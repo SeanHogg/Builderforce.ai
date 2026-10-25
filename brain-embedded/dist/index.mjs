@@ -1829,6 +1829,9 @@ var INDEXEDDB_REDACTED_KEYS = [
 ];
 var INDEXEDDB_REDACTION_RULE = `Only exportForUploadOrLog() output may be uploaded or logged. It strips every secret-shaped key at every depth \u2014 a key whose lowercase name is one of ${INDEXEDDB_REDACTED_KEYS.join(", ")} or contains token, secret, password, authorization, cookie, or apikey \u2014 so accessToken, client_secret and sessionCookie are stripped too. The strip is recursive through arrays and nested objects, the input is not mutated, and a dropped key is absent rather than blanked. export() is the unfiltered local record and must not leave the device.`;
 
+// src/localFirstPersistence.ts
+import { summarizeTranscript } from "@seanhogg/builderforce-memory/working";
+
 // ../packages/spend-contract/src/cost.ts
 var MILLICENTS_PER_USD = 1e5;
 function millicentsToUsd(millicents) {
@@ -1948,10 +1951,10 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
   "~deepseek/deepseek-flash-latest": [2e-8, 1e-6],
   "~deepseek/deepseek-pro-latest": [1188e-10, 8e-6],
-  "~deepseek/deepseek-v4-flash-latest": [422e-10, 1694e-10],
+  "~deepseek/deepseek-v4-flash-latest": [422e-10, 1763e-10],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [19e-8, 894e-8],
+  "~moonshotai/kimi-latest": [226e-9, 16e-6],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -1959,7 +1962,7 @@ var PRICE_SNAPSHOT = {
   "~openai/gpt-terra-latest": [2e-6, 12e-6],
   "~unbiased/pareto-latest": [8e-7, 32e-7],
   "~x-ai/grok-latest": [2e-6, 6e-6],
-  "~z-ai/glm-flash-latest": [44e-9, 2e-7],
+  "~z-ai/glm-flash-latest": [513e-10, 701e-10],
   "~z-ai/glm-latest": [703e-10, 43843e-10],
   "aion-labs/aion-2.0": [8e-7, 16e-7],
   "aion-labs/aion-3.0": [3e-6, 6e-6],
@@ -2026,7 +2029,7 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v3.2": [28e-8, 42e-8],
   "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
   "deepseek/deepseek-v4-flash": [91e-9, 182e-9],
-  "deepseek/deepseek-v4-flash-0731": [422e-10, 1694e-10],
+  "deepseek/deepseek-v4-flash-0731": [4444e-11, 13332e-11],
   "deepseek/deepseek-v4-flash-vision-exp": [2156e-10, 6468e-10],
   "deepseek/deepseek-v4-pro": [2088e-10, 4176e-10],
   "deepseek/deepseek-v4-pro-0813": [66e-8, 198e-8],
@@ -2403,7 +2406,7 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5.1": [14e-7, 44e-7],
   "z-ai/glm-5.2": [341e-10, 7e-6],
   "z-ai/glm-5.3": [79e-9, 14e-7],
-  "z-ai/glm-5.3-flash": [44e-9, 2e-7],
+  "z-ai/glm-5.3-flash": [15e-8, 5e-7],
   "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
   "z-ai/glm-5.3-prime": [28e-7, 88e-7],
@@ -2422,17 +2425,17 @@ function snapshotPriceBook() {
 
 // ../packages/model-catalog/src/providers.ts
 var LLM_PROVIDER_INFO = [
-  { id: "anthropic", label: "Anthropic (Claude)", credential: "api_key", keyPlaceholder: "sk-ant-\u2026", subscription: "paste" },
-  { id: "openai", label: "OpenAI", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "paste" },
+  { id: "anthropic", label: "Anthropic (Claude)", credential: "api_key", keyPlaceholder: "sk-ant-\u2026", subscription: "paste", signInDomains: ["claude.ai", "anthropic.com"] },
+  { id: "openai", label: "OpenAI", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "paste", signInDomains: ["openai.com"] },
   { id: "google", label: "Google (Gemini)", credential: "api_key", keyPlaceholder: "AIza\u2026", subscription: null },
   { id: "meta", label: "Meta AI (MUSE)", credential: "api_key", keyPlaceholder: "meta-\u2026", subscription: null },
   // A Kimi Code subscription issues no API key at all — its own config leaves `api_key`
   // empty beside an OAuth record — so it connects by device-code redirect, never paste.
-  { id: "kimi", label: "Kimi", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "device" },
+  { id: "kimi", label: "Kimi", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "device", signInDomains: ["kimi.com"] },
   { id: "moonshot", label: "Moonshot AI", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
   { id: "qwen", label: "Qwen", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
   { id: "minimax", label: "MiniMax", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
-  { id: "xai", label: "xAI (Grok)", credential: "api_key", keyPlaceholder: "xai-\u2026", subscription: "paste" },
+  { id: "xai", label: "xAI (Grok)", credential: "api_key", keyPlaceholder: "xai-\u2026", subscription: "paste", signInDomains: ["x.ai"] },
   { id: "ollama", label: "Ollama Cloud", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
   {
     id: "ollama-local",
@@ -2578,6 +2581,1977 @@ function isUsageSurface(raw) {
   return typeof raw === "string" && USAGE_SURFACES.includes(raw);
 }
 var USAGE_SURFACE_HEADER = "x-builderforce-surface";
+
+// ../packages/creation-canvas-contract/src/canvasTools.ts
+var GUEST_SAFE_CANVAS_TOOLS = [
+  // Reads over the guest's own in-browser document.
+  "canvas_read_snapshot",
+  // Named by the system prompt as the check to run before saying an object is missing.
+  // Its absence from the guest vocabulary meant the prompt was instructing the model to
+  // call a tool the model had not been given.
+  "canvas_read_object",
+  "canvas_read_document",
+  // Pure client-side computation over rows already loaded in the guest's own browser.
+  // Without it a guest can only be told placeholder numbers.
+  "canvas_query_dataset",
+  // Authoring + layout over the local document. The API never executes these; they are
+  // descriptions of operations the browser applies to the visitor's own canvas.
+  "canvas_add_object",
+  // Theater seating is a local-document layout (chairs facing a screen on the
+  // visitor's own board). Same class as `canvas_add_object`; leaving it unclassified
+  // made the model plan around a tool the gateway stripped, then land an empty room.
+  "canvas_create_room",
+  "canvas_update_object",
+  "canvas_delete_object",
+  "canvas_arrange_objects",
+  "canvas_set_object_layout",
+  "canvas_invoke_object_action",
+  "canvas_connect_objects",
+  "canvas_update_connection",
+  "canvas_delete_connection",
+  "canvas_convert_diagram",
+  // Lifts one post out of a social feed tile that is ALREADY on this board, in the
+  // browser, over the posts that tile is holding — no request, no tenant. Its sibling
+  // tools, which do reach `/api/social/*`, are in the gated set below.
+  "canvas_pin_social_post",
+  // Ranks the résumé objects ALREADY ON THIS BOARD against a posting on this board, in
+  // the browser, with no network call — the same deterministic analyzer the résumé
+  // builder uses, composed N:1. Guest-safe because it reads nothing but the canvas: a
+  // visitor evaluating the product can drop in five CVs and a job ad and watch a real
+  // ranking come back with its evidence and its gaps, which is the strongest thing this
+  // vocabulary can show without an account.
+  "canvas_screen_resumes",
+  // Re-renders a résumé that is ALREADY on the board through the built-in template
+  // engine — pure function, no network, no tenant — so it is guest-safe on exactly the
+  // reasoning `canvas_screen_resumes` is, and for the same person: the visitor most
+  // likely to arrive logged out and ask for their CV in five styles is the one out of
+  // work. Gating it would leave `canvas_add_object` as the only route, which is the
+  // path that spent four minutes retyping the document and produced nothing.
+  "canvas_render_resume_variants",
+  // The step BEFORE both of those, and guest-safe for the same reason: it reads text
+  // the visitor's own browser already extracted from the file they dropped, and runs
+  // the deterministic JSON Resume reader over it — no network, no tenant, no model.
+  // Gating it would leave a logged-out visitor with their CV on the board and no way
+  // to make it a résumé, which is the exact dead end that had the model asking people
+  // to paste a document the canvas was already holding.
+  "canvas_import_resume",
+  // ── Academic imports ─────────────────────────────────────────────────────────
+  // Same reasoning as `canvas_import_resume`, for the two document formats the
+  // academic set documents but never wired: a deterministic CSV/`.bib`/`.ris` reader
+  // over text the visitor's own browser already extracted, writing only to a `cohort`
+  // or `bibliography` object already on their own board. No network, no tenant.
+  "canvas_import_roster",
+  "canvas_import_references",
+  // The free diagnostics and calculators. `GET /api/tools`, `GET /api/tools/:id` and
+  // `POST /api/tools/:id/compute` are unauthenticated by design (they power the
+  // marketing surface), so a visitor asking "how mature is our delivery?" gets a real
+  // scored object on the board instead of an apology.
+  "canvas_list_diagnostics",
+  "canvas_add_diagnostic",
+  // The 8-target "Idea → Real" catalog (`GET /api/realizations/targets`) — static
+  // copy, no tenant. Guest-safe for the same reason `canvas_list_diagnostics` is:
+  // a visitor can browse what a phone line, a pilot or a smoke test actually
+  // build before `canvas_realize` ever asks for an account.
+  "canvas_list_realization_targets",
+  // Returns a STATIC executive use-case contract; its tenant-evidence branch already
+  // degrades to `saved_session_required` without a session, so it is safe unauthenticated.
+  "canvas_prepare_executive_use_case",
+  // ── Founder objects ──────────────────────────────────────────────────────────
+  // Pure client-side computation over `competitor` objects ALREADY on the visitor's own
+  // board: it reads their `locations`, projects them, and authors a `map` object plus
+  // the coverage gaps. No tenant data and no network — the research that PUT the
+  // competitors there is `builtin_web_search`, which a guest already has, so a logged-out
+  // founder can complete a geographic market analysis end to end.
+  "canvas_map_competitors",
+  // Evaluates `trigger` objects against the `liveMetric` objects on the same board. The
+  // reading of a live metric may need an account; comparing two numbers that are already
+  // in front of the visitor does not, and a guest who authors a threshold by hand should
+  // see it fire.
+  "canvas_evaluate_triggers",
+  // ── Data architecture ────────────────────────────────────────────────────────
+  // Every one of these is pure computation over the visitor's OWN board: a model
+  // authored in the browser, a join between two datasets already loaded there, a
+  // PII scan of rows the visitor uploaded themselves, a contract evaluated against
+  // them, a check suite run over them, a metric defined on them, and the lineage
+  // graph of the objects in front of them. No tenant, no network.
+  //
+  // `canvas_create_data_model` is the reason this matters: "create me an ERD" must
+  // work for someone evaluating the product, and it ends in real DDL. Gating it
+  // would make the model improvise a limitation the product does not have — the
+  // exact failure the `canvas_add_image` note above records.
+  "canvas_create_data_model",
+  "canvas_export_data_model",
+  "canvas_join_datasets",
+  "canvas_classify_dataset",
+  "canvas_set_data_contract",
+  "canvas_run_data_quality",
+  "canvas_define_metric",
+  "canvas_trace_lineage",
+  // ── Data science: analysis, model comparison, evaluation, governance ─────────
+  // Every one is pure computation over the visitor's OWN board, which is what makes
+  // them guest-safe on the same reasoning as the data-architecture set above.
+  //
+  // `canvas_run_notebook` deserves its own note: it EXECUTES code, which sounds like
+  // the least guest-safe thing here and is the opposite. The kernel is a Web Worker
+  // with `fetch`, `XMLHttpRequest`, `importScripts` and `WebSocket` deleted from its
+  // global scope before any cell compiles, the rows are structured-cloned in, and it
+  // is terminated on a hard timeout. A cell can compute and cannot reach the network,
+  // the DOM or the session — so it is strictly more contained than a tool that calls
+  // an API. Gating it would make "analyse this CSV" require an account, which is the
+  // single most common thing a visitor arrives wanting to do.
+  "canvas_run_notebook",
+  "canvas_compare_runs",
+  "canvas_sample_for_labels",
+  "canvas_forecast_series",
+  // Governance is authored locally and enforced locally. A guest who declares that a
+  // dataset may not be used for training should see that refusal honoured.
+  "canvas_set_data_use",
+  // ── QA ───────────────────────────────────────────────────────────────────────
+  // "Create automation tests for my website" is answered ENTIRELY in the visitor's own
+  // browser: route discovery is a regex over HTML the model already fetched with
+  // `builtin_web_fetch` (guest research), and the Playwright lowering is the pure
+  // function in `qa.ts`. Gating these would make the most common QA request in the
+  // product reachable only after signing up, and — worse, per the note above — would
+  // have the model improvise a limitation instead of writing the tests.
+  //
+  // The page audit is the same shape as `canvas_add_diagnostic`: scored findings over
+  // content the visitor supplied, no tenant and no network of its own.
+  "canvas_create_test_plan",
+  "canvas_test_coverage",
+  "canvas_record_defect",
+  "canvas_audit_page",
+  "canvas_generate_test_data",
+  // ── The build vocabulary (`lib/canvasBuildTools.ts`) ─────────────────────────
+  // Creating, listing, reading, searching and editing the CODE behind a Builder
+  // object. Guest-safe because a board with no account runs its app over files held
+  // in the BROWSER (`lib/workspace/localFileStore.ts`) and the tools run there too:
+  // nothing reaches a tenant. "Keep your work" uploads those files into a real
+  // project. Only the history pair below stays account-required.
+  "canvas_create_build",
+  "canvas_list_build_files",
+  "canvas_read_build_file",
+  "canvas_search_build_files",
+  "canvas_write_build_file",
+  "canvas_edit_build_file",
+  "canvas_read_build_diagnostics",
+  // What the visitor's own preview printed to its console — read from this browser's
+  // memory (`lib/previewConsole.ts`), so nothing reaches a tenant.
+  "canvas_read_preview_console",
+  // Runs one command (install, build, type-check, test) in the visitor's OWN browser
+  // runtime over the same browser-held files (`lib/browserRuntime/workspaceShell.ts`) —
+  // the runtime the preview already runs on, so nothing reaches a tenant.
+  "canvas_run_build_command",
+  // Measures the RUNNING preview in a hidden frame of the visitor's own browser
+  // (`lib/previewProbe`). Reads nothing but the app the visitor is already looking at.
+  "canvas_inspect_preview"
+];
+var GUEST_GATED_CANVAS_TOOLS = [
+  // Server-side stock search / image generation. The ONLY route to real pixels, so its
+  // absence rewrote every "draw me…" turn into a drawing-tool failure.
+  "canvas_add_image",
+  // The ONLY route to pixels of a page that ALREADY EXISTS, and the same classification
+  // for the same measured reason. Without it, "upgrade my website — show me a before and
+  // after" produced an after and an apology: "as a large language model, I don't have the
+  // ability to browse the web visually or take screenshots of live websites" (2026-08-19,
+  // ui 2026.8.60). That is a fact about a model presented as a fact about the product,
+  // which is exactly what an absent tool buys. Gated rather than absent so a visitor
+  // hears the true, one-click reason instead.
+  "canvas_capture_screenshot",
+  // The ONLY route to the text of a SCANNED page, and classified by the failure its
+  // absence causes rather than by what it touches. Without it a visitor who drops a
+  // photographed contract hears "I can't read scanned documents" — a fact about a model
+  // presented as a fact about the product, on a board where the true answer is one
+  // click away. It self-gates on a saved session and returns the account gate.
+  "canvas_read_attachment",
+  // The ONLY route to a playable game. Deliberately here rather than in the safe set
+  // even though HALF of it is guest-safe: a web game is authored in the visitor's own
+  // browser and needs no account, while a Roblox place is written on the server. The
+  // tool self-gates on that split. It is classified by the failure its ABSENCE causes,
+  // which is the reason this set exists — without it a guest asking for a game gets
+  // `canvas_add_object`, and that produces a design document nobody can play.
+  "canvas_add_game",
+  // The ONLY routes to moving pictures (`canvasVideoTools.ts`). Gated rather than
+  // absent for the reason this set exists: with no video tool a model tells the user
+  // "I can't make videos", which is false here. Clips are generated on the server, so
+  // the gate is on credentials, exactly like `canvas_add_image`.
+  "canvas_add_video",
+  "canvas_create_scene",
+  // Writes the board's cases into the tenant's QA library (`/api/qa/flows` +
+  // `/api/qa/generate`) and reads its runs back. Gated rather than absent for the
+  // reason the whole set exists: a visitor who has just watched the canvas write their
+  // tests will ask to make them run, and "that needs a free account" is a true,
+  // one-click answer, where an absent tool produces an invented one. It is also the
+  // only tool a guest-visible description may name — `canvas_create_test_plan`'s
+  // description does not, precisely so this classification stays free to change.
+  "canvas_publish_tests",
+  // Files a board dataset as a fine-tune training corpus under a project. Classified
+  // here for the same reason as `canvas_publish_tests`, and by the same test: what does
+  // its ABSENCE make the model say? Every step before it is guest-safe — a visitor can
+  // import a CSV, profile it, chart it and classify its columns entirely in their own
+  // browser — so "now train a model on this" is the natural next sentence on a guest
+  // board. With the tool absent the model has no way to know the product fine-tunes at
+  // all, and the improvisation it reaches for ("I can't train models") is false about a
+  // product that ships adapters. The corpus itself is a tenant row, so the WORK needs an
+  // account; the gate is on credentials, not on a saved board, exactly like the social
+  // tools. Its description names only `canvas_set_data_use`, which is guest-safe — rule 2
+  // holds.
+  "canvas_promote_dataset_to_corpus",
+  // Turns an idea into one of the 8 tested "Idea → Real" proofs — a phone line, a
+  // pilot, a smoke test, a live system — through the exact pipeline `/realize`
+  // uses (`planRealization` + `realize()`), never an improvisation. Gated rather
+  // than absent for the reason this whole set exists, and on direct evidence:
+  // measured 2026-08-29, a signed-in board asked to "stand up a phone line" with
+  // no bridge into this pipeline got a legacy `workflow` object with zero
+  // authored steps (unrunnable) and a hand-typed Twilio guide with the wrong
+  // webhook URLs and no WEBHOOK_SHARED_SECRET — worse than absent, because it
+  // looked done. A guest asking the same thing must hear the true reason a LIVE
+  // proof needs an account, not be left to the same improvisation.
+  //
+  // What is real either way is the generated PLAN — the actual routes, runbook
+  // and required connectors/secrets `target.build()` produces — which carries no
+  // tenant credential and is guest-safe to author onto the board with
+  // `canvas_add_object`; only PERSISTING it as a live, running project
+  // (`POST /api/realizations` writes a tenant row) needs the account.
+  "canvas_realize",
+  // ── Connected social accounts (`/api/social/*`) ──────────────────────────────
+  // Gated rather than absent, for the reason this whole set exists, and on the
+  // strongest evidence yet that the reason is real.
+  //
+  // Measured 2026-08-15 (ui 2026.8.17 / api 2026.8.11), a board opened with "I want to
+  // create a social media campaign. First I want to connect all my social media
+  // accounts and then create a post that goes to all the social media." All five social
+  // tools were account-required and therefore absent, while the SOCIAL block of the
+  // canvas system prompt — which is unconditional — was busy naming every one of them.
+  // The model, holding instructions for tools it had not been given, improvised: "I
+  // can't directly perform those actions. You would need to connect your existing
+  // accounts to a social media management platform." That is false twice over. The
+  // product connects X, LinkedIn, Facebook, Instagram and TikTok through the connector
+  // platform, publishes to all of them from one campaign, and the panel that does it is
+  // on the same canvas. It then fell back to `canvas_add_object` kind `socialCampaign`,
+  // was refused for carrying no authored ledger, and the session ended with nothing on
+  // the board and a recommendation to go and buy a competitor's product.
+  //
+  // Every one of these is a stateless request carrying the tenant token, exactly like
+  // `canvas_add_image` — so the gate is on CREDENTIALS, not on whether the board has
+  // been saved, and a signed-in user on an unsaved board publishes for real.
+  //
+  // `canvas_pin_social_post` is NOT here: it lifts one post out of a feed tile already
+  // on the board, in the browser, with no request of its own — so it belongs with the
+  // local-document tools above. A guest can never hold a feed tile to pin from, and the
+  // answer it gives them ("there is no social feed on this canvas yet") is true.
+  "canvas_connect_social_account",
+  "canvas_add_social_feed",
+  "canvas_refresh_social_feed",
+  "canvas_create_social_campaign",
+  "canvas_publish_social_campaign"
+];
+var ACCOUNT_REQUIRED_CANVAS_TOOLS = [
+  // Connected Microsoft 365 / Gmail mailboxes (`/api/mailboxes/*`).
+  "canvas_add_inbox",
+  "canvas_refresh_inbox",
+  "canvas_pin_email",
+  // The social tools used to be here. They are guest-GATED now — see the note above
+  // them in GUEST_GATED_CANVAS_TOOLS for the session that moved them, and why absence
+  // was the worse of the two answers.
+  // Tenant-scoped Builderforce domain data and canonical project PRDs.
+  "canvas_read_domain",
+  "canvas_read_project_prds",
+  "canvas_create_project_prd",
+  // ── Founder objects, tenant half ─────────────────────────────────────────────
+  // Writes the investor seat's `companies` row onto a canvas `company` object. It is a
+  // WRITE-TO-BOARD action layered on the same kernel read `canvas_read_domain` performs
+  // — the same relationship `canvas_add_diagnostic` has to `GET /api/tools` — not a
+  // second way to read a tenant's company.
+  "canvas_sync_company_profile",
+  // ── Founder operations (0469) ────────────────────────────────────────────────
+  // Every one reads or writes a TENANT record, which is what makes them
+  // account-required rather than guest-gated: a counterparty register, a CRM's
+  // deals, and a stage change that moves a real deal. A guest has none of the
+  // three, and unlike an image or a test run there is no true one-sentence answer
+  // that turns into a capability on sign-up — an empty workspace has no
+  // counterparties either. Advertising them to a guest would spend the model's
+  // attention on three routes it cannot take, on the surface where first
+  // impressions are formed.
+  //
+  // `canvas_move_deal` is the one that matters structurally: it writes the deal
+  // AND rewrites the board from the same response, which is what replaces the
+  // mirroring instruction in the canvas system prompt with a mechanism.
+  "canvas_sync_account",
+  "canvas_sync_sales_pipeline",
+  "canvas_move_deal",
+  // The legal seat's own records, for the same reason one line up: `legal_entities`,
+  // `intellectual_property` and `legal_matters` are tenant rows, and a guest board has
+  // no entity to be incorporated, no mark to renew and nobody to argue with. Every field
+  // on the three kinds it authors is a projection, so advertising it to a guest would
+  // offer a card that can only ever come back empty.
+  "canvas_sync_legal",
+  // The RAISE is the same board through a different family (FO-E1): `deals.kind =
+  // 'investment'`, `party_roles role='investor'`, and `pipeline_touchpoints` as the
+  // thread. `canvas_open_deal` is the one that makes a firm an OBJECT rather than a
+  // string in a cell, which is what `fundingRound.investors` never was.
+  "canvas_sync_funding_round",
+  // The round's PLAN, as a record. `funding_rounds` had no writer at all until
+  // 0937, so a target and a valuation were board JSON beside an empty table.
+  "canvas_plan_funding_round",
+  "canvas_open_deal",
+  "canvas_log_deal_touch",
+  // ── The data room, actually sent (FO-E2) ─────────────────────────────────────
+  // Account-required for the sharpest version of the reason: sharing one sends
+  // diligence material to a named party outside the workspace, behind an NDA, with
+  // every open logged. A guest board has no room, no recipient and no NDA.
+  "canvas_sync_data_room",
+  "canvas_share_data_room",
+  "canvas_revoke_data_room_share",
+  // A room holds TWO shapes: a diligence obligation and an encrypted legal file
+  // filed into it (0937). This is how the second one gets there — and how it leaves.
+  "canvas_file_document_in_data_room",
+  // The founders' agreement and its siblings, drafted from the one template registry
+  // (FO-D5). Account-required because it renders a real workspace's formation
+  // paperwork and lands it on a `contract` card that is then SENT for signature.
+  "canvas_draft_legal_document",
+  // Reads the pay runs a connected payroll provider actually ran, onto a `payRun`
+  // card. Account-required for the plainest possible reason: it makes an
+  // authenticated call to the tenant's own Gusto, Rippling, ADP or Deel account. A
+  // guest board has no payroll — and unlike an image, there is no true
+  // one-sentence answer that becomes a capability on sign-up either, because an
+  // empty workspace has no payroll provider connected.
+  "canvas_sync_pay_run",
+  // ── Ownership (0927) ─────────────────────────────────────────────────────────
+  // Account-required for the same reason, with one addition that is specific to
+  // this family: three of the five WRITE the ledger that says who owns the
+  // company. There is no guest-safe reading of "issue shares", and a board with no
+  // workspace has no ledger to fold, so advertising them to a visitor would spend
+  // the model's attention on five routes it cannot take.
+  //
+  // `canvas_sync_cap_table` is the one that matters structurally: it replaces a
+  // hand-typed `holders` array with a FOLD, which is what makes the percentages
+  // total 100 by construction rather than by instruction.
+  "canvas_sync_cap_table",
+  "canvas_record_equity_grant",
+  "canvas_record_convertible",
+  "canvas_record_equity_event",
+  "canvas_model_round",
+  // Re-reads the domain metric series a `liveMetric` object was bound to. This is the
+  // LIVE half the finance and investor answers never had: without it every runway, burn
+  // and pipeline number on a board is a snapshot with an as-of date and no way to ask
+  // again. Named for `liveMetric` rather than the semantic-layer `metric` it must not be
+  // confused with — see the kind's note in index.ts.
+  "canvas_refresh_live_metric",
+  // ── The secure legal FILE (`/api/legal-documents/*`) ─────────────────────────
+  //
+  // These four and `canvas_request_signature` below were declared by the canvas and named
+  // NOWHERE in this contract, because `check-canvas-tool-contract.mjs` scanned three
+  // source files and their two modules were not among them — the guard's own "a new family
+  // adds one line here" instruction, unfollowed twice. Nothing broke, and that is the
+  // point: an unlisted `canvas_*` tool is dropped from a guest turn by
+  // `restrictGuestTools`, which is the RIGHT outcome for these, arrived at by accident
+  // rather than by decision. They are account-required for the ordinary reason: each one
+  // reads or writes an encrypted tenant document, mints an external link to it, or emails
+  // a counterparty for a signature. A guest has no document to share.
+  "canvas_legal_document_sync",
+  "canvas_legal_document_share",
+  "canvas_legal_document_revoke_share",
+  "canvas_legal_document_request_signature",
+  // The generic e-signature request for an AUTHORED object (a contract, an offer) rather
+  // than an uploaded file. Same reason: it emails a real counterparty.
+  "canvas_request_signature",
+  // The RETURN LEG. `canvas_request_signature` wrote "sent" and nothing ever wrote
+  // what happened next, so `policy.roster` and `acknowledgementRate` — both declared
+  // as "written by the signature subsystem" — had no writer at all. Account-required
+  // for the same reason as its sibling: it reads a real tenant record.
+  "canvas_sync_signature",
+  // ── The sell motion ──────────────────────────────────────────────────────────
+  //
+  // The commercial half of "idea to real". Every one is account-required, and for a
+  // sharper reason than "it reaches a tenant": each acts on a real relationship with a
+  // real person outside the workspace. A prospect share mints a credential; an engagement
+  // read projects `activity_log`; pricing reads the published contract and writes a figure
+  // a buyer will be held to; a trial and a handoff create durable boards; a cadence sends
+  // messages to named people. A guest board has no prospect, no cadence and no evidence to
+  // assemble, so advertising these to one would spend the model's attention on ten routes
+  // it cannot take — the failure this contract's own header measures.
+  //
+  // There is deliberately no `canvas_accept_quote`. Acceptance exists ONLY on the buyer's
+  // own tokenised route, so no seller, agent or model can close a deal on the buyer's
+  // behalf — see `canvasSellMotionTools.ts`.
+  "canvas_share_with_prospect",
+  "canvas_list_prospect_shares",
+  "canvas_revoke_prospect_share",
+  "canvas_refresh_prospect_engagement",
+  "canvas_price_quote",
+  "canvas_read_call",
+  "canvas_assemble_trust_packet",
+  "canvas_provision_trial",
+  "canvas_handoff_plan",
+  "canvas_enrol_in_sequence",
+  "canvas_set_sequence_state",
+  // ── Connected data sources (`/api/data-sources/*`) ───────────────────────────
+  // The tenant's own connected warehouses — Postgres/Neon, ClickHouse, BigQuery.
+  // Account-required for exactly the reason the mailbox tools are: the credential
+  // is a tenant credential, and a guest has no warehouse to read. The GUEST path
+  // to the same capability is a file upload, which is already complete.
+  "canvas_list_data_sources",
+  "canvas_add_data_source",
+  "canvas_query_data_source",
+  // Reads this workspace's fine-tuning runs (`/api/ide/training/*`) — a tenant
+  // resource with a tenant credential, so a guest has no runs to read. This is the
+  // tool that closes the loop a `build` object of modality "finetune" opens: without
+  // it the board launches a training run and can never see the loss curve or the
+  // scorecard it produced.
+  "canvas_read_training_run",
+  // The prompt library (`/api/prompts/*`, `prompt_library_entries` +
+  // `prompt_library_versions`) — the other half of the same loop for prompt
+  // engineering. Account-required for the same reason as the training run one line up:
+  // a library entry is a tenant row behind a tenant JWT, and saving a version appends to
+  // it. A guest board can still author a `prompt` card with `canvas_add_object`; what it
+  // cannot have is the history, and there is no true one-sentence answer that turns an
+  // empty workspace's library into one. See `lib/canvasPromptLibraryTools.ts`.
+  "canvas_read_prompt",
+  "canvas_save_prompt_version",
+  // ── The recruiter's funnel (`/api/hiring/*`) ─────────────────────────────────
+  // Account-required for the same reason `canvas_read_domain` is: every one reads or
+  // writes tenant hiring data. The Recruiter built-in agent ships a good bio and, until
+  // these existed, no domain tools at all — so it improvised limitations, which is the
+  // failure mode `canvas_add_image` documents at length.
+  //
+  // `canvas_measure_funnel` is a WRITE-TO-BOARD over the same computation the seat
+  // reads, not a second way to count a pipeline. `canvas_offer_interview_slots` mints
+  // the candidate's self-schedule link over the availability solver that already
+  // existed — the recruiter's largest time sink was never built OUT, only never wired
+  // to anyone without an account.
+  "canvas_measure_funnel",
+  "canvas_offer_interview_slots",
+  // The REQUISITION, bound to its real `job_postings` row (FO-B3). Account-required for
+  // the sharpest version of the reason: one of its two paths CREATES a job posting in
+  // the workspace, and the other counts the applications recorded against one. A guest
+  // board has no requisition and nobody has applied to it — and unlike an image, there
+  // is no true one-sentence answer that becomes a capability on sign-up either, because
+  // an empty workspace has no postings to count.
+  //
+  // This is the tool that makes `jobPosting.applicantCount` a COUNT rather than a typed
+  // number, which is what `canvas_sync_account` did for the counterparty half of the
+  // board: the card carries `postingId`, and every application read joins on it instead
+  // of on a title two requisitions can share.
+  "canvas_sync_job_posting",
+  // FO-B4: publish that requisition to the workspace's CONNECTED job boards. Account-
+  // required twice over — it needs the real posting and a connector credential, and it
+  // puts the workspace's name on a public board.
+  "canvas_distribute_job_posting",
+  // ── The build vocabulary's undo (`lib/canvasBuildTools.ts`) ──────────────────
+  // File history is kept by a durable project's storage (`ide/projects/<id>/` in R2,
+  // behind a tenant JWT). A guest's app is held in the browser and keeps none, so
+  // these two stay account-required while the rest of the build vocabulary is
+  // guest-safe (see GUEST_SAFE_CANVAS_TOOLS).
+  "canvas_list_build_file_history",
+  "canvas_restore_build_file"
+];
+var GUEST_RESEARCH_TOOL_NAMES = [
+  "builtin_web_search",
+  "builtin_web_fetch",
+  "builtin_geo_geocode"
+];
+var GUEST_CAREER_TOOL_NAMES = [
+  // Résumé readings — the whole point of the guest surface for this visitor.
+  "builtin_recruiter_score_resume",
+  "builtin_recruiter_optimize_resume",
+  "builtin_recruiter_tailor_resume",
+  "builtin_recruiter_match_job",
+  "builtin_recruiter_summarize_resume",
+  "builtin_recruiter_resume_sentiment",
+  "builtin_recruiter_roast_resume",
+  "builtin_recruiter_extract_skills",
+  "builtin_recruiter_parse_resume",
+  "builtin_recruiter_consolidate_resumes",
+  // The hiring side of the same pure comparison. A logged-out visitor evaluating the
+  // product by pasting a candidate's résumé and their own posting reaches no tenant and
+  // no network — it is the identical overlap measurement the seeker half runs, reported
+  // to the other party. Withholding it would only mean the model improvises a screening
+  // verdict instead of computing one against stated criteria.
+  "builtin_recruiter_screen_candidate",
+  "builtin_recruiter_build_packet",
+  // Preparation and positioning.
+  "builtin_recruiter_interview_questions",
+  "builtin_hr_coach",
+  "builtin_hr_value_proposition",
+  "builtin_hr_employer_research",
+  // Direction.
+  "builtin_hr_career360_suggest_targets",
+  "builtin_hr_career360_select_target",
+  // Money. `hr_runway` is the number that paces every other decision, and it is pure
+  // arithmetic over figures the visitor typed — there is nothing to gate.
+  "builtin_hr_salary_analyze",
+  "builtin_hr_comp_analyze",
+  "builtin_hr_runway",
+  "builtin_hr_compare_work_options",
+  // Drafting a listing they do not have an account to save yet. Deliberately included:
+  // seeing the listing their own résumé produces is the strongest reason to make one.
+  "builtin_listing_draft_from_resume",
+  "builtin_listing_readiness",
+  "builtin_listing_profile_blocks"
+];
+var CREATION_CANVAS_TOOLS = [
+  ...GUEST_SAFE_CANVAS_TOOLS,
+  ...GUEST_GATED_CANVAS_TOOLS,
+  ...ACCOUNT_REQUIRED_CANVAS_TOOLS
+];
+var GUEST_CANVAS_TOOL_NAMES = /* @__PURE__ */ new Set([
+  ...GUEST_SAFE_CANVAS_TOOLS,
+  ...GUEST_GATED_CANVAS_TOOLS,
+  ...GUEST_RESEARCH_TOOL_NAMES,
+  ...GUEST_CAREER_TOOL_NAMES
+]);
+var ACCOUNT_REQUIRED_SET = new Set(ACCOUNT_REQUIRED_CANVAS_TOOLS);
+var CANVAS_IMAGE_TOOL = "canvas_add_image";
+var CANVAS_GAME_TOOL = "canvas_add_game";
+var CANVAS_GAME_ACCOUNT_GATE = `Authoring a Roblox place needs a free Builderforce account: the Luau and the .rbxlx are written on the server, not in this browser. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that the Roblox build needs a free account, and then offer to build a playable WEB game right now with ${CANVAS_GAME_TOOL} at platform "web" \u2014 that works on this board with no account, plays immediately, and installs on a phone. Do NOT say that you cannot make games, and do NOT describe this as a technical limitation: it is the account, and it is one click away.`;
+var CANVAS_SCREENSHOT_TOOL = "canvas_capture_screenshot";
+var CANVAS_SCREENSHOT_ACCOUNT_GATE = `${CANVAS_SCREENSHOT_TOOL} needs a free Builderforce account: the page is rendered by a real browser on the server, not in this tab. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that the "before" screenshot needs a free account, and then build the comparison this board CAN hold right now \u2014 read the live page with builtin_web_fetch and set out its current headline, structure and calls to action beside the new design, so the user can see what changed. Do NOT say that you are unable to browse the web visually, that you cannot see or screenshot a website, or that this is a technical limitation of the product: the only reason is the account, and it is one click away.`;
+var CANVAS_IMAGE_ACCOUNT_GATE = `${CANVAS_IMAGE_TOOL} needs a free Builderforce account: image search and generation run on the server, not in this browser. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that the picture needs a free account, and then build what this canvas CAN hold right now \u2014 the authored plan, the labelled layout, the planting list \u2014 with canvas_add_object. Do NOT say that you are unable to generate images, that you cannot see or look things up, or that a tool is technically limited: the only reason is the account, and it is one click away.`;
+
+// ../packages/creation-canvas-contract/src/canvasVideoTools.ts
+var CANVAS_VIDEO_TOOL = "canvas_add_video";
+var CANVAS_SCENE_TOOL = "canvas_create_scene";
+var CANVAS_VIDEO_ACCOUNT_GATE = `${CANVAS_VIDEO_TOOL} and ${CANVAS_SCENE_TOOL} need a free Builderforce account: video is generated on the server, not in this browser. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that the video needs a free account, and then build what this canvas CAN hold right now \u2014 the shot list, the script, the storyboard as authored objects \u2014 with canvas_add_object. Do NOT say that you are unable to make videos or that this is a technical limitation of the product: the only reason is the account, and it is one click away.`;
+
+// ../packages/creation-canvas-contract/src/marketplaceListings.ts
+var MARKETPLACE_LISTING_KINDS = [
+  {
+    // The reason this whole seam was built: a generated game is playable the moment
+    // it exists, and until now only its author could play it.
+    id: "game",
+    launch: "play",
+    from: ["game"],
+    family: "asset",
+    harness: "runtime",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "full",
+    icon: "\u{1F3AE}"
+  },
+  {
+    // A published site already has a real URL (`publishStaticSite`). Selling it is
+    // selling the source, and the URL is the demo.
+    id: "app",
+    launch: "open",
+    from: ["website", "prototype", "build", "project", "service"],
+    family: "asset",
+    harness: "runtime",
+    // The only kind that IS a running system on an address somebody keeps
+    // operating — so the only kind there is anything to give ACCESS to.
+    deliveries: ["hosted", "copy"],
+    pricing: "either",
+    trial: "full",
+    icon: "\u{1F680}"
+  },
+  {
+    id: "automation",
+    launch: "install",
+    from: ["workflow"],
+    family: "asset",
+    harness: "system",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u2699\uFE0F"
+  },
+  {
+    // Agents already have a registry of their own; a canvas-authored agent joins it
+    // through the same listing row rather than through a second publish path.
+    id: "agent",
+    launch: "install",
+    from: ["agent", "staff"],
+    family: "agent",
+    harness: "system",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F916}"
+  },
+  {
+    id: "template",
+    launch: "install",
+    from: ["template", "frame"],
+    family: "asset",
+    harness: "system",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F9E9}"
+  },
+  {
+    // The board itself. `from: []` — a pack is published from a session, and the
+    // publish panel offers it only when the whole canvas is the product.
+    id: "pack",
+    launch: "install",
+    from: [],
+    family: "asset",
+    harness: "system",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F4E6}"
+  },
+  {
+    id: "dashboard",
+    launch: "preview",
+    from: ["dashboard", "chart", "kpi", "report", "metric", "liveMetric"],
+    family: "asset",
+    harness: "system",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F4CA}"
+  },
+  {
+    id: "playbook",
+    launch: "preview",
+    from: ["document", "knowledge", "prd", "slides", "diagram", "roadmap", "pitch", "testPlan"],
+    family: "asset",
+    harness: "paged",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F4D8}"
+  },
+  {
+    id: "course",
+    launch: "run",
+    from: ["course", "practice", "guidedTour"],
+    family: "asset",
+    harness: "instrument",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F393}"
+  },
+  {
+    id: "dataset",
+    launch: "preview",
+    from: ["dataset", "table", "spreadsheet", "datasource"],
+    family: "asset",
+    harness: "system",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F5C2}\uFE0F"
+  },
+  {
+    id: "tool",
+    launch: "run",
+    from: ["diagnostics", "mcp", "code", "evaluation"],
+    family: "asset",
+    harness: "instrument",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F6E0}\uFE0F"
+  },
+  {
+    id: "creative",
+    launch: "preview",
+    from: ["image", "video", "animation", "podcast", "comic", "model3d", "cad", "mockup", "mockupSet", "drawing"],
+    family: "asset",
+    // The kind that proved `harness` cannot be one value per listing kind: a video is
+    // time-based, a comic is paged and a 3D model is dimensioned, and all three are
+    // legitimately `creative`. `resolveListingHarness` reads the source object first.
+    harness: "media",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "full",
+    icon: "\u{1F3A8}"
+  },
+  {
+    // An INSTRUMENT, not its answers. What is sold is the questions and the scoring;
+    // the responses belong to whoever runs it and are the one thing the seller must
+    // never be able to read — which is why the buyer gets an empty response store and
+    // the publish path strips the seller's own.
+    id: "survey",
+    launch: "run",
+    from: ["form"],
+    family: "asset",
+    harness: "instrument",
+    deliveries: ["copy"],
+    pricing: "either",
+    // `preview` even when free: an instrument someone can read in full is one they can
+    // copy, and the sample is the sales pitch.
+    trial: "preview",
+    icon: "\u{1F4CB}"
+  },
+  {
+    // Cover, pages and figures as one product with three outputs (reader, EPUB/PDF,
+    // print). Separate from `playbook` because the harness differs: a playbook is read
+    // on a screen and a book has to hold at print resolution as well.
+    id: "book",
+    launch: "preview",
+    from: ["book"],
+    family: "asset",
+    harness: "paged",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F4D6}"
+  },
+  {
+    // A designed room — boardroom, office kitchen, an open floor of cubicles — that
+    // another session installs as the place it meets in. The buyer gets the design
+    // itself (`copy`): a `room` object lands on their board and their room surface
+    // draws it. Previewable before paying, since a room is judged by walking it.
+    id: "room",
+    launch: "install",
+    from: ["room"],
+    family: "asset",
+    harness: "space",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F3E2}"
+  },
+  {
+    // A CAPABILITY of the platform, sold through the same shop window as everything
+    // else (PRD 33 D17: every workspace installs Insights through the Marketplace,
+    // Builderforce's own included). Published by the platform (a migration row), never
+    // from a canvas — `from` is empty and `sessionListingKinds` excludes it, because a
+    // board cannot BE a capability. The buyer gets no copy: holding the licence grants
+    // the capability (`deliveries: ['entitlement']`). `instrument` because what a buyer
+    // does with it is take measurements and read their own results.
+    id: "capability",
+    launch: "run",
+    from: [],
+    family: "asset",
+    harness: "instrument",
+    deliveries: ["entitlement"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F3A5}"
+  }
+];
+var LISTING_KIND_IDS = MARKETPLACE_LISTING_KINDS.map((spec) => spec.id);
+var DAY_MS = 24 * 60 * 60 * 1e3;
+
+// ../packages/creation-canvas-contract/src/academic.ts
+var ACADEMIC_OBJECT_KINDS = [
+  // ── Teaching: the assessment loop ──────────────────────────────────────────────
+  // The class itself. A roster is the axis the canvas never had: without it, "hand
+  // this out" and "who is behind?" have no subject.
+  "cohort",
+  // The task, its rubric, and one answer per learner. See the block comment above for
+  // why the last of these is a kind rather than an array.
+  "assignment",
+  "rubric",
+  "submission",
+  // Marks, aggregated and moderated. Deliberately separate from `rubric`: a rubric is
+  // the instrument, a gradebook is the record, and they have different lifetimes —
+  // the instrument is reused for years, the record belongs to one cohort.
+  "gradebook",
+  // The lawful and reusable parts of running a class.
+  "accommodation",
+  "feedbackBank",
+  // Delivering it: the session plan and the bookable hours after it.
+  //
+  // The live question asked DURING it is not here. `poll` was declared twice — once as a
+  // teaching kind and once, the same week, as the facilitation primitive in
+  // `SHARED_OBJECT_KINDS` — and two declarations of one word is not a duplicate the way
+  // two similar tables are: `CREATION_OBJECT_KINDS` concatenates both lists, so the
+  // registry indexed one kind twice and whichever spec loaded last silently won. A
+  // lecture check-for-understanding is the shared `poll` with `pollFormat: 'quiz'`,
+  // which is exactly the argument `SHARED_OBJECT_KINDS` makes for it.
+  "lecture",
+  "officeHours",
+  // Programme outcomes mapped to what actually evidences them. This is the
+  // accreditation artifact every department rebuilds in a spreadsheet every cycle.
+  "curriculumMap",
+  // ── Research: the scholarly lifecycle, in gate order ──────────────────────────
+  "grantProposal",
+  "ethicsApproval",
+  "preRegistration",
+  "protocol",
+  "consentForm",
+  "participantPool",
+  "dataManagementPlan",
+  "literatureReview",
+  "hypothesis",
+  "manuscript",
+  "peerReview",
+  // ── Scholarly primitives ──────────────────────────────────────────────────────
+  // One reference, the formatted list of them, and mathematics.
+  "citation",
+  "bibliography",
+  "equation"
+];
+var ACADEMIC_KIND_SET = new Set(ACADEMIC_OBJECT_KINDS);
+
+// ../packages/creation-canvas-contract/src/people.ts
+var PEOPLE_OBJECT_KINDS = [
+  // ── THE PERSON, AND THE SHAPE OF THE ORGANISATION ─────────────────────────────
+  // `staff` stays what it always was — a card for somebody on this board. `employee` is
+  // the employment RELATIONSHIP: department, manager, employment basis, status, dates.
+  // `people_employees.managerRef` has always carried the edge an org chart is drawn from
+  // and nothing on the canvas could hold it, so the board could not draw an org even from
+  // data it could already read.
+  "employee",
+  // Derived from those manager references and editable as a SCENARIO — which is the half
+  // a read-only directory cannot do and the half a reorg is entirely made of. Span of
+  // control and the layers under a manager are computed, never typed, because a typed
+  // span is wrong the first time somebody moves.
+  "orgChart",
+  // Approved vs actual vs budget, per team. The object a requisition is approved against
+  // and the one that makes "can we afford this hire" answerable on the board rather than
+  // in a thread nobody can find in March.
+  "headcountPlan",
+  // Range, midpoint, comparatio. The object that makes an offer checkable and pay equity
+  // answerable — the highest-value question in the whole set, and the one the data model
+  // could already answer while the canvas could not ask it.
+  "compBand",
+  // ── THE PAPER AND THE PROCESS ─────────────────────────────────────────────────
+  // A policy with a LIFECYCLE: effective date, jurisdiction, owner, review cadence and an
+  // acknowledgement roster. Drafting one was always possible with `document`; publishing
+  // it, collecting acknowledgements and chasing the people who have not signed were the
+  // three steps with no home — which is four-fifths of the actual job.
+  "policy",
+  // Onboarding and offboarding as ONE kind with a `direction`, because they are the same
+  // shape — dated steps against an anchor date, an owner per step, evidence per step —
+  // and their compliance-critical halves (right-to-work checked; access revoked) are
+  // mirror images. Two kinds would be one shape maintained twice, and the leaver half is
+  // the one that carries real risk.
+  "employeeLifecycle",
+  // Who is away, and whether the rota survives it. Every delivery forecast on this board
+  // models capacity as though headcount were always available; this is the subtrahend.
+  "absencePlan",
+  // ── PERFORMANCE, CAPABILITY AND RELATIONS ─────────────────────────────────────
+  // One review cycle for one person, at whatever cadence `reviewType` names.
+  "performanceReview",
+  // competencies × people, with the gap named. The one HR artifact the rest of the
+  // company acts on, because it is what answers build-vs-buy for a capability — which is
+  // the sentence that turns a skills gap into either a `course` or a `jobPosting`.
+  "skillsMatrix",
+  // Employee-relations casework: grievance, investigation, accommodation, disciplinary,
+  // performance plan. RESTRICTED by construction — see `RESTRICTED_BY_DEFAULT_KINDS`.
+  // This kind is why confidentiality is a declared part of the contract rather than
+  // something the export seam remembers to check.
+  "case",
+  // A STATUTORY commitment, as against `contract.obligations`, which are commitments to a
+  // counterparty. "We just hired in California and Ontario — what changes?" had no object
+  // at all.
+  //
+  // NOT YET WATCHABLE. This comment used to claim `trigger` binds to this object's `dueAt`
+  // and warns before the deadline. It does not: `canvasTriggers.ts` parses a NUMBER out of
+  // a `liveMetric` on the same board and compares it with below/above/equals/changes-by,
+  // so there is no date comparator and no binding to a non-metric object — and
+  // `canvas_evaluate_triggers` is a frontend tool with no server sweep, so nothing
+  // evaluates while the board is closed. A statutory deadline is therefore recorded here
+  // and noticed by a person. See the Gap Register entry "date-bearing triggers".
+  "obligation",
+  // ── THE COLLECTION PRIMITIVE ──────────────────────────────────────────────────
+  // A structured question set that a REAL HUMAN answers, and the responses that come back.
+  //
+  // It is declared in this vocabulary because HR is the domain that exposed its absence —
+  // applications, acknowledgements, 360s, exit interviews, pulses and accommodation
+  // requests are all one shape — but every field it declares is deliberately domain
+  // NEUTRAL. Support intake, a research screener and a satisfaction round are the same
+  // object, and handing the domain that asked first a private copy is how a product ends
+  // up with three response stores. `pulse_surveys` becomes its first binding rather than
+  // its competitor.
+  //
+  // This is the single largest "idea to REAL" break the canvas had: it could author
+  // anything and collect nothing, so every flow that needed an answer from a person
+  // terminated in a document and finished its real work somewhere else.
+  "form"
+];
+var CONFIDENTIALITY_LEVELS = ["public", "internal", "restricted"];
+function isConfidentialityLevel(value) {
+  return typeof value === "string" && CONFIDENTIALITY_LEVELS.includes(value);
+}
+function confidentialityAtMost(level, ceiling) {
+  return CONFIDENTIALITY_LEVELS.indexOf(level) <= CONFIDENTIALITY_LEVELS.indexOf(ceiling);
+}
+var BOUNDARY_CEILING = {
+  export: "internal",
+  share: "internal",
+  guest: "public",
+  publicMedia: "internal",
+  aiContext: "internal"
+};
+function boundaryAdmits(level, boundary) {
+  return confidentialityAtMost(level, BOUNDARY_CEILING[boundary]);
+}
+
+// ../packages/creation-canvas-contract/src/advisoryThread.ts
+var ADVISORY_THREAD_MARKER = "advisory-thread";
+var ADVISORY_THREAD_CONFIDENTIALITY = "restricted";
+function advisoryThreadConfidentiality(declared) {
+  if (isConfidentialityLevel(declared) && declared === ADVISORY_THREAD_CONFIDENTIALITY) return declared;
+  return ADVISORY_THREAD_CONFIDENTIALITY;
+}
+function advisoryThreadAdmitted(state, boundary) {
+  const level = advisoryThreadConfidentiality(state.confidentiality);
+  if (boundary === "aiContext" && state.founderInvitedAdvisor) {
+    return boundaryAdmits("internal", "aiContext");
+  }
+  return boundaryAdmits(level, boundary);
+}
+function readAdvisoryThreadState(metadata) {
+  if (metadata == null || metadata === "") return null;
+  let raw = metadata;
+  if (typeof metadata === "string") {
+    try {
+      raw = JSON.parse(metadata);
+    } catch {
+      return null;
+    }
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record2 = raw;
+  if (record2.marker !== ADVISORY_THREAD_MARKER) return null;
+  return {
+    confidentiality: advisoryThreadConfidentiality(record2.confidentiality),
+    founderInvitedAdvisor: record2.founderInvitedAdvisor === true,
+    hostRef: typeof record2.hostRef === "string" && record2.hostRef ? record2.hostRef : void 0
+  };
+}
+function advisoryThreadHistoryAdmitted(messages, boundary = "aiContext") {
+  for (const message of messages) {
+    const state = readAdvisoryThreadState(message.metadata);
+    if (!state) continue;
+    return advisoryThreadAdmitted(state, boundary);
+  }
+  return true;
+}
+
+// ../packages/creation-canvas-contract/src/facilitation.ts
+var GRID_QUADRANTS = [
+  { key: "lowLow", x: 0, y: 0 },
+  { key: "highLow", x: 1, y: 0 },
+  { key: "lowHigh", x: 0, y: 1 },
+  { key: "highHigh", x: 1, y: 1 }
+];
+var POLL_GRID_QUADRANTS = GRID_QUADRANTS.map((q) => q.key);
+
+// ../packages/creation-canvas-contract/src/dataScience.ts
+var DATA_SCIENCE_OBJECT_KINDS = [
+  // ── ANALYSIS ────────────────────────────────────────────────────────────────
+  // The cell. Its outputs are first-class canvas artifacts rather than a scrollback
+  // buffer, which is what makes an analysis something the next turn can reason over
+  // instead of something a person has to re-read.
+  "notebook",
+  // ── MODEL ───────────────────────────────────────────────────────────────────
+  // What was trained, and one run that trained it. Two kinds rather than one, and it
+  // is the same split `metric`/`liveMetric` and `inbox`/`email` already draw: a
+  // `model` is the ARTIFACT that persists and gets promoted, a `trainingRun` is one
+  // EXECUTION that produced a loss curve and a scorecard and then stopped changing.
+  // Collapsing them would mean a model could only ever remember its most recent run.
+  "model",
+  "trainingRun",
+  // N runs side by side with their hyperparameters and their metrics. Its own kind
+  // rather than a view because the CHOICE is an artifact: "we picked this config, at
+  // this cost, over that one" is exactly the reasoning a `decision` object cites.
+  "runComparison",
+  // ── EVALUATION ──────────────────────────────────────────────────────────────
+  // Where an eval set legitimately comes from: sampled rows, a question, the humans
+  // who answered it, and their agreement. `labels` is derived for the same reason
+  // `practice.attempts` and an academic `marks` field are — it is the record of what a
+  // person actually chose, and a model that could write it could manufacture consensus.
+  "labelSet",
+  // ── SHIP ────────────────────────────────────────────────────────────────────
+  // The prompt as a VERSIONED artifact with an evaluation attached, backed by the
+  // prompt library the platform already stores. `llm.instructions` was a bare string
+  // with no history and nothing to diff against.
+  "prompt"
+];
+
+// ../packages/creation-canvas-contract/src/operations.ts
+var OPERATIONS_OBJECT_KINDS = [
+  // ── THE THING BEING SERVED ────────────────────────────────────────────────────
+  // The physical or managed item work is done TO: a boiler, a rental unit, a vehicle, a
+  // production line, a treatment room. It is first because it is the only object here
+  // with a life longer than any single job, and it is what makes the operation's most
+  // valuable question answerable at all — "what does this asset cost us a year, and is it
+  // cheaper to replace it" — which no amount of per-job record keeping answers.
+  "serviceAsset",
+  // ── THE WORK ──────────────────────────────────────────────────────────────────
+  // One unit of committed work: reactive repair, planned maintenance, installation,
+  // warranty, callback. `orderType` carries which, because they are the same object with
+  // the same lifecycle and the same costing, and splitting them would split the backlog.
+  "workOrder",
+  // WHEN AND BY WHOM, on the ground. A work order can need none, one or six visits — a
+  // return trip for a part is the commonest event in field service and the one a
+  // single-appointment model cannot represent without lying about first-time fix.
+  "visit",
+  // THE DAY, ACROSS EVERYBODY. Capacity, assignment and the unassigned pile: the view a
+  // service business runs its morning from, and the one that makes "we are full" a fact
+  // rather than a feeling.
+  "dispatchBoard",
+  // ── THE COMMERCIAL FRAME ──────────────────────────────────────────────────────
+  // The recurring commitment: a maintenance plan, a retainer, an SLA, a managed-service
+  // agreement. It is what turns a service business from a queue of jobs into a book of
+  // revenue, and it is what a planned `workOrder` is generated FROM rather than
+  // remembered into existence.
+  "serviceAgreement",
+  // The priced quote that precedes the work — the missing predecessor of `invoice`.
+  "estimate",
+  // ── THE EVIDENCE AND THE PERMISSION ───────────────────────────────────────────
+  // A completed procedure against an asset: lines, results, evidence, an outcome and a
+  // next-due date. Safety checks, statutory certificates, condition surveys, QA passes on
+  // a line, a vehicle walkaround — one shape, `inspectionType` says which.
+  "inspection",
+  // The credential the work is only lawful WITH: a trade registration, a practising
+  // certificate, an insurance policy, a calibration, a licence to operate. It carries an
+  // expiry, which is the whole point: an expired certificate does not announce itself,
+  // and dispatching against one is how a company loses its own licence.
+  "certification",
+  // ── WHAT THE WORK CONSUMES ────────────────────────────────────────────────────
+  // Stock with a reorder point and a lead time: the parts on the van and in the store.
+  "inventoryItem",
+  // Who it is bought from, and how long they take. Lead time is the field that makes a
+  // reorder point calculable rather than guessed.
+  "supplier",
+  // The replenishment itself, from raised to received.
+  "purchaseOrder",
+  // The movement, with tracking and proof of delivery. Distinct from the purchase order
+  // for the same reason `testRun` is distinct from `testPlan`: one order can ship three
+  // times, and a part that is late is a job that cannot be booked.
+  "shipment",
+  // ── WHEN IT GOES WRONG ────────────────────────────────────────────────────────
+  // A safety, environmental or service-failure event: injury, near miss, spill, outage,
+  // damage, complaint. Its own kind rather than a `defect` because a defect is
+  // REPRODUCED and VERIFIED against a build, and an incident is REPORTED, investigated
+  // and — in most of these verticals — reportable to a regulator on a clock. It is
+  // `restricted` by default: an injury record carries health data about a named person.
+  "incident"
+];
+var OPERATIONS_KIND_SET = new Set(OPERATIONS_OBJECT_KINDS);
+
+// ../packages/creation-canvas-contract/src/resumeLexicon.ts
+var SKILL_GROUPS = {
+  Languages: ["javascript", "typescript", "python", "java", "csharp", "cpp", "go", "rust", "ruby", "php", "swift", "kotlin", "scala", "r", "sql", "objectivec", "dart", "elixir", "perl", "bash"],
+  "Frameworks & libraries": ["react", "nextjs", "vue", "angular", "svelte", "nodejs", "django", "flask", "fastapi", "rails", "spring", "laravel", "express", "dotnet", "pytorch", "tensorflow", "pandas", "numpy", "tailwind"],
+  "Cloud & infrastructure": ["aws", "azure", "googlecloud", "cloudflare", "kubernetes", "docker", "terraform", "ansible", "serverless", "linux", "nginx", "cicd", "jenkins", "githubactions"],
+  "Data & storage": ["postgresql", "mysql", "mongodb", "redis", "elasticsearch", "snowflake", "bigquery", "databricks", "kafka", "spark", "airflow", "dbt", "nosql", "etl"],
+  "Practices & methods": ["agile", "scrum", "kanban", "devops", "tdd", "qualityassurance", "microservices", "rest", "graphql", "api", "accessibility", "observability", "sre", "incidentresponse"],
+  // `machinelearning`, `nlp` and `computervision` are canonical PHRASE tokens — the
+  // tokenizer collapses "machine learning" into one of them. They must also be listed
+  // here or `isSkillToken` returns false for every one, which silently made machine
+  // learning invisible to the scorer, the matcher and the role catalogue alike.
+  // Both spellings of the two phrases that do not collapse to their acronym: the
+  // tokenizer produces the run-together PHRASE form ("naturallanguageprocessing") while
+  // a résumé that writes the acronym produces "nlp". Listing one and not the other is
+  // how the same skill counts on one document and not on another.
+  "AI & data science": ["machinelearning", "deeplearning", "nlp", "naturallanguageprocessing", "computervision", "datascience", "dataengineering"],
+  "Product & design": ["productmanagement", "userexperience", "userinterface", "figma", "wireframing", "prototyping", "userresearch", "roadmapping", "analytics", "experimentation"],
+  "Business & commercial": ["saas", "b2b", "b2c", "crm", "erp", "salesforce", "hubspot", "forecasting", "budgeting", "pricing", "negotiation", "procurement", "compliance"],
+  "Marketing & growth": ["seo", "searchengineoptimization", "contentmarketing", "socialmedia", "customersuccess", "businessdevelopment", "accountmanagement"],
+  "Leadership & communication": ["mentoring", "coaching", "hiring", "stakeholdermanagement", "facilitation", "publicspeaking", "technicalwriting", "peoplemanagement", "changemanagement"]
+};
+var SKILL_INDEX = new Map(
+  Object.entries(SKILL_GROUPS).flatMap(([group2, tokens2]) => tokens2.map((t) => [t, group2]))
+);
+var STRONG_VERBS = [
+  "led",
+  "built",
+  "shipped",
+  "launched",
+  "designed",
+  "architected",
+  "delivered",
+  "owned",
+  "drove",
+  "grew",
+  "reduced",
+  "increased",
+  "cut",
+  "saved",
+  "scaled",
+  "automated",
+  "migrated",
+  "rebuilt",
+  "negotiated",
+  "closed",
+  "hired",
+  "mentored",
+  "founded",
+  "created",
+  "introduced",
+  "streamlined",
+  "recovered",
+  "won"
+];
+var POSITIVE_TONE = [
+  ...STRONG_VERBS,
+  "improved",
+  "exceeded",
+  "achieved",
+  "award",
+  "awarded",
+  "promoted",
+  "recognised",
+  "recognized",
+  "successful",
+  "record",
+  "best",
+  "first",
+  "expert",
+  "certified",
+  "accelerated"
+];
+
+// ../packages/creation-canvas-contract/src/website.ts
+var WEBSITE_SECTION_KINDS = ["hero", "features", "content", "stats", "testimonial", "cta"];
+var WEBSITE_ADDABLE_SECTION_KINDS = WEBSITE_SECTION_KINDS.filter((kind) => kind !== "hero");
+var WEBSITE_THEME_STYLES = ["editorial", "bold", "minimal", "soft", "technical"];
+var SECTION_KINDS = new Set(WEBSITE_SECTION_KINDS);
+var THEME_STYLES = new Set(WEBSITE_THEME_STYLES);
+
+// ../packages/creation-canvas-contract/src/sellMotion.ts
+var SELL_MOTION_OBJECT_KINDS = [
+  // WHAT IT COSTS THEM. Seats × plan × term × discount × expiry, that a buyer can accept
+  // without an account. The object where a negotiated price stops dying on the way to
+  // checkout.
+  "quote",
+  // WHAT THEY ACTUALLY SAID. Recording, transcript, objections, commitment, next step —
+  // the highest-signal artifact in selling, and the one the board could not hold.
+  "call",
+  // LET THEM TRY IT. A time-boxed prospect workspace provisioned FROM the board built
+  // with them, so the demo artifact becomes the trial and the trial becomes onboarding.
+  "trial",
+  // THE PROCUREMENT DELIVERABLE. Controls, subprocessors, the DPA, the diagnostics, and
+  // the questionnaire answered row by row with the evidence each answer rests on.
+  "trustPacket",
+  // THE PLAN BOTH SIDES OWN. Dated milestones with a named owner on EACH side, and the
+  // handoff that carries what was built during the sale into the customer's workspace.
+  "mutualActionPlan"
+];
+
+// ../packages/creation-canvas-contract/src/career.ts
+var CAREER_OBJECT_KINDS = [
+  // A POSTING SOMEONE ELSE OPENED. The research object: what the role is, what it pays
+  // as ADVERTISED (never as guessed), the requirements as stated, and the honest read
+  // on fit. Bound to `recruiter.match_job` and `jobs.get`.
+  "job",
+  // ONE APPLICATION, WITH ITS LIFECYCLE. A projection of a `job_proposals` row, not a
+  // second copy of it — see the header. This is the object that makes a follow-up date
+  // a thing the board can warn about rather than a thing somebody remembers.
+  "jobApplication",
+  // ALL OF THEM AT ONCE. The transpose of a `shortlist`: one person's applications with
+  // their stages, their ages and the one that has gone quiet longest. Bound to
+  // `proposals.mine`.
+  "applicationPipeline",
+  // THE LETTER. Its own kind rather than a `document` because it is written AGAINST a
+  // posting and re-written per application, and because the openings a person reuses are
+  // the part worth keeping — a `document` cannot say which posting it answered.
+  "coverLetter",
+  // THE REHEARSAL, PERSISTED. Questions with the rubric each is scored against, the
+  // gaps the posting exposes, and the answers the person has actually drafted. Bound to
+  // `recruiter.interview_questions` and `hr.interview_coaching`.
+  "interviewPrep",
+  // THE CLOCK EVERY OTHER DECISION IS PACED AGAINST. Bound to `hr.runway` and
+  // `hr.compare_work_options`.
+  "runway",
+  // THE HOURS, AND WHAT THEY ARE WORTH. A projection of a `timecards` row, which has had
+  // routes, a lifecycle (draft → submitted → approved → rejected → paid) and a
+  // freelancer dashboard the whole time and no canvas surface at all — so the one seat
+  // where "idea → REAL" ends in money arriving could draft the agreement on the board
+  // and had to leave it to bill for the work.
+  //
+  // IN THIS VOCABULARY AND NOT THE FOUNDER ONE, though it is unambiguously money: an
+  // `invoice` is what a COMPANY sends and it already exists over `freelancer_invoices`.
+  // A timecard is the hours ONE PERSON worked, submitted for somebody else's approval —
+  // the same side of the transaction as `jobApplication`, and the same relationship to
+  // its row: the lifecycle lives in the table, and the card projects it.
+  "timecard"
+];
+var CAREER_KIND_SET = new Set(CAREER_OBJECT_KINDS);
+
+// ../packages/creation-canvas-contract/src/marketing.ts
+var MARKETING_OBJECT_KINDS = [
+  // THE BRAND, AS A BINDABLE THING. Palette, typography, logo, voice, and the claims
+  // that may never be made. Projects `brand_kits`; the claim list is the board's own,
+  // because `battlecard.doNotSay` is where the product already records a forbidden
+  // claim and a second store for the same sentence is how the two come to disagree.
+  "brandKit",
+  // WHO A SEND REACHES, AND WHO IT MUST NOT. Rules, size, and the suppression count —
+  // the last of which is the whole reason the kind exists: an audience card that showed
+  // a size and not a suppression count would make the surface's own legal exposure
+  // invisible in exactly the place a person decides to press send.
+  "audience"
+];
+var BRAND_BOUND_KINDS = [
+  // The `creative.*` capabilities — every one of them reaches `builtin_creative_compose`.
+  "image",
+  "video",
+  "animation",
+  "comic",
+  "podcast",
+  "drawing",
+  "model3d",
+  "cad",
+  // The authored surfaces, which do not go through the creative route but carry the same
+  // identity: a site and an email that ignore the palette are as off-brand as a poster.
+  "website",
+  "prototype",
+  "emailTemplate",
+  "emailCampaign",
+  "socialCampaign",
+  "socialPost",
+  // Slides and mockups are shown to customers more often than any image on this list.
+  "slides",
+  "mockup",
+  "mockupSet"
+];
+var BRAND_BOUND_SET = new Set(BRAND_BOUND_KINDS);
+
+// ../packages/creation-canvas-contract/src/objectKinds.ts
+var FOUNDER_OBJECT_KINDS = [
+  // WHO WE ARE. The anchor every other founder object is authored against, and the
+  // reason "use my existing business details" can be a real instruction rather than a
+  // request for the user to paste their own company into the prompt. Hydrates from the
+  // investor seat's `companies` entity when there is a tenant, and is authored directly
+  // when there is not — a guest evaluating the product still has a company.
+  "company",
+  // WHO WE ARE AGAINST. One rival, with the geography that makes a market analysis
+  // spatial rather than a list: `locations` carry lat/lng, so the same competitors that
+  // answer "who is in Florida" also answer "where are they NOT".
+  "competitor",
+  // WHO WE SELL TO, and the plan that reaches them. A segment is sized and sourced;
+  // a GTM plan names the motion, the channels and the economics that make the segment
+  // reachable — which is what turns "potential customers" into a list with a route.
+  "customerSegment",
+  "gtmPlan",
+  // HOW WE WIN A NAMED RIVAL'S CUSTOMER. Deliberately its own kind rather than a field
+  // on `competitor`: the analysis of a rival and the plan to take their customers have
+  // different authors, different review cycles, and different lifetimes.
+  "battlecard",
+  // THE IDEA, BEFORE ANY OF IT. The thing a founder has in the shower, jots on a
+  // scratchpad, and — on every other tool — loses. The board could hold a researched
+  // segment, a battlecard and a run experiment, and not the half-formed thought that
+  // started them. An `idea` is written in seconds (a line is enough), carries a `stage`
+  // from `IDEA_STAGES` so a pile of them can be TRACKED rather than merely kept, and
+  // names the `customerInterview` / `experiment` objects that tested it, so "have we
+  // talked to anybody about this?" is a fact on the card rather than a feeling. Ported
+  // from BurnRateOS's Ideas Scratch Pad as a KIND, not a second document editor: the
+  // canvas already has pages, and what it lacked was the idea as a thing you can count.
+  "idea",
+  // THE EVIDENCE UNDER ALL OF IT. A customer conversation and a run experiment are the
+  // two things that turn an assumption into a fact, and the canvas had neither.
+  //
+  // Named `customerInterview` and not `interview` because the hiring domain registers a
+  // JOB interview under `kind: 'interview'` in the kernel `objects` table
+  // (`api/src/application/domains/hiring/entities.ts`). Two different things under one
+  // word in the ubiquitous language is how `canvas_read_domain('hiring')` comes to hand
+  // the model rows it maps onto a discovery card with `painsHeard` and `segment` — the
+  // same collision class the FinOps `soc_controls` rename exists to record. The founder
+  // kind carries the qualifier because it is the one with an adjective available; the
+  // hiring kind keeps the bare noun a recruiter actually says.
+  "customerInterview",
+  "experiment",
+  // WHAT WE CHOSE AND WHY. The canvas recorded what HAPPENED in five places (timeline,
+  // activity, checkpoints, branches, the action journal) and why we CHOSE in none.
+  "decision",
+  // WHAT COULD GO WRONG, TRACKED RATHER THAN BURIED IN A NOTE. `decision`'s sibling
+  // durable artifact: a decision is chosen and reasoned about once, a risk is watched
+  // and re-scored over the life of a project. Before this it degraded to a free-text
+  // `note`, which meant it could not roll up (how many open risks, what is the highest
+  // exposure) or be reported on — the same gap `decision` closed for the choices.
+  "risk",
+  // WHAT WE ARE AIMING AT, on the board rather than only in the PMO spine.
+  "objective",
+  // THE LIVE HALF. See the block comment above.
+  "liveMetric",
+  "trigger",
+  // THE MONEY. A canvas that can design and market a product but cannot price it,
+  // raise against it, or say who owns it is a canvas for a project, not a company.
+  "pricing",
+  "capTable",
+  "fundingRound",
+  "investorUpdate",
+  "dataRoom",
+  // ── OWNERSHIP, AS EVENTS RATHER THAN A TYPED TABLE ──────────────────────────────
+  // `capTable` above is now a PROJECTION — it computes its own totals from the real
+  // ledger and nothing writes a percentage onto it. These two are what the ledger is
+  // made of, and each is its own kind for a reason the other cannot carry:
+  //
+  //  • `equityGrant` is an award with a VESTING SCHEDULE, which is a set of terms with
+  //    a date attached — so it is the only ownership object a `trigger` can watch, and
+  //    `cliffAt` is a declared deadline for exactly that. Folding it into `capTable`
+  //    would mean one card per company holding N schedules with N cliff dates, of which
+  //    a deadline binding could watch precisely one.
+  //  • `convertible` is a SAFE or a note: money that is NOT yet equity and converts on
+  //    terms (cap, discount, pre/post-money) that decide what everybody else ends up
+  //    owning. `fundingRound.roundType: 'safe'` was a label over nothing, and a priced
+  //    round modelled without the stack in front of it is modelled against a fiction.
+  "equityGrant",
+  "convertible",
+  // ── THE MONEY, OPERATED ─────────────────────────────────────────────────────────
+  // The five kinds above hold the money a company RAISES and CHARGES. These five hold
+  // the money it PLANS, COLLECTS, OWES and SPENDS ON PEOPLE — the difference between a
+  // board that can run a fundraise and one that can run a month.
+  //
+  // WHY EACH IS ITS OWN KIND, and not a status on one `finance` object:
+  //  • `budget` is the PLAN. It is authored once a year, approved, and then compared
+  //    against — so it must stop changing while actuals move. Budget-vs-actual is the
+  //    single most-performed operation in the role and had nowhere to live.
+  //  • `forecast` is the MODEL. It re-computes from drivers and scenarios and is
+  //    expected to change weekly, which is the exact opposite lifetime to a budget's.
+  //    Collapsing the two would make "what we committed to" and "what we now expect"
+  //    the same object, and the variance between them is the entire report.
+  //  • `invoice` / `bill` are RECEIVABLE and PAYABLE. Two kinds rather than one signed
+  //    number because they have different counterparties, different owners, different
+  //    ageing rules, and because "who owes us" and "who we owe" are asked separately.
+  //
+  // All four carry structured money (`canvasMoney.ts`) rather than the prose the five
+  // above were designed around, which is what makes them summable.
+  //
+  // NOT HERE, DELIBERATELY: `headcountPlan`. The largest line in any budget is people,
+  // and the canvas could draw them as an org (`team`/`role`/`staff`) and never as a
+  // cost — so the CFO review asked for a cost-bearing headcount object. `PEOPLE_OBJECT_
+  // KINDS` already declares one, from the HR seat, holding approved-vs-actual headcount
+  // per team. Declaring a second would be two specs for one noun and two answers to
+  // "how many people are we planning", which is the collision `customerInterview` is
+  // renamed to avoid. The single spec in `peopleObjects.ts` carries BOTH halves instead:
+  // HR owns the establishment, finance owns what it costs, and a role's loaded cost is
+  // one fact in one place.
+  "budget",
+  "forecast",
+  "invoice",
+  "bill",
+  // ── WHAT PAYROLL ACTUALLY COST ──────────────────────────────────────────────────
+  // The fifth of the operated-money kinds, and the one that makes the largest line on
+  // a forecast a FACT rather than a figure somebody typed.
+  //
+  // WHY IT IS ITS OWN KIND AND NOT A `bill`. A pay run has no counterparty to approve,
+  // dispute or schedule: the money has already left, through a provider that calculated
+  // it. Modelling it as a payable would put a vendor's demand and a completed
+  // disbursement under one lifecycle, and `bill.approve` — the one act on this platform
+  // that can cause real financial harm — would become available on a row nobody can
+  // authorise because it is already done.
+  //
+  // WHY IT IS READ-ONLY IN PRACTICE. Every figure on it is one a payroll provider
+  // returned, hydrated by `canvas_sync_pay_run`. The platform must never CALCULATE a
+  // salary or a tax — see `connectors/defaults/payroll.ts` for the full argument — so
+  // this card reports and never computes.
+  "payRun",
+  // THE PAPER. Formation, customer and vendor agreements — the first ninety days of a
+  // company, which the governance vocabulary (SOC 2 controls, vendor registers) covers
+  // for an enterprise and not at all for a new one.
+  "contract",
+  // ── THE COUNTERPARTY ────────────────────────────────────────────────────────────
+  // An account you have WON, or a vendor you buy from — the ONE object every
+  // commercial reference on this board points at.
+  //
+  // WHY IT WAS MISSING, AND WHY THAT COST SOMETHING. `company` is US. `competitor` is
+  // THEM. `salesContact` is a person and `customerSegment` is a cohort; none of the
+  // four is an account. So `invoice.customer`, `bill.vendor`, `contract.counterparty`
+  // and `placement.client` were each told to "match it to a company, salesContact or
+  // contract on the board where one exists" — four fields matching four different
+  // typed strings, which means joining a contract to its invoices, its tickets and its
+  // renewal was a string comparison that a trailing "Ltd" broke.
+  //
+  // WHY IT IS NOT A NEW TABLE. `party_roles` in the kernel already holds exactly one
+  // row per (tenant, party kind, party ref, role) with a unique index proving it — the
+  // counterparty EXISTS and the canvas simply could not see it. A second customer store
+  // is the collision `finance_soc_controls` exists to record. So the kind carries a
+  // `partyRef`, and `parties.ts` declares the ref format and the role vocabulary that
+  // both sides resolve through.
+  "account"
+];
+var FOUNDER_KIND_SET = new Set(FOUNDER_OBJECT_KINDS);
+var IDEA_STAGES = ["captured", "exploring", "validating", "validated", "parked", "dropped", "promoted"];
+var IDEA_STAGE_SET = new Set(IDEA_STAGES);
+var HIRING_OBJECT_KINDS = [
+  // WHO WE ARE HIRING. One person in one search, with the stage they are at and the
+  // consent under which we hold them. The `salesContact` of this funnel.
+  "candidate",
+  // WHERE THEY CAME FROM. A reproducible sourcing search plus the people it found —
+  // the object that makes silver-medallist re-engagement possible at all, because the
+  // list survives the search that produced it.
+  "talentPool",
+  // WHAT WE ARE HIRING FOR, and WHERE IT WAS ADVERTISED. Requisition and distribution
+  // are one object because a posting nobody can see is not a posting: the board list is
+  // the field that makes "post this role" end in something real.
+  "jobPosting",
+  // WHO MADE THE CUT. N résumés ranked against ONE posting, with the reason each rank
+  // was given. The screening half the ATS scorer could not express when it took one
+  // résumé and one job description.
+  "shortlist",
+  // WHAT THEY WILL BE PUT THROUGH, and the link that lets them book it themselves.
+  "interviewLoop",
+  // WHAT ONE INTERVIEWER THOUGHT, per attribute, submitted independently. Its own kind
+  // rather than a field on the loop because independence is the whole point: a
+  // scorecard that can be read before it is submitted is a scorecard that anchors.
+  "scorecard",
+  // WHAT WE OFFERED, what it is worth, who approved it, and whether it is signed.
+  "offer",
+  // THE FEE. For an agency or embedded recruiter this is the revenue event, and the
+  // split is the business — `placement_splits` is registered read-only in the domain
+  // precisely because it is money.
+  "placement"
+];
+var HIRING_KIND_SET = new Set(HIRING_OBJECT_KINDS);
+var LEGAL_OBJECT_KINDS = [
+  "legalDocument",
+  // THE COMPANY ITSELF, and every subsidiary. `renewsAt` is the agent appointment or the
+  // entity's own standing lapsing — the first date on this board a founder is penalised
+  // for missing rather than merely embarrassed by.
+  "legalEntity",
+  // WHAT WE OWN THAT IS NOT A THING. A mark, a patent, a design, a domain — one shape,
+  // because each is "a right, in a jurisdiction, in a class, with a filing date and a
+  // renewal date", and `assignedFrom` is the founder-IP question a raise discovers.
+  "ipAsset",
+  // WHAT IS BEING ARGUED, with a cost and an adverse party. `nextActionAt` is a filing
+  // deadline or a hearing — a date somebody is judged against, not a date noted.
+  "legalMatter"
+];
+var LEGAL_KIND_SET = new Set(LEGAL_OBJECT_KINDS);
+var SHARED_OBJECT_KINDS = [
+  "funnel",
+  "book",
+  "sequence",
+  /**
+   * A question put to a ROOM — the facilitation primitive.
+   *
+   * Cross-domain in the strongest sense on this list: a retro, a planning estimate, a
+   * class check-for-understanding, a customer workshop and an all-hands Q&A are one
+   * object put to five different rooms. Which INSTRUMENT it is — a ballot, a word
+   * cloud, a ranking, a 1-to-5, a 2×2, a quiz — is a value (`pollFormat`), for the
+   * same reason `funnelDomain` and `direction` are values one entry up.
+   *
+   * Its answers live in `question_sets` + `responses` with `kind = 'poll'`, which is
+   * the store the collection primitive already collapsed twelve survey tables into.
+   * A poll is NOT a `form`: a form is answered on somebody's own time and read later,
+   * a poll is answered by a room at once and read WHILE it is being answered. Same
+   * store, different object, and the difference is the whole feature — see
+   * `facilitation.ts`.
+   */
+  "poll",
+  /**
+   * A DATE WITH A SUBJECT, and any number of them — the calendar primitive.
+   *
+   * Cross-domain by construction, and it is the kind that ended a MODALITY. The month
+   * used to be a board-scoped surface in the canvas rail: one grid, one hardcoded
+   * reading (this board's dated cards), no way to have two, and no way to point it at
+   * the deployments, meetings, holidays or connected accounts whose dates already
+   * existed elsewhere. A release calendar, a send calendar, a leave calendar and an
+   * on-call rotation are one object bound to four SOURCES — which is a value on the
+   * card, exactly as `funnelDomain` and `pollFormat` are values one entry up.
+   *
+   * It owns no dates it did not author. A bound calendar PROJECTS its source and writes
+   * an edit back through it, because a second copy of a send's date is how a card and a
+   * calendar come to disagree about when something ships. See `calendar.ts`.
+   */
+  "calendar"
+];
+var CREATION_OBJECT_KINDS = [
+  /**
+   * ONE EXECUTABLE STEP, ON THE BOARD.
+   *
+   * `workflow` is the old shape: a card standing in for a graph that lived somewhere
+   * else, edited in a modal that opened a second canvas on top of the first. A
+   * `flowStep` is that graph said once — one step is one object, connected with the
+   * board's own connections, grouped with the board's own frames, and compiled from
+   * what is actually drawn (`compileBoardFlow.ts`). The canvas IS the workflow.
+   *
+   * There is exactly ONE kind for ~60 step kinds: which step it is, is a VALUE
+   * (`stepKind`, from the step catalog), not a kind — the same rule that makes a new
+   * industry a `discipline` value rather than a new vocabulary. `workflow` remains for
+   * boards authored before this and for a card that points at a saved definition.
+   */
+  "flowStep",
+  "workflow",
+  "project",
+  "website",
+  "build",
+  "dashboard",
+  "chat",
+  "agent",
+  "staff",
+  "evaluation",
+  "dataset",
+  "table",
+  "spreadsheet",
+  "chart",
+  "map",
+  "report",
+  "kpi",
+  "prototype",
+  "code",
+  "browser",
+  "llm",
+  "voice",
+  "video",
+  "image",
+  "animation",
+  "podcast",
+  "comic",
+  "game",
+  "cad",
+  "model3d",
+  "resume",
+  "template",
+  // A place, not a picture: a walkable 3D scene with placed props and a real camera.
+  // Distinct from `model3d` (one generated mesh, previewed on a card) and from the
+  // room's session (a temporary reading of the flat board) — `world` is authored
+  // object state of its own, opened full-size the same way `game`/`website` are.
+  "world",
+  // THE ROOM'S DESIGN. A place the SESSION meets in — its floor, walls and furniture —
+  // rather than a place a walker explores (`world`). The room surface reads the
+  // board's active `room` object to know what to draw; a session with none meets in
+  // the standup room. See `roomDesign.ts`.
+  "room",
+  // AI VIDEO/3D GENERATION, as a canvas object. Opens into the `scene3d` SURFACE
+  // (`creationObjectSurfaces.ts`) bound to itself — the product decision that AI
+  // video/3D generation lives under the 3D surface rather than under `timeline`
+  // (which stays the real multi-track editor for imported/screen/camera clips,
+  // untouched by this kind) or under a bolted-on legacy project modality (retired).
+  // Distinct from `world`: a `world` is hand-authored prop-by-prop; a `scene` is one
+  // prompt handed to the studio engine. See `scene.ts`.
+  "scene",
+  "document",
+  "slides",
+  "diagram",
+  "knowledge",
+  "file",
+  "url",
+  "note",
+  "drawing",
+  "frame",
+  "comment",
+  "timer",
+  /**
+   * COUNTING UP, which a countdown cannot do.
+   *
+   * `timer` runs a clock DOWN from a length somebody chose — a timebox. A stopwatch has
+   * no length: it answers "how long did that actually take", which is the question a
+   * facilitator asks about a demo, a discussion or a round nobody boxed. The two share
+   * a shape (`startedAt` + `baseElapsedMs`, so every viewer derives the same elapsed
+   * value from the shared model rather than a private local clock) and answer opposite
+   * questions, which is why one kind with a `countsDown` flag would need a branch at
+   * every place either is read.
+   *
+   * It came from the knowledge board, which had it while the canvas that is actually
+   * the front door did not — the seam that entry was logged against.
+   */
+  "stopwatch",
+  /**
+   * ANOTHER OBJECT, SHOWN HERE — the transclusion.
+   *
+   * Not a copy and not a link: the card renders the referenced object's own current
+   * content, so a board can put the same document in two contexts without either of
+   * them going stale. `url` points AWAY from the workspace and `knowledge` IS a
+   * knowledge item; neither says "show me that one, live, over there".
+   *
+   * The other half of the knowledge board's fold: its `embed` block transcluded a
+   * knowledge document by id, and the Creation Canvas had no equivalent.
+   */
+  "transclusion",
+  /**
+   * A PLATFORM COMPONENT, MOUNTED ON THE BOARD.
+   *
+   * Not a picture of one and not a link to one: the card renders the same live,
+   * tenant-scoped surface the app renders — the kanban, the roadmap, the vendor
+   * register, the workforce directory — from the one component registry
+   * (`lib/components/registry.ts`), addressed by `componentId`.
+   *
+   * This is the kind that makes the board a place a business is RUN rather than
+   * only described. A CRM or a marketing pipeline is not a new object type here;
+   * it is a board somebody composed out of these, which is why there is one kind
+   * and not one per surface. `transclusion` shows another CANVAS object; this
+   * shows a domain the platform owns.
+   *
+   * The same id addresses the same component at `/embed/<id>` inside the app a
+   * customer publishes, so a card on the board and the surface in their product
+   * are one declaration rather than two implementations.
+   */
+  "component",
+  // The UNTYPED escape hatch, and the only one on this list.
+  //
+  // Every other kind here is a claim about what a thing IS, which is the whole
+  // argument for a typed canvas: a `task` has an assignee, a `testRun` has a verdict,
+  // and the board can compute over both. A sticky claims nothing. It is a coloured
+  // rectangle with words on it.
+  //
+  // It exists for two reasons that are really one reason. First, a workshop starts
+  // before anyone knows what the objects are — forcing a person to pick from 180 kinds
+  // to write down "customers hate the onboarding" is asking them to model a problem
+  // they are still discovering. Second, it is what a Miro board is MADE of, and an
+  // import that has nowhere to put a sticky note cannot claim to have imported the
+  // board. `miroImport` maps `sticky_note`, `text` and `shape` here.
+  //
+  // The knowledge board (`components/canvas/canvasModel.ts`) has had stickies since it
+  // shipped; this is the same object arriving on the canvas that is actually the front
+  // door, and it deliberately shares that board's pigment palette rather than choosing
+  // a second one.
+  "sticky",
+  "roadmap",
+  "prd",
+  "release",
+  "task",
+  "mockup",
+  "mockupSet",
+  "featureSummary",
+  "team",
+  "role",
+  "mcp",
+  "evermind",
+  "projectComparison",
+  "standup",
+  "pitch",
+  "pitchScorecard",
+  "pitchQa",
+  "pitchApplication",
+  "repository",
+  "selection",
+  "diagnostics",
+  "terminal",
+  "service",
+  // THE DELIVERY LIFECYCLE. `repository`/`terminal`/`diagnostics`/`service`/`release`
+  // covered the workspace and the plan; nothing covered what actually SHIPS — a pull
+  // request, the CI run that gated it, the deployment it produced, an incident against
+  // that deployment, or the environment it landed in. `deployment_events` already feeds
+  // DORA without a canvas object to show for it, and the PR loop is a core runtime with
+  // no board presence at all.
+  //
+  // Named `productionIncident`, not `incident`: the Operations vocabulary already owns
+  // `incident` for a field-service/safety report (injury, near-miss, property damage —
+  // `operationsObjects.ts`), a different noun that happens to share the English word,
+  // exactly the collision `customerInterview` above was renamed to avoid. A botched
+  // deployment rollback and a warehouse near-miss are not the same shape of thing.
+  "pullRequest",
+  "ciRun",
+  "deployment",
+  "productionIncident",
+  "environment",
+  // THE PMO ROLLUP, AS A BOARD OBJECT. `pmoApi.rollup()`/`pmoApi.valueStream()` already
+  // compute delivery/DORA/spend/OKR for a portfolio, initiative, project or the whole
+  // workspace — nothing on the canvas read them, so a board could plan work and never
+  // see its own measurement. Named `deliveryRollup`, not `delivery`: a connection already
+  // uses `delivery` as an EDGE kind (`CREATION_CONNECTION_KINDS` above) and an object
+  // named identically to an edge in the same vocabulary reads as one thing having two
+  // meanings at a glance, the exact ambiguity `productionIncident` was renamed to avoid.
+  "deliveryRollup",
+  "salesPipeline",
+  "salesContact",
+  "salesCampaign",
+  "targetMarket",
+  "salesGoal",
+  "salesMeeting",
+  // A connected mailbox and one message out of it. Two kinds rather than one
+  // because they answer different questions: an `inbox` is a LIVE, filtered view
+  // that re-reads, while an `email` is a single message pinned to the board so it
+  // can be annotated, connected to a task, and still be there tomorrow after it
+  // has scrolled out of the live view.
+  "inbox",
+  "email",
+  // A marketing campaign and the template it renders — the canvas half of
+  // "draft this, then send it to that list".
+  "emailCampaign",
+  "emailTemplate",
+  // The social half of the same story, and the same two-kind split as inbox/email
+  // for the same reason: a `socialFeed` is a LIVE merged view across every connected
+  // network that re-reads, while a `socialPost` is one post pinned to the board so it
+  // can be annotated and connected to work and is still there tomorrow. A
+  // `socialCampaign` is one announcement published to every connected account.
+  "socialFeed",
+  "socialPost",
+  "socialCampaign",
+  // ── The data-architecture objects ────────────────────────────────────────
+  // A `dataset` is a SNAPSHOT (rows uploaded once); a `datasource` is a LIVE
+  // connection to a warehouse the workspace has connected — the same two-kind
+  // split as inbox/email, for the same reason: one re-reads, one does not.
+  "datasource",
+  // The model itself: entities, attributes, keys, relationships. Not a picture —
+  // it validates, generates DDL, and diffs against a live schema, which is what
+  // makes "create me an ERD" end in something real.
+  "erd",
+  // What a dataset is ALLOWED to be (declared schema + governance tags), what it
+  // is CHECKED against (a quality suite), how a number is DEFINED (the semantic
+  // layer), and where a value CAME FROM (lineage + impact).
+  //
+  // `metric` here is the DEFINITION — formula, grain, dimensions, unit, target:
+  // the answer to "how is ARR calculated here". `liveMetric` below is one bound
+  // READING of such a definition. See the split argued in the founder block.
+  "dataContract",
+  "dataQuality",
+  "metric",
+  "lineage",
+  // A standards-based learning experience authored and completed on the canvas,
+  // and the practice set that makes studying it a loop rather than a read: a
+  // `practice` object holds the questions AND the record of every attempt, so
+  // the board can say what is still weak instead of only what was opened.
+  "course",
+  "practice",
+  // A reusable, target-aware product onboarding design. It stays provider-neutral:
+  // the Canvas authors the contract and each delivery surface supplies its anchors.
+  "guidedTour",
+  // ── The QA objects ───────────────────────────────────────────────────────
+  // The canvas could MAKE a website, a game, a campaign and a data model, and had
+  // no object for the one question asked of every one of them: does it work?
+  //
+  // Four kinds rather than one, and the split is the same one `inbox`/`email` and
+  // `metric`/`liveMetric` already draw — an INTENT that persists, an ARTIFACT that
+  // runs, an EVENT that happened, and a DEFECT that outlives all three:
+  //
+  //  • `testPlan`  — what we intend to prove, against which target, with which exit
+  //    criteria. It is the object a release gate is read off, which is why the
+  //    criteria live here and not in a hand-edited evidence file.
+  //  • `testCase`  — one runnable scenario: ordered `QaStep`s AND the generated
+  //    Playwright source. Both, deliberately: the steps are what a person edits and
+  //    what the heatmap planner speaks, the spec is what CI executes. `qa.ts` lowers
+  //    one to the other so they cannot drift.
+  //  • `testRun`   — one execution, with per-case outcomes. Pinned, not live: it is
+  //    evidence, and evidence that re-reads is not evidence.
+  //  • `defect`    — what broke, with the repro, the expected/actual, the severity
+  //    and the journal of what the person was doing. Its own kind rather than a
+  //    `task` because a defect is REPRODUCED and VERIFIED, and a task is only done.
+  //
+  // A `testPlan` is also the suite: a "test suite" is a plan whose cases are the
+  // suite's members, so it is a connection, not a fifth kind.
+  "testPlan",
+  "testCase",
+  "testRun",
+  "defect",
+  // Cross-domain kinds — `funnel` today. See SHARED_OBJECT_KINDS for why conversion
+  // through stages is one object with a domain VALUE rather than one kind per funnel.
+  ...SHARED_OBJECT_KINDS,
+  ...HIRING_OBJECT_KINDS,
+  // HR operations, plus `form` — the collection primitive declared alongside the domain
+  // that exposed its absence. See `people.ts` for why hiring and people operations are
+  // two vocabularies with two owning agents rather than one set called "HR".
+  ...PEOPLE_OBJECT_KINDS,
+  ...FOUNDER_OBJECT_KINDS,
+  // The teaching and research vocabulary: the assessment loop (a cohort, an assignment,
+  // a rubric, ONE SUBMISSION PER LEARNER, a gradebook), the research lifecycle in the
+  // order it is gated (grant → ethics → pre-registration → protocol → consent →
+  // participants → manuscript → peer review), and the three scholarly primitives no
+  // business object covers — a citation, a bibliography and an equation. `academic.ts`
+  // argues each one, including why a submission is a kind and not an array.
+  ...ACADEMIC_OBJECT_KINDS,
+  // The stages after the data: analysis that computes, a model, the run that trained
+  // it, the comparison that chose between runs, the labelled set an evaluation is
+  // legitimately built from, and the versioned prompt. See `dataScience.ts`.
+  ...DATA_SCIENCE_OBJECT_KINDS,
+  // The work a vertical company SELLS: an asset, the order against it, the visit that
+  // executes it, the evidence, the certificate that permits it, the parts it consumes,
+  // and the incident when it goes wrong. Every other vocabulary on this list models how
+  // a company runs ITSELF; this is the first that models what it does for a customer.
+  // See `operations.ts` for why it is one vocabulary and not one pack per industry.
+  ...OPERATIONS_OBJECT_KINDS,
+  // The secure legal FILE — an uploaded, encrypted document with a checksum, a
+  // signature history and a share history, distinct from the AUTHORED `contract` in
+  // `FOUNDER_OBJECT_KINDS` — and the three RECORD kinds it is held against: the entity,
+  // the IP asset and the matter. See the kind's own comment above for why they are two
+  // shapes in one vocabulary, and why the matter carries a qualifier.
+  ...LEGAL_OBJECT_KINDS,
+  // The commercial half of the motion: a priced `quote` a buyer accepts, the `sequence`
+  // that follows up across channels and stops on reply, the `call` that carries what they
+  // actually said, the `trial` the demo board becomes, the `trustPacket` procurement asks
+  // for, and the `mutualActionPlan` both sides own. Every other vocabulary on this list
+  // models how the company BUILDS; this is the first that models how it SELLS. See
+  // `sellMotion.ts` for why each of the six is not one of the six sales kinds above.
+  ...SELL_MOTION_OBJECT_KINDS,
+  // The job search, as objects. Every other vocabulary on this list is authored by a
+  // company; this is the first authored by ONE PERSON about their own working life —
+  // which is why `job` is research rather than a requisition, `applicationPipeline` is a
+  // `shortlist` transposed, and `runway` is a personal clock rather than a budget. See
+  // `career.ts` for why none of the six folds into `HIRING_OBJECT_KINDS`.
+  ...CAREER_OBJECT_KINDS,
+  // The brand a generative board composes against, and the audience a send is allowed
+  // to reach. Two kinds over tables (`brand_kits`, `marketing_audiences`,
+  // `marketing_suppressions`) that had existed since the growth domain landed with
+  // nothing on the board able to read them — which is why every creative object composed
+  // unbranded and a campaign could be fired with no visible consent state. See
+  // `marketing.ts` for why the brand is a bindable OBJECT rather than a canvas setting,
+  // and why there is no `campaignCalendar` kind to go with the calendar surface.
+  ...MARKETING_OBJECT_KINDS
+];
+
+// ../packages/creation-canvas-contract/src/startupListing.ts
+var FUNDING_STAGES = [
+  "bootstrapped",
+  "pre_seed",
+  "seed",
+  "series_a",
+  "series_b",
+  "series_c",
+  "series_d_plus",
+  "ipo_ready"
+];
+var BUSINESS_STAGES = ["idea", "mvp", "early_revenue", "growth", "scale"];
+var STARTUP_SECTORS = [
+  "ai_ml",
+  "saas",
+  "fintech",
+  "healthtech",
+  "medtech",
+  "biotech",
+  "climate_energy",
+  "hardware_robotics",
+  "cybersecurity",
+  "marketplace",
+  "ecommerce",
+  "consumer_apps",
+  "enterprise_software",
+  "edtech",
+  "blockchain",
+  "gaming",
+  "media_entertainment",
+  "real_estate",
+  "logistics",
+  "other"
+];
+var SEEKING_TYPES = ["funding", "cofounders", "advisors", "customers", "partners", "hiring", "mentorship"];
+var INVESTMENT_TYPES = ["equity", "convertible_note", "safe", "revenue_share", "debt"];
+var INQUIRY_TIMEFRAMES = ["immediate", "short_term", "medium_term", "long_term"];
+var EXPERTISE_AREAS = [
+  "product",
+  "marketing",
+  "operations",
+  "finance",
+  "legal",
+  "people",
+  "technology",
+  "business_development",
+  "fundraising",
+  "international"
+];
+var DIRECTORY_SORTS = ["newest", "funding", "alphabetical", "runway"];
+var INQUIRY_STATUSES = ["new", "qualifying", "converted", "rejected"];
+var inList = (list2) => (v) => typeof v === "string" && list2.includes(v);
+var isFundingStage = inList(FUNDING_STAGES);
+var isBusinessStage = inList(BUSINESS_STAGES);
+var isStartupSector = inList(STARTUP_SECTORS);
+var isSeekingType = inList(SEEKING_TYPES);
+var isInvestmentType = inList(INVESTMENT_TYPES);
+var isInquiryTimeframe = inList(INQUIRY_TIMEFRAMES);
+var isExpertiseArea = inList(EXPERTISE_AREAS);
+var isDirectorySort = inList(DIRECTORY_SORTS);
+var isInquiryStatus = inList(INQUIRY_STATUSES);
+
+// src/transcriptSeed.ts
+import { scopeToConsolidation } from "@seanhogg/builderforce-memory/working";
+
+// src/provenance.ts
+var PROVENANCE_META_KEY = "provenance";
+function asProvenanceAccount(value) {
+  return value === "own" || value === "shared" || value === "shared_byo_unused" ? value : void 0;
+}
+function isConnectedAccountUnused(prov) {
+  return prov?.account === "shared_byo_unused";
+}
+function parseMessageProvenance(msg) {
+  if (!msg.metadata) return null;
+  try {
+    const p = JSON.parse(msg.metadata).provenance;
+    if (p && typeof p.model === "string" && p.model.length > 0) {
+      const ev = p.evermind;
+      const evermind = ev && typeof ev.version === "number" && ev.version >= 1 ? { version: ev.version } : void 0;
+      const account = asProvenanceAccount(p.account);
+      const requestedModel = typeof p.requestedModel === "string" && p.requestedModel && p.requestedModel !== p.model ? p.requestedModel : void 0;
+      return {
+        model: p.model,
+        ...account ? { account } : {},
+        ...typeof p.vendor === "string" ? { vendor: p.vendor } : {},
+        ...evermind ? { evermind } : {},
+        ...requestedModel ? { requestedModel } : {}
+      };
+    }
+  } catch {
+  }
+  return null;
+}
+function lastServedModel(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const prov = parseMessageProvenance(messages[i]);
+    if (prov) return prov.model;
+  }
+  return void 0;
+}
+function withProvenanceMetadata(provenance, base) {
+  const meta = { ...base ?? {} };
+  if (provenance) meta[PROVENANCE_META_KEY] = provenance;
+  return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
+}
+function formatAssistantTranscriptHeading(assistantName, message) {
+  const prov = parseMessageProvenance(message);
+  if (!prov?.model) return `## ${assistantName}`;
+  if (prov.requestedModel) return `## ${assistantName} \xB7 ${prov.model} (requested ${prov.requestedModel})`;
+  return `## ${assistantName} \xB7 ${prov.model}`;
+}
+
+// src/stoppedTurn.ts
+var STOPPED_TURN_META_KEY = "stoppedByUser";
+var STOPPED_TURN_STEP = "agent.stopped";
+function stoppedTurnMetadata(source) {
+  const account = asProvenanceAccount(source.account);
+  const provenance = source.model ? { model: source.model, ...account ? { account } : {} } : null;
+  return withProvenanceMetadata(provenance, { [STOPPED_TURN_META_KEY]: true }) ?? "{}";
+}
+function isStoppedTurn(msg) {
+  if (!msg.metadata) return false;
+  try {
+    return JSON.parse(msg.metadata)?.[STOPPED_TURN_META_KEY] === true;
+  } catch {
+    return false;
+  }
+}
+
+// src/types.ts
+function serverChatIdOf(chat) {
+  if (!chat) return null;
+  if (chat.serverId != null) return chat.serverId;
+  return chat.origin === "local" ? null : chat.id;
+}
+var STEP_MESSAGE_ROLE = "tool";
+function isStepMessage(m) {
+  return m.role === STEP_MESSAGE_ROLE;
+}
+function attachEvermindLearn(messages, outcome) {
+  if (!outcome) return messages;
+  return messages.map((m) => m.role === "assistant" ? { ...m, evermindLearn: outcome } : m);
+}
+function formatEvermindLearnStep(outcome) {
+  if (!outcome) return null;
+  const targets = outcome.targets;
+  if (targets && targets.length > 0) {
+    const label = (t) => `${t.name} (proj #${t.projectId}${t.version ? ` v${t.version}` : ""})`;
+    const learned = targets.filter((t) => t.learned);
+    const skipped = targets.filter((t) => !t.learned && t.reason && t.reason !== "too-short");
+    const parts = [];
+    if (learned.length > 0) parts.push(`Contributed this turn to ${learned.map(label).join(", ")}`);
+    for (const t of skipped) {
+      const why = t.reason === "not-seeded" ? "not set up yet" : t.reason === "frozen" ? "frozen (read-only)" : String(t.reason);
+      parts.push(`skipped ${label(t)} \u2014 ${why}`);
+    }
+    return parts.length > 0 ? `\u{1F9E0} ${parts.join("; ")}.` : null;
+  }
+  if (outcome.learned) return `\u{1F9E0} Contributed this turn to the project Evermind (v${outcome.version}).`;
+  switch (outcome.reason) {
+    case "not-attached":
+      return "\u{1F9E0} Not learned this turn \u2014 this chat isn't attached to a project, so it can't train a project Evermind.";
+    case "not-seeded":
+      return "\u{1F9E0} Not learned this turn \u2014 this project's Evermind isn't set up yet.";
+    case "frozen":
+      return "\u{1F9E0} Not learned this turn \u2014 this project's Evermind is frozen (read-only).";
+    default:
+      return null;
+  }
+}
+
+// src/transcriptSeed.ts
+function transcriptSeedOf(history) {
+  const messages = [];
+  const ids2 = [];
+  if (!advisoryThreadHistoryAdmitted(history)) return { messages, ids: ids2 };
+  for (const m of scopeToConsolidation(history)) {
+    if (isStepMessage(m) || isStoppedTurn(m)) continue;
+    if (m.role === "assistant") {
+      const content = replayTextOf(m.content);
+      if (!content) continue;
+      messages.push({ role: "assistant", content });
+    } else {
+      messages.push({ role: m.role, content: m.content });
+    }
+    ids2.push(m.id);
+  }
+  return { messages, ids: ids2 };
+}
 
 // src/localChat/journal.ts
 var BOUND_ONLY_VERSION = 0;
@@ -2874,6 +4848,7 @@ function createLocalBrainPersistence(options) {
   const blobs = /* @__PURE__ */ new Map();
   const chats = (tx) => liveRecords(tx, "chat", options.deviceId);
   const messages = (tx) => liveRecords(tx, "message", options.deviceId);
+  const chatMessages = (chatId) => options.store.read(async (tx) => (await messages(tx)).filter((row) => row.payload.chatId === chatId).sort((a, b) => a.payload.message.seq - b.payload.message.seq).map((row) => row.payload.message));
   const chatFor = async (tx, id) => {
     const chat = (await chats(tx)).find((row) => row.payload.chat.id === id);
     if (!chat) throw new Error(`No such local chat: ${id}`);
@@ -3029,13 +5004,17 @@ function createLocalBrainPersistence(options) {
         return { archived: true };
       });
     },
-    summarizeChat: async () => ({ error: options.summarizeUnavailable }),
+    async summarizeChat(chatId) {
+      if (!options.summarize) return { error: options.summarizeUnavailable };
+      const seed = transcriptSeedOf(await chatMessages(chatId)).messages;
+      if (seed.length < 2) return { summary: "" };
+      const summary = await summarizeTranscript(options.summarize, seed);
+      return summary ? { summary } : { error: options.summarizeFailed ?? options.summarizeUnavailable };
+    },
     ...options.bindChat ? { bindChat: options.bindChat } : {},
     async getMessages(chatId, limit) {
-      return options.store.read(async (tx) => {
-        const all = (await messages(tx)).filter((row) => row.payload.chatId === chatId).sort((a, b) => a.payload.message.seq - b.payload.message.seq).map((row) => row.payload.message);
-        return limit != null ? all.slice(-limit) : all;
-      });
+      const all = await chatMessages(chatId);
+      return limit != null ? all.slice(-limit) : all;
     },
     subscribeMessages: (_chatId, onChanged) => options.store.subscribe(onChanged),
     async sendMessages(chatId, input) {
@@ -3852,7 +5831,7 @@ var ACTION_TYPE_SET = new Set(ACTION_TYPES);
 // ../packages/learned-routing/src/recencyDecay.ts
 var ROUTING_HALF_LIFE_DAYS = 30;
 var DECAYED_WINDOW_DAYS = 4 * ROUTING_HALF_LIFE_DAYS;
-var DAY_MS = 24 * 60 * 60 * 1e3;
+var DAY_MS2 = 24 * 60 * 60 * 1e3;
 
 // ../packages/workload/src/actionClassifier.ts
 var MIN_CONFIDENCE = 0.45;
@@ -6844,7 +8823,7 @@ async function completeLocalFirst(input) {
 }
 
 // src/windowFit/packForModel.ts
-import { defaultEstimateTokens as defaultEstimateTokens2, packHandoff } from "@seanhogg/builderforce-memory/handoff";
+import { defaultEstimateTokens, packHandoff } from "@seanhogg/builderforce-memory/handoff";
 import { formatEvermindMemoryBlock } from "@seanhogg/builderforce-memory/evermind";
 
 // ../packages/cost-levers/src/index.ts
@@ -6923,149 +8902,28 @@ function isCostLeverOn(env, id, tenantId) {
   return costLeverBucket(id, tenantId) < rollout;
 }
 
-// src/workingTranscript.ts
-import {
-  defaultEstimateTokens,
-  messageTokens as handoffMessageTokens,
-  tokensOf as handoffTokensOf
-} from "@seanhogg/builderforce-memory/handoff";
-var HISTORY_WINDOW = 80;
-var HISTORY_TOKEN_BUDGET = 64e3;
-var COMPACT_TAIL_TOKEN_BUDGET = 4e4;
-function messageTokens(m) {
-  return handoffMessageTokens(m, defaultEstimateTokens);
-}
-function windowed(convo) {
-  let w = convo.slice(-HISTORY_WINDOW);
-  while (w.length > 0 && w[0].role !== "user") w = w.slice(1);
-  if (w.length === 0) {
-    const lastUser = convo.map((m) => m.role).lastIndexOf("user");
-    w = lastUser >= 0 ? convo.slice(lastUser) : convo.slice();
-  }
-  return tokenBounded(w);
-}
-function tokenBounded(w) {
-  let total = transcriptTokens(w);
-  if (total <= HISTORY_TOKEN_BUDGET) return w;
-  const lastUser = w.map((m) => m.role).lastIndexOf("user");
-  let start = 0;
-  while (total > HISTORY_TOKEN_BUDGET && start < lastUser) {
-    total -= messageTokens(w[start]);
-    start += 1;
-  }
-  let trimmed = w.slice(start);
-  while (trimmed.length > 1 && trimmed[0].role !== "user") trimmed = trimmed.slice(1);
-  return trimmed;
-}
-function stillInWorkingContext(state, anchor) {
-  const convo = state.transcript;
-  const idx = convo.indexOf(anchor);
-  if (idx < 0) return false;
-  if (state.compactMemo) return idx >= verbatimStart(convo, state.compactMemo.coveredEnd);
-  return windowed(convo).includes(convo[idx]);
-}
-var COMPACT_TAIL_TURNS = 8;
-var COMPACT_TAIL_MAX_MESSAGES = HISTORY_WINDOW / 2;
-function verbatimStart(convo, from) {
-  let start = Math.max(0, Math.min(from, convo.length));
-  while (start < convo.length && convo[start].role === "tool") start += 1;
-  return start;
-}
-function compactTailStartForBudget(convo, budgetTokens) {
-  let start = convo.length;
-  let tokens2 = 0;
-  while (start > 0) {
-    const kept = convo.length - start;
-    if (kept >= COMPACT_TAIL_MAX_MESSAGES) break;
-    const next = messageTokens(convo[start - 1]);
-    if (kept >= COMPACT_TAIL_TURNS && tokens2 + next > budgetTokens) break;
-    tokens2 += next;
-    start -= 1;
-  }
-  return verbatimStart(convo, start);
-}
-function pinnedDirectiveIndex(convo, tailStart) {
-  const lastUser = convo.map((m) => m.role).lastIndexOf("user");
-  return lastUser >= 0 && lastUser < tailStart ? lastUser : -1;
-}
-function assembleCompacted(systemPrompt, convo, note, coveredEnd) {
-  const tailStart = verbatimStart(convo, coveredEnd);
-  const out = [{ role: "system", content: systemPrompt }];
-  out.push({ role: "assistant", content: note });
-  const directiveIdx = pinnedDirectiveIndex(convo, tailStart);
-  if (directiveIdx >= 0) out.push(convo[directiveIdx]);
-  out.push(...convo.slice(tailStart));
-  return out;
-}
-function renderForSummary(msgs) {
-  return msgs.map((m) => {
-    const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
-    const calls = m.tool_calls?.length ? ` [called: ${m.tool_calls.map((t) => t.function?.name).filter(Boolean).join(", ")}]` : "";
-    return `${m.role}${calls}: ${content}`;
-  }).join("\n\n");
-}
-async function summarizeMiddle(stream, model, msgs, signal) {
-  if (msgs.length === 0) return null;
-  try {
+// src/transcriptSummarizer.ts
+import { summarizeTranscript as summarizeTranscript2 } from "@seanhogg/builderforce-memory/working";
+function streamSummaryCompletion(stream, model) {
+  return async ({ system, user, maxTokens, signal }) => {
     const res = await stream({
-      messages: [
-        {
-          role: "system",
-          content: "You compress an in-progress AI agent transcript into a concise MEMORY the agent keeps working from. Capture: the CURRENT outstanding instruction from the user (the most recent user message is authoritative \u2014 earlier requests it supersedes are history, not the active task), concrete facts/answers discovered, tool results that matter (ids, paths, values), decisions made, and what still remains to do. Keep every file path, symbol name and line number the remaining work depends on, with the specific facts learned from each file \u2014 the agent no longer sees those results, so what you leave out it must read again. Be information-dense; drop pleasantries. No preamble."
-        },
-        { role: "user", content: renderForSummary(msgs) }
-      ],
+      messages: [{ role: "system", content: system }, { role: "user", content: user }],
       model,
-      // A compaction note is a UTILITY completion: a bounded answer with no thinking.
-      // Left unset, it inherited the run's full output ceiling and, on a thinking-
-      // capable model, the run's reasoning depth — the most expensive way to write a
-      // paragraph the user never sees. Bounded at ~2.5k tokens: the note is the agent's
-      // only record of every file it folds (paths, symbols, line numbers), and 1.2k was
-      // too little to carry them — the run re-read whatever the note had to leave out.
-      maxTokens: 2500,
+      maxTokens,
       reasoning: { level: "off" },
       signal
     });
-    const out = (res.text ?? "").trim();
-    return out.length > 0 ? out : null;
-  } catch {
-    return null;
-  }
+    return res.text;
+  };
 }
-function transcriptTokens(msgs) {
-  return handoffTokensOf(msgs, defaultEstimateTokens);
-}
-function fitsVerbatim(msgs, extraTokens = 0) {
-  return msgs.length <= HISTORY_WINDOW && extraTokens + transcriptTokens(msgs) <= HISTORY_TOKEN_BUDGET;
-}
-async function buildWorkingTranscript(state, systemPrompt, summarize, onFolded) {
-  const convo = state.transcript;
-  if (fitsVerbatim(convo)) {
-    state.compactMemo = null;
-    return [{ role: "system", content: systemPrompt }, ...windowed(convo)];
-  }
-  const memo = state.compactMemo && state.compactMemo.coveredEnd <= convo.length ? state.compactMemo : null;
-  if (memo && fitsVerbatim(convo.slice(verbatimStart(convo, memo.coveredEnd)), defaultEstimateTokens(memo.note))) {
-    return assembleCompacted(systemPrompt, convo, memo.note, memo.coveredEnd);
-  }
-  const from = memo?.coveredEnd ?? 0;
-  const to = Math.max(from, compactTailStartForBudget(convo, COMPACT_TAIL_TOKEN_BUDGET));
-  const fold = memo ? [{ role: "assistant", content: memo.note }, ...convo.slice(from, to)] : convo.slice(from, to);
-  const summary = to > from ? await summarize(fold) : null;
-  if (summary == null) {
-    return memo ? assembleCompacted(systemPrompt, convo, memo.note, memo.coveredEnd) : [{ role: "system", content: systemPrompt }, ...windowed(convo)];
-  }
-  const note = `Compressed memory of the first ${to} message(s) of this conversation:
-${summary}`;
-  state.compactMemo = { note, coveredEnd: to };
-  onFolded(to - from);
-  return assembleCompacted(systemPrompt, convo, note, to);
+function summarizeMiddle(stream, model, msgs, signal) {
+  return summarizeTranscript2(streamSummaryCompletion(stream, model), msgs, signal);
 }
 
 // src/windowFit/packForModel.ts
 var DEFAULT_HANDOFF_TIMEOUT_MS = 2e4;
 function toolSchemaTokens2(tools) {
-  return toolSchemaTokens(tools, defaultEstimateTokens2);
+  return toolSchemaTokens(tools, defaultEstimateTokens);
 }
 function packTargetTokens(to, contextTokens, reserve) {
   const boundary = isCostLeverOn(void 0, "c9_price_tier_budget", null) ? priceTierBoundary(to) : void 0;
@@ -9695,7 +11553,7 @@ function useArmedNewChat(chats) {
 }
 
 // src/useBrainConversation.ts
-import { useCallback as useCallback7, useEffect as useEffect6, useRef as useRef6, useState as useState7 } from "react";
+import { useCallback as useCallback8, useEffect as useEffect7, useMemo as useMemo6, useRef as useRef7, useState as useState8 } from "react";
 
 // src/useRunSnapshot.ts
 import { useCallback as useCallback6, useSyncExternalStore } from "react";
@@ -9855,6 +11713,8 @@ function makeCell() {
     runTraceFrom: 0,
     persistStep: null,
     compactMemo: null,
+    transcriptAnchors: [],
+    unseenFromId: void 0,
     runUsage: emptyRunUsage(),
     lastServedModel: null,
     liveTurn: null,
@@ -9968,71 +11828,6 @@ function accrueByoUnresolved(c, raw) {
 }
 function accrueProviderCap(c, raw) {
   accrueProviders(c, "providerCap", raw);
-}
-
-// src/provenance.ts
-var PROVENANCE_META_KEY = "provenance";
-function asProvenanceAccount(value) {
-  return value === "own" || value === "shared" || value === "shared_byo_unused" ? value : void 0;
-}
-function isConnectedAccountUnused(prov) {
-  return prov?.account === "shared_byo_unused";
-}
-function parseMessageProvenance(msg) {
-  if (!msg.metadata) return null;
-  try {
-    const p = JSON.parse(msg.metadata).provenance;
-    if (p && typeof p.model === "string" && p.model.length > 0) {
-      const ev = p.evermind;
-      const evermind = ev && typeof ev.version === "number" && ev.version >= 1 ? { version: ev.version } : void 0;
-      const account = asProvenanceAccount(p.account);
-      const requestedModel = typeof p.requestedModel === "string" && p.requestedModel && p.requestedModel !== p.model ? p.requestedModel : void 0;
-      return {
-        model: p.model,
-        ...account ? { account } : {},
-        ...typeof p.vendor === "string" ? { vendor: p.vendor } : {},
-        ...evermind ? { evermind } : {},
-        ...requestedModel ? { requestedModel } : {}
-      };
-    }
-  } catch {
-  }
-  return null;
-}
-function lastServedModel(messages) {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const prov = parseMessageProvenance(messages[i]);
-    if (prov) return prov.model;
-  }
-  return void 0;
-}
-function withProvenanceMetadata(provenance, base) {
-  const meta = { ...base ?? {} };
-  if (provenance) meta[PROVENANCE_META_KEY] = provenance;
-  return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
-}
-function formatAssistantTranscriptHeading(assistantName, message) {
-  const prov = parseMessageProvenance(message);
-  if (!prov?.model) return `## ${assistantName}`;
-  if (prov.requestedModel) return `## ${assistantName} \xB7 ${prov.model} (requested ${prov.requestedModel})`;
-  return `## ${assistantName} \xB7 ${prov.model}`;
-}
-
-// src/stoppedTurn.ts
-var STOPPED_TURN_META_KEY = "stoppedByUser";
-var STOPPED_TURN_STEP = "agent.stopped";
-function stoppedTurnMetadata(source) {
-  const account = asProvenanceAccount(source.account);
-  const provenance = source.model ? { model: source.model, ...account ? { account } : {} } : null;
-  return withProvenanceMetadata(provenance, { [STOPPED_TURN_META_KEY]: true }) ?? "{}";
-}
-function isStoppedTurn(msg) {
-  if (!msg.metadata) return false;
-  try {
-    return JSON.parse(msg.metadata)?.[STOPPED_TURN_META_KEY] === true;
-  } catch {
-    return false;
-  }
 }
 
 // src/runStore/turnPersistence.ts
@@ -11071,64 +12866,329 @@ function batchStepPersistence(base, opts = {}) {
   };
 }
 
+// src/delegationRequest.ts
+var SPAWN_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents"]);
+var ASKS_FOR_SUBAGENTS = /\bsub[- ]?agents?\b|\bspawn(?:_agents?|\s+(?:agents?|workers?|children))\b|\b(?:parallel|concurrent)\s+(?:agents?|workers?)\b|\bfan[- ]?out\b/i;
+var DECLINES_SUBAGENTS = /\b(?:no|without|don'?t\s+use|do\s+not\s+use|never\s+use|skip(?:\s+the)?)\s+(?:any\s+)?sub[- ]?agents?\b/i;
+function asksForSubagents(text) {
+  const t = text ?? "";
+  return ASKS_FOR_SUBAGENTS.test(t) && !DECLINES_SUBAGENTS.test(t);
+}
+function canSpawnHere(toolNames) {
+  return toolNames.some((n) => SPAWN_TOOLS.has(n));
+}
+function isSpawnTool(name) {
+  return SPAWN_TOOLS.has(name);
+}
+function attemptedDelegation(events) {
+  return events.some((e) => e.category === "tool" && SPAWN_TOOLS.has(e.label));
+}
+function leftDelegationUndone(input) {
+  return !input.delegatedRun && canSpawnHere(input.toolNames) && asksForSubagents(input.requestText) && !attemptedDelegation(input.events);
+}
+function undelegatedRequestNudge(toolNames) {
+  const fanOut = toolNames.includes("spawn_agents");
+  const call2 = fanOut ? 'Call spawn_agents NOW: one workstream per open ticket whose files do not overlap \u2014 ticket=<id>, a complete standalone task brief, role "code". Each child is a clone of you and makes its change itself. It takes up to 4 per call and returns at once \u2014 the children run in the background, so start the next batch right away if there are more. Use spawn_agent for a slice that must run alone.' : 'Call spawn_agent NOW, one slice at a time, with a complete standalone task brief and role "code". The child is a clone of you and makes its change itself.';
+  return `The user asked for this work to be done by SUB-AGENTS, and none has been started. Do not ask how to proceed \u2014 the user already said. A sub-agent here is a LOCAL child run on this machine: it needs no cloud dispatch, no ticket assignment and no Developer on the roster. The workspace execution kill-switch and every \`autoRun: execution_disabled\` verdict stop CLOUD runs only \u2014 they do not apply to it. as_agent is optional: with no fitting teammate, OMIT it \u2014 the spawn tools staff the role on this project themselves (a capable teammate, or a Developer hired into the workspace and project, with the ticket assigned) and the child runs AS that agent. ${call2} ${delegationShape(fanOut ? "spawn_agents" : "spawn_agent")} Keep working while they run; when their reports are in (they arrive on their own, or call wait_agents), verify their changes and report what each child delivered, per ticket.`;
+}
+function delegationShape(spawnTool) {
+  return `The shape of this run: you read only the document the request names and the chat state already in your context \u2014 no source files. Research (reading code, searching, tracing callers) goes to children: ${spawnTool} with role "explore", one per question, each brief stating the question, the files or folders to start from, what is already known and ruled out, and the answer's shape (paths with line numbers, short excerpts, a word cap). When they report, write the deliverable the request names (the document or plan edit) yourself in that same turn \u2014 filing tickets is not the deliverable.`;
+}
+function earlyDelegationNudge(toolNames, reads) {
+  return `STOP READING AND DELEGATE. This run has made ${reads} read calls and started no sub-agent. ${undelegatedRequestNudge(toolNames)}`;
+}
+
+// src/modelScorecard.ts
+var SILENT_TURNS_AT = 3;
+function modelOf(ev) {
+  const m = ev.args?.model;
+  return typeof m === "string" && m && m !== "default" ? m : null;
+}
+function modelScorecard(events) {
+  const byModel = /* @__PURE__ */ new Map();
+  const row = (model) => {
+    let score2 = byModel.get(model);
+    if (!score2) {
+      score2 = {
+        model,
+        turns: 0,
+        toolCalls: 0,
+        textOnlyTurns: 0,
+        unliftedMarkupTurns: 0,
+        failures: 0,
+        stopped: 0,
+        upstreamReportedTurns: 0,
+        upstreamFunctionCalls: 0,
+        upstreamRecovered: 0,
+        adapterLossTurns: 0
+      };
+      byModel.set(model, score2);
+    }
+    return score2;
+  };
+  for (const ev of events) {
+    if (ev.label === STOPPED_TURN_STEP) {
+      const model2 = modelOf(ev);
+      if (model2) row(model2).stopped += 1;
+      continue;
+    }
+    if (ev.label !== "llm.complete") continue;
+    const model = modelOf(ev);
+    if (!model) continue;
+    if (ev.category === "error") {
+      row(model).failures += 1;
+      continue;
+    }
+    if (ev.category !== "llm") continue;
+    const score2 = row(model);
+    const args = ev.args;
+    const calls = typeof args?.toolCalls === "number" ? args.toolCalls : 0;
+    score2.turns += 1;
+    score2.toolCalls += calls;
+    if (calls === 0 && (ev.textChars ?? 0) > 0) score2.textOnlyTurns += 1;
+    if (args?.unliftedCallMarkup === true) score2.unliftedMarkupTurns += 1;
+    if (typeof args?.upstreamFunctionCalls === "number") {
+      score2.upstreamReportedTurns += 1;
+      score2.upstreamFunctionCalls += args.upstreamFunctionCalls;
+      if (typeof args.upstreamRecovered === "number") score2.upstreamRecovered += args.upstreamRecovered;
+      if (args.upstreamFunctionCalls > calls) score2.adapterLossTurns += 1;
+    }
+  }
+  return [...byModel.values()];
+}
+function silentModelFlag(s) {
+  const base = " \xB7 \u26A0 made NO tool calls while another model in this run did";
+  if (s.upstreamReportedTurns > 0 && s.upstreamFunctionCalls === 0) {
+    return `${base}. Its raw responses carried 0 structured function calls on the ${s.upstreamReportedTurns} turn(s) its vendor reported, so the MODEL did not call \u2014 nothing was lost on the way.`;
+  }
+  return `${base}: this model is not emitting structured calls on its route.`;
+}
+function formatModelScorecard(scores) {
+  const markup = scores.some((s) => s.unliftedMarkupTurns > 0);
+  const stopped = scores.some((s) => s.stopped > 0);
+  const lost = scores.some((s) => s.adapterLossTurns > 0);
+  if (scores.length < 2 && !markup && !stopped && !lost) return [];
+  const anyActed = scores.some((s) => s.toolCalls > 0);
+  const lines = ["Per model:"];
+  for (const s of scores) {
+    const parts = [`${s.turns} turn(s)`, `${s.toolCalls} tool call(s)`];
+    if (s.textOnlyTurns) parts.push(`${s.textOnlyTurns} text-only`);
+    if (s.upstreamReportedTurns) {
+      parts.push(`raw response: ${s.upstreamFunctionCalls} structured call(s) over ${s.upstreamReportedTurns} reported turn(s)`);
+    }
+    if (s.upstreamRecovered) parts.push(`${s.upstreamRecovered} rebuilt from the final frame`);
+    if (s.failures) parts.push(`${s.failures} failed`);
+    if (s.stopped) parts.push(`${s.stopped} stopped by the user mid-stream`);
+    const flag = s.unliftedMarkupTurns ? ` \xB7 \u26A0 ${s.unliftedMarkupTurns} turn(s) wrote a tool call as MARKUP that no parser lifted, so the call never ran. The model tried to act; this is a parser gap, not a refusal.` : s.adapterLossTurns ? ` \xB7 \u26A0 on ${s.adapterLossTurns} turn(s) the vendor returned structured tool calls that never reached the loop: the calls were lost in translation, so this is an adapter defect, not the model.` : scores.length > 1 && anyActed && s.toolCalls === 0 && s.turns >= SILENT_TURNS_AT ? silentModelFlag(s) : "";
+    lines.push(`  \u2022 ${s.model}: ${parts.join(" \xB7 ")}${flag}`);
+  }
+  return lines;
+}
+function modelTurnLog(events) {
+  const turns = [];
+  for (const ev of events) {
+    if (ev.label !== "llm.complete") continue;
+    const model = modelOf(ev);
+    if (!model) continue;
+    const args = ev.args;
+    const requested = typeof args?.requestedModel === "string" && args.requestedModel && args.requestedModel !== "default" && args.requestedModel !== model ? args.requestedModel : void 0;
+    if (ev.category === "error") {
+      turns.push({
+        index: turns.length + 1,
+        model,
+        ...requested ? { requestedModel: requested } : {},
+        toolCalls: 0,
+        textOnly: false,
+        failed: true,
+        ...typeof ev.durationMs === "number" ? { durationMs: ev.durationMs } : {}
+      });
+      continue;
+    }
+    if (ev.category !== "llm") continue;
+    const calls = typeof args?.toolCalls === "number" ? args.toolCalls : 0;
+    const turn = {
+      index: turns.length + 1,
+      model,
+      ...requested ? { requestedModel: requested } : {},
+      toolCalls: calls,
+      textOnly: calls === 0 && (ev.textChars ?? 0) > 0,
+      // What the turn SPENT its time producing. Absent on traces that predate the
+      // accounting, so an old chat's log renders exactly as it used to.
+      ...typeof args?.argBytes === "number" && args.argBytes > 0 ? { argBytes: args.argBytes } : {},
+      ...typeof ev.usage?.completion === "number" && ev.usage.completion > 0 ? { completionTokens: ev.usage.completion } : {},
+      ...typeof ev.durationMs === "number" ? { durationMs: ev.durationMs } : {},
+      ...args?.unliftedCallMarkup === true ? { unliftedCallMarkup: true } : {}
+    };
+    if (typeof args?.upstreamFunctionCalls === "number") {
+      turn.upstreamFunctionCalls = args.upstreamFunctionCalls;
+      if (typeof args.upstreamRecovered === "number") turn.upstreamRecovered = args.upstreamRecovered;
+    }
+    turns.push(turn);
+  }
+  return turns;
+}
+function formatOneTurn(t) {
+  const model = t.requestedModel ? `${t.model} (requested ${t.requestedModel})` : t.model;
+  const parts = [];
+  if (t.failed) {
+    parts.push("FAILED");
+  } else {
+    parts.push(`${t.toolCalls} tool call(s)`);
+    if (t.textOnly) parts.push("text-only");
+  }
+  if (typeof t.upstreamFunctionCalls === "number") {
+    parts.push(`raw response: ${t.upstreamFunctionCalls} structured call(s)`);
+  }
+  if (t.upstreamRecovered) parts.push(`${t.upstreamRecovered} rebuilt from the final frame`);
+  if (t.unliftedCallMarkup) parts.push("\u26A0 unlifted call markup");
+  if (t.argBytes) parts.push(`${formatBytes(t.argBytes)} of arguments`);
+  if (t.completionTokens) parts.push(`${t.completionTokens.toLocaleString("en-US")} completion tok`);
+  if (typeof t.durationMs === "number") parts.push(`${t.durationMs}ms`);
+  return `  ${t.index}. ${model} \xB7 ${parts.join(" \xB7 ")}`;
+}
+function formatModelTurnLog(turns) {
+  if (!turns.length) return [];
+  return ["Turn log:", ...turns.map(formatOneTurn)];
+}
+
 // src/runOutcomeReport.ts
 function runOutcomeId(chatId, startedAtMs) {
   return `ide:${chatId}:${startedAtMs}`;
 }
+var NO_DELIVERABLE_MIN_STEPS = 20;
 function codeRunOutcome(args) {
-  if (args.aborted || !args.codeChanged || !args.codeModel || !args.runId) return null;
-  return {
-    clientRunId: args.runId,
-    model: args.codeModel,
-    role: "code",
-    source: "ide",
-    terminalStatus: args.failed ? "failed" : "completed",
-    merged: args.shipped,
-    steps: args.trace.filter((e) => e.label === "llm.complete" && !e.isError).length,
-    ...args.projectId != null ? { projectId: args.projectId } : {}
-  };
+  if (!args.runId) return null;
+  const steps = args.trace.filter((e) => e.label === "llm.complete" && !e.isError).length;
+  const base = { clientRunId: args.runId, role: "code", source: "ide", steps, ...args.projectId != null ? { projectId: args.projectId } : {} };
+  if (args.codeChanged) {
+    if (args.aborted || !args.codeModel) return null;
+    return { ...base, model: args.codeModel, terminalStatus: args.failed ? "failed" : "completed", merged: args.shipped };
+  }
+  const emptyHanded = args.askedForChange && steps >= NO_DELIVERABLE_MIN_STEPS && !attemptedDelegation(args.trace);
+  const model = emptyHanded ? busiestModel(args.trace) : null;
+  if (!model) return null;
+  return { ...base, model, terminalStatus: "failed", merged: false };
+}
+function busiestModel(trace) {
+  let best = null;
+  for (const s of modelScorecard([...trace])) if (!best || s.turns > best.turns) best = s;
+  return best && best.turns > 0 ? best.model : null;
 }
 
-// src/types.ts
-function serverChatIdOf(chat) {
-  if (!chat) return null;
-  if (chat.serverId != null) return chat.serverId;
-  return chat.origin === "local" ? null : chat.id;
+// src/modelReply.ts
+import { isConsolidationMarker } from "@seanhogg/builderforce-memory/working";
+
+// src/chatActivity.ts
+var PHASES = ["started", "completed", "failed", "paused", "resumed", "cancelled"];
+function isPhase(v) {
+  return typeof v === "string" && PHASES.includes(v);
 }
-var STEP_MESSAGE_ROLE = "tool";
-function isStepMessage(m) {
-  return m.role === STEP_MESSAGE_ROLE;
+function str(v) {
+  return typeof v === "string" && v.trim() ? v : void 0;
 }
-function attachEvermindLearn(messages, outcome) {
-  if (!outcome) return messages;
-  return messages.map((m) => m.role === "assistant" ? { ...m, evermindLearn: outcome } : m);
-}
-function formatEvermindLearnStep(outcome) {
-  if (!outcome) return null;
-  const targets = outcome.targets;
-  if (targets && targets.length > 0) {
-    const label = (t) => `${t.name} (proj #${t.projectId}${t.version ? ` v${t.version}` : ""})`;
-    const learned = targets.filter((t) => t.learned);
-    const skipped = targets.filter((t) => !t.learned && t.reason && t.reason !== "too-short");
-    const parts = [];
-    if (learned.length > 0) parts.push(`Contributed this turn to ${learned.map(label).join(", ")}`);
-    for (const t of skipped) {
-      const why = t.reason === "not-seeded" ? "not set up yet" : t.reason === "frozen" ? "frozen (read-only)" : String(t.reason);
-      parts.push(`skipped ${label(t)} \u2014 ${why}`);
-    }
-    return parts.length > 0 ? `\u{1F9E0} ${parts.join("; ")}.` : null;
+function parseChatActivity(msg) {
+  if (!msg.metadata) return null;
+  let meta;
+  try {
+    const parsed = JSON.parse(msg.metadata);
+    if (!parsed || typeof parsed !== "object") return null;
+    meta = parsed;
+  } catch {
+    return null;
   }
-  if (outcome.learned) return `\u{1F9E0} Contributed this turn to the project Evermind (v${outcome.version}).`;
-  switch (outcome.reason) {
-    case "not-attached":
-      return "\u{1F9E0} Not learned this turn \u2014 this chat isn't attached to a project, so it can't train a project Evermind.";
-    case "not-seeded":
-      return "\u{1F9E0} Not learned this turn \u2014 this project's Evermind isn't set up yet.";
-    case "frozen":
-      return "\u{1F9E0} Not learned this turn \u2014 this project's Evermind is frozen (read-only).";
+  const ticketKind = str(meta.ticketKind) ?? "task";
+  const ticketRef = str(meta.ticketRef) ?? "";
+  const agentName = str(meta.agentName) ?? str(meta.agentRef) ?? "";
+  if (meta.runMilestone != null && isPhase(meta.phase)) {
+    return {
+      kind: "milestone",
+      phase: meta.phase,
+      agentName,
+      ticketKind,
+      ticketRef,
+      executionId: typeof meta.executionId === "number" ? meta.executionId : null,
+      ...str(meta.toStatus) ? { toStatus: str(meta.toStatus) } : {},
+      ...str(meta.note) ? { note: str(meta.note) } : {},
+      ...str(meta.question) ? { question: str(meta.question) } : {}
+    };
+  }
+  if (meta.agentDispatch === true) {
+    return { kind: "dispatch", agentName, ticketKind, ticketRef };
+  }
+  return null;
+}
+function isActivityMessage(msg) {
+  return parseChatActivity(msg) !== null;
+}
+function activityMessageCount(messages) {
+  let n = 0;
+  for (const m of messages) if (isActivityMessage(m)) n += 1;
+  return n;
+}
+var DEFAULT_CHAT_ACTIVITY_LABELS = {
+  milestoneStarted: "{agent} started working on {kind} #{ref}",
+  milestoneCompleted: "{agent} finished {kind} #{ref}",
+  milestoneCompletedWithLane: "{agent} finished {kind} #{ref} \u2014 moved to {lane}",
+  milestoneFailed: "{agent}\u2019s run on {kind} #{ref} failed",
+  milestonePaused: "{agent} paused on {kind} #{ref} \u2014 waiting on a human answer",
+  milestonePausedWithQuestion: "{agent} paused on {kind} #{ref} \u2014 needs an answer: {question}",
+  milestoneResumed: "{agent} resumed work on {kind} #{ref}",
+  milestoneCancelled: "{agent}\u2019s run on {kind} #{ref} was cancelled",
+  agentDispatched: "{agent} was assigned to {kind} #{ref}"
+};
+function activityIcon(activity) {
+  if (activity.kind === "dispatch") return "\u{1F464}";
+  switch (activity.phase) {
+    case "started":
+      return "\u25B6";
+    case "completed":
+      return "\u2713";
+    case "failed":
+      return "!";
+    case "paused":
+      return "?";
+    case "resumed":
+      return "\u25B6";
+    case "cancelled":
+      return "\u25A0";
     default:
-      return null;
+      return "\u2022";
   }
+}
+function activityTone(activity) {
+  if (activity.kind === "dispatch") return "neutral";
+  if (activity.phase === "completed") return "good";
+  if (activity.phase === "failed") return "bad";
+  if (activity.phase === "paused") return "waiting";
+  return "neutral";
+}
+function fill(template, values) {
+  return template.replace(/\{(\w+)\}/g, (_, key) => values[key] ?? "");
+}
+function chatActivityText(activity, labels) {
+  const base = { agent: activity.agentName, kind: activity.ticketKind, ref: activity.ticketRef };
+  if (activity.kind === "dispatch") return fill(labels.agentDispatched, base);
+  switch (activity.phase) {
+    case "started":
+      return fill(labels.milestoneStarted, base);
+    case "completed":
+      return activity.toStatus ? fill(labels.milestoneCompletedWithLane, { ...base, lane: activity.toStatus }) : fill(labels.milestoneCompleted, base);
+    case "failed":
+      return fill(labels.milestoneFailed, base);
+    case "paused":
+      return activity.question ? fill(labels.milestonePausedWithQuestion, { ...base, question: activity.question }) : fill(labels.milestonePaused, base);
+    case "resumed":
+      return fill(labels.milestoneResumed, base);
+    case "cancelled":
+      return fill(labels.milestoneCancelled, base);
+    default:
+      return "";
+  }
+}
+
+// src/modelReply.ts
+function isModelReply(m) {
+  return m.role === "assistant" && !isStepMessage(m) && !isConsolidationMarker(m) && !isActivityMessage(m);
 }
 
 // src/persistedSteps.ts
@@ -12027,159 +14087,6 @@ function runProgressVerdict(p) {
   return `${loop}${effect}${remedy}`;
 }
 
-// src/modelScorecard.ts
-var SILENT_TURNS_AT = 3;
-function modelOf(ev) {
-  const m = ev.args?.model;
-  return typeof m === "string" && m && m !== "default" ? m : null;
-}
-function modelScorecard(events) {
-  const byModel = /* @__PURE__ */ new Map();
-  const row = (model) => {
-    let score2 = byModel.get(model);
-    if (!score2) {
-      score2 = {
-        model,
-        turns: 0,
-        toolCalls: 0,
-        textOnlyTurns: 0,
-        unliftedMarkupTurns: 0,
-        failures: 0,
-        stopped: 0,
-        upstreamReportedTurns: 0,
-        upstreamFunctionCalls: 0,
-        upstreamRecovered: 0,
-        adapterLossTurns: 0
-      };
-      byModel.set(model, score2);
-    }
-    return score2;
-  };
-  for (const ev of events) {
-    if (ev.label === STOPPED_TURN_STEP) {
-      const model2 = modelOf(ev);
-      if (model2) row(model2).stopped += 1;
-      continue;
-    }
-    if (ev.label !== "llm.complete") continue;
-    const model = modelOf(ev);
-    if (!model) continue;
-    if (ev.category === "error") {
-      row(model).failures += 1;
-      continue;
-    }
-    if (ev.category !== "llm") continue;
-    const score2 = row(model);
-    const args = ev.args;
-    const calls = typeof args?.toolCalls === "number" ? args.toolCalls : 0;
-    score2.turns += 1;
-    score2.toolCalls += calls;
-    if (calls === 0 && (ev.textChars ?? 0) > 0) score2.textOnlyTurns += 1;
-    if (args?.unliftedCallMarkup === true) score2.unliftedMarkupTurns += 1;
-    if (typeof args?.upstreamFunctionCalls === "number") {
-      score2.upstreamReportedTurns += 1;
-      score2.upstreamFunctionCalls += args.upstreamFunctionCalls;
-      if (typeof args.upstreamRecovered === "number") score2.upstreamRecovered += args.upstreamRecovered;
-      if (args.upstreamFunctionCalls > calls) score2.adapterLossTurns += 1;
-    }
-  }
-  return [...byModel.values()];
-}
-function silentModelFlag(s) {
-  const base = " \xB7 \u26A0 made NO tool calls while another model in this run did";
-  if (s.upstreamReportedTurns > 0 && s.upstreamFunctionCalls === 0) {
-    return `${base}. Its raw responses carried 0 structured function calls on the ${s.upstreamReportedTurns} turn(s) its vendor reported, so the MODEL did not call \u2014 nothing was lost on the way.`;
-  }
-  return `${base}: this model is not emitting structured calls on its route.`;
-}
-function formatModelScorecard(scores) {
-  const markup = scores.some((s) => s.unliftedMarkupTurns > 0);
-  const stopped = scores.some((s) => s.stopped > 0);
-  const lost = scores.some((s) => s.adapterLossTurns > 0);
-  if (scores.length < 2 && !markup && !stopped && !lost) return [];
-  const anyActed = scores.some((s) => s.toolCalls > 0);
-  const lines = ["Per model:"];
-  for (const s of scores) {
-    const parts = [`${s.turns} turn(s)`, `${s.toolCalls} tool call(s)`];
-    if (s.textOnlyTurns) parts.push(`${s.textOnlyTurns} text-only`);
-    if (s.upstreamReportedTurns) {
-      parts.push(`raw response: ${s.upstreamFunctionCalls} structured call(s) over ${s.upstreamReportedTurns} reported turn(s)`);
-    }
-    if (s.upstreamRecovered) parts.push(`${s.upstreamRecovered} rebuilt from the final frame`);
-    if (s.failures) parts.push(`${s.failures} failed`);
-    if (s.stopped) parts.push(`${s.stopped} stopped by the user mid-stream`);
-    const flag = s.unliftedMarkupTurns ? ` \xB7 \u26A0 ${s.unliftedMarkupTurns} turn(s) wrote a tool call as MARKUP that no parser lifted, so the call never ran. The model tried to act; this is a parser gap, not a refusal.` : s.adapterLossTurns ? ` \xB7 \u26A0 on ${s.adapterLossTurns} turn(s) the vendor returned structured tool calls that never reached the loop: the calls were lost in translation, so this is an adapter defect, not the model.` : scores.length > 1 && anyActed && s.toolCalls === 0 && s.turns >= SILENT_TURNS_AT ? silentModelFlag(s) : "";
-    lines.push(`  \u2022 ${s.model}: ${parts.join(" \xB7 ")}${flag}`);
-  }
-  return lines;
-}
-function modelTurnLog(events) {
-  const turns = [];
-  for (const ev of events) {
-    if (ev.label !== "llm.complete") continue;
-    const model = modelOf(ev);
-    if (!model) continue;
-    const args = ev.args;
-    const requested = typeof args?.requestedModel === "string" && args.requestedModel && args.requestedModel !== "default" && args.requestedModel !== model ? args.requestedModel : void 0;
-    if (ev.category === "error") {
-      turns.push({
-        index: turns.length + 1,
-        model,
-        ...requested ? { requestedModel: requested } : {},
-        toolCalls: 0,
-        textOnly: false,
-        failed: true,
-        ...typeof ev.durationMs === "number" ? { durationMs: ev.durationMs } : {}
-      });
-      continue;
-    }
-    if (ev.category !== "llm") continue;
-    const calls = typeof args?.toolCalls === "number" ? args.toolCalls : 0;
-    const turn = {
-      index: turns.length + 1,
-      model,
-      ...requested ? { requestedModel: requested } : {},
-      toolCalls: calls,
-      textOnly: calls === 0 && (ev.textChars ?? 0) > 0,
-      // What the turn SPENT its time producing. Absent on traces that predate the
-      // accounting, so an old chat's log renders exactly as it used to.
-      ...typeof args?.argBytes === "number" && args.argBytes > 0 ? { argBytes: args.argBytes } : {},
-      ...typeof ev.usage?.completion === "number" && ev.usage.completion > 0 ? { completionTokens: ev.usage.completion } : {},
-      ...typeof ev.durationMs === "number" ? { durationMs: ev.durationMs } : {},
-      ...args?.unliftedCallMarkup === true ? { unliftedCallMarkup: true } : {}
-    };
-    if (typeof args?.upstreamFunctionCalls === "number") {
-      turn.upstreamFunctionCalls = args.upstreamFunctionCalls;
-      if (typeof args.upstreamRecovered === "number") turn.upstreamRecovered = args.upstreamRecovered;
-    }
-    turns.push(turn);
-  }
-  return turns;
-}
-function formatOneTurn(t) {
-  const model = t.requestedModel ? `${t.model} (requested ${t.requestedModel})` : t.model;
-  const parts = [];
-  if (t.failed) {
-    parts.push("FAILED");
-  } else {
-    parts.push(`${t.toolCalls} tool call(s)`);
-    if (t.textOnly) parts.push("text-only");
-  }
-  if (typeof t.upstreamFunctionCalls === "number") {
-    parts.push(`raw response: ${t.upstreamFunctionCalls} structured call(s)`);
-  }
-  if (t.upstreamRecovered) parts.push(`${t.upstreamRecovered} rebuilt from the final frame`);
-  if (t.unliftedCallMarkup) parts.push("\u26A0 unlifted call markup");
-  if (t.argBytes) parts.push(`${formatBytes(t.argBytes)} of arguments`);
-  if (t.completionTokens) parts.push(`${t.completionTokens.toLocaleString("en-US")} completion tok`);
-  if (typeof t.durationMs === "number") parts.push(`${t.durationMs}ms`);
-  return `  ${t.index}. ${model} \xB7 ${parts.join(" \xB7 ")}`;
-}
-function formatModelTurnLog(turns) {
-  if (!turns.length) return [];
-  return ["Turn log:", ...turns.map(formatOneTurn)];
-}
-
 // src/staffingSummary.ts
 var DISPATCH_TOOL = /chats[._](dispatch_agent|execute_as_agent)|kanban[._](coordinate|materialize_work_items|assess_resource|assign_participant)|executions[._]submit|run[._-]?now/i;
 function isDispatchTool(label) {
@@ -12286,7 +14193,13 @@ var TOOL_OUTPUT_CAPS = {
   git_history: 2e4,
   git_sync_latest: 2e4,
   git_undo: 2e4,
-  git_redo: 2e4
+  git_redo: 2e4,
+  // Up to four children's reports in one result, each capped by agent-tools'
+  // `SUBAGENT_REPORT_CHARS`. A research child's report IS its deliverable: under the 6K
+  // default a wait on four left the owner ~1.5K of each, and it re-spawned researchers
+  // to recover what was cut (VS Code chat #6). Four full reports plus each one's header
+  // and cut marker; `subagentReportBudget.test.ts` (brain-embedded) holds the two together.
+  wait_agents: 34e3
 };
 var READ_FILE_TOOL = "read_file";
 var SHELL_TOOLS = /* @__PURE__ */ new Set(["run_command", "exec", "bash", "shell", "process"]);
@@ -12716,6 +14629,7 @@ function requestedReadWindow2(out, start, end) {
 }
 
 // src/brainTriage.ts
+import { HISTORY_TOKEN_BUDGET } from "@seanhogg/builderforce-memory/working";
 var CONTEXT_PROMPT_PEAK = Math.round(HISTORY_TOKEN_BUDGET * 1.5);
 var LARGE_LOSSY_RESULT_BYTES = 2e4;
 function isFailedToolResult(result) {
@@ -12748,19 +14662,19 @@ function detectUnbackedWriteClaim(events, messages) {
     (e) => e.category === "tool" && isFileWriteTool(e.label) && !e.isError && !isFailedToolResult(e.result)
   );
   if (wroteOk) return false;
-  return messages.some((m) => m.role === "assistant" && typeof m.content === "string" && FILE_SAVE_CLAIM.test(m.content));
+  return messages.some((m) => isModelReply(m) && typeof m.content === "string" && FILE_SAVE_CLAIM.test(m.content));
 }
 function detectUnbackedTicketClaim(events, messages) {
   const filedOk = events.some(
     (e) => e.category === "tool" && isTicketWriteTool(e.label) && !e.isError && !isFailedToolResult(e.result)
   );
   if (filedOk) return false;
-  return messages.some((m) => m.role === "assistant" && typeof m.content === "string" && TICKET_CLAIM.test(m.content));
+  return messages.some((m) => isModelReply(m) && typeof m.content === "string" && TICKET_CLAIM.test(m.content));
 }
 function detectAnnouncedButUnmadeToolCall(events, messages) {
   if (events.some((e) => e.category === "tool")) return false;
   return messages.some(
-    (m) => m.role === "assistant" && typeof m.content === "string" && announcesUntakenAction(m.content)
+    (m) => isModelReply(m) && typeof m.content === "string" && announcesUntakenAction(m.content)
   );
 }
 var LOOP_STEP = {
@@ -13663,8 +15577,12 @@ function resolveServerChatId(chatId, req) {
   return req.serverChatId === void 0 ? chatId : req.serverChatId;
 }
 
+// src/runStore/runLoop.ts
+import { windowed } from "@seanhogg/builderforce-memory/working";
+
 // src/runStore/runMemory.ts
 import { formatEvermindMemoryBlock as formatEvermindMemoryBlock2, countReconciledMemories } from "@seanhogg/builderforce-memory/evermind";
+import { transcriptTokens } from "@seanhogg/builderforce-memory/working";
 
 // src/runStore/answerAnchors.ts
 var FILE_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "view_file", "open_file", "read_files"]);
@@ -13885,10 +15803,10 @@ var HAND_OFF_TOOL_SPEC = {
     }
   }
 };
-var str = (v) => typeof v === "string" ? v.trim() : "";
+var str2 = (v) => typeof v === "string" ? v.trim() : "";
 function parseHandOff(args) {
   const a = args ?? {};
-  const summary = str(a.summary);
+  const summary = str2(a.summary);
   if (!Array.isArray(a.tasks) || a.tasks.length === 0) {
     return "hand_off needs { summary, tasks:[{ title, brief, paths? }] } with at least one task";
   }
@@ -13898,11 +15816,11 @@ function parseHandOff(args) {
   const tasks = [];
   for (const [i, raw] of a.tasks.entries()) {
     const t = raw ?? {};
-    const title = str(t.title);
-    const brief = str(t.brief);
+    const title = str2(t.title);
+    const brief = str2(t.brief);
     if (!title || !brief) return `task ${i + 1} needs both a title and a brief`;
-    const paths = Array.isArray(t.paths) ? t.paths.map(str).filter(Boolean) : [];
-    const acceptance = str(t.acceptance);
+    const paths = Array.isArray(t.paths) ? t.paths.map(str2).filter(Boolean) : [];
+    const acceptance = str2(t.acceptance);
     tasks.push({ title, brief, paths, ...acceptance ? { acceptance } : {} });
   }
   return { summary, tasks };
@@ -14373,6 +16291,82 @@ function completionAdvisory(open) {
   return `MARKED DONE OVER A PLACEHOLDER. This run wrote ${open.length} placeholder(s) it has not removed \u2014 ${shown}${open.length > 3 ? ` (+${open.length - 3} more)` : ""}. A ticket is done when its code works in the product, not when a stub compiles. Finish the placeholder and keep the ticket done, or set it back to in_progress and name what blocks it.`;
 }
 
+// src/runStore/runPreamble.ts
+import { HISTORY_TOKEN_BUDGET as HISTORY_TOKEN_BUDGET2 } from "@seanhogg/builderforce-memory/working";
+
+// src/runStore/runFoldMarker.ts
+import {
+  consolidationMarkerContent,
+  consolidationMetadata,
+  foldKeepFromId
+} from "@seanhogg/builderforce-memory/working";
+function entryKey(m) {
+  return `${m.role}\0${m.role === "assistant" ? replayTextOf(contentText(m.content ?? "")) : contentText(m.content ?? "")}`;
+}
+function anchorPersistedHistory(c, seed, seedIds) {
+  const at = /* @__PURE__ */ new Map();
+  c.transcript.forEach((m, i) => {
+    const key = entryKey(m);
+    const list2 = at.get(key);
+    if (list2) list2.push(i);
+    else at.set(key, [i]);
+  });
+  let from = 0;
+  seed.forEach((m, k) => {
+    const id = seedIds[k];
+    const index = at.get(entryKey(m))?.find((i) => i >= from);
+    if (index === void 0) {
+      c.unseenFromId = c.unseenFromId === void 0 ? id : Math.min(c.unseenFromId, id);
+      return;
+    }
+    if (!c.transcriptAnchors.some((a) => a.index === index)) c.transcriptAnchors.push({ index, id });
+    from = index + 1;
+  });
+}
+function recordTranscriptAnchors(c, req) {
+  const t = c.transcript;
+  const { seed, seedIds } = req;
+  c.unseenFromId = void 0;
+  if (seed && seedIds && seed.length > 0 && seedIds.length === seed.length) {
+    if (t[0] === seed[0] && t[seed.length - 1] === seed[seed.length - 1]) {
+      c.transcriptAnchors = seedIds.map((id, index) => ({ index, id }));
+    } else {
+      anchorPersistedHistory(c, seed, seedIds);
+    }
+  }
+  if (req.userTurnMessageId == null || req.userTurn === void 0) return;
+  for (let i = t.length - 1; i >= 0; i--) {
+    if (t[i].role === "user" && t[i].content === req.userTurn) {
+      if (!c.transcriptAnchors.some((a) => a.index === i)) c.transcriptAnchors.push({ index: i, id: req.userTurnMessageId });
+      return;
+    }
+  }
+}
+async function persistFoldMarker(c, chatId, persistence, fold) {
+  const covered = foldKeepFromId(c.transcriptAnchors, fold.coveredEnd);
+  if (covered === void 0) return;
+  const keepFromId = c.unseenFromId === void 0 ? covered : Math.min(covered, c.unseenFromId);
+  try {
+    const [msg] = await persistence.sendMessages(chatId, [{
+      role: "assistant",
+      content: consolidationMarkerContent(fold.note),
+      metadata: consolidationMetadata({ keepFromId, folded: fold.droppedMessages })
+    }]);
+    if (msg) {
+      recordAppended(c, msg);
+      emit(c);
+    }
+  } catch (error) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "context.compact_persist_failed",
+      args: { coveredEnd: fold.coveredEnd },
+      result: `The compaction note could not be saved (${error instanceof Error ? error.message : String(error)}) \u2014 the next run will summarize this history again.`
+    });
+  }
+}
+
 // src/windowFit/runWindowFit.ts
 function windowFitTrace(ts, step, t) {
   const how = t.summarized ? "summarized" : t.recalled ? "recalled from memory" : "elided";
@@ -14604,6 +16598,7 @@ async function prepareRunLoop(chatId, c, req, runKey) {
   const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, runTool, stream, evermind } = req;
   const convo = c.transcript;
   restoreTurnContext(c);
+  recordTranscriptAnchors(c, req);
   const stablePrefix = stablePrefixOn();
   const turnParts = [];
   const canAskUser = !!runTool && (toolSpecs?.length ?? 0) > 0;
@@ -14695,7 +16690,7 @@ ${turnContext}` : systemPrompt),
     ...canAskUser ? [ASK_USER_TOOL] : []
   ];
   const windowFit = createRunWindowFit({
-    workingBudgetTokens: HISTORY_TOKEN_BUDGET,
+    workingBudgetTokens: HISTORY_TOKEN_BUDGET2,
     summarizer: () => ({ stream, model: run.policy.model, signal: c.abort?.signal }),
     ...evermind?.recall ? { recall: (q) => evermind.recall(q), priorRecall } : {},
     ...req.windowSources ? { windowSources: req.windowSources } : {},
@@ -15178,10 +17173,14 @@ function takeRunSteering(c, runKey, step) {
   return texts;
 }
 
+// src/runStore/completeTurn.ts
+import { buildWorkingTranscript } from "@seanhogg/builderforce-memory/working";
+
 // src/runStore/compactionSaved.ts
-function compactionSavedTokens(full, working, historyBudgetTokens = HISTORY_TOKEN_BUDGET) {
-  const withoutCompaction = Math.min(transcriptTokens(full), historyBudgetTokens);
-  return Math.max(0, withoutCompaction - transcriptTokens(working));
+import { HISTORY_TOKEN_BUDGET as HISTORY_TOKEN_BUDGET3, transcriptTokens as transcriptTokens2 } from "@seanhogg/builderforce-memory/working";
+function compactionSavedTokens(full, working, historyBudgetTokens = HISTORY_TOKEN_BUDGET3) {
+  const withoutCompaction = Math.min(transcriptTokens2(full), historyBudgetTokens);
+  return Math.max(0, withoutCompaction - transcriptTokens2(working));
 }
 function stampOncePerCall(stamped, plain2) {
   let used = false;
@@ -15269,15 +17268,16 @@ function completeTurnPort(run) {
       c,
       systemPrompt,
       (msgs) => summarizeMiddle(stream, run.policy.model, msgs, c.abort?.signal),
-      (dropped) => {
+      (fold) => {
         pushTrace(c, {
           ts: nowIso(),
           category: "message",
           label: "context.compacted",
-          args: { droppedMessages: dropped },
-          result: `Compressed ${dropped} earlier step(s) into a memory to stay within the context window.`
+          args: { droppedMessages: fold.droppedMessages },
+          result: `Compressed ${fold.droppedMessages} earlier step(s) into a memory to stay within the context window.`
         });
         emit(c);
+        void persistFoldMarker(c, chatId, run.req.persistence, fold);
       }
     );
     const trimmed = c.compactMemo ? compactionSavedTokens([{ role: "system", content: systemPrompt }, ...c.transcript], working) : 0;
@@ -15449,6 +17449,7 @@ function completeTurnPort(run) {
     if (localFallback) pushTrace(c, localFallback);
     const narratedUnadvertised = result.toolCalls.length === 0 ? toolNamesMentionedIn(result.text).filter((n) => !advertisedNames.has(n)) : [];
     const argBytes = toolCallArgBytes(result.toolCalls);
+    const contextWindow = await run.windowFit.contextWindow?.();
     pushTrace(c, {
       ts: nowIso(),
       category: "llm",
@@ -15471,6 +17472,7 @@ function completeTurnPort(run) {
         // nothing about a turn that spent three minutes streaming 21 KB of
         // `write_file` arguments — which is what a long turn usually is.
         ...argBytes > 0 ? { argBytes } : {},
+        ...contextWindow ? { contextWindow } : {},
         // Which account served the turn + any connected-BYO provider the gateway
         // could NOT resolve — so triage tells "ran on the shared pool despite a
         // connected Claude account (expired?)" apart from "nothing connected".
@@ -15508,38 +17510,6 @@ function completeTurnPort(run) {
   };
 }
 
-// src/delegationRequest.ts
-var SPAWN_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents"]);
-var ASKS_FOR_SUBAGENTS = /\bsub[- ]?agents?\b|\bspawn(?:_agents?|\s+(?:agents?|workers?|children))\b|\b(?:parallel|concurrent)\s+(?:agents?|workers?)\b|\bfan[- ]?out\b/i;
-var DECLINES_SUBAGENTS = /\b(?:no|without|don'?t\s+use|do\s+not\s+use|never\s+use|skip(?:\s+the)?)\s+(?:any\s+)?sub[- ]?agents?\b/i;
-function asksForSubagents(text) {
-  const t = text ?? "";
-  return ASKS_FOR_SUBAGENTS.test(t) && !DECLINES_SUBAGENTS.test(t);
-}
-function canSpawnHere(toolNames) {
-  return toolNames.some((n) => SPAWN_TOOLS.has(n));
-}
-function isSpawnTool(name) {
-  return SPAWN_TOOLS.has(name);
-}
-function attemptedDelegation(events) {
-  return events.some((e) => e.category === "tool" && SPAWN_TOOLS.has(e.label));
-}
-function leftDelegationUndone(input) {
-  return canSpawnHere(input.toolNames) && asksForSubagents(input.requestText) && !attemptedDelegation(input.events);
-}
-function undelegatedRequestNudge(toolNames) {
-  const fanOut = toolNames.includes("spawn_agents");
-  const call2 = fanOut ? 'Call spawn_agents NOW: one workstream per open ticket whose files do not overlap \u2014 ticket=<id>, a complete standalone task brief, role "code". Each child is a clone of you and makes its change itself. It takes up to 4 per call and returns at once \u2014 the children run in the background, so start the next batch right away if there are more. Use spawn_agent for a slice that must run alone.' : 'Call spawn_agent NOW, one slice at a time, with a complete standalone task brief and role "code". The child is a clone of you and makes its change itself.';
-  return `The user asked for this work to be done by SUB-AGENTS, and none has been started. Do not ask how to proceed \u2014 the user already said. A sub-agent here is a LOCAL child run on this machine: it needs no cloud dispatch, no ticket assignment and no Developer on the roster. The workspace execution kill-switch and every \`autoRun: execution_disabled\` verdict stop CLOUD runs only \u2014 they do not apply to it. as_agent is optional: with no fitting teammate, OMIT it \u2014 the spawn tools staff the role on this project themselves (a capable teammate, or a Developer hired into the workspace and project, with the ticket assigned) and the child runs AS that agent. ${call2} ${delegationShape(fanOut ? "spawn_agents" : "spawn_agent")} Keep working while they run; when their reports are in (they arrive on their own, or call wait_agents), verify their changes and report what each child delivered, per ticket.`;
-}
-function delegationShape(spawnTool) {
-  return `The shape of this run: you read only the document the request names and the chat state already in your context \u2014 no source files. Research (reading code, searching, tracing callers) goes to children: ${spawnTool} with role "explore", one per question, each brief stating the question, the files or folders to start from, what is already known and ruled out, and the answer's shape (paths with line numbers, short excerpts, a word cap). When they report, write the deliverable the request names (the document or plan edit) yourself in that same turn \u2014 filing tickets is not the deliverable.`;
-}
-function earlyDelegationNudge(toolNames, reads) {
-  return `STOP READING AND DELEGATE. This run has made ${reads} read calls and started no sub-agent. ${undelegatedRequestNudge(toolNames)}`;
-}
-
 // src/runStore/earlyDelegation.ts
 var counters = /* @__PURE__ */ new WeakMap();
 function counterOf(run) {
@@ -15549,6 +17519,14 @@ function counterOf(run) {
     counters.set(run, counter);
   }
   return counter;
+}
+function runLeftDelegationUndone(run) {
+  return leftDelegationUndone({
+    toolNames: run.catalogToolNames,
+    requestText: run.userRequest,
+    events: runTrace(run.c),
+    delegatedRun: !!run.req.lineage
+  });
 }
 function delegationCallKind(name, args, isReadTool) {
   if (isSpawnTool(name)) return "spawn";
@@ -15560,7 +17538,7 @@ function earlyDelegationAdvisory(run, name, args, isReadTool, step) {
   const kind = delegationCallKind(name, args, isReadTool);
   const reads = counter.record(kind);
   if (kind !== "read" || !counter.due(READS_BEFORE_DELEGATION_NUDGE)) return null;
-  if (!leftDelegationUndone({ toolNames: run.catalogToolNames, requestText: run.userRequest, events: runTrace(run.c) })) return null;
+  if (!runLeftDelegationUndone(run)) return null;
   counter.markNudged();
   const nudge = earlyDelegationNudge(run.catalogToolNames, reads);
   pushTrace(run.c, {
@@ -15675,6 +17653,7 @@ ${delegate}` : delegate;
 }
 
 // src/runStore/beforeDispatch.ts
+import { stillInWorkingContext } from "@seanhogg/builderforce-memory/working";
 function beforeDispatchHook(run) {
   const { c, chatId, runKey, req, allTools, catalogToolNames, usedTools, readCoverage, writeLedger, placeholderLedger } = run;
   const { runTool, needsConfirm, persistence } = req;
@@ -15880,16 +17859,12 @@ function recordShellFileRead(coverage, tool, args, out, servedWhole, anchor) {
 
 // src/runStore/toolCallHooks.ts
 function beforeToolCallsHook(run) {
-  const { c, chatId, catalogToolNames, userRequest } = run;
+  const { c, chatId } = run;
   const { runTool, persistence, onActivity } = run.req;
   return async (ctx, turn, calls) => {
     const { result, requested } = metaOf(turn);
     const askCall = calls.find((tc) => tc.name === ASK_USER_TOOL);
-    if (askCall && runTool && !run.delegationRecoveryUsed && leftDelegationUndone({
-      toolNames: catalogToolNames,
-      requestText: userRequest,
-      events: runTrace(c)
-    })) {
+    if (askCall && runTool && !run.delegationRecoveryUsed && runLeftDelegationUndone(run)) {
       run.delegationRecoveryUsed = true;
       run.redirectAskToDelegation = true;
       pushTrace(c, {
@@ -16079,11 +18054,7 @@ function finalAnswerHook(run) {
       enterVerifyIfChanged(run);
       return { action: "continue" };
     }
-    if (runTool && !run.delegationRecoveryUsed && leftDelegationUndone({
-      toolNames: catalogToolNames,
-      requestText: userRequest,
-      events: runTrace(c)
-    })) {
+    if (runTool && !run.delegationRecoveryUsed && runLeftDelegationUndone(run)) {
       run.delegationRecoveryUsed = true;
       await requeueWithNudge(undelegatedRequestNudge(catalogToolNames));
       pushTrace(c, {
@@ -16202,13 +18173,15 @@ async function runLoop(chatId, c, req, runKey) {
       ));
       accrueByoUnresolved(c, closing.byoUnresolved);
       accrueProviderCap(c, closing.providerCap);
+      run.windowFit.served(closing.resolvedModel ?? closeAsk.model);
+      const contextWindow = await run.windowFit.contextWindow?.();
       pushTrace(c, {
         ts: nowIso(),
         category: "llm",
         label: "llm.complete",
         durationMs: nowMs2() - closeStart,
         ttftMs: closeFirstTokenAt !== void 0 ? closeFirstTokenAt - closeStart : void 0,
-        args: { model: closing.resolvedModel ?? closeAsk.model ?? "default", requestedModel: closeAsk.model ?? "default", step: loop.step, toolCalls: 0, forcedFinish: true, failureStreak: streak, account: closing.account, byoUnresolved: closing.byoUnresolved },
+        args: { model: closing.resolvedModel ?? closeAsk.model ?? "default", requestedModel: closeAsk.model ?? "default", step: loop.step, toolCalls: 0, forcedFinish: true, failureStreak: streak, account: closing.account, byoUnresolved: closing.byoUnresolved, ...contextWindow ? { contextWindow } : {} },
         usage: closing.usage,
         finishReason: closing.finishReason,
         textChars: closing.text.length,
@@ -16265,6 +18238,7 @@ function beginRun(c, outcomeKey) {
 }
 
 // src/runStore/startRun.ts
+var delegatingCells = /* @__PURE__ */ new WeakSet();
 async function startRun(runKey, request) {
   const driver = getRunDriver();
   if (driver) return driver.start(runKey, request);
@@ -16329,6 +18303,9 @@ async function startRun(runKey, request) {
       ).catch(() => {
       });
     }
+    const trace = runTrace(c);
+    const personsRequest = !lineage && !delegatingCells.has(c);
+    if (attemptedDelegation(trace)) delegatingCells.add(c);
     const outcome = req.reportOutcome && codeRunOutcome({
       runId: c.runId,
       codeModel: c.codeModel,
@@ -16336,8 +18313,9 @@ async function startRun(runKey, request) {
       aborted,
       failed: c.error !== "",
       shipped,
-      trace: runTrace(c),
-      projectId: req.projectId
+      trace,
+      projectId: req.projectId,
+      askedForChange: personsRequest && asksForChange(req.userTurn === void 0 ? void 0 : contentText(req.userTurn))
     });
     if (outcome) void req.reportOutcome(outcome).catch(() => void 0);
     c.persistStep = null;
@@ -16398,1885 +18376,8 @@ function useRunSnapshot(key) {
   return useSyncExternalStore(subscribe, read, read);
 }
 
-// ../packages/creation-canvas-contract/src/canvasTools.ts
-var GUEST_SAFE_CANVAS_TOOLS = [
-  // Reads over the guest's own in-browser document.
-  "canvas_read_snapshot",
-  // Named by the system prompt as the check to run before saying an object is missing.
-  // Its absence from the guest vocabulary meant the prompt was instructing the model to
-  // call a tool the model had not been given.
-  "canvas_read_object",
-  "canvas_read_document",
-  // Pure client-side computation over rows already loaded in the guest's own browser.
-  // Without it a guest can only be told placeholder numbers.
-  "canvas_query_dataset",
-  // Authoring + layout over the local document. The API never executes these; they are
-  // descriptions of operations the browser applies to the visitor's own canvas.
-  "canvas_add_object",
-  // Theater seating is a local-document layout (chairs facing a screen on the
-  // visitor's own board). Same class as `canvas_add_object`; leaving it unclassified
-  // made the model plan around a tool the gateway stripped, then land an empty room.
-  "canvas_create_room",
-  "canvas_update_object",
-  "canvas_delete_object",
-  "canvas_arrange_objects",
-  "canvas_set_object_layout",
-  "canvas_invoke_object_action",
-  "canvas_connect_objects",
-  "canvas_update_connection",
-  "canvas_delete_connection",
-  "canvas_convert_diagram",
-  // Lifts one post out of a social feed tile that is ALREADY on this board, in the
-  // browser, over the posts that tile is holding — no request, no tenant. Its sibling
-  // tools, which do reach `/api/social/*`, are in the gated set below.
-  "canvas_pin_social_post",
-  // Ranks the résumé objects ALREADY ON THIS BOARD against a posting on this board, in
-  // the browser, with no network call — the same deterministic analyzer the résumé
-  // builder uses, composed N:1. Guest-safe because it reads nothing but the canvas: a
-  // visitor evaluating the product can drop in five CVs and a job ad and watch a real
-  // ranking come back with its evidence and its gaps, which is the strongest thing this
-  // vocabulary can show without an account.
-  "canvas_screen_resumes",
-  // Re-renders a résumé that is ALREADY on the board through the built-in template
-  // engine — pure function, no network, no tenant — so it is guest-safe on exactly the
-  // reasoning `canvas_screen_resumes` is, and for the same person: the visitor most
-  // likely to arrive logged out and ask for their CV in five styles is the one out of
-  // work. Gating it would leave `canvas_add_object` as the only route, which is the
-  // path that spent four minutes retyping the document and produced nothing.
-  "canvas_render_resume_variants",
-  // The step BEFORE both of those, and guest-safe for the same reason: it reads text
-  // the visitor's own browser already extracted from the file they dropped, and runs
-  // the deterministic JSON Resume reader over it — no network, no tenant, no model.
-  // Gating it would leave a logged-out visitor with their CV on the board and no way
-  // to make it a résumé, which is the exact dead end that had the model asking people
-  // to paste a document the canvas was already holding.
-  "canvas_import_resume",
-  // ── Academic imports ─────────────────────────────────────────────────────────
-  // Same reasoning as `canvas_import_resume`, for the two document formats the
-  // academic set documents but never wired: a deterministic CSV/`.bib`/`.ris` reader
-  // over text the visitor's own browser already extracted, writing only to a `cohort`
-  // or `bibliography` object already on their own board. No network, no tenant.
-  "canvas_import_roster",
-  "canvas_import_references",
-  // The free diagnostics and calculators. `GET /api/tools`, `GET /api/tools/:id` and
-  // `POST /api/tools/:id/compute` are unauthenticated by design (they power the
-  // marketing surface), so a visitor asking "how mature is our delivery?" gets a real
-  // scored object on the board instead of an apology.
-  "canvas_list_diagnostics",
-  "canvas_add_diagnostic",
-  // The 8-target "Idea → Real" catalog (`GET /api/realizations/targets`) — static
-  // copy, no tenant. Guest-safe for the same reason `canvas_list_diagnostics` is:
-  // a visitor can browse what a phone line, a pilot or a smoke test actually
-  // build before `canvas_realize` ever asks for an account.
-  "canvas_list_realization_targets",
-  // Returns a STATIC executive use-case contract; its tenant-evidence branch already
-  // degrades to `saved_session_required` without a session, so it is safe unauthenticated.
-  "canvas_prepare_executive_use_case",
-  // ── Founder objects ──────────────────────────────────────────────────────────
-  // Pure client-side computation over `competitor` objects ALREADY on the visitor's own
-  // board: it reads their `locations`, projects them, and authors a `map` object plus
-  // the coverage gaps. No tenant data and no network — the research that PUT the
-  // competitors there is `builtin_web_search`, which a guest already has, so a logged-out
-  // founder can complete a geographic market analysis end to end.
-  "canvas_map_competitors",
-  // Evaluates `trigger` objects against the `liveMetric` objects on the same board. The
-  // reading of a live metric may need an account; comparing two numbers that are already
-  // in front of the visitor does not, and a guest who authors a threshold by hand should
-  // see it fire.
-  "canvas_evaluate_triggers",
-  // ── Data architecture ────────────────────────────────────────────────────────
-  // Every one of these is pure computation over the visitor's OWN board: a model
-  // authored in the browser, a join between two datasets already loaded there, a
-  // PII scan of rows the visitor uploaded themselves, a contract evaluated against
-  // them, a check suite run over them, a metric defined on them, and the lineage
-  // graph of the objects in front of them. No tenant, no network.
-  //
-  // `canvas_create_data_model` is the reason this matters: "create me an ERD" must
-  // work for someone evaluating the product, and it ends in real DDL. Gating it
-  // would make the model improvise a limitation the product does not have — the
-  // exact failure the `canvas_add_image` note above records.
-  "canvas_create_data_model",
-  "canvas_export_data_model",
-  "canvas_join_datasets",
-  "canvas_classify_dataset",
-  "canvas_set_data_contract",
-  "canvas_run_data_quality",
-  "canvas_define_metric",
-  "canvas_trace_lineage",
-  // ── Data science: analysis, model comparison, evaluation, governance ─────────
-  // Every one is pure computation over the visitor's OWN board, which is what makes
-  // them guest-safe on the same reasoning as the data-architecture set above.
-  //
-  // `canvas_run_notebook` deserves its own note: it EXECUTES code, which sounds like
-  // the least guest-safe thing here and is the opposite. The kernel is a Web Worker
-  // with `fetch`, `XMLHttpRequest`, `importScripts` and `WebSocket` deleted from its
-  // global scope before any cell compiles, the rows are structured-cloned in, and it
-  // is terminated on a hard timeout. A cell can compute and cannot reach the network,
-  // the DOM or the session — so it is strictly more contained than a tool that calls
-  // an API. Gating it would make "analyse this CSV" require an account, which is the
-  // single most common thing a visitor arrives wanting to do.
-  "canvas_run_notebook",
-  "canvas_compare_runs",
-  "canvas_sample_for_labels",
-  "canvas_forecast_series",
-  // Governance is authored locally and enforced locally. A guest who declares that a
-  // dataset may not be used for training should see that refusal honoured.
-  "canvas_set_data_use",
-  // ── QA ───────────────────────────────────────────────────────────────────────
-  // "Create automation tests for my website" is answered ENTIRELY in the visitor's own
-  // browser: route discovery is a regex over HTML the model already fetched with
-  // `builtin_web_fetch` (guest research), and the Playwright lowering is the pure
-  // function in `qa.ts`. Gating these would make the most common QA request in the
-  // product reachable only after signing up, and — worse, per the note above — would
-  // have the model improvise a limitation instead of writing the tests.
-  //
-  // The page audit is the same shape as `canvas_add_diagnostic`: scored findings over
-  // content the visitor supplied, no tenant and no network of its own.
-  "canvas_create_test_plan",
-  "canvas_test_coverage",
-  "canvas_record_defect",
-  "canvas_audit_page",
-  "canvas_generate_test_data",
-  // ── The build vocabulary (`lib/canvasBuildTools.ts`) ─────────────────────────
-  // Creating, listing, reading, searching and editing the CODE behind a Builder
-  // object. Guest-safe because a board with no account runs its app over files held
-  // in the BROWSER (`lib/workspace/localFileStore.ts`) and the tools run there too:
-  // nothing reaches a tenant. "Keep your work" uploads those files into a real
-  // project. Only the history pair below stays account-required.
-  "canvas_create_build",
-  "canvas_list_build_files",
-  "canvas_read_build_file",
-  "canvas_search_build_files",
-  "canvas_write_build_file",
-  "canvas_edit_build_file",
-  "canvas_read_build_diagnostics",
-  // What the visitor's own preview printed to its console — read from this browser's
-  // memory (`lib/previewConsole.ts`), so nothing reaches a tenant.
-  "canvas_read_preview_console",
-  // Runs one command (install, build, type-check, test) in the visitor's OWN browser
-  // runtime over the same browser-held files (`lib/browserRuntime/workspaceShell.ts`) —
-  // the runtime the preview already runs on, so nothing reaches a tenant.
-  "canvas_run_build_command",
-  // Measures the RUNNING preview in a hidden frame of the visitor's own browser
-  // (`lib/previewProbe`). Reads nothing but the app the visitor is already looking at.
-  "canvas_inspect_preview"
-];
-var GUEST_GATED_CANVAS_TOOLS = [
-  // Server-side stock search / image generation. The ONLY route to real pixels, so its
-  // absence rewrote every "draw me…" turn into a drawing-tool failure.
-  "canvas_add_image",
-  // The ONLY route to pixels of a page that ALREADY EXISTS, and the same classification
-  // for the same measured reason. Without it, "upgrade my website — show me a before and
-  // after" produced an after and an apology: "as a large language model, I don't have the
-  // ability to browse the web visually or take screenshots of live websites" (2026-08-19,
-  // ui 2026.8.60). That is a fact about a model presented as a fact about the product,
-  // which is exactly what an absent tool buys. Gated rather than absent so a visitor
-  // hears the true, one-click reason instead.
-  "canvas_capture_screenshot",
-  // The ONLY route to the text of a SCANNED page, and classified by the failure its
-  // absence causes rather than by what it touches. Without it a visitor who drops a
-  // photographed contract hears "I can't read scanned documents" — a fact about a model
-  // presented as a fact about the product, on a board where the true answer is one
-  // click away. It self-gates on a saved session and returns the account gate.
-  "canvas_read_attachment",
-  // The ONLY route to a playable game. Deliberately here rather than in the safe set
-  // even though HALF of it is guest-safe: a web game is authored in the visitor's own
-  // browser and needs no account, while a Roblox place is written on the server. The
-  // tool self-gates on that split. It is classified by the failure its ABSENCE causes,
-  // which is the reason this set exists — without it a guest asking for a game gets
-  // `canvas_add_object`, and that produces a design document nobody can play.
-  "canvas_add_game",
-  // The ONLY routes to moving pictures (`canvasVideoTools.ts`). Gated rather than
-  // absent for the reason this set exists: with no video tool a model tells the user
-  // "I can't make videos", which is false here. Clips are generated on the server, so
-  // the gate is on credentials, exactly like `canvas_add_image`.
-  "canvas_add_video",
-  "canvas_create_scene",
-  // Writes the board's cases into the tenant's QA library (`/api/qa/flows` +
-  // `/api/qa/generate`) and reads its runs back. Gated rather than absent for the
-  // reason the whole set exists: a visitor who has just watched the canvas write their
-  // tests will ask to make them run, and "that needs a free account" is a true,
-  // one-click answer, where an absent tool produces an invented one. It is also the
-  // only tool a guest-visible description may name — `canvas_create_test_plan`'s
-  // description does not, precisely so this classification stays free to change.
-  "canvas_publish_tests",
-  // Files a board dataset as a fine-tune training corpus under a project. Classified
-  // here for the same reason as `canvas_publish_tests`, and by the same test: what does
-  // its ABSENCE make the model say? Every step before it is guest-safe — a visitor can
-  // import a CSV, profile it, chart it and classify its columns entirely in their own
-  // browser — so "now train a model on this" is the natural next sentence on a guest
-  // board. With the tool absent the model has no way to know the product fine-tunes at
-  // all, and the improvisation it reaches for ("I can't train models") is false about a
-  // product that ships adapters. The corpus itself is a tenant row, so the WORK needs an
-  // account; the gate is on credentials, not on a saved board, exactly like the social
-  // tools. Its description names only `canvas_set_data_use`, which is guest-safe — rule 2
-  // holds.
-  "canvas_promote_dataset_to_corpus",
-  // Turns an idea into one of the 8 tested "Idea → Real" proofs — a phone line, a
-  // pilot, a smoke test, a live system — through the exact pipeline `/realize`
-  // uses (`planRealization` + `realize()`), never an improvisation. Gated rather
-  // than absent for the reason this whole set exists, and on direct evidence:
-  // measured 2026-08-29, a signed-in board asked to "stand up a phone line" with
-  // no bridge into this pipeline got a legacy `workflow` object with zero
-  // authored steps (unrunnable) and a hand-typed Twilio guide with the wrong
-  // webhook URLs and no WEBHOOK_SHARED_SECRET — worse than absent, because it
-  // looked done. A guest asking the same thing must hear the true reason a LIVE
-  // proof needs an account, not be left to the same improvisation.
-  //
-  // What is real either way is the generated PLAN — the actual routes, runbook
-  // and required connectors/secrets `target.build()` produces — which carries no
-  // tenant credential and is guest-safe to author onto the board with
-  // `canvas_add_object`; only PERSISTING it as a live, running project
-  // (`POST /api/realizations` writes a tenant row) needs the account.
-  "canvas_realize",
-  // ── Connected social accounts (`/api/social/*`) ──────────────────────────────
-  // Gated rather than absent, for the reason this whole set exists, and on the
-  // strongest evidence yet that the reason is real.
-  //
-  // Measured 2026-08-15 (ui 2026.8.17 / api 2026.8.11), a board opened with "I want to
-  // create a social media campaign. First I want to connect all my social media
-  // accounts and then create a post that goes to all the social media." All five social
-  // tools were account-required and therefore absent, while the SOCIAL block of the
-  // canvas system prompt — which is unconditional — was busy naming every one of them.
-  // The model, holding instructions for tools it had not been given, improvised: "I
-  // can't directly perform those actions. You would need to connect your existing
-  // accounts to a social media management platform." That is false twice over. The
-  // product connects X, LinkedIn, Facebook, Instagram and TikTok through the connector
-  // platform, publishes to all of them from one campaign, and the panel that does it is
-  // on the same canvas. It then fell back to `canvas_add_object` kind `socialCampaign`,
-  // was refused for carrying no authored ledger, and the session ended with nothing on
-  // the board and a recommendation to go and buy a competitor's product.
-  //
-  // Every one of these is a stateless request carrying the tenant token, exactly like
-  // `canvas_add_image` — so the gate is on CREDENTIALS, not on whether the board has
-  // been saved, and a signed-in user on an unsaved board publishes for real.
-  //
-  // `canvas_pin_social_post` is NOT here: it lifts one post out of a feed tile already
-  // on the board, in the browser, with no request of its own — so it belongs with the
-  // local-document tools above. A guest can never hold a feed tile to pin from, and the
-  // answer it gives them ("there is no social feed on this canvas yet") is true.
-  "canvas_connect_social_account",
-  "canvas_add_social_feed",
-  "canvas_refresh_social_feed",
-  "canvas_create_social_campaign",
-  "canvas_publish_social_campaign"
-];
-var ACCOUNT_REQUIRED_CANVAS_TOOLS = [
-  // Connected Microsoft 365 / Gmail mailboxes (`/api/mailboxes/*`).
-  "canvas_add_inbox",
-  "canvas_refresh_inbox",
-  "canvas_pin_email",
-  // The social tools used to be here. They are guest-GATED now — see the note above
-  // them in GUEST_GATED_CANVAS_TOOLS for the session that moved them, and why absence
-  // was the worse of the two answers.
-  // Tenant-scoped Builderforce domain data and canonical project PRDs.
-  "canvas_read_domain",
-  "canvas_read_project_prds",
-  "canvas_create_project_prd",
-  // ── Founder objects, tenant half ─────────────────────────────────────────────
-  // Writes the investor seat's `companies` row onto a canvas `company` object. It is a
-  // WRITE-TO-BOARD action layered on the same kernel read `canvas_read_domain` performs
-  // — the same relationship `canvas_add_diagnostic` has to `GET /api/tools` — not a
-  // second way to read a tenant's company.
-  "canvas_sync_company_profile",
-  // ── Founder operations (0469) ────────────────────────────────────────────────
-  // Every one reads or writes a TENANT record, which is what makes them
-  // account-required rather than guest-gated: a counterparty register, a CRM's
-  // deals, and a stage change that moves a real deal. A guest has none of the
-  // three, and unlike an image or a test run there is no true one-sentence answer
-  // that turns into a capability on sign-up — an empty workspace has no
-  // counterparties either. Advertising them to a guest would spend the model's
-  // attention on three routes it cannot take, on the surface where first
-  // impressions are formed.
-  //
-  // `canvas_move_deal` is the one that matters structurally: it writes the deal
-  // AND rewrites the board from the same response, which is what replaces the
-  // mirroring instruction in the canvas system prompt with a mechanism.
-  "canvas_sync_account",
-  "canvas_sync_sales_pipeline",
-  "canvas_move_deal",
-  // The legal seat's own records, for the same reason one line up: `legal_entities`,
-  // `intellectual_property` and `legal_matters` are tenant rows, and a guest board has
-  // no entity to be incorporated, no mark to renew and nobody to argue with. Every field
-  // on the three kinds it authors is a projection, so advertising it to a guest would
-  // offer a card that can only ever come back empty.
-  "canvas_sync_legal",
-  // The RAISE is the same board through a different family (FO-E1): `deals.kind =
-  // 'investment'`, `party_roles role='investor'`, and `pipeline_touchpoints` as the
-  // thread. `canvas_open_deal` is the one that makes a firm an OBJECT rather than a
-  // string in a cell, which is what `fundingRound.investors` never was.
-  "canvas_sync_funding_round",
-  // The round's PLAN, as a record. `funding_rounds` had no writer at all until
-  // 0937, so a target and a valuation were board JSON beside an empty table.
-  "canvas_plan_funding_round",
-  "canvas_open_deal",
-  "canvas_log_deal_touch",
-  // ── The data room, actually sent (FO-E2) ─────────────────────────────────────
-  // Account-required for the sharpest version of the reason: sharing one sends
-  // diligence material to a named party outside the workspace, behind an NDA, with
-  // every open logged. A guest board has no room, no recipient and no NDA.
-  "canvas_sync_data_room",
-  "canvas_share_data_room",
-  "canvas_revoke_data_room_share",
-  // A room holds TWO shapes: a diligence obligation and an encrypted legal file
-  // filed into it (0937). This is how the second one gets there — and how it leaves.
-  "canvas_file_document_in_data_room",
-  // The founders' agreement and its siblings, drafted from the one template registry
-  // (FO-D5). Account-required because it renders a real workspace's formation
-  // paperwork and lands it on a `contract` card that is then SENT for signature.
-  "canvas_draft_legal_document",
-  // Reads the pay runs a connected payroll provider actually ran, onto a `payRun`
-  // card. Account-required for the plainest possible reason: it makes an
-  // authenticated call to the tenant's own Gusto, Rippling, ADP or Deel account. A
-  // guest board has no payroll — and unlike an image, there is no true
-  // one-sentence answer that becomes a capability on sign-up either, because an
-  // empty workspace has no payroll provider connected.
-  "canvas_sync_pay_run",
-  // ── Ownership (0927) ─────────────────────────────────────────────────────────
-  // Account-required for the same reason, with one addition that is specific to
-  // this family: three of the five WRITE the ledger that says who owns the
-  // company. There is no guest-safe reading of "issue shares", and a board with no
-  // workspace has no ledger to fold, so advertising them to a visitor would spend
-  // the model's attention on five routes it cannot take.
-  //
-  // `canvas_sync_cap_table` is the one that matters structurally: it replaces a
-  // hand-typed `holders` array with a FOLD, which is what makes the percentages
-  // total 100 by construction rather than by instruction.
-  "canvas_sync_cap_table",
-  "canvas_record_equity_grant",
-  "canvas_record_convertible",
-  "canvas_record_equity_event",
-  "canvas_model_round",
-  // Re-reads the domain metric series a `liveMetric` object was bound to. This is the
-  // LIVE half the finance and investor answers never had: without it every runway, burn
-  // and pipeline number on a board is a snapshot with an as-of date and no way to ask
-  // again. Named for `liveMetric` rather than the semantic-layer `metric` it must not be
-  // confused with — see the kind's note in index.ts.
-  "canvas_refresh_live_metric",
-  // ── The secure legal FILE (`/api/legal-documents/*`) ─────────────────────────
-  //
-  // These four and `canvas_request_signature` below were declared by the canvas and named
-  // NOWHERE in this contract, because `check-canvas-tool-contract.mjs` scanned three
-  // source files and their two modules were not among them — the guard's own "a new family
-  // adds one line here" instruction, unfollowed twice. Nothing broke, and that is the
-  // point: an unlisted `canvas_*` tool is dropped from a guest turn by
-  // `restrictGuestTools`, which is the RIGHT outcome for these, arrived at by accident
-  // rather than by decision. They are account-required for the ordinary reason: each one
-  // reads or writes an encrypted tenant document, mints an external link to it, or emails
-  // a counterparty for a signature. A guest has no document to share.
-  "canvas_legal_document_sync",
-  "canvas_legal_document_share",
-  "canvas_legal_document_revoke_share",
-  "canvas_legal_document_request_signature",
-  // The generic e-signature request for an AUTHORED object (a contract, an offer) rather
-  // than an uploaded file. Same reason: it emails a real counterparty.
-  "canvas_request_signature",
-  // The RETURN LEG. `canvas_request_signature` wrote "sent" and nothing ever wrote
-  // what happened next, so `policy.roster` and `acknowledgementRate` — both declared
-  // as "written by the signature subsystem" — had no writer at all. Account-required
-  // for the same reason as its sibling: it reads a real tenant record.
-  "canvas_sync_signature",
-  // ── The sell motion ──────────────────────────────────────────────────────────
-  //
-  // The commercial half of "idea to real". Every one is account-required, and for a
-  // sharper reason than "it reaches a tenant": each acts on a real relationship with a
-  // real person outside the workspace. A prospect share mints a credential; an engagement
-  // read projects `activity_log`; pricing reads the published contract and writes a figure
-  // a buyer will be held to; a trial and a handoff create durable boards; a cadence sends
-  // messages to named people. A guest board has no prospect, no cadence and no evidence to
-  // assemble, so advertising these to one would spend the model's attention on ten routes
-  // it cannot take — the failure this contract's own header measures.
-  //
-  // There is deliberately no `canvas_accept_quote`. Acceptance exists ONLY on the buyer's
-  // own tokenised route, so no seller, agent or model can close a deal on the buyer's
-  // behalf — see `canvasSellMotionTools.ts`.
-  "canvas_share_with_prospect",
-  "canvas_list_prospect_shares",
-  "canvas_revoke_prospect_share",
-  "canvas_refresh_prospect_engagement",
-  "canvas_price_quote",
-  "canvas_read_call",
-  "canvas_assemble_trust_packet",
-  "canvas_provision_trial",
-  "canvas_handoff_plan",
-  "canvas_enrol_in_sequence",
-  "canvas_set_sequence_state",
-  // ── Connected data sources (`/api/data-sources/*`) ───────────────────────────
-  // The tenant's own connected warehouses — Postgres/Neon, ClickHouse, BigQuery.
-  // Account-required for exactly the reason the mailbox tools are: the credential
-  // is a tenant credential, and a guest has no warehouse to read. The GUEST path
-  // to the same capability is a file upload, which is already complete.
-  "canvas_list_data_sources",
-  "canvas_add_data_source",
-  "canvas_query_data_source",
-  // Reads this workspace's fine-tuning runs (`/api/ide/training/*`) — a tenant
-  // resource with a tenant credential, so a guest has no runs to read. This is the
-  // tool that closes the loop a `build` object of modality "finetune" opens: without
-  // it the board launches a training run and can never see the loss curve or the
-  // scorecard it produced.
-  "canvas_read_training_run",
-  // The prompt library (`/api/prompts/*`, `prompt_library_entries` +
-  // `prompt_library_versions`) — the other half of the same loop for prompt
-  // engineering. Account-required for the same reason as the training run one line up:
-  // a library entry is a tenant row behind a tenant JWT, and saving a version appends to
-  // it. A guest board can still author a `prompt` card with `canvas_add_object`; what it
-  // cannot have is the history, and there is no true one-sentence answer that turns an
-  // empty workspace's library into one. See `lib/canvasPromptLibraryTools.ts`.
-  "canvas_read_prompt",
-  "canvas_save_prompt_version",
-  // ── The recruiter's funnel (`/api/hiring/*`) ─────────────────────────────────
-  // Account-required for the same reason `canvas_read_domain` is: every one reads or
-  // writes tenant hiring data. The Recruiter built-in agent ships a good bio and, until
-  // these existed, no domain tools at all — so it improvised limitations, which is the
-  // failure mode `canvas_add_image` documents at length.
-  //
-  // `canvas_measure_funnel` is a WRITE-TO-BOARD over the same computation the seat
-  // reads, not a second way to count a pipeline. `canvas_offer_interview_slots` mints
-  // the candidate's self-schedule link over the availability solver that already
-  // existed — the recruiter's largest time sink was never built OUT, only never wired
-  // to anyone without an account.
-  "canvas_measure_funnel",
-  "canvas_offer_interview_slots",
-  // The REQUISITION, bound to its real `job_postings` row (FO-B3). Account-required for
-  // the sharpest version of the reason: one of its two paths CREATES a job posting in
-  // the workspace, and the other counts the applications recorded against one. A guest
-  // board has no requisition and nobody has applied to it — and unlike an image, there
-  // is no true one-sentence answer that becomes a capability on sign-up either, because
-  // an empty workspace has no postings to count.
-  //
-  // This is the tool that makes `jobPosting.applicantCount` a COUNT rather than a typed
-  // number, which is what `canvas_sync_account` did for the counterparty half of the
-  // board: the card carries `postingId`, and every application read joins on it instead
-  // of on a title two requisitions can share.
-  "canvas_sync_job_posting",
-  // FO-B4: publish that requisition to the workspace's CONNECTED job boards. Account-
-  // required twice over — it needs the real posting and a connector credential, and it
-  // puts the workspace's name on a public board.
-  "canvas_distribute_job_posting",
-  // ── The build vocabulary's undo (`lib/canvasBuildTools.ts`) ──────────────────
-  // File history is kept by a durable project's storage (`ide/projects/<id>/` in R2,
-  // behind a tenant JWT). A guest's app is held in the browser and keeps none, so
-  // these two stay account-required while the rest of the build vocabulary is
-  // guest-safe (see GUEST_SAFE_CANVAS_TOOLS).
-  "canvas_list_build_file_history",
-  "canvas_restore_build_file"
-];
-var GUEST_RESEARCH_TOOL_NAMES = [
-  "builtin_web_search",
-  "builtin_web_fetch",
-  "builtin_geo_geocode"
-];
-var GUEST_CAREER_TOOL_NAMES = [
-  // Résumé readings — the whole point of the guest surface for this visitor.
-  "builtin_recruiter_score_resume",
-  "builtin_recruiter_optimize_resume",
-  "builtin_recruiter_tailor_resume",
-  "builtin_recruiter_match_job",
-  "builtin_recruiter_summarize_resume",
-  "builtin_recruiter_resume_sentiment",
-  "builtin_recruiter_roast_resume",
-  "builtin_recruiter_extract_skills",
-  "builtin_recruiter_parse_resume",
-  "builtin_recruiter_consolidate_resumes",
-  // The hiring side of the same pure comparison. A logged-out visitor evaluating the
-  // product by pasting a candidate's résumé and their own posting reaches no tenant and
-  // no network — it is the identical overlap measurement the seeker half runs, reported
-  // to the other party. Withholding it would only mean the model improvises a screening
-  // verdict instead of computing one against stated criteria.
-  "builtin_recruiter_screen_candidate",
-  "builtin_recruiter_build_packet",
-  // Preparation and positioning.
-  "builtin_recruiter_interview_questions",
-  "builtin_hr_coach",
-  "builtin_hr_value_proposition",
-  "builtin_hr_employer_research",
-  // Direction.
-  "builtin_hr_career360_suggest_targets",
-  "builtin_hr_career360_select_target",
-  // Money. `hr_runway` is the number that paces every other decision, and it is pure
-  // arithmetic over figures the visitor typed — there is nothing to gate.
-  "builtin_hr_salary_analyze",
-  "builtin_hr_comp_analyze",
-  "builtin_hr_runway",
-  "builtin_hr_compare_work_options",
-  // Drafting a listing they do not have an account to save yet. Deliberately included:
-  // seeing the listing their own résumé produces is the strongest reason to make one.
-  "builtin_listing_draft_from_resume",
-  "builtin_listing_readiness",
-  "builtin_listing_profile_blocks"
-];
-var CREATION_CANVAS_TOOLS = [
-  ...GUEST_SAFE_CANVAS_TOOLS,
-  ...GUEST_GATED_CANVAS_TOOLS,
-  ...ACCOUNT_REQUIRED_CANVAS_TOOLS
-];
-var GUEST_CANVAS_TOOL_NAMES = /* @__PURE__ */ new Set([
-  ...GUEST_SAFE_CANVAS_TOOLS,
-  ...GUEST_GATED_CANVAS_TOOLS,
-  ...GUEST_RESEARCH_TOOL_NAMES,
-  ...GUEST_CAREER_TOOL_NAMES
-]);
-var ACCOUNT_REQUIRED_SET = new Set(ACCOUNT_REQUIRED_CANVAS_TOOLS);
-var CANVAS_IMAGE_TOOL = "canvas_add_image";
-var CANVAS_GAME_TOOL = "canvas_add_game";
-var CANVAS_GAME_ACCOUNT_GATE = `Authoring a Roblox place needs a free Builderforce account: the Luau and the .rbxlx are written on the server, not in this browser. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that the Roblox build needs a free account, and then offer to build a playable WEB game right now with ${CANVAS_GAME_TOOL} at platform "web" \u2014 that works on this board with no account, plays immediately, and installs on a phone. Do NOT say that you cannot make games, and do NOT describe this as a technical limitation: it is the account, and it is one click away.`;
-var CANVAS_SCREENSHOT_TOOL = "canvas_capture_screenshot";
-var CANVAS_SCREENSHOT_ACCOUNT_GATE = `${CANVAS_SCREENSHOT_TOOL} needs a free Builderforce account: the page is rendered by a real browser on the server, not in this tab. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that the "before" screenshot needs a free account, and then build the comparison this board CAN hold right now \u2014 read the live page with builtin_web_fetch and set out its current headline, structure and calls to action beside the new design, so the user can see what changed. Do NOT say that you are unable to browse the web visually, that you cannot see or screenshot a website, or that this is a technical limitation of the product: the only reason is the account, and it is one click away.`;
-var CANVAS_IMAGE_ACCOUNT_GATE = `${CANVAS_IMAGE_TOOL} needs a free Builderforce account: image search and generation run on the server, not in this browser. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that the picture needs a free account, and then build what this canvas CAN hold right now \u2014 the authored plan, the labelled layout, the planting list \u2014 with canvas_add_object. Do NOT say that you are unable to generate images, that you cannot see or look things up, or that a tool is technically limited: the only reason is the account, and it is one click away.`;
-
-// ../packages/creation-canvas-contract/src/canvasVideoTools.ts
-var CANVAS_VIDEO_TOOL = "canvas_add_video";
-var CANVAS_SCENE_TOOL = "canvas_create_scene";
-var CANVAS_VIDEO_ACCOUNT_GATE = `${CANVAS_VIDEO_TOOL} and ${CANVAS_SCENE_TOOL} need a free Builderforce account: video is generated on the server, not in this browser. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that the video needs a free account, and then build what this canvas CAN hold right now \u2014 the shot list, the script, the storyboard as authored objects \u2014 with canvas_add_object. Do NOT say that you are unable to make videos or that this is a technical limitation of the product: the only reason is the account, and it is one click away.`;
-
-// ../packages/creation-canvas-contract/src/marketplaceListings.ts
-var MARKETPLACE_LISTING_KINDS = [
-  {
-    // The reason this whole seam was built: a generated game is playable the moment
-    // it exists, and until now only its author could play it.
-    id: "game",
-    launch: "play",
-    from: ["game"],
-    family: "asset",
-    harness: "runtime",
-    deliveries: ["copy"],
-    pricing: "either",
-    trial: "full",
-    icon: "\u{1F3AE}"
-  },
-  {
-    // A published site already has a real URL (`publishStaticSite`). Selling it is
-    // selling the source, and the URL is the demo.
-    id: "app",
-    launch: "open",
-    from: ["website", "prototype", "build", "project", "service"],
-    family: "asset",
-    harness: "runtime",
-    // The only kind that IS a running system on an address somebody keeps
-    // operating — so the only kind there is anything to give ACCESS to.
-    deliveries: ["hosted", "copy"],
-    pricing: "either",
-    trial: "full",
-    icon: "\u{1F680}"
-  },
-  {
-    id: "automation",
-    launch: "install",
-    from: ["workflow"],
-    family: "asset",
-    harness: "system",
-    deliveries: ["copy"],
-    pricing: "either",
-    trial: "preview",
-    icon: "\u2699\uFE0F"
-  },
-  {
-    // Agents already have a registry of their own; a canvas-authored agent joins it
-    // through the same listing row rather than through a second publish path.
-    id: "agent",
-    launch: "install",
-    from: ["agent", "staff"],
-    family: "agent",
-    harness: "system",
-    deliveries: ["copy"],
-    pricing: "either",
-    trial: "preview",
-    icon: "\u{1F916}"
-  },
-  {
-    id: "template",
-    launch: "install",
-    from: ["template", "frame"],
-    family: "asset",
-    harness: "system",
-    deliveries: ["copy"],
-    pricing: "either",
-    trial: "preview",
-    icon: "\u{1F9E9}"
-  },
-  {
-    // The board itself. `from: []` — a pack is published from a session, and the
-    // publish panel offers it only when the whole canvas is the product.
-    id: "pack",
-    launch: "install",
-    from: [],
-    family: "asset",
-    harness: "system",
-    deliveries: ["copy"],
-    pricing: "either",
-    trial: "preview",
-    icon: "\u{1F4E6}"
-  },
-  {
-    id: "dashboard",
-    launch: "preview",
-    from: ["dashboard", "chart", "kpi", "report", "metric", "liveMetric"],
-    family: "asset",
-    harness: "system",
-    deliveries: ["copy"],
-    pricing: "either",
-    trial: "preview",
-    icon: "\u{1F4CA}"
-  },
-  {
-    id: "playbook",
-    launch: "preview",
-    from: ["document", "knowledge", "prd", "slides", "diagram", "roadmap", "pitch", "testPlan"],
-    family: "asset",
-    harness: "paged",
-    deliveries: ["copy"],
-    pricing: "either",
-    trial: "preview",
-    icon: "\u{1F4D8}"
-  },
-  {
-    id: "course",
-    launch: "run",
-    from: ["course", "practice", "guidedTour"],
-    family: "asset",
-    harness: "instrument",
-    deliveries: ["copy"],
-    pricing: "either",
-    trial: "preview",
-    icon: "\u{1F393}"
-  },
-  {
-    id: "dataset",
-    launch: "preview",
-    from: ["dataset", "table", "spreadsheet", "datasource"],
-    family: "asset",
-    harness: "system",
-    deliveries: ["copy"],
-    pricing: "either",
-    trial: "preview",
-    icon: "\u{1F5C2}\uFE0F"
-  },
-  {
-    id: "tool",
-    launch: "run",
-    from: ["diagnostics", "mcp", "code", "evaluation"],
-    family: "asset",
-    harness: "instrument",
-    deliveries: ["copy"],
-    pricing: "either",
-    trial: "preview",
-    icon: "\u{1F6E0}\uFE0F"
-  },
-  {
-    id: "creative",
-    launch: "preview",
-    from: ["image", "video", "animation", "podcast", "comic", "model3d", "cad", "mockup", "mockupSet", "drawing"],
-    family: "asset",
-    // The kind that proved `harness` cannot be one value per listing kind: a video is
-    // time-based, a comic is paged and a 3D model is dimensioned, and all three are
-    // legitimately `creative`. `resolveListingHarness` reads the source object first.
-    harness: "media",
-    deliveries: ["copy"],
-    pricing: "either",
-    trial: "full",
-    icon: "\u{1F3A8}"
-  },
-  {
-    // An INSTRUMENT, not its answers. What is sold is the questions and the scoring;
-    // the responses belong to whoever runs it and are the one thing the seller must
-    // never be able to read — which is why the buyer gets an empty response store and
-    // the publish path strips the seller's own.
-    id: "survey",
-    launch: "run",
-    from: ["form"],
-    family: "asset",
-    harness: "instrument",
-    deliveries: ["copy"],
-    pricing: "either",
-    // `preview` even when free: an instrument someone can read in full is one they can
-    // copy, and the sample is the sales pitch.
-    trial: "preview",
-    icon: "\u{1F4CB}"
-  },
-  {
-    // Cover, pages and figures as one product with three outputs (reader, EPUB/PDF,
-    // print). Separate from `playbook` because the harness differs: a playbook is read
-    // on a screen and a book has to hold at print resolution as well.
-    id: "book",
-    launch: "preview",
-    from: ["book"],
-    family: "asset",
-    harness: "paged",
-    deliveries: ["copy"],
-    pricing: "either",
-    trial: "preview",
-    icon: "\u{1F4D6}"
-  },
-  {
-    // A designed room — boardroom, office kitchen, an open floor of cubicles — that
-    // another session installs as the place it meets in. The buyer gets the design
-    // itself (`copy`): a `room` object lands on their board and their room surface
-    // draws it. Previewable before paying, since a room is judged by walking it.
-    id: "room",
-    launch: "install",
-    from: ["room"],
-    family: "asset",
-    harness: "space",
-    deliveries: ["copy"],
-    pricing: "either",
-    trial: "preview",
-    icon: "\u{1F3E2}"
-  },
-  {
-    // A CAPABILITY of the platform, sold through the same shop window as everything
-    // else (PRD 33 D17: every workspace installs Insights through the Marketplace,
-    // Builderforce's own included). Published by the platform (a migration row), never
-    // from a canvas — `from` is empty and `sessionListingKinds` excludes it, because a
-    // board cannot BE a capability. The buyer gets no copy: holding the licence grants
-    // the capability (`deliveries: ['entitlement']`). `instrument` because what a buyer
-    // does with it is take measurements and read their own results.
-    id: "capability",
-    launch: "run",
-    from: [],
-    family: "asset",
-    harness: "instrument",
-    deliveries: ["entitlement"],
-    pricing: "either",
-    trial: "preview",
-    icon: "\u{1F3A5}"
-  }
-];
-var LISTING_KIND_IDS = MARKETPLACE_LISTING_KINDS.map((spec) => spec.id);
-var DAY_MS2 = 24 * 60 * 60 * 1e3;
-
-// ../packages/creation-canvas-contract/src/academic.ts
-var ACADEMIC_OBJECT_KINDS = [
-  // ── Teaching: the assessment loop ──────────────────────────────────────────────
-  // The class itself. A roster is the axis the canvas never had: without it, "hand
-  // this out" and "who is behind?" have no subject.
-  "cohort",
-  // The task, its rubric, and one answer per learner. See the block comment above for
-  // why the last of these is a kind rather than an array.
-  "assignment",
-  "rubric",
-  "submission",
-  // Marks, aggregated and moderated. Deliberately separate from `rubric`: a rubric is
-  // the instrument, a gradebook is the record, and they have different lifetimes —
-  // the instrument is reused for years, the record belongs to one cohort.
-  "gradebook",
-  // The lawful and reusable parts of running a class.
-  "accommodation",
-  "feedbackBank",
-  // Delivering it: the session plan and the bookable hours after it.
-  //
-  // The live question asked DURING it is not here. `poll` was declared twice — once as a
-  // teaching kind and once, the same week, as the facilitation primitive in
-  // `SHARED_OBJECT_KINDS` — and two declarations of one word is not a duplicate the way
-  // two similar tables are: `CREATION_OBJECT_KINDS` concatenates both lists, so the
-  // registry indexed one kind twice and whichever spec loaded last silently won. A
-  // lecture check-for-understanding is the shared `poll` with `pollFormat: 'quiz'`,
-  // which is exactly the argument `SHARED_OBJECT_KINDS` makes for it.
-  "lecture",
-  "officeHours",
-  // Programme outcomes mapped to what actually evidences them. This is the
-  // accreditation artifact every department rebuilds in a spreadsheet every cycle.
-  "curriculumMap",
-  // ── Research: the scholarly lifecycle, in gate order ──────────────────────────
-  "grantProposal",
-  "ethicsApproval",
-  "preRegistration",
-  "protocol",
-  "consentForm",
-  "participantPool",
-  "dataManagementPlan",
-  "literatureReview",
-  "hypothesis",
-  "manuscript",
-  "peerReview",
-  // ── Scholarly primitives ──────────────────────────────────────────────────────
-  // One reference, the formatted list of them, and mathematics.
-  "citation",
-  "bibliography",
-  "equation"
-];
-var ACADEMIC_KIND_SET = new Set(ACADEMIC_OBJECT_KINDS);
-
-// ../packages/creation-canvas-contract/src/people.ts
-var PEOPLE_OBJECT_KINDS = [
-  // ── THE PERSON, AND THE SHAPE OF THE ORGANISATION ─────────────────────────────
-  // `staff` stays what it always was — a card for somebody on this board. `employee` is
-  // the employment RELATIONSHIP: department, manager, employment basis, status, dates.
-  // `people_employees.managerRef` has always carried the edge an org chart is drawn from
-  // and nothing on the canvas could hold it, so the board could not draw an org even from
-  // data it could already read.
-  "employee",
-  // Derived from those manager references and editable as a SCENARIO — which is the half
-  // a read-only directory cannot do and the half a reorg is entirely made of. Span of
-  // control and the layers under a manager are computed, never typed, because a typed
-  // span is wrong the first time somebody moves.
-  "orgChart",
-  // Approved vs actual vs budget, per team. The object a requisition is approved against
-  // and the one that makes "can we afford this hire" answerable on the board rather than
-  // in a thread nobody can find in March.
-  "headcountPlan",
-  // Range, midpoint, comparatio. The object that makes an offer checkable and pay equity
-  // answerable — the highest-value question in the whole set, and the one the data model
-  // could already answer while the canvas could not ask it.
-  "compBand",
-  // ── THE PAPER AND THE PROCESS ─────────────────────────────────────────────────
-  // A policy with a LIFECYCLE: effective date, jurisdiction, owner, review cadence and an
-  // acknowledgement roster. Drafting one was always possible with `document`; publishing
-  // it, collecting acknowledgements and chasing the people who have not signed were the
-  // three steps with no home — which is four-fifths of the actual job.
-  "policy",
-  // Onboarding and offboarding as ONE kind with a `direction`, because they are the same
-  // shape — dated steps against an anchor date, an owner per step, evidence per step —
-  // and their compliance-critical halves (right-to-work checked; access revoked) are
-  // mirror images. Two kinds would be one shape maintained twice, and the leaver half is
-  // the one that carries real risk.
-  "employeeLifecycle",
-  // Who is away, and whether the rota survives it. Every delivery forecast on this board
-  // models capacity as though headcount were always available; this is the subtrahend.
-  "absencePlan",
-  // ── PERFORMANCE, CAPABILITY AND RELATIONS ─────────────────────────────────────
-  // One review cycle for one person, at whatever cadence `reviewType` names.
-  "performanceReview",
-  // competencies × people, with the gap named. The one HR artifact the rest of the
-  // company acts on, because it is what answers build-vs-buy for a capability — which is
-  // the sentence that turns a skills gap into either a `course` or a `jobPosting`.
-  "skillsMatrix",
-  // Employee-relations casework: grievance, investigation, accommodation, disciplinary,
-  // performance plan. RESTRICTED by construction — see `RESTRICTED_BY_DEFAULT_KINDS`.
-  // This kind is why confidentiality is a declared part of the contract rather than
-  // something the export seam remembers to check.
-  "case",
-  // A STATUTORY commitment, as against `contract.obligations`, which are commitments to a
-  // counterparty. "We just hired in California and Ontario — what changes?" had no object
-  // at all.
-  //
-  // NOT YET WATCHABLE. This comment used to claim `trigger` binds to this object's `dueAt`
-  // and warns before the deadline. It does not: `canvasTriggers.ts` parses a NUMBER out of
-  // a `liveMetric` on the same board and compares it with below/above/equals/changes-by,
-  // so there is no date comparator and no binding to a non-metric object — and
-  // `canvas_evaluate_triggers` is a frontend tool with no server sweep, so nothing
-  // evaluates while the board is closed. A statutory deadline is therefore recorded here
-  // and noticed by a person. See the Gap Register entry "date-bearing triggers".
-  "obligation",
-  // ── THE COLLECTION PRIMITIVE ──────────────────────────────────────────────────
-  // A structured question set that a REAL HUMAN answers, and the responses that come back.
-  //
-  // It is declared in this vocabulary because HR is the domain that exposed its absence —
-  // applications, acknowledgements, 360s, exit interviews, pulses and accommodation
-  // requests are all one shape — but every field it declares is deliberately domain
-  // NEUTRAL. Support intake, a research screener and a satisfaction round are the same
-  // object, and handing the domain that asked first a private copy is how a product ends
-  // up with three response stores. `pulse_surveys` becomes its first binding rather than
-  // its competitor.
-  //
-  // This is the single largest "idea to REAL" break the canvas had: it could author
-  // anything and collect nothing, so every flow that needed an answer from a person
-  // terminated in a document and finished its real work somewhere else.
-  "form"
-];
-var CONFIDENTIALITY_LEVELS = ["public", "internal", "restricted"];
-function isConfidentialityLevel(value) {
-  return typeof value === "string" && CONFIDENTIALITY_LEVELS.includes(value);
-}
-function confidentialityAtMost(level, ceiling) {
-  return CONFIDENTIALITY_LEVELS.indexOf(level) <= CONFIDENTIALITY_LEVELS.indexOf(ceiling);
-}
-var BOUNDARY_CEILING = {
-  export: "internal",
-  share: "internal",
-  guest: "public",
-  publicMedia: "internal",
-  aiContext: "internal"
-};
-function boundaryAdmits(level, boundary) {
-  return confidentialityAtMost(level, BOUNDARY_CEILING[boundary]);
-}
-
-// ../packages/creation-canvas-contract/src/advisoryThread.ts
-var ADVISORY_THREAD_MARKER = "advisory-thread";
-var ADVISORY_THREAD_CONFIDENTIALITY = "restricted";
-function advisoryThreadConfidentiality(declared) {
-  if (isConfidentialityLevel(declared) && declared === ADVISORY_THREAD_CONFIDENTIALITY) return declared;
-  return ADVISORY_THREAD_CONFIDENTIALITY;
-}
-function advisoryThreadAdmitted(state, boundary) {
-  const level = advisoryThreadConfidentiality(state.confidentiality);
-  if (boundary === "aiContext" && state.founderInvitedAdvisor) {
-    return boundaryAdmits("internal", "aiContext");
-  }
-  return boundaryAdmits(level, boundary);
-}
-function readAdvisoryThreadState(metadata) {
-  if (metadata == null || metadata === "") return null;
-  let raw = metadata;
-  if (typeof metadata === "string") {
-    try {
-      raw = JSON.parse(metadata);
-    } catch {
-      return null;
-    }
-  }
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const record2 = raw;
-  if (record2.marker !== ADVISORY_THREAD_MARKER) return null;
-  return {
-    confidentiality: advisoryThreadConfidentiality(record2.confidentiality),
-    founderInvitedAdvisor: record2.founderInvitedAdvisor === true,
-    hostRef: typeof record2.hostRef === "string" && record2.hostRef ? record2.hostRef : void 0
-  };
-}
-function advisoryThreadHistoryAdmitted(messages, boundary = "aiContext") {
-  for (const message of messages) {
-    const state = readAdvisoryThreadState(message.metadata);
-    if (!state) continue;
-    return advisoryThreadAdmitted(state, boundary);
-  }
-  return true;
-}
-
-// ../packages/creation-canvas-contract/src/facilitation.ts
-var GRID_QUADRANTS = [
-  { key: "lowLow", x: 0, y: 0 },
-  { key: "highLow", x: 1, y: 0 },
-  { key: "lowHigh", x: 0, y: 1 },
-  { key: "highHigh", x: 1, y: 1 }
-];
-var POLL_GRID_QUADRANTS = GRID_QUADRANTS.map((q) => q.key);
-
-// ../packages/creation-canvas-contract/src/dataScience.ts
-var DATA_SCIENCE_OBJECT_KINDS = [
-  // ── ANALYSIS ────────────────────────────────────────────────────────────────
-  // The cell. Its outputs are first-class canvas artifacts rather than a scrollback
-  // buffer, which is what makes an analysis something the next turn can reason over
-  // instead of something a person has to re-read.
-  "notebook",
-  // ── MODEL ───────────────────────────────────────────────────────────────────
-  // What was trained, and one run that trained it. Two kinds rather than one, and it
-  // is the same split `metric`/`liveMetric` and `inbox`/`email` already draw: a
-  // `model` is the ARTIFACT that persists and gets promoted, a `trainingRun` is one
-  // EXECUTION that produced a loss curve and a scorecard and then stopped changing.
-  // Collapsing them would mean a model could only ever remember its most recent run.
-  "model",
-  "trainingRun",
-  // N runs side by side with their hyperparameters and their metrics. Its own kind
-  // rather than a view because the CHOICE is an artifact: "we picked this config, at
-  // this cost, over that one" is exactly the reasoning a `decision` object cites.
-  "runComparison",
-  // ── EVALUATION ──────────────────────────────────────────────────────────────
-  // Where an eval set legitimately comes from: sampled rows, a question, the humans
-  // who answered it, and their agreement. `labels` is derived for the same reason
-  // `practice.attempts` and an academic `marks` field are — it is the record of what a
-  // person actually chose, and a model that could write it could manufacture consensus.
-  "labelSet",
-  // ── SHIP ────────────────────────────────────────────────────────────────────
-  // The prompt as a VERSIONED artifact with an evaluation attached, backed by the
-  // prompt library the platform already stores. `llm.instructions` was a bare string
-  // with no history and nothing to diff against.
-  "prompt"
-];
-
-// ../packages/creation-canvas-contract/src/operations.ts
-var OPERATIONS_OBJECT_KINDS = [
-  // ── THE THING BEING SERVED ────────────────────────────────────────────────────
-  // The physical or managed item work is done TO: a boiler, a rental unit, a vehicle, a
-  // production line, a treatment room. It is first because it is the only object here
-  // with a life longer than any single job, and it is what makes the operation's most
-  // valuable question answerable at all — "what does this asset cost us a year, and is it
-  // cheaper to replace it" — which no amount of per-job record keeping answers.
-  "serviceAsset",
-  // ── THE WORK ──────────────────────────────────────────────────────────────────
-  // One unit of committed work: reactive repair, planned maintenance, installation,
-  // warranty, callback. `orderType` carries which, because they are the same object with
-  // the same lifecycle and the same costing, and splitting them would split the backlog.
-  "workOrder",
-  // WHEN AND BY WHOM, on the ground. A work order can need none, one or six visits — a
-  // return trip for a part is the commonest event in field service and the one a
-  // single-appointment model cannot represent without lying about first-time fix.
-  "visit",
-  // THE DAY, ACROSS EVERYBODY. Capacity, assignment and the unassigned pile: the view a
-  // service business runs its morning from, and the one that makes "we are full" a fact
-  // rather than a feeling.
-  "dispatchBoard",
-  // ── THE COMMERCIAL FRAME ──────────────────────────────────────────────────────
-  // The recurring commitment: a maintenance plan, a retainer, an SLA, a managed-service
-  // agreement. It is what turns a service business from a queue of jobs into a book of
-  // revenue, and it is what a planned `workOrder` is generated FROM rather than
-  // remembered into existence.
-  "serviceAgreement",
-  // The priced quote that precedes the work — the missing predecessor of `invoice`.
-  "estimate",
-  // ── THE EVIDENCE AND THE PERMISSION ───────────────────────────────────────────
-  // A completed procedure against an asset: lines, results, evidence, an outcome and a
-  // next-due date. Safety checks, statutory certificates, condition surveys, QA passes on
-  // a line, a vehicle walkaround — one shape, `inspectionType` says which.
-  "inspection",
-  // The credential the work is only lawful WITH: a trade registration, a practising
-  // certificate, an insurance policy, a calibration, a licence to operate. It carries an
-  // expiry, which is the whole point: an expired certificate does not announce itself,
-  // and dispatching against one is how a company loses its own licence.
-  "certification",
-  // ── WHAT THE WORK CONSUMES ────────────────────────────────────────────────────
-  // Stock with a reorder point and a lead time: the parts on the van and in the store.
-  "inventoryItem",
-  // Who it is bought from, and how long they take. Lead time is the field that makes a
-  // reorder point calculable rather than guessed.
-  "supplier",
-  // The replenishment itself, from raised to received.
-  "purchaseOrder",
-  // The movement, with tracking and proof of delivery. Distinct from the purchase order
-  // for the same reason `testRun` is distinct from `testPlan`: one order can ship three
-  // times, and a part that is late is a job that cannot be booked.
-  "shipment",
-  // ── WHEN IT GOES WRONG ────────────────────────────────────────────────────────
-  // A safety, environmental or service-failure event: injury, near miss, spill, outage,
-  // damage, complaint. Its own kind rather than a `defect` because a defect is
-  // REPRODUCED and VERIFIED against a build, and an incident is REPORTED, investigated
-  // and — in most of these verticals — reportable to a regulator on a clock. It is
-  // `restricted` by default: an injury record carries health data about a named person.
-  "incident"
-];
-var OPERATIONS_KIND_SET = new Set(OPERATIONS_OBJECT_KINDS);
-
-// ../packages/creation-canvas-contract/src/resumeLexicon.ts
-var SKILL_GROUPS = {
-  Languages: ["javascript", "typescript", "python", "java", "csharp", "cpp", "go", "rust", "ruby", "php", "swift", "kotlin", "scala", "r", "sql", "objectivec", "dart", "elixir", "perl", "bash"],
-  "Frameworks & libraries": ["react", "nextjs", "vue", "angular", "svelte", "nodejs", "django", "flask", "fastapi", "rails", "spring", "laravel", "express", "dotnet", "pytorch", "tensorflow", "pandas", "numpy", "tailwind"],
-  "Cloud & infrastructure": ["aws", "azure", "googlecloud", "cloudflare", "kubernetes", "docker", "terraform", "ansible", "serverless", "linux", "nginx", "cicd", "jenkins", "githubactions"],
-  "Data & storage": ["postgresql", "mysql", "mongodb", "redis", "elasticsearch", "snowflake", "bigquery", "databricks", "kafka", "spark", "airflow", "dbt", "nosql", "etl"],
-  "Practices & methods": ["agile", "scrum", "kanban", "devops", "tdd", "qualityassurance", "microservices", "rest", "graphql", "api", "accessibility", "observability", "sre", "incidentresponse"],
-  // `machinelearning`, `nlp` and `computervision` are canonical PHRASE tokens — the
-  // tokenizer collapses "machine learning" into one of them. They must also be listed
-  // here or `isSkillToken` returns false for every one, which silently made machine
-  // learning invisible to the scorer, the matcher and the role catalogue alike.
-  // Both spellings of the two phrases that do not collapse to their acronym: the
-  // tokenizer produces the run-together PHRASE form ("naturallanguageprocessing") while
-  // a résumé that writes the acronym produces "nlp". Listing one and not the other is
-  // how the same skill counts on one document and not on another.
-  "AI & data science": ["machinelearning", "deeplearning", "nlp", "naturallanguageprocessing", "computervision", "datascience", "dataengineering"],
-  "Product & design": ["productmanagement", "userexperience", "userinterface", "figma", "wireframing", "prototyping", "userresearch", "roadmapping", "analytics", "experimentation"],
-  "Business & commercial": ["saas", "b2b", "b2c", "crm", "erp", "salesforce", "hubspot", "forecasting", "budgeting", "pricing", "negotiation", "procurement", "compliance"],
-  "Marketing & growth": ["seo", "searchengineoptimization", "contentmarketing", "socialmedia", "customersuccess", "businessdevelopment", "accountmanagement"],
-  "Leadership & communication": ["mentoring", "coaching", "hiring", "stakeholdermanagement", "facilitation", "publicspeaking", "technicalwriting", "peoplemanagement", "changemanagement"]
-};
-var SKILL_INDEX = new Map(
-  Object.entries(SKILL_GROUPS).flatMap(([group2, tokens2]) => tokens2.map((t) => [t, group2]))
-);
-var STRONG_VERBS = [
-  "led",
-  "built",
-  "shipped",
-  "launched",
-  "designed",
-  "architected",
-  "delivered",
-  "owned",
-  "drove",
-  "grew",
-  "reduced",
-  "increased",
-  "cut",
-  "saved",
-  "scaled",
-  "automated",
-  "migrated",
-  "rebuilt",
-  "negotiated",
-  "closed",
-  "hired",
-  "mentored",
-  "founded",
-  "created",
-  "introduced",
-  "streamlined",
-  "recovered",
-  "won"
-];
-var POSITIVE_TONE = [
-  ...STRONG_VERBS,
-  "improved",
-  "exceeded",
-  "achieved",
-  "award",
-  "awarded",
-  "promoted",
-  "recognised",
-  "recognized",
-  "successful",
-  "record",
-  "best",
-  "first",
-  "expert",
-  "certified",
-  "accelerated"
-];
-
-// ../packages/creation-canvas-contract/src/website.ts
-var WEBSITE_SECTION_KINDS = ["hero", "features", "content", "stats", "testimonial", "cta"];
-var WEBSITE_ADDABLE_SECTION_KINDS = WEBSITE_SECTION_KINDS.filter((kind) => kind !== "hero");
-var WEBSITE_THEME_STYLES = ["editorial", "bold", "minimal", "soft", "technical"];
-var SECTION_KINDS = new Set(WEBSITE_SECTION_KINDS);
-var THEME_STYLES = new Set(WEBSITE_THEME_STYLES);
-
-// ../packages/creation-canvas-contract/src/sellMotion.ts
-var SELL_MOTION_OBJECT_KINDS = [
-  // WHAT IT COSTS THEM. Seats × plan × term × discount × expiry, that a buyer can accept
-  // without an account. The object where a negotiated price stops dying on the way to
-  // checkout.
-  "quote",
-  // WHAT THEY ACTUALLY SAID. Recording, transcript, objections, commitment, next step —
-  // the highest-signal artifact in selling, and the one the board could not hold.
-  "call",
-  // LET THEM TRY IT. A time-boxed prospect workspace provisioned FROM the board built
-  // with them, so the demo artifact becomes the trial and the trial becomes onboarding.
-  "trial",
-  // THE PROCUREMENT DELIVERABLE. Controls, subprocessors, the DPA, the diagnostics, and
-  // the questionnaire answered row by row with the evidence each answer rests on.
-  "trustPacket",
-  // THE PLAN BOTH SIDES OWN. Dated milestones with a named owner on EACH side, and the
-  // handoff that carries what was built during the sale into the customer's workspace.
-  "mutualActionPlan"
-];
-
-// ../packages/creation-canvas-contract/src/career.ts
-var CAREER_OBJECT_KINDS = [
-  // A POSTING SOMEONE ELSE OPENED. The research object: what the role is, what it pays
-  // as ADVERTISED (never as guessed), the requirements as stated, and the honest read
-  // on fit. Bound to `recruiter.match_job` and `jobs.get`.
-  "job",
-  // ONE APPLICATION, WITH ITS LIFECYCLE. A projection of a `job_proposals` row, not a
-  // second copy of it — see the header. This is the object that makes a follow-up date
-  // a thing the board can warn about rather than a thing somebody remembers.
-  "jobApplication",
-  // ALL OF THEM AT ONCE. The transpose of a `shortlist`: one person's applications with
-  // their stages, their ages and the one that has gone quiet longest. Bound to
-  // `proposals.mine`.
-  "applicationPipeline",
-  // THE LETTER. Its own kind rather than a `document` because it is written AGAINST a
-  // posting and re-written per application, and because the openings a person reuses are
-  // the part worth keeping — a `document` cannot say which posting it answered.
-  "coverLetter",
-  // THE REHEARSAL, PERSISTED. Questions with the rubric each is scored against, the
-  // gaps the posting exposes, and the answers the person has actually drafted. Bound to
-  // `recruiter.interview_questions` and `hr.interview_coaching`.
-  "interviewPrep",
-  // THE CLOCK EVERY OTHER DECISION IS PACED AGAINST. Bound to `hr.runway` and
-  // `hr.compare_work_options`.
-  "runway",
-  // THE HOURS, AND WHAT THEY ARE WORTH. A projection of a `timecards` row, which has had
-  // routes, a lifecycle (draft → submitted → approved → rejected → paid) and a
-  // freelancer dashboard the whole time and no canvas surface at all — so the one seat
-  // where "idea → REAL" ends in money arriving could draft the agreement on the board
-  // and had to leave it to bill for the work.
-  //
-  // IN THIS VOCABULARY AND NOT THE FOUNDER ONE, though it is unambiguously money: an
-  // `invoice` is what a COMPANY sends and it already exists over `freelancer_invoices`.
-  // A timecard is the hours ONE PERSON worked, submitted for somebody else's approval —
-  // the same side of the transaction as `jobApplication`, and the same relationship to
-  // its row: the lifecycle lives in the table, and the card projects it.
-  "timecard"
-];
-var CAREER_KIND_SET = new Set(CAREER_OBJECT_KINDS);
-
-// ../packages/creation-canvas-contract/src/marketing.ts
-var MARKETING_OBJECT_KINDS = [
-  // THE BRAND, AS A BINDABLE THING. Palette, typography, logo, voice, and the claims
-  // that may never be made. Projects `brand_kits`; the claim list is the board's own,
-  // because `battlecard.doNotSay` is where the product already records a forbidden
-  // claim and a second store for the same sentence is how the two come to disagree.
-  "brandKit",
-  // WHO A SEND REACHES, AND WHO IT MUST NOT. Rules, size, and the suppression count —
-  // the last of which is the whole reason the kind exists: an audience card that showed
-  // a size and not a suppression count would make the surface's own legal exposure
-  // invisible in exactly the place a person decides to press send.
-  "audience"
-];
-var BRAND_BOUND_KINDS = [
-  // The `creative.*` capabilities — every one of them reaches `builtin_creative_compose`.
-  "image",
-  "video",
-  "animation",
-  "comic",
-  "podcast",
-  "drawing",
-  "model3d",
-  "cad",
-  // The authored surfaces, which do not go through the creative route but carry the same
-  // identity: a site and an email that ignore the palette are as off-brand as a poster.
-  "website",
-  "prototype",
-  "emailTemplate",
-  "emailCampaign",
-  "socialCampaign",
-  "socialPost",
-  // Slides and mockups are shown to customers more often than any image on this list.
-  "slides",
-  "mockup",
-  "mockupSet"
-];
-var BRAND_BOUND_SET = new Set(BRAND_BOUND_KINDS);
-
-// ../packages/creation-canvas-contract/src/objectKinds.ts
-var FOUNDER_OBJECT_KINDS = [
-  // WHO WE ARE. The anchor every other founder object is authored against, and the
-  // reason "use my existing business details" can be a real instruction rather than a
-  // request for the user to paste their own company into the prompt. Hydrates from the
-  // investor seat's `companies` entity when there is a tenant, and is authored directly
-  // when there is not — a guest evaluating the product still has a company.
-  "company",
-  // WHO WE ARE AGAINST. One rival, with the geography that makes a market analysis
-  // spatial rather than a list: `locations` carry lat/lng, so the same competitors that
-  // answer "who is in Florida" also answer "where are they NOT".
-  "competitor",
-  // WHO WE SELL TO, and the plan that reaches them. A segment is sized and sourced;
-  // a GTM plan names the motion, the channels and the economics that make the segment
-  // reachable — which is what turns "potential customers" into a list with a route.
-  "customerSegment",
-  "gtmPlan",
-  // HOW WE WIN A NAMED RIVAL'S CUSTOMER. Deliberately its own kind rather than a field
-  // on `competitor`: the analysis of a rival and the plan to take their customers have
-  // different authors, different review cycles, and different lifetimes.
-  "battlecard",
-  // THE IDEA, BEFORE ANY OF IT. The thing a founder has in the shower, jots on a
-  // scratchpad, and — on every other tool — loses. The board could hold a researched
-  // segment, a battlecard and a run experiment, and not the half-formed thought that
-  // started them. An `idea` is written in seconds (a line is enough), carries a `stage`
-  // from `IDEA_STAGES` so a pile of them can be TRACKED rather than merely kept, and
-  // names the `customerInterview` / `experiment` objects that tested it, so "have we
-  // talked to anybody about this?" is a fact on the card rather than a feeling. Ported
-  // from BurnRateOS's Ideas Scratch Pad as a KIND, not a second document editor: the
-  // canvas already has pages, and what it lacked was the idea as a thing you can count.
-  "idea",
-  // THE EVIDENCE UNDER ALL OF IT. A customer conversation and a run experiment are the
-  // two things that turn an assumption into a fact, and the canvas had neither.
-  //
-  // Named `customerInterview` and not `interview` because the hiring domain registers a
-  // JOB interview under `kind: 'interview'` in the kernel `objects` table
-  // (`api/src/application/domains/hiring/entities.ts`). Two different things under one
-  // word in the ubiquitous language is how `canvas_read_domain('hiring')` comes to hand
-  // the model rows it maps onto a discovery card with `painsHeard` and `segment` — the
-  // same collision class the FinOps `soc_controls` rename exists to record. The founder
-  // kind carries the qualifier because it is the one with an adjective available; the
-  // hiring kind keeps the bare noun a recruiter actually says.
-  "customerInterview",
-  "experiment",
-  // WHAT WE CHOSE AND WHY. The canvas recorded what HAPPENED in five places (timeline,
-  // activity, checkpoints, branches, the action journal) and why we CHOSE in none.
-  "decision",
-  // WHAT COULD GO WRONG, TRACKED RATHER THAN BURIED IN A NOTE. `decision`'s sibling
-  // durable artifact: a decision is chosen and reasoned about once, a risk is watched
-  // and re-scored over the life of a project. Before this it degraded to a free-text
-  // `note`, which meant it could not roll up (how many open risks, what is the highest
-  // exposure) or be reported on — the same gap `decision` closed for the choices.
-  "risk",
-  // WHAT WE ARE AIMING AT, on the board rather than only in the PMO spine.
-  "objective",
-  // THE LIVE HALF. See the block comment above.
-  "liveMetric",
-  "trigger",
-  // THE MONEY. A canvas that can design and market a product but cannot price it,
-  // raise against it, or say who owns it is a canvas for a project, not a company.
-  "pricing",
-  "capTable",
-  "fundingRound",
-  "investorUpdate",
-  "dataRoom",
-  // ── OWNERSHIP, AS EVENTS RATHER THAN A TYPED TABLE ──────────────────────────────
-  // `capTable` above is now a PROJECTION — it computes its own totals from the real
-  // ledger and nothing writes a percentage onto it. These two are what the ledger is
-  // made of, and each is its own kind for a reason the other cannot carry:
-  //
-  //  • `equityGrant` is an award with a VESTING SCHEDULE, which is a set of terms with
-  //    a date attached — so it is the only ownership object a `trigger` can watch, and
-  //    `cliffAt` is a declared deadline for exactly that. Folding it into `capTable`
-  //    would mean one card per company holding N schedules with N cliff dates, of which
-  //    a deadline binding could watch precisely one.
-  //  • `convertible` is a SAFE or a note: money that is NOT yet equity and converts on
-  //    terms (cap, discount, pre/post-money) that decide what everybody else ends up
-  //    owning. `fundingRound.roundType: 'safe'` was a label over nothing, and a priced
-  //    round modelled without the stack in front of it is modelled against a fiction.
-  "equityGrant",
-  "convertible",
-  // ── THE MONEY, OPERATED ─────────────────────────────────────────────────────────
-  // The five kinds above hold the money a company RAISES and CHARGES. These five hold
-  // the money it PLANS, COLLECTS, OWES and SPENDS ON PEOPLE — the difference between a
-  // board that can run a fundraise and one that can run a month.
-  //
-  // WHY EACH IS ITS OWN KIND, and not a status on one `finance` object:
-  //  • `budget` is the PLAN. It is authored once a year, approved, and then compared
-  //    against — so it must stop changing while actuals move. Budget-vs-actual is the
-  //    single most-performed operation in the role and had nowhere to live.
-  //  • `forecast` is the MODEL. It re-computes from drivers and scenarios and is
-  //    expected to change weekly, which is the exact opposite lifetime to a budget's.
-  //    Collapsing the two would make "what we committed to" and "what we now expect"
-  //    the same object, and the variance between them is the entire report.
-  //  • `invoice` / `bill` are RECEIVABLE and PAYABLE. Two kinds rather than one signed
-  //    number because they have different counterparties, different owners, different
-  //    ageing rules, and because "who owes us" and "who we owe" are asked separately.
-  //
-  // All four carry structured money (`canvasMoney.ts`) rather than the prose the five
-  // above were designed around, which is what makes them summable.
-  //
-  // NOT HERE, DELIBERATELY: `headcountPlan`. The largest line in any budget is people,
-  // and the canvas could draw them as an org (`team`/`role`/`staff`) and never as a
-  // cost — so the CFO review asked for a cost-bearing headcount object. `PEOPLE_OBJECT_
-  // KINDS` already declares one, from the HR seat, holding approved-vs-actual headcount
-  // per team. Declaring a second would be two specs for one noun and two answers to
-  // "how many people are we planning", which is the collision `customerInterview` is
-  // renamed to avoid. The single spec in `peopleObjects.ts` carries BOTH halves instead:
-  // HR owns the establishment, finance owns what it costs, and a role's loaded cost is
-  // one fact in one place.
-  "budget",
-  "forecast",
-  "invoice",
-  "bill",
-  // ── WHAT PAYROLL ACTUALLY COST ──────────────────────────────────────────────────
-  // The fifth of the operated-money kinds, and the one that makes the largest line on
-  // a forecast a FACT rather than a figure somebody typed.
-  //
-  // WHY IT IS ITS OWN KIND AND NOT A `bill`. A pay run has no counterparty to approve,
-  // dispute or schedule: the money has already left, through a provider that calculated
-  // it. Modelling it as a payable would put a vendor's demand and a completed
-  // disbursement under one lifecycle, and `bill.approve` — the one act on this platform
-  // that can cause real financial harm — would become available on a row nobody can
-  // authorise because it is already done.
-  //
-  // WHY IT IS READ-ONLY IN PRACTICE. Every figure on it is one a payroll provider
-  // returned, hydrated by `canvas_sync_pay_run`. The platform must never CALCULATE a
-  // salary or a tax — see `connectors/defaults/payroll.ts` for the full argument — so
-  // this card reports and never computes.
-  "payRun",
-  // THE PAPER. Formation, customer and vendor agreements — the first ninety days of a
-  // company, which the governance vocabulary (SOC 2 controls, vendor registers) covers
-  // for an enterprise and not at all for a new one.
-  "contract",
-  // ── THE COUNTERPARTY ────────────────────────────────────────────────────────────
-  // An account you have WON, or a vendor you buy from — the ONE object every
-  // commercial reference on this board points at.
-  //
-  // WHY IT WAS MISSING, AND WHY THAT COST SOMETHING. `company` is US. `competitor` is
-  // THEM. `salesContact` is a person and `customerSegment` is a cohort; none of the
-  // four is an account. So `invoice.customer`, `bill.vendor`, `contract.counterparty`
-  // and `placement.client` were each told to "match it to a company, salesContact or
-  // contract on the board where one exists" — four fields matching four different
-  // typed strings, which means joining a contract to its invoices, its tickets and its
-  // renewal was a string comparison that a trailing "Ltd" broke.
-  //
-  // WHY IT IS NOT A NEW TABLE. `party_roles` in the kernel already holds exactly one
-  // row per (tenant, party kind, party ref, role) with a unique index proving it — the
-  // counterparty EXISTS and the canvas simply could not see it. A second customer store
-  // is the collision `finance_soc_controls` exists to record. So the kind carries a
-  // `partyRef`, and `parties.ts` declares the ref format and the role vocabulary that
-  // both sides resolve through.
-  "account"
-];
-var FOUNDER_KIND_SET = new Set(FOUNDER_OBJECT_KINDS);
-var IDEA_STAGES = ["captured", "exploring", "validating", "validated", "parked", "dropped", "promoted"];
-var IDEA_STAGE_SET = new Set(IDEA_STAGES);
-var HIRING_OBJECT_KINDS = [
-  // WHO WE ARE HIRING. One person in one search, with the stage they are at and the
-  // consent under which we hold them. The `salesContact` of this funnel.
-  "candidate",
-  // WHERE THEY CAME FROM. A reproducible sourcing search plus the people it found —
-  // the object that makes silver-medallist re-engagement possible at all, because the
-  // list survives the search that produced it.
-  "talentPool",
-  // WHAT WE ARE HIRING FOR, and WHERE IT WAS ADVERTISED. Requisition and distribution
-  // are one object because a posting nobody can see is not a posting: the board list is
-  // the field that makes "post this role" end in something real.
-  "jobPosting",
-  // WHO MADE THE CUT. N résumés ranked against ONE posting, with the reason each rank
-  // was given. The screening half the ATS scorer could not express when it took one
-  // résumé and one job description.
-  "shortlist",
-  // WHAT THEY WILL BE PUT THROUGH, and the link that lets them book it themselves.
-  "interviewLoop",
-  // WHAT ONE INTERVIEWER THOUGHT, per attribute, submitted independently. Its own kind
-  // rather than a field on the loop because independence is the whole point: a
-  // scorecard that can be read before it is submitted is a scorecard that anchors.
-  "scorecard",
-  // WHAT WE OFFERED, what it is worth, who approved it, and whether it is signed.
-  "offer",
-  // THE FEE. For an agency or embedded recruiter this is the revenue event, and the
-  // split is the business — `placement_splits` is registered read-only in the domain
-  // precisely because it is money.
-  "placement"
-];
-var HIRING_KIND_SET = new Set(HIRING_OBJECT_KINDS);
-var LEGAL_OBJECT_KINDS = [
-  "legalDocument",
-  // THE COMPANY ITSELF, and every subsidiary. `renewsAt` is the agent appointment or the
-  // entity's own standing lapsing — the first date on this board a founder is penalised
-  // for missing rather than merely embarrassed by.
-  "legalEntity",
-  // WHAT WE OWN THAT IS NOT A THING. A mark, a patent, a design, a domain — one shape,
-  // because each is "a right, in a jurisdiction, in a class, with a filing date and a
-  // renewal date", and `assignedFrom` is the founder-IP question a raise discovers.
-  "ipAsset",
-  // WHAT IS BEING ARGUED, with a cost and an adverse party. `nextActionAt` is a filing
-  // deadline or a hearing — a date somebody is judged against, not a date noted.
-  "legalMatter"
-];
-var LEGAL_KIND_SET = new Set(LEGAL_OBJECT_KINDS);
-var SHARED_OBJECT_KINDS = [
-  "funnel",
-  "book",
-  "sequence",
-  /**
-   * A question put to a ROOM — the facilitation primitive.
-   *
-   * Cross-domain in the strongest sense on this list: a retro, a planning estimate, a
-   * class check-for-understanding, a customer workshop and an all-hands Q&A are one
-   * object put to five different rooms. Which INSTRUMENT it is — a ballot, a word
-   * cloud, a ranking, a 1-to-5, a 2×2, a quiz — is a value (`pollFormat`), for the
-   * same reason `funnelDomain` and `direction` are values one entry up.
-   *
-   * Its answers live in `question_sets` + `responses` with `kind = 'poll'`, which is
-   * the store the collection primitive already collapsed twelve survey tables into.
-   * A poll is NOT a `form`: a form is answered on somebody's own time and read later,
-   * a poll is answered by a room at once and read WHILE it is being answered. Same
-   * store, different object, and the difference is the whole feature — see
-   * `facilitation.ts`.
-   */
-  "poll",
-  /**
-   * A DATE WITH A SUBJECT, and any number of them — the calendar primitive.
-   *
-   * Cross-domain by construction, and it is the kind that ended a MODALITY. The month
-   * used to be a board-scoped surface in the canvas rail: one grid, one hardcoded
-   * reading (this board's dated cards), no way to have two, and no way to point it at
-   * the deployments, meetings, holidays or connected accounts whose dates already
-   * existed elsewhere. A release calendar, a send calendar, a leave calendar and an
-   * on-call rotation are one object bound to four SOURCES — which is a value on the
-   * card, exactly as `funnelDomain` and `pollFormat` are values one entry up.
-   *
-   * It owns no dates it did not author. A bound calendar PROJECTS its source and writes
-   * an edit back through it, because a second copy of a send's date is how a card and a
-   * calendar come to disagree about when something ships. See `calendar.ts`.
-   */
-  "calendar"
-];
-var CREATION_OBJECT_KINDS = [
-  /**
-   * ONE EXECUTABLE STEP, ON THE BOARD.
-   *
-   * `workflow` is the old shape: a card standing in for a graph that lived somewhere
-   * else, edited in a modal that opened a second canvas on top of the first. A
-   * `flowStep` is that graph said once — one step is one object, connected with the
-   * board's own connections, grouped with the board's own frames, and compiled from
-   * what is actually drawn (`compileBoardFlow.ts`). The canvas IS the workflow.
-   *
-   * There is exactly ONE kind for ~60 step kinds: which step it is, is a VALUE
-   * (`stepKind`, from the step catalog), not a kind — the same rule that makes a new
-   * industry a `discipline` value rather than a new vocabulary. `workflow` remains for
-   * boards authored before this and for a card that points at a saved definition.
-   */
-  "flowStep",
-  "workflow",
-  "project",
-  "website",
-  "build",
-  "dashboard",
-  "chat",
-  "agent",
-  "staff",
-  "evaluation",
-  "dataset",
-  "table",
-  "spreadsheet",
-  "chart",
-  "map",
-  "report",
-  "kpi",
-  "prototype",
-  "code",
-  "browser",
-  "llm",
-  "voice",
-  "video",
-  "image",
-  "animation",
-  "podcast",
-  "comic",
-  "game",
-  "cad",
-  "model3d",
-  "resume",
-  "template",
-  // A place, not a picture: a walkable 3D scene with placed props and a real camera.
-  // Distinct from `model3d` (one generated mesh, previewed on a card) and from the
-  // room's session (a temporary reading of the flat board) — `world` is authored
-  // object state of its own, opened full-size the same way `game`/`website` are.
-  "world",
-  // THE ROOM'S DESIGN. A place the SESSION meets in — its floor, walls and furniture —
-  // rather than a place a walker explores (`world`). The room surface reads the
-  // board's active `room` object to know what to draw; a session with none meets in
-  // the standup room. See `roomDesign.ts`.
-  "room",
-  // AI VIDEO/3D GENERATION, as a canvas object. Opens into the `scene3d` SURFACE
-  // (`creationObjectSurfaces.ts`) bound to itself — the product decision that AI
-  // video/3D generation lives under the 3D surface rather than under `timeline`
-  // (which stays the real multi-track editor for imported/screen/camera clips,
-  // untouched by this kind) or under a bolted-on legacy project modality (retired).
-  // Distinct from `world`: a `world` is hand-authored prop-by-prop; a `scene` is one
-  // prompt handed to the studio engine. See `scene.ts`.
-  "scene",
-  "document",
-  "slides",
-  "diagram",
-  "knowledge",
-  "file",
-  "url",
-  "note",
-  "drawing",
-  "frame",
-  "comment",
-  "timer",
-  /**
-   * COUNTING UP, which a countdown cannot do.
-   *
-   * `timer` runs a clock DOWN from a length somebody chose — a timebox. A stopwatch has
-   * no length: it answers "how long did that actually take", which is the question a
-   * facilitator asks about a demo, a discussion or a round nobody boxed. The two share
-   * a shape (`startedAt` + `baseElapsedMs`, so every viewer derives the same elapsed
-   * value from the shared model rather than a private local clock) and answer opposite
-   * questions, which is why one kind with a `countsDown` flag would need a branch at
-   * every place either is read.
-   *
-   * It came from the knowledge board, which had it while the canvas that is actually
-   * the front door did not — the seam that entry was logged against.
-   */
-  "stopwatch",
-  /**
-   * ANOTHER OBJECT, SHOWN HERE — the transclusion.
-   *
-   * Not a copy and not a link: the card renders the referenced object's own current
-   * content, so a board can put the same document in two contexts without either of
-   * them going stale. `url` points AWAY from the workspace and `knowledge` IS a
-   * knowledge item; neither says "show me that one, live, over there".
-   *
-   * The other half of the knowledge board's fold: its `embed` block transcluded a
-   * knowledge document by id, and the Creation Canvas had no equivalent.
-   */
-  "transclusion",
-  /**
-   * A PLATFORM COMPONENT, MOUNTED ON THE BOARD.
-   *
-   * Not a picture of one and not a link to one: the card renders the same live,
-   * tenant-scoped surface the app renders — the kanban, the roadmap, the vendor
-   * register, the workforce directory — from the one component registry
-   * (`lib/components/registry.ts`), addressed by `componentId`.
-   *
-   * This is the kind that makes the board a place a business is RUN rather than
-   * only described. A CRM or a marketing pipeline is not a new object type here;
-   * it is a board somebody composed out of these, which is why there is one kind
-   * and not one per surface. `transclusion` shows another CANVAS object; this
-   * shows a domain the platform owns.
-   *
-   * The same id addresses the same component at `/embed/<id>` inside the app a
-   * customer publishes, so a card on the board and the surface in their product
-   * are one declaration rather than two implementations.
-   */
-  "component",
-  // The UNTYPED escape hatch, and the only one on this list.
-  //
-  // Every other kind here is a claim about what a thing IS, which is the whole
-  // argument for a typed canvas: a `task` has an assignee, a `testRun` has a verdict,
-  // and the board can compute over both. A sticky claims nothing. It is a coloured
-  // rectangle with words on it.
-  //
-  // It exists for two reasons that are really one reason. First, a workshop starts
-  // before anyone knows what the objects are — forcing a person to pick from 180 kinds
-  // to write down "customers hate the onboarding" is asking them to model a problem
-  // they are still discovering. Second, it is what a Miro board is MADE of, and an
-  // import that has nowhere to put a sticky note cannot claim to have imported the
-  // board. `miroImport` maps `sticky_note`, `text` and `shape` here.
-  //
-  // The knowledge board (`components/canvas/canvasModel.ts`) has had stickies since it
-  // shipped; this is the same object arriving on the canvas that is actually the front
-  // door, and it deliberately shares that board's pigment palette rather than choosing
-  // a second one.
-  "sticky",
-  "roadmap",
-  "prd",
-  "release",
-  "task",
-  "mockup",
-  "mockupSet",
-  "featureSummary",
-  "team",
-  "role",
-  "mcp",
-  "evermind",
-  "projectComparison",
-  "standup",
-  "pitch",
-  "pitchScorecard",
-  "pitchQa",
-  "pitchApplication",
-  "repository",
-  "selection",
-  "diagnostics",
-  "terminal",
-  "service",
-  // THE DELIVERY LIFECYCLE. `repository`/`terminal`/`diagnostics`/`service`/`release`
-  // covered the workspace and the plan; nothing covered what actually SHIPS — a pull
-  // request, the CI run that gated it, the deployment it produced, an incident against
-  // that deployment, or the environment it landed in. `deployment_events` already feeds
-  // DORA without a canvas object to show for it, and the PR loop is a core runtime with
-  // no board presence at all.
-  //
-  // Named `productionIncident`, not `incident`: the Operations vocabulary already owns
-  // `incident` for a field-service/safety report (injury, near-miss, property damage —
-  // `operationsObjects.ts`), a different noun that happens to share the English word,
-  // exactly the collision `customerInterview` above was renamed to avoid. A botched
-  // deployment rollback and a warehouse near-miss are not the same shape of thing.
-  "pullRequest",
-  "ciRun",
-  "deployment",
-  "productionIncident",
-  "environment",
-  // THE PMO ROLLUP, AS A BOARD OBJECT. `pmoApi.rollup()`/`pmoApi.valueStream()` already
-  // compute delivery/DORA/spend/OKR for a portfolio, initiative, project or the whole
-  // workspace — nothing on the canvas read them, so a board could plan work and never
-  // see its own measurement. Named `deliveryRollup`, not `delivery`: a connection already
-  // uses `delivery` as an EDGE kind (`CREATION_CONNECTION_KINDS` above) and an object
-  // named identically to an edge in the same vocabulary reads as one thing having two
-  // meanings at a glance, the exact ambiguity `productionIncident` was renamed to avoid.
-  "deliveryRollup",
-  "salesPipeline",
-  "salesContact",
-  "salesCampaign",
-  "targetMarket",
-  "salesGoal",
-  "salesMeeting",
-  // A connected mailbox and one message out of it. Two kinds rather than one
-  // because they answer different questions: an `inbox` is a LIVE, filtered view
-  // that re-reads, while an `email` is a single message pinned to the board so it
-  // can be annotated, connected to a task, and still be there tomorrow after it
-  // has scrolled out of the live view.
-  "inbox",
-  "email",
-  // A marketing campaign and the template it renders — the canvas half of
-  // "draft this, then send it to that list".
-  "emailCampaign",
-  "emailTemplate",
-  // The social half of the same story, and the same two-kind split as inbox/email
-  // for the same reason: a `socialFeed` is a LIVE merged view across every connected
-  // network that re-reads, while a `socialPost` is one post pinned to the board so it
-  // can be annotated and connected to work and is still there tomorrow. A
-  // `socialCampaign` is one announcement published to every connected account.
-  "socialFeed",
-  "socialPost",
-  "socialCampaign",
-  // ── The data-architecture objects ────────────────────────────────────────
-  // A `dataset` is a SNAPSHOT (rows uploaded once); a `datasource` is a LIVE
-  // connection to a warehouse the workspace has connected — the same two-kind
-  // split as inbox/email, for the same reason: one re-reads, one does not.
-  "datasource",
-  // The model itself: entities, attributes, keys, relationships. Not a picture —
-  // it validates, generates DDL, and diffs against a live schema, which is what
-  // makes "create me an ERD" end in something real.
-  "erd",
-  // What a dataset is ALLOWED to be (declared schema + governance tags), what it
-  // is CHECKED against (a quality suite), how a number is DEFINED (the semantic
-  // layer), and where a value CAME FROM (lineage + impact).
-  //
-  // `metric` here is the DEFINITION — formula, grain, dimensions, unit, target:
-  // the answer to "how is ARR calculated here". `liveMetric` below is one bound
-  // READING of such a definition. See the split argued in the founder block.
-  "dataContract",
-  "dataQuality",
-  "metric",
-  "lineage",
-  // A standards-based learning experience authored and completed on the canvas,
-  // and the practice set that makes studying it a loop rather than a read: a
-  // `practice` object holds the questions AND the record of every attempt, so
-  // the board can say what is still weak instead of only what was opened.
-  "course",
-  "practice",
-  // A reusable, target-aware product onboarding design. It stays provider-neutral:
-  // the Canvas authors the contract and each delivery surface supplies its anchors.
-  "guidedTour",
-  // ── The QA objects ───────────────────────────────────────────────────────
-  // The canvas could MAKE a website, a game, a campaign and a data model, and had
-  // no object for the one question asked of every one of them: does it work?
-  //
-  // Four kinds rather than one, and the split is the same one `inbox`/`email` and
-  // `metric`/`liveMetric` already draw — an INTENT that persists, an ARTIFACT that
-  // runs, an EVENT that happened, and a DEFECT that outlives all three:
-  //
-  //  • `testPlan`  — what we intend to prove, against which target, with which exit
-  //    criteria. It is the object a release gate is read off, which is why the
-  //    criteria live here and not in a hand-edited evidence file.
-  //  • `testCase`  — one runnable scenario: ordered `QaStep`s AND the generated
-  //    Playwright source. Both, deliberately: the steps are what a person edits and
-  //    what the heatmap planner speaks, the spec is what CI executes. `qa.ts` lowers
-  //    one to the other so they cannot drift.
-  //  • `testRun`   — one execution, with per-case outcomes. Pinned, not live: it is
-  //    evidence, and evidence that re-reads is not evidence.
-  //  • `defect`    — what broke, with the repro, the expected/actual, the severity
-  //    and the journal of what the person was doing. Its own kind rather than a
-  //    `task` because a defect is REPRODUCED and VERIFIED, and a task is only done.
-  //
-  // A `testPlan` is also the suite: a "test suite" is a plan whose cases are the
-  // suite's members, so it is a connection, not a fifth kind.
-  "testPlan",
-  "testCase",
-  "testRun",
-  "defect",
-  // Cross-domain kinds — `funnel` today. See SHARED_OBJECT_KINDS for why conversion
-  // through stages is one object with a domain VALUE rather than one kind per funnel.
-  ...SHARED_OBJECT_KINDS,
-  ...HIRING_OBJECT_KINDS,
-  // HR operations, plus `form` — the collection primitive declared alongside the domain
-  // that exposed its absence. See `people.ts` for why hiring and people operations are
-  // two vocabularies with two owning agents rather than one set called "HR".
-  ...PEOPLE_OBJECT_KINDS,
-  ...FOUNDER_OBJECT_KINDS,
-  // The teaching and research vocabulary: the assessment loop (a cohort, an assignment,
-  // a rubric, ONE SUBMISSION PER LEARNER, a gradebook), the research lifecycle in the
-  // order it is gated (grant → ethics → pre-registration → protocol → consent →
-  // participants → manuscript → peer review), and the three scholarly primitives no
-  // business object covers — a citation, a bibliography and an equation. `academic.ts`
-  // argues each one, including why a submission is a kind and not an array.
-  ...ACADEMIC_OBJECT_KINDS,
-  // The stages after the data: analysis that computes, a model, the run that trained
-  // it, the comparison that chose between runs, the labelled set an evaluation is
-  // legitimately built from, and the versioned prompt. See `dataScience.ts`.
-  ...DATA_SCIENCE_OBJECT_KINDS,
-  // The work a vertical company SELLS: an asset, the order against it, the visit that
-  // executes it, the evidence, the certificate that permits it, the parts it consumes,
-  // and the incident when it goes wrong. Every other vocabulary on this list models how
-  // a company runs ITSELF; this is the first that models what it does for a customer.
-  // See `operations.ts` for why it is one vocabulary and not one pack per industry.
-  ...OPERATIONS_OBJECT_KINDS,
-  // The secure legal FILE — an uploaded, encrypted document with a checksum, a
-  // signature history and a share history, distinct from the AUTHORED `contract` in
-  // `FOUNDER_OBJECT_KINDS` — and the three RECORD kinds it is held against: the entity,
-  // the IP asset and the matter. See the kind's own comment above for why they are two
-  // shapes in one vocabulary, and why the matter carries a qualifier.
-  ...LEGAL_OBJECT_KINDS,
-  // The commercial half of the motion: a priced `quote` a buyer accepts, the `sequence`
-  // that follows up across channels and stops on reply, the `call` that carries what they
-  // actually said, the `trial` the demo board becomes, the `trustPacket` procurement asks
-  // for, and the `mutualActionPlan` both sides own. Every other vocabulary on this list
-  // models how the company BUILDS; this is the first that models how it SELLS. See
-  // `sellMotion.ts` for why each of the six is not one of the six sales kinds above.
-  ...SELL_MOTION_OBJECT_KINDS,
-  // The job search, as objects. Every other vocabulary on this list is authored by a
-  // company; this is the first authored by ONE PERSON about their own working life —
-  // which is why `job` is research rather than a requisition, `applicationPipeline` is a
-  // `shortlist` transposed, and `runway` is a personal clock rather than a budget. See
-  // `career.ts` for why none of the six folds into `HIRING_OBJECT_KINDS`.
-  ...CAREER_OBJECT_KINDS,
-  // The brand a generative board composes against, and the audience a send is allowed
-  // to reach. Two kinds over tables (`brand_kits`, `marketing_audiences`,
-  // `marketing_suppressions`) that had existed since the growth domain landed with
-  // nothing on the board able to read them — which is why every creative object composed
-  // unbranded and a campaign could be fired with no visible consent state. See
-  // `marketing.ts` for why the brand is a bindable OBJECT rather than a canvas setting,
-  // and why there is no `campaignCalendar` kind to go with the calendar surface.
-  ...MARKETING_OBJECT_KINDS
-];
-
-// ../packages/creation-canvas-contract/src/startupListing.ts
-var FUNDING_STAGES = [
-  "bootstrapped",
-  "pre_seed",
-  "seed",
-  "series_a",
-  "series_b",
-  "series_c",
-  "series_d_plus",
-  "ipo_ready"
-];
-var BUSINESS_STAGES = ["idea", "mvp", "early_revenue", "growth", "scale"];
-var STARTUP_SECTORS = [
-  "ai_ml",
-  "saas",
-  "fintech",
-  "healthtech",
-  "medtech",
-  "biotech",
-  "climate_energy",
-  "hardware_robotics",
-  "cybersecurity",
-  "marketplace",
-  "ecommerce",
-  "consumer_apps",
-  "enterprise_software",
-  "edtech",
-  "blockchain",
-  "gaming",
-  "media_entertainment",
-  "real_estate",
-  "logistics",
-  "other"
-];
-var SEEKING_TYPES = ["funding", "cofounders", "advisors", "customers", "partners", "hiring", "mentorship"];
-var INVESTMENT_TYPES = ["equity", "convertible_note", "safe", "revenue_share", "debt"];
-var INQUIRY_TIMEFRAMES = ["immediate", "short_term", "medium_term", "long_term"];
-var EXPERTISE_AREAS = [
-  "product",
-  "marketing",
-  "operations",
-  "finance",
-  "legal",
-  "people",
-  "technology",
-  "business_development",
-  "fundraising",
-  "international"
-];
-var DIRECTORY_SORTS = ["newest", "funding", "alphabetical", "runway"];
-var INQUIRY_STATUSES = ["new", "qualifying", "converted", "rejected"];
-var inList = (list2) => (v) => typeof v === "string" && list2.includes(v);
-var isFundingStage = inList(FUNDING_STAGES);
-var isBusinessStage = inList(BUSINESS_STAGES);
-var isStartupSector = inList(STARTUP_SECTORS);
-var isSeekingType = inList(SEEKING_TYPES);
-var isInvestmentType = inList(INVESTMENT_TYPES);
-var isInquiryTimeframe = inList(INQUIRY_TIMEFRAMES);
-var isExpertiseArea = inList(EXPERTISE_AREAS);
-var isDirectorySort = inList(DIRECTORY_SORTS);
-var isInquiryStatus = inList(INQUIRY_STATUSES);
-
-// src/consolidation.ts
-var CONSOLIDATION_META = { consolidation: true };
-function consolidationMetadata() {
-  return JSON.stringify(CONSOLIDATION_META);
-}
-function isConsolidationMarker(msg) {
-  if (!msg.metadata) return false;
-  try {
-    return JSON.parse(msg.metadata)?.consolidation === true;
-  } catch {
-    return false;
-  }
-}
-function lastConsolidationIndex(messages) {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (isConsolidationMarker(messages[i])) return i;
-  }
-  return -1;
-}
-function scopeToConsolidation(messages) {
-  const idx = lastConsolidationIndex(messages);
-  return idx >= 0 ? messages.slice(idx) : messages;
-}
-var CONSOLIDATION_MARKER_PREFIX = "\u{1F4CC} **Consolidated summary** \u2014 context continues from here.\n\n";
-function consolidationMarkerContent(summary) {
-  return `${CONSOLIDATION_MARKER_PREFIX}${summary.trim()}`;
-}
-
-// src/transcriptSeed.ts
-function transcriptSeedFrom(history) {
-  if (!advisoryThreadHistoryAdmitted(history)) return [];
-  return scopeToConsolidation(history).filter((m) => !isStepMessage(m) && !isStoppedTurn(m)).flatMap((m) => {
-    if (m.role !== "assistant") return [{ role: m.role, content: m.content }];
-    const content = replayTextOf(m.content);
-    return content ? [{ role: "assistant", content }] : [];
-  });
-}
+// src/useChatTranscript.ts
+import { useCallback as useCallback7, useEffect as useEffect6, useRef as useRef6, useState as useState7 } from "react";
 
 // src/mergeTranscript.ts
 function mergeTranscript(base, extra) {
@@ -18285,6 +18386,104 @@ function mergeTranscript(base, extra) {
   const fresh = extra.filter((m) => !have.has(m.id));
   if (fresh.length === 0) return base;
   return [...base, ...fresh].sort((a, b) => a.seq - b.seq);
+}
+
+// src/useChatTranscript.ts
+var NO_MESSAGES = [];
+function useChatTranscript(persistence, chatId, snapshot, callbacks) {
+  const cb = useRef6(callbacks);
+  cb.current = callbacks;
+  const [held, setHeld] = useState7({ chatId, list: [] });
+  const messages = held.chatId === chatId ? held.list : NO_MESSAGES;
+  const updateMessages = useCallback7((forChat, update) => {
+    setHeld((cur) => cur.chatId === forChat ? { chatId: forChat, list: update(cur.list) } : cur);
+  }, []);
+  const [loadingMessages, setLoadingMessages] = useState7(false);
+  const [reloadNonce, setReloadNonce] = useState7(0);
+  const reloadMessages = useCallback7(() => setReloadNonce((n) => n + 1), []);
+  useEffect6(() => {
+    let cancelled = false;
+    if (chatId == null) {
+      setHeld({ chatId: null, list: [] });
+      return;
+    }
+    setLoadingMessages(true);
+    cb.current.onLoadStart();
+    persistence.getMessages(chatId).then((list2) => {
+      if (!cancelled) setHeld({ chatId, list: mergeTranscript(list2, getRunSnapshot(chatId).appended) });
+    }).catch((e) => {
+      if (!cancelled) cb.current.onLoadError(e instanceof Error ? e.message : "Failed to load messages");
+    }).finally(() => {
+      if (!cancelled) setLoadingMessages(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [persistence, chatId, reloadNonce]);
+  useEffect6(() => {
+    if (chatId == null || !persistence.subscribeMessages) return;
+    return persistence.subscribeMessages(chatId, reloadMessages);
+  }, [persistence, chatId, reloadMessages]);
+  const lastMarkedRef = useRef6(null);
+  useEffect6(() => {
+    if (chatId == null || !persistence.markChatRead || messages.length === 0) return;
+    let maxSeq = 0;
+    for (const m of messages) if (m.seq > maxSeq) maxSeq = m.seq;
+    if (maxSeq <= 0) return;
+    const prev = lastMarkedRef.current;
+    if (prev && prev.chatId === chatId && prev.seq >= maxSeq) return;
+    lastMarkedRef.current = { chatId, seq: maxSeq };
+    void persistence.markChatRead(chatId, maxSeq).catch(() => {
+      if (lastMarkedRef.current?.chatId === chatId) lastMarkedRef.current = prev;
+    });
+  }, [persistence, chatId, messages]);
+  useEffect6(() => {
+    const appended = snapshot.appended;
+    if (appended.length === 0) return;
+    updateMessages(chatId, (prev) => mergeTranscript(prev, appended));
+  }, [snapshot.messagesEpoch, snapshot.appended, chatId, updateMessages]);
+  return { messages, updateMessages, loadingMessages, reloadMessages };
+}
+
+// src/useBrainConversation.ts
+import { isConsolidationMarker as isConsolidationMarker2, scopeToConsolidation as scopeToConsolidation2 } from "@seanhogg/builderforce-memory/working";
+
+// src/contextUsage.ts
+var LLM_COMPLETE = "llm.complete";
+var positive2 = (n) => typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.floor(n) : void 0;
+function usageFrom(args, usage) {
+  const promptTokens = positive2(usage?.prompt);
+  if (promptTokens === void 0) return null;
+  const a = args ?? {};
+  const contextWindow = positive2(a.contextWindow);
+  return {
+    promptTokens,
+    ...contextWindow !== void 0 ? { contextWindow } : {},
+    ...typeof a.model === "string" && a.model ? { model: a.model } : {}
+  };
+}
+var rowUsage = /* @__PURE__ */ new WeakMap();
+function usageOfRow(m) {
+  if (rowUsage.has(m)) return rowUsage.get(m);
+  const parsed = parseStepMessage(m.metadata);
+  const found = parsed && parsed.step.category === "llm" && parsed.step.label === LLM_COMPLETE ? usageFrom(parsed.step.args, parsed.step.usage) : null;
+  rowUsage.set(m, found);
+  return found;
+}
+function contextUsageOf(messages, trace) {
+  for (let i = trace.length - 1; i >= 0; i--) {
+    const ev = trace[i];
+    if (ev.category !== "llm" || ev.label !== LLM_COMPLETE) continue;
+    const found = usageFrom(ev.args, ev.usage);
+    if (found) return found;
+  }
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (!isStepMessage(m)) continue;
+    const found = usageOfRow(m);
+    if (found) return found;
+  }
+  return null;
 }
 
 // src/priorResearch.ts
@@ -18368,11 +18567,10 @@ function withRating(ratings, messageId, rating) {
 }
 
 // src/useBrainConversation.ts
-var NO_MESSAGES = [];
 function unansweredTurnIndex(messages) {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
-    if (isStepMessage(message)) continue;
+    if (isStepMessage(message) || isConsolidationMarker2(message)) continue;
     return message.role === "user" && !isMidTurnMetadata(message.metadata) ? i : -1;
   }
   return -1;
@@ -18404,17 +18602,9 @@ function useBrainConversation(options) {
     chatRoster,
     prepareRun
   } = options;
-  const [held, setHeld] = useState7({ chatId, list: [] });
-  const messages = held.chatId === chatId ? held.list : NO_MESSAGES;
-  const updateMessages = useCallback7((forChat, update) => {
-    setHeld((cur) => cur.chatId === forChat ? { chatId: forChat, list: update(cur.list) } : cur);
-  }, []);
-  const [loadingMessages, setLoadingMessages] = useState7(false);
-  const [reloadNonce, setReloadNonce] = useState7(0);
-  const reloadMessages = useCallback7(() => setReloadNonce((n) => n + 1), []);
-  const sendingRef = useRef6(/* @__PURE__ */ new Set());
-  const [sendingChats, setSendingChats] = useState7(sendingRef.current);
-  const markSending = useCallback7((key, on) => {
+  const sendingRef = useRef7(/* @__PURE__ */ new Set());
+  const [sendingChats, setSendingChats] = useState8(sendingRef.current);
+  const markSending = useCallback8((key, on) => {
     const next = new Set(sendingRef.current);
     if (on) next.add(key);
     else next.delete(key);
@@ -18422,56 +18612,21 @@ function useBrainConversation(options) {
     setSendingChats(next);
   }, []);
   const localSending = sendingChats.has(chatId);
-  const chatIdRef = useRef6(chatId);
+  const chatIdRef = useRef7(chatId);
   chatIdRef.current = chatId;
-  const [localError, setLocalError] = useState7("");
-  const [ratings, setRatings] = useState7({});
-  const [pendingAttachments, setPendingAttachments] = useState7([]);
-  const [uploading, setUploading] = useState7(false);
-  const autoRepliedChatIdRef = useRef6(null);
+  const [localError, setLocalError] = useState8("");
+  const [ratings, setRatings] = useState8({});
+  const [pendingAttachments, setPendingAttachments] = useState8([]);
+  const [uploading, setUploading] = useState8(false);
+  const autoRepliedChatIdRef = useRef7(null);
   const snapshot = useRunSnapshot(chatId);
-  useEffect6(() => {
-    let cancelled = false;
-    if (chatId == null) {
-      setHeld({ chatId: null, list: [] });
-      return;
-    }
-    setLoadingMessages(true);
-    setLocalError("");
-    persistence.getMessages(chatId).then((list2) => {
-      if (!cancelled) setHeld({ chatId, list: mergeTranscript(list2, getRunSnapshot(chatId).appended) });
-    }).catch((e) => {
-      if (!cancelled) setLocalError(e instanceof Error ? e.message : "Failed to load messages");
-    }).finally(() => {
-      if (!cancelled) setLoadingMessages(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [persistence, chatId, reloadNonce]);
-  useEffect6(() => {
-    if (chatId == null || !persistence.subscribeMessages) return;
-    return persistence.subscribeMessages(chatId, reloadMessages);
-  }, [persistence, chatId, reloadMessages]);
-  const lastMarkedRef = useRef6(null);
-  useEffect6(() => {
-    if (chatId == null || !persistence.markChatRead || messages.length === 0) return;
-    let maxSeq = 0;
-    for (const m of messages) if (m.seq > maxSeq) maxSeq = m.seq;
-    if (maxSeq <= 0) return;
-    const prev = lastMarkedRef.current;
-    if (prev && prev.chatId === chatId && prev.seq >= maxSeq) return;
-    lastMarkedRef.current = { chatId, seq: maxSeq };
-    void persistence.markChatRead(chatId, maxSeq).catch(() => {
-      if (lastMarkedRef.current?.chatId === chatId) lastMarkedRef.current = prev;
-    });
-  }, [persistence, chatId, messages]);
-  useEffect6(() => {
-    const appended = snapshot.appended;
-    if (appended.length === 0) return;
-    updateMessages(chatId, (prev) => mergeTranscript(prev, appended));
-  }, [snapshot.messagesEpoch, snapshot.appended, chatId, updateMessages]);
-  useEffect6(() => {
+  const { messages, updateMessages, loadingMessages, reloadMessages } = useChatTranscript(persistence, chatId, snapshot, {
+    onLoadStart: () => setLocalError(""),
+    onLoadError: setLocalError
+  });
+  const messagesRef = useRef7(messages);
+  messagesRef.current = messages;
+  useEffect7(() => {
     const map = {};
     for (const msg of messages) {
       if (!msg.metadata) continue;
@@ -18487,34 +18642,39 @@ function useBrainConversation(options) {
   const resolvedSystemPrompt = systemPrompt ?? resolveSystemPrompt(modality);
   const fullSystemPrompt = extraSystem ? `${resolvedSystemPrompt}
 ${extraSystem}` : resolvedSystemPrompt;
-  const buildRequest = useCallback7(
-    (seed, userTurn, priorResearch) => ({
-      resolvedSystemPrompt: fullSystemPrompt,
-      tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0,
-      model,
-      modelStrict,
-      routingMode,
-      pickFallbackModel,
-      ...windowSources ? { windowSources } : {},
-      maxTokens,
-      reasoning,
-      runTool,
-      needsConfirm,
-      stream,
-      persistence,
-      onActivity,
-      evermind,
-      augmentSystemPrompt,
-      seed,
-      priorResearch,
-      userTurn,
-      projectId,
-      chatMode,
-      chatRoster
-    }),
+  const buildRequest = useCallback8(
+    (history, researchFrom, userTurn, userTurnMessageId) => {
+      const seed = transcriptSeedOf(history);
+      return {
+        resolvedSystemPrompt: fullSystemPrompt,
+        tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0,
+        model,
+        modelStrict,
+        routingMode,
+        pickFallbackModel,
+        ...windowSources ? { windowSources } : {},
+        maxTokens,
+        reasoning,
+        runTool,
+        needsConfirm,
+        stream,
+        persistence,
+        onActivity,
+        evermind,
+        augmentSystemPrompt,
+        seed: seed.messages,
+        seedIds: seed.ids,
+        priorResearch: priorResearchDigest(scopeToConsolidation2(researchFrom)),
+        userTurn,
+        ...userTurnMessageId != null ? { userTurnMessageId } : {},
+        projectId,
+        chatMode,
+        chatRoster
+      };
+    },
     [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
   );
-  const launch = useCallback7(async (id, request) => {
+  const launch = useCallback8(async (id, request) => {
     let extra = null;
     if (prepareRun) {
       try {
@@ -18526,7 +18686,7 @@ ${extraSystem}` : resolvedSystemPrompt;
     }
     await startRun(id, extra ? { ...request, ...extra } : request);
   }, [prepareRun]);
-  const send = useCallback7(
+  const send = useCallback8(
     async (text, opts) => {
       const trimmed = text.trim();
       if (!trimmed || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
@@ -18599,7 +18759,7 @@ ${refs}`;
           }
           return true;
         }
-        await launch(id, buildRequest(transcriptSeedFrom(messages), modelContent, priorResearchDigest(scopeToConsolidation(messages))));
+        await launch(id, buildRequest(messages, messages, modelContent, userMsg?.id));
         return true;
       } catch (e) {
         if (stillOpen()) {
@@ -18613,7 +18773,7 @@ ${refs}`;
     },
     [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages]
   );
-  useEffect6(() => {
+  useEffect7(() => {
     if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
     if (isRunning(chatId)) return;
     const last = messages[messages.length - 1];
@@ -18623,9 +18783,9 @@ ${refs}`;
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError("");
-    void launch(chatId, buildRequest(transcriptSeedFrom(messages.slice(0, -1)), last.content, priorResearchDigest(scopeToConsolidation(messages))));
+    void launch(chatId, buildRequest(messages.slice(0, -1), messages, last.content, last.id));
   }, [chatId, loadingMessages, localSending, messages, buildRequest, launch]);
-  const retryLastTurn = useCallback7(() => {
+  const retryLastTurn = useCallback8(() => {
     if (chatId == null || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
     const index = unansweredTurnIndex(messages);
     if (index < 0) return false;
@@ -18634,13 +18794,13 @@ ${refs}`;
     autoRepliedChatIdRef.current = chatId;
     setLocalError("");
     clearRunError(chatId);
-    void launch(chatId, buildRequest(transcriptSeedFrom(messages.slice(0, index)), turn.content, priorResearchDigest(scopeToConsolidation(messages))));
+    void launch(chatId, buildRequest(messages.slice(0, index), messages, turn.content, turn.id));
     return true;
   }, [chatId, messages, buildRequest, launch]);
-  const rateMessage = useCallback7(async (msg, rating) => {
+  const rateMessage = useCallback8(async (msg, rating) => {
     setRatings((prev) => withRating(prev, msg.id, rating));
-    const context = ratedTurnContext(messages, msg.id);
-    const localVerdict = localRatingVerdict(messages, msg.id, rating, chatId);
+    const context = ratedTurnContext(messagesRef.current, msg.id);
+    const localVerdict = localRatingVerdict(messagesRef.current, msg.id, rating, chatId);
     if (localVerdict) submitLocalTurnVerdict(localVerdict.chatId, localVerdict.passed);
     try {
       await persistence.setMessageFeedback(
@@ -18650,8 +18810,8 @@ ${refs}`;
       );
     } catch {
     }
-  }, [persistence, messages, chatId]);
-  const attach2 = useCallback7(async (file) => {
+  }, [persistence, chatId]);
+  const attach2 = useCallback8(async (file) => {
     setUploading(true);
     try {
       const result = await persistence.upload(file);
@@ -18672,20 +18832,20 @@ ${refs}`;
       setUploading(false);
     }
   }, [persistence]);
-  const removeAttachment = useCallback7((key) => {
+  const removeAttachment = useCallback8((key) => {
     setPendingAttachments((prev) => prev.filter((a) => a.key !== key));
   }, []);
-  const resolveConfirm = useCallback7((ok) => {
+  const resolveConfirm = useCallback8((ok) => {
     if (chatId != null) resolveRunConfirm(chatId, ok);
   }, [chatId]);
-  const clearError = useCallback7(() => {
+  const clearError = useCallback8(() => {
     setLocalError("");
     clearRunError(chatId);
   }, [chatId]);
-  const stop = useCallback7(() => {
+  const stop = useCallback8(() => {
     if (chatId != null) stopRun(chatId);
   }, [chatId]);
-  const buildTriageReport = useCallback7(
+  const buildTriageReport = useCallback8(
     (agentLabel, surface) => buildBrainTriageReport({
       capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
       events: getRunTrace(chatId),
@@ -18698,6 +18858,7 @@ ${refs}`;
     }),
     [chatId, messages, localError, snapshot.error, model]
   );
+  const contextUsage = useMemo6(() => contextUsageOf(messages, snapshot.trace), [messages, snapshot.trace]);
   return {
     messages,
     loadingMessages,
@@ -18725,6 +18886,7 @@ ${refs}`;
     resolveConfirm,
     hasTrace: snapshot.hasTrace,
     trace: snapshot.trace,
+    contextUsage,
     /** Connected providers the gateway couldn't use this run (e.g. an expired Claude
      *  subscription) — a mounted view renders a passive "reconnect your account"
      *  banner off this. Empty when everything resolved. */
@@ -18983,113 +19145,8 @@ function ordinalWord(n) {
   }
 }
 
-// src/chatActivity.ts
-var PHASES = ["started", "completed", "failed", "paused", "resumed", "cancelled"];
-function isPhase(v) {
-  return typeof v === "string" && PHASES.includes(v);
-}
-function str2(v) {
-  return typeof v === "string" && v.trim() ? v : void 0;
-}
-function parseChatActivity(msg) {
-  if (!msg.metadata) return null;
-  let meta;
-  try {
-    const parsed = JSON.parse(msg.metadata);
-    if (!parsed || typeof parsed !== "object") return null;
-    meta = parsed;
-  } catch {
-    return null;
-  }
-  const ticketKind = str2(meta.ticketKind) ?? "task";
-  const ticketRef = str2(meta.ticketRef) ?? "";
-  const agentName = str2(meta.agentName) ?? str2(meta.agentRef) ?? "";
-  if (meta.runMilestone != null && isPhase(meta.phase)) {
-    return {
-      kind: "milestone",
-      phase: meta.phase,
-      agentName,
-      ticketKind,
-      ticketRef,
-      executionId: typeof meta.executionId === "number" ? meta.executionId : null,
-      ...str2(meta.toStatus) ? { toStatus: str2(meta.toStatus) } : {},
-      ...str2(meta.note) ? { note: str2(meta.note) } : {},
-      ...str2(meta.question) ? { question: str2(meta.question) } : {}
-    };
-  }
-  if (meta.agentDispatch === true) {
-    return { kind: "dispatch", agentName, ticketKind, ticketRef };
-  }
-  return null;
-}
-function isActivityMessage(msg) {
-  return parseChatActivity(msg) !== null;
-}
-function activityMessageCount(messages) {
-  let n = 0;
-  for (const m of messages) if (isActivityMessage(m)) n += 1;
-  return n;
-}
-var DEFAULT_CHAT_ACTIVITY_LABELS = {
-  milestoneStarted: "{agent} started working on {kind} #{ref}",
-  milestoneCompleted: "{agent} finished {kind} #{ref}",
-  milestoneCompletedWithLane: "{agent} finished {kind} #{ref} \u2014 moved to {lane}",
-  milestoneFailed: "{agent}\u2019s run on {kind} #{ref} failed",
-  milestonePaused: "{agent} paused on {kind} #{ref} \u2014 waiting on a human answer",
-  milestonePausedWithQuestion: "{agent} paused on {kind} #{ref} \u2014 needs an answer: {question}",
-  milestoneResumed: "{agent} resumed work on {kind} #{ref}",
-  milestoneCancelled: "{agent}\u2019s run on {kind} #{ref} was cancelled",
-  agentDispatched: "{agent} was assigned to {kind} #{ref}"
-};
-function activityIcon(activity) {
-  if (activity.kind === "dispatch") return "\u{1F464}";
-  switch (activity.phase) {
-    case "started":
-      return "\u25B6";
-    case "completed":
-      return "\u2713";
-    case "failed":
-      return "!";
-    case "paused":
-      return "?";
-    case "resumed":
-      return "\u25B6";
-    case "cancelled":
-      return "\u25A0";
-    default:
-      return "\u2022";
-  }
-}
-function activityTone(activity) {
-  if (activity.kind === "dispatch") return "neutral";
-  if (activity.phase === "completed") return "good";
-  if (activity.phase === "failed") return "bad";
-  if (activity.phase === "paused") return "waiting";
-  return "neutral";
-}
-function fill(template, values) {
-  return template.replace(/\{(\w+)\}/g, (_, key) => values[key] ?? "");
-}
-function chatActivityText(activity, labels) {
-  const base = { agent: activity.agentName, kind: activity.ticketKind, ref: activity.ticketRef };
-  if (activity.kind === "dispatch") return fill(labels.agentDispatched, base);
-  switch (activity.phase) {
-    case "started":
-      return fill(labels.milestoneStarted, base);
-    case "completed":
-      return activity.toStatus ? fill(labels.milestoneCompletedWithLane, { ...base, lane: activity.toStatus }) : fill(labels.milestoneCompleted, base);
-    case "failed":
-      return fill(labels.milestoneFailed, base);
-    case "paused":
-      return activity.question ? fill(labels.milestonePausedWithQuestion, { ...base, question: activity.question }) : fill(labels.milestonePaused, base);
-    case "resumed":
-      return fill(labels.milestoneResumed, base);
-    case "cancelled":
-      return fill(labels.milestoneCancelled, base);
-    default:
-      return "";
-  }
-}
+// src/index.ts
+import { HISTORY_TOKEN_BUDGET as HISTORY_TOKEN_BUDGET4 } from "@seanhogg/builderforce-memory/working";
 
 // src/apiVersion.ts
 var API_VERSION_TTL_MS = 6e4;
@@ -19156,6 +19213,18 @@ function takePendingPrompt() {
     return null;
   }
 }
+
+// src/index.ts
+import {
+  CONSOLIDATION_META,
+  CONSOLIDATION_MARKER_PREFIX,
+  consolidationMetadata as consolidationMetadata2,
+  consolidationMarkerContent as consolidationMarkerContent2,
+  consolidationMarkerOf,
+  isConsolidationMarker as isConsolidationMarker3,
+  lastConsolidationIndex,
+  scopeToConsolidation as scopeToConsolidation3
+} from "@seanhogg/builderforce-memory/working";
 
 // src/agentPool.ts
 var DEFAULT_AGENT_MODEL_SENTINEL = "builderforce-default";
@@ -20188,7 +20257,7 @@ function isManagerRole(role) {
 }
 
 // src/ui/PromptInput.tsx
-import { useState as useState8 } from "react";
+import { useState as useState9 } from "react";
 import { jsx as jsx4, jsxs } from "react/jsx-runtime";
 var boxStyle = (active) => ({
   display: "flex",
@@ -20253,7 +20322,7 @@ function PromptInput({
   className,
   submitOnEnter = true
 }) {
-  const [focused, setFocused] = useState8(false);
+  const [focused, setFocused] = useState9(false);
   const empty = value.trim().length === 0;
   const canSubmit = !empty && !disabled && !busy;
   const showStop = busy && empty && !!onStop && !!stopLabel;
@@ -20299,19 +20368,19 @@ function withUsageSurface(fetchImpl, surface) {
 }
 
 // src/useChatTurns.ts
-import { useCallback as useCallback9, useRef as useRef8 } from "react";
+import { useCallback as useCallback10, useRef as useRef9 } from "react";
 
 // src/useQueuedTurns.ts
-import { useCallback as useCallback8, useEffect as useEffect7, useRef as useRef7, useState as useState9 } from "react";
+import { useCallback as useCallback9, useEffect as useEffect8, useRef as useRef8, useState as useState10 } from "react";
 function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2 }) {
-  const [queued, setQueued] = useState9([]);
-  const nextId = useRef7(0);
-  const sendRef = useRef7(send);
+  const [queued, setQueued] = useState10([]);
+  const nextId = useRef8(0);
+  const sendRef = useRef8(send);
   sendRef.current = send;
-  const textOfRef = useRef7(textOf2);
+  const textOfRef = useRef8(textOf2);
   textOfRef.current = textOf2;
-  const runningRef = useRef7(running);
-  const submit = useCallback8((value) => {
+  const runningRef = useRef8(running);
+  const submit = useCallback9((value) => {
     const text = typeof value === "string" ? value.trim() : (textOfRef.current?.(value) ?? "").trim();
     if (!text) return false;
     if (!runningRef.current) return false;
@@ -20320,10 +20389,10 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2 }) {
     return true;
   }, []);
   runningRef.current = running;
-  const remove = useCallback8((id) => setQueued((current) => current.filter((item) => item.id !== id)), []);
-  const clear = useCallback8(() => setQueued((current) => current.length ? [] : current), []);
-  const prev = useRef7({ key: resetKey, running });
-  useEffect7(() => {
+  const remove = useCallback9((id) => setQueued((current) => current.filter((item) => item.id !== id)), []);
+  const clear = useCallback9(() => setQueued((current) => current.length ? [] : current), []);
+  const prev = useRef8({ key: resetKey, running });
+  useEffect8(() => {
     const was = prev.current;
     prev.current = { key: resetKey, running };
     if (was.key !== resetKey || !was.running || running || queued.length === 0) return;
@@ -20331,7 +20400,7 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2 }) {
     setQueued(rest);
     if (next) sendRef.current(next.value);
   }, [running, queued, resetKey]);
-  useEffect7(() => {
+  useEffect8(() => {
     setQueued([]);
   }, [resetKey]);
   return { items: queued, count: queued.length, submit, remove, clear };
@@ -20339,7 +20408,7 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2 }) {
 
 // src/useChatTurns.ts
 function useChatTurns({ running, runKey, send, steer, stop, textOf: textOf2 }) {
-  const ports = useRef8({ send, steer, stop, textOf: textOf2, runKey });
+  const ports = useRef9({ send, steer, stop, textOf: textOf2, runKey });
   ports.current = { send, steer, stop, textOf: textOf2, runKey };
   const queued = useQueuedTurns({
     running,
@@ -20350,7 +20419,7 @@ function useChatTurns({ running, runKey, send, steer, stop, textOf: textOf2 }) {
     textOf: textOf2
   });
   const { submit: hold, clear } = queued;
-  const submit = useCallback9(async (turn) => {
+  const submit = useCallback10(async (turn) => {
     const { send: deliver, steer: route, textOf: text } = ports.current;
     const body = typeof turn === "string" ? turn.trim() : (text?.(turn) ?? "").trim();
     if (!body) return false;
@@ -20358,7 +20427,7 @@ function useChatTurns({ running, runKey, send, steer, stop, textOf: textOf2 }) {
     if (hold(turn)) return true;
     return await deliver(turn) !== false;
   }, [hold]);
-  const stopTurns = useCallback9(() => {
+  const stopTurns = useCallback10(() => {
     clear();
     const { stop: halt, runKey: key } = ports.current;
     if (halt) halt();
@@ -20368,12 +20437,12 @@ function useChatTurns({ running, runKey, send, steer, stop, textOf: textOf2 }) {
 }
 
 // src/useRunRefreshTick.ts
-import { useEffect as useEffect8, useRef as useRef9, useState as useState10 } from "react";
+import { useEffect as useEffect9, useRef as useRef10, useState as useState11 } from "react";
 var RUN_REFRESH_MS = 3e4;
 function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
-  const [tick, setTick] = useState10(0);
-  const wasRunning = useRef9(running);
-  useEffect8(() => {
+  const [tick, setTick] = useState11(0);
+  const wasRunning = useRef10(running);
+  useEffect9(() => {
     if (wasRunning.current && !running) setTick((n) => n + 1);
     wasRunning.current = running;
     if (!running) return;
@@ -20384,21 +20453,21 @@ function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
 }
 
 // src/useChatCreation.ts
-import { useCallback as useCallback10, useEffect as useEffect9, useRef as useRef10 } from "react";
+import { useCallback as useCallback11, useEffect as useEffect10, useRef as useRef11 } from "react";
 function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }) {
-  const chatIdRef = useRef10(chatId);
+  const chatIdRef = useRef11(chatId);
   chatIdRef.current = chatId;
-  const createRef = useRef10(create);
+  const createRef = useRef11(create);
   createRef.current = create;
-  const autoTitleRef = useRef10(autoTitle);
+  const autoTitleRef = useRef11(autoTitle);
   autoTitleRef.current = autoTitle;
-  const captureRef = useRef10(onCaptureOriginalRequest);
+  const captureRef = useRef11(onCaptureOriginalRequest);
   captureRef.current = onCaptureOriginalRequest;
-  const creating = useRef10(null);
-  useEffect9(() => {
+  const creating = useRef11(null);
+  useEffect10(() => {
     if (chatId != null) creating.current = null;
   }, [chatId]);
-  const ensureChatId = useCallback10(() => {
+  const ensureChatId = useCallback11(() => {
     const open = chatIdRef.current;
     if (open != null) return Promise.resolve(open);
     creating.current ??= createRef.current().then(
@@ -20413,7 +20482,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
     );
     return creating.current;
   }, []);
-  const onFirstUserTurn = useCallback10(async (id, firstUserText) => {
+  const onFirstUserTurn = useCallback11(async (id, firstUserText) => {
     void captureRef.current?.(id, firstUserText);
     await autoTitleRef.current?.(id, firstUserText);
   }, []);
@@ -20463,7 +20532,7 @@ export {
   FailureTally,
   HAND_OFF_TOOL,
   HAND_OFF_TOOL_SPEC,
-  HISTORY_TOKEN_BUDGET,
+  HISTORY_TOKEN_BUDGET4 as HISTORY_TOKEN_BUDGET,
   INFERENCE_MODES,
   LOCAL_ENGINE_FAILURE_CODES,
   LOCAL_PICKER_GROUPS,
@@ -20573,8 +20642,10 @@ export {
   composeEvermindHooks,
   computeBrainDiagnostics,
   computeRunProgress,
-  consolidationMarkerContent,
-  consolidationMetadata,
+  consolidationMarkerContent2 as consolidationMarkerContent,
+  consolidationMarkerOf,
+  consolidationMetadata2 as consolidationMetadata,
+  contextUsageOf,
   contextWindowOf,
   countReconciledMemories2 as countReconciledMemories,
   createBfiWorkerEngine,
@@ -20660,7 +20731,7 @@ export {
   isCoderReask,
   isConnectFailure,
   isConnectedAccountUnused,
-  isConsolidationMarker,
+  isConsolidationMarker3 as isConsolidationMarker,
   isDirectedToParticipant,
   isDispatchTool,
   isEffort,
@@ -20671,6 +20742,7 @@ export {
   isLocalWorkspaceTool,
   isMalformedToolCall,
   isManagerRole,
+  isModelReply,
   isMutationTool,
   isPageEngineReply,
   isPageEngineRequest,
@@ -20788,7 +20860,7 @@ export {
   startRun as runBrainLoop,
   runProgressVerdict,
   savePendingPrompt,
-  scopeToConsolidation,
+  scopeToConsolidation3 as scopeToConsolidation,
   selectPendingAskUser,
   selectToolsForTurn,
   selfReviewShipDirective,
@@ -20811,6 +20883,7 @@ export {
   stopRun,
   stoppedTurnMetadata,
   streamChatCompletion,
+  streamSummaryCompletion,
   stripAskUser,
   studioToolsIn,
   submitLocalTurnVerdict,
@@ -20828,7 +20901,7 @@ export {
   toolSchemaTokens2 as toolSchemaTokens,
   toolSpecsFor,
   traceWithPersistedSteps,
-  transcriptSeedFrom,
+  transcriptSeedOf,
   transportRetryTrace,
   trimToolResult,
   turnAffectBlock,

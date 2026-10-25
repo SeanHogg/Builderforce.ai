@@ -9,7 +9,7 @@
  */
 
 import type { ChatCompletionMessage } from '../streamChatCompletion';
-import { HISTORY_TOKEN_BUDGET, transcriptTokens } from '../workingTranscript';
+import { HISTORY_TOKEN_BUDGET, transcriptTokens } from '@seanhogg/builderforce-memory/working';
 
 export function compactionSavedTokens(
   full: readonly ChatCompletionMessage[],

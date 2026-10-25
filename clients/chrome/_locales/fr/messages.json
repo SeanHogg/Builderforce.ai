@@ -609,6 +609,14 @@
     "message": "Désactivé — le modèle répond directement. Activez-le pour une phase de réflexion avant la réponse.",
     "description": "Thinking off"
   },
+  "cmpContextMeterHint": {
+    "message": "Contexte : {used} sur {limit} jetons au dernier tour ({percent}). L’historique plus ancien est compacté automatiquement à mesure qu’il se remplit.",
+    "description": "Context meter tooltip (window known); keep {used} {limit} {percent} literal"
+  },
+  "cmpContextMeterHintTokens": {
+    "message": "Contexte : {used} jetons au dernier tour. L’historique plus ancien est compacté automatiquement à mesure qu’il se remplit.",
+    "description": "Context meter tooltip (window unknown); keep {used} literal"
+  },
   "optCategoryAuto": {
     "message": "Auto",
     "description": "Model group: automatic"

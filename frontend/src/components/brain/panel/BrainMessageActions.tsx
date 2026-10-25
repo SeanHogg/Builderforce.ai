@@ -1,7 +1,7 @@
 import { ChatMessageActions } from '@/components/ChatMessageActions';
 import { CapabilityArtifactNotice } from '@/components/brain/CapabilityArtifactNotice';
 import { TurnChangesCard } from '@/components/brain/TurnChangesCard';
-import { isStepMessage, parseSuggestedActions, type SuggestedAction, type useBrainConversation } from '@/lib/brain';
+import { isModelReply, isStepMessage, parseSuggestedActions, type SuggestedAction, type useBrainConversation } from '@/lib/brain';
 import type { BrainMessage } from '@/lib/builderforceApi';
 import { useBrainPanel } from './BrainPanelContext';
 
@@ -17,7 +17,7 @@ export function BrainMessageActions({ msg, conv, projectId, capability, chatTitl
   onRunSuggestion?: (prompt: string) => void;
 }) {
   // Only the newest assistant turn is worth judging/retrying for a missing artifact.
-  const lastAssistantId = [...conv.messages].reverse().find((m) => m.role === 'assistant' && !isStepMessage(m))?.id;
+  const lastAssistantId = [...conv.messages].reverse().find(isModelReply)?.id;
   return (
     <>
       {/* What this turn changed in the project beside the chat, under its last reply. */}

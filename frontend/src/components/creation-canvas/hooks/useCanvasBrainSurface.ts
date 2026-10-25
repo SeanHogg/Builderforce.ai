@@ -3,7 +3,7 @@ import { canvasRunKey } from '../brainTurn/canvasRunKey';
 import { type BrainDockMode, type BrainDockPreferences, brainDockReservedWidth } from '../brainDockPreferences';
 import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect, useMemo, useState } from 'react';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
-import { stepRow, useRunSnapshot, withRating, type MessageRatings } from '@seanhogg/builderforce-brain-embedded';
+import { contextUsageOf, stepRow, useRunSnapshot, withRating, type MessageRatings } from '@seanhogg/builderforce-brain-embedded';
 import { useTranscriptReplies } from '@/lib/brain/useTranscriptReplies';
 import { boardAgentOccupants, boardAgents } from '@/lib/canvas/boardAgents';
 import { roomSpeech } from '@/lib/canvas/roomSpeech';
@@ -255,6 +255,8 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
    * what "unread" means and why the mark is taken while the surface is open.
    */
   const brainUnreadReplies = useBrainUnreadReplies(brainMessages, brainSurfaceOpen);
+  // How full the model's context was on the canvas run's last turn — the composer's meter.
+  const brainContextUsage = useMemo(() => contextUsageOf(brainMessages, brainTrace), [brainMessages, brainTrace]);
   // The no-model refusal as THE banner, for every placement and the conversation props.
   const { modelRefusal, setModelRefusal, composerId: refusalComposerId } = refusal;
   const brainRefusal = useCanvasRefusalBanner({ modelRefusal, setModelRefusal, composerId: refusalComposerId, startCanvasTurnRef });
@@ -285,5 +287,5 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
     onExecutionDetailChange: (showExecutionDetail) => updateBrainDock({ showExecutionDetail }),
     onClose: () => updateBrainDock({ open: false }),
   }), [brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRatings, brainRunShownStartedAt, brainRunning, brainSurfaceOpen, brainTrace, brainUnreadReplies, edges, guestSignupPrompt, joinedCollaborator, nodes, openBrainDock, persistence, presentMode, rateBrainMessage, brainRefusal, replayBrainMessage, answerBrainQuestion, sessionId, setSelectedId, setSelectedIds, updateBrainDock]);
-  return { brainSurfaceOpen, brainPlacement, rosterMembers, seatedAgents, boardBridge, spacePresence, brainDockReserved, brainSurface, brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, answerBrainQuestion, guestSignupPrompt, roomOccupants, roomSpeechBySeat, revealSpeechInChat, rosterSelfId, brainUnreadReplies, brainRefusal };
+  return { brainSurfaceOpen, brainPlacement, rosterMembers, seatedAgents, boardBridge, spacePresence, brainDockReserved, brainSurface, brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, answerBrainQuestion, guestSignupPrompt, roomOccupants, roomSpeechBySeat, revealSpeechInChat, rosterSelfId, brainUnreadReplies, brainRefusal, brainContextUsage };
 }

@@ -23,19 +23,20 @@
  * nothing.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isMidTurnMetadata } from '@builderforce/agent-loop';
 import { useBrainConfig } from './config';
 import { useRunSnapshot } from './useRunSnapshot';
 import { isStepMessage, type BrainMessage, type BrainModality, type ChatInputAttachment } from './types';
-import { transcriptSeedFrom } from './transcriptSeed';
-import { mergeTranscript } from './mergeTranscript';
-import type { BrainToolSpec, ChatCompletionMessage, ContentPart } from './streamChatCompletion';
+import { transcriptSeedOf } from './transcriptSeed';
+import { useChatTranscript } from './useChatTranscript';
+import type { BrainToolSpec, ContentPart } from './streamChatCompletion';
 import type { EvermindRunHooks } from './evermindMemory';
 import type { ReasoningIntent } from './effort';
 import type { RunWindowSources } from './windowFit/modelWindow';
 import { prepareImageDataUrl } from './imagePrep';
-import { scopeToConsolidation } from './consolidation';
+import { isConsolidationMarker, scopeToConsolidation } from '@seanhogg/builderforce-memory/working';
+import { contextUsageOf, type ContextUsage } from './contextUsage';
 import { priorResearchDigest } from './priorResearch';
 import { withDirectedMetadata, isDirectedToParticipant, directedAgentRecipients, type DirectedRecipient, type DirectedGroup } from './directedMessage';
 import { buildBrainTriageReport, type BrainTraceEvent } from './brainTriage';
@@ -48,16 +49,12 @@ import {
   startRun,
   stopRun,
   isRunning,
-  getRunSnapshot,
   getRunTrace,
   resolveRunConfirm,
   clearRunError,
   type BrainRunRequest,
 } from './brainRunStore';
 
-/** The list a chat reads before its own has loaded — one identity, so effects keyed on
- *  `messages` do not re-fire on every render of that window. */
-const NO_MESSAGES: BrainMessage[] = [];
 
 export interface UseBrainConversationOptions {
   chatId: number | null;
@@ -248,6 +245,9 @@ export interface UseBrainConversation {
    * user/assistant turns. Empty when the chat has no run this session.
    */
   trace: BrainTraceEvent[];
+  /** How full the model's context was on the last turn — the composer's context meter
+   *  (`contextUsageOf` over the live trace, then the persisted steps). */
+  contextUsage: ContextUsage | null;
   /**
    * Connected providers the gateway could NOT use this run (e.g. an expired Claude
    * subscription that fell back to the shared pool). A mounted view renders a passive
@@ -279,7 +279,8 @@ export interface UseBrainConversation {
 export function unansweredTurnIndex(messages: readonly BrainMessage[]): number {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i]!;
-    if (isStepMessage(message)) continue;
+    // A step, or a compaction note a failed run persisted mid-run, is not an answer.
+    if (isStepMessage(message) || isConsolidationMarker(message)) continue;
     return message.role === 'user' && !isMidTurnMetadata(message.metadata) ? i : -1;
   }
   return -1;
@@ -313,24 +314,6 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     prepareRun,
   } = options;
 
-  // The transcript is held TOGETHER WITH the chat it was loaded for, and read only for
-  // that chat. One instance serves a panel that walks between chats, and React applies
-  // the switch's new `chatId` a render before the reload's state lands: a bare list let
-  // that render read the PREVIOUS chat's messages under the NEW chat's id. The
-  // auto-reply below then found the old chat's trailing user row (a steer sent into
-  // its live run) and started a run in the chat just switched to — an "only do analysis"
-  // typed in one chat stopped a different chat's work. Every write names its chat and
-  // is dropped when that is no longer the one held.
-  const [held, setHeld] = useState<{ chatId: number | null; list: BrainMessage[] }>({ chatId, list: [] });
-  const messages = held.chatId === chatId ? held.list : NO_MESSAGES;
-  const updateMessages = useCallback((forChat: number | null, update: (prev: BrainMessage[]) => BrainMessage[]) => {
-    setHeld((cur) => (cur.chatId === forChat ? { chatId: forChat, list: update(cur.list) } : cur));
-  }, []);
-  const [loadingMessages, setLoadingMessages] = useState(false);
-  // Bumped by reloadMessages() to force a transcript refetch without changing the
-  // chat id — e.g. after another chat is merged INTO this one server-side.
-  const [reloadNonce, setReloadNonce] = useState(0);
-  const reloadMessages = useCallback(() => setReloadNonce((n) => n + 1), []);
   // Which chats THIS hook instance has a send in flight for: persisting the user turn,
   // then holding until the run settles (a driver-owned run's `running` only lands with
   // its first sync, so the snapshot alone would leave a gap). Keyed by chat because one
@@ -362,74 +345,14 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   // cell, including on the render a switch lands in.
   const snapshot = useRunSnapshot(chatId);
 
-  // Load messages whenever the active chat changes.
-  useEffect(() => {
-    let cancelled = false;
-    if (chatId == null) {
-      setHeld({ chatId: null, list: [] });
-      return;
-    }
-    setLoadingMessages(true);
-    setLocalError('');
-    persistence
-      .getMessages(chatId)
-      .then((list) => {
-        // MERGE, never replace: a run that persisted its reply hands it over through
-        // the run store's `appended` buffer, and this fetch can resolve after that
-        // splice. Replacing would drop the turn, and the splice effect below will not
-        // re-fire to restore it (its epoch has not moved). See `mergeTranscript`.
-        if (!cancelled) setHeld({ chatId, list: mergeTranscript(list, getRunSnapshot(chatId).appended) });
-      })
-      .catch((e) => {
-        if (!cancelled) setLocalError(e instanceof Error ? e.message : 'Failed to load messages');
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingMessages(false);
-      });
-    return () => { cancelled = true; };
-  }, [persistence, chatId, reloadNonce]);
-
-  // Agent lifecycle messages are written outside this browser's run store. Subscribe
-  // to the host's chat invalidation channel and re-read durable state on each push.
-  useEffect(() => {
-    if (chatId == null || !persistence.subscribeMessages) return;
-    return persistence.subscribeMessages(chatId, reloadMessages);
-  }, [persistence, chatId, reloadMessages]);
-
-  // Mark the OPEN chat read up to its newest message, so the unread badge a
-  // background chat shows (an execution milestone / teammate turn that landed while
-  // you were elsewhere) clears the moment you view it — on BOTH surfaces, since it
-  // marks the same server chat. Fires whenever the mounted chat's high-water seq
-  // advances (initial load, each `changed` push, an in-run append). Only ever moves
-  // forward (ref guard) so it doesn't spam the endpoint on every re-render.
-  const lastMarkedRef = useRef<{ chatId: number; seq: number } | null>(null);
-  useEffect(() => {
-    if (chatId == null || !persistence.markChatRead || messages.length === 0) return;
-    let maxSeq = 0;
-    for (const m of messages) if (m.seq > maxSeq) maxSeq = m.seq;
-    if (maxSeq <= 0) return;
-    const prev = lastMarkedRef.current;
-    if (prev && prev.chatId === chatId && prev.seq >= maxSeq) return;
-    lastMarkedRef.current = { chatId, seq: maxSeq };
-    void persistence.markChatRead(chatId, maxSeq).catch(() => {
-      // Best-effort: a failed mark just means the badge clears on the next open.
-      if (lastMarkedRef.current?.chatId === chatId) lastMarkedRef.current = prev;
-    });
-  }, [persistence, chatId, messages]);
-
-  // A run (possibly started in another, now-unmounted Brain instance) persisted
-  // assistant messages — splice them in without a refetch. The store delivers
-  // the FULL run-appended list (narration turns + final answer), not just the
-  // latest, and we merge by id: React coalesces the rapid mid-run emits into one
-  // render, so a "last value only" hand-off would drop the intermediate
-  // narration turns and the next turn's stream would appear to erase them. Keyed
-  // on messagesEpoch so it fires once per completed turn for EVERY mounted
-  // instance, not just the one that drove the loop.
-  useEffect(() => {
-    const appended = snapshot.appended;
-    if (appended.length === 0) return;
-    updateMessages(chatId, (prev) => mergeTranscript(prev, appended));
-  }, [snapshot.messagesEpoch, snapshot.appended, chatId, updateMessages]);
+  // The durable transcript for the chat on screen (`useChatTranscript`).
+  const { messages, updateMessages, loadingMessages, reloadMessages } = useChatTranscript(persistence, chatId, snapshot, {
+    onLoadStart: () => setLocalError(''),
+    onLoadError: setLocalError,
+  });
+  // The latest transcript, for callbacks that must keep their identity across appends.
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   // Re-hydrate this viewer's thumbs from the persisted message metadata, so a
   // reopened chat shows what they already pressed. (The durable RATING fact lives in
@@ -452,7 +375,11 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
 
   /** Assemble the BrainRunRequest from the current options (captured at run start). */
   const buildRequest = useCallback(
-    (seed?: ChatCompletionMessage[], userTurn?: string | ContentPart[], priorResearch?: string | null) => ({
+    (history: BrainMessage[], researchFrom: BrainMessage[], userTurn: string | ContentPart[], userTurnMessageId?: number) => {
+      // The seed and the persisted ids behind it (a fold records what its note covers),
+      // and what the earlier turns READ (`priorResearch.ts`).
+      const seed = transcriptSeedOf(history);
+      return {
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined,
       model,
@@ -469,13 +396,16 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       onActivity,
       evermind,
       augmentSystemPrompt,
-      seed,
-      priorResearch,
+      seed: seed.messages,
+      seedIds: seed.ids,
+      priorResearch: priorResearchDigest(scopeToConsolidation(researchFrom)),
       userTurn,
+      ...(userTurnMessageId != null ? { userTurnMessageId } : {}),
       projectId,
       chatMode,
       chatRoster,
-    }),
+      };
+    },
     [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster],
   );
 
@@ -606,7 +536,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
           }
           return true;
         }
-        await launch(id, buildRequest(transcriptSeedFrom(messages), modelContent, priorResearchDigest(scopeToConsolidation(messages))));
+        await launch(id, buildRequest(messages, messages, modelContent, userMsg?.id));
         return true;
       } catch (e) {
         // Persisting the user turn failed (commonly an expired token) — the turn
@@ -643,7 +573,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError('');
-    void launch(chatId, buildRequest(transcriptSeedFrom(messages.slice(0, -1)), last.content, priorResearchDigest(scopeToConsolidation(messages))));
+    void launch(chatId, buildRequest(messages.slice(0, -1), messages, last.content, last.id));
   }, [chatId, loadingMessages, localSending, messages, buildRequest, launch]);
 
   const retryLastTurn = useCallback((): boolean => {
@@ -656,7 +586,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     autoRepliedChatIdRef.current = chatId;
     setLocalError('');
     clearRunError(chatId);
-    void launch(chatId, buildRequest(transcriptSeedFrom(messages.slice(0, index)), turn.content, priorResearchDigest(scopeToConsolidation(messages))));
+    void launch(chatId, buildRequest(messages.slice(0, index), messages, turn.content, turn.id));
     return true;
   }, [chatId, messages, buildRequest, launch]);
 
@@ -666,12 +596,12 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     // Derived from the transcript, not from the composer's current state: the model
     // is whatever the gateway actually resolved for THIS reply (after any failover),
     // and the tool is the one the turn executed.
-    const context = ratedTurnContext(messages, msg.id);
+    const context = ratedTurnContext(messagesRef.current, msg.id);
     // E5: a thumb on the chat's latest reply is the `rating` verdict on that turn's
     // deferred local-success label — resolved here, where the web Brain and Rovr run
     // their model stream (a no-op when nothing local is waiting). The VS Code host
     // resolves it on its own side from `localVerdict` (its stream lives there).
-    const localVerdict = localRatingVerdict(messages, msg.id, rating, chatId);
+    const localVerdict = localRatingVerdict(messagesRef.current, msg.id, rating, chatId);
     if (localVerdict) submitLocalTurnVerdict(localVerdict.chatId, localVerdict.passed);
     try {
       await persistence.setMessageFeedback(
@@ -680,7 +610,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         { toolName: context.toolName, ...(localVerdict ? { localVerdict } : {}) },
       );
     } catch { /* best-effort */ }
-  }, [persistence, messages, chatId]);
+  }, [persistence, chatId]);
 
   const attach = useCallback(async (file: File) => {
     setUploading(true);
@@ -739,6 +669,8 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     [chatId, messages, localError, snapshot.error, model],
   );
 
+  const contextUsage = useMemo(() => contextUsageOf(messages, snapshot.trace), [messages, snapshot.trace]);
+
   return {
     messages,
     loadingMessages,
@@ -766,6 +698,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     resolveConfirm,
     hasTrace: snapshot.hasTrace,
     trace: snapshot.trace,
+    contextUsage,
     /** Connected providers the gateway couldn't use this run (e.g. an expired Claude
      *  subscription) — a mounted view renders a passive "reconnect your account"
      *  banner off this. Empty when everything resolved. */

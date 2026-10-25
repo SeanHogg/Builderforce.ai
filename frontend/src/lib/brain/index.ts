@@ -29,6 +29,7 @@ export {
   buildBrainTriageReport,
   isFailedToolResult,
   isStepMessage,
+  isModelReply,
   mentionRecipient,
   resolveRecipient,
 } from '@seanhogg/builderforce-brain-embedded';

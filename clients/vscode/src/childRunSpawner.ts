@@ -17,6 +17,7 @@ import {
   codeChangesOf,
   getRunSnapshot,
   getRunTrace,
+  isModelReply,
   queueRunSteering,
   type RunLineage,
 } from "@seanhogg/builderforce-brain-embedded";
@@ -147,7 +148,7 @@ export function childControls(host: ChildRunHost, owner: ChildOwner): ChildContr
 /** What a settled child run reported — read from the run itself, never re-derived. */
 function reportOf(key: number, lineage: RunLineage, req: ChildRequest, stopped: boolean): ChildReport {
   const snapshot = getRunSnapshot(key);
-  const answer = [...snapshot.appended].reverse().find((m) => m.role === "assistant")?.content?.trim() ?? "";
+  const answer = [...snapshot.appended].reverse().find(isModelReply)?.content?.trim() ?? "";
   const files = new Set<string>();
   for (const ev of getRunTrace(key)) {
     if (ev.category !== "tool") continue;

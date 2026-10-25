@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   DEFAULT_MODEL_IDENTITY,
   parseSubagentOrigin,
@@ -14,14 +14,17 @@ import { ModelMoveStep } from './ModelMoveStep';
 import { DEFAULT_TIMELINE_LABELS, type BrainTimelineLabels } from './timeline/labels';
 import type { MessageRating } from './timeline/MessageActions';
 import { useTranscriptScroll } from './timeline/useTranscriptScroll';
+import { TIMELINE_PAGE_SIZE, useRenderWindow } from './timeline/useRenderWindow';
 import { AssistantRow, UserRow } from './timeline/MessageRows';
-import { LearnRow, MemoryAnswerRow, RecallRow, ReconcileRow } from './timeline/MemoryRows';
+import { CompactedRow, LearnRow, MemoryAnswerRow, RecallRow, ReconcileRow } from './timeline/MemoryRows';
 import { ActivityRow, ErrorRow, StreamingRow, ThinkingRow, ToolRow } from './timeline/StepRows';
 
 // The public surface stays HERE: the labels and the rating type live beside the row
 // components that use them (`./timeline/*`), and are re-exported unchanged.
 export { DEFAULT_TIMELINE_LABELS };
 export type { BrainTimelineLabels, MessageRating };
+
+export { TIMELINE_PAGE_SIZE };
 
 export interface BrainTimelineProps {
   messages: BrainMessage[];
@@ -80,6 +83,12 @@ export interface BrainTimelineProps {
    * jump no-op'ing. Absent or null ⇒ no jump, no highlight.
    */
   revealMessage?: { id: number; nonce: number } | null;
+  /**
+   * Which conversation this is (its chat id). The render window belongs to ONE
+   * conversation: another one opens on its newest page. Omitted ⇒ the first node's key
+   * stands in, which a host whose message list is a moving tail should not rely on.
+   */
+  conversationKey?: string | number | null;
 }
 
 /**
@@ -112,6 +121,7 @@ function BrainTimelineInner({
   onAnswerQuestion,
   autoScroll = true,
   revealMessage = null,
+  conversationKey,
 }: BrainTimelineProps) {
   // Stable across renders so the memoized <Markdown> children below keep their
   // identity and don't re-parse when only streaming text ticks over.
@@ -133,7 +143,8 @@ function BrainTimelineInner({
 
   const { scrollRef, contentRef, onScroll } = useTranscriptScroll(autoScroll, revealMessage);
 
-  const renderMsg = (msg: BrainMessage, role: 'user' | 'assistant', text: string) =>
+  // Stable, so the memoized rows below are not re-rendered on every streamed token.
+  const renderMsg = useCallback((msg: BrainMessage, role: 'user' | 'assistant', text: string) =>
     renderMessage ? (
       renderMessage(msg, { role, text })
     ) : (
@@ -144,14 +155,28 @@ function BrainTimelineInner({
         onCreateFile={role === 'assistant' ? onCreateFile : undefined}
         labels={labels}
       />
-    );
+    ), [renderMessage, onInternalLink, onApplyCode, onCreateFile, labels]);
+
+  // The render window (`useRenderWindow`): the newest page, older and newer pages on
+  // request, a page around a revealed message — never the whole chat at once.
+  const revealIndex = useMemo(
+    () => (revealMessage ? nodes.findIndex((n) => (n.kind === 'user' || n.kind === 'assistant') && n.message.id === revealMessage.id) : -1),
+    [nodes, revealMessage],
+  );
+  const { visible, earlier, newer } = useRenderWindow(
+    nodes,
+    conversationKey ?? nodes[0]?.key ?? null,
+    revealMessage && revealIndex >= 0 ? { index: revealIndex, nonce: revealMessage.nonce } : null,
+    scrollRef,
+  );
 
   const isEmpty = nodes.length === 0 && !loading;
   // Once a sub-agent has spoken, the chat's own agent is named as their OWNER, so the
-  // transcript reads as Owner and Agent (name), never as one voice.
+  // transcript reads as Owner and Agent (name), never as one voice. Over the MESSAGES:
+  // a trace event or a streamed token cannot change it.
   const hasSubagents = useMemo(
-    () => nodes.some((n) => n.kind === 'assistant' && parseSubagentOrigin(n.message) !== null),
-    [nodes],
+    () => messages.some((m) => m.role === 'assistant' && parseSubagentOrigin(m) !== null),
+    [messages],
   );
   const focusedId = revealMessage?.id ?? null;
   const focusClass = (messageId: number) => (focusedId === messageId ? ' bf-tl__item--focus' : '');
@@ -161,8 +186,13 @@ function BrainTimelineInner({
       {loading && <div className="bf-tl-status">{labels.loading}</div>}
       {isEmpty &&
         (emptyState ?? <div className="bf-tl-empty">{labels.empty}</div>)}
+      {earlier && (
+        <button type="button" className="bf-tl-earlier" onClick={earlier.show}>
+          {labels.showEarlier.replace('{count}', String(earlier.count))}
+        </button>
+      )}
       <ol className="bf-tl" ref={contentRef}>
-        {nodes.map((node) => {
+        {visible.map((node) => {
           switch (node.kind) {
             case 'user':
               return (
@@ -212,6 +242,8 @@ function BrainTimelineInner({
               return <ModelMoveStep key={node.key} move={node.move} labels={labels} />;
             case 'reconcile':
               return <ReconcileRow key={node.key} node={node} labels={labels} />;
+            case 'compacted':
+              return <CompactedRow key={node.key} node={node} labels={labels} />;
             default:
               return (
                 <StreamingRow
@@ -234,6 +266,16 @@ function BrainTimelineInner({
           <LiveActivity activity={activity} isRunning={isRunning} labels={labels.live} />
         )}
       </ol>
+      {newer && (
+        <div className="bf-tl-newer">
+          <button type="button" className="bf-tl-earlier" onClick={newer.show}>
+            {labels.showNewer.replace('{count}', String(newer.count))}
+          </button>
+          <button type="button" className="bf-tl-earlier" onClick={newer.latest}>
+            {labels.jumpToLatest}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

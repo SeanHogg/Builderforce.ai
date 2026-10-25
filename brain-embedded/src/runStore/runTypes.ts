@@ -112,6 +112,11 @@ export interface BrainRunRequest {
   priorResearch?: string | null;
   /** The user turn that triggered this run, appended to the transcript. */
   userTurn?: string | ContentPart[];
+  /** The persisted message id behind each {@link seed} entry, in order (`transcriptSeedOf`). */
+  seedIds?: number[];
+  /** The persisted message id of {@link userTurn}. With {@link seedIds} it lets a fold
+   *  record which persisted messages its note covers (`runFoldMarker.ts`). */
+  userTurnMessageId?: number;
   /**
    * The chat's project. Enables the post-run "a code change is always tied to a
    * ticket" backstop: when an IDE run changed code but never recorded a ticket, the

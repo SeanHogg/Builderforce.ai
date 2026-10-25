@@ -22,6 +22,37 @@
   line-height: 1.5;
 }
 
+/* "Show N earlier steps" — the transcript renders its newest page; older ones load on demand. */
+.bf-tl-earlier {
+  display: block;
+  margin: 0 auto 12px;
+  padding: 6px 14px;
+  min-height: 32px;
+  max-width: 100%;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--bf-accent, #9085e9);
+  background: transparent;
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.35));
+  border-radius: 999px;
+  cursor: pointer;
+}
+.bf-tl-earlier:hover {
+  background: color-mix(in srgb, var(--bf-accent, #9085e9) 10%, transparent);
+}
+.bf-tl-newer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.bf-tl-newer .bf-tl-earlier { margin: 0; }
+.bf-tl-earlier:focus-visible {
+  outline: 2px solid var(--bf-accent, #9085e9);
+  outline-offset: 2px;
+}
+
 .bf-tl {
   list-style: none;
   margin: 0;
@@ -596,6 +627,17 @@
 .bf-tl__memory-text {
   flex: 1 1 auto;
   overflow-wrap: anywhere;
+}
+/* The note an auto-compaction left — the memory the run continues from. */
+.bf-tl__memory-note {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--bf-text-muted, #8a8a8a);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow-y: auto;
 }
 
 /* ---- ask_user question card ---- */
@@ -2123,6 +2165,42 @@
 .bf-acct__bar-fill { height: 100%; background: var(--bf-accent, #3b82f6); }
 .bf-acct__meta { margin-top: 3px; font-size: 10px; color: var(--bf-text-muted, #8a8a8a); }
 
+/* Status tab — Connected accounts: one card per provider account, wrapping actions so the
+   row stays inside the popover at 360px. Colours are theme tokens only. */
+.bf-conn { display: flex; flex-direction: column; gap: 6px; }
+.bf-conn__pad { padding: 0 9px; }
+.bf-conn__row {
+  display: flex; flex-direction: column; gap: 4px;
+  margin: 0 5px; padding: 7px 9px;
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.35));
+  border-radius: 8px;
+}
+.bf-conn__head { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12px; }
+.bf-conn__dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 999px; background: var(--bf-text-muted, #8a8a8a); }
+.bf-conn__dot.is-ok { background: var(--bf-success, #3fa45b); }
+.bf-conn__dot.is-warn { background: var(--bf-warning, #d29922); }
+.bf-conn__dot.is-bad { background: var(--bf-danger, #f7768e); }
+.bf-conn__name { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--bf-text, inherit); }
+.bf-conn__kind { flex: 0 0 auto; font-size: 10px; color: var(--bf-text-muted, #8a8a8a); }
+.bf-conn__health { font-size: 10.5px; line-height: 1.35; color: var(--bf-text-muted, #8a8a8a); }
+.bf-conn__health.is-alert { color: var(--bf-warning, #d29922); }
+.bf-conn__flow { display: flex; flex-direction: column; gap: 5px; }
+.bf-conn__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.bf-conn__input { flex: 1 1 140px; width: auto; min-width: 0; margin: 0; }
+.bf-conn__btn {
+  min-height: 28px; padding: 3px 10px;
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.35));
+  border-radius: 6px;
+  background: transparent; color: inherit; font: inherit; font-size: 11.5px;
+  cursor: pointer;
+}
+.bf-conn__btn:hover:not(:disabled) { background: var(--bf-accent-soft, rgba(79, 128, 255, 0.14)); }
+.bf-conn__btn.is-primary { border-color: var(--bf-accent, #4f80ff); color: var(--bf-accent, #4f80ff); }
+.bf-conn__btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.bf-conn__note { font-size: 10.5px; line-height: 1.35; word-break: break-word; }
+.bf-conn__note.is-ok { color: var(--bf-success, #3fa45b); }
+.bf-conn__note.is-bad { color: var(--bf-danger, #f7768e); }
+
 .bf-evstatus { cursor: help; }
 .bf-evstatus__dot {
   display: inline-block;
@@ -2165,42 +2243,6 @@
   gap: 5px;
   min-width: 0;
   max-width: 100%;
-/* Status tab — Connected accounts: one card per provider account, wrapping actions so the
-   row stays inside the popover at 360px. Colours are theme tokens only. */
-.bf-conn { display: flex; flex-direction: column; gap: 6px; }
-.bf-conn__pad { padding: 0 9px; }
-.bf-conn__row {
-  display: flex; flex-direction: column; gap: 4px;
-  margin: 0 5px; padding: 7px 9px;
-  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.35));
-  border-radius: 8px;
-}
-.bf-conn__head { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12px; }
-.bf-conn__dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 999px; background: var(--bf-text-muted, #8a8a8a); }
-.bf-conn__dot.is-ok { background: var(--bf-success, #3fa45b); }
-.bf-conn__dot.is-warn { background: var(--bf-warning, #d29922); }
-.bf-conn__dot.is-bad { background: var(--bf-danger, #f7768e); }
-.bf-conn__name { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--bf-text, inherit); }
-.bf-conn__kind { flex: 0 0 auto; font-size: 10px; color: var(--bf-text-muted, #8a8a8a); }
-.bf-conn__health { font-size: 10.5px; line-height: 1.35; color: var(--bf-text-muted, #8a8a8a); }
-.bf-conn__health.is-alert { color: var(--bf-warning, #d29922); }
-.bf-conn__flow { display: flex; flex-direction: column; gap: 5px; }
-.bf-conn__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.bf-conn__input { flex: 1 1 140px; width: auto; min-width: 0; margin: 0; }
-.bf-conn__btn {
-  min-height: 28px; padding: 3px 10px;
-  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.35));
-  border-radius: 6px;
-  background: transparent; color: inherit; font: inherit; font-size: 11.5px;
-  cursor: pointer;
-}
-.bf-conn__btn:hover:not(:disabled) { background: var(--bf-accent-soft, rgba(79, 128, 255, 0.14)); }
-.bf-conn__btn.is-primary { border-color: var(--bf-accent, #4f80ff); color: var(--bf-accent, #4f80ff); }
-.bf-conn__btn:disabled { opacity: 0.55; cursor: not-allowed; }
-.bf-conn__note { font-size: 10.5px; line-height: 1.35; word-break: break-word; }
-.bf-conn__note.is-ok { color: var(--bf-success, #3fa45b); }
-.bf-conn__note.is-bad { color: var(--bf-danger, #f7768e); }
-
   padding: 2px 9px;
   border-radius: 999px;
   border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.35));
@@ -2599,3 +2641,27 @@
   min-height: 24px;
 }
 .bf-fallback-notice__dismiss:focus-visible { outline: 2px solid var(--bf-accent, #4f80ff); outline-offset: 1px; }
+
+/* ---- Context meter (composer tool row) — the last turn's prompt against the model's window ---- */
+.bf-ctx-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 0 6px;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--bf-text-muted, #8a8a8a);
+  white-space: nowrap;
+  cursor: default;
+}
+.bf-ctx-meter__ring { flex: 0 0 auto; }
+.bf-ctx-meter__track { stroke: var(--bf-border, rgba(128, 128, 128, 0.35)); }
+.bf-ctx-meter__fill { stroke: var(--bf-accent, #9085e9); transition: stroke-dasharray 0.3s ease; }
+.bf-ctx-meter--high .bf-ctx-meter__fill { stroke: var(--bf-warning, #d29922); }
+.bf-ctx-meter--high .bf-ctx-meter__text { color: var(--bf-warning, #d29922); }
+.bf-ctx-meter--full .bf-ctx-meter__fill { stroke: var(--bf-danger, #f7768e); }
+.bf-ctx-meter--full .bf-ctx-meter__text { color: var(--bf-danger, #f7768e); }
+@media (prefers-reduced-motion: reduce) {
+  .bf-ctx-meter__fill { transition: none; }
+}

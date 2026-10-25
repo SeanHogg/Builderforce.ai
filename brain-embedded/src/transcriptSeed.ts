@@ -14,20 +14,32 @@
  */
 import { replayTextOf } from '@builderforce/agent-loop';
 import { advisoryThreadHistoryAdmitted } from '@builderforce/creation-canvas-contract';
-import { scopeToConsolidation } from './consolidation';
+import { scopeToConsolidation } from '@seanhogg/builderforce-memory/working';
 import { isStoppedTurn } from './stoppedTurn';
 import type { ChatCompletionMessage } from './streamChatCompletion';
 import { isStepMessage, type BrainMessage } from './types';
 
-export function transcriptSeedFrom(history: BrainMessage[]): ChatCompletionMessage[] {
+/**
+ * The seed, and the persisted message id behind each seed entry, in
+ * order — what lets a run's fold record which persisted messages its note covers
+ * (`BrainRunRequest.seedIds`, `runFoldMarker.ts`).
+ */
+export function transcriptSeedOf(history: BrainMessage[]): { messages: ChatCompletionMessage[]; ids: number[] } {
+  const messages: ChatCompletionMessage[] = [];
+  const ids: number[] = [];
   // Ask the full history, not the post-consolidation slice: the marker sits on
   // the opening system message, which a later consolidation marker would drop.
-  if (!advisoryThreadHistoryAdmitted(history)) return [];
-  return scopeToConsolidation(history)
-    .filter((m) => !isStepMessage(m) && !isStoppedTurn(m))
-    .flatMap((m): ChatCompletionMessage[] => {
-      if (m.role !== 'assistant') return [{ role: m.role as ChatCompletionMessage['role'], content: m.content }];
+  if (!advisoryThreadHistoryAdmitted(history)) return { messages, ids };
+  for (const m of scopeToConsolidation(history)) {
+    if (isStepMessage(m) || isStoppedTurn(m)) continue;
+    if (m.role === 'assistant') {
       const content = replayTextOf(m.content);
-      return content ? [{ role: 'assistant', content }] : [];
-    });
+      if (!content) continue;
+      messages.push({ role: 'assistant', content });
+    } else {
+      messages.push({ role: m.role as ChatCompletionMessage['role'], content: m.content });
+    }
+    ids.push(m.id);
+  }
+  return { messages, ids };
 }

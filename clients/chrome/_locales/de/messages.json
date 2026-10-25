@@ -609,6 +609,14 @@
     "message": "Aus – das Modell antwortet direkt. Einschalten für einen Denkdurchgang vor der Antwort.",
     "description": "Thinking off"
   },
+  "cmpContextMeterHint": {
+    "message": "Kontext: {used} von {limit} Tokens im letzten Durchgang ({percent}). Ältere Verläufe werden automatisch komprimiert, sobald er sich füllt.",
+    "description": "Context meter tooltip (window known); keep {used} {limit} {percent} literal"
+  },
+  "cmpContextMeterHintTokens": {
+    "message": "Kontext: {used} Tokens im letzten Durchgang. Ältere Verläufe werden automatisch komprimiert, sobald er sich füllt.",
+    "description": "Context meter tooltip (window unknown); keep {used} literal"
+  },
   "optCategoryAuto": {
     "message": "Auto",
     "description": "Model group: automatic"

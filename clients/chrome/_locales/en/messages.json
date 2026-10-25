@@ -727,6 +727,14 @@
     "message": "Off — the model answers directly. Turn on for a reasoning pass before the answer.",
     "description": "Thinking off"
   },
+  "cmpContextMeterHint": {
+    "message": "Context: {used} of {limit} tokens on the last turn ({percent}). Older history is auto-compacted as it fills.",
+    "description": "Context meter tooltip (window known); keep {used} {limit} {percent} literal"
+  },
+  "cmpContextMeterHintTokens": {
+    "message": "Context: {used} tokens on the last turn. Older history is auto-compacted as it fills.",
+    "description": "Context meter tooltip (window unknown); keep {used} literal"
+  },
   "optCategoryAuto": {
     "message": "Auto",
     "description": "Model group: automatic"

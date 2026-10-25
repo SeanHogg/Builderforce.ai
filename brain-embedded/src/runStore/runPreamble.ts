@@ -28,7 +28,8 @@ import { ReadCoverage } from '../readCoverage';
 import { RunKnowledgeRecorder, type RunKnowledgeLog } from '@builderforce/agent-tools';
 import { FailureTally, WriteLedger } from '@builderforce/run-guards';
 import { PlaceholderLedger } from '../completionGuard';
-import { HISTORY_TOKEN_BUDGET } from '../workingTranscript';
+import { HISTORY_TOKEN_BUDGET } from '@seanhogg/builderforce-memory/working';
+import { recordTranscriptAnchors } from './runFoldMarker';
 import { createRunWindowFit } from '../windowFit/runWindowFit';
 import type { RunCell } from './runCell';
 import { nowIso, pushTrace } from './runCells';
@@ -63,6 +64,8 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
   // The previous run's per-turn block goes back off its user message BEFORE anything
   // here reads the history (recall query, follow-up test, routing query) — see `turnContext`.
   restoreTurnContext(c);
+  // Which persisted messages the transcript holds — what a fold's durable marker keeps from.
+  recordTranscriptAnchors(c, req);
   // Volatile, per-run blocks: kept out of the system prompt when the lever is on, so
   // the prompt prefix is byte-identical across runs of a chat and caches.
   const stablePrefix = stablePrefixOn();

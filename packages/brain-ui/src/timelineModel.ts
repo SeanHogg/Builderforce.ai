@@ -9,131 +9,20 @@
  * verbatim across surfaces.
  */
 
-import { isStepMessage, parseChatActivity, parseStepMessage, stepSig, type BrainMessage, type ChatActivity, type BrainTraceEvent, type ChatInputAttachment, type EvermindRecallItem, type EvermindLearnTarget, type PersistedStep } from '@seanhogg/builderforce-brain-embedded';
+import { stepSig, type BrainMessage, type BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import { answerTextOf } from '@builderforce/agent-loop';
-import { modelMoveOf, type ModelMove } from './timelineModelMoves';
+import { modelMoveOf } from './timelineModelMoves';
+import { messageNode, ORDER, traceNode, TRACE_RANK, withoutCoveredFolds, type TimelineNode } from './timelineNodes';
 
-export interface TimelineImage {
-  url: string;
-  name?: string;
-}
-
-/** Why a turn did not feed the project Evermind (mirrors the api's `BrainLearnSkipReason`). */
-export type BrainLearnSkipReason = 'not-attached' | 'not-seeded' | 'frozen';
-
-const LEARN_SKIP_REASONS: readonly string[] = ['not-attached', 'not-seeded', 'frozen'];
-
-function isLearnSkipReason(v: unknown): v is BrainLearnSkipReason {
-  return typeof v === 'string' && LEARN_SKIP_REASONS.includes(v);
-}
-
-export type TimelineNode =
-  | { key: string; kind: 'user'; ts: number; order: number; message: BrainMessage; text: string; images: TimelineImage[] }
-  | { key: string; kind: 'assistant'; ts: number; order: number; message: BrainMessage; text: string }
-  // A run milestone / agent dispatch: the RUNTIME narrating itself, not the model
-  // talking. Carries the structured facts so the renderer composes the sentence in the
-  // reader's language rather than showing the server's English one.
-  | { key: string; kind: 'activity'; ts: number; order: number; message: BrainMessage; activity: ChatActivity; fallbackText: string }
-  | { key: string; kind: 'thinking'; ts: number; order: number; durationMs?: number; step: number }
-  | { key: string; kind: 'tool'; ts: number; order: number; label: string; args: unknown; result: unknown; isError: boolean; durationMs?: number }
-  | { key: string; kind: 'error'; ts: number; order: number; label: string; message: string }
-  // Project-Evermind memory steps — recall (before answering), learn + reconcile (after).
-  | { key: string; kind: 'recall'; ts: number; order: number; version: number; count: number; items: EvermindRecallItem[] }
-  // A memory-first ANSWER: the model was skipped and memory replied. Not a recall — it
-  // grounded nothing and carries no memories, so it must not render as "Recalled 0
-  // memories from Evermind v0". `version` is set only when Evermind generated it.
-  | { key: string; kind: 'memoryAnswer'; ts: number; order: number; source: 'qa-cache' | 'evermind'; version: number | null }
-  | { key: string; kind: 'learn'; ts: number; order: number; version: number; skipped?: BrainLearnSkipReason; targets?: EvermindLearnTarget[] }
-  | { key: string; kind: 'reconcile'; ts: number; order: number; version: number; count: number }
-  // The run moved models — its transcript re-packed for the next model's window, or a
-  // local-first turn that fell over to another model (`timelineModelMoves.ts`).
-  | { key: string; kind: 'modelMove'; ts: number; order: number; move: ModelMove }
-  | { key: string; kind: 'streaming'; ts: number; order: number; text: string };
+// The node shapes live with their derivation (`timelineNodes.ts`); re-exported unchanged.
+export { attachmentsOf } from './timelineNodes';
+export type { BrainLearnSkipReason, TimelineImage, TimelineNode } from './timelineNodes';
 
 export interface BuildTimelineInput {
   messages: BrainMessage[];
   trace: BrainTraceEvent[];
   streamingText: string;
   isRunning: boolean;
-}
-
-/** Same-timestamp tie-break so a turn reads recall → thinking → narration → tools
- *  → learn → reconcile → error.
- *
- *  This rank breaks ties ACROSS the two sources only (a message against a trace
- *  step). It must never re-rank the trace against ITSELF — see {@link TRACE_RANK}. */
-const ORDER: Record<TimelineNode['kind'], number> = {
-  user: 0,
-  recall: 1,
-  memoryAnswer: 1,
-  thinking: 2,
-  assistant: 3,
-  // An activity line reports what happened AFTER the turn that triggered it, so it sorts
-  // with the tool steps rather than ahead of the narration.
-  activity: 4,
-  tool: 4,
-  modelMove: 4,
-  learn: 5,
-  reconcile: 6,
-  error: 7,
-  streaming: 8,
-};
-
-/**
- * The rank EVERY trace-derived node sorts at, whatever its kind.
- *
- * The trace is a SEQUENCE, not a bag: the run emitted those events in an order the
- * array already holds. Ranking them against each other by kind therefore destroys
- * real information, and did — a reopened chat used to rehydrate its trace from a
- * since-retired store whose rows were written in ONE batch insert at run end and so
- * all carried the SAME `created_at` (any trace whose stamps tie hits the same case). Every timestamp tied, the kind rank became the
- * only discriminator and regrouped the run into "every Thought, then every tool call"
- * instead of the interleaving that actually happened. (A live run hid this: its events
- * carry distinct wall-clock stamps, which is why sending one new message appeared to
- * "fix" the order.)
- *
- * Collapsing the trace to a single rank keeps the cross-source intent — a step still
- * sorts after the user turn and the narration that share its instant — while leaving
- * the trace's own order to the trace. It is also what makes the comparator a TOTAL
- * order: ranking within one stream by kind and across streams by position is
- * intransitive (tool-before-thinking in the trace, with an assistant message ranked
- * between them, is a cycle), and an intransitive comparator has no defined result.
- */
-const TRACE_RANK = ORDER.tool;
-
-function parseTs(iso: string | undefined, fallback: number): number {
-  if (!iso) return fallback;
-  const t = Date.parse(iso);
-  return Number.isFinite(t) ? t : fallback;
-}
-
-/** Pull the attachment list a message stored in its metadata JSON (best-effort). */
-export function attachmentsOf(message: BrainMessage): ChatInputAttachment[] {
-  if (!message.metadata) return [];
-  try {
-    const meta = JSON.parse(message.metadata) as { attachments?: ChatInputAttachment[] };
-    return Array.isArray(meta.attachments) ? meta.attachments : [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Strip the trailing `[Attached: name](url)` markdown links a sent message
- * carries for its IMAGE attachments — those render as image bubbles instead, so
- * showing the link too is redundant. Non-image attachment links are kept.
- */
-function stripImageRefs(text: string, imageNames: Set<string>): string {
-  if (imageNames.size === 0) return text;
-  return text
-    .split('\n')
-    .filter((line) => {
-      const m = line.match(/^\[Attached:\s*(.+?)\]\((.*)\)\s*$/);
-      return !(m && imageNames.has(m[1].trim()));
-    })
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
 }
 
 /**
@@ -147,45 +36,6 @@ export function buildTimeline(input: BuildTimelineInput): TimelineNode[] {
   const streaming = streamingNode(input.streamingText, input.isRunning);
   if (streaming) nodes.push(streaming);
   return nodes;
-}
-
-/** Build the timeline node for a tool/memory step (shared by the trace and the
- *  persisted-message paths). Returns null for a category that isn't a step node. */
-function stepNode(step: PersistedStep, ts: number, key: string): TimelineNode | null {
-  switch (step.category) {
-    case 'tool':
-      return { key, kind: 'tool', ts, order: ORDER.tool, label: step.label, args: step.args, result: step.result, isError: !!step.isError, durationMs: step.durationMs };
-    case 'error':
-      return { key, kind: 'error', ts, order: ORDER.error, label: step.label, message: typeof step.result === 'string' ? step.result : JSON.stringify(step.result ?? '') };
-    case 'recall': {
-      const r = (step.result ?? {}) as { count?: number; version?: number; items?: EvermindRecallItem[]; skippedLlm?: boolean; source?: string };
-      // The memory-first answer shares the `recall` category (it IS memory) but reports
-      // an answer, not recalled items — see the run loop's `memory.answer` /
-      // `evermind.answer` step.
-      if (r.skippedLlm === true || step.label === 'memory.answer' || step.label === 'evermind.answer') {
-        const source = r.source === 'evermind' || step.label === 'evermind.answer' ? 'evermind' : 'qa-cache';
-        return { key, kind: 'memoryAnswer', ts, order: ORDER.memoryAnswer, source, version: typeof r.version === 'number' && r.version > 0 ? r.version : null };
-      }
-      return { key, kind: 'recall', ts, order: ORDER.recall, version: typeof r.version === 'number' ? r.version : 0, count: typeof r.count === 'number' ? r.count : (Array.isArray(r.items) ? r.items.length : 0), items: Array.isArray(r.items) ? r.items : [] };
-    }
-    case 'learn': {
-      const r = (step.result ?? {}) as { version?: number; skipped?: boolean; reason?: string; targets?: EvermindLearnTarget[] };
-      const skipped = r.skipped && isLearnSkipReason(r.reason) ? r.reason : undefined;
-      const targets = Array.isArray(r.targets) ? r.targets : undefined;
-      return { key, kind: 'learn', ts, order: ORDER.learn, version: typeof r.version === 'number' ? r.version : 0, ...(skipped ? { skipped } : {}), ...(targets ? { targets } : {}) };
-    }
-    case 'reconcile': {
-      const r = (step.result ?? {}) as { count?: number; version?: number };
-      return { key, kind: 'reconcile', ts, order: ORDER.reconcile, version: typeof r.version === 'number' ? r.version : 0, count: typeof r.count === 'number' ? r.count : 0 };
-    }
-    case 'message': {
-      // Narration is the durable assistant message's to render; only a MODEL MOVE is a step.
-      const move = modelMoveOf(step.label, step.args);
-      return move ? { key, kind: 'modelMove', ts, order: ORDER.modelMove, move } : null;
-    }
-    default:
-      return null;
-  }
 }
 
 /**
@@ -210,82 +60,22 @@ export function buildSettledTimeline(messages: BrainMessage[], trace: BrainTrace
   }
 
   messages.forEach((message, i) => {
-    const ts = parseTs(message.createdAt, i);
-    if (message.role === 'user') {
-      const atts = attachmentsOf(message);
-      const images: TimelineImage[] = atts
-        .filter((a) => a.imageUrl)
-        .map((a) => ({ url: a.imageUrl as string, name: a.name }));
-      const imageNames = new Set(images.map((im) => im.name).filter((n): n is string => !!n));
-      nodes.push({
-        key: `msg-${message.id}`,
-        kind: 'user',
-        ts,
-        order: ORDER.user,
-        message,
-        text: stripImageRefs(message.content, imageNames),
-        images,
-      });
-    } else if (isStepMessage(message)) {
-      // A durable tool/memory STEP row — reconstruct its timeline node so it survives
-      // a reload. Skip when the live trace already carries this exact step (dedup), or
-      // when the metadata isn't a step (never render a tool row as an assistant bubble).
-      const parsed = parseStepMessage(message.metadata);
-      if (!parsed) return;
-      if (traceStepSigs.has(stepSig(parsed.step.category, parsed.step.label, parsed.tsIso))) return;
-      const node = stepNode(parsed.step, parseTs(parsed.tsIso, ts), `msg-${message.id}`);
-      if (node) nodes.push(node);
-    } else {
-      // A run milestone / dispatch is an ACTIVITY line, never an assistant bubble — the
-      // runtime said it, not the model, and the reader needs to be able to tell.
-      const activity = parseChatActivity(message);
-      if (activity) {
-        nodes.push({
-          key: `msg-${message.id}`,
-          kind: 'activity',
-          ts,
-          order: ORDER.activity,
-          message,
-          activity,
-          // Pre-structured rows carry only the server's English sentence; showing it
-          // beats showing nothing, so it rides along as the fallback.
-          fallbackText: message.content,
-        });
-        return;
-      }
-      nodes.push({
-        key: `msg-${message.id}`,
-        kind: 'assistant',
-        ts,
-        order: ORDER.assistant,
-        message,
-        text: message.content,
-      });
-    }
+    // Derived once per message (`timelineNodes.ts`); a persisted step the live trace
+    // already carries is dropped here, because that depends on the trace.
+    const { node, stepSig: sig } = messageNode(message, i);
+    if (node && !(sig && traceStepSigs.has(sig))) nodes.push(node);
   });
 
   // Everything pushed from here on is trace-derived, and sorts at TRACE_RANK in the
   // trace's OWN order rather than by kind.
   const messageNodeCount = nodes.length;
 
+  // Derived once per trace event (`timelineNodes.ts`), so a live run's rows stay memoized.
   let step = 0;
   trace.forEach((ev, i) => {
-    const ts = parseTs(ev.ts, 1e15 + i); // unparseable trace sorts after dated content
-    if (ev.category === 'llm') {
-      // "Thought for Xs" = time-to-first-token when the loop captured it (the
-      // latency before the model started answering), falling back to the full
-      // turn duration for older traces that predate ttftMs.
-      nodes.push({ key: `trace-${i}`, kind: 'thinking', ts, order: ORDER.thinking, durationMs: ev.ttftMs ?? ev.durationMs, step: step++ });
-    } else {
-      // 'message' trace events are dropped (the durable assistant message already
-      // renders that text) — except a model move, which `stepNode` turns into its step.
-      const node = stepNode(
-        { category: ev.category, label: ev.label, args: ev.args, result: ev.result, isError: ev.isError, durationMs: ev.durationMs },
-        ts,
-        `trace-${i}`,
-      );
-      if (node) nodes.push(node);
-    }
+    const node = traceNode(ev, i, step);
+    if (ev.category === 'llm') step++;
+    if (node) nodes.push(node);
   });
 
   // Chronological sort on the tuple (timestamp, rank, position). `position` is the
@@ -297,10 +87,12 @@ export function buildSettledTimeline(messages: BrainMessage[], trace: BrainTrace
   // step, so a tie between two trace steps falls through to their run order instead of
   // being regrouped by kind (see TRACE_RANK).
   const rank = (n: TimelineNode, i: number): number => (i < messageNodeCount ? n.order : TRACE_RANK);
-  return nodes
+  const sorted = nodes
     .map((node, i) => ({ node, i, rank: rank(node, i) }))
     .sort((a, b) => a.node.ts - b.node.ts || a.rank - b.rank || a.i - b.i)
     .map((e) => e.node);
+  // A fold shows once: from its durable marker when one was saved, else from its step.
+  return withoutCoveredFolds(sorted);
 }
 
 /**

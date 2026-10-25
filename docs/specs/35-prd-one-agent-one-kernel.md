@@ -102,7 +102,12 @@ VS Code adapter ─┐   Rovr/Web adapter ─┐   On-prem adapter ─┐   Clou
    uses: packages/agent-tools · @seanhogg/builderforce-memory (/working, /handoff) · run-policy · model-router · cost-levers · agent-stall · run-guards
 ```
 
-- `packages/agent-run` is the **only** place run policy exists, and the only importer of `runAgentLoop`.
+- **Split by layer (operator decision, 2026-10-25).** Pure brain logic does not live in `packages/agent-run`. It lives in tested builderforce-memory packages, and `agent-run` imports it:
+  - **`@seanhogg/builderforce-memory`** (`/working`, `/handoff`): the context fold and compaction (`buildWorkingTranscript`, budgets, tail sizing), the summarizer prompt, consolidation markers, and window fit.
+  - **`@seanhogg/builderforce-memory-engine`**: the stall, finish and verify decision functions.
+  - **`agent-run`** keeps only the stateful run store, the ports and the adapters' composition. A WS2 policy module is a thin binding over these pure functions, never a second copy.
+  - **First slice landed 2026-10-25.** The fold and the consolidation markers moved out of `brain-embedded/src/workingTranscript.ts` and `consolidation.ts`.
+- `packages/agent-run` is the **only** place run policy is composed, and the only importer of `runAgentLoop`.
 - An adapter only **builds ports**. It has no loop, no policy, no branches on behaviour, and stays under ~300 lines.
 - Proposed adapter homes:
   - `clients/vscode/src/run/vscodeAdapter.ts`

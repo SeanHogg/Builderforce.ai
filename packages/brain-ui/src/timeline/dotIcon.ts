@@ -19,6 +19,8 @@ export function dotIcon(kind: TimelineNode['kind'], isError?: boolean): string {
     case 'learn':
     case 'reconcile':
       return '🧠';
+    case 'compacted':
+      return '⇊';
     default:
       return '•';
   }

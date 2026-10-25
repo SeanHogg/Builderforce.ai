@@ -346,7 +346,10 @@ export { installStepDurability, type StepDurability, type StepOutgoingMessage } 
 export { installIndexedDbStepDurability, type IndexedDbStepDurabilityOptions } from './indexedDbStepDurability';
 // The model-visible transcript a run continues from (history minus step rows and stopped
 // turns) — shared by the React hook and every non-React host that starts a run on history.
-export { transcriptSeedFrom } from './transcriptSeed';
+export { transcriptSeedOf } from './transcriptSeed';
+// The ONE transcript summarizer bound to a run stream — folds, hand-off notes, Consolidate.
+export { streamSummaryCompletion } from './transcriptSummarizer';
+export type { SummaryStreamFn } from './transcriptSummarizer';
 
 // Execution triage — capture the Brain run (LLM/tool/error trace) as a report.
 export {
@@ -425,7 +428,7 @@ export { trimToolResult, MAX_TOOL_RESULT_CHARS, READ_FILE_RESULT_CHARS } from '.
 export type { TrimmedToolResult, TrimOptions } from './toolResultBudget';
 // The working transcript's token budget — the figure a triage reader needs to know a
 // 90k-token prompt is the design working, not a window being outgrown.
-export { HISTORY_TOKEN_BUDGET } from './workingTranscript';
+export { HISTORY_TOKEN_BUDGET } from '@seanhogg/builderforce-memory/working';
 // A stream that goes silent must END, not hang until the user presses Stop.
 export { readWithIdleWatchdog, StreamIdleError, STREAM_IDLE_MS } from './streamIdleWatchdog';
 export type { IdleWatchdogOptions, IdleWatchdogReader } from './streamIdleWatchdog';
@@ -450,6 +453,10 @@ export {
 export type { ChatActivity, RunMilestoneActivity, AgentDispatchActivity, ChatActivityLabels, RunMilestonePhase } from './chatActivity';
 export { stepSig, parseStepMessage, traceWithPersistedSteps } from './persistedSteps';
 export type { PersistedStep } from './persistedSteps';
+// The last turn's context fill — the composer's context meter (`conv.contextUsage`; the
+// canvas reads its own run's messages + trace with `contextUsageOf`).
+export { contextUsageOf } from './contextUsage';
+export type { ContextUsage } from './contextUsage';
 
 // Deployed API version (session-cached) — the "which build produced this capture?"
 // half of the diagnostics version stamp. Each surface supplies its own /health read.
@@ -581,16 +588,19 @@ export type { ChatMode, ChatRosterAgent, ChatWorkDirectiveOptions } from './chat
 // Landing-page → auth → replay handoff
 export { savePendingPrompt, takePendingPrompt } from './pendingPrompt';
 
-// Chat consolidation markers (compress a long chat into a summary base context)
+// Chat consolidation markers (compress a long chat into a summary base context) — the
+// memory package's, re-exported so every host reads them from one place.
 export {
   CONSOLIDATION_META,
   CONSOLIDATION_MARKER_PREFIX,
   consolidationMetadata,
   consolidationMarkerContent,
+  consolidationMarkerOf,
   isConsolidationMarker,
   lastConsolidationIndex,
   scopeToConsolidation,
-} from './consolidation';
+} from '@seanhogg/builderforce-memory/working';
+export type { ConsolidationMarkerMeta } from '@seanhogg/builderforce-memory/working';
 
 // Directed messages (address a chat turn to a participant instead of the BRAIN)
 export {
@@ -688,6 +698,7 @@ export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment, Everm
 export { serverChatIdOf } from './types';
 export { routingQueryForTurn, turnOptimizationDirective } from './turnOptimization';
 export { STEP_MESSAGE_ROLE, isStepMessage, attachEvermindLearn, formatEvermindLearnStep } from './types';
+export { isModelReply } from './modelReply';
 
 // "Copy diagnostics" — pure serializer for the chat's identity + Evermind wiring state
 export { formatChatDiagnostics, classifyModelFunding, allowanceState } from './chatDiagnostics';

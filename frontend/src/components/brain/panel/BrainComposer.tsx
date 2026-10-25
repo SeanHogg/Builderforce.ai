@@ -145,6 +145,7 @@ export function BrainComposer() {
       ticketables={ticketables}
       onTicketTag={handleTicketTag}
       focusToken={composerFocusToken}
+      contextUsage={conv.contextUsage}
       contextControls={<>
         {/* What the next request is about, when elements were picked in the preview. */}
         <PreviewPickChips />

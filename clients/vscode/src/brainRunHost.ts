@@ -159,7 +159,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     settingUp.add(key);
     // What a child derives from and a wake restarts with; the turn's own seed, research and
     // message are never reused (a wake passes the next turn), so they are not kept.
-    const { seed: _seed, priorResearch: _prior, userTurn: _turn, ...kept } = p;
+    const { seed: _seed, priorResearch: _prior, userTurn: _turn, seedIds: _ids, userTurnMessageId: _turnId, ...kept } = p;
     specs.set(key, kept);
     try {
       await runTurn(p);
@@ -294,6 +294,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         ...(p.seed ? { seed: p.seed } : {}),
         ...(p.priorResearch ? { priorResearch: p.priorResearch } : {}),
         ...(p.userTurn != null ? { userTurn: p.userTurn } : {}),
+        ...(p.seedIds ? { seedIds: p.seedIds } : {}),
+        ...(p.userTurnMessageId != null ? { userTurnMessageId: p.userTurnMessageId } : {}),
         projectId: p.projectId ?? null,
         ...(p.chatMode ? { chatMode: p.chatMode } : {}),
         ...(ports.reportOutcome ? { reportOutcome: (o: BrainRunOutcome) => ports.reportOutcome!(o) } : {}),

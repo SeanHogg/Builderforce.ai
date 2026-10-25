@@ -21,6 +21,7 @@ import { brainChats, brainChatMessages } from '../../infrastructure/database/sch
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveEvermindTargets, resolveEffectiveEvermindProjectId, isLiveLearnTarget, dispatchProjectEvermindLearnText, provisionDefaultProjectEvermind } from '../llm/projectEvermind';
 import { isMidTurnMetadata, stripReasoningScratchpad, stripRunNarration } from '@builderforce/agent-loop';
+import { isConsolidationMarker } from '@seanhogg/builderforce-memory/working';
 import { EVERMIND_MIN_TEACH_CHARS } from '@seanhogg/builderforce-memory/evermind';
 
 /** A persisted turn row; `metadata` is the stored JSON string (mid-turn rows carry `midTurn`). */
@@ -276,9 +277,11 @@ export async function learnFromPersistedTurns(
   deps: BrainLearnGateDeps = DEFAULT_GATE_DEPS,
 ): Promise<BrainLearnOutcome> {
   // A run's mid-turn blocks (the text before its tool calls) are persisted through this
-  // same path and MARKED by their writer; they are never an answer to learn from. A
-  // batch of only those reads as `too-short`, which no surface renders.
-  const teachable = inserted.filter((m) => !isMidTurnMetadata(m.metadata));
+  // same path and MARKED by their writer; they are never an answer to learn from. Nor is
+  // a consolidation marker — a "Consolidate" summary or a run's auto-compaction note is
+  // a compressed transcript, not something the model answered. A batch of only those
+  // reads as `too-short`, which no surface renders.
+  const teachable = inserted.filter((m) => !isMidTurnMetadata(m.metadata) && !isConsolidationMarker(m));
   const gate: BrainLearnGate = await evaluateBrainLearnGate(env, db, chatId, tenantId, teachable, deps).catch(
     () => ({ outcome: { learned: false, version: 0, reason: null }, projectId: null, contributedProjectIds: [], assistant: null }),
   );

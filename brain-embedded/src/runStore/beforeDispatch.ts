@@ -19,7 +19,7 @@ import { undelegatedRequestNudge } from '../delegationRequest';
 import { visitTarget } from '../runActivity';
 import { repeatedWriteNote, revisitAdvisory } from '@builderforce/run-guards';
 import { requestedReadWindow, trimToolResult } from '../toolResultBudget';
-import { stillInWorkingContext } from '../workingTranscript';
+import { stillInWorkingContext } from '@seanhogg/builderforce-memory/working';
 import { emit, nowIso, nowMs, pushTrace, recordAppended } from './runCells';
 import { requestRunConfirm } from './runControl';
 import { attachDeltaToRunTicket, autoLinkCreatedItem } from './runBackstops';

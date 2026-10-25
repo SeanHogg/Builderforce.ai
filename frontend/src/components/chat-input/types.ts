@@ -1,7 +1,7 @@
 import type { ChatModeVocabulary } from '@/lib/brain/useChatModeCopy';
 import type { ReactNode } from 'react';
 import type { ChatModelOptions, ChatModelSelection, ComposerSuggestion, InferenceModeGate, ModelIdentityContext, QueuedTurns } from '@seanhogg/builderforce-brain-ui';
-import type { DirectedRecipient, TicketTag } from '@seanhogg/builderforce-brain-embedded';
+import type { ContextUsage, DirectedRecipient, TicketTag } from '@seanhogg/builderforce-brain-embedded';
 import type { BrainEffort, ChatMode } from '@/lib/brain';
 import type { TemplateEntry } from '@/lib/templates/contract';
 
@@ -170,6 +170,9 @@ export interface ChatInputProps {
   onTicketTag?: (ticket: TicketTag) => void;
   /** Who answers / what is addressed ("Acting as", capability, "To", scope) — they ride in the tool row, after `+` and `/`. Each should self-hide until it has something to say. */
   contextControls?: ReactNode;
+  /** How full the model's context was on the last turn (`conv.contextUsage`) — the
+   *  shared composer's context meter. Omitted ⇒ no meter. */
+  contextUsage?: ContextUsage | null;
   /** Extra rows for the `+` menu — host actions that belong with "add to this turn". */
   addMenuItems?: readonly ComposerAddMenuItem[];
   /** Starting points: a `+` row that opens the catalogue inside the box. */

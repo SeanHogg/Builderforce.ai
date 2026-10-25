@@ -48,6 +48,8 @@ const COMPOSER_KEY: Readonly<Record<string, MessageKey>> = {
   effortThinkingSuffix: 'cmpEffortThinkingSuffix',
   thinkingOnDesc: 'cmpThinkingOnDesc',
   thinkingOffDesc: 'cmpThinkingOffDesc',
+  contextMeterHint: 'cmpContextMeterHint',
+  contextMeterHintTokens: 'cmpContextMeterHintTokens',
 };
 
 const OPTIONS_KEY: Readonly<Record<string, MessageKey>> = {
@@ -114,8 +116,6 @@ const OPTIONS_KEY: Readonly<Record<string, MessageKey>> = {
   inferenceModeAskBody: 'optInferenceModeAskBody',
 };
 
-const PICKER_KEY: Readonly<Record<string, MessageKey>> = {
-  'mention.title': 'mnTitle',
 /** The Status tab's Connected accounts — `conn<Field>` in Rovr's catalogs. */
 const CONNECTIONS_KEY: Readonly<Record<string, MessageKey>> = {
   heading: 'connHeading',
@@ -146,6 +146,8 @@ const CONNECTIONS_KEY: Readonly<Record<string, MessageKey>> = {
   errFailed: 'connErrFailed',
 };
 
+const PICKER_KEY: Readonly<Record<string, MessageKey>> = {
+  'mention.title': 'mnTitle',
   'mention.agent': 'mnAgent',
   'mention.human': 'mnHuman',
   'ticket.title': 'mnTicketTitle',
@@ -170,9 +172,9 @@ export function composerMessageKey(scoped: string, memoryGap: MemoryGap): Messag
       return OPTIONS_KEY[key] ?? (isLocalModelField(key) ? rovrLocalModelKey(key) : undefined);
     case 'status': return STATUS_KEY[key];
     case 'spend': return SPEND_KEY[key];
+    case 'connections': return CONNECTIONS_KEY[key];
     default: return PICKER_KEY[scoped];
   }
-    case 'connections': return CONNECTIONS_KEY[key];
 }
 
 /** Everything `BrainComposer` renders, in the panel's language. */

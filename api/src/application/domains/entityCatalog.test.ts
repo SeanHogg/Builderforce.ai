@@ -332,7 +332,13 @@ describe('the entity catalog', () => {
     //  - `llm_specialist_admissions` (1257) is a GLOBAL CATALOGUE with no `tenant_id`
     //    (adjudicated in scripts/adjudications/tenant-column.mjs) — the catalog registers
     //    into the tenant-scoped `objects` table, so it structurally cannot be entered.
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(47);
+    //
+    // Ceiling moved 47 → 48 (2026-10-25) with `brain_chat_steps` (1276): APPEND-ONLY RUN
+    // TELEMETRY on the operational endpoint (transactional 0023) — one row per Brain run
+    // step, keyed by (chat_id, event_key), no title, no status, read only as a chat's
+    // step timeline. Core's copy is the single-database mirror and stays empty in
+    // production, the same reason the 1217 replay mirrors are exempt.
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(48);
   });
 
   it('declares nothing that no migration creates', () => {

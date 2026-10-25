@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { TimelineNode } from '../timelineModel';
 import { dotIcon } from './dotIcon';
 import type { BrainTimelineLabels } from './labels';
@@ -21,7 +22,7 @@ function MemoryLine({ kind, title, hint }: { kind: TimelineNode['kind']; title: 
   );
 }
 
-export function RecallRow({ node, labels }: { node: Extract<TimelineNode, { kind: 'recall' }>; labels: BrainTimelineLabels }) {
+function RecallRowInner({ node, labels }: { node: Extract<TimelineNode, { kind: 'recall' }>; labels: BrainTimelineLabels }) {
   const title = labels.recallTitle
     .replace('{count}', String(node.count))
     .replace('{version}', String(node.version));
@@ -52,14 +53,14 @@ export function RecallRow({ node, labels }: { node: Extract<TimelineNode, { kind
   );
 }
 
-export function MemoryAnswerRow({ node, labels }: { node: Extract<TimelineNode, { kind: 'memoryAnswer' }>; labels: BrainTimelineLabels }) {
+function MemoryAnswerRowInner({ node, labels }: { node: Extract<TimelineNode, { kind: 'memoryAnswer' }>; labels: BrainTimelineLabels }) {
   const title = node.source === 'evermind' && node.version != null
     ? labels.memoryAnswerEvermind.replace('{version}', String(node.version))
     : labels.memoryAnswerCache;
   return <MemoryLine kind="memoryAnswer" title={title} hint={labels.memoryAnswerHint} />;
 }
 
-export function LearnRow({ node, labels }: { node: Extract<TimelineNode, { kind: 'learn' }>; labels: BrainTimelineLabels }) {
+function LearnRowInner({ node, labels }: { node: Extract<TimelineNode, { kind: 'learn' }>; labels: BrainTimelineLabels }) {
   // Multi-target: a project can fan out to MANY Everminds (its own head + its IDE
   // builds). Name EACH by id + version so a fan-out is triageable — the same detail
   // the native chat chip shows. Falls back to the single-line phrasing below when
@@ -91,9 +92,47 @@ export function LearnRow({ node, labels }: { node: Extract<TimelineNode, { kind:
   return <MemoryLine kind="learn" title={title} hint={hint} />;
 }
 
-export function ReconcileRow({ node, labels }: { node: Extract<TimelineNode, { kind: 'reconcile' }>; labels: BrainTimelineLabels }) {
+function ReconcileRowInner({ node, labels }: { node: Extract<TimelineNode, { kind: 'reconcile' }>; labels: BrainTimelineLabels }) {
   const title = labels.reconcileTitle
     .replace('{count}', String(node.count))
     .replace('{version}', String(node.version));
   return <MemoryLine kind="reconcile" title={title} hint={labels.reconcileHint} />;
 }
+
+/** The run auto-compacted its working context — the older steps live on as the memory
+ *  note it continues from, which the row expands to show. */
+function CompactedRowInner({ node, labels }: { node: Extract<TimelineNode, { kind: 'compacted' }>; labels: BrainTimelineLabels }) {
+  const title = labels.contextCompacted.replace('{count}', String(node.count));
+  return (
+    <li className="bf-tl__item bf-tl__item--memory">
+      <span className="bf-tl__gutter">
+        <span className="bf-tl__dot bf-tl__dot--muted">{dotIcon('compacted')}</span>
+      </span>
+      <div className="bf-tl__body">
+        {node.note ? (
+          <details className="bf-tl__tool bf-tl__memory">
+            <summary className="bf-tl__tool-head" title={labels.contextCompactedHint}>
+              <span className="bf-tl__tool-name">{title}</span>
+              <span className="bf-tl__tool-caret" aria-hidden>▸</span>
+            </summary>
+            <div className="bf-tl__tool-body">
+              <p className="bf-tl__memory-note">{node.note}</p>
+            </div>
+          </details>
+        ) : (
+          // Known only from the run's step: there is no saved note to expand.
+          <div className="bf-tl__tool-head bf-tl__memory" title={labels.contextCompactedHint}>
+            <span className="bf-tl__tool-name">{title}</span>
+          </div>
+        )}
+      </div>
+    </li>
+  );
+}
+
+// Memoized: a streamed token re-renders the transcript, never the rows it did not touch.
+export const RecallRow = memo(RecallRowInner);
+export const MemoryAnswerRow = memo(MemoryAnswerRowInner);
+export const LearnRow = memo(LearnRowInner);
+export const ReconcileRow = memo(ReconcileRowInner);
+export const CompactedRow = memo(CompactedRowInner);

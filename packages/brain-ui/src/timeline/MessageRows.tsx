@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type React from 'react';
 import {
   isStoppedTurn,
@@ -21,7 +22,7 @@ import { ProvenanceChip } from './ProvenanceChip';
 export type RenderMessageText = (msg: BrainMessage, role: 'user' | 'assistant', text: string) => React.ReactNode;
 
 /** A user turn: author (or "You"), who it was addressed to, images, then the text. */
-export function UserRow({
+function UserRowInner({
   node,
   labels,
   focusClass,
@@ -69,7 +70,7 @@ export function UserRow({
  * An assistant turn. A reasoning-only turn collapses to one "Thought" line; anything
  * else renders as a full reply with its ask-user card, provenance chip and actions.
  */
-export function AssistantRow({
+function AssistantRowInner({
   node,
   labels,
   focusClass,
@@ -196,3 +197,7 @@ function OriginTag({ message, owner, labels }: { message: BrainMessage; owner: b
   }
   return owner ? <span className="bf-tl__origin">{labels.ownerTag}</span> : null;
 }
+
+// Memoized: a streamed token re-renders the transcript, never the rows it did not touch.
+export const UserRow = memo(UserRowInner);
+export const AssistantRow = memo(AssistantRowInner);

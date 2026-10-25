@@ -609,6 +609,14 @@
     "message": "Desactivado: el modelo responde directamente. Actívalo para que razone antes de responder.",
     "description": "Thinking off"
   },
+  "cmpContextMeterHint": {
+    "message": "Contexto: {used} de {limit} tokens en el último turno ({percent}). El historial anterior se compacta automáticamente a medida que se llena.",
+    "description": "Context meter tooltip (window known); keep {used} {limit} {percent} literal"
+  },
+  "cmpContextMeterHintTokens": {
+    "message": "Contexto: {used} tokens en el último turno. El historial anterior se compacta automáticamente a medida que se llena.",
+    "description": "Context meter tooltip (window unknown); keep {used} literal"
+  },
   "optCategoryAuto": {
     "message": "Auto",
     "description": "Model group: automatic"

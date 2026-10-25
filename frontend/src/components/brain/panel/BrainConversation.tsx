@@ -155,6 +155,7 @@ export function BrainConversation() {
         thread={(
           <div className="bs-messages" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <BrainTimeline
+              conversationKey={chats.activeChatId}
               messages={conv.messages}
               trace={timelineTrace}
               streamingText={conv.sending ? conv.streamingText : ''}

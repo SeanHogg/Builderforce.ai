@@ -75,6 +75,11 @@ export function brainChatLabels(): Record<string, string> {
     "tl.modelMoveHowElided": t("left out"),
     "tl.modelMoveLocalFallback": t("{from} on this device could not take this turn — {to} answered it"),
     "tl.modelMoveHint": t("The run moved to another model, so the conversation was fitted to that model’s context window."),
+    "tl.contextCompacted": t("Context auto-compacted: older steps summarized into a memory ({count})"),
+    "tl.contextCompactedHint": t("The conversation outgrew its working budget, so the older part was summarized into a memory note the model keeps working from. Nothing is deleted from this transcript."),
+    "tl.showEarlier": t("Show earlier steps ({count})"),
+    "tl.showNewer": t("Show newer steps ({count})"),
+    "tl.jumpToLatest": t("Jump to latest"),
     // Run milestones + agent dispatch render as system ACTIVITY lines in the shared
     // transcript, composed client-side from each message's structured metadata. The
     // server records the FACTS in one language; these templates are what make the line
@@ -214,6 +219,8 @@ export function brainChatLabels(): Record<string, string> {
     // Thinking toggle description — `{budget}` is the current effort's thinking budget.
     "app.thinkingOnDesc": t("The model reasons before answering, with a {budget}-token thinking budget at this effort. Slower, better on hard problems."),
     "app.thinkingOffDesc": t("Off — the model answers directly. Turn on for a reasoning pass before the answer."),
+    "app.contextMeterHint": t("Context: {used} of {limit} tokens on the last turn ({percent}). Older history is auto-compacted as it fills."),
+    "app.contextMeterHintTokens": t("Context: {used} tokens on the last turn. Older history is auto-compacted as it fills."),
     // The `/` menu's own chrome. The model ROWS' copy (categories, funding lines,
     // Auto/Pool/Evermind naming) is not here: it is shared with the host's
     // `Change model` QuickPick and travels as `init.modelLabels`

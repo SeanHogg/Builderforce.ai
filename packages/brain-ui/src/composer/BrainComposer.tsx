@@ -34,6 +34,8 @@ import { ComposerTrailingButton } from './ComposerTrailingButton';
 import { AttachmentChips, type ComposerAttachment } from './AttachmentChips';
 import { composerOptionGroups, type ComposerOptions } from './composerOptions';
 import { SuggestionRow, type ComposerSuggestion } from './SuggestionRow';
+import { ContextMeter } from './ContextMeter';
+import type { ContextUsage } from '@seanhogg/builderforce-brain-embedded';
 import { composerLabels, type ComposerLabels } from './labels';
 
 export interface BrainComposerLabels {
@@ -41,9 +43,9 @@ export interface BrainComposerLabels {
   options?: Partial<PromptOptionsLabels>;
   status?: Partial<WorkStatusLabels>;
   spend?: Partial<SpendLabels>;
+  connections?: Partial<ConnectionsLabels>;
   mention?: UseMentionAutocompleteOptions['labels'];
   ticket?: UseTicketAutocompleteOptions['labels'];
-  connections?: Partial<ConnectionsLabels>;
 }
 
 export interface BrainComposerProps {
@@ -75,11 +77,11 @@ export interface BrainComposerProps {
     projectId: number | null;
     locale?: string;
     onUpgrade?: (target: UpgradeTarget) => void;
-  };
-  onAccountSettings?: () => void;
     /** The workspace's connected provider accounts — shown under the Status tab with Test
      *  and Reconnect. Omit on a surface that cannot open a sign-in page. */
     connections?: ComposerConnections;
+  };
+  onAccountSettings?: () => void;
   attachments?: {
     items: readonly ComposerAttachment[];
     onAdd: (files: File[]) => void;
@@ -99,6 +101,9 @@ export interface BrainComposerProps {
   voice?: boolean;
   /** Who answers / who is addressed — rides the tool row after `+` and `/`. */
   context?: ReactNode;
+  /** How full the model's context was on the last turn (`contextUsageOf`) — the meter
+   *  after `context`. Omitted or null ⇒ no meter. */
+  contextUsage?: ContextUsage | null;
   /** Shown above the text (queued turns, starters). */
   above?: ReactNode;
   /**
@@ -127,7 +132,7 @@ export function BrainComposer(props: BrainComposerProps) {
     value, onChange, onSubmit, running = false, onStop, onQueue, disabled = false, blockedNotice,
     placeholder, ariaLabel, rows = 2, submitOnEnter = true, focusToken, options, account,
     onAccountSettings, attachments, onAddContext, webBrowsing, addMenuItems, mentions, tickets,
-    pickersDisabled = false, voice = false, context, above, suggestions, below, modeGate, labels: labelBundle, className,
+    pickersDisabled = false, voice = false, context, contextUsage, above, suggestions, below, modeGate, labels: labelBundle, className,
   } = props;
   const labels = composerLabels(labelBundle?.composer);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -201,14 +206,14 @@ export function BrainComposer(props: BrainComposerProps) {
       />
     )
     : undefined;
+  const connectionsNode = account?.connections
+    ? <ConnectionsPanel connections={account.connections} labels={labelBundle?.connections} />
+    : null;
   // The Spend tab is named by the breakdown's own "Spent" heading, so no host needs a new string.
   const spendTab = account
     ? {
       label: spendLabels(labelBundle?.spend).spendHeading,
       content: (
-  const connectionsNode = account?.connections
-    ? <ConnectionsPanel connections={account.connections} labels={labelBundle?.connections} />
-    : null;
         <WorkSpendPanel
           request={account.request}
           labels={labelBundle?.spend}
@@ -287,7 +292,7 @@ export function BrainComposer(props: BrainComposerProps) {
             />
           </>
         )}
-        context={context ? <>{context}</> : undefined}
+        context={context || contextUsage ? <>{context}<ContextMeter usage={contextUsage} labels={labels} locale={account?.locale} /></> : undefined}
         primaryAction={(
           <ComposerTrailingButton
             labels={labels}

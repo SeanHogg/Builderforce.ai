@@ -609,6 +609,14 @@
     "message": "关——模型直接作答。开启后会在回答前先推理。",
     "description": "Thinking off"
   },
+  "cmpContextMeterHint": {
+    "message": "上下文：上一轮使用了 {used} / {limit} 个 token（{percent}）。上下文将满时，较早的历史会自动压缩。",
+    "description": "Context meter tooltip (window known); keep {used} {limit} {percent} literal"
+  },
+  "cmpContextMeterHintTokens": {
+    "message": "上下文：上一轮使用了 {used} 个 token。上下文将满时，较早的历史会自动压缩。",
+    "description": "Context meter tooltip (window unknown); keep {used} literal"
+  },
   "optCategoryAuto": {
     "message": "自动",
     "description": "Model group: automatic"

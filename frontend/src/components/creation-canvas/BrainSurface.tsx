@@ -171,6 +171,7 @@ export function BrainSurface({
       thread={tab === 'chat'
         ? <div className={styles.brainDockTimeline} role="log" aria-label={t('brainChatHistory')} tabIndex={0}>
           <BrainTimeline
+            conversationKey={runKey ?? null}
             messages={messages}
             trace={showExecutionDetail ? trace : []}
             streamingText=""

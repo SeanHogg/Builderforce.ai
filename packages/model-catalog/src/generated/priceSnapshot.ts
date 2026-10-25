@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-10-25T07:44:11.445Z";
+export const PRICE_SNAPSHOT_AT = "2026-10-25T15:04:11.443Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
@@ -14,10 +14,10 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "~anthropic/claude-sonnet-latest": [0.000002, 0.00001],
   "~deepseek/deepseek-flash-latest": [2e-8, 0.000001],
   "~deepseek/deepseek-pro-latest": [1.188e-7, 0.000008],
-  "~deepseek/deepseek-v4-flash-latest": [4.22e-8, 1.694e-7],
+  "~deepseek/deepseek-v4-flash-latest": [4.22e-8, 1.763e-7],
   "~google/gemini-flash-latest": [7.5e-7, 0.00000375],
   "~google/gemini-pro-latest": [0.000002, 0.00001],
-  "~moonshotai/kimi-latest": [1.9e-7, 0.00000894],
+  "~moonshotai/kimi-latest": [2.26e-7, 0.000016],
   "~openai/gpt-astra-latest": [0.00001, 0.00005],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [7.5e-7, 0.0000045],
@@ -25,7 +25,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "~openai/gpt-terra-latest": [0.000002, 0.000012],
   "~unbiased/pareto-latest": [8e-7, 0.0000032],
   "~x-ai/grok-latest": [0.000002, 0.000006],
-  "~z-ai/glm-flash-latest": [4.18e-8, 7.7e-8],
+  "~z-ai/glm-flash-latest": [5.13e-8, 7.01e-8],
   "~z-ai/glm-latest": [7.03e-8, 0.0000043843],
   "aion-labs/aion-2.0": [8e-7, 0.0000016],
   "aion-labs/aion-3.0": [0.000003, 0.000006],
@@ -92,7 +92,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "deepseek/deepseek-v3.2": [2.8e-7, 4.2e-7],
   "deepseek/deepseek-v3.2-exp": [2.7e-7, 4.1e-7],
   "deepseek/deepseek-v4-flash": [9.1e-8, 1.82e-7],
-  "deepseek/deepseek-v4-flash-0731": [4.22e-8, 1.694e-7],
+  "deepseek/deepseek-v4-flash-0731": [4.444e-8, 1.3332e-7],
   "deepseek/deepseek-v4-flash-vision-exp": [2.156e-7, 6.468e-7],
   "deepseek/deepseek-v4-pro": [2.088e-7, 4.176e-7],
   "deepseek/deepseek-v4-pro-0813": [6.6e-7, 0.00000198],

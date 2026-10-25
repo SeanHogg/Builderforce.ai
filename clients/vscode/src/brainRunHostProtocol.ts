@@ -30,6 +30,9 @@ export interface WebviewRunStart {
   /** Earlier turns' tool work, as a system-prompt block — see `BrainRunRequest.priorResearch`. */
   priorResearch?: string | null;
   userTurn?: string | ContentPart[];
+  /** The persisted ids behind `seed` and `userTurn` — see `BrainRunRequest.seedIds`. */
+  seedIds?: number[];
+  userTurnMessageId?: number;
   projectId?: number | null;
   chatMode?: ChatMode;
   /** The panel's Auto-mode switch at start; `setAutoApprove` follows it live. */

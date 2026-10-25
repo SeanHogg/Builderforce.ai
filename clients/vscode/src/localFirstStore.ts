@@ -28,6 +28,7 @@ import {
 } from "@seanhogg/builderforce-brain-embedded";
 import { createDurableLocalFirstStore, type DurableLocalFirstStore } from "./durableLocalFirstStore";
 import { chatAccountDestination, chatBindingPort, serverChatSpend } from "./chatAccount";
+import { gatewaySummaryCompletion } from "./chatSummarizer";
 
 /** The durable store over this extension's global storage. */
 export function createVsCodeLocalFirstStore(
@@ -75,6 +76,9 @@ export function localBrainApplication(ctx: vscode.ExtensionContext): LocalApplic
       store,
       deviceId,
       summarizeUnavailable: vscode.l10n.t("Summarizing a chat needs a BuilderForce account. This conversation is only on this machine."),
+      // "Consolidate" / "Fork" summarize through the run's own gateway route.
+      summarize: gatewaySummaryCompletion(ctx.secrets),
+      summarizeFailed: vscode.l10n.t("The chat could not be summarized right now. Try again in a moment."),
       accountDestination: chatAccountDestination,
       serverSpend: serverChatSpend(ctx.secrets),
       bindChat: (chatId) => identity.bind(chatId),

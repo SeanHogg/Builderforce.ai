@@ -96,6 +96,18 @@ export interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels {
   reconcileTitle: string;
   /** Tooltip on the reconcile step. */
   reconcileHint: string;
+  /** Auto-compaction step — the run folded older steps into a memory note to stay
+   *  within the context window. Must contain `{count}`. */
+  contextCompacted: string;
+  /** Tooltip on the auto-compaction step. */
+  contextCompactedHint: string;
+  /** The button above a long transcript that renders the next page of older steps.
+   *  Must contain `{count}`. */
+  showEarlier: string;
+  /** Below a window moved back in time: render the next page of newer steps. `{count}`. */
+  showNewer: string;
+  /** …or go straight back to the newest page. */
+  jumpToLatest: string;
   /**
    * RUN-ACTIVITY line templates (run milestones + agent dispatch). Templates, not
    * sentences: the server records only the FACTS, and each surface composes the line in
@@ -162,6 +174,11 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   learnTargetSkipped: 'Skipped {name} (project #{projectId}) — {reason}',
   reconcileTitle: 'Reconciled {count} learned memories in Evermind v{version}',
   reconcileHint: 'The answer restated these recalled learnings, so it updates them (write-through cognition).',
+  contextCompacted: 'Context auto-compacted: older steps summarized into a memory ({count})',
+  contextCompactedHint: 'The conversation outgrew its working budget, so the older part was summarized into a memory note the model keeps working from. Nothing is deleted from this transcript.',
+  showEarlier: 'Show earlier steps ({count})',
+  showNewer: 'Show newer steps ({count})',
+  jumpToLatest: 'Jump to latest',
   ...DEFAULT_MODEL_MOVE_LABELS,
   activity: DEFAULT_CHAT_ACTIVITY_LABELS,
 };

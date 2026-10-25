@@ -27,7 +27,7 @@
 import { runAgentLoop, openAiChatCodec, replayTextOf } from '@builderforce/agent-loop';
 import { nextTurn } from '@builderforce/run-policy';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
-import { windowed } from '../workingTranscript';
+import { windowed } from '@seanhogg/builderforce-memory/working';
 import type { RunCell } from './runCell';
 import { accrueByoUnresolved, accrueProviderCap, emit, emitStreaming, nowIso, nowMs, pushTrace, recordAppended, recordRunFailure } from './runCells';
 import { asLiveTurn, canonicalTurnText, connectRetryStep, liveTurnModel, provenanceMetadata } from './turnPersistence';
@@ -116,13 +116,16 @@ export async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, 
       ));
       accrueByoUnresolved(c, closing.byoUnresolved);
       accrueProviderCap(c, closing.providerCap);
+      // The closing turn may have failed over: its window is the model that answered it.
+      run.windowFit.served(closing.resolvedModel ?? closeAsk.model);
+      const contextWindow = await run.windowFit.contextWindow?.();
       pushTrace(c, {
         ts: nowIso(),
         category: 'llm',
         label: 'llm.complete',
         durationMs: nowMs() - closeStart,
         ttftMs: closeFirstTokenAt !== undefined ? closeFirstTokenAt - closeStart : undefined,
-        args: { model: closing.resolvedModel ?? closeAsk.model ?? 'default', requestedModel: closeAsk.model ?? 'default', step: loop.step, toolCalls: 0, forcedFinish: true, failureStreak: streak, account: closing.account, byoUnresolved: closing.byoUnresolved },
+        args: { model: closing.resolvedModel ?? closeAsk.model ?? 'default', requestedModel: closeAsk.model ?? 'default', step: loop.step, toolCalls: 0, forcedFinish: true, failureStreak: streak, account: closing.account, byoUnresolved: closing.byoUnresolved, ...(contextWindow ? { contextWindow } : {}) },
         usage: closing.usage,
         finishReason: closing.finishReason,
         textChars: closing.text.length,

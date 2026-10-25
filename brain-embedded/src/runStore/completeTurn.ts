@@ -23,7 +23,9 @@ import { createComposingActivity, toolCallArgBytes } from '../composingActivity'
 import { hasCallMarkup } from '../xmlToolCalls';
 import { turnInterruption } from '../finishReason.js';
 import { takeRunSteering } from './steerInterrupt';
-import { buildWorkingTranscript, summarizeMiddle } from '../workingTranscript';
+import { buildWorkingTranscript } from '@seanhogg/builderforce-memory/working';
+import { summarizeMiddle } from '../transcriptSummarizer';
+import { persistFoldMarker } from './runFoldMarker';
 import { compactionSavedTokens, stampOncePerCall } from './compactionSaved';
 import { callMemoryEffect } from '../memorySavings';
 import { accrueByoUnresolved, accrueProviderCap, emit, emitStreaming, nowIso, nowMs, pushTrace, runTrace, setActivity } from './runCells';
@@ -50,15 +52,17 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
       c,
       systemPrompt,
       (msgs) => summarizeMiddle(stream, run.policy.model, msgs, c.abort?.signal),
-      (dropped) => {
+      (fold) => {
         pushTrace(c, {
           ts: nowIso(),
           category: 'message',
           label: 'context.compacted',
-          args: { droppedMessages: dropped },
-          result: `Compressed ${dropped} earlier step(s) into a memory to stay within the context window.`,
+          args: { droppedMessages: fold.droppedMessages },
+          result: `Compressed ${fold.droppedMessages} earlier step(s) into a memory to stay within the context window.`,
         });
         emit(c);
+        // Durable: the next run seeds from this note instead of re-summarizing the history.
+        void persistFoldMarker(c, chatId, run.req.persistence, fold);
       },
     );
     // What memory did to THIS call's prompt — compaction kept the folded part of the
@@ -321,6 +325,9 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // Bytes of tool-call arguments this turn emitted — taken from the ASSEMBLED calls,
     // so a turn retried after a stream break reports what the surviving attempt sent.
     const argBytes = toolCallArgBytes(result.toolCalls);
+    // The serving model's window (resolved once per model per run), so the composer's
+    // context meter reads this turn's prompt against it — `contextUsageOf`.
+    const contextWindow = await run.windowFit.contextWindow?.();
     // DURABLE, not just live: an `llm` turn carries the token usage, finish reason
     // and resolved model the A-vs-B triage runs on. Kept in memory only, a chat
     // copied after a reload reported `Turns: 0` / "Tokens: not reported" and could
@@ -348,6 +355,7 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
         // nothing about a turn that spent three minutes streaming 21 KB of
         // `write_file` arguments — which is what a long turn usually is.
         ...(argBytes > 0 ? { argBytes } : {}),
+        ...(contextWindow ? { contextWindow } : {}),
         // Which account served the turn + any connected-BYO provider the gateway
         // could NOT resolve — so triage tells "ran on the shared pool despite a
         // connected Claude account (expired?)" apart from "nothing connected".

@@ -9,7 +9,7 @@ import { formatEvermindMemoryBlock, countReconciledMemories, type EvermindRecall
 import type { BrainMessage } from '../types';
 import type { BrainToolSpec, ChatCompletionMessage } from '../streamChatCompletion';
 import type { EvermindRunHooks, MemoryFirstAnswer } from '../evermindMemory';
-import { transcriptTokens } from '../workingTranscript';
+import { transcriptTokens } from '@seanhogg/builderforce-memory/working';
 import type { RunCell } from './runCell';
 import { emit, nowIso, pushTrace, recordAppended, runTrace } from './runCells';
 import { readFileAnchors } from './answerAnchors';

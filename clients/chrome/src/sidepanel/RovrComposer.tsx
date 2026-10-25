@@ -7,6 +7,7 @@
  */
 import { useMemo, type ReactNode } from 'react';
 import { BrainComposer, useComposerMenuRequest } from '@seanhogg/builderforce-brain-ui';
+import type { ContextUsage } from '@seanhogg/builderforce-brain-embedded';
 import { PRICING_URL } from '../config';
 import { t } from '../i18n/t';
 import { useInferenceModeOption, useServices } from './hooks';
@@ -31,9 +32,11 @@ export interface RovrComposerProps {
   /** The fixed next-step chips — offered once a chat has begun (the empty state shows
    *  the same starters as tiles, so they are not offered twice). */
   showSuggestions: boolean;
+  /** How full the model's context was on the last turn — the shared context meter. */
+  contextUsage?: ContextUsage | null;
 }
 
-export function RovrComposer({ composerId, value, onChange, onSubmit, running, onStop, chatOptions, onOpenSettings, above, showSuggestions }: RovrComposerProps) {
+export function RovrComposer({ composerId, value, onChange, onSubmit, running, onStop, chatOptions, onOpenSettings, above, showSuggestions, contextUsage }: RovrComposerProps) {
   const { options, memoryGap, request, projectId } = chatOptions;
   const labels = useMemo(() => rovrComposerLabels(memoryGap), [memoryGap]);
   // Where models run — the `/` menu's Run models control and the first-run question.
@@ -46,20 +49,20 @@ export function RovrComposer({ composerId, value, onChange, onSubmit, running, o
     [options, inferenceMode, openMenu],
   );
   const locale = useMemo(() => chrome.i18n.getUILanguage(), []);
+  // The Status tab's Connected accounts (Test / Reconnect) — the panel's one client.
+  const { connections } = useServices();
   const account = useMemo(
     () =>
       request
-  // The Status tab's Connected accounts (Test / Reconnect) — the panel's one client.
-  const { connections } = useServices();
         ? {
             request,
             projectId,
             locale,
             onUpgrade: () => void chrome.tabs.create({ url: PRICING_URL }),
+            connections,
           }
         : undefined,
     [request, projectId, locale, connections],
-            connections,
   );
 
   return (
@@ -78,6 +81,7 @@ export function RovrComposer({ composerId, value, onChange, onSubmit, running, o
       above={above}
       // WHERE the turn acts — the site of the tab Rovr is working in.
       context={<SiteChip />}
+      contextUsage={contextUsage}
       // Fixed next steps — a chip seeds the box; the person edits and sends it.
       {...(showSuggestions
         ? {

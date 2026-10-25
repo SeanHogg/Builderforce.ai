@@ -26,7 +26,7 @@ import { isCostLeverOn } from '@builderforce/cost-levers';
 import { priceTierBoundary } from '@builderforce/model-catalog';
 import { handoffReserveTokens, handoffTokenBudget, toolSchemaTokens as schemaTokens } from '@builderforce/run-policy';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
-import { summarizeMiddle, type SummaryStreamFn } from '../workingTranscript';
+import { summarizeMiddle, type SummaryStreamFn } from '../transcriptSummarizer';
 import type { LocalAttemptFit } from '../localFirstTransport';
 
 /** Ceiling on each of the summarize / recall calls — a hand-off never waits longer. */

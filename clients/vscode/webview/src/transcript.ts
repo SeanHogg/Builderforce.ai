@@ -245,6 +245,11 @@ export function buildTranscript(input: TranscriptInput): string {
       case 'error':
         lines.push(`### Error: ${node.label}`, node.message);
         break;
+      case 'compacted':
+        // A fold is triage-relevant: everything above it reached the model only as this note.
+        lines.push(`### Context auto-compacted (${node.count} step(s))`);
+        if (node.note) fenced('Memory note', node.note, budget, lines);
+        break;
     }
     lines.push('');
   }

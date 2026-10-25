@@ -37,7 +37,7 @@ export function ChatInput(props: ChatInputProps) {
     onAttach, onAddContext, webBrowsing, onWebBrowsingChange, accountSettingsHref,
     modeVocabulary, memoryUnavailableReason, showBrainIcon = false, showVoice = false,
     pendingAttachments = NO_ATTACHMENTS, onRemoveAttachment, secondaryContent,
-    mentionables, onMention, ticketables, onTicketTag, contextControls, addMenuItems,
+    mentionables, onMention, ticketables, onTicketTag, contextControls, contextUsage, addMenuItems,
     starters, suggestions, account, className, focusToken, modeGate,
   } = props;
   const t = useTranslations('chatInput');
@@ -162,6 +162,7 @@ export function ChatInput(props: ChatInputProps) {
         tickets={ticketables && ticketables.length > 0 && onTicketTag ? { tickets: ticketables, onPick: onTicketTag } : undefined}
         voice={showVoice}
         context={context}
+        contextUsage={contextUsage}
         above={above}
         suggestions={suggestionRow}
         below={secondaryContent

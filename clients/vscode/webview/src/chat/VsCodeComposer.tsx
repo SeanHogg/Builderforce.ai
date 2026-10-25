@@ -234,6 +234,8 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
           labels={recipientLabels}
         />
       </>}
+      // How full the model's context was on the last turn — the run compacts on its own.
+      contextUsage={conv.contextUsage}
       // Messages queued behind the in-flight run — each sends on its own once the run
       // finishes, or is steered into it now.
       // Held turns — the shared chips; a turn addressed to the run (no participant) can be

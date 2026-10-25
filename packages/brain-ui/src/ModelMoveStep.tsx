@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { modelMoveLine, type ModelMove, type ModelMoveLabels } from './timelineModelMoves';
 
 /**
@@ -5,7 +6,7 @@ import { modelMoveLine, type ModelMove, type ModelMoveLabels } from './timelineM
  * or a local-first turn that fell over — as a muted step line in the reader's language
  * (`timelineModelMoves.ts`). The same row shape as the memory steps.
  */
-export function ModelMoveStep({ move, labels }: { move: ModelMove; labels: ModelMoveLabels }) {
+function ModelMoveStepInner({ move, labels }: { move: ModelMove; labels: ModelMoveLabels }) {
   return (
     <li className="bf-tl__item bf-tl__item--memory">
       <span className="bf-tl__gutter">
@@ -17,3 +18,6 @@ export function ModelMoveStep({ move, labels }: { move: ModelMove; labels: Model
     </li>
   );
 }
+
+/** Memoized like every other transcript row. */
+export const ModelMoveStep = memo(ModelMoveStepInner);

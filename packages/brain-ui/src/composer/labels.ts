@@ -47,6 +47,11 @@ export interface ComposerLabels {
   effortThinkingSuffix: (thinkingTokens: number) => string;
   thinkingOnDesc: (budgetTokens: number) => string;
   thinkingOffDesc: string;
+  /** The context meter's tooltip when the model's window is known — `{used}`, `{limit}`
+   *  (tokens) and `{percent}` (with its sign), all formatted by the meter. */
+  contextMeterHint: string;
+  /** …and when it is not — `{used}` only. */
+  contextMeterHintTokens: string;
 }
 
 const n = (v: number) => v.toLocaleString();
@@ -84,6 +89,8 @@ export const DEFAULT_COMPOSER_LABELS: ComposerLabels = {
   effortThinkingSuffix: (thinking) => `Plus up to ${n(thinking)} thinking tokens.`,
   thinkingOnDesc: (budget) => `The model reasons before answering, with a ${n(budget)}-token thinking budget at this effort. Slower, better on hard problems.`,
   thinkingOffDesc: 'Off — the model answers directly. Turn on for a reasoning pass before the answer.',
+  contextMeterHint: 'Context: {used} of {limit} tokens on the last turn ({percent}). Older history is auto-compacted as it fills.',
+  contextMeterHintTokens: 'Context: {used} tokens on the last turn. Older history is auto-compacted as it fills.',
 };
 
 export function composerLabels(overrides?: Partial<ComposerLabels>): ComposerLabels {

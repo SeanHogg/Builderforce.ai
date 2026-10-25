@@ -1,5 +1,5 @@
 // src/BrainTimeline.tsx
-import React4, { useMemo as useMemo3 } from "react";
+import React4, { useCallback as useCallback2, useMemo as useMemo4 } from "react";
 import {
   DEFAULT_MODEL_IDENTITY,
   parseSubagentOrigin as parseSubagentOrigin2
@@ -354,7 +354,7 @@ function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, lab
 var Markdown = React.memo(MarkdownInner);
 
 // src/timelineModel.ts
-import { isStepMessage, parseChatActivity, parseStepMessage, stepSig } from "@seanhogg/builderforce-brain-embedded";
+import { stepSig as stepSig2 } from "@seanhogg/builderforce-brain-embedded";
 
 // src/timelineModelMoves.ts
 var DEFAULT_MODEL_MOVE_LABELS = {
@@ -395,7 +395,15 @@ function modelMoveLine(move, labels) {
   return move.fits ? line : `${line}. ${labels.modelMoveOverWindow}`;
 }
 
-// src/timelineModel.ts
+// src/timelineNodes.ts
+import {
+  consolidationMarkerOf,
+  CONSOLIDATION_MARKER_PREFIX,
+  isStepMessage,
+  parseChatActivity,
+  parseStepMessage,
+  stepSig
+} from "@seanhogg/builderforce-brain-embedded";
 var LEARN_SKIP_REASONS = ["not-attached", "not-seeded", "frozen"];
 function isLearnSkipReason(v) {
   return typeof v === "string" && LEARN_SKIP_REASONS.includes(v);
@@ -411,6 +419,7 @@ var ORDER = {
   activity: 4,
   tool: 4,
   modelMove: 4,
+  compacted: 4,
   learn: 5,
   reconcile: 6,
   error: 7,
@@ -438,12 +447,6 @@ function stripImageRefs(text, imageNames) {
     return !(m && imageNames.has(m[1].trim()));
   }).join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
-function buildTimeline(input) {
-  const nodes = buildSettledTimeline(input.messages, input.trace);
-  const streaming = streamingNode(input.streamingText, input.isRunning);
-  if (streaming) nodes.push(streaming);
-  return nodes;
-}
 function stepNode(step, ts, key) {
   switch (step.category) {
     case "tool":
@@ -469,6 +472,10 @@ function stepNode(step, ts, key) {
       return { key, kind: "reconcile", ts, order: ORDER.reconcile, version: typeof r.version === "number" ? r.version : 0, count: typeof r.count === "number" ? r.count : 0 };
     }
     case "message": {
+      if (step.label === COMPACTED_STEP) {
+        const dropped = step.args?.droppedMessages;
+        return { key, kind: "compacted", ts, order: ORDER.compacted, message: null, count: typeof dropped === "number" ? dropped : 0, note: "" };
+      }
       const move = modelMoveOf(step.label, step.args);
       return move ? { key, kind: "modelMove", ts, order: ORDER.modelMove, move } : null;
     }
@@ -476,76 +483,85 @@ function stepNode(step, ts, key) {
       return null;
   }
 }
+var COMPACTED_STEP = "context.compacted";
+var MARKER_SKEW_MS = 6e4;
+function withoutCoveredFolds(nodes) {
+  const markers = nodes.filter((n2) => n2.kind === "compacted" && n2.message).map((n2) => n2.ts);
+  if (markers.length === 0) return nodes;
+  return nodes.filter((n2) => !(n2.kind === "compacted" && !n2.message && markers.some((t) => t >= n2.ts - MARKER_SKEW_MS)));
+}
+var traceDerived = /* @__PURE__ */ new WeakMap();
+function traceNode(ev, index, step) {
+  const hit = traceDerived.get(ev);
+  if (hit && hit.index === index && hit.step === step) return hit.node;
+  const ts = parseTs(ev.ts, 1e15 + index);
+  const node = ev.category === "llm" ? { key: `trace-${index}`, kind: "thinking", ts, order: ORDER.thinking, durationMs: ev.ttftMs ?? ev.durationMs, step } : stepNode({ category: ev.category, label: ev.label, args: ev.args, result: ev.result, isError: ev.isError, durationMs: ev.durationMs }, ts, `trace-${index}`);
+  traceDerived.set(ev, { index, step, node });
+  return node;
+}
+var derived = /* @__PURE__ */ new WeakMap();
+function messageNode(message, index) {
+  const hit = derived.get(message);
+  if (hit) return hit;
+  const out = deriveMessageNode(message, index);
+  derived.set(message, out);
+  return out;
+}
+function deriveMessageNode(message, index) {
+  const key = `msg-${message.id}`;
+  const ts = parseTs(message.createdAt, index);
+  if (message.role === "user") {
+    const images = attachmentsOf(message).filter((a) => a.imageUrl).map((a) => ({ url: a.imageUrl, name: a.name }));
+    const imageNames = new Set(images.map((im) => im.name).filter((n2) => !!n2));
+    return { node: { key, kind: "user", ts, order: ORDER.user, message, text: stripImageRefs(message.content, imageNames), images } };
+  }
+  if (isStepMessage(message)) {
+    const parsed = parseStepMessage(message.metadata);
+    if (!parsed) return { node: null };
+    return {
+      node: stepNode(parsed.step, parseTs(parsed.tsIso, ts), key),
+      stepSig: stepSig(parsed.step.category, parsed.step.label, parsed.tsIso)
+    };
+  }
+  const marker = consolidationMarkerOf(message);
+  if (marker?.auto) {
+    const note = message.content.startsWith(CONSOLIDATION_MARKER_PREFIX) ? message.content.slice(CONSOLIDATION_MARKER_PREFIX.length) : message.content;
+    return { node: { key, kind: "compacted", ts, order: ORDER.compacted, message, count: marker.folded ?? 0, note } };
+  }
+  const activity = parseChatActivity(message);
+  if (activity) {
+    return { node: { key, kind: "activity", ts, order: ORDER.activity, message, activity, fallbackText: message.content } };
+  }
+  return { node: { key, kind: "assistant", ts, order: ORDER.assistant, message, text: message.content } };
+}
+
+// src/timelineModel.ts
+function buildTimeline(input) {
+  const nodes = buildSettledTimeline(input.messages, input.trace);
+  const streaming = streamingNode(input.streamingText, input.isRunning);
+  if (streaming) nodes.push(streaming);
+  return nodes;
+}
 function buildSettledTimeline(messages, trace) {
   const nodes = [];
   const traceStepSigs = /* @__PURE__ */ new Set();
   for (const ev of trace) {
-    if (ev.category !== "llm" && ev.category !== "message" || modelMoveOf(ev.label, ev.args)) traceStepSigs.add(stepSig(ev.category, ev.label, ev.ts));
+    if (ev.category !== "llm" && ev.category !== "message" || modelMoveOf(ev.label, ev.args)) traceStepSigs.add(stepSig2(ev.category, ev.label, ev.ts));
   }
   messages.forEach((message, i) => {
-    const ts = parseTs(message.createdAt, i);
-    if (message.role === "user") {
-      const atts = attachmentsOf(message);
-      const images = atts.filter((a) => a.imageUrl).map((a) => ({ url: a.imageUrl, name: a.name }));
-      const imageNames = new Set(images.map((im) => im.name).filter((n2) => !!n2));
-      nodes.push({
-        key: `msg-${message.id}`,
-        kind: "user",
-        ts,
-        order: ORDER.user,
-        message,
-        text: stripImageRefs(message.content, imageNames),
-        images
-      });
-    } else if (isStepMessage(message)) {
-      const parsed = parseStepMessage(message.metadata);
-      if (!parsed) return;
-      if (traceStepSigs.has(stepSig(parsed.step.category, parsed.step.label, parsed.tsIso))) return;
-      const node = stepNode(parsed.step, parseTs(parsed.tsIso, ts), `msg-${message.id}`);
-      if (node) nodes.push(node);
-    } else {
-      const activity = parseChatActivity(message);
-      if (activity) {
-        nodes.push({
-          key: `msg-${message.id}`,
-          kind: "activity",
-          ts,
-          order: ORDER.activity,
-          message,
-          activity,
-          // Pre-structured rows carry only the server's English sentence; showing it
-          // beats showing nothing, so it rides along as the fallback.
-          fallbackText: message.content
-        });
-        return;
-      }
-      nodes.push({
-        key: `msg-${message.id}`,
-        kind: "assistant",
-        ts,
-        order: ORDER.assistant,
-        message,
-        text: message.content
-      });
-    }
+    const { node, stepSig: sig } = messageNode(message, i);
+    if (node && !(sig && traceStepSigs.has(sig))) nodes.push(node);
   });
   const messageNodeCount = nodes.length;
   let step = 0;
   trace.forEach((ev, i) => {
-    const ts = parseTs(ev.ts, 1e15 + i);
-    if (ev.category === "llm") {
-      nodes.push({ key: `trace-${i}`, kind: "thinking", ts, order: ORDER.thinking, durationMs: ev.ttftMs ?? ev.durationMs, step: step++ });
-    } else {
-      const node = stepNode(
-        { category: ev.category, label: ev.label, args: ev.args, result: ev.result, isError: ev.isError, durationMs: ev.durationMs },
-        ts,
-        `trace-${i}`
-      );
-      if (node) nodes.push(node);
-    }
+    const node = traceNode(ev, i, step);
+    if (ev.category === "llm") step++;
+    if (node) nodes.push(node);
   });
   const rank = (n2, i) => i < messageNodeCount ? n2.order : TRACE_RANK;
-  return nodes.map((node, i) => ({ node, i, rank: rank(node, i) })).sort((a, b) => a.node.ts - b.node.ts || a.rank - b.rank || a.i - b.i).map((e) => e.node);
+  const sorted = nodes.map((node, i) => ({ node, i, rank: rank(node, i) })).sort((a, b) => a.node.ts - b.node.ts || a.rank - b.rank || a.i - b.i).map((e) => e.node);
+  return withoutCoveredFolds(sorted);
 }
 function strandedReplyKey(nodes, isRunning) {
   if (isRunning) return null;
@@ -668,13 +684,15 @@ function LiveActivityInner({ activity, isRunning, labels: partial }) {
 var LiveActivity = React2.memo(LiveActivityInner);
 
 // src/ModelMoveStep.tsx
+import { memo } from "react";
 import { jsx as jsx3, jsxs as jsxs3 } from "react/jsx-runtime";
-function ModelMoveStep({ move, labels }) {
+function ModelMoveStepInner({ move, labels }) {
   return /* @__PURE__ */ jsxs3("li", { className: "bf-tl__item bf-tl__item--memory", children: [
     /* @__PURE__ */ jsx3("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx3("span", { className: "bf-tl__dot bf-tl__dot--muted", children: "\u21C4" }) }),
     /* @__PURE__ */ jsx3("div", { className: "bf-tl__body", children: /* @__PURE__ */ jsx3("span", { className: "bf-tl__memory-line", title: labels.modelMoveHint, children: modelMoveLine(move, labels) }) })
   ] });
 }
+var ModelMoveStep = memo(ModelMoveStepInner);
 
 // src/timeline/labels.ts
 import { DEFAULT_CHAT_ACTIVITY_LABELS } from "@seanhogg/builderforce-brain-embedded";
@@ -846,6 +864,11 @@ var DEFAULT_TIMELINE_LABELS = {
   learnTargetSkipped: "Skipped {name} (project #{projectId}) \u2014 {reason}",
   reconcileTitle: "Reconciled {count} learned memories in Evermind v{version}",
   reconcileHint: "The answer restated these recalled learnings, so it updates them (write-through cognition).",
+  contextCompacted: "Context auto-compacted: older steps summarized into a memory ({count})",
+  contextCompactedHint: "The conversation outgrew its working budget, so the older part was summarized into a memory note the model keeps working from. Nothing is deleted from this transcript.",
+  showEarlier: "Show earlier steps ({count})",
+  showNewer: "Show newer steps ({count})",
+  jumpToLatest: "Jump to latest",
   ...DEFAULT_MODEL_MOVE_LABELS,
   activity: DEFAULT_CHAT_ACTIVITY_LABELS
 };
@@ -900,7 +923,78 @@ function useTranscriptScroll(autoScroll, revealMessage) {
   return { scrollRef, contentRef, onScroll };
 }
 
+// src/timeline/useRenderWindow.ts
+import { useCallback, useLayoutEffect, useMemo as useMemo3, useRef as useRef2, useState as useState4 } from "react";
+var TIMELINE_PAGE_SIZE = 150;
+var REVEAL_LEAD = 10;
+function renderRange(keys, anchor, revealIndex) {
+  const length = keys.length;
+  const newest = Math.max(0, length - TIMELINE_PAGE_SIZE);
+  const at = (key) => key === null ? -1 : keys.indexOf(key);
+  const anchoredStart = at(anchor.startKey);
+  const anchoredEnd = at(anchor.endKey);
+  const start = anchoredStart >= 0 ? Math.min(anchoredStart, newest) : newest;
+  const end = anchoredEnd >= 0 ? Math.max(anchoredEnd + 1, Math.min(length, start + TIMELINE_PAGE_SIZE)) : length;
+  if (revealIndex >= 0 && (revealIndex < start || revealIndex >= end)) {
+    const from = Math.max(0, revealIndex - REVEAL_LEAD);
+    return { start: from, end: Math.min(length, from + TIMELINE_PAGE_SIZE) };
+  }
+  return { start, end };
+}
+function lastStableKey(keys, end) {
+  for (let i = end - 1; i >= 0; i--) if (keys[i] !== "streaming") return keys[i];
+  return null;
+}
+var NEWEST = { startKey: null, endKey: null };
+function useRenderWindow(nodes, conversationKey, reveal, scrollRef) {
+  const [state, setState] = useState4(
+    { conversation: conversationKey, anchor: NEWEST, seenReveal: null }
+  );
+  const keys = useMemo3(() => nodes.map((n2) => n2.key), [nodes]);
+  let current = state;
+  if (current.conversation !== conversationKey) {
+    current = { conversation: conversationKey, anchor: NEWEST, seenReveal: current.seenReveal };
+    setState(current);
+  }
+  const pending = reveal && reveal.nonce !== current.seenReveal ? reveal : null;
+  if (pending) {
+    const shown = renderRange(keys, current.anchor, -1);
+    const inView = pending.index >= shown.start && pending.index < shown.end;
+    const around = renderRange(keys, current.anchor, pending.index);
+    current = {
+      ...current,
+      seenReveal: pending.nonce,
+      anchor: inView ? current.anchor : { startKey: keys[around.start] ?? null, endKey: around.end >= keys.length ? null : lastStableKey(keys, around.end) }
+    };
+    setState(current);
+  }
+  const range = renderRange(keys, current.anchor, -1);
+  const fromBottom = useRef2(null);
+  const move = useCallback((next, keepPlace) => {
+    const el = scrollRef.current;
+    if (keepPlace && el) fromBottom.current = el.scrollHeight - el.scrollTop;
+    setState((prev) => ({ ...prev, conversation: conversationKey, anchor: next }));
+  }, [scrollRef, conversationKey]);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (el && fromBottom.current != null) el.scrollTop = el.scrollHeight - fromBottom.current;
+    fromBottom.current = null;
+  }, [scrollRef, range.start]);
+  const pinnedEnd = lastStableKey(keys, range.end);
+  const earlier = range.start > 0 ? { count: Math.min(range.start, TIMELINE_PAGE_SIZE), show: () => move({ startKey: keys[Math.max(0, range.start - TIMELINE_PAGE_SIZE)] ?? null, endKey: pinnedEnd }, true) } : null;
+  const newer = range.end < keys.length ? {
+    count: Math.min(keys.length - range.end, TIMELINE_PAGE_SIZE),
+    show: () => {
+      const end = range.end + TIMELINE_PAGE_SIZE;
+      move(end >= keys.length ? NEWEST : { startKey: keys[range.start] ?? null, endKey: lastStableKey(keys, end) }, false);
+    },
+    latest: () => move(NEWEST, false)
+  } : null;
+  return { visible: nodes.slice(range.start, range.end), earlier, newer };
+}
+
 // src/timeline/MessageRows.tsx
+import { memo as memo2 } from "react";
 import {
   isStoppedTurn,
   parseDirectedRecipients,
@@ -993,17 +1087,19 @@ function dotIcon(kind, isError) {
     case "learn":
     case "reconcile":
       return "\u{1F9E0}";
+    case "compacted":
+      return "\u21CA";
     default:
       return "\u2022";
   }
 }
 
 // src/CopyButton.tsx
-import { useState as useState4 } from "react";
+import { useState as useState5 } from "react";
 import { jsx as jsx6 } from "react/jsx-runtime";
 var CONFIRM_MS = 1500;
 function CopyButton({ text, labels, icon = false }) {
-  const [copied, setCopied] = useState4(false);
+  const [copied, setCopied] = useState5(false);
   return /* @__PURE__ */ jsx6(
     "button",
     {
@@ -1113,7 +1209,7 @@ function ProvenanceChip({
 
 // src/timeline/MessageRows.tsx
 import { jsx as jsx9, jsxs as jsxs8 } from "react/jsx-runtime";
-function UserRow({
+function UserRowInner({
   node,
   labels,
   focusClass,
@@ -1135,7 +1231,7 @@ function UserRow({
     ] })
   ] });
 }
-function AssistantRow({
+function AssistantRowInner({
   node,
   labels,
   focusClass,
@@ -1213,8 +1309,11 @@ function OriginTag({ message, owner, labels }) {
   }
   return owner ? /* @__PURE__ */ jsx9("span", { className: "bf-tl__origin", children: labels.ownerTag }) : null;
 }
+var UserRow = memo2(UserRowInner);
+var AssistantRow = memo2(AssistantRowInner);
 
 // src/timeline/MemoryRows.tsx
+import { memo as memo3 } from "react";
 import { jsx as jsx10, jsxs as jsxs9 } from "react/jsx-runtime";
 function MemoryLine({ kind, title, hint }) {
   return /* @__PURE__ */ jsxs9("li", { className: "bf-tl__item bf-tl__item--memory", children: [
@@ -1222,7 +1321,7 @@ function MemoryLine({ kind, title, hint }) {
     /* @__PURE__ */ jsx10("div", { className: "bf-tl__body", children: /* @__PURE__ */ jsx10("span", { className: "bf-tl__memory-line", title: hint, children: title }) })
   ] });
 }
-function RecallRow({ node, labels }) {
+function RecallRowInner({ node, labels }) {
   const title = labels.recallTitle.replace("{count}", String(node.count)).replace("{version}", String(node.version));
   return /* @__PURE__ */ jsxs9("li", { className: "bf-tl__item bf-tl__item--memory", children: [
     /* @__PURE__ */ jsx10("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx10("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("recall") }) }),
@@ -1241,11 +1340,11 @@ function RecallRow({ node, labels }) {
     ] }) })
   ] });
 }
-function MemoryAnswerRow({ node, labels }) {
+function MemoryAnswerRowInner({ node, labels }) {
   const title = node.source === "evermind" && node.version != null ? labels.memoryAnswerEvermind.replace("{version}", String(node.version)) : labels.memoryAnswerCache;
   return /* @__PURE__ */ jsx10(MemoryLine, { kind: "memoryAnswer", title, hint: labels.memoryAnswerHint });
 }
-function LearnRow({ node, labels }) {
+function LearnRowInner({ node, labels }) {
   if (node.targets && node.targets.length > 0) {
     const lines = node.targets.map((tg) => {
       if (tg.learned) {
@@ -1261,12 +1360,34 @@ function LearnRow({ node, labels }) {
   const hint = node.skipped ? labels.learnSkippedHint : labels.learnHint;
   return /* @__PURE__ */ jsx10(MemoryLine, { kind: "learn", title, hint });
 }
-function ReconcileRow({ node, labels }) {
+function ReconcileRowInner({ node, labels }) {
   const title = labels.reconcileTitle.replace("{count}", String(node.count)).replace("{version}", String(node.version));
   return /* @__PURE__ */ jsx10(MemoryLine, { kind: "reconcile", title, hint: labels.reconcileHint });
 }
+function CompactedRowInner({ node, labels }) {
+  const title = labels.contextCompacted.replace("{count}", String(node.count));
+  return /* @__PURE__ */ jsxs9("li", { className: "bf-tl__item bf-tl__item--memory", children: [
+    /* @__PURE__ */ jsx10("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx10("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("compacted") }) }),
+    /* @__PURE__ */ jsx10("div", { className: "bf-tl__body", children: node.note ? /* @__PURE__ */ jsxs9("details", { className: "bf-tl__tool bf-tl__memory", children: [
+      /* @__PURE__ */ jsxs9("summary", { className: "bf-tl__tool-head", title: labels.contextCompactedHint, children: [
+        /* @__PURE__ */ jsx10("span", { className: "bf-tl__tool-name", children: title }),
+        /* @__PURE__ */ jsx10("span", { className: "bf-tl__tool-caret", "aria-hidden": true, children: "\u25B8" })
+      ] }),
+      /* @__PURE__ */ jsx10("div", { className: "bf-tl__tool-body", children: /* @__PURE__ */ jsx10("p", { className: "bf-tl__memory-note", children: node.note }) })
+    ] }) : (
+      // Known only from the run's step: there is no saved note to expand.
+      /* @__PURE__ */ jsx10("div", { className: "bf-tl__tool-head bf-tl__memory", title: labels.contextCompactedHint, children: /* @__PURE__ */ jsx10("span", { className: "bf-tl__tool-name", children: title }) })
+    ) })
+  ] });
+}
+var RecallRow = memo3(RecallRowInner);
+var MemoryAnswerRow = memo3(MemoryAnswerRowInner);
+var LearnRow = memo3(LearnRowInner);
+var ReconcileRow = memo3(ReconcileRowInner);
+var CompactedRow = memo3(CompactedRowInner);
 
 // src/timeline/StepRows.tsx
+import { memo as memo4 } from "react";
 import { activityIcon, activityTone, chatActivityText, chatErrorAction } from "@seanhogg/builderforce-brain-embedded";
 
 // src/chatErrorMessage.ts
@@ -1409,7 +1530,7 @@ function ChatErrorBanner({
 }
 
 // src/ToolStep.tsx
-import { useState as useState5 } from "react";
+import { useState as useState6 } from "react";
 
 // src/toolStepView.ts
 import { activityTarget } from "@seanhogg/builderforce-brain-embedded";
@@ -1599,7 +1720,7 @@ function CommandCard({ run, labels }) {
 }
 function ToolStep({ node, labels }) {
   const view = toolStepView(node);
-  const [open, setOpen] = useState5(view.defaultOpen);
+  const [open, setOpen] = useState6(view.defaultOpen);
   return /* @__PURE__ */ jsxs11(
     "details",
     {
@@ -1627,20 +1748,20 @@ function ToolStep({ node, labels }) {
 
 // src/timeline/StepRows.tsx
 import { jsx as jsx13, jsxs as jsxs12 } from "react/jsx-runtime";
-function ThinkingRow({ node, labels }) {
+function ThinkingRowInner({ node, labels }) {
   const label = labels.thoughtFor.replace("{duration}", formatDuration(node.durationMs));
   return /* @__PURE__ */ jsxs12("li", { className: "bf-tl__item bf-tl__item--thinking", children: [
     /* @__PURE__ */ jsx13("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx13("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("thinking") }) }),
     /* @__PURE__ */ jsx13("div", { className: "bf-tl__body", children: /* @__PURE__ */ jsx13("span", { className: "bf-tl__thinking", children: label }) })
   ] });
 }
-function ToolRow({ node, labels }) {
+function ToolRowInner({ node, labels }) {
   return /* @__PURE__ */ jsxs12("li", { className: "bf-tl__item bf-tl__item--tool", children: [
     /* @__PURE__ */ jsx13("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx13("span", { className: `bf-tl__dot${node.isError ? " bf-tl__dot--error" : ""}`, children: dotIcon("tool", node.isError) }) }),
     /* @__PURE__ */ jsx13("div", { className: "bf-tl__body", children: /* @__PURE__ */ jsx13(ToolStep, { node, labels }) })
   ] });
 }
-function ErrorRow({ node, labels }) {
+function ErrorRowInner({ node, labels }) {
   return /* @__PURE__ */ jsxs12("li", { className: "bf-tl__item bf-tl__item--error", children: [
     /* @__PURE__ */ jsx13("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx13("span", { className: "bf-tl__dot bf-tl__dot--error", children: dotIcon("error") }) }),
     /* @__PURE__ */ jsxs12("div", { className: "bf-tl__body", children: [
@@ -1649,7 +1770,7 @@ function ErrorRow({ node, labels }) {
     ] })
   ] });
 }
-function ActivityRow({ node, labels }) {
+function ActivityRowInner({ node, labels }) {
   const text = chatActivityText(node.activity, labels.activity) || node.fallbackText;
   const tone = activityTone(node.activity);
   return /* @__PURE__ */ jsxs12("li", { className: `bf-tl__item bf-tl__item--activity bf-tl__item--activity-${tone}`, children: [
@@ -1675,6 +1796,10 @@ function StreamingRow({
     ] })
   ] });
 }
+var ThinkingRow = memo4(ThinkingRowInner);
+var ToolRow = memo4(ToolRowInner);
+var ErrorRow = memo4(ErrorRowInner);
+var ActivityRow = memo4(ActivityRowInner);
 
 // src/BrainTimeline.tsx
 import { jsx as jsx14, jsxs as jsxs13 } from "react/jsx-runtime";
@@ -1700,18 +1825,19 @@ function BrainTimelineInner({
   onCreateFile,
   onAnswerQuestion,
   autoScroll = true,
-  revealMessage = null
+  revealMessage = null,
+  conversationKey
 }) {
-  const labels = useMemo3(() => ({ ...DEFAULT_TIMELINE_LABELS, ...labelOverrides }), [labelOverrides]);
+  const labels = useMemo4(() => ({ ...DEFAULT_TIMELINE_LABELS, ...labelOverrides }), [labelOverrides]);
   const assistant = assistantName ?? labels.assistant;
-  const settled = useMemo3(() => buildSettledTimeline(messages, trace), [messages, trace]);
-  const nodes = useMemo3(() => {
+  const settled = useMemo4(() => buildSettledTimeline(messages, trace), [messages, trace]);
+  const nodes = useMemo4(() => {
     const streaming = streamingNode(streamingText, isRunning);
     return streaming ? [...settled, streaming] : settled;
   }, [settled, streamingText, isRunning]);
-  const stranded = useMemo3(() => strandedReplyKey(nodes, isRunning), [nodes, isRunning]);
+  const stranded = useMemo4(() => strandedReplyKey(nodes, isRunning), [nodes, isRunning]);
   const { scrollRef, contentRef, onScroll } = useTranscriptScroll(autoScroll, revealMessage);
-  const renderMsg = (msg, role, text) => renderMessage ? renderMessage(msg, { role, text }) : /* @__PURE__ */ jsx14(
+  const renderMsg = useCallback2((msg, role, text) => renderMessage ? renderMessage(msg, { role, text }) : /* @__PURE__ */ jsx14(
     Markdown,
     {
       content: text,
@@ -1720,19 +1846,30 @@ function BrainTimelineInner({
       onCreateFile: role === "assistant" ? onCreateFile : void 0,
       labels
     }
+  ), [renderMessage, onInternalLink, onApplyCode, onCreateFile, labels]);
+  const revealIndex = useMemo4(
+    () => revealMessage ? nodes.findIndex((n2) => (n2.kind === "user" || n2.kind === "assistant") && n2.message.id === revealMessage.id) : -1,
+    [nodes, revealMessage]
+  );
+  const { visible, earlier, newer } = useRenderWindow(
+    nodes,
+    conversationKey ?? nodes[0]?.key ?? null,
+    revealMessage && revealIndex >= 0 ? { index: revealIndex, nonce: revealMessage.nonce } : null,
+    scrollRef
   );
   const isEmpty = nodes.length === 0 && !loading;
-  const hasSubagents = useMemo3(
-    () => nodes.some((n2) => n2.kind === "assistant" && parseSubagentOrigin2(n2.message) !== null),
-    [nodes]
+  const hasSubagents = useMemo4(
+    () => messages.some((m) => m.role === "assistant" && parseSubagentOrigin2(m) !== null),
+    [messages]
   );
   const focusedId = revealMessage?.id ?? null;
   const focusClass = (messageId) => focusedId === messageId ? " bf-tl__item--focus" : "";
   return /* @__PURE__ */ jsxs13("div", { className: "bf-tl-scroll", ref: scrollRef, onScroll, children: [
     loading && /* @__PURE__ */ jsx14("div", { className: "bf-tl-status", children: labels.loading }),
     isEmpty && (emptyState ?? /* @__PURE__ */ jsx14("div", { className: "bf-tl-empty", children: labels.empty })),
+    earlier && /* @__PURE__ */ jsx14("button", { type: "button", className: "bf-tl-earlier", onClick: earlier.show, children: labels.showEarlier.replace("{count}", String(earlier.count)) }),
     /* @__PURE__ */ jsxs13("ol", { className: "bf-tl", ref: contentRef, children: [
-      nodes.map((node) => {
+      visible.map((node) => {
         switch (node.kind) {
           case "user":
             return /* @__PURE__ */ jsx14(
@@ -1784,6 +1921,8 @@ function BrainTimelineInner({
             return /* @__PURE__ */ jsx14(ModelMoveStep, { move: node.move, labels }, node.key);
           case "reconcile":
             return /* @__PURE__ */ jsx14(ReconcileRow, { node, labels }, node.key);
+          case "compacted":
+            return /* @__PURE__ */ jsx14(CompactedRow, { node, labels }, node.key);
           default:
             return /* @__PURE__ */ jsx14(
               StreamingRow,
@@ -1799,6 +1938,10 @@ function BrainTimelineInner({
         }
       }),
       isRunning && !(streamingText.trim() && activity?.phase === "writing") && /* @__PURE__ */ jsx14(LiveActivity, { activity, isRunning, labels: labels.live })
+    ] }),
+    newer && /* @__PURE__ */ jsxs13("div", { className: "bf-tl-newer", children: [
+      /* @__PURE__ */ jsx14("button", { type: "button", className: "bf-tl-earlier", onClick: newer.show, children: labels.showNewer.replace("{count}", String(newer.count)) }),
+      /* @__PURE__ */ jsx14("button", { type: "button", className: "bf-tl-earlier", onClick: newer.latest, children: labels.jumpToLatest })
     ] })
   ] });
 }
@@ -1894,7 +2037,7 @@ function timelineLabelsFrom(lookup, overrides) {
 }
 
 // src/inlineTitle/InlineChatTitle.tsx
-import { useEffect as useEffect3, useRef as useRef2, useState as useState6 } from "react";
+import { useEffect as useEffect3, useRef as useRef3, useState as useState7 } from "react";
 import { jsx as jsx15, jsxs as jsxs14 } from "react/jsx-runtime";
 var DEFAULT_INLINE_CHAT_TITLE_LABELS = {
   edit: "Edit chat title",
@@ -1911,12 +2054,12 @@ function InlineChatTitle({
   titleClassName
 }) {
   const labels = { ...DEFAULT_INLINE_CHAT_TITLE_LABELS, ...overrides };
-  const [editing, setEditing] = useState6(false);
-  const [draft, setDraft] = useState6("");
-  const [shown, setShown] = useState6(null);
-  const settled = useRef2(false);
-  const from = useRef2("");
-  const input = useRef2(null);
+  const [editing, setEditing] = useState7(false);
+  const [draft, setDraft] = useState7("");
+  const [shown, setShown] = useState7(null);
+  const settled = useRef3(false);
+  const from = useRef3("");
+  const input = useRef3(null);
   useEffect3(() => {
     setShown(null);
     if (editing) {
@@ -2073,7 +2216,7 @@ function ModelFallbackNotice({ channel, labels: partial, className }) {
 }
 
 // src/ToolConfirmBar.tsx
-import { memo, useEffect as useEffect4, useRef as useRef3 } from "react";
+import { memo as memo5, useEffect as useEffect4, useRef as useRef4 } from "react";
 import { Fragment as Fragment4, jsx as jsx17, jsxs as jsxs16 } from "react/jsx-runtime";
 var DEFAULT_TOOL_CONFIRM_LABELS = {
   prompt: "Run {name}?",
@@ -2098,7 +2241,7 @@ function toolConfirmPreview(req) {
   }
   return { command, args };
 }
-var ToolConfirmBar = memo(function ToolConfirmBar2({
+var ToolConfirmBar = memo5(function ToolConfirmBar2({
   req,
   onApprove,
   onDeny,
@@ -2109,7 +2252,7 @@ var ToolConfirmBar = memo(function ToolConfirmBar2({
   className
 }) {
   const labels = { ...DEFAULT_TOOL_CONFIRM_LABELS, ...labelOverrides };
-  const approveRef = useRef3(null);
+  const approveRef = useRef4(null);
   useEffect4(() => approveRef.current?.focus(), [req]);
   const { command, args } = toolConfirmPreview(req);
   const [before, after = ""] = labels.prompt.split("{name}");
@@ -2241,7 +2384,7 @@ function SurfaceLauncher({ onOpen, label, running = false, text, badge, markSize
 }
 
 // src/surface/SurfaceTabs.tsx
-import { useCallback, useRef as useRef4 } from "react";
+import { useCallback as useCallback3, useRef as useRef5 } from "react";
 
 // src/optionStyle.ts
 var nativeOptionStyle = {
@@ -2412,8 +2555,8 @@ var warnBox = {
 // src/surface/SurfaceTabs.tsx
 import { jsx as jsx21, jsxs as jsxs20 } from "react/jsx-runtime";
 function SurfaceTabs({ tabs, activeId, onSelect, label, idPrefix, className, panelClassName }) {
-  const stripRef = useRef4(null);
-  const onKeyDown = useCallback((e) => {
+  const stripRef = useRef5(null);
+  const onKeyDown = useCallback3((e) => {
     const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
     if (!keys.includes(e.key)) return;
     e.preventDefault();
@@ -2589,7 +2732,7 @@ function StarterTile({ icon, label, hint, onClick, pressed, disabled }) {
 }
 
 // src/surface/ChatHistory.tsx
-import { memo as memo2 } from "react";
+import { memo as memo6 } from "react";
 
 // src/chatTickets/chatSwitcherLabel.ts
 function chatSwitcherLabel(input) {
@@ -2626,7 +2769,7 @@ function ChatHistoryList({ loading, total, children, labels: overrides, id, clas
     hasRows && /* @__PURE__ */ jsx26("div", { role: "list", className: "bf-history__rows", children })
   ] });
 }
-var ChatHistoryRow = memo2(function ChatHistoryRow2({
+var ChatHistoryRow = memo6(function ChatHistoryRow2({
   chat,
   active,
   onOpen,
@@ -2732,49 +2875,49 @@ var ChatHistoryRow = memo2(function ChatHistoryRow2({
 });
 
 // src/surface/useChatRowActions.ts
-import { useCallback as useCallback2, useRef as useRef5, useState as useState7 } from "react";
+import { useCallback as useCallback4, useRef as useRef6, useState as useState8 } from "react";
 function useChatRowActions(options) {
-  const opts = useRef5(options);
+  const opts = useRef6(options);
   opts.current = options;
-  const [actionsChatId, setActionsChatId] = useState7(null);
-  const [renamingId, setRenamingId] = useState7(null);
-  const [renameValue, setRenameValue] = useState7("");
-  const [summarizingId, setSummarizingId] = useState7(null);
-  const [archivingId, setArchivingId] = useState7(null);
-  const [deletingId, setDeletingId] = useState7(null);
-  const [busyId, setBusyId] = useState7(null);
-  const renameFrom = useRef5("");
-  const settled = useRef5(null);
-  const openChat = useCallback2((id) => {
+  const [actionsChatId, setActionsChatId] = useState8(null);
+  const [renamingId, setRenamingId] = useState8(null);
+  const [renameValue, setRenameValue] = useState8("");
+  const [summarizingId, setSummarizingId] = useState8(null);
+  const [archivingId, setArchivingId] = useState8(null);
+  const [deletingId, setDeletingId] = useState8(null);
+  const [busyId, setBusyId] = useState8(null);
+  const renameFrom = useRef6("");
+  const settled = useRef6(null);
+  const openChat = useCallback4((id) => {
     opts.current.onOpen(id);
     if (opts.current.revealActionsOnOpen) setActionsChatId(id);
   }, []);
-  const toggleActions = useCallback2((id) => {
+  const toggleActions = useCallback4((id) => {
     setActionsChatId((cur) => cur === id ? null : id);
   }, []);
-  const startRename = useCallback2((chat) => {
+  const startRename = useCallback4((chat) => {
     settled.current = null;
     renameFrom.current = chat.title;
     setRenamingId(chat.id);
     setRenameValue(chat.title);
     setActionsChatId(null);
   }, []);
-  const endRename = useCallback2((id) => {
+  const endRename = useCallback4((id) => {
     settled.current = id;
     setRenamingId(null);
     setRenameValue("");
   }, []);
-  const renamingRef = useRef5(renamingId);
+  const renamingRef = useRef6(renamingId);
   renamingRef.current = renamingId;
-  const cancelRename = useCallback2(() => endRename(renamingRef.current), [endRename]);
-  const submitRename = useCallback2(async (id, value) => {
+  const cancelRename = useCallback4(() => endRename(renamingRef.current), [endRename]);
+  const submitRename = useCallback4(async (id, value) => {
     if (settled.current === id) return;
     endRename(id);
     const title = value.trim();
     if (!title || title === renameFrom.current.trim()) return;
     await opts.current.rename(id, title);
   }, [endRename]);
-  const onSummarize = useCallback2(async (id) => {
+  const onSummarize = useCallback4(async (id) => {
     setSummarizingId(id);
     try {
       await opts.current.summarize?.(id);
@@ -2782,7 +2925,7 @@ function useChatRowActions(options) {
       setSummarizingId((cur) => cur === id ? null : cur);
     }
   }, []);
-  const onArchive = useCallback2(async (chat) => {
+  const onArchive = useCallback4(async (chat) => {
     const { archive, isArchived } = opts.current;
     if (!archive || isArchived?.(chat.id)) return;
     setArchivingId(chat.id);
@@ -2793,7 +2936,7 @@ function useChatRowActions(options) {
       setArchivingId((cur) => cur === chat.id ? null : cur);
     }
   }, []);
-  const onDelete = useCallback2(async (chat) => {
+  const onDelete = useCallback4(async (chat) => {
     const { confirmDelete, remove } = opts.current;
     if (!remove) return;
     if (confirmDelete && !await confirmDelete({ id: chat.id, title: chat.title })) return;
@@ -2805,7 +2948,7 @@ function useChatRowActions(options) {
       setDeletingId((cur) => cur === chat.id ? null : cur);
     }
   }, []);
-  const onAssign = useCallback2(async (chatId, projectId) => {
+  const onAssign = useCallback4(async (chatId, projectId) => {
     setBusyId(chatId);
     try {
       await opts.current.assign?.(chatId, projectId);
@@ -2861,18 +3004,18 @@ function useChatRowActions(options) {
 }
 
 // src/surface/useDismissibleNotice.ts
-import { useCallback as useCallback3, useState as useState8 } from "react";
+import { useCallback as useCallback5, useState as useState9 } from "react";
 function useDismissibleNotice(values) {
-  const [dismissed, setDismissed] = useState8("");
+  const [dismissed, setDismissed] = useState9("");
   const key = values.join(",");
-  const dismiss = useCallback3(() => setDismissed(key), [key]);
+  const dismiss = useCallback5(() => setDismissed(key), [key]);
   return { show: values.length > 0 && dismissed !== key, dismiss };
 }
 
 // src/composer/SuggestionRow.tsx
-import { memo as memo3 } from "react";
+import { memo as memo7 } from "react";
 import { jsx as jsx27 } from "react/jsx-runtime";
-var SuggestionRow = memo3(function SuggestionRow2({ items, ariaLabel }) {
+var SuggestionRow = memo7(function SuggestionRow2({ items, ariaLabel }) {
   if (items.length === 0) return null;
   return /* @__PURE__ */ jsx27("div", { className: "bf-suggest", role: "group", "aria-label": ariaLabel, "data-testid": "composer-suggestions", children: items.map((item) => /* @__PURE__ */ jsx27("button", { type: "button", className: "bf-suggest__chip", onClick: item.onSelect, children: item.label }, item.id)) });
 });
@@ -2903,7 +3046,7 @@ function QueuedTurnChips({ items, textOf, onRemove, onSteer, canSteer, labels: o
 }
 
 // src/composer/ContextChip.tsx
-import { memo as memo4 } from "react";
+import { memo as memo8 } from "react";
 import { jsx as jsx29, jsxs as jsxs27 } from "react/jsx-runtime";
 function ContextChipImpl({ label, value, options = [], onChange, icon, className }) {
   const classes = ["bf-ctxchip", className].filter(Boolean).join(" ");
@@ -2918,7 +3061,7 @@ function ContextChipImpl({ label, value, options = [], onChange, icon, className
     /* @__PURE__ */ jsx29("select", { "aria-label": label, value, onChange: (event) => onChange(event.target.value), children: options.map((option) => /* @__PURE__ */ jsx29("option", { value: option.value, disabled: option.disabled, children: option.label }, option.value)) })
   ] });
 }
-var ContextChip = memo4(ContextChipImpl);
+var ContextChip = memo8(ContextChipImpl);
 
 // src/PromptPanel.tsx
 import { jsx as jsx30, jsxs as jsxs28 } from "react/jsx-runtime";
@@ -3005,22 +3148,22 @@ function promptTrailingAction({ canSubmit, running, canStop, voice, recording })
 }
 
 // src/useVoiceDictation.ts
-import { useCallback as useCallback4, useEffect as useEffect5, useRef as useRef6, useState as useState9 } from "react";
+import { useCallback as useCallback6, useEffect as useEffect5, useRef as useRef7, useState as useState10 } from "react";
 function recognitionCtor() {
   if (typeof window === "undefined") return null;
   const w = window;
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 function useVoiceDictation(getValue, onChange) {
-  const recognitionRef = useRef6(null);
-  const [recording, setRecording] = useState9(false);
-  const [supported] = useState9(() => recognitionCtor() != null);
-  const stopVoice = useCallback4(() => {
+  const recognitionRef = useRef7(null);
+  const [recording, setRecording] = useState10(false);
+  const [supported] = useState10(() => recognitionCtor() != null);
+  const stopVoice = useCallback6(() => {
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     setRecording(false);
   }, []);
-  const startVoice = useCallback4(() => {
+  const startVoice = useCallback6(() => {
     const Recognition = recognitionCtor();
     if (!Recognition) return;
     if (recognitionRef.current) {
@@ -3061,7 +3204,7 @@ function useVoiceDictation(getValue, onChange) {
 }
 
 // src/promptOptions/PromptOptionsMenu.tsx
-import { useEffect as useEffect8, useMemo as useMemo6, useRef as useRef10, useState as useState15 } from "react";
+import { useEffect as useEffect8, useMemo as useMemo7, useRef as useRef11, useState as useState16 } from "react";
 import {
   buildModelItems as buildModelItems2,
   DEFAULT_MODEL_IDENTITY as DEFAULT_MODEL_IDENTITY2,
@@ -3194,13 +3337,13 @@ function promptOptionsLabelsFrom(lookup) {
 }
 
 // src/popover/usePopover.ts
-import { useCallback as useCallback5, useEffect as useEffect6, useRef as useRef7, useState as useState10 } from "react";
+import { useCallback as useCallback7, useEffect as useEffect6, useRef as useRef8, useState as useState11 } from "react";
 function usePopover() {
-  const [open, setOpen] = useState10(false);
-  const rootRef = useRef7(null);
-  const close = useCallback5(() => setOpen(false), []);
-  const toggle = useCallback5(() => setOpen((value) => !value), []);
-  const show = useCallback5(() => setOpen(true), []);
+  const [open, setOpen] = useState11(false);
+  const rootRef = useRef8(null);
+  const close = useCallback7(() => setOpen(false), []);
+  const toggle = useCallback7(() => setOpen((value) => !value), []);
+  const show = useCallback7(() => setOpen(true), []);
   useEffect6(() => {
     if (!open) return;
     const onDown = (event) => {
@@ -3352,7 +3495,7 @@ function ModePane({ labels, mode, memory, autoMode, session, close }) {
 }
 
 // src/promptOptions/ModelPane.tsx
-import { useMemo as useMemo5, useState as useState14 } from "react";
+import { useMemo as useMemo6, useState as useState15 } from "react";
 import {
   activeModelKey,
   buildModelItems,
@@ -3363,7 +3506,7 @@ import {
 } from "@seanhogg/builderforce-brain-embedded";
 
 // src/localModels/LocalModelList.tsx
-import { useMemo as useMemo4, useState as useState12 } from "react";
+import { useMemo as useMemo5, useState as useState13 } from "react";
 import { localPickerView } from "@seanhogg/builderforce-brain-embedded";
 
 // src/localModels/localModelView.ts
@@ -3398,10 +3541,10 @@ function backendBadge(row, labels) {
 }
 
 // src/localModels/LocalModelRow.tsx
-import { useState as useState11 } from "react";
+import { useState as useState12 } from "react";
 import { jsx as jsx32, jsxs as jsxs30 } from "react/jsx-runtime";
 function LocalModelRow({ row, labels, active, failed, locale, onSelect, onDownload, onCancel, onRemove }) {
-  const [menuOpen, setMenuOpen] = useState11(false);
+  const [menuOpen, setMenuOpen] = useState12(false);
   const ready = row.state === "ready";
   const removable = ready || row.state === "unsupported" && row.downloaded === true;
   const percent = progressPercent(row);
@@ -3478,8 +3621,8 @@ import { Fragment as Fragment8, jsx as jsx33, jsxs as jsxs31 } from "react/jsx-r
 var isHeld = (row, activeRef) => row.state === "ready" || row.state === "downloading" || row.downloaded === true || row.ref === activeRef;
 function LocalModelList({ state, labels, activeRef, locale, hideHeading, onSelect }) {
   const { rows } = state;
-  const [showAll, setShowAll] = useState12(false);
-  const view = useMemo4(
+  const [showAll, setShowAll] = useState13(false);
+  const view = useMemo5(
     () => localPickerView(rows ?? [], {
       fits: (row) => row.state !== "unsupported",
       pinned: (row) => isHeld(row, activeRef)
@@ -3530,7 +3673,7 @@ function LocalModelList({ state, labels, activeRef, locale, hideHeading, onSelec
 }
 
 // src/localModels/useLocalModels.ts
-import { useCallback as useCallback6, useEffect as useEffect7, useRef as useRef8, useState as useState13 } from "react";
+import { useCallback as useCallback8, useEffect as useEffect7, useRef as useRef9, useState as useState14 } from "react";
 var controllersByStore = /* @__PURE__ */ new WeakMap();
 function controllersOf(store) {
   let map = controllersByStore.get(store);
@@ -3542,9 +3685,9 @@ function controllersOf(store) {
 }
 var NO_ROWS = [];
 function useLocalModels(store) {
-  const [rows, setRows] = useState13(store ? null : NO_ROWS);
-  const [failed, setFailed] = useState13(() => /* @__PURE__ */ new Set());
-  const live = useRef8(true);
+  const [rows, setRows] = useState14(store ? null : NO_ROWS);
+  const [failed, setFailed] = useState14(() => /* @__PURE__ */ new Set());
+  const live = useRef9(true);
   useEffect7(() => {
     live.current = true;
     if (!store) {
@@ -3584,7 +3727,7 @@ function useLocalModels(store) {
       unsubscribe();
     };
   }, [store]);
-  const download = useCallback6(
+  const download = useCallback8(
     (ref) => {
       if (!store) return;
       const controllers = controllersOf(store);
@@ -3605,13 +3748,13 @@ function useLocalModels(store) {
     },
     [store]
   );
-  const cancel = useCallback6(
+  const cancel = useCallback8(
     (ref) => {
       if (store) controllersOf(store).get(ref)?.abort();
     },
     [store]
   );
-  const remove = useCallback6(
+  const remove = useCallback8(
     (ref) => {
       if (store) void store.remove(ref).catch(() => void 0);
     },
@@ -3623,16 +3766,16 @@ function useLocalModels(store) {
 // src/promptOptions/ModelPane.tsx
 import { Fragment as Fragment9, jsx as jsx34, jsxs as jsxs32 } from "react/jsx-runtime";
 function ModelPane({ model, labels, identity, inUse, onPicked }) {
-  const [query, setQuery] = useState14("");
-  const [filter, setFilter] = useState14("all");
+  const [query, setQuery] = useState15("");
+  const [filter, setFilter] = useState15("all");
   const local = useLocalModels(model.localStore);
   const hasStore = !!model.localStore;
-  const items = useMemo5(
+  const items = useMemo6(
     () => buildModelItems(withReadyPageModels(model.options, local.rows), labels, identity),
     [model.options, local.rows, labels, identity]
   );
-  const storeKeys = useMemo5(() => new Set((local.rows ?? []).map((row) => `model:${row.ref}`)), [local.rows]);
-  const categories = useMemo5(
+  const storeKeys = useMemo6(() => new Set((local.rows ?? []).map((row) => `model:${row.ref}`)), [local.rows]);
+  const categories = useMemo6(
     () => MODEL_CATEGORIES.filter((category) => items.some((item) => item.category === category) || category === "local" && hasStore),
     [items, hasStore]
   );
@@ -3708,7 +3851,7 @@ function ModelPane({ model, labels, identity, inUse, onPicked }) {
 import { INFERENCE_MODES } from "@seanhogg/builderforce-brain-embedded";
 
 // src/useRovingRadioGroup.ts
-import { useCallback as useCallback7, useRef as useRef9 } from "react";
+import { useCallback as useCallback9, useRef as useRef10 } from "react";
 function rovingRadioNextIndex(key, index, count) {
   if (count <= 0) return null;
   switch (key) {
@@ -3727,9 +3870,9 @@ function rovingRadioNextIndex(key, index, count) {
   }
 }
 function useRovingRadioGroup(count, checkedIndex) {
-  const items = useRef9([]);
+  const items = useRef10([]);
   const stop = checkedIndex >= 0 && checkedIndex < count ? checkedIndex : 0;
-  const itemProps = useCallback7((index) => ({
+  const itemProps = useCallback9((index) => ({
     ref: (el) => {
       items.current[index] = el;
     },
@@ -3811,12 +3954,12 @@ function PromptOptionsMenu({
   onAccountSettings,
   className
 }) {
-  const labels = useMemo6(() => promptOptionsLabels(labelOverrides), [labelOverrides]);
+  const labels = useMemo7(() => promptOptionsLabels(labelOverrides), [labelOverrides]);
   const { open, toggle, close, show, rootRef } = usePopover();
-  const [tab, setTab] = useState15("mode");
+  const [tab, setTab] = useState16("mode");
   const openTab = openOn?.tab;
   const openToken = openOn?.token;
-  const handledToken = useRef10(openToken);
+  const handledToken = useRef11(openToken);
   useEffect8(() => {
     if (openToken === void 0 || !openTab || openToken === handledToken.current) return;
     handledToken.current = openToken;
@@ -3824,8 +3967,8 @@ function PromptOptionsMenu({
     show();
   }, [openToken, openTab, show]);
   const identity = model?.identity ?? DEFAULT_MODEL_IDENTITY2;
-  const items = useMemo6(() => model ? buildModelItems2(model.options, labels, identity) : [], [model, labels, identity]);
-  const inUse = useMemo6(
+  const items = useMemo7(() => model ? buildModelItems2(model.options, labels, identity) : [], [model, labels, identity]);
+  const inUse = useMemo7(
     () => model ? modelInUse(model.selection, items, labels, model.effective, identity) : null,
     [model, items, labels, identity]
   );
@@ -3969,7 +4112,7 @@ function PromptOptionsMenu({
 }
 
 // src/promptOptions/composerMenuRequest.ts
-import { useCallback as useCallback8, useSyncExternalStore as useSyncExternalStore2 } from "react";
+import { useCallback as useCallback10, useSyncExternalStore as useSyncExternalStore2 } from "react";
 var requests = /* @__PURE__ */ new Map();
 var listeners = /* @__PURE__ */ new Set();
 var lastToken = 0;
@@ -3985,18 +4128,18 @@ function subscribe(listener) {
   };
 }
 function useComposerMenuRequest(composerId) {
-  const current = useCallback8(() => composerId ? requests.get(composerId) : void 0, [composerId]);
+  const current = useCallback10(() => composerId ? requests.get(composerId) : void 0, [composerId]);
   return useSyncExternalStore2(subscribe, current, () => void 0);
 }
 
 // src/inferenceMode/InferenceModeFirstRun.tsx
-import { useEffect as useEffect9, useId, useRef as useRef11 } from "react";
+import { useEffect as useEffect9, useId, useRef as useRef12 } from "react";
 import { jsx as jsx37, jsxs as jsxs35 } from "react/jsx-runtime";
 var ASKED = ["hybrid", "local-only"];
 function InferenceModeFirstRun({ labels, onChoose }) {
   const titleId = useId();
-  const first = useRef11(null);
-  const region = useRef11(null);
+  const first = useRef12(null);
+  const region = useRef12(null);
   const announcement = `${labels.inferenceModeAskTitle} ${labels.inferenceModeAskBody}`;
   useEffect9(() => {
     first.current?.focus();
@@ -4030,24 +4173,24 @@ function InferenceModeFirstRun({ labels, onChoose }) {
 }
 
 // src/inferenceMode/useInferenceModeGate.ts
-import { useCallback as useCallback9, useEffect as useEffect10, useRef as useRef12, useState as useState16 } from "react";
+import { useCallback as useCallback11, useEffect as useEffect10, useRef as useRef13, useState as useState17 } from "react";
 function useInferenceModeGate(inferenceMode) {
   const needsChoice = !!inferenceMode?.needsChoice;
-  const held = useRef12([]);
-  const [holding, setHolding] = useState16(false);
+  const held = useRef13([]);
+  const [holding, setHolding] = useState17(false);
   const onChange = inferenceMode?.onChange;
-  const onChangeRef = useRef12(onChange);
+  const onChangeRef = useRef13(onChange);
   onChangeRef.current = onChange;
-  const answered = useRef12(false);
-  const needsRef = useRef12(needsChoice);
+  const answered = useRef13(false);
+  const needsRef = useRef13(needsChoice);
   needsRef.current = needsChoice && !answered.current;
-  const release = useCallback9(() => {
+  const release = useCallback11(() => {
     const sends = held.current;
     held.current = [];
     setHolding(false);
     return sends;
   }, []);
-  const request = useCallback9((send) => {
+  const request = useCallback11((send) => {
     if (!needsRef.current) {
       send();
       return true;
@@ -4056,7 +4199,7 @@ function useInferenceModeGate(inferenceMode) {
     setHolding(true);
     return false;
   }, []);
-  const choose = useCallback9((mode) => {
+  const choose = useCallback11((mode) => {
     answered.current = true;
     needsRef.current = false;
     const sends = release();
@@ -4230,20 +4373,20 @@ function RecipientPicker({ participants, recipient, onChoose, labels, disabled, 
 }
 
 // src/recipient/useRecipientChoice.ts
-import { useEffect as useEffect11, useMemo as useMemo7, useState as useState17 } from "react";
+import { useEffect as useEffect11, useMemo as useMemo8, useState as useState18 } from "react";
 import {
   mentionRecipient,
   resolveRecipient
 } from "@seanhogg/builderforce-brain-embedded";
 function useRecipientChoice({ participants, input, resetKey }) {
-  const [choice, setChoice] = useState17(null);
+  const [choice, setChoice] = useState18(null);
   useEffect11(() => {
     setChoice(null);
   }, [resetKey]);
   useEffect11(() => {
     setChoice((c) => c && c !== "brain" && !participants.some((p) => p.kind === c.kind && p.ref === c.ref) ? null : c);
   }, [participants]);
-  const mentioned = useMemo7(() => mentionRecipient(input, participants), [input, participants]);
+  const mentioned = useMemo8(() => mentionRecipient(input, participants), [input, participants]);
   return { recipient: resolveRecipient(choice, mentioned), choice, choose: setChoice };
 }
 
@@ -4513,7 +4656,7 @@ function PendingChangesList({
 }
 
 // src/chatTickets/ChatTicketsPanel.tsx
-import { memo as memo5, useCallback as useCallback12, useEffect as useEffect14, useMemo as useMemo9, useRef as useRef14, useState as useState23 } from "react";
+import { memo as memo9, useCallback as useCallback14, useEffect as useEffect14, useMemo as useMemo10, useRef as useRef15, useState as useState24 } from "react";
 
 // src/chatTickets/runGate.ts
 function resolveRunGate(adapter) {
@@ -4523,16 +4666,16 @@ function resolveRunGate(adapter) {
 }
 
 // src/chatTickets/useChatProgressSync.ts
-import { useCallback as useCallback10, useEffect as useEffect12, useRef as useRef13 } from "react";
+import { useCallback as useCallback12, useEffect as useEffect12, useRef as useRef14 } from "react";
 function useChatProgressSync(chatId, chatList, onStale) {
-  const rowRef = useRef13(void 0);
-  const onStaleRef = useRef13(onStale);
-  const reported = useRef13(null);
+  const rowRef = useRef14(void 0);
+  const onStaleRef = useRef14(onStale);
+  const reported = useRef14(null);
   useEffect12(() => {
     rowRef.current = chatList.find((c) => c.id === chatId);
     onStaleRef.current = onStale;
   }, [chatList, chatId, onStale]);
-  return useCallback10((tickets) => {
+  return useCallback12((tickets) => {
     const row = rowRef.current;
     if (!onStaleRef.current || !chatProgressIsStale(row, tickets)) return;
     const signature = `${chatId}:${tickets.length}:${tickets.map((t) => `${t.progressPct}/${t.status ?? ""}`).join(",")}`;
@@ -4838,7 +4981,7 @@ function SpendPill({ summary, labels: overrides, locale }) {
 }
 
 // src/chatTickets/LinkForm.tsx
-import { useEffect as useEffect13, useMemo as useMemo8, useState as useState18 } from "react";
+import { useEffect as useEffect13, useMemo as useMemo9, useState as useState19 } from "react";
 
 // src/chatTickets/types.ts
 var TICKET_KINDS = ["task", "epic", "gap", "objective", "initiative", "portfolio", "roadmap", "spec", "retro", "poker"];
@@ -4915,13 +5058,13 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
 import { jsx as jsx47, jsxs as jsxs45 } from "react/jsx-runtime";
 var SEARCH_LIMIT = 40;
 function LinkForm({ search, projectId, existing, labels, onLink }) {
-  const [kind, setKind] = useState18("task");
-  const [ref, setRef] = useState18("");
-  const [query, setQuery] = useState18("");
-  const [linkType, setLinkType] = useState18("linked");
-  const [busy, setBusy] = useState18(false);
-  const [results, setResults] = useState18([]);
-  const [loading, setLoading] = useState18(false);
+  const [kind, setKind] = useState19("task");
+  const [ref, setRef] = useState19("");
+  const [query, setQuery] = useState19("");
+  const [linkType, setLinkType] = useState19("linked");
+  const [busy, setBusy] = useState19(false);
+  const [results, setResults] = useState19([]);
+  const [loading, setLoading] = useState19(false);
   useEffect13(() => {
     let live = true;
     setLoading(true);
@@ -4939,7 +5082,7 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
       clearTimeout(h);
     };
   }, [search, kind, query, projectId]);
-  const shown = useMemo8(
+  const shown = useMemo9(
     () => results.filter((o) => !existing.some((e) => e.kind === kind && e.ref === o.ref)),
     [results, existing, kind]
   );
@@ -4989,10 +5132,10 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
 }
 
 // src/chatTickets/MergeSection.tsx
-import { useState as useState19 } from "react";
+import { useState as useState20 } from "react";
 import { jsx as jsx48, jsxs as jsxs46 } from "react/jsx-runtime";
 function MergeSection({ chatId, chatList, labels, onMerge, busy }) {
-  const [selected, setSelected] = useState19([]);
+  const [selected, setSelected] = useState20([]);
   const candidates = chatList.filter((c) => c.id !== chatId);
   const toggle = (id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
   return /* @__PURE__ */ jsxs46("div", { style: { ...S2.section, flexDirection: "column", alignItems: "stretch" }, children: [
@@ -5008,10 +5151,10 @@ function MergeSection({ chatId, chatList, labels, onMerge, busy }) {
 }
 
 // src/chatTickets/PeopleSection.tsx
-import { useState as useState20 } from "react";
+import { useState as useState21 } from "react";
 import { jsx as jsx49, jsxs as jsxs47 } from "react/jsx-runtime";
 function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite, onRemove, busy }) {
-  const [email, setEmail] = useState20("");
+  const [email, setEmail] = useState21("");
   const submit = async () => {
     const e = email.trim();
     if (!e) return;
@@ -5052,11 +5195,11 @@ function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite,
 }
 
 // src/chatTickets/QuestionsSection.tsx
-import { useState as useState21 } from "react";
+import { useState as useState22 } from "react";
 import { jsx as jsx50, jsxs as jsxs48 } from "react/jsx-runtime";
 function QuestionsSection({ questions, labels, onAnswer }) {
-  const [answers, setAnswers] = useState21({});
-  const [sending, setSending] = useState21(null);
+  const [answers, setAnswers] = useState22({});
+  const [sending, setSending] = useState22(null);
   return /* @__PURE__ */ jsx50("div", { style: S2.drawer, children: questions.length === 0 ? /* @__PURE__ */ jsx50("span", { style: S2.muted, children: labels.noQuestions }) : questions.map((q, index) => {
     const value = answers[q.id] ?? "";
     return /* @__PURE__ */ jsxs48("div", { style: { padding: "10px 0", borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : void 0 }, children: [
@@ -5110,7 +5253,7 @@ function sortChatTickets(tickets, sort) {
 }
 
 // src/chatTickets/useChatTicketSort.ts
-import { useCallback as useCallback11, useState as useState22 } from "react";
+import { useCallback as useCallback13, useState as useState23 } from "react";
 var SORT_KEY = "bf.chatTickets.sort";
 function readSort() {
   try {
@@ -5127,8 +5270,8 @@ function writeSort(sort) {
   }
 }
 function useChatTicketSort() {
-  const [sort, setSort] = useState22(readSort);
-  const choose = useCallback11((next) => {
+  const [sort, setSort] = useState23(readSort);
+  const choose = useCallback13((next) => {
     setSort(next);
     writeSort(next);
   }, []);
@@ -5141,27 +5284,27 @@ var RUNNABLE = new Set(RUNNABLE_KINDS);
 var COLLAPSE_THRESHOLD = 8;
 var NO_SUBAGENTS = [];
 function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS, spend, spendLabels: spendLabels2, locale, originalRequest }) {
-  const [tickets, setTickets] = useState23([]);
-  const [agents, setAgents] = useState23([]);
-  const [members, setMembers] = useState23([]);
-  const [pool, setPool] = useState23([]);
-  const [questions, setQuestions] = useState23([]);
-  const [panel, setPanel] = useState23(null);
+  const [tickets, setTickets] = useState24([]);
+  const [agents, setAgents] = useState24([]);
+  const [members, setMembers] = useState24([]);
+  const [pool, setPool] = useState24([]);
+  const [questions, setQuestions] = useState24([]);
+  const [panel, setPanel] = useState24(null);
   const togglePanel = (key) => setPanel((open) => open === key ? null : key);
   const openExtension = extensions?.find((ext) => ext.key === panel) ?? null;
   useEffect14(() => {
     if (panel && !isBuiltinPanel(panel) && !extensions?.some((ext) => ext.key === panel)) setPanel(null);
   }, [panel, extensions]);
-  const [lineageKey, setLineageKey] = useState23(null);
-  const [lineage, setLineage] = useState23([]);
-  const [runKey, setRunKey] = useState23(null);
-  const [msg, setMsg] = useState23(null);
-  const [busy, setBusy] = useState23(false);
-  const [collapsed, setCollapsed] = useState23(null);
-  const userCollapsed = useRef14(false);
+  const [lineageKey, setLineageKey] = useState24(null);
+  const [lineage, setLineage] = useState24([]);
+  const [runKey, setRunKey] = useState24(null);
+  const [msg, setMsg] = useState24(null);
+  const [busy, setBusy] = useState24(false);
+  const [collapsed, setCollapsed] = useState24(null);
+  const userCollapsed = useRef15(false);
   const [sort, setSort] = useChatTicketSort();
   const syncChatProgress = useChatProgressSync(chatId, chatList, onChanged);
-  const load = useCallback12(async () => {
+  const load = useCallback14(async () => {
     const [tk, ag, mem, qs] = await Promise.all([
       adapter.listTickets(chatId).catch(() => []),
       adapter.listAgents(chatId).catch(() => []),
@@ -5185,8 +5328,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     setMsg(m);
     if (typeof window !== "undefined") window.setTimeout(() => setMsg(null), 3500);
   };
-  const poolName = useCallback12((ref) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
-  const parentLink = useCallback12((tk) => tk.parent ? tickets.find((t) => t.kind === tk.parent.kind && t.ref === tk.parent.ref) : void 0, [tickets]);
+  const poolName = useCallback14((ref) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
+  const parentLink = useCallback14((tk) => tk.parent ? tickets.find((t) => t.kind === tk.parent.kind && t.ref === tk.parent.ref) : void 0, [tickets]);
   const unlink = async (tk) => {
     setBusy(true);
     try {
@@ -5219,8 +5362,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       setBusy(false);
     }
   };
-  const agg = useMemo9(() => rollupChatTicketHealth(tickets), [tickets]);
-  const displayedTickets = useMemo9(() => sortChatTickets(tickets, sort), [tickets, sort]);
+  const agg = useMemo10(() => rollupChatTicketHealth(tickets), [tickets]);
+  const displayedTickets = useMemo10(() => sortChatTickets(tickets, sort), [tickets, sort]);
   const isCollapsed = tickets.length > 0 && (collapsed ?? tickets.length > COLLAPSE_THRESHOLD);
   const toggleCollapsed = () => {
     userCollapsed.current = true;
@@ -5488,7 +5631,7 @@ var BUILTIN_PANELS = /* @__PURE__ */ new Set(["link", "agents", "people", "merge
 function isBuiltinPanel(key) {
   return BUILTIN_PANELS.has(key);
 }
-var ChatTicketsPanel = memo5(ChatTicketsPanelInner);
+var ChatTicketsPanel = memo9(ChatTicketsPanelInner);
 
 // src/chatTickets/restAdapter.ts
 import { readChatRunHistory, readChatTicketLinks } from "@seanhogg/builderforce-brain-embedded";
@@ -5611,11 +5754,11 @@ function createChatTicketsRestAdapter(opts) {
 }
 
 // src/chatTickets/useChatParticipants.ts
-import { useEffect as useEffect15, useMemo as useMemo10, useState as useState24 } from "react";
+import { useEffect as useEffect15, useMemo as useMemo11, useState as useState25 } from "react";
 function useChatParticipants(adapter, chatId, refreshSignal = 0) {
-  const [pool, setPool] = useState24([]);
-  const [invited, setInvited] = useState24([]);
-  const [members, setMembers] = useState24([]);
+  const [pool, setPool] = useState25([]);
+  const [invited, setInvited] = useState25([]);
+  const [members, setMembers] = useState25([]);
   useEffect15(() => {
     if (chatId == null) {
       setInvited([]);
@@ -5650,7 +5793,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
       ok = false;
     };
   }, [adapter, needsPool]);
-  return useMemo10(
+  return useMemo11(
     () => [
       // The NAME comes off the invited row, which the server resolves in one batched
       // query. The pool lookup behind it is the legacy path, kept only for a client
@@ -5671,14 +5814,14 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
 }
 
 // src/chatTickets/useChatActivitySignal.ts
-import { useMemo as useMemo11 } from "react";
+import { useMemo as useMemo12 } from "react";
 import { activityMessageCount } from "@seanhogg/builderforce-brain-embedded";
 function useChatActivitySignal(messages) {
-  return useMemo11(() => activityMessageCount(messages), [messages]);
+  return useMemo12(() => activityMessageCount(messages), [messages]);
 }
 
 // src/mention/MentionAutocomplete.tsx
-import { useCallback as useCallback13, useEffect as useEffect16, useMemo as useMemo12, useState as useState25 } from "react";
+import { useCallback as useCallback15, useEffect as useEffect16, useMemo as useMemo13, useState as useState26 } from "react";
 import {
   activeMentionToken,
   filterMentionCandidates
@@ -5687,14 +5830,14 @@ import { jsx as jsx52, jsxs as jsxs50 } from "react/jsx-runtime";
 var DEFAULT_MENTION_LABELS = { title: "Direct to", agent: "Agent", human: "Person" };
 function useMentionAutocomplete(opts) {
   const { textareaRef, value, setValue, participants, onPick, labels, disabled } = opts;
-  const [token, setToken] = useState25(null);
-  const [index, setIndex] = useState25(0);
-  const matches = useMemo12(
+  const [token, setToken] = useState26(null);
+  const [index, setIndex] = useState26(0);
+  const matches = useMemo13(
     () => token && !disabled ? filterMentionCandidates(participants, token.query) : [],
     [token, participants, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
-  const recompute = useCallback13(() => {
+  const recompute = useCallback15(() => {
     const el = textareaRef.current;
     if (!el || disabled || participants.length === 0) {
       setToken(null);
@@ -5707,7 +5850,7 @@ function useMentionAutocomplete(opts) {
   useEffect16(() => {
     recompute();
   }, [value, recompute]);
-  const choose = useCallback13((r) => {
+  const choose = useCallback15((r) => {
     const el = textareaRef.current;
     const tk = token ?? (el ? activeMentionToken(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
@@ -5729,7 +5872,7 @@ function useMentionAutocomplete(opts) {
     setToken(null);
     onPick(r);
   }, [token, value, setValue, onPick, textareaRef]);
-  const onKeyDown = useCallback13((e) => {
+  const onKeyDown = useCallback15((e) => {
     if (!open) return false;
     switch (e.key) {
       case "ArrowDown":
@@ -5817,7 +5960,7 @@ var POP = {
 };
 
 // src/mention/TicketAutocomplete.tsx
-import { useCallback as useCallback14, useEffect as useEffect17, useMemo as useMemo13, useState as useState26 } from "react";
+import { useCallback as useCallback16, useEffect as useEffect17, useMemo as useMemo14, useState as useState27 } from "react";
 import {
   activeTicketToken,
   filterTicketCandidates
@@ -5826,14 +5969,14 @@ import { jsx as jsx53, jsxs as jsxs51 } from "react/jsx-runtime";
 var DEFAULT_TICKET_TAG_LABELS = { title: "Tag ticket", status: "Status", noMatches: "No tickets found" };
 function useTicketAutocomplete(opts) {
   const { textareaRef, value, setValue, tickets, onPick, labels, disabled } = opts;
-  const [token, setToken] = useState26(null);
-  const [index, setIndex] = useState26(0);
-  const matches = useMemo13(
+  const [token, setToken] = useState27(null);
+  const [index, setIndex] = useState27(0);
+  const matches = useMemo14(
     () => token && !disabled ? filterTicketCandidates(tickets, token.query) : [],
     [token, tickets, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
-  const recompute = useCallback14(() => {
+  const recompute = useCallback16(() => {
     const el = textareaRef.current;
     if (!el || disabled || tickets.length === 0) {
       setToken(null);
@@ -5846,7 +5989,7 @@ function useTicketAutocomplete(opts) {
   useEffect17(() => {
     recompute();
   }, [value, recompute]);
-  const choose = useCallback14((t) => {
+  const choose = useCallback16((t) => {
     const el = textareaRef.current;
     const tk = token ?? (el ? activeTicketToken(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
@@ -5869,7 +6012,7 @@ function useTicketAutocomplete(opts) {
     setToken(null);
     onPick(t);
   }, [token, value, setValue, onPick, textareaRef]);
-  const onKeyDown = useCallback14((e) => {
+  const onKeyDown = useCallback16((e) => {
     if (!open) return false;
     switch (e.key) {
       case "ArrowDown":
@@ -6013,7 +6156,7 @@ function chatDiagnosticsReads(adapter, chatId) {
 }
 
 // src/evermind/EvermindConsole.tsx
-import { useCallback as useCallback19, useEffect as useEffect20, useId as useId2, useMemo as useMemo15, useRef as useRef16, useState as useState31 } from "react";
+import { useCallback as useCallback21, useEffect as useEffect20, useId as useId2, useMemo as useMemo16, useRef as useRef17, useState as useState32 } from "react";
 
 // src/evermind/types.ts
 function defaultFormatWhen(atMs) {
@@ -6238,13 +6381,13 @@ function evermindNextAction(input) {
 }
 
 // src/evermind/EvermindTestBench.tsx
-import { useCallback as useCallback15, useState as useState27 } from "react";
+import { useCallback as useCallback17, useState as useState28 } from "react";
 import { jsx as jsx54, jsxs as jsxs52 } from "react/jsx-runtime";
 function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
-  const [prompt, setPrompt] = useState27("");
-  const [running, setRunning] = useState27(false);
-  const [error, setError] = useState27(null);
-  const run = useCallback15(async (withPrompt) => {
+  const [prompt, setPrompt] = useState28("");
+  const [running, setRunning] = useState28(false);
+  const [error, setError] = useState28(null);
+  const run = useCallback17(async (withPrompt) => {
     setRunning(true);
     setError(null);
     try {
@@ -6297,7 +6440,7 @@ function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
 }
 
 // src/evermind/EvermindMaintenance.tsx
-import { useCallback as useCallback16, useState as useState28 } from "react";
+import { useCallback as useCallback18, useState as useState29 } from "react";
 import { jsx as jsx55, jsxs as jsxs53 } from "react/jsx-runtime";
 function EvermindMaintenance({
   t,
@@ -6307,13 +6450,13 @@ function EvermindMaintenance({
   onReindex,
   onCleanup
 }) {
-  const [slug, setSlug] = useState28("");
-  const [pending, setPending] = useState28(null);
-  const doReseed = useCallback16(async () => {
+  const [slug, setSlug] = useState29("");
+  const [pending, setPending] = useState29(null);
+  const doReseed = useCallback18(async () => {
     setPending(null);
     await onReseed?.(slug || void 0);
   }, [onReseed, slug]);
-  const doCleanup = useCallback16(async () => {
+  const doCleanup = useCallback18(async () => {
     setPending(null);
     await onCleanup?.();
   }, [onCleanup]);
@@ -6417,7 +6560,7 @@ function Confirm({
 }
 
 // src/evermind/EvermindAnalyzer.tsx
-import { useCallback as useCallback17, useEffect as useEffect18, useMemo as useMemo14, useState as useState29 } from "react";
+import { useCallback as useCallback19, useEffect as useEffect18, useMemo as useMemo15, useState as useState30 } from "react";
 import { Fragment as Fragment14, jsx as jsx56, jsxs as jsxs54 } from "react/jsx-runtime";
 var TONE = {
   ok: "ok",
@@ -6428,15 +6571,15 @@ var TONE = {
   redundant: "warn"
 };
 function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysis, onAnalysis }) {
-  const [selected, setSelected] = useState29(/* @__PURE__ */ new Set());
-  const [running, setRunning] = useState29(false);
-  const [applying, setApplying] = useState29(false);
-  const [repair, setRepair] = useState29(null);
-  const [error, setError] = useState29(null);
+  const [selected, setSelected] = useState30(/* @__PURE__ */ new Set());
+  const [running, setRunning] = useState30(false);
+  const [applying, setApplying] = useState30(false);
+  const [repair, setRepair] = useState30(null);
+  const [error, setError] = useState30(null);
   useEffect18(() => {
     setSelected(new Set(analysis?.findings.map((f) => f.id) ?? []));
   }, [analysis]);
-  const run = useCallback17(async () => {
+  const run = useCallback19(async () => {
     setRunning(true);
     setError(null);
     setRepair(null);
@@ -6449,7 +6592,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       setRunning(false);
     }
   }, [onAnalyze, onAnalysis, t.errorGeneric]);
-  const apply = useCallback17(async () => {
+  const apply = useCallback19(async () => {
     if (!onApply || !analysis) return;
     const picked = analysis.findings.filter((f) => selected.has(f.id));
     if (picked.length === 0) return;
@@ -6468,7 +6611,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       setApplying(false);
     }
   }, [analysis, onAnalysis, onApply, onRepaired, selected, t.errorGeneric]);
-  const toggle = useCallback17((id) => {
+  const toggle = useCallback19((id) => {
     setSelected((cur) => {
       const next = new Set(cur);
       if (next.has(id)) next.delete(id);
@@ -6477,7 +6620,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
     });
   }, []);
   const findings = analysis?.findings ?? [];
-  const allSelected = useMemo14(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
+  const allSelected = useMemo15(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
   const busy = disabled || running || applying;
   return /* @__PURE__ */ jsxs54("div", { style: sectionBlock, children: [
     /* @__PURE__ */ jsx56("div", { style: fieldTitle, children: t.analyzeTitle }),
@@ -6580,13 +6723,13 @@ function FindingRow({
 }
 
 // src/evermind/EvermindDiagnostics.tsx
-import { useCallback as useCallback18, useEffect as useEffect19, useRef as useRef15, useState as useState30 } from "react";
+import { useCallback as useCallback20, useEffect as useEffect19, useRef as useRef16, useState as useState31 } from "react";
 import { Fragment as Fragment15, jsx as jsx57, jsxs as jsxs55 } from "react/jsx-runtime";
 function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
-  const [report, setReport] = useState30(null);
-  const [copied, setCopied] = useState30(false);
-  const [revealed, setRevealed] = useState30(false);
-  const copy = useCallback18(async () => {
+  const [report, setReport] = useState31(null);
+  const [copied, setCopied] = useState31(false);
+  const [revealed, setRevealed] = useState31(false);
+  const copy = useCallback20(async () => {
     const text = buildReport();
     setReport(text);
     try {
@@ -6601,12 +6744,12 @@ function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
       onManualFallback?.();
     }
   }, [buildReport, onCopy, onManualFallback]);
-  const toggleReveal = useCallback18(() => setRevealed((v) => !v), []);
+  const toggleReveal = useCallback20(() => setRevealed((v) => !v), []);
   return { report, copied, revealed, copy, toggleReveal };
 }
 function EvermindDiagnostics({ t, disabled, copy }) {
   const { report, copied, revealed } = copy;
-  const areaRef = useRef15(null);
+  const areaRef = useRef16(null);
   useEffect19(() => {
     if (!revealed) return;
     areaRef.current?.focus();
@@ -6924,26 +7067,26 @@ import { Fragment as Fragment16, jsx as jsx59, jsxs as jsxs56 } from "react/jsx-
 var TEACH_POLL_INTERVAL_MS = 3e3;
 var TEACH_POLL_TIMEOUT_MS = 12e4;
 function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate, host = "web" }) {
-  const t = useMemo15(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
-  const [data, setData] = useState31(null);
-  const [targets, setTargets] = useState31(null);
-  const [seedModels, setSeedModels] = useState31([]);
-  const [teacherOpts, setTeacherOpts] = useState31(null);
-  const [selectedSlug, setSelectedSlug] = useState31("");
-  const [teachPrompt, setTeachPrompt] = useState31("");
-  const [teachText, setTeachText] = useState31("");
-  const [busy, setBusy] = useState31(false);
-  const [validating, setValidating] = useState31(false);
-  const [validateResult, setValidateResult] = useState31(null);
-  const [notice, setNotice] = useState31(null);
-  const [noticeTone, setNoticeTone] = useState31("good");
-  const [error, setError] = useState31(null);
-  const [loaded, setLoaded] = useState31(false);
-  const [tab, setTab] = useState31("teach");
-  const [probeResult, setProbeResult] = useState31(null);
-  const [analysis, setAnalysis] = useState31(null);
-  const [loadFailed, setLoadFailed] = useState31(false);
-  const reload = useCallback19(async () => {
+  const t = useMemo16(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
+  const [data, setData] = useState32(null);
+  const [targets, setTargets] = useState32(null);
+  const [seedModels, setSeedModels] = useState32([]);
+  const [teacherOpts, setTeacherOpts] = useState32(null);
+  const [selectedSlug, setSelectedSlug] = useState32("");
+  const [teachPrompt, setTeachPrompt] = useState32("");
+  const [teachText, setTeachText] = useState32("");
+  const [busy, setBusy] = useState32(false);
+  const [validating, setValidating] = useState32(false);
+  const [validateResult, setValidateResult] = useState32(null);
+  const [notice, setNotice] = useState32(null);
+  const [noticeTone, setNoticeTone] = useState32("good");
+  const [error, setError] = useState32(null);
+  const [loaded, setLoaded] = useState32(false);
+  const [tab, setTab] = useState32("teach");
+  const [probeResult, setProbeResult] = useState32(null);
+  const [analysis, setAnalysis] = useState32(null);
+  const [loadFailed, setLoadFailed] = useState32(false);
+  const reload = useCallback21(async () => {
     const targetsP = adapter.loadTargets?.().catch(() => null);
     try {
       const d = await adapter.loadData();
@@ -6997,13 +7140,13 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [refreshMs, busy, reload]);
-  const lastRefreshSignal = useRef16(refreshSignal);
+  const lastRefreshSignal = useRef17(refreshSignal);
   useEffect20(() => {
     if (refreshSignal == null || refreshSignal === lastRefreshSignal.current) return;
     lastRefreshSignal.current = refreshSignal;
     void reload();
   }, [refreshSignal, reload]);
-  const runValidate = useCallback19(async (prompt) => {
+  const runValidate = useCallback21(async (prompt) => {
     const task = prompt.trim();
     if (task.length < 3) return;
     setValidating(true);
@@ -7019,12 +7162,12 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setValidating(false);
     }
   }, [adapter, onValidate, t.errorGeneric]);
-  const clearValidate = useCallback19(() => {
+  const clearValidate = useCallback21(() => {
     setValidateResult(null);
     onValidate?.(null);
   }, [onValidate]);
-  const pollTimer = useRef16(null);
-  const mounted = useRef16(true);
+  const pollTimer = useRef17(null);
+  const mounted = useRef17(true);
   useEffect20(() => {
     mounted.current = true;
     return () => {
@@ -7032,7 +7175,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (pollTimer.current) clearTimeout(pollTimer.current);
     };
   }, []);
-  const describeTeachOutcome = useCallback19((status) => {
+  const describeTeachOutcome = useCallback21((status) => {
     if (status.state === "dropped") return { text: t.taughtDropped, tone: "warn" };
     if (status.state !== "merged") return { text: t.taughtStillPending, tone: "warn" };
     const verdict = evermindLearnedStatus({
@@ -7048,7 +7191,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     if (verdict.state === "fault") return { text: t.taughtTeacherFault(verdict.teacherModel ?? "", verdict.reason), tone: "warn" };
     return { text: t.taughtSelf(version), tone: "good" };
   }, [t]);
-  const trackTeach = useCallback19((contributionId) => {
+  const trackTeach = useCallback21((contributionId) => {
     const readStatus = adapter.teachStatus;
     if (!readStatus || !Number.isInteger(contributionId) || contributionId <= 0) return;
     if (pollTimer.current) clearTimeout(pollTimer.current);
@@ -7082,7 +7225,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       void tick();
     }, TEACH_POLL_INTERVAL_MS);
   }, [adapter, describeTeachOutcome, reload, t.taughtStillPending]);
-  const run = useCallback19(async (op, successNotice) => {
+  const run = useCallback21(async (op, successNotice) => {
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -7098,7 +7241,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     }
   }, [reload, t.errorGeneric]);
   const panelId = useId2();
-  const buildReport = useCallback19(() => buildEvermindDiagnostics({
+  const buildReport = useCallback21(() => buildEvermindDiagnostics({
     data,
     projectName,
     host,
@@ -7658,7 +7801,7 @@ function RecentList({ t, entries }) {
   ] });
 }
 function RecentRow({ t, entry }) {
-  const [open, setOpen] = useState31(false);
+  const [open, setOpen] = useState32(false);
   const status = evermindLearnedStatus(entry);
   const faulted = status.state === "fault";
   const body = entry.kind === "delta" ? t.deltaEntry : faulted ? "" : entry.text ?? "";
@@ -7951,7 +8094,7 @@ function evermindLabelsFromBundle(bundle, prefix = "ev.") {
 }
 
 // src/project360/Project360View.tsx
-import { useMemo as useMemo16, useState as useState32 } from "react";
+import { useMemo as useMemo17, useState as useState33 } from "react";
 
 // src/project360/sunburstGeometry.ts
 var VIEWBOX = 320;
@@ -8131,9 +8274,9 @@ var DEFAULT_PROJECT360_LABELS = {
 import { Fragment as Fragment17, jsx as jsx61, jsxs as jsxs58 } from "react/jsx-runtime";
 var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
-  const L = useMemo16(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
-  const [selected, setSelected] = useState32(null);
-  const sortedWorkforce = useMemo16(
+  const L = useMemo17(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
+  const [selected, setSelected] = useState33(null);
+  const sortedWorkforce = useMemo17(
     () => [...data?.workforce ?? []].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)),
     [data?.workforce]
   );
@@ -8300,7 +8443,7 @@ function MemberRow({ member, labels, onAction }) {
 }
 
 // src/projectList/ProjectListView.tsx
-import { useMemo as useMemo17 } from "react";
+import { useMemo as useMemo18 } from "react";
 
 // src/projectList/types.ts
 var DEFAULT_PROJECT_LIST_LABELS = {
@@ -8315,7 +8458,7 @@ var DEFAULT_PROJECT_LIST_LABELS = {
 // src/projectList/ProjectListView.tsx
 import { jsx as jsx62, jsxs as jsxs59 } from "react/jsx-runtime";
 function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }) {
-  const L = useMemo17(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
+  const L = useMemo18(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
   const header = /* @__PURE__ */ jsxs59("header", { className: "bf-list-head", children: [
     /* @__PURE__ */ jsxs59("div", { className: "bf-list-head__id", children: [
       /* @__PURE__ */ jsx62("span", { className: "bf-list-head__title", children: title }),
@@ -8392,7 +8535,7 @@ function Row2({ item, onAction }) {
 }
 
 // src/composer/BrainComposer.tsx
-import { useCallback as useCallback20, useEffect as useEffect23, useRef as useRef18, useState as useState35 } from "react";
+import { useCallback as useCallback24, useEffect as useEffect25, useRef as useRef20, useState as useState38 } from "react";
 
 // src/workStatus/consumptionSnapshot.ts
 var TTL_MS = 6e4;
@@ -8425,9 +8568,9 @@ function subscribeConsumptionSnapshot(listener) {
 }
 
 // src/workStatus/useConsumptionSnapshot.ts
-import { useEffect as useEffect21, useState as useState33 } from "react";
+import { useEffect as useEffect21, useState as useState34 } from "react";
 function useConsumptionSnapshot(request) {
-  const [snapshot, setSnapshot] = useState33(cachedConsumptionSnapshot());
+  const [snapshot, setSnapshot] = useState34(cachedConsumptionSnapshot());
   useEffect21(() => {
     if (!request) return void 0;
     let alive = true;
@@ -8563,10 +8706,10 @@ function AccountStatus({ snapshot, labels, locale, onUpgrade }) {
 }
 
 // src/workStatus/EvermindStatus.tsx
-import { useEffect as useEffect22, useState as useState34 } from "react";
+import { useEffect as useEffect22, useState as useState35 } from "react";
 import { jsx as jsx64, jsxs as jsxs61 } from "react/jsx-runtime";
 function EvermindStatus({ request, projectId, labels }) {
-  const [head, setHead] = useState34(null);
+  const [head, setHead] = useState35(null);
   useEffect22(() => {
     if (projectId == null) {
       setHead(null);
@@ -8629,42 +8772,393 @@ function WorkSpendPanel({ request, labels: overrides, loadingLabel, locale }) {
   ] });
 }
 
+// src/connections/ConnectionRow.tsx
+import { useState as useState36 } from "react";
+
+// src/connections/types.ts
+var DEFAULT_CONNECTIONS_LABELS = {
+  heading: "Connected accounts",
+  empty: "No provider accounts connected.",
+  loadFailed: "Could not load connected accounts.",
+  unavailable: "Connected accounts are not available from here.",
+  authOauth: "Subscription",
+  authApiKey: "API key",
+  healthOk: "Working",
+  healthCapacity: "Usage limit reached \u2014 add credits or wait for the reset",
+  healthNotEntitled: "Signed in, but the plan does not cover this model",
+  healthRejected: "Sign-in expired \u2014 reconnect",
+  healthUnresolved: "Credential could not be read \u2014 reconnect",
+  test: "Test",
+  testing: "Testing\u2026",
+  testOk: "Connection works",
+  reconnect: "Reconnect",
+  pasteHint: "Sign in on the page that opened, then paste the code it shows.",
+  pastePlaceholder: "Paste code",
+  finish: "Finish",
+  finishing: "Finishing\u2026",
+  cancel: "Cancel",
+  deviceHint: "Approve in your browser \u2014 the page shows code {code}.",
+  reconnected: "Reconnected",
+  errDenied: "The connection was declined.",
+  errExpired: "That code expired \u2014 reconnect again.",
+  errStart: "Could not start reconnecting.",
+  errFailed: "Could not reconnect."
+};
+function connectionsLabels(overrides) {
+  return overrides ? { ...DEFAULT_CONNECTIONS_LABELS, ...overrides } : DEFAULT_CONNECTIONS_LABELS;
+}
+function connectionsLabelsFrom(lookup) {
+  return stringsFrom(DEFAULT_CONNECTIONS_LABELS, lookup);
+}
+var HEALTH_LABEL = {
+  ok: "healthOk",
+  capacity: "healthCapacity",
+  not_entitled: "healthNotEntitled",
+  rejected: "healthRejected",
+  unresolved: "healthUnresolved"
+};
+function healthLabel(health, labels) {
+  return labels[HEALTH_LABEL[health]];
+}
+
+// src/connections/useProviderReconnect.ts
+import { useCallback as useCallback22, useEffect as useEffect23, useMemo as useMemo19, useRef as useRef18, useSyncExternalStore as useSyncExternalStore3 } from "react";
+
+// src/connections/reconnectFlow.ts
+var REASONS = ["unavailable", "denied", "expired", "failed"];
+function failureOf(error) {
+  const reason = error?.reason;
+  if (reason === "cancelled") return null;
+  const detail = error?.detail;
+  return {
+    reason: REASONS.includes(reason) ? reason : "failed",
+    detail: typeof detail === "string" && detail ? detail : error instanceof Error && !reason ? error.message : null
+  };
+}
+var IDLE = { phase: "idle", userCode: null, code: "", failure: null, connected: 0 };
+var ReconnectFlow = class {
+  constructor(client, provider) {
+    this.client = client;
+    this.provider = provider;
+  }
+  client;
+  provider;
+  state = IDLE;
+  listeners = /* @__PURE__ */ new Set();
+  generation = 0;
+  started = null;
+  abort = null;
+  subscribe = (listener) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
+  snapshot = () => this.state;
+  set(patch) {
+    this.state = { ...this.state, ...patch };
+    for (const listener of this.listeners) listener();
+  }
+  /** The ONE place a flow is torn down, so every ending leaves the same state. Returns the new generation. */
+  reset(patch = {}) {
+    this.generation += 1;
+    this.abort?.abort();
+    this.abort = null;
+    this.started = null;
+    this.set({ phase: "idle", userCode: null, code: "", ...patch });
+    return this.generation;
+  }
+  succeed() {
+    this.reset({ failure: null, connected: this.state.connected + 1 });
+  }
+  setCode = (code) => this.set({ code });
+  /** Run the connect. Resolves true once the gateway stored the connection. */
+  start = async (openUrl) => {
+    const generation = this.reset({ failure: null });
+    this.set({ phase: "starting" });
+    let begun;
+    try {
+      begun = await this.client.start(this.provider);
+    } catch (error) {
+      if (generation === this.generation) this.reset({ failure: failureOf(error) });
+      return false;
+    }
+    if (generation !== this.generation) return false;
+    this.started = begun;
+    openUrl(begun.authorizeUrl);
+    if (begun.grant === "paste") {
+      this.set({ phase: "paste" });
+      return this.awaitPaste(generation);
+    }
+    this.set({ phase: "device", userCode: begun.userCode });
+    const controller = new AbortController();
+    this.abort = controller;
+    try {
+      await this.client.awaitDevice(this.provider, begun, controller.signal);
+    } catch (error) {
+      if (generation === this.generation && !controller.signal.aborted) this.reset({ failure: failureOf(error) });
+      return false;
+    }
+    if (generation !== this.generation || controller.signal.aborted) return false;
+    this.succeed();
+    return true;
+  };
+  /** For a paste grant `start` resolves when the pasted code is redeemed, or the flow ends otherwise. */
+  awaitPaste(generation) {
+    return new Promise((resolve) => {
+      const before = this.state.connected;
+      const off = this.subscribe(() => {
+        if (this.state.connected !== before) {
+          off();
+          resolve(true);
+          return;
+        }
+        if (this.generation !== generation) {
+          off();
+          resolve(false);
+        }
+      });
+    });
+  }
+  finish = async () => {
+    const begun = this.started;
+    const pasted = this.state.code.trim();
+    if (!begun || !pasted || this.state.phase !== "paste") return;
+    const generation = this.generation;
+    this.set({ phase: "finishing", failure: null });
+    try {
+      await this.client.completePaste(this.provider, pasted, begun.state);
+    } catch (error) {
+      if (generation !== this.generation) return;
+      const why = failureOf(error);
+      if (why?.reason === "expired") this.reset({ failure: why });
+      else this.set({ phase: "paste", failure: why });
+      return;
+    }
+    if (generation === this.generation) this.succeed();
+  };
+  cancel = () => {
+    this.reset({ failure: null });
+  };
+};
+var flows = /* @__PURE__ */ new WeakMap();
+function reconnectFlow(client, provider) {
+  let byProvider = flows.get(client);
+  if (!byProvider) {
+    byProvider = /* @__PURE__ */ new Map();
+    flows.set(client, byProvider);
+  }
+  let flow = byProvider.get(provider);
+  if (!flow) {
+    flow = new ReconnectFlow(client, provider);
+    byProvider.set(provider, flow);
+  }
+  return flow;
+}
+
+// src/connections/useProviderReconnect.ts
+function useProviderReconnect(client, provider, { openUrl, onConnected }) {
+  const flow = useMemo19(() => reconnectFlow(client, provider), [client, provider]);
+  const state = useSyncExternalStore3(flow.subscribe, flow.snapshot, flow.snapshot);
+  const seen = useRef18(state.connected);
+  const onConnectedRef = useRef18(onConnected);
+  onConnectedRef.current = onConnected;
+  useEffect23(() => {
+    if (state.connected === seen.current) return;
+    seen.current = state.connected;
+    onConnectedRef.current?.();
+  }, [state.connected]);
+  const openUrlRef = useRef18(openUrl);
+  openUrlRef.current = openUrl;
+  const start = useCallback22(() => flow.start((url) => openUrlRef.current(url)), [flow]);
+  return {
+    phase: state.phase,
+    userCode: state.userCode,
+    code: state.code,
+    failure: state.failure,
+    setCode: flow.setCode,
+    start,
+    finish: flow.finish,
+    cancel: flow.cancel
+  };
+}
+
+// src/connections/ConnectionRow.tsx
+import { jsx as jsx67, jsxs as jsxs64 } from "react/jsx-runtime";
+function failureText(failure, labels) {
+  switch (failure.reason) {
+    case "denied":
+      return labels.errDenied;
+    case "expired":
+      return labels.errExpired;
+    case "unavailable":
+      return failure.detail ? `${labels.errStart} ${failure.detail}` : labels.errStart;
+    default:
+      return failure.detail ? `${labels.errFailed} ${failure.detail}` : labels.errFailed;
+  }
+}
+function ConnectionRow({ row, connections, labels, onChanged, onReconnected }) {
+  const [testing, setTesting] = useState36(false);
+  const [note, setNote] = useState36(null);
+  const reconnect = useProviderReconnect(connections.client, row.provider, {
+    openUrl: connections.openUrl,
+    onConnected: () => {
+      setNote({ ok: true, text: labels.reconnected });
+      onReconnected();
+    }
+  });
+  const test = async () => {
+    setTesting(true);
+    setNote(null);
+    try {
+      const result = await connections.client.test(row.provider);
+      if (result.health) onChanged({ health: result.health });
+      setNote(result.ok ? { ok: true, text: labels.testOk } : { ok: false, text: result.message ?? labels.errFailed });
+    } catch (error) {
+      setNote({ ok: false, text: error instanceof Error ? error.message : labels.errFailed });
+    } finally {
+      setTesting(false);
+    }
+  };
+  const busy = testing || reconnect.phase === "starting" || reconnect.phase === "finishing";
+  const healthy = row.health === "ok";
+  return /* @__PURE__ */ jsxs64("div", { className: "bf-conn__row", children: [
+    /* @__PURE__ */ jsxs64("div", { className: "bf-conn__head", children: [
+      /* @__PURE__ */ jsx67("span", { className: `bf-conn__dot${healthy ? " is-ok" : row.health === "capacity" ? " is-warn" : " is-bad"}`, "aria-hidden": "true" }),
+      /* @__PURE__ */ jsx67("span", { className: "bf-conn__name", children: row.label }),
+      /* @__PURE__ */ jsx67("span", { className: "bf-conn__kind", children: row.authType === "oauth" ? labels.authOauth : labels.authApiKey })
+    ] }),
+    /* @__PURE__ */ jsx67("div", { className: `bf-conn__health${healthy ? "" : " is-alert"}`, role: "status", children: healthLabel(row.health, labels) }),
+    reconnect.phase === "paste" || reconnect.phase === "finishing" ? /* @__PURE__ */ jsxs64("div", { className: "bf-conn__flow", children: [
+      /* @__PURE__ */ jsx67("span", { className: "bf-pmenu__desc", children: labels.pasteHint }),
+      /* @__PURE__ */ jsxs64("div", { className: "bf-conn__actions", children: [
+        /* @__PURE__ */ jsx67(
+          "input",
+          {
+            className: "bf-pmenu__search bf-conn__input",
+            value: reconnect.code,
+            onChange: (e) => reconnect.setCode(e.target.value),
+            onKeyDown: (e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void reconnect.finish();
+              }
+            },
+            placeholder: labels.pastePlaceholder,
+            "aria-label": labels.pastePlaceholder,
+            disabled: reconnect.phase === "finishing",
+            autoFocus: true
+          }
+        ),
+        /* @__PURE__ */ jsx67("button", { type: "button", className: "bf-conn__btn is-primary", disabled: busy || !reconnect.code.trim(), onClick: () => void reconnect.finish(), children: reconnect.phase === "finishing" ? labels.finishing : labels.finish }),
+        /* @__PURE__ */ jsx67("button", { type: "button", className: "bf-conn__btn", disabled: reconnect.phase === "finishing", onClick: reconnect.cancel, children: labels.cancel })
+      ] })
+    ] }) : reconnect.phase === "device" ? /* @__PURE__ */ jsxs64("div", { className: "bf-conn__flow", children: [
+      /* @__PURE__ */ jsx67("span", { className: "bf-pmenu__desc", children: fill(labels.deviceHint, { code: reconnect.userCode ?? "\u2026" }) }),
+      /* @__PURE__ */ jsx67("div", { className: "bf-conn__actions", children: /* @__PURE__ */ jsx67("button", { type: "button", className: "bf-conn__btn", onClick: reconnect.cancel, children: labels.cancel }) })
+    ] }) : /* @__PURE__ */ jsxs64("div", { className: "bf-conn__actions", children: [
+      /* @__PURE__ */ jsx67("button", { type: "button", className: "bf-conn__btn", disabled: busy, onClick: () => void test(), children: testing ? labels.testing : labels.test }),
+      row.reconnectable && /* @__PURE__ */ jsx67(
+        "button",
+        {
+          type: "button",
+          className: `bf-conn__btn${healthy || row.health === "capacity" ? "" : " is-primary"}`,
+          disabled: busy,
+          onClick: () => {
+            setNote(null);
+            void reconnect.start();
+          },
+          children: labels.reconnect
+        }
+      )
+    ] }),
+    reconnect.failure && /* @__PURE__ */ jsx67("div", { className: "bf-conn__note is-bad", role: "alert", children: failureText(reconnect.failure, labels) }),
+    !reconnect.failure && note && /* @__PURE__ */ jsx67("div", { className: `bf-conn__note${note.ok ? " is-ok" : " is-bad"}`, role: "status", children: note.text })
+  ] });
+}
+
+// src/connections/useProviderConnections.ts
+import { useCallback as useCallback23, useEffect as useEffect24, useState as useState37 } from "react";
+function useProviderConnections(client) {
+  const [state, setState] = useState37({ kind: "loading" });
+  const reload = useCallback23(async () => {
+    try {
+      const rows = await client.list();
+      setState(rows === null ? { kind: "unavailable" } : { kind: "ready", rows });
+    } catch {
+      setState({ kind: "failed" });
+    }
+  }, [client]);
+  useEffect24(() => {
+    void reload();
+  }, [reload]);
+  const patch = useCallback23((provider, change) => {
+    setState((prev) => prev.kind === "ready" ? { kind: "ready", rows: prev.rows.map((row) => row.provider === provider ? { ...row, ...change } : row) } : prev);
+  }, []);
+  return { state, reload, patch };
+}
+
+// src/connections/ConnectionsPanel.tsx
+import { jsx as jsx68, jsxs as jsxs65 } from "react/jsx-runtime";
+function ConnectionsPanel({ connections, labels: overrides }) {
+  const labels = connectionsLabels(overrides);
+  const { state, reload, patch } = useProviderConnections(connections.client);
+  return /* @__PURE__ */ jsxs65("section", { className: "bf-conn", "aria-label": labels.heading, children: [
+    /* @__PURE__ */ jsx68("div", { className: "bf-pmenu__group", children: labels.heading }),
+    state.kind === "loading" && /* @__PURE__ */ jsx68("div", { className: "bf-pmenu__desc bf-conn__pad", children: "\u2026" }),
+    state.kind === "failed" && /* @__PURE__ */ jsx68("div", { className: "bf-pmenu__desc bf-conn__pad", children: labels.loadFailed }),
+    state.kind === "unavailable" && /* @__PURE__ */ jsx68("div", { className: "bf-pmenu__desc bf-conn__pad", children: labels.unavailable }),
+    state.kind === "ready" && state.rows.length === 0 && /* @__PURE__ */ jsx68("div", { className: "bf-pmenu__desc bf-conn__pad", children: labels.empty }),
+    state.kind === "ready" && state.rows.map((row) => /* @__PURE__ */ jsx68(
+      ConnectionRow,
+      {
+        row,
+        connections,
+        labels,
+        onChanged: (change) => patch(row.provider, change),
+        onReconnected: () => void reload()
+      },
+      row.provider
+    ))
+  ] });
+}
+
 // src/composer/ComposerAddMenu.tsx
-import { useRef as useRef17 } from "react";
+import { useRef as useRef19 } from "react";
 
 // src/composer/ComposerIcons.tsx
-import { jsx as jsx67, jsxs as jsxs64 } from "react/jsx-runtime";
-var IconPlus = () => /* @__PURE__ */ jsx67("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ jsx67("path", { d: "M8 3.25v9.5M3.25 8h9.5", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round" }) });
-var IconMic = () => /* @__PURE__ */ jsxs64("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
-  /* @__PURE__ */ jsx67("rect", { x: "6", y: "2", width: "4", height: "7.5", rx: "2", fill: "currentColor" }),
-  /* @__PURE__ */ jsx67("path", { d: "M3.75 8a4.25 4.25 0 0 0 8.5 0M8 12.25V14", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round" })
+import { jsx as jsx69, jsxs as jsxs66 } from "react/jsx-runtime";
+var IconPlus = () => /* @__PURE__ */ jsx69("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ jsx69("path", { d: "M8 3.25v9.5M3.25 8h9.5", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round" }) });
+var IconMic = () => /* @__PURE__ */ jsxs66("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
+  /* @__PURE__ */ jsx69("rect", { x: "6", y: "2", width: "4", height: "7.5", rx: "2", fill: "currentColor" }),
+  /* @__PURE__ */ jsx69("path", { d: "M3.75 8a4.25 4.25 0 0 0 8.5 0M8 12.25V14", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round" })
 ] });
-var IconSend = () => /* @__PURE__ */ jsx67("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ jsx67("path", { d: "M8 13V3.75M4.25 7.5 8 3.75l3.75 3.75", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round" }) });
-var IconQueue = () => /* @__PURE__ */ jsxs64("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
-  /* @__PURE__ */ jsx67("path", { d: "M3 4.5h10M3 8h10M3 11.5h5.5", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round" }),
-  /* @__PURE__ */ jsx67("path", { d: "M11 10.25v2.5l1.75 1", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" })
+var IconSend = () => /* @__PURE__ */ jsx69("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ jsx69("path", { d: "M8 13V3.75M4.25 7.5 8 3.75l3.75 3.75", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round" }) });
+var IconQueue = () => /* @__PURE__ */ jsxs66("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
+  /* @__PURE__ */ jsx69("path", { d: "M3 4.5h10M3 8h10M3 11.5h5.5", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round" }),
+  /* @__PURE__ */ jsx69("path", { d: "M11 10.25v2.5l1.75 1", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" })
 ] });
-var IconStop = () => /* @__PURE__ */ jsx67("svg", { width: "12", height: "12", viewBox: "0 0 16 16", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ jsx67("rect", { x: "3.5", y: "3.5", width: "9", height: "9", rx: "1.5" }) });
+var IconStop = () => /* @__PURE__ */ jsx69("svg", { width: "12", height: "12", viewBox: "0 0 16 16", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ jsx69("rect", { x: "3.5", y: "3.5", width: "9", height: "9", rx: "1.5" }) });
 
 // src/composer/ComposerAddMenu.tsx
-import { jsx as jsx68, jsxs as jsxs65 } from "react/jsx-runtime";
+import { jsx as jsx70, jsxs as jsxs67 } from "react/jsx-runtime";
 function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = false, accept, onAddContext, webBrowsing, items }) {
   const { open, toggle, close, rootRef } = usePopover();
-  const fileRef = useRef17(null);
+  const fileRef = useRef19(null);
   if (!onAttachFiles && !onAddContext && !webBrowsing && !items?.length) return null;
   const onFiles = (e) => {
     const files = Array.from(e.target.files ?? []);
     if (files.length && onAttachFiles) onAttachFiles(files);
     e.target.value = "";
   };
-  const row = (key, icon, label, onClick, hint, active) => /* @__PURE__ */ jsxs65("button", { type: "button", role: "menuitem", className: `bf-pmenu__item${active ? " is-active" : ""}`, onClick, children: [
-    /* @__PURE__ */ jsx68("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: icon }),
-    /* @__PURE__ */ jsx68("span", { className: "bf-pmenu__lbl", children: label }),
-    hint != null && /* @__PURE__ */ jsx68("span", { className: "bf-pmenu__hint", children: hint })
+  const row = (key, icon, label, onClick, hint, active) => /* @__PURE__ */ jsxs67("button", { type: "button", role: "menuitem", className: `bf-pmenu__item${active ? " is-active" : ""}`, onClick, children: [
+    /* @__PURE__ */ jsx70("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: icon }),
+    /* @__PURE__ */ jsx70("span", { className: "bf-pmenu__lbl", children: label }),
+    hint != null && /* @__PURE__ */ jsx70("span", { className: "bf-pmenu__hint", children: hint })
   ] }, key);
-  return /* @__PURE__ */ jsxs65("div", { className: "bf-pmenu", ref: rootRef, children: [
-    onAttachFiles && /* @__PURE__ */ jsx68("input", { ref: fileRef, type: "file", multiple: true, hidden: true, accept, onChange: onFiles }),
-    /* @__PURE__ */ jsx68(
+  return /* @__PURE__ */ jsxs67("div", { className: "bf-pmenu", ref: rootRef, children: [
+    onAttachFiles && /* @__PURE__ */ jsx70("input", { ref: fileRef, type: "file", multiple: true, hidden: true, accept, onChange: onFiles }),
+    /* @__PURE__ */ jsx70(
       "button",
       {
         type: "button",
@@ -8675,10 +9169,10 @@ function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = 
         "aria-label": labels.add,
         disabled,
         onClick: toggle,
-        children: /* @__PURE__ */ jsx68(IconPlus, {})
+        children: /* @__PURE__ */ jsx70(IconPlus, {})
       }
     ),
-    open && /* @__PURE__ */ jsxs65("div", { className: "bf-pmenu__pop", role: "menu", children: [
+    open && /* @__PURE__ */ jsxs67("div", { className: "bf-pmenu__pop", role: "menu", children: [
       onAttachFiles && row("upload", "\u{1F4BB}", uploading ? labels.uploading : labels.upload, () => {
         close();
         if (!uploading) fileRef.current?.click();
@@ -8697,7 +9191,7 @@ function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = 
 }
 
 // src/composer/ComposerTrailingButton.tsx
-import { Fragment as Fragment21, jsx as jsx69, jsxs as jsxs66 } from "react/jsx-runtime";
+import { Fragment as Fragment21, jsx as jsx71, jsxs as jsxs68 } from "react/jsx-runtime";
 function queueShortcutKeys(nav = typeof navigator === "undefined" ? void 0 : navigator) {
   const platform = nav?.userAgentData?.platform || nav?.platform || "";
   return /mac|iphone|ipad/i.test(platform) ? "\u2325+Enter" : "Alt+Enter";
@@ -8715,7 +9209,7 @@ function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, 
   });
   if (action === "voice") {
     const label2 = dictation.recording ? labels.stopDictation : labels.dictate;
-    return /* @__PURE__ */ jsx69(
+    return /* @__PURE__ */ jsx71(
       "button",
       {
         type: "button",
@@ -8725,37 +9219,37 @@ function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, 
         "aria-pressed": dictation.recording,
         disabled,
         onClick: dictation.recording ? dictation.stopVoice : dictation.startVoice,
-        children: /* @__PURE__ */ jsx69(IconMic, {})
+        children: /* @__PURE__ */ jsx71(IconMic, {})
       }
     );
   }
   if (action === "stop") {
-    return /* @__PURE__ */ jsx69("button", { type: "button", className: "bf-cmp-iconbtn bf-cmp-iconbtn--stop", onClick: onStop, title: labels.stop, "aria-label": labels.stop, children: /* @__PURE__ */ jsx69(IconStop, {}) });
+    return /* @__PURE__ */ jsx71("button", { type: "button", className: "bf-cmp-iconbtn bf-cmp-iconbtn--stop", onClick: onStop, title: labels.stop, "aria-label": labels.stop, children: /* @__PURE__ */ jsx71(IconStop, {}) });
   }
   const label = running ? labels.queueSend : labels.send;
-  const send = /* @__PURE__ */ jsx69("button", { type: "submit", className: "bf-cmp-iconbtn bf-cmp-iconbtn--send", onClick: (e) => {
+  const send = /* @__PURE__ */ jsx71("button", { type: "submit", className: "bf-cmp-iconbtn bf-cmp-iconbtn--send", onClick: (e) => {
     e.preventDefault();
     onSend();
-  }, disabled: !canSubmit || disabled, title: label, "aria-label": label, children: /* @__PURE__ */ jsx69(IconSend, {}) });
+  }, disabled: !canSubmit || disabled, title: label, "aria-label": label, children: /* @__PURE__ */ jsx71(IconSend, {}) });
   if (!(running && onQueue && canSubmit)) return send;
   const queueLabel = labels.queueAfter(queueShortcutKeys());
-  return /* @__PURE__ */ jsxs66(Fragment21, { children: [
-    /* @__PURE__ */ jsxs66("button", { type: "button", className: "bf-cmp-queuebtn", onClick: onQueue, disabled, title: queueLabel, "aria-label": queueLabel, children: [
-      /* @__PURE__ */ jsx69(IconQueue, {}),
-      /* @__PURE__ */ jsx69("span", { className: "bf-cmp-queuebtn__text", children: labels.queueAfterShort })
+  return /* @__PURE__ */ jsxs68(Fragment21, { children: [
+    /* @__PURE__ */ jsxs68("button", { type: "button", className: "bf-cmp-queuebtn", onClick: onQueue, disabled, title: queueLabel, "aria-label": queueLabel, children: [
+      /* @__PURE__ */ jsx71(IconQueue, {}),
+      /* @__PURE__ */ jsx71("span", { className: "bf-cmp-queuebtn__text", children: labels.queueAfterShort })
     ] }),
     send
   ] });
 }
 
 // src/composer/AttachmentChips.tsx
-import { jsx as jsx70, jsxs as jsxs67 } from "react/jsx-runtime";
+import { jsx as jsx72, jsxs as jsxs69 } from "react/jsx-runtime";
 function AttachmentChips({ items, onRemove, labels }) {
   if (items.length === 0) return null;
-  return /* @__PURE__ */ jsx70("div", { className: "bf-cmp-attachments", children: items.map((a) => /* @__PURE__ */ jsxs67("span", { className: "bf-cmp-chip", children: [
-    a.imageUrl && /* @__PURE__ */ jsx70("img", { src: a.imageUrl, alt: "", className: "bf-cmp-chip__thumb" }),
-    /* @__PURE__ */ jsx70("span", { className: "bf-cmp-chip__name", children: a.name }),
-    /* @__PURE__ */ jsx70("button", { type: "button", className: "bf-cmp-chip__x", onClick: () => onRemove(a.key), "aria-label": `${labels.remove} ${a.name}`, children: "\xD7" })
+  return /* @__PURE__ */ jsx72("div", { className: "bf-cmp-attachments", children: items.map((a) => /* @__PURE__ */ jsxs69("span", { className: "bf-cmp-chip", children: [
+    a.imageUrl && /* @__PURE__ */ jsx72("img", { src: a.imageUrl, alt: "", className: "bf-cmp-chip__thumb" }),
+    /* @__PURE__ */ jsx72("span", { className: "bf-cmp-chip__name", children: a.name }),
+    /* @__PURE__ */ jsx72("button", { type: "button", className: "bf-cmp-chip__x", onClick: () => onRemove(a.key), "aria-label": `${labels.remove} ${a.name}`, children: "\xD7" })
   ] }, a.key)) });
 }
 
@@ -8803,6 +9297,56 @@ function composerOptionGroups(options, labels) {
   };
 }
 
+// src/composer/ContextMeter.tsx
+import { jsx as jsx73, jsxs as jsxs70 } from "react/jsx-runtime";
+var R = 7;
+var C2 = 2 * Math.PI * R;
+function ContextMeter({ usage, labels, locale }) {
+  if (!usage) return null;
+  const used = formatTokens(usage.promptTokens, locale);
+  const window2 = usage.contextWindow;
+  if (!window2) {
+    const hint2 = fill(labels.contextMeterHintTokens, { used });
+    return /* @__PURE__ */ jsx73("span", { className: "bf-ctx-meter", title: hint2, "aria-label": hint2, role: "note", children: /* @__PURE__ */ jsx73("span", { className: "bf-ctx-meter__text", children: used }) });
+  }
+  const percent = Math.min(100, Math.round(usage.promptTokens / window2 * 100));
+  const shown = new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 }).format(percent / 100);
+  const hint = fill(labels.contextMeterHint, { used, limit: formatTokens(window2, locale), percent: shown });
+  const tone = percent >= 90 ? " bf-ctx-meter--full" : percent >= 70 ? " bf-ctx-meter--high" : "";
+  return /* @__PURE__ */ jsxs70(
+    "span",
+    {
+      className: `bf-ctx-meter${tone}`,
+      title: hint,
+      role: "meter",
+      "aria-label": hint,
+      "aria-valuemin": 0,
+      "aria-valuemax": 100,
+      "aria-valuenow": percent,
+      children: [
+        /* @__PURE__ */ jsxs70("svg", { className: "bf-ctx-meter__ring", width: "16", height: "16", viewBox: "0 0 18 18", "aria-hidden": "true", children: [
+          /* @__PURE__ */ jsx73("circle", { className: "bf-ctx-meter__track", cx: "9", cy: "9", r: R, fill: "none", strokeWidth: "2.5" }),
+          /* @__PURE__ */ jsx73(
+            "circle",
+            {
+              className: "bf-ctx-meter__fill",
+              cx: "9",
+              cy: "9",
+              r: R,
+              fill: "none",
+              strokeWidth: "2.5",
+              strokeLinecap: "round",
+              strokeDasharray: `${percent / 100 * C2} ${C2}`,
+              transform: "rotate(-90 9 9)"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsx73("span", { className: "bf-ctx-meter__text", children: shown })
+      ]
+    }
+  );
+}
+
 // src/composer/labels.ts
 var n = (v) => v.toLocaleString();
 var DEFAULT_COMPOSER_LABELS = {
@@ -8835,7 +9379,9 @@ var DEFAULT_COMPOSER_LABELS = {
   })[level],
   effortThinkingSuffix: (thinking) => `Plus up to ${n(thinking)} thinking tokens.`,
   thinkingOnDesc: (budget) => `The model reasons before answering, with a ${n(budget)}-token thinking budget at this effort. Slower, better on hard problems.`,
-  thinkingOffDesc: "Off \u2014 the model answers directly. Turn on for a reasoning pass before the answer."
+  thinkingOffDesc: "Off \u2014 the model answers directly. Turn on for a reasoning pass before the answer.",
+  contextMeterHint: "Context: {used} of {limit} tokens on the last turn ({percent}). Older history is auto-compacted as it fills.",
+  contextMeterHintTokens: "Context: {used} tokens on the last turn. Older history is auto-compacted as it fills."
 };
 function composerLabels(overrides) {
   return overrides ? { ...DEFAULT_COMPOSER_LABELS, ...overrides } : DEFAULT_COMPOSER_LABELS;
@@ -8855,7 +9401,7 @@ function composerLabelsFrom(lookup, overrides) {
 }
 
 // src/composer/BrainComposer.tsx
-import { Fragment as Fragment22, jsx as jsx71, jsxs as jsxs68 } from "react/jsx-runtime";
+import { Fragment as Fragment22, jsx as jsx74, jsxs as jsxs71 } from "react/jsx-runtime";
 var NO_PARTICIPANTS = [];
 var NO_TICKETS = [];
 var noop = () => void 0;
@@ -8886,6 +9432,7 @@ function BrainComposer(props) {
     pickersDisabled = false,
     voice = false,
     context,
+    contextUsage,
     above,
     suggestions,
     below,
@@ -8894,13 +9441,13 @@ function BrainComposer(props) {
     className
   } = props;
   const labels = composerLabels(labelBundle?.composer);
-  const textareaRef = useRef18(null);
-  const valueRef = useRef18(value);
+  const textareaRef = useRef20(null);
+  const valueRef = useRef20(value);
   valueRef.current = value;
-  const getValue = useCallback20(() => valueRef.current, []);
-  const [focused, setFocused] = useState35(false);
-  const [dragging, setDragging] = useState35(false);
-  useEffect23(() => {
+  const getValue = useCallback24(() => valueRef.current, []);
+  const [focused, setFocused] = useState38(false);
+  const [dragging, setDragging] = useState38(false);
+  useEffect25(() => {
     if (focusToken == null) return;
     const el = textareaRef.current;
     if (!el) return;
@@ -8928,13 +9475,13 @@ function BrainComposer(props) {
   const canSubmit = value.trim().length > 0 && !disabled;
   const ownGate = useInferenceModeGate(options.inferenceMode);
   const gate = modeGate ?? ownGate;
-  const onSubmitRef = useRef18(onSubmit);
+  const onSubmitRef = useRef20(onSubmit);
   onSubmitRef.current = onSubmit;
   const submit = () => {
     if (!canSubmit) return;
     gate.request(() => onSubmitRef.current());
   };
-  const onQueueRef = useRef18(onQueue);
+  const onQueueRef = useRef20(onQueue);
   onQueueRef.current = onQueue;
   const queue = () => {
     const hold = onQueueRef.current;
@@ -8959,7 +9506,7 @@ function BrainComposer(props) {
     }
   };
   const groups = composerOptionGroups(options, labels);
-  const statusNode = account ? /* @__PURE__ */ jsx71(
+  const statusNode = account ? /* @__PURE__ */ jsx74(
     WorkStatusPanel,
     {
       request: account.request,
@@ -8969,9 +9516,10 @@ function BrainComposer(props) {
       onUpgrade: account.onUpgrade
     }
   ) : void 0;
+  const connectionsNode = account?.connections ? /* @__PURE__ */ jsx74(ConnectionsPanel, { connections: account.connections, labels: labelBundle?.connections }) : null;
   const spendTab = account ? {
     label: spendLabels(labelBundle?.spend).spendHeading,
-    content: /* @__PURE__ */ jsx71(
+    content: /* @__PURE__ */ jsx74(
       WorkSpendPanel,
       {
         request: account.request,
@@ -8981,18 +9529,18 @@ function BrainComposer(props) {
       }
     )
   } : void 0;
-  const chips = attachments ? /* @__PURE__ */ jsx71(AttachmentChips, { items: attachments.items, onRemove: attachments.onRemove, labels }) : null;
+  const chips = attachments ? /* @__PURE__ */ jsx74(AttachmentChips, { items: attachments.items, onRemove: attachments.onRemove, labels }) : null;
   const showSuggestions = !!suggestions?.items.length && !value.trim() && !running;
-  const modeQuestion = gate.asking ? /* @__PURE__ */ jsx71(InferenceModeFirstRun, { labels: promptOptionsLabels(labelBundle?.options), onChoose: gate.choose }) : null;
-  const aboveBox = modeQuestion || above || showSuggestions || attachments && attachments.items.length > 0 ? /* @__PURE__ */ jsxs68(Fragment22, { children: [
+  const modeQuestion = gate.asking ? /* @__PURE__ */ jsx74(InferenceModeFirstRun, { labels: promptOptionsLabels(labelBundle?.options), onChoose: gate.choose }) : null;
+  const aboveBox = modeQuestion || above || showSuggestions || attachments && attachments.items.length > 0 ? /* @__PURE__ */ jsxs71(Fragment22, { children: [
     modeQuestion,
     above,
-    showSuggestions && /* @__PURE__ */ jsx71(SuggestionRow, { items: suggestions.items, ariaLabel: suggestions.label }),
+    showSuggestions && /* @__PURE__ */ jsx74(SuggestionRow, { items: suggestions.items, ariaLabel: suggestions.label }),
     chips
   ] }) : void 0;
-  return /* @__PURE__ */ jsxs68("div", { className: ["bf-cmp", className].filter(Boolean).join(" "), children: [
+  return /* @__PURE__ */ jsxs71("div", { className: ["bf-cmp", className].filter(Boolean).join(" "), children: [
     blockedNotice,
-    /* @__PURE__ */ jsx71(
+    /* @__PURE__ */ jsx74(
       PromptPanel,
       {
         active: focused || value.trim().length > 0,
@@ -9005,7 +9553,7 @@ function BrainComposer(props) {
         onDrop: attachments ? onDrop : void 0,
         overlay: ticket.open ? ticket.popup : mention.popup,
         status: aboveBox,
-        input: /* @__PURE__ */ jsx71(
+        input: /* @__PURE__ */ jsx74(
           "textarea",
           {
             ref: textareaRef,
@@ -9034,8 +9582,8 @@ function BrainComposer(props) {
             }
           }
         ),
-        actions: /* @__PURE__ */ jsxs68(Fragment22, { children: [
-          /* @__PURE__ */ jsx71(
+        actions: /* @__PURE__ */ jsxs71(Fragment22, { children: [
+          /* @__PURE__ */ jsx74(
             ComposerAddMenu,
             {
               labels,
@@ -9048,20 +9596,26 @@ function BrainComposer(props) {
               items: addMenuItems
             }
           ),
-          /* @__PURE__ */ jsx71(
+          /* @__PURE__ */ jsx74(
             PromptOptionsMenu,
             {
               labels: labelBundle?.options,
               disabled,
               ...groups,
-              status: statusNode,
+              status: statusNode && /* @__PURE__ */ jsxs71(Fragment22, { children: [
+                statusNode,
+                connectionsNode
+              ] }),
               spend: spendTab,
               onAccountSettings
             }
           )
         ] }),
-        context: context ? /* @__PURE__ */ jsx71(Fragment22, { children: context }) : void 0,
-        primaryAction: /* @__PURE__ */ jsx71(
+        context: context || contextUsage ? /* @__PURE__ */ jsxs71(Fragment22, { children: [
+          context,
+          /* @__PURE__ */ jsx74(ContextMeter, { usage: contextUsage, labels, locale: account?.locale })
+        ] }) : void 0,
+        primaryAction: /* @__PURE__ */ jsx74(
           ComposerTrailingButton,
           {
             labels,
@@ -9081,14 +9635,14 @@ function BrainComposer(props) {
 }
 
 // src/composer/useChatMemorySwitch.ts
-import { useCallback as useCallback21, useEffect as useEffect24, useState as useState36 } from "react";
+import { useCallback as useCallback25, useEffect as useEffect26, useState as useState39 } from "react";
 function useChatMemorySwitch(opts) {
   const { chatId, serverValue, persist } = opts;
-  const [enabled, setLocal] = useState36(serverValue ?? true);
-  useEffect24(() => {
+  const [enabled, setLocal] = useState39(serverValue ?? true);
+  useEffect26(() => {
     setLocal(serverValue ?? true);
   }, [chatId, serverValue]);
-  const setEnabled = useCallback21((on) => {
+  const setEnabled = useCallback25((on) => {
     setLocal(on);
     if (chatId == null) return;
     persist(chatId, on).catch(() => setLocal(!on));
@@ -9106,6 +9660,7 @@ function brainComposerLabelsFrom(lookup, overrides) {
     options: { ...promptOptionsLabelsFrom(scopedLookup(lookup, "options")), ...overrides?.options },
     status: workStatusLabelsFrom(scopedLookup(lookup, "status")),
     spend: spendLabelsFrom(scopedLookup(lookup, "spend")),
+    connections: connectionsLabelsFrom(scopedLookup(lookup, "connections")),
     mention: stringsFrom(DEFAULT_MENTION_LABELS, scopedLookup(lookup, "mention")),
     ticket: stringsFrom(DEFAULT_TICKET_TAG_LABELS, scopedLookup(lookup, "ticket"))
   };
@@ -9150,6 +9705,7 @@ export {
   ChatHistoryList,
   ChatHistoryRow,
   ChatTicketsPanel,
+  ConnectionsPanel,
   ContextChip,
   CopyButton,
   DEFAULT_ASK_USER_LABELS,
@@ -9157,6 +9713,7 @@ export {
   DEFAULT_CHAT_HISTORY_LABELS,
   DEFAULT_CHAT_TICKETS_LABELS,
   DEFAULT_COMPOSER_LABELS,
+  DEFAULT_CONNECTIONS_LABELS,
   DEFAULT_EVERMIND_LABELS,
   DEFAULT_INFERENCE_MODE_LABELS,
   DEFAULT_INLINE_CHAT_TITLE_LABELS,
@@ -9249,6 +9806,7 @@ export {
   composerLabels,
   composerLabelsFrom,
   composerModel,
+  connectionsLabelsFrom,
   createChatTicketsRestAdapter,
   createEvermindRestAdapter,
   displayModelName2 as displayModelName,
@@ -9325,6 +9883,7 @@ export {
   useMentionAutocomplete,
   useModelFallback,
   usePopover,
+  useProviderReconnect,
   useRecipientChoice,
   useRovingRadioGroup,
   useTicketAutocomplete,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
-import { HISTORY_TOKEN_BUDGET, transcriptTokens } from '../workingTranscript';
+import { HISTORY_TOKEN_BUDGET, transcriptTokens } from '@seanhogg/builderforce-memory/working';
 import { compactionSavedTokens, stampOncePerCall } from './compactionSaved';
 
 const msg = (chars: number): ChatCompletionMessage => ({ role: 'user', content: 'x'.repeat(chars) });

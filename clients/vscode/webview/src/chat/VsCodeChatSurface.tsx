@@ -51,7 +51,7 @@ import {
 } from '@seanhogg/builderforce-brain-embedded';
 import {
   AiSurface, BrainTimeline, ChatTicketsPanel, PendingQuestionBanner, SpendPill, SurfaceFooter, ToolConfirmBar,
-  askUserAnchorId, selectPendingAskUser,
+  selectPendingAskUser,
 } from '@seanhogg/builderforce-brain-ui';
 import { authedFetch } from '../authedFetch';
 import { getToken, post, refreshToken, type InitData } from '../vscodeBridge';
@@ -205,11 +205,12 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // What actually answered, not what was requested (under auto `init.model` is the plan default).
   const servedModel = useMemo(() => lastServedModel(conv.messages), [conv.messages]);
   const askLabels = useMemo(() => askUserLabels(init.labels), [init.labels]);
+  // The banner's "show me" goes through the transcript's own reveal: the question's
+  // message is paged into the render window and the stick-to-bottom scroll lets go.
+  const [reveal, setReveal] = useState<{ id: number; nonce: number } | null>(null);
   const revealQuestion = useCallback(() => {
     if (!pendingQuestion) return;
-    document
-      .getElementById(askUserAnchorId(pendingQuestion.messageId))
-      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setReveal((r) => ({ id: pendingQuestion.messageId, nonce: (r?.nonce ?? 0) + 1 }));
   }, [pendingQuestion]);
 
   const { copyState, canCopy, copyTranscript } = useCopyDiagnostics({
@@ -299,6 +300,8 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           onReplayMessage={replayMessage}
           onRateMessage={conv.rateMessage}
           ratings={conv.ratings}
+          revealMessage={reveal}
+          conversationKey={chatId}
         />
       )}
       notices={<VsCodeChatNotices conv={conv} chatsError={vsChats.error} onDismissChatsError={vsChats.clearError} bundle={init.labels} init={init} composerId={composerId} />}

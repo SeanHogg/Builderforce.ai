@@ -7,7 +7,7 @@
  */
 
 import { useMemo, useSyncExternalStore } from 'react';
-import { getRunSnapshot, getRunTrace, type DirectedRecipient, type SubagentDiagnosticsInput } from '@seanhogg/builderforce-brain-embedded';
+import { getRunSnapshot, getRunTrace, isModelReply, type DirectedRecipient, type SubagentDiagnosticsInput } from '@seanhogg/builderforce-brain-embedded';
 import type { ChatSubagentVM } from '@seanhogg/builderforce-brain-ui';
 import type { ChildView } from '../../../src/childRuns';
 import { post } from '../vscodeBridge';
@@ -56,7 +56,7 @@ export function subagentDiagnosticsOf(chatId: number | null): SubagentDiagnostic
   const live = new Set((byChat.get(chatId) ?? []).map((c) => c.key));
   return [...(everByChat.get(chatId)?.values() ?? [])].map((c) => {
     const snap = getRunSnapshot(c.key);
-    const last = [...snap.appended].reverse().find((m) => m.role === 'assistant')?.content ?? snap.streamingText;
+    const last = [...snap.appended].reverse().find(isModelReply)?.content ?? snap.streamingText;
     return {
       handle: c.handle,
       name: c.name,

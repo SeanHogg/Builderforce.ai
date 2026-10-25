@@ -9,7 +9,7 @@ import type { ChatCompletionMessage } from '../streamChatCompletion';
 import type { BrainTraceEvent } from '../brainTriage';
 import type { ChatErrorAction } from '../chatError';
 import type { BrainRunActivity } from '../runActivity';
-import type { CompactMemo } from '../workingTranscript';
+import type { CompactMemo } from '@seanhogg/builderforce-memory/working';
 import { emptyRunUsage, type RunUsageTally } from '../memorySavings';
 import type { BrainRunSnapshot, RunTurn } from './runTypes';
 
@@ -123,7 +123,7 @@ export interface RunCell {
   persistStep: ((ev: BrainTraceEvent) => void) | null;
   /**
    * Cached compressed-memory of the transcript's older part. When the transcript exceeds
-   * the working-transcript token budget (`HISTORY_TOKEN_BUDGET` in `workingTranscript.ts`)
+   * the working-transcript token budget (`HISTORY_TOKEN_BUDGET`, `@seanhogg/builderforce-memory/working`)
    * the loop SUMMARIZES `transcript[0, coveredEnd)` into this
    * note (instead of dropping it, which made a weak model re-read and thrash into "LOOP
    * EXHAUSTED") and sends every message from `coveredEnd` on verbatim. Re-folded
@@ -131,6 +131,21 @@ export interface RunCell {
    * Null until the first overflow / reset.
    */
   compactMemo: CompactMemo | null;
+  /**
+   * Which persisted message each known transcript entry is (transcript index → message
+   * id): the seeded history and every run's user turn. A fold persists its note as an
+   * auto consolidation marker that keeps from the first message it did not cover
+   * (`foldKeepFromId`), so the next run — after a reload, on another surface — starts
+   * from the note instead of summarizing the whole history again (`runFoldMarker.ts`).
+   */
+  transcriptAnchors: Array<{ index: number; id: number }>;
+  /**
+   * The lowest id of a persisted message this run's history holds that the cell's
+   * transcript does NOT (another surface's turn, an @agent reply, a teammate's message —
+   * persisted between runs, never seen by this cell). A fold's note cannot cover it, so
+   * the marker keeps from no later than here. Undefined when the transcript holds it all.
+   */
+  unseenFromId: number | undefined;
   /** This run's summed usage — what its answer is cached with (`memorySavings.ts`). */
   runUsage: RunUsageTally;
   /** The model that last served a call in this chat — what a memory answer is priced
@@ -194,6 +209,8 @@ export function makeCell(): RunCell {
     runTraceFrom: 0,
     persistStep: null,
     compactMemo: null,
+    transcriptAnchors: [],
+    unseenFromId: undefined,
     runUsage: emptyRunUsage(),
     lastServedModel: null,
     liveTurn: null,

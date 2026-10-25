@@ -187,6 +187,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
       ) : null}
       thread={(
         <BrainTimeline
+          conversationKey={chatId}
           messages={messages}
           trace={conv.trace}
           streamingText={conv.streamingText}
@@ -300,6 +301,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
                 />
               )}
               showSuggestions={!empty}
+              contextUsage={conv.contextUsage}
               chatOptions={chatOptions}
               onOpenSettings={onOpenSettings}
             />

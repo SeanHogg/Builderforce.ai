@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type React from 'react';
 import { activityIcon, activityTone, chatActivityText, chatErrorAction } from '@seanhogg/builderforce-brain-embedded';
 import { DEFAULT_CHAT_ERROR_LABELS } from '../ChatErrorBanner';
@@ -13,7 +14,7 @@ import type { BrainTimelineLabels } from './labels';
  * a runtime activity line, and the live streaming reply.
  */
 
-export function ThinkingRow({ node, labels }: { node: Extract<TimelineNode, { kind: 'thinking' }>; labels: BrainTimelineLabels }) {
+function ThinkingRowInner({ node, labels }: { node: Extract<TimelineNode, { kind: 'thinking' }>; labels: BrainTimelineLabels }) {
   const label = labels.thoughtFor.replace('{duration}', formatDuration(node.durationMs));
   return (
     <li className="bf-tl__item bf-tl__item--thinking">
@@ -27,7 +28,7 @@ export function ThinkingRow({ node, labels }: { node: Extract<TimelineNode, { ki
   );
 }
 
-export function ToolRow({ node, labels }: { node: Extract<TimelineNode, { kind: 'tool' }>; labels: BrainTimelineLabels }) {
+function ToolRowInner({ node, labels }: { node: Extract<TimelineNode, { kind: 'tool' }>; labels: BrainTimelineLabels }) {
   return (
     <li className="bf-tl__item bf-tl__item--tool">
       <span className="bf-tl__gutter">
@@ -40,7 +41,7 @@ export function ToolRow({ node, labels }: { node: Extract<TimelineNode, { kind: 
   );
 }
 
-export function ErrorRow({ node, labels }: { node: Extract<TimelineNode, { kind: 'error' }>; labels: BrainTimelineLabels }) {
+function ErrorRowInner({ node, labels }: { node: Extract<TimelineNode, { kind: 'error' }>; labels: BrainTimelineLabels }) {
   return (
     <li className="bf-tl__item bf-tl__item--error">
       <span className="bf-tl__gutter">
@@ -57,7 +58,7 @@ export function ErrorRow({ node, labels }: { node: Extract<TimelineNode, { kind:
   );
 }
 
-export function ActivityRow({ node, labels }: { node: Extract<TimelineNode, { kind: 'activity' }>; labels: BrainTimelineLabels }) {
+function ActivityRowInner({ node, labels }: { node: Extract<TimelineNode, { kind: 'activity' }>; labels: BrainTimelineLabels }) {
   // The RUNTIME narrating itself — deliberately NOT an assistant bubble. Composed
   // here from the structured metadata so it reads in the viewer's language; a
   // pre-structured row falls back to the sentence the server stored.
@@ -106,3 +107,9 @@ export function StreamingRow({
     </li>
   );
 }
+
+// Memoized: a streamed token re-renders the transcript, never the rows it did not touch.
+export const ThinkingRow = memo(ThinkingRowInner);
+export const ToolRow = memo(ToolRowInner);
+export const ErrorRow = memo(ErrorRowInner);
+export const ActivityRow = memo(ActivityRowInner);

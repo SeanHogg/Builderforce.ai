@@ -32,7 +32,7 @@ var src_exports = {};
 __export(src_exports, {
   AiSurface: () => AiSurface,
   Avatar: () => Avatar,
-  BUILDERFORCE_PRODUCT_NAME: () => import_builderforce_brain_embedded24.BUILDERFORCE_PRODUCT_NAME,
+  BUILDERFORCE_PRODUCT_NAME: () => import_builderforce_brain_embedded25.BUILDERFORCE_PRODUCT_NAME,
   BrainComposer: () => BrainComposer,
   BrainMark: () => BrainMark,
   BrainTimeline: () => BrainTimeline,
@@ -40,6 +40,7 @@ __export(src_exports, {
   ChatHistoryList: () => ChatHistoryList,
   ChatHistoryRow: () => ChatHistoryRow,
   ChatTicketsPanel: () => ChatTicketsPanel,
+  ConnectionsPanel: () => ConnectionsPanel,
   ContextChip: () => ContextChip,
   CopyButton: () => CopyButton,
   DEFAULT_ASK_USER_LABELS: () => DEFAULT_ASK_USER_LABELS,
@@ -47,6 +48,7 @@ __export(src_exports, {
   DEFAULT_CHAT_HISTORY_LABELS: () => DEFAULT_CHAT_HISTORY_LABELS,
   DEFAULT_CHAT_TICKETS_LABELS: () => DEFAULT_CHAT_TICKETS_LABELS,
   DEFAULT_COMPOSER_LABELS: () => DEFAULT_COMPOSER_LABELS,
+  DEFAULT_CONNECTIONS_LABELS: () => DEFAULT_CONNECTIONS_LABELS,
   DEFAULT_EVERMIND_LABELS: () => DEFAULT_EVERMIND_LABELS,
   DEFAULT_INFERENCE_MODE_LABELS: () => DEFAULT_INFERENCE_MODE_LABELS,
   DEFAULT_INLINE_CHAT_TITLE_LABELS: () => DEFAULT_INLINE_CHAT_TITLE_LABELS,
@@ -54,7 +56,7 @@ __export(src_exports, {
   DEFAULT_LOCAL_MODEL_LABELS: () => DEFAULT_LOCAL_MODEL_LABELS,
   DEFAULT_MENTION_LABELS: () => DEFAULT_MENTION_LABELS,
   DEFAULT_MODEL_FALLBACK_LABELS: () => DEFAULT_MODEL_FALLBACK_LABELS,
-  DEFAULT_MODEL_IDENTITY: () => import_builderforce_brain_embedded24.DEFAULT_MODEL_IDENTITY,
+  DEFAULT_MODEL_IDENTITY: () => import_builderforce_brain_embedded25.DEFAULT_MODEL_IDENTITY,
   DEFAULT_MODEL_MOVE_LABELS: () => DEFAULT_MODEL_MOVE_LABELS,
   DEFAULT_PENDING_CHANGES_LABELS: () => DEFAULT_PENDING_CHANGES_LABELS,
   DEFAULT_PERSONA_PICKER_LABELS: () => DEFAULT_PERSONA_PICKER_LABELS,
@@ -83,10 +85,10 @@ __export(src_exports, {
   LiveActivity: () => LiveActivity,
   LocalModelList: () => LocalModelList,
   LocalModelRow: () => LocalModelRow,
-  MODEL_CATEGORIES: () => import_builderforce_brain_embedded24.MODEL_CATEGORIES,
+  MODEL_CATEGORIES: () => import_builderforce_brain_embedded25.MODEL_CATEGORIES,
   Markdown: () => Markdown,
   ModelFallbackNotice: () => ModelFallbackNotice,
-  PROJECT_EVERMIND_MODEL_PREFIX: () => import_builderforce_brain_embedded24.PROJECT_EVERMIND_MODEL_PREFIX,
+  PROJECT_EVERMIND_MODEL_PREFIX: () => import_builderforce_brain_embedded25.PROJECT_EVERMIND_MODEL_PREFIX,
   PendingChangesList: () => PendingChangesList,
   PendingQuestionBanner: () => PendingQuestionBanner,
   PersonaPicker: () => PersonaPicker,
@@ -116,16 +118,16 @@ __export(src_exports, {
   ToolStep: () => ToolStep,
   WorkSpendPanel: () => WorkSpendPanel,
   WorkStatusPanel: () => WorkStatusPanel,
-  activeModelKey: () => import_builderforce_brain_embedded24.activeModelKey,
-  askUserAnchorId: () => import_builderforce_brain_embedded3.askUserAnchorId,
+  activeModelKey: () => import_builderforce_brain_embedded25.activeModelKey,
+  askUserAnchorId: () => import_builderforce_brain_embedded4.askUserAnchorId,
   attachmentsOf: () => attachmentsOf,
   avatarColor: () => avatarColor,
   brainComposerLabelsFrom: () => brainComposerLabelsFrom,
-  buildModelItems: () => import_builderforce_brain_embedded24.buildModelItems,
+  buildModelItems: () => import_builderforce_brain_embedded25.buildModelItems,
   buildSettledTimeline: () => buildSettledTimeline,
   buildTimeline: () => buildTimeline,
   bundleLookup: () => bundleLookup,
-  byoVendorLabel: () => import_builderforce_brain_embedded24.byoVendorLabel,
+  byoVendorLabel: () => import_builderforce_brain_embedded25.byoVendorLabel,
   cachedConsumptionSnapshot: () => cachedConsumptionSnapshot,
   chatActivityLabelsFrom: () => chatActivityLabelsFrom,
   chatDiagnosticsReads: () => chatDiagnosticsReads,
@@ -139,14 +141,15 @@ __export(src_exports, {
   composerLabels: () => composerLabels,
   composerLabelsFrom: () => composerLabelsFrom,
   composerModel: () => composerModel,
+  connectionsLabelsFrom: () => connectionsLabelsFrom,
   createChatTicketsRestAdapter: () => createChatTicketsRestAdapter,
   createEvermindRestAdapter: () => createEvermindRestAdapter,
-  displayModelName: () => import_builderforce_brain_embedded24.displayModelName,
+  displayModelName: () => import_builderforce_brain_embedded25.displayModelName,
   evermindLabelsFromBundle: () => evermindLabelsFromBundle,
   evermindLearnedStatus: () => evermindLearnedStatus,
   evermindNextAction: () => evermindNextAction,
   fetchConsumptionSnapshot: () => fetchConsumptionSnapshot,
-  filterModelItems: () => import_builderforce_brain_embedded24.filterModelItems,
+  filterModelItems: () => import_builderforce_brain_embedded25.filterModelItems,
   formatContextTokens: () => formatContextTokens,
   formatDownloadSize: () => formatDownloadSize,
   formatDuration: () => formatDuration,
@@ -160,24 +163,24 @@ __export(src_exports, {
   inferenceModeOption: () => inferenceModeOption,
   initialsOf: () => initialsOf,
   invalidateConsumptionSnapshot: () => invalidateConsumptionSnapshot,
-  isManagerRole: () => import_builderforce_brain_embedded25.isManagerRole,
+  isManagerRole: () => import_builderforce_brain_embedded26.isManagerRole,
   liveActivityLabelsFrom: () => liveActivityLabelsFrom,
   loadEvermindBuilds: () => loadEvermindBuilds,
   localModelLabelsFrom: () => localModelLabelsFrom,
-  modelCategoryLabel: () => import_builderforce_brain_embedded24.modelCategoryLabel,
-  modelInUse: () => import_builderforce_brain_embedded24.modelInUse,
+  modelCategoryLabel: () => import_builderforce_brain_embedded25.modelCategoryLabel,
+  modelInUse: () => import_builderforce_brain_embedded25.modelInUse,
   modelMoveLine: () => modelMoveLine,
   modelMoveOf: () => modelMoveOf,
   modelRemedies: () => modelRemedies,
   modelSelectionFrom: () => modelSelectionFrom,
-  parseAskUser: () => import_builderforce_brain_embedded3.parseAskUser,
+  parseAskUser: () => import_builderforce_brain_embedded4.parseAskUser,
   pendingChangesSummary: () => pendingChangesSummary,
-  perMillionUsd: () => import_builderforce_brain_embedded24.perMillionUsd,
+  perMillionUsd: () => import_builderforce_brain_embedded25.perMillionUsd,
   planIsPaid: () => planIsPaid,
   preferredEvermindBuild: () => preferredEvermindBuild,
-  premiumCostLabel: () => import_builderforce_brain_embedded24.premiumCostLabel,
-  productForPlan: () => import_builderforce_brain_embedded24.productForPlan,
-  productModelName: () => import_builderforce_brain_embedded24.productModelName,
+  premiumCostLabel: () => import_builderforce_brain_embedded25.premiumCostLabel,
+  productForPlan: () => import_builderforce_brain_embedded25.productForPlan,
+  productModelName: () => import_builderforce_brain_embedded25.productModelName,
   promptOptionsLabels: () => promptOptionsLabels,
   promptOptionsLabelsFrom: () => promptOptionsLabelsFrom,
   promptTrailingAction: () => promptTrailingAction,
@@ -185,17 +188,17 @@ __export(src_exports, {
   requestComposerMenu: () => requestComposerMenu,
   resolvePendingChangesLabels: () => resolvePendingChangesLabels,
   resolveTeacherOptions: () => resolveTeacherOptions,
-  revealsModelId: () => import_builderforce_brain_embedded24.revealsModelId,
+  revealsModelId: () => import_builderforce_brain_embedded25.revealsModelId,
   rovingRadioNextIndex: () => rovingRadioNextIndex,
-  selectPendingAskUser: () => import_builderforce_brain_embedded3.selectPendingAskUser,
-  serializeAskUser: () => import_builderforce_brain_embedded3.serializeAskUser,
+  selectPendingAskUser: () => import_builderforce_brain_embedded4.selectPendingAskUser,
+  serializeAskUser: () => import_builderforce_brain_embedded4.serializeAskUser,
   shellOutcomeOf: () => shellOutcomeOf,
   spendLabels: () => spendLabels,
   spendLabelsFrom: () => spendLabelsFrom,
   strandedReplyKey: () => strandedReplyKey,
   streamingNode: () => streamingNode,
   stringsFrom: () => stringsFrom,
-  stripAskUser: () => import_builderforce_brain_embedded3.stripAskUser,
+  stripAskUser: () => import_builderforce_brain_embedded4.stripAskUser,
   subscribeConsumptionSnapshot: () => subscribeConsumptionSnapshot,
   timelineCatalogLookup: () => timelineCatalogLookup,
   timelineLabelsFrom: () => timelineLabelsFrom,
@@ -215,6 +218,7 @@ __export(src_exports, {
   useMentionAutocomplete: () => useMentionAutocomplete,
   useModelFallback: () => useModelFallback,
   usePopover: () => usePopover,
+  useProviderReconnect: () => useProviderReconnect,
   useRecipientChoice: () => useRecipientChoice,
   useRovingRadioGroup: () => useRovingRadioGroup,
   useTicketAutocomplete: () => useTicketAutocomplete,
@@ -226,8 +230,8 @@ __export(src_exports, {
 module.exports = __toCommonJS(src_exports);
 
 // src/BrainTimeline.tsx
-var import_react7 = __toESM(require("react"), 1);
-var import_builderforce_brain_embedded9 = require("@seanhogg/builderforce-brain-embedded");
+var import_react12 = __toESM(require("react"), 1);
+var import_builderforce_brain_embedded10 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/Markdown.tsx
 var import_react = __toESM(require("react"), 1);
@@ -578,7 +582,7 @@ function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, lab
 var Markdown = import_react.default.memo(MarkdownInner);
 
 // src/timelineModel.ts
-var import_builderforce_brain_embedded = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded2 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/timelineModelMoves.ts
 var DEFAULT_MODEL_MOVE_LABELS = {
@@ -619,7 +623,8 @@ function modelMoveLine(move, labels) {
   return move.fits ? line : `${line}. ${labels.modelMoveOverWindow}`;
 }
 
-// src/timelineModel.ts
+// src/timelineNodes.ts
+var import_builderforce_brain_embedded = require("@seanhogg/builderforce-brain-embedded");
 var LEARN_SKIP_REASONS = ["not-attached", "not-seeded", "frozen"];
 function isLearnSkipReason(v) {
   return typeof v === "string" && LEARN_SKIP_REASONS.includes(v);
@@ -635,6 +640,7 @@ var ORDER = {
   activity: 4,
   tool: 4,
   modelMove: 4,
+  compacted: 4,
   learn: 5,
   reconcile: 6,
   error: 7,
@@ -662,12 +668,6 @@ function stripImageRefs(text, imageNames) {
     return !(m && imageNames.has(m[1].trim()));
   }).join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
-function buildTimeline(input) {
-  const nodes = buildSettledTimeline(input.messages, input.trace);
-  const streaming = streamingNode(input.streamingText, input.isRunning);
-  if (streaming) nodes.push(streaming);
-  return nodes;
-}
 function stepNode(step, ts, key) {
   switch (step.category) {
     case "tool":
@@ -693,6 +693,10 @@ function stepNode(step, ts, key) {
       return { key, kind: "reconcile", ts, order: ORDER.reconcile, version: typeof r.version === "number" ? r.version : 0, count: typeof r.count === "number" ? r.count : 0 };
     }
     case "message": {
+      if (step.label === COMPACTED_STEP) {
+        const dropped = step.args?.droppedMessages;
+        return { key, kind: "compacted", ts, order: ORDER.compacted, message: null, count: typeof dropped === "number" ? dropped : 0, note: "" };
+      }
       const move = modelMoveOf(step.label, step.args);
       return move ? { key, kind: "modelMove", ts, order: ORDER.modelMove, move } : null;
     }
@@ -700,76 +704,85 @@ function stepNode(step, ts, key) {
       return null;
   }
 }
+var COMPACTED_STEP = "context.compacted";
+var MARKER_SKEW_MS = 6e4;
+function withoutCoveredFolds(nodes) {
+  const markers = nodes.filter((n2) => n2.kind === "compacted" && n2.message).map((n2) => n2.ts);
+  if (markers.length === 0) return nodes;
+  return nodes.filter((n2) => !(n2.kind === "compacted" && !n2.message && markers.some((t) => t >= n2.ts - MARKER_SKEW_MS)));
+}
+var traceDerived = /* @__PURE__ */ new WeakMap();
+function traceNode(ev, index, step) {
+  const hit = traceDerived.get(ev);
+  if (hit && hit.index === index && hit.step === step) return hit.node;
+  const ts = parseTs(ev.ts, 1e15 + index);
+  const node = ev.category === "llm" ? { key: `trace-${index}`, kind: "thinking", ts, order: ORDER.thinking, durationMs: ev.ttftMs ?? ev.durationMs, step } : stepNode({ category: ev.category, label: ev.label, args: ev.args, result: ev.result, isError: ev.isError, durationMs: ev.durationMs }, ts, `trace-${index}`);
+  traceDerived.set(ev, { index, step, node });
+  return node;
+}
+var derived = /* @__PURE__ */ new WeakMap();
+function messageNode(message, index) {
+  const hit = derived.get(message);
+  if (hit) return hit;
+  const out = deriveMessageNode(message, index);
+  derived.set(message, out);
+  return out;
+}
+function deriveMessageNode(message, index) {
+  const key = `msg-${message.id}`;
+  const ts = parseTs(message.createdAt, index);
+  if (message.role === "user") {
+    const images = attachmentsOf(message).filter((a) => a.imageUrl).map((a) => ({ url: a.imageUrl, name: a.name }));
+    const imageNames = new Set(images.map((im) => im.name).filter((n2) => !!n2));
+    return { node: { key, kind: "user", ts, order: ORDER.user, message, text: stripImageRefs(message.content, imageNames), images } };
+  }
+  if ((0, import_builderforce_brain_embedded.isStepMessage)(message)) {
+    const parsed = (0, import_builderforce_brain_embedded.parseStepMessage)(message.metadata);
+    if (!parsed) return { node: null };
+    return {
+      node: stepNode(parsed.step, parseTs(parsed.tsIso, ts), key),
+      stepSig: (0, import_builderforce_brain_embedded.stepSig)(parsed.step.category, parsed.step.label, parsed.tsIso)
+    };
+  }
+  const marker = (0, import_builderforce_brain_embedded.consolidationMarkerOf)(message);
+  if (marker?.auto) {
+    const note = message.content.startsWith(import_builderforce_brain_embedded.CONSOLIDATION_MARKER_PREFIX) ? message.content.slice(import_builderforce_brain_embedded.CONSOLIDATION_MARKER_PREFIX.length) : message.content;
+    return { node: { key, kind: "compacted", ts, order: ORDER.compacted, message, count: marker.folded ?? 0, note } };
+  }
+  const activity = (0, import_builderforce_brain_embedded.parseChatActivity)(message);
+  if (activity) {
+    return { node: { key, kind: "activity", ts, order: ORDER.activity, message, activity, fallbackText: message.content } };
+  }
+  return { node: { key, kind: "assistant", ts, order: ORDER.assistant, message, text: message.content } };
+}
+
+// src/timelineModel.ts
+function buildTimeline(input) {
+  const nodes = buildSettledTimeline(input.messages, input.trace);
+  const streaming = streamingNode(input.streamingText, input.isRunning);
+  if (streaming) nodes.push(streaming);
+  return nodes;
+}
 function buildSettledTimeline(messages, trace) {
   const nodes = [];
   const traceStepSigs = /* @__PURE__ */ new Set();
   for (const ev of trace) {
-    if (ev.category !== "llm" && ev.category !== "message" || modelMoveOf(ev.label, ev.args)) traceStepSigs.add((0, import_builderforce_brain_embedded.stepSig)(ev.category, ev.label, ev.ts));
+    if (ev.category !== "llm" && ev.category !== "message" || modelMoveOf(ev.label, ev.args)) traceStepSigs.add((0, import_builderforce_brain_embedded2.stepSig)(ev.category, ev.label, ev.ts));
   }
   messages.forEach((message, i) => {
-    const ts = parseTs(message.createdAt, i);
-    if (message.role === "user") {
-      const atts = attachmentsOf(message);
-      const images = atts.filter((a) => a.imageUrl).map((a) => ({ url: a.imageUrl, name: a.name }));
-      const imageNames = new Set(images.map((im) => im.name).filter((n2) => !!n2));
-      nodes.push({
-        key: `msg-${message.id}`,
-        kind: "user",
-        ts,
-        order: ORDER.user,
-        message,
-        text: stripImageRefs(message.content, imageNames),
-        images
-      });
-    } else if ((0, import_builderforce_brain_embedded.isStepMessage)(message)) {
-      const parsed = (0, import_builderforce_brain_embedded.parseStepMessage)(message.metadata);
-      if (!parsed) return;
-      if (traceStepSigs.has((0, import_builderforce_brain_embedded.stepSig)(parsed.step.category, parsed.step.label, parsed.tsIso))) return;
-      const node = stepNode(parsed.step, parseTs(parsed.tsIso, ts), `msg-${message.id}`);
-      if (node) nodes.push(node);
-    } else {
-      const activity = (0, import_builderforce_brain_embedded.parseChatActivity)(message);
-      if (activity) {
-        nodes.push({
-          key: `msg-${message.id}`,
-          kind: "activity",
-          ts,
-          order: ORDER.activity,
-          message,
-          activity,
-          // Pre-structured rows carry only the server's English sentence; showing it
-          // beats showing nothing, so it rides along as the fallback.
-          fallbackText: message.content
-        });
-        return;
-      }
-      nodes.push({
-        key: `msg-${message.id}`,
-        kind: "assistant",
-        ts,
-        order: ORDER.assistant,
-        message,
-        text: message.content
-      });
-    }
+    const { node, stepSig: sig } = messageNode(message, i);
+    if (node && !(sig && traceStepSigs.has(sig))) nodes.push(node);
   });
   const messageNodeCount = nodes.length;
   let step = 0;
   trace.forEach((ev, i) => {
-    const ts = parseTs(ev.ts, 1e15 + i);
-    if (ev.category === "llm") {
-      nodes.push({ key: `trace-${i}`, kind: "thinking", ts, order: ORDER.thinking, durationMs: ev.ttftMs ?? ev.durationMs, step: step++ });
-    } else {
-      const node = stepNode(
-        { category: ev.category, label: ev.label, args: ev.args, result: ev.result, isError: ev.isError, durationMs: ev.durationMs },
-        ts,
-        `trace-${i}`
-      );
-      if (node) nodes.push(node);
-    }
+    const node = traceNode(ev, i, step);
+    if (ev.category === "llm") step++;
+    if (node) nodes.push(node);
   });
   const rank = (n2, i) => i < messageNodeCount ? n2.order : TRACE_RANK;
-  return nodes.map((node, i) => ({ node, i, rank: rank(node, i) })).sort((a, b) => a.node.ts - b.node.ts || a.rank - b.rank || a.i - b.i).map((e) => e.node);
+  const sorted = nodes.map((node, i) => ({ node, i, rank: rank(node, i) })).sort((a, b) => a.node.ts - b.node.ts || a.rank - b.rank || a.i - b.i).map((e) => e.node);
+  return withoutCoveredFolds(sorted);
 }
 function strandedReplyKey(nodes, isRunning) {
   if (isRunning) return null;
@@ -806,7 +819,7 @@ function formatPayload(value) {
 
 // src/LiveActivity.tsx
 var import_react2 = __toESM(require("react"), 1);
-var import_builderforce_brain_embedded2 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded3 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime2 = require("react/jsx-runtime");
 var SLOW_AFTER_MS = 12e3;
 var TICK_MS = 1e3;
@@ -844,7 +857,7 @@ function phaseLine(activity, labels) {
   const tool = activity.label ?? "";
   if (activity.phase === "composing") {
     const composing = labels.composing.replace("{tool}", tool);
-    return activity.bytes != null ? `${composing}${labels.composed.replace("{bytes}", (0, import_builderforce_brain_embedded2.formatBytes)(activity.bytes))}` : composing;
+    return activity.bytes != null ? `${composing}${labels.composed.replace("{bytes}", (0, import_builderforce_brain_embedded3.formatBytes)(activity.bytes))}` : composing;
   }
   const base = activity.phase === "starting" ? labels.starting : activity.phase === "thinking" ? labels.thinking : activity.phase === "writing" ? labels.writing : activity.phase === "finishing" ? labels.finishing : activity.phase === "awaiting" ? labels.awaiting.replace("{tool}", tool) : labels.tool.replace("{tool}", tool);
   return activity.detail ? `${base}${labels.on.replace("{target}", activity.detail)}` : base;
@@ -892,20 +905,22 @@ function LiveActivityInner({ activity, isRunning, labels: partial }) {
 var LiveActivity = import_react2.default.memo(LiveActivityInner);
 
 // src/ModelMoveStep.tsx
+var import_react3 = require("react");
 var import_jsx_runtime3 = require("react/jsx-runtime");
-function ModelMoveStep({ move, labels }) {
+function ModelMoveStepInner({ move, labels }) {
   return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("li", { className: "bf-tl__item bf-tl__item--memory", children: [
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: "\u21C4" }) }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "bf-tl__body", children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: "bf-tl__memory-line", title: labels.modelMoveHint, children: modelMoveLine(move, labels) }) })
   ] });
 }
+var ModelMoveStep = (0, import_react3.memo)(ModelMoveStepInner);
 
 // src/timeline/labels.ts
-var import_builderforce_brain_embedded4 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded5 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/askUser.tsx
-var import_react3 = require("react");
-var import_builderforce_brain_embedded3 = require("@seanhogg/builderforce-brain-embedded");
+var import_react4 = require("react");
+var import_builderforce_brain_embedded4 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime4 = require("react/jsx-runtime");
 var DEFAULT_ASK_USER_LABELS = {
   askSubmit: "Send",
@@ -920,9 +935,9 @@ function QuestionCard({
   onAnswer,
   anchorId
 }) {
-  const lab = (0, import_react3.useMemo)(() => ({ ...DEFAULT_ASK_USER_LABELS, ...labels }), [labels]);
-  const [answered, setAnswered] = (0, import_react3.useState)(null);
-  const [checked, setChecked] = (0, import_react3.useState)(() => /* @__PURE__ */ new Set());
+  const lab = (0, import_react4.useMemo)(() => ({ ...DEFAULT_ASK_USER_LABELS, ...labels }), [labels]);
+  const [answered, setAnswered] = (0, import_react4.useState)(null);
+  const [checked, setChecked] = (0, import_react4.useState)(() => /* @__PURE__ */ new Set());
   const multi = payload.multiSelect === true;
   const commit = (answer) => {
     if (answered || !answer.trim()) return;
@@ -984,8 +999,8 @@ function PendingQuestionBanner({
   onAnswer,
   onReveal
 }) {
-  const lab = (0, import_react3.useMemo)(() => ({ ...DEFAULT_ASK_USER_LABELS, ...labels }), [labels]);
-  const [closed, setClosed] = (0, import_react3.useState)(false);
+  const lab = (0, import_react4.useMemo)(() => ({ ...DEFAULT_ASK_USER_LABELS, ...labels }), [labels]);
+  const [closed, setClosed] = (0, import_react4.useState)(false);
   if (closed) return null;
   const answer = (choice) => {
     setClosed(true);
@@ -1064,22 +1079,27 @@ var DEFAULT_TIMELINE_LABELS = {
   learnTargetSkipped: "Skipped {name} (project #{projectId}) \u2014 {reason}",
   reconcileTitle: "Reconciled {count} learned memories in Evermind v{version}",
   reconcileHint: "The answer restated these recalled learnings, so it updates them (write-through cognition).",
+  contextCompacted: "Context auto-compacted: older steps summarized into a memory ({count})",
+  contextCompactedHint: "The conversation outgrew its working budget, so the older part was summarized into a memory note the model keeps working from. Nothing is deleted from this transcript.",
+  showEarlier: "Show earlier steps ({count})",
+  showNewer: "Show newer steps ({count})",
+  jumpToLatest: "Jump to latest",
   ...DEFAULT_MODEL_MOVE_LABELS,
-  activity: import_builderforce_brain_embedded4.DEFAULT_CHAT_ACTIVITY_LABELS
+  activity: import_builderforce_brain_embedded5.DEFAULT_CHAT_ACTIVITY_LABELS
 };
 
 // src/timeline/useTranscriptScroll.ts
-var import_react4 = require("react");
+var import_react5 = require("react");
 function useTranscriptScroll(autoScroll, revealMessage) {
-  const scrollRef = (0, import_react4.useRef)(null);
-  const contentRef = (0, import_react4.useRef)(null);
-  const pinnedRef = (0, import_react4.useRef)(true);
+  const scrollRef = (0, import_react5.useRef)(null);
+  const contentRef = (0, import_react5.useRef)(null);
+  const pinnedRef = (0, import_react5.useRef)(true);
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
     pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
-  (0, import_react4.useEffect)(() => {
+  (0, import_react5.useEffect)(() => {
     if (!autoScroll) return;
     const scroller = scrollRef.current;
     const content = contentRef.current;
@@ -1093,7 +1113,7 @@ function useTranscriptScroll(autoScroll, revealMessage) {
     ro.observe(content);
     return () => ro.disconnect();
   }, [autoScroll]);
-  (0, import_react4.useEffect)(() => {
+  (0, import_react5.useEffect)(() => {
     if (revealMessage == null) return;
     pinnedRef.current = false;
     const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -1118,8 +1138,79 @@ function useTranscriptScroll(autoScroll, revealMessage) {
   return { scrollRef, contentRef, onScroll };
 }
 
+// src/timeline/useRenderWindow.ts
+var import_react6 = require("react");
+var TIMELINE_PAGE_SIZE = 150;
+var REVEAL_LEAD = 10;
+function renderRange(keys, anchor, revealIndex) {
+  const length = keys.length;
+  const newest = Math.max(0, length - TIMELINE_PAGE_SIZE);
+  const at = (key) => key === null ? -1 : keys.indexOf(key);
+  const anchoredStart = at(anchor.startKey);
+  const anchoredEnd = at(anchor.endKey);
+  const start = anchoredStart >= 0 ? Math.min(anchoredStart, newest) : newest;
+  const end = anchoredEnd >= 0 ? Math.max(anchoredEnd + 1, Math.min(length, start + TIMELINE_PAGE_SIZE)) : length;
+  if (revealIndex >= 0 && (revealIndex < start || revealIndex >= end)) {
+    const from = Math.max(0, revealIndex - REVEAL_LEAD);
+    return { start: from, end: Math.min(length, from + TIMELINE_PAGE_SIZE) };
+  }
+  return { start, end };
+}
+function lastStableKey(keys, end) {
+  for (let i = end - 1; i >= 0; i--) if (keys[i] !== "streaming") return keys[i];
+  return null;
+}
+var NEWEST = { startKey: null, endKey: null };
+function useRenderWindow(nodes, conversationKey, reveal, scrollRef) {
+  const [state, setState] = (0, import_react6.useState)(
+    { conversation: conversationKey, anchor: NEWEST, seenReveal: null }
+  );
+  const keys = (0, import_react6.useMemo)(() => nodes.map((n2) => n2.key), [nodes]);
+  let current = state;
+  if (current.conversation !== conversationKey) {
+    current = { conversation: conversationKey, anchor: NEWEST, seenReveal: current.seenReveal };
+    setState(current);
+  }
+  const pending = reveal && reveal.nonce !== current.seenReveal ? reveal : null;
+  if (pending) {
+    const shown = renderRange(keys, current.anchor, -1);
+    const inView = pending.index >= shown.start && pending.index < shown.end;
+    const around = renderRange(keys, current.anchor, pending.index);
+    current = {
+      ...current,
+      seenReveal: pending.nonce,
+      anchor: inView ? current.anchor : { startKey: keys[around.start] ?? null, endKey: around.end >= keys.length ? null : lastStableKey(keys, around.end) }
+    };
+    setState(current);
+  }
+  const range = renderRange(keys, current.anchor, -1);
+  const fromBottom = (0, import_react6.useRef)(null);
+  const move = (0, import_react6.useCallback)((next, keepPlace) => {
+    const el = scrollRef.current;
+    if (keepPlace && el) fromBottom.current = el.scrollHeight - el.scrollTop;
+    setState((prev) => ({ ...prev, conversation: conversationKey, anchor: next }));
+  }, [scrollRef, conversationKey]);
+  (0, import_react6.useLayoutEffect)(() => {
+    const el = scrollRef.current;
+    if (el && fromBottom.current != null) el.scrollTop = el.scrollHeight - fromBottom.current;
+    fromBottom.current = null;
+  }, [scrollRef, range.start]);
+  const pinnedEnd = lastStableKey(keys, range.end);
+  const earlier = range.start > 0 ? { count: Math.min(range.start, TIMELINE_PAGE_SIZE), show: () => move({ startKey: keys[Math.max(0, range.start - TIMELINE_PAGE_SIZE)] ?? null, endKey: pinnedEnd }, true) } : null;
+  const newer = range.end < keys.length ? {
+    count: Math.min(keys.length - range.end, TIMELINE_PAGE_SIZE),
+    show: () => {
+      const end = range.end + TIMELINE_PAGE_SIZE;
+      move(end >= keys.length ? NEWEST : { startKey: keys[range.start] ?? null, endKey: lastStableKey(keys, end) }, false);
+    },
+    latest: () => move(NEWEST, false)
+  } : null;
+  return { visible: nodes.slice(range.start, range.end), earlier, newer };
+}
+
 // src/timeline/MessageRows.tsx
-var import_builderforce_brain_embedded6 = require("@seanhogg/builderforce-brain-embedded");
+var import_react8 = require("react");
+var import_builderforce_brain_embedded7 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/ParticipantBadge.tsx
 var import_jsx_runtime5 = require("react/jsx-runtime");
@@ -1205,17 +1296,19 @@ function dotIcon(kind, isError) {
     case "learn":
     case "reconcile":
       return "\u{1F9E0}";
+    case "compacted":
+      return "\u21CA";
     default:
       return "\u2022";
   }
 }
 
 // src/CopyButton.tsx
-var import_react5 = require("react");
+var import_react7 = require("react");
 var import_jsx_runtime6 = require("react/jsx-runtime");
 var CONFIRM_MS = 1500;
 function CopyButton({ text, labels, icon = false }) {
-  const [copied, setCopied] = (0, import_react5.useState)(false);
+  const [copied, setCopied] = (0, import_react7.useState)(false);
   return /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
     "button",
     {
@@ -1304,7 +1397,7 @@ function MessageActions({
 }
 
 // src/timeline/ProvenanceChip.tsx
-var import_builderforce_brain_embedded5 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded6 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime8 = require("react/jsx-runtime");
 function ProvenanceChip({
   prov,
@@ -1314,7 +1407,7 @@ function ProvenanceChip({
   const unused = prov.account === "shared_byo_unused";
   const badge = prov.account === "own" ? labels.accountOwn : unused ? labels.accountByoUnused : prov.account === "shared" ? labels.accountShared : null;
   const variant = prov.account === "own" ? "bf-tl__prov--own" : unused ? "bf-tl__prov--unused" : "bf-tl__prov--shared";
-  const name = (0, import_builderforce_brain_embedded5.displayModelName)(prov.model, identity, { account: prov.account });
+  const name = (0, import_builderforce_brain_embedded6.displayModelName)(prov.model, identity, { account: prov.account });
   const modelTitle = prov.vendor && name === prov.model ? `${name} \xB7 ${prov.vendor}` : name;
   return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: `bf-tl__prov ${variant}`, children: [
     /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-tl__prov-model", title: modelTitle, children: name }),
@@ -1325,15 +1418,15 @@ function ProvenanceChip({
 
 // src/timeline/MessageRows.tsx
 var import_jsx_runtime9 = require("react/jsx-runtime");
-function UserRow({
+function UserRowInner({
   node,
   labels,
   focusClass,
   renderMsg,
   onReplay
 }) {
-  const to = (0, import_builderforce_brain_embedded6.parseDirectedRecipients)(node.message);
-  const author = (0, import_builderforce_brain_embedded6.parseMessageAuthor)(node.message);
+  const to = (0, import_builderforce_brain_embedded7.parseDirectedRecipients)(node.message);
+  const author = (0, import_builderforce_brain_embedded7.parseMessageAuthor)(node.message);
   return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { id: brainMessageAnchorId(node.message.id), className: `bf-tl__item bf-tl__item--user${focusClass}`, children: [
     /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "bf-tl__dot", children: author ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(Avatar, { name: author.name, kind: author.kind, size: 16 }) : dotIcon("user") }) }),
     /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "bf-tl__body", children: [
@@ -1347,7 +1440,7 @@ function UserRow({
     ] })
   ] });
 }
-function AssistantRow({
+function AssistantRowInner({
   node,
   labels,
   focusClass,
@@ -1362,13 +1455,13 @@ function AssistantRow({
   rating,
   renderAssistantActions
 }) {
-  const author = (0, import_builderforce_brain_embedded6.parseMessageAuthor)(node.message);
-  const card = onAnswerQuestion ? (0, import_builderforce_brain_embedded3.parseAskUser)(node.text) : null;
-  const bodyText = card ? (0, import_builderforce_brain_embedded3.stripAskUser)(node.text) : node.text;
-  const prov = (0, import_builderforce_brain_embedded6.parseMessageProvenance)(node.message);
+  const author = (0, import_builderforce_brain_embedded7.parseMessageAuthor)(node.message);
+  const card = onAnswerQuestion ? (0, import_builderforce_brain_embedded4.parseAskUser)(node.text) : null;
+  const bodyText = card ? (0, import_builderforce_brain_embedded4.stripAskUser)(node.text) : node.text;
+  const prov = (0, import_builderforce_brain_embedded7.parseMessageProvenance)(node.message);
   const answer = answerTextOf(bodyText);
   const rescued = node.key === stranded ? thoughtTextOf(bodyText) : "";
-  const stopped = (0, import_builderforce_brain_embedded6.isStoppedTurn)(node.message);
+  const stopped = (0, import_builderforce_brain_embedded7.isStoppedTurn)(node.message);
   if (!answer && bodyText && !card && !rescued && !stopped) {
     return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { id: brainMessageAnchorId(node.message.id), className: `bf-tl__item bf-tl__item--thought${focusClass}`, children: [
       /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("thinking") }) }),
@@ -1394,7 +1487,7 @@ function AssistantRow({
           payload: card,
           labels: { askSubmit: labels.askSubmit, askAnswered: labels.askAnswered },
           onAnswer: onAnswerQuestion,
-          anchorId: (0, import_builderforce_brain_embedded3.askUserAnchorId)(node.message.id)
+          anchorId: (0, import_builderforce_brain_embedded4.askUserAnchorId)(node.message.id)
         }
       ),
       /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "bf-tl__foot", children: [
@@ -1419,14 +1512,17 @@ function AssistantRow({
   ] });
 }
 function OriginTag({ message, owner, labels }) {
-  const origin = (0, import_builderforce_brain_embedded6.parseSubagentOrigin)(message);
+  const origin = (0, import_builderforce_brain_embedded7.parseSubagentOrigin)(message);
   if (origin) {
     return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "bf-tl__origin", children: `${labels.subagentOf.replace("{owner}", origin.owner)} \xB7 ${origin.handle}` });
   }
   return owner ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "bf-tl__origin", children: labels.ownerTag }) : null;
 }
+var UserRow = (0, import_react8.memo)(UserRowInner);
+var AssistantRow = (0, import_react8.memo)(AssistantRowInner);
 
 // src/timeline/MemoryRows.tsx
+var import_react9 = require("react");
 var import_jsx_runtime10 = require("react/jsx-runtime");
 function MemoryLine({ kind, title, hint }) {
   return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("li", { className: "bf-tl__item bf-tl__item--memory", children: [
@@ -1434,7 +1530,7 @@ function MemoryLine({ kind, title, hint }) {
     /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-tl__body", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-tl__memory-line", title: hint, children: title }) })
   ] });
 }
-function RecallRow({ node, labels }) {
+function RecallRowInner({ node, labels }) {
   const title = labels.recallTitle.replace("{count}", String(node.count)).replace("{version}", String(node.version));
   return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("li", { className: "bf-tl__item bf-tl__item--memory", children: [
     /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("recall") }) }),
@@ -1453,11 +1549,11 @@ function RecallRow({ node, labels }) {
     ] }) })
   ] });
 }
-function MemoryAnswerRow({ node, labels }) {
+function MemoryAnswerRowInner({ node, labels }) {
   const title = node.source === "evermind" && node.version != null ? labels.memoryAnswerEvermind.replace("{version}", String(node.version)) : labels.memoryAnswerCache;
   return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(MemoryLine, { kind: "memoryAnswer", title, hint: labels.memoryAnswerHint });
 }
-function LearnRow({ node, labels }) {
+function LearnRowInner({ node, labels }) {
   if (node.targets && node.targets.length > 0) {
     const lines = node.targets.map((tg) => {
       if (tg.learned) {
@@ -1473,13 +1569,35 @@ function LearnRow({ node, labels }) {
   const hint = node.skipped ? labels.learnSkippedHint : labels.learnHint;
   return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(MemoryLine, { kind: "learn", title, hint });
 }
-function ReconcileRow({ node, labels }) {
+function ReconcileRowInner({ node, labels }) {
   const title = labels.reconcileTitle.replace("{count}", String(node.count)).replace("{version}", String(node.version));
   return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(MemoryLine, { kind: "reconcile", title, hint: labels.reconcileHint });
 }
+function CompactedRowInner({ node, labels }) {
+  const title = labels.contextCompacted.replace("{count}", String(node.count));
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("li", { className: "bf-tl__item bf-tl__item--memory", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("compacted") }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-tl__body", children: node.note ? /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("details", { className: "bf-tl__tool bf-tl__memory", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("summary", { className: "bf-tl__tool-head", title: labels.contextCompactedHint, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-tl__tool-name", children: title }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-tl__tool-caret", "aria-hidden": true, children: "\u25B8" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-tl__tool-body", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "bf-tl__memory-note", children: node.note }) })
+    ] }) : (
+      // Known only from the run's step: there is no saved note to expand.
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-tl__tool-head bf-tl__memory", title: labels.contextCompactedHint, children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-tl__tool-name", children: title }) })
+    ) })
+  ] });
+}
+var RecallRow = (0, import_react9.memo)(RecallRowInner);
+var MemoryAnswerRow = (0, import_react9.memo)(MemoryAnswerRowInner);
+var LearnRow = (0, import_react9.memo)(LearnRowInner);
+var ReconcileRow = (0, import_react9.memo)(ReconcileRowInner);
+var CompactedRow = (0, import_react9.memo)(CompactedRowInner);
 
 // src/timeline/StepRows.tsx
-var import_builderforce_brain_embedded8 = require("@seanhogg/builderforce-brain-embedded");
+var import_react11 = require("react");
+var import_builderforce_brain_embedded9 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/chatErrorMessage.ts
 function engineMessage(code, labels, fallback) {
@@ -1621,10 +1739,10 @@ function ChatErrorBanner({
 }
 
 // src/ToolStep.tsx
-var import_react6 = require("react");
+var import_react10 = require("react");
 
 // src/toolStepView.ts
-var import_builderforce_brain_embedded7 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded8 = require("@seanhogg/builderforce-brain-embedded");
 var COMMAND_KEYS = ["command", "cmd"];
 var SHELL_RESULT_KEYS = /* @__PURE__ */ new Set([
   "ok",
@@ -1715,7 +1833,7 @@ function residualArgs(args, command) {
   return Object.keys(rest).length > 0 ? rest : null;
 }
 function subjectOf(args, isCommand) {
-  const target = (0, import_builderforce_brain_embedded7.activityTarget)(args);
+  const target = (0, import_builderforce_brain_embedded8.activityTarget)(args);
   if (target) return { subject: target, subjectIsPath: !isCommand && target.includes("/") && !/\s/.test(target) };
   const paths = asRecord(args)?.paths;
   const names = Array.isArray(paths) ? paths.filter((path) => typeof path === "string" && !!path.trim()) : [];
@@ -1811,7 +1929,7 @@ function CommandCard({ run, labels }) {
 }
 function ToolStep({ node, labels }) {
   const view = toolStepView(node);
-  const [open, setOpen] = (0, import_react6.useState)(view.defaultOpen);
+  const [open, setOpen] = (0, import_react10.useState)(view.defaultOpen);
   return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
     "details",
     {
@@ -1839,33 +1957,33 @@ function ToolStep({ node, labels }) {
 
 // src/timeline/StepRows.tsx
 var import_jsx_runtime13 = require("react/jsx-runtime");
-function ThinkingRow({ node, labels }) {
+function ThinkingRowInner({ node, labels }) {
   const label = labels.thoughtFor.replace("{duration}", formatDuration(node.durationMs));
   return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("li", { className: "bf-tl__item bf-tl__item--thinking", children: [
     /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("thinking") }) }),
     /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-tl__body", children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-tl__thinking", children: label }) })
   ] });
 }
-function ToolRow({ node, labels }) {
+function ToolRowInner({ node, labels }) {
   return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("li", { className: "bf-tl__item bf-tl__item--tool", children: [
     /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: `bf-tl__dot${node.isError ? " bf-tl__dot--error" : ""}`, children: dotIcon("tool", node.isError) }) }),
     /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-tl__body", children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(ToolStep, { node, labels }) })
   ] });
 }
-function ErrorRow({ node, labels }) {
+function ErrorRowInner({ node, labels }) {
   return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("li", { className: "bf-tl__item bf-tl__item--error", children: [
     /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-tl__dot bf-tl__dot--error", children: dotIcon("error") }) }),
     /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "bf-tl__body", children: [
       /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-tl__role bf-tl__role--error", children: labels.error }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-tl__bubble bf-tl__bubble--error", children: chatErrorMessage(node.message, (0, import_builderforce_brain_embedded8.chatErrorAction)(node.message), { ...DEFAULT_CHAT_ERROR_LABELS, ...labels.chatError }) })
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-tl__bubble bf-tl__bubble--error", children: chatErrorMessage(node.message, (0, import_builderforce_brain_embedded9.chatErrorAction)(node.message), { ...DEFAULT_CHAT_ERROR_LABELS, ...labels.chatError }) })
     ] })
   ] });
 }
-function ActivityRow({ node, labels }) {
-  const text = (0, import_builderforce_brain_embedded8.chatActivityText)(node.activity, labels.activity) || node.fallbackText;
-  const tone = (0, import_builderforce_brain_embedded8.activityTone)(node.activity);
+function ActivityRowInner({ node, labels }) {
+  const text = (0, import_builderforce_brain_embedded9.chatActivityText)(node.activity, labels.activity) || node.fallbackText;
+  const tone = (0, import_builderforce_brain_embedded9.activityTone)(node.activity);
   return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("li", { className: `bf-tl__item bf-tl__item--activity bf-tl__item--activity-${tone}`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-tl__dot bf-tl__dot--activity", "aria-hidden": true, children: (0, import_builderforce_brain_embedded8.activityIcon)(node.activity) }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-tl__dot bf-tl__dot--activity", "aria-hidden": true, children: (0, import_builderforce_brain_embedded9.activityIcon)(node.activity) }) }),
     /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "bf-tl__body", children: [
       /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-tl__activity-line", children: text }),
       node.activity.kind === "milestone" && node.activity.note && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-tl__activity-note", children: node.activity.note })
@@ -1887,6 +2005,10 @@ function StreamingRow({
     ] })
   ] });
 }
+var ThinkingRow = (0, import_react11.memo)(ThinkingRowInner);
+var ToolRow = (0, import_react11.memo)(ToolRowInner);
+var ErrorRow = (0, import_react11.memo)(ErrorRowInner);
+var ActivityRow = (0, import_react11.memo)(ActivityRowInner);
 
 // src/BrainTimeline.tsx
 var import_jsx_runtime14 = require("react/jsx-runtime");
@@ -1898,7 +2020,7 @@ function BrainTimelineInner({
   activity,
   loading,
   labels: labelOverrides,
-  modelIdentity = import_builderforce_brain_embedded9.DEFAULT_MODEL_IDENTITY,
+  modelIdentity = import_builderforce_brain_embedded10.DEFAULT_MODEL_IDENTITY,
   assistantName,
   emptyState,
   renderMessage,
@@ -1912,18 +2034,19 @@ function BrainTimelineInner({
   onCreateFile,
   onAnswerQuestion,
   autoScroll = true,
-  revealMessage = null
+  revealMessage = null,
+  conversationKey
 }) {
-  const labels = (0, import_react7.useMemo)(() => ({ ...DEFAULT_TIMELINE_LABELS, ...labelOverrides }), [labelOverrides]);
+  const labels = (0, import_react12.useMemo)(() => ({ ...DEFAULT_TIMELINE_LABELS, ...labelOverrides }), [labelOverrides]);
   const assistant = assistantName ?? labels.assistant;
-  const settled = (0, import_react7.useMemo)(() => buildSettledTimeline(messages, trace), [messages, trace]);
-  const nodes = (0, import_react7.useMemo)(() => {
+  const settled = (0, import_react12.useMemo)(() => buildSettledTimeline(messages, trace), [messages, trace]);
+  const nodes = (0, import_react12.useMemo)(() => {
     const streaming = streamingNode(streamingText, isRunning);
     return streaming ? [...settled, streaming] : settled;
   }, [settled, streamingText, isRunning]);
-  const stranded = (0, import_react7.useMemo)(() => strandedReplyKey(nodes, isRunning), [nodes, isRunning]);
+  const stranded = (0, import_react12.useMemo)(() => strandedReplyKey(nodes, isRunning), [nodes, isRunning]);
   const { scrollRef, contentRef, onScroll } = useTranscriptScroll(autoScroll, revealMessage);
-  const renderMsg = (msg, role, text) => renderMessage ? renderMessage(msg, { role, text }) : /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+  const renderMsg = (0, import_react12.useCallback)((msg, role, text) => renderMessage ? renderMessage(msg, { role, text }) : /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
     Markdown,
     {
       content: text,
@@ -1932,19 +2055,30 @@ function BrainTimelineInner({
       onCreateFile: role === "assistant" ? onCreateFile : void 0,
       labels
     }
+  ), [renderMessage, onInternalLink, onApplyCode, onCreateFile, labels]);
+  const revealIndex = (0, import_react12.useMemo)(
+    () => revealMessage ? nodes.findIndex((n2) => (n2.kind === "user" || n2.kind === "assistant") && n2.message.id === revealMessage.id) : -1,
+    [nodes, revealMessage]
+  );
+  const { visible, earlier, newer } = useRenderWindow(
+    nodes,
+    conversationKey ?? nodes[0]?.key ?? null,
+    revealMessage && revealIndex >= 0 ? { index: revealIndex, nonce: revealMessage.nonce } : null,
+    scrollRef
   );
   const isEmpty = nodes.length === 0 && !loading;
-  const hasSubagents = (0, import_react7.useMemo)(
-    () => nodes.some((n2) => n2.kind === "assistant" && (0, import_builderforce_brain_embedded9.parseSubagentOrigin)(n2.message) !== null),
-    [nodes]
+  const hasSubagents = (0, import_react12.useMemo)(
+    () => messages.some((m) => m.role === "assistant" && (0, import_builderforce_brain_embedded10.parseSubagentOrigin)(m) !== null),
+    [messages]
   );
   const focusedId = revealMessage?.id ?? null;
   const focusClass = (messageId) => focusedId === messageId ? " bf-tl__item--focus" : "";
   return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "bf-tl-scroll", ref: scrollRef, onScroll, children: [
     loading && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "bf-tl-status", children: labels.loading }),
     isEmpty && (emptyState ?? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "bf-tl-empty", children: labels.empty })),
+    earlier && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", className: "bf-tl-earlier", onClick: earlier.show, children: labels.showEarlier.replace("{count}", String(earlier.count)) }),
     /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("ol", { className: "bf-tl", ref: contentRef, children: [
-      nodes.map((node) => {
+      visible.map((node) => {
         switch (node.kind) {
           case "user":
             return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
@@ -1996,6 +2130,8 @@ function BrainTimelineInner({
             return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(ModelMoveStep, { move: node.move, labels }, node.key);
           case "reconcile":
             return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(ReconcileRow, { node, labels }, node.key);
+          case "compacted":
+            return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(CompactedRow, { node, labels }, node.key);
           default:
             return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
               StreamingRow,
@@ -2011,10 +2147,14 @@ function BrainTimelineInner({
         }
       }),
       isRunning && !(streamingText.trim() && activity?.phase === "writing") && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(LiveActivity, { activity, isRunning, labels: labels.live })
+    ] }),
+    newer && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "bf-tl-newer", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", className: "bf-tl-earlier", onClick: newer.show, children: labels.showNewer.replace("{count}", String(newer.count)) }),
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", className: "bf-tl-earlier", onClick: newer.latest, children: labels.jumpToLatest })
     ] })
   ] });
 }
-var BrainTimeline = import_react7.default.memo(BrainTimelineInner);
+var BrainTimeline = import_react12.default.memo(BrainTimelineInner);
 
 // src/spend/format.ts
 function formatUsd(usd, locale) {
@@ -2106,7 +2246,7 @@ function timelineLabelsFrom(lookup, overrides) {
 }
 
 // src/inlineTitle/InlineChatTitle.tsx
-var import_react8 = require("react");
+var import_react13 = require("react");
 var import_jsx_runtime15 = require("react/jsx-runtime");
 var DEFAULT_INLINE_CHAT_TITLE_LABELS = {
   edit: "Edit chat title",
@@ -2123,13 +2263,13 @@ function InlineChatTitle({
   titleClassName
 }) {
   const labels = { ...DEFAULT_INLINE_CHAT_TITLE_LABELS, ...overrides };
-  const [editing, setEditing] = (0, import_react8.useState)(false);
-  const [draft, setDraft] = (0, import_react8.useState)("");
-  const [shown, setShown] = (0, import_react8.useState)(null);
-  const settled = (0, import_react8.useRef)(false);
-  const from = (0, import_react8.useRef)("");
-  const input = (0, import_react8.useRef)(null);
-  (0, import_react8.useEffect)(() => {
+  const [editing, setEditing] = (0, import_react13.useState)(false);
+  const [draft, setDraft] = (0, import_react13.useState)("");
+  const [shown, setShown] = (0, import_react13.useState)(null);
+  const settled = (0, import_react13.useRef)(false);
+  const from = (0, import_react13.useRef)("");
+  const input = (0, import_react13.useRef)(null);
+  (0, import_react13.useEffect)(() => {
     setShown(null);
     if (editing) {
       setEditing(false);
@@ -2166,7 +2306,7 @@ function InlineChatTitle({
     settled.current = true;
     end();
   };
-  (0, import_react8.useEffect)(() => {
+  (0, import_react13.useEffect)(() => {
     if (!editing) return;
     const el = input.current;
     if (!el) return;
@@ -2249,24 +2389,24 @@ var TITLE_INPUT = {
 var TITLE_HINT = { display: "none" };
 
 // src/ModelFallbackNotice.tsx
-var import_react9 = require("react");
-var import_builderforce_brain_embedded10 = require("@seanhogg/builderforce-brain-embedded");
+var import_react14 = require("react");
+var import_builderforce_brain_embedded11 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime16 = require("react/jsx-runtime");
 var DEFAULT_MODEL_FALLBACK_LABELS = {
-  fallback: import_builderforce_brain_embedded10.DEFAULT_MODEL_FALLBACK_TEMPLATE,
+  fallback: import_builderforce_brain_embedded11.DEFAULT_MODEL_FALLBACK_TEMPLATE,
   dismiss: "Dismiss"
 };
 var NO_EVENT = () => null;
 var NO_SUBSCRIBE = () => () => void 0;
 function useModelFallback(channel) {
-  return (0, import_react9.useSyncExternalStore)(channel?.subscribe ?? NO_SUBSCRIBE, channel?.latest ?? NO_EVENT, NO_EVENT);
+  return (0, import_react14.useSyncExternalStore)(channel?.subscribe ?? NO_SUBSCRIBE, channel?.latest ?? NO_EVENT, NO_EVENT);
 }
 function ModelFallbackNotice({ channel, labels: partial, className }) {
   const event = useModelFallback(channel);
   if (!event || !channel) return null;
   const labels = { ...DEFAULT_MODEL_FALLBACK_LABELS, ...partial };
   return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: ["bf-fallback-notice", className].filter(Boolean).join(" "), role: "status", "aria-live": "polite", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "bf-fallback-notice__text", children: (0, import_builderforce_brain_embedded10.modelFallbackText)(labels.fallback, event) }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "bf-fallback-notice__text", children: (0, import_builderforce_brain_embedded11.modelFallbackText)(labels.fallback, event) }),
     /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
       "button",
       {
@@ -2282,7 +2422,7 @@ function ModelFallbackNotice({ channel, labels: partial, className }) {
 }
 
 // src/ToolConfirmBar.tsx
-var import_react10 = require("react");
+var import_react15 = require("react");
 var import_jsx_runtime17 = require("react/jsx-runtime");
 var DEFAULT_TOOL_CONFIRM_LABELS = {
   prompt: "Run {name}?",
@@ -2307,7 +2447,7 @@ function toolConfirmPreview(req) {
   }
   return { command, args };
 }
-var ToolConfirmBar = (0, import_react10.memo)(function ToolConfirmBar2({
+var ToolConfirmBar = (0, import_react15.memo)(function ToolConfirmBar2({
   req,
   onApprove,
   onDeny,
@@ -2318,8 +2458,8 @@ var ToolConfirmBar = (0, import_react10.memo)(function ToolConfirmBar2({
   className
 }) {
   const labels = { ...DEFAULT_TOOL_CONFIRM_LABELS, ...labelOverrides };
-  const approveRef = (0, import_react10.useRef)(null);
-  (0, import_react10.useEffect)(() => approveRef.current?.focus(), [req]);
+  const approveRef = (0, import_react15.useRef)(null);
+  (0, import_react15.useEffect)(() => approveRef.current?.focus(), [req]);
   const { command, args } = toolConfirmPreview(req);
   const [before, after = ""] = labels.prompt.split("{name}");
   return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { role: "alertdialog", "aria-label": labels.aria, className: ["bf-confirm", className].filter(Boolean).join(" "), children: [
@@ -2450,7 +2590,7 @@ function SurfaceLauncher({ onOpen, label, running = false, text, badge, markSize
 }
 
 // src/surface/SurfaceTabs.tsx
-var import_react11 = require("react");
+var import_react16 = require("react");
 
 // src/optionStyle.ts
 var nativeOptionStyle = {
@@ -2621,8 +2761,8 @@ var warnBox = {
 // src/surface/SurfaceTabs.tsx
 var import_jsx_runtime21 = require("react/jsx-runtime");
 function SurfaceTabs({ tabs, activeId, onSelect, label, idPrefix, className, panelClassName }) {
-  const stripRef = (0, import_react11.useRef)(null);
-  const onKeyDown = (0, import_react11.useCallback)((e) => {
+  const stripRef = (0, import_react16.useRef)(null);
+  const onKeyDown = (0, import_react16.useCallback)((e) => {
     const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
     if (!keys.includes(e.key)) return;
     e.preventDefault();
@@ -2798,7 +2938,7 @@ function StarterTile({ icon, label, hint, onClick, pressed, disabled }) {
 }
 
 // src/surface/ChatHistory.tsx
-var import_react12 = require("react");
+var import_react17 = require("react");
 
 // src/chatTickets/chatSwitcherLabel.ts
 function chatSwitcherLabel(input) {
@@ -2835,7 +2975,7 @@ function ChatHistoryList({ loading, total, children, labels: overrides, id, clas
     hasRows && /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { role: "list", className: "bf-history__rows", children })
   ] });
 }
-var ChatHistoryRow = (0, import_react12.memo)(function ChatHistoryRow2({
+var ChatHistoryRow = (0, import_react17.memo)(function ChatHistoryRow2({
   chat,
   active,
   onOpen,
@@ -2941,49 +3081,49 @@ var ChatHistoryRow = (0, import_react12.memo)(function ChatHistoryRow2({
 });
 
 // src/surface/useChatRowActions.ts
-var import_react13 = require("react");
+var import_react18 = require("react");
 function useChatRowActions(options) {
-  const opts = (0, import_react13.useRef)(options);
+  const opts = (0, import_react18.useRef)(options);
   opts.current = options;
-  const [actionsChatId, setActionsChatId] = (0, import_react13.useState)(null);
-  const [renamingId, setRenamingId] = (0, import_react13.useState)(null);
-  const [renameValue, setRenameValue] = (0, import_react13.useState)("");
-  const [summarizingId, setSummarizingId] = (0, import_react13.useState)(null);
-  const [archivingId, setArchivingId] = (0, import_react13.useState)(null);
-  const [deletingId, setDeletingId] = (0, import_react13.useState)(null);
-  const [busyId, setBusyId] = (0, import_react13.useState)(null);
-  const renameFrom = (0, import_react13.useRef)("");
-  const settled = (0, import_react13.useRef)(null);
-  const openChat = (0, import_react13.useCallback)((id) => {
+  const [actionsChatId, setActionsChatId] = (0, import_react18.useState)(null);
+  const [renamingId, setRenamingId] = (0, import_react18.useState)(null);
+  const [renameValue, setRenameValue] = (0, import_react18.useState)("");
+  const [summarizingId, setSummarizingId] = (0, import_react18.useState)(null);
+  const [archivingId, setArchivingId] = (0, import_react18.useState)(null);
+  const [deletingId, setDeletingId] = (0, import_react18.useState)(null);
+  const [busyId, setBusyId] = (0, import_react18.useState)(null);
+  const renameFrom = (0, import_react18.useRef)("");
+  const settled = (0, import_react18.useRef)(null);
+  const openChat = (0, import_react18.useCallback)((id) => {
     opts.current.onOpen(id);
     if (opts.current.revealActionsOnOpen) setActionsChatId(id);
   }, []);
-  const toggleActions = (0, import_react13.useCallback)((id) => {
+  const toggleActions = (0, import_react18.useCallback)((id) => {
     setActionsChatId((cur) => cur === id ? null : id);
   }, []);
-  const startRename = (0, import_react13.useCallback)((chat) => {
+  const startRename = (0, import_react18.useCallback)((chat) => {
     settled.current = null;
     renameFrom.current = chat.title;
     setRenamingId(chat.id);
     setRenameValue(chat.title);
     setActionsChatId(null);
   }, []);
-  const endRename = (0, import_react13.useCallback)((id) => {
+  const endRename = (0, import_react18.useCallback)((id) => {
     settled.current = id;
     setRenamingId(null);
     setRenameValue("");
   }, []);
-  const renamingRef = (0, import_react13.useRef)(renamingId);
+  const renamingRef = (0, import_react18.useRef)(renamingId);
   renamingRef.current = renamingId;
-  const cancelRename = (0, import_react13.useCallback)(() => endRename(renamingRef.current), [endRename]);
-  const submitRename = (0, import_react13.useCallback)(async (id, value) => {
+  const cancelRename = (0, import_react18.useCallback)(() => endRename(renamingRef.current), [endRename]);
+  const submitRename = (0, import_react18.useCallback)(async (id, value) => {
     if (settled.current === id) return;
     endRename(id);
     const title = value.trim();
     if (!title || title === renameFrom.current.trim()) return;
     await opts.current.rename(id, title);
   }, [endRename]);
-  const onSummarize = (0, import_react13.useCallback)(async (id) => {
+  const onSummarize = (0, import_react18.useCallback)(async (id) => {
     setSummarizingId(id);
     try {
       await opts.current.summarize?.(id);
@@ -2991,7 +3131,7 @@ function useChatRowActions(options) {
       setSummarizingId((cur) => cur === id ? null : cur);
     }
   }, []);
-  const onArchive = (0, import_react13.useCallback)(async (chat) => {
+  const onArchive = (0, import_react18.useCallback)(async (chat) => {
     const { archive, isArchived } = opts.current;
     if (!archive || isArchived?.(chat.id)) return;
     setArchivingId(chat.id);
@@ -3002,7 +3142,7 @@ function useChatRowActions(options) {
       setArchivingId((cur) => cur === chat.id ? null : cur);
     }
   }, []);
-  const onDelete = (0, import_react13.useCallback)(async (chat) => {
+  const onDelete = (0, import_react18.useCallback)(async (chat) => {
     const { confirmDelete, remove } = opts.current;
     if (!remove) return;
     if (confirmDelete && !await confirmDelete({ id: chat.id, title: chat.title })) return;
@@ -3014,7 +3154,7 @@ function useChatRowActions(options) {
       setDeletingId((cur) => cur === chat.id ? null : cur);
     }
   }, []);
-  const onAssign = (0, import_react13.useCallback)(async (chatId, projectId) => {
+  const onAssign = (0, import_react18.useCallback)(async (chatId, projectId) => {
     setBusyId(chatId);
     try {
       await opts.current.assign?.(chatId, projectId);
@@ -3070,18 +3210,18 @@ function useChatRowActions(options) {
 }
 
 // src/surface/useDismissibleNotice.ts
-var import_react14 = require("react");
+var import_react19 = require("react");
 function useDismissibleNotice(values) {
-  const [dismissed, setDismissed] = (0, import_react14.useState)("");
+  const [dismissed, setDismissed] = (0, import_react19.useState)("");
   const key = values.join(",");
-  const dismiss = (0, import_react14.useCallback)(() => setDismissed(key), [key]);
+  const dismiss = (0, import_react19.useCallback)(() => setDismissed(key), [key]);
   return { show: values.length > 0 && dismissed !== key, dismiss };
 }
 
 // src/composer/SuggestionRow.tsx
-var import_react15 = require("react");
+var import_react20 = require("react");
 var import_jsx_runtime27 = require("react/jsx-runtime");
-var SuggestionRow = (0, import_react15.memo)(function SuggestionRow2({ items, ariaLabel }) {
+var SuggestionRow = (0, import_react20.memo)(function SuggestionRow2({ items, ariaLabel }) {
   if (items.length === 0) return null;
   return /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { className: "bf-suggest", role: "group", "aria-label": ariaLabel, "data-testid": "composer-suggestions", children: items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("button", { type: "button", className: "bf-suggest__chip", onClick: item.onSelect, children: item.label }, item.id)) });
 });
@@ -3112,7 +3252,7 @@ function QueuedTurnChips({ items, textOf, onRemove, onSteer, canSteer, labels: o
 }
 
 // src/composer/ContextChip.tsx
-var import_react16 = require("react");
+var import_react21 = require("react");
 var import_jsx_runtime29 = require("react/jsx-runtime");
 function ContextChipImpl({ label, value, options = [], onChange, icon, className }) {
   const classes = ["bf-ctxchip", className].filter(Boolean).join(" ");
@@ -3127,7 +3267,7 @@ function ContextChipImpl({ label, value, options = [], onChange, icon, className
     /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("select", { "aria-label": label, value, onChange: (event) => onChange(event.target.value), children: options.map((option) => /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("option", { value: option.value, disabled: option.disabled, children: option.label }, option.value)) })
   ] });
 }
-var ContextChip = (0, import_react16.memo)(ContextChipImpl);
+var ContextChip = (0, import_react21.memo)(ContextChipImpl);
 
 // src/PromptPanel.tsx
 var import_jsx_runtime30 = require("react/jsx-runtime");
@@ -3214,22 +3354,22 @@ function promptTrailingAction({ canSubmit, running, canStop, voice, recording })
 }
 
 // src/useVoiceDictation.ts
-var import_react17 = require("react");
+var import_react22 = require("react");
 function recognitionCtor() {
   if (typeof window === "undefined") return null;
   const w = window;
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 function useVoiceDictation(getValue, onChange) {
-  const recognitionRef = (0, import_react17.useRef)(null);
-  const [recording, setRecording] = (0, import_react17.useState)(false);
-  const [supported] = (0, import_react17.useState)(() => recognitionCtor() != null);
-  const stopVoice = (0, import_react17.useCallback)(() => {
+  const recognitionRef = (0, import_react22.useRef)(null);
+  const [recording, setRecording] = (0, import_react22.useState)(false);
+  const [supported] = (0, import_react22.useState)(() => recognitionCtor() != null);
+  const stopVoice = (0, import_react22.useCallback)(() => {
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     setRecording(false);
   }, []);
-  const startVoice = (0, import_react17.useCallback)(() => {
+  const startVoice = (0, import_react22.useCallback)(() => {
     const Recognition = recognitionCtor();
     if (!Recognition) return;
     if (recognitionRef.current) {
@@ -3263,18 +3403,18 @@ function useVoiceDictation(getValue, onChange) {
       done();
     }
   }, [getValue, onChange, stopVoice]);
-  (0, import_react17.useEffect)(() => () => {
+  (0, import_react22.useEffect)(() => () => {
     recognitionRef.current?.stop();
   }, []);
   return { supported, recording, startVoice, stopVoice };
 }
 
 // src/promptOptions/PromptOptionsMenu.tsx
-var import_react24 = require("react");
-var import_builderforce_brain_embedded15 = require("@seanhogg/builderforce-brain-embedded");
+var import_react29 = require("react");
+var import_builderforce_brain_embedded16 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/promptOptions/types.ts
-var import_builderforce_brain_embedded11 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded12 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/localModels/labels.ts
 var DEFAULT_LOCAL_MODEL_LABELS = {
@@ -3357,7 +3497,7 @@ function inferenceModeCopy(mode, labels) {
 
 // src/promptOptions/types.ts
 var DEFAULT_PROMPT_OPTIONS_LABELS = {
-  ...import_builderforce_brain_embedded11.DEFAULT_MODEL_CHOICE_LABELS,
+  ...import_builderforce_brain_embedded12.DEFAULT_MODEL_CHOICE_LABELS,
   ...DEFAULT_LOCAL_MODEL_LABELS,
   ...DEFAULT_INFERENCE_MODE_LABELS,
   options: "Options",
@@ -3399,14 +3539,14 @@ function promptOptionsLabelsFrom(lookup) {
 }
 
 // src/popover/usePopover.ts
-var import_react18 = require("react");
+var import_react23 = require("react");
 function usePopover() {
-  const [open, setOpen] = (0, import_react18.useState)(false);
-  const rootRef = (0, import_react18.useRef)(null);
-  const close = (0, import_react18.useCallback)(() => setOpen(false), []);
-  const toggle = (0, import_react18.useCallback)(() => setOpen((value) => !value), []);
-  const show = (0, import_react18.useCallback)(() => setOpen(true), []);
-  (0, import_react18.useEffect)(() => {
+  const [open, setOpen] = (0, import_react23.useState)(false);
+  const rootRef = (0, import_react23.useRef)(null);
+  const close = (0, import_react23.useCallback)(() => setOpen(false), []);
+  const toggle = (0, import_react23.useCallback)(() => setOpen((value) => !value), []);
+  const show = (0, import_react23.useCallback)(() => setOpen(true), []);
+  (0, import_react23.useEffect)(() => {
     if (!open) return;
     const onDown = (event) => {
       if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
@@ -3557,12 +3697,12 @@ function ModePane({ labels, mode, memory, autoMode, session, close }) {
 }
 
 // src/promptOptions/ModelPane.tsx
-var import_react22 = require("react");
-var import_builderforce_brain_embedded13 = require("@seanhogg/builderforce-brain-embedded");
+var import_react27 = require("react");
+var import_builderforce_brain_embedded14 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/localModels/LocalModelList.tsx
-var import_react20 = require("react");
-var import_builderforce_brain_embedded12 = require("@seanhogg/builderforce-brain-embedded");
+var import_react25 = require("react");
+var import_builderforce_brain_embedded13 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/localModels/localModelView.ts
 var GB = 1e9;
@@ -3596,10 +3736,10 @@ function backendBadge(row, labels) {
 }
 
 // src/localModels/LocalModelRow.tsx
-var import_react19 = require("react");
+var import_react24 = require("react");
 var import_jsx_runtime32 = require("react/jsx-runtime");
 function LocalModelRow({ row, labels, active, failed, locale, onSelect, onDownload, onCancel, onRemove }) {
-  const [menuOpen, setMenuOpen] = (0, import_react19.useState)(false);
+  const [menuOpen, setMenuOpen] = (0, import_react24.useState)(false);
   const ready = row.state === "ready";
   const removable = ready || row.state === "unsupported" && row.downloaded === true;
   const percent = progressPercent(row);
@@ -3676,9 +3816,9 @@ var import_jsx_runtime33 = require("react/jsx-runtime");
 var isHeld = (row, activeRef) => row.state === "ready" || row.state === "downloading" || row.downloaded === true || row.ref === activeRef;
 function LocalModelList({ state, labels, activeRef, locale, hideHeading, onSelect }) {
   const { rows } = state;
-  const [showAll, setShowAll] = (0, import_react20.useState)(false);
-  const view = (0, import_react20.useMemo)(
-    () => (0, import_builderforce_brain_embedded12.localPickerView)(rows ?? [], {
+  const [showAll, setShowAll] = (0, import_react25.useState)(false);
+  const view = (0, import_react25.useMemo)(
+    () => (0, import_builderforce_brain_embedded13.localPickerView)(rows ?? [], {
       fits: (row) => row.state !== "unsupported",
       pinned: (row) => isHeld(row, activeRef)
     }),
@@ -3728,7 +3868,7 @@ function LocalModelList({ state, labels, activeRef, locale, hideHeading, onSelec
 }
 
 // src/localModels/useLocalModels.ts
-var import_react21 = require("react");
+var import_react26 = require("react");
 var controllersByStore = /* @__PURE__ */ new WeakMap();
 function controllersOf(store) {
   let map = controllersByStore.get(store);
@@ -3740,10 +3880,10 @@ function controllersOf(store) {
 }
 var NO_ROWS = [];
 function useLocalModels(store) {
-  const [rows, setRows] = (0, import_react21.useState)(store ? null : NO_ROWS);
-  const [failed, setFailed] = (0, import_react21.useState)(() => /* @__PURE__ */ new Set());
-  const live = (0, import_react21.useRef)(true);
-  (0, import_react21.useEffect)(() => {
+  const [rows, setRows] = (0, import_react26.useState)(store ? null : NO_ROWS);
+  const [failed, setFailed] = (0, import_react26.useState)(() => /* @__PURE__ */ new Set());
+  const live = (0, import_react26.useRef)(true);
+  (0, import_react26.useEffect)(() => {
     live.current = true;
     if (!store) {
       setRows(NO_ROWS);
@@ -3782,7 +3922,7 @@ function useLocalModels(store) {
       unsubscribe();
     };
   }, [store]);
-  const download = (0, import_react21.useCallback)(
+  const download = (0, import_react26.useCallback)(
     (ref) => {
       if (!store) return;
       const controllers = controllersOf(store);
@@ -3803,13 +3943,13 @@ function useLocalModels(store) {
     },
     [store]
   );
-  const cancel = (0, import_react21.useCallback)(
+  const cancel = (0, import_react26.useCallback)(
     (ref) => {
       if (store) controllersOf(store).get(ref)?.abort();
     },
     [store]
   );
-  const remove = (0, import_react21.useCallback)(
+  const remove = (0, import_react26.useCallback)(
     (ref) => {
       if (store) void store.remove(ref).catch(() => void 0);
     },
@@ -3821,20 +3961,20 @@ function useLocalModels(store) {
 // src/promptOptions/ModelPane.tsx
 var import_jsx_runtime34 = require("react/jsx-runtime");
 function ModelPane({ model, labels, identity, inUse, onPicked }) {
-  const [query, setQuery] = (0, import_react22.useState)("");
-  const [filter, setFilter] = (0, import_react22.useState)("all");
+  const [query, setQuery] = (0, import_react27.useState)("");
+  const [filter, setFilter] = (0, import_react27.useState)("all");
   const local = useLocalModels(model.localStore);
   const hasStore = !!model.localStore;
-  const items = (0, import_react22.useMemo)(
-    () => (0, import_builderforce_brain_embedded13.buildModelItems)((0, import_builderforce_brain_embedded13.withReadyPageModels)(model.options, local.rows), labels, identity),
+  const items = (0, import_react27.useMemo)(
+    () => (0, import_builderforce_brain_embedded14.buildModelItems)((0, import_builderforce_brain_embedded14.withReadyPageModels)(model.options, local.rows), labels, identity),
     [model.options, local.rows, labels, identity]
   );
-  const storeKeys = (0, import_react22.useMemo)(() => new Set((local.rows ?? []).map((row) => `model:${row.ref}`)), [local.rows]);
-  const categories = (0, import_react22.useMemo)(
-    () => import_builderforce_brain_embedded13.MODEL_CATEGORIES.filter((category) => items.some((item) => item.category === category) || category === "local" && hasStore),
+  const storeKeys = (0, import_react27.useMemo)(() => new Set((local.rows ?? []).map((row) => `model:${row.ref}`)), [local.rows]);
+  const categories = (0, import_react27.useMemo)(
+    () => import_builderforce_brain_embedded14.MODEL_CATEGORIES.filter((category) => items.some((item) => item.category === category) || category === "local" && hasStore),
     [items, hasStore]
   );
-  const activeKey = (0, import_builderforce_brain_embedded13.activeModelKey)(model.selection);
+  const activeKey = (0, import_builderforce_brain_embedded14.activeModelKey)(model.selection);
   const activeRef = model.selection.mode === "model" ? model.selection.model : void 0;
   const pick = (selection) => {
     model.onChange(selection);
@@ -3852,14 +3992,14 @@ function ModelPane({ model, labels, identity, inUse, onPicked }) {
       onClick: () => pick(item.selection),
       children: [
         /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { className: "bf-pmenu__optName", children: item.label }),
-        /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { className: "bf-pmenu__optTag", children: (0, import_builderforce_brain_embedded13.modelCategoryLabel)(item.category, labels) }),
+        /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { className: "bf-pmenu__optTag", children: (0, import_builderforce_brain_embedded14.modelCategoryLabel)(item.category, labels) }),
         item.detail ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { className: "bf-pmenu__optDetail", children: item.detail }) : null
       ]
     },
     item.key
   ));
   const localSection = /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(LocalModelList, { state: local, labels, ...activeRef ? { activeRef } : {}, onSelect: pickLocal });
-  const visible = (0, import_builderforce_brain_embedded13.filterModelItems)(items, labels, query, filter);
+  const visible = (0, import_builderforce_brain_embedded14.filterModelItems)(items, labels, query, filter);
   const listed = filter === "local" ? visible.filter((item) => !storeKeys.has(item.key)) : visible;
   const lockedLocal = items.filter((item) => item.category === "auto" ? model.selection.mode !== "auto" : item.category === "local" && !storeKeys.has(item.key));
   return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(import_jsx_runtime34.Fragment, { children: [
@@ -3885,7 +4025,7 @@ function ModelPane({ model, labels, identity, inUse, onPicked }) {
           className: `bf-pmenu__filter${filter === category ? " is-active" : ""}`,
           "aria-pressed": filter === category,
           onClick: () => setFilter(category),
-          children: category === "all" ? labels.all : (0, import_builderforce_brain_embedded13.modelCategoryLabel)(category, labels)
+          children: category === "all" ? labels.all : (0, import_builderforce_brain_embedded14.modelCategoryLabel)(category, labels)
         },
         category
       )) }),
@@ -3903,10 +4043,10 @@ function ModelPane({ model, labels, identity, inUse, onPicked }) {
 }
 
 // src/inferenceMode/InferenceModeControl.tsx
-var import_builderforce_brain_embedded14 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded15 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/useRovingRadioGroup.ts
-var import_react23 = require("react");
+var import_react28 = require("react");
 function rovingRadioNextIndex(key, index, count) {
   if (count <= 0) return null;
   switch (key) {
@@ -3925,9 +4065,9 @@ function rovingRadioNextIndex(key, index, count) {
   }
 }
 function useRovingRadioGroup(count, checkedIndex) {
-  const items = (0, import_react23.useRef)([]);
+  const items = (0, import_react28.useRef)([]);
   const stop = checkedIndex >= 0 && checkedIndex < count ? checkedIndex : 0;
-  const itemProps = (0, import_react23.useCallback)((index) => ({
+  const itemProps = (0, import_react28.useCallback)((index) => ({
     ref: (el) => {
       items.current[index] = el;
     },
@@ -3945,11 +4085,11 @@ function useRovingRadioGroup(count, checkedIndex) {
 // src/inferenceMode/InferenceModeControl.tsx
 var import_jsx_runtime35 = require("react/jsx-runtime");
 function InferenceModeControl({ inferenceMode, labels, onPicked }) {
-  const { itemProps } = useRovingRadioGroup(import_builderforce_brain_embedded14.INFERENCE_MODES.length, inferenceMode ? import_builderforce_brain_embedded14.INFERENCE_MODES.indexOf(inferenceMode.value) : -1);
+  const { itemProps } = useRovingRadioGroup(import_builderforce_brain_embedded15.INFERENCE_MODES.length, inferenceMode ? import_builderforce_brain_embedded15.INFERENCE_MODES.indexOf(inferenceMode.value) : -1);
   if (!inferenceMode) return null;
   return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { className: "bf-imode", role: "radiogroup", "aria-label": labels.inferenceMode, children: [
     /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { className: "bf-pmenu__group", "aria-hidden": "true", children: labels.inferenceMode }),
-    import_builderforce_brain_embedded14.INFERENCE_MODES.map((mode, index) => {
+    import_builderforce_brain_embedded15.INFERENCE_MODES.map((mode, index) => {
       const { name, hint } = inferenceModeCopy(mode, labels);
       const active = mode === inferenceMode.value;
       return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(
@@ -4009,22 +4149,22 @@ function PromptOptionsMenu({
   onAccountSettings,
   className
 }) {
-  const labels = (0, import_react24.useMemo)(() => promptOptionsLabels(labelOverrides), [labelOverrides]);
+  const labels = (0, import_react29.useMemo)(() => promptOptionsLabels(labelOverrides), [labelOverrides]);
   const { open, toggle, close, show, rootRef } = usePopover();
-  const [tab, setTab] = (0, import_react24.useState)("mode");
+  const [tab, setTab] = (0, import_react29.useState)("mode");
   const openTab = openOn?.tab;
   const openToken = openOn?.token;
-  const handledToken = (0, import_react24.useRef)(openToken);
-  (0, import_react24.useEffect)(() => {
+  const handledToken = (0, import_react29.useRef)(openToken);
+  (0, import_react29.useEffect)(() => {
     if (openToken === void 0 || !openTab || openToken === handledToken.current) return;
     handledToken.current = openToken;
     setTab(openTab);
     show();
   }, [openToken, openTab, show]);
-  const identity = model?.identity ?? import_builderforce_brain_embedded15.DEFAULT_MODEL_IDENTITY;
-  const items = (0, import_react24.useMemo)(() => model ? (0, import_builderforce_brain_embedded15.buildModelItems)(model.options, labels, identity) : [], [model, labels, identity]);
-  const inUse = (0, import_react24.useMemo)(
-    () => model ? (0, import_builderforce_brain_embedded15.modelInUse)(model.selection, items, labels, model.effective, identity) : null,
+  const identity = model?.identity ?? import_builderforce_brain_embedded16.DEFAULT_MODEL_IDENTITY;
+  const items = (0, import_react29.useMemo)(() => model ? (0, import_builderforce_brain_embedded16.buildModelItems)(model.options, labels, identity) : [], [model, labels, identity]);
+  const inUse = (0, import_react29.useMemo)(
+    () => model ? (0, import_builderforce_brain_embedded16.modelInUse)(model.selection, items, labels, model.effective, identity) : null,
     [model, items, labels, identity]
   );
   const hasModeTab = !!(mode || memory || autoMode || session);
@@ -4167,7 +4307,7 @@ function PromptOptionsMenu({
 }
 
 // src/promptOptions/composerMenuRequest.ts
-var import_react25 = require("react");
+var import_react30 = require("react");
 var requests = /* @__PURE__ */ new Map();
 var listeners = /* @__PURE__ */ new Set();
 var lastToken = 0;
@@ -4183,20 +4323,20 @@ function subscribe(listener) {
   };
 }
 function useComposerMenuRequest(composerId) {
-  const current = (0, import_react25.useCallback)(() => composerId ? requests.get(composerId) : void 0, [composerId]);
-  return (0, import_react25.useSyncExternalStore)(subscribe, current, () => void 0);
+  const current = (0, import_react30.useCallback)(() => composerId ? requests.get(composerId) : void 0, [composerId]);
+  return (0, import_react30.useSyncExternalStore)(subscribe, current, () => void 0);
 }
 
 // src/inferenceMode/InferenceModeFirstRun.tsx
-var import_react26 = require("react");
+var import_react31 = require("react");
 var import_jsx_runtime37 = require("react/jsx-runtime");
 var ASKED = ["hybrid", "local-only"];
 function InferenceModeFirstRun({ labels, onChoose }) {
-  const titleId = (0, import_react26.useId)();
-  const first = (0, import_react26.useRef)(null);
-  const region = (0, import_react26.useRef)(null);
+  const titleId = (0, import_react31.useId)();
+  const first = (0, import_react31.useRef)(null);
+  const region = (0, import_react31.useRef)(null);
   const announcement = `${labels.inferenceModeAskTitle} ${labels.inferenceModeAskBody}`;
-  (0, import_react26.useEffect)(() => {
+  (0, import_react31.useEffect)(() => {
     first.current?.focus();
     if (region.current) region.current.textContent = announcement;
   }, [announcement]);
@@ -4228,24 +4368,24 @@ function InferenceModeFirstRun({ labels, onChoose }) {
 }
 
 // src/inferenceMode/useInferenceModeGate.ts
-var import_react27 = require("react");
+var import_react32 = require("react");
 function useInferenceModeGate(inferenceMode) {
   const needsChoice = !!inferenceMode?.needsChoice;
-  const held = (0, import_react27.useRef)([]);
-  const [holding, setHolding] = (0, import_react27.useState)(false);
+  const held = (0, import_react32.useRef)([]);
+  const [holding, setHolding] = (0, import_react32.useState)(false);
   const onChange = inferenceMode?.onChange;
-  const onChangeRef = (0, import_react27.useRef)(onChange);
+  const onChangeRef = (0, import_react32.useRef)(onChange);
   onChangeRef.current = onChange;
-  const answered = (0, import_react27.useRef)(false);
-  const needsRef = (0, import_react27.useRef)(needsChoice);
+  const answered = (0, import_react32.useRef)(false);
+  const needsRef = (0, import_react32.useRef)(needsChoice);
   needsRef.current = needsChoice && !answered.current;
-  const release = (0, import_react27.useCallback)(() => {
+  const release = (0, import_react32.useCallback)(() => {
     const sends = held.current;
     held.current = [];
     setHolding(false);
     return sends;
   }, []);
-  const request = (0, import_react27.useCallback)((send) => {
+  const request = (0, import_react32.useCallback)((send) => {
     if (!needsRef.current) {
       send();
       return true;
@@ -4254,7 +4394,7 @@ function useInferenceModeGate(inferenceMode) {
     setHolding(true);
     return false;
   }, []);
-  const choose = (0, import_react27.useCallback)((mode) => {
+  const choose = (0, import_react32.useCallback)((mode) => {
     answered.current = true;
     needsRef.current = false;
     const sends = release();
@@ -4263,7 +4403,7 @@ function useInferenceModeGate(inferenceMode) {
     };
     void Promise.resolve(onChangeRef.current?.(mode)).then(run, run);
   }, [release]);
-  (0, import_react27.useEffect)(() => {
+  (0, import_react32.useEffect)(() => {
     if (needsChoice || held.current.length === 0) return;
     for (const send of release()) send();
   }, [needsChoice, release]);
@@ -4296,7 +4436,7 @@ function inferenceModeOption(state) {
 }
 
 // src/index.ts
-var import_builderforce_brain_embedded24 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded25 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/picker/PickerShell.tsx
 var import_jsx_runtime38 = require("react/jsx-runtime");
@@ -4411,22 +4551,22 @@ function RecipientPicker({ participants, recipient, onChoose, labels, disabled, 
 }
 
 // src/recipient/useRecipientChoice.ts
-var import_react28 = require("react");
-var import_builderforce_brain_embedded16 = require("@seanhogg/builderforce-brain-embedded");
+var import_react33 = require("react");
+var import_builderforce_brain_embedded17 = require("@seanhogg/builderforce-brain-embedded");
 function useRecipientChoice({ participants, input, resetKey }) {
-  const [choice, setChoice] = (0, import_react28.useState)(null);
-  (0, import_react28.useEffect)(() => {
+  const [choice, setChoice] = (0, import_react33.useState)(null);
+  (0, import_react33.useEffect)(() => {
     setChoice(null);
   }, [resetKey]);
-  (0, import_react28.useEffect)(() => {
+  (0, import_react33.useEffect)(() => {
     setChoice((c) => c && c !== "brain" && !participants.some((p) => p.kind === c.kind && p.ref === c.ref) ? null : c);
   }, [participants]);
-  const mentioned = (0, import_react28.useMemo)(() => (0, import_builderforce_brain_embedded16.mentionRecipient)(input, participants), [input, participants]);
-  return { recipient: (0, import_builderforce_brain_embedded16.resolveRecipient)(choice, mentioned), choice, choose: setChoice };
+  const mentioned = (0, import_react33.useMemo)(() => (0, import_builderforce_brain_embedded17.mentionRecipient)(input, participants), [input, participants]);
+  return { recipient: (0, import_builderforce_brain_embedded17.resolveRecipient)(choice, mentioned), choice, choose: setChoice };
 }
 
 // src/persona/PersonaPicker.tsx
-var import_builderforce_brain_embedded17 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded18 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime40 = require("react/jsx-runtime");
 var DEFAULT_PERSONA_PICKER_LABELS = {
   actingAs: "Acting as",
@@ -4438,8 +4578,8 @@ var DEFAULT_PERSONA_PICKER_LABELS = {
 function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, quietAt }) {
   if (quietAt !== void 0 && agents.length === 0 && value === quietAt) return null;
   const l = { ...DEFAULT_PERSONA_PICKER_LABELS, ...labels };
-  const modality = modalities.find((m) => (0, import_builderforce_brain_embedded17.modalityPersonaChoice)(m.id) === value);
-  const agent = (0, import_builderforce_brain_embedded17.personaAgentOf)(value, agents);
+  const modality = modalities.find((m) => (0, import_builderforce_brain_embedded18.modalityPersonaChoice)(m.id) === value);
+  const agent = (0, import_builderforce_brain_embedded18.personaAgentOf)(value, agents);
   const leading = agent ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Avatar, { name: agent.name, kind: "agent", size: 16 }) : modality?.icon ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { "aria-hidden": "true", children: modality.icon }) : /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(IconBolt, {});
   return /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
     PickerShell,
@@ -4448,7 +4588,7 @@ function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, 
       leading,
       name: modality?.label ?? agent?.name ?? l.defaultBrain,
       title: l.title,
-      active: value !== import_builderforce_brain_embedded17.DEFAULT_PERSONA && (modality != null || agent != null),
+      active: value !== import_builderforce_brain_embedded18.DEFAULT_PERSONA && (modality != null || agent != null),
       disabled,
       children: (close) => {
         const pick = (next) => {
@@ -4456,7 +4596,7 @@ function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, 
           close();
         };
         return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_jsx_runtime40.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(PickerItem, { icon: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(IconBolt, {}), label: l.defaultBrain, active: !modality && !agent, onClick: () => pick(import_builderforce_brain_embedded17.DEFAULT_PERSONA) }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(PickerItem, { icon: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(IconBolt, {}), label: l.defaultBrain, active: !modality && !agent, onClick: () => pick(import_builderforce_brain_embedded18.DEFAULT_PERSONA) }),
           modalities.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_jsx_runtime40.Fragment, { children: [
             /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "bf-pmenu__sep" }),
             /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "bf-pmenu__group", children: l.personas }),
@@ -4466,7 +4606,7 @@ function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, 
                 icon: m.icon ?? "",
                 label: m.label,
                 active: modality?.id === m.id,
-                onClick: () => pick((0, import_builderforce_brain_embedded17.modalityPersonaChoice)(m.id))
+                onClick: () => pick((0, import_builderforce_brain_embedded18.modalityPersonaChoice)(m.id))
               },
               m.id
             ))
@@ -4479,10 +4619,10 @@ function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, 
               {
                 icon: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Avatar, { name: a.name, kind: "agent", size: 16 }),
                 label: a.name,
-                active: agent != null && (0, import_builderforce_brain_embedded17.agentPersonaChoice)(agent) === (0, import_builderforce_brain_embedded17.agentPersonaChoice)(a),
-                onClick: () => pick((0, import_builderforce_brain_embedded17.agentPersonaChoice)(a))
+                active: agent != null && (0, import_builderforce_brain_embedded18.agentPersonaChoice)(agent) === (0, import_builderforce_brain_embedded18.agentPersonaChoice)(a),
+                onClick: () => pick((0, import_builderforce_brain_embedded18.agentPersonaChoice)(a))
               },
-              (0, import_builderforce_brain_embedded17.agentPersonaChoice)(a)
+              (0, import_builderforce_brain_embedded18.agentPersonaChoice)(a)
             ))
           ] })
         ] });
@@ -4686,7 +4826,7 @@ function PendingChangesList({
 }
 
 // src/chatTickets/ChatTicketsPanel.tsx
-var import_react35 = require("react");
+var import_react40 = require("react");
 
 // src/chatTickets/runGate.ts
 function resolveRunGate(adapter) {
@@ -4696,16 +4836,16 @@ function resolveRunGate(adapter) {
 }
 
 // src/chatTickets/useChatProgressSync.ts
-var import_react29 = require("react");
+var import_react34 = require("react");
 function useChatProgressSync(chatId, chatList, onStale) {
-  const rowRef = (0, import_react29.useRef)(void 0);
-  const onStaleRef = (0, import_react29.useRef)(onStale);
-  const reported = (0, import_react29.useRef)(null);
-  (0, import_react29.useEffect)(() => {
+  const rowRef = (0, import_react34.useRef)(void 0);
+  const onStaleRef = (0, import_react34.useRef)(onStale);
+  const reported = (0, import_react34.useRef)(null);
+  (0, import_react34.useEffect)(() => {
     rowRef.current = chatList.find((c) => c.id === chatId);
     onStaleRef.current = onStale;
   }, [chatList, chatId, onStale]);
-  return (0, import_react29.useCallback)((tickets) => {
+  return (0, import_react34.useCallback)((tickets) => {
     const row = rowRef.current;
     if (!onStaleRef.current || !chatProgressIsStale(row, tickets)) return;
     const signature = `${chatId}:${tickets.length}:${tickets.map((t) => `${t.progressPct}/${t.status ?? ""}`).join(",")}`;
@@ -5011,7 +5151,7 @@ function SpendPill({ summary, labels: overrides, locale }) {
 }
 
 // src/chatTickets/LinkForm.tsx
-var import_react30 = require("react");
+var import_react35 = require("react");
 
 // src/chatTickets/types.ts
 var TICKET_KINDS = ["task", "epic", "gap", "objective", "initiative", "portfolio", "roadmap", "spec", "retro", "poker"];
@@ -5088,14 +5228,14 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
 var import_jsx_runtime47 = require("react/jsx-runtime");
 var SEARCH_LIMIT = 40;
 function LinkForm({ search, projectId, existing, labels, onLink }) {
-  const [kind, setKind] = (0, import_react30.useState)("task");
-  const [ref, setRef] = (0, import_react30.useState)("");
-  const [query, setQuery] = (0, import_react30.useState)("");
-  const [linkType, setLinkType] = (0, import_react30.useState)("linked");
-  const [busy, setBusy] = (0, import_react30.useState)(false);
-  const [results, setResults] = (0, import_react30.useState)([]);
-  const [loading, setLoading] = (0, import_react30.useState)(false);
-  (0, import_react30.useEffect)(() => {
+  const [kind, setKind] = (0, import_react35.useState)("task");
+  const [ref, setRef] = (0, import_react35.useState)("");
+  const [query, setQuery] = (0, import_react35.useState)("");
+  const [linkType, setLinkType] = (0, import_react35.useState)("linked");
+  const [busy, setBusy] = (0, import_react35.useState)(false);
+  const [results, setResults] = (0, import_react35.useState)([]);
+  const [loading, setLoading] = (0, import_react35.useState)(false);
+  (0, import_react35.useEffect)(() => {
     let live = true;
     setLoading(true);
     const h = setTimeout(() => {
@@ -5112,12 +5252,12 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
       clearTimeout(h);
     };
   }, [search, kind, query, projectId]);
-  const shown = (0, import_react30.useMemo)(
+  const shown = (0, import_react35.useMemo)(
     () => results.filter((o) => !existing.some((e) => e.kind === kind && e.ref === o.ref)),
     [results, existing, kind]
   );
   const atCap = results.length >= SEARCH_LIMIT;
-  (0, import_react30.useEffect)(() => {
+  (0, import_react35.useEffect)(() => {
     if (ref && !shown.some((o) => o.ref === ref)) setRef("");
   }, [shown, ref]);
   const submit = async () => {
@@ -5162,10 +5302,10 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
 }
 
 // src/chatTickets/MergeSection.tsx
-var import_react31 = require("react");
+var import_react36 = require("react");
 var import_jsx_runtime48 = require("react/jsx-runtime");
 function MergeSection({ chatId, chatList, labels, onMerge, busy }) {
-  const [selected, setSelected] = (0, import_react31.useState)([]);
+  const [selected, setSelected] = (0, import_react36.useState)([]);
   const candidates = chatList.filter((c) => c.id !== chatId);
   const toggle = (id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
   return /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { style: { ...S2.section, flexDirection: "column", alignItems: "stretch" }, children: [
@@ -5181,10 +5321,10 @@ function MergeSection({ chatId, chatList, labels, onMerge, busy }) {
 }
 
 // src/chatTickets/PeopleSection.tsx
-var import_react32 = require("react");
+var import_react37 = require("react");
 var import_jsx_runtime49 = require("react/jsx-runtime");
 function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite, onRemove, busy }) {
-  const [email, setEmail] = (0, import_react32.useState)("");
+  const [email, setEmail] = (0, import_react37.useState)("");
   const submit = async () => {
     const e = email.trim();
     if (!e) return;
@@ -5225,11 +5365,11 @@ function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite,
 }
 
 // src/chatTickets/QuestionsSection.tsx
-var import_react33 = require("react");
+var import_react38 = require("react");
 var import_jsx_runtime50 = require("react/jsx-runtime");
 function QuestionsSection({ questions, labels, onAnswer }) {
-  const [answers, setAnswers] = (0, import_react33.useState)({});
-  const [sending, setSending] = (0, import_react33.useState)(null);
+  const [answers, setAnswers] = (0, import_react38.useState)({});
+  const [sending, setSending] = (0, import_react38.useState)(null);
   return /* @__PURE__ */ (0, import_jsx_runtime50.jsx)("div", { style: S2.drawer, children: questions.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime50.jsx)("span", { style: S2.muted, children: labels.noQuestions }) : questions.map((q, index) => {
     const value = answers[q.id] ?? "";
     return /* @__PURE__ */ (0, import_jsx_runtime50.jsxs)("div", { style: { padding: "10px 0", borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : void 0 }, children: [
@@ -5283,7 +5423,7 @@ function sortChatTickets(tickets, sort) {
 }
 
 // src/chatTickets/useChatTicketSort.ts
-var import_react34 = require("react");
+var import_react39 = require("react");
 var SORT_KEY = "bf.chatTickets.sort";
 function readSort() {
   try {
@@ -5300,8 +5440,8 @@ function writeSort(sort) {
   }
 }
 function useChatTicketSort() {
-  const [sort, setSort] = (0, import_react34.useState)(readSort);
-  const choose = (0, import_react34.useCallback)((next) => {
+  const [sort, setSort] = (0, import_react39.useState)(readSort);
+  const choose = (0, import_react39.useCallback)((next) => {
     setSort(next);
     writeSort(next);
   }, []);
@@ -5314,27 +5454,27 @@ var RUNNABLE = new Set(RUNNABLE_KINDS);
 var COLLAPSE_THRESHOLD = 8;
 var NO_SUBAGENTS = [];
 function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS, spend, spendLabels: spendLabels2, locale, originalRequest }) {
-  const [tickets, setTickets] = (0, import_react35.useState)([]);
-  const [agents, setAgents] = (0, import_react35.useState)([]);
-  const [members, setMembers] = (0, import_react35.useState)([]);
-  const [pool, setPool] = (0, import_react35.useState)([]);
-  const [questions, setQuestions] = (0, import_react35.useState)([]);
-  const [panel, setPanel] = (0, import_react35.useState)(null);
+  const [tickets, setTickets] = (0, import_react40.useState)([]);
+  const [agents, setAgents] = (0, import_react40.useState)([]);
+  const [members, setMembers] = (0, import_react40.useState)([]);
+  const [pool, setPool] = (0, import_react40.useState)([]);
+  const [questions, setQuestions] = (0, import_react40.useState)([]);
+  const [panel, setPanel] = (0, import_react40.useState)(null);
   const togglePanel = (key) => setPanel((open) => open === key ? null : key);
   const openExtension = extensions?.find((ext) => ext.key === panel) ?? null;
-  (0, import_react35.useEffect)(() => {
+  (0, import_react40.useEffect)(() => {
     if (panel && !isBuiltinPanel(panel) && !extensions?.some((ext) => ext.key === panel)) setPanel(null);
   }, [panel, extensions]);
-  const [lineageKey, setLineageKey] = (0, import_react35.useState)(null);
-  const [lineage, setLineage] = (0, import_react35.useState)([]);
-  const [runKey, setRunKey] = (0, import_react35.useState)(null);
-  const [msg, setMsg] = (0, import_react35.useState)(null);
-  const [busy, setBusy] = (0, import_react35.useState)(false);
-  const [collapsed, setCollapsed] = (0, import_react35.useState)(null);
-  const userCollapsed = (0, import_react35.useRef)(false);
+  const [lineageKey, setLineageKey] = (0, import_react40.useState)(null);
+  const [lineage, setLineage] = (0, import_react40.useState)([]);
+  const [runKey, setRunKey] = (0, import_react40.useState)(null);
+  const [msg, setMsg] = (0, import_react40.useState)(null);
+  const [busy, setBusy] = (0, import_react40.useState)(false);
+  const [collapsed, setCollapsed] = (0, import_react40.useState)(null);
+  const userCollapsed = (0, import_react40.useRef)(false);
   const [sort, setSort] = useChatTicketSort();
   const syncChatProgress = useChatProgressSync(chatId, chatList, onChanged);
-  const load = (0, import_react35.useCallback)(async () => {
+  const load = (0, import_react40.useCallback)(async () => {
     const [tk, ag, mem, qs] = await Promise.all([
       adapter.listTickets(chatId).catch(() => []),
       adapter.listAgents(chatId).catch(() => []),
@@ -5348,18 +5488,18 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     setQuestions(qs);
     if (!userCollapsed.current) setCollapsed(tk.length > COLLAPSE_THRESHOLD);
   }, [adapter, chatId, syncChatProgress]);
-  (0, import_react35.useEffect)(() => {
+  (0, import_react40.useEffect)(() => {
     void load();
   }, [load, refreshSignal]);
-  (0, import_react35.useEffect)(() => {
+  (0, import_react40.useEffect)(() => {
     adapter.loadAgentPool().then(setPool).catch(() => setPool([]));
   }, [adapter]);
   const flash = (m) => {
     setMsg(m);
     if (typeof window !== "undefined") window.setTimeout(() => setMsg(null), 3500);
   };
-  const poolName = (0, import_react35.useCallback)((ref) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
-  const parentLink = (0, import_react35.useCallback)((tk) => tk.parent ? tickets.find((t) => t.kind === tk.parent.kind && t.ref === tk.parent.ref) : void 0, [tickets]);
+  const poolName = (0, import_react40.useCallback)((ref) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
+  const parentLink = (0, import_react40.useCallback)((tk) => tk.parent ? tickets.find((t) => t.kind === tk.parent.kind && t.ref === tk.parent.ref) : void 0, [tickets]);
   const unlink = async (tk) => {
     setBusy(true);
     try {
@@ -5392,8 +5532,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       setBusy(false);
     }
   };
-  const agg = (0, import_react35.useMemo)(() => rollupChatTicketHealth(tickets), [tickets]);
-  const displayedTickets = (0, import_react35.useMemo)(() => sortChatTickets(tickets, sort), [tickets, sort]);
+  const agg = (0, import_react40.useMemo)(() => rollupChatTicketHealth(tickets), [tickets]);
+  const displayedTickets = (0, import_react40.useMemo)(() => sortChatTickets(tickets, sort), [tickets, sort]);
   const isCollapsed = tickets.length > 0 && (collapsed ?? tickets.length > COLLAPSE_THRESHOLD);
   const toggleCollapsed = () => {
     userCollapsed.current = true;
@@ -5661,10 +5801,10 @@ var BUILTIN_PANELS = /* @__PURE__ */ new Set(["link", "agents", "people", "merge
 function isBuiltinPanel(key) {
   return BUILTIN_PANELS.has(key);
 }
-var ChatTicketsPanel = (0, import_react35.memo)(ChatTicketsPanelInner);
+var ChatTicketsPanel = (0, import_react40.memo)(ChatTicketsPanelInner);
 
 // src/chatTickets/restAdapter.ts
-var import_builderforce_brain_embedded18 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded19 = require("@seanhogg/builderforce-brain-embedded");
 var emptyRunHistory = () => ({ linkedRunnableTickets: 0, runs: [], dispatchers: [], executors: [] });
 var RUNNABLE2 = new Set(RUNNABLE_KINDS);
 function createChatTicketsRestAdapter(opts) {
@@ -5688,13 +5828,13 @@ function createChatTicketsRestAdapter(opts) {
     return [...workforce, ...agents];
   };
   return {
-    listTickets: (chatId) => (0, import_builderforce_brain_embedded18.readChatTicketLinks)(req, chatId),
+    listTickets: (chatId) => (0, import_builderforce_brain_embedded19.readChatTicketLinks)(req, chatId),
     linkTicket: (chatId, input) => req(`/api/brain/chats/${chatId}/tickets`, { method: "POST", body: JSON.stringify(input) }).then(() => void 0),
     unlinkTicket: (chatId, kind, ref) => req(
       `/api/brain/chats/${chatId}/tickets?kind=${encodeURIComponent(kind)}&ref=${encodeURIComponent(ref)}`,
       { method: "DELETE" }
     ).then(() => void 0),
-    listRuns: (chatId) => (0, import_builderforce_brain_embedded18.readChatRunHistory)(req, chatId).then((history) => history ?? emptyRunHistory()).catch(emptyRunHistory),
+    listRuns: (chatId) => (0, import_builderforce_brain_embedded19.readChatRunHistory)(req, chatId).then((history) => history ?? emptyRunHistory()).catch(emptyRunHistory),
     listTicketChats: (kind, ref) => req(
       `/api/brain/tickets/${encodeURIComponent(kind)}/${encodeURIComponent(ref)}/chats`
     ).then((r) => r.chats.map((c) => ({
@@ -5765,7 +5905,7 @@ function createChatTicketsRestAdapter(opts) {
     },
     listQuestions: async (chatId) => {
       const [links, pending] = await Promise.all([
-        (0, import_builderforce_brain_embedded18.readChatTicketLinks)(req, chatId),
+        (0, import_builderforce_brain_embedded19.readChatTicketLinks)(req, chatId),
         // `kind` is on the wire but not on the VM — the panel renders a question
         // without caring which flavour it is, while the FILTER cares about nothing
         // else. Typing the wire row here keeps both true.
@@ -5784,12 +5924,12 @@ function createChatTicketsRestAdapter(opts) {
 }
 
 // src/chatTickets/useChatParticipants.ts
-var import_react36 = require("react");
+var import_react41 = require("react");
 function useChatParticipants(adapter, chatId, refreshSignal = 0) {
-  const [pool, setPool] = (0, import_react36.useState)([]);
-  const [invited, setInvited] = (0, import_react36.useState)([]);
-  const [members, setMembers] = (0, import_react36.useState)([]);
-  (0, import_react36.useEffect)(() => {
+  const [pool, setPool] = (0, import_react41.useState)([]);
+  const [invited, setInvited] = (0, import_react41.useState)([]);
+  const [members, setMembers] = (0, import_react41.useState)([]);
+  (0, import_react41.useEffect)(() => {
     if (chatId == null) {
       setInvited([]);
       setMembers([]);
@@ -5811,7 +5951,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
     };
   }, [adapter, chatId, refreshSignal]);
   const needsPool = invited.some((a) => !a.name);
-  (0, import_react36.useEffect)(() => {
+  (0, import_react41.useEffect)(() => {
     if (!needsPool) return;
     let ok = true;
     adapter.loadAgentPool().then((p) => {
@@ -5823,7 +5963,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
       ok = false;
     };
   }, [adapter, needsPool]);
-  return (0, import_react36.useMemo)(
+  return (0, import_react41.useMemo)(
     () => [
       // The NAME comes off the invited row, which the server resolves in one batched
       // query. The pool lookup behind it is the legacy path, kept only for a client
@@ -5844,42 +5984,42 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
 }
 
 // src/chatTickets/useChatActivitySignal.ts
-var import_react37 = require("react");
-var import_builderforce_brain_embedded19 = require("@seanhogg/builderforce-brain-embedded");
+var import_react42 = require("react");
+var import_builderforce_brain_embedded20 = require("@seanhogg/builderforce-brain-embedded");
 function useChatActivitySignal(messages) {
-  return (0, import_react37.useMemo)(() => (0, import_builderforce_brain_embedded19.activityMessageCount)(messages), [messages]);
+  return (0, import_react42.useMemo)(() => (0, import_builderforce_brain_embedded20.activityMessageCount)(messages), [messages]);
 }
 
 // src/mention/MentionAutocomplete.tsx
-var import_react38 = require("react");
-var import_builderforce_brain_embedded20 = require("@seanhogg/builderforce-brain-embedded");
+var import_react43 = require("react");
+var import_builderforce_brain_embedded21 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime52 = require("react/jsx-runtime");
 var DEFAULT_MENTION_LABELS = { title: "Direct to", agent: "Agent", human: "Person" };
 function useMentionAutocomplete(opts) {
   const { textareaRef, value, setValue, participants, onPick, labels, disabled } = opts;
-  const [token, setToken] = (0, import_react38.useState)(null);
-  const [index, setIndex] = (0, import_react38.useState)(0);
-  const matches = (0, import_react38.useMemo)(
-    () => token && !disabled ? (0, import_builderforce_brain_embedded20.filterMentionCandidates)(participants, token.query) : [],
+  const [token, setToken] = (0, import_react43.useState)(null);
+  const [index, setIndex] = (0, import_react43.useState)(0);
+  const matches = (0, import_react43.useMemo)(
+    () => token && !disabled ? (0, import_builderforce_brain_embedded21.filterMentionCandidates)(participants, token.query) : [],
     [token, participants, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
-  const recompute = (0, import_react38.useCallback)(() => {
+  const recompute = (0, import_react43.useCallback)(() => {
     const el = textareaRef.current;
     if (!el || disabled || participants.length === 0) {
       setToken(null);
       return;
     }
-    const next = (0, import_builderforce_brain_embedded20.activeMentionToken)(el.value, el.selectionStart ?? el.value.length);
+    const next = (0, import_builderforce_brain_embedded21.activeMentionToken)(el.value, el.selectionStart ?? el.value.length);
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, participants.length]);
-  (0, import_react38.useEffect)(() => {
+  (0, import_react43.useEffect)(() => {
     recompute();
   }, [value, recompute]);
-  const choose = (0, import_react38.useCallback)((r) => {
+  const choose = (0, import_react43.useCallback)((r) => {
     const el = textareaRef.current;
-    const tk = token ?? (el ? (0, import_builderforce_brain_embedded20.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
+    const tk = token ?? (el ? (0, import_builderforce_brain_embedded21.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
       let after = value.slice(tk.end);
       if (after.startsWith(" ")) after = after.slice(1);
@@ -5899,7 +6039,7 @@ function useMentionAutocomplete(opts) {
     setToken(null);
     onPick(r);
   }, [token, value, setValue, onPick, textareaRef]);
-  const onKeyDown = (0, import_react38.useCallback)((e) => {
+  const onKeyDown = (0, import_react43.useCallback)((e) => {
     if (!open) return false;
     switch (e.key) {
       case "ArrowDown":
@@ -5987,35 +6127,35 @@ var POP = {
 };
 
 // src/mention/TicketAutocomplete.tsx
-var import_react39 = require("react");
-var import_builderforce_brain_embedded21 = require("@seanhogg/builderforce-brain-embedded");
+var import_react44 = require("react");
+var import_builderforce_brain_embedded22 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime53 = require("react/jsx-runtime");
 var DEFAULT_TICKET_TAG_LABELS = { title: "Tag ticket", status: "Status", noMatches: "No tickets found" };
 function useTicketAutocomplete(opts) {
   const { textareaRef, value, setValue, tickets, onPick, labels, disabled } = opts;
-  const [token, setToken] = (0, import_react39.useState)(null);
-  const [index, setIndex] = (0, import_react39.useState)(0);
-  const matches = (0, import_react39.useMemo)(
-    () => token && !disabled ? (0, import_builderforce_brain_embedded21.filterTicketCandidates)(tickets, token.query) : [],
+  const [token, setToken] = (0, import_react44.useState)(null);
+  const [index, setIndex] = (0, import_react44.useState)(0);
+  const matches = (0, import_react44.useMemo)(
+    () => token && !disabled ? (0, import_builderforce_brain_embedded22.filterTicketCandidates)(tickets, token.query) : [],
     [token, tickets, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
-  const recompute = (0, import_react39.useCallback)(() => {
+  const recompute = (0, import_react44.useCallback)(() => {
     const el = textareaRef.current;
     if (!el || disabled || tickets.length === 0) {
       setToken(null);
       return;
     }
-    const next = (0, import_builderforce_brain_embedded21.activeTicketToken)(el.value, el.selectionStart ?? el.value.length);
+    const next = (0, import_builderforce_brain_embedded22.activeTicketToken)(el.value, el.selectionStart ?? el.value.length);
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, tickets.length]);
-  (0, import_react39.useEffect)(() => {
+  (0, import_react44.useEffect)(() => {
     recompute();
   }, [value, recompute]);
-  const choose = (0, import_react39.useCallback)((t) => {
+  const choose = (0, import_react44.useCallback)((t) => {
     const el = textareaRef.current;
-    const tk = token ?? (el ? (0, import_builderforce_brain_embedded21.activeTicketToken)(el.value, el.selectionStart ?? 0) : null);
+    const tk = token ?? (el ? (0, import_builderforce_brain_embedded22.activeTicketToken)(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
       const ref = t.key ?? String(t.id);
       let after = value.slice(tk.end);
@@ -6036,7 +6176,7 @@ function useTicketAutocomplete(opts) {
     setToken(null);
     onPick(t);
   }, [token, value, setValue, onPick, textareaRef]);
-  const onKeyDown = (0, import_react39.useCallback)((e) => {
+  const onKeyDown = (0, import_react44.useCallback)((e) => {
     if (!open) return false;
     switch (e.key) {
       case "ArrowDown":
@@ -6180,7 +6320,7 @@ function chatDiagnosticsReads(adapter, chatId) {
 }
 
 // src/evermind/EvermindConsole.tsx
-var import_react44 = require("react");
+var import_react49 = require("react");
 
 // src/evermind/types.ts
 function defaultFormatWhen(atMs) {
@@ -6405,13 +6545,13 @@ function evermindNextAction(input) {
 }
 
 // src/evermind/EvermindTestBench.tsx
-var import_react40 = require("react");
+var import_react45 = require("react");
 var import_jsx_runtime54 = require("react/jsx-runtime");
 function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
-  const [prompt, setPrompt] = (0, import_react40.useState)("");
-  const [running, setRunning] = (0, import_react40.useState)(false);
-  const [error, setError] = (0, import_react40.useState)(null);
-  const run = (0, import_react40.useCallback)(async (withPrompt) => {
+  const [prompt, setPrompt] = (0, import_react45.useState)("");
+  const [running, setRunning] = (0, import_react45.useState)(false);
+  const [error, setError] = (0, import_react45.useState)(null);
+  const run = (0, import_react45.useCallback)(async (withPrompt) => {
     setRunning(true);
     setError(null);
     try {
@@ -6464,7 +6604,7 @@ function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
 }
 
 // src/evermind/EvermindMaintenance.tsx
-var import_react41 = require("react");
+var import_react46 = require("react");
 var import_jsx_runtime55 = require("react/jsx-runtime");
 function EvermindMaintenance({
   t,
@@ -6474,13 +6614,13 @@ function EvermindMaintenance({
   onReindex,
   onCleanup
 }) {
-  const [slug, setSlug] = (0, import_react41.useState)("");
-  const [pending, setPending] = (0, import_react41.useState)(null);
-  const doReseed = (0, import_react41.useCallback)(async () => {
+  const [slug, setSlug] = (0, import_react46.useState)("");
+  const [pending, setPending] = (0, import_react46.useState)(null);
+  const doReseed = (0, import_react46.useCallback)(async () => {
     setPending(null);
     await onReseed?.(slug || void 0);
   }, [onReseed, slug]);
-  const doCleanup = (0, import_react41.useCallback)(async () => {
+  const doCleanup = (0, import_react46.useCallback)(async () => {
     setPending(null);
     await onCleanup?.();
   }, [onCleanup]);
@@ -6584,7 +6724,7 @@ function Confirm({
 }
 
 // src/evermind/EvermindAnalyzer.tsx
-var import_react42 = require("react");
+var import_react47 = require("react");
 var import_jsx_runtime56 = require("react/jsx-runtime");
 var TONE = {
   ok: "ok",
@@ -6595,15 +6735,15 @@ var TONE = {
   redundant: "warn"
 };
 function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysis, onAnalysis }) {
-  const [selected, setSelected] = (0, import_react42.useState)(/* @__PURE__ */ new Set());
-  const [running, setRunning] = (0, import_react42.useState)(false);
-  const [applying, setApplying] = (0, import_react42.useState)(false);
-  const [repair, setRepair] = (0, import_react42.useState)(null);
-  const [error, setError] = (0, import_react42.useState)(null);
-  (0, import_react42.useEffect)(() => {
+  const [selected, setSelected] = (0, import_react47.useState)(/* @__PURE__ */ new Set());
+  const [running, setRunning] = (0, import_react47.useState)(false);
+  const [applying, setApplying] = (0, import_react47.useState)(false);
+  const [repair, setRepair] = (0, import_react47.useState)(null);
+  const [error, setError] = (0, import_react47.useState)(null);
+  (0, import_react47.useEffect)(() => {
     setSelected(new Set(analysis?.findings.map((f) => f.id) ?? []));
   }, [analysis]);
-  const run = (0, import_react42.useCallback)(async () => {
+  const run = (0, import_react47.useCallback)(async () => {
     setRunning(true);
     setError(null);
     setRepair(null);
@@ -6616,7 +6756,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       setRunning(false);
     }
   }, [onAnalyze, onAnalysis, t.errorGeneric]);
-  const apply = (0, import_react42.useCallback)(async () => {
+  const apply = (0, import_react47.useCallback)(async () => {
     if (!onApply || !analysis) return;
     const picked = analysis.findings.filter((f) => selected.has(f.id));
     if (picked.length === 0) return;
@@ -6635,7 +6775,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       setApplying(false);
     }
   }, [analysis, onAnalysis, onApply, onRepaired, selected, t.errorGeneric]);
-  const toggle = (0, import_react42.useCallback)((id) => {
+  const toggle = (0, import_react47.useCallback)((id) => {
     setSelected((cur) => {
       const next = new Set(cur);
       if (next.has(id)) next.delete(id);
@@ -6644,7 +6784,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
     });
   }, []);
   const findings = analysis?.findings ?? [];
-  const allSelected = (0, import_react42.useMemo)(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
+  const allSelected = (0, import_react47.useMemo)(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
   const busy = disabled || running || applying;
   return /* @__PURE__ */ (0, import_jsx_runtime56.jsxs)("div", { style: sectionBlock, children: [
     /* @__PURE__ */ (0, import_jsx_runtime56.jsx)("div", { style: fieldTitle, children: t.analyzeTitle }),
@@ -6747,13 +6887,13 @@ function FindingRow({
 }
 
 // src/evermind/EvermindDiagnostics.tsx
-var import_react43 = require("react");
+var import_react48 = require("react");
 var import_jsx_runtime57 = require("react/jsx-runtime");
 function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
-  const [report, setReport] = (0, import_react43.useState)(null);
-  const [copied, setCopied] = (0, import_react43.useState)(false);
-  const [revealed, setRevealed] = (0, import_react43.useState)(false);
-  const copy = (0, import_react43.useCallback)(async () => {
+  const [report, setReport] = (0, import_react48.useState)(null);
+  const [copied, setCopied] = (0, import_react48.useState)(false);
+  const [revealed, setRevealed] = (0, import_react48.useState)(false);
+  const copy = (0, import_react48.useCallback)(async () => {
     const text = buildReport();
     setReport(text);
     try {
@@ -6768,13 +6908,13 @@ function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
       onManualFallback?.();
     }
   }, [buildReport, onCopy, onManualFallback]);
-  const toggleReveal = (0, import_react43.useCallback)(() => setRevealed((v) => !v), []);
+  const toggleReveal = (0, import_react48.useCallback)(() => setRevealed((v) => !v), []);
   return { report, copied, revealed, copy, toggleReveal };
 }
 function EvermindDiagnostics({ t, disabled, copy }) {
   const { report, copied, revealed } = copy;
-  const areaRef = (0, import_react43.useRef)(null);
-  (0, import_react43.useEffect)(() => {
+  const areaRef = (0, import_react48.useRef)(null);
+  (0, import_react48.useEffect)(() => {
     if (!revealed) return;
     areaRef.current?.focus();
     areaRef.current?.select();
@@ -7091,26 +7231,26 @@ var import_jsx_runtime59 = require("react/jsx-runtime");
 var TEACH_POLL_INTERVAL_MS = 3e3;
 var TEACH_POLL_TIMEOUT_MS = 12e4;
 function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate, host = "web" }) {
-  const t = (0, import_react44.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
-  const [data, setData] = (0, import_react44.useState)(null);
-  const [targets, setTargets] = (0, import_react44.useState)(null);
-  const [seedModels, setSeedModels] = (0, import_react44.useState)([]);
-  const [teacherOpts, setTeacherOpts] = (0, import_react44.useState)(null);
-  const [selectedSlug, setSelectedSlug] = (0, import_react44.useState)("");
-  const [teachPrompt, setTeachPrompt] = (0, import_react44.useState)("");
-  const [teachText, setTeachText] = (0, import_react44.useState)("");
-  const [busy, setBusy] = (0, import_react44.useState)(false);
-  const [validating, setValidating] = (0, import_react44.useState)(false);
-  const [validateResult, setValidateResult] = (0, import_react44.useState)(null);
-  const [notice, setNotice] = (0, import_react44.useState)(null);
-  const [noticeTone, setNoticeTone] = (0, import_react44.useState)("good");
-  const [error, setError] = (0, import_react44.useState)(null);
-  const [loaded, setLoaded] = (0, import_react44.useState)(false);
-  const [tab, setTab] = (0, import_react44.useState)("teach");
-  const [probeResult, setProbeResult] = (0, import_react44.useState)(null);
-  const [analysis, setAnalysis] = (0, import_react44.useState)(null);
-  const [loadFailed, setLoadFailed] = (0, import_react44.useState)(false);
-  const reload = (0, import_react44.useCallback)(async () => {
+  const t = (0, import_react49.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
+  const [data, setData] = (0, import_react49.useState)(null);
+  const [targets, setTargets] = (0, import_react49.useState)(null);
+  const [seedModels, setSeedModels] = (0, import_react49.useState)([]);
+  const [teacherOpts, setTeacherOpts] = (0, import_react49.useState)(null);
+  const [selectedSlug, setSelectedSlug] = (0, import_react49.useState)("");
+  const [teachPrompt, setTeachPrompt] = (0, import_react49.useState)("");
+  const [teachText, setTeachText] = (0, import_react49.useState)("");
+  const [busy, setBusy] = (0, import_react49.useState)(false);
+  const [validating, setValidating] = (0, import_react49.useState)(false);
+  const [validateResult, setValidateResult] = (0, import_react49.useState)(null);
+  const [notice, setNotice] = (0, import_react49.useState)(null);
+  const [noticeTone, setNoticeTone] = (0, import_react49.useState)("good");
+  const [error, setError] = (0, import_react49.useState)(null);
+  const [loaded, setLoaded] = (0, import_react49.useState)(false);
+  const [tab, setTab] = (0, import_react49.useState)("teach");
+  const [probeResult, setProbeResult] = (0, import_react49.useState)(null);
+  const [analysis, setAnalysis] = (0, import_react49.useState)(null);
+  const [loadFailed, setLoadFailed] = (0, import_react49.useState)(false);
+  const reload = (0, import_react49.useCallback)(async () => {
     const targetsP = adapter.loadTargets?.().catch(() => null);
     try {
       const d = await adapter.loadData();
@@ -7127,11 +7267,11 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (tg) setTargets(tg);
     }
   }, [adapter]);
-  (0, import_react44.useEffect)(() => {
+  (0, import_react49.useEffect)(() => {
     setLoaded(false);
     void reload();
   }, [reload]);
-  (0, import_react44.useEffect)(() => {
+  (0, import_react49.useEffect)(() => {
     if (!canManage) return;
     let cancelled = false;
     void adapter.loadSeedModels().then((m) => {
@@ -7149,7 +7289,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       cancelled = true;
     };
   }, [adapter, canManage]);
-  (0, import_react44.useEffect)(() => {
+  (0, import_react49.useEffect)(() => {
     if (!refreshMs) return;
     const hidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
     const id = setInterval(() => {
@@ -7164,13 +7304,13 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [refreshMs, busy, reload]);
-  const lastRefreshSignal = (0, import_react44.useRef)(refreshSignal);
-  (0, import_react44.useEffect)(() => {
+  const lastRefreshSignal = (0, import_react49.useRef)(refreshSignal);
+  (0, import_react49.useEffect)(() => {
     if (refreshSignal == null || refreshSignal === lastRefreshSignal.current) return;
     lastRefreshSignal.current = refreshSignal;
     void reload();
   }, [refreshSignal, reload]);
-  const runValidate = (0, import_react44.useCallback)(async (prompt) => {
+  const runValidate = (0, import_react49.useCallback)(async (prompt) => {
     const task = prompt.trim();
     if (task.length < 3) return;
     setValidating(true);
@@ -7186,20 +7326,20 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setValidating(false);
     }
   }, [adapter, onValidate, t.errorGeneric]);
-  const clearValidate = (0, import_react44.useCallback)(() => {
+  const clearValidate = (0, import_react49.useCallback)(() => {
     setValidateResult(null);
     onValidate?.(null);
   }, [onValidate]);
-  const pollTimer = (0, import_react44.useRef)(null);
-  const mounted = (0, import_react44.useRef)(true);
-  (0, import_react44.useEffect)(() => {
+  const pollTimer = (0, import_react49.useRef)(null);
+  const mounted = (0, import_react49.useRef)(true);
+  (0, import_react49.useEffect)(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
       if (pollTimer.current) clearTimeout(pollTimer.current);
     };
   }, []);
-  const describeTeachOutcome = (0, import_react44.useCallback)((status) => {
+  const describeTeachOutcome = (0, import_react49.useCallback)((status) => {
     if (status.state === "dropped") return { text: t.taughtDropped, tone: "warn" };
     if (status.state !== "merged") return { text: t.taughtStillPending, tone: "warn" };
     const verdict = evermindLearnedStatus({
@@ -7215,7 +7355,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     if (verdict.state === "fault") return { text: t.taughtTeacherFault(verdict.teacherModel ?? "", verdict.reason), tone: "warn" };
     return { text: t.taughtSelf(version), tone: "good" };
   }, [t]);
-  const trackTeach = (0, import_react44.useCallback)((contributionId) => {
+  const trackTeach = (0, import_react49.useCallback)((contributionId) => {
     const readStatus = adapter.teachStatus;
     if (!readStatus || !Number.isInteger(contributionId) || contributionId <= 0) return;
     if (pollTimer.current) clearTimeout(pollTimer.current);
@@ -7249,7 +7389,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       void tick();
     }, TEACH_POLL_INTERVAL_MS);
   }, [adapter, describeTeachOutcome, reload, t.taughtStillPending]);
-  const run = (0, import_react44.useCallback)(async (op, successNotice) => {
+  const run = (0, import_react49.useCallback)(async (op, successNotice) => {
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -7264,8 +7404,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setBusy(false);
     }
   }, [reload, t.errorGeneric]);
-  const panelId = (0, import_react44.useId)();
-  const buildReport = (0, import_react44.useCallback)(() => buildEvermindDiagnostics({
+  const panelId = (0, import_react49.useId)();
+  const buildReport = (0, import_react49.useCallback)(() => buildEvermindDiagnostics({
     data,
     projectName,
     host,
@@ -7825,7 +7965,7 @@ function RecentList({ t, entries }) {
   ] });
 }
 function RecentRow({ t, entry }) {
-  const [open, setOpen] = (0, import_react44.useState)(false);
+  const [open, setOpen] = (0, import_react49.useState)(false);
   const status = evermindLearnedStatus(entry);
   const faulted = status.state === "fault";
   const body = entry.kind === "delta" ? t.deltaEntry : faulted ? "" : entry.text ?? "";
@@ -7977,7 +8117,7 @@ function preferredEvermindBuild(builds, pick = {}) {
 }
 
 // src/index.ts
-var import_builderforce_brain_embedded25 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded26 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/evermind/labelBundle.ts
 var STATIC_KEYS = [
@@ -8118,7 +8258,7 @@ function evermindLabelsFromBundle(bundle, prefix = "ev.") {
 }
 
 // src/project360/Project360View.tsx
-var import_react45 = require("react");
+var import_react50 = require("react");
 
 // src/project360/sunburstGeometry.ts
 var VIEWBOX = 320;
@@ -8298,9 +8438,9 @@ var DEFAULT_PROJECT360_LABELS = {
 var import_jsx_runtime61 = require("react/jsx-runtime");
 var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
-  const L = (0, import_react45.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
-  const [selected, setSelected] = (0, import_react45.useState)(null);
-  const sortedWorkforce = (0, import_react45.useMemo)(
+  const L = (0, import_react50.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
+  const [selected, setSelected] = (0, import_react50.useState)(null);
+  const sortedWorkforce = (0, import_react50.useMemo)(
     () => [...data?.workforce ?? []].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)),
     [data?.workforce]
   );
@@ -8467,7 +8607,7 @@ function MemberRow({ member, labels, onAction }) {
 }
 
 // src/projectList/ProjectListView.tsx
-var import_react46 = require("react");
+var import_react51 = require("react");
 
 // src/projectList/types.ts
 var DEFAULT_PROJECT_LIST_LABELS = {
@@ -8482,7 +8622,7 @@ var DEFAULT_PROJECT_LIST_LABELS = {
 // src/projectList/ProjectListView.tsx
 var import_jsx_runtime62 = require("react/jsx-runtime");
 function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }) {
-  const L = (0, import_react46.useMemo)(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
+  const L = (0, import_react51.useMemo)(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
   const header = /* @__PURE__ */ (0, import_jsx_runtime62.jsxs)("header", { className: "bf-list-head", children: [
     /* @__PURE__ */ (0, import_jsx_runtime62.jsxs)("div", { className: "bf-list-head__id", children: [
       /* @__PURE__ */ (0, import_jsx_runtime62.jsx)("span", { className: "bf-list-head__title", children: title }),
@@ -8559,7 +8699,7 @@ function Row2({ item, onAction }) {
 }
 
 // src/composer/BrainComposer.tsx
-var import_react50 = require("react");
+var import_react58 = require("react");
 
 // src/workStatus/consumptionSnapshot.ts
 var TTL_MS = 6e4;
@@ -8592,10 +8732,10 @@ function subscribeConsumptionSnapshot(listener) {
 }
 
 // src/workStatus/useConsumptionSnapshot.ts
-var import_react47 = require("react");
+var import_react52 = require("react");
 function useConsumptionSnapshot(request) {
-  const [snapshot, setSnapshot] = (0, import_react47.useState)(cachedConsumptionSnapshot());
-  (0, import_react47.useEffect)(() => {
+  const [snapshot, setSnapshot] = (0, import_react52.useState)(cachedConsumptionSnapshot());
+  (0, import_react52.useEffect)(() => {
     if (!request) return void 0;
     let alive = true;
     const off = subscribeConsumptionSnapshot((s) => {
@@ -8730,11 +8870,11 @@ function AccountStatus({ snapshot, labels, locale, onUpgrade }) {
 }
 
 // src/workStatus/EvermindStatus.tsx
-var import_react48 = require("react");
+var import_react53 = require("react");
 var import_jsx_runtime64 = require("react/jsx-runtime");
 function EvermindStatus({ request, projectId, labels }) {
-  const [head, setHead] = (0, import_react48.useState)(null);
-  (0, import_react48.useEffect)(() => {
+  const [head, setHead] = (0, import_react53.useState)(null);
+  (0, import_react53.useEffect)(() => {
     if (projectId == null) {
       setHead(null);
       return void 0;
@@ -8796,42 +8936,393 @@ function WorkSpendPanel({ request, labels: overrides, loadingLabel, locale }) {
   ] });
 }
 
+// src/connections/ConnectionRow.tsx
+var import_react55 = require("react");
+
+// src/connections/types.ts
+var DEFAULT_CONNECTIONS_LABELS = {
+  heading: "Connected accounts",
+  empty: "No provider accounts connected.",
+  loadFailed: "Could not load connected accounts.",
+  unavailable: "Connected accounts are not available from here.",
+  authOauth: "Subscription",
+  authApiKey: "API key",
+  healthOk: "Working",
+  healthCapacity: "Usage limit reached \u2014 add credits or wait for the reset",
+  healthNotEntitled: "Signed in, but the plan does not cover this model",
+  healthRejected: "Sign-in expired \u2014 reconnect",
+  healthUnresolved: "Credential could not be read \u2014 reconnect",
+  test: "Test",
+  testing: "Testing\u2026",
+  testOk: "Connection works",
+  reconnect: "Reconnect",
+  pasteHint: "Sign in on the page that opened, then paste the code it shows.",
+  pastePlaceholder: "Paste code",
+  finish: "Finish",
+  finishing: "Finishing\u2026",
+  cancel: "Cancel",
+  deviceHint: "Approve in your browser \u2014 the page shows code {code}.",
+  reconnected: "Reconnected",
+  errDenied: "The connection was declined.",
+  errExpired: "That code expired \u2014 reconnect again.",
+  errStart: "Could not start reconnecting.",
+  errFailed: "Could not reconnect."
+};
+function connectionsLabels(overrides) {
+  return overrides ? { ...DEFAULT_CONNECTIONS_LABELS, ...overrides } : DEFAULT_CONNECTIONS_LABELS;
+}
+function connectionsLabelsFrom(lookup) {
+  return stringsFrom(DEFAULT_CONNECTIONS_LABELS, lookup);
+}
+var HEALTH_LABEL = {
+  ok: "healthOk",
+  capacity: "healthCapacity",
+  not_entitled: "healthNotEntitled",
+  rejected: "healthRejected",
+  unresolved: "healthUnresolved"
+};
+function healthLabel(health, labels) {
+  return labels[HEALTH_LABEL[health]];
+}
+
+// src/connections/useProviderReconnect.ts
+var import_react54 = require("react");
+
+// src/connections/reconnectFlow.ts
+var REASONS = ["unavailable", "denied", "expired", "failed"];
+function failureOf(error) {
+  const reason = error?.reason;
+  if (reason === "cancelled") return null;
+  const detail = error?.detail;
+  return {
+    reason: REASONS.includes(reason) ? reason : "failed",
+    detail: typeof detail === "string" && detail ? detail : error instanceof Error && !reason ? error.message : null
+  };
+}
+var IDLE = { phase: "idle", userCode: null, code: "", failure: null, connected: 0 };
+var ReconnectFlow = class {
+  constructor(client, provider) {
+    this.client = client;
+    this.provider = provider;
+  }
+  client;
+  provider;
+  state = IDLE;
+  listeners = /* @__PURE__ */ new Set();
+  generation = 0;
+  started = null;
+  abort = null;
+  subscribe = (listener) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
+  snapshot = () => this.state;
+  set(patch) {
+    this.state = { ...this.state, ...patch };
+    for (const listener of this.listeners) listener();
+  }
+  /** The ONE place a flow is torn down, so every ending leaves the same state. Returns the new generation. */
+  reset(patch = {}) {
+    this.generation += 1;
+    this.abort?.abort();
+    this.abort = null;
+    this.started = null;
+    this.set({ phase: "idle", userCode: null, code: "", ...patch });
+    return this.generation;
+  }
+  succeed() {
+    this.reset({ failure: null, connected: this.state.connected + 1 });
+  }
+  setCode = (code) => this.set({ code });
+  /** Run the connect. Resolves true once the gateway stored the connection. */
+  start = async (openUrl) => {
+    const generation = this.reset({ failure: null });
+    this.set({ phase: "starting" });
+    let begun;
+    try {
+      begun = await this.client.start(this.provider);
+    } catch (error) {
+      if (generation === this.generation) this.reset({ failure: failureOf(error) });
+      return false;
+    }
+    if (generation !== this.generation) return false;
+    this.started = begun;
+    openUrl(begun.authorizeUrl);
+    if (begun.grant === "paste") {
+      this.set({ phase: "paste" });
+      return this.awaitPaste(generation);
+    }
+    this.set({ phase: "device", userCode: begun.userCode });
+    const controller = new AbortController();
+    this.abort = controller;
+    try {
+      await this.client.awaitDevice(this.provider, begun, controller.signal);
+    } catch (error) {
+      if (generation === this.generation && !controller.signal.aborted) this.reset({ failure: failureOf(error) });
+      return false;
+    }
+    if (generation !== this.generation || controller.signal.aborted) return false;
+    this.succeed();
+    return true;
+  };
+  /** For a paste grant `start` resolves when the pasted code is redeemed, or the flow ends otherwise. */
+  awaitPaste(generation) {
+    return new Promise((resolve) => {
+      const before = this.state.connected;
+      const off = this.subscribe(() => {
+        if (this.state.connected !== before) {
+          off();
+          resolve(true);
+          return;
+        }
+        if (this.generation !== generation) {
+          off();
+          resolve(false);
+        }
+      });
+    });
+  }
+  finish = async () => {
+    const begun = this.started;
+    const pasted = this.state.code.trim();
+    if (!begun || !pasted || this.state.phase !== "paste") return;
+    const generation = this.generation;
+    this.set({ phase: "finishing", failure: null });
+    try {
+      await this.client.completePaste(this.provider, pasted, begun.state);
+    } catch (error) {
+      if (generation !== this.generation) return;
+      const why = failureOf(error);
+      if (why?.reason === "expired") this.reset({ failure: why });
+      else this.set({ phase: "paste", failure: why });
+      return;
+    }
+    if (generation === this.generation) this.succeed();
+  };
+  cancel = () => {
+    this.reset({ failure: null });
+  };
+};
+var flows = /* @__PURE__ */ new WeakMap();
+function reconnectFlow(client, provider) {
+  let byProvider = flows.get(client);
+  if (!byProvider) {
+    byProvider = /* @__PURE__ */ new Map();
+    flows.set(client, byProvider);
+  }
+  let flow = byProvider.get(provider);
+  if (!flow) {
+    flow = new ReconnectFlow(client, provider);
+    byProvider.set(provider, flow);
+  }
+  return flow;
+}
+
+// src/connections/useProviderReconnect.ts
+function useProviderReconnect(client, provider, { openUrl, onConnected }) {
+  const flow = (0, import_react54.useMemo)(() => reconnectFlow(client, provider), [client, provider]);
+  const state = (0, import_react54.useSyncExternalStore)(flow.subscribe, flow.snapshot, flow.snapshot);
+  const seen = (0, import_react54.useRef)(state.connected);
+  const onConnectedRef = (0, import_react54.useRef)(onConnected);
+  onConnectedRef.current = onConnected;
+  (0, import_react54.useEffect)(() => {
+    if (state.connected === seen.current) return;
+    seen.current = state.connected;
+    onConnectedRef.current?.();
+  }, [state.connected]);
+  const openUrlRef = (0, import_react54.useRef)(openUrl);
+  openUrlRef.current = openUrl;
+  const start = (0, import_react54.useCallback)(() => flow.start((url) => openUrlRef.current(url)), [flow]);
+  return {
+    phase: state.phase,
+    userCode: state.userCode,
+    code: state.code,
+    failure: state.failure,
+    setCode: flow.setCode,
+    start,
+    finish: flow.finish,
+    cancel: flow.cancel
+  };
+}
+
+// src/connections/ConnectionRow.tsx
+var import_jsx_runtime67 = require("react/jsx-runtime");
+function failureText(failure, labels) {
+  switch (failure.reason) {
+    case "denied":
+      return labels.errDenied;
+    case "expired":
+      return labels.errExpired;
+    case "unavailable":
+      return failure.detail ? `${labels.errStart} ${failure.detail}` : labels.errStart;
+    default:
+      return failure.detail ? `${labels.errFailed} ${failure.detail}` : labels.errFailed;
+  }
+}
+function ConnectionRow({ row, connections, labels, onChanged, onReconnected }) {
+  const [testing, setTesting] = (0, import_react55.useState)(false);
+  const [note, setNote] = (0, import_react55.useState)(null);
+  const reconnect = useProviderReconnect(connections.client, row.provider, {
+    openUrl: connections.openUrl,
+    onConnected: () => {
+      setNote({ ok: true, text: labels.reconnected });
+      onReconnected();
+    }
+  });
+  const test = async () => {
+    setTesting(true);
+    setNote(null);
+    try {
+      const result = await connections.client.test(row.provider);
+      if (result.health) onChanged({ health: result.health });
+      setNote(result.ok ? { ok: true, text: labels.testOk } : { ok: false, text: result.message ?? labels.errFailed });
+    } catch (error) {
+      setNote({ ok: false, text: error instanceof Error ? error.message : labels.errFailed });
+    } finally {
+      setTesting(false);
+    }
+  };
+  const busy = testing || reconnect.phase === "starting" || reconnect.phase === "finishing";
+  const healthy = row.health === "ok";
+  return /* @__PURE__ */ (0, import_jsx_runtime67.jsxs)("div", { className: "bf-conn__row", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime67.jsxs)("div", { className: "bf-conn__head", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("span", { className: `bf-conn__dot${healthy ? " is-ok" : row.health === "capacity" ? " is-warn" : " is-bad"}`, "aria-hidden": "true" }),
+      /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("span", { className: "bf-conn__name", children: row.label }),
+      /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("span", { className: "bf-conn__kind", children: row.authType === "oauth" ? labels.authOauth : labels.authApiKey })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("div", { className: `bf-conn__health${healthy ? "" : " is-alert"}`, role: "status", children: healthLabel(row.health, labels) }),
+    reconnect.phase === "paste" || reconnect.phase === "finishing" ? /* @__PURE__ */ (0, import_jsx_runtime67.jsxs)("div", { className: "bf-conn__flow", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("span", { className: "bf-pmenu__desc", children: labels.pasteHint }),
+      /* @__PURE__ */ (0, import_jsx_runtime67.jsxs)("div", { className: "bf-conn__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime67.jsx)(
+          "input",
+          {
+            className: "bf-pmenu__search bf-conn__input",
+            value: reconnect.code,
+            onChange: (e) => reconnect.setCode(e.target.value),
+            onKeyDown: (e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void reconnect.finish();
+              }
+            },
+            placeholder: labels.pastePlaceholder,
+            "aria-label": labels.pastePlaceholder,
+            disabled: reconnect.phase === "finishing",
+            autoFocus: true
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("button", { type: "button", className: "bf-conn__btn is-primary", disabled: busy || !reconnect.code.trim(), onClick: () => void reconnect.finish(), children: reconnect.phase === "finishing" ? labels.finishing : labels.finish }),
+        /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("button", { type: "button", className: "bf-conn__btn", disabled: reconnect.phase === "finishing", onClick: reconnect.cancel, children: labels.cancel })
+      ] })
+    ] }) : reconnect.phase === "device" ? /* @__PURE__ */ (0, import_jsx_runtime67.jsxs)("div", { className: "bf-conn__flow", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("span", { className: "bf-pmenu__desc", children: fill(labels.deviceHint, { code: reconnect.userCode ?? "\u2026" }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("div", { className: "bf-conn__actions", children: /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("button", { type: "button", className: "bf-conn__btn", onClick: reconnect.cancel, children: labels.cancel }) })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime67.jsxs)("div", { className: "bf-conn__actions", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("button", { type: "button", className: "bf-conn__btn", disabled: busy, onClick: () => void test(), children: testing ? labels.testing : labels.test }),
+      row.reconnectable && /* @__PURE__ */ (0, import_jsx_runtime67.jsx)(
+        "button",
+        {
+          type: "button",
+          className: `bf-conn__btn${healthy || row.health === "capacity" ? "" : " is-primary"}`,
+          disabled: busy,
+          onClick: () => {
+            setNote(null);
+            void reconnect.start();
+          },
+          children: labels.reconnect
+        }
+      )
+    ] }),
+    reconnect.failure && /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("div", { className: "bf-conn__note is-bad", role: "alert", children: failureText(reconnect.failure, labels) }),
+    !reconnect.failure && note && /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("div", { className: `bf-conn__note${note.ok ? " is-ok" : " is-bad"}`, role: "status", children: note.text })
+  ] });
+}
+
+// src/connections/useProviderConnections.ts
+var import_react56 = require("react");
+function useProviderConnections(client) {
+  const [state, setState] = (0, import_react56.useState)({ kind: "loading" });
+  const reload = (0, import_react56.useCallback)(async () => {
+    try {
+      const rows = await client.list();
+      setState(rows === null ? { kind: "unavailable" } : { kind: "ready", rows });
+    } catch {
+      setState({ kind: "failed" });
+    }
+  }, [client]);
+  (0, import_react56.useEffect)(() => {
+    void reload();
+  }, [reload]);
+  const patch = (0, import_react56.useCallback)((provider, change) => {
+    setState((prev) => prev.kind === "ready" ? { kind: "ready", rows: prev.rows.map((row) => row.provider === provider ? { ...row, ...change } : row) } : prev);
+  }, []);
+  return { state, reload, patch };
+}
+
+// src/connections/ConnectionsPanel.tsx
+var import_jsx_runtime68 = require("react/jsx-runtime");
+function ConnectionsPanel({ connections, labels: overrides }) {
+  const labels = connectionsLabels(overrides);
+  const { state, reload, patch } = useProviderConnections(connections.client);
+  return /* @__PURE__ */ (0, import_jsx_runtime68.jsxs)("section", { className: "bf-conn", "aria-label": labels.heading, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime68.jsx)("div", { className: "bf-pmenu__group", children: labels.heading }),
+    state.kind === "loading" && /* @__PURE__ */ (0, import_jsx_runtime68.jsx)("div", { className: "bf-pmenu__desc bf-conn__pad", children: "\u2026" }),
+    state.kind === "failed" && /* @__PURE__ */ (0, import_jsx_runtime68.jsx)("div", { className: "bf-pmenu__desc bf-conn__pad", children: labels.loadFailed }),
+    state.kind === "unavailable" && /* @__PURE__ */ (0, import_jsx_runtime68.jsx)("div", { className: "bf-pmenu__desc bf-conn__pad", children: labels.unavailable }),
+    state.kind === "ready" && state.rows.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime68.jsx)("div", { className: "bf-pmenu__desc bf-conn__pad", children: labels.empty }),
+    state.kind === "ready" && state.rows.map((row) => /* @__PURE__ */ (0, import_jsx_runtime68.jsx)(
+      ConnectionRow,
+      {
+        row,
+        connections,
+        labels,
+        onChanged: (change) => patch(row.provider, change),
+        onReconnected: () => void reload()
+      },
+      row.provider
+    ))
+  ] });
+}
+
 // src/composer/ComposerAddMenu.tsx
-var import_react49 = require("react");
+var import_react57 = require("react");
 
 // src/composer/ComposerIcons.tsx
-var import_jsx_runtime67 = require("react/jsx-runtime");
-var IconPlus = () => /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("path", { d: "M8 3.25v9.5M3.25 8h9.5", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round" }) });
-var IconMic = () => /* @__PURE__ */ (0, import_jsx_runtime67.jsxs)("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
-  /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("rect", { x: "6", y: "2", width: "4", height: "7.5", rx: "2", fill: "currentColor" }),
-  /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("path", { d: "M3.75 8a4.25 4.25 0 0 0 8.5 0M8 12.25V14", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round" })
+var import_jsx_runtime69 = require("react/jsx-runtime");
+var IconPlus = () => /* @__PURE__ */ (0, import_jsx_runtime69.jsx)("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime69.jsx)("path", { d: "M8 3.25v9.5M3.25 8h9.5", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round" }) });
+var IconMic = () => /* @__PURE__ */ (0, import_jsx_runtime69.jsxs)("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
+  /* @__PURE__ */ (0, import_jsx_runtime69.jsx)("rect", { x: "6", y: "2", width: "4", height: "7.5", rx: "2", fill: "currentColor" }),
+  /* @__PURE__ */ (0, import_jsx_runtime69.jsx)("path", { d: "M3.75 8a4.25 4.25 0 0 0 8.5 0M8 12.25V14", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round" })
 ] });
-var IconSend = () => /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("path", { d: "M8 13V3.75M4.25 7.5 8 3.75l3.75 3.75", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round" }) });
-var IconQueue = () => /* @__PURE__ */ (0, import_jsx_runtime67.jsxs)("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
-  /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("path", { d: "M3 4.5h10M3 8h10M3 11.5h5.5", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round" }),
-  /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("path", { d: "M11 10.25v2.5l1.75 1", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" })
+var IconSend = () => /* @__PURE__ */ (0, import_jsx_runtime69.jsx)("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime69.jsx)("path", { d: "M8 13V3.75M4.25 7.5 8 3.75l3.75 3.75", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round" }) });
+var IconQueue = () => /* @__PURE__ */ (0, import_jsx_runtime69.jsxs)("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
+  /* @__PURE__ */ (0, import_jsx_runtime69.jsx)("path", { d: "M3 4.5h10M3 8h10M3 11.5h5.5", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round" }),
+  /* @__PURE__ */ (0, import_jsx_runtime69.jsx)("path", { d: "M11 10.25v2.5l1.75 1", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" })
 ] });
-var IconStop = () => /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("svg", { width: "12", height: "12", viewBox: "0 0 16 16", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("rect", { x: "3.5", y: "3.5", width: "9", height: "9", rx: "1.5" }) });
+var IconStop = () => /* @__PURE__ */ (0, import_jsx_runtime69.jsx)("svg", { width: "12", height: "12", viewBox: "0 0 16 16", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime69.jsx)("rect", { x: "3.5", y: "3.5", width: "9", height: "9", rx: "1.5" }) });
 
 // src/composer/ComposerAddMenu.tsx
-var import_jsx_runtime68 = require("react/jsx-runtime");
+var import_jsx_runtime70 = require("react/jsx-runtime");
 function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = false, accept, onAddContext, webBrowsing, items }) {
   const { open, toggle, close, rootRef } = usePopover();
-  const fileRef = (0, import_react49.useRef)(null);
+  const fileRef = (0, import_react57.useRef)(null);
   if (!onAttachFiles && !onAddContext && !webBrowsing && !items?.length) return null;
   const onFiles = (e) => {
     const files = Array.from(e.target.files ?? []);
     if (files.length && onAttachFiles) onAttachFiles(files);
     e.target.value = "";
   };
-  const row = (key, icon, label, onClick, hint, active) => /* @__PURE__ */ (0, import_jsx_runtime68.jsxs)("button", { type: "button", role: "menuitem", className: `bf-pmenu__item${active ? " is-active" : ""}`, onClick, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime68.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: icon }),
-    /* @__PURE__ */ (0, import_jsx_runtime68.jsx)("span", { className: "bf-pmenu__lbl", children: label }),
-    hint != null && /* @__PURE__ */ (0, import_jsx_runtime68.jsx)("span", { className: "bf-pmenu__hint", children: hint })
+  const row = (key, icon, label, onClick, hint, active) => /* @__PURE__ */ (0, import_jsx_runtime70.jsxs)("button", { type: "button", role: "menuitem", className: `bf-pmenu__item${active ? " is-active" : ""}`, onClick, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime70.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: icon }),
+    /* @__PURE__ */ (0, import_jsx_runtime70.jsx)("span", { className: "bf-pmenu__lbl", children: label }),
+    hint != null && /* @__PURE__ */ (0, import_jsx_runtime70.jsx)("span", { className: "bf-pmenu__hint", children: hint })
   ] }, key);
-  return /* @__PURE__ */ (0, import_jsx_runtime68.jsxs)("div", { className: "bf-pmenu", ref: rootRef, children: [
-    onAttachFiles && /* @__PURE__ */ (0, import_jsx_runtime68.jsx)("input", { ref: fileRef, type: "file", multiple: true, hidden: true, accept, onChange: onFiles }),
-    /* @__PURE__ */ (0, import_jsx_runtime68.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime70.jsxs)("div", { className: "bf-pmenu", ref: rootRef, children: [
+    onAttachFiles && /* @__PURE__ */ (0, import_jsx_runtime70.jsx)("input", { ref: fileRef, type: "file", multiple: true, hidden: true, accept, onChange: onFiles }),
+    /* @__PURE__ */ (0, import_jsx_runtime70.jsx)(
       "button",
       {
         type: "button",
@@ -8842,10 +9333,10 @@ function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = 
         "aria-label": labels.add,
         disabled,
         onClick: toggle,
-        children: /* @__PURE__ */ (0, import_jsx_runtime68.jsx)(IconPlus, {})
+        children: /* @__PURE__ */ (0, import_jsx_runtime70.jsx)(IconPlus, {})
       }
     ),
-    open && /* @__PURE__ */ (0, import_jsx_runtime68.jsxs)("div", { className: "bf-pmenu__pop", role: "menu", children: [
+    open && /* @__PURE__ */ (0, import_jsx_runtime70.jsxs)("div", { className: "bf-pmenu__pop", role: "menu", children: [
       onAttachFiles && row("upload", "\u{1F4BB}", uploading ? labels.uploading : labels.upload, () => {
         close();
         if (!uploading) fileRef.current?.click();
@@ -8864,7 +9355,7 @@ function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = 
 }
 
 // src/composer/ComposerTrailingButton.tsx
-var import_jsx_runtime69 = require("react/jsx-runtime");
+var import_jsx_runtime71 = require("react/jsx-runtime");
 function queueShortcutKeys(nav = typeof navigator === "undefined" ? void 0 : navigator) {
   const platform = nav?.userAgentData?.platform || nav?.platform || "";
   return /mac|iphone|ipad/i.test(platform) ? "\u2325+Enter" : "Alt+Enter";
@@ -8882,7 +9373,7 @@ function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, 
   });
   if (action === "voice") {
     const label2 = dictation.recording ? labels.stopDictation : labels.dictate;
-    return /* @__PURE__ */ (0, import_jsx_runtime69.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime71.jsx)(
       "button",
       {
         type: "button",
@@ -8892,49 +9383,49 @@ function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, 
         "aria-pressed": dictation.recording,
         disabled,
         onClick: dictation.recording ? dictation.stopVoice : dictation.startVoice,
-        children: /* @__PURE__ */ (0, import_jsx_runtime69.jsx)(IconMic, {})
+        children: /* @__PURE__ */ (0, import_jsx_runtime71.jsx)(IconMic, {})
       }
     );
   }
   if (action === "stop") {
-    return /* @__PURE__ */ (0, import_jsx_runtime69.jsx)("button", { type: "button", className: "bf-cmp-iconbtn bf-cmp-iconbtn--stop", onClick: onStop, title: labels.stop, "aria-label": labels.stop, children: /* @__PURE__ */ (0, import_jsx_runtime69.jsx)(IconStop, {}) });
+    return /* @__PURE__ */ (0, import_jsx_runtime71.jsx)("button", { type: "button", className: "bf-cmp-iconbtn bf-cmp-iconbtn--stop", onClick: onStop, title: labels.stop, "aria-label": labels.stop, children: /* @__PURE__ */ (0, import_jsx_runtime71.jsx)(IconStop, {}) });
   }
   const label = running ? labels.queueSend : labels.send;
-  const send = /* @__PURE__ */ (0, import_jsx_runtime69.jsx)("button", { type: "submit", className: "bf-cmp-iconbtn bf-cmp-iconbtn--send", onClick: (e) => {
+  const send = /* @__PURE__ */ (0, import_jsx_runtime71.jsx)("button", { type: "submit", className: "bf-cmp-iconbtn bf-cmp-iconbtn--send", onClick: (e) => {
     e.preventDefault();
     onSend();
-  }, disabled: !canSubmit || disabled, title: label, "aria-label": label, children: /* @__PURE__ */ (0, import_jsx_runtime69.jsx)(IconSend, {}) });
+  }, disabled: !canSubmit || disabled, title: label, "aria-label": label, children: /* @__PURE__ */ (0, import_jsx_runtime71.jsx)(IconSend, {}) });
   if (!(running && onQueue && canSubmit)) return send;
   const queueLabel = labels.queueAfter(queueShortcutKeys());
-  return /* @__PURE__ */ (0, import_jsx_runtime69.jsxs)(import_jsx_runtime69.Fragment, { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime69.jsxs)("button", { type: "button", className: "bf-cmp-queuebtn", onClick: onQueue, disabled, title: queueLabel, "aria-label": queueLabel, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime69.jsx)(IconQueue, {}),
-      /* @__PURE__ */ (0, import_jsx_runtime69.jsx)("span", { className: "bf-cmp-queuebtn__text", children: labels.queueAfterShort })
+  return /* @__PURE__ */ (0, import_jsx_runtime71.jsxs)(import_jsx_runtime71.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime71.jsxs)("button", { type: "button", className: "bf-cmp-queuebtn", onClick: onQueue, disabled, title: queueLabel, "aria-label": queueLabel, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime71.jsx)(IconQueue, {}),
+      /* @__PURE__ */ (0, import_jsx_runtime71.jsx)("span", { className: "bf-cmp-queuebtn__text", children: labels.queueAfterShort })
     ] }),
     send
   ] });
 }
 
 // src/composer/AttachmentChips.tsx
-var import_jsx_runtime70 = require("react/jsx-runtime");
+var import_jsx_runtime72 = require("react/jsx-runtime");
 function AttachmentChips({ items, onRemove, labels }) {
   if (items.length === 0) return null;
-  return /* @__PURE__ */ (0, import_jsx_runtime70.jsx)("div", { className: "bf-cmp-attachments", children: items.map((a) => /* @__PURE__ */ (0, import_jsx_runtime70.jsxs)("span", { className: "bf-cmp-chip", children: [
-    a.imageUrl && /* @__PURE__ */ (0, import_jsx_runtime70.jsx)("img", { src: a.imageUrl, alt: "", className: "bf-cmp-chip__thumb" }),
-    /* @__PURE__ */ (0, import_jsx_runtime70.jsx)("span", { className: "bf-cmp-chip__name", children: a.name }),
-    /* @__PURE__ */ (0, import_jsx_runtime70.jsx)("button", { type: "button", className: "bf-cmp-chip__x", onClick: () => onRemove(a.key), "aria-label": `${labels.remove} ${a.name}`, children: "\xD7" })
+  return /* @__PURE__ */ (0, import_jsx_runtime72.jsx)("div", { className: "bf-cmp-attachments", children: items.map((a) => /* @__PURE__ */ (0, import_jsx_runtime72.jsxs)("span", { className: "bf-cmp-chip", children: [
+    a.imageUrl && /* @__PURE__ */ (0, import_jsx_runtime72.jsx)("img", { src: a.imageUrl, alt: "", className: "bf-cmp-chip__thumb" }),
+    /* @__PURE__ */ (0, import_jsx_runtime72.jsx)("span", { className: "bf-cmp-chip__name", children: a.name }),
+    /* @__PURE__ */ (0, import_jsx_runtime72.jsx)("button", { type: "button", className: "bf-cmp-chip__x", onClick: () => onRemove(a.key), "aria-label": `${labels.remove} ${a.name}`, children: "\xD7" })
   ] }, a.key)) });
 }
 
 // src/composer/composerOptions.ts
-var import_builderforce_brain_embedded22 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded23 = require("@seanhogg/builderforce-brain-embedded");
 function composerOptionGroups(options, labels) {
   const { mode, memory, effort, thinking, model, inferenceMode, openMenu, autoMode, session } = options;
   const thinkingOn = thinking?.value ?? false;
   const modeGroup = mode ? {
     value: mode.value,
     onChange: (next) => mode.onChange(next),
-    choices: import_builderforce_brain_embedded22.CHAT_MODES.map((m) => ({ value: m, label: labels.modeLabel(m), hint: labels.modeHint(m), icon: import_builderforce_brain_embedded22.CHAT_MODE_ICON[m] }))
+    choices: import_builderforce_brain_embedded23.CHAT_MODES.map((m) => ({ value: m, label: labels.modeLabel(m), hint: labels.modeHint(m), icon: import_builderforce_brain_embedded23.CHAT_MODE_ICON[m] }))
   } : void 0;
   const memoryGroup = memory ? {
     enabled: memory.enabled,
@@ -8954,7 +9445,7 @@ function composerOptionGroups(options, labels) {
       // What a level REALLY costs, read from the shared effort table, so the copy can
       // never promise a budget the request does not send.
       describeEffort: (level) => {
-        const { maxTokens, thinkingBudgetTokens } = (0, import_builderforce_brain_embedded22.effortProfile)(level);
+        const { maxTokens, thinkingBudgetTokens } = (0, import_builderforce_brain_embedded23.effortProfile)(level);
         const base = labels.effortDesc(level, Math.max(maxTokens, effort.minAnswerTokens ?? 0));
         return thinkingOn ? `${base} ${labels.effortThinkingSuffix(thinkingBudgetTokens)}` : base;
       }
@@ -8962,12 +9453,62 @@ function composerOptionGroups(options, labels) {
     ...thinking ? {
       thinking: thinking.value,
       onThinkingChange: thinking.onChange,
-      describeThinking: (on) => on ? labels.thinkingOnDesc((0, import_builderforce_brain_embedded22.effortProfile)(effort?.value ?? "balanced").thinkingBudgetTokens) : labels.thinkingOffDesc
+      describeThinking: (on) => on ? labels.thinkingOnDesc((0, import_builderforce_brain_embedded23.effortProfile)(effort?.value ?? "balanced").thinkingBudgetTokens) : labels.thinkingOffDesc
     } : {},
     model,
     inferenceMode,
     openOn: openMenu
   };
+}
+
+// src/composer/ContextMeter.tsx
+var import_jsx_runtime73 = require("react/jsx-runtime");
+var R = 7;
+var C2 = 2 * Math.PI * R;
+function ContextMeter({ usage, labels, locale }) {
+  if (!usage) return null;
+  const used = formatTokens(usage.promptTokens, locale);
+  const window2 = usage.contextWindow;
+  if (!window2) {
+    const hint2 = fill(labels.contextMeterHintTokens, { used });
+    return /* @__PURE__ */ (0, import_jsx_runtime73.jsx)("span", { className: "bf-ctx-meter", title: hint2, "aria-label": hint2, role: "note", children: /* @__PURE__ */ (0, import_jsx_runtime73.jsx)("span", { className: "bf-ctx-meter__text", children: used }) });
+  }
+  const percent = Math.min(100, Math.round(usage.promptTokens / window2 * 100));
+  const shown = new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 }).format(percent / 100);
+  const hint = fill(labels.contextMeterHint, { used, limit: formatTokens(window2, locale), percent: shown });
+  const tone = percent >= 90 ? " bf-ctx-meter--full" : percent >= 70 ? " bf-ctx-meter--high" : "";
+  return /* @__PURE__ */ (0, import_jsx_runtime73.jsxs)(
+    "span",
+    {
+      className: `bf-ctx-meter${tone}`,
+      title: hint,
+      role: "meter",
+      "aria-label": hint,
+      "aria-valuemin": 0,
+      "aria-valuemax": 100,
+      "aria-valuenow": percent,
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime73.jsxs)("svg", { className: "bf-ctx-meter__ring", width: "16", height: "16", viewBox: "0 0 18 18", "aria-hidden": "true", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime73.jsx)("circle", { className: "bf-ctx-meter__track", cx: "9", cy: "9", r: R, fill: "none", strokeWidth: "2.5" }),
+          /* @__PURE__ */ (0, import_jsx_runtime73.jsx)(
+            "circle",
+            {
+              className: "bf-ctx-meter__fill",
+              cx: "9",
+              cy: "9",
+              r: R,
+              fill: "none",
+              strokeWidth: "2.5",
+              strokeLinecap: "round",
+              strokeDasharray: `${percent / 100 * C2} ${C2}`,
+              transform: "rotate(-90 9 9)"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime73.jsx)("span", { className: "bf-ctx-meter__text", children: shown })
+      ]
+    }
+  );
 }
 
 // src/composer/labels.ts
@@ -9002,7 +9543,9 @@ var DEFAULT_COMPOSER_LABELS = {
   })[level],
   effortThinkingSuffix: (thinking) => `Plus up to ${n(thinking)} thinking tokens.`,
   thinkingOnDesc: (budget) => `The model reasons before answering, with a ${n(budget)}-token thinking budget at this effort. Slower, better on hard problems.`,
-  thinkingOffDesc: "Off \u2014 the model answers directly. Turn on for a reasoning pass before the answer."
+  thinkingOffDesc: "Off \u2014 the model answers directly. Turn on for a reasoning pass before the answer.",
+  contextMeterHint: "Context: {used} of {limit} tokens on the last turn ({percent}). Older history is auto-compacted as it fills.",
+  contextMeterHintTokens: "Context: {used} tokens on the last turn. Older history is auto-compacted as it fills."
 };
 function composerLabels(overrides) {
   return overrides ? { ...DEFAULT_COMPOSER_LABELS, ...overrides } : DEFAULT_COMPOSER_LABELS;
@@ -9022,7 +9565,7 @@ function composerLabelsFrom(lookup, overrides) {
 }
 
 // src/composer/BrainComposer.tsx
-var import_jsx_runtime71 = require("react/jsx-runtime");
+var import_jsx_runtime74 = require("react/jsx-runtime");
 var NO_PARTICIPANTS = [];
 var NO_TICKETS = [];
 var noop = () => void 0;
@@ -9053,6 +9596,7 @@ function BrainComposer(props) {
     pickersDisabled = false,
     voice = false,
     context,
+    contextUsage,
     above,
     suggestions,
     below,
@@ -9061,13 +9605,13 @@ function BrainComposer(props) {
     className
   } = props;
   const labels = composerLabels(labelBundle?.composer);
-  const textareaRef = (0, import_react50.useRef)(null);
-  const valueRef = (0, import_react50.useRef)(value);
+  const textareaRef = (0, import_react58.useRef)(null);
+  const valueRef = (0, import_react58.useRef)(value);
   valueRef.current = value;
-  const getValue = (0, import_react50.useCallback)(() => valueRef.current, []);
-  const [focused, setFocused] = (0, import_react50.useState)(false);
-  const [dragging, setDragging] = (0, import_react50.useState)(false);
-  (0, import_react50.useEffect)(() => {
+  const getValue = (0, import_react58.useCallback)(() => valueRef.current, []);
+  const [focused, setFocused] = (0, import_react58.useState)(false);
+  const [dragging, setDragging] = (0, import_react58.useState)(false);
+  (0, import_react58.useEffect)(() => {
     if (focusToken == null) return;
     const el = textareaRef.current;
     if (!el) return;
@@ -9095,13 +9639,13 @@ function BrainComposer(props) {
   const canSubmit = value.trim().length > 0 && !disabled;
   const ownGate = useInferenceModeGate(options.inferenceMode);
   const gate = modeGate ?? ownGate;
-  const onSubmitRef = (0, import_react50.useRef)(onSubmit);
+  const onSubmitRef = (0, import_react58.useRef)(onSubmit);
   onSubmitRef.current = onSubmit;
   const submit = () => {
     if (!canSubmit) return;
     gate.request(() => onSubmitRef.current());
   };
-  const onQueueRef = (0, import_react50.useRef)(onQueue);
+  const onQueueRef = (0, import_react58.useRef)(onQueue);
   onQueueRef.current = onQueue;
   const queue = () => {
     const hold = onQueueRef.current;
@@ -9126,7 +9670,7 @@ function BrainComposer(props) {
     }
   };
   const groups = composerOptionGroups(options, labels);
-  const statusNode = account ? /* @__PURE__ */ (0, import_jsx_runtime71.jsx)(
+  const statusNode = account ? /* @__PURE__ */ (0, import_jsx_runtime74.jsx)(
     WorkStatusPanel,
     {
       request: account.request,
@@ -9136,9 +9680,10 @@ function BrainComposer(props) {
       onUpgrade: account.onUpgrade
     }
   ) : void 0;
+  const connectionsNode = account?.connections ? /* @__PURE__ */ (0, import_jsx_runtime74.jsx)(ConnectionsPanel, { connections: account.connections, labels: labelBundle?.connections }) : null;
   const spendTab = account ? {
     label: spendLabels(labelBundle?.spend).spendHeading,
-    content: /* @__PURE__ */ (0, import_jsx_runtime71.jsx)(
+    content: /* @__PURE__ */ (0, import_jsx_runtime74.jsx)(
       WorkSpendPanel,
       {
         request: account.request,
@@ -9148,18 +9693,18 @@ function BrainComposer(props) {
       }
     )
   } : void 0;
-  const chips = attachments ? /* @__PURE__ */ (0, import_jsx_runtime71.jsx)(AttachmentChips, { items: attachments.items, onRemove: attachments.onRemove, labels }) : null;
+  const chips = attachments ? /* @__PURE__ */ (0, import_jsx_runtime74.jsx)(AttachmentChips, { items: attachments.items, onRemove: attachments.onRemove, labels }) : null;
   const showSuggestions = !!suggestions?.items.length && !value.trim() && !running;
-  const modeQuestion = gate.asking ? /* @__PURE__ */ (0, import_jsx_runtime71.jsx)(InferenceModeFirstRun, { labels: promptOptionsLabels(labelBundle?.options), onChoose: gate.choose }) : null;
-  const aboveBox = modeQuestion || above || showSuggestions || attachments && attachments.items.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime71.jsxs)(import_jsx_runtime71.Fragment, { children: [
+  const modeQuestion = gate.asking ? /* @__PURE__ */ (0, import_jsx_runtime74.jsx)(InferenceModeFirstRun, { labels: promptOptionsLabels(labelBundle?.options), onChoose: gate.choose }) : null;
+  const aboveBox = modeQuestion || above || showSuggestions || attachments && attachments.items.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime74.jsxs)(import_jsx_runtime74.Fragment, { children: [
     modeQuestion,
     above,
-    showSuggestions && /* @__PURE__ */ (0, import_jsx_runtime71.jsx)(SuggestionRow, { items: suggestions.items, ariaLabel: suggestions.label }),
+    showSuggestions && /* @__PURE__ */ (0, import_jsx_runtime74.jsx)(SuggestionRow, { items: suggestions.items, ariaLabel: suggestions.label }),
     chips
   ] }) : void 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime71.jsxs)("div", { className: ["bf-cmp", className].filter(Boolean).join(" "), children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime74.jsxs)("div", { className: ["bf-cmp", className].filter(Boolean).join(" "), children: [
     blockedNotice,
-    /* @__PURE__ */ (0, import_jsx_runtime71.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime74.jsx)(
       PromptPanel,
       {
         active: focused || value.trim().length > 0,
@@ -9172,7 +9717,7 @@ function BrainComposer(props) {
         onDrop: attachments ? onDrop : void 0,
         overlay: ticket.open ? ticket.popup : mention.popup,
         status: aboveBox,
-        input: /* @__PURE__ */ (0, import_jsx_runtime71.jsx)(
+        input: /* @__PURE__ */ (0, import_jsx_runtime74.jsx)(
           "textarea",
           {
             ref: textareaRef,
@@ -9201,8 +9746,8 @@ function BrainComposer(props) {
             }
           }
         ),
-        actions: /* @__PURE__ */ (0, import_jsx_runtime71.jsxs)(import_jsx_runtime71.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime71.jsx)(
+        actions: /* @__PURE__ */ (0, import_jsx_runtime74.jsxs)(import_jsx_runtime74.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime74.jsx)(
             ComposerAddMenu,
             {
               labels,
@@ -9215,20 +9760,26 @@ function BrainComposer(props) {
               items: addMenuItems
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime71.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime74.jsx)(
             PromptOptionsMenu,
             {
               labels: labelBundle?.options,
               disabled,
               ...groups,
-              status: statusNode,
+              status: statusNode && /* @__PURE__ */ (0, import_jsx_runtime74.jsxs)(import_jsx_runtime74.Fragment, { children: [
+                statusNode,
+                connectionsNode
+              ] }),
               spend: spendTab,
               onAccountSettings
             }
           )
         ] }),
-        context: context ? /* @__PURE__ */ (0, import_jsx_runtime71.jsx)(import_jsx_runtime71.Fragment, { children: context }) : void 0,
-        primaryAction: /* @__PURE__ */ (0, import_jsx_runtime71.jsx)(
+        context: context || contextUsage ? /* @__PURE__ */ (0, import_jsx_runtime74.jsxs)(import_jsx_runtime74.Fragment, { children: [
+          context,
+          /* @__PURE__ */ (0, import_jsx_runtime74.jsx)(ContextMeter, { usage: contextUsage, labels, locale: account?.locale })
+        ] }) : void 0,
+        primaryAction: /* @__PURE__ */ (0, import_jsx_runtime74.jsx)(
           ComposerTrailingButton,
           {
             labels,
@@ -9248,14 +9799,14 @@ function BrainComposer(props) {
 }
 
 // src/composer/useChatMemorySwitch.ts
-var import_react51 = require("react");
+var import_react59 = require("react");
 function useChatMemorySwitch(opts) {
   const { chatId, serverValue, persist } = opts;
-  const [enabled, setLocal] = (0, import_react51.useState)(serverValue ?? true);
-  (0, import_react51.useEffect)(() => {
+  const [enabled, setLocal] = (0, import_react59.useState)(serverValue ?? true);
+  (0, import_react59.useEffect)(() => {
     setLocal(serverValue ?? true);
   }, [chatId, serverValue]);
-  const setEnabled = (0, import_react51.useCallback)((on) => {
+  const setEnabled = (0, import_react59.useCallback)((on) => {
     setLocal(on);
     if (chatId == null) return;
     persist(chatId, on).catch(() => setLocal(!on));
@@ -9273,18 +9824,19 @@ function brainComposerLabelsFrom(lookup, overrides) {
     options: { ...promptOptionsLabelsFrom(scopedLookup(lookup, "options")), ...overrides?.options },
     status: workStatusLabelsFrom(scopedLookup(lookup, "status")),
     spend: spendLabelsFrom(scopedLookup(lookup, "spend")),
+    connections: connectionsLabelsFrom(scopedLookup(lookup, "connections")),
     mention: stringsFrom(DEFAULT_MENTION_LABELS, scopedLookup(lookup, "mention")),
     ticket: stringsFrom(DEFAULT_TICKET_TAG_LABELS, scopedLookup(lookup, "ticket"))
   };
 }
 
 // src/composer/composerModel.ts
-var import_builderforce_brain_embedded23 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded24 = require("@seanhogg/builderforce-brain-embedded");
 function composerCatalogLoaded(catalog) {
-  return catalog != null && catalog !== import_builderforce_brain_embedded23.EMPTY_GATEWAY_MODEL_OPTIONS;
+  return catalog != null && catalog !== import_builderforce_brain_embedded24.EMPTY_GATEWAY_MODEL_OPTIONS;
 }
 function withLocalModels(catalog, local) {
-  const base = catalog ?? import_builderforce_brain_embedded23.EMPTY_GATEWAY_MODEL_OPTIONS;
+  const base = catalog ?? import_builderforce_brain_embedded24.EMPTY_GATEWAY_MODEL_OPTIONS;
   if (!local || local.length === 0) return base;
   return { ...base, options: { ...base.options, local } };
 }
@@ -9316,6 +9868,7 @@ function composerModel(input) {
   ChatHistoryList,
   ChatHistoryRow,
   ChatTicketsPanel,
+  ConnectionsPanel,
   ContextChip,
   CopyButton,
   DEFAULT_ASK_USER_LABELS,
@@ -9323,6 +9876,7 @@ function composerModel(input) {
   DEFAULT_CHAT_HISTORY_LABELS,
   DEFAULT_CHAT_TICKETS_LABELS,
   DEFAULT_COMPOSER_LABELS,
+  DEFAULT_CONNECTIONS_LABELS,
   DEFAULT_EVERMIND_LABELS,
   DEFAULT_INFERENCE_MODE_LABELS,
   DEFAULT_INLINE_CHAT_TITLE_LABELS,
@@ -9415,6 +9969,7 @@ function composerModel(input) {
   composerLabels,
   composerLabelsFrom,
   composerModel,
+  connectionsLabelsFrom,
   createChatTicketsRestAdapter,
   createEvermindRestAdapter,
   displayModelName,
@@ -9491,6 +10046,7 @@ function composerModel(input) {
   useMentionAutocomplete,
   useModelFallback,
   usePopover,
+  useProviderReconnect,
   useRecipientChoice,
   useRovingRadioGroup,
   useTicketAutocomplete,

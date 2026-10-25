@@ -10,7 +10,7 @@
  * with no duplicate user row) is pinned in brain-embedded's `useBrainConversation.test.tsx`.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getRunSnapshot, resetBrainRunStore, startRun, transcriptSeedFrom, type BrainStreamFn, type StreamChatResult } from '@seanhogg/builderforce-brain-embedded';
+import { getRunSnapshot, resetBrainRunStore, startRun, transcriptSeedOf, type BrainStreamFn, type StreamChatResult } from '@seanhogg/builderforce-brain-embedded';
 import { createLocalFirstPersistence } from '../persistence/localFirstPersistence';
 import { createRovrBrainPersistence } from '../persistence/rovrBrainPersistence';
 import { createMemoryRecords } from '../store/records';
@@ -71,7 +71,7 @@ function setup(turns: Turn[], gate: (name: string) => boolean = () => false) {
       resolvedSystemPrompt: '',
       stream,
       persistence,
-      seed: transcriptSeedFrom(prior),
+      seed: transcriptSeedOf(prior).messages,
       userTurn: text,
       ...(await host.prepareRun(id)),
     });

@@ -7,9 +7,11 @@ import {
   type LocalRecord,
 } from '@builderforce/local-first';
 import type { PriceBook } from '@builderforce/model-catalog';
+import { summarizeTranscript, type SummaryCompletion } from '@seanhogg/builderforce-memory/working';
 import { combineSpendSavings, type SpendSavingsSummary } from '@builderforce/spend-contract';
 import type { BrainPersistenceAdapter } from './config';
 import type { BrainChat, BrainMessage } from './types';
+import { transcriptSeedOf } from './transcriptSeed';
 import { boundServerId } from './localChat/chatIdentity';
 import { journalWrite } from './localChat/journal';
 import { liveRecords, type ChatValue, type MessageValue } from './localChat/records';
@@ -19,7 +21,16 @@ export interface LocalBrainPersistenceOptions {
   store: LocalFirstStore;
   deviceId: string;
   destination?: EntityDestination;
+  /** Why "Consolidate" / "Fork" cannot run here — no {@link summarize} port. */
   summarizeUnavailable: string;
+  /**
+   * The model call a chat summary is written with (the ONE transcript summarizer,
+   * `@seanhogg/builderforce-memory/working`). Omitted: summarizing reports
+   * {@link summarizeUnavailable}.
+   */
+  summarize?: SummaryCompletion;
+  /** Why a summary came back empty or failed (the model call errored). */
+  summarizeFailed?: string;
   /**
    * The account destination chats bind into right now (PRD 36) — what `serverId` is
    * projected from. Omitted or undefined (signed out): every chat reads as unbound.
@@ -58,6 +69,12 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
 
   const chats = (tx: LocalFirstTransaction) => liveRecords<ChatValue>(tx, 'chat', options.deviceId);
   const messages = (tx: LocalFirstTransaction) => liveRecords<MessageValue>(tx, 'message', options.deviceId);
+  /** One chat's messages in `seq` order. */
+  const chatMessages = (chatId: number): Promise<BrainMessage[]> => options.store.read(async (tx) =>
+    (await messages(tx))
+      .filter((row) => row.payload.chatId === chatId)
+      .sort((a, b) => a.payload.message.seq - b.payload.message.seq)
+      .map((row) => row.payload.message));
   const chatFor = async (tx: LocalFirstTransaction, id: number): Promise<LocalRecord<ChatValue>> => {
     const chat = (await chats(tx)).find((row) => row.payload.chat.id === id);
     if (!chat) throw new Error(`No such local chat: ${id}`);
@@ -227,16 +244,19 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
         return { archived: true };
       });
     },
-    summarizeChat: async () => ({ error: options.summarizeUnavailable }),
+    async summarizeChat(chatId) {
+      if (!options.summarize) return { error: options.summarizeUnavailable };
+      // What the model would be seeded with — from the last consolidation, no step rows.
+      const seed = transcriptSeedOf(await chatMessages(chatId)).messages;
+      // Under two turns there is nothing to consolidate: an empty summary says so.
+      if (seed.length < 2) return { summary: '' };
+      const summary = await summarizeTranscript(options.summarize, seed);
+      return summary ? { summary } : { error: options.summarizeFailed ?? options.summarizeUnavailable };
+    },
     ...(options.bindChat ? { bindChat: options.bindChat } : {}),
     async getMessages(chatId, limit) {
-      return options.store.read(async (tx) => {
-        const all = (await messages(tx))
-          .filter((row) => row.payload.chatId === chatId)
-          .sort((a, b) => a.payload.message.seq - b.payload.message.seq)
-          .map((row) => row.payload.message);
-        return limit != null ? all.slice(-limit) : all;
-      });
+      const all = await chatMessages(chatId);
+      return limit != null ? all.slice(-limit) : all;
     },
     subscribeMessages: (_chatId, onChanged) => options.store.subscribe(onChanged),
     async sendMessages(chatId, input) {

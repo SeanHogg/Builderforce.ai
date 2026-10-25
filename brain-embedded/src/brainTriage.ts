@@ -12,6 +12,7 @@
 import { announcesUntakenAction } from '@builderforce/agent-stall';
 import { turnInterruption } from './finishReason';
 import type { BrainMessage } from './types';
+import { isModelReply } from './modelReply';
 import { traceWithPersistedSteps } from './persistedSteps';
 import { computeRunProgress, formatRunProgress, runProgressVerdict, type RunProgress } from './runProgress';
 import { formatModelScorecard, formatModelTurnLog, modelScorecard, modelTurnLog, type ModelScore, type ModelTurn } from './modelScorecard';
@@ -20,7 +21,7 @@ import { parseMessageProvenance } from './provenance';
 import { STOPPED_TURN_STEP } from './stoppedTurn';
 import { isCodeChangeTool } from './localWorkspaceTools';
 import { MAX_TOOL_RESULT_CHARS, READ_FILE_TOOL } from './toolResultBudget';
-import { HISTORY_TOKEN_BUDGET } from './workingTranscript';
+import { HISTORY_TOKEN_BUDGET } from '@seanhogg/builderforce-memory/working';
 
 /**
  * A prompt at or past this many tokens is context PRESSURE.
@@ -176,7 +177,7 @@ export function detectUnbackedWriteClaim(events: BrainTraceEvent[], messages: Br
     (e) => e.category === 'tool' && isFileWriteTool(e.label) && !e.isError && !isFailedToolResult(e.result),
   );
   if (wroteOk) return false;
-  return messages.some((m) => m.role === 'assistant' && typeof m.content === 'string' && FILE_SAVE_CLAIM.test(m.content));
+  return messages.some((m) => isModelReply(m) && typeof m.content === 'string' && FILE_SAVE_CLAIM.test(m.content));
 }
 
 /**
@@ -193,7 +194,7 @@ export function detectUnbackedTicketClaim(events: BrainTraceEvent[], messages: B
     (e) => e.category === 'tool' && isTicketWriteTool(e.label) && !e.isError && !isFailedToolResult(e.result),
   );
   if (filedOk) return false;
-  return messages.some((m) => m.role === 'assistant' && typeof m.content === 'string' && TICKET_CLAIM.test(m.content));
+  return messages.some((m) => isModelReply(m) && typeof m.content === 'string' && TICKET_CLAIM.test(m.content));
 }
 
 /**
@@ -218,7 +219,7 @@ export function detectUnbackedTicketClaim(events: BrainTraceEvent[], messages: B
 export function detectAnnouncedButUnmadeToolCall(events: BrainTraceEvent[], messages: BrainMessage[]): boolean {
   if (events.some((e) => e.category === 'tool')) return false;
   return messages.some(
-    (m) => m.role === 'assistant' && typeof m.content === 'string' && announcesUntakenAction(m.content),
+    (m) => isModelReply(m) && typeof m.content === 'string' && announcesUntakenAction(m.content),
   );
 }
 

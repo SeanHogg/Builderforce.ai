@@ -133,6 +133,7 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
           // theirs, captioned.
           <div className="gb-messages">
             <BrainTimeline
+              conversationKey={s.activeChatId}
               messages={conv.messages}
               trace={[]}
               streamingText={conv.streamingText || room.streamingPeer?.text || ''}
@@ -168,6 +169,7 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
               <GuestCapWall limit={s.limit} shared={s.inRoom} refusal={s.refusedWall} />
             ) : (
               <ChatInput
+                contextUsage={conv.contextUsage}
                 value={s.input}
                 onChange={s.setInput}
                 onSubmit={() => { void s.submit(); }}
