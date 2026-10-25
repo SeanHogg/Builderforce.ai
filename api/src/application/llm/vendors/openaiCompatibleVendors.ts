@@ -51,6 +51,8 @@ interface VendorSpec {
   flagships?: { agentic: string; chat: string; gatedCoders?: readonly string[] };
   /** Override the OpenAI `max_tokens` field name (rare). */
   maxTokensField?: 'max_tokens' | 'max_completion_tokens';
+  /** The provider chooses sampling per model: no temperature/top_p is sent. */
+  providerSampling?: boolean;
   /** Extra static headers (rare). */
   headers?: Record<string, string>;
   noStream?: boolean;
@@ -146,6 +148,9 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     // Kimi asks third-party coding clients to preserve their real identity. Do
     // not spoof kimi-code-cli/Claude/Codex; identify this gateway truthfully.
     headers: { 'User-Agent': 'Builderforce.ai' },
+    // K3 accepts only `temperature: 1` (400 "invalid temperature" otherwise, verified
+    // 2026-10-25); Kimi applies each model's own default when none is sent.
+    providerSampling: true,
     // Kimi's edge returns an HTML 403 to the Cloudflare Workers egress BEFORE the
     // API reads the key — the same request from an ordinary machine gets a clean
     // JSON answer. So this vendor runs from the tenant's own connected runtime when
@@ -346,6 +351,7 @@ export const openAICompatibleModules: ReadonlyArray<VendorModule> = SPECS.map((s
       return { id, label: `${id} (${spec.brand})`, brand: spec.brand, tier, ...(capabilities ? { capabilities: [...capabilities] } : {}) };
     }),
     ...(spec.maxTokensField ? { maxTokensField: spec.maxTokensField } : {}),
+    ...(spec.providerSampling ? { providerSampling: true } : {}),
     ...(spec.headers ? { headers: spec.headers } : {}),
     ...(spec.noStream ? { noStream: spec.noStream } : {}),
     ...(spec.pseudoStream ? { pseudoStream: spec.pseudoStream } : {}),

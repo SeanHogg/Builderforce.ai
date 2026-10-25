@@ -99,6 +99,9 @@ export interface LocalRuntime {
    *  the CLIENT must make the call — Kimi Code, whose edge refuses the gateway. A gateway
    *  ref on that vendor is dispatched from the user's machine (`clientPinOf`). */
   gatewayVendor?: string;
+  /** The provider chooses sampling per model, so a client sends no `temperature` —
+   *  Kimi K3 accepts only `1` and 400s anything else. */
+  providerSampling?: true;
 }
 
 /**
@@ -164,7 +167,7 @@ export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
     tools: 'unknown',
     reach: 'page',
   },
-  { id: 'kimi-code', automaticRank: Number.POSITIVE_INFINITY, label: 'Kimi Code', onDevice: false, catalog: 'declared', tools: 'all', reach: 'http', gatewayVendor: 'kimi-code' },
+  { id: 'kimi-code', automaticRank: Number.POSITIVE_INFINITY, label: 'Kimi Code', onDevice: false, catalog: 'declared', tools: 'all', reach: 'http', gatewayVendor: 'kimi-code', providerSampling: true },
 ];
 
 /** The runtimes reached over HTTP — what a prober, a settings form or an endpoint

@@ -2013,6 +2013,18 @@ interface BrainTransport {
      * to the global `fetch` for the browser/web app.
      */
     fetch?: (input: string, init: RequestInit) => Promise<Response>;
+    /**
+     * `openai`: the transport reaches a provider's plain OpenAI route, not the gateway
+     * (`localTransport`). The gateway-only fields — `strict`, `routingMode`,
+     * `excludeModels`, `role`, `arcStage`, `reasoning`, `metadata` — are never sent: the
+     * gateway strips them before any vendor (`STANDARD_BODY_FIELDS`), and a provider may
+     * reject them outright (Kimi Code 400s `metadata` with numeric values). Absent =
+     * the gateway.
+     */
+    wire?: 'gateway' | 'openai';
+    /** The provider chooses sampling per model, so no `temperature` is sent — Kimi K3
+     *  accepts only `1` and 400s our default (the runtime registry's `providerSampling`). */
+    providerSampling?: boolean;
 }
 /** OpenAI function-tool spec (the `tools[]` entries sent to the model). */
 interface BrainToolSpec {
@@ -4207,9 +4219,14 @@ type StreamFn$1 = (opts: Omit<StreamChatOptions, 'transport'>, handlers?: Stream
  * is NOT running, and the cloud fallback is waiting. So the refusal is re-thrown as a
  * plain error — deliberately with NO `cause`, because the retry walks the cause chain
  * for a connect-failure code and would find it there.
+ *
+ * The body is the plain OpenAI one (`wire: 'openai'`): no gateway-only field reaches a
+ * runtime. `runtime`, when known, lets the registry's `providerSampling` drop the
+ * temperature for a provider that picks it per model (Kimi Code).
  */
 declare function localTransport(endpoint: LocalEndpoint, fetchImpl?: LocalFetch, options?: {
     failFast?: boolean;
+    runtime?: LocalRuntimeId;
 }): BrainTransport;
 /**
  * Packs a call for the LOCAL model about to take it — a host builds one with brain-

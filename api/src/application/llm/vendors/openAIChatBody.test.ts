@@ -30,6 +30,14 @@ describe('buildOpenAIChatBody', () => {
     expect(body.response_format).toEqual({ type: 'json_object' }); // extraBody spread
   });
 
+  // Kimi Code's K3 400s anything but `temperature: 1` (verified 2026-10-25).
+  it('providerSampling sends no temperature / top_p', () => {
+    const body = buildOpenAIChatBody(base({ model: 'k3', temperature: 0.3, topP: 0.9, maxTokens: 64 }), { providerSampling: true });
+    expect('temperature' in body).toBe(false);
+    expect('top_p' in body).toBe(false);
+    expect(body.max_tokens).toBe(64);
+  });
+
   it('omits optional fields when unset', () => {
     const body = buildOpenAIChatBody(base());
     expect('tools' in body).toBe(false);

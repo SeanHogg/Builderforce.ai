@@ -51,6 +51,18 @@ export interface BrainTransport {
    * to the global `fetch` for the browser/web app.
    */
   fetch?: (input: string, init: RequestInit) => Promise<Response>;
+  /**
+   * `openai`: the transport reaches a provider's plain OpenAI route, not the gateway
+   * (`localTransport`). The gateway-only fields — `strict`, `routingMode`,
+   * `excludeModels`, `role`, `arcStage`, `reasoning`, `metadata` — are never sent: the
+   * gateway strips them before any vendor (`STANDARD_BODY_FIELDS`), and a provider may
+   * reject them outright (Kimi Code 400s `metadata` with numeric values). Absent =
+   * the gateway.
+   */
+  wire?: 'gateway' | 'openai';
+  /** The provider chooses sampling per model, so no `temperature` is sent — Kimi K3
+   *  accepts only `1` and 400s our default (the runtime registry's `providerSampling`). */
+  providerSampling?: boolean;
 }
 
 /** OpenAI function-tool spec (the `tools[]` entries sent to the model). */
@@ -483,9 +495,10 @@ async function runStreamChatCompletion(
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
+  const gateway = transport.wire !== 'openai';
   const body: Record<string, unknown> = {
     messages: opts.messages,
-    temperature: opts.temperature ?? 0.3,
+    ...(transport.providerSampling ? {} : { temperature: opts.temperature ?? 0.3 }),
     max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
     stream: true,
     // Ask the gateway to emit a trailing `usage` chunk (OpenAI stream_options).
@@ -503,12 +516,14 @@ async function runStreamChatCompletion(
   // unpinned chat has always meant on every other surface.
   const model = opts.model ?? transport.defaultModel;
   if (model) body.model = model;
-  if (model && opts.modelStrict) body.strict = true;
-  if (opts.routingMode) body.routingMode = opts.routingMode;
-  if (opts.excludeModels && opts.excludeModels.length > 0) body.excludeModels = opts.excludeModels;
   if (opts.prompt_cache_key) body.prompt_cache_key = opts.prompt_cache_key;
-  if (opts.role) body.role = opts.role;
-  if (opts.arcStage) body.arcStage = opts.arcStage;
+  if (gateway) {
+    if (model && opts.modelStrict) body.strict = true;
+    if (opts.routingMode) body.routingMode = opts.routingMode;
+    if (opts.excludeModels && opts.excludeModels.length > 0) body.excludeModels = opts.excludeModels;
+    if (opts.role) body.role = opts.role;
+    if (opts.arcStage) body.arcStage = opts.arcStage;
+  }
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
     body.tool_choice = opts.tool_choice ?? 'auto';
@@ -516,14 +531,14 @@ async function runStreamChatCompletion(
   // Reasoning intent only when actually asked for: `off`/absent omits the key so
   // the body is byte-identical to a pre-feature request (and an older gateway that
   // doesn't know the field never sees it).
-  if (opts.reasoning && opts.reasoning.level !== 'off') {
+  if (gateway && opts.reasoning && opts.reasoning.level !== 'off') {
     body.reasoning = { level: opts.reasoning.level };
   }
   // Caller provenance for the gateway's audit emit. Same "omit when empty"
   // discipline as `reasoning`: undefined-valued fields are dropped, and a
   // metadata object with nothing left in it never reaches the wire — so an
   // anonymous/unsaved run's body is byte-identical to a pre-feature request.
-  if (opts.metadata) {
+  if (gateway && opts.metadata) {
     const meta = Object.fromEntries(
       Object.entries(opts.metadata).filter(([, v]) => v !== undefined && v !== null),
     );

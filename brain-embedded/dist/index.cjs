@@ -1940,9 +1940,10 @@ async function runStreamChatCompletion(opts, handlers, request) {
   const token = transport.getToken();
   const headers = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
+  const gateway = transport.wire !== "openai";
   const body = {
     messages: opts.messages,
-    temperature: opts.temperature ?? 0.3,
+    ...transport.providerSampling ? {} : { temperature: opts.temperature ?? 0.3 },
     max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
     stream: true,
     // Ask the gateway to emit a trailing `usage` chunk (OpenAI stream_options).
@@ -1951,20 +1952,22 @@ async function runStreamChatCompletion(opts, handlers, request) {
   };
   const model = opts.model ?? transport.defaultModel;
   if (model) body.model = model;
-  if (model && opts.modelStrict) body.strict = true;
-  if (opts.routingMode) body.routingMode = opts.routingMode;
-  if (opts.excludeModels && opts.excludeModels.length > 0) body.excludeModels = opts.excludeModels;
   if (opts.prompt_cache_key) body.prompt_cache_key = opts.prompt_cache_key;
-  if (opts.role) body.role = opts.role;
-  if (opts.arcStage) body.arcStage = opts.arcStage;
+  if (gateway) {
+    if (model && opts.modelStrict) body.strict = true;
+    if (opts.routingMode) body.routingMode = opts.routingMode;
+    if (opts.excludeModels && opts.excludeModels.length > 0) body.excludeModels = opts.excludeModels;
+    if (opts.role) body.role = opts.role;
+    if (opts.arcStage) body.arcStage = opts.arcStage;
+  }
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
     body.tool_choice = opts.tool_choice ?? "auto";
   }
-  if (opts.reasoning && opts.reasoning.level !== "off") {
+  if (gateway && opts.reasoning && opts.reasoning.level !== "off") {
     body.reasoning = { level: opts.reasoning.level };
   }
-  if (opts.metadata) {
+  if (gateway && opts.metadata) {
     const meta = Object.fromEntries(
       Object.entries(opts.metadata).filter(([, v]) => v !== void 0 && v !== null)
     );
@@ -2482,7 +2485,7 @@ var PRICE_SNAPSHOT = {
   "~deepseek/deepseek-v4-flash-latest": [422e-10, 1763e-10],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [161e-9, 16e-6],
+  "~moonshotai/kimi-latest": [226e-9, 16e-6],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -5279,7 +5282,7 @@ var LOCAL_RUNTIMES = [
     tools: "unknown",
     reach: "page"
   },
-  { id: "kimi-code", automaticRank: Number.POSITIVE_INFINITY, label: "Kimi Code", onDevice: false, catalog: "declared", tools: "all", reach: "http" }
+  { id: "kimi-code", automaticRank: Number.POSITIVE_INFINITY, label: "Kimi Code", onDevice: false, catalog: "declared", tools: "all", reach: "http", gatewayVendor: "kimi-code", providerSampling: true }
 ];
 var HTTP_LOCAL_RUNTIMES = LOCAL_RUNTIMES.filter((r) => r.reach === "http");
 var LOCAL_RUNTIME_IDS = LOCAL_RUNTIMES.map((r) => r.id);
@@ -5293,6 +5296,7 @@ var HOST_FALLBACK_RUNTIMES = LOCAL_RUNTIMES.filter((r) => r.fallbackReach === "h
 
 // ../packages/local-inference/src/ref.ts
 var LOCAL_MODEL_PREFIX = "local/";
+var GATEWAY_DIRECT_PREFIX = "direct/";
 function formatLocalModelRef(runtime, model) {
   return `${LOCAL_MODEL_PREFIX}${runtime}/${model}`;
 }
@@ -5305,6 +5309,17 @@ function parseLocalModelRef(ref) {
   const model = rest.slice(slash + 1);
   if (!model || !isLocalRuntimeId(provider)) return null;
   return { provider, model };
+}
+function clientPinOf(ref) {
+  const local = parseLocalModelRef(ref);
+  if (local || !ref || !ref.startsWith(GATEWAY_DIRECT_PREFIX)) return local;
+  const rest = ref.slice(GATEWAY_DIRECT_PREFIX.length);
+  const slash = rest.indexOf("/");
+  if (slash <= 0) return null;
+  const vendor = rest.slice(0, slash);
+  const model = rest.slice(slash + 1);
+  const runtime = LOCAL_RUNTIMES.find((r) => r.gatewayVendor === vendor);
+  return runtime && model ? { provider: runtime.id, model } : null;
 }
 function isLocalModelRef(ref) {
   return parseLocalModelRef(ref) !== null;
@@ -9598,6 +9613,8 @@ function localTransport(endpoint, fetchImpl = globalFetch, options = {}) {
   return {
     baseUrl: normalizeLocalBaseUrl(endpoint.baseUrl),
     getToken: () => endpoint.token ?? null,
+    wire: "openai",
+    ...options.runtime && localRuntime(options.runtime).providerSampling ? { providerSampling: true } : {},
     fetch: async (input, init) => {
       try {
         return await fetchImpl(rewriteToLocalUrl(input), init);
@@ -9631,19 +9648,21 @@ async function streamOnLocal(target, opts, handlers, transport, messages) {
   return { ...served, resolvedModel: target.ref, resolvedVendor: `local/${target.provider}` };
 }
 function createLocalStream(endpoint, model, fetchImpl, route = {}) {
-  const transport = localTransport(endpoint, fetchImpl);
-  const probes = route.probes ?? [];
   const pin = parseLocalModelRef(route.ref);
+  const transport = localTransport(endpoint, fetchImpl, pin ? { runtime: pin.provider } : {});
+  const probes = route.probes ?? [];
   const pinned = route.ref && pin ? { ref: route.ref, provider: pin.provider, model, endpoint } : null;
   return async (opts, handlers = {}) => {
     const asked = opts.model;
-    if (asked && asked !== route.ref && asked !== model) {
-      if (isLocalModelRef(asked)) {
-        const parsed = parseLocalModelRef(asked);
-        const sameRuntime = pin && parsed && parsed.provider === pin.provider ? { ref: asked, provider: parsed.provider, model: parsed.model, endpoint } : null;
-        const target = probedTarget(asked, probes) ?? sameRuntime;
+    const parsed = clientPinOf(asked);
+    const isPin = !!pin && !!parsed && parsed.provider === pin.provider && parsed.model === model;
+    if (asked && asked !== route.ref && asked !== model && !isPin) {
+      if (parsed) {
+        const ref = formatLocalModelRef(parsed.provider, parsed.model);
+        const sameRuntime = pin && parsed.provider === pin.provider ? { ref, provider: parsed.provider, model: parsed.model, endpoint } : null;
+        const target = probedTarget(ref, probes) ?? sameRuntime;
         if (target) {
-          const t = target.endpoint === endpoint ? transport : localTransport(target.endpoint, fetchImpl);
+          const t = target.endpoint === endpoint ? transport : localTransport(target.endpoint, fetchImpl, { runtime: target.provider });
           const messages2 = await fittedFor(target, opts, route.fit, probes);
           return streamOnLocal(target, opts, committingHandlers(handlers, () => void 0, target.ref), t, messages2);
         }
@@ -9698,7 +9717,7 @@ function createLocalFirstStream(input) {
       }
       const local = probedTarget(opts.model, input.probes);
       if (local) {
-        const transport = localTransport(local.endpoint, input.fetch);
+        const transport = localTransport(local.endpoint, input.fetch, { runtime: local.provider });
         const messages = await fittedFor(local, opts, input.fit, input.probes);
         return streamOnLocal(local, opts, committingHandlers(handlers, () => void 0, local.ref), transport, messages);
       }
@@ -9715,7 +9734,7 @@ function createLocalFirstStream(input) {
       plan,
       async (attempt, commit) => {
         if (attempt.kind === "cloud") return input.cloud(routed, committingHandlers(handlers, commit));
-        const transport = localTransport(attempt.endpoint, input.fetch, { failFast: true });
+        const transport = localTransport(attempt.endpoint, input.fetch, { failFast: true, runtime: attempt.provider });
         const messages = await fittedFor(attempt, routed, input.fit, input.probes);
         return streamOnLocal(attempt, routed, committingHandlers(handlers, commit, attempt.ref), transport, messages);
       },

@@ -170,6 +170,34 @@ describe('streamChatCompletion transport injection', () => {
     expect(body).toMatchObject({ model: 'direct/kimi-code/kimi-k2.5', strict: true });
   });
 
+  // Kimi Code answered both of these with a 400 (verified against the live API
+  // 2026-10-25): numeric `metadata` → "Invalid request Error", and K3 → "invalid
+  // temperature: only 1 is allowed". A provider's own route gets the plain OpenAI body.
+  it('sends a provider route (wire: openai) no gateway-only field', async () => {
+    const fetchMock = vi.fn(async () => sseResponse(['data: [DONE]\n']));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamChatCompletion({
+      messages: [], transport: { ...baseTransport, wire: 'openai' }, model: 'k3', modelStrict: true,
+      routingMode: 'byo_pool', excludeModels: ['x'], role: 'code', arcStage: 'build',
+      reasoning: { level: 'high' }, metadata: { projectId: 11, chatId: 5091 }, prompt_cache_key: 'chat-5091',
+    } as Parameters<typeof streamChatCompletion>[0]);
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    for (const key of ['strict', 'routingMode', 'excludeModels', 'role', 'arcStage', 'reasoning', 'metadata']) {
+      expect(body).not.toHaveProperty(key);
+    }
+    expect(body).toMatchObject({ model: 'k3', temperature: 0.3, stream: true, prompt_cache_key: 'chat-5091' });
+  });
+
+  it('sends no temperature when the provider chooses sampling', async () => {
+    const fetchMock = vi.fn(async () => sseResponse(['data: [DONE]\n']));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamChatCompletion({ messages: [], transport: { ...baseTransport, wire: 'openai', providerSampling: true }, model: 'k3', temperature: 0.7 });
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body).not.toHaveProperty('temperature');
+  });
+
   it('distinguishes ordered BYO Pool from gateway Auto on the wire', async () => {
     const fetchMock = vi.fn(async () => sseResponse(['data: [DONE]\n']));
     vi.stubGlobal('fetch', fetchMock);

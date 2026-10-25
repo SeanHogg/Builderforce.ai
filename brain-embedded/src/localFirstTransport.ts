@@ -15,10 +15,13 @@
  */
 
 import {
+  clientPinOf,
+  formatLocalModelRef,
   isLocalModelRef,
   localAuthHeaders,
   localChatCompletionsUrl,
   localFirstPlan,
+  localRuntime,
   normalizeLocalBaseUrl,
   parseLocalModelRef,
   rewriteToLocalUrl,
@@ -67,15 +70,21 @@ const globalFetch: LocalFetch = (input, init) => fetch(input, init);
  * is NOT running, and the cloud fallback is waiting. So the refusal is re-thrown as a
  * plain error — deliberately with NO `cause`, because the retry walks the cause chain
  * for a connect-failure code and would find it there.
+ *
+ * The body is the plain OpenAI one (`wire: 'openai'`): no gateway-only field reaches a
+ * runtime. `runtime`, when known, lets the registry's `providerSampling` drop the
+ * temperature for a provider that picks it per model (Kimi Code).
  */
 export function localTransport(
   endpoint: LocalEndpoint,
   fetchImpl: LocalFetch = globalFetch,
-  options: { failFast?: boolean } = {},
+  options: { failFast?: boolean; runtime?: LocalRuntimeId } = {},
 ): BrainTransport {
   return {
     baseUrl: normalizeLocalBaseUrl(endpoint.baseUrl),
     getToken: () => endpoint.token ?? null,
+    wire: 'openai',
+    ...(options.runtime && localRuntime(options.runtime).providerSampling ? { providerSampling: true } : {}),
     fetch: async (input, init) => {
       try {
         return await fetchImpl(rewriteToLocalUrl(input), init);
@@ -175,21 +184,26 @@ export function createLocalStream(
   fetchImpl?: LocalFetch,
   route: LocalStreamRoute = {},
 ): StreamFn {
-  const transport = localTransport(endpoint, fetchImpl);
-  const probes = route.probes ?? [];
   const pin = parseLocalModelRef(route.ref);
+  const transport = localTransport(endpoint, fetchImpl, pin ? { runtime: pin.provider } : {});
+  const probes = route.probes ?? [];
   const pinned: LocalTarget | null = route.ref && pin ? { ref: route.ref, provider: pin.provider, model, endpoint } : null;
   return async (opts, handlers = {}) => {
     const asked = opts.model;
-    if (asked && asked !== route.ref && asked !== model) {
-      if (isLocalModelRef(asked)) {
-        const parsed = parseLocalModelRef(asked);
-        const sameRuntime: LocalTarget | null = pin && parsed && parsed.provider === pin.provider
-          ? { ref: asked, provider: parsed.provider, model: parsed.model, endpoint }
+    // `clientPinOf`: the pick may name the pin in the gateway's spelling
+    // (`direct/kimi-code/k3` for `local/kimi-code/k3`) — that IS the pin, not a model to
+    // send to the gateway.
+    const parsed = clientPinOf(asked);
+    const isPin = !!pin && !!parsed && parsed.provider === pin.provider && parsed.model === model;
+    if (asked && asked !== route.ref && asked !== model && !isPin) {
+      if (parsed) {
+        const ref = formatLocalModelRef(parsed.provider, parsed.model);
+        const sameRuntime: LocalTarget | null = pin && parsed.provider === pin.provider
+          ? { ref, provider: parsed.provider, model: parsed.model, endpoint }
           : null;
-        const target = probedTarget(asked, probes) ?? sameRuntime;
+        const target = probedTarget(ref, probes) ?? sameRuntime;
         if (target) {
-          const t = target.endpoint === endpoint ? transport : localTransport(target.endpoint, fetchImpl);
+          const t = target.endpoint === endpoint ? transport : localTransport(target.endpoint, fetchImpl, { runtime: target.provider });
           const messages = await fittedFor(target, opts, route.fit, probes);
           return streamOnLocal(target, opts, committingHandlers(handlers, () => undefined, target.ref), t, messages);
         }
@@ -328,7 +342,7 @@ export function createLocalFirstStream(input: LocalFirstStreamInput): StreamFn {
       }
       const local = probedTarget(opts.model, input.probes);
       if (local) {
-        const transport = localTransport(local.endpoint, input.fetch);
+        const transport = localTransport(local.endpoint, input.fetch, { runtime: local.provider });
         const messages = await fittedFor(local, opts, input.fit, input.probes);
         return streamOnLocal(local, opts, committingHandlers(handlers, () => undefined, local.ref), transport, messages);
       }
@@ -347,7 +361,7 @@ export function createLocalFirstStream(input: LocalFirstStreamInput): StreamFn {
       plan,
       async (attempt, commit) => {
         if (attempt.kind === 'cloud') return input.cloud!(routed, committingHandlers(handlers, commit));
-        const transport = localTransport(attempt.endpoint, input.fetch, { failFast: true });
+        const transport = localTransport(attempt.endpoint, input.fetch, { failFast: true, runtime: attempt.provider });
         const messages = await fittedFor(attempt, routed, input.fit, input.probes);
         return streamOnLocal(attempt, routed, committingHandlers(handlers, commit, attempt.ref), transport, messages);
       },

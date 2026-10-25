@@ -73,6 +73,8 @@ export interface OpenAICompatibleVendorOptions {
   headers?: Record<string, string>;
   /** Output-token field name when the provider deviates from `max_tokens`. */
   maxTokensField?: 'max_tokens' | 'max_completion_tokens';
+  /** The provider chooses sampling per model — see `OpenAIChatBodyOptions.providerSampling`. */
+  providerSampling?: boolean;
   /** Transform the passthrough `extraBody` — e.g. strip draft-07 JSON-Schema
    *  keywords a strict vendor validator (Cerebras) rejects. */
   transformExtra?: (extraBody: Record<string, unknown> | undefined) => Record<string, unknown> | undefined;
@@ -218,6 +220,7 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
     catalog = [],
     defaultTier = 'STANDARD',
     maxTokensField,
+    providerSampling = false,
     autoRoute = false,
     noStream = false,
     pseudoStream = false,
@@ -232,10 +235,11 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
     ?? (schemaDialect ? (extra: Record<string, unknown> | undefined) => sanitizeExtraBodyForVendor(id, extra) : undefined);
 
   const catalogById = new Map(catalog.map((m) => [m.id, m]));
-  const bodyOpts = (maxTokensField || transformExtra)
+  const bodyOpts = (maxTokensField || transformExtra || providerSampling)
     ? {
         ...(maxTokensField ? { maxTokensField } : {}),
         ...(transformExtra ? { transformExtra } : {}),
+        ...(providerSampling ? { providerSampling } : {}),
       }
     : undefined;
   const buildBody = (params: VendorCallParams): Record<string, unknown> =>

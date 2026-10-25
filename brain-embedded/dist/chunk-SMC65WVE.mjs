@@ -55,7 +55,7 @@ var LOCAL_RUNTIMES = [
     tools: "unknown",
     reach: "page"
   },
-  { id: "kimi-code", automaticRank: Number.POSITIVE_INFINITY, label: "Kimi Code", onDevice: false, catalog: "declared", tools: "all", reach: "http" }
+  { id: "kimi-code", automaticRank: Number.POSITIVE_INFINITY, label: "Kimi Code", onDevice: false, catalog: "declared", tools: "all", reach: "http", gatewayVendor: "kimi-code", providerSampling: true }
 ];
 var HTTP_LOCAL_RUNTIMES = LOCAL_RUNTIMES.filter((r) => r.reach === "http");
 var LOCAL_RUNTIME_IDS = LOCAL_RUNTIMES.map((r) => r.id);
@@ -69,6 +69,7 @@ var HOST_FALLBACK_RUNTIMES = LOCAL_RUNTIMES.filter((r) => r.fallbackReach === "h
 
 // ../packages/local-inference/src/ref.ts
 var LOCAL_MODEL_PREFIX = "local/";
+var GATEWAY_DIRECT_PREFIX = "direct/";
 function formatLocalModelRef(runtime, model) {
   return `${LOCAL_MODEL_PREFIX}${runtime}/${model}`;
 }
@@ -81,6 +82,17 @@ function parseLocalModelRef(ref) {
   const model = rest.slice(slash + 1);
   if (!model || !isLocalRuntimeId(provider)) return null;
   return { provider, model };
+}
+function clientPinOf(ref) {
+  const local = parseLocalModelRef(ref);
+  if (local || !ref || !ref.startsWith(GATEWAY_DIRECT_PREFIX)) return local;
+  const rest = ref.slice(GATEWAY_DIRECT_PREFIX.length);
+  const slash = rest.indexOf("/");
+  if (slash <= 0) return null;
+  const vendor = rest.slice(0, slash);
+  const model = rest.slice(slash + 1);
+  const runtime = LOCAL_RUNTIMES.find((r) => r.gatewayVendor === vendor);
+  return runtime && model ? { provider: runtime.id, model } : null;
 }
 function isLocalModelRef(ref) {
   return parseLocalModelRef(ref) !== null;
@@ -1278,6 +1290,7 @@ export {
   localRuntime,
   formatLocalModelRef,
   parseLocalModelRef,
+  clientPinOf,
   isLocalModelRef,
   runsOnDevice,
   normalizeLocalBaseUrl,
@@ -1324,4 +1337,4 @@ export {
   createHfModelStore,
   catalogProbe
 };
-//# sourceMappingURL=chunk-F5PXU2EH.mjs.map
+//# sourceMappingURL=chunk-SMC65WVE.mjs.map

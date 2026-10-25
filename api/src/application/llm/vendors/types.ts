@@ -1153,6 +1153,9 @@ export interface OpenAIChatBodyOptions {
    *  ids, where re-sending a large coding prefix every turn would otherwise pay full
    *  price instead of the ~0.1x cache-read rate. */
   noCache?: boolean;
+  /** The provider chooses sampling per model: no `temperature` / `top_p` is sent. Kimi
+   *  Code's K3 accepts only `temperature: 1` and 400s every other value. */
+  providerSampling?: boolean;
 }
 
 export function buildOpenAIChatBody(params: VendorCallParams, opts?: OpenAIChatBodyOptions): Record<string, unknown> {
@@ -1178,8 +1181,8 @@ export function buildOpenAIChatBody(params: VendorCallParams, opts?: OpenAIChatB
     ...(tools ? { tools } : {}),
     ...(toolChoice ? { tool_choice: toolChoice } : {}),
     ...(maxTokens != null ? { [mtField]: maxTokens } : {}),
-    ...(temperature != null ? { temperature } : {}),
-    ...(topP != null ? { top_p: topP } : {}),
+    ...(temperature != null && !opts?.providerSampling ? { temperature } : {}),
+    ...(topP != null && !opts?.providerSampling ? { top_p: topP } : {}),
     ...extra,
     // After extra: a vendor transform must not drop the cache key, and must not
     // be able to clobber the caller's key with a different one.

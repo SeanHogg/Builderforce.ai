@@ -289,4 +289,38 @@ data: [DONE]
     expect(models).toEqual(['qwen3:8b']);
     expect(result.resolvedModel).toBe('local/ollama/qwen3:8b');
   });
+
+  // Chat #5091: the call carries the pick in the gateway spelling while the pin is the
+  // local ref. Under Hybrid (a cloud present) that went to the gateway, which cannot reach
+  // Kimi; then Kimi 400'd the body. Both verified against the live Kimi API.
+  describe('a Kimi Code pin', () => {
+    const kimi = { baseUrl: 'https://api.kimi.com/coding/v1', token: 'kc-token' };
+
+    it('serves a call naming the pin as direct/kimi-code/… on the pin, not the gateway', async () => {
+      const bodies: Record<string, unknown>[] = [];
+      const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
+        bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+        return sse('ok');
+      });
+      const cloud = vi.fn<BrainStreamFn>(async () => ({ text: 'from-cloud', toolCalls: [], finishReason: 'stop' }));
+      const stream = createLocalStream(kimi, 'k3', fetchImpl, { ref: 'local/kimi-code/k3', cloud });
+      const result = await stream({ ...hello, model: 'direct/kimi-code/k3', modelStrict: true, metadata: { projectId: 11 } } as Parameters<typeof stream>[0]);
+      expect(cloud).not.toHaveBeenCalled();
+      expect(result.resolvedModel).toBe('local/kimi-code/k3');
+      // The body Kimi accepts: its own model id, no temperature (K3 takes only 1), no
+      // gateway-only field.
+      expect(bodies[0]).toMatchObject({ model: 'k3' });
+      for (const key of ['temperature', 'metadata', 'strict']) expect(bodies[0]).not.toHaveProperty(key);
+    });
+
+    it('keeps the temperature for an on-device runtime', async () => {
+      const bodies: Record<string, unknown>[] = [];
+      const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
+        bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+        return sse('hi');
+      });
+      await createLocalStream(endpoint, 'gemma:2b', fetchImpl, { ref: 'local/ollama/gemma:2b' })({ ...hello, model: 'local/ollama/gemma:2b' });
+      expect(bodies[0]).toHaveProperty('temperature');
+    });
+  });
 });
