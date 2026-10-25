@@ -45,7 +45,7 @@ import { boundedDelete, type PurgeStatement } from './boundedPurge';
 import { rollUpToolAudit, TOOL_AUDIT_ROLLUP_AFTER_DAYS } from './toolAuditRollup';
 import { rollUpLlmUsage, LLM_USAGE_ROLLUP_AFTER_DAYS } from './llmUsageRollup';
 import { VISITOR_RETENTION_DAYS, purgeVisitorActivity } from '../marketing/visitorActivity';
-import { BOUNDED_TELEMETRY_TABLES, EXPIRED_CREDENTIAL_TABLES } from './sweptTablesBounded';
+import { BOUNDED_TELEMETRY_TABLES, EXPIRED_CREDENTIAL_TABLES, OPERATIONAL } from './sweptTablesBounded';
 import { DAY_MS, MINUTE_MS } from '../../domain/shared/time';
 import { SYNC_CHANGE_RETENTION_DAYS, SYNC_EVENT_RETENTION_DAYS } from '../../domain/sync/syncRetention';
 import {
@@ -92,17 +92,16 @@ export interface SweptTable {
   /** Physical relation name. This is the identifier `VACUUM` and `pg_class` use, so
    *  it must match the table's `pgTable(...)` name, not the Drizzle export. */
   relation: string;
-  /** Every endpoint the relation physically exists on.
+  /** The endpoints this relation is swept on — purge, rollup, redact and vacuum all
+   *  iterate it.
    *
-   *  USUALLY ONE. The exceptions are tables whose writers moved to the transactional
-   *  endpoint: `llm_*` and `api_error_log` when it was split out (2026-07-13), and the
-   *  agent-run telemetry (`tool_audit_*`) on 2026-10-03, grouped
-   *  with the usage ledger by when it is written. The relations were never dropped from
-   *  primary, so a copy went on sitting there with no writer AND no sweep — 35 MB of
-   *  rows frozen at the date of the split, invisible to a registry that could name only
-   *  one endpoint per table. Declaring the endpoints as a LIST is what closes that hole:
-   *  purge and vacuum both iterate it, so a dual-resident relation cannot be swept on
-   *  one endpoint and forgotten on the other. */
+   *  ONE per relation. Logs, audit, telemetry and the usage ledger are
+   *  {@link OPERATIONAL}: their writers moved there (`llm_*`/`api_error_log` 2026-07-13,
+   *  run telemetry 2026-10-03) and the core residue was copied and purged on 2026-10-25.
+   *  They used to be listed on `primary` too, and that is what kept core holding
+   *  telemetry: the rollup step INSERTS, so sweeping core's copy wrote fresh rows into
+   *  it every night. Core's empty copies remain only so a single-database environment
+   *  (local, tests) has the tables; there `transactional` resolves to core anyway. */
   connections: readonly SweptConnection[];
   /** Days of history kept before older rows are purged. */
   retentionDays: number;
@@ -221,7 +220,7 @@ export interface SweptTable {
 export const SWEPT_TABLES: readonly SweptTable[] = [
   {
     relation: 'llm_traces',
-    connections: ['transactional', 'primary'],
+    connections: OPERATIONAL,
     retentionDays: 30,
     pressureFloorDays: 7,
     // The one relation here that is UPDATEd after insert (a stream finalises its row),
@@ -261,7 +260,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'llm_usage_log',
-    connections: ['transactional', 'primary'],
+    connections: OPERATIONAL,
     retentionDays: 1200,
     // NO pressure floor, deliberately. This is the billing ledger, and "the database is
     // getting full" is never a reason to shorten how long the platform can answer what a
@@ -291,7 +290,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'ingestion_usage_log',
-    connections: ['transactional', 'primary'],
+    connections: OPERATIONAL,
     retentionDays: ROLLUP_DAYS,
     pressureFloorDays: 45,
     rationale:
@@ -305,7 +304,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'llm_failover_log',
-    connections: ['transactional', 'primary'],
+    connections: OPERATIONAL,
     retentionDays: 30,
     pressureFloorDays: 7,
     rationale: 'Routing failover events, read only while diagnosing a live routing incident.',
@@ -313,7 +312,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'llm_health_probes',
-    connections: ['transactional', 'primary'],
+    connections: OPERATIONAL,
     retentionDays: 180,
     pressureFloorDays: 30,
     rationale: 'Vendor health history — the long window is the point; it is what makes a vendor trend readable.',
@@ -321,7 +320,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'api_error_log',
-    connections: ['transactional', 'primary'],
+    connections: OPERATIONAL,
     retentionDays: 30,
     pressureFloorDays: 7,
     rationale:
@@ -362,7 +361,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'tool_audit_events',
-    connections: ['transactional', 'primary'],
+    connections: OPERATIONAL,
     retentionDays: 90,
     rationale:
       'Agent tool-audit timeline. The 90d window is NOT arbitrary and must not be shortened to '
@@ -412,7 +411,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'tool_audit_daily',
-    connections: ['transactional', 'primary'],
+    connections: OPERATIONAL,
     retentionDays: ROLLUP_DAYS,
     rationale:
       'The compliance record `tool_audit_events` becomes at 45 days. Retained far LONGER than its '
@@ -500,7 +499,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'activity_log',
-    connections: ['transactional', 'primary'],
+    connections: OPERATIONAL,
     retentionDays: VISITOR_RETENTION_DAYS,
     // No pressure floor and NOT reclaimable: see `reclaimable` above, and note that the
     // window below is not really this table's — it belongs to the visitor rows the
@@ -532,7 +531,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   // visitor in it, so an age window is the whole policy.
   {
     relation: 'replay_route_daily',
-    connections: ['transactional', 'primary'],
+    connections: OPERATIONAL,
     retentionDays: ROLLUP_DAYS,
     pressureFloorDays: 90,
     rationale: ROLLUP_RATIONALE,
@@ -540,7 +539,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'replay_breakdown_daily',
-    connections: ['transactional', 'primary'],
+    connections: OPERATIONAL,
     retentionDays: ROLLUP_DAYS,
     pressureFloorDays: 90,
     rationale: ROLLUP_RATIONALE,
@@ -548,7 +547,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'replay_heat_daily',
-    connections: ['transactional', 'primary'],
+    connections: OPERATIONAL,
     retentionDays: ROLLUP_DAYS,
     pressureFloorDays: 90,
     rationale: ROLLUP_RATIONALE,
@@ -556,7 +555,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'replay_vitals_daily',
-    connections: ['transactional', 'primary'],
+    connections: OPERATIONAL,
     retentionDays: ROLLUP_DAYS,
     pressureFloorDays: 90,
     rationale: ROLLUP_RATIONALE,
@@ -564,7 +563,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'replay_issue_daily',
-    connections: ['transactional', 'primary'],
+    connections: OPERATIONAL,
     retentionDays: ROLLUP_DAYS,
     pressureFloorDays: 90,
     rationale: 'Insights issue sessions per day (13 months, D3). Child of replay_issues; aged by its own day.',
@@ -572,14 +571,14 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'replay_issues',
-    connections: ['transactional', 'primary'],
+    connections: OPERATIONAL,
     retentionDays: ROLLUP_DAYS,
     rationale: 'Insights issue groups not seen for 13 months — their daily rows are gone, so nothing could rank them.',
     purge: (db, cutoff) => boundedDelete(db, replayIssues, acrossTenants(replayIssues, 'scheduled_sweep', lt(replayIssues.lastSeenAt, cutoff))),
   },
   {
     relation: 'replay_recordings',
-    connections: ['transactional', 'primary'],
+    connections: OPERATIONAL,
     // The BACKSTOP at the longest site window (90 days). Each site's own window
     // (30 by default) is applied by `replayRetention.purgeExpiredRecordings`, which
     // also sweeps the R2 bytes; this entry catches rows whose site no longer exists
@@ -590,7 +589,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'replay_live',
-    connections: ['transactional', 'primary'],
+    connections: OPERATIONAL,
     // A one-day window is the registry's smallest unit; presence is only "live" for
     // five minutes, so the purge moves the cutoff up to now − 5 min (ingest also
     // purges each site's stale rows once a minute).

@@ -71,4 +71,14 @@ describe('siblingDatabase / siblingDatabaseOf', () => {
     const core = buildDatabase(BASE_ENV);
     expect(siblingDatabase(undefined, core, 'apps')).toBe(core);
   });
+
+  it('siblingDatabase with no env still reaches a BOUND sibling through the env the core handle remembers', () => {
+    // The leak this pins: `recordActivity(undefined, db)` used to write the operational
+    // `activity_log` row into core's copy because a missing env meant "use core".
+    const env = { ...BASE_ENV, NEON_TRANSACTIONAL_DATABASE_URL: 'postgres://user:pass@ops2.neon.tech/ops' } as Env;
+    const core = buildDatabase(env);
+    const operational = siblingDatabase(undefined, core, 'operational');
+    expect(operational).not.toBe(core);
+    expect(operational).toBe(siblingDatabaseOf(core, 'operational'));
+  });
 });

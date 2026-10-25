@@ -147,7 +147,11 @@ export function buildTransactionalDatabase(env: Env): Db {
 const siblingHandles = new WeakMap<object, Map<SiblingDatabase, Db>>();
 
 /** The sibling `which`, or `core` itself when that sibling is not split out here. */
-export function siblingDatabase(env: Env | undefined, core: Db, which: SiblingDatabase): Db {
+export function siblingDatabase(envIn: Env | undefined, core: Db, which: SiblingDatabase): Db {
+  // A caller with no env in reach still holds a core handle that remembers its own.
+  // Returning `core` on a missing env sent every such write (activity rows, telemetry)
+  // to the core database's copy of an operational table instead of the operational one.
+  const env = envIn ?? handleEnv.get(core);
   if (!env || !hasSiblingDatabase(env, which)) return core;
   let byRole = siblingHandles.get(core);
   if (!byRole) {

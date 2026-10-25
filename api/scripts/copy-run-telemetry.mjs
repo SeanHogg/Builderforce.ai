@@ -74,7 +74,10 @@ const TABLES = [
   { name: 'execution_claims', key: ['id'], serial: false },
   { name: 'execution_claim_evidence', key: ['claim_id', 'tool_audit_event_id'], serial: false },
   { name: 'usage_snapshots', key: ['id'], serial: true },
-  { name: 'run_context_state', key: ['id'], serial: true },
+  // `verifyOn`: the business key (uq_run_context_state_subject). The operational endpoint was
+  // written to before the copy, so a subject it already holds keeps ITS newer row and the core
+  // row is skipped by ON CONFLICT — present by subject, never by id.
+  { name: 'run_context_state', key: ['id'], serial: true, verifyOn: ['tenant_id', 'scope', 'subject_key'] },
   { name: 'run_model_outcomes', key: ['id'], serial: true },
   {
     name: 'llm_usage_log', key: ['id'], serial: false, remapId: true,
@@ -154,14 +157,15 @@ async function advanceSequence(name) {
 }
 
 /** Every core row must already be on the operational endpoint before core is emptied. */
-async function missingOnOps({ name, key, remapId, match }) {
+async function missingOnOps({ name, key, remapId, match, verifyOn }) {
   let cursor = null;
   let missing = 0;
   const keyList = key.map(ident).join(', ');
   // A remapped table has no shared key to compare, so a core row is "present" when an
-  // operational row matches it on every business column.
-  const compareCols = remapId ? match : key;
-  const selectList = (remapId ? [...new Set([...key, ...match])] : key).map(ident).join(', ');
+  // operational row matches it on every business column; a table with a business unique
+  // key is present when the operational endpoint holds a row for that key.
+  const compareCols = remapId ? match : verifyOn ?? key;
+  const selectList = [...new Set([...key, ...compareCols])].map(ident).join(', ');
   for (;;) {
     const after = cursor == null ? '' : `WHERE (${keyList}) > (${key.map((_, i) => `$${i + 1}`).join(', ')})`;
     const [{ batch }] = await core(

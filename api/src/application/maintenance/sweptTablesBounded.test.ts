@@ -38,10 +38,11 @@ describe('bounded telemetry retention entries', () => {
     expect(BOUNDED_TELEMETRY_TABLES.map((t) => t.relation).sort()).toEqual(Object.keys(TELEMETRY_WINDOWS).sort());
   });
 
-  it('puts the run-telemetry tables on BOTH endpoints and everything else on core only', () => {
-    const both = ['execution_claims', 'execution_claim_evidence', 'usage_snapshots', 'run_model_outcomes', 'replay_visit_summaries', 'replay_releases', 'llm_batch_jobs'];
+  it('sweeps the run-telemetry tables on the operational endpoint ONLY (never core) and everything else on core', () => {
+    // Sweeping core's empty copy is how core kept collecting telemetry: a rollup inserts.
+    const operational = ['execution_claims', 'execution_claim_evidence', 'usage_snapshots', 'run_model_outcomes', 'replay_visit_summaries', 'replay_releases', 'llm_batch_jobs'];
     for (const relation of Object.keys(TELEMETRY_WINDOWS)) {
-      expect([...byName(relation).connections].sort(), relation).toEqual(both.includes(relation) ? ['primary', 'transactional'] : ['primary']);
+      expect([...byName(relation).connections], relation).toEqual(operational.includes(relation) ? ['transactional'] : ['primary']);
     }
   });
 

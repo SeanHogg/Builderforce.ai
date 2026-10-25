@@ -4620,6 +4620,8 @@ var S2 = {
   // The header row: ticket health on the left, the sort control on the right. Wraps
   // on a narrow panel rather than pushing the select off the edge.
   headerRow: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, minWidth: 0 },
+  // The drawer toggles, wrapping on a narrow panel; the cost pill closes the row on the right.
+  actionRow: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", minWidth: 0 },
   ticketsHeader: { display: "flex", alignItems: "center", gap: 8, padding: "2px 4px", flex: "1 1 auto", minWidth: 0, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", color: V.text },
   caret: { display: "inline-block", fontSize: 11, color: V.muted, transition: "transform 120ms ease" },
   ticketsCount: { fontSize: 12, fontWeight: 600, color: V.text },
@@ -5229,8 +5231,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       /* @__PURE__ */ jsx51("span", { style: S2.originalRequestLabel, children: labels.originalRequest }),
       /* @__PURE__ */ jsx51("span", { style: S2.originalRequestText, title: labels.originalRequestText(originalRequest), children: originalRequest })
     ] }),
-    (tickets.length > 0 || hasSpendToShow(spend)) && /* @__PURE__ */ jsxs49("div", { style: S2.headerRow, children: [
-      tickets.length > 0 && /* @__PURE__ */ jsxs49(
+    tickets.length > 0 && /* @__PURE__ */ jsxs49("div", { style: S2.headerRow, children: [
+      /* @__PURE__ */ jsxs49(
         "button",
         {
           type: "button",
@@ -5264,8 +5266,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
             /* @__PURE__ */ jsx51("option", { value: "linked", style: S2.option, children: labels.sortLinked })
           ]
         }
-      ),
-      /* @__PURE__ */ jsx51(SpendPill, { summary: spend, labels: spendLabels2, locale })
+      )
     ] }),
     !isCollapsed && /* @__PURE__ */ jsx51("div", { style: S2.ticketGrid, children: tickets.length === 0 ? /* @__PURE__ */ jsx51("span", { style: S2.muted, children: labels.none }) : displayedTickets.map((tk) => {
       const key = `${tk.kind}:${tk.ref}`;
@@ -5331,7 +5332,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         ] }) : null
       ] }, c.chatId)) })
     ] }),
-    /* @__PURE__ */ jsxs49("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
+    /* @__PURE__ */ jsxs49("div", { style: S2.actionRow, children: [
       /* @__PURE__ */ jsxs49("button", { type: "button", onClick: () => togglePanel("link"), style: S2.pill(panel === "link"), children: [
         "\uFF0B ",
         labels.link
@@ -5374,7 +5375,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         },
         ext.key
       )),
-      msg && /* @__PURE__ */ jsx51("span", { style: { fontSize: 12, color: V.accent, alignSelf: "center" }, children: msg })
+      msg && /* @__PURE__ */ jsx51("span", { style: { fontSize: 12, color: V.accent, alignSelf: "center" }, children: msg }),
+      /* @__PURE__ */ jsx51(SpendPill, { summary: spend, labels: spendLabels2, locale })
     ] }),
     openExtension && /* @__PURE__ */ jsx51("div", { style: S2.drawer, children: openExtension.render() }),
     panel === "link" && /* @__PURE__ */ jsx51(LinkForm, { search: adapter.searchTickets, projectId, existing: tickets, labels, onLink: async (kind, ref, linkType) => {

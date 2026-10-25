@@ -21,6 +21,7 @@ import {
   type StakeholderReviewState,
 } from './stakeholderAlignment.types';
 import { HOUR_MS } from '../../domain/shared/time';
+import { activityDatabase } from '../activity/activityLog';
 
 const REVIEW_WINDOW_HOURS = 48;
 
@@ -442,7 +443,7 @@ export async function runStakeholderReminderSweep(db: Db, now = new Date()) {
 /** One multi-row insert per chunk instead of one round-trip per event. */
 async function insertActivityEvents(db: Db, events: Array<typeof activityLog.$inferInsert>): Promise<void> {
   for (let i = 0; i < events.length; i += ACTIVITY_INSERT_CHUNK) {
-    await db.insert(activityLog).values(events.slice(i, i + ACTIVITY_INSERT_CHUNK)).onConflictDoNothing({ target: activityLog.eventKey });
+    await activityDatabase(undefined, db).insert(activityLog).values(events.slice(i, i + ACTIVITY_INSERT_CHUNK)).onConflictDoNothing({ target: activityLog.eventKey });
   }
 }
 

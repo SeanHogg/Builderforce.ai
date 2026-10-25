@@ -72,8 +72,8 @@ import {
 } from '../../infrastructure/database/schema';
 
 const CORE: readonly SweptConnection[] = ['primary'];
-/** Tables whose writers moved to the operational endpoint but whose core copy was never dropped. */
-const BOTH: readonly SweptConnection[] = ['transactional', 'primary'];
+/** Logs, audit and telemetry: swept on the operational endpoint only (see `SweptTable.connections`). */
+export const OPERATIONAL: readonly SweptConnection[] = ['transactional'];
 
 /**
  * SOC 2 evidence window — same 90 days as `tool_audit_events` (sweptTables.ts). Claims
@@ -132,9 +132,9 @@ export const BOUNDED_TELEMETRY_TABLES: readonly SweptTable[] = [
   // ── Immutable audit (DELETE only when SET LOCAL app.retention = 'on') ──
   // 90 days = tool_audit_events SOC 2 window. Claims cite those events (RESTRICT);
   // purging claims (CASCADE evidence) unblocks the trail. UPDATE stays forbidden.
-  entry({ relation: 'execution_claims', connections: BOTH, table: executionClaims, tenanted: executionClaims, column: executionClaims.createdAt, days: AUDIT_RETENTION_DAYS, reclaimable: false, gated: true,
+  entry({ relation: 'execution_claims', connections: OPERATIONAL, table: executionClaims, tenanted: executionClaims, column: executionClaims.createdAt, days: AUDIT_RETENTION_DAYS, reclaimable: false, gated: true,
     rationale: 'SOC 2 execution claims. 90-day window matches tool_audit_events; evidence CASCADE. BEFORE DELETE honours app.retention=on.' }),
-  entry({ relation: 'execution_claim_evidence', connections: BOTH, table: executionClaimEvidence, tenanted: executionClaimEvidence, column: executionClaimEvidence.createdAt, days: AUDIT_RETENTION_DAYS, reclaimable: false, gated: true,
+  entry({ relation: 'execution_claim_evidence', connections: OPERATIONAL, table: executionClaimEvidence, tenanted: executionClaimEvidence, column: executionClaimEvidence.createdAt, days: AUDIT_RETENTION_DAYS, reclaimable: false, gated: true,
     rationale: 'Citations from claims to tool_audit_events (ON DELETE RESTRICT). Same 90-day window; must drain before the trail can be purged.' }),
   entry({ relation: 'agent_context_contributions', connections: CORE, table: agentContextContributions, tenanted: agentContextContributions, column: agentContextContributions.createdAt, days: AUDIT_RETENTION_DAYS, reclaimable: false, gated: true,
     rationale: 'Per-run context-contribution trust history. 90-day audit window; DELETE gated on app.retention.' }),
@@ -183,18 +183,18 @@ export const BOUNDED_TELEMETRY_TABLES: readonly SweptTable[] = [
     only: () => sql`not exists (select 1 from ${evermindLearningCandidates} where ${evermindLearningCandidates.runId} = ${evermindLearningRuns.id} and ${evermindLearningCandidates.status} = 'pending')`,
     rationale: 'Evermind learning-pipeline run ledger (one row per text-learn). 90 days bounds the KR window; runs with a pending candidate are kept so the review queue never loses work.' }),
   // ── Run telemetry, dual-resident (writers on the operational endpoint, core residue) ──
-  entry({ relation: 'usage_snapshots', connections: BOTH, table: usageSnapshots, tenanted: usageSnapshots, column: usageSnapshots.ts, days: 90, floor: 14,
+  entry({ relation: 'usage_snapshots', connections: OPERATIONAL, table: usageSnapshots, tenanted: usageSnapshots, column: usageSnapshots.ts, days: 90, floor: 14,
     rationale: 'Host usage gauges and per-run token snapshots; billing reads llm_usage_log.' }),
-  entry({ relation: 'run_model_outcomes', connections: BOTH, table: runModelOutcomes, tenanted: runModelOutcomes, column: runModelOutcomes.createdAt, days: 400, reclaimable: false,
+  entry({ relation: 'run_model_outcomes', connections: OPERATIONAL, table: runModelOutcomes, tenanted: runModelOutcomes, column: runModelOutcomes.createdAt, days: 400, reclaimable: false,
     rationale: 'Learned-routing outcome rows; 400d keeps the full-year signal the router weighs.' }),
-  entry({ relation: 'replay_visit_summaries', connections: BOTH, table: replayVisitSummaries, column: replayVisitSummaries.generatedAt, days: 400, reclaimable: false,
+  entry({ relation: 'replay_visit_summaries', connections: OPERATIONAL, table: replayVisitSummaries, column: replayVisitSummaries.generatedAt, days: 400, reclaimable: false,
     rationale: 'AI summaries of recordings; the recordings themselves go at 90d, this is the 13-month Insights window.' }),
-  entry({ relation: 'replay_releases', connections: BOTH, table: replayReleases, tenanted: replayReleases, column: replayReleases.lastSeenAt, days: 400, reclaimable: false,
+  entry({ relation: 'replay_releases', connections: OPERATIONAL, table: replayReleases, tenanted: replayReleases, column: replayReleases.lastSeenAt, days: 400, reclaimable: false,
     rationale: 'Insights release markers not seen for 13 months — their daily rows are gone.' }),
   // ── LLM cost optimisation (1254 / 1255+0020 / 1257) — autovacuum restated in 1258 / 0021 ──
   entry({ relation: 'cascade_outcomes', connections: CORE, table: cascadeOutcomes, tenanted: cascadeOutcomes, column: cascadeOutcomes.createdAt, days: 90, floor: 30,
     rationale: 'Append-only D1 verifier-cascade outcomes — the training rows of the D2 head. The daily training sweep and the D1 weak-pass-rate prior both read the last 30 days (DIFFICULTY_TRAINING_DAYS), so the floor sits on that window; a quarter keeps a trend readable.' }),
-  entry({ relation: 'llm_batch_jobs', connections: BOTH, table: llmBatchJobs, tenanted: llmBatchJobs, column: llmBatchJobs.createdAt, days: 30, floor: 7, reclaimable: false,
+  entry({ relation: 'llm_batch_jobs', connections: OPERATIONAL, table: llmBatchJobs, tenanted: llmBatchJobs, column: llmBatchJobs.createdAt, days: 30, floor: 7, reclaimable: false,
     only: () => inArray(llmBatchJobs.status, ['completed', 'failed']),
     rationale: 'The D6 deferred-call queue. Only SETTLED jobs age out — an open job is work that has not happened yet. A settled row has already had its request cleared and its usage metered into llm_usage_log, so past a month it is provenance nobody opens. Not reclaimable: the tick claims rows from it.' }),
   entry({ relation: 'llm_specialist_eval_cases', connections: CORE, table: llmSpecialistEvalCases, tenanted: llmSpecialistEvalCases, column: llmSpecialistEvalCases.capturedAt, days: 180, floor: 90, reclaimable: false,

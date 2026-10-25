@@ -18,6 +18,7 @@ import {
   visitorStandingCacheKey,
 } from './marketingCacheKeys';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { activityDatabase } from '../activity/activityLog';
 
 /**
  * Platform broadcasts — the superadmin's channel to visitors who have no
@@ -254,7 +255,7 @@ export class PlatformBroadcastService {
     env: Env,
     input: { broadcastId: number; visitorId: string; kind: BroadcastEvent },
   ): Promise<void> {
-    await this.db
+    await activityDatabase(env, this.db)
       .insert(activityLog)
       .values({
         eventKey: `broadcast:${input.broadcastId}:${input.visitorId}:${input.kind}`,
@@ -274,18 +275,9 @@ export class PlatformBroadcastService {
   /** Every platform broadcast with its measured engagement, newest first. */
   async listForConsole(env: Env): Promise<BroadcastWithEngagement[]> {
     return getOrSetCached(env, BROADCAST_CONSOLE_CACHE_KEY, async () => {
-      const rows = await this.db.execute(sql`
-        WITH engagement AS (
-          SELECT
-            target_id,
-            COUNT(*) FILTER (WHERE verb = 'broadcast.impression')::int AS impressions,
-            COUNT(*) FILTER (WHERE verb = 'broadcast.click')::int      AS clicks,
-            COUNT(*) FILTER (WHERE verb = 'broadcast.dismiss')::int    AS dismissals,
-            COUNT(DISTINCT actor_ref)::int                             AS reach
-          FROM activity_log
-          WHERE target_type = 'announcement_banner'
-          GROUP BY target_id
-        )
+      // The banners live on core and their engagement in `activity_log` on the operational
+      // endpoint — two databases, so two reads joined here rather than one SQL JOIN.
+      const banners = await this.db.execute(sql`
         SELECT
           b.id, b.key, b.message, b.tone,
           b.cta_label   AS "ctaLabel",
@@ -297,19 +289,33 @@ export class PlatformBroadcastService {
           b.ends_at     AS "endsAt",
           b.created_by  AS "createdBy",
           b.created_at  AS "createdAt",
-          b.updated_at  AS "updatedAt",
-          COALESCE(e.impressions, 0) AS impressions,
-          COALESCE(e.clicks, 0)      AS clicks,
-          COALESCE(e.dismissals, 0)  AS dismissals,
-          COALESCE(e.reach, 0)       AS reach
+          b.updated_at  AS "updatedAt"
         FROM announcement_banners b
-        LEFT JOIN engagement e ON e.target_id = b.id::text
         WHERE b.tenant_id IS NULL
         ORDER BY b.created_at DESC
         LIMIT 200
       `);
+      const bannerRows = banners.rows as Array<Record<string, unknown>>;
+      const ids = bannerRows.map((row) => String(row.id));
+      const engagement = new Map<string, Record<string, unknown>>();
+      if (ids.length > 0) {
+        const counts = await activityDatabase(env, this.db).execute(sql`
+          SELECT
+            target_id,
+            COUNT(*) FILTER (WHERE verb = 'broadcast.impression')::int AS impressions,
+            COUNT(*) FILTER (WHERE verb = 'broadcast.click')::int      AS clicks,
+            COUNT(*) FILTER (WHERE verb = 'broadcast.dismiss')::int    AS dismissals,
+            COUNT(DISTINCT actor_ref)::int                             AS reach
+          FROM activity_log
+          WHERE target_type = 'announcement_banner'
+            AND target_id = ANY(${ids})
+          GROUP BY target_id
+        `);
+        for (const row of counts.rows as Array<Record<string, unknown>>) engagement.set(String(row.target_id), row);
+      }
 
-      return (rows.rows as Array<Record<string, unknown>>).map((row) => {
+      return bannerRows.map((banner) => {
+        const row = { ...banner, ...engagement.get(String(banner.id)) };
         const reach = Number(row.reach ?? 0);
         const clicks = Number(row.clicks ?? 0);
         return {

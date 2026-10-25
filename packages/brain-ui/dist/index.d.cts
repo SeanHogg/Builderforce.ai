@@ -2633,7 +2633,7 @@ interface ChatTicketsPanelProps {
      *  editor's run registry); omit where there are none. */
     subagents?: readonly ChatSubagentVM[];
     /** What this conversation cost and what memory saved it — the `spend` the api attaches
-     *  to every chat payload. Shown as a pill in the header row; absent/empty ⇒ no pill. */
+     *  to every chat payload. Shown as a pill at the right end of the action row; absent/empty ⇒ no pill. */
     spend?: SpendSavingsSummary | null;
     spendLabels?: Partial<SpendLabels>;
     /** BCP-47 locale for the pill's money and token formatting. */
