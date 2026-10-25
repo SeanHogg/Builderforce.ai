@@ -56,10 +56,10 @@ importers:
         version: link:../builderforce-embedded
       '@seanhogg/builderforce-memory':
         specifier: ^2026.10.24
-        version: 2026.10.24(@seanhogg/builderforce-memory-engine@2026.10.23)
+        version: 2026.10.24(@seanhogg/builderforce-memory-engine@2026.10.24)
       '@seanhogg/builderforce-memory-engine':
-        specifier: ^2026.10.23
-        version: 2026.10.23
+        specifier: ^2026.10.24
+        version: 2026.10.24
       '@seanhogg/builderforce-quality':
         specifier: ^2026.7.5
         version: 2026.7.5
@@ -1384,8 +1384,8 @@ packages:
   '@schummar/icu-type-parser@1.21.5':
     resolution: {integrity: sha512-bXHSaW5jRTmke9Vd0h5P7BtWZG9Znqb8gSDxZnxaGSJnGwPLDPfS+3g0BKzeWqzgZPsIVZkM7m2tbo18cm5HBw==}
 
-  '@seanhogg/builderforce-memory-engine@2026.10.23':
-    resolution: {integrity: sha512-g1BBr1119eNNdxDRP1lVzrSRbBQc6UD5FHUu5EoPE7m5wUizBLBeATZGcTq+FlaUu8PFRRBN6+ukG4fjdeQilw==}
+  '@seanhogg/builderforce-memory-engine@2026.10.24':
+    resolution: {integrity: sha512-61A44q1dybxys+4+njCD+E8IELzOxTa/zE4DQD8uHIXoS1BgpHnvQ7FIL9NazYTb/LDFMl/SkGYbGFomUXivuQ==}
     engines: {node: '>=18.0.0'}
 
   '@seanhogg/builderforce-memory@2026.10.24':
@@ -6629,11 +6629,11 @@ snapshots:
 
   '@schummar/icu-type-parser@1.21.5': {}
 
-  '@seanhogg/builderforce-memory-engine@2026.10.23': {}
+  '@seanhogg/builderforce-memory-engine@2026.10.24': {}
 
-  '@seanhogg/builderforce-memory@2026.10.24(@seanhogg/builderforce-memory-engine@2026.10.23)':
+  '@seanhogg/builderforce-memory@2026.10.24(@seanhogg/builderforce-memory-engine@2026.10.24)':
     dependencies:
-      '@seanhogg/builderforce-memory-engine': 2026.10.23
+      '@seanhogg/builderforce-memory-engine': 2026.10.24
 
   '@seanhogg/builderforce-quality@2026.7.5': {}
 
