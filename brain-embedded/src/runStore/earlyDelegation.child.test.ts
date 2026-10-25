@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { isCoderReask } from '@builderforce/run-policy';
 import { getRunTrace, resetBrainRunStore, startRun } from '../brainRunStore';
-import { leftDelegationUndone } from '../delegationRequest';
+import { asksForSubagents } from '../delegationRequest';
 
-// VS Code chat #6: every PRD 35 workstream brief names the sub-agent POLICY, so each
-// child read its brief as "the user asked for sub-agents", was told to stop reading and
-// delegate, and spent the night spawning researchers instead of writing the code.
+// VS Code chat #6: every PRD 35 workstream brief NAMED the sub-agent policy, the gate read
+// that mention as "asked for sub-agents", and each child was told to stop reading and
+// delegate. A sub-agent runs the same gate as its owner, on its own brief: a brief that
+// asks for sub-agents nudges a child exactly as it would nudge the owner, and one that
+// only mentions them nudges neither.
 
 beforeEach(resetBrainRunStore);
 
@@ -20,10 +22,12 @@ const TOOLS = ['read_file', 'spawn_agent', 'spawn_agents'].map((name) => ({
 }));
 type Call = { id: string; name: string; args: string } | null;
 const read = (i: number): Call => ({ id: `r${i}`, name: 'read_file', args: JSON.stringify({ path: `docs/file-${i}.md` }) });
-const BRIEF = 'You are implementing WS1. Port the steering, ask and sub-agents policy module; children run as parallel agents.';
+const MENTIONS = 'You are implementing WS1. Port the steering, ask and sub-agents policy module; children run as parallel agents.';
+const ASKS = 'You are implementing WS1. Use sub-agents for the research, then write the module yourself.';
 const lineage = { rootChatId: 4700, ownerKey: 4700, ownerName: 'BuilderForce', handle: 'a1', label: 'WS1', agent: { ref: 'subagent:WS1', name: 'WS1' }, depth: 1 };
+const NUDGE = 'loop.nudge_undelegated_request';
 
-async function scriptedChild(runKey: number, script: Call[]) {
+async function scripted(runKey: number, userTurn: string, child: boolean, script: Call[]) {
   let turn = 0;
   let lastRole: string | undefined;
   await startRun(runKey, {
@@ -40,22 +44,32 @@ async function scriptedChild(runKey: number, script: Call[]) {
       return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
     },
     persistence: persistence(),
-    userTurn: BRIEF,
-    lineage,
+    userTurn,
+    ...(child ? { lineage } : {}),
   });
+  return getRunTrace(runKey);
 }
 
-describe('a sub-agent is never told it must delegate', () => {
-  it('the gate is quiet for a delegated run whatever its brief says', () => {
-    const input = { toolNames: ['spawn_agents'], requestText: BRIEF, events: [] };
-    expect(leftDelegationUndone(input)).toBe(true);
-    expect(leftDelegationUndone({ ...input, delegatedRun: true })).toBe(false);
+describe('a sub-agent runs the same delegation gate as its owner', () => {
+  it('a mention of sub-agents is not a request for them; an ask is', () => {
+    expect(asksForSubagents(MENTIONS)).toBe(false);
+    expect(asksForSubagents('the sub-agent delegation contract applies')).toBe(false);
+    expect(asksForSubagents(ASKS)).toBe(true);
+    expect(asksForSubagents('delegate it to sub-agents')).toBe(true);
   });
 
-  it('a child that reads past the threshold and finishes is neither nudged nor sent back', async () => {
-    await scriptedChild(-4701, [...[1, 2, 3, 4, 5, 6, 7].map(read), null]);
-    const trace = getRunTrace(-4701);
-    expect(trace.some((e) => e.label === 'loop.nudge_undelegated_request')).toBe(false);
-    expect(trace.some((e) => e.label === 'loop.recover_undelegated_request')).toBe(false);
+  it('a brief that only mentions sub-agents nudges neither a child nor a top-level run', async () => {
+    for (const [key, child] of [[-4701, true], [4702, false]] as const) {
+      const trace = await scripted(key, MENTIONS, child, [...[1, 2, 3, 4, 5, 6, 7].map(read), null]);
+      expect(trace.some((e) => e.label === NUDGE)).toBe(false);
+      expect(trace.some((e) => e.label === 'loop.recover_undelegated_request')).toBe(false);
+    }
+  });
+
+  it('a brief that asks for sub-agents nudges a child exactly as it nudges a top-level run', async () => {
+    for (const [key, child] of [[-4703, true], [4704, false]] as const) {
+      const trace = await scripted(key, ASKS, child, [...[1, 2, 3, 4, 5, 6, 7].map(read), null]);
+      expect(trace.filter((e) => e.label === NUDGE)).toHaveLength(1);
+    }
   });
 });

@@ -46,7 +46,7 @@ const CHANGE_VERB =
  * column?") is a question about a change, not a request for one.
  */
 const QUESTION_SHAPE =
-  /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|can|could|should|would|will|explain|describe|summar|tell me|show me|list|compare|review|analyse|analyze)\b|\?\s*$/i;
+  /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|can|could|should|would|will|explain|describe|summar|tell me|show me|list|compare|review|analyse|analyze|research|investigate|find|locate|trace|audit|look into|search)\b|\?\s*$/i;
 
 /**
  * Does this text ask for something to be CHANGED (as opposed to found, explained

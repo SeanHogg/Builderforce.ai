@@ -29,15 +29,11 @@ function counterOf(run: RunLoopContext): ReadsWithoutSpawn {
 
 /**
  * THE delegation gate for one run — the early nudge, the prose-end backstop and the
- * `ask_user` redirect all ask it, so a sub-agent is exempt on every path at once.
+ * `ask_user` redirect all ask it, so every path applies the same rule. A sub-agent runs
+ * it exactly as its owner does, on its own request (its brief).
  */
 export function runLeftDelegationUndone(run: RunLoopContext): boolean {
-  return leftDelegationUndone({
-    toolNames: run.catalogToolNames,
-    requestText: run.userRequest,
-    events: runTrace(run.c),
-    delegatedRun: !!run.req.lineage,
-  });
+  return leftDelegationUndone({ toolNames: run.catalogToolNames, requestText: run.userRequest, events: runTrace(run.c) });
 }
 
 /** What this call is to the counter. `isReadTool` is dispatch's own `isDedupableRead`. */

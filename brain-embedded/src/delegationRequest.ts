@@ -29,12 +29,22 @@ import type { BrainTraceEvent } from './brainTriage';
 const SPAWN_TOOLS: ReadonlySet<string> = new Set(['spawn_agent', 'spawn_agents']);
 
 /**
- * The user asked for the work to be done by sub-agents. Narrow on purpose: "sub-agent(s)",
- * "spawn …", or parallel/fan-out agents — never a bare mention of an agent, which in this
- * product usually means a cloud teammate.
+ * The request ASKS for the work to be done by sub-agents: "use / using / with / via /
+ * delegate to / run … sub-agents or parallel agents", "spawn agents", "fan out the …".
+ * Never a bare MENTION — "the sub-agent policy", "children run as parallel agents" —
+ * which is how a brief or a PRD talks about sub-agents without asking for them (VS Code
+ * chat #6: every PRD 35 brief named the policy, and each child was told to delegate). Nor
+ * a bare mention of an agent, which in this product usually means a cloud teammate.
+ * One rule for every run, whoever started it.
  */
-const ASKS_FOR_SUBAGENTS =
-  /\bsub[- ]?agents?\b|\bspawn(?:_agents?|\s+(?:agents?|workers?|children))\b|\b(?:parallel|concurrent)\s+(?:agents?|workers?)\b|\bfan[- ]?out\b/i;
+const SUBAGENT_NOUN = String.raw`(?:sub[- ]?agents?|(?:parallel|concurrent)\s+(?:agents?|workers?))`;
+const ASKS_FOR_SUBAGENTS = new RegExp(
+  String.raw`\b(?:use|using|with|via|through|delegate(?:\s+(?:it|this|them|the\s+\w+))?\s+to|run|launch|start|dispatch|employ)\s+`
+    + String.raw`(?:(?:the|some|a|few|several|multiple|more|\d+)\s+){0,2}` + SUBAGENT_NOUN + String.raw`\b`
+    + String.raw`|\bspawn(?:_agents?|\s+(?:agents?|workers?|children|sub[- ]?agents?))\b`
+    + String.raw`|\bfan[- ]?out\s+(?:the|these|this|it|them|across|over|to)\b`,
+  'i',
+);
 
 /** …unless the request says NOT to use them. */
 const DECLINES_SUBAGENTS =
@@ -71,28 +81,17 @@ export interface DelegationRequestInput {
   requestText: string | null | undefined;
   /** THIS run's trace events. */
   events: readonly BrainTraceEvent[];
-  /**
-   * This run IS a sub-agent. Its request is its owner's BRIEF, not the user's ask, and a
-   * brief names sub-agents as a topic far more often than it asks for them (VS Code chat
-   * #6: every PRD 35 workstream brief mentions the sub-agent policy). Nudging a child to
-   * delegate sent a coding child into 90 minutes of spawning researchers and waiting on
-   * them, and a research child into fanning out four more. A child still MAY spawn — it
-   * holds its owner's catalog — it is just never told it must.
-   */
-  delegatedRun?: boolean;
 }
 
 /**
  * Is this run about to stop (or ask) without starting the sub-agents the user asked for?
  * Every condition must hold, so the gate stays quiet whenever stopping is right:
- *  - the run is the user's own, not a sub-agent;
  *  - the host can spawn local children;
  *  - the user explicitly asked for sub-agents, and did not say not to;
  *  - nothing in this run called `spawn_agent` / `spawn_agents`.
  */
 export function leftDelegationUndone(input: DelegationRequestInput): boolean {
-  return !input.delegatedRun
-    && canSpawnHere(input.toolNames) && asksForSubagents(input.requestText) && !attemptedDelegation(input.events);
+  return canSpawnHere(input.toolNames) && asksForSubagents(input.requestText) && !attemptedDelegation(input.events);
 }
 
 /**
