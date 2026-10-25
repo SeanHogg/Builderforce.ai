@@ -30,6 +30,8 @@ export * from "./skill-tools.js";
 export * from "./subagent-tools.js";
 export * from "./live-subagent-tools.js";
 export * from "./git-tools.js";
+// The run's default checkout in a folder that CONTAINS checkouts (pure resolver).
+export * from "./defaultRepo.js";
 export * from "./symbols.js";
 export * from "./symbol-tools.js";
 export * from "./semantic-tools.js";

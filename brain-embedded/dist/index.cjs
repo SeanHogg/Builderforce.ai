@@ -329,6 +329,7 @@ __export(src_exports, {
   narratedUnadvertisedInTrace: () => narratedUnadvertisedInTrace,
   nextFallbackModel: () => nextFallbackModel,
   normalizeChatMode: () => normalizeChatMode,
+  noteRunStep: () => noteRunStep,
   onDeviceMemoryHooks: () => onDeviceMemoryHooks,
   packForModel: () => packForModel,
   pageEnginesFetch: () => pageEnginesFetch,
@@ -375,6 +376,8 @@ __export(src_exports, {
   queueRunSteering: () => queueRunSteering,
   ratedTurnContext: () => ratedTurnContext,
   ratedTurnTool: () => ratedTurnTool,
+  readChatRunHistory: () => readChatRunHistory,
+  readChatTicketLinks: () => readChatTicketLinks,
   readWithIdleWatchdog: () => readWithIdleWatchdog,
   reasoningForRun: () => reasoningForRun,
   repeatedFailureAdvisory: () => repeatedFailureAdvisory,
@@ -914,10 +917,10 @@ function inOpenCodeFence(text) {
   return fences % 2 === 1;
 }
 function readsAsProse(block) {
-  let words2 = 0;
+  let words3 = 0;
   for (const word of block.split(/\s+/)) {
-    if (/\p{L}/u.test(word)) words2 += 1;
-    if (words2 >= LOOP_MIN_BLOCK_WORDS) return true;
+    if (/\p{L}/u.test(word)) words3 += 1;
+    if (words3 >= LOOP_MIN_BLOCK_WORDS) return true;
   }
   return false;
 }
@@ -960,6 +963,25 @@ var Ctx = class {
   output = "";
   failureStreak = 0;
 };
+var CANCELLED = /* @__PURE__ */ Symbol("cancelled");
+function raceCancel(work, signal) {
+  if (!signal) return work;
+  return new Promise((resolve, reject) => {
+    const onAbort = () => resolve(CANCELLED);
+    if (signal.aborted) onAbort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+    work.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      }
+    );
+  });
+}
 function readOnlySpan(calls, start, isReadOnly) {
   let end = start;
   while (end < calls.length && isReadOnly(calls[end])) end++;
@@ -1078,13 +1100,21 @@ async function runAgentLoop(args) {
       const last = prepared[prepared.length - 1];
       const tail = prepared.length > 1 && !last.result && !ports.isReadOnly(last.call) ? last : void 0;
       const batch = tail ? prepared.slice(0, -1) : prepared;
-      const results = batch.length > 1 ? await Promise.all(batch.map((p) => p.result ?? ports.dispatch(p.call, ctx))) : [batch[0].result ?? await ports.dispatch(batch[0].call, ctx)];
-      if (tail) results.push(await ports.dispatch(tail.call, ctx));
+      const dispatchOne = (p) => p.result ? Promise.resolve(p.result) : raceCancel(ports.dispatch(p.call, ctx), signal);
+      const results = await Promise.all(batch.map(dispatchOne));
+      if (tail && !results.includes(CANCELLED)) results.push(await raceCancel(ports.dispatch(tail.call, ctx), signal));
+      if (results.includes(CANCELLED)) {
+        const stopped = { data: { ok: false, aborted: true, error: "stopped" }, isError: true };
+        for (const rest of calls.slice(i)) ctx.messages.push(codec.tool(rest, stopped));
+        cancelled = true;
+        break;
+      }
       let stop = false;
       for (let k = 0; k < prepared.length && !stop; k++) stop = await settle(i + k, prepared[k].call, results[k]);
       if (stop) break;
       i += prepared.length;
     }
+    if (cancelled) break;
     const after = await hooks.afterToolCalls?.(ctx, finished);
     if (after && after.finished !== void 0) finished = after.finished;
     if (awaitingInput) break;
@@ -2343,7 +2373,28 @@ var TOKENS_PER_MILLION = 1e6;
 function perMillionToPerToken(usdPerMillion) {
   return usdPerMillion / TOKENS_PER_MILLION;
 }
+function perTokenToPerMillion(usdPerToken) {
+  return usdPerToken * TOKENS_PER_MILLION;
+}
 var ZERO_PRICE = Object.freeze({ input: 0, output: 0 });
+
+// ../packages/model-catalog/src/tier.ts
+var STANDARD_MAX_OUTPUT_PER_MILLION = 8;
+var PREMIUM_MAX_OUTPUT_PER_MILLION = 20;
+function tierForPrice(price) {
+  if (price.input === 0 && price.output === 0) return "FREE";
+  const outputPerMillion = perTokenToPerMillion(price.output);
+  if (outputPerMillion < STANDARD_MAX_OUTPUT_PER_MILLION) return "STANDARD";
+  return outputPerMillion < PREMIUM_MAX_OUTPUT_PER_MILLION ? "PREMIUM" : "ULTRA";
+}
+function resolveModelTier(known) {
+  if (known.catalogTier) return known.catalogTier;
+  return known.price ? tierForPrice(known.price) : void 0;
+}
+var AGENTIC_TIERS = /* @__PURE__ */ new Set(["PREMIUM", "ULTRA"]);
+function isAgenticTier(tier2) {
+  return tier2 ? AGENTIC_TIERS.has(tier2) : void 0;
+}
 
 // ../packages/model-catalog/src/priceTiers.ts
 var tier = (aboveInputTokens, inputPerMillion, outputPerMillion) => ({
@@ -2431,7 +2482,7 @@ var PRICE_SNAPSHOT = {
   "~openai/gpt-terra-latest": [2e-6, 12e-6],
   "~unbiased/pareto-latest": [8e-7, 32e-7],
   "~x-ai/grok-latest": [2e-6, 6e-6],
-  "~z-ai/glm-flash-latest": [511e-10, 761e-10],
+  "~z-ai/glm-flash-latest": [44e-9, 2e-7],
   "~z-ai/glm-latest": [703e-10, 43843e-10],
   "aion-labs/aion-2.0": [8e-7, 16e-7],
   "aion-labs/aion-3.0": [3e-6, 6e-6],
@@ -2875,7 +2926,7 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5.1": [14e-7, 44e-7],
   "z-ai/glm-5.2": [341e-10, 7e-6],
   "z-ai/glm-5.3": [79e-9, 14e-7],
-  "z-ai/glm-5.3-flash": [15e-8, 5e-7],
+  "z-ai/glm-5.3-flash": [44e-9, 2e-7],
   "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
   "z-ai/glm-5.3-prime": [28e-7, 88e-7],
@@ -5073,97 +5124,6 @@ function toolCallPaths(args) {
   return out;
 }
 
-// ../packages/agent-tools/src/compress.ts
-var DEFAULT_COMPRESS_MIN_CHARS = 4e3;
-var DEFAULT_COMPRESS_RATE = 0.5;
-var FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/;
-function fenceRun(line2) {
-  return FENCE_OPEN.exec(line2)?.[1] ?? null;
-}
-function splitFences(text) {
-  const out = [];
-  const lines = text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
-  let buf = "";
-  let fence = null;
-  const flush = (kind) => {
-    if (buf) out.push({ kind, text: buf });
-    buf = "";
-  };
-  for (const line2 of lines) {
-    const bare = line2.replace(/\r?\n$/, "");
-    if (!fence) {
-      const run2 = fenceRun(bare);
-      if (run2) {
-        flush("prose");
-        fence = { ch: run2.charAt(0), len: run2.length };
-      }
-      buf += line2;
-      continue;
-    }
-    buf += line2;
-    const run = fenceRun(bare);
-    const open = fence;
-    if (run && run.charAt(0) === open.ch && run.length >= open.len && [...bare.trim()].every((c) => c === open.ch)) {
-      flush("fence");
-      fence = null;
-    }
-  }
-  flush(fence ? "fence" : "prose");
-  return out;
-}
-async function compressLargeContext(text, opts = {}) {
-  const minChars = opts.minChars ?? DEFAULT_COMPRESS_MIN_CHARS;
-  const rate = opts.rate ?? DEFAULT_COMPRESS_RATE;
-  const unchanged = { text, compressed: false, originalTokens: 0, keptTokens: 0 };
-  if (!opts.compress || text.length < minChars || !(rate > 0 && rate < 1)) return unchanged;
-  let compressed = false;
-  let originalTokens = 0;
-  let keptTokens = 0;
-  const parts = [];
-  for (const seg of splitFences(text)) {
-    if (seg.kind === "fence" || seg.text.trim().length < minChars) {
-      parts.push(seg.text);
-      continue;
-    }
-    let r;
-    try {
-      r = await opts.compress(seg.text, rate);
-    } catch {
-      r = { ok: false };
-    }
-    if (r.ok && typeof r.text === "string" && r.text.length < seg.text.length) {
-      parts.push(r.text);
-      compressed = true;
-      originalTokens += r.originalTokens ?? 0;
-      keptTokens += r.keptTokens ?? 0;
-    } else {
-      parts.push(seg.text);
-    }
-  }
-  return compressed ? { text: parts.join(""), compressed, originalTokens, keptTokens } : unchanged;
-}
-async function compressToolOutput(text, ctx, tool) {
-  const semantic = ctx.caps.semantic;
-  if (ctx.compressLargeOutputs !== true || !semantic?.compress) {
-    return { text, compressed: false, originalTokens: 0, keptTokens: 0 };
-  }
-  const r = await compressLargeContext(text, { compress: (t, rate) => semantic.compress(t, rate) });
-  if (r.compressed) {
-    ctx.emit?.({ level: "debug", message: `${tool}: output compressed (C8)`, detail: { originalTokens: r.originalTokens, keptTokens: r.keptTokens } });
-  }
-  return r;
-}
-async function compressShellResult(r, ctx) {
-  if (!r.ok || r.exitCode !== void 0 && r.exitCode !== 0 || typeof r.stdout !== "string") return r;
-  const c = await compressToolOutput(r.stdout, ctx, "run_command");
-  return c.compressed ? { ...r, stdout: c.text, compressed: true } : r;
-}
-async function compressWebFetchResult(r, ctx) {
-  if (!r.ok || typeof r.content !== "string") return r;
-  const c = await compressToolOutput(r.content, ctx, "web_fetch");
-  return c.compressed ? { ...r, content: c.text, compressed: true } : r;
-}
-
 // ../packages/agent-tools/src/fileWindow.ts
 var READ_DEFAULT_LINE_LIMIT = 2e3;
 function windowFileContent(content, opts) {
@@ -5180,474 +5140,6 @@ function fileWindowNote(win) {
   const lastLine = win.offset + win.returnedLines - 1;
   return `Showing lines ${win.offset}\u2013${lastLine} of ${win.totalLines}. To continue, call read_file again with offset ${lastLine + 1}.`;
 }
-
-// ../packages/agent-tools/src/git-tools.ts
-function safeGitArg(v) {
-  return typeof v === "string" && /^[\w./@-]+$/.test(v) ? v : null;
-}
-function safeRepoArg(repo) {
-  const arg = safeGitArg(repo);
-  return arg && !arg.split(/[\\/]/).includes("..") && !arg.startsWith("/") ? arg : null;
-}
-function inferRepoFromPath(path2) {
-  if (typeof path2 !== "string" || !path2.trim()) return null;
-  const parts = path2.split(/[\\/]/).filter((s) => s.length > 0 && s !== ".");
-  if (parts.length < 2) return null;
-  return safeRepoArg(parts[0]);
-}
-function repoScopedScript(script, repo) {
-  const dir = safeRepoArg(repo);
-  return dir ? `cd "${dir}" || exit 1
-${script}` : script;
-}
-function buildListCheckoutsCommand() {
-  return 'for d in */; do [ -e "$d.git" ] && printf "%s\\n" "${d%/}"; done';
-}
-function parseCheckoutList(stdout) {
-  if (!stdout) return [];
-  const names = [];
-  for (const line2 of stdout.split(/\r?\n/)) {
-    const name = line2.trim().replace(/\/+$/, "");
-    if (!name || name === "*" || name === "." || name === "..") continue;
-    const safe = safeRepoArg(name);
-    if (safe) names.push(safe);
-  }
-  return names;
-}
-function notARepoResult(action, candidates = []) {
-  const named = candidates.filter(Boolean);
-  const extra = named.length ? `Candidate repositories: ${named.map((c) => `"${c}"`).join(", ")}. Re-run this tool with \`repo\` set to the one holding the code you are working on (e.g. { "repo": "${named[0]}" }).` : "No git checkouts were found at the top level of the open folder. File edits still work; only the git tools need a repository.";
-  return {
-    data: {
-      ok: false,
-      action,
-      error: "not a git repository at the workspace root \u2014 this usually means the open folder CONTAINS the repositories rather than being one (several checkouts side by side). " + extra,
-      ...named.length ? { candidates: named } : {}
-    }
-  };
-}
-async function notARepoWithCandidates(action, ctx) {
-  const listed = await ctx.caps.shell.run(buildListCheckoutsCommand());
-  return notARepoResult(action, parseCheckoutList(listed.stdout));
-}
-var RESOLVE_BASE = `BASE="$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; [ -n "$BASE" ] || BASE=main`;
-var IDENTITY_EMAIL = 'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"';
-var IDENTITY_NAME = 'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"';
-function buildGitCommand(action, opts) {
-  const path2 = safeGitArg(opts?.path);
-  const pathArg = path2 ? ` -- "${path2}"` : "";
-  const repo = safeRepoArg(opts?.repo);
-  const scoped = (cmd) => repo ? `cd "${repo}" && ${cmd}` : cmd;
-  const scopedScript = (lines) => repoScopedScript(lines.join("\n"), opts?.repo);
-  const tracked = safeGitArg(opts?.trackedBranch);
-  const absorb = tracked ? ["set -e", IDENTITY_EMAIL, IDENTITY_NAME, `git fetch origin "${tracked}" 2>/dev/null && git merge --ff-only "origin/${tracked}" 2>/dev/null || true`] : [];
-  const publish = (force) => tracked ? [force ? "git push --force-with-lease origin HEAD" : "git push origin HEAD"] : [];
-  switch (action) {
-    case "status":
-      return scoped("git status --short --branch");
-    case "diff":
-      return scoped(`git --no-pager diff${pathArg}`);
-    case "history": {
-      const limit = Number.isFinite(opts?.limit) && opts.limit > 0 ? Math.min(Math.floor(opts.limit), 200) : 30;
-      return scoped(`git --no-pager log --oneline -n ${limit}${pathArg}`);
-    }
-    case "sync_latest": {
-      const base = safeGitArg(opts?.baseBranch);
-      const resolveBase = base ? `BASE="${base}"` : RESOLVE_BASE;
-      return scopedScript([
-        ...tracked ? absorb : ["set -e"],
-        resolveBase,
-        ...tracked ? [] : [IDENTITY_EMAIL, IDENTITY_NAME],
-        'git fetch origin "$BASE"',
-        'git merge --no-edit "origin/$BASE" || { git merge --abort; echo MERGE_CONFLICT; exit 3; }',
-        ...publish(false),
-        'echo "Synced with origin/$BASE"'
-      ]);
-    }
-    case "undo":
-      return scopedScript([
-        ...absorb,
-        '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
-        "git reset --hard HEAD~1",
-        ...publish(true),
-        'echo "Undid the last commit (use git_redo to reapply)"'
-      ]);
-    case "redo":
-      return scopedScript([
-        ...absorb,
-        '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
-        'git reset --hard "HEAD@{1}"',
-        ...publish(true),
-        'echo "Reapplied the last undone change"'
-      ]);
-  }
-}
-function gitToolResult(action, r) {
-  const out = (r.stdout ?? "").trim();
-  if (r.exitCode === 3 || /MERGE_CONFLICT/.test(out)) {
-    return { data: { ok: false, action, error: "merge conflict \u2014 the base branch has changes that conflict with your branch; the merge was aborted (working tree is clean). Resolve by editing the conflicting files, or ask a human.", output: out } };
-  }
-  if (r.exitCode === 4 || /\bDIRTY\b/.test(out)) {
-    return { data: { ok: false, action, error: "you have uncommitted changes \u2014 commit or discard them before git_" + action + " (it refuses to discard uncommitted work)." } };
-  }
-  return { data: { ok: r.ok, action, output: out.slice(0, 2e4), ...r.error ? { error: r.error } : {} } };
-}
-var NOT_A_REPO = /not a git repository/i;
-function isNotARepo(r) {
-  return NOT_A_REPO.test(`${r.stdout ?? ""} ${r.error ?? ""}`);
-}
-async function runGitTool(action, opts, ctx) {
-  const explicitRepo = opts.repo;
-  let repo = explicitRepo;
-  let path2 = opts.path;
-  const trackedBranch = ctx.caps.shell?.trackedBranch;
-  const build = (o) => buildGitCommand(action, trackedBranch ? { ...o, trackedBranch } : o);
-  let r = await ctx.caps.shell.run(build({ ...opts, repo, path: path2 }));
-  if (isNotARepo(r) && !explicitRepo) {
-    const inferred = inferRepoFromPath(opts.path);
-    if (inferred) {
-      const inner = commitPathCandidates(opts.path ?? "", inferred);
-      path2 = inner.length > 0 ? inner[inner.length - 1] : void 0;
-      r = await ctx.caps.shell.run(build({ ...opts, repo: inferred, path: path2 }));
-      if (!isNotARepo(r)) repo = inferred;
-    }
-    if (isNotARepo(r)) return notARepoWithCandidates(action, ctx);
-  }
-  const result = gitToolResult(action, r);
-  if (repo && result.data.ok) {
-    result.data.repo = repo;
-  }
-  return result;
-}
-var REPO_PARAM = {
-  type: "string",
-  description: 'Optional subdirectory holding the repository, when the open folder CONTAINS checkouts rather than being one (e.g. "my-project"). Omit when the workspace root is itself the repo.'
-};
-var gitStatusTool = defineTool({
-  name: "git_status",
-  description: "Show the current branch and any uncommitted changes (git status). Use it to see what you have modified before committing, syncing, or finishing. If the open folder contains several checkouts rather than being one repo, pass `repo` to name the one you mean.",
-  parameters: { type: "object", properties: { repo: REPO_PARAM } },
-  requires: ["shell"],
-  execute: (args, ctx) => runGitTool("status", { repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
-});
-var gitDiffTool = defineTool({
-  name: "git_diff",
-  description: "Show the uncommitted diff of your working tree (optionally for one path). Use it to review exactly what you changed before finishing.",
-  parameters: { type: "object", properties: { path: { type: "string", description: "Optional repo-relative file/dir to scope the diff to." }, repo: REPO_PARAM } },
-  requires: ["shell"],
-  execute: (args, ctx) => runGitTool("diff", { path: typeof args.path === "string" ? args.path : void 0, repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
-});
-var gitHistoryTool = defineTool({
-  name: "git_history",
-  description: "Show recent commit history (git log --oneline), optionally scoped to a path. Use it to understand how a file evolved before changing it.",
-  parameters: {
-    type: "object",
-    properties: {
-      path: { type: "string", description: "Optional repo-relative file/dir to scope history to." },
-      limit: { type: "number", description: "Max commits to return (default 30, max 200)." },
-      repo: REPO_PARAM
-    }
-  },
-  requires: ["shell"],
-  execute: (args, ctx) => runGitTool("history", { path: typeof args.path === "string" ? args.path : void 0, limit: typeof args.limit === "number" ? args.limit : void 0, repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
-});
-var gitSyncLatestTool = defineTool({
-  name: "git_sync_latest",
-  description: "Fetch the latest base branch (e.g. main) and merge it into your working branch so you are NOT building on stale code. Run this FIRST, before editing \u2014 a branch created earlier can be far behind main, so its build fails against old dependencies and its pull request would revert newer work. On a merge conflict it safely aborts and tells you which to resolve.",
-  parameters: { type: "object", properties: { baseBranch: { type: "string", description: "Base branch to sync from. Defaults to the remote's default branch (usually main)." }, repo: REPO_PARAM } },
-  requires: ["shell"],
-  execute: (args, ctx) => runGitTool("sync_latest", { baseBranch: typeof args.baseBranch === "string" ? args.baseBranch : void 0, repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
-});
-var gitUndoTool = defineTool({
-  name: "git_undo",
-  description: "Undo your most recent commit (keeps the change recoverable \u2014 use git_redo to reapply). Refuses if you have uncommitted changes, so it can never discard unsaved work. Use it to back out a change that was wrong.",
-  parameters: { type: "object", properties: { repo: REPO_PARAM } },
-  requires: ["shell"],
-  execute: (args, ctx) => runGitTool("undo", { repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
-});
-var gitRedoTool = defineTool({
-  name: "git_redo",
-  description: "Reapply the change you most recently undid with git_undo (reflog redo). Refuses if you have uncommitted changes.",
-  parameters: { type: "object", properties: { repo: REPO_PARAM } },
-  requires: ["shell"],
-  execute: (args, ctx) => runGitTool("redo", { repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
-});
-function shellQuote(v) {
-  return `'${v.replace(/'/g, `'\\''`)}'`;
-}
-function commitPathCandidates(path2, repo) {
-  const out = [path2];
-  const dir = safeRepoArg(repo);
-  if (dir) {
-    const prefix = `${dir.replace(/\/+$/, "")}/`;
-    if (path2.startsWith(prefix)) out.push(path2.slice(prefix.length));
-    const leaf = dir.split("/").filter(Boolean).pop();
-    if (leaf && path2.startsWith(`${leaf}/`)) out.push(path2.slice(leaf.length + 1));
-  }
-  return [...new Set(out)].filter((p) => p.trim() !== "");
-}
-function buildCommitCommand(opts) {
-  const branch = safeGitArg(opts.branch);
-  const resolveLines = opts.paths.map((p, i) => {
-    const candidates = commitPathCandidates(p, opts.repo).map(shellQuote).join(" ");
-    return `P${i}="$(pick ${candidates})" || MISSING="$MISSING ${shellQuote(p).slice(1, -1)}"`;
-  });
-  const paths = opts.paths.map((_, i) => `"$P${i}"`).join(" ");
-  return [
-    "set -e",
-    RESOLVE_BASE,
-    'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"',
-    'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"',
-    'CUR="$(git rev-parse --abbrev-ref HEAD)"',
-    // A ticket branch was named: switch to it, creating it if new. Otherwise the base
-    // branch is refused — unless the caller DECLARED it, the same declared act `git_push`
-    // takes. Without that declaration "commit and push to main" had no reachable path at
-    // all: push accepted `allowBaseBranch`, but the commit before it could never land on
-    // main, so an explicit human instruction ended in a refusal every time.
-    ...branch ? [`git rev-parse --verify --quiet "${branch}" >/dev/null && git checkout "${branch}" || git checkout -b "${branch}"`] : opts.allowBaseBranch ? [] : ['[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }'],
-    // A path is "there" if it is on disk OR tracked by git — the second arm is what
-    // lets a DELETION be committed, since the file is gone by definition.
-    'pick() { for c in "$@"; do if [ -e "$c" ] || git ls-files --error-unmatch -- "$c" >/dev/null 2>&1; then printf %s "$c"; return 0; fi; done; return 1; }',
-    'MISSING=""',
-    ...resolveLines,
-    '[ -z "$MISSING" ] || { echo "MISSING_PATHS:$MISSING"; exit 8; }',
-    `git add -- ${paths}`,
-    // Nothing staged is a fact, not a failure — say which rather than exiting 1 with
-    // git's own "nothing to commit" that reads like a broken tool.
-    "git diff --cached --quiet && { echo NOTHING_STAGED; exit 6; }",
-    `git commit -m ${shellQuote(opts.message)}`,
-    'echo "Committed on $(git rev-parse --abbrev-ref HEAD): $(git rev-parse --short HEAD)"'
-  ].join("\n");
-}
-function buildPushCommand(opts) {
-  return [
-    "set -e",
-    RESOLVE_BASE,
-    'CUR="$(git rev-parse --abbrev-ref HEAD)"',
-    ...opts.allowBaseBranch ? [] : ['[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }'],
-    // `-u` so a brand-new ticket branch gets its upstream on the first push.
-    'git push -u origin "$CUR"',
-    'echo "Pushed $CUR to origin"',
-    // Report where the push LANDED — the branch header (`## main...origin/main`, with any
-    // `[ahead N]` still owed) plus whatever is still uncommitted. That is the evidence a
-    // host needs to call the change shipped, so the push verifies itself rather than
-    // depending on the agent remembering a separate status call. Never fails the push.
-    "git status --short --branch 2>/dev/null || true"
-  ].join("\n");
-}
-function buildPullRequestCommand(opts) {
-  const base = safeGitArg(opts.base);
-  const reviewers = (opts.reviewers ?? []).map((r) => safeGitArg(r)).filter((r) => !!r);
-  return [
-    "set -e",
-    "command -v gh >/dev/null 2>&1 || { echo NO_GH_CLI; exit 7; }",
-    ...base ? [`BASE="${base}"`] : [RESOLVE_BASE],
-    'CUR="$(git rev-parse --abbrev-ref HEAD)"',
-    '[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }',
-    // Push first when the branch has no upstream — `gh pr create` fails on an unpushed
-    // head, and "open a PR" plainly means the branch has to exist on the remote.
-    'git rev-parse --abbrev-ref "@{upstream}" >/dev/null 2>&1 || git push -u origin "$CUR"',
-    `gh pr create --base "$BASE" --head "$CUR" --title ${shellQuote(opts.title)} --body ${shellQuote(opts.body)}` + reviewers.map((r) => ` --reviewer "${r}"`).join("")
-  ].join("\n");
-}
-function buildCleanupCommand(opts) {
-  const branch = safeGitArg(opts.branch);
-  const base = safeGitArg(opts.baseBranch);
-  return [
-    "set -e",
-    ...base ? [`BASE="${base}"`] : [RESOLVE_BASE],
-    ...branch ? [`TARGET="${branch}"`] : ['TARGET="$(git rev-parse --abbrev-ref HEAD)"'],
-    '[ "$TARGET" != "$BASE" ] || { echo NOTHING_TO_CLEAN; exit 9; }',
-    '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
-    'git rev-parse --verify --quiet "$TARGET" >/dev/null || { echo NO_SUCH_BRANCH; exit 11; }',
-    // Was this branch ever pushed? Read BEFORE the prune, which is what removes the
-    // evidence — a branch that had an upstream and no longer exists on the remote was
-    // merged and deleted by the host, however it was merged.
-    'HAD_UPSTREAM=0; git rev-parse --verify --quiet "refs/remotes/origin/$TARGET" >/dev/null && HAD_UPSTREAM=1',
-    "git fetch --prune origin",
-    'REMOTE_EXISTS=0; git ls-remote --exit-code --heads origin "$TARGET" >/dev/null 2>&1 && REMOTE_EXISTS=1',
-    // Get onto the base branch and bring it up to date — the state the user expects to
-    // be left in. `--ff-only` so a divergent local base is reported, never merged.
-    'git checkout "$BASE"',
-    'git merge --ff-only "origin/$BASE" >/dev/null 2>&1 || echo "note: local $BASE has diverged from origin/$BASE and was left alone"',
-    'MERGED=0; git branch --merged "origin/$BASE" | sed "s/^[* ] *//" | grep -qx "$TARGET" && MERGED=1',
-    // Squash-merged: the commits are in the base under a new hash, so `--merged` says
-    // no, but the host deleted the remote branch when the PR landed.
-    '[ "$MERGED" = 1 ] || { [ "$HAD_UPSTREAM" = 1 ] && [ "$REMOTE_EXISTS" = 0 ] && MERGED=1; } || true',
-    ...opts.force ? ["MERGED=1"] : [],
-    '[ "$MERGED" = 1 ] || { echo NOT_MERGED; exit 10; }',
-    // `-D`, not `-d`: the merged-ness check above is STRICTER than git's own (it also
-    // accepts the squash-merge case git cannot see), so `-d` would refuse exactly the
-    // branches this tool exists to remove. Nothing reaches this line unmerged.
-    'git branch -D "$TARGET"',
-    // The remote branch is usually ALREADY gone (the host deletes it on merge). That is
-    // the goal state, not an error, so it is only pushed when it is actually there.
-    '[ "$REMOTE_EXISTS" = 0 ] || git push origin --delete "$TARGET"',
-    "git remote prune origin >/dev/null 2>&1 || true",
-    'echo "Cleaned up $TARGET \u2014 on $BASE (updated), branch deleted locally and on origin"'
-  ].join("\n");
-}
-function publishToolResult(action, r) {
-  const out = (r.stdout ?? "").trim();
-  const fail = (error) => ({ data: { ok: false, action, error, output: out } });
-  if (r.exitCode === 5 || /\bON_BASE_BRANCH\b/.test(out)) {
-    return fail(
-      action === "push" ? "you are on the BASE branch (main/master) and `allowBaseBranch` was not set \u2014 pushing here bypasses pull-request review. Open a pull request instead (git_commit with a `branch`, then open_pull_request). If the human has explicitly asked you to push the base branch, or your session instructions make you the reviewer of your own change and you have self-reviewed it, re-call with allowBaseBranch:true; they will be prompted to approve it." : "you are on the BASE branch (main/master) and `allowBaseBranch` was not set \u2014 committing here bypasses pull-request review. Pass `branch` to git_commit to work on a ticket branch (it is created for you), then open_pull_request. If the human has explicitly asked you to commit to the base branch directly, or your session instructions make you the reviewer of your own change and you have self-reviewed it, re-call with allowBaseBranch:true; they will be prompted to approve it."
-    );
-  }
-  if (r.exitCode === 6 || /\bNOTHING_STAGED\b/.test(out)) {
-    return fail("none of the named paths have uncommitted changes \u2014 nothing was committed. Run git_status to see what actually differs; do not report a commit that did not happen.");
-  }
-  const missing = /MISSING_PATHS:([^\n]*)/.exec(out);
-  if (r.exitCode === 8 || missing) {
-    const named = (missing?.[1] ?? "").trim();
-    return fail(
-      `these paths do not exist in the repository, so nothing was committed:${named ? ` ${named}` : ""}. \`paths\` are relative to the REPOSITORY root \u2014 when you pass \`repo\`, that means relative to the repo directory, NOT to the workspace root your file tools use. Run git_status (with the same \`repo\`) and copy the paths it prints.`
-    );
-  }
-  if (r.exitCode === 9 || /\bNOTHING_TO_CLEAN\b/.test(out)) {
-    return fail("you are already on the base branch and no ticket branch was named \u2014 there is nothing to clean up. Pass `branch` to name the merged branch to delete.");
-  }
-  if (r.exitCode === 10 || /\bNOT_MERGED\b/.test(out)) {
-    return fail(
-      "that branch's commits are NOT in the base branch, so it was left alone \u2014 deleting it would destroy unmerged work. If the pull request was SQUASH-merged (the commits are in main under a new hash and the remote branch still exists), re-call with force:true to delete it anyway."
-    );
-  }
-  if (r.exitCode === 11 || /\bNO_SUCH_BRANCH\b/.test(out)) {
-    return fail("no local branch by that name \u2014 it has already been deleted. Nothing to do.");
-  }
-  if (r.exitCode === 4 || /\bDIRTY\b/.test(out)) {
-    return fail("you have uncommitted changes \u2014 commit or discard them before cleaning up (this refuses to discard uncommitted work).");
-  }
-  if (r.exitCode === 7 || /\bNO_GH_CLI\b/.test(out)) {
-    return fail("the GitHub CLI (`gh`) is not installed or not on PATH, so a pull request cannot be opened from here. The branch is committed and pushed; tell the human to open the PR, and give them the branch name.");
-  }
-  return { data: { ok: r.ok, action, output: out.slice(0, 2e4), ...r.error ? { error: r.error } : {} } };
-}
-async function runPublishTool(action, command, repo, ctx) {
-  const scoped = repoScopedScript(command, repo);
-  const r = await ctx.caps.shell.run(scoped);
-  if (isNotARepo(r) && !repo) return notARepoWithCandidates(action, ctx);
-  const result = publishToolResult(action, r);
-  if (repo && result.data.ok) result.data.repo = repo;
-  return result;
-}
-var gitCommitTool = defineTool({
-  name: "git_commit",
-  description: "Commit the files you changed. You must list the exact `paths` to commit \u2014 the working tree is shared with the human using it, so committing everything would sweep up their unrelated in-flight work; run git_status/git_diff first if you are unsure what you touched. The DEFAULT route is a TICKET BRANCH: pass `branch` to name it (created for you if it does not exist), then use open_pull_request so the work is reviewed. Without `branch`, a commit is refused while you are on the base branch (main/master) \u2014 unless the human has EXPLICITLY asked you to commit to main directly, or your session instructions make you the reviewer of your own change (a local editor session, after you have verified and self-reviewed it); then pass allowBaseBranch:true (the human is prompted to approve it) and follow with git_push allowBaseBranch:true.",
-  parameters: {
-    type: "object",
-    properties: {
-      message: { type: "string", description: "Commit message. One line saying what changed and why." },
-      paths: { type: "array", items: { type: "string" }, description: "Repo-relative paths to commit. Exactly the files YOU changed \u2014 never a catch-all." },
-      branch: { type: "string", description: 'Ticket branch to commit on, created if new (e.g. "ticket/2394-mobile-board-height"). The default route; required when on the base branch unless allowBaseBranch is set.' },
-      allowBaseBranch: { type: "boolean", description: "Set ONLY when the human explicitly asked to commit to the base branch (main/master) directly. Default false, which refuses on the base branch and tells you to use a ticket branch." },
-      repo: REPO_PARAM
-    },
-    required: ["message", "paths"]
-  },
-  requires: ["git.write"],
-  execute: (args, ctx) => {
-    const message2 = typeof args.message === "string" ? args.message.trim() : "";
-    if (!message2) return Promise.resolve({ data: { ok: false, action: "commit", error: "message is required" } });
-    const paths = Array.isArray(args.paths) ? args.paths.filter((p) => typeof p === "string" && p.trim() !== "") : [];
-    if (paths.length === 0) {
-      return Promise.resolve({ data: { ok: false, action: "commit", error: "paths is required \u2014 list the exact files you changed. Run git_status to see them. Do not pass '.' or '-A': the working tree may hold changes that are not yours." } });
-    }
-    const repo = typeof args.repo === "string" ? args.repo : void 0;
-    return runPublishTool(
-      "commit",
-      buildCommitCommand({ message: message2, paths, branch: typeof args.branch === "string" ? args.branch : void 0, allowBaseBranch: args.allowBaseBranch === true, repo }),
-      repo,
-      ctx
-    );
-  }
-});
-var gitPushTool = defineTool({
-  name: "git_push",
-  description: "Push the current branch to origin (setting its upstream on the first push), then report where it landed (`git status --short --branch`). Pushing the BASE branch (main/master) is refused unless you pass allowBaseBranch \u2014 that path skips pull-request review, so only set it when the human has explicitly asked for it, or when your session instructions make you the reviewer of your own change (a local editor session, after verifying and self-reviewing it); the human is prompted to approve it either way. Otherwise the route is a ticket branch: git_commit with a `branch`, git_push, then open_pull_request.",
-  parameters: {
-    type: "object",
-    properties: {
-      allowBaseBranch: { type: "boolean", description: "Set ONLY when the human explicitly asked to push the base branch directly. Default false, which refuses and tells you to open a pull request." },
-      repo: REPO_PARAM
-    }
-  },
-  requires: ["git.write"],
-  execute: (args, ctx) => {
-    const repo = typeof args.repo === "string" ? args.repo : void 0;
-    return runPublishTool("push", buildPushCommand({ allowBaseBranch: args.allowBaseBranch === true, repo }), repo, ctx);
-  }
-});
-var openPullRequestTool = defineTool({
-  name: "open_pull_request",
-  description: "Open a pull request for the current ticket branch against the base branch, pushing it first if it has no upstream yet. This is how a change gets REVIEWED \u2014 prefer it over pushing the base branch, and say so when someone asks you to push directly. Pass `reviewers` to request review from specific people or teams. Returns the pull request URL; report that URL rather than claiming the work is shipped, because it is not until the PR is merged.",
-  parameters: {
-    type: "object",
-    properties: {
-      title: { type: "string", description: "Pull request title \u2014 what this change does, in one line." },
-      body: { type: "string", description: "Pull request description: what changed, why, and how a reviewer can verify it." },
-      base: { type: "string", description: "Base branch to target. Defaults to the remote's default branch (usually main)." },
-      reviewers: { type: "array", items: { type: "string" }, description: "GitHub usernames or org/team slugs to request review from." },
-      repo: REPO_PARAM
-    },
-    required: ["title", "body"]
-  },
-  requires: ["git.write"],
-  execute: (args, ctx) => {
-    const title = typeof args.title === "string" ? args.title.trim() : "";
-    const body = typeof args.body === "string" ? args.body : "";
-    if (!title) return Promise.resolve({ data: { ok: false, action: "pull_request", error: "title is required" } });
-    const repo = typeof args.repo === "string" ? args.repo : void 0;
-    const reviewers = Array.isArray(args.reviewers) ? args.reviewers.filter((r) => typeof r === "string") : void 0;
-    return runPublishTool(
-      "pull_request",
-      buildPullRequestCommand({ title, body, base: typeof args.base === "string" ? args.base : void 0, reviewers, repo }),
-      repo,
-      ctx
-    );
-  }
-});
-var gitCleanupMergedTool = defineTool({
-  name: "git_cleanup_merged",
-  description: "Clean up after work that has LANDED: switch to the base branch, fast-forward it to origin, and delete the merged ticket branch locally and on origin. Call it once the pull request is merged (or once you have pushed the base branch directly) so the checkout is not left sitting on a dead branch with a stale base \u2014 do not hand-roll this with run_command. It is IDEMPOTENT: a remote branch the host already deleted on merge is the expected state, not an error. It REFUSES to delete a branch whose commits are not in the base branch, and refuses to run on a dirty working tree, so it can never destroy unmerged or uncommitted work. If the pull request was SQUASH-merged and the remote branch still exists, git cannot see the merge \u2014 re-call with force:true.",
-  parameters: {
-    type: "object",
-    properties: {
-      branch: { type: "string", description: "The merged branch to delete. Defaults to the branch you are currently on." },
-      baseBranch: { type: "string", description: "Branch to return to and update. Defaults to the remote's default branch (usually main)." },
-      force: { type: "boolean", description: "Delete the branch even though git cannot see its commits in the base branch. ONLY for a squash-merged pull request you have confirmed is merged." },
-      repo: REPO_PARAM
-    }
-  },
-  requires: ["git.write"],
-  execute: (args, ctx) => {
-    const repo = typeof args.repo === "string" ? args.repo : void 0;
-    return runPublishTool(
-      "cleanup",
-      buildCleanupCommand({
-        branch: typeof args.branch === "string" ? args.branch : void 0,
-        baseBranch: typeof args.baseBranch === "string" ? args.baseBranch : void 0,
-        force: args.force === true,
-        repo
-      }),
-      repo,
-      ctx
-    );
-  }
-});
-var GIT_TOOLS = [
-  gitStatusTool,
-  gitDiffTool,
-  gitHistoryTool,
-  gitSyncLatestTool,
-  gitUndoTool,
-  gitRedoTool,
-  gitCommitTool,
-  gitPushTool,
-  openPullRequestTool,
-  gitCleanupMergedTool
-];
 
 // ../packages/agent-tools/src/symbols.ts
 var SYMBOL_KINDS = [
@@ -5926,7 +5418,752 @@ var fileOutlineTool = defineTool({
     return { data };
   }
 });
+function markdownOutline(path2, content) {
+  return extractSymbols(path2, content).filter((s) => s.kind === "heading").slice(0, OUTLINE_MAX_ENTRIES).map((s) => ({ heading: s.name, line: s.line }));
+}
 var SYMBOL_TOOLS = [findSymbolTool, fileOutlineTool];
+
+// ../packages/agent-tools/src/fileRead.ts
+var READ_FILE_MAX_PATHS = 8;
+var MARKDOWN_OUTLINE_MIN_CHARS = 16e3;
+function readFileKey(path2, file, key) {
+  if (file.truncated === true) {
+    return { ok: false, path: path2, key, error: "the file is too large to load whole, so `key` cannot be used \u2014 page it with offset/limit" };
+  }
+  const read = readJsonKey(file.content ?? "", key);
+  if (!read.ok) return { path: path2, key, ...read };
+  if ("tooLarge" in read) {
+    return {
+      ok: true,
+      path: path2,
+      key: read.key,
+      childKeys: read.childKeys,
+      note: `"${read.key}" is ${read.size} characters \u2014 too large to return whole. Read one of its childKeys, e.g. key "${read.key}.${read.childKeys[0] ?? "\u2026"}".`
+    };
+  }
+  return { ok: true, path: path2, key: read.key, content: read.content };
+}
+var isMarkdown = (path2) => /\.mdx?$/i.test(path2);
+async function readOneFile(path2, opts, caps) {
+  const r = await caps.repoRead.readFile(path2);
+  if (!r.ok) return r;
+  if (opts.key) return readFileKey(r.path ?? path2, r, opts.key);
+  const content = r.content ?? "";
+  const win = windowFileContent(content, { offset: opts.offset, limit: opts.limit });
+  const data = {
+    ok: true,
+    path: r.path ?? path2,
+    content: win.content,
+    truncated: win.truncated || r.truncated === true,
+    totalLines: win.totalLines,
+    offset: win.offset
+  };
+  let note = fileWindowNote(win);
+  if (opts.offset === void 0 && isMarkdown(data.path ?? path2) && (content.length > MARKDOWN_OUTLINE_MIN_CHARS || win.truncated)) {
+    const outline = markdownOutline(data.path ?? path2, content);
+    if (outline.length > 0) {
+      data.outline = outline;
+      const pointer = "This document is larger than one read: `outline` lists its headings with their line numbers \u2014 page by heading line with offset (and a small limit) instead of reading it window by window.";
+      note = note ? `${note} ${pointer}` : pointer;
+    }
+  }
+  if (note) data.note = note;
+  return data;
+}
+async function readManyFiles(paths, opts, caps) {
+  return Promise.all(
+    paths.map(
+      (path2) => readOneFile(path2, opts, caps).catch((err) => ({ ok: false, path: path2, error: err instanceof Error ? err.message : String(err) }))
+    )
+  );
+}
+
+// ../packages/agent-tools/src/compress.ts
+var DEFAULT_COMPRESS_MIN_CHARS = 4e3;
+var DEFAULT_COMPRESS_RATE = 0.5;
+var FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/;
+function fenceRun(line2) {
+  return FENCE_OPEN.exec(line2)?.[1] ?? null;
+}
+function splitFences(text) {
+  const out = [];
+  const lines = text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
+  let buf = "";
+  let fence = null;
+  const flush = (kind) => {
+    if (buf) out.push({ kind, text: buf });
+    buf = "";
+  };
+  for (const line2 of lines) {
+    const bare = line2.replace(/\r?\n$/, "");
+    if (!fence) {
+      const run2 = fenceRun(bare);
+      if (run2) {
+        flush("prose");
+        fence = { ch: run2.charAt(0), len: run2.length };
+      }
+      buf += line2;
+      continue;
+    }
+    buf += line2;
+    const run = fenceRun(bare);
+    const open = fence;
+    if (run && run.charAt(0) === open.ch && run.length >= open.len && [...bare.trim()].every((c) => c === open.ch)) {
+      flush("fence");
+      fence = null;
+    }
+  }
+  flush(fence ? "fence" : "prose");
+  return out;
+}
+async function compressLargeContext(text, opts = {}) {
+  const minChars = opts.minChars ?? DEFAULT_COMPRESS_MIN_CHARS;
+  const rate = opts.rate ?? DEFAULT_COMPRESS_RATE;
+  const unchanged = { text, compressed: false, originalTokens: 0, keptTokens: 0 };
+  if (!opts.compress || text.length < minChars || !(rate > 0 && rate < 1)) return unchanged;
+  let compressed = false;
+  let originalTokens = 0;
+  let keptTokens = 0;
+  const parts = [];
+  for (const seg of splitFences(text)) {
+    if (seg.kind === "fence" || seg.text.trim().length < minChars) {
+      parts.push(seg.text);
+      continue;
+    }
+    let r;
+    try {
+      r = await opts.compress(seg.text, rate);
+    } catch {
+      r = { ok: false };
+    }
+    if (r.ok && typeof r.text === "string" && r.text.length < seg.text.length) {
+      parts.push(r.text);
+      compressed = true;
+      originalTokens += r.originalTokens ?? 0;
+      keptTokens += r.keptTokens ?? 0;
+    } else {
+      parts.push(seg.text);
+    }
+  }
+  return compressed ? { text: parts.join(""), compressed, originalTokens, keptTokens } : unchanged;
+}
+async function compressToolOutput(text, ctx, tool) {
+  const semantic = ctx.caps.semantic;
+  if (ctx.compressLargeOutputs !== true || !semantic?.compress) {
+    return { text, compressed: false, originalTokens: 0, keptTokens: 0 };
+  }
+  const r = await compressLargeContext(text, { compress: (t, rate) => semantic.compress(t, rate) });
+  if (r.compressed) {
+    ctx.emit?.({ level: "debug", message: `${tool}: output compressed (C8)`, detail: { originalTokens: r.originalTokens, keptTokens: r.keptTokens } });
+  }
+  return r;
+}
+async function compressShellResult(r, ctx) {
+  if (!r.ok || r.exitCode !== void 0 && r.exitCode !== 0 || typeof r.stdout !== "string") return r;
+  const c = await compressToolOutput(r.stdout, ctx, "run_command");
+  return c.compressed ? { ...r, stdout: c.text, compressed: true } : r;
+}
+async function compressWebFetchResult(r, ctx) {
+  if (!r.ok || typeof r.content !== "string") return r;
+  const c = await compressToolOutput(r.content, ctx, "web_fetch");
+  return c.compressed ? { ...r, content: c.text, compressed: true } : r;
+}
+
+// ../packages/agent-tools/src/git-repo-scope.ts
+function safeGitArg(v) {
+  return typeof v === "string" && /^[\w./@-]+$/.test(v) ? v : null;
+}
+function safeRepoArg(repo) {
+  const arg = safeGitArg(repo);
+  return arg && !arg.split(/[\\/]/).includes("..") && !arg.startsWith("/") ? arg : null;
+}
+function inferRepoFromPath(path2) {
+  if (typeof path2 !== "string" || !path2.trim()) return null;
+  const parts = path2.split(/[\\/]/).filter((s) => s.length > 0 && s !== ".");
+  if (parts.length < 2) return null;
+  return safeRepoArg(parts[0]);
+}
+function repoScopedScript(script, repo) {
+  const dir = safeRepoArg(repo);
+  return dir ? `cd "${dir}" || exit 1
+${script}` : script;
+}
+function buildListCheckoutsCommand() {
+  return 'for d in */; do [ -e "$d.git" ] && printf "%s\\n" "${d%/}"; done';
+}
+function parseCheckoutList(stdout) {
+  if (!stdout) return [];
+  const names = [];
+  for (const line2 of stdout.split(/\r?\n/)) {
+    const name = line2.trim().replace(/\/+$/, "");
+    if (!name || name === "*" || name === "." || name === "..") continue;
+    const safe = safeRepoArg(name);
+    if (safe) names.push(safe);
+  }
+  return names;
+}
+function notARepoResult(action, candidates = []) {
+  const named = candidates.filter(Boolean);
+  const extra = named.length ? `Candidate repositories: ${named.map((c) => `"${c}"`).join(", ")}. Re-run this tool with \`repo\` set to the one holding the code you are working on (e.g. { "repo": "${named[0]}" }).` : "No git checkouts were found at the top level of the open folder. File edits still work; only the git tools need a repository.";
+  return {
+    data: {
+      ok: false,
+      action,
+      error: "not a git repository at the workspace root \u2014 this usually means the open folder CONTAINS the repositories rather than being one (several checkouts side by side). " + extra,
+      ...named.length ? { candidates: named } : {}
+    }
+  };
+}
+function defaultRepoOf(ctx) {
+  return safeRepoArg(ctx.caps.shell?.defaultRepo);
+}
+function pathInRepo(path2, repo) {
+  if (!path2) return path2;
+  const inner = commitPathCandidates(path2, repo);
+  return inner.length > 0 ? inner[inner.length - 1] : void 0;
+}
+async function notARepoWithCandidates(action, ctx) {
+  const listed = await ctx.caps.shell.run(buildListCheckoutsCommand());
+  return notARepoResult(action, parseCheckoutList(listed.stdout));
+}
+var NOT_A_REPO = /not a git repository/i;
+function isNotARepo(r) {
+  return NOT_A_REPO.test(`${r.stdout ?? ""} ${r.error ?? ""}`);
+}
+function commitPathCandidates(path2, repo) {
+  const out = [path2];
+  const dir = safeRepoArg(repo);
+  if (dir) {
+    const prefix = `${dir.replace(/\/+$/, "")}/`;
+    if (path2.startsWith(prefix)) out.push(path2.slice(prefix.length));
+    const leaf = dir.split("/").filter(Boolean).pop();
+    if (leaf && path2.startsWith(`${leaf}/`)) out.push(path2.slice(leaf.length + 1));
+  }
+  return [...new Set(out)].filter((p) => p.trim() !== "");
+}
+var rootNotARepo = /* @__PURE__ */ new WeakSet();
+function scopeAttempts(ctx, path2) {
+  const fallback = defaultRepoOf(ctx);
+  const shell = ctx.caps.shell;
+  const attempts = [];
+  if (!(fallback && shell && rootNotARepo.has(shell))) attempts.push({ path: path2 });
+  const inferred = inferRepoFromPath(path2);
+  if (inferred) attempts.push({ repo: inferred, path: pathInRepo(path2, inferred) });
+  if (fallback && fallback !== inferred) attempts.push({ repo: fallback, path: pathInRepo(path2, fallback) });
+  return attempts;
+}
+async function runInRepoScope(ctx, scope, run) {
+  if (scope.repo) return { r: await run(scope.repo, scope.path), repo: scope.repo };
+  for (const attempt of scopeAttempts(ctx, scope.path)) {
+    const r = await run(attempt.repo, attempt.path);
+    if (!isNotARepo(r)) return attempt.repo ? { r, repo: attempt.repo } : { r };
+    if (!attempt.repo && ctx.caps.shell) rootNotARepo.add(ctx.caps.shell);
+  }
+  return null;
+}
+
+// ../packages/agent-tools/src/shell-tools.ts
+var SHELL_WAIT_MAX_MS = 10 * 60 * 1e3;
+function waitArg(v) {
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.min(Math.floor(v), SHELL_WAIT_MAX_MS) : void 0;
+}
+function cwdArg(v) {
+  if (v == null || v === "") return void 0;
+  if (typeof v !== "string") return null;
+  const dir = v.trim().split("\\").join("/").replace(/^(\.\/)+/, "").replace(/\/+$/, "");
+  if (dir === "" || dir === ".") return ".";
+  return safeRepoArg(dir);
+}
+function scopeCommand(command, dir) {
+  if (!dir || dir === ".") return command;
+  return /\r?\n/.test(command.trim()) ? `cd "${dir}" || exit 1
+${command}` : `cd "${dir}" && ${command}`;
+}
+function commandDir(command, cwd, defaultRepo) {
+  if (cwd) return cwd === "." ? void 0 : cwd;
+  if (/^\s*(cd|pushd)\s/i.test(command)) return void 0;
+  return safeRepoArg(defaultRepo) ?? void 0;
+}
+var jobNote = (id) => `Running in the background (job ${id}). Keep working; check it with command_status { "id": "${id}" } (pass waitMs to wait for it), stop it with command_stop { "id": "${id}" }.`;
+function finishedJob(st) {
+  return {
+    ok: st.status === "exited" && st.exitCode === 0,
+    ...st.exitCode !== void 0 ? { exitCode: st.exitCode } : {},
+    stdout: st.output ?? "",
+    ...st.status === "killed" ? { aborted: true, error: st.error ?? "the job was stopped" } : st.error ? { error: st.error } : {}
+  };
+}
+async function runShellCommand(args, ctx) {
+  const command = typeof args.command === "string" ? args.command : "";
+  if (!command.trim()) return { data: { ok: false, error: "command is required" } };
+  const cwd = cwdArg(args.cwd);
+  if (cwd === null) {
+    return { data: { ok: false, error: "`cwd` must be a directory inside the workspace, relative to its root (no `..`, no absolute path)." } };
+  }
+  const shell = ctx.caps.shell;
+  const dir = commandDir(command, cwd, shell.defaultRepo);
+  const scoped = scopeCommand(command, dir);
+  const where = dir ? { cwd: dir } : {};
+  const opts = ctx.signal ? { signal: ctx.signal } : void 0;
+  const background = args.background === true;
+  const yieldMs = waitArg(args.yieldMs);
+  let note;
+  if (background || yieldMs !== void 0) {
+    if (shell.start && shell.poll) {
+      if (ctx.signal?.aborted) return { data: { ok: false, aborted: true, error: "stopped before the command started", ...where } };
+      const started = await shell.start(scoped);
+      if (!started.ok || !started.id) return { data: { ok: false, error: started.error ?? "the background job did not start", ...where } };
+      const id = started.id;
+      if (background) return { data: { ok: true, background: true, id, status: "running", note: jobNote(id), ...where } };
+      const st = await shell.poll(id, { waitMs: yieldMs, ...ctx.signal ? { signal: ctx.signal } : {} });
+      if (st.status === "running") {
+        const why = ctx.signal?.aborted ? "The wait was interrupted" : `Still running after ${yieldMs}ms`;
+        return { data: { ok: true, background: true, id, status: "running", output: st.output ?? "", note: `${why}, so it moved to the background. ${jobNote(id)}`, ...where } };
+      }
+      const r2 = await compressShellResult(finishedJob(st), ctx);
+      return { data: { ...r2, ...where } };
+    }
+    note = "This surface has no background shell, so the command ran in the foreground.";
+  }
+  const r = await compressShellResult(opts ? await shell.run(scoped, opts) : await shell.run(scoped), ctx);
+  return { data: { ...r, ...where, ...note ? { note } : {} } };
+}
+function jobId(args) {
+  return typeof args.id === "string" ? args.id.trim() : "";
+}
+var commandStatusTool = defineTool({
+  name: "command_status",
+  description: "Check a BACKGROUND command started by run_command (background:true, or one that outlived its yieldMs): whether it is still running, its exit code, and the tail of its output. Pass waitMs to wait up to that long for it to finish first. Use this instead of re-running a long command.",
+  parameters: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "The job id run_command returned." },
+      waitMs: { type: "number", description: "Optional: wait up to this many milliseconds for the job to finish before answering (max 600000)." }
+    },
+    required: ["id"]
+  },
+  requires: ["shell.jobs"],
+  async execute(args, ctx) {
+    const id = jobId(args);
+    if (!id) return { data: { ok: false, error: "id is required" } };
+    const poll = ctx.caps.shell?.poll;
+    if (!poll) return { data: { ok: false, error: "background commands are not available on this surface" } };
+    const waitMs = waitArg(args.waitMs);
+    const st = await poll.call(ctx.caps.shell, id, { ...waitMs !== void 0 ? { waitMs } : {}, ...ctx.signal ? { signal: ctx.signal } : {} });
+    return { data: st };
+  }
+});
+var commandStopTool = defineTool({
+  name: "command_stop",
+  description: "Stop a BACKGROUND command started by run_command \u2014 it and every process it started are killed. Returns its final output tail.",
+  parameters: {
+    type: "object",
+    properties: { id: { type: "string", description: "The job id run_command returned." } },
+    required: ["id"]
+  },
+  requires: ["shell.jobs"],
+  async execute(args, ctx) {
+    const id = jobId(args);
+    if (!id) return { data: { ok: false, error: "id is required" } };
+    const kill = ctx.caps.shell?.kill;
+    if (!kill) return { data: { ok: false, error: "background commands are not available on this surface" } };
+    const st = await kill.call(ctx.caps.shell, id);
+    return { data: st };
+  }
+});
+var SHELL_JOB_TOOLS = [commandStatusTool, commandStopTool];
+
+// ../packages/agent-tools/src/git-tools.ts
+var RESOLVE_BASE = `BASE="$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; [ -n "$BASE" ] || BASE=main`;
+var IDENTITY_EMAIL = 'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"';
+var IDENTITY_NAME = 'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"';
+function buildGitCommand(action, opts) {
+  const path2 = safeGitArg(opts?.path);
+  const pathArg = path2 ? ` -- "${path2}"` : "";
+  const repo = safeRepoArg(opts?.repo);
+  const scoped = (cmd) => repo ? `cd "${repo}" && ${cmd}` : cmd;
+  const scopedScript = (lines) => repoScopedScript(lines.join("\n"), opts?.repo);
+  const tracked = safeGitArg(opts?.trackedBranch);
+  const absorb = tracked ? ["set -e", IDENTITY_EMAIL, IDENTITY_NAME, `git fetch origin "${tracked}" 2>/dev/null && git merge --ff-only "origin/${tracked}" 2>/dev/null || true`] : [];
+  const publish = (force) => tracked ? [force ? "git push --force-with-lease origin HEAD" : "git push origin HEAD"] : [];
+  switch (action) {
+    case "status":
+      return scoped("git status --short --branch");
+    case "diff":
+      return scoped(`git --no-pager diff${pathArg}`);
+    case "history": {
+      const limit = Number.isFinite(opts?.limit) && opts.limit > 0 ? Math.min(Math.floor(opts.limit), 200) : 30;
+      return scoped(`git --no-pager log --oneline -n ${limit}${pathArg}`);
+    }
+    case "sync_latest": {
+      const base = safeGitArg(opts?.baseBranch);
+      const resolveBase = base ? `BASE="${base}"` : RESOLVE_BASE;
+      return scopedScript([
+        ...tracked ? absorb : ["set -e"],
+        resolveBase,
+        ...tracked ? [] : [IDENTITY_EMAIL, IDENTITY_NAME],
+        'git fetch origin "$BASE"',
+        'git merge --no-edit "origin/$BASE" || { git merge --abort; echo MERGE_CONFLICT; exit 3; }',
+        ...publish(false),
+        'echo "Synced with origin/$BASE"'
+      ]);
+    }
+    case "undo":
+      return scopedScript([
+        ...absorb,
+        '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
+        "git reset --hard HEAD~1",
+        ...publish(true),
+        'echo "Undid the last commit (use git_redo to reapply)"'
+      ]);
+    case "redo":
+      return scopedScript([
+        ...absorb,
+        '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
+        'git reset --hard "HEAD@{1}"',
+        ...publish(true),
+        'echo "Reapplied the last undone change"'
+      ]);
+  }
+}
+function gitToolResult(action, r) {
+  const out = (r.stdout ?? "").trim();
+  if (r.exitCode === 3 || /MERGE_CONFLICT/.test(out)) {
+    return { data: { ok: false, action, error: "merge conflict \u2014 the base branch has changes that conflict with your branch; the merge was aborted (working tree is clean). Resolve by editing the conflicting files, or ask a human.", output: out } };
+  }
+  if (r.exitCode === 4 || /\bDIRTY\b/.test(out)) {
+    return { data: { ok: false, action, error: "you have uncommitted changes \u2014 commit or discard them before git_" + action + " (it refuses to discard uncommitted work)." } };
+  }
+  return { data: { ok: r.ok, action, output: out.slice(0, 2e4), ...r.error ? { error: r.error } : {} } };
+}
+async function runGitTool(action, opts, ctx) {
+  const trackedBranch = ctx.caps.shell?.trackedBranch;
+  const ran = await runInRepoScope(ctx, opts, (repo, path2) => ctx.caps.shell.run(buildGitCommand(action, { ...opts, repo, path: path2, ...trackedBranch ? { trackedBranch } : {} })));
+  if (!ran) return notARepoWithCandidates(action, ctx);
+  const result = gitToolResult(action, ran.r);
+  if (ran.repo && result.data.ok) {
+    result.data.repo = ran.repo;
+  }
+  return result;
+}
+var REPO_PARAM = {
+  type: "string",
+  description: 'Optional subdirectory holding the repository, when the open folder CONTAINS checkouts rather than being one (e.g. "my-project"). Omit when the workspace root is itself the repo.'
+};
+var gitStatusTool = defineTool({
+  name: "git_status",
+  description: "Show the current branch and any uncommitted changes (git status). Use it to see what you have modified before committing, syncing, or finishing. If the open folder contains several checkouts rather than being one repo, pass `repo` to name the one you mean.",
+  parameters: { type: "object", properties: { repo: REPO_PARAM } },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("status", { repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
+});
+var gitDiffTool = defineTool({
+  name: "git_diff",
+  description: "Show the uncommitted diff of your working tree (optionally for one path). Use it to review exactly what you changed before finishing.",
+  parameters: { type: "object", properties: { path: { type: "string", description: "Optional repo-relative file/dir to scope the diff to." }, repo: REPO_PARAM } },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("diff", { path: typeof args.path === "string" ? args.path : void 0, repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
+});
+var gitHistoryTool = defineTool({
+  name: "git_history",
+  description: "Show recent commit history (git log --oneline), optionally scoped to a path. Use it to understand how a file evolved before changing it.",
+  parameters: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: "Optional repo-relative file/dir to scope history to." },
+      limit: { type: "number", description: "Max commits to return (default 30, max 200)." },
+      repo: REPO_PARAM
+    }
+  },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("history", { path: typeof args.path === "string" ? args.path : void 0, limit: typeof args.limit === "number" ? args.limit : void 0, repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
+});
+var gitSyncLatestTool = defineTool({
+  name: "git_sync_latest",
+  description: "Fetch the latest base branch (e.g. main) and merge it into your working branch so you are NOT building on stale code. Run this FIRST, before editing \u2014 a branch created earlier can be far behind main, so its build fails against old dependencies and its pull request would revert newer work. On a merge conflict it safely aborts and tells you which to resolve.",
+  parameters: { type: "object", properties: { baseBranch: { type: "string", description: "Base branch to sync from. Defaults to the remote's default branch (usually main)." }, repo: REPO_PARAM } },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("sync_latest", { baseBranch: typeof args.baseBranch === "string" ? args.baseBranch : void 0, repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
+});
+var gitUndoTool = defineTool({
+  name: "git_undo",
+  description: "Undo your most recent commit (keeps the change recoverable \u2014 use git_redo to reapply). Refuses if you have uncommitted changes, so it can never discard unsaved work. Use it to back out a change that was wrong.",
+  parameters: { type: "object", properties: { repo: REPO_PARAM } },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("undo", { repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
+});
+var gitRedoTool = defineTool({
+  name: "git_redo",
+  description: "Reapply the change you most recently undid with git_undo (reflog redo). Refuses if you have uncommitted changes.",
+  parameters: { type: "object", properties: { repo: REPO_PARAM } },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("redo", { repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
+});
+function shellQuote(v) {
+  return `'${v.replace(/'/g, `'\\''`)}'`;
+}
+function buildCommitCommand(opts) {
+  const branch = safeGitArg(opts.branch);
+  const resolveLines = opts.paths.map((p, i) => {
+    const candidates = commitPathCandidates(p, opts.repo).map(shellQuote).join(" ");
+    return `P${i}="$(pick ${candidates})" || MISSING="$MISSING ${shellQuote(p).slice(1, -1)}"`;
+  });
+  const paths = opts.paths.map((_, i) => `"$P${i}"`).join(" ");
+  return [
+    "set -e",
+    RESOLVE_BASE,
+    'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"',
+    'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"',
+    'CUR="$(git rev-parse --abbrev-ref HEAD)"',
+    // A ticket branch was named: switch to it, creating it if new. Otherwise the base
+    // branch is refused — unless the caller DECLARED it, the same declared act `git_push`
+    // takes. Without that declaration "commit and push to main" had no reachable path at
+    // all: push accepted `allowBaseBranch`, but the commit before it could never land on
+    // main, so an explicit human instruction ended in a refusal every time.
+    ...branch ? [`git rev-parse --verify --quiet "${branch}" >/dev/null && git checkout "${branch}" || git checkout -b "${branch}"`] : opts.allowBaseBranch ? [] : ['[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }'],
+    // A path is "there" if it is on disk OR tracked by git — the second arm is what
+    // lets a DELETION be committed, since the file is gone by definition.
+    'pick() { for c in "$@"; do if [ -e "$c" ] || git ls-files --error-unmatch -- "$c" >/dev/null 2>&1; then printf %s "$c"; return 0; fi; done; return 1; }',
+    'MISSING=""',
+    ...resolveLines,
+    '[ -z "$MISSING" ] || { echo "MISSING_PATHS:$MISSING"; exit 8; }',
+    `git add -- ${paths}`,
+    // Nothing staged is a fact, not a failure — say which rather than exiting 1 with
+    // git's own "nothing to commit" that reads like a broken tool.
+    "git diff --cached --quiet && { echo NOTHING_STAGED; exit 6; }",
+    `git commit -m ${shellQuote(opts.message)}`,
+    'echo "Committed on $(git rev-parse --abbrev-ref HEAD): $(git rev-parse --short HEAD)"'
+  ].join("\n");
+}
+function buildPushCommand(opts) {
+  return [
+    "set -e",
+    RESOLVE_BASE,
+    'CUR="$(git rev-parse --abbrev-ref HEAD)"',
+    ...opts.allowBaseBranch ? [] : ['[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }'],
+    // `-u` so a brand-new ticket branch gets its upstream on the first push.
+    'git push -u origin "$CUR"',
+    'echo "Pushed $CUR to origin"',
+    // Report where the push LANDED — the branch header (`## main...origin/main`, with any
+    // `[ahead N]` still owed) plus whatever is still uncommitted. That is the evidence a
+    // host needs to call the change shipped, so the push verifies itself rather than
+    // depending on the agent remembering a separate status call. Never fails the push.
+    "git status --short --branch 2>/dev/null || true"
+  ].join("\n");
+}
+function buildPullRequestCommand(opts) {
+  const base = safeGitArg(opts.base);
+  const reviewers = (opts.reviewers ?? []).map((r) => safeGitArg(r)).filter((r) => !!r);
+  return [
+    "set -e",
+    "command -v gh >/dev/null 2>&1 || { echo NO_GH_CLI; exit 7; }",
+    ...base ? [`BASE="${base}"`] : [RESOLVE_BASE],
+    'CUR="$(git rev-parse --abbrev-ref HEAD)"',
+    '[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }',
+    // Push first when the branch has no upstream — `gh pr create` fails on an unpushed
+    // head, and "open a PR" plainly means the branch has to exist on the remote.
+    'git rev-parse --abbrev-ref "@{upstream}" >/dev/null 2>&1 || git push -u origin "$CUR"',
+    `gh pr create --base "$BASE" --head "$CUR" --title ${shellQuote(opts.title)} --body ${shellQuote(opts.body)}` + reviewers.map((r) => ` --reviewer "${r}"`).join("")
+  ].join("\n");
+}
+function buildCleanupCommand(opts) {
+  const branch = safeGitArg(opts.branch);
+  const base = safeGitArg(opts.baseBranch);
+  return [
+    "set -e",
+    ...base ? [`BASE="${base}"`] : [RESOLVE_BASE],
+    ...branch ? [`TARGET="${branch}"`] : ['TARGET="$(git rev-parse --abbrev-ref HEAD)"'],
+    '[ "$TARGET" != "$BASE" ] || { echo NOTHING_TO_CLEAN; exit 9; }',
+    '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
+    'git rev-parse --verify --quiet "$TARGET" >/dev/null || { echo NO_SUCH_BRANCH; exit 11; }',
+    // Was this branch ever pushed? Read BEFORE the prune, which is what removes the
+    // evidence — a branch that had an upstream and no longer exists on the remote was
+    // merged and deleted by the host, however it was merged.
+    'HAD_UPSTREAM=0; git rev-parse --verify --quiet "refs/remotes/origin/$TARGET" >/dev/null && HAD_UPSTREAM=1',
+    "git fetch --prune origin",
+    'REMOTE_EXISTS=0; git ls-remote --exit-code --heads origin "$TARGET" >/dev/null 2>&1 && REMOTE_EXISTS=1',
+    // Get onto the base branch and bring it up to date — the state the user expects to
+    // be left in. `--ff-only` so a divergent local base is reported, never merged.
+    'git checkout "$BASE"',
+    'git merge --ff-only "origin/$BASE" >/dev/null 2>&1 || echo "note: local $BASE has diverged from origin/$BASE and was left alone"',
+    'MERGED=0; git branch --merged "origin/$BASE" | sed "s/^[* ] *//" | grep -qx "$TARGET" && MERGED=1',
+    // Squash-merged: the commits are in the base under a new hash, so `--merged` says
+    // no, but the host deleted the remote branch when the PR landed.
+    '[ "$MERGED" = 1 ] || { [ "$HAD_UPSTREAM" = 1 ] && [ "$REMOTE_EXISTS" = 0 ] && MERGED=1; } || true',
+    ...opts.force ? ["MERGED=1"] : [],
+    '[ "$MERGED" = 1 ] || { echo NOT_MERGED; exit 10; }',
+    // `-D`, not `-d`: the merged-ness check above is STRICTER than git's own (it also
+    // accepts the squash-merge case git cannot see), so `-d` would refuse exactly the
+    // branches this tool exists to remove. Nothing reaches this line unmerged.
+    'git branch -D "$TARGET"',
+    // The remote branch is usually ALREADY gone (the host deletes it on merge). That is
+    // the goal state, not an error, so it is only pushed when it is actually there.
+    '[ "$REMOTE_EXISTS" = 0 ] || git push origin --delete "$TARGET"',
+    "git remote prune origin >/dev/null 2>&1 || true",
+    'echo "Cleaned up $TARGET \u2014 on $BASE (updated), branch deleted locally and on origin"'
+  ].join("\n");
+}
+function publishToolResult(action, r) {
+  const out = (r.stdout ?? "").trim();
+  const fail = (error) => ({ data: { ok: false, action, error, output: out } });
+  if (r.exitCode === 5 || /\bON_BASE_BRANCH\b/.test(out)) {
+    return fail(
+      action === "push" ? "you are on the BASE branch (main/master) and `allowBaseBranch` was not set \u2014 pushing here bypasses pull-request review. Open a pull request instead (git_commit with a `branch`, then open_pull_request). If the human has explicitly asked you to push the base branch, or your session instructions make you the reviewer of your own change and you have self-reviewed it, re-call with allowBaseBranch:true; they will be prompted to approve it." : "you are on the BASE branch (main/master) and `allowBaseBranch` was not set \u2014 committing here bypasses pull-request review. Pass `branch` to git_commit to work on a ticket branch (it is created for you), then open_pull_request. If the human has explicitly asked you to commit to the base branch directly, or your session instructions make you the reviewer of your own change and you have self-reviewed it, re-call with allowBaseBranch:true; they will be prompted to approve it."
+    );
+  }
+  if (r.exitCode === 6 || /\bNOTHING_STAGED\b/.test(out)) {
+    return fail("none of the named paths have uncommitted changes \u2014 nothing was committed. Run git_status to see what actually differs; do not report a commit that did not happen.");
+  }
+  const missing = /MISSING_PATHS:([^\n]*)/.exec(out);
+  if (r.exitCode === 8 || missing) {
+    const named = (missing?.[1] ?? "").trim();
+    return fail(
+      `these paths do not exist in the repository, so nothing was committed:${named ? ` ${named}` : ""}. \`paths\` are relative to the REPOSITORY root \u2014 when you pass \`repo\`, that means relative to the repo directory, NOT to the workspace root your file tools use. Run git_status (with the same \`repo\`) and copy the paths it prints.`
+    );
+  }
+  if (r.exitCode === 9 || /\bNOTHING_TO_CLEAN\b/.test(out)) {
+    return fail("you are already on the base branch and no ticket branch was named \u2014 there is nothing to clean up. Pass `branch` to name the merged branch to delete.");
+  }
+  if (r.exitCode === 10 || /\bNOT_MERGED\b/.test(out)) {
+    return fail(
+      "that branch's commits are NOT in the base branch, so it was left alone \u2014 deleting it would destroy unmerged work. If the pull request was SQUASH-merged (the commits are in main under a new hash and the remote branch still exists), re-call with force:true to delete it anyway."
+    );
+  }
+  if (r.exitCode === 11 || /\bNO_SUCH_BRANCH\b/.test(out)) {
+    return fail("no local branch by that name \u2014 it has already been deleted. Nothing to do.");
+  }
+  if (r.exitCode === 4 || /\bDIRTY\b/.test(out)) {
+    return fail("you have uncommitted changes \u2014 commit or discard them before cleaning up (this refuses to discard uncommitted work).");
+  }
+  if (r.exitCode === 7 || /\bNO_GH_CLI\b/.test(out)) {
+    return fail("the GitHub CLI (`gh`) is not installed or not on PATH, so a pull request cannot be opened from here. The branch is committed and pushed; tell the human to open the PR, and give them the branch name.");
+  }
+  return { data: { ok: r.ok, action, output: out.slice(0, 2e4), ...r.error ? { error: r.error } : {} } };
+}
+async function runPublishTool(action, command, repo, ctx) {
+  const build = (scope) => typeof command === "string" ? command : command(scope);
+  const ran = await runInRepoScope(ctx, repo ? { repo } : {}, (scope) => ctx.caps.shell.run(repoScopedScript(build(scope), scope)));
+  if (!ran) return notARepoWithCandidates(action, ctx);
+  const result = publishToolResult(action, ran.r);
+  if (ran.repo && result.data.ok) result.data.repo = ran.repo;
+  return result;
+}
+var gitCommitTool = defineTool({
+  name: "git_commit",
+  description: "Commit the files you changed. You must list the exact `paths` to commit \u2014 the working tree is shared with the human using it, so committing everything would sweep up their unrelated in-flight work; run git_status/git_diff first if you are unsure what you touched. The DEFAULT route is a TICKET BRANCH: pass `branch` to name it (created for you if it does not exist), then use open_pull_request so the work is reviewed. Without `branch`, a commit is refused while you are on the base branch (main/master) \u2014 unless the human has EXPLICITLY asked you to commit to main directly, or your session instructions make you the reviewer of your own change (a local editor session, after you have verified and self-reviewed it); then pass allowBaseBranch:true (the human is prompted to approve it) and follow with git_push allowBaseBranch:true.",
+  parameters: {
+    type: "object",
+    properties: {
+      message: { type: "string", description: "Commit message. One line saying what changed and why." },
+      paths: { type: "array", items: { type: "string" }, description: "Repo-relative paths to commit. Exactly the files YOU changed \u2014 never a catch-all." },
+      branch: { type: "string", description: 'Ticket branch to commit on, created if new (e.g. "ticket/2394-mobile-board-height"). The default route; required when on the base branch unless allowBaseBranch is set.' },
+      allowBaseBranch: { type: "boolean", description: "Set ONLY when the human explicitly asked to commit to the base branch (main/master) directly. Default false, which refuses on the base branch and tells you to use a ticket branch." },
+      repo: REPO_PARAM
+    },
+    required: ["message", "paths"]
+  },
+  requires: ["git.write"],
+  execute: (args, ctx) => {
+    const message2 = typeof args.message === "string" ? args.message.trim() : "";
+    if (!message2) return Promise.resolve({ data: { ok: false, action: "commit", error: "message is required" } });
+    const paths = Array.isArray(args.paths) ? args.paths.filter((p) => typeof p === "string" && p.trim() !== "") : [];
+    if (paths.length === 0) {
+      return Promise.resolve({ data: { ok: false, action: "commit", error: "paths is required \u2014 list the exact files you changed. Run git_status to see them. Do not pass '.' or '-A': the working tree may hold changes that are not yours." } });
+    }
+    const repo = typeof args.repo === "string" ? args.repo : void 0;
+    return runPublishTool(
+      "commit",
+      (scope) => buildCommitCommand({ message: message2, paths, branch: typeof args.branch === "string" ? args.branch : void 0, allowBaseBranch: args.allowBaseBranch === true, repo: scope }),
+      repo,
+      ctx
+    );
+  }
+});
+var gitPushTool = defineTool({
+  name: "git_push",
+  description: "Push the current branch to origin (setting its upstream on the first push), then report where it landed (`git status --short --branch`). Pushing the BASE branch (main/master) is refused unless you pass allowBaseBranch \u2014 that path skips pull-request review, so only set it when the human has explicitly asked for it, or when your session instructions make you the reviewer of your own change (a local editor session, after verifying and self-reviewing it); the human is prompted to approve it either way. Otherwise the route is a ticket branch: git_commit with a `branch`, git_push, then open_pull_request.",
+  parameters: {
+    type: "object",
+    properties: {
+      allowBaseBranch: { type: "boolean", description: "Set ONLY when the human explicitly asked to push the base branch directly. Default false, which refuses and tells you to open a pull request." },
+      repo: REPO_PARAM
+    }
+  },
+  requires: ["git.write"],
+  execute: (args, ctx) => {
+    const repo = typeof args.repo === "string" ? args.repo : void 0;
+    return runPublishTool("push", buildPushCommand({ allowBaseBranch: args.allowBaseBranch === true, repo }), repo, ctx);
+  }
+});
+var openPullRequestTool = defineTool({
+  name: "open_pull_request",
+  description: "Open a pull request for the current ticket branch against the base branch, pushing it first if it has no upstream yet. This is how a change gets REVIEWED \u2014 prefer it over pushing the base branch, and say so when someone asks you to push directly. Pass `reviewers` to request review from specific people or teams. Returns the pull request URL; report that URL rather than claiming the work is shipped, because it is not until the PR is merged.",
+  parameters: {
+    type: "object",
+    properties: {
+      title: { type: "string", description: "Pull request title \u2014 what this change does, in one line." },
+      body: { type: "string", description: "Pull request description: what changed, why, and how a reviewer can verify it." },
+      base: { type: "string", description: "Base branch to target. Defaults to the remote's default branch (usually main)." },
+      reviewers: { type: "array", items: { type: "string" }, description: "GitHub usernames or org/team slugs to request review from." },
+      repo: REPO_PARAM
+    },
+    required: ["title", "body"]
+  },
+  requires: ["git.write"],
+  execute: (args, ctx) => {
+    const title = typeof args.title === "string" ? args.title.trim() : "";
+    const body = typeof args.body === "string" ? args.body : "";
+    if (!title) return Promise.resolve({ data: { ok: false, action: "pull_request", error: "title is required" } });
+    const repo = typeof args.repo === "string" ? args.repo : void 0;
+    const reviewers = Array.isArray(args.reviewers) ? args.reviewers.filter((r) => typeof r === "string") : void 0;
+    return runPublishTool(
+      "pull_request",
+      buildPullRequestCommand({ title, body, base: typeof args.base === "string" ? args.base : void 0, reviewers, repo }),
+      repo,
+      ctx
+    );
+  }
+});
+var gitCleanupMergedTool = defineTool({
+  name: "git_cleanup_merged",
+  description: "Clean up after work that has LANDED: switch to the base branch, fast-forward it to origin, and delete the merged ticket branch locally and on origin. Call it once the pull request is merged (or once you have pushed the base branch directly) so the checkout is not left sitting on a dead branch with a stale base \u2014 do not hand-roll this with run_command. It is IDEMPOTENT: a remote branch the host already deleted on merge is the expected state, not an error. It REFUSES to delete a branch whose commits are not in the base branch, and refuses to run on a dirty working tree, so it can never destroy unmerged or uncommitted work. If the pull request was SQUASH-merged and the remote branch still exists, git cannot see the merge \u2014 re-call with force:true.",
+  parameters: {
+    type: "object",
+    properties: {
+      branch: { type: "string", description: "The merged branch to delete. Defaults to the branch you are currently on." },
+      baseBranch: { type: "string", description: "Branch to return to and update. Defaults to the remote's default branch (usually main)." },
+      force: { type: "boolean", description: "Delete the branch even though git cannot see its commits in the base branch. ONLY for a squash-merged pull request you have confirmed is merged." },
+      repo: REPO_PARAM
+    }
+  },
+  requires: ["git.write"],
+  execute: (args, ctx) => {
+    const repo = typeof args.repo === "string" ? args.repo : void 0;
+    return runPublishTool(
+      "cleanup",
+      buildCleanupCommand({
+        branch: typeof args.branch === "string" ? args.branch : void 0,
+        baseBranch: typeof args.baseBranch === "string" ? args.baseBranch : void 0,
+        force: args.force === true,
+        repo
+      }),
+      repo,
+      ctx
+    );
+  }
+});
+var GIT_TOOLS = [
+  gitStatusTool,
+  gitDiffTool,
+  gitHistoryTool,
+  gitSyncLatestTool,
+  gitUndoTool,
+  gitRedoTool,
+  gitCommitTool,
+  gitPushTool,
+  openPullRequestTool,
+  gitCleanupMergedTool
+];
 
 // ../packages/agent-tools/src/retrievalK.ts
 var ADAPTIVE_K_START = 3;
@@ -6283,58 +6520,37 @@ var searchCodeTool = defineTool({
     return { data: r };
   }
 });
-function readFileKey(path2, file, key) {
-  if (file.truncated === true) {
-    return { ok: false, path: path2, key, error: "the file is too large to load whole, so `key` cannot be used \u2014 page it with offset/limit" };
-  }
-  const read = readJsonKey(file.content ?? "", key);
-  if (!read.ok) return { path: path2, key, ...read };
-  if ("tooLarge" in read) {
-    return {
-      ok: true,
-      path: path2,
-      key: read.key,
-      childKeys: read.childKeys,
-      note: `"${read.key}" is ${read.size} characters \u2014 too large to return whole. Read one of its childKeys, e.g. key "${read.key}.${read.childKeys[0] ?? "\u2026"}".`
-    };
-  }
-  return { ok: true, path: path2, key: read.key, content: read.content };
-}
 var readFileTool = defineTool({
   name: "read_file",
-  description: "Read a repo file on the ticket branch. Returns up to " + READ_DEFAULT_LINE_LIMIT + ' lines at a time: a large file comes back as a paginated line window (never a hard failure), and the result\'s `truncated`/`totalLines` tell you when more remains \u2014 read the next chunk by calling again with `offset`. For a large JSON file (an i18n catalog, a config) pass `key` with a dot path such as "admin.visitorFlow" to get just that subtree instead of paging line windows. Always read a file before editing it so you preserve existing code and only change what is needed.',
+  description: "Read a repo file on the ticket branch. Returns up to " + READ_DEFAULT_LINE_LIMIT + " lines at a time: a large file comes back as a paginated line window (never a hard failure), and the result's `truncated`/`totalLines` tell you when more remains \u2014 read the next chunk by calling again with `offset`. To read several files at once pass `paths` (up to " + READ_FILE_MAX_PATHS + ') instead of `path`: you get `files`, one result per path. A first read of a large Markdown document also returns its `outline` (headings with line numbers) \u2014 page by heading line with `offset`. For a large JSON file (an i18n catalog, a config) pass `key` with a dot path such as "admin.visitorFlow" to get just that subtree instead of paging line windows. Always read a file before editing it so you preserve existing code and only change what is needed.',
   parameters: {
     type: "object",
     properties: {
       path: { type: "string", description: 'Repo-relative path, e.g. "src/feature.ts".' },
+      paths: {
+        type: "array",
+        items: { type: "string" },
+        maxItems: READ_FILE_MAX_PATHS,
+        description: `Instead of \`path\`: up to ${READ_FILE_MAX_PATHS} repo-relative paths read in one call. offset/limit/key apply to each.`
+      },
       offset: { type: "number", description: "1-based line to start reading from (for paging through a large file). Default 1." },
       limit: { type: "number", description: `Max lines to return. Default ${READ_DEFAULT_LINE_LIMIT}. Read the next window with offset = previous offset + returned lines.` },
       key: { type: "string", description: 'JSON files only: a dot path (e.g. "admin.visitorFlow") \u2014 returns that subtree, or its child keys when it is too large. Ignores offset/limit.' }
-    },
-    required: ["path"]
+    }
   },
   requires: ["repo.read"],
   async execute(args, ctx) {
     const path2 = typeof args.path === "string" ? args.path : "";
-    if (!path2) return { data: { ok: false, error: "path is required" } };
-    const offset = typeof args.offset === "number" && args.offset > 0 ? Math.floor(args.offset) : void 0;
-    const limit = typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : void 0;
-    const key = typeof args.key === "string" ? args.key.trim() : "";
-    const r = await ctx.caps.repoRead.readFile(path2);
-    if (!r.ok) return { data: r };
-    if (key) return { data: readFileKey(r.path ?? path2, r, key) };
-    const win = windowFileContent(r.content ?? "", { offset, limit });
-    const data = {
-      ok: true,
-      path: r.path ?? path2,
-      content: win.content,
-      truncated: win.truncated || r.truncated === true,
-      totalLines: win.totalLines,
-      offset: win.offset
+    const paths = !path2 && Array.isArray(args.paths) ? args.paths.filter((p) => typeof p === "string" && p.trim() !== "") : [];
+    if (!path2 && paths.length === 0) return { data: { ok: false, error: "path is required (or paths: a list of up to " + READ_FILE_MAX_PATHS + ")" } };
+    if (paths.length > READ_FILE_MAX_PATHS) return { data: { ok: false, error: `paths takes at most ${READ_FILE_MAX_PATHS} files per call \u2014 split the rest into another read_file` } };
+    const opts = {
+      offset: typeof args.offset === "number" && args.offset > 0 ? Math.floor(args.offset) : void 0,
+      limit: typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : void 0,
+      key: typeof args.key === "string" ? args.key.trim() : ""
     };
-    const note = fileWindowNote(win);
-    if (note) data.note = note;
-    return { data };
+    if (!path2) return { data: { ok: true, files: await readManyFiles(paths, opts, ctx.caps) } };
+    return { data: await readOneFile(path2, opts, ctx.caps) };
   }
 });
 var writeFileTool = defineTool({
@@ -6638,17 +6854,16 @@ var runCommandTool = defineTool({
   parameters: {
     type: "object",
     properties: {
-      command: { type: "string", description: 'The shell command to run, e.g. "npm install" or "npm test".' }
+      command: { type: "string", description: 'The shell command to run, e.g. "npm install" or "npm test".' },
+      cwd: { type: "string", description: 'Optional directory to run in, relative to the workspace root (e.g. "my-project"). Defaults to the run\'s repository; "." is the workspace root. Use this instead of a `cd X &&` prefix.' },
+      background: { type: "boolean", description: "Run a long command (a dev server, a full test suite, a build) in the background: returns a job id at once; check it with command_status, stop it with command_stop." },
+      yieldMs: { type: "number", description: "Optional: run in the foreground up to this many milliseconds, then hand back a background job id if it is still running." }
     },
     required: ["command"]
   },
   requires: ["shell"],
-  async execute(args, ctx) {
-    const command = typeof args.command === "string" ? args.command : "";
-    if (!command.trim()) return { data: { ok: false, error: "command is required" } };
-    const r = await compressShellResult(await ctx.caps.shell.run(command), ctx);
-    return { data: r };
-  }
+  // Where it runs, Stop, and the background modes live in `shell-tools.ts`.
+  execute: (args, ctx) => runShellCommand(args, ctx)
 });
 var askHumanTool = defineTool({
   name: "ask_human",
@@ -6746,6 +6961,7 @@ var CORE_TOOLS = [
   deleteFileTool,
   runChecksTool,
   runCommandTool,
+  ...SHELL_JOB_TOOLS,
   analyzeCodebaseTool,
   ...GIT_TOOLS,
   webFetchTool,
@@ -6914,6 +7130,12 @@ var RunKnowledgeRecorder = class _RunKnowledgeRecorder {
       return;
     }
     const kind = fileToolKind(name);
+    const rec = args && typeof args === "object" && !Array.isArray(args) ? args : void 0;
+    const many = kind === "read" && !!rec && !(typeof rec.path === "string" && rec.path !== "") && Array.isArray(rec.paths);
+    if (kind && many) {
+      for (const path2 of toolCallPaths(args)) this.memory.observe({ kind: OBSERVATION[kind], path: path2 });
+      return;
+    }
     const p = kind ? argPath(args) : void 0;
     if (kind && p) this.memory.observe({ kind: OBSERVATION[kind], path: p });
   }
@@ -10135,12 +10357,12 @@ function segmentIsReadOnly(segment, depth) {
   }
   const flat = segment.replace(/\$\((?:[^()]|\([^()]*\))*\)/g, "X");
   if (writesViaRedirect(flat)) return false;
-  let words2 = tokens(flat);
-  while (words2.length && (CONSTRUCT_WORDS.has(words2[0]) || /^[A-Za-z_]\w*=/.test(words2[0]) || words2[0] === "if" || words2[0] === "while" || words2[0] === "until" || words2[0] === "!")) {
-    words2 = words2.slice(1);
+  let words3 = tokens(flat);
+  while (words3.length && (CONSTRUCT_WORDS.has(words3[0]) || /^[A-Za-z_]\w*=/.test(words3[0]) || words3[0] === "if" || words3[0] === "while" || words3[0] === "until" || words3[0] === "!")) {
+    words3 = words3.slice(1);
   }
-  if (words2.length === 0) return true;
-  const [program, ...args] = words2;
+  if (words3.length === 0) return true;
+  const [program, ...args] = words3;
   if (program === "for" || program === "case") return true;
   if (program === "git") return gitIsReadOnly(args);
   if (!READ_ONLY_PROGRAMS.has(program)) return false;
@@ -11301,6 +11523,10 @@ function activityTarget(args) {
     const value = record2[key];
     if (typeof value === "string" && value.trim()) return shortenTarget(value);
     if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  if (Array.isArray(record2.paths)) {
+    const names = record2.paths.filter((p) => typeof p === "string" && p.trim() !== "");
+    if (names.length) return shortenTarget(names.join(", "));
   }
   return void 0;
 }
@@ -12758,6 +12984,10 @@ var LOCAL_WORKSPACE_TOOLS = /* @__PURE__ */ new Set([
   "edit_file",
   "delete_file",
   "run_command",
+  // A background command's companions (PRD 35 E6): a turn that started `npm test` in the
+  // background and now asks "did it pass?" shares no stem with `command_status`.
+  "command_status",
+  "command_stop",
   // The git tools, read and publish alike. They belong here for exactly the reason the
   // file tools do: "commit the change and push to main" is not one domain among many a
   // query can be relevant to, it is the surface doing its job. The turn that produced
@@ -12964,6 +13194,19 @@ ${advisory}` : advisory;
   return { result, note: advisory };
 }
 
+// ../packages/run-guards/src/multiRead.ts
+function singleReadsOf(tool, args) {
+  if (tool !== "read_file" || !args || typeof args !== "object" || Array.isArray(args)) return null;
+  const { paths, ...rest } = args;
+  if (!Array.isArray(paths) || typeof rest.path === "string" && rest.path !== "") return null;
+  const named = paths.filter((p) => typeof p === "string" && p.trim() !== "").slice(0, READ_FILE_MAX_PATHS);
+  if (named.length === 0) return null;
+  return named.map((path2) => ({ ...rest, path: path2 }));
+}
+function perFileResults(result) {
+  return result && Array.isArray(result.files) ? result.files : null;
+}
+
 // ../packages/run-guards/src/readCoverage.ts
 var PATH_ARG_KEYS = /* @__PURE__ */ new Set(["path", "scope", "repo", "file", "filePath", "dir"]);
 function normalizePathArg(value) {
@@ -13032,6 +13275,9 @@ function clipRequestedToEof(want, covering) {
   if (!data || data.truncated === true || typeof data.totalLines !== "number" || data.totalLines < 1) return want;
   return { start: want.start, end: Math.min(want.end, Math.floor(data.totalLines)) };
 }
+function servedCopy(cached2) {
+  return cached2.served !== void 0 ? cached2.served : cached2.result;
+}
 var ReadCoverage = class _ReadCoverage {
   constructor(traits) {
     this.traits = traits;
@@ -13054,6 +13300,23 @@ var ReadCoverage = class _ReadCoverage {
   /** Keep what a SUCCESSFUL read returned, with the message that carried it. A no-op for
    *  a read that was never recorded (a failure has nothing to replay). */
   cacheResult(tool, args, cached2) {
+    const singles = singleReadsOf(tool, args);
+    if (singles) {
+      const results = perFileResults(resultObject(cached2.result));
+      const served = cached2.served !== void 0 ? perFileResults(resultObject(cached2.served)) : null;
+      if (!results) return;
+      singles.forEach((single, i) => {
+        const entry = resultObject(results[i]);
+        if (!entry || entry.ok === false) {
+          this.exact.delete(_ReadCoverage.exactKey(tool, single));
+          return;
+        }
+        const one = { result: results[i], anchor: cached2.anchor };
+        if (served && served[i] !== void 0) one.served = served[i];
+        this.cacheResult(tool, single, one);
+      });
+      return;
+    }
     const read = this.exact.get(_ReadCoverage.exactKey(tool, args));
     if (read) read.cached = cached2;
   }
@@ -13066,6 +13329,15 @@ var ReadCoverage = class _ReadCoverage {
    * resulting target visit — or null when the call names no target.
    */
   record(tool, args) {
+    const singles = singleReadsOf(tool, args);
+    if (singles) {
+      let worst = null;
+      for (const single of singles) {
+        const visit = this.record(tool, single);
+        if (visit && (!worst || visit.count > worst.count)) worst = visit;
+      }
+      return worst;
+    }
     const target = this.traits.visitTarget(args) ?? null;
     this.exact.set(_ReadCoverage.exactKey(tool, args), { tool, args: canonicalReadArgs(tool, args), target });
     if (!target) return null;
@@ -13123,9 +13395,10 @@ var ReadCoverage = class _ReadCoverage {
       if (typeof read.args.key === "string") continue;
       const earlierPath = typeof read.args.path === "string" ? read.args.path : "";
       if (earlierPath !== path2) continue;
-      const got = servedReadWindow(read.cached.result);
+      const served = servedCopy(read.cached);
+      const got = servedReadWindow(served);
       if (!got) continue;
-      const clipped = clipRequestedToEof(want, read.cached.result);
+      const clipped = clipRequestedToEof(want, served);
       if (clipped.start > clipped.end) continue;
       if (!spanContains(got, clipped)) continue;
       return {
@@ -13174,6 +13447,96 @@ var ReadCoverage = class _ReadCoverage {
     return null;
   }
 };
+
+// ../packages/run-guards/src/shellFileRead.ts
+var SHELL_META = /[|;&<>`$*?(){}\[\]\\\n\r!~]/;
+function words(text) {
+  const unquoted = text.replace(/"[^"]*"|'[^']*'/g, "");
+  if (SHELL_META.test(unquoted) || /["']/.test(unquoted)) return null;
+  const out = [];
+  const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
+  for (let m = re.exec(text); m; m = re.exec(text)) out.push(m[1] ?? m[2] ?? m[3] ?? "");
+  return out;
+}
+function workspacePath(raw) {
+  const p = raw.trim().split("\\").join("/");
+  if (!p || p.startsWith("/") || p.startsWith("-") || p.includes(":")) return null;
+  const parts = p.split("/").filter((s) => s !== "" && s !== ".");
+  if (parts.length === 0 || parts.some((s) => s === "..")) return null;
+  return parts.join("/");
+}
+var positiveInt2 = (s) => s !== void 0 && /^\d+$/.test(s) && Number(s) > 0 ? Number(s) : void 0;
+function printedLines(argv) {
+  const [program, ...args] = argv;
+  if (program === "cat" && args.length === 1) return { file: args[0], from: 1 };
+  if (program === "head" || program === "tail") {
+    let n;
+    let file;
+    if (args.length === 1) [file] = args;
+    else if (args.length === 2 && /^-\d+$/.test(args[0])) [n, file] = [args[0].slice(1), args[1]];
+    else if (args.length === 2 && /^-n\+?\d+$/.test(args[0])) [n, file] = [args[0].slice(2), args[1]];
+    else if (args.length === 2 && /^--lines=\+?\d+$/.test(args[0])) [n, file] = [args[0].slice(8), args[1]];
+    else if (args.length === 3 && args[0] === "-n") [n, file] = [args[1], args[2]];
+    else return null;
+    if (!file) return null;
+    if (n === void 0) n = "10";
+    if (program === "head") {
+      const count3 = positiveInt2(n);
+      return count3 ? { file, from: 1, count: count3 } : null;
+    }
+    if (n.startsWith("+")) {
+      const from = positiveInt2(n.slice(1));
+      return from ? { file, from } : null;
+    }
+    const count2 = positiveInt2(n);
+    return count2 ? { file, count: count2 } : null;
+  }
+  if (program === "sed" && args.length === 3 && args[0] === "-n") {
+    const m = /^(\d+)(?:,(\d+))?\s*p$/.exec(args[1].trim());
+    const from = positiveInt2(m?.[1]);
+    const to = m && m[2] !== void 0 ? positiveInt2(m[2]) : from;
+    if (!from || !to || to < from) return null;
+    return { file: args[2], from, count: to - from + 1 };
+  }
+  return null;
+}
+function parseShellFileRead(command) {
+  let rest = command.trim();
+  let dir = "";
+  const cd = /^cd\s+("[^"]+"|'[^']+'|[^\s;&|<>`$"']+)\s*&&\s*/.exec(rest);
+  if (cd) {
+    const folder = workspacePath(cd[1].replace(/^["']|["']$/g, ""));
+    if (!folder) return null;
+    dir = folder;
+    rest = rest.slice(cd[0].length);
+  }
+  const argv = words(rest);
+  if (!argv || argv.length === 0) return null;
+  const printed = printedLines(argv);
+  if (!printed) return null;
+  const file = workspacePath(printed.file);
+  if (!file) return null;
+  const { file: _file, ...lines } = printed;
+  return { path: dir ? `${dir}/${file}` : file, ...lines };
+}
+function shellReadAsFileRead(command, stdout) {
+  const read = parseShellFileRead(command);
+  if (!read) return null;
+  const body = stdout.replace(/\r?\n$/, "");
+  if (!body) return null;
+  const printed = body.split("\n").length;
+  const whole = (from) => ({ ok: true, path: read.path, content: body, offset: from, totalLines: from + printed - 1, truncated: false });
+  if (read.from === void 0) {
+    return read.count !== void 0 && printed < read.count ? { args: { path: read.path }, result: whole(1) } : null;
+  }
+  if (read.count === void 0) {
+    return { args: read.from > 1 ? { path: read.path, offset: read.from } : { path: read.path }, result: whole(read.from) };
+  }
+  if (printed > read.count) return null;
+  const args = { path: read.path, offset: read.from, limit: read.count };
+  if (printed < read.count) return { args, result: whole(read.from) };
+  return { args, result: { ok: true, path: read.path, content: body, offset: read.from, truncated: true } };
+}
 
 // ../packages/run-guards/src/failureTally.ts
 var FAILURE_NUDGE_AT = 2;
@@ -13257,6 +13620,32 @@ function repeatedWriteNote(tool, path2) {
 
 // ../packages/run-guards/src/streak.ts
 var BACK_TO_BACK_AT = 3;
+
+// ../packages/run-guards/src/readsWithoutSpawn.ts
+var READS_BEFORE_DELEGATION_NUDGE = 6;
+var ReadsWithoutSpawn = class {
+  state;
+  constructor(state) {
+    this.state = state ? { ...state } : { reads: 0, spawned: false, nudged: false };
+  }
+  /** Record one dispatched call. Returns the reads-without-spawn count after it. */
+  record(kind) {
+    if (kind === "spawn") this.state.spawned = true;
+    else if (kind === "read" && !this.state.spawned) this.state.reads += 1;
+    return this.state.reads;
+  }
+  /** The threshold is reached, nothing was spawned, and the nudge has not fired yet. */
+  due(threshold = READS_BEFORE_DELEGATION_NUDGE) {
+    return !this.state.spawned && !this.state.nudged && this.state.reads >= threshold;
+  }
+  /** The nudge was given; {@link due} stays false for the rest of the run. */
+  markNudged() {
+    this.state.nudged = true;
+  }
+  snapshot() {
+    return { ...this.state };
+  }
+};
 
 // src/runProgress.ts
 var MUTATION_TOOL = /(^|_)(write|edit|save|create|update|delete|apply|patch|publish|send|dispatch|run_command|assign|link|move|set)(_|$)/i;
@@ -13670,8 +14059,22 @@ var TOOL_OUTPUT_CAPS = {
 };
 var READ_FILE_TOOL = "read_file";
 var SHELL_TOOLS = /* @__PURE__ */ new Set(["run_command", "exec", "bash", "shell", "process"]);
+var HARD_MAX_TOOL_RESULT_CHARS = 4e5;
+var TOOL_RESULT_WINDOW_SHARE = 0.3;
+var TOOL_RESULT_CHARS_PER_TOKEN = 4;
 function toolOutputCap(tool, caps = TOOL_OUTPUT_CAPS) {
   return caps[tool] ?? DEFAULT_TOOL_OUTPUT_CHARS;
+}
+function windowToolResultCap(contextWindowTokens) {
+  const maxTokens = Math.floor(contextWindowTokens * TOOL_RESULT_WINDOW_SHARE);
+  return Math.min(maxTokens * TOOL_RESULT_CHARS_PER_TOKEN, HARD_MAX_TOOL_RESULT_CHARS);
+}
+var READ_FILE_MAX_CHARS = 64e3;
+function windowedCap(tool, tableCap, contextWindowTokens) {
+  if (typeof contextWindowTokens !== "number" || !Number.isFinite(contextWindowTokens) || contextWindowTokens <= 0) return tableCap;
+  const share = windowToolResultCap(contextWindowTokens);
+  if (tool === READ_FILE_TOOL) return Math.min(READ_FILE_MAX_CHARS, Math.max(tableCap, share));
+  return Math.min(tableCap, share);
 }
 function isShellTool(tool) {
   return SHELL_TOOLS.has(tool);
@@ -13911,17 +14314,18 @@ function isReadFileResult(out) {
 function windowReadFile(out, opts = {}) {
   const maxChars = opts.maxChars ?? READ_FILE_RESULT_CHARS;
   const withNote = (result) => opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(result, opts.advisory) : result;
+  const done = (served2, truncated) => ({ value: withNote(served2), served: served2, truncated });
   const lines = out.content.split("\n");
   const offset = typeof out.offset === "number" && out.offset > 0 ? Math.floor(out.offset) : 1;
   const totalLines = typeof out.totalLines === "number" && out.totalLines > 0 ? Math.floor(out.totalLines) : offset + lines.length - 1;
   const alreadyPartial = out.truncated === true;
-  const build = (kept, note) => {
+  const served = (kept, note) => {
     const lastLine = offset + kept.length - 1;
-    return withNote({ ...out, content: kept.join("\n"), offset, totalLines, truncated: lastLine < totalLines || alreadyPartial, note });
+    return { ...out, content: kept.join("\n"), offset, totalLines, truncated: lastLine < totalLines || alreadyPartial, note };
   };
+  const build = (kept, note) => withNote(served(kept, note));
   const fits = (value) => JSON.stringify(value).length <= maxChars;
-  const whole = withNote({ ...out });
-  if (fits(whole)) return { value: whole, truncated: false };
+  if (fits(withNote({ ...out }))) return done({ ...out }, false);
   const continuation = (lastLine) => `Showing lines ${offset}\u2013${lastLine} of ${totalLines}. This surface returns at most ~${maxChars.toLocaleString("en-US")} chars per read, so a large file arrives in several windows \u2014 call read_file again with offset ${lastLine + 1} to continue from exactly where this one stopped. Do not re-request lines you already have.`;
   let lo = 1;
   let hi = lines.length;
@@ -13939,9 +14343,52 @@ function windowReadFile(out, opts = {}) {
     const first = lines[0] ?? "";
     const head = first.slice(0, Math.max(0, maxChars - 600));
     const note = `Line ${offset} of ${totalLines} is longer than the ~${maxChars.toLocaleString("en-US")}-char read budget; the first ${head.length.toLocaleString("en-US")} of its ${first.length.toLocaleString("en-US")} chars are shown. Paging by offset cannot reach the rest of this line \u2014 use search_code for the specific symbol instead.`;
-    return { value: withNote({ ...out, content: head, offset, totalLines, truncated: true, note }), truncated: true };
+    return done({ ...out, content: head, offset, totalLines, truncated: true, note }, true);
   }
-  return { value: build(lines.slice(0, best), continuation(offset + best - 1)), truncated: true };
+  return done(served(lines.slice(0, best), continuation(offset + best - 1)), true);
+}
+function isReadFilesResult(out) {
+  return !!out && typeof out === "object" && !Array.isArray(out) && out.ok !== false && Array.isArray(out.files);
+}
+function windowReadFiles(out, opts = {}) {
+  const maxChars = opts.maxChars ?? READ_FILE_RESULT_CHARS;
+  const files = out.files;
+  const overhead = JSON.stringify({ ...out, files: [] }).length + files.length + (opts.advisory ? opts.advisory.length + 16 : 0);
+  const order = files.map((f, i) => ({ i, size: JSON.stringify(f ?? null).length })).sort((a, b) => a.size - b.size);
+  const servedFiles = files.slice();
+  let remaining = Math.max(0, maxChars - overhead);
+  let truncated = false;
+  order.forEach(({ i, size }, n) => {
+    const file = files[i];
+    const share = Math.floor(remaining / (order.length - n));
+    if (isReadFileResult(file) && size > share) {
+      const windowed2 = windowReadFile(file, { maxChars: share });
+      servedFiles[i] = windowed2.served;
+      truncated = truncated || windowed2.truncated;
+    }
+    remaining -= JSON.stringify(servedFiles[i] ?? null).length;
+  });
+  const served = { ...out, files: servedFiles };
+  const value = opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(served, opts.advisory) : served;
+  return { value, served, truncated };
+}
+function sliceReadFile(out, start, end) {
+  const lines = out.content.split("\n");
+  const first = typeof out.offset === "number" && out.offset > 0 ? Math.floor(out.offset) : 1;
+  const from = Math.max(first, Math.floor(start));
+  const kept = lines.slice(from - first, Math.max(from - first, Math.floor(end) - first + 1));
+  const lastLine = from + kept.length - 1;
+  const totalLines = typeof out.totalLines === "number" && out.totalLines > 0 ? Math.floor(out.totalLines) : void 0;
+  const truncated = totalLines !== void 0 ? lastLine < totalLines : out.truncated === true;
+  const { note: _coveringNote, ...rest } = out;
+  return {
+    ...rest,
+    content: kept.join("\n"),
+    offset: from,
+    ...totalLines !== void 0 ? { totalLines } : {},
+    truncated,
+    ...truncated ? { note: `Showing lines ${from}\u2013${lastLine}${totalLines !== void 0 ? ` of ${totalLines}` : ""}. To continue, call read_file again with offset ${lastLine + 1}.` } : {}
+  };
 }
 
 // ../packages/tool-output-policy/src/policy.ts
@@ -13959,8 +14406,8 @@ function attach(value, opts) {
 }
 function capFor(tool, opts) {
   if (opts.maxChars !== void 0) return opts.maxChars;
-  if (!opts.summarize && tool !== READ_FILE_TOOL) return DEFAULT_TOOL_OUTPUT_CHARS;
-  return toolOutputCap(tool, opts.caps);
+  const tableCap = !opts.summarize && tool !== READ_FILE_TOOL ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
+  return windowedCap(tool, tableCap, opts.contextWindowTokens);
 }
 function shrinkLogFields(tool, out, cap2, overhead) {
   const fields = LOG_FIELDS.filter((f) => typeof out[f] === "string" && out[f].length > 0);
@@ -13981,9 +14428,11 @@ function shrinkLogFields(tool, out, cap2, overhead) {
 }
 function shapeToolResult(tool, out, opts = {}) {
   const bytes = JSON.stringify(out ?? null).length;
-  if (tool === READ_FILE_TOOL && isReadFileResult(out)) {
-    const windowed2 = windowReadFile(out, { maxChars: opts.maxChars, advisory: opts.advisory, attachAdvisory: opts.attachAdvisory });
-    return { content: JSON.stringify(windowed2.value), bytes, truncated: windowed2.truncated };
+  if (tool === READ_FILE_TOOL && (isReadFileResult(out) || isReadFilesResult(out))) {
+    const maxChars = opts.maxChars ?? windowedCap(READ_FILE_TOOL, READ_FILE_RESULT_CHARS, opts.contextWindowTokens);
+    const windowOpts = { maxChars, advisory: opts.advisory, attachAdvisory: opts.attachAdvisory };
+    const windowed2 = isReadFileResult(out) ? windowReadFile(out, windowOpts) : windowReadFiles(out, windowOpts);
+    return { content: JSON.stringify(windowed2.value), bytes, truncated: windowed2.truncated, served: windowed2.served };
   }
   const cap2 = capFor(tool, opts);
   const full = JSON.stringify(attach(out ?? null, opts));
@@ -14027,8 +14476,12 @@ function trimToolResult(tool, out, opts = {}) {
   return shapeToolResult(tool, out, {
     advisory: opts.advisory,
     attachAdvisory: withAdvisory,
-    summarize: opts.summarize ?? isCostLeverOn(void 0, "c7_tool_output_policy", null)
+    summarize: opts.summarize ?? isCostLeverOn(void 0, "c7_tool_output_policy", null),
+    ...opts.contextWindowTokens !== void 0 ? { contextWindowTokens: opts.contextWindowTokens } : {}
   });
+}
+function requestedReadWindow2(out, start, end) {
+  return isReadFileResult(out) ? sliceReadFile(out, start, end) : out;
 }
 
 // src/brainTriage.ts
@@ -15038,10 +15491,18 @@ function lastAssistantText(convo) {
 }
 
 // src/runStore/runMemory.ts
-async function recallForRun(c, convo, evermind) {
+var MAX_RECALL_HINT_CHARS = 600;
+function recallQuery(userText, hint) {
+  const extra = (hint ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_RECALL_HINT_CHARS);
+  if (!extra || !userText.trim()) return userText;
+  return `${userText.trim()}
+
+${extra}`;
+}
+async function recallForRun(c, convo, evermind, hint) {
   let recalled = null;
   if (!evermind?.recall) return { recalled, block: null, blockTokens: 0 };
-  const query = latestUserText(convo);
+  const query = recallQuery(latestUserText(convo), hint);
   if (!query) return { recalled, block: null, blockTokens: 0 };
   try {
     recalled = await evermind.recall(query);
@@ -15480,9 +15941,9 @@ function previousReplyText(convo) {
   return "";
 }
 function shingles(text) {
-  const words2 = text.toLowerCase().replace(/[^a-z0-9#\s]+/g, " ").split(/\s+/).filter(Boolean);
+  const words3 = text.toLowerCase().replace(/[^a-z0-9#\s]+/g, " ").split(/\s+/).filter(Boolean);
   const out = /* @__PURE__ */ new Set();
-  for (let i = 0; i + 2 < words2.length; i++) out.add(`${words2[i]} ${words2[i + 1]} ${words2[i + 2]}`);
+  for (let i = 0; i + 2 < words3.length; i++) out.add(`${words3[i]} ${words3[i + 1]} ${words3[i + 2]}`);
   return out;
 }
 function isRestatedReply(current, previous) {
@@ -15701,8 +16162,19 @@ function windowFitRecallFailedTrace(ts, step, error) {
     result: `The memory recall for the hand-off note failed (${error instanceof Error ? error.message : String(error)}) \u2014 the dropped messages were elided instead.`
   };
 }
+function windowCapUnknownTrace(ts, model, error) {
+  return {
+    ts,
+    category: "message",
+    label: "llm.window_unknown",
+    args: { model },
+    result: `The context window of ${model} could not be resolved (${error instanceof Error ? error.message : String(error)}) \u2014 tool results keep the default caps.`
+  };
+}
 function createRunWindowFit(deps) {
   let lastServed;
+  let lastAsked;
+  const capWindows = /* @__PURE__ */ new Map();
   const recalls = /* @__PURE__ */ new Map();
   if (deps.priorRecall) recalls.set(deps.priorRecall.query, Promise.resolve(deps.priorRecall.result));
   const recallFor = (step) => deps.recall ? (query) => {
@@ -15720,6 +16192,7 @@ function createRunWindowFit(deps) {
     async prepare(req) {
       const to = req.model;
       if (!to) return req.messages;
+      lastAsked = to;
       const window2 = await resolveContextWindow(to, deps.windowSources);
       if (window2 === void 0) return req.messages;
       const differs = lastServed !== void 0 && lastServed !== to;
@@ -15742,8 +16215,111 @@ function createRunWindowFit(deps) {
     },
     served(model) {
       if (model) lastServed = model;
+    },
+    contextWindow() {
+      const ref = lastServed ?? lastAsked;
+      if (!ref) return Promise.resolve(void 0);
+      let window2 = capWindows.get(ref);
+      if (!window2) {
+        window2 = resolveContextWindow(ref, deps.windowSources).catch((e) => {
+          deps.trace(windowCapUnknownTrace(deps.now(), ref, e));
+          return void 0;
+        });
+        capWindows.set(ref, window2);
+      }
+      return window2;
     }
   };
+}
+
+// src/runStore/modelPreflight.ts
+var MODEL_PREFLIGHT_LABEL = "model.preflight";
+function planModelWarning(model, book2 = snapshotPriceBook()) {
+  if (!model || model === "default") return null;
+  const price = listPriceOf(book2, model);
+  const tier2 = price ? resolveModelTier({ price }) : void 0;
+  return tier2 && isAgenticTier(tier2) === false ? { model, tier: tier2 } : null;
+}
+function modelPreflightEvent(result, ts, plan) {
+  const entries = parseByoUnresolved((result?.byoUnresolved ?? []).filter((e) => e.trim()));
+  if (entries.length === 0 && !plan) return null;
+  const said = [];
+  if (entries.length > 0) {
+    const onto = result?.fallback ? ` This run will use ${result.fallback} instead.` : " This run will fall back to another model.";
+    said.push(`${entries.map(byoUnresolvedSummary).join("; ")}.${onto}`);
+  }
+  if (plan) {
+    said.push(`the plan phase will run on ${plan.model}, a ${plan.tier}-tier (Flash-class) model \u2014 weak at planning a multi-step change; pick a stronger model for planning if the result matters.`);
+  }
+  return {
+    ts,
+    category: "message",
+    label: MODEL_PREFLIGHT_LABEL,
+    args: {
+      ...entries.length ? { byoUnresolved: entries.map((e) => e.reason ? `${e.provider}:${e.reason}` : e.provider).join(",") } : {},
+      ...result?.fallback && entries.length ? { fallback: result.fallback } : {},
+      ...plan ? { planModel: plan.model, planTier: plan.tier } : {}
+    },
+    result: `Before the first turn: ${said.join(" Also: ")}`
+  };
+}
+async function applyModelPreflight(c, preflight, pinnedModel) {
+  if (!preflight) return;
+  let result;
+  try {
+    result = await preflight();
+  } catch {
+    return;
+  }
+  const plan = c.codeChanged || c.codePhaseReached ? null : planModelWarning(pinnedModel);
+  const event = modelPreflightEvent(result, nowIso(), plan);
+  if (!event) return;
+  if (result?.byoUnresolved.length) accrueByoUnresolved(c, result.byoUnresolved.join(","));
+  pushTrace(c, event);
+  emit(c);
+}
+
+// src/runStore/hostRunContext.ts
+async function hostPart(c, part, read) {
+  if (!read) return void 0;
+  try {
+    return await read();
+  } catch (e) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "host.context_failed",
+      args: { part },
+      result: `The host's ${part} could not be read (${e instanceof Error ? e.message : String(e)}) \u2014 the run starts without it.`
+    });
+    return void 0;
+  }
+}
+async function gatherHostRunContext(c, req, recall) {
+  const [recallHint, turnContext, servedReads] = await Promise.all([
+    recall ? hostPart(c, "recall hint", req.recallHint) : Promise.resolve(void 0),
+    hostPart(c, "task context", req.turnContext),
+    hostPart(c, "served reads", req.servedReads),
+    // The model preflight (E7): an account that cannot serve this run is shown on the
+    // banner BEFORE the first turn, not after it.
+    applyModelPreflight(c, req.modelPreflight, req.model)
+  ]);
+  return {
+    ...recallHint ? { recallHint } : {},
+    ...turnContext?.trim() ? { turnContext } : {},
+    servedReads: servedReads ?? []
+  };
+}
+function recordServedReads(coverage, reads, anchor) {
+  for (const read of reads) {
+    if (!read.path) continue;
+    const args = { path: read.path };
+    coverage.record("read_file", args);
+    coverage.cacheResult("read_file", args, {
+      result: { ok: true, path: read.path, content: read.content, totalLines: read.totalLines, offset: 1, truncated: false },
+      anchor
+    });
+  }
 }
 
 // src/runStore/turnContext.ts
@@ -15756,6 +16332,10 @@ function turnContextBlock(parts) {
 
 ${body}
 ${CLOSE}` : null;
+}
+function turnContextCarrier(c) {
+  const a = attached.get(c);
+  return a && a.convo[a.index] === a.carrier ? a.carrier : void 0;
 }
 function restoreTurnContext(c) {
   const prior = attached.get(c);
@@ -15808,7 +16388,8 @@ async function prepareRunLoop(chatId, c, req, runKey) {
     mode: runMode,
     ...req.projectId != null ? { projectId: req.projectId } : {}
   };
-  const { recalled, block: recallBlock2, blockTokens: recallBlockTokens } = await recallForRun(c, convo, evermind);
+  const host = await gatherHostRunContext(c, req, !!evermind?.recall);
+  const { recalled, block: recallBlock2, blockTokens: recallBlockTokens } = await recallForRun(c, convo, evermind, host.recallHint);
   let systemPrompt = resolvedSystemPrompt;
   if (recallBlock2) {
     if (stablePrefix) turnParts.push(recallBlock2);
@@ -15819,6 +16400,7 @@ ${recallBlock2}`;
   const priorRecall = { query: latestUserText(convo), result: recalled };
   const memoryReplay = memoryReplayable(latestUserText(convo), { followUp: isFollowUpTurn(convo) });
   if (await answerFromMemory(chatId, c, req, allTools, memoryReplay)) return null;
+  if (host.turnContext) turnParts.push(host.turnContext);
   if (req.augmentSystemPrompt) {
     try {
       const extra = await req.augmentSystemPrompt(latestUserText(convo));
@@ -15985,6 +16567,7 @@ ${turnContext}` : systemPrompt),
 
 ${turnContext}`;
   }
+  recordServedReads(run.readCoverage, host.servedReads, turnContextCarrier(c));
   return run;
 }
 
@@ -16149,11 +16732,11 @@ function routerToolSpecs(catalogSize) {
     }
   ];
 }
-function words(text) {
+function words2(text) {
   return text.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
 }
 function findTools(catalog, query, limit = FIND_LIMIT) {
-  const terms = words(query);
+  const terms = words2(query);
   if (terms.length === 0) return [];
   const scored = [];
   catalog.forEach((tool, index) => {
@@ -16261,18 +16844,107 @@ function createComposingActivity(sink, opts) {
 
 // src/runSteering.ts
 var inboxes = /* @__PURE__ */ new Map();
-function queueRunSteering(runKey, text) {
+var interrupting = /* @__PURE__ */ new Set();
+var interruptListeners = /* @__PURE__ */ new Map();
+function queueRunSteering(runKey, text, opts) {
   const trimmed = text.trim();
   if (!trimmed) return;
   const queue = inboxes.get(runKey) ?? [];
   queue.push(trimmed);
   inboxes.set(runKey, queue);
+  if (!opts?.interrupt) return;
+  interrupting.add(runKey);
+  for (const listener of [...interruptListeners.get(runKey) ?? []]) listener();
 }
 function drainRunSteering(runKey) {
+  interrupting.delete(runKey);
   const queue = inboxes.get(runKey);
   if (!queue?.length) return [];
   inboxes.delete(runKey);
   return queue;
+}
+function hasRunInterrupt(runKey) {
+  return interrupting.has(runKey);
+}
+function onRunInterrupt(runKey, listener) {
+  const set = interruptListeners.get(runKey) ?? /* @__PURE__ */ new Set();
+  set.add(listener);
+  interruptListeners.set(runKey, set);
+  return () => {
+    set.delete(listener);
+    if (set.size === 0) interruptListeners.delete(runKey);
+  };
+}
+
+// src/runStore/steerInterrupt.ts
+var INTERRUPTED_BY_STEER = "Interrupted by the user's new message: the command was stopped before it finished. Read the message that follows and do what it asks; re-run the command only if it still applies.";
+var WAIT_INTERRUPTED_BY_STEER = "Wait interrupted by the user's new message: the background job is STILL RUNNING. Read the message that follows and do what it asks; check the job later with command_status, or stop it with command_stop.";
+var SKIPPED_BY_STEER = "Not run: the user sent a new message while this turn was running. Read it and decide what to do next.";
+function argsOf(args) {
+  return args && typeof args === "object" && !Array.isArray(args) ? args : {};
+}
+function isWaitCall(name, a) {
+  if (name === "run_command") return a.background !== true && a.yieldMs != null;
+  return name === "command_status" && typeof a.waitMs === "number" && a.waitMs > 0;
+}
+function isInterruptibleCall(name, args) {
+  const a = argsOf(args);
+  if (isWaitCall(name, a)) return true;
+  return name === "run_command" && a.background !== true;
+}
+function interruptedResult(out) {
+  const base = out && typeof out === "object" && !Array.isArray(out) ? out : out === void 0 ? {} : { output: out };
+  return { ...base, ok: false, aborted: true, interrupted: true, error: INTERRUPTED_BY_STEER };
+}
+function waitInterruptedResult(out) {
+  const base = out && typeof out === "object" && !Array.isArray(out) ? out : { output: out };
+  return { ...base, interrupted: true, note: WAIT_INTERRUPTED_BY_STEER };
+}
+function cameBackAborted(out) {
+  return !!out && typeof out === "object" && out.aborted === true;
+}
+async function runToolInterruptibly(runTool, runKey, runSignal, name, args) {
+  if (!isInterruptibleCall(name, args)) return runTool(name, args);
+  if (hasRunInterrupt(runKey)) return interruptedResult(void 0);
+  const wait = isWaitCall(name, argsOf(args));
+  const step = new AbortController();
+  let interrupted = false;
+  const onStop = () => step.abort();
+  if (runSignal?.aborted) step.abort();
+  runSignal?.addEventListener("abort", onStop, { once: true });
+  const off = onRunInterrupt(runKey, () => {
+    interrupted = true;
+    step.abort();
+  });
+  try {
+    const out = await runTool(name, args, step.signal);
+    if (!interrupted) return out;
+    if (wait) return cameBackAborted(out) ? interruptedResult(out) : waitInterruptedResult(out);
+    return cameBackAborted(out) ? interruptedResult(out) : out;
+  } finally {
+    off();
+    runSignal?.removeEventListener("abort", onStop);
+  }
+}
+function skipOnSteer(runKey, inner) {
+  return async (call2, result, row, ctx) => {
+    const post = await inner(call2, result, row, ctx);
+    if (post?.skipRemaining || !hasRunInterrupt(runKey)) return post;
+    return { ...post ?? {}, skipRemaining: { data: { ok: false, skipped: true, error: SKIPPED_BY_STEER }, isError: false } };
+  };
+}
+function takeRunSteering(c, runKey, step) {
+  const texts = drainRunSteering(runKey);
+  if (texts.length > 0) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "steer.applied",
+      args: { step, messages: texts.length },
+      result: texts.map((t) => t.slice(0, 200)).join("\n")
+    });
+  }
+  return texts;
 }
 
 // src/runStore/compactionSaved.ts
@@ -16286,6 +16958,38 @@ function stampOncePerCall(stamped, plain2) {
     if (used) return plain2;
     used = true;
     return stamped;
+  };
+}
+
+// src/runStore/modelDowngrade.ts
+var MODEL_DOWNGRADE_LABEL = "llm.model_downgrade";
+function modelDowngradeEvent(input) {
+  const { requested, resolved, step, ts } = input;
+  if (resolved === "default") return null;
+  if (requested !== "default") {
+    if (resolved === requested) return null;
+    return {
+      ts,
+      category: "message",
+      label: MODEL_DOWNGRADE_LABEL,
+      args: { requestedModel: requested, model: resolved, step },
+      result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) \u2014 a smaller context window can truncate long transcripts.`
+    };
+  }
+  const unresolved = (input.byoUnresolved ?? "").trim();
+  if (!unresolved) return null;
+  const said = input.events.some((e) => {
+    if (e.label !== MODEL_DOWNGRADE_LABEL) return false;
+    const args = e.args;
+    return args?.requestedModel === "default" && args.model === resolved;
+  });
+  if (said) return null;
+  return {
+    ts,
+    category: "message",
+    label: MODEL_DOWNGRADE_LABEL,
+    args: { requestedModel: "default", model: resolved, step, byoUnresolved: unresolved },
+    result: `Auto-routing answered with ${resolved} because a connected account could not be used (${unresolved}) \u2014 the run is not on the tenant's own model. Reconnect it under Settings \u25B8 API Keys.`
   };
 }
 
@@ -16329,7 +17033,7 @@ function completeTurnPort(run) {
     const iter = ctx.step;
     c.streamingText = "";
     emit(c);
-    for (const text of drainRunSteering(runKey)) convo.push({ role: "user", content: text });
+    for (const text of takeRunSteering(c, runKey, iter)) convo.push({ role: "user", content: text });
     const working = await buildWorkingTranscript(
       c,
       systemPrompt,
@@ -16501,15 +17205,15 @@ function completeTurnPort(run) {
       c.lastServedModel = result.resolvedModel;
     }
     setLastResolvedModel(chatId, result.resolvedModel);
-    if (requested !== "default" && resolved !== "default" && resolved !== requested) {
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "message",
-        label: "llm.model_downgrade",
-        args: { requestedModel: requested, model: resolved, step: iter },
-        result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) \u2014 a smaller context window can truncate long transcripts.`
-      });
-    }
+    const downgrade = modelDowngradeEvent({
+      requested,
+      resolved,
+      step: iter,
+      ts: nowIso(),
+      events: runTrace(c),
+      ...result.byoUnresolved ? { byoUnresolved: result.byoUnresolved } : {}
+    });
+    if (downgrade) pushTrace(c, downgrade);
     const localFallback = localFallbackTrace(nowIso(), iter, result.localFirst);
     if (localFallback) pushTrace(c, localFallback);
     const narratedUnadvertised = result.toolCalls.length === 0 ? toolNamesMentionedIn(result.text).filter((n) => !advertisedNames.has(n)) : [];
@@ -16573,6 +17277,71 @@ function completeTurnPort(run) {
   };
 }
 
+// src/delegationRequest.ts
+var SPAWN_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents"]);
+var ASKS_FOR_SUBAGENTS = /\bsub[- ]?agents?\b|\bspawn(?:_agents?|\s+(?:agents?|workers?|children))\b|\b(?:parallel|concurrent)\s+(?:agents?|workers?)\b|\bfan[- ]?out\b/i;
+var DECLINES_SUBAGENTS = /\b(?:no|without|don'?t\s+use|do\s+not\s+use|never\s+use|skip(?:\s+the)?)\s+(?:any\s+)?sub[- ]?agents?\b/i;
+function asksForSubagents(text) {
+  const t = text ?? "";
+  return ASKS_FOR_SUBAGENTS.test(t) && !DECLINES_SUBAGENTS.test(t);
+}
+function canSpawnHere(toolNames) {
+  return toolNames.some((n) => SPAWN_TOOLS.has(n));
+}
+function isSpawnTool(name) {
+  return SPAWN_TOOLS.has(name);
+}
+function attemptedDelegation(events) {
+  return events.some((e) => e.category === "tool" && SPAWN_TOOLS.has(e.label));
+}
+function leftDelegationUndone(input) {
+  return canSpawnHere(input.toolNames) && asksForSubagents(input.requestText) && !attemptedDelegation(input.events);
+}
+function undelegatedRequestNudge(toolNames) {
+  const fanOut = toolNames.includes("spawn_agents");
+  const call2 = fanOut ? 'Call spawn_agents NOW: one workstream per open ticket whose files do not overlap \u2014 ticket=<id>, a complete standalone task brief, role "code". Each child is a clone of you and makes its change itself. It takes up to 4 per call and returns at once \u2014 the children run in the background, so start the next batch right away if there are more. Use spawn_agent for a slice that must run alone.' : 'Call spawn_agent NOW, one slice at a time, with a complete standalone task brief and role "code". The child is a clone of you and makes its change itself.';
+  return `The user asked for this work to be done by SUB-AGENTS, and none has been started. Do not ask how to proceed \u2014 the user already said. A sub-agent here is a LOCAL child run on this machine: it needs no cloud dispatch, no ticket assignment and no Developer on the roster. The workspace execution kill-switch and every \`autoRun: execution_disabled\` verdict stop CLOUD runs only \u2014 they do not apply to it. as_agent is optional: with no fitting teammate, OMIT it \u2014 the spawn tools staff the role on this project themselves (a capable teammate, or a Developer hired into the workspace and project, with the ticket assigned) and the child runs AS that agent. ${call2} ${delegationShape(fanOut ? "spawn_agents" : "spawn_agent")} Keep working while they run; when their reports are in (they arrive on their own, or call wait_agents), verify their changes and report what each child delivered, per ticket.`;
+}
+function delegationShape(spawnTool) {
+  return `The shape of this run: you read only the document the request names and the chat state already in your context \u2014 no source files. Research (reading code, searching, tracing callers) goes to children: ${spawnTool} with role "explore", one per question, each brief stating the question, the files or folders to start from, what is already known and ruled out, and the answer's shape (paths with line numbers, short excerpts, a word cap). When they report, write the deliverable the request names (the document or plan edit) yourself in that same turn \u2014 filing tickets is not the deliverable.`;
+}
+function earlyDelegationNudge(toolNames, reads) {
+  return `STOP READING AND DELEGATE. This run has made ${reads} read calls and started no sub-agent. ${undelegatedRequestNudge(toolNames)}`;
+}
+
+// src/runStore/earlyDelegation.ts
+var counters = /* @__PURE__ */ new WeakMap();
+function counterOf(run) {
+  let counter = counters.get(run);
+  if (!counter) {
+    counter = new ReadsWithoutSpawn();
+    counters.set(run, counter);
+  }
+  return counter;
+}
+function delegationCallKind(name, args, isReadTool) {
+  if (isSpawnTool(name)) return "spawn";
+  if (isReadTool || isReadOnlyShellCall(name, args)) return "read";
+  return "other";
+}
+function earlyDelegationAdvisory(run, name, args, isReadTool, step) {
+  const counter = counterOf(run);
+  const kind = delegationCallKind(name, args, isReadTool);
+  const reads = counter.record(kind);
+  if (kind !== "read" || !counter.due(READS_BEFORE_DELEGATION_NUDGE)) return null;
+  if (!leftDelegationUndone({ toolNames: run.catalogToolNames, requestText: run.userRequest, events: runTrace(run.c) })) return null;
+  counter.markNudged();
+  const nudge = earlyDelegationNudge(run.catalogToolNames, reads);
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "loop.nudge_undelegated_request",
+    args: { step, tool: name, reads },
+    result: `The user asked for sub-agents and the run had made ${reads} reads without starting one \u2014 told to delegate on that read result.`
+  });
+  return nudge;
+}
+
 // src/runStore/dispatchTool.ts
 function dispatchToolPort(run) {
   const { c, chatId, req, readCoverage, failures, writeLedger, placeholderLedger } = run;
@@ -16600,7 +17369,7 @@ function dispatchToolPort(run) {
     if (!runTool) throw new Error("tool call without a tool runner");
     let out;
     try {
-      out = await runTool(call2.name, withObservedModel(chatId, call2.name, args));
+      out = await runToolInterruptibly(runTool, run.runKey, c.abort?.signal, call2.name, withObservedModel(chatId, call2.name, args));
     } catch (e) {
       const message2 = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
       out = { ok: false, error: message2 };
@@ -16663,33 +17432,15 @@ function dispatchToolPort(run) {
         }
       }
     }
-    const trimmedOut = trimToolResult(call2.name, out ?? null, { advisory });
-    run.pendingRun = { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated };
+    const delegate = earlyDelegationAdvisory(run, call2.name, args, isReadTool, iter);
+    if (delegate) advisory = advisory ? `${advisory}
+
+${delegate}` : delegate;
+    const contextWindowTokens = await run.windowFit.contextWindow?.();
+    const trimmedOut = trimToolResult(call2.name, out ?? null, { advisory, contextWindowTokens });
+    run.pendingRun = { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated, served: trimmedOut.served };
     return { data: trimmedOut.content, isError: isFailedToolResult(out) };
   };
-}
-
-// src/delegationRequest.ts
-var SPAWN_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents"]);
-var ASKS_FOR_SUBAGENTS = /\bsub[- ]?agents?\b|\bspawn(?:_agents?|\s+(?:agents?|workers?|children))\b|\b(?:parallel|concurrent)\s+(?:agents?|workers?)\b|\bfan[- ]?out\b/i;
-var DECLINES_SUBAGENTS = /\b(?:no|without|don'?t\s+use|do\s+not\s+use|never\s+use|skip(?:\s+the)?)\s+(?:any\s+)?sub[- ]?agents?\b/i;
-function asksForSubagents(text) {
-  const t = text ?? "";
-  return ASKS_FOR_SUBAGENTS.test(t) && !DECLINES_SUBAGENTS.test(t);
-}
-function canSpawnHere(toolNames) {
-  return toolNames.some((n) => SPAWN_TOOLS.has(n));
-}
-function attemptedDelegation(events) {
-  return events.some((e) => e.category === "tool" && SPAWN_TOOLS.has(e.label));
-}
-function leftDelegationUndone(input) {
-  return canSpawnHere(input.toolNames) && asksForSubagents(input.requestText) && !attemptedDelegation(input.events);
-}
-function undelegatedRequestNudge(toolNames) {
-  const fanOut = toolNames.includes("spawn_agents");
-  const call2 = fanOut ? 'Call spawn_agents NOW: one workstream per open ticket whose files do not overlap \u2014 ticket=<id>, a complete standalone task brief, role "code". Each child is a clone of you and makes its change itself. It takes up to 4 per call and returns at once \u2014 the children run in the background, so start the next batch right away if there are more. Use spawn_agent for a slice that must run alone.' : 'Call spawn_agent NOW, one slice at a time, with a complete standalone task brief and role "code". The child is a clone of you and makes its change itself.';
-  return `The user asked for this work to be done by SUB-AGENTS, and none has been started. Do not ask how to proceed \u2014 the user already said. A sub-agent here is a LOCAL child run on this machine: it needs no cloud dispatch, no ticket assignment and no Developer on the roster. The workspace execution kill-switch and every \`autoRun: execution_disabled\` verdict stop CLOUD runs only \u2014 they do not apply to it. as_agent is optional: with no fitting teammate, OMIT it \u2014 the spawn tools staff the role on this project themselves (a capable teammate, or a Developer hired into the workspace and project, with the ticket assigned) and the child runs AS that agent. ${call2} Keep working while they run; when their reports are in (they arrive on their own, or call wait_agents), verify their changes and report what each child delivered, per ticket.`;
 }
 
 // src/runStore/beforeDispatch.ts
@@ -16792,10 +17543,13 @@ function beforeDispatchHook(run) {
           const visit = readCoverage.record(call2.name, args);
           const target = visit ? visitTarget(args) : void 0;
           const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
-          const replayed = trimToolResult(call2.name, cached2.result ?? null, { advisory: revisit ? `${replayNote}
+          const replayed = trimToolResult(call2.name, cached2.result ?? null, {
+            advisory: revisit ? `${replayNote}
 
-${revisit}` : replayNote });
-          run.pendingReplay = { name: call2.name, args, result: cached2.result };
+${revisit}` : replayNote,
+            contextWindowTokens: await run.windowFit.contextWindow?.()
+          });
+          run.pendingReplay = { name: call2.name, args, result: cached2.result, served: replayed.served };
           pushTrace(c, {
             ts: nowIso(),
             category: "tool",
@@ -16822,8 +17576,9 @@ ${revisit}` : replayNote });
 
 ${revisit}` : covered.note;
         if (covered.cached && !stillInWorkingContext(c, covered.cached.anchor)) {
-          const replayed = trimToolResult(call2.name, covered.cached.result ?? null, { advisory: note });
-          run.pendingReplay = { name: call2.name, args, result: covered.cached.result };
+          const requested = requestedReadWindow2(covered.cached.result ?? null, covered.start, covered.end);
+          const replayed = trimToolResult(call2.name, requested, { advisory: note, contextWindowTokens: await run.windowFit.contextWindow?.() });
+          run.pendingReplay = { name: call2.name, args, result: requested, served: replayed.served };
           pushTrace(c, {
             ts: nowIso(),
             category: "tool",
@@ -16844,7 +17599,7 @@ ${revisit}` : covered.note;
         const visit = readCoverage.record(call2.name, args);
         const target = visit ? visitTarget(args) : void 0;
         const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
-        const served = trimToolResult(call2.name, derived, { advisory: revisit });
+        const served = trimToolResult(call2.name, derived, { advisory: revisit, contextWindowTokens: await run.windowFit.contextWindow?.() });
         run.pendingReplay = { name: call2.name, args, result: derived };
         pushTrace(c, {
           ts: nowIso(),
@@ -16868,6 +17623,28 @@ ${revisit}` : covered.note;
     }
     return call2 === rawCall ? void 0 : { rewrite: call2 };
   };
+}
+
+// src/runStore/shellReadCoverage.ts
+function cleanPrint(args, out) {
+  if (!args || typeof args !== "object" || !out || typeof out !== "object" || Array.isArray(out)) return null;
+  const a = args;
+  const r = out;
+  if (r.ok === false || r.compressed === true || r.exitCode !== void 0 && r.exitCode !== 0) return null;
+  const stdout = typeof r.stdout === "string" ? r.stdout : typeof r.output === "string" ? r.output : null;
+  const raw = typeof a.command === "string" ? a.command : typeof a.cmd === "string" ? a.cmd : "";
+  if (stdout === null || !raw.trim()) return null;
+  const cwd = [r.cwd, a.cwd].map((v) => typeof v === "string" ? v.trim() : "").find(Boolean) ?? "";
+  return { command: cwd ? `cd ${JSON.stringify(cwd)} && ${raw}` : raw, stdout };
+}
+function recordShellFileRead(coverage, tool, args, out, servedWhole, anchor) {
+  if (!servedWhole || !isReadOnlyShellCall(tool, args)) return false;
+  const print = cleanPrint(args, out);
+  const read = print ? shellReadAsFileRead(print.command, print.stdout) : null;
+  if (!read) return false;
+  coverage.record("read_file", read.args);
+  coverage.cacheResult("read_file", read.args, { result: read.result, anchor });
+  return true;
 }
 
 // src/runStore/toolCallHooks.ts
@@ -16920,7 +17697,8 @@ function afterDispatchHook(run) {
   const { c, readCoverage, usedTools } = run;
   return (call2, _result, row) => {
     if (run.pendingReplay) {
-      readCoverage.cacheResult(run.pendingReplay.name, run.pendingReplay.args, { result: run.pendingReplay.result, anchor: row });
+      const replay = run.pendingReplay;
+      readCoverage.cacheResult(replay.name, replay.args, { result: replay.result, ...replay.served !== void 0 ? { served: replay.served } : {}, anchor: row });
       run.pendingReplay = null;
       return void 0;
     }
@@ -16932,7 +17710,11 @@ function afterDispatchHook(run) {
       pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, durationMs: nowMs2() - ran.toolStart, args, result: ran.out, isError: true });
       return void 0;
     }
-    if (ran.isReadTool && !isFailedToolResult(ran.out)) readCoverage.cacheResult(call2.name, args, { result: ran.out ?? null, anchor: row });
+    if (ran.isReadTool && !isFailedToolResult(ran.out)) {
+      readCoverage.cacheResult(call2.name, args, { result: ran.out ?? null, ...ran.served !== void 0 ? { served: ran.served } : {}, anchor: row });
+    } else if (!isFailedToolResult(ran.out)) {
+      recordShellFileRead(readCoverage, call2.name, args, ran.out, ran.truncated !== true, row);
+    }
     pushTrace(c, {
       ts: nowIso(),
       category: "tool",
@@ -16987,7 +17769,7 @@ function finalAnswerHook(run) {
       convo.push({ role: "assistant", content: replayTextOf(result.text) });
       convo.push({ role: "user", content: nudge });
     };
-    const steering = drainRunSteering(runKey);
+    const steering = takeRunSteering(c, runKey, iter);
     if (steering.length > 0) {
       await requeueWithNudge(steering.join("\n\n"));
       c.streamingText = "";
@@ -17144,7 +17926,8 @@ async function runLoop(chatId, c, req, runKey) {
     hooks: {
       beforeToolCalls: beforeToolCallsHook(run),
       beforeDispatch: beforeDispatchHook(run),
-      afterDispatch: afterDispatchHook(run),
+      // The person's message skips the rest of the turn it interrupted (PRD 35 E10).
+      afterDispatch: skipOnSteer(run.runKey, afterDispatchHook(run)),
       onNoToolCalls: finalAnswerHook(run)
     },
     signal: c.abort?.signal,
@@ -19866,6 +20649,23 @@ function createBrainRestPersistence(opts) {
   };
 }
 
+// src/chatStateReads.ts
+async function readChatTicketLinks(get, chatId) {
+  const r = await get(`/api/brain/chats/${chatId}/tickets`);
+  return r?.tickets ?? [];
+}
+function readChatRunHistory(get, chatId) {
+  return get(`/api/brain/chats/${chatId}/runs`);
+}
+
+// src/runStore/runNote.ts
+function noteRunStep(key, step) {
+  const c = cells.get(key);
+  if (!c) return;
+  pushTrace(c, { ts: nowIso(), category: "message", label: step.label, ...step.args ? { args: step.args } : {}, result: step.result });
+  emit(c);
+}
+
 // src/indexedDbStepDurability.ts
 function installIndexedDbStepDurability(opts) {
   const { indexedDB: factory, dbName } = opts;
@@ -21689,6 +22489,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   narratedUnadvertisedInTrace,
   nextFallbackModel,
   normalizeChatMode,
+  noteRunStep,
   onDeviceMemoryHooks,
   packForModel,
   pageEnginesFetch,
@@ -21735,6 +22536,8 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   queueRunSteering,
   ratedTurnContext,
   ratedTurnTool,
+  readChatRunHistory,
+  readChatTicketLinks,
   readWithIdleWatchdog,
   reasoningForRun,
   repeatedFailureAdvisory,

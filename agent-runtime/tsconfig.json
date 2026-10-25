@@ -39,6 +39,7 @@
       "@builderforce/model-router": ["../packages/model-router/src/index.ts"],
       "@builderforce/run-policy": ["../packages/run-policy/src/index.ts"],
       "@builderforce/run-context": ["../packages/run-context/src/index.ts"],
+      "@builderforce/run-guards": ["../packages/run-guards/src/index.ts"],
       "@builderforce/cost-levers": ["../packages/cost-levers/src/index.ts"],
       "@builderforce/tool-output-policy": ["../packages/tool-output-policy/src/index.ts"],
       "@builderforce/write-outbox/core": ["../packages/write-outbox/src/core.ts"],

@@ -16,6 +16,8 @@ import type { ChatMode, ChatRosterAgent } from '../chatMode';
 import type { EvermindRunHooks } from '../evermindMemory';
 import type { RunWindowSources } from '../windowFit/modelWindow';
 import type { RunKnowledgeLog } from '@builderforce/agent-tools';
+import type { ModelPreflightResult } from './modelPreflight';
+import type { ServedRead } from './hostRunContext';
 
 /**
  * What a run cell is keyed by. A CHAT's run is keyed by its chat id (a number — the
@@ -78,7 +80,9 @@ export interface BrainRunRequest {
    * shipped local catalog answers — a cloud move keeps the working budget.
    */
   windowSources?: RunWindowSources;
-  runTool?: (name: string, args: unknown) => Promise<unknown>;
+  /** `signal` is passed for a call the person's steer may interrupt (a foreground
+   *  command); otherwise the host lends the call the run's own Stop. */
+  runTool?: (name: string, args: unknown, signal?: AbortSignal) => Promise<unknown>;
   /** Pure predicate: true → pause the loop for an explicit user confirmation. */
   needsConfirm?: (req: { name: string; args: unknown }) => boolean;
   stream: BrainStreamFn;
@@ -136,6 +140,32 @@ export interface BrainRunRequest {
    * failed Evermind recall.
    */
   augmentSystemPrompt?: (userText: string) => Promise<string | undefined>;
+  /**
+   * Terms the host adds to the Evermind recall query (PRD 35 E2): the focus files the
+   * request names and their top headings, from the host's context pack. Recall then
+   * searches with the request PLUS the code it is about, never the bare sentence.
+   * Awaited once before the first turn; a throw or an empty string recalls as before.
+   */
+  recallHint?: () => Promise<string | undefined>;
+  /**
+   * The host's per-run TASK CONTEXT (PRD 35 E2 — its context pack). Unlike
+   * {@link augmentSystemPrompt}, it ALWAYS rides the volatile per-turn block after the
+   * history (never the cached system prefix), whatever `b1_stable_prefix` says: it is
+   * large and changes every run. Awaited once before the first turn; best-effort.
+   */
+  turnContext?: () => Promise<string | undefined>;
+  /**
+   * Files the host already SERVED the model whole in {@link turnContext} (the pack's
+   * inlined focus files). Recorded as reads in the run's read coverage, so a `read_file`
+   * of one is an exact repeat / covered window, not a second read. Best-effort.
+   */
+  servedReads?: () => Promise<readonly ServedRead[] | undefined>;
+  /**
+   * The host's MODEL PREFLIGHT (PRD 35 E7): its BYO health check, awaited once before
+   * the first turn. Unresolved accounts are seeded into the run's BYO banner state and
+   * recorded as `model.preflight`, so the user hears it before any work. Best-effort.
+   */
+  modelPreflight?: () => Promise<ModelPreflightResult | undefined>;
   /**
    * The conversation's MODE (migration 0409) — whether this run is a CONVERSATION
    * (`chat`: read, reason, answer) or an EXECUTION (`work`: create + staff + link the

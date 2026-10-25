@@ -9,6 +9,10 @@ export const IconMic = () => (
 export const IconSend = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 13V3.75M4.25 7.5 8 3.75l3.75 3.75" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
 );
+/* Queue for after = a list with a waiting line: it goes in line behind the run. */
+export const IconQueue = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 4.5h10M3 8h10M3 11.5h5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M11 10.25v2.5l1.75 1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+);
 /* Stop = filled rounded square, the interrupt glyph. */
 export const IconStop = () => (
   <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5" /></svg>

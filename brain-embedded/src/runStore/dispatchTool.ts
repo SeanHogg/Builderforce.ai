@@ -21,7 +21,9 @@ import { isUnscopedMutation } from '../readCoverage';
 import { trimToolResult } from '../toolResultBudget';
 import { nowIso, nowMs, pushTrace, setActivity } from './runCells';
 import { autoLinkCreatedItem, recordCodeChangeTicket } from './runBackstops';
+import { earlyDelegationAdvisory } from './earlyDelegation';
 import { failureAdvisoryFor, isDedupableRead, type RunLoopContext } from './runLoopContext';
+import { runToolInterruptibly } from './steerInterrupt';
 
 export function dispatchToolPort(run: RunLoopContext): LoopPorts<ChatCompletionMessage>['dispatch'] {
   const { c, chatId, req, readCoverage, failures, writeLedger, placeholderLedger } = run;
@@ -61,7 +63,8 @@ export function dispatchToolPort(run: RunLoopContext): LoopPorts<ChatCompletionM
       // `lastResolvedModel.ts`). Applied here rather than in a relay because this is
       // the only layer that knows both the conversation and the call — which is what
       // makes it work on every surface, instead of only the one relay that had a copy.
-      out = await runTool(call.name, withObservedModel(chatId, call.name, args));
+      // A foreground command runs under a step signal: Stop or the person's steer kills it.
+      out = await runToolInterruptibly(runTool, run.runKey, c.abort?.signal, call.name, withObservedModel(chatId, call.name, args));
     } catch (e) {
       const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
       out = { ok: false, error: message };
@@ -170,12 +173,20 @@ export function dispatchToolPort(run: RunLoopContext): LoopPorts<ChatCompletionM
         }
       }
     }
+    // The user asked for sub-agents and the run is still reading instead (PRD 35 E5):
+    // told on the read that crosses the threshold, not only at the final answer.
+    const delegate = earlyDelegationAdvisory(run, call.name, args, isReadTool, iter);
+    if (delegate) advisory = advisory ? `${advisory}\n\n${delegate}` : delegate;
     // Trimmed to the transcript budget with the advisory attached AFTER the cut, so
     // the budget can never delete the guard — and a `read_file` is paged by LINE with
     // its continuation offset intact, instead of sliced mid-line with the paging
-    // fields (which sit after the content) thrown away. See `toolResultBudget.ts`.
-    const trimmedOut = trimToolResult(call.name, out ?? null, { advisory });
-    run.pendingRun = { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated };
+    // fields (which sit after the content) thrown away. See `toolResultBudget.ts`. The
+    // cap is sized to the serving model's window when the run knows it (PRD 35 E4).
+    const contextWindowTokens = await run.windowFit.contextWindow?.();
+    const trimmedOut = trimToolResult(call.name, out ?? null, { advisory, contextWindowTokens });
+    // `served` — the window the model was actually handed — is what read coverage
+    // records (PRD 35 E1); the untrimmed `out` is kept only for a replay.
+    run.pendingRun = { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated, served: trimmedOut.served };
     return { data: trimmedOut.content, isError: isFailedToolResult(out) };
   };
 }

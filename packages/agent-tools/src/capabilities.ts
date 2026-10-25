@@ -27,6 +27,8 @@
 
 import type { SymbolKind } from "./symbols.js";
 import type { ModelRole } from "./modelRoles.js";
+import type { ShellJobStart, ShellJobStatus, ShellRunOptions } from "./shell-job-types.js";
+export type { ShellJobStart, ShellJobStatus, ShellRunOptions } from "./shell-job-types.js";
 
 /**
  * The set of capabilities a tool can require / a surface can provide. Adding a new
@@ -61,6 +63,10 @@ export type Capability =
   | "repo.delete"
   /** Run a real shell command in the checked-out repo (only true Linux processes). */
   | "shell"
+  /** BACKGROUND shell jobs (`ShellCapability.start` / `poll` / `kill`): `command_status`
+   *  and `command_stop`. Separate from `shell` so a surface whose shell runs only in the
+   *  foreground never advertises two tools it cannot back. */
+  | "shell.jobs"
   /**
    * PUBLISH work from the checked-out repo: commit, push, open a pull request.
    *
@@ -208,7 +214,22 @@ export interface WebCapability {
 /** Run a real shell command. Present only on surfaces with a true process (the
  *  cloud Container, on-prem Node) — never on the bare Worker/DO. */
 export interface ShellCapability {
-  run(command: string): Promise<ShellResult>;
+  run(command: string, opts?: ShellRunOptions): Promise<ShellResult>;
+  /**
+   * The run's default checkout, when the workspace root CONTAINS checkouts rather than
+   * being one — resolved once per run by the surface (`resolveDefaultRepo`). Set ⇒ the
+   * git tools retry there before naming candidates, and `run_command` runs there.
+   */
+  defaultRepo?: string;
+  /** Start a BACKGROUND job (`run_command` `background` / `yieldMs`). Omitted ⇒ the
+   *  surface runs everything in the foreground. The job is the RUN's, not the step's: it
+   *  outlives an interrupted wait, and the surface kills it when the run settles. */
+  start?(command: string, opts?: ShellRunOptions): Promise<ShellJobStart>;
+  /** A background job's state, waiting up to `waitMs` for it to finish first. Aborting
+   *  `signal` ends the WAIT early (the status so far); the job itself runs on. */
+  poll?(id: string, opts?: { waitMs?: number; signal?: AbortSignal }): Promise<ShellJobStatus>;
+  /** Kill a background job (its process tree). */
+  kill?(id: string): Promise<ShellJobStatus>;
   /**
    * The remote ticket branch this shell's clone mirrors, when the SURFACE owns that
    * branch rather than the clone (a cloud run commits through its git provider; the
@@ -679,6 +700,8 @@ export interface ShellResult {
   stdout?: string;
   exitCode?: number;
   error?: string;
+  /** The command was killed by its cancel signal (Stop, or the person's steer). */
+  aborted?: boolean;
 }
 export interface WebFetchResult {
   ok: boolean;

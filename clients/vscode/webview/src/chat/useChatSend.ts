@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useChatTurns, useRunRefreshTick, type BrainMessage, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { request } from '../vscodeBridge';
-import { childTarget, isWaitingOnSubagents, steerRun, type useChatChildren } from './chatChildren';
+import { childTarget, steerRun, type useChatChildren } from './chatChildren';
 import type { QueuedTurn } from './VsCodeComposer';
 
 /**
@@ -81,15 +81,17 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
     send: (m) => dispatchSend(m.text, m.recipient),
     textOf: (m) => m.text,
     // The editor's steer: a live sub-agent takes its message straight into its run, and
-    // a chat run waiting on its sub-agents is spoken to now (the wait gives way and its
-    // next turn answers) rather than queued behind a run that may hold for minutes.
+    // the chat's own RUNNING run is spoken to now (PRD 35 E10) — the message interrupts
+    // the step in flight and reaches the next model call, instead of waiting behind a run
+    // that may hold for minutes. A stop command ("STOP executing") stops it (the host
+    // reads that). Holding it for after the run is the explicit alternative: `queueAfter`.
     steer: ({ text, recipient: to }) => {
       const child = childTarget(text, to, liveChildren);
       if (child) {
         steerRun(child.key, text);
         return true;
       }
-      if (conv.sending && !to && chatId != null && isWaitingOnSubagents(conv.activity)) {
+      if (conv.sending && !to && chatId != null) {
         steerRun(chatId, text);
         return true;
       }
@@ -97,6 +99,7 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
     },
   });
   const { submit: submitTurn } = turns;
+  const { submit: holdTurn } = turns.queued;
 
   // A run moves what the chat row reports (its spend & savings, ticket counts), and the
   // host drives the run, so the in-page loop's `onActivity` never sees it: re-read the row
@@ -117,6 +120,15 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
     sendOrQueue(text, recipient);
   }, [input, recipient, sendOrQueue, setInput]);
 
+  // The explicit "Queue for after": hold the typed message until the run finishes
+  // (sent on its falling edge); with no run going it is simply sent.
+  const queueAfter = useCallback(() => {
+    const text = input.trim();
+    if (!text) return;
+    setInput('');
+    if (!holdTurn({ text, recipient })) sendOrQueue(text, recipient);
+  }, [holdTurn, input, recipient, sendOrQueue, setInput]);
+
   // Answering an ask_user card posts the chosen option(s) as the user's next turn.
   const answerQuestion = useCallback((answer: string) => {
     sendOrQueue(answer, recipient);
@@ -128,5 +140,5 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
   }, [recipient, sendOrQueue]);
 
   // `stop` clears the held turns AND stops the chat's run — the composer's Stop.
-  return { queued: turns.queued, stop: turns.stop, submit, answerQuestion, replayMessage };
+  return { queued: turns.queued, stop: turns.stop, submit, queueAfter, answerQuestion, replayMessage };
 }

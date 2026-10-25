@@ -14,7 +14,7 @@
  */
 
 import type * as vscode from "vscode";
-import { withRunUsage, type LocalChatIdentity, type RunUsageLedger } from "@seanhogg/builderforce-brain-embedded";
+import { noteRunStep, withRunUsage, type LocalChatIdentity, type RunUsageLedger } from "@seanhogg/builderforce-brain-embedded";
 import { rememberProjectFact } from "./bfApi";
 import { getApiKey } from "./gateway";
 import { resolveModelRoute, routeStream } from "./modelRouting";
@@ -45,6 +45,15 @@ export async function recordEditorRunEnd(
   // The project the run STARTED in, never the one selected when it settles: a run with
   // none had no project memory to recall from, so it writes none either.
   const projectId = opts.projectId;
+  // The run's server chat rides every fact write (PRD 35 E8): its usage row is the fact's
+  // origin cost, and the server applies the chat's own Memory gate to it.
+  const chatMeta = async (): Promise<{ chatId?: number }> => {
+    const id = await usage.identity.serverIdFor(usage.chatId).catch(() => undefined);
+    return typeof id === "number" ? { chatId: id } : {};
+  };
+  // Memory off: one line on the run's trace saying so, so "0 facts written" reads as the
+  // switch, not a fault. Said synchronously, before the host stops relaying the run.
+  const note = (line: string): void => noteRunStep(usage.runKey, { label: "memory.commit_skipped", args: { reason: "memory-off" }, result: line });
   void commitRunKnowledgeIfAllowed(root, run, opts, async () =>
     projectId == null
       ? undefined
@@ -67,7 +76,10 @@ export async function recordEditorRunEnd(
             });
             return result.text;
           },
-          remember: (key, content) => rememberProjectFact(secrets, projectId, key, content),
+          remember: async (key, content) => rememberProjectFact(secrets, projectId, key, content, await chatMeta()),
+          rememberCodemap: async (key, content, meta) =>
+            rememberProjectFact(secrets, projectId, key, content, { ...(await chatMeta()), fileAnchors: meta.fileAnchors }),
         },
+    note,
   );
 }

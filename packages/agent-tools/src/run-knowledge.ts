@@ -141,6 +141,14 @@ export class RunKnowledgeRecorder implements RunKnowledgeLog {
       return;
     }
     const kind = fileToolKind(name);
+    // `read_file` with `paths[]` (and no `path` — empty counts as none, as the tool reads it)
+    // read every file it names.
+    const rec = args && typeof args === "object" && !Array.isArray(args) ? (args as Record<string, unknown>) : undefined;
+    const many = kind === "read" && !!rec && !(typeof rec.path === "string" && rec.path !== "") && Array.isArray(rec.paths);
+    if (kind && many) {
+      for (const path of toolCallPaths(args as Record<string, unknown>)) this.memory.observe({ kind: OBSERVATION[kind], path });
+      return;
+    }
     const p = kind ? argPath(args) : undefined;
     if (kind && p) this.memory.observe({ kind: OBSERVATION[kind], path: p });
   }

@@ -30,7 +30,17 @@ export interface ToolDef {
    * leave this falsy and require a root. The agent loop branches on it.
    */
   remote?: boolean;
-  execute: (args: Record<string, unknown>, root: string) => Promise<string>;
+  execute: (args: Record<string, unknown>, root: string, run?: ToolRunOptions) => Promise<string>;
+}
+
+/** What the RUN lends one call, beyond the folder: its Stop and its default checkout. */
+export interface ToolRunOptions {
+  /** The call's cancel signal (the run's Stop, or a steer interrupting this step). */
+  signal?: AbortSignal;
+  /** The run's default checkout in a folder that CONTAINS checkouts (`resolveDefaultRepo`). */
+  defaultRepo?: string;
+  /** The run's key: its background jobs are its own, and die when it settles. */
+  runKey?: number;
 }
 
 /** The one shared registry, built once. Adding a tool in `@builderforce/agent-tools`
@@ -66,13 +76,19 @@ export const TOOL_DEFS: ToolDef[] = registry
     description: def.schema.function.description,
     parameters: def.schema.function.parameters as Record<string, unknown>,
     mutating: isMutating(def.name, def.requires),
-    execute: async (args, root) => {
+    execute: async (args, root, run) => {
       const result = await registry.dispatch(def.name, args, {
         // The ripgrep VS Code ships (or one on PATH) backs `search_code`, so a repo-wide
         // symbol search covers the whole workspace instead of the first 4,000 files.
-        caps: buildLocalCapabilityProvider(root, { ripgrep: () => findRipgrep() }),
+        caps: buildLocalCapabilityProvider(root, {
+          ripgrep: () => findRipgrep(),
+          ...(run?.defaultRepo ? { defaultRepo: run.defaultRepo } : {}),
+          ...(run?.runKey !== undefined ? { jobOwner: run.runKey } : {}),
+        }),
         workspaceRoot: root,
         compressLargeOutputs: hostCostLeverOn("c8_token_compression"),
+        // Stop reaches the tool (and `run_command`'s process tree) through here.
+        ...(run?.signal ? { signal: run.signal } : {}),
       });
       return JSON.stringify(result.data);
     },

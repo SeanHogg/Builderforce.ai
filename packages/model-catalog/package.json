@@ -1,6 +1,6 @@
 {
   "name": "@builderforce/model-catalog",
-  "version": "2026.10.18",
+  "version": "2026.10.19",
   "private": true,
   "type": "module",
   "description": "The model catalog VOCABULARY every routing host shares: tier ladder and THE tier rule (catalog tier, else price band), per-token price and the per-million conversion, residency (local | cloud), the CatalogView port a host binds to its own registry, and the BYO LLM provider table (ids, brand labels, key | subscription | local-runtime connect shape) the gateway and web app both derive from, and Anthropic's release line the gateway and the on-prem runtime both derive from. Pure, dependency-free and I/O-free by contract.",

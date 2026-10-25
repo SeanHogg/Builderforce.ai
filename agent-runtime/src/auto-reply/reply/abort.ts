@@ -22,18 +22,12 @@ import { normalizeCommandBody, type CommandNormalizeOptions } from "../commands-
 import type { FinalizedMsgContext, MsgContext } from "../templating.js";
 import { stripMentions, stripStructuralPrefixes } from "./mentions.js";
 import { clearSessionQueues } from "./queue.js";
+import { isAbortTrigger } from "@builderforce/run-guards";
 
-const ABORT_TRIGGERS = new Set(["stop", "esc", "abort", "wait", "exit", "interrupt"]);
+// The bare-word abort triggers are the shared stop primitive's exact-word layer.
+export { isAbortTrigger } from "@builderforce/run-guards";
 const ABORT_MEMORY = new Map<string, boolean>();
 const ABORT_MEMORY_MAX = 2000;
-
-export function isAbortTrigger(text?: string): boolean {
-  if (!text) {
-    return false;
-  }
-  const normalized = text.trim().toLowerCase();
-  return ABORT_TRIGGERS.has(normalized);
-}
 
 export function isAbortRequestText(text?: string, options?: CommandNormalizeOptions): boolean {
   if (!text) {

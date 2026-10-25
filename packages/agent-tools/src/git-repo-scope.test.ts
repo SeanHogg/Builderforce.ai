@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   buildGitCommand,
   buildListCheckoutsCommand,
+  gitCommitTool,
   gitDiffTool,
+  gitPushTool,
   gitStatusTool,
   inferRepoFromPath,
 } from "./git-tools.js";
@@ -156,5 +158,102 @@ describe("runGitTool at a multi-checkout workspace root", () => {
     expect(sh.scripts[0]).toBe('cd "other-project" && git --no-pager diff -- "Builderforce.ai/foo.ts"');
     expect(data(r).ok).toBe(true);
     expect(data(r).repo).toBe("other-project");
+  });
+});
+
+/** A shell at a multi-checkout root: only commands that `cd` into `app` find a repository. */
+function rootOfCheckouts(defaultRepo?: string) {
+  const sh = mockShell((cmd) => {
+    if (cmd === buildListCheckoutsCommand()) return { ok: true, exitCode: 0, stdout: "app\napi\n" };
+    if (cmd.startsWith('cd "app"')) return { ok: true, exitCode: 0, stdout: "## main" };
+    return { ok: false, exitCode: 128, stdout: NOT_A_REPO };
+  });
+  if (defaultRepo) Object.assign(sh.caps.shell, { defaultRepo });
+  return sh;
+}
+
+// PRD 35 E3 — characterization of today's remedy on the PUBLISH path, before the default.
+describe("runPublishTool at a multi-checkout workspace root (no default repo)", () => {
+  it("names the candidate checkouts when the root is not a repository", async () => {
+    const sh = rootOfCheckouts();
+    const r = await gitPushTool.execute({}, sh as never);
+    expect(data(r).ok).toBe(false);
+    expect(data(r).candidates).toEqual(["app", "api"]);
+    expect(sh.scripts[sh.scripts.length - 1]).toBe(buildListCheckoutsCommand());
+  });
+});
+
+describe("the run's default repo (ShellCapability.defaultRepo)", () => {
+  it("git tools retry in the default checkout before naming candidates", async () => {
+    const sh = rootOfCheckouts("app");
+    const r = await gitStatusTool.execute({}, sh as never);
+    expect(data(r).ok).toBe(true);
+    expect(data(r).repo).toBe("app");
+    expect(sh.scripts).toEqual(["git status --short --branch", 'cd "app" && git status --short --branch']);
+  });
+
+  it("an explicit repo wins over the default", async () => {
+    const sh = rootOfCheckouts("api");
+    const r = await gitStatusTool.execute({ repo: "app" }, sh as never);
+    expect(sh.scripts).toEqual(['cd "app" && git status --short --branch']);
+    expect(data(r).repo).toBe("app");
+  });
+
+  it("a path that names another checkout is tried before the default", async () => {
+    const sh = rootOfCheckouts("api");
+    const r = await gitDiffTool.execute({ path: "app/src/x.ts" }, sh as never);
+    expect(data(r).repo).toBe("app");
+    expect(sh.scripts[1]).toBe('cd "app" && git --no-pager diff -- "src/x.ts"');
+    expect(sh.scripts).toHaveLength(2);
+  });
+
+  it("still names the candidates when the default is not a repository either", async () => {
+    const sh = rootOfCheckouts("gone");
+    const r = await gitStatusTool.execute({}, sh as never);
+    expect(data(r).ok).toBe(false);
+    expect(data(r).candidates).toEqual(["app", "api"]);
+  });
+
+  it("publish tools use the default checkout", async () => {
+    const sh = rootOfCheckouts("app");
+    const r = await gitPushTool.execute({}, sh as never);
+    expect(data(r).repo).toBe("app");
+    expect(sh.scripts[1]!.startsWith('cd "app" || exit 1\n')).toBe(true);
+  });
+
+  it("a commit in the default checkout resolves workspace-root paths inside it", async () => {
+    const sh = rootOfCheckouts("app");
+    await gitCommitTool.execute({ message: "fix", paths: ["app/src/x.ts"], branch: "ticket/1-fix" }, sh as never);
+    const scoped = sh.scripts[1]!;
+    expect(scoped.startsWith('cd "app" || exit 1\n')).toBe(true);
+    expect(scoped).toContain("'src/x.ts'");
+  });
+});
+
+describe("a root known not to be a checkout (the verdict is cached per shell)", () => {
+  it("with a default repo, a later call goes to the default directly", async () => {
+    const sh = rootOfCheckouts("app");
+    await gitStatusTool.execute({}, sh as never);
+    const before = sh.scripts.length;
+    const r = await gitStatusTool.execute({}, sh as never);
+    expect(data(r).repo).toBe("app");
+    expect(sh.scripts.slice(before)).toEqual(['cd "app" && git status --short --branch']);
+  });
+
+  it("publish tools share the verdict", async () => {
+    const sh = rootOfCheckouts("app");
+    await gitStatusTool.execute({}, sh as never);
+    const before = sh.scripts.length;
+    await gitPushTool.execute({}, sh as never);
+    expect(sh.scripts.slice(before)).toHaveLength(1);
+    expect(sh.scripts[before]!.startsWith('cd "app" || exit 1\n')).toBe(true);
+  });
+
+  it("without a default repo the root is still tried every time", async () => {
+    const sh = rootOfCheckouts();
+    await gitStatusTool.execute({}, sh as never);
+    const before = sh.scripts.length;
+    await gitStatusTool.execute({}, sh as never);
+    expect(sh.scripts[before]).toBe("git status --short --branch");
   });
 });

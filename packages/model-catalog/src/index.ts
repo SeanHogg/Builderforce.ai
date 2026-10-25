@@ -12,8 +12,10 @@
  */
 
 export {
+  AGENTIC_TIERS,
   MODEL_TIERS,
   UNKNOWN_TIER_RANK,
+  isAgenticTier,
   isModelTier,
   resolveModelTier,
   tierForPrice,

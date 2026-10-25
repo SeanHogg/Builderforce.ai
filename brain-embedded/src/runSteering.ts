@@ -17,24 +17,58 @@
 
 const inboxes = new Map<number, string[]>();
 
-/** Queue one message for a run's next turn. Blank text is ignored. */
-export function queueRunSteering(runKey: number, text: string): void {
+/**
+ * Runs whose waiting direction INTERRUPTS the step in flight — the person's own words
+ * (PRD 35 E10), as opposed to a child's report, which waits for the step to end. Cleared
+ * when the inbox is drained. Listeners are the step in flight (`steerInterrupt.ts`).
+ */
+const interrupting = new Set<number>();
+const interruptListeners = new Map<number, Set<() => void>>();
+
+/**
+ * Queue one message for a run's next turn. Blank text is ignored. `interrupt` also
+ * aborts the run's interruptible step now (a foreground command) and skips the rest of
+ * its turn's calls.
+ */
+export function queueRunSteering(runKey: number, text: string, opts?: { interrupt?: boolean }): void {
   const trimmed = text.trim();
   if (!trimmed) return;
   const queue = inboxes.get(runKey) ?? [];
   queue.push(trimmed);
   inboxes.set(runKey, queue);
+  if (!opts?.interrupt) return;
+  interrupting.add(runKey);
+  for (const listener of [...(interruptListeners.get(runKey) ?? [])]) listener();
 }
 
 /** Take every message queued for a run, oldest first. Empty when none are waiting. */
 export function drainRunSteering(runKey: number): string[] {
+  interrupting.delete(runKey);
   const queue = inboxes.get(runKey);
   if (!queue?.length) return [];
   inboxes.delete(runKey);
   return queue;
 }
 
+/** True while an interrupting message waits for the run's next turn. */
+export function hasRunInterrupt(runKey: number): boolean {
+  return interrupting.has(runKey);
+}
+
+/** Be told when an interrupting message arrives for a run. Returns the unsubscribe. */
+export function onRunInterrupt(runKey: number, listener: () => void): () => void {
+  const set = interruptListeners.get(runKey) ?? new Set<() => void>();
+  set.add(listener);
+  interruptListeners.set(runKey, set);
+  return () => {
+    set.delete(listener);
+    if (set.size === 0) interruptListeners.delete(runKey);
+  };
+}
+
 /** Test-only: forget every queue. */
 export function resetRunSteering(): void {
   inboxes.clear();
+  interrupting.clear();
+  interruptListeners.clear();
 }

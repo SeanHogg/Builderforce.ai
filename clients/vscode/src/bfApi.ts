@@ -580,17 +580,28 @@ export async function recallProjectFacts(
 /**
  * Write-through a belief to the project's SHARED facts store (POST …/facts). Replaces
  * by stable key server-side, so cloud/on-prem/editor runs all see it. Best-effort.
+ *
+ * `meta` carries what the route records beside the fact (`RememberFactBody`): the server
+ * `chatId` it came from (its origin cost, and the chat's Memory gate — a chat with memory
+ * off answers `ok:false, reason:'memory-off'`) and the `fileAnchors` it is about.
  */
 export async function rememberProjectFact(
   secrets: vscode.SecretStorage,
   projectId: number,
   key: string,
   content: string,
+  meta?: { chatId?: number; fileAnchors?: Array<{ path: string }> },
 ): Promise<boolean> {
   try {
     const r = await authed<{ ok?: boolean }>(secrets, `/api/projects/${projectId}/facts`, {
       method: 'POST',
-      body: JSON.stringify({ key, content, source: 'vscode' }),
+      body: JSON.stringify({
+        key,
+        content,
+        source: 'vscode',
+        ...(meta?.chatId != null ? { chatId: meta.chatId } : {}),
+        ...(meta?.fileAnchors?.length ? { fileAnchors: meta.fileAnchors } : {}),
+      }),
     });
     return !!r?.ok;
   } catch {

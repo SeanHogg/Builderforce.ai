@@ -115,5 +115,24 @@ export const fileOutlineTool: ToolDefinition = defineTool({
   },
 });
 
+/** One Markdown heading and its 1-based line. */
+export interface HeadingEntry {
+  heading: string;
+  line: number;
+}
+
+/**
+ * A Markdown file's headings with their lines (at most {@link OUTLINE_MAX_ENTRIES}) — the
+ * same extractor `file_outline` runs, shaped for `read_file`'s large-document outline so
+ * a model can page straight to a section instead of reading windows until it gets there.
+ * Empty for a non-Markdown path.
+ */
+export function markdownOutline(path: string, content: string): HeadingEntry[] {
+  return extractSymbols(path, content)
+    .filter((s) => s.kind === "heading")
+    .slice(0, OUTLINE_MAX_ENTRIES)
+    .map((s) => ({ heading: s.name, line: s.line }));
+}
+
 /** The code-navigation tools, spliced into `CORE_TOOLS` beside the file tools. */
 export const SYMBOL_TOOLS: readonly ToolDefinition[] = [findSymbolTool, fileOutlineTool];

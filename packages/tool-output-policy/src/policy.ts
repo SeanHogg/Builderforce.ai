@@ -14,9 +14,9 @@
  * Pure: no I/O, no clock, no env. The lever decision arrives as a parameter.
  */
 
-import { DEFAULT_TOOL_OUTPUT_CHARS, READ_FILE_TOOL, isShellTool, toolOutputCap } from './caps.js';
+import { DEFAULT_TOOL_OUTPUT_CHARS, READ_FILE_TOOL, isShellTool, toolOutputCap, windowedCap } from './caps.js';
 import { projectJson } from './jsonProjection.js';
-import { isReadFileResult, windowReadFile, type AttachAdvisory } from './readFileWindow.js';
+import { READ_FILE_RESULT_CHARS, isReadFileResult, isReadFilesResult, windowReadFile, windowReadFiles, type AttachAdvisory } from './readFileWindow.js';
 import { detectRunner, summarizeShellOutput } from './shellSummary.js';
 import { cutHeadTail } from './textCut.js';
 
@@ -27,6 +27,9 @@ export interface ShapedToolResult {
   bytes: number;
   /** True when the model was handed less than the tool returned. */
   truncated: boolean;
+  /** `read_file` only: the window the model was served, before the advisory — what read
+   *  coverage records instead of the untrimmed result. */
+  served?: Record<string, unknown>;
 }
 
 export interface ShapeToolResultOptions {
@@ -43,6 +46,9 @@ export interface ShapeToolResultOptions {
   caps?: Readonly<Record<string, number>>;
   /** The C7 lever: summarize logs and project large JSON. Off = the legacy head slice. */
   summarize?: boolean;
+  /** The serving model's context window (tokens), when known — sizes the cap
+   *  ({@link windowedCap}). Unknown = the table caps. Ignored when `maxChars` is set. */
+  contextWindowTokens?: number;
 }
 
 /** Field names that carry a command's log in a structured shell result. */
@@ -80,8 +86,8 @@ function attach(value: unknown, opts: ShapeToolResultOptions): unknown {
  *  behaviour, so with the lever off every other tool keeps the generic cap it always had. */
 function capFor(tool: string, opts: ShapeToolResultOptions): number {
   if (opts.maxChars !== undefined) return opts.maxChars;
-  if (!opts.summarize && tool !== READ_FILE_TOOL) return DEFAULT_TOOL_OUTPUT_CHARS;
-  return toolOutputCap(tool, opts.caps);
+  const tableCap = !opts.summarize && tool !== READ_FILE_TOOL ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
+  return windowedCap(tool, tableCap, opts.contextWindowTokens);
 }
 
 /** Shrink the log fields of a structured shell result so the whole result fits. */
@@ -110,9 +116,12 @@ function shrinkLogFields(tool: string, out: Record<string, unknown>, cap: number
 export function shapeToolResult(tool: string, out: unknown, opts: ShapeToolResultOptions = {}): ShapedToolResult {
   const bytes = JSON.stringify(out ?? null).length;
 
-  if (tool === READ_FILE_TOOL && isReadFileResult(out)) {
-    const windowed = windowReadFile(out, { maxChars: opts.maxChars, advisory: opts.advisory, attachAdvisory: opts.attachAdvisory });
-    return { content: JSON.stringify(windowed.value), bytes, truncated: windowed.truncated };
+  if (tool === READ_FILE_TOOL && (isReadFileResult(out) || isReadFilesResult(out))) {
+    // The line window's own row (the `caps` override never applied to it), sized to the window.
+    const maxChars = opts.maxChars ?? windowedCap(READ_FILE_TOOL, READ_FILE_RESULT_CHARS, opts.contextWindowTokens);
+    const windowOpts = { maxChars, advisory: opts.advisory, attachAdvisory: opts.attachAdvisory };
+    const windowed = isReadFileResult(out) ? windowReadFile(out, windowOpts) : windowReadFiles(out, windowOpts);
+    return { content: JSON.stringify(windowed.value), bytes, truncated: windowed.truncated, served: windowed.served };
   }
 
   const cap = capFor(tool, opts);

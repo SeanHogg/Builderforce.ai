@@ -32,34 +32,32 @@ import {
   isFailedToolResult,
   isRunning,
   nextFallbackModel,
-  queueRunSteering,
   resolveRunConfirm,
   runAbortSignal,
   startRun,
-  stopRun,
   subscribeRunStore,
   type BrainRunOutcome,
-  type BrainRunPersistence,
   type BrainStreamFn,
-  type EvermindRunHooks,
-  type ModelFallbackEvent,
 } from "@seanhogg/builderforce-brain-embedded";
-import type { LocalRuntimeProbe } from "@builderforce/local-inference";
 import type { ToolDef } from "./fileTools";
-import { approvalRequestFor, createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs, type NativeRunLabels } from "./nativeBrainRun";
-import type { PolicyGate } from "./policy";
+import { approvalRequestFor, createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs } from "./nativeBrainRun";
 import { withRunPreamble } from "./runPreamble";
 import { replaceWorkspaceMap } from "./idePersona";
-import type { RunDirectives } from "./hooks/runHooks";
-import { RunKnowledgeRecorder, recordingOnly, type RunKnowledgeLog } from "@builderforce/agent-tools";
+import { RunKnowledgeRecorder, recordingOnly } from "@builderforce/agent-tools";
 import { createChildRuns } from "./childRuns";
-import { syncMessageFor, type RunHostMessage, type RunSink, type SinkEntry, type WebviewRunStart } from "./brainRunHostProtocol";
-import { childControls, directionText, type ChildControls, type ChildOwner } from "./childRunSpawner";
+import { syncMessageFor, type RunHostMessage, type SinkEntry } from "./brainRunHostProtocol";
+import { childControls } from "./childRunSpawner";
 import { createChildRunHost, ownerOf, type RunSpec } from "./childRunHost";
-import { createChildApprovalRelay, type ChildApprover } from "./childApprovalRelay";
+import { createChildApprovalRelay } from "./childApprovalRelay";
 import { createRunWatches } from "./runWatches";
+import { OWNER_NAME, type BrainRunHost, type BrainRunHostPorts, type RunNoteOptions, type ToolRunInfo } from "./brainRunHostContract";
+import { runContextFields, startRunRepo } from "./runSetup";
+import { createRunSteer } from "./runSteer";
 
 export { syncMessageFor } from "./brainRunHostProtocol";
+export type { RunHostMessage, RunSink, RunSyncMessage, RunToolMessage, SinkEntry, WebviewRunStart } from "./brainRunHostProtocol";
+export { OWNER_NAME } from "./brainRunHostContract";
+export type { BrainRunHost, BrainRunHostPorts, RunContextPack, RunNoteOptions, ToolRunInfo } from "./brainRunHostContract";
 
 /** The user's ask, whether the panel sent a string or multimodal parts. */
 function askedText(turn: RunSpec["userTurn"]): string | undefined {
@@ -76,151 +74,6 @@ function askedText(turn: RunSpec["userTurn"]): string | undefined {
   }
   const asked = parts.join(" ").replace(/\s+/g, " ").trim();
   return asked || undefined;
-}
-export type { RunHostMessage, RunSink, RunSyncMessage, RunToolMessage, SinkEntry, WebviewRunStart } from "./brainRunHostProtocol";
-
-/** The top-level owner's name, as the chat shows it (a brand, not translated). */
-export const OWNER_NAME = "BuilderForce";
-
-/** How a settled run's note is committed: the chat's Memory switch, and the project the
- *  run STARTED in — so switching projects mid-run does not move its memory. */
-export interface RunNoteOptions {
-  memory: boolean;
-  projectId?: number;
-}
-
-export interface ToolRunInfo {
-  chatId: number;
-  name: string;
-  args: Record<string, unknown>;
-  mutating: boolean;
-  remote: boolean;
-  ok: boolean;
-}
-
-/** What the editor supplies to a run; every member is host-side, none needs the panel. */
-export interface BrainRunHostPorts {
-  /**
-   * Local file tools + cognition + the gateway's platform catalog, for a project.
-   *
-   * `children` is THIS run's handle on its sub-agents and `signal` its Stop — built here
-   * (not by the port) because only the run knows who it is: its key, its chat, its depth.
-   */
-  tools(projectId: number | undefined, children: ChildControls, signal: () => AbortSignal | undefined, opts: { memory: boolean; audit?: { auditId: string; runId: string } }): Promise<readonly ToolDef[]>;
-  /** Workspace root the local tools resolve against; '' when no folder is open. */
-  workspaceRoot(): string;
-  /**
-   * The transport-bound streamer for the CURRENT route (gateway or on-device).
-   * `onFallback` is told when Hybrid's pick failed and the turn was answered with Auto.
-   */
-  stream(onFallback?: (event: ModelFallbackEvent) => void): Promise<BrainStreamFn>;
-  /** The live on-device runtimes, asked only when a turn moves onto a local model so the
-   *  window gate packs for that runtime's real window. Omitted ⇒ the catalog row. */
-  localProbes?(): Promise<readonly LocalRuntimeProbe[]>;
-  /** Where the loop persists its turns — the same Brain store the panel reads. */
-  persistence: BrainRunPersistence;
-  /**
-   * PRD 36: which SERVER chat a run's local chat is — binding it first when signed in —
-   * and its client id. `serverChatId: null` = unbound: no chat id leaves the machine.
-   * Omitted ⇒ the run's chat id is itself a server chat.
-   */
-  chatIdentity?(chatId: number): Promise<{ serverChatId: number | null; clientChatId?: string }>;
-  /** PRD 36: wrap the run's streamer so every call lands in the chat's usage ledger. */
-  recordUsage?(stream: BrainStreamFn, run: { chatId: number; runKey: number; mode?: "chat" | "work" }): BrainStreamFn;
-  /** Project-Evermind hooks for a project (recall, memory-first answer, cache), tiered on
-   *  the conversation when it has a server chat (`null` = none). */
-  evermind(projectId: number, serverChatId: number | null): EvermindRunHooks | undefined;
-  /**
-   * The api-assembled platform context for this turn — strategy / PRD / governance /
-   * the project's durable memory (facts) / prior Evermind lessons — rendered as a
-   * system-prompt section, or '' when there is none. Fetched once per run at loop
-   * start with the user's request as the recall query. This is the block the native
-   * participant already carried and the webview run did not: without it a run in the
-   * panel started every task with no memory of what earlier runs had learned.
-   */
-  runContext?(projectId: number, serverChatId: number | null, query: string): Promise<string>;
-  /**
-   * The tenant's effective governance gates for a run — the same compiled rows the
-   * cloud and on-prem loops enforce. Resolved once per run at loop start; a throw
-   * refuses the run (fail-closed, as the server is). Omitted ⇒ no gates.
-   */
-  policyGates?(projectId: number | undefined): Promise<readonly PolicyGate[]>;
-  /**
-   * The workspace's committed rules + hooks (`.builderforce/rules.md`, `hooks.json`) for
-   * ONE run — fresh per run, since the hooks hold the run's state. A sub-agent asks with
-   * `subagent` and gets the tool hooks only. Omitted ⇒ none.
-   */
-  directives?(scope: "run" | "subagent"): Promise<RunDirectives | undefined>;
-  labels: Pick<NativeRunLabels, "blockedByPolicy">;
-  /** A chat gained a turn — refresh the Sessions tree. */
-  onChatsChanged?(): void;
-  /** A tool call finished (local or platform) — refresh what it may have changed. */
-  onToolRun?(info: ToolRunInfo): void;
-  /** The set of live runs changed — feed the Sessions tree's status overlay. */
-  onRunsChanged?(state: { running: number[]; awaiting: number[] }): void;
-  /**
-   * A run finished with local activity — write its `.builderforce/` note and, when the
-   * chat's Memory switch is on (`memory`), what it learned and the code map of what it
-   * found into the project's facts.
-   */
-  sessionNote?(chatId: number, run: RunKnowledgeLog, opts: RunNoteOptions): Promise<void> | void;
-  /**
-   * What recent runs in this workspace did, read NOW. The panel builds its system
-   * prompt once, when it opens; without this every later run in that panel started
-   * from the notes of the runs before the panel opened, never from the run that just
-   * finished. Joined to the run-context block — the volatile per-run seam — so the
-   * system prompt itself stays a stable, cacheable prefix. Omitted ⇒ none.
-   */
-  recentActivity?(): Promise<string>;
-  /**
-   * The workspace's SHAPE as it is NOW — scan map, repo map, symbol index; never the run
-   * notes (those ride {@link recentActivity}). The panel builds its prompt once, when it
-   * opens, often before indexing finished; swapping the block per run gives each run the
-   * current map, and the prompt's bytes change only when the workspace was rescanned, so
-   * it stays a cacheable prefix. Omitted ⇒ the prompt's own copy is used as sent.
-   */
-  grounding?(): Promise<string | undefined>;
-  /** Report a settled code-changing run's outcome to learned routing. Best-effort. */
-  reportOutcome?(outcome: BrainRunOutcome): Promise<unknown>;
-}
-
-export interface BrainRunHost {
-  /** Run one turn. Resolves when the loop has settled (like `startRun`). */
-  start(payload: WebviewRunStart): Promise<void>;
-  stop(chatId: number): void;
-  confirm(chatId: number, ok: boolean): void;
-  clearError(chatId: number): void;
-  /**
-   * The Auto-mode switch moved for ONE chat — the one whose panel it was flipped in.
-   *
-   * Deliberately per-chat, and the reason is the whole point of runs living out here:
-   * several chats execute AT ONCE, and closing or switching away from a tab no longer
-   * stops the work behind it. While this applied to every live run, "turn Auto on so
-   * this refactor stops asking me" also silently answered YES to whatever a DIFFERENT
-   * chat happened to be parked on — a delete, a push, a base-branch commit — in a tab
-   * the user was not even looking at. A switch in one conversation must not approve an
-   * action in another.
-   *
-   * Also called when a panel BINDS to a chat, not only when the switch is toggled: in
-   * reuse mode one panel moves between chats, so a chat parked on a confirm must be
-   * answered the moment the user comes back to it with Auto already on — otherwise the
-   * per-chat scoping would strand exactly the run the user returned to unblock.
-   */
-  setAutoApprove(chatId: number, on: boolean): void;
-  /** Put the person's words in front of a RUNNING run's next turn — the chat's own run
-   *  (instead of queueing behind it) or one of its sub-agents. */
-  steer(runKey: number, text: string): void;
-  /**
-   * Sub-agent controls for a run this host did NOT start — the native chat participant.
-   * Its children run here, as ordinary runs; it cannot be woken (its turn belongs to the
-   * editor's chat view), so their reports wait in its inbox for its next turn. With
-   * `approve`, its children's write prompts are asked through it (the native view cannot
-   * render a run cell's confirm).
-   */
-  childControls(owner: ChildOwner, base: Omit<WebviewRunStart, "chatId">, approve?: ChildApprover): ChildControls;
-  /** Watch the runs from a panel. The panel is brought up to date immediately. */
-  attach(sink: RunSink): () => void;
-  dispose(): void;
 }
 
 function argsRecord(value: unknown): Record<string, unknown> {
@@ -288,6 +141,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
   const announce = (chatId: number): void => broadcast({ type: "run.children", chatId, children: registry.viewsIn(chatId) });
   /** Chats with a turn being set up or run by THIS host — claimed before the async setup. */
   const active = new Set<number>();
+  /** The claimed keys whose loop has not ENDED yet — before it starts, a steer is heard at turn 1. */
+  const settingUp = new Set<number>();
 
   /**
    * ONE run entry for every run: a chat's turn, a sub-agent (its key is its own, its
@@ -301,6 +156,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // flag on the way out.
     if (active.has(key) || isRunning(key)) return;
     active.add(key);
+    settingUp.add(key);
     // What a child derives from and a wake restarts with; the turn's own seed, research and
     // message are never reused (a wake passes the next turn), so they are not kept.
     const { seed: _seed, priorResearch: _prior, userTurn: _turn, ...kept } = p;
@@ -309,10 +165,15 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       await runTurn(p);
     } finally {
       active.delete(key);
+      settingUp.delete(key);
       // Settled: stop pinning its cell. Before `afterRun`, whose wake re-watches the key.
       watches.release(key);
-      // A child's report that arrived as this run was ending is heard now.
+      // What the run held outside the loop (its background jobs) dies with it.
+      ports.settleRun?.(key);
+      // A child's report that arrived as this run was ending is heard now…
       childHost.afterRun(key);
+      // …and so is what the person typed as it ended (unless they stopped it).
+      steering.settled(key);
     }
   };
 
@@ -325,6 +186,9 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     const asked = askedText(p.userTurn);
     if (asked) notesFor(key).setPrompt(asked);
     const projectId = p.projectId ?? undefined;
+    // E3: the run's default checkout, resolved ONCE and in parallel with the setup below;
+    // a tool call waits for it (the port bounds itself), a failure means "none".
+    const repo = startRunRepo(ports, { ...(projectId != null ? { projectId } : {}), ...(asked ? { request: asked } : {}) });
     // Governance FIRST: an unreadable policy throws here and the run never starts.
     const gates = (await ports.policyGates?.(projectId)) ?? [];
     const directives = await ports.directives?.(p.child ? "subagent" : "run");
@@ -357,10 +221,16 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       ...(directives ? { hooks: directives.hooks } : {}),
       events: { onToolStart: () => undefined, onToolResult: () => undefined },
       labels: ports.labels,
+      defaultRepo: repo.current,
+      // The run owns the background jobs its calls start; they die when it settles.
+      runKey: key,
     });
-    const runTool = async (name: string, args: unknown): Promise<unknown> => {
+    // `signal` is the call's Stop (the run's, or the step's when a steer may interrupt it).
+    const runTool = async (name: string, args: unknown, signal?: AbortSignal): Promise<unknown> => {
       const def = defs.find((d) => d.name === name);
-      const out = await native(name, args);
+      await repo.ready;
+      // Every other call is lent the RUN's Stop, so Stop reaches every tool.
+      const out = await native(name, args, signal ?? runAbortSignal(key));
       if (def) recordToolRun(def, argsRecord(args), out);
       return out;
     };
@@ -411,10 +281,16 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         onActivity: () => ports.onChatsChanged?.(),
         ...(identity ? { serverChatId: identity.serverChatId, ...(identity.clientChatId ? { clientChatId: identity.clientChatId } : {}) } : {}),
         ...(p.evermind && projectId != null ? { evermind: ports.evermind(projectId, serverChatId) } : {}),
-        // Project memory + platform context, appended to the system prompt by the loop
-        // (the same seam the limbic block uses) so the webview run starts from what the
-        // project already knows instead of rediscovering it with tool calls.
-        ...runContextFor(projectId, serverChatId),
+        // Project memory + platform context and the task context pack (PRD 35 E2), so the
+        // run starts from what the project already knows instead of rediscovering it with
+        // tool calls; and the BYO preflight (E7), said before turn 1 (`runSetup.ts`).
+        ...runContextFields(ports, {
+          ...(projectId != null ? { projectId } : {}),
+          serverChatId,
+          request: asked ?? "",
+          memory: p.evermind,
+          child: !!p.child,
+        }),
         ...(p.seed ? { seed: p.seed } : {}),
         ...(p.priorResearch ? { priorResearch: p.priorResearch } : {}),
         ...(p.userTurn != null ? { userTurn: p.userTurn } : {}),
@@ -425,32 +301,14 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         ...(directives ? { onStop: directives.hooks.onStop } : {}),
       });
     } finally {
+      // The loop has ended: a steer from here on is sent on once the run has settled.
+      settingUp.delete(key);
       flags.delete(key);
       approvals.forget(key);
       await flushNote(key, chatId, { memory: p.evermind, ...(projectId != null ? { projectId } : {}) });
       // The workspace's runEnd hooks — after the run, never holding its settle.
       void directives?.hooks.onRunEnd();
     }
-  };
-
-  /**
-   * The per-run context the loop appends (the same seam the limbic block uses): the
-   * project's platform context + memory, and the workspace's run notes as they are now.
-   * Either half failing costs that half, never the run.
-   */
-  const runContextFor = (projectId: number | undefined, serverChatId: number | null): { augmentSystemPrompt?: (text: string) => Promise<string | undefined> } => {
-    const platform = projectId != null && ports.runContext ? ports.runContext : undefined;
-    const recent = ports.recentActivity;
-    if (!platform && !recent) return {};
-    return {
-      augmentSystemPrompt: async (text: string) => {
-        const parts = await Promise.all([
-          platform ? platform(projectId!, serverChatId, text).catch(() => "") : "",
-          recent ? recent().catch(() => "") : "",
-        ]);
-        return parts.filter((part) => part.trim()).join("\n\n") || undefined;
-      },
-    };
   };
 
   const start = async (payload: RunSpec): Promise<void> => {
@@ -476,29 +334,27 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     persistence: ports.persistence,
     announce,
   });
+  const steering = createRunSteer({
+    registry,
+    childHost,
+    isBusy: (key) => active.has(key) || isRunning(key),
+    isSettingUp: (key) => settingUp.has(key),
+    ownerName: OWNER_NAME,
+  });
 
   return {
     start,
     // A sub-agent's Stop is its own run's Stop, marked as on purpose so it reports
     // "stopped" rather than "failed".
-    stop: (runKey) => childHost.stop(runKey),
+    stop: (runKey) => steering.stop(runKey),
     confirm: (runKey, ok) => resolveRunConfirm(runKey, ok),
     // A settled run is no longer subscribed, so its cleared error is relayed here.
     clearError: (runKey) => {
       clearRunError(runKey);
       broadcastSync(runKey);
     },
-    steer(runKey, text) {
-      if (!isRunning(runKey) || !text.trim()) return;
-      const lineage = registry.lineageOf(runKey);
-      // A sub-agent hears it as direction from its owner; the chat's own run hears the
-      // person directly. Either way it is in front of the run's NEXT turn, not after it.
-      queueRunSteering(runKey, lineage ? directionText(lineage.ownerName, text) : text);
-      // A run sitting in `wait_agents` would otherwise hear this only once every child
-      // settled; the wait gives way and the next turn answers.
-      registry.interrupt(runKey);
-      childHost.postDirection(lineage?.rootChatId ?? runKey, "person", lineage?.ownerName ?? OWNER_NAME, lineage?.agent ?? null, text);
-    },
+    // The person's words at a run — steer, stop, or its next turn (`runSteer.ts`).
+    steer: (runKey, text) => steering.steer(runKey, text),
     childControls(owner, base, approve) {
       // Registered so a child can derive from it; never woken — its turns are the editor's.
       specs.set(owner.key, { ...base, chatId: owner.key, wakeable: false });

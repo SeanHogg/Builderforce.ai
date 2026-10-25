@@ -44,6 +44,12 @@ export function turnContextBlock(parts: ReadonlyArray<string | null | undefined>
   return body ? `${OPEN}\n\n${body}\n${CLOSE}` : null;
 }
 
+/** The message carrying this run's block, while it still holds its slot; undefined when none. */
+export function turnContextCarrier(c: RunCell): ChatCompletionMessage | undefined {
+  const a = attached.get(c);
+  return a && a.convo[a.index] === a.carrier ? a.carrier : undefined;
+}
+
 /** Put back the user message the previous run attached its block to. Idempotent. */
 export function restoreTurnContext(c: RunCell): void {
   const prior = attached.get(c);

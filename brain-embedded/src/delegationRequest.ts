@@ -50,6 +50,11 @@ export function canSpawnHere(toolNames: readonly string[]): boolean {
   return toolNames.some((n) => SPAWN_TOOLS.has(n));
 }
 
+/** `spawn_agent` / `spawn_agents` — the calls that count as a delegation attempt. */
+export function isSpawnTool(name: string): boolean {
+  return SPAWN_TOOLS.has(name);
+}
+
 /**
  * Did this run TRY to delegate locally? Success is not required: a child the role check
  * refused, or one that failed, is a result to report — re-prompting would only repeat it.
@@ -93,6 +98,28 @@ export function undelegatedRequestNudge(toolNames: readonly string[]): string {
     'A sub-agent here is a LOCAL child run on this machine: it needs no cloud dispatch, no ticket assignment and no Developer on the roster. ' +
     'The workspace execution kill-switch and every `autoRun: execution_disabled` verdict stop CLOUD runs only — they do not apply to it. ' +
     'as_agent is optional: with no fitting teammate, OMIT it — the spawn tools staff the role on this project themselves (a capable teammate, or a Developer hired into the workspace and project, with the ticket assigned) and the child runs AS that agent. ' +
-    `${call} Keep working while they run; when their reports are in (they arrive on their own, or call wait_agents), verify their changes and report what each child delivered, per ticket.`
+    `${call} ${delegationShape(fanOut ? 'spawn_agents' : 'spawn_agent')} ` +
+    'Keep working while they run; when their reports are in (they arrive on their own, or call wait_agents), verify their changes and report what each child delivered, per ticket.'
   );
+}
+
+/**
+ * How the parent works (PRD 35 §5.2): it plans, children research. Said in both nudges so
+ * a run told to delegate also knows what to delegate and what to keep.
+ */
+function delegationShape(spawnTool: string): string {
+  return (
+    'The shape of this run: you read only the document the request names and the chat state already in your context — no source files. ' +
+    `Research (reading code, searching, tracing callers) goes to children: ${spawnTool} with role "explore", one per question, each brief stating the question, the files or folders to start from, what is already known and ruled out, and the answer's shape (paths with line numbers, short excerpts, a word cap). ` +
+    'When they report, write the deliverable the request names (the document or plan edit) yourself in that same turn — filing tickets is not the deliverable.'
+  );
+}
+
+/**
+ * The EARLY nudge (PRD 35 E5): attached to the read result that reaches the
+ * reads-without-spawn threshold, so a run that keeps reading is told to delegate long
+ * before it ever reaches a final answer. The end-of-run gate stays as the backstop.
+ */
+export function earlyDelegationNudge(toolNames: readonly string[], reads: number): string {
+  return `STOP READING AND DELEGATE. This run has made ${reads} read calls and started no sub-agent. ${undelegatedRequestNudge(toolNames)}`;
 }

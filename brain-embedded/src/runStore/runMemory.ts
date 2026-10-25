@@ -29,6 +29,20 @@ export interface RunRecall {
   blockTokens: number;
 }
 
+/** The most hint text a recall query carries — the search is a query, not a document. */
+export const MAX_RECALL_HINT_CHARS = 600;
+
+/**
+ * The recall query: the user's request, plus the host's hint (focus-file paths and their
+ * top headings, PRD 35 E2) when there is one. No request ⇒ the request as it is — a hint
+ * alone is not a question. Pure.
+ */
+export function recallQuery(userText: string, hint?: string | null): string {
+  const extra = (hint ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_RECALL_HINT_CHARS);
+  if (!extra || !userText.trim()) return userText;
+  return `${userText.trim()}\n\n${extra}`;
+}
+
 /**
  * Evermind recall — before the FIRST turn, ask the project's self-learning model
  * which learned memories are relevant to this request. When it returns some, we
@@ -37,10 +51,15 @@ export interface RunRecall {
  * badge). Best-effort: a non-project chat / unavailable recall / thrown fetch just
  * skips it.
  */
-export async function recallForRun(c: RunCell, convo: ChatCompletionMessage[], evermind: EvermindRunHooks | undefined): Promise<RunRecall> {
+export async function recallForRun(
+  c: RunCell,
+  convo: ChatCompletionMessage[],
+  evermind: EvermindRunHooks | undefined,
+  hint?: string,
+): Promise<RunRecall> {
   let recalled: EvermindRecallResult | null = null;
   if (!evermind?.recall) return { recalled, block: null, blockTokens: 0 };
-  const query = latestUserText(convo);
+  const query = recallQuery(latestUserText(convo), hint);
   if (!query) return { recalled, block: null, blockTokens: 0 };
   try {
     recalled = await evermind.recall(query);

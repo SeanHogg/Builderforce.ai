@@ -105,3 +105,13 @@ describe("recordingOnly", () => {
     expect(local.isEmpty).toBe(false);
   });
 });
+
+describe("RunKnowledgeRecorder — read_file paths[] with an empty path", () => {
+  it("records every file of a paths[] read whose path is empty, as the tool reads it", () => {
+    const r = new RunKnowledgeRecorder();
+    r.record("read_file", { path: "", paths: ["src/a.ts", "src/b.ts"] });
+    const brief = JSON.stringify(r.snapshot());
+    expect(brief).toContain("src/a.ts");
+    expect(brief).toContain("src/b.ts");
+  });
+});

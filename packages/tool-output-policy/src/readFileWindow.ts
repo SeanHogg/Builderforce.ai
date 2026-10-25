@@ -47,29 +47,41 @@ export interface ReadFileWindowOptions {
   attachAdvisory?: AttachAdvisory;
 }
 
+/** A windowed `read_file` result. */
+export interface ReadFileWindowed {
+  /** What the model is handed: the window with the advisory attached. */
+  value: Record<string, unknown>;
+  /** The same window BEFORE the advisory — the lines the model was actually served, which
+   *  read coverage records (an advisory is guidance, not file content). */
+  served: Record<string, unknown>;
+  truncated: boolean;
+}
+
 /**
  * Cut a `read_file` result to the budget at a line boundary and rewrite its paging
  * fields so the model knows exactly which lines it has and which `offset` continues.
  */
-export function windowReadFile(out: ReadFileResult, opts: ReadFileWindowOptions = {}): { value: Record<string, unknown>; truncated: boolean } {
+export function windowReadFile(out: ReadFileResult, opts: ReadFileWindowOptions = {}): ReadFileWindowed {
   const maxChars = opts.maxChars ?? READ_FILE_RESULT_CHARS;
   const withNote = (result: Record<string, unknown>): Record<string, unknown> =>
     opts.advisory && opts.attachAdvisory ? (opts.attachAdvisory(result, opts.advisory) as Record<string, unknown>) : result;
+  /** `served` is the window before the advisory — what read coverage records. */
+  const done = (served: Record<string, unknown>, truncated: boolean): ReadFileWindowed => ({ value: withNote(served), served, truncated });
 
   const lines = out.content.split('\n');
   const offset = typeof out.offset === 'number' && out.offset > 0 ? Math.floor(out.offset) : 1;
   const totalLines = typeof out.totalLines === 'number' && out.totalLines > 0 ? Math.floor(out.totalLines) : offset + lines.length - 1;
   const alreadyPartial = out.truncated === true;
 
-  const build = (kept: string[], note: string): Record<string, unknown> => {
+  const served = (kept: string[], note: string): Record<string, unknown> => {
     const lastLine = offset + kept.length - 1;
-    return withNote({ ...out, content: kept.join('\n'), offset, totalLines, truncated: lastLine < totalLines || alreadyPartial, note });
+    return { ...out, content: kept.join('\n'), offset, totalLines, truncated: lastLine < totalLines || alreadyPartial, note };
   };
+  const build = (kept: string[], note: string): Record<string, unknown> => withNote(served(kept, note));
   const fits = (value: Record<string, unknown>): boolean => JSON.stringify(value).length <= maxChars;
 
   // Whole result within budget: the tool's own fields stand; only the advisory is added.
-  const whole = withNote({ ...out });
-  if (fits(whole)) return { value: whole, truncated: false };
+  if (fits(withNote({ ...out }))) return done({ ...out }, false);
 
   const continuation = (lastLine: number): string =>
     `Showing lines ${offset}–${lastLine} of ${totalLines}. This surface returns at most ~${maxChars.toLocaleString('en-US')} chars per read, so a large file arrives in several windows — call read_file again with offset ${lastLine + 1} to continue from exactly where this one stopped. Do not re-request lines you already have.`;
@@ -95,8 +107,75 @@ export function windowReadFile(out: ReadFileResult, opts: ReadFileWindowOptions 
     const first = lines[0] ?? '';
     const head = first.slice(0, Math.max(0, maxChars - 600));
     const note = `Line ${offset} of ${totalLines} is longer than the ~${maxChars.toLocaleString('en-US')}-char read budget; the first ${head.length.toLocaleString('en-US')} of its ${first.length.toLocaleString('en-US')} chars are shown. Paging by offset cannot reach the rest of this line — use search_code for the specific symbol instead.`;
-    return { value: withNote({ ...out, content: head, offset, totalLines, truncated: true, note }), truncated: true };
+    return done({ ...out, content: head, offset, totalLines, truncated: true, note }, true);
   }
 
-  return { value: build(lines.slice(0, best), continuation(offset + best - 1)), truncated: true };
+  return done(served(lines.slice(0, best), continuation(offset + best - 1)), true);
+}
+
+/** `read_file` with `paths[]`: one result per file, in request order. */
+export interface ReadFilesResult {
+  ok?: unknown;
+  files: unknown[];
+  [key: string]: unknown;
+}
+
+export function isReadFilesResult(out: unknown): out is ReadFilesResult {
+  return !!out && typeof out === 'object' && !Array.isArray(out)
+    && (out as { ok?: unknown }).ok !== false
+    && Array.isArray((out as { files?: unknown }).files);
+}
+
+/**
+ * Window a multi-file `read_file` result: the char budget is SPLIT across the files —
+ * smallest first, so a short file is kept whole and what it did not use goes to the
+ * larger ones — and each file is paged by line on its own ({@link windowReadFile}). A
+ * failed entry (a missing path) passes through. The advisory rides on the whole result.
+ */
+export function windowReadFiles(out: ReadFilesResult, opts: ReadFileWindowOptions = {}): ReadFileWindowed {
+  const maxChars = opts.maxChars ?? READ_FILE_RESULT_CHARS;
+  const files = out.files;
+  // The wrapper, the commas between entries and the advisory are spent before any file.
+  const overhead = JSON.stringify({ ...out, files: [] }).length + files.length + (opts.advisory ? opts.advisory.length + 16 : 0);
+  const order = files.map((f, i) => ({ i, size: JSON.stringify(f ?? null).length })).sort((a, b) => a.size - b.size);
+  const servedFiles: unknown[] = files.slice();
+  let remaining = Math.max(0, maxChars - overhead);
+  let truncated = false;
+  order.forEach(({ i, size }, n) => {
+    const file = files[i];
+    const share = Math.floor(remaining / (order.length - n));
+    if (isReadFileResult(file) && size > share) {
+      const windowed = windowReadFile(file, { maxChars: share });
+      servedFiles[i] = windowed.served;
+      truncated = truncated || windowed.truncated;
+    }
+    remaining -= JSON.stringify(servedFiles[i] ?? null).length;
+  });
+  const served = { ...out, files: servedFiles };
+  const value = opts.advisory && opts.attachAdvisory ? (opts.attachAdvisory(served, opts.advisory) as Record<string, unknown>) : served;
+  return { value, served, truncated };
+}
+
+/**
+ * The lines `start`–`end` of a `read_file` result that holds them — how a covered read
+ * is REPLAYED: the requested window, not the covering read's from its first line. The
+ * paging fields are rewritten to describe the slice.
+ */
+export function sliceReadFile(out: ReadFileResult, start: number, end: number): Record<string, unknown> {
+  const lines = out.content.split('\n');
+  const first = typeof out.offset === 'number' && out.offset > 0 ? Math.floor(out.offset) : 1;
+  const from = Math.max(first, Math.floor(start));
+  const kept = lines.slice(from - first, Math.max(from - first, Math.floor(end) - first + 1));
+  const lastLine = from + kept.length - 1;
+  const totalLines = typeof out.totalLines === 'number' && out.totalLines > 0 ? Math.floor(out.totalLines) : undefined;
+  const truncated = totalLines !== undefined ? lastLine < totalLines : out.truncated === true;
+  const { note: _coveringNote, ...rest } = out;
+  return {
+    ...rest,
+    content: kept.join('\n'),
+    offset: from,
+    ...(totalLines !== undefined ? { totalLines } : {}),
+    truncated,
+    ...(truncated ? { note: `Showing lines ${from}–${lastLine}${totalLines !== undefined ? ` of ${totalLines}` : ''}. To continue, call read_file again with offset ${lastLine + 1}.` } : {}),
+  };
 }

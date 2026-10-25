@@ -4254,8 +4254,14 @@ interface ComposerLabels {
     off: string;
     remove: string;
     send: string;
-    /** Send while a run streams queues the message behind it — its name says so. */
+    /** Send while a run streams queues the message behind it — its name says so. (A host
+     *  whose Send STEERS the run words it so; its queue is then {@link queueAfter}.) */
     queueSend: string;
+    /** The "Queue for after" button beside Send mid-run — `keys` is the platform's
+     *  shortcut (`Alt+Enter`, `⌥+Enter` on macOS). */
+    queueAfter: (keys: string) => string;
+    /** Its short visible text (hidden at narrow widths, where the icon stands alone). */
+    queueAfterShort: string;
     stop: string;
     dictate: string;
     stopDictation: string;
@@ -4362,6 +4368,11 @@ interface BrainComposerProps {
     /** A run is streaming: Send queues behind it, an empty box offers Stop. */
     running?: boolean;
     onStop?: () => void;
+    /**
+     * The explicit "Queue for after" while a run is going (Alt+Enter), for a host whose
+     * Send STEERS the running turn instead of queueing behind it. Omitted ⇒ Alt+Enter sends.
+     */
+    onQueue?: () => void;
     disabled?: boolean;
     /** Why the box is closed to input (an exam in progress, …) — shown above it. */
     blockedNotice?: ReactNode;

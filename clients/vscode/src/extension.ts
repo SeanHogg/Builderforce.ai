@@ -77,6 +77,7 @@ import { installHostBfiRuntime } from "./hostBfi/runtime";
 import { createModelProvisioner, hostModelProvisioner } from "./hostBfi/provision";
 import { provisionProgressReporter } from "./hostBfi/provisionProgress";
 import { hostPageEngines } from "./pageEngineBridge";
+import { killAllJobs } from "./localShellJobs";
 
 /** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
 /**
@@ -1294,7 +1295,8 @@ async function reviewHumanRequests(
 let auditExecution: AuditExecution | undefined;
 
 export async function deactivate(): Promise<void> {
-  await auditExecution?.flushClose();
+  // No run outlives the editor: every background shell job (a dev server, a watcher) dies here.
+  await Promise.all([auditExecution?.flushClose(), killAllJobs()]);
 }
 
 /** Re-push every auth-gated surface after sign-in/out. Evermind and the Brain

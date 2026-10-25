@@ -37,6 +37,32 @@ class Ctx<M> implements TurnContext<M> {
   ) {}
 }
 
+/** What {@link raceCancel} settles with when the signal fired first. */
+const CANCELLED: unique symbol = Symbol("cancelled");
+
+/**
+ * `work`, or {@link CANCELLED} the moment `signal` aborts — whichever is first. A late
+ * result (or rejection) of the abandoned work is swallowed here, never unhandled.
+ */
+function raceCancel<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T | typeof CANCELLED> {
+  if (!signal) return work;
+  return new Promise<T | typeof CANCELLED>((resolve, reject) => {
+    const onAbort = (): void => resolve(CANCELLED);
+    if (signal.aborted) onAbort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+    work.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
 /** How many calls from `start` may dispatch together: the run of consecutive read-only
  *  calls there, when it is at least two long; otherwise 1 (the sequential path). */
 function readOnlySpan(calls: readonly ParsedToolCall[], start: number, isReadOnly: (call: ParsedToolCall) => boolean): number {
@@ -190,16 +216,27 @@ export async function runAgentLoop<M>(args: LoopRunArgs<M>): Promise<LoopResult>
       // A batch's trailing non-read-only rewrite runs AFTER the reads before it, alone.
       const tail = prepared.length > 1 && !last.result && !ports.isReadOnly!(last.call) ? last : undefined;
       const batch = tail ? prepared.slice(0, -1) : prepared;
-      const results = batch.length > 1
-        ? await Promise.all(batch.map((p) => p.result ?? ports.dispatch(p.call, ctx)))
-        : [batch[0]!.result ?? (await ports.dispatch(batch[0]!.call, ctx))];
-      if (tail) results.push(await ports.dispatch(tail.call, ctx));
+      // A dispatch in flight is RACED against the cancel signal: Stop settles the run
+      // `cancelled` now, not when a 10-minute command ends; its late result is dropped.
+      const dispatchOne = (p: { call: ParsedToolCall; result?: LoopDispatchResult }) =>
+        p.result ? Promise.resolve(p.result) : raceCancel(ports.dispatch(p.call, ctx), signal);
+      const results = await Promise.all(batch.map(dispatchOne));
+      if (tail && !results.includes(CANCELLED)) results.push(await raceCancel(ports.dispatch(tail.call, ctx), signal));
+      if (results.includes(CANCELLED)) {
+        // The assistant turn is already in the transcript: every call from here on gets a
+        // stopped row, so the history never carries a tool_call without its answer.
+        const stopped: LoopDispatchResult = { data: { ok: false, aborted: true, error: "stopped" }, isError: true };
+        for (const rest of calls.slice(i)) ctx.messages.push(codec.tool(rest, stopped));
+        cancelled = true;
+        break;
+      }
 
       let stop = false;
-      for (let k = 0; k < prepared.length && !stop; k++) stop = await settle(i + k, prepared[k]!.call, results[k]!);
+      for (let k = 0; k < prepared.length && !stop; k++) stop = await settle(i + k, prepared[k]!.call, results[k] as LoopDispatchResult);
       if (stop) break;
       i += prepared.length;
     }
+    if (cancelled) break;
 
     const after: AfterToolCallsDecision | void = await hooks.afterToolCalls?.(ctx, finished);
     if (after && after.finished !== undefined) finished = after.finished;

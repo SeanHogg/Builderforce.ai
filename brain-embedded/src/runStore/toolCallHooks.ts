@@ -13,6 +13,7 @@ import { emit, nowIso, nowMs, pushTrace, runTrace } from './runCells';
 import { persistMidTurnText } from './turnPersistence';
 import { emitEvermindLearnReconcile } from './runMemory';
 import { metaOf, settleReply, type RunLoopContext } from './runLoopContext';
+import { recordShellFileRead } from './shellReadCoverage';
 
 type Hooks = LoopHooks<ChatCompletionMessage>;
 
@@ -86,7 +87,8 @@ export function afterDispatchHook(run: RunLoopContext): NonNullable<Hooks['after
   return (call, _result, row) => {
     if (run.pendingReplay) {
       // Keep the replayed read anchored to the message that now carries it.
-      readCoverage.cacheResult(run.pendingReplay.name, run.pendingReplay.args, { result: run.pendingReplay.result, anchor: row });
+      const replay = run.pendingReplay;
+      readCoverage.cacheResult(replay.name, replay.args, { result: replay.result, ...(replay.served !== undefined ? { served: replay.served } : {}), anchor: row });
       run.pendingReplay = null;
       return undefined;
     }
@@ -100,8 +102,15 @@ export function afterDispatchHook(run: RunLoopContext): NonNullable<Hooks['after
       return undefined;
     }
     // Keep what a successful read returned, anchored to the message that carries
-    // it, so an exact repeat can be replayed once compaction removes that message.
-    if (ran.isReadTool && !isFailedToolResult(ran.out)) readCoverage.cacheResult(call.name, args, { result: ran.out ?? null, anchor: row });
+    // it, so an exact repeat can be replayed once compaction removes that message —
+    // and what the model was SERVED of it, which is all coverage may claim (PRD 35 E1:
+    // the untrimmed copy claimed lines 251–534 of a file the model saw 1–250 of).
+    if (ran.isReadTool && !isFailedToolResult(ran.out)) {
+      readCoverage.cacheResult(call.name, args, { result: ran.out ?? null, ...(ran.served !== undefined ? { served: ran.served } : {}), anchor: row });
+    } else if (!isFailedToolResult(ran.out)) {
+      // A read-only shell print of one file is a read of those lines.
+      recordShellFileRead(readCoverage, call.name, args, ran.out, ran.truncated !== true, row);
+    }
     pushTrace(c, {
       ts: nowIso(),
       category: 'tool',

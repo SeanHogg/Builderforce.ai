@@ -18,7 +18,7 @@ import { delegationPlaceholders } from '../placeholderGuard';
 import { undelegatedRequestNudge } from '../delegationRequest';
 import { visitTarget } from '../runActivity';
 import { repeatedWriteNote, revisitAdvisory } from '@builderforce/run-guards';
-import { trimToolResult } from '../toolResultBudget';
+import { requestedReadWindow, trimToolResult } from '../toolResultBudget';
 import { stillInWorkingContext } from '../workingTranscript';
 import { emit, nowIso, nowMs, pushTrace, recordAppended } from './runCells';
 import { requestRunConfirm } from './runControl';
@@ -164,8 +164,11 @@ export function beforeDispatchHook(run: RunLoopContext): NonNullable<LoopHooks<C
           const visit = readCoverage.record(call.name, args);
           const target = visit ? visitTarget(args) : undefined;
           const revisit = visit && target ? revisitAdvisory(call.name, target, visit) : null;
-          const replayed = trimToolResult(call.name, cached.result ?? null, { advisory: revisit ? `${replayNote}\n\n${revisit}` : replayNote });
-          run.pendingReplay = { name: call.name, args, result: cached.result };
+          const replayed = trimToolResult(call.name, cached.result ?? null, {
+            advisory: revisit ? `${replayNote}\n\n${revisit}` : replayNote,
+            contextWindowTokens: await run.windowFit.contextWindow?.(),
+          });
+          run.pendingReplay = { name: call.name, args, result: cached.result, served: replayed.served };
           pushTrace(c, {
             ts: nowIso(),
             category: 'tool',
@@ -195,8 +198,11 @@ export function beforeDispatchHook(run: RunLoopContext): NonNullable<LoopHooks<C
         const revisit = visit && target ? revisitAdvisory(call.name, target, visit) : null;
         const note = revisit ? `${covered.note}\n\n${revisit}` : covered.note;
         if (covered.cached && !stillInWorkingContext(c, covered.cached.anchor)) {
-          const replayed = trimToolResult(call.name, covered.cached.result ?? null, { advisory: note });
-          run.pendingReplay = { name: call.name, args, result: covered.cached.result };
+          // The REQUESTED window, cut from the covering read's full result — not that
+          // read's own window from its first line (PRD 35 E1).
+          const requested = requestedReadWindow(covered.cached.result ?? null, covered.start, covered.end);
+          const replayed = trimToolResult(call.name, requested, { advisory: note, contextWindowTokens: await run.windowFit.contextWindow?.() });
+          run.pendingReplay = { name: call.name, args, result: requested, served: replayed.served };
           pushTrace(c, {
             ts: nowIso(),
             category: 'tool',
@@ -221,7 +227,7 @@ export function beforeDispatchHook(run: RunLoopContext): NonNullable<LoopHooks<C
         const visit = readCoverage.record(call.name, args);
         const target = visit ? visitTarget(args) : undefined;
         const revisit = visit && target ? revisitAdvisory(call.name, target, visit) : null;
-        const served = trimToolResult(call.name, derived, { advisory: revisit });
+        const served = trimToolResult(call.name, derived, { advisory: revisit, contextWindowTokens: await run.windowFit.contextWindow?.() });
         run.pendingReplay = { name: call.name, args, result: derived };
         pushTrace(c, {
           ts: nowIso(),

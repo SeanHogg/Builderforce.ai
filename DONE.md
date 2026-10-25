@@ -1,3 +1,56 @@
+## ✅ RESOLVED 2026-10-25 — PRD 35 WS8: VS Code runs read once, delegate early, stop when told
+
+**Why.** A VS Code run took 79 turns to update PRD 35, dispatched nothing and never edited the PRD. "STOP" and "write the update now" were both ignored (PRD 35 §2.1, E1–E10).
+
+**What shipped** (VSIX 2026.10.76; agent-tools 2026.10.13, agent-loop 2026.10.12, run-guards 2026.10.1, tool-output-policy 2026.10.1, model-catalog 2026.10.19, brain-embedded 2026.10.51, brain-ui 2026.10.24, agent-runtime 2026.10.19, api 2026.10.80 with regenerated container files):
+
+- **8a: read coverage records what was served.**
+  - Coverage covers the trimmed window the model saw, not the untrimmed file.
+  - A covered replay serves the requested window, not line 1.
+  - `cat`/`head`/`tail`/`sed -n` prints of a file count as reads, resolved against the shell's effective directory.
+- **8b: one default repo.** `resolveDefaultRepo` resolves from an explicit `repo`, then a path in the request, then the chat's project repository, then a single checkout.
+  - Git tools and `run_command` use it, and `run_command` accepts `cwd`.
+  - The scope helpers moved to `git-repo-scope.ts`, which caches the "root is not a repo" answer.
+  - `ticketBranchTool` uses the shared helpers.
+- **8c: delegation nudged early.** When sub-agents were asked for and none has spawned by the 6th read, the read result carries the brief-shaped nudge. The end-of-run check stays as the backstop.
+- **8d: memory.** Code-area fact writes carry `chatId` and `fileAnchors`. When Memory is off, the run trace says no facts were written.
+- **8e: stop and steer.**
+  - The abort signal reaches every tool. Stop or a timeout kills the shell's whole process tree.
+  - The kernel races each dispatch against cancel. Every call in a stopped turn gets a "stopped" tool row, so the transcript stays valid.
+  - A message typed while a run is going steers it. It interrupts a foreground command, or a wait on a background job, and is logged as `steer.applied`.
+  - A steer arriving at setup, during unwind or after the run is never lost; it becomes the next turn.
+  - "STOP executing" or `/stop` works like the button. On-prem's bare abort words are now in the same `run-guards` module.
+  - A visible "Queue" control (⌥/Alt+Enter) holds a message until the run finishes. It is translated in all five bundles.
+- **8f: context pack before turn 1.** It is built with no model call and attached as the volatile turn context:
+  - the focus files (inlined, or their outline);
+  - the chat's tickets and runs, through one shared reader with the web;
+  - git state for each checkout;
+  - matching `codemap:` facts.
+  
+  Inlined files count as already read. Recall searches with the request plus the focus-file hint.
+- **8g: reads and shell.**
+  - The per-result output limit is sized to the model's window (`windowedCap`); `read_file` gets 16–64k characters.
+  - `read_file` takes `paths[]`, and a large markdown file returns its outline.
+  - `run_command` takes `background` and `yieldMs`. `command_status` and `command_stop` work on jobs scoped to the run, and a run's jobs die when it settles or the extension deactivates.
+- **8h: model preflight.** Before turn 1 the run checks BYO account health (this also triggers a token refresh) and announces an expired or unresolved provider and its fallback. A pinned model below the agentic tier gets a warning. `llm.model_downgrade` also fires for auto-routed turns.
+- **Structure.** `brainRunHost.ts` was split into `brainRunHostContract`, `runSetup` and `runSteer` (591 → 395 lines). `run-guards` has its own vitest config.
+- **Proof.** Every new test is in a new file or appended to an existing one; no existing assertion changed. Results, all targeted runs:
+
+  | Package | Tests |
+  |---|---|
+  | brain-embedded | 236 |
+  | clients/vscode | 157 |
+  | agent-tools | 315 |
+  | agent-loop | 200 |
+  | run-guards | 64 |
+  | tool-output-policy | 35 |
+  | model-catalog | 31 |
+  | brain-ui | 18 |
+  | agent-runtime abort | 14 |
+
+  These checks are green: silent-catches, source-package-graph, tenant-scope, i18n-keys and the container generator checks.
+- **Left over:** the native chat participant, the web composer, the container shell and a stop during setup. They are in ROADMAP › Cloud and IDE agent runs.
+
 ## ✅ RESOLVED 2026-10-25 — Core holds no run telemetry: writers fixed, steps moved to ops
 
 - **Core cleanup (prod).** Eight run-telemetry tables copied to ops (`db:copy-run-telemetry`, `run_context_state` verified on its natural key), checked, and truncated on core. 142,605 superadmin step rows and the remaining 253 other-user step rows deleted from `brain_chat_messages` (core now holds none), and 94 `activity_log` `task.created` rows moved to ops. `VACUUM FULL` took core from 621 MB to 319 MB.

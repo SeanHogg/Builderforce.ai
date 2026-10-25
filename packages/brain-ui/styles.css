@@ -2059,6 +2059,34 @@
 @keyframes bf-cmp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 @media (pointer: coarse) { .bf-cmp-iconbtn { width: 40px; height: 40px; } }
 
+/* "Queue for after" beside Send while a run is going (a host whose Send steers the run).
+   A quiet outline pill on the theme's tokens, so it reads in light and dark; at narrow
+   widths only its icon stays, the full label (with the shortcut) on its tooltip. */
+.bf-cmp-queuebtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  height: var(--bf-ctl-size, 32px);
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.35));
+  background: transparent;
+  color: var(--bf-text-secondary, var(--bf-text, inherit));
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.bf-cmp-queuebtn:hover:not(:disabled) { background: var(--bf-surface-2, rgba(128, 128, 128, 0.14)); }
+.bf-cmp-queuebtn:focus-visible { outline: 2px solid var(--bf-accent, #3b82f6); outline-offset: 1px; }
+.bf-cmp-queuebtn:disabled { opacity: 0.45; cursor: not-allowed; }
+@media (max-width: 360px) {
+  .bf-cmp-queuebtn { width: var(--bf-ctl-size, 32px); padding: 0; justify-content: center; }
+  .bf-cmp-queuebtn__text { display: none; }
+}
+@media (pointer: coarse) { .bf-cmp-queuebtn { height: 40px; } }
+
 .bf-cmp-attachments { display: flex; flex-wrap: wrap; gap: 6px; }
 .bf-cmp-chip {
   display: inline-flex;

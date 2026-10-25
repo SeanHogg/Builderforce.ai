@@ -308,6 +308,13 @@ export {
   startEngineRun,
 } from './brainRunStore';
 export type { BrainRunRequest, BrainRunSnapshot, BrainRunPersistence, BrainStreamFn, BrainRunEngine, RunEngineControl, RunKey, RunTurn } from './brainRunStore';
+// PRD 35 E7: what a host's pre-turn BYO health check hands the run.
+export type { ModelPreflightResult } from './runStore/modelPreflight';
+export type { ServedRead } from './runStore/hostRunContext';
+// The chat's tickets + run history, ONE reader for every host (panel adapter, VS Code context pack).
+export { readChatRunHistory, readChatTicketLinks, type ChatStateGet } from './chatStateReads';
+// PRD 35 E8: a host's note on a settled run's trace (e.g. "Memory is off — no facts written").
+export { noteRunStep, type RunNoteStep } from './runStore/runNote';
 export { useRunSnapshot } from './useRunSnapshot';
 // A sub-agent is an ordinary run with an OWNER pointer (`runLineage.ts`), redirected
 // mid-run through the same inbox any run has (`runSteering.ts`).

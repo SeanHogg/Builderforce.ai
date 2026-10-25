@@ -51,6 +51,13 @@ export interface RunWindowFit {
   prepare(request: RunWindowFitRequest): Promise<ChatCompletionMessage[]>;
   /** Record the model that actually served a turn. */
   served(model: string | undefined): void;
+  /**
+   * The context window (tokens) of the model the current tool results answer — the one
+   * that last served, else the one last asked for — or undefined when nobody knows. Sizes
+   * the tool-result cap (`windowedCap`, PRD 35 E4). Resolved once per model per run.
+   * Optional so a host's own gate need not implement it (unknown = today's caps).
+   */
+  contextWindow?(): Promise<number | undefined>;
 }
 
 /**
@@ -83,8 +90,23 @@ export function windowFitRecallFailedTrace(ts: string, step: number, error: unkn
   };
 }
 
+/** The step recorded when the result cap could not learn a model's window — the run
+ *  keeps the default caps, and the reason is kept rather than swallowed. */
+export function windowCapUnknownTrace(ts: string, model: string, error: unknown): BrainTraceEvent {
+  return {
+    ts,
+    category: 'message',
+    label: 'llm.window_unknown',
+    args: { model },
+    result: `The context window of ${model} could not be resolved (${error instanceof Error ? error.message : String(error)}) — tool results keep the default caps.`,
+  };
+}
+
 export function createRunWindowFit(deps: RunWindowFitDeps): RunWindowFit {
   let lastServed: string | undefined;
+  let lastAsked: string | undefined;
+  // The result cap's window, once per model: a run's tool results need no live re-probe.
+  const capWindows = new Map<string, Promise<number | undefined>>();
   // One recall per directive for the whole run; the pre-turn recall seeds it.
   const recalls = new Map<string, Promise<EvermindRecallResult | null>>();
   if (deps.priorRecall) recalls.set(deps.priorRecall.query, Promise.resolve(deps.priorRecall.result));
@@ -107,6 +129,7 @@ export function createRunWindowFit(deps: RunWindowFitDeps): RunWindowFit {
     async prepare(req) {
       const to = req.model;
       if (!to) return req.messages;
+      lastAsked = to;
       const window = await resolveContextWindow(to, deps.windowSources);
       if (window === undefined) return req.messages;
       const differs = lastServed !== undefined && lastServed !== to;
@@ -130,6 +153,20 @@ export function createRunWindowFit(deps: RunWindowFitDeps): RunWindowFit {
     },
     served(model) {
       if (model) lastServed = model;
+    },
+    contextWindow() {
+      const ref = lastServed ?? lastAsked;
+      if (!ref) return Promise.resolve(undefined);
+      let window = capWindows.get(ref);
+      if (!window) {
+        // Unknown window ⇒ today's caps; the reason is kept on the run's trace.
+        window = resolveContextWindow(ref, deps.windowSources).catch((e: unknown) => {
+          deps.trace(windowCapUnknownTrace(deps.now(), ref, e));
+          return undefined;
+        });
+        capWindows.set(ref, window);
+      }
+      return window;
     },
   };
 }

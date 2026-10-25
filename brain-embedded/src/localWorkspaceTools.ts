@@ -57,6 +57,10 @@ export const LOCAL_WORKSPACE_TOOLS: ReadonlySet<string> = new Set([
   'edit_file',
   'delete_file',
   'run_command',
+  // A background command's companions (PRD 35 E6): a turn that started `npm test` in the
+  // background and now asks "did it pass?" shares no stem with `command_status`.
+  'command_status',
+  'command_stop',
   // The git tools, read and publish alike. They belong here for exactly the reason the
   // file tools do: "commit the change and push to main" is not one domain among many a
   // query can be relevant to, it is the surface doing its job. The turn that produced

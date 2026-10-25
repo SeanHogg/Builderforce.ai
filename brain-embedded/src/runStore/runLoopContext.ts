@@ -108,9 +108,11 @@ export interface RunLoopContext {
    *  dispatch it answers. */
   redirectAskToDelegation: boolean;
   /** A replayed read waits for its row to be pushed so the cache can anchor to it. */
-  pendingReplay: { name: string; args: unknown; result: unknown } | null;
-  /** What dispatch learned about the call it just ran — for the durable step + the read cache. */
-  pendingRun: { out: unknown; toolStart: number; isReadTool: boolean; threw: boolean; bytes?: number; truncated?: boolean } | null;
+  pendingReplay: { name: string; args: unknown; result: unknown; served?: unknown } | null;
+  /** What dispatch learned about the call it just ran — for the durable step + the read cache.
+   *  `served` is the `read_file` window the model was handed (before the advisory), which
+   *  read coverage records instead of the untrimmed `out`. */
+  pendingRun: { out: unknown; toolStart: number; isReadTool: boolean; threw: boolean; bytes?: number; truncated?: boolean; served?: unknown } | null;
   /** The finish reason of the turn that produced the call being dispatched. A malformed
    *  call is either the tail of a response that hit the output ceiling or JSON the model
    *  simply got wrong, and the advice for the two is opposite. */

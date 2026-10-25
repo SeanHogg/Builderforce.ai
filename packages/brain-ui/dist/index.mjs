@@ -5491,6 +5491,8 @@ function isBuiltinPanel(key) {
 var ChatTicketsPanel = memo5(ChatTicketsPanelInner);
 
 // src/chatTickets/restAdapter.ts
+import { readChatRunHistory, readChatTicketLinks } from "@seanhogg/builderforce-brain-embedded";
+var emptyRunHistory = () => ({ linkedRunnableTickets: 0, runs: [], dispatchers: [], executors: [] });
 var RUNNABLE2 = new Set(RUNNABLE_KINDS);
 function createChatTicketsRestAdapter(opts) {
   const { request: req } = opts;
@@ -5513,13 +5515,13 @@ function createChatTicketsRestAdapter(opts) {
     return [...workforce, ...agents];
   };
   return {
-    listTickets: (chatId) => req(`/api/brain/chats/${chatId}/tickets`).then((r) => r.tickets),
+    listTickets: (chatId) => readChatTicketLinks(req, chatId),
     linkTicket: (chatId, input) => req(`/api/brain/chats/${chatId}/tickets`, { method: "POST", body: JSON.stringify(input) }).then(() => void 0),
     unlinkTicket: (chatId, kind, ref) => req(
       `/api/brain/chats/${chatId}/tickets?kind=${encodeURIComponent(kind)}&ref=${encodeURIComponent(ref)}`,
       { method: "DELETE" }
     ).then(() => void 0),
-    listRuns: (chatId) => req(`/api/brain/chats/${chatId}/runs`).catch(() => ({ linkedRunnableTickets: 0, runs: [], dispatchers: [], executors: [] })),
+    listRuns: (chatId) => readChatRunHistory(req, chatId).then((history) => history ?? emptyRunHistory()).catch(emptyRunHistory),
     listTicketChats: (kind, ref) => req(
       `/api/brain/tickets/${encodeURIComponent(kind)}/${encodeURIComponent(ref)}/chats`
     ).then((r) => r.chats.map((c) => ({
@@ -5590,7 +5592,7 @@ function createChatTicketsRestAdapter(opts) {
     },
     listQuestions: async (chatId) => {
       const [links, pending] = await Promise.all([
-        req(`/api/brain/chats/${chatId}/tickets`).then((r) => r.tickets),
+        readChatTicketLinks(req, chatId),
         // `kind` is on the wire but not on the VM — the panel renders a question
         // without caring which flavour it is, while the FILTER cares about nothing
         // else. Typing the wire row here keeps both true.
@@ -8638,6 +8640,10 @@ var IconMic = () => /* @__PURE__ */ jsxs64("svg", { width: "16", height: "16", v
   /* @__PURE__ */ jsx67("path", { d: "M3.75 8a4.25 4.25 0 0 0 8.5 0M8 12.25V14", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round" })
 ] });
 var IconSend = () => /* @__PURE__ */ jsx67("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ jsx67("path", { d: "M8 13V3.75M4.25 7.5 8 3.75l3.75 3.75", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round" }) });
+var IconQueue = () => /* @__PURE__ */ jsxs64("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
+  /* @__PURE__ */ jsx67("path", { d: "M3 4.5h10M3 8h10M3 11.5h5.5", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round" }),
+  /* @__PURE__ */ jsx67("path", { d: "M11 10.25v2.5l1.75 1", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" })
+] });
 var IconStop = () => /* @__PURE__ */ jsx67("svg", { width: "12", height: "12", viewBox: "0 0 16 16", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ jsx67("rect", { x: "3.5", y: "3.5", width: "9", height: "9", rx: "1.5" }) });
 
 // src/composer/ComposerAddMenu.tsx
@@ -8691,10 +8697,14 @@ function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = 
 }
 
 // src/composer/ComposerTrailingButton.tsx
-import { jsx as jsx69 } from "react/jsx-runtime";
+import { Fragment as Fragment21, jsx as jsx69, jsxs as jsxs66 } from "react/jsx-runtime";
+function queueShortcutKeys(nav = typeof navigator === "undefined" ? void 0 : navigator) {
+  const platform = nav?.userAgentData?.platform || nav?.platform || "";
+  return /mac|iphone|ipad/i.test(platform) ? "\u2325+Enter" : "Alt+Enter";
+}
 var noopGet = () => "";
 var noopSet = () => void 0;
-function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, onSend, onStop, voice }) {
+function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, onSend, onStop, onQueue, voice }) {
   const dictation = useVoiceDictation(voice?.getValue ?? noopGet, voice?.setValue ?? noopSet);
   const action = promptTrailingAction({
     canSubmit,
@@ -8723,17 +8733,26 @@ function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, 
     return /* @__PURE__ */ jsx69("button", { type: "button", className: "bf-cmp-iconbtn bf-cmp-iconbtn--stop", onClick: onStop, title: labels.stop, "aria-label": labels.stop, children: /* @__PURE__ */ jsx69(IconStop, {}) });
   }
   const label = running ? labels.queueSend : labels.send;
-  return /* @__PURE__ */ jsx69("button", { type: "submit", className: "bf-cmp-iconbtn bf-cmp-iconbtn--send", onClick: (e) => {
+  const send = /* @__PURE__ */ jsx69("button", { type: "submit", className: "bf-cmp-iconbtn bf-cmp-iconbtn--send", onClick: (e) => {
     e.preventDefault();
     onSend();
   }, disabled: !canSubmit || disabled, title: label, "aria-label": label, children: /* @__PURE__ */ jsx69(IconSend, {}) });
+  if (!(running && onQueue && canSubmit)) return send;
+  const queueLabel = labels.queueAfter(queueShortcutKeys());
+  return /* @__PURE__ */ jsxs66(Fragment21, { children: [
+    /* @__PURE__ */ jsxs66("button", { type: "button", className: "bf-cmp-queuebtn", onClick: onQueue, disabled, title: queueLabel, "aria-label": queueLabel, children: [
+      /* @__PURE__ */ jsx69(IconQueue, {}),
+      /* @__PURE__ */ jsx69("span", { className: "bf-cmp-queuebtn__text", children: labels.queueAfterShort })
+    ] }),
+    send
+  ] });
 }
 
 // src/composer/AttachmentChips.tsx
-import { jsx as jsx70, jsxs as jsxs66 } from "react/jsx-runtime";
+import { jsx as jsx70, jsxs as jsxs67 } from "react/jsx-runtime";
 function AttachmentChips({ items, onRemove, labels }) {
   if (items.length === 0) return null;
-  return /* @__PURE__ */ jsx70("div", { className: "bf-cmp-attachments", children: items.map((a) => /* @__PURE__ */ jsxs66("span", { className: "bf-cmp-chip", children: [
+  return /* @__PURE__ */ jsx70("div", { className: "bf-cmp-attachments", children: items.map((a) => /* @__PURE__ */ jsxs67("span", { className: "bf-cmp-chip", children: [
     a.imageUrl && /* @__PURE__ */ jsx70("img", { src: a.imageUrl, alt: "", className: "bf-cmp-chip__thumb" }),
     /* @__PURE__ */ jsx70("span", { className: "bf-cmp-chip__name", children: a.name }),
     /* @__PURE__ */ jsx70("button", { type: "button", className: "bf-cmp-chip__x", onClick: () => onRemove(a.key), "aria-label": `${labels.remove} ${a.name}`, children: "\xD7" })
@@ -8798,6 +8817,8 @@ var DEFAULT_COMPOSER_LABELS = {
   remove: "Remove",
   send: "Send",
   queueSend: "Queue message \u2014 sends when the current run finishes",
+  queueAfter: (keys) => `Queue for after the run (${keys})`,
+  queueAfterShort: "Queue",
   stop: "Stop",
   dictate: "Dictate",
   stopDictation: "Stop dictation",
@@ -8823,6 +8844,7 @@ function composerLabelsFrom(lookup, overrides) {
   const d = DEFAULT_COMPOSER_LABELS;
   return {
     ...stringsFrom(d, lookup),
+    queueAfter: (keys) => lookup("queueAfter", { keys }) || d.queueAfter(keys),
     modeLabel: (mode) => lookup(`modeLabel.${mode}`) || d.modeLabel(mode),
     modeHint: (mode) => lookup(`modeHint.${mode}`) || d.modeHint(mode),
     effortDesc: (level, answer) => lookup(`effortDesc.${level}`, { answer }) || d.effortDesc(level, answer),
@@ -8833,7 +8855,7 @@ function composerLabelsFrom(lookup, overrides) {
 }
 
 // src/composer/BrainComposer.tsx
-import { Fragment as Fragment21, jsx as jsx71, jsxs as jsxs67 } from "react/jsx-runtime";
+import { Fragment as Fragment22, jsx as jsx71, jsxs as jsxs68 } from "react/jsx-runtime";
 var NO_PARTICIPANTS = [];
 var NO_TICKETS = [];
 var noop = () => void 0;
@@ -8844,6 +8866,7 @@ function BrainComposer(props) {
     onSubmit,
     running = false,
     onStop,
+    onQueue,
     disabled = false,
     blockedNotice,
     placeholder,
@@ -8911,6 +8934,13 @@ function BrainComposer(props) {
     if (!canSubmit) return;
     gate.request(() => onSubmitRef.current());
   };
+  const onQueueRef = useRef18(onQueue);
+  onQueueRef.current = onQueue;
+  const queue = () => {
+    const hold = onQueueRef.current;
+    if (!canSubmit || !hold) return;
+    gate.request(() => hold());
+  };
   const onPaste = (e) => {
     if (!attachments) return;
     const files = Array.from(e.clipboardData?.items ?? []).filter((i) => i.kind === "file" && i.type.startsWith("image/")).map((i) => i.getAsFile()).filter((f) => !!f);
@@ -8954,13 +8984,13 @@ function BrainComposer(props) {
   const chips = attachments ? /* @__PURE__ */ jsx71(AttachmentChips, { items: attachments.items, onRemove: attachments.onRemove, labels }) : null;
   const showSuggestions = !!suggestions?.items.length && !value.trim() && !running;
   const modeQuestion = gate.asking ? /* @__PURE__ */ jsx71(InferenceModeFirstRun, { labels: promptOptionsLabels(labelBundle?.options), onChoose: gate.choose }) : null;
-  const aboveBox = modeQuestion || above || showSuggestions || attachments && attachments.items.length > 0 ? /* @__PURE__ */ jsxs67(Fragment21, { children: [
+  const aboveBox = modeQuestion || above || showSuggestions || attachments && attachments.items.length > 0 ? /* @__PURE__ */ jsxs68(Fragment22, { children: [
     modeQuestion,
     above,
     showSuggestions && /* @__PURE__ */ jsx71(SuggestionRow, { items: suggestions.items, ariaLabel: suggestions.label }),
     chips
   ] }) : void 0;
-  return /* @__PURE__ */ jsxs67("div", { className: ["bf-cmp", className].filter(Boolean).join(" "), children: [
+  return /* @__PURE__ */ jsxs68("div", { className: ["bf-cmp", className].filter(Boolean).join(" "), children: [
     blockedNotice,
     /* @__PURE__ */ jsx71(
       PromptPanel,
@@ -8998,12 +9028,13 @@ function BrainComposer(props) {
               if (ticket.onKeyDown(e)) return;
               if (submitOnEnter && e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
-                submit();
+                if (e.altKey && running && onQueue) queue();
+                else submit();
               }
             }
           }
         ),
-        actions: /* @__PURE__ */ jsxs67(Fragment21, { children: [
+        actions: /* @__PURE__ */ jsxs68(Fragment22, { children: [
           /* @__PURE__ */ jsx71(
             ComposerAddMenu,
             {
@@ -9029,7 +9060,7 @@ function BrainComposer(props) {
             }
           )
         ] }),
-        context: context ? /* @__PURE__ */ jsx71(Fragment21, { children: context }) : void 0,
+        context: context ? /* @__PURE__ */ jsx71(Fragment22, { children: context }) : void 0,
         primaryAction: /* @__PURE__ */ jsx71(
           ComposerTrailingButton,
           {
@@ -9039,6 +9070,7 @@ function BrainComposer(props) {
             disabled,
             onSend: submit,
             onStop,
+            ...onQueue ? { onQueue: queue } : {},
             voice: voice ? { getValue, setValue: onChange } : void 0
           }
         )

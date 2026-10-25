@@ -26,7 +26,6 @@ import type {
   RepoDeleteResult,
   RepoEditResult,
   RepoListResult,
-  RepoReadResult,
   RepoSearchResult,
   RepoWriteResult,
   StaticCheckResult,
@@ -35,11 +34,15 @@ import type {
 } from "./capabilities.js";
 import { ToolRegistry } from "./registry.js";
 import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
-import { readJsonKey } from "./jsonKeyRead.js";
-import { compressShellResult, compressWebFetchResult } from "./compress.js";
+// `read_file`'s per-file body (window, JSON `key`, large-Markdown outline) and `paths[]`.
+import { READ_FILE_MAX_PATHS, readManyFiles, readOneFile } from "./fileRead.js";
+export { MARKDOWN_OUTLINE_MIN_CHARS, READ_FILE_MAX_PATHS } from "./fileRead.js";
+import { compressWebFetchResult } from "./compress.js";
+// `run_command`'s body (cwd / default repo, Stop, background jobs) and the job tools.
+import { runShellCommand, SHELL_JOB_TOOLS } from "./shell-tools.js";
 // The line window is its own dependency-free module so the build-less Container image can
 // run a compiled copy of it (see `fileWindow.ts`); re-exported for existing importers.
-import { READ_DEFAULT_LINE_LIMIT, fileWindowNote, windowFileContent } from "./fileWindow.js";
+import { READ_DEFAULT_LINE_LIMIT } from "./fileWindow.js";
 export { READ_DEFAULT_LINE_LIMIT, fileWindowNote, windowFileContent, type FileWindow } from "./fileWindow.js";
 // The git/version-control subsystem lives in its own module (see `git-tools.ts`); it is
 // spliced into `CORE_TOOLS` here so the advertised catalog — name, order and all — is
@@ -116,63 +119,44 @@ export const searchCodeTool: ToolDefinition = defineTool({
   },
 });
 
-/** `read_file` with `key`: one JSON subtree (see `jsonKeyRead.ts`). */
-function readFileKey(path: string, file: RepoReadResult, key: string): Record<string, unknown> {
-  if (file.truncated === true) {
-    return { ok: false, path, key, error: "the file is too large to load whole, so `key` cannot be used — page it with offset/limit" };
-  }
-  const read = readJsonKey(file.content ?? "", key);
-  if (!read.ok) return { path, key, ...read };
-  if ("tooLarge" in read) {
-    return {
-      ok: true,
-      path,
-      key: read.key,
-      childKeys: read.childKeys,
-      note: `"${read.key}" is ${read.size} characters — too large to return whole. Read one of its childKeys, e.g. key "${read.key}.${read.childKeys[0] ?? "…"}".`,
-    };
-  }
-  return { ok: true, path, key: read.key, content: read.content };
-}
-
 export const readFileTool: ToolDefinition = defineTool({
   name: "read_file",
   description:
     "Read a repo file on the ticket branch. Returns up to " +
     READ_DEFAULT_LINE_LIMIT +
-    " lines at a time: a large file comes back as a paginated line window (never a hard failure), and the result's `truncated`/`totalLines` tell you when more remains — read the next chunk by calling again with `offset`. For a large JSON file (an i18n catalog, a config) pass `key` with a dot path such as \"admin.visitorFlow\" to get just that subtree instead of paging line windows. Always read a file before editing it so you preserve existing code and only change what is needed.",
+    " lines at a time: a large file comes back as a paginated line window (never a hard failure), and the result's `truncated`/`totalLines` tell you when more remains — read the next chunk by calling again with `offset`. To read several files at once pass `paths` (up to " +
+    READ_FILE_MAX_PATHS +
+    ") instead of `path`: you get `files`, one result per path. A first read of a large Markdown document also returns its `outline` (headings with line numbers) — page by heading line with `offset`. For a large JSON file (an i18n catalog, a config) pass `key` with a dot path such as \"admin.visitorFlow\" to get just that subtree instead of paging line windows. Always read a file before editing it so you preserve existing code and only change what is needed.",
   parameters: {
     type: "object",
     properties: {
       path: { type: "string", description: 'Repo-relative path, e.g. "src/feature.ts".' },
+      paths: {
+        type: "array",
+        items: { type: "string" },
+        maxItems: READ_FILE_MAX_PATHS,
+        description: `Instead of \`path\`: up to ${READ_FILE_MAX_PATHS} repo-relative paths read in one call. offset/limit/key apply to each.`,
+      },
       offset: { type: "number", description: "1-based line to start reading from (for paging through a large file). Default 1." },
       limit: { type: "number", description: `Max lines to return. Default ${READ_DEFAULT_LINE_LIMIT}. Read the next window with offset = previous offset + returned lines.` },
       key: { type: "string", description: 'JSON files only: a dot path (e.g. "admin.visitorFlow") — returns that subtree, or its child keys when it is too large. Ignores offset/limit.' },
     },
-    required: ["path"],
   },
   requires: ["repo.read"],
   async execute(args, ctx): Promise<ToolResult> {
     const path = typeof args.path === "string" ? args.path : "";
-    if (!path) return { data: { ok: false, error: "path is required" } };
-    const offset = typeof args.offset === "number" && args.offset > 0 ? Math.floor(args.offset) : undefined;
-    const limit = typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : undefined;
-    const key = typeof args.key === "string" ? args.key.trim() : "";
-    const r = (await ctx.caps.repoRead!.readFile(path)) as RepoReadResult;
-    if (!r.ok) return { data: r as unknown as Record<string, unknown> };
-    if (key) return { data: readFileKey(r.path ?? path, r, key) };
-    const win = windowFileContent(r.content ?? "", { offset, limit });
-    const data: RepoReadResult = {
-      ok: true,
-      path: r.path ?? path,
-      content: win.content,
-      truncated: win.truncated || r.truncated === true,
-      totalLines: win.totalLines,
-      offset: win.offset,
+    const paths = !path && Array.isArray(args.paths)
+      ? args.paths.filter((p): p is string => typeof p === "string" && p.trim() !== "")
+      : [];
+    if (!path && paths.length === 0) return { data: { ok: false, error: "path is required (or paths: a list of up to " + READ_FILE_MAX_PATHS + ")" } };
+    if (paths.length > READ_FILE_MAX_PATHS) return { data: { ok: false, error: `paths takes at most ${READ_FILE_MAX_PATHS} files per call — split the rest into another read_file` } };
+    const opts = {
+      offset: typeof args.offset === "number" && args.offset > 0 ? Math.floor(args.offset) : undefined,
+      limit: typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : undefined,
+      key: typeof args.key === "string" ? args.key.trim() : "",
     };
-    const note = fileWindowNote(win);
-    if (note) data.note = note;
-    return { data: data as unknown as Record<string, unknown> };
+    if (!path) return { data: { ok: true, files: await readManyFiles(paths, opts, ctx.caps) } };
+    return { data: await readOneFile(path, opts, ctx.caps) };
   },
 });
 
@@ -531,16 +515,15 @@ export const runCommandTool: ToolDefinition = defineTool({
     type: "object",
     properties: {
       command: { type: "string", description: 'The shell command to run, e.g. "npm install" or "npm test".' },
+      cwd: { type: "string", description: 'Optional directory to run in, relative to the workspace root (e.g. "my-project"). Defaults to the run\'s repository; "." is the workspace root. Use this instead of a `cd X &&` prefix.' },
+      background: { type: "boolean", description: "Run a long command (a dev server, a full test suite, a build) in the background: returns a job id at once; check it with command_status, stop it with command_stop." },
+      yieldMs: { type: "number", description: "Optional: run in the foreground up to this many milliseconds, then hand back a background job id if it is still running." },
     },
     required: ["command"],
   },
   requires: ["shell"],
-  async execute(args, ctx): Promise<ToolResult> {
-    const command = typeof args.command === "string" ? args.command : "";
-    if (!command.trim()) return { data: { ok: false, error: "command is required" } };
-    const r = await compressShellResult(await ctx.caps.shell!.run(command), ctx);
-    return { data: r as unknown as Record<string, unknown> };
-  },
+  // Where it runs, Stop, and the background modes live in `shell-tools.ts`.
+  execute: (args, ctx): Promise<ToolResult> => runShellCommand(args, ctx),
 });
 
 export const askHumanTool: ToolDefinition = defineTool({
@@ -666,6 +649,7 @@ export const CORE_TOOLS: readonly ToolDefinition[] = [
   deleteFileTool,
   runChecksTool,
   runCommandTool,
+  ...SHELL_JOB_TOOLS,
   analyzeCodebaseTool,
   ...GIT_TOOLS,
   webFetchTool,

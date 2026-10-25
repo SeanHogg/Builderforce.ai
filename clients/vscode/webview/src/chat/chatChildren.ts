@@ -7,7 +7,7 @@
  */
 
 import { useMemo, useSyncExternalStore } from 'react';
-import { getRunSnapshot, getRunTrace, type BrainRunActivity, type DirectedRecipient, type SubagentDiagnosticsInput } from '@seanhogg/builderforce-brain-embedded';
+import { getRunSnapshot, getRunTrace, type DirectedRecipient, type SubagentDiagnosticsInput } from '@seanhogg/builderforce-brain-embedded';
 import type { ChatSubagentVM } from '@seanhogg/builderforce-brain-ui';
 import type { ChildView } from '../../../src/childRuns';
 import { post } from '../vscodeBridge';
@@ -79,16 +79,6 @@ export function subagentDiagnosticsOf(chatId: number | null): SubagentDiagnostic
  */
 export function steerRun(runKey: number, text: string): void {
   post('run.steer', { chatId: runKey, text });
-}
-
-/**
- * Whether a run is sitting in `wait_agents` (the shared owner verb, named in
- * `@builderforce/agent-tools`'s `SUBAGENT_CONTROL_TOOL_NAMES.wait`; the webview does not
- * load that package). Such a run may hold for minutes, so a message the person sends
- * goes straight into it — the wait gives way — instead of queueing behind the whole run.
- */
-export function isWaitingOnSubagents(activity: BrainRunActivity | null | undefined): boolean {
-  return activity?.phase === 'tool' && activity.label === 'wait_agents';
 }
 
 /** How a live sub-agent is addressed in the composer's @-picker — by its run key. */

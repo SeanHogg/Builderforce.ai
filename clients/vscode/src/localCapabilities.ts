@@ -57,6 +57,9 @@ const LIST_RETURN_MAX = 400;
  *  are offered, identical to the cloud Container). */
 export const LOCAL_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   "repo.read", "repo.search", "repo.write", "repo.edit", "repo.delete", "shell",
+  // Background shell jobs (`run_command` background / yieldMs → `command_status` /
+  // `command_stop`), backed by `localShell.ts`'s job table.
+  "shell.jobs",
   // The definition index behind `find_symbol` / `file_outline` (see workspaceSymbols.ts):
   // "where is X defined" in one call, and a file's map before paging through it.
   "repo.symbols",
@@ -151,6 +154,11 @@ export interface LocalProviderOptions {
   symbols?: RepoSymbolsCapability & { markDirty(path: string): void };
   /** The semantic index. Defaults to Builderforce Desktop's; a test can pin its own. */
   semantic?: RepoSemanticCapability;
+  /** The run's default checkout (`resolveDefaultRepo`), handed to the shell. */
+  defaultRepo?: string;
+  /** The run this provider's background jobs belong to (its run key) — scoped ids, and
+   *  killed when that run settles (`localShellJobs.ts`). */
+  jobOwner?: number;
 }
 
 /** Build the editor's local-disk capability provider rooted at the open folder. */
@@ -252,7 +260,8 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
   };
 
   // The ONE local shell runner (`localShell.ts`) — shared with the workspace hooks.
-  const shell = createLocalShell(rootResolved);
+  // The run's default checkout rides on it, so git and `run_command` start there.
+  const shell = { ...createLocalShell(rootResolved, { jobOwner: options.jobOwner }), ...(options.defaultRepo ? { defaultRepo: options.defaultRepo } : {}) };
 
   const semantic = options.semantic ?? desktopSemanticCapability(rootResolved, { adaptive: hostCostLeverOn("c4_adaptive_context") });
   return { capabilities: LOCAL_SURFACE_CAPS, repoRead, repoWrite, symbols, semantic, shell };

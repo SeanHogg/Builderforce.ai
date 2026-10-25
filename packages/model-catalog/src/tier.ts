@@ -64,3 +64,15 @@ export function resolveModelTier(known: { catalogTier?: ModelTier; price?: Model
   if (known.catalogTier) return known.catalogTier;
   return known.price ? tierForPrice(known.price) : undefined;
 }
+
+/**
+ * Tiers a run's PLANNING can lean on for long multi-step tool use — the Sonnet-class
+ * workhorses and up. FREE and STANDARD are the Flash-class band (small / open-weight /
+ * free pools): fine for a turn, weak for planning a change across a codebase. Pure.
+ */
+export const AGENTIC_TIERS: ReadonlySet<ModelTier> = new Set<ModelTier>(['PREMIUM', 'ULTRA']);
+
+/** True for an agentic tier, false for a Flash-class one, undefined when the tier is unknown. Pure. */
+export function isAgenticTier(tier: ModelTier | undefined): boolean | undefined {
+  return tier ? AGENTIC_TIERS.has(tier) : undefined;
+}

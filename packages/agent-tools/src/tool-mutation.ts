@@ -52,6 +52,9 @@ export const TOOL_SIDE_EFFECT = {
   delete_file: "mutate",
   run_checks: "verify",
   run_command: "mutate",
+  // A background job's status is a read; stopping one kills processes.
+  command_status: "read",
+  command_stop: "mutate",
   git_status: "read",
   git_diff: "read",
   git_history: "read",

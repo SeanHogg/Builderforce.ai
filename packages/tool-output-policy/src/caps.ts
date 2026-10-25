@@ -73,6 +73,26 @@ export function windowToolResultCap(contextWindowTokens: number): number {
   return Math.min(maxTokens * TOOL_RESULT_CHARS_PER_TOKEN, HARD_MAX_TOOL_RESULT_CHARS);
 }
 
+/** The most one `read_file` result may hold, however large the window (PRD 35 E4). */
+export const READ_FILE_MAX_CHARS = 64_000;
+
+/**
+ * THE window-sized cap for one tool result (PRD 35 §6.10), from the table row and the
+ * serving model's context window:
+ *
+ *   • `read_file` with a known window → the window share, clamped to
+ *     [table row (16K), {@link READ_FILE_MAX_CHARS}] — a big window reads a big file in
+ *     fewer windows, a tiny one still gets a whole-line page;
+ *   • every other tool with a known window → the smaller of its row and the window share;
+ *   • unknown window → the table row (today's behaviour).
+ */
+export function windowedCap(tool: string, tableCap: number, contextWindowTokens?: number): number {
+  if (typeof contextWindowTokens !== 'number' || !Number.isFinite(contextWindowTokens) || contextWindowTokens <= 0) return tableCap;
+  const share = windowToolResultCap(contextWindowTokens);
+  if (tool === READ_FILE_TOOL) return Math.min(READ_FILE_MAX_CHARS, Math.max(tableCap, share));
+  return Math.min(tableCap, share);
+}
+
 /** Whether a tool's output is a shell/build/test log. */
 export function isShellTool(tool: string): boolean {
   return SHELL_TOOLS.has(tool);

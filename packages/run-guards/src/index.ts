@@ -25,6 +25,8 @@ export {
   type CoveredRead,
   type ReadCoverageTraits,
 } from "./readCoverage.js";
+export { perFileResults, singleReadsOf } from "./multiRead.js";
+export { parseShellFileRead, shellReadAsFileRead, type ShellFileRead, type ShellReadAsFileRead } from "./shellFileRead.js";
 export {
   FAILURE_HARD_AT,
   FAILURE_NUDGE_AT,
@@ -55,3 +57,11 @@ export {
   type ProgressSignalKind,
 } from "./progressDetector.js";
 export { BACK_TO_BACK_AT } from "./streak.js";
+// "STOP executing" typed mid-run means the Stop button (PRD 35 E10).
+export { ABORT_TRIGGERS, isAbortTrigger, stopIntent } from "./stopIntent.js";
+export {
+  READS_BEFORE_DELEGATION_NUDGE,
+  ReadsWithoutSpawn,
+  type DelegationCallKind,
+  type ReadsWithoutSpawnState,
+} from "./readsWithoutSpawn.js";

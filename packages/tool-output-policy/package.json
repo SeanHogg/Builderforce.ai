@@ -1,6 +1,6 @@
 {
   "name": "@builderforce/tool-output-policy",
-  "version": "2026.10.0",
+  "version": "2026.10.1",
   "private": true,
   "type": "module",
   "description": "THE tool-output policy (PRD C7): how much of a tool result the MODEL transcript is handed, and how it is cut down when it costs too much. Per-tool caps as a data table, a context-window-relative cap, read_file paged at a line boundary with the continuation offset rewritten, head+tail cuts with an elision marker, a shell/test/build output summarizer (failing tests + error lines + assertion diffs + the last lines) and large-JSON projection. Pure, dependency-free and I/O-free: the Worker, the browser (Brain), Node (agent-runtime) and the container image (compiled by api/scripts/gen-tool-output-policy.mjs) run the same code.",

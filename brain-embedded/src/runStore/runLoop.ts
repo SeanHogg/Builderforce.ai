@@ -37,6 +37,7 @@ import { completeTurnPort } from './completeTurn';
 import { dispatchToolPort } from './dispatchTool';
 import { beforeDispatchHook } from './beforeDispatch';
 import { afterDispatchHook, beforeToolCallsHook } from './toolCallHooks';
+import { skipOnSteer } from './steerInterrupt';
 import { finalAnswerHook } from './finalAnswerHook';
 import type { BrainRunRequest } from './runTypes';
 
@@ -58,7 +59,8 @@ export async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, 
     hooks: {
       beforeToolCalls: beforeToolCallsHook(run),
       beforeDispatch: beforeDispatchHook(run),
-      afterDispatch: afterDispatchHook(run),
+      // The person's message skips the rest of the turn it interrupted (PRD 35 E10).
+      afterDispatch: skipOnSteer(run.runKey, afterDispatchHook(run)),
       onNoToolCalls: finalAnswerHook(run),
     },
     signal: c.abort?.signal,

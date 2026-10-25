@@ -19,7 +19,7 @@ import {
 } from '@builderforce/agent-stall';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { modelFailoverTrace } from '../runPolicyTraces';
-import { drainRunSteering } from '../runSteering';
+import { takeRunSteering } from './steerInterrupt';
 import { askStopHook } from '../stopHooks';
 import { leftChangeUnshipped, unshippedChangeNudge } from '../selfReviewShip';
 import { leftChangeUnreviewed, unreviewedChangeNudge } from '../previewReview';
@@ -76,7 +76,7 @@ export function finalAnswerHook(run: RunLoopContext): NonNullable<LoopHooks<Chat
     // Direction arrived while this turn was being written (an owner redirecting its
     // sub-agent, a child reporting to its owner): the run is not over — what the model
     // said stays as its own block, and the next turn answers the new direction.
-    const steering = drainRunSteering(runKey);
+    const steering = takeRunSteering(c, runKey, iter);
     if (steering.length > 0) {
       await requeueWithNudge(steering.join('\n\n'));
       c.streamingText = '';

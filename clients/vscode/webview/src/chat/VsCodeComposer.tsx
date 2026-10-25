@@ -61,6 +61,9 @@ export interface VsCodeComposerProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
+  /** Alt+Enter mid-run — `useChatSend().queueAfter`: hold the message for after the run
+   *  (Send steers the running turn; this is the explicit alternative). */
+  onQueue?: () => void;
   /** The composer's Stop — `useChatSend().stop`: drops the held turns AND stops the run. */
   onStop: () => void;
   /** Seed the box with a fixed starter's prompt and focus it — the empty state's tiles do the same. */
@@ -99,7 +102,7 @@ export interface VsCodeComposerProps {
 
 export function VsCodeComposer(props: VsCodeComposerProps) {
   const {
-    composerId, init, apiReq, conv, value, onChange, onSubmit, onStop, onPickStarter, focusToken, chatId, projectId, ensureChatId,
+    composerId, init, apiReq, conv, value, onChange, onSubmit, onQueue, onStop, onPickStarter, focusToken, chatId, projectId, ensureChatId,
     ticketAdapter, ticketRefresh, onTicketLinked, participants, mentionable, hasLiveChildren,
     recipient, chooseRecipient, persona, onPersona, personaAgents, queue, onRemoveQueued,
     mode, memory, shaping, models, servedModel, autoMode, session, suggest = true,
@@ -189,6 +192,8 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
       running={conv.sending}
       // Stop drops the held turns too — the person stopped the conversation, not one sentence.
       onStop={onStop}
+      // Send steers the running turn; Alt+Enter holds the message for after it.
+      {...(onQueue ? { onQueue } : {})}
       focusToken={focusToken}
       placeholder={recipient
         ? t('app.messageParticipant', 'Message {name}…').replace('{name}', recipient.name)

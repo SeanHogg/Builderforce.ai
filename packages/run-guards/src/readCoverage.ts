@@ -28,6 +28,7 @@
 
 import { READ_DEFAULT_LINE_LIMIT, stableStringify } from "@builderforce/agent-tools";
 import { VisitTally, type ReadVisit } from "./visitTally.js";
+import { perFileResults, singleReadsOf } from "./multiRead.js";
 
 /** The host's tool vocabulary, as the read guard needs it. */
 export interface ReadCoverageTraits {
@@ -121,7 +122,9 @@ function requestedReadWindow(args: Record<string, unknown>): LineSpan {
 }
 
 /** The line range an earlier `read_file` actually RETURNED; null when the cached payload
- *  does not describe a window (a stub, a failure, an empty body). */
+ *  does not describe a window (a stub, a failure, an empty body). Reads the SERVED copy
+ *  ({@link servedCopy}): a trimmed window says `truncated:true` and ends where the model
+ *  stopped seeing lines, where the untrimmed result would claim the file through EOF. */
 function servedReadWindow(result: unknown): LineSpan | null {
   const data = resultObject(result);
   if (!data || data.ok === false) return null;
@@ -141,7 +144,7 @@ function spanContains(outer: LineSpan, inner: LineSpan): boolean {
   return inner.start >= outer.start && inner.end <= outer.end;
 }
 
-/** Clip a requested window to EOF when the covering read actually reached the end of the file. */
+/** Clip a requested window to EOF when the covering read's SERVED copy reached the end of the file. */
 function clipRequestedToEof(want: LineSpan, covering: unknown): LineSpan {
   const data = resultObject(covering);
   if (!data || data.truncated === true || typeof data.totalLines !== "number" || data.totalLines < 1) return want;
@@ -155,9 +158,21 @@ function clipRequestedToEof(want: LineSpan, covering: unknown): LineSpan {
  * (opaque here; the run loop decides whether that message is still in the working context).
  */
 export interface CachedRead {
-  /** The tool's UNTRIMMED result — the loop re-trims it to the budget on replay. */
+  /** The tool's UNTRIMMED result, kept only for the REPLAY — which serves the requested
+   *  window from it and re-trims that to the budget. Never what coverage reasons from. */
   result: unknown;
+  /**
+   * What the model was actually SERVED (the trimmed window, before any advisory) — the
+   * only honest answer to "which lines has it seen?". Coverage reads this; absent, the
+   * result is taken as served whole (a host that does not trim).
+   */
+  served?: unknown;
   anchor: unknown;
+}
+
+/** The copy of a cached read that coverage reasons from — see {@link CachedRead.served}. */
+function servedCopy(cached: CachedRead): unknown {
+  return cached.served !== undefined ? cached.served : cached.result;
 }
 
 /** What {@link ReadCoverage.coveredRead} hands the loop. */
@@ -209,6 +224,26 @@ export class ReadCoverage {
   /** Keep what a SUCCESSFUL read returned, with the message that carried it. A no-op for
    *  a read that was never recorded (a failure has nothing to replay). */
   cacheResult(tool: string, args: unknown, cached: CachedRead): void {
+    const singles = singleReadsOf(tool, args);
+    if (singles) {
+      // A `paths[]` read: each file is cached as the single-path read it was.
+      const results = perFileResults(resultObject(cached.result));
+      const served = cached.served !== undefined ? perFileResults(resultObject(cached.served)) : null;
+      if (!results) return;
+      singles.forEach((single, i) => {
+        const entry = resultObject(results[i]);
+        // A file that failed inside a call that succeeded was never read: un-arm its repeat
+        // guard, exactly as a failed single read is never recorded.
+        if (!entry || entry.ok === false) {
+          this.exact.delete(ReadCoverage.exactKey(tool, single));
+          return;
+        }
+        const one: CachedRead = { result: results[i], anchor: cached.anchor };
+        if (served && served[i] !== undefined) one.served = served[i];
+        this.cacheResult(tool, single, one);
+      });
+      return;
+    }
     const read = this.exact.get(ReadCoverage.exactKey(tool, args));
     if (read) read.cached = cached;
   }
@@ -223,6 +258,16 @@ export class ReadCoverage {
    * resulting target visit — or null when the call names no target.
    */
   record(tool: string, args: unknown): ReadVisit | null {
+    const singles = singleReadsOf(tool, args);
+    if (singles) {
+      // A `paths[]` read is one visit per file; the most-revisited one speaks for the call.
+      let worst: ReadVisit | null = null;
+      for (const single of singles) {
+        const visit = this.record(tool, single);
+        if (visit && (!worst || visit.count > worst.count)) worst = visit;
+      }
+      return worst;
+    }
     const target = this.traits.visitTarget(args) ?? null;
     this.exact.set(ReadCoverage.exactKey(tool, args), { tool, args: canonicalReadArgs(tool, args), target });
     if (!target) return null;
@@ -283,9 +328,10 @@ export class ReadCoverage {
       if (typeof read.args.key === "string") continue;
       const earlierPath = typeof read.args.path === "string" ? read.args.path : "";
       if (earlierPath !== path) continue;
-      const got = servedReadWindow(read.cached.result);
+      const served = servedCopy(read.cached);
+      const got = servedReadWindow(served);
       if (!got) continue;
-      const clipped = clipRequestedToEof(want, read.cached.result);
+      const clipped = clipRequestedToEof(want, served);
       if (clipped.start > clipped.end) continue;
       if (!spanContains(got, clipped)) continue;
       return {

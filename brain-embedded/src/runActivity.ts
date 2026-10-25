@@ -100,6 +100,11 @@ export function activityTarget(args: unknown): string | undefined {
     if (typeof value === 'string' && value.trim()) return shortenTarget(value);
     if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   }
+  // `read_file` with `paths[]`: the files it reads, as one target.
+  if (Array.isArray(record.paths)) {
+    const names = record.paths.filter((p): p is string => typeof p === 'string' && p.trim() !== '');
+    if (names.length) return shortenTarget(names.join(', '));
+  }
   return undefined;
 }
 

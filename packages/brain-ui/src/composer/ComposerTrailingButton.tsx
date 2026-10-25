@@ -2,12 +2,19 @@
  * The composer's ONE trailing button — mic, Send or Stop. Which one is the shared
  * `promptTrailingAction` rule; the dictation is the shared `useVoiceDictation`, and
  * where the runtime cannot listen there is no mic at all. Send during a run queues the
- * message behind it, so its name says so.
+ * message behind it, so its name says so — unless the host STEERS the run with Send
+ * (`onQueue`), and then "Queue for after" sits beside it, naming its shortcut.
  */
 import { promptTrailingAction } from '../promptTrailingAction';
 import { useVoiceDictation } from '../useVoiceDictation';
-import { IconMic, IconSend, IconStop } from './ComposerIcons';
+import { IconMic, IconQueue, IconSend, IconStop } from './ComposerIcons';
 import type { ComposerLabels } from './labels';
+
+/** The platform's spelling of the queue shortcut: `⌥+Enter` on macOS, `Alt+Enter` elsewhere. */
+export function queueShortcutKeys(nav: { platform?: string; userAgentData?: { platform?: string } } | undefined = typeof navigator === 'undefined' ? undefined : (navigator as never)): string {
+  const platform = nav?.userAgentData?.platform || nav?.platform || '';
+  return /mac|iphone|ipad/i.test(platform) ? '⌥+Enter' : 'Alt+Enter';
+}
 
 export interface ComposerTrailingButtonProps {
   labels: ComposerLabels;
@@ -16,6 +23,8 @@ export interface ComposerTrailingButtonProps {
   disabled?: boolean;
   onSend: () => void;
   onStop?: () => void;
+  /** Mid-run "Queue for after" — shown beside Send while a run is going and there is text. */
+  onQueue?: () => void;
   /** Offer dictation. Needs the current text reader + setter. */
   voice?: { getValue: () => string; setValue: (value: string) => void };
 }
@@ -23,7 +32,7 @@ export interface ComposerTrailingButtonProps {
 const noopGet = () => '';
 const noopSet = () => undefined;
 
-export function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, onSend, onStop, voice }: ComposerTrailingButtonProps) {
+export function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, onSend, onStop, onQueue, voice }: ComposerTrailingButtonProps) {
   const dictation = useVoiceDictation(voice?.getValue ?? noopGet, voice?.setValue ?? noopSet);
   const action = promptTrailingAction({
     canSubmit,
@@ -56,9 +65,20 @@ export function ComposerTrailingButton({ labels, canSubmit, running, disabled = 
     );
   }
   const label = running ? labels.queueSend : labels.send;
-  return (
+  const send = (
     <button type="submit" className="bf-cmp-iconbtn bf-cmp-iconbtn--send" onClick={(e) => { e.preventDefault(); onSend(); }} disabled={!canSubmit || disabled} title={label} aria-label={label}>
       <IconSend />
     </button>
+  );
+  if (!(running && onQueue && canSubmit)) return send;
+  const queueLabel = labels.queueAfter(queueShortcutKeys());
+  return (
+    <>
+      <button type="button" className="bf-cmp-queuebtn" onClick={onQueue} disabled={disabled} title={queueLabel} aria-label={queueLabel}>
+        <IconQueue />
+        <span className="bf-cmp-queuebtn__text">{labels.queueAfterShort}</span>
+      </button>
+      {send}
+    </>
   );
 }

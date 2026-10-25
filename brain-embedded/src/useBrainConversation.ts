@@ -101,8 +101,8 @@ export interface UseBrainConversationOptions {
   reasoning?: ReasoningIntent;
   /** Tool specs from the page-action registry. */
   toolSpecs?: BrainToolSpec[];
-  /** Dispatch a tool call to the registry. */
-  runTool?: (name: string, args: unknown) => Promise<unknown>;
+  /** Dispatch a tool call to the registry. `signal`: the call's Stop, when it is interruptible. */
+  runTool?: (name: string, args: unknown, signal?: AbortSignal) => Promise<unknown>;
   /**
    * Pure predicate: return true to pause the loop for an explicit user
    * confirmation before the tool runs (the human-in-the-loop gate). The prompt

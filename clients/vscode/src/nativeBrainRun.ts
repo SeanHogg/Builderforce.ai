@@ -305,8 +305,12 @@ export function createNativeRunTool(opts: {
   hooks?: Pick<RunHooks, "beforeTool" | "afterTool">;
   events: Pick<NativeRunEvents, "onToolStart" | "onToolResult">;
   labels: Pick<NativeRunLabels, "blockedByPolicy">;
-}): (name: string, args: unknown) => Promise<unknown> {
-  return async (name, args) => {
+  /** The run's default checkout, read per call (resolved after the run started). */
+  defaultRepo?: () => string | undefined;
+  /** The run's key — the owner of the background jobs its calls start. */
+  runKey?: number;
+}): (name: string, args: unknown, signal?: AbortSignal) => Promise<unknown> {
+  return async (name, args, signal) => {
     const resolved = resolveToolAlias(name);
     const record = argsRecord(args);
     const label = toolLabel(opts.defs, resolved, record);
@@ -327,7 +331,14 @@ export function createNativeRunTool(opts: {
     }
     opts.events.onToolStart(label);
     try {
-      const out = await def.execute(record, opts.root);
+      // The call's Stop and the run's default checkout — only when there is one, so a
+      // surface that passes neither calls the tool exactly as before.
+      const defaultRepo = opts.defaultRepo?.();
+      const runKey = opts.runKey;
+      const run = signal || defaultRepo || runKey !== undefined
+        ? { ...(signal ? { signal } : {}), ...(defaultRepo ? { defaultRepo } : {}), ...(runKey !== undefined ? { runKey } : {}) }
+        : undefined;
+      const out = run ? await def.execute(record, opts.root, run) : await def.execute(record, opts.root);
       opts.events.onToolResult(label, true);
       const parsed = parseToolOutput(out);
       return opts.hooks ? opts.hooks.afterTool(resolved, record, parsed) : parsed;

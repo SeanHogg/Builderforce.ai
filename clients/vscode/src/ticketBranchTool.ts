@@ -10,9 +10,10 @@
  */
 
 import type * as vscode from "vscode";
-import * as fs from "fs/promises";
 import * as path from "path";
+import { notARepoResult, safeRepoArg } from "@builderforce/agent-tools";
 import { listTasksForReview } from "./bfApi";
+import { listCheckouts } from "./workspaceCheckouts";
 import type { ToolDef } from "./fileTools";
 import { GitRepo, mapLimit, type BranchComparison, type BranchRef } from "./gitBranchFacts";
 import {
@@ -35,22 +36,10 @@ const MAX_UNTRACKED_COMPARED = 80;
 
 export const TICKET_BRANCH_REVIEW_TOOL = "review_ticket_branches";
 
-/** A `repo` subdirectory argument that stays inside the workspace. */
+/** A `repo` subdirectory argument that stays inside the workspace — the git tools' own rule. */
 function safeRepo(repo: unknown): string | null {
   if (typeof repo !== "string" || !repo.trim()) return null;
-  const r = repo.trim().split("\\").join("/").replace(/^\.\/+/, "").replace(/\/+$/, "");
-  return r && !r.split("/").includes("..") && !path.isAbsolute(r) && /^[\w./@-]+$/.test(r) ? r : null;
-}
-
-/** The immediate subdirectories that are git checkouts — the remedy when the root is not one. */
-async function checkoutsUnder(root: string): Promise<string[]> {
-  const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
-  const out: string[] = [];
-  for (const e of entries) {
-    if (!e.isDirectory() || e.name.startsWith(".") || e.name === "node_modules") continue;
-    if (await fs.stat(path.join(root, e.name, ".git")).then(() => true, () => false)) out.push(e.name);
-  }
-  return out;
+  return safeRepoArg(repo.trim().split("\\").join("/").replace(/^\.\/+/, "").replace(/\/+$/, ""));
 }
 
 function asVerdict(v: unknown): BranchVerdict | undefined {
@@ -73,18 +62,18 @@ export function ticketBranchReviewToolDef(secrets: vscode.SecretStorage, project
       },
     },
     mutating: false,
-    execute: async (args, root) => {
-      const repoArg = safeRepo(args.repo);
-      if (args.repo != null && !repoArg) return JSON.stringify({ ok: false, error: "`repo` must be a subdirectory inside the workspace." });
+    execute: async (args, root, run) => {
+      const explicitRepo = safeRepo(args.repo);
+      if (args.repo != null && !explicitRepo) return JSON.stringify({ ok: false, error: "`repo` must be a subdirectory inside the workspace." });
+      // No `repo`: the run's default checkout (PRD 35 E3) when the root is not itself one.
+      let repoArg = explicitRepo;
+      if (!repoArg && run?.defaultRepo && !(await new GitRepo(root).isRepo())) repoArg = safeRepo(run.defaultRepo);
       const repoDir = repoArg ? path.join(root, repoArg) : root;
       const git = new GitRepo(repoDir);
       if (!(await git.isRepo())) {
-        const candidates = repoArg ? [] : await checkoutsUnder(root);
-        return JSON.stringify({
-          ok: false,
-          error: `${repoArg ?? "The workspace root"} is not a git repository.`,
-          ...(candidates.length ? { checkouts: candidates, note: `Re-run with \`repo\` set to one of: ${candidates.join(", ")}.` } : {}),
-        });
+        if (explicitRepo) return JSON.stringify({ ok: false, error: `${explicitRepo} is not a git repository.` });
+        // The same not-a-repo remedy the git tools give, naming the checkouts there are.
+        return JSON.stringify(notARepoResult(TICKET_BRANCH_REVIEW_TOOL, await listCheckouts(root)).data);
       }
       const fetched = args.fetch === false ? false : await git.fetch();
       const base = await git.resolveBase(typeof args.baseBranch === "string" && args.baseBranch.trim() ? args.baseBranch.trim() : undefined);

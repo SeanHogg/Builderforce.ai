@@ -22,8 +22,14 @@ export interface ComposerLabels {
   off: string;
   remove: string;
   send: string;
-  /** Send while a run streams queues the message behind it — its name says so. */
+  /** Send while a run streams queues the message behind it — its name says so. (A host
+   *  whose Send STEERS the run words it so; its queue is then {@link queueAfter}.) */
   queueSend: string;
+  /** The "Queue for after" button beside Send mid-run — `keys` is the platform's
+   *  shortcut (`Alt+Enter`, `⌥+Enter` on macOS). */
+  queueAfter: (keys: string) => string;
+  /** Its short visible text (hidden at narrow widths, where the icon stands alone). */
+  queueAfterShort: string;
   stop: string;
   dictate: string;
   stopDictation: string;
@@ -57,6 +63,8 @@ export const DEFAULT_COMPOSER_LABELS: ComposerLabels = {
   remove: 'Remove',
   send: 'Send',
   queueSend: 'Queue message — sends when the current run finishes',
+  queueAfter: (keys) => `Queue for after the run (${keys})`,
+  queueAfterShort: 'Queue',
   stop: 'Stop',
   dictate: 'Dictate',
   stopDictation: 'Stop dictation',
@@ -94,6 +102,7 @@ export function composerLabelsFrom(lookup: LabelLookup, overrides?: Partial<Comp
   const d = DEFAULT_COMPOSER_LABELS;
   return {
     ...stringsFrom(d, lookup),
+    queueAfter: (keys) => lookup('queueAfter', { keys }) || d.queueAfter(keys),
     modeLabel: (mode) => lookup(`modeLabel.${mode}`) || d.modeLabel(mode),
     modeHint: (mode) => lookup(`modeHint.${mode}`) || d.modeHint(mode),
     effortDesc: (level, answer) => lookup(`effortDesc.${level}`, { answer }) || d.effortDesc(level, answer),

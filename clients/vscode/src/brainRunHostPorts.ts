@@ -15,6 +15,7 @@ import { auditToolCatalog } from "./auditToolCatalog";
 import { brainToolCatalog } from "./brainToolCatalog";
 import { localWindowProbes, resolveModelRoute, routeStream } from "./modelRouting";
 import { refreshPendingChanges } from "./gitChanges";
+import { editorRunSetupPorts } from "./runSetupPorts";
 import { recordEditorRunEnd } from "./editorRunEnd";
 import { boundServerIds } from "./sessionChats";
 import { getStableGrounding, recentActivitySection } from "./grounding";
@@ -344,6 +345,9 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     // Fresh per run: the notes of the run that just finished, not the panel's copy.
     recentActivity: () => recentActivitySection(workspaceRoot() || undefined),
     grounding: () => getStableGrounding(workspaceRoot() || undefined),
+    // PRD 35 E2 / E3 / E7: default checkout, context pack, BYO preflight; and a settled
+    // run's background jobs die with it.
+    ...editorRunSetupPorts(secrets, workspaceRoot),
   });
   // G22: the run journal. Start, step checkpoints and the TERMINAL status come from the
   // host's own run events (a sink on the host), so a finished run is never rewritten to

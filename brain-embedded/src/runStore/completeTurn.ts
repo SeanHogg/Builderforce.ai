@@ -22,11 +22,12 @@ import { HAND_OFF_TOOL } from '../planHandoff';
 import { createComposingActivity, toolCallArgBytes } from '../composingActivity';
 import { hasCallMarkup } from '../xmlToolCalls';
 import { turnInterruption } from '../finishReason.js';
-import { drainRunSteering } from '../runSteering';
+import { takeRunSteering } from './steerInterrupt';
 import { buildWorkingTranscript, summarizeMiddle } from '../workingTranscript';
 import { compactionSavedTokens, stampOncePerCall } from './compactionSaved';
 import { callMemoryEffect } from '../memorySavings';
-import { accrueByoUnresolved, accrueProviderCap, emit, emitStreaming, nowIso, nowMs, pushTrace, setActivity } from './runCells';
+import { accrueByoUnresolved, accrueProviderCap, emit, emitStreaming, nowIso, nowMs, pushTrace, runTrace, setActivity } from './runCells';
+import { modelDowngradeEvent } from './modelDowngrade';
 import { asLiveTurn, connectRetryStep, liveTurnModel } from './turnPersistence';
 import { reportToPolicy, type RunLoopContext, type TurnMeta } from './runLoopContext';
 
@@ -38,8 +39,9 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     c.streamingText = '';
     emit(c);
     // Direction that arrived while the run was working — an owner redirecting its
-    // sub-agent, or a child's report reaching its owner — goes in front of this turn.
-    for (const text of drainRunSteering(runKey)) convo.push({ role: 'user', content: text });
+    // sub-agent, or a child's report reaching its owner — goes in front of this turn,
+    // recorded as one `steer.applied` step.
+    for (const text of takeRunSteering(c, runKey, iter)) convo.push({ role: 'user', content: text });
     // Auto-compact BEFORE the turn: summarize the older middle into a memory note
     // when the transcript exceeds the token budget (instead of silently dropping it
     // and making the model thrash into "LOOP EXHAUSTED"). Falls back to the
@@ -295,15 +297,13 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // Keyed by CHAT: runs are concurrent on a host that owns them, so one slot would
     // let this chat's tool call answer with the model that served a different one.
     setLastResolvedModel(chatId, result.resolvedModel);
-    if (requested !== 'default' && resolved !== 'default' && resolved !== requested) {
-      pushTrace(c, {
-        ts: nowIso(),
-        category: 'message',
-        label: 'llm.model_downgrade',
-        args: { requestedModel: requested, model: resolved, step: iter },
-        result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) — a smaller context window can truncate long transcripts.`,
-      });
-    }
+    // A pinned model answered by another, or an auto-routed turn the tenant's own
+    // account could not serve (PRD 35 E7) — see `modelDowngrade.ts`.
+    const downgrade = modelDowngradeEvent({
+      requested, resolved, step: iter, ts: nowIso(), events: runTrace(c),
+      ...(result.byoUnresolved ? { byoUnresolved: result.byoUnresolved } : {}),
+    });
+    if (downgrade) pushTrace(c, downgrade);
     // A local-first turn that fell over (on-device model down/refused → the cloud).
     const localFallback = localFallbackTrace(nowIso(), iter, result.localFirst);
     if (localFallback) pushTrace(c, localFallback);

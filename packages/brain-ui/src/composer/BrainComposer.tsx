@@ -50,6 +50,11 @@ export interface BrainComposerProps {
   /** A run is streaming: Send queues behind it, an empty box offers Stop. */
   running?: boolean;
   onStop?: () => void;
+  /**
+   * The explicit "Queue for after" while a run is going (Alt+Enter), for a host whose
+   * Send STEERS the running turn instead of queueing behind it. Omitted ⇒ Alt+Enter sends.
+   */
+  onQueue?: () => void;
   disabled?: boolean;
   /** Why the box is closed to input (an exam in progress, …) — shown above it. */
   blockedNotice?: ReactNode;
@@ -113,7 +118,7 @@ const noop = () => undefined;
 
 export function BrainComposer(props: BrainComposerProps) {
   const {
-    value, onChange, onSubmit, running = false, onStop, disabled = false, blockedNotice,
+    value, onChange, onSubmit, running = false, onStop, onQueue, disabled = false, blockedNotice,
     placeholder, ariaLabel, rows = 2, submitOnEnter = true, focusToken, options, account,
     onAccountSettings, attachments, onAddContext, webBrowsing, addMenuItems, mentions, tickets,
     pickersDisabled = false, voice = false, context, above, suggestions, below, modeGate, labels: labelBundle, className,
@@ -154,6 +159,13 @@ export function BrainComposer(props: BrainComposerProps) {
   const submit = () => {
     if (!canSubmit) return;
     gate.request(() => onSubmitRef.current());
+  };
+  const onQueueRef = useRef(onQueue);
+  onQueueRef.current = onQueue;
+  const queue = () => {
+    const hold = onQueueRef.current;
+    if (!canSubmit || !hold) return;
+    gate.request(() => hold());
   };
 
   const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -237,7 +249,9 @@ export function BrainComposer(props: BrainComposerProps) {
               if (ticket.onKeyDown(e)) return;
               if (submitOnEnter && e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
-                submit();
+                // Alt+Enter mid-run: hold it for after the run, where the host offers that.
+                if (e.altKey && running && onQueue) queue();
+                else submit();
               }
             }}
           />
@@ -273,6 +287,7 @@ export function BrainComposer(props: BrainComposerProps) {
             disabled={disabled}
             onSend={submit}
             onStop={onStop}
+            {...(onQueue ? { onQueue: queue } : {})}
             voice={voice ? { getValue, setValue: onChange } : undefined}
           />
         )}

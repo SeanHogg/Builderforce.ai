@@ -34,9 +34,10 @@ import type { RunCell } from './runCell';
 import { nowIso, pushTrace } from './runCells';
 import { isFollowUpTurn, lastAssistantText, latestUserText } from './convoText';
 import { answerFromMemory, recallForRun } from './runMemory';
+import { gatherHostRunContext, recordServedReads } from './hostRunContext';
 import type { RunLoopContext } from './runLoopContext';
 import type { BrainRunRequest } from './runTypes';
-import { attachTurnContext, restoreTurnContext, turnContextBlock } from './turnContext';
+import { attachTurnContext, restoreTurnContext, turnContextBlock, turnContextCarrier } from './turnContext';
 import { resolveServerChatId } from './serverChat';
 
 /**
@@ -112,7 +113,11 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
     ...(req.projectId != null ? { projectId: req.projectId } : {}),
   };
 
-  const { recalled, block: recallBlock, blockTokens: recallBlockTokens } = await recallForRun(c, convo, evermind);
+  // What the host hands the run before turn 1, in one wait (see `hostRunContext.ts`): the
+  // recall hint (its context pack's focus files + headings) widens the query past the
+  // bare sentence; the model preflight (E7) is on the banner before the first turn.
+  const host = await gatherHostRunContext(c, req, !!evermind?.recall);
+  const { recalled, block: recallBlock, blockTokens: recallBlockTokens } = await recallForRun(c, convo, evermind, host.recallHint);
   let systemPrompt = resolvedSystemPrompt;
   if (recallBlock) {
     if (stablePrefix) turnParts.push(recallBlock);
@@ -128,6 +133,10 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
   // report). The same gate covers every tier: on-device, the Q&A cache and Evermind.
   const memoryReplay = memoryReplayable(latestUserText(convo), { followUp: isFollowUpTurn(convo) });
   if (await answerFromMemory(chatId, c, req, allTools, memoryReplay)) return null;
+
+  // The host's task context (its context pack, E2) is ALWAYS volatile: it changes every
+  // run, so it rides after the history whatever the stable-prefix lever says.
+  if (host.turnContext) turnParts.push(host.turnContext);
 
   // Per-turn system-prompt augmentation (the LIMBIC parity seam). Fetched once
   // at loop start with the latest user text; a non-empty return is appended to
@@ -355,5 +364,8 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
   if (turnContext && !attachTurnContext(c, convo, turnContext)) {
     run.systemPrompt = `${systemPrompt}\n\n${turnContext}`;
   }
+  // The files the block served whole are this run's reads already (E2 ↔ E1), anchored
+  // to the message that carries them (none ⇒ the system prompt: replayed from cache).
+  recordServedReads(run.readCoverage, host.servedReads, turnContextCarrier(c));
   return run;
 }

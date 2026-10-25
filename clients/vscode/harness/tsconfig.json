@@ -19,7 +19,8 @@
       "@builderforce/agent-skills": ["../../../packages/agent-skills/src/index.ts"],
       "@builderforce/agent-tools": ["../../../packages/agent-tools/src/index.ts"],
       "@builderforce/agent-tools/*": ["../../../packages/agent-tools/src/*"],
-      "@builderforce/cost-levers": ["../../../packages/cost-levers/src/index.ts"]
+      "@builderforce/cost-levers": ["../../../packages/cost-levers/src/index.ts"],
+      "@builderforce/run-guards": ["../../../packages/run-guards/src/index.ts"]
     }
   },
   "include": ["**/*.ts", "../vitest.config.ts"]

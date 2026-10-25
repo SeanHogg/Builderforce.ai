@@ -241,10 +241,13 @@ export function brainChatLabels(): Record<string, string> {
     "app.stopDictation": t("Stop dictation"),
     "app.send": t("Send"),
     "app.stop": t("Stop"),
-    // Queue-while-running: messages composed during an in-flight run are queued and
-    // drained one per completed run instead of being dropped.
-    "app.queueSend": t("Queue message — sends when the current run finishes"),
-    "app.queuedLabel": t("Queued messages"),
+    // Steer-while-running (PRD 35 E10): a message sent during a run goes INTO it now;
+    // "Queue for after" (its button, or Alt/⌥+Enter — `{keys}`, per platform) holds it,
+    // drained one per completed run.
+    "app.queueSend": t("Send into the running turn now"),
+    "app.queueAfter": t("Queue for after the run ({keys})"),
+    "app.queueAfterShort": t("Queue"),
+    "app.queuedLabel": t("Queued for after the run"),
     "app.queuedHint": t("Queued — sends when the run finishes"),
     // Fixed next-step chips over an empty composer (never a model call).
     "app.suggestions": t("Suggested next steps"),

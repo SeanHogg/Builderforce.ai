@@ -18,6 +18,18 @@
  */
 
 import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
+import {
+  commitPathCandidates,
+  notARepoWithCandidates,
+  repoScopedScript,
+  runInRepoScope,
+  safeGitArg,
+  safeRepoArg,
+  type GitShellCtx,
+} from "./git-repo-scope.js";
+
+// The repo-scope helpers live in `git-repo-scope.ts`; these were this module's exports.
+export { buildListCheckoutsCommand, commitPathCandidates, inferRepoFromPath, notARepoResult, safeRepoArg } from "./git-repo-scope.js";
 
 // ---------------------------------------------------------------------------
 // Git / version-control tools. Gated to `shell` (a real clone + Linux process),
@@ -31,14 +43,16 @@ import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
 // for the command text so the two execution backends can't drift.
 // ---------------------------------------------------------------------------
 
-/** A safe git ref/path token — blocks shell metacharacters so a model-supplied
- *  branch/path can't inject a second command. */
-function safeGitArg(v: unknown): string | null {
-  return typeof v === "string" && /^[\w./@-]+$/.test(v) ? v : null;
-}
-
 /** The git action verbs exposed as tools. */
 export type GitAction = "status" | "diff" | "history" | "sync_latest" | "undo" | "redo";
+
+/** Resolve the remote's default branch into `$BASE`, falling back to `main`. Shared so
+ *  "what is the base branch" has ONE answer across sync, commit, push and pull request. */
+const RESOLVE_BASE = `BASE="$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; [ -n "$BASE" ] || BASE=main`;
+
+/** A commit identity for a clone that has none configured. */
+const IDENTITY_EMAIL = 'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"';
+const IDENTITY_NAME = 'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"';
 
 /**
  * Build the shell command for a git action — the SINGLE source of the command
@@ -56,116 +70,6 @@ export type GitAction = "status" | "diff" | "history" | "sync_latest" | "undo" |
  * mirrors a surface-owned branch names it (`ShellCapability.trackedBranch`), and the
  * script then absorbs that branch first and publishes to it after.
  */
-/**
- * The validated `repo` subdirectory, or null.
- *
- * Held to a stricter rule than the other args: it becomes the target of a `cd`, so a
- * `..` segment would walk OUT of the workspace rather than merely widening a diff.
- * `safeGitArg` permits dots (a directory really can be named `Builderforce.ai`), so
- * traversal is rejected separately here — the one place it would actually escape.
- */
-function safeRepoArg(repo: unknown): string | null {
-  const arg = safeGitArg(repo);
-  return arg && !arg.split(/[\\/]/).includes("..") && !arg.startsWith("/") ? arg : null;
-}
-
-/**
- * Infer a `repo` subdirectory from a workspace-relative `path`.
- *
- * File tools speak in workspace-root paths (`Builderforce.ai/packages/…`). When the
- * open folder CONTAINS checkouts rather than being one, that first segment is the
- * checkout — but only when there is a nested path to take a segment FROM (a bare
- * `README.md` is a file, not a repo). `..` / absolute segments are rejected by
- * {@link safeRepoArg}.
- */
-export function inferRepoFromPath(path?: string): string | null {
-  if (typeof path !== "string" || !path.trim()) return null;
-  const parts = path.split(/[\\/]/).filter((s) => s.length > 0 && s !== ".");
-  if (parts.length < 2) return null;
-  return safeRepoArg(parts[0]);
-}
-
-/**
- * Scope a multi-line script into a repository subdirectory.
- *
- * A multi-line script cannot take the `cd X && Y` prefix — that would scope only its
- * FIRST line — so the `cd` becomes a guarded leading statement instead. Every script
- * that goes through here already requires a POSIX shell (they use `$(…)` and `[ … ]`),
- * which is what makes a bare `cd` line safe here and not for the one-liners.
- */
-function repoScopedScript(script: string, repo: unknown): string {
-  const dir = safeRepoArg(repo);
-  return dir ? `cd "${dir}" || exit 1\n${script}` : script;
-}
-
-/**
- * POSIX one-liner that prints top-level checkout directory names, one per line.
- *
- * `$d` from a directory glob (`foo/`) so `$d.git` is `foo/.git` (a directory, or a file
- * for a worktree/submodule). Routed to bash on Windows the same way the other multi-line
- * git scripts are (`[ … ]` is a POSIX-only form).
- */
-export function buildListCheckoutsCommand(): string {
-  return 'for d in */; do [ -e "$d.git" ] && printf "%s\\n" "${d%/}"; done';
-}
-
-function parseCheckoutList(stdout?: string): string[] {
-  if (!stdout) return [];
-  const names: string[] = [];
-  for (const line of stdout.split(/\r?\n/)) {
-    const name = line.trim().replace(/\/+$/, "");
-    if (!name || name === "*" || name === "." || name === "..") continue;
-    const safe = safeRepoArg(name);
-    if (safe) names.push(safe);
-  }
-  return names;
-}
-
-/**
- * The remedy for "fatal: not a git repository", shared by every git tool.
- *
- * Returning git's raw fatal is what makes this look like the end of the road. It happens
- * routinely when the OPEN FOLDER holds several checkouts side by side (`/code/`, with
- * `/code/app` and `/code/api` each a repo): git runs at the root, finds no `.git`, and
- * the agent — handed a bare fatal with no next step — concludes the tool is unusable and
- * gives up, or asks the user a question it could have answered itself.
- *
- * So the failure carries its own remedy: name the candidate checkouts that ARE sitting
- * at the top level, and show the exact retry with `repo`. Do not send the model to
- * `list_files` — that is a round trip it already failed to take (chat #141).
- */
-function notARepoResult(action: string, candidates: string[] = []): ToolResult {
-  const named = candidates.filter(Boolean);
-  const extra = named.length
-    ? `Candidate repositories: ${named.map((c) => `"${c}"`).join(", ")}. Re-run this tool with \`repo\` set to the one holding the code you are working on (e.g. { "repo": "${named[0]}" }).`
-    : "No git checkouts were found at the top level of the open folder. File edits still work; only the git tools need a repository.";
-  return {
-    data: {
-      ok: false,
-      action,
-      error:
-        "not a git repository at the workspace root — this usually means the open folder CONTAINS the repositories rather than being one (several checkouts side by side). "
-        + extra,
-      ...(named.length ? { candidates: named } : {}),
-    },
-  };
-}
-
-type GitShellCtx = { caps: { shell?: { run(c: string): Promise<{ ok: boolean; stdout?: string; exitCode?: number; error?: string }>; trackedBranch?: string } } };
-
-async function notARepoWithCandidates(action: string, ctx: GitShellCtx): Promise<ToolResult> {
-  const listed = await ctx.caps.shell!.run(buildListCheckoutsCommand());
-  return notARepoResult(action, parseCheckoutList(listed.stdout));
-}
-
-/** Resolve the remote's default branch into `$BASE`, falling back to `main`. Shared so
- *  "what is the base branch" has ONE answer across sync, commit, push and pull request. */
-const RESOLVE_BASE = `BASE="$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; [ -n "$BASE" ] || BASE=main`;
-
-/** A commit identity for a clone that has none configured. */
-const IDENTITY_EMAIL = 'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"';
-const IDENTITY_NAME = 'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"';
-
 export function buildGitCommand(action: GitAction, opts?: { path?: string; baseBranch?: string; limit?: number; repo?: string; trackedBranch?: string }): string {
   const path = safeGitArg(opts?.path);
   const pathArg = path ? ` -- "${path}"` : "";
@@ -255,39 +159,19 @@ function gitToolResult(action: GitAction, r: { ok: boolean; stdout?: string; exi
   return { data: { ok: r.ok, action, output: out.slice(0, 20_000), ...(r.error ? { error: r.error } : {}) } };
 }
 
-/** git's own wording when the working directory has no repository above it. */
-const NOT_A_REPO = /not a git repository/i;
-
-function isNotARepo(r: { stdout?: string; error?: string }): boolean {
-  return NOT_A_REPO.test(`${r.stdout ?? ""} ${r.error ?? ""}`);
-}
-
 async function runGitTool(action: GitAction, opts: { path?: string; baseBranch?: string; limit?: number; repo?: string }, ctx: GitShellCtx): Promise<ToolResult> {
-  const explicitRepo = opts.repo;
-  let repo = explicitRepo;
-  let path = opts.path;
   const trackedBranch = ctx.caps.shell?.trackedBranch;
-  const build = (o: typeof opts) => buildGitCommand(action, trackedBranch ? { ...o, trackedBranch } : o);
-  let r = await ctx.caps.shell!.run(build({ ...opts, repo, path }));
-  // "fatal: not a git repository" is not the end of the road. An explicit `repo` still
-  // wins (the caller already chose). Otherwise: if a workspace-relative `path` starts
-  // with a checkout, retry scoped there; if we still cannot, NAME the candidate
-  // checkouts — never send the model to `list_files` for a list we can produce here.
-  if (isNotARepo(r) && !explicitRepo) {
-    const inferred = inferRepoFromPath(opts.path);
-    if (inferred) {
-      const inner = commitPathCandidates(opts.path ?? "", inferred);
-      path = inner.length > 0 ? inner[inner.length - 1] : undefined;
-      r = await ctx.caps.shell!.run(build({ ...opts, repo: inferred, path }));
-      if (!isNotARepo(r)) repo = inferred;
-    }
-    if (isNotARepo(r)) return notARepoWithCandidates(action, ctx);
-  }
-  const result = gitToolResult(action, r);
+  // "fatal: not a git repository" at the root is not the end of the road: the checkout
+  // the path names, then the run's default — and if none is a repository, NAME the
+  // candidates (never send the model to `list_files` for a list we can produce here).
+  const ran = await runInRepoScope(ctx, opts, (repo, path) =>
+    ctx.caps.shell!.run(buildGitCommand(action, { ...opts, repo, path, ...(trackedBranch ? { trackedBranch } : {}) })));
+  if (!ran) return notARepoWithCandidates(action, ctx);
+  const result = gitToolResult(action, ran.r);
   // Say WHERE it ran whenever that was not the obvious place, so a later command in
   // the same run does not have to rediscover the scope.
-  if (repo && (result.data as { ok?: boolean }).ok) {
-    (result.data as Record<string, unknown>).repo = repo;
+  if (ran.repo && (result.data as { ok?: boolean }).ok) {
+    (result.data as Record<string, unknown>).repo = ran.repo;
   }
   return result;
 }
@@ -390,36 +274,6 @@ function shellQuote(v: string): string {
  * Refuses to commit onto the base branch: `branch` names the ticket branch, created
  * from the current HEAD if it does not exist yet.
  */
-/**
- * The paths a commit should TRY for one path the model supplied, best guess first.
- *
- * `paths` are documented as repo-relative, but the model reads and edits through the
- * FILE tools, whose paths are relative to the workspace ROOT — and when the workspace
- * contains checkouts rather than being one, those two are different. A real run passed
- * `api/src/…` with `repo` scoping git into the `api` directory and git answered
- * `warning: could not open directory 'api/api/src/…'`, staged nothing, and the commit
- * was reported as "nothing to commit" — a wrong-path failure wearing an empty-diff
- * message.
- *
- * Rather than rewriting the path and hoping, this hands the SCRIPT an ordered candidate
- * list and lets it pick the one that exists (see {@link buildCommitCommand}): the path
- * as given always wins, so a repo that really does contain a nested `api/` directory is
- * never mis-resolved. Pure and exported for the unit tests.
- */
-export function commitPathCandidates(path: string, repo?: string): string[] {
-  const out = [path];
-  const dir = safeRepoArg(repo);
-  if (dir) {
-    const prefix = `${dir.replace(/\/+$/, "")}/`;
-    if (path.startsWith(prefix)) out.push(path.slice(prefix.length));
-    // `repo: "Builderforce.ai/api"` + `path: "api/src/x.ts"` — the model repeated the
-    // repo's LAST segment, which is the segment it was reading paths through.
-    const leaf = dir.split("/").filter(Boolean).pop();
-    if (leaf && path.startsWith(`${leaf}/`)) out.push(path.slice(leaf.length + 1));
-  }
-  return [...new Set(out)].filter((p) => p.trim() !== "");
-}
-
 function buildCommitCommand(opts: { message: string; paths: string[]; branch?: string; allowBaseBranch?: boolean; repo?: string }): string {
   const branch = safeGitArg(opts.branch);
   // Resolve each path to a shell variable holding the candidate that actually exists,
@@ -610,15 +464,16 @@ function publishToolResult(action: string, r: { ok: boolean; stdout?: string; ex
  *  the read-only git tools give. */
 async function runPublishTool(
   action: string,
-  command: string,
+  command: string | ((repo: string | undefined) => string),
   repo: string | undefined,
-  ctx: { caps: { shell?: { run(c: string): Promise<{ ok: boolean; stdout?: string; exitCode?: number; error?: string }> } } },
+  ctx: GitShellCtx,
 ): Promise<ToolResult> {
-  const scoped = repoScopedScript(command, repo);
-  const r = await ctx.caps.shell!.run(scoped);
-  if (isNotARepo(r) && !repo) return notARepoWithCandidates(action, ctx);
-  const result = publishToolResult(action, r);
-  if (repo && (result.data as { ok?: boolean }).ok) (result.data as Record<string, unknown>).repo = repo;
+  // A builder, when the script's own text depends on the repo (commit's path candidates).
+  const build = (scope: string | undefined): string => (typeof command === "string" ? command : command(scope));
+  const ran = await runInRepoScope(ctx, repo ? { repo } : {}, (scope) => ctx.caps.shell!.run(repoScopedScript(build(scope), scope)));
+  if (!ran) return notARepoWithCandidates(action, ctx);
+  const result = publishToolResult(action, ran.r);
+  if (ran.repo && (result.data as { ok?: boolean }).ok) (result.data as Record<string, unknown>).repo = ran.repo;
   return result;
 }
 
@@ -648,7 +503,7 @@ export const gitCommitTool: ToolDefinition = defineTool({
     const repo = typeof args.repo === "string" ? args.repo : undefined;
     return runPublishTool(
       "commit",
-      buildCommitCommand({ message, paths, branch: typeof args.branch === "string" ? args.branch : undefined, allowBaseBranch: args.allowBaseBranch === true, repo }),
+      (scope) => buildCommitCommand({ message, paths, branch: typeof args.branch === "string" ? args.branch : undefined, allowBaseBranch: args.allowBaseBranch === true, repo: scope }),
       repo,
       ctx,
     );

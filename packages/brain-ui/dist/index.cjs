@@ -32,7 +32,7 @@ var src_exports = {};
 __export(src_exports, {
   AiSurface: () => AiSurface,
   Avatar: () => Avatar,
-  BUILDERFORCE_PRODUCT_NAME: () => import_builderforce_brain_embedded23.BUILDERFORCE_PRODUCT_NAME,
+  BUILDERFORCE_PRODUCT_NAME: () => import_builderforce_brain_embedded24.BUILDERFORCE_PRODUCT_NAME,
   BrainComposer: () => BrainComposer,
   BrainMark: () => BrainMark,
   BrainTimeline: () => BrainTimeline,
@@ -54,7 +54,7 @@ __export(src_exports, {
   DEFAULT_LOCAL_MODEL_LABELS: () => DEFAULT_LOCAL_MODEL_LABELS,
   DEFAULT_MENTION_LABELS: () => DEFAULT_MENTION_LABELS,
   DEFAULT_MODEL_FALLBACK_LABELS: () => DEFAULT_MODEL_FALLBACK_LABELS,
-  DEFAULT_MODEL_IDENTITY: () => import_builderforce_brain_embedded23.DEFAULT_MODEL_IDENTITY,
+  DEFAULT_MODEL_IDENTITY: () => import_builderforce_brain_embedded24.DEFAULT_MODEL_IDENTITY,
   DEFAULT_MODEL_MOVE_LABELS: () => DEFAULT_MODEL_MOVE_LABELS,
   DEFAULT_PENDING_CHANGES_LABELS: () => DEFAULT_PENDING_CHANGES_LABELS,
   DEFAULT_PERSONA_PICKER_LABELS: () => DEFAULT_PERSONA_PICKER_LABELS,
@@ -83,10 +83,10 @@ __export(src_exports, {
   LiveActivity: () => LiveActivity,
   LocalModelList: () => LocalModelList,
   LocalModelRow: () => LocalModelRow,
-  MODEL_CATEGORIES: () => import_builderforce_brain_embedded23.MODEL_CATEGORIES,
+  MODEL_CATEGORIES: () => import_builderforce_brain_embedded24.MODEL_CATEGORIES,
   Markdown: () => Markdown,
   ModelFallbackNotice: () => ModelFallbackNotice,
-  PROJECT_EVERMIND_MODEL_PREFIX: () => import_builderforce_brain_embedded23.PROJECT_EVERMIND_MODEL_PREFIX,
+  PROJECT_EVERMIND_MODEL_PREFIX: () => import_builderforce_brain_embedded24.PROJECT_EVERMIND_MODEL_PREFIX,
   PendingChangesList: () => PendingChangesList,
   PendingQuestionBanner: () => PendingQuestionBanner,
   PersonaPicker: () => PersonaPicker,
@@ -116,16 +116,16 @@ __export(src_exports, {
   ToolStep: () => ToolStep,
   WorkSpendPanel: () => WorkSpendPanel,
   WorkStatusPanel: () => WorkStatusPanel,
-  activeModelKey: () => import_builderforce_brain_embedded23.activeModelKey,
+  activeModelKey: () => import_builderforce_brain_embedded24.activeModelKey,
   askUserAnchorId: () => import_builderforce_brain_embedded3.askUserAnchorId,
   attachmentsOf: () => attachmentsOf,
   avatarColor: () => avatarColor,
   brainComposerLabelsFrom: () => brainComposerLabelsFrom,
-  buildModelItems: () => import_builderforce_brain_embedded23.buildModelItems,
+  buildModelItems: () => import_builderforce_brain_embedded24.buildModelItems,
   buildSettledTimeline: () => buildSettledTimeline,
   buildTimeline: () => buildTimeline,
   bundleLookup: () => bundleLookup,
-  byoVendorLabel: () => import_builderforce_brain_embedded23.byoVendorLabel,
+  byoVendorLabel: () => import_builderforce_brain_embedded24.byoVendorLabel,
   cachedConsumptionSnapshot: () => cachedConsumptionSnapshot,
   chatActivityLabelsFrom: () => chatActivityLabelsFrom,
   chatDiagnosticsReads: () => chatDiagnosticsReads,
@@ -141,12 +141,12 @@ __export(src_exports, {
   composerModel: () => composerModel,
   createChatTicketsRestAdapter: () => createChatTicketsRestAdapter,
   createEvermindRestAdapter: () => createEvermindRestAdapter,
-  displayModelName: () => import_builderforce_brain_embedded23.displayModelName,
+  displayModelName: () => import_builderforce_brain_embedded24.displayModelName,
   evermindLabelsFromBundle: () => evermindLabelsFromBundle,
   evermindLearnedStatus: () => evermindLearnedStatus,
   evermindNextAction: () => evermindNextAction,
   fetchConsumptionSnapshot: () => fetchConsumptionSnapshot,
-  filterModelItems: () => import_builderforce_brain_embedded23.filterModelItems,
+  filterModelItems: () => import_builderforce_brain_embedded24.filterModelItems,
   formatContextTokens: () => formatContextTokens,
   formatDownloadSize: () => formatDownloadSize,
   formatDuration: () => formatDuration,
@@ -160,24 +160,24 @@ __export(src_exports, {
   inferenceModeOption: () => inferenceModeOption,
   initialsOf: () => initialsOf,
   invalidateConsumptionSnapshot: () => invalidateConsumptionSnapshot,
-  isManagerRole: () => import_builderforce_brain_embedded24.isManagerRole,
+  isManagerRole: () => import_builderforce_brain_embedded25.isManagerRole,
   liveActivityLabelsFrom: () => liveActivityLabelsFrom,
   loadEvermindBuilds: () => loadEvermindBuilds,
   localModelLabelsFrom: () => localModelLabelsFrom,
-  modelCategoryLabel: () => import_builderforce_brain_embedded23.modelCategoryLabel,
-  modelInUse: () => import_builderforce_brain_embedded23.modelInUse,
+  modelCategoryLabel: () => import_builderforce_brain_embedded24.modelCategoryLabel,
+  modelInUse: () => import_builderforce_brain_embedded24.modelInUse,
   modelMoveLine: () => modelMoveLine,
   modelMoveOf: () => modelMoveOf,
   modelRemedies: () => modelRemedies,
   modelSelectionFrom: () => modelSelectionFrom,
   parseAskUser: () => import_builderforce_brain_embedded3.parseAskUser,
   pendingChangesSummary: () => pendingChangesSummary,
-  perMillionUsd: () => import_builderforce_brain_embedded23.perMillionUsd,
+  perMillionUsd: () => import_builderforce_brain_embedded24.perMillionUsd,
   planIsPaid: () => planIsPaid,
   preferredEvermindBuild: () => preferredEvermindBuild,
-  premiumCostLabel: () => import_builderforce_brain_embedded23.premiumCostLabel,
-  productForPlan: () => import_builderforce_brain_embedded23.productForPlan,
-  productModelName: () => import_builderforce_brain_embedded23.productModelName,
+  premiumCostLabel: () => import_builderforce_brain_embedded24.premiumCostLabel,
+  productForPlan: () => import_builderforce_brain_embedded24.productForPlan,
+  productModelName: () => import_builderforce_brain_embedded24.productModelName,
   promptOptionsLabels: () => promptOptionsLabels,
   promptOptionsLabelsFrom: () => promptOptionsLabelsFrom,
   promptTrailingAction: () => promptTrailingAction,
@@ -185,7 +185,7 @@ __export(src_exports, {
   requestComposerMenu: () => requestComposerMenu,
   resolvePendingChangesLabels: () => resolvePendingChangesLabels,
   resolveTeacherOptions: () => resolveTeacherOptions,
-  revealsModelId: () => import_builderforce_brain_embedded23.revealsModelId,
+  revealsModelId: () => import_builderforce_brain_embedded24.revealsModelId,
   rovingRadioNextIndex: () => rovingRadioNextIndex,
   selectPendingAskUser: () => import_builderforce_brain_embedded3.selectPendingAskUser,
   serializeAskUser: () => import_builderforce_brain_embedded3.serializeAskUser,
@@ -4296,7 +4296,7 @@ function inferenceModeOption(state) {
 }
 
 // src/index.ts
-var import_builderforce_brain_embedded23 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded24 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/picker/PickerShell.tsx
 var import_jsx_runtime38 = require("react/jsx-runtime");
@@ -5664,6 +5664,8 @@ function isBuiltinPanel(key) {
 var ChatTicketsPanel = (0, import_react35.memo)(ChatTicketsPanelInner);
 
 // src/chatTickets/restAdapter.ts
+var import_builderforce_brain_embedded18 = require("@seanhogg/builderforce-brain-embedded");
+var emptyRunHistory = () => ({ linkedRunnableTickets: 0, runs: [], dispatchers: [], executors: [] });
 var RUNNABLE2 = new Set(RUNNABLE_KINDS);
 function createChatTicketsRestAdapter(opts) {
   const { request: req } = opts;
@@ -5686,13 +5688,13 @@ function createChatTicketsRestAdapter(opts) {
     return [...workforce, ...agents];
   };
   return {
-    listTickets: (chatId) => req(`/api/brain/chats/${chatId}/tickets`).then((r) => r.tickets),
+    listTickets: (chatId) => (0, import_builderforce_brain_embedded18.readChatTicketLinks)(req, chatId),
     linkTicket: (chatId, input) => req(`/api/brain/chats/${chatId}/tickets`, { method: "POST", body: JSON.stringify(input) }).then(() => void 0),
     unlinkTicket: (chatId, kind, ref) => req(
       `/api/brain/chats/${chatId}/tickets?kind=${encodeURIComponent(kind)}&ref=${encodeURIComponent(ref)}`,
       { method: "DELETE" }
     ).then(() => void 0),
-    listRuns: (chatId) => req(`/api/brain/chats/${chatId}/runs`).catch(() => ({ linkedRunnableTickets: 0, runs: [], dispatchers: [], executors: [] })),
+    listRuns: (chatId) => (0, import_builderforce_brain_embedded18.readChatRunHistory)(req, chatId).then((history) => history ?? emptyRunHistory()).catch(emptyRunHistory),
     listTicketChats: (kind, ref) => req(
       `/api/brain/tickets/${encodeURIComponent(kind)}/${encodeURIComponent(ref)}/chats`
     ).then((r) => r.chats.map((c) => ({
@@ -5763,7 +5765,7 @@ function createChatTicketsRestAdapter(opts) {
     },
     listQuestions: async (chatId) => {
       const [links, pending] = await Promise.all([
-        req(`/api/brain/chats/${chatId}/tickets`).then((r) => r.tickets),
+        (0, import_builderforce_brain_embedded18.readChatTicketLinks)(req, chatId),
         // `kind` is on the wire but not on the VM — the panel renders a question
         // without caring which flavour it is, while the FILTER cares about nothing
         // else. Typing the wire row here keeps both true.
@@ -5843,14 +5845,14 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
 
 // src/chatTickets/useChatActivitySignal.ts
 var import_react37 = require("react");
-var import_builderforce_brain_embedded18 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded19 = require("@seanhogg/builderforce-brain-embedded");
 function useChatActivitySignal(messages) {
-  return (0, import_react37.useMemo)(() => (0, import_builderforce_brain_embedded18.activityMessageCount)(messages), [messages]);
+  return (0, import_react37.useMemo)(() => (0, import_builderforce_brain_embedded19.activityMessageCount)(messages), [messages]);
 }
 
 // src/mention/MentionAutocomplete.tsx
 var import_react38 = require("react");
-var import_builderforce_brain_embedded19 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded20 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime52 = require("react/jsx-runtime");
 var DEFAULT_MENTION_LABELS = { title: "Direct to", agent: "Agent", human: "Person" };
 function useMentionAutocomplete(opts) {
@@ -5858,7 +5860,7 @@ function useMentionAutocomplete(opts) {
   const [token, setToken] = (0, import_react38.useState)(null);
   const [index, setIndex] = (0, import_react38.useState)(0);
   const matches = (0, import_react38.useMemo)(
-    () => token && !disabled ? (0, import_builderforce_brain_embedded19.filterMentionCandidates)(participants, token.query) : [],
+    () => token && !disabled ? (0, import_builderforce_brain_embedded20.filterMentionCandidates)(participants, token.query) : [],
     [token, participants, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
@@ -5868,7 +5870,7 @@ function useMentionAutocomplete(opts) {
       setToken(null);
       return;
     }
-    const next = (0, import_builderforce_brain_embedded19.activeMentionToken)(el.value, el.selectionStart ?? el.value.length);
+    const next = (0, import_builderforce_brain_embedded20.activeMentionToken)(el.value, el.selectionStart ?? el.value.length);
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, participants.length]);
@@ -5877,7 +5879,7 @@ function useMentionAutocomplete(opts) {
   }, [value, recompute]);
   const choose = (0, import_react38.useCallback)((r) => {
     const el = textareaRef.current;
-    const tk = token ?? (el ? (0, import_builderforce_brain_embedded19.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
+    const tk = token ?? (el ? (0, import_builderforce_brain_embedded20.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
       let after = value.slice(tk.end);
       if (after.startsWith(" ")) after = after.slice(1);
@@ -5986,7 +5988,7 @@ var POP = {
 
 // src/mention/TicketAutocomplete.tsx
 var import_react39 = require("react");
-var import_builderforce_brain_embedded20 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded21 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime53 = require("react/jsx-runtime");
 var DEFAULT_TICKET_TAG_LABELS = { title: "Tag ticket", status: "Status", noMatches: "No tickets found" };
 function useTicketAutocomplete(opts) {
@@ -5994,7 +5996,7 @@ function useTicketAutocomplete(opts) {
   const [token, setToken] = (0, import_react39.useState)(null);
   const [index, setIndex] = (0, import_react39.useState)(0);
   const matches = (0, import_react39.useMemo)(
-    () => token && !disabled ? (0, import_builderforce_brain_embedded20.filterTicketCandidates)(tickets, token.query) : [],
+    () => token && !disabled ? (0, import_builderforce_brain_embedded21.filterTicketCandidates)(tickets, token.query) : [],
     [token, tickets, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
@@ -6004,7 +6006,7 @@ function useTicketAutocomplete(opts) {
       setToken(null);
       return;
     }
-    const next = (0, import_builderforce_brain_embedded20.activeTicketToken)(el.value, el.selectionStart ?? el.value.length);
+    const next = (0, import_builderforce_brain_embedded21.activeTicketToken)(el.value, el.selectionStart ?? el.value.length);
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, tickets.length]);
@@ -6013,7 +6015,7 @@ function useTicketAutocomplete(opts) {
   }, [value, recompute]);
   const choose = (0, import_react39.useCallback)((t) => {
     const el = textareaRef.current;
-    const tk = token ?? (el ? (0, import_builderforce_brain_embedded20.activeTicketToken)(el.value, el.selectionStart ?? 0) : null);
+    const tk = token ?? (el ? (0, import_builderforce_brain_embedded21.activeTicketToken)(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
       const ref = t.key ?? String(t.id);
       let after = value.slice(tk.end);
@@ -7975,7 +7977,7 @@ function preferredEvermindBuild(builds, pick = {}) {
 }
 
 // src/index.ts
-var import_builderforce_brain_embedded24 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded25 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/evermind/labelBundle.ts
 var STATIC_KEYS = [
@@ -8805,6 +8807,10 @@ var IconMic = () => /* @__PURE__ */ (0, import_jsx_runtime67.jsxs)("svg", { widt
   /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("path", { d: "M3.75 8a4.25 4.25 0 0 0 8.5 0M8 12.25V14", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round" })
 ] });
 var IconSend = () => /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("path", { d: "M8 13V3.75M4.25 7.5 8 3.75l3.75 3.75", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round" }) });
+var IconQueue = () => /* @__PURE__ */ (0, import_jsx_runtime67.jsxs)("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
+  /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("path", { d: "M3 4.5h10M3 8h10M3 11.5h5.5", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round" }),
+  /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("path", { d: "M11 10.25v2.5l1.75 1", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" })
+] });
 var IconStop = () => /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("svg", { width: "12", height: "12", viewBox: "0 0 16 16", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime67.jsx)("rect", { x: "3.5", y: "3.5", width: "9", height: "9", rx: "1.5" }) });
 
 // src/composer/ComposerAddMenu.tsx
@@ -8859,9 +8865,13 @@ function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = 
 
 // src/composer/ComposerTrailingButton.tsx
 var import_jsx_runtime69 = require("react/jsx-runtime");
+function queueShortcutKeys(nav = typeof navigator === "undefined" ? void 0 : navigator) {
+  const platform = nav?.userAgentData?.platform || nav?.platform || "";
+  return /mac|iphone|ipad/i.test(platform) ? "\u2325+Enter" : "Alt+Enter";
+}
 var noopGet = () => "";
 var noopSet = () => void 0;
-function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, onSend, onStop, voice }) {
+function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, onSend, onStop, onQueue, voice }) {
   const dictation = useVoiceDictation(voice?.getValue ?? noopGet, voice?.setValue ?? noopSet);
   const action = promptTrailingAction({
     canSubmit,
@@ -8890,10 +8900,19 @@ function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, 
     return /* @__PURE__ */ (0, import_jsx_runtime69.jsx)("button", { type: "button", className: "bf-cmp-iconbtn bf-cmp-iconbtn--stop", onClick: onStop, title: labels.stop, "aria-label": labels.stop, children: /* @__PURE__ */ (0, import_jsx_runtime69.jsx)(IconStop, {}) });
   }
   const label = running ? labels.queueSend : labels.send;
-  return /* @__PURE__ */ (0, import_jsx_runtime69.jsx)("button", { type: "submit", className: "bf-cmp-iconbtn bf-cmp-iconbtn--send", onClick: (e) => {
+  const send = /* @__PURE__ */ (0, import_jsx_runtime69.jsx)("button", { type: "submit", className: "bf-cmp-iconbtn bf-cmp-iconbtn--send", onClick: (e) => {
     e.preventDefault();
     onSend();
   }, disabled: !canSubmit || disabled, title: label, "aria-label": label, children: /* @__PURE__ */ (0, import_jsx_runtime69.jsx)(IconSend, {}) });
+  if (!(running && onQueue && canSubmit)) return send;
+  const queueLabel = labels.queueAfter(queueShortcutKeys());
+  return /* @__PURE__ */ (0, import_jsx_runtime69.jsxs)(import_jsx_runtime69.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime69.jsxs)("button", { type: "button", className: "bf-cmp-queuebtn", onClick: onQueue, disabled, title: queueLabel, "aria-label": queueLabel, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime69.jsx)(IconQueue, {}),
+      /* @__PURE__ */ (0, import_jsx_runtime69.jsx)("span", { className: "bf-cmp-queuebtn__text", children: labels.queueAfterShort })
+    ] }),
+    send
+  ] });
 }
 
 // src/composer/AttachmentChips.tsx
@@ -8908,14 +8927,14 @@ function AttachmentChips({ items, onRemove, labels }) {
 }
 
 // src/composer/composerOptions.ts
-var import_builderforce_brain_embedded21 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded22 = require("@seanhogg/builderforce-brain-embedded");
 function composerOptionGroups(options, labels) {
   const { mode, memory, effort, thinking, model, inferenceMode, openMenu, autoMode, session } = options;
   const thinkingOn = thinking?.value ?? false;
   const modeGroup = mode ? {
     value: mode.value,
     onChange: (next) => mode.onChange(next),
-    choices: import_builderforce_brain_embedded21.CHAT_MODES.map((m) => ({ value: m, label: labels.modeLabel(m), hint: labels.modeHint(m), icon: import_builderforce_brain_embedded21.CHAT_MODE_ICON[m] }))
+    choices: import_builderforce_brain_embedded22.CHAT_MODES.map((m) => ({ value: m, label: labels.modeLabel(m), hint: labels.modeHint(m), icon: import_builderforce_brain_embedded22.CHAT_MODE_ICON[m] }))
   } : void 0;
   const memoryGroup = memory ? {
     enabled: memory.enabled,
@@ -8935,7 +8954,7 @@ function composerOptionGroups(options, labels) {
       // What a level REALLY costs, read from the shared effort table, so the copy can
       // never promise a budget the request does not send.
       describeEffort: (level) => {
-        const { maxTokens, thinkingBudgetTokens } = (0, import_builderforce_brain_embedded21.effortProfile)(level);
+        const { maxTokens, thinkingBudgetTokens } = (0, import_builderforce_brain_embedded22.effortProfile)(level);
         const base = labels.effortDesc(level, Math.max(maxTokens, effort.minAnswerTokens ?? 0));
         return thinkingOn ? `${base} ${labels.effortThinkingSuffix(thinkingBudgetTokens)}` : base;
       }
@@ -8943,7 +8962,7 @@ function composerOptionGroups(options, labels) {
     ...thinking ? {
       thinking: thinking.value,
       onThinkingChange: thinking.onChange,
-      describeThinking: (on) => on ? labels.thinkingOnDesc((0, import_builderforce_brain_embedded21.effortProfile)(effort?.value ?? "balanced").thinkingBudgetTokens) : labels.thinkingOffDesc
+      describeThinking: (on) => on ? labels.thinkingOnDesc((0, import_builderforce_brain_embedded22.effortProfile)(effort?.value ?? "balanced").thinkingBudgetTokens) : labels.thinkingOffDesc
     } : {},
     model,
     inferenceMode,
@@ -8965,6 +8984,8 @@ var DEFAULT_COMPOSER_LABELS = {
   remove: "Remove",
   send: "Send",
   queueSend: "Queue message \u2014 sends when the current run finishes",
+  queueAfter: (keys) => `Queue for after the run (${keys})`,
+  queueAfterShort: "Queue",
   stop: "Stop",
   dictate: "Dictate",
   stopDictation: "Stop dictation",
@@ -8990,6 +9011,7 @@ function composerLabelsFrom(lookup, overrides) {
   const d = DEFAULT_COMPOSER_LABELS;
   return {
     ...stringsFrom(d, lookup),
+    queueAfter: (keys) => lookup("queueAfter", { keys }) || d.queueAfter(keys),
     modeLabel: (mode) => lookup(`modeLabel.${mode}`) || d.modeLabel(mode),
     modeHint: (mode) => lookup(`modeHint.${mode}`) || d.modeHint(mode),
     effortDesc: (level, answer) => lookup(`effortDesc.${level}`, { answer }) || d.effortDesc(level, answer),
@@ -9011,6 +9033,7 @@ function BrainComposer(props) {
     onSubmit,
     running = false,
     onStop,
+    onQueue,
     disabled = false,
     blockedNotice,
     placeholder,
@@ -9077,6 +9100,13 @@ function BrainComposer(props) {
   const submit = () => {
     if (!canSubmit) return;
     gate.request(() => onSubmitRef.current());
+  };
+  const onQueueRef = (0, import_react50.useRef)(onQueue);
+  onQueueRef.current = onQueue;
+  const queue = () => {
+    const hold = onQueueRef.current;
+    if (!canSubmit || !hold) return;
+    gate.request(() => hold());
   };
   const onPaste = (e) => {
     if (!attachments) return;
@@ -9165,7 +9195,8 @@ function BrainComposer(props) {
               if (ticket.onKeyDown(e)) return;
               if (submitOnEnter && e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
-                submit();
+                if (e.altKey && running && onQueue) queue();
+                else submit();
               }
             }
           }
@@ -9206,6 +9237,7 @@ function BrainComposer(props) {
             disabled,
             onSend: submit,
             onStop,
+            ...onQueue ? { onQueue: queue } : {},
             voice: voice ? { getValue, setValue: onChange } : void 0
           }
         )
@@ -9247,12 +9279,12 @@ function brainComposerLabelsFrom(lookup, overrides) {
 }
 
 // src/composer/composerModel.ts
-var import_builderforce_brain_embedded22 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded23 = require("@seanhogg/builderforce-brain-embedded");
 function composerCatalogLoaded(catalog) {
-  return catalog != null && catalog !== import_builderforce_brain_embedded22.EMPTY_GATEWAY_MODEL_OPTIONS;
+  return catalog != null && catalog !== import_builderforce_brain_embedded23.EMPTY_GATEWAY_MODEL_OPTIONS;
 }
 function withLocalModels(catalog, local) {
-  const base = catalog ?? import_builderforce_brain_embedded22.EMPTY_GATEWAY_MODEL_OPTIONS;
+  const base = catalog ?? import_builderforce_brain_embedded23.EMPTY_GATEWAY_MODEL_OPTIONS;
   if (!local || local.length === 0) return base;
   return { ...base, options: { ...base.options, local } };
 }

@@ -19,6 +19,7 @@
  * differs per host is injected: how an authenticated call is made, and whether
  * this surface may dispatch a run at all.
  */
+import { readChatRunHistory, readChatTicketLinks } from '@seanhogg/builderforce-brain-embedded';
 import { RUNNABLE_KINDS } from './types';
 import type {
   AgentOptionVM,
@@ -29,6 +30,9 @@ import type {
   TicketLinkVM,
   TicketOptionVM,
 } from './types';
+
+/** What a history that could not be read degrades to: "nothing has run" (see `listRuns`). */
+const emptyRunHistory = (): ChatRunHistoryVM => ({ linkedRunnableTickets: 0, runs: [], dispatchers: [], executors: [] });
 
 /** An authenticated JSON call, relative to the gateway origin. */
 export type ChatTicketsRequest = <T>(path: string, init?: { method?: string; body?: BodyInit }) => Promise<T>;
@@ -85,8 +89,7 @@ export function createChatTicketsRestAdapter(opts: ChatTicketsRestOptions): Chat
   };
 
   return {
-    listTickets: (chatId) =>
-      req<{ tickets: TicketLinkVM[] }>(`/api/brain/chats/${chatId}/tickets`).then((r) => r.tickets),
+    listTickets: (chatId) => readChatTicketLinks<TicketLinkVM>(req, chatId),
 
     linkTicket: (chatId, input) =>
       req(`/api/brain/chats/${chatId}/tickets`, { method: 'POST', body: JSON.stringify(input) }).then(() => undefined),
@@ -98,14 +101,15 @@ export function createChatTicketsRestAdapter(opts: ChatTicketsRestOptions): Chat
       ).then(() => undefined),
 
     listRuns: (chatId) =>
-      req<ChatRunHistoryVM>(`/api/brain/chats/${chatId}/runs`)
+      readChatRunHistory<ChatRunHistoryVM>(req, chatId)
+        .then((history) => history ?? emptyRunHistory())
         // A chat with no runnable links, or an API that predates the endpoint, is not a
         // failure of the capture that reads this — it is "nothing has run", which is the
         // answer. Degrading to an empty history keeps a diagnostics copy from failing on
         // the one read whose whole point is to be reassuring when it comes back empty.
         // Deliberately omit `subagents`: a failed fetch is not "no children", and the
         // web poller only replaces the roster when the field is present.
-        .catch(() => ({ linkedRunnableTickets: 0, runs: [], dispatchers: [], executors: [] })),
+        .catch(emptyRunHistory),
 
     listTicketChats: (kind, ref) =>
       req<{ chats: LineageVM[] }>(
@@ -195,7 +199,7 @@ export function createChatTicketsRestAdapter(opts: ChatTicketsRestOptions): Chat
 
     listQuestions: async (chatId): Promise<ChatQuestionVM[]> => {
       const [links, pending] = await Promise.all([
-        req<{ tickets: TicketLinkVM[] }>(`/api/brain/chats/${chatId}/tickets`).then((r) => r.tickets),
+        readChatTicketLinks<TicketLinkVM>(req, chatId),
         // `kind` is on the wire but not on the VM — the panel renders a question
         // without caring which flavour it is, while the FILTER cares about nothing
         // else. Typing the wire row here keeps both true.

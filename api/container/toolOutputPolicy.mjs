@@ -7,7 +7,7 @@
  * Regenerate with `node scripts/gen-container-shared.mjs` (from `api/`).
  * `--check` fails the build when the source no longer matches the hash below.
  *
- * @source-sha256 73405783f3f57e2993dc499be317134e58b6f806ff443ca361e43d5d3f90232a
+ * @source-sha256 df1c83039ec92566c889b68a761c027cadda48c12dfbba3a7697e41205dfbc48
  */
 // ── caps.ts ──
 /**
@@ -72,6 +72,26 @@ function toolOutputCap(tool, caps = TOOL_OUTPUT_CAPS) {
 function windowToolResultCap(contextWindowTokens) {
     const maxTokens = Math.floor(contextWindowTokens * TOOL_RESULT_WINDOW_SHARE);
     return Math.min(maxTokens * TOOL_RESULT_CHARS_PER_TOKEN, HARD_MAX_TOOL_RESULT_CHARS);
+}
+/** The most one `read_file` result may hold, however large the window (PRD 35 E4). */
+const READ_FILE_MAX_CHARS = 64_000;
+/**
+ * THE window-sized cap for one tool result (PRD 35 §6.10), from the table row and the
+ * serving model's context window:
+ *
+ *   • `read_file` with a known window → the window share, clamped to
+ *     [table row (16K), {@link READ_FILE_MAX_CHARS}] — a big window reads a big file in
+ *     fewer windows, a tiny one still gets a whole-line page;
+ *   • every other tool with a known window → the smaller of its row and the window share;
+ *   • unknown window → the table row (today's behaviour).
+ */
+function windowedCap(tool, tableCap, contextWindowTokens) {
+    if (typeof contextWindowTokens !== 'number' || !Number.isFinite(contextWindowTokens) || contextWindowTokens <= 0)
+        return tableCap;
+    const share = windowToolResultCap(contextWindowTokens);
+    if (tool === READ_FILE_TOOL)
+        return Math.min(READ_FILE_MAX_CHARS, Math.max(tableCap, share));
+    return Math.min(tableCap, share);
 }
 /** Whether a tool's output is a shell/build/test log. */
 function isShellTool(tool) {
@@ -401,19 +421,21 @@ function isReadFileResult(out) {
 function windowReadFile(out, opts = {}) {
     const maxChars = opts.maxChars ?? READ_FILE_RESULT_CHARS;
     const withNote = (result) => opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(result, opts.advisory) : result;
+    /** `served` is the window before the advisory — what read coverage records. */
+    const done = (served, truncated) => ({ value: withNote(served), served, truncated });
     const lines = out.content.split('\n');
     const offset = typeof out.offset === 'number' && out.offset > 0 ? Math.floor(out.offset) : 1;
     const totalLines = typeof out.totalLines === 'number' && out.totalLines > 0 ? Math.floor(out.totalLines) : offset + lines.length - 1;
     const alreadyPartial = out.truncated === true;
-    const build = (kept, note) => {
+    const served = (kept, note) => {
         const lastLine = offset + kept.length - 1;
-        return withNote({ ...out, content: kept.join('\n'), offset, totalLines, truncated: lastLine < totalLines || alreadyPartial, note });
+        return { ...out, content: kept.join('\n'), offset, totalLines, truncated: lastLine < totalLines || alreadyPartial, note };
     };
+    const build = (kept, note) => withNote(served(kept, note));
     const fits = (value) => JSON.stringify(value).length <= maxChars;
     // Whole result within budget: the tool's own fields stand; only the advisory is added.
-    const whole = withNote({ ...out });
-    if (fits(whole))
-        return { value: whole, truncated: false };
+    if (fits(withNote({ ...out })))
+        return done({ ...out }, false);
     const continuation = (lastLine) => `Showing lines ${offset}–${lastLine} of ${totalLines}. This surface returns at most ~${maxChars.toLocaleString('en-US')} chars per read, so a large file arrives in several windows — call read_file again with offset ${lastLine + 1} to continue from exactly where this one stopped. Do not re-request lines you already have.`;
     // Largest whole-line prefix that fits. Monotonic in the line count, so a binary
     // search over 0..lines.length costs ~11 stringifies of a bounded string.
@@ -436,9 +458,66 @@ function windowReadFile(out, opts = {}) {
         const first = lines[0] ?? '';
         const head = first.slice(0, Math.max(0, maxChars - 600));
         const note = `Line ${offset} of ${totalLines} is longer than the ~${maxChars.toLocaleString('en-US')}-char read budget; the first ${head.length.toLocaleString('en-US')} of its ${first.length.toLocaleString('en-US')} chars are shown. Paging by offset cannot reach the rest of this line — use search_code for the specific symbol instead.`;
-        return { value: withNote({ ...out, content: head, offset, totalLines, truncated: true, note }), truncated: true };
+        return done({ ...out, content: head, offset, totalLines, truncated: true, note }, true);
     }
-    return { value: build(lines.slice(0, best), continuation(offset + best - 1)), truncated: true };
+    return done(served(lines.slice(0, best), continuation(offset + best - 1)), true);
+}
+function isReadFilesResult(out) {
+    return !!out && typeof out === 'object' && !Array.isArray(out)
+        && out.ok !== false
+        && Array.isArray(out.files);
+}
+/**
+ * Window a multi-file `read_file` result: the char budget is SPLIT across the files —
+ * smallest first, so a short file is kept whole and what it did not use goes to the
+ * larger ones — and each file is paged by line on its own ({@link windowReadFile}). A
+ * failed entry (a missing path) passes through. The advisory rides on the whole result.
+ */
+function windowReadFiles(out, opts = {}) {
+    const maxChars = opts.maxChars ?? READ_FILE_RESULT_CHARS;
+    const files = out.files;
+    // The wrapper, the commas between entries and the advisory are spent before any file.
+    const overhead = JSON.stringify({ ...out, files: [] }).length + files.length + (opts.advisory ? opts.advisory.length + 16 : 0);
+    const order = files.map((f, i) => ({ i, size: JSON.stringify(f ?? null).length })).sort((a, b) => a.size - b.size);
+    const servedFiles = files.slice();
+    let remaining = Math.max(0, maxChars - overhead);
+    let truncated = false;
+    order.forEach(({ i, size }, n) => {
+        const file = files[i];
+        const share = Math.floor(remaining / (order.length - n));
+        if (isReadFileResult(file) && size > share) {
+            const windowed = windowReadFile(file, { maxChars: share });
+            servedFiles[i] = windowed.served;
+            truncated = truncated || windowed.truncated;
+        }
+        remaining -= JSON.stringify(servedFiles[i] ?? null).length;
+    });
+    const served = { ...out, files: servedFiles };
+    const value = opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(served, opts.advisory) : served;
+    return { value, served, truncated };
+}
+/**
+ * The lines `start`–`end` of a `read_file` result that holds them — how a covered read
+ * is REPLAYED: the requested window, not the covering read's from its first line. The
+ * paging fields are rewritten to describe the slice.
+ */
+function sliceReadFile(out, start, end) {
+    const lines = out.content.split('\n');
+    const first = typeof out.offset === 'number' && out.offset > 0 ? Math.floor(out.offset) : 1;
+    const from = Math.max(first, Math.floor(start));
+    const kept = lines.slice(from - first, Math.max(from - first, Math.floor(end) - first + 1));
+    const lastLine = from + kept.length - 1;
+    const totalLines = typeof out.totalLines === 'number' && out.totalLines > 0 ? Math.floor(out.totalLines) : undefined;
+    const truncated = totalLines !== undefined ? lastLine < totalLines : out.truncated === true;
+    const { note: _coveringNote, ...rest } = out;
+    return {
+        ...rest,
+        content: kept.join('\n'),
+        offset: from,
+        ...(totalLines !== undefined ? { totalLines } : {}),
+        truncated,
+        ...(truncated ? { note: `Showing lines ${from}–${lastLine}${totalLines !== undefined ? ` of ${totalLines}` : ''}. To continue, call read_file again with offset ${lastLine + 1}.` } : {}),
+    };
 }
 
 // ── policy.ts ──
@@ -483,9 +562,8 @@ function attach(value, opts) {
 function capFor(tool, opts) {
     if (opts.maxChars !== undefined)
         return opts.maxChars;
-    if (!opts.summarize && tool !== READ_FILE_TOOL)
-        return DEFAULT_TOOL_OUTPUT_CHARS;
-    return toolOutputCap(tool, opts.caps);
+    const tableCap = !opts.summarize && tool !== READ_FILE_TOOL ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
+    return windowedCap(tool, tableCap, opts.contextWindowTokens);
 }
 /** Shrink the log fields of a structured shell result so the whole result fits. */
 function shrinkLogFields(tool, out, cap, overhead) {
@@ -513,9 +591,12 @@ function shrinkLogFields(tool, out, cap, overhead) {
  */
 function shapeToolResult(tool, out, opts = {}) {
     const bytes = JSON.stringify(out ?? null).length;
-    if (tool === READ_FILE_TOOL && isReadFileResult(out)) {
-        const windowed = windowReadFile(out, { maxChars: opts.maxChars, advisory: opts.advisory, attachAdvisory: opts.attachAdvisory });
-        return { content: JSON.stringify(windowed.value), bytes, truncated: windowed.truncated };
+    if (tool === READ_FILE_TOOL && (isReadFileResult(out) || isReadFilesResult(out))) {
+        // The line window's own row (the `caps` override never applied to it), sized to the window.
+        const maxChars = opts.maxChars ?? windowedCap(READ_FILE_TOOL, READ_FILE_RESULT_CHARS, opts.contextWindowTokens);
+        const windowOpts = { maxChars, advisory: opts.advisory, attachAdvisory: opts.attachAdvisory };
+        const windowed = isReadFileResult(out) ? windowReadFile(out, windowOpts) : windowReadFiles(out, windowOpts);
+        return { content: JSON.stringify(windowed.value), bytes, truncated: windowed.truncated, served: windowed.served };
     }
     const cap = capFor(tool, opts);
     const full = JSON.stringify(attach(out ?? null, opts));
