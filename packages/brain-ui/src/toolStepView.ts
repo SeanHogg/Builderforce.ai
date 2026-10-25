@@ -190,12 +190,13 @@ function residualArgs(args: unknown, command: string | null): unknown {
  * once (`paths`) — their basenames, since the shared directory says nothing.
  */
 function subjectOf(args: unknown, isCommand: boolean): { subject: string | null; subjectIsPath: boolean } {
-  const target = activityTarget(args);
-  if (target) return { subject: target, subjectIsPath: !isCommand && target.includes('/') && !/\s/.test(target) };
+  // Several files first: `activityTarget` also reads `paths` (one joined string, for the
+  // live indicator), which would hide the basenames this header shows.
   const paths = asRecord(args)?.paths;
   const names = Array.isArray(paths) ? paths.filter((path): path is string => typeof path === 'string' && !!path.trim()) : [];
-  if (names.length === 1) return { subject: names[0].trim(), subjectIsPath: names[0].includes('/') };
   if (names.length > 1) return { subject: names.map((path) => path.trim().split(/[\\/]/).pop()).join(', '), subjectIsPath: false };
+  const target = activityTarget(args);
+  if (target) return { subject: target, subjectIsPath: !isCommand && target.includes('/') && !/\s/.test(target) };
   return { subject: null, subjectIsPath: false };
 }
 

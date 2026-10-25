@@ -166,6 +166,9 @@ jobs:
           scope: package-agents
 
       - run: pnpm install --frozen-lockfile
+      # packages/agent-tools is compiled from source (tsconfig paths); its npm imports
+      # (@seanhogg/builderforce-memory/working) resolve from ITS node_modules.
+      - run: pnpm --dir ../packages/agent-tools install --frozen-lockfile
       - run: pnpm run ${{ matrix.script }}
 
   # The on-prem agent CLI every installer (install.sh / install.ps1 / install-cli.sh,
@@ -199,6 +202,7 @@ jobs:
           npm-token: ${{ secrets.NPM_TOKEN }}
 
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir ../packages/agent-tools install --frozen-lockfile
 
       # agent-runtime/vendor/ is gitignored (Docker builds exclude it too), so a
       # fresh checkout here has neither the A2UI renderer sources nor a prebuilt
@@ -648,6 +652,9 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=6144
         run: |
           pnpm install --frozen-lockfile
+          # packages/agent-tools is compiled from source (tsconfig paths), and its imports of npm
+          # packages (@seanhogg/builderforce-memory/working) resolve from ITS node_modules.
+          pnpm --dir ../packages/agent-tools install --frozen-lockfile
           ${{ matrix.run }}
 
   deploy-api:
@@ -703,6 +710,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
           pnpm install --frozen-lockfile
+          pnpm --dir ../packages/agent-tools install --frozen-lockfile
           npm run db:migrate
 
           for attempt in 1 2 3; do

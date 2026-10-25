@@ -30,6 +30,11 @@ function fakeSandbox(files: Record<string, string> = {}) {
   return { sandbox, fsCalls };
 }
 
+/** The branch does not hold the file — an edit then applies to the working tree. */
+function notOnBranch(base: CapabilityProvider): void {
+  vi.mocked(base.repoRead!.readFile).mockResolvedValue({ ok: false, error: 'not on the branch' });
+}
+
 function baseProvider(writeOk = true): CapabilityProvider & { writes: Array<[string, string]> } {
   const writes: Array<[string, string]> = [];
   return {
@@ -72,7 +77,7 @@ describe('withSandbox', () => {
     expect(heartbeat).toHaveBeenCalledTimes(2);
     release();
     await expect(ran).resolves.toEqual({ ok: true, exitCode: 0, stdout: 'built' });
-    expect(sandbox.run).toHaveBeenCalledWith('pnpm build', abort.signal);
+    expect(sandbox.run).toHaveBeenCalledWith('pnpm build', abort.signal, undefined);
     // The beat stops with the command.
     await vi.advanceTimersByTimeAsync(130_000);
     expect(heartbeat).toHaveBeenCalledTimes(2);
@@ -115,6 +120,7 @@ describe('withSandbox', () => {
 
   it('edits the WORKING TREE with the shared edit core and commits the result through writeFile', async () => {
     const base = baseProvider();
+    notOnBranch(base);
     const { sandbox, fsCalls } = fakeSandbox({ 'src/a.ts': 'const a = 1;\nconst b = 2;\n' });
     const p = withSandbox(base, sandbox, { heartbeat: async () => undefined });
     const r = await p.repoWrite!.editFile('src/a.ts', 'const b = 2;', 'const b = 3;');
@@ -136,6 +142,7 @@ describe('withSandbox', () => {
 
   it('an edit of a file the tree does not hold fails before anything is committed', async () => {
     const base = baseProvider();
+    notOnBranch(base);
     const p = withSandbox(base, fakeSandbox().sandbox, { heartbeat: async () => undefined });
     await expect(p.repoWrite!.editFile('missing.ts', 'a', 'b')).resolves.toMatchObject({ ok: false });
     expect(base.writes).toEqual([]);

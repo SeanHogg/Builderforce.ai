@@ -116,7 +116,9 @@ describe("local-first journal transaction", () => {
     const answer = await callLocalPersistence(app.persistence, "listChats", [{ projectId: "11" }]);
     expect(answer).toEqual({ ok: true, result: [expect.objectContaining({ id: chat.id, title: "listed" })] });
     const summarized = await callLocalPersistence(app.persistence, "summarizeChat", [chat.id]);
-    expect(summarized).toEqual({ ok: true, result: { error: expect.stringContaining("only on this machine") } });
+    // A local chat summarizes through the gateway now (Consolidate / Fork); an empty chat
+    // has nothing to consolidate, which reads as an empty summary, never an error.
+    expect(summarized).toEqual({ ok: true, result: { summary: "" } });
     await expect(app.persistence.getChat(chat.id + 999)).rejects.toThrow();
   });
 
