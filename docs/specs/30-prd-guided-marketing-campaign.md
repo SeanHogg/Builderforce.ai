@@ -2,7 +2,7 @@
 
 **Status:** Proposed — first slice is the canvas journey prompt · **Owner:** platform (Growth / CMO seat) · **Created:** 2026-09-16
 **Board:** epic #2547 · spec `57b8d17d-6269-40aa-840d-440170cbc26b` · roadmap `e5697b23-1f76-4b5b-9d3a-76f7129bc6f1` · chat #115
-**Companion to:** [PRD 19](./19-prd-burnrateos-consolidation.md) (BurnRateOS CMO remainder), [06-marketing-parity-additions.md](./06-marketing-parity-additions.md) (Jira/Linear/DORA — **not** this journey), Growth seat `/seat/growth`
+**Companion to:** [PRD 19](./19-prd-burnrateos-consolidation.md) (BurnRateOS CMO remainder), the former doc 06 marketing-parity additions (Jira/Linear/DORA — **not** this journey; shipped parts in [DONE.md](../../DONE.md), open parts in [ROADMAP.md](../../ROADMAP.md)), Growth seat `/seat/growth`
 
 ---
 
@@ -107,6 +107,28 @@ Rule 3 (`api/scripts/check-canvas-tool-contract.mjs`): a `canvas_*` name that re
 
 **C0 is this slice.** C1–C4 are additive. Do not start C3–C4 before C0 is measurable. Do not send from cloud agents in any track.
 
+### 4.1 C3 · the ICP picker contract (folded from `docs/design/c2-icp-picker.md`, 2026-10-25)
+
+The architect design for ticket #2636 (2026-09-16) numbered its slices differently: its "C2" is this
+PRD's **C3**, and its "C3 send gate" is the human-confirm send already required by §5.5. Its
+component tree and file list were a proposal; the four rules below are the contract that survives.
+
+1. **The picker never blocks.** It is an optional section inside the intake, not a numbered step.
+   Continue, Save draft, Generate and Send are never disabled by ICP absence, an empty list, a load
+   error or a cleared selection. The primary CTA stays the intake's own Continue, never "Select ICP".
+2. **`intake.icp` is an id or null.** No selection, skipped or cleared means omitted or `null`; a
+   selected or newly created ICP is its `ri_icps` id. Never `""`, `0`, `"none"`, `"pending"`, a
+   placeholder UUID or any synthetic id. A persisted id that no longer resolves (deleted / 404) is
+   cleared with a non-blocking notice.
+3. **Create in flow, never automatically.** "Create ICP" opens a modal inside the intake (never
+   abandons it), prefilled from the brand kit and workspace profile (audience, industry, company
+   size, geography, value proposition, tone) and editable. Prefill is assistive only: an empty source
+   gives an empty form, and nothing is auto-created or auto-selected. A failed create keeps the modal
+   open with an inline error; cancel leaves the prior selection unchanged.
+4. **The selection lives only on intake state** (`intake.icp`, through the existing
+   `canvasMarketing.ts` channel). No new store, route, column or permission: list and create use the
+   existing `ri_icps` API, and Growth send passes `intake.icp` through only when it is set.
+
 ---
 
 ## 5. Acceptance (epic)
@@ -131,7 +153,7 @@ A reviewer can kill the epic if any of those six requires a new campaign app, a 
 - Frontend ICP picker (C3).
 - Campaign ROI engine (C4).
 - Overwriting `marketing.campaigns.list` (the portfolio table remains valid for “show me my campaigns”).
-- `06-marketing-parity-additions.md` work (Jira/Linear/DORA/git/Slack).
+- The former doc 06 marketing-parity work (Jira/Linear/DORA/git/Slack).
 
 ---
 

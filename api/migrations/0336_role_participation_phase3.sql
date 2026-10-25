@@ -1,5 +1,5 @@
 -- 0336 — Coordinated Role Participation, Phase 3–5
--- (PRD-coordinated-role-participation.md): ticket-type-scoped requirements + quorum
+-- (docs/specs/37-prd-coordinated-role-participation.md): ticket-type-scoped requirements + quorum
 -- + condition, the lifecycle-managed board flag (Coordinator = Assignee, executor
 -- decoupling), and the incident→implicated-delivery-ticket edge for RCA linkage.
 -- All additive / idempotent.

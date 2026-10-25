@@ -10,6 +10,8 @@ import { reconcileKeyedBatch, unwrittenKeys } from '../../domain/shared/keyedBat
 import { messageColumns, type BrainChatMessageRow } from './brainChatShapes';
 import type { Db } from '../../infrastructure/database/connection';
 import { bumpChatMessages, bumpUnreadForChatAudience } from './chatCacheVersions';
+import { isStepRow } from '@builderforce/agent-loop';
+import { appendSteps } from './chatStepStore';
 
 /** Append messages to a chat (seq-managed insert + touch), NO access check —
  *  callers must have already verified access. Shared by `appendMessages`
@@ -20,6 +22,48 @@ export async function appendRaw(
   messages: Array<{ role: string; content: string; metadata?: string | null; eventKey?: string | null }>,
 ) {
   const valid = messages.filter((m) => m.role && typeof m.content === 'string');
+  if (valid.length === 0) return [];
+
+  // Step rows are run telemetry and go to the operational store, not this table; the
+  // rest is the conversation. The chat is touched FIRST because the steps carry its tenant.
+  const turns = valid.filter((m) => !isStepRow(m));
+  const steps = valid.filter((m) => isStepRow(m));
+  const [touched] = await db
+    .update(brainChats)
+    .set({ updatedAt: new Date() })
+    .where(eq(brainChats.id, chatId))
+    .returning({ tenantId: brainChats.tenantId });
+  const [turnRows, stepRows] = await Promise.all([
+    insertTurns(db, chatId, turns),
+    touched
+      ? appendSteps(db, touched.tenantId, chatId, steps.map((s) => ({ metadata: s.metadata as string, eventKey: s.eventKey ?? null })))
+      : Promise.resolve([] as BrainChatMessageRow[]),
+  ]);
+  // Orphan the cached transcript reads (`chatPolledReads.ts`) and the unread maps of
+  // users who have actually read this chat (tenant-wide bump kept the unread cache
+  // cold in busy tenants).
+  await Promise.all([
+    bumpChatMessages(chatId),
+    touched ? bumpUnreadForChatAudience(db, touched.tenantId, chatId) : undefined,
+  ]);
+
+  // Answer in the order asked, each half having kept its own order.
+  let t = 0;
+  let s = 0;
+  const out: BrainChatMessageRow[] = [];
+  for (const m of valid) {
+    const row = isStepRow(m) ? stepRows[s++] : turnRows[t++];
+    if (row) out.push(row);
+  }
+  return out;
+}
+
+/** The conversation half of {@link appendRaw}: one seq-managed, idempotent insert. */
+async function insertTurns(
+  db: Db,
+  chatId: number,
+  valid: Array<{ role: string; content: string; metadata?: string | null; eventKey?: string | null }>,
+): Promise<BrainChatMessageRow[]> {
   if (valid.length === 0) return [];
 
   // ONE insert for the whole batch, not one per message. This used to be two
@@ -55,20 +99,6 @@ export async function appendRaw(
   // seq is the generated PK (atomic append order; MAX(seq)+1 races under concurrent
   // appends). Migration 1233's BEFORE INSERT trigger stamps it inside the INSERT, so
   // RETURNING already carries it — no follow-up UPDATE round trip.
-
-  // Touch updatedAt on the chat
-  const [touched] = await db
-    .update(brainChats)
-    .set({ updatedAt: new Date() })
-    .where(eq(brainChats.id, chatId))
-    .returning({ tenantId: brainChats.tenantId });
-  // Orphan the cached transcript reads (`chatPolledReads.ts`) and the unread maps of
-  // users who have actually read this chat (tenant-wide bump kept the unread cache
-  // cold in busy tenants).
-  await Promise.all([
-    bumpChatMessages(chatId),
-    touched ? bumpUnreadForChatAudience(db, touched.tenantId, chatId) : undefined,
-  ]);
 
   const written = rows;
   // Nothing was skipped: every message is new, so the batch IS the answer.

@@ -1,6 +1,12 @@
 # 08 — PRD: Agentic Security & Governance (Policy Packs + Governance-Auditor Agent)
 
 **Status: Planned (P1).** Continues docs 04 (Agentic Dev Layer) and 07 (Security/Compliance Phase 2).
+
+> **2026-10-25 docs cleanup.** Docs 04 and 07 were shipped and removed (recorded in
+> [DONE.md](../../DONE.md); git history keeps them). Doc 07's §5 DevSecOps layer, the part this PRD
+> extends, is now §10 below; "doc 07 §5" / "doc 07 SEC-n" references in this file mean that section
+> and the SEC-1..11 trackers that shipped. Open security automation is tracked in
+> [ROADMAP.md](../../ROADMAP.md) › Run › `[governance]`.
 This PRD specifies the **differentiating** capability the operator has repeatedly asked for and which
 the Consolidated Gap Register (root `README.md`, "Team Intelligence" pass, 2026-05-31) records as
 **not built**:
@@ -51,11 +57,13 @@ under policy at PR time).
   nav; a runtime `/govern` TUI command + `governance_audit` tool.
 
 ### Out of scope (explicitly deferred → Gap Register)
-- The **FACTS library** (structured fact store) — sibling gap from the same pass; the auditor reads
-  prose memory + the ruleset for now. Logged separately.
+- ~~The **FACTS library** (structured fact store)~~ — built since: `/api/facts`
+  (`api/src/presentation/routes/factsRoutes.ts`, `application/facts/factsQuery.ts`). Wiring the
+  auditor to assert against it is not built; the auditor still reads prose memory + the ruleset.
 - The prompt **Analyzer** — unrelated sibling gap.
 - Full SAST/SCA engine parity (doc 07 SEC-9 owns deep scanners; doc 08 consumes their findings as one
-  input and focuses on *policy* conformance, not CVE discovery). Where SEC-9 scanners exist, the
+  input and focuses on *policy* conformance, not CVE discovery). **Superseded 2026-10-25:** SAST/SCA
+  on agent PRs is now in scope as the DevSecOps layer in §10, folded in from doc 07 §5. Where SEC-9 scanners exist, the
   auditor links their `VulnerabilityFinding`s rather than re-implementing them.
 - Identity/RBAC/SSO — stays in BurnRateOS (doc 05/07 §8).
 
@@ -317,12 +325,48 @@ None of 8a–8d alter the Tenant→Segment isolation model or the embed/SSO cont
 
 ## 9. Deferred (Consolidated Gap Register entries this PRD creates)
 
-- **FACTS library** still not built — the auditor reads the ruleset + prose memory, not a structured
-  fact store. Building it (a `facts` table + `facts` AgentTool, synced via the knowledge loop) would
-  let the auditor assert against durable structured truth. (Pre-existing sibling gap; doc 08 does not
-  close it.)
-- **Deep SAST/SCA parity (doc 07 SEC-9)** remains separate; doc 08 links existing
-  `VulnerabilityFinding`s as a finding `source` but does not discover CVEs itself.
+- **FACTS library** — built since this PRD was written: the `facts` table and `/api/facts`
+  (`api/src/presentation/routes/factsRoutes.ts`). Still open: the auditor does not assert against it
+  (no `facts` read in the `governance_audit` path); it reads the ruleset + prose memory.
+- **Deep SAST/SCA parity (doc 07 SEC-9)** — superseded by §10 (DevSecOps layer), which makes
+  SAST/SCA/secret scanning of every agent PR part of this program.
 - **Auditor runs in the connected runtime only** — like the rest of the repo-aware flow, a cloud-only
   run with no FS/subprocess cannot check out the repo; the audit requires a connected agent-runtime or
   self-hosted agentHost (same constraint as the Architect/PRD-first flow).
+
+---
+
+## 10. Agentic DevSecOps layer (folded from doc 07 §5, 2026-10-25)
+
+Doc 07 (Security, Governance & Compliance, Phase 2) shipped its SEC-1..11 trackers and was removed;
+this is the part of it that is still a requirement. It is the scanning half of the merge gate whose
+policy half is §4.4.
+
+New agent kinds on `AgentKind`: **SECURITY_SCAN**, **SECURITY_REVIEW**.
+
+- **Auto-scan agent PRs.** When an implement agent opens a PR, the orchestrator runs a
+  `VulnerabilityScan` (SAST + SCA + secret scan) against the branch. Findings land as
+  `VulnerabilityFinding`s linked to the agent run. Human-authored PRs can be scanned too.
+- **Security-review gate.** A SECURITY_REVIEW agent (`useCase: dev.security_review`) assesses the
+  diff for injection, authz, secret-leak and unsafe-dependency risks and writes `CodeReviewFinding`s
+  with `category=SECURITY`. **A BLOCKER security finding gates auto-merge** through the same
+  `policy.blockerGate` as a BLOCKER governance finding (§4.4).
+- **Auto SOC 2 evidence.** Agent runs and PR/merge records create `SocEvidence` for the CC8
+  change-management controls ("every code change went through review + scan"); `sourceRef` records
+  provenance.
+- **CRITICAL → incident.** A CRITICAL finding auto-opens a `SecurityIncident` (detection source
+  `agent`) so the response clock starts.
+
+**Per-Segment DSR and suppression (from doc 07 §1 re-homing note).** BuilderForce's data subject
+requests and suppression list are per-Segment: they govern only that Segment's data (work items,
+validation evidence, identity cache, agent inputs), not a shared contact graph. A platform-global
+DSR/suppression rail for a shared graph stays with the system that owns that graph, and an erasure
+there reaches BuilderForce through the Segment delete cascade (doc 05 §3). The two must be
+implemented deliberately so neither leaves a compliance gap.
+
+**Acceptance:** no agent PR auto-merges with an open BLOCKER security finding; every scan and
+finding is Segment-scoped and audited; scanners run in the same sandboxed runner as the dev agents;
+scanner config is least-privilege over the Segment's connected repos only.
+
+**Status:** not built. Tracked in [ROADMAP.md](../../ROADMAP.md) › Run › `[governance]` "Security
+automation incomplete".

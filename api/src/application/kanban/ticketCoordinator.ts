@@ -1,7 +1,7 @@
 /**
  * THE TICKET'S COORDINATOR — one accountable voice for everything that leaves the ticket.
  *
- * PRD-coordinated-role-participation §5.5: the ticket's Assignee IS its Coordinator, and
+ * PRD 37 (docs/specs/37-prd-coordinated-role-participation.md) §5.5: the ticket's Assignee IS its Coordinator, and
  * the Coordinator "owns the ticket's outward communication … stakeholder updates /
  * notifications, `ask_human` escalations, human approvals at human-gated lanes, external
  * board sync comments … so there is one accountable voice per ticket."

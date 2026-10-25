@@ -2,6 +2,13 @@
 
 **Status: Planned (P0 — validation gate).** Continues doc 04 (Agentic Dev Layer) and the "Cloud Agent Engines V1/V2" + "Cloud Agent Observability" + "Ticket Workspace Flow" passes (2026-06-07).
 
+> **Re-audit needed (note added 2026-10-25).** The 50 gaps below were enumerated against the June 2026
+> execution paths. Since then every cloud run moved onto the one engine with the container as its
+> sandbox (DONE.md 2026-10-24), which partly addresses the isolation gaps (G1 and the workspace
+> group); the sandbox deploy and the no-sandbox build path are open in [ROADMAP.md](../../ROADMAP.md)
+> › Make › Cloud and IDE agent runs. Re-audit each gap against the current tree before acting on it.
+> Doc 04 shipped and was removed (DONE.md).
+
 This PRD exists so the operator can **validate the cloud agents** end-to-end before they are sold as a
 first-class runtime alongside self-hosted agent hosts. Today a "cloud agent" is a real, wired path
 (dispatch → engine → workspace → telemetry → steering), but it has only been exercised on the happy

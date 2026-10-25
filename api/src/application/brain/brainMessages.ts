@@ -13,6 +13,7 @@ import { markChatRead } from './chatReadState';
 import { messageColumns, type AppendMessagesDto, type MessageFeedback } from './brainChatShapes';
 import { canAccessChat, ensureMembership } from './brainChatGuards';
 import { appendRaw } from './brainMessageStore';
+import { mergeSteps } from './chatStepStore';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { bumpChatMessages } from './chatCacheVersions';
@@ -35,16 +36,24 @@ export async function getMessages(db: Db, chatId: number, tenantId: number, user
       .limit(Math.min(Math.max(1, limit), 500));
   }
 
-  return readTimelineTail(
-    (rows) => db
-      .select(messageColumns)
-      .from(brainChatMessages)
-      .where(eq(brainChatMessages.chatId, chatId))
-      .orderBy(desc(brainChatMessages.seq))
-      .limit(rows),
+  // The forward cursor above stays conversation-only: a step carries `seq: 0`, so it can
+  // never move a poller's cursor, and pollers do not render steps. The tail is the
+  // transcript a reader opens, so it gets the run's steps back from their own store.
+  let asked = 0;
+  const tail = await readTimelineTail(
+    (rows) => {
+      asked = rows;
+      return db
+        .select(messageColumns)
+        .from(brainChatMessages)
+        .where(eq(brainChatMessages.chatId, chatId))
+        .orderBy(desc(brainChatMessages.seq))
+        .limit(rows);
+    },
     limit,
     500,
   );
+  return mergeSteps(db, chatId, tail, tail.length >= asked);
 }
 
 /** Advance the caller's read high-water mark for a chat (unread-badge state).

@@ -1,5 +1,7 @@
 import * as vscode from "vscode";
+import * as path from "path";
 import { autoApproveDefault } from "./permissionMode";
+import { JOURNAL_FILE } from "./localFirstJournalIo";
 import { listLocalModels, localModelOptions } from "./localModels";
 import { BUILD_ID, BUILT_AT } from "./buildInfo";
 import { posixShellReport } from "./posixShell";
@@ -87,6 +89,9 @@ export async function buildWorkspaceInit(
     // report of that failure could not say whether the guard against it was even
     // present. Now it travels with every copied diagnostics report.
     posixShell: posixShellReport(),
+    // Where every chat's full dialogue is committed on this machine (the journal is the
+    // record; `local-first-v1.json` beside it is a cache), for the diagnostics report.
+    chatHistoryPath: path.join(ctx.globalStorageUri.fsPath, JOURNAL_FILE),
     platformPolicy: platformPolicy().snapshot(),
     ...inferenceModeInit(),
     token,

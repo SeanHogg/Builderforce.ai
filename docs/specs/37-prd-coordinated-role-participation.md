@@ -1,6 +1,6 @@
-# PRD — Coordinated Role Participation & Execution Verification for Tickets
+# PRD 37 — Coordinated Role Participation & Execution Verification for Tickets
 
-> Status: **Draft (P1)** · Author: platform · Date: 2026-07-12
+> Status: **Mostly built** (2026-10-25 review; migrations 0334/0336, `ticketCoordinator.ts`, `coordinateTicket.ts`, `ticketParticipants.ts`, `attributeRunToManifest.ts`, `AccountabilityTab.tsx`). Open items: lane chaining / one notifier, and per-role audit verification + Coordinator-routed stakeholder notifications — both in [ROADMAP.md](../../ROADMAP.md) › Make › Autonomous delivery. Renumbered from `PRD-coordinated-role-participation.md` on 2026-10-25. · Author: platform · Date: 2026-07-12
 > Supersedes nothing; **extends** the "Agentic Workforce Kanban" (migration 0274). Aligns with specs `03` (Kanban), `04` (Agentic Dev Layer), `08` (Governance — reuse its "BLOCKER gates merge" pattern), `11` (engine seam). Reuses the Compile/PolicyGate primitive only where noted.
 
 ---

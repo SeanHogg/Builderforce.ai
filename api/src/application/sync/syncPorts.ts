@@ -260,6 +260,22 @@ export interface SyncUsageLedger {
   record(row: RecordUsageRow): Promise<void>;
 }
 
+/**
+ * A chat's run STEPS as the message importer sees them. Steps are run telemetry on the
+ * operational endpoint (`brain_chat_steps`), not transcript rows, so — like the usage
+ * ledger — their writes cannot ride the sync transaction; a retry is deduped by the
+ * step's `event_key`.
+ */
+export interface SyncStepStore {
+  /** Write one step; the stored step's id (the existing one for a replayed key). */
+  append(tenantId: number, chatId: number, step: { metadata: string; eventKey: string | null; createdAt: Date }): Promise<number | null>;
+  /** The chat a tenant's step is on, or null when there is no such step. */
+  chatOf(tenantId: number, stepId: number): Promise<number | null>;
+  /** Rewrite a step's metadata; null when the chat holds no such step. */
+  update(chatId: number, stepId: number, metadata: string): Promise<number | null>;
+  remove(chatId: number, stepId: number): Promise<void>;
+}
+
 /** Everything one atomic event apply writes through: sync stores AND importers, one transaction. */
 export interface SyncUnitOfWork {
   stores: SyncStoreSet;

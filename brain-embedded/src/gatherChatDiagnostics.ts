@@ -25,6 +25,7 @@
 import type { SpendSavingsSummary } from './spendSavings';
 import { classifyModelFunding, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, type ChatDiagnosticsRuns } from './chatDiagnostics';
 import { toolExposureInTrace, type BrainTraceEvent } from './brainTriage';
+import { isStepMessage } from './types';
 
 /** The `/api/consumption` snapshot, structurally — each host has its own named type
  *  for it, and they agree on exactly these fields. */
@@ -94,8 +95,11 @@ export interface ChatDiagnosticsSources {
   selectedProjectName?: string | null;
   tenantId?: number | string | null;
   userId?: string | null;
-  /** The transcript — read only for the newest assistant turn's learn outcome. */
+  /** The transcript — read for the newest assistant turn's learn outcome and the
+   *  message/step counts. */
   messages?: readonly ChatDiagnosticsMessageLike[];
+  /** Where the full dialogue is stored on this surface (a file path, a chat URL). */
+  historyLocation?: string | null;
   /** This chat's dollar rollup (`BrainChat.spend`). Null when the server has none yet. */
   spend?: import('./spendSavings').SpendSavingsSummary | null;
   /** The live tool registry the conversation runs on, and why it might be short. */
@@ -223,6 +227,11 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
     surface: src.surface,
     chatId: src.chatId ?? null,
     chatTitle: src.chatTitle ?? null,
+    history: {
+      messages: msgs.length,
+      steps: msgs.filter(isStepMessage).length,
+      location: src.historyLocation?.trim() || null,
+    },
     chatVisibility: src.chatVisibility ?? null,
     mode: src.mode ?? null,
     projectId: src.projectId ?? null,

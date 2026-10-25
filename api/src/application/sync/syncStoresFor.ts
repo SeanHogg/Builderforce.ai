@@ -13,6 +13,7 @@
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { syncUsageLedger } from './syncUsageLedger';
+import { syncStepStore } from './syncStepStore';
 import { taskInTenant } from '../../infrastructure/database/tenantScope';
 import { createSyncRepository } from '../../infrastructure/repositories/SyncRepository';
 import { chatOwnedBy } from '../brain/brainChatGuards';
@@ -32,5 +33,6 @@ export function syncReferenceReader(db: Db): SyncReferenceReader {
 
 export function syncStoresFor(db: Db, env: Env): SyncStores {
   const usage = syncUsageLedger(db, env);
-  return createSyncRepository(db, (tx) => namedSyncImporters(tx, usage), syncReferenceReader(db));
+  const steps = syncStepStore(db);
+  return createSyncRepository(db, (tx) => namedSyncImporters(tx, usage, steps), syncReferenceReader(db));
 }

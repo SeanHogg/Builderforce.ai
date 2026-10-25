@@ -4,7 +4,7 @@ Reviewed: 2026-10-18. Scope: the current working tree in `Builderforce.ai`, incl
 
 ## Recommendation
 
-Inference and memory implementation scope: [Shared offline inference and memory](offline-inference-and-memory-scope.md). Reuse the existing `builderforce-inference` engines and `builderforce-memory` knowledge/cognition/retrieval components. Across all modalities, automatic generation prefers a compatible downloaded WebLLM model on usable WebGPU; local memory recall/cache can satisfy eligible requests first. Preserve explicit pins and workload requirements, coordinate GPU resources, and prohibit gateway fallback offline.
+Inference and memory implementation scope: [Shared offline memory scope](#shared-offline-memory-scope-folded-2026-10-25) below. Reuse the existing `builderforce-inference` engines and `builderforce-memory` knowledge/cognition/retrieval components. Across all modalities, automatic generation prefers a compatible downloaded WebLLM model on usable WebGPU; local memory recall/cache can satisfy eligible requests first. Preserve explicit pins and workload requirements, coordinate GPU resources, and prohibit gateway fallback offline.
 
 Make **Web, Rovr, and VSIX follow the same durable local-first application pattern**, with optional account sync independent of execution. This is a requirement for all three modalities, including Web domain editing. Retain the shared Brain loop, model transports, governance decisions, and outbox primitives. Add shared domain/application contracts, host-specific transactional local stores, and one versioned server sync protocol. Merely increasing queue delays or selecting a local model cannot provide the requested behavior.
 
@@ -87,6 +87,52 @@ Additional source anchors:
 - [Audit execution](../../clients/vscode/src/auditExecution.ts), [audit API](../../clients/vscode/src/systemAuditApi.ts), [server audit service](../../api/src/application/tools/AuditRunner.ts), [remediation dedupe](../../api/src/application/tools/auditRemediation.ts).
 - [Policy resolution](../../clients/vscode/src/policyGates.ts), [session cache](../../clients/vscode/src/sessionsSnapshotStore.ts), [workspace fact publishing](../../clients/vscode/src/workspaceFactsSync.ts), [Git changes](../../clients/vscode/src/gitChanges.ts).
 - [Server message routes and side effects](../../api/src/presentation/routes/brainRoutes.ts), [replay middleware](../../api/src/presentation/middleware/idempotentReplay.ts), [replay policy](../../api/src/application/shared/idempotentReplay.ts), [cache adapter](../../api/src/infrastructure/cache/idempotencyReplayStore.ts).
+
+## Shared offline memory scope (folded 2026-10-25)
+
+Folded from the supplementary review `offline-inference-and-memory-scope.md` (2026-10-18, static
+review of `builderforce-inference`, `builderforce-memory` and this repo), which was then removed. Its
+inference half (WebLLM-first ranking, GPU limits, model readiness, page-engine worker, distribution)
+shipped with PRD 34 and the local-models work recorded in [DONE.md](../../DONE.md). The memory half
+below is still open. **These gaps live in the `builderforce-memory` repository** (`packages/memory`,
+`packages/memory-mcp`), plus the product bindings that call it; they are tracked in
+[ROADMAP.md](../../ROADMAP.md) › OTHER › Evermind / SSM.
+
+**Decision.** `builderforce-inference` owns inference engines; `builderforce-memory` owns local
+knowledge, retrieval, cognition and memory-learning primitives. No modality implements its own engine,
+fact reconciliation or retrieval. Memory and inference are integrated through narrow ports. A local
+memory hit may satisfy an eligible request without loading an LLM. Today the product integration is
+more remote-dependent than the package: VSIX `src/cognition.ts` routes recall/remember through
+`bfApi`, and `brain-embedded/src/evermindMemory.ts` binds per-turn recall to the server. Those
+bindings are replaced by shared local-memory services in every modality, with the server adapter
+kept behind sync and explicit connected features.
+
+| ID | Finding (2026-10-18) | Required scope |
+|---|---|---|
+| M01 | `MemoryStore` owns IndexedDB directly; no production Node database adapter (Node guidance injects `fake-indexeddb`; MCP is durable only with `persistFile`). | Extract narrow storage/transaction ports without breaking the API; durable browser and VSIX Node adapters. An in-memory IDB shim is never durable storage. |
+| M02 | IndexedDB write helpers resolve on request success, not transaction commit; fact writes share no transaction with a sync journal. | Resolve a durable save only after commit; commit fact mutation, provenance, tombstone/event and journal atomically through a unit-of-work port. |
+| M03 | `MemoryEntry` has no account/tenant/project/repository/chat identity or server version; default database names are global to the origin. | Explicit scope values and partitions enforced by repositories, including personal and never-connected memory; scope preserved in snapshots and cache keys. Tags are not authorization. |
+| M04 | No sync receipts, durable operation identity, base versions, conflict exchange or deletion tombstones. | Fact operations join the common sync protocol (G15/G18); evidence and base revision preserved; concurrent evidence conflicts stay explicit, not last-write-wins. |
+| M05 | Cognition mutex/version/cache and `_writeSeq` are per instance; they cannot serialise tabs, windows, MCP processes or replicas. | Repository compare-and-set/transactions, durable revisions, locking where needed, cross-context invalidation. |
+| M06 | TTL/caps hard-delete facts (MCP default cap 10,000); the mirrored snapshot drops TTL/time/sequence and restores by fresh remember calls. | Separate evictable caches from durable knowledge and unsynced operations; preserve source time/provenance through import; never evict pending knowledge to meet a cap. |
+| M07 | SemanticCache L1 is process memory; remote L2 can be hit on every use; dense vectors/index are not persisted across restart. | Persist scoped answer cache/index with knowledge, embedding, model and tokenizer versions; remote L2 off when offline; rebuild derived indexes when a version changes. |
+| M08 | Sessions fetch checkpoints/tokenizer URLs; `InferenceRouter` can pick a remote transformer bridge. | Offline asset resolver and explicit network capabilities for every memory path; no remote teacher, remote embeddings or automatic download when disconnected. |
+| M09 | Local learning/checkpoint deltas exist, but no account-wide concurrent merge semantics. | Version base checkpoint, architecture, tokenizer, training config and contribution ids; sync experiences and immutable checkpoint manifests; never average weights or apply a delta to an incompatible base. |
+| M10 | The memory package carries its own SSM/transformer router and graph facilities beside Brain's agent loop and local inference planner. | One execution owner: adapt memory hooks to the shared inference policy; no competing agent loop or fallback policy. |
+| M11 | A recalled answer is not proof a current external action happened; Brain already restricts SSM generation on tool-capable runs. | Keep that guard locally; scope cache validity by knowledge/input/tool semantics; never satisfy a requested mutation with a cached action result. |
+
+**Acceptance (memory).**
+
+5. Each modality: a downloaded compatible WebLLM model is preferred when a usable GPU exists; no GPU,
+   no assets, unfit tools or device loss produce the correct local alternative or a clear setup state;
+   no API call is attempted; explicit pins obey policy.
+6. Offline memory: remember/recall/forget and local model restoration survive restart; lexical recall
+   works without a GPU; CPU semantic recall works with installed assets; GPU memory competes safely
+   with generation; no network teacher or L2 leak.
+7. Injected crashes, transaction aborts and concurrent writes across windows and MCP processes lose
+   no acknowledged knowledge, recall nothing across scopes, resurrect no deletes, duplicate no
+   learning, apply no incompatible checkpoint and evict no unsynced fact. Product restart and
+   network-denial tests supplement the package unit tests.
 
 ## API chatter inventory
 
@@ -235,6 +281,17 @@ Comments in `api/migrations/1247_sync_batch_protocol.sql` and `api/src/infrastru
 Files outside the paths named here are not evidence that a gap is closed.
 
 ### G01–G27
+
+> **Stale table (note added 2026-10-25).** This table predates commit `ed26ab8a8` (2026-10-20), which
+> wired run recovery (G22), run change sets (G19), `configurePolicyGatesPersistence` (G09), local
+> audits (G07/G08), `createSyncCoordinator` (G24/G15), local domain tools (G06) and the capability
+> matrix (G21), and the server sync routes. Read the rows below as the 2026-10-18 baseline, not the
+> current state. The gaps still open are **G03** (SQLite system of record built, not wired —
+> ROADMAP › OTHER › Agent runtime "G03 SQLite system of record"), **G05/G23** (local project/ticket/chat
+> views and the sync-status presenter — ROADMAP › OTHER › Workload-aware routing "VSIX sync status is
+> not shown"), **G04 for chats across devices** (ROADMAP › Make › Cloud and IDE agent runs "A VS Code
+> chat's history does not follow the person") and **G27** (packaged network-denied acceptance suite —
+> ROADMAP › OTHER › Agent runtime).
 
 | Gap | Status | Evidence in the working tree | Still required |
 | --- | --- | --- | --- |

@@ -10,6 +10,7 @@ import { bumpExecutionState } from '../runtime/executionStateVersion';
 import { CHAT_SCOPE } from './chatAgents';
 import { bumpChatMessages, bumpChatStructure, bumpUnreadForChatAudience } from './chatCacheVersions';
 import { accessibleChat, type ChatTicketDeps } from './chatTicketAccess';
+import { copySteps } from './chatStepStore';
 
 export interface ConsolidateResult {
   targetChatId: number;
@@ -72,6 +73,8 @@ export async function consolidateChats(
     }))).onConflictDoNothing().returning({ id: brainChatMessages.id });
     messagesMoved = inserted.length;
   }
+  // The sources' run steps live in their own store; they follow the conversation.
+  messagesMoved += await copySteps(db, tenantId, sources, input.targetChatId);
 
   // Move ticket links to the target (skip ones already present on the target).
   const [srcLinks, targetLinksRows, seg] = await Promise.all([

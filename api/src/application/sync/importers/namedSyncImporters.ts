@@ -10,14 +10,15 @@
  *
  * The usage importer is the one exception, and it is structural: `llm_usage_log`
  * lives in another database, so it writes through the {@link SyncUsageLedger} port
- * (deduped by idempotency key), not through `tx`.
+ * (deduped by idempotency key), not through `tx`. A chat's run steps are the same
+ * case — the message importer writes them through {@link SyncStepStore}.
  *
  * There is no payload-writer fallback: an entity type with no owning importer
  * is rejected by the push before this is reached.
  */
 
 import type { Tx } from '../../../infrastructure/database/connection';
-import type { SyncNamedImporters, SyncUsageLedger } from '../syncPorts';
+import type { SyncNamedImporters, SyncStepStore, SyncUsageLedger } from '../syncPorts';
 import { importMirrorRecord } from './importMirrorRecord';
 import { importSyncedChat } from './importSyncedChat';
 import { importSyncedMessage } from './importSyncedMessage';
@@ -25,12 +26,12 @@ import { importSyncedProject } from './importSyncedProject';
 import { importSyncedTicket } from './importSyncedTicket';
 import { importSyncedUsage } from './importSyncedUsage';
 
-export function namedSyncImporters(tx: Tx, usage: SyncUsageLedger): SyncNamedImporters {
+export function namedSyncImporters(tx: Tx, usage: SyncUsageLedger, steps: SyncStepStore): SyncNamedImporters {
   return {
     importSyncedTicket: (event, ctx, stores) => importSyncedTicket(event, ctx, stores, tx),
     importSyncedProject: (event, ctx, stores) => importSyncedProject(event, ctx, stores, tx),
     importSyncedChat: (event, ctx, stores) => importSyncedChat(event, ctx, stores, tx),
-    importSyncedMessage: (event, ctx, stores) => importSyncedMessage(event, ctx, stores, tx),
+    importSyncedMessage: (event, ctx, stores) => importSyncedMessage(event, ctx, stores, tx, steps),
     importSyncedUsage: (event, ctx, stores) => importSyncedUsage(event, ctx, stores, usage),
     importMirrorRecord,
   };

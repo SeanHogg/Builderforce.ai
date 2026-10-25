@@ -1,6 +1,6 @@
 /**
  * Ticket Participation Manifest + Accountability Record
- * (PRD-coordinated-role-participation.md §5.2, §5.9).
+ * (docs/specs/37-prd-coordinated-role-participation.md §5.2, §5.9).
  *
  * The manifest is the per-ticket, forward-looking roster: who MUST participate on a
  * ticket (role + responsibility), who has, and with what evidence. It is DERIVED

@@ -4,6 +4,13 @@ This is the **contract between the two apps**. It specifies how BurnRateOS authe
 BuilderForce, how Segments are provisioned, how BuilderForce surfaces re-embed into BurnRateOS,
 the cross-domain API seams, and how the BurnRateOS PM/Agile pages become thin shells.
 
+> **Status note (2026-10-25).** Live contract. Docs 00–04 and 06–07, which this PRD was written
+> beside, shipped or were folded and have been removed (see [DONE.md](../../DONE.md)); "doc 0n"
+> references below are historical. The open identity work (inbound OIDC, `resolveSegment(jwt)`, S2S
+> tokens) is in [ROADMAP.md](../../ROADMAP.md) › OTHER › Identity and governance. The roadmap's old
+> `tenant_webhooks` item is very likely satisfied by `webhook_subscriptions` (§4.3) and is marked
+> there for confirmation.
+
 ---
 
 ## 1. Topology

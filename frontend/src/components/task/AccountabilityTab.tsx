@@ -13,7 +13,7 @@ import { statusPillStyle, type StatusToneMap } from '@/lib/statusTone';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * "Sign-off & Accountability" tab of the ticket detail — the operator's headline
- * surface (PRD-coordinated-role-participation.md §5.9). For every required role it
+ * surface (docs/specs/37-prd-coordinated-role-participation.md §5.9). For every required role it
  * shows Who signed, When, Verdict, Comments and the linked Contribution, plus the
  * gaps (unstaffed/unsigned roles, sign-offs with no contribution, waivers) and the
  * ticket's real %-complete. Managers can run a Resource Assessment (add a needed

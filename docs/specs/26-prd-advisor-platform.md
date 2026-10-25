@@ -3,7 +3,7 @@
 **Status:** Product contract for epic **#2522** · rewritten 2026-09-16 on ticket **#2604**
 **Owner:** platform (Talent listing + meetings + board-sync)
 **Board:** epic **#2522** · Spec path (do not change): `docs/specs/26-prd-advisor-platform.md`
-**Companion (compose-only):** [`26-implementation-notes-advisor-platform.md`](./26-implementation-notes-advisor-platform.md) — build detail only; **this file wins** if the two diverge
+**Companion:** the former `26-implementation-notes-advisor-platform.md` (composition contract, 2026-09-16) was folded into §12 of this file on 2026-10-25 and removed; git history keeps it
 **Not this epic:** marketplace composition A0–A5, `/marketplace?family=talent` Book bind, restricted Brain thread — those belong to epic **#2545** (see §6)
 
 This revision **replaces** the 2026-09-16 research artifact that specified epic **#2545** (SCORE-checklist marketplace composition) as PRD 26. Git history retains that body. Do not implement it to close **#2522**.
@@ -214,7 +214,7 @@ A reviewer **rejects** a #2522 child that treats this PRD as a licence to build 
 - Mirror `advisory` in the frontend meeting-kind list (`ScheduleMeetingPanel` or equivalent) if it duplicates server KINDS.
 - README index blurb for doc 26 (still SCORE-class / marketplace-flavoured) should match this file after merge; **#2604** does not edit README.
 - **#2545** needs its own spec path so its Spec field does not keep pointing at a #2522 PRD.
-- Notes alignment (**R7**) when `26-implementation-notes-advisor-platform.md` is on the tree (**#2593** / do not merge PR **#829** as-is).
+- Notes alignment (**R7**) — done: the implementation notes were folded into §12 (2026-10-25).
 - Stage chips on `?category=advisors` (`freelancer_profiles.stages` tokens `start|grow|exit`, query key `stage`) are **#2586** / **#2637**, not this rewrite.
 
 ---
@@ -222,3 +222,42 @@ A reviewer **rejects** a #2522 child that treats this PRD as a licence to build 
 ## 11. Claim-to-proof
 
 Public copy may say founders can **find Advisors, meet them, and land notes on the board**. It may not say we are a SCORE alternative, an SBA partner, that mentoring is free unless a live listing is priced 0, or that Marketplace family Book / Academy / packs shipped as this epic.
+
+---
+
+## 12. Composition rules and open items (folded from the implementation notes, 2026-10-25)
+
+**Composition rules (still binding).**
+
+| Capability | Reuse | Never |
+|---|---|---|
+| Advisor identity | Talent / freelancer profile + opt-in flag (default off) | A new user type; `advisory` in `PEOPLE_OBJECT_KINDS` |
+| Discovery | Marketplace listing chrome + `?category=advisors` over opted-in talent | `/advisors`; `advisor` in `MARKETPLACE_LISTING_KINDS` |
+| Book | `booking_hosts.host_ref = talent userId`; authenticated Book = `BookAdvisorPanel` (`reserveTalentSession`, tenant); logged-out Book = the ATS `/book/{token}` path | `freelancer_profiles.booking_service_id` (cross-tenant leak); a public `POST /api/freelancers/:id/reservations` |
+| Session / join | Meetings `kind=advisory` on existing WebRTC; visitor join by token (interviewScheduling token→tenant pattern) | A new video stack; opening `authMiddleware` for the whole meetings router |
+| Notes | `runAgentTurn` + `summarizeMeeting` + `parseMeetingMinutes`, three-section Markdown (Summary / Decisions / Action items) | A new notes schema or editor |
+| Action items | The generalised `pullStandupMinutesAct` (parameterised by meeting kind) | A second minutes pipeline |
+| Follow-up | The same availability solver; **propose**, do not book | An auto-booked next session |
+| Resources (P2) | That advisor's existing listings only | A new CMS / LMS / content type |
+| Pro bono (P3) | A badge when the session price is 0 | A new payout rail |
+
+**Built (2026-10-25 review).** The A0 bind, the public `GET /api/freelancers/:id/booking-services`
+catalogue and Book on talent profiles (`BookAdvisorPanel` in `TalentDetailClient`); A1 — a confirmed
+1:1 reservation provisions an `advisory` meeting, a calendar event for both attendees and a restricted
+Brain thread in the advisor's tenant, idempotent by `meetings.advisory_reservation_id`
+(`api/src/application/commerce/advisoryProvisioning.ts`, migration 1249).
+
+**Open (tracked in [ROADMAP.md](../../ROADMAP.md) › Reach › Marketplace and commerce).**
+
+1. Meeting Notes as the silent notetaker, default-on for advisory meetings (dogfood advisors).
+2. On meeting end, parsed open action items land as board tasks on the visitor's resulting workspace,
+   idempotent by title, with a fixture proving at least one lands from an advisory transcript.
+3. From minutes + advisor availability, **propose** one follow-up slot (never book it), visible to the
+   visitor after the call and bookable without staff; email both parties; a visitor with no tenant
+   gets a guest project + claim link.
+4. A test that a visitor token cannot list other advisors' meetings.
+5. P2: filters on `category=advisors` only (expertise, language, method, stage) without breaking other
+   categories; visitor chat on the public profile through the existing chat primitive; a Resources tab
+   of that advisor's existing listings (empty state allowed).
+6. P3: a pro-bono badge when sessions are unpaid; location on the profile and as an optional filter;
+   Start / Grow / Exit as listing filters matching the stored stage fields.

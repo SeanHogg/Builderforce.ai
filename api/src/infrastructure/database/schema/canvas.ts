@@ -306,6 +306,31 @@ export const brainChatMessages = pgTable('brain_chat_messages', {
   index('idx_brain_chat_messages_chat_seq').on(t.chatId, t.seq),
 ]);
 
+/**
+ * A Brain run's STEPS — tool calls, LLM turns and memory steps (`stepRow`). Run telemetry,
+ * so it lives on the OPERATIONAL endpoint (`runTelemetryDatabase`), never beside the
+ * conversation on core: written at every tool call, it was 148 MB of a 225 MB transcript.
+ *
+ * Read back through the transcript (`chatStepStore.mergeSteps`), so clients still see a
+ * step as a `role:'tool'` message. Cross-database ids (`tenant_id`, `chat_id`) are plain
+ * scalars; ids start at {@link STEP_ID_FLOOR} so a step id never collides with a message id.
+ */
+export const brainChatSteps = pgTable('brain_chat_steps', {
+  id:        bigserial('id', { mode: 'number' }).primaryKey(),
+  tenantId:  integer('tenant_id').notNull(),
+  chatId:    integer('chat_id').notNull(),
+  metadata:  text('metadata').notNull(),
+  eventKey:  varchar('event_key', { length: 160 }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_brain_chat_steps_event').on(t.chatId, t.eventKey).where(sql`event_key IS NOT NULL`),
+  index('idx_brain_chat_steps_chat_created').on(t.chatId, t.createdAt),
+  index('idx_brain_chat_steps_tenant').on(t.tenantId),
+]);
+
+/** First id the step sequence hands out — above any `brain_chat_messages` id. */
+export const STEP_ID_FLOOR = 1_000_000_000_000;
+
 
 /**
  * Marketplace listings for KNOWLEDGE documents (migration 0252). Lets a tenant

@@ -154,4 +154,7 @@ export interface InitData {
   posixShell?: string;
   /** ISO timestamp the installed artifact was bundled, or `"dev"` when unbundled. */
   builtAt?: string;
+  /** Absolute path of the file the full chat history is committed to (the local-first
+   *  journal), so a diagnostics report can say where the whole dialogue lives. */
+  chatHistoryPath?: string;
 }

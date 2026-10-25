@@ -1,5 +1,5 @@
 -- 0334 — Coordinated Role Participation & Execution Verification
--- (PRD-coordinated-role-participation.md, Phases 1–2 + resource-assessment + child-task rollup).
+-- (docs/specs/37-prd-coordinated-role-participation.md, Phases 1–2 + resource-assessment + child-task rollup).
 --
 -- Closes the #467 root cause (role-blind assignment) and lays the accountability
 -- record: a per-ticket participation manifest, an enriched append-only sign-off

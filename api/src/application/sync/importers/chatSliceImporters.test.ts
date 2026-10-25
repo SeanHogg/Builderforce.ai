@@ -4,11 +4,23 @@ vi.mock('../../brain/chatCacheVersions', () => ({ bumpChatMessages: async () => 
 
 import { hashSyncPayload, type LocalEntityType } from '../../../domain/sync/syncProtocol';
 import type { RecordUsageRow } from '../../llm/usageLedger';
-import type { SyncEntityMappingRow, SyncStoreSet, SyncUsageLedger } from '../syncPorts';
+import type { SyncEntityMappingRow, SyncStepStore, SyncStoreSet, SyncUsageLedger } from '../syncPorts';
 import { boundKey, ctx, dbOf, event, mapping, now, stores } from './__fixtures__/importerHarness';
 import { importSyncedChat } from './importSyncedChat';
 import { importSyncedMessage } from './importSyncedMessage';
 import { importSyncedUsage } from './importSyncedUsage';
+
+/** A step store that records what it was asked to write (ids from the operational floor). */
+function stepStore(): SyncStepStore & { appended: Array<{ chatId: number; eventKey: string | null; metadata: string }> } {
+  const appended: Array<{ chatId: number; eventKey: string | null; metadata: string }> = [];
+  return {
+    appended,
+    async append(_tenantId, chatId, step) { appended.push({ chatId, eventKey: step.eventKey, metadata: step.metadata }); return 1_000_000_000_000 + appended.length; },
+    async chatOf() { return null; },
+    async update() { return null; },
+    async remove() {},
+  };
+}
 
 const CHAT_CLIENT_ID = '22222222-2222-4222-8222-222222222222';
 
@@ -146,6 +158,8 @@ describe('importSyncedChat', () => {
 });
 
 describe('importSyncedMessage', () => {
+  const steps = stepStore();
+
   it('writes a history row on the mapped server chat, at the client’s time', async () => {
     const db = dbOf([[{ id: 77 }]]);
     const outcome = await importSyncedMessage(
@@ -153,6 +167,7 @@ describe('importSyncedMessage', () => {
       ctx(),
       storesWith({ chat: mapping({ serverId: '42' }) }),
       db,
+      steps,
     );
     expect(outcome).toMatchObject({ status: 'applied', serverId: '77', serverVersion: 1, payload: messageValue });
     expect(db.calls).toHaveLength(1);
@@ -172,6 +187,7 @@ describe('importSyncedMessage', () => {
       ctx(),
       storesWith({}),
       db,
+      steps,
     );
     expect(outcome).toEqual({ status: 'pending', detail: 'message_chat_pending' });
     expect(db.calls).toHaveLength(0);
@@ -184,6 +200,7 @@ describe('importSyncedMessage', () => {
       ctx({ resolveOwnChatId: async () => null }),
       storesWith({ chat: mapping({ serverId: '42' }) }),
       db,
+      steps,
     );
     expect(outcome).toEqual({ status: 'rejected', detail: 'message_chat_not_owned' });
     expect(db.calls).toHaveLength(0);
@@ -196,6 +213,7 @@ describe('importSyncedMessage', () => {
       ctx(),
       storesWith({ chat: mapping({ serverId: '42' }) }),
       db,
+      steps,
     );
     expect(outcome).toMatchObject({ status: 'applied', serverId: '55' });
   });
@@ -208,6 +226,7 @@ describe('importSyncedMessage', () => {
       ctx(),
       storesWith({ chat: mapping({ serverId: '42' }) }),
       db,
+      steps,
     );
     expect(db.calls[0]?.payload).toMatchObject({ createdAt: now });
   });
@@ -220,6 +239,7 @@ describe('importSyncedMessage', () => {
       ctx(),
       storesWith({ chat: mapping({ serverId: '42' }), message: mapping({ serverId: '77' }) }),
       db,
+      steps,
     );
     expect(outcome).toMatchObject({ status: 'applied', serverVersion: 3 });
     expect(db.calls[0]?.kind).toBe('update');
@@ -233,9 +253,26 @@ describe('importSyncedMessage', () => {
       ctx(),
       storesWith({ message: mapping({ serverId: '77' }) }),
       db,
+      steps,
     );
     expect(outcome).toMatchObject({ status: 'applied', serverVersion: 3 });
     expect(db.calls.map((call) => call.kind)).toEqual(['select', 'delete']);
+  });
+
+  it('sends a run STEP to the step store, never into the transcript transaction', async () => {
+    const book = stepStore();
+    const db = dbOf();
+    const step = { ...messageValue, eventKey: 'step:1', message: { ...messageValue.message, role: 'tool', content: '', metadata: '{"kind":"step","category":"tool","label":"read_file"}' } };
+    const outcome = await importSyncedMessage(
+      event({ entityType: 'message', operation: 'import', payload: step }),
+      ctx(),
+      storesWith({ chat: mapping({ serverId: '42' }) }),
+      db,
+      book,
+    );
+    expect(outcome).toMatchObject({ status: 'applied', serverId: '1000000000001' });
+    expect(db.calls).toHaveLength(0);
+    expect(book.appended).toEqual([{ chatId: 42, eventKey: 'step:1', metadata: step.message.metadata }]);
   });
 
   it('rejects an unknown role', async () => {
@@ -244,6 +281,7 @@ describe('importSyncedMessage', () => {
       ctx(),
       storesWith({ chat: mapping({ serverId: '42' }) }),
       dbOf(),
+      steps,
     );
     expect(outcome).toEqual({ status: 'rejected', detail: 'message_role_invalid' });
   });

@@ -1,7 +1,7 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Attribute a finalized run to the role it ran AS on the ticket's participation
- * manifest (PRD-coordinated-role-participation.md §5.6). Wired at the composition
+ * manifest (docs/specs/37-prd-coordinated-role-participation.md §5.6). Wired at the composition
  * root to `RuntimeService.onRunFinalized`, so every terminal cloud run records that
  * "role X participated", linked to the execution.
  *

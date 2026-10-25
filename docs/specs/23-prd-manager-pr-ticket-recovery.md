@@ -3,7 +3,7 @@
 > **Status:** ACTIVE · production audit completed 2026-08-10 · first runtime/reconciliation
 > corrections implemented locally but not yet committed, deployed, or enabled in production.
 > **Depends on:** [PRD 21 — Unified Experience](./21-prd-unified-experience.md) ·
-> [Coordinated Role Participation](./PRD-coordinated-role-participation.md) ·
+> [PRD 37 — Coordinated Role Participation](./37-prd-coordinated-role-participation.md) ·
 > [ROADMAP](../../ROADMAP.md).
 > **Scope:** the Builderforce project Manager, open pull requests, their associated tickets,
 > reviewer assignment, acceptance evidence, reconciliation, and safe backlog closure.

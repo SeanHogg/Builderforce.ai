@@ -46,6 +46,18 @@ function capped(value: unknown): unknown {
   return s.length > STEP_RESULT_CAP ? `${s.slice(0, STEP_RESULT_CAP)}…[${s.length - STEP_RESULT_CAP} more chars]` : (value ?? null);
 }
 
+const STEP_KIND = /"kind"\s*:\s*"step"/;
+
+/**
+ * Whether a message is a stored step — the ONE test every store uses to keep step rows
+ * (run telemetry, written to the operational database) apart from the conversation.
+ * Textual on purpose: the metadata is a JSON string and a step row is identified by its
+ * `kind`, so this never pays for a parse on the write path.
+ */
+export function isStepRow(m: { role: string; metadata?: string | null }): boolean {
+  return m.role === "tool" && typeof m.metadata === "string" && STEP_KIND.test(m.metadata);
+}
+
 /** The `role:'tool'` message that stores one step. */
 export function stepRow(step: StepRowInput): { role: "tool"; content: ""; metadata: string } {
   const metadata = JSON.stringify({

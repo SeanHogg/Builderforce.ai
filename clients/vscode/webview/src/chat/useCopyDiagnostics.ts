@@ -81,6 +81,10 @@ export function useCopyDiagnostics({
         tenantId: claims.tid ?? null,
         userId: claims.sub ?? null,
         messages: conv.messages,
+        // The chat lives in this machine's local-first store, keyed by the local chat id.
+        historyLocation: init.chatHistoryPath
+          ? `${init.chatHistoryPath} · local chat #${chatId ?? '?'}${serverChatId != null ? ` (server chat #${serverChatId})` : ''}`
+          : null,
         // The catalog the HOST built for the last run; the status explains a zero. The
         // trace supplies what was ACTUALLY advertised per turn.
         tools: { count: mcp.count, error: mcp.error, loading: mcp.loading },
@@ -156,7 +160,7 @@ export function useCopyDiagnostics({
       );
       window.setTimeout(() => setCopyState('idle'), 3000);
     }
-  }, [conv, init.model, init.extensionVersion, init.buildId, init.builtAt, init.posixShell, init.baseUrl, modelSurface, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatMode, chatId, serverChatId, ticketAdapter, apiReq, init.project?.id, init.project?.name, t]);
+  }, [conv, init.model, init.extensionVersion, init.buildId, init.builtAt, init.posixShell, init.baseUrl, init.chatHistoryPath, modelSurface, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatMode, chatId, serverChatId, ticketAdapter, apiReq, init.project?.id, init.project?.name, t]);
 
   return { copyState, canCopy, copyTranscript };
 }

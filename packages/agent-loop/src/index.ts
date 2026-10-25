@@ -15,7 +15,7 @@ export { looksLikeRunNarration, stripRunNarration, NARRATION_MIN_CHARS } from ".
 export type { StrippedNarration } from "./runNarration.js";
 // The structural half: a persisted mid-turn block is MARKED, and the learn gate skips it.
 export { isMidTurnMetadata, MID_TURN_META_KEY } from "./turnPhase.js";
-export { stepRow, STEP_RESULT_CAP, type StepRowInput } from "./stepRow.js";
+export { stepRow, isStepRow, STEP_RESULT_CAP, type StepRowInput } from "./stepRow.js";
 export { subagentReportMessage, type SubagentReportLike } from "./subagentReport.js";
 // A chat's linked-ticket progress — the ONE rollup the api, the ticket rail and the
 // Sessions tree share. Consumers import it from here directly; no published package

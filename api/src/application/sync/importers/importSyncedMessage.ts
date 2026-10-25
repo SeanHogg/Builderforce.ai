@@ -25,7 +25,9 @@ import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import type { Tx } from '../../../infrastructure/database/connection';
 import { brainChatMessages, brainChats } from '../../../infrastructure/database/schema';
 import { bumpChatMessages } from '../../brain/chatCacheVersions';
-import type { SyncEntityMappingRow, SyncEventInput, SyncImportContext, SyncStoreSet } from '../syncPorts';
+import { isStepId } from '../../brain/chatStepStore';
+import { isStepRow } from '@builderforce/agent-loop';
+import type { SyncEntityMappingRow, SyncEventInput, SyncImportContext, SyncStepStore, SyncStoreSet } from '../syncPorts';
 import {
   appliedExisting,
   appliedNew,
@@ -102,6 +104,7 @@ async function createMessage(
   stores: SyncStoreSet,
   tx: Tx,
   mapping: SyncEntityMappingRow | null,
+  steps: SyncStepStore,
 ): Promise<BoundedImportOutcome> {
   const parsed = readMessage(event.payload);
   if (!parsed.ok) return rejected(parsed.detail);
@@ -115,6 +118,21 @@ async function createMessage(
   if (chat.kind === 'unmapped') return pending('message_chat_pending');
   if (chat.kind === 'foreign') return rejected('message_chat_not_owned');
   const { chatId } = chat;
+  // A run step is telemetry: it goes to the operational step store, not the transcript.
+  if (isStepRow(fields)) {
+    try {
+      const id = await steps.append(ctx.auth.tenantId, chatId, {
+        metadata: fields.metadata as string,
+        eventKey: fields.eventKey,
+        createdAt: clampedClientTime(fields.createdAt, ctx.now),
+      });
+      if (id === null) return rejected('message_insert_failed');
+      await bumpChatMessages(chatId);
+      return appliedNew(String(id), 1, ctx.destinationKey, event.payload);
+    } catch (error) {
+      return writeFailure(error, 'createStep');
+    }
+  }
   try {
     const rows = await tx.transaction((savepoint) => savepoint.insert(brainChatMessages).values({
       chatId,
@@ -158,6 +176,7 @@ async function mutateMessage(
   stores: SyncStoreSet,
   tx: Tx,
   mapping: SyncEntityMappingRow | null,
+  steps: SyncStepStore,
 ): Promise<BoundedImportOutcome> {
   const isDelete = event.operation === 'delete';
   const gate = mutateGate(event, ctx, mapping);
@@ -165,6 +184,7 @@ async function mutateMessage(
   const current = mapping as SyncEntityMappingRow;
   const id = serverNumericId(current.serverId);
   if (id === null) return rejected('server_id_invalid');
+  if (isStepId(id)) return mutateStep(event, ctx, stores, tx, current, id, steps);
   try {
     if (isDelete) {
       const chatId = await ownMessageChatId(tx, ctx, id);
@@ -193,18 +213,65 @@ async function mutateMessage(
   }
 }
 
-/** Apply one already-validated message mutation through the unit-of-work `tx`. */
+/**
+ * Update / delete of a message whose server id names a STEP (operational store). Same
+ * ownership rule as a transcript row: the step's chat must be the caller's own.
+ */
+async function mutateStep(
+  event: SyncEventInput,
+  ctx: SyncImportContext,
+  stores: SyncStoreSet,
+  tx: Tx,
+  current: SyncEntityMappingRow,
+  stepId: number,
+  steps: SyncStepStore,
+): Promise<BoundedImportOutcome> {
+  try {
+    if (event.operation === 'delete') {
+      const chatId = await steps.chatOf(ctx.auth.tenantId, stepId);
+      if (chatId !== null && await ownChat(tx, ctx, chatId)) {
+        await steps.remove(chatId, stepId);
+        await bumpChatMessages(chatId);
+      }
+      return appliedNew(current.serverId, current.serverVersion + 1, ctx.destinationKey, null);
+    }
+    const parsed = readMessage(event.payload);
+    if (!parsed.ok) return rejected(parsed.detail);
+    const chat = await mappedChat(stores, ctx, parsed.value.chatClientId);
+    if (chat.kind !== 'own') return rejected(chat.kind === 'foreign' ? 'message_chat_not_owned' : 'message_chat_unresolved');
+    if (sameCanonical(current, event.payload)) return appliedExisting(current, event.payload);
+    if (await steps.update(chat.chatId, stepId, parsed.value.metadata ?? '') === null) return rejected('message_not_found');
+    await bumpChatMessages(chat.chatId);
+    return appliedNew(current.serverId, current.serverVersion + 1, ctx.destinationKey, event.payload);
+  } catch (error) {
+    return writeFailure(error, event.operation === 'delete' ? 'deleteStep' : 'updateStep');
+  }
+}
+
+/** Whether a chat is the caller's own in their tenant. */
+async function ownChat(tx: Tx, ctx: SyncImportContext, chatId: number): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: brainChats.id })
+    .from(brainChats)
+    .where(and(eq(brainChats.id, chatId), eq(brainChats.tenantId, ctx.auth.tenantId), eq(brainChats.userId, ctx.auth.userId)))
+    .limit(1);
+  return !!row;
+}
+
+/** Apply one already-validated message mutation through the unit-of-work `tx`; a run
+ *  step goes through the step store instead (`brain_chat_steps`, operational). */
 export async function importSyncedMessage(
   event: SyncEventInput,
   ctx: SyncImportContext,
   stores: SyncStoreSet,
   tx: Tx,
+  steps: SyncStepStore,
 ): Promise<BoundedImportOutcome> {
   if (event.entityType !== 'message') return rejected('entity_type_rejected');
   const prelude = preludeRejection(event, ctx);
   if (prelude) return prelude;
   const mapping = await stores.findMapping(ctx.auth.tenantId, event.entityType, event.clientEntityId);
-  if (event.operation === 'update' || event.operation === 'delete') return mutateMessage(event, ctx, stores, tx, mapping);
-  if (event.operation === 'create' || event.operation === 'import') return createMessage(event, ctx, stores, tx, mapping);
+  if (event.operation === 'update' || event.operation === 'delete') return mutateMessage(event, ctx, stores, tx, mapping, steps);
+  if (event.operation === 'create' || event.operation === 'import') return createMessage(event, ctx, stores, tx, mapping, steps);
   return rejected('operation_unsupported');
 }

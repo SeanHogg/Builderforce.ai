@@ -93,6 +93,19 @@ describe('gatherChatDiagnostics', () => {
     expect(messages).toEqual(snapshot);
   });
 
+  it('counts messages and run steps and states where the full dialogue lives', async () => {
+    const messages = [{ role: 'user' }, { role: 'tool' }, { role: 'tool' }, { role: 'assistant' }];
+    const d = await gatherChatDiagnostics({ ...base, messages, historyLocation: '/store/local-first-v2.journal · local chat #1' });
+    expect(d.history).toEqual({ messages: 4, steps: 2, location: '/store/local-first-v2.journal · local chat #1' });
+    expect(formatChatDiagnostics(d).join('\n'))
+      .toContain('- History: 4 message(s) · 2 run step(s) · full dialogue: /store/local-first-v2.journal · local chat #1');
+  });
+
+  it('says the location was not reported rather than leaving it out', async () => {
+    const d = await gatherChatDiagnostics(base);
+    expect(formatChatDiagnostics(d).join('\n')).toContain('full dialogue: not reported by this surface');
+  });
+
   it('reports "not gathered" tools when the host has no registry to report', async () => {
     const d = await gatherChatDiagnostics(base);
     expect(d.tools).toBeNull();

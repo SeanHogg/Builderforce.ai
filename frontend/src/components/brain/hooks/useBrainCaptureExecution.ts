@@ -85,6 +85,10 @@ export function useBrainCaptureExecution({
         tenantId: tenant?.id ?? null,
         userId: user?.id ?? null,
         messages: conv.messages,
+        // The full dialogue is the server chat, opened at the page it was captured from.
+        historyLocation: typeof window !== 'undefined' && chatId != null
+          ? `${window.location.origin}${window.location.pathname}${window.location.search} (Brain chat #${chatId}; API GET /api/brain/chats/${chatId}/messages)`
+          : null,
         // What the model could actually CALL. The COUNT is the live registry the
         // conversation runs on (`toolSpecs` — navigation + MCP catalog together), not
         // just the MCP subset; the catalog status explains a zero. The trace supplies

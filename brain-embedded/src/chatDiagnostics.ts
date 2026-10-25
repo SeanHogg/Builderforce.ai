@@ -161,10 +161,27 @@ import { DEFAULT_TOOL_LIMIT } from './selectTools';
 import { PROJECT_EVERMIND_MODEL_PREFIX } from './modelChoice';
 
 /** Everything the diagnostics block needs — already gathered by the host (pure in). */
+/**
+ * How big the conversation is and WHERE its full dialogue lives. A copied report is
+ * trimmed (results capped, long chats summarized), so a reader needs the count to know
+ * what they are not seeing and the location to go and read it.
+ */
+export interface ChatDiagnosticsHistory {
+  /** Every message the surface holds for this chat, step rows included. */
+  messages: number;
+  /** Of those, the run's persisted tool/LLM/memory step rows. */
+  steps: number;
+  /** Where the full dialogue is stored — a local file on the VSIX, the chat URL on the web.
+   *  Null when the surface did not say. */
+  location: string | null;
+}
+
 export interface ChatDiagnosticsData {
   surface?: string;
   chatId?: number | null;
   chatTitle?: string | null;
+  /** Message/step counts and where the full history lives. */
+  history?: ChatDiagnosticsHistory | null;
   /** 'shared' | 'locked' — who can see the chat. */
   chatVisibility?: string | null;
   /**
@@ -785,6 +802,14 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
   // Directly under the chat line, because it qualifies everything below it: the same
   // trace reads as a healthy answer in `chat` and as an unfinished execution in `work`.
   if (d.mode) lines.push(`- Mode: ${d.mode}`);
+  // Directly under the chat too: this report is a trimmed view, and the count plus the
+  // location is how a reader gets from it to the whole conversation.
+  if (d.history) {
+    lines.push(
+      `- History: ${d.history.messages} message(s) · ${d.history.steps} run step(s)`
+        + ` · full dialogue: ${d.history.location ?? 'not reported by this surface'}`,
+    );
+  }
   lines.push(`- Chat's project: ${fmtProject(d.projectId, d.projectName)}`);
   // ALWAYS printed, even when it matches (or is absent). Printing it only on a mismatch
   // is what made "nothing selected" and "selected but unadopted" indistinguishable.
