@@ -6,6 +6,11 @@ All notable changes to the BuilderForce VS Code extension are documented here.
 
 - **A sub-agent follows the same rules as the agent that started it.** In 2026.10.78 a sub-agent was simply never asked to delegate. Now every run, top-level or sub-agent, follows one rule. Only a request that actually asks for sub-agents ("use sub-agents", "spawn agents") counts. A brief that only mentions them, as every plan brief does, no longer prompts any run to delegate, while a sub-agent whose brief asks for sub-agents is prompted exactly as its parent would be.
 - **Research briefs are not graded as unfinished changes.** "Research…", "investigate…", "find…" and "trace…" now read as questions, so a run that answers them is not counted as a failed change request.
+- **A compacted long chat never loses a message.** When a long run summarizes its older steps, the saved memory now keeps every message it did not actually cover verbatim, including a reply from an @-mentioned agent or a turn sent from another window between runs. A memory that no longer matches the chat, after a merge or a deleted message, is ignored rather than trusted.
+- **Retry still appears after a run that compacted and then failed.** The compaction memory is never mistaken for the agent's answer, so Retry, the latest-reply actions, sub-agent reports and the diagnostics checks all read the real reply.
+- **Long chats stay where you put them.** Clicking the pending-question banner no longer pulls the view back to that question later in the run, and showing older steps no longer makes the list grow with every new step. Coming back to a chat opens it at its newest page.
+- **Consolidate works on very long chats.** A chat too long for one summary is summarized in parts, so it no longer fails on the model's context limit.
+- **A compaction shows even when its memory could not be saved.**
 
 ## [2026.10.78] — Sub-agents get on with the work, Stop works everywhere, long chats stay responsive
 

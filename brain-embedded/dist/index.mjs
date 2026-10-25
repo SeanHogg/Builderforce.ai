@@ -5123,7 +5123,7 @@ async function bindChatHistoryForSync(store, deviceId, destination) {
 
 // ../packages/agent-stall/src/requestIntent.ts
 var CHANGE_VERB = /\b(add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge)\b/i;
-var QUESTION_SHAPE = /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|can|could|should|would|will|explain|describe|summar|tell me|show me|list|compare|review|analyse|analyze)\b|\?\s*$/i;
+var QUESTION_SHAPE = /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|can|could|should|would|will|explain|describe|summar|tell me|show me|list|compare|review|analyse|analyze|research|investigate|find|locate|trace|audit|look into|search)\b|\?\s*$/i;
 function asksForChange(text) {
   const t = (text ?? "").trim();
   if (!t) return false;
@@ -12868,7 +12868,11 @@ function batchStepPersistence(base, opts = {}) {
 
 // src/delegationRequest.ts
 var SPAWN_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents"]);
-var ASKS_FOR_SUBAGENTS = /\bsub[- ]?agents?\b|\bspawn(?:_agents?|\s+(?:agents?|workers?|children))\b|\b(?:parallel|concurrent)\s+(?:agents?|workers?)\b|\bfan[- ]?out\b/i;
+var SUBAGENT_NOUN = String.raw`(?:sub[- ]?agents?|(?:parallel|concurrent)\s+(?:agents?|workers?))`;
+var ASKS_FOR_SUBAGENTS = new RegExp(
+  String.raw`\b(?:use|using|with|via|through|delegate(?:\s+(?:it|this|them|the\s+\w+))?\s+to|run|launch|start|dispatch|employ)\s+` + String.raw`(?:(?:the|some|a|few|several|multiple|more|\d+)\s+){0,2}` + SUBAGENT_NOUN + String.raw`\b` + String.raw`|\bspawn(?:_agents?|\s+(?:agents?|workers?|children|sub[- ]?agents?))\b` + String.raw`|\bfan[- ]?out\s+(?:the|these|this|it|them|across|over|to)\b`,
+  "i"
+);
 var DECLINES_SUBAGENTS = /\b(?:no|without|don'?t\s+use|do\s+not\s+use|never\s+use|skip(?:\s+the)?)\s+(?:any\s+)?sub[- ]?agents?\b/i;
 function asksForSubagents(text) {
   const t = text ?? "";
@@ -12884,7 +12888,7 @@ function attemptedDelegation(events) {
   return events.some((e) => e.category === "tool" && SPAWN_TOOLS.has(e.label));
 }
 function leftDelegationUndone(input) {
-  return !input.delegatedRun && canSpawnHere(input.toolNames) && asksForSubagents(input.requestText) && !attemptedDelegation(input.events);
+  return canSpawnHere(input.toolNames) && asksForSubagents(input.requestText) && !attemptedDelegation(input.events);
 }
 function undelegatedRequestNudge(toolNames) {
   const fanOut = toolNames.includes("spawn_agents");
@@ -17521,12 +17525,7 @@ function counterOf(run) {
   return counter;
 }
 function runLeftDelegationUndone(run) {
-  return leftDelegationUndone({
-    toolNames: run.catalogToolNames,
-    requestText: run.userRequest,
-    events: runTrace(run.c),
-    delegatedRun: !!run.req.lineage
-  });
+  return leftDelegationUndone({ toolNames: run.catalogToolNames, requestText: run.userRequest, events: runTrace(run.c) });
 }
 function delegationCallKind(name, args, isReadTool) {
   if (isSpawnTool(name)) return "spawn";
@@ -18304,7 +18303,7 @@ async function startRun(runKey, request) {
       });
     }
     const trace = runTrace(c);
-    const personsRequest = !lineage && !delegatingCells.has(c);
+    const wakeTurn = delegatingCells.has(c);
     if (attemptedDelegation(trace)) delegatingCells.add(c);
     const outcome = req.reportOutcome && codeRunOutcome({
       runId: c.runId,
@@ -18315,7 +18314,7 @@ async function startRun(runKey, request) {
       shipped,
       trace,
       projectId: req.projectId,
-      askedForChange: personsRequest && asksForChange(req.userTurn === void 0 ? void 0 : contentText(req.userTurn))
+      askedForChange: !wakeTurn && asksForChange(req.userTurn === void 0 ? void 0 : contentText(req.userTurn))
     });
     if (outcome) void req.reportOutcome(outcome).catch(() => void 0);
     c.persistStep = null;

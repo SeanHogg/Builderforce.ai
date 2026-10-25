@@ -1624,12 +1624,11 @@ function residualArgs(args, command) {
   return Object.keys(rest).length > 0 ? rest : null;
 }
 function subjectOf(args, isCommand) {
-  const target = activityTarget(args);
-  if (target) return { subject: target, subjectIsPath: !isCommand && target.includes("/") && !/\s/.test(target) };
   const paths = asRecord(args)?.paths;
   const names = Array.isArray(paths) ? paths.filter((path) => typeof path === "string" && !!path.trim()) : [];
-  if (names.length === 1) return { subject: names[0].trim(), subjectIsPath: names[0].includes("/") };
   if (names.length > 1) return { subject: names.map((path) => path.trim().split(/[\\/]/).pop()).join(", "), subjectIsPath: false };
+  const target = activityTarget(args);
+  if (target) return { subject: target, subjectIsPath: !isCommand && target.includes("/") && !/\s/.test(target) };
   return { subject: null, subjectIsPath: false };
 }
 function toolStepView({ args, result, isError }) {

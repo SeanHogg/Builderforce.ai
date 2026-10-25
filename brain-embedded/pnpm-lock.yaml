@@ -16,10 +16,10 @@ importers:
         version: 0.2.84
       '@seanhogg/builderforce-memory':
         specifier: ^2026.10.26
-        version: 2026.10.26(@seanhogg/builderforce-memory-engine@2026.10.23)
+        version: 2026.10.26(@seanhogg/builderforce-memory-engine@2026.10.26)
       '@seanhogg/builderforce-memory-engine':
-        specifier: ^2026.10.23
-        version: 2026.10.23
+        specifier: ^2026.10.26
+        version: 2026.10.26
     devDependencies:
       '@builderforce/agent-loop':
         specifier: link:../packages/agent-loop
@@ -611,8 +611,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@seanhogg/builderforce-memory-engine@2026.10.23':
-    resolution: {integrity: sha512-g1BBr1119eNNdxDRP1lVzrSRbBQc6UD5FHUu5EoPE7m5wUizBLBeATZGcTq+FlaUu8PFRRBN6+ukG4fjdeQilw==}
+  '@seanhogg/builderforce-memory-engine@2026.10.26':
+    resolution: {integrity: sha512-2wdqOlTmYQFWX4owaSuaz0M9oKF8S/S0CZQ8OyMpqTGbR1ZXXjX/3pjaDpd811LqU0vEA6lRoUrgF/GLdcxWYg==}
     engines: {node: '>=18.0.0'}
 
   '@seanhogg/builderforce-memory@2026.10.26':
@@ -1634,11 +1634,11 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.63.5':
     optional: true
 
-  '@seanhogg/builderforce-memory-engine@2026.10.23': {}
+  '@seanhogg/builderforce-memory-engine@2026.10.26': {}
 
-  '@seanhogg/builderforce-memory@2026.10.26(@seanhogg/builderforce-memory-engine@2026.10.23)':
+  '@seanhogg/builderforce-memory@2026.10.26(@seanhogg/builderforce-memory-engine@2026.10.26)':
     dependencies:
-      '@seanhogg/builderforce-memory-engine': 2026.10.23
+      '@seanhogg/builderforce-memory-engine': 2026.10.26
 
   '@standard-schema/spec@1.1.0': {}
 

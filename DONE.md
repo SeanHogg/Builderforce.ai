@@ -1,3 +1,15 @@
+## ✅ RESOLVED 2026-10-25 — Main's Release CI green again (run 40208698931)
+
+Main had been red since `5ce9137bf`. Fixed across `c70cf33a9` and `a866daf22`:
+
+- **`@seanhogg/builderforce-memory/working` not found** (api type-check, builderforce-agents type-check). The api, agent-tools, agent-runtime, frontend and brain-embedded now depend on builderforce-memory ^2026.10.26, which exports `./working`, with their lockfiles. The release workflow also installs `packages/agent-tools`' own dependencies in verify/package-agents, verify-api and deploy-api, because its source is compiled through tsconfig paths and its npm imports resolve from its own `node_modules`.
+- **`entityCatalog` coverage** (api vitest). `brain_chat_steps` (1276, run telemetry on the operational endpoint, single-database mirror in core) is adjudicated, and the ceiling moves from 47 to 48.
+- **Stale tests after intended behaviour changes:**
+  - `sandboxProvider.test.ts`: an edit applies to the branch copy first, and the shell passes its optional timeout.
+  - `localFirstStore.transaction.test.ts`: Consolidate now answers for local chats.
+  - brain-ui `toolStepView`: multi-file reads show basenames again now that `activityTarget` also reads `paths`.
+- **Frontend architecture ratchet.** `CreationCanvas.tsx` is back under its ceiling, and the ceilings of files that shrank were lowered.
+
 ## ✅ RESOLVED 2026-10-25 — Long chats stay responsive, show context use and compaction; the context logic moves into builderforce-memory (builderforce-memory 2026.10.25 + 2026.10.26 · VSIX 2026.10.79)
 
 **Reported:** the VS Code panel froze ("window unresponsive") on long chats, and nothing showed how full the context was or when a run compacted it.
