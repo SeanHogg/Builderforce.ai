@@ -1,3 +1,7 @@
+## ✅ RESOLVED 2026-10-25 — A picked model survives a reload (VSIX 2026.10.89)
+
+After reloading VS Code, Specific model still showed Kimi K3 in the `/` menu, but every turn failed `no_specific_model` (diagnostics: `Model: auto`). The mode is a setting (`builderforce.inferenceMode`) and survived; the pick (`modelState.selected`) lived only in memory and did not. The pick is now saved in the extension's global state (`builderforce.modelPick`) and restored at activation (`bindModelPickStore`), so the mode and the pick always come back together. Guarded in `modelState.test.ts`.
+
 ## ✅ RESOLVED 2026-10-25 — Opening the BuilderForce tab no longer opens the Visualization (VSIX 2026.10.88)
 
 `chatView.ts` opened the Visualization panel whenever the chat view loaded or you signed in (`openVisualizationOnce`). Both triggers are gone. The panel now opens only from the header's Visualize button or the `builderforce.openVisualization` command, which is what the agent runs. Guarded in `authPanelSync.test.ts`.

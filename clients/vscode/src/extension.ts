@@ -31,7 +31,7 @@ import { DiagnosticsController } from "./diagnostics";
 import { clearPlatformToolsCache } from "./platformTools";
 import { setGroundingSummary } from "./grounding";
 import { registerWorkspace } from "./desktopContext";
-import { onModelChange, setSelectedModel } from "./modelState";
+import { bindModelPickStore, onModelChange, setSelectedModel } from "./modelState";
 import { applyModelPick } from "./modelPick";
 import { modelChoiceLabels } from "./modelChoiceLabels";
 // The model list itself: one builder for the composer `/` menu AND this picker.
@@ -357,6 +357,8 @@ export function activate(context: vscode.ExtensionContext): void {
   // The ONE log surface, owned by errorReporter so any module can write to it and
   // so "log it" and "file it in Quality" can never drift apart.
   const output = initErrorReporter(context);
+  // Before any surface resolves a route: the pick made before the reload is the pick now.
+  bindModelPickStore(context.globalState);
   // The connected accounts create themselves on first use; warming them here only lets the
   // model lists show the account's models before the first turn. A credential arriving or
   // dropped re-pushes those lists.

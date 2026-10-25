@@ -29,20 +29,47 @@ function routingFor(selection: ChatModelSelection): Pick<EffectiveModelChoice, "
   return routingMode ? { routingMode } : {};
 }
 
+type ModelPick = { mode: "auto" | "byo_pool" | "model"; model?: string };
+
 /** Undefined means inherit project/config. Once the user chooses, Auto and Pool
  * remain explicit choices rather than collapsing back into that inheritance. */
-let selected: { mode: "auto" | "byo_pool" | "model"; model?: string } | undefined;
+let selected: ModelPick | undefined;
 const emitter = new vscode.EventEmitter<string | undefined>();
 export const onModelChange = emitter.event;
 
+/**
+ * The pick survives a reload, like the mode it was made under (`builderforce.inferenceMode`,
+ * a setting). Kept only in memory, a reload left Specific with nothing picked — every turn
+ * failed `no_specific_model` while the `/` menu still named the model.
+ */
+const PICK_KEY = "builderforce.modelPick";
+let pickStore: vscode.Memento | undefined;
+
+function isModelPick(value: unknown): value is ModelPick {
+  if (!value || typeof value !== "object") return false;
+  const { mode, model } = value as ModelPick;
+  return mode === "auto" || mode === "byo_pool" || (mode === "model" && typeof model === "string" && model.length > 0);
+}
+
+/** Restore the saved pick and keep every later pick saved — once, at activation. */
+export function bindModelPickStore(store: vscode.Memento): void {
+  pickStore = store;
+  const saved = store.get<unknown>(PICK_KEY);
+  if (selected === undefined && isModelPick(saved)) choose(saved);
+}
+
+function choose(pick: ModelPick): void {
+  selected = pick;
+  void pickStore?.update(PICK_KEY, pick);
+  emitter.fire(pick.mode === "model" ? pick.model : undefined);
+}
+
 export function setSelectedModel(model: string | undefined): void {
-  selected = model ? { mode: "model", model } : { mode: "auto" };
-  emitter.fire(model);
+  choose(model ? { mode: "model", model } : { mode: "auto" });
 }
 
 export function setSelectedModelPool(): void {
-  selected = { mode: "byo_pool" };
-  emitter.fire(undefined);
+  choose({ mode: "byo_pool" });
 }
 
 /** The configured fallback model (empty → let the gateway auto-select). */
