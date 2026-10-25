@@ -12,7 +12,7 @@
  * Connect card (a user gesture, which Chrome needs to grant the `api.kimi.com` origin).
  */
 import type { HostLocalPin } from '@seanhogg/builderforce-brain-embedded';
-import { parseLocalModelRef } from '@builderforce/local-inference';
+import { clientPinOf } from '@builderforce/local-inference';
 import { createLocalCredentialStore, type GatewayRequest, type LocalCredentialStore } from '@builderforce/provider-connect';
 import type { KeyValueStore } from '../platform/keyValue';
 
@@ -42,7 +42,8 @@ export function connectRequiredProvider(error: string | null | undefined): strin
 
 export interface ConnectedAccount {
   store: LocalCredentialStore;
-  /** Where a `local/kimi-code/<model>` pin runs, or null for any other ref. */
+  /** Where a Kimi pin (`local/kimi-code/<model>` or the gateway's `direct/kimi-code/<model>`)
+   *  runs, or null for any other ref. */
   pinFor(ref: string): Promise<HostLocalPin | null>;
 }
 
@@ -68,7 +69,7 @@ export function createConnectedAccount(deps: {
   return {
     store,
     async pinFor(ref) {
-      const pin = parseLocalModelRef(ref);
+      const pin = clientPinOf(ref);
       if (!pin || pin.provider !== KIMI_RUNTIME) return null;
       if (!(await deps.originGranted())) throw new ProviderConnectRequired(KIMI_PROVIDER, 'origin');
       const outcome = await store.resolve();

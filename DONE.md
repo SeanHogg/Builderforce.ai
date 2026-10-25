@@ -1,3 +1,11 @@
+## ✅ RESOLVED 2026-10-25 — A connected Kimi pick runs from this machine, with sign-in (VSIX 2026.10.82)
+
+**Reported:** chat #5091 pinned `direct/kimi-code/k3` in the VSIX and every turn failed `Strict-pin: model 'direct/kimi-code/k3' is unavailable (local_egress_required)`. The Kimi login was never offered.
+
+- **Cause.** The picker lists a connected Kimi account's models in the gateway spelling (`direct/kimi-code/…`). `modelRouting.resolveChoiceRoute` and Rovr's `connectedAccount.pinFor` recognised only `local/kimi-code/…` (`parseLocalModelRef`). The pick went to the Worker, which cannot reach Kimi's edge. Once the previous fix made picks strict, the Worker had nothing to fail over to and answered `local_egress_required`.
+- **Fix.** The runtime registry now carries `gatewayVendor` (`kimi-code` → `kimi-code`). `clientPinOf` in `@builderforce/local-inference` resolves both `local/<runtime>/<model>` and `direct/<gatewayVendor>/<model>` to the client runtime. The VSIX route and Rovr's account pin both use it, so either spelling reaches the authorizer: the Kimi Code CLI login first, then the workspace connection, with the device-code connect offered on the spot.
+- Tests: `packages/local-inference/src/ref.test.ts` (`clientPinOf`) and a source guard in `clients/vscode/src/modelRouting.test.ts`.
+
 ## ✅ RESOLVED 2026-10-25 — The model you pick is the model that runs (brain-embedded 2026.10.55 · brain-ui 2026.10.26 · VSIX 2026.10.81)
 
 **Reported:** picking a BYO model (`direct/kimi-code/k3`) left the mode control on Hybrid, and the turn was answered by `direct/minimax/MiniMax-M3.1-Flash-Preview`.

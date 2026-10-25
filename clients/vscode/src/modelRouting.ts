@@ -41,9 +41,9 @@ import {
   type ModelFallbackEvent,
 } from "@seanhogg/builderforce-brain-embedded";
 import {
+  clientPinOf,
   localRuntime,
   formatLocalModelRef,
-  parseLocalModelRef,
   type LocalEndpoint,
   type LocalFirstAttemptRecord,
   type LocalRuntimeId,
@@ -136,7 +136,10 @@ async function onDeviceOnly(route: ModelRoute, request: RouteRequest): Promise<M
 
 async function resolveChoiceRoute(secrets: vscode.SecretStorage, choice: ModelRoute, request: RouteRequest): Promise<ModelRoute> {
   const config = getLocalModelsConfig();
-  const pin = parseLocalModelRef(choice.model);
+  // `clientPinOf`, not the bare local grammar: the picker lists a connected Kimi account's
+  // models as `direct/kimi-code/…`, and only this machine can reach Kimi — that pick must
+  // reach the authorizer below (CLI login, else the workspace connect), not the gateway.
+  const pin = clientPinOf(choice.model);
   if (!pin) return withLocalFirst(choice, config, request);
   // A model the chat webview runs (`local/bfi/…`, `local/webllm/…`) is served over the
   // page-engine bridge: it needs a port for its runtime, not a configured endpoint — the

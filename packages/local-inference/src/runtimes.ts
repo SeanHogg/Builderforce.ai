@@ -95,6 +95,10 @@ export interface LocalRuntime {
    *  `bfi serve` starts at Ollama's port 11434 and walks upward when it is taken, so the
    *  Ollama URL can be answered by bfi; this is how a probe tells them apart. */
   ownedBy?: string;
+  /** The gateway vendor (`direct/<vendor>/<model>`) whose models this runtime serves when
+   *  the CLIENT must make the call — Kimi Code, whose edge refuses the gateway. A gateway
+   *  ref on that vendor is dispatched from the user's machine (`clientPinOf`). */
+  gatewayVendor?: string;
 }
 
 /**
@@ -160,7 +164,7 @@ export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
     tools: 'unknown',
     reach: 'page',
   },
-  { id: 'kimi-code', automaticRank: Number.POSITIVE_INFINITY, label: 'Kimi Code', onDevice: false, catalog: 'declared', tools: 'all', reach: 'http' },
+  { id: 'kimi-code', automaticRank: Number.POSITIVE_INFINITY, label: 'Kimi Code', onDevice: false, catalog: 'declared', tools: 'all', reach: 'http', gatewayVendor: 'kimi-code' },
 ];
 
 /** The runtimes reached over HTTP — what a prober, a settings form or an endpoint

@@ -248,4 +248,11 @@ describe("the inference mode is decided by the seam", () => {
     expect(routing).toContain('choice.inferenceMode === "local-only" && !localRuntime(pin.provider).onDevice');
     expect(routing.indexOf("!localRuntime(pin.provider).onDevice")).toBeLessThan(routing.indexOf("authorizeLocalEndpoint(pin.provider"));
   });
+
+  it("routes a connected-account pick in the gateway spelling (direct/kimi-code/…) to this machine, not the gateway", () => {
+    // The picker lists a connected Kimi account as `direct/kimi-code/k3`; the bare local
+    // grammar misses it and the Worker answers `local_egress_required`.
+    expect(routing).toContain("const pin = clientPinOf(choice.model);");
+    expect(routing).not.toContain("parseLocalModelRef(");
+  });
 });

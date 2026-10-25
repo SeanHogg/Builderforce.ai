@@ -8,9 +8,10 @@
  * (it spends nothing).
  */
 
-import { isLocalRuntimeId, localRuntime, type LocalRuntimeId } from './runtimes.js';
+import { isLocalRuntimeId, localRuntime, LOCAL_RUNTIMES, type LocalRuntimeId } from './runtimes.js';
 
 export const LOCAL_MODEL_PREFIX = 'local/';
+const GATEWAY_DIRECT_PREFIX = 'direct/';
 
 /** Compose the ref for a model on a local runtime. */
 export function formatLocalModelRef(runtime: LocalRuntimeId, model: string): string {
@@ -34,6 +35,26 @@ export function parseLocalModelRef(ref: string | undefined): { provider: LocalRu
   const model = rest.slice(slash + 1);
   if (!model || !isLocalRuntimeId(provider)) return null;
   return { provider, model };
+}
+
+/**
+ * Where a ref runs when a client on the user's machine must make the call: a `local/…`
+ * ref, or a gateway `direct/<vendor>/<model>` ref whose vendor a runtime serves
+ * (registry `gatewayVendor`). The picker lists a connected Kimi account's models under
+ * the gateway spelling (`direct/kimi-code/k3`), and the gateway cannot reach Kimi — so
+ * every client resolves a pin through this, never through {@link parseLocalModelRef}
+ * alone, or that pick goes to a Worker that answers `local_egress_required`.
+ */
+export function clientPinOf(ref: string | undefined): { provider: LocalRuntimeId; model: string } | null {
+  const local = parseLocalModelRef(ref);
+  if (local || !ref || !ref.startsWith(GATEWAY_DIRECT_PREFIX)) return local;
+  const rest = ref.slice(GATEWAY_DIRECT_PREFIX.length);
+  const slash = rest.indexOf('/');
+  if (slash <= 0) return null;
+  const vendor = rest.slice(0, slash);
+  const model = rest.slice(slash + 1);
+  const runtime = LOCAL_RUNTIMES.find((r) => r.gatewayVendor === vendor);
+  return runtime && model ? { provider: runtime.id, model } : null;
 }
 
 /** Whether a ref names a locally-served model (so it must bypass gateway entitlement). */
