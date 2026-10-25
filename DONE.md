@@ -13,6 +13,15 @@
   - A failure is filed through `reportExtensionError` (`kimi.authorize`).
   - `resolveChoiceRoute` logs every route decision (`[route]`).
   - Under Specific, a pick for a provider only this machine can reach (registry `gatewayVendor`) that cannot be authorized now fails the turn with the reason and the remedy. Hybrid still answers with Auto, but logged.
+- **The workspace Kimi sign-in was never wired; now ONE shared implementation (VSIX 2026.10.86 · Rovr 2026.10.28).** The editor's credential store was an activation step (`initLocalProviderCredentials`) that nothing called. So every turn without a CLI login failed "Kimi credentials are not initialized" and never offered Connect Kimi, while Rovr ran its own copy (`connectedAccount.ts`). Both now run `createConnectedAccounts` (`@builderforce/provider-connect/accounts`).
+  - It creates each provider's store on first use, hydrated before its first resolve, so there is no init step to forget.
+  - It resolves a pick (`clientPinOf`) or a runtime to its endpoint through the runtime registry's new `accountProvider`.
+  - The hosts keep only their own UX: the editor's Connect notification, and Rovr's origin permission and Connect card.
+  - Tests: `clients/vscode/src/connectedAccounts.test.ts`, plus a guard in `modelRouting.test.ts`.
+  - Kimi's `auth.kimi.ai` device authorization was verified live.
+  - **Regression in 2026.10.85, fixed in .86: picking a Kimi model would not stick.** The store's change listener refreshed the panels. A refresh resolved the route, the authorizer re-asked the store, and an unchanged "not connected" was persisted and notified again, which looped the panel and reset its model pick. The fix has two parts.
+    - The shared store neither writes nor notifies when the credential is unchanged.
+    - The authorizer offers the sign-in and files a failure only for a turn (`interactive: request.turn`). A panel refresh resolves quietly.
 - **Known consequence.** A workspace Kimi connection granted on `auth.kimi.com` before this change will ask to be reconnected once, which re-grants it on `kimi.ai`.
 
 ## ✅ RESOLVED 2026-10-25 — A connected Kimi pick runs from this machine, with sign-in (VSIX 2026.10.83 · brain-embedded 2026.10.56 · api 2026.10.82)

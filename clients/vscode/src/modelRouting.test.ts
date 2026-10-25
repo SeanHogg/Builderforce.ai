@@ -256,11 +256,19 @@ describe("the inference mode is decided by the seam", () => {
     expect(routing).not.toContain("parseLocalModelRef(");
   });
 
-  // The store was defined but never created at activation, so every Kimi turn without a
-  // CLI login failed "Kimi credentials are not initialized" and the connect was never offered.
-  it("creates the workspace Kimi credential store at activation, so a turn can offer the sign-in", () => {
-    const extension = stripComments(fs.readFileSync(path.join(SRC, "extension.ts"), "utf8"));
-    expect(extension).toContain("initLocalProviderCredentials(context.secrets, gatewayRequest(context.secrets)");
+  // The store was once an activation step nothing called, so every Kimi turn without a CLI
+  // login failed "Kimi credentials are not initialized" and the sign-in was never offered.
+  // Now it is the SHARED connected accounts (Rovr's too), created on first use.
+  it("authorizes Kimi through the shared connected accounts, with no init step to forget", () => {
+    const auth = stripComments(fs.readFileSync(path.join(SRC, "localEndpointAuth.ts"), "utf8"));
+    const store = stripComments(fs.readFileSync(path.join(SRC, "localProviderCredentials.ts"), "utf8"));
+    expect(auth).toContain("editorAccounts(secrets).providerFor(provider)");
+    expect(store).toContain('from "@builderforce/provider-connect/accounts"');
+    expect(store).not.toContain("initLocalProviderCredentials");
+  });
+
+  it("offers the Kimi sign-in only for a turn — a panel refresh resolving the route stays quiet", () => {
+    expect(routing).toContain("authorizeLocalEndpoint(pin.provider, endpoint, secrets, { interactive: request.turn === true })");
   });
 
   it("never sends an unauthorized Specific Kimi pick to the gateway silently — the turn fails with why", () => {

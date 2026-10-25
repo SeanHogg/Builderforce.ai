@@ -23,7 +23,8 @@ import {
   type LocalCredentialOutcome,
 } from "@builderforce/provider-connect";
 import { gatewayRequest } from "./gatewayRequest";
-import { localCredentialStore, type LocalCredentialProvider } from "./localProviderCredentials";
+import { connectedAccounts } from "./localProviderCredentials";
+import type { ConnectedAccounts } from "@builderforce/provider-connect/accounts";
 
 /** Why a connect did not finish, in the person's language. */
 function failureMessage(label: string, error: unknown): string {
@@ -101,8 +102,14 @@ export async function connectProviderInteractively(
   }
 }
 
+/** The editor's connected accounts (the shared implementation Rovr runs too), created on
+ *  first use with this editor's authenticated gateway call. */
+export function editorAccounts(secrets: vscode.SecretStorage): ConnectedAccounts {
+  return connectedAccounts(secrets, () => gatewayRequest(secrets));
+}
+
 /** One prompt per provider at a time: three turns that start together ask once. */
-const prompting = new Map<LocalCredentialProvider, Promise<LocalCredentialOutcome>>();
+const prompting = new Map<string, Promise<LocalCredentialOutcome>>();
 
 /**
  * A credential this machine may send to the provider right now, connecting first when
@@ -110,13 +117,13 @@ const prompting = new Map<LocalCredentialProvider, Promise<LocalCredentialOutcom
  */
 export async function ensureLocalProviderCredential(
   secrets: vscode.SecretStorage,
-  provider: LocalCredentialProvider,
+  provider: string,
   label: string,
+  { prompt }: { prompt: boolean },
 ): Promise<LocalCredentialOutcome> {
-  const store = localCredentialStore(provider);
-  if (!store) return { kind: "unavailable", detail: `${label} credentials are not initialized.` };
+  const store = editorAccounts(secrets).store(provider);
   const first = await store.resolve();
-  if (first.kind === "credential" || first.kind === "unavailable") return first;
+  if (first.kind === "credential" || first.kind === "unavailable" || !prompt) return first;
 
   const pending = prompting.get(provider);
   if (pending) return pending;

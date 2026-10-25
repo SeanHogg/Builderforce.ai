@@ -22,6 +22,7 @@
       "@builderforce/cost-levers": ["../../../packages/cost-levers/src/index.ts"],
       "@builderforce/model-catalog": ["../../../packages/model-catalog/src/index.ts"],
       "@builderforce/provider-connect": ["../../../packages/provider-connect/src/index.ts"],
+      "@builderforce/local-inference": ["../../../packages/local-inference/src/index.ts"],
       "@builderforce/run-guards": ["../../../packages/run-guards/src/index.ts"]
     }
   },

@@ -102,6 +102,9 @@ export interface LocalRuntime {
   /** The provider chooses sampling per model, so a client sends no `temperature` —
    *  Kimi K3 accepts only `1` and 400s anything else. */
   providerSampling?: true;
+  /** The workspace's connected-account provider whose short-lived credential this runtime
+   *  is called with (`@builderforce/provider-connect/accounts`) — Kimi Code ↔ `kimi`. */
+  accountProvider?: string;
 }
 
 /**
@@ -167,7 +170,7 @@ export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
     tools: 'unknown',
     reach: 'page',
   },
-  { id: 'kimi-code', automaticRank: Number.POSITIVE_INFINITY, label: 'Kimi Code', onDevice: false, catalog: 'declared', tools: 'all', reach: 'http', gatewayVendor: 'kimi-code', providerSampling: true },
+  { id: 'kimi-code', automaticRank: Number.POSITIVE_INFINITY, label: 'Kimi Code', onDevice: false, catalog: 'declared', tools: 'all', reach: 'http', gatewayVendor: 'kimi-code', providerSampling: true, accountProvider: 'kimi' },
 ];
 
 /** The runtimes reached over HTTP — what a prober, a settings form or an endpoint

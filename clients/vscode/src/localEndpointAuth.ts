@@ -21,11 +21,11 @@
  * signed-out editor able to run a local turn.
  */
 import type * as vscode from "vscode";
-import type { LocalEndpoint, LocalRuntimeId } from "@builderforce/local-inference";
+import { localRuntime, type LocalEndpoint, type LocalRuntimeId } from "@builderforce/local-inference";
 import { currentKimiInstall } from "./gateway";
 import { ensureFreshKimiToken } from "./kimiCodeAuth";
 import { isKimiCodeInstall } from "./kimiCodeInstall";
-import { ensureLocalProviderCredential } from "./providerConnect";
+import { editorAccounts, ensureLocalProviderCredential } from "./providerConnect";
 import { logLine, reportExtensionError } from "./errorReporter";
 import nodeFs from "node:fs";
 
@@ -39,11 +39,16 @@ const log = (line: string): void => logLine(`[kimi auth] ${line}`);
  * `endpoint` may be absent for Kimi: a pin made before any Kimi source existed on this
  * machine still has to reach the connect offer, and the workspace credential carries its
  * own base URL.
+ *
+ * `interactive` is a turn about to run: only then is the sign-in offered and a failure filed.
+ * A panel refresh or a scan resolves the same route quietly — prompting there re-rendered the
+ * panel, which resolved again, and the loop reset the model pick.
  */
 export async function authorizeLocalEndpoint(
   provider: LocalRuntimeId,
   endpoint: LocalEndpoint | undefined,
   secrets: vscode.SecretStorage,
+  { interactive }: { interactive: boolean },
 ): Promise<LocalEndpointAuthorization> {
   if (provider !== "kimi-code") {
     return endpoint ? { ok: true, endpoint } : { ok: false, detail: `${provider} has no configured endpoint.` };
@@ -59,18 +64,22 @@ export async function authorizeLocalEndpoint(
       : process.env;
     const resolved = await ensureFreshKimiToken(nodeFs, install.home, { env });
     if (resolved.kind === "token") {
-      log(`Kimi Code CLI login used (${install.home}, ${install.baseUrl}).`);
+      if (interactive) log(`Kimi Code CLI login used (${install.home}, ${install.baseUrl}).`);
       return { ok: true, endpoint: { baseUrl: install.baseUrl, ...endpoint, token: resolved.accessToken } };
     }
     cliDetail = resolved.detail;
-    log(`Kimi Code CLI login unusable (${resolved.kind}, sign-in host ${env.KIMI_CODE_OAUTH_HOST ?? "default"}): ${resolved.detail}`);
-  } else {
+    if (interactive) log(`Kimi Code CLI login unusable (${resolved.kind}, sign-in host ${env.KIMI_CODE_OAUTH_HOST ?? "default"}): ${resolved.detail}`);
+  } else if (interactive) {
     log(`No Kimi Code CLI login (${install.reason}): ${install.detail}`);
   }
 
-  const outcome = await ensureLocalProviderCredential(secrets, "kimi", "Kimi");
+  // The workspace's connected account for this runtime (registry `accountProvider`), through
+  // the shared connected accounts — offering the sign-in when none is usable.
+  const accountProvider = editorAccounts(secrets).providerFor(provider);
+  if (!accountProvider) return { ok: false, detail: cliDetail ?? `${provider} has no connected account.` };
+  const outcome = await ensureLocalProviderCredential(secrets, accountProvider, localRuntime(provider).label, { prompt: interactive });
   if (outcome.kind === "credential") {
-    log(`Workspace Kimi connection used (${outcome.credential.baseUrl}).`);
+    if (interactive) log(`Workspace Kimi connection used (${outcome.credential.baseUrl}).`);
     return { ok: true, endpoint: { baseUrl: outcome.credential.baseUrl, token: outcome.credential.accessToken } };
   }
   const accountDetail = outcome.kind === "unavailable"
@@ -79,6 +88,7 @@ export async function authorizeLocalEndpoint(
       ? `The workspace Kimi connection needs to be renewed (${outcome.detail}).`
       : "No Kimi account is connected to this workspace.";
   const detail = cliDetail ? `${cliDetail} ${accountDetail}` : accountDetail;
+  if (!interactive) return { ok: false, detail };
   void reportExtensionError(new Error(`Kimi could not be authorized: ${detail}`), {
     operation: "kimi.authorize",
     level: "warning",

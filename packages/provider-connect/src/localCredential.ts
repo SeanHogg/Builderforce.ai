@@ -143,6 +143,13 @@ export function createLocalCredentialStore(deps: {
     credential !== null && credential.expiresAt - deps.now() > LOCAL_CREDENTIAL_REFRESH_MARGIN_MS;
 
   const persist = async (credential: LocalCredential | null) => {
+    // Unchanged ⇒ no write and no notify. A listener typically re-renders a host surface, and
+    // that surface may resolve again — "not connected" persisted over "not connected" used to
+    // notify every time and looped the editor's panel, resetting its model pick.
+    const unchanged = credential === null
+      ? current === null
+      : current !== null && current.accessToken === credential.accessToken && current.expiresAt === credential.expiresAt;
+    if (unchanged) return;
     current = credential;
     try {
       if (credential) await deps.store.set(key, JSON.stringify(credential));

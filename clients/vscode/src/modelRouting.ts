@@ -180,14 +180,14 @@ async function resolveChoiceRoute(secrets: vscode.SecretStorage, choice: ModelRo
   // the transport is built — `routeStream` is synchronous by design and a fifteen-minute
   // Kimi token cannot be refreshed from inside it. A provider that cannot authorize falls
   // back to the gateway rather than dispatching a request that is certain to 401.
-  const authorized = await authorizeLocalEndpoint(pin.provider, endpoint, secrets);
+  const authorized = await authorizeLocalEndpoint(pin.provider, endpoint, secrets, { interactive: request.turn === true });
   if (!authorized.ok) {
     // Only Specific promises the pick and nothing else; Hybrid answers with Auto.
     const failTurn = choice.inferenceMode === "specific" && localRuntime(pin.provider).gatewayVendor !== undefined;
-    logLine(`[route] ${choice.model} could not run on this machine (${authorized.detail}); ${failTurn ? "failing the turn" : "routing to the gateway"}.`);
+    if (request.turn) logLine(`[route] ${choice.model} could not run on this machine (${authorized.detail}); ${failTurn ? "failing the turn" : "routing to the gateway"}.`);
     return failTurn ? { ...choice, unauthorized: { provider: pin.provider, detail: authorized.detail } } : choice;
   }
-  logLine(`[route] ${choice.model} runs on this machine via ${pin.provider}.`);
+  if (request.turn) logLine(`[route] ${choice.model} runs on this machine via ${pin.provider}.`);
   return { ...choice, local: { ...pin, endpoint: authorized.endpoint } };
 }
 

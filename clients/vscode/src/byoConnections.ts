@@ -1,8 +1,7 @@
 import * as vscode from "vscode";
 import { LLM_PROVIDER_INFO } from "@builderforce/model-catalog";
 import * as bfApi from "./bfApi";
-import { connectProviderInteractively } from "./providerConnect";
-import { LOCAL_CREDENTIAL_PROVIDERS, localCredentialStore, type LocalCredentialProvider } from "./localProviderCredentials";
+import { connectProviderInteractively, editorAccounts } from "./providerConnect";
 
 /**
  * Manage BYO (bring-your-own) model provider connections from the editor.
@@ -108,10 +107,10 @@ async function addProviderWithOAuth(
   if (!info || !info.supportsOAuth) return false;
   const connected = await connectProviderInteractively(secrets, providerId, info.label);
   if (connected) {
-    const local = (LOCAL_CREDENTIAL_PROVIDERS as readonly string[]).includes(providerId)
-      ? localCredentialStore(providerId as LocalCredentialProvider)
-      : undefined;
-    if (local) await local.resolve();
+    // A provider called from this machine (registry `accountProvider`) gets its credential
+    // persisted right away, so the next turn needs no round trip.
+    const accounts = editorAccounts(secrets);
+    if (accounts.providers.includes(providerId)) await accounts.store(providerId).resolve();
   }
   return connected;
 }

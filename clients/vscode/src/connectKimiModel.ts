@@ -9,17 +9,15 @@
 import * as vscode from "vscode";
 import { formatLocalModelRef } from "@builderforce/local-inference";
 import type { LocalCredential } from "@builderforce/provider-connect";
-import { localCredentialStore } from "./localProviderCredentials";
 import { applyModelPick } from "./modelPick";
-import { connectProviderInteractively } from "./providerConnect";
+import { connectProviderInteractively, editorAccounts } from "./providerConnect";
 
 const K3_IDS = new Set(["k3", "k3-256k"]);
 
 /** The credential, `connect` when the workspace has no usable Kimi connection, or null
  *  when the gateway could not be reached (already reported). */
-async function resolveKimi(): Promise<LocalCredential | "connect" | null> {
-  const outcome = await localCredentialStore("kimi")?.resolve();
-  if (!outcome) return null;
+async function resolveKimi(secrets: vscode.SecretStorage): Promise<LocalCredential | "connect" | null> {
+  const outcome = await editorAccounts(secrets).store("kimi").resolve();
   if (outcome.kind === "credential") return outcome.credential;
   if (outcome.kind === "unavailable") {
     void vscode.window.showErrorMessage(vscode.l10n.t("BuilderForce: could not reach your Kimi connection ({0}).", outcome.detail));
@@ -31,10 +29,10 @@ async function resolveKimi(): Promise<LocalCredential | "connect" | null> {
 export async function connectKimiAndPin(secrets: vscode.SecretStorage): Promise<void> {
   // Already connected: skip straight to the choice. Otherwise connect first — the
   // connection lands in the workspace's integrations and the token on this machine.
-  let resolved = await resolveKimi();
+  let resolved = await resolveKimi(secrets);
   if (resolved === "connect") {
     if (!(await connectProviderInteractively(secrets, "kimi", "Kimi"))) return;
-    resolved = await resolveKimi();
+    resolved = await resolveKimi(secrets);
   }
   if (!resolved || resolved === "connect") return;
   const credential = resolved;

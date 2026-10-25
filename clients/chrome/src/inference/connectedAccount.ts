@@ -14,7 +14,8 @@
 import type { HostLocalPin } from '@seanhogg/builderforce-brain-embedded';
 import { KIMI_CODE_API_HOST } from '@builderforce/kimi-oauth';
 import { clientPinOf } from '@builderforce/local-inference';
-import { createLocalCredentialStore, type GatewayRequest, type LocalCredentialStore } from '@builderforce/provider-connect';
+import type { GatewayRequest, LocalCredentialStore } from '@builderforce/provider-connect';
+import { createConnectedAccounts } from '@builderforce/provider-connect/accounts';
 import type { KeyValueStore } from '../platform/keyValue';
 
 export const KIMI_PROVIDER = 'kimi';
@@ -48,6 +49,12 @@ export interface ConnectedAccount {
   pinFor(ref: string): Promise<HostLocalPin | null>;
 }
 
+/**
+ * Rovr's binding of the shared connected accounts (`@builderforce/provider-connect/accounts`,
+ * the same implementation the editor runs). What is Rovr's own: the browser storage, the
+ * origin permission Chrome needs before Kimi can be called, and the Connect card a
+ * {@link ProviderConnectRequired} raises.
+ */
 export function createConnectedAccount(deps: {
   /** The panel's ONE status-preserving gateway call (`PanelServices.gateway`). */
   request: GatewayRequest;
@@ -56,9 +63,8 @@ export function createConnectedAccount(deps: {
   originGranted(): Promise<boolean>;
   now: () => number;
 }): ConnectedAccount {
-  const store = createLocalCredentialStore({
+  const accounts = createConnectedAccounts({
     request: deps.request,
-    provider: KIMI_PROVIDER,
     store: {
       get: (key) => deps.storage.get<string>(key),
       set: (key, value) => deps.storage.set(key, value),
@@ -68,17 +74,17 @@ export function createConnectedAccount(deps: {
   });
 
   return {
-    store,
+    store: accounts.store(KIMI_PROVIDER),
     async pinFor(ref) {
       const pin = clientPinOf(ref);
-      if (!pin || pin.provider !== KIMI_RUNTIME) return null;
-      if (!(await deps.originGranted())) throw new ProviderConnectRequired(KIMI_PROVIDER, 'origin');
-      const outcome = await store.resolve();
-      if (outcome.kind === 'credential') {
-        return { endpoint: { baseUrl: outcome.credential.baseUrl, token: outcome.credential.accessToken }, model: pin.model };
-      }
+      const provider = pin ? accounts.providerFor(pin.provider) : null;
+      if (!provider) return null;
+      if (!(await deps.originGranted())) throw new ProviderConnectRequired(provider, 'origin');
+      const outcome = await accounts.pinFor(ref);
+      if (!outcome) return null;
+      if (outcome.kind === 'endpoint') return { endpoint: outcome.endpoint, model: outcome.model };
       if (outcome.kind === 'unavailable') throw new Error(outcome.detail);
-      throw new ProviderConnectRequired(KIMI_PROVIDER, outcome.kind);
+      throw new ProviderConnectRequired(provider, outcome.reason);
     },
   };
 }

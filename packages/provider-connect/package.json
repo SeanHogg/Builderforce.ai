@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Connecting a BYO model provider's subscription and using it from the person's own machine, in one place: start the gateway's connect flow (/llm/provider-keys/:provider/oauth/start), wait out a device approval (pending / slow_down / denied / expired), and fetch + persist the short-lived local credential (/llm/provider-keys/:provider/local-credential) that a runtime on this machine sends straight to the provider. Shared by the VS Code extension, Rovr and the web settings card so the polling and caching contract cannot drift between them. Host-neutral: the authenticated request, the page opener, the clock and the string store are injected; no DOM, Node or editor globals.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./accounts": "./src/connectedAccounts.ts"
   },
   "types": "./src/index.ts",
   "scripts": {
