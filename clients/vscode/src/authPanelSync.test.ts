@@ -74,7 +74,9 @@ describe("post-login auth surface sync", () => {
     expect(app).not.toMatch(/\(!init\.signedIn\s*\|\|\s*!getToken\(\)\)/);
     expect(app).toMatch(/if\s*\(!init\.signedIn\s*&&\s*!init\.localRoute\)/);
     expect(app).toMatch(/init\.signedIn\s*&&\s*!hasToken/);
-    expect(app).toContain("void refreshToken()");
+    // The root's late-token path mints (`mintToken` → `await refreshToken()`); the
+    // transport's `void refreshToken()` moved to `canvas/CanvasScreenProviders.tsx`.
+    expect(app).toMatch(/(?:void|await) refreshToken\(\)/);
   });
 
   it("never mounts a server-persisted board without the tenant token", () => {

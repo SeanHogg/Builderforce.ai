@@ -270,6 +270,8 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ## 🧰 OTHER — enabling work outside the arc
 
+- **[gateway] Who may reconnect or replace the workspace's provider subscriptions.** `GET /llm/provider-keys`, `POST /llm/provider-keys/:provider/test` and `/oauth/start|complete` check only tenant membership (`requireTenantAccess`), not role. Any member can therefore replace the workspace's Claude, ChatGPT, Grok or Kimi subscription with their own account, and now from every chat's `/` menu (Status ▸ Connected accounts) as well as Settings ▸ API Keys. If this should be owner/manager only: gate the routes server-side, then render the composer section and the settings card disabled-with-reason through the RBAC primitive (never hidden). *Blocker: operator decision on the role policy.*
+
 ### Production ops (2026-10-10 log review)
 
 - **Disconnect Moonshot on tenant 1** (empty pay-as-you-go balance; use the Kimi Code subscription). *Blocker: operator clicks Disconnect in Settings.*
@@ -312,6 +314,7 @@ Waves 1–3 shipped (see DONE.md 2026-10-22 and 2026-10-23). Still open:
 
 ### Brain chat `[agents]`
 
+
 - **No cross-turn guard against re-deriving a finished analysis.** `seedFrom` drops tool rows, so a guard must re-serve prior results with a staleness rule. *Blocker: a captured repro.*
 - **Ask-the-Manager zero tool calls — suspect the vendor path.** Instrument `buildResponsesBody` so the 102-tool payload shape lands in the logs. Not blocked.
 - **Inherited Evermind endpoints still accept writes** (UI is read-only); a 409 would change the front-door contract.
@@ -350,6 +353,13 @@ Waves 1–3 shipped (see DONE.md 2026-10-22 and 2026-10-23). Still open:
 - **G03 SQLite system of record is built but not wired** (`clients/vscode/src/localRecordTransaction.ts`: one `BEGIN IMMEDIATE` transaction, `busy_timeout`, corrupt file refused; offline-first review step 2). It loads `node:sqlite` at runtime, which exists only on Node ≥ 22.13 (VS Code ≥ 1.101), while `engines.vscode` is `^1.95.0` (Node 20). Wiring it from activation in place of the journaled store needs that floor raised, or a journaled-store fallback kept for older hosts. *Blocker: operator decision on the VS Code engine floor.*
 - **Sync residuals after the 2026-10-20 wiring** (`api/src/application/sync/*`, `SyncRepository.ts`): (a) `sync_changes.seq` is a global bigserial, so a row whose seq was allocated before a pull's tip read but committed after it can be skipped by that cursor — needs a commit-ordered watermark (e.g. `pg_current_xact_id` snapshot or a per-destination sequence); (b) each applied event opens its own interactive transaction (one WebSocket pool checkout per event) — batch per push; (c) once a dependency's receipt is purged (90 d) a dependent event stays `dependency_pending` forever — treat a purged dependency as satisfied or reject explicitly. None blocks a first live sync; (a) matters under concurrent writers.
 - **Two journal-backed VSIX stores; the host uses one** — `clients/vscode/src/offlineLocalFirstStore.ts` (`createOfflineLocalFirstStore`, `commitOfflineEntityWrite`) has no production caller since the host moved to `durableLocalFirstStore.ts`; only its own test imports it. Fold any guarantee it pins that `localFirstStore.transaction.test.ts` does not (compaction equivalence, minted-id lookup by logical write) into the durable store's tests, then retire it. *Blocker: operator sign-off — removal in the offline path was refused on 2026-10-20 until confirmed.*
+- **The Visualization panel is VS Code-only and draws no code knowledge graph** (requested 2026-10-25). Today `VisualizationPanel` (`clients/vscode/webview/src/visualization/`) is a change tree for one host. Its edges are imports on changed diff lines only (`diffModel.ts` `buildChangeGraph`). End state:
+  - **(1) One pure projection.** `buildKnowledgeGraph(structure, knowledge, live)` returns `{nodes, edges}`. Structure is `@builderforce/repo-map` `SerializedRepoGraph`: files, weighted reference edges, symbols, PageRank. Knowledge is `project_facts` rows, joined to nodes by `fileAnchors`, with `codemap:<area>` facts as area clusters and co-touched-file edges. Live is the run's `ChangeGraph`.
+  - **(2) One presentational `KnowledgeGraphView`** in `frontend/src/components/`, which the VSIX webview already imports. Web, canvas, VS Code and Rovr each supply a data port. VS Code builds the structure from workspace files with `repo-map`. Web and cloud read the R2 repo map (`repoMapStore.ts`) through a new `GET /api/projects/:id/knowledge-graph`, cached with `getOrSetCached` keyed by repo sha plus a facts version token.
+  - **(3) The memory packages keep no edges.** `MemoryEntry` and `project_facts` are flat keyed text. Relations are derived from `fileAnchors` and codemap membership, never stored as a second copy of the repo graph.
+  - **(4) Node identity is repo plus path.** `buildChangeGraph` (`diffModel.ts`) keys nodes and diffs by repo-relative path, so in a multi-root workspace `package.json` changed in two repos merges into one node showing one repo's diff. The knowledge graph's node id must carry the repository, and the change graph must adopt it.
+
+  Acceptance: the same component renders the graph on all four hosts, and a fact remembered in one host appears on its file node in the others. *Blocker: operator review of this end-state design before code (design-before-code rule).*
 - **Recovered interrupted runs are only logged** (`clients/vscode/src/brainRunHostPorts.ts`, BuilderForce output channel) — surface them in the run list so the person can resume or dismiss.
 - **Two plain-Node runners duplicate the loop skeleton** (`server.mjs`, `githubActionsRunner.ts`). Fix = bundle the kernel into both. Not blocked.
 - **pi-tui is the last `@mariozechner/pi-*` dependency** — migrate `src/tui/*` to Ink, then remove.

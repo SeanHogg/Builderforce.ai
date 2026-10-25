@@ -31,7 +31,8 @@ import {
   type PendingChangeRepo,
   type PendingChangeSet,
 } from "./gitChangeModel";
-import { getGitApi, runGit, watchGitRepositories, type GitApiRepository } from "./gitApi";
+import { getGitApi, runGit, runGitRaw, watchGitRepositories, type GitApiRepository } from "./gitApi";
+import { boundDiff, pendingDiffCommands } from "./pendingDiffModel";
 import { ttlCache } from "./ttlCache";
 
 export type {
@@ -46,6 +47,13 @@ export { EMPTY_CHANGE_SET } from "./gitChangeModel";
 const CHANGES_TTL = 15_000;
 const CACHE_KEY = "workspace";
 const cache = ttlCache<string, PendingChangeSet>(CHANGES_TTL);
+/** The working tree's unified diff, invalidated with {@link cache} — same events. */
+const diffCache = ttlCache<string, string>(CHANGES_TTL);
+/** Bumped on every invalidation: a diff computed across one is not cached, so a slow
+ *  read that started before an agent write cannot pin the pre-write rows for a TTL. */
+let diffGeneration = 0;
+/** The read in flight, shared by every ask that arrives while it runs. */
+let diffInFlight: { generation: number; promise: Promise<string> } | undefined;
 
 const changeEmitter = new vscode.EventEmitter<void>();
 
@@ -117,9 +125,55 @@ export async function detectPendingChanges(): Promise<PendingChangeSet> {
   return set;
 }
 
+/**
+ * The uncommitted work as unified diff text — what the Visualization panel's change
+ * tree renders as before/after rows (`parseUnifiedDiff`). Every repository's diff
+ * against HEAD, concatenated (paths stay repo-relative, the shape the change graph
+ * keys on); which commands depend on whether the repository has a HEAD
+ * (`pendingDiffCommands`), and the result is bounded by file (`boundDiff`). Untracked
+ * files have no diff and are drawn from the change list. Cached and invalidated
+ * exactly like {@link detectPendingChanges}; concurrent asks share one read.
+ */
+export function detectPendingDiff(): Promise<string> {
+  const hit = diffCache.get(CACHE_KEY);
+  if (hit) return Promise.resolve(hit.value);
+  if (diffInFlight?.generation === diffGeneration) return diffInFlight.promise;
+  const generation = diffGeneration;
+  const promise = readPendingDiff()
+    .then((diff) => {
+      if (generation === diffGeneration) diffCache.set(CACHE_KEY, diff);
+      return diff;
+    })
+    .finally(() => {
+      if (diffInFlight?.promise === promise) diffInFlight = undefined;
+    });
+  diffInFlight = { generation, promise };
+  return promise;
+}
+
+/** Room for a large staged change before the per-file bound drops it; git output past
+ *  this fails the read, which would otherwise blank every row. */
+const DIFF_READ_LIMITS = { timeoutMs: 15_000, maxBuffer: 64 * 1024 * 1024 };
+
+async function readPendingDiff(): Promise<string> {
+  const set = await detectPendingChanges();
+  const parts: string[] = [];
+  for (const repo of set.repos) {
+    if (repo.changes.length === 0) continue;
+    const hasHead = (await runGit(repo.root, "rev-parse --verify -q HEAD")) !== undefined;
+    for (const command of pendingDiffCommands(hasHead)) {
+      const text = await runGitRaw(repo.root, command, DIFF_READ_LIMITS);
+      if (text) parts.push(text.endsWith("\n") ? text : `${text}\n`);
+    }
+  }
+  return boundDiff(parts.join(""));
+}
+
 /** Drop the cached set so the next read re-detects. */
 function invalidatePendingChanges(): void {
   cache.invalidate();
+  diffCache.invalidate();
+  diffGeneration += 1;
 }
 
 /**

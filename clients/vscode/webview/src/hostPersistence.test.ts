@@ -11,8 +11,9 @@ import { join } from "node:path";
 describe("the panel is wired to it", () => {
   // `App.tsx` until the chat/canvas merge: the panel's root moved to `WorkspaceApp`
   // when chat became a SURFACE of the one canvas, and the runtime moved with it into
-  // `ChatRuntimeProvider` there. Same wiring, same assertions, one file along.
-  const app = readFileSync(join(__dirname, "WorkspaceApp.tsx"), "utf8");
+  // `ChatRuntimeProvider` there — and then into `canvas/CanvasScreenProviders.tsx`, the
+  // one provider stack every board screen mounts. Same wiring, same assertions.
+  const app = readFileSync(join(__dirname, "canvas", "CanvasScreenProviders.tsx"), "utf8");
 
   it("writes chat history to the extension host's local store, signed in or out", () => {
     expect(app).toContain("createHostPersistence");

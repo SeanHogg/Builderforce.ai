@@ -23,42 +23,25 @@
  * routing unchanged.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { IntlProvider } from 'use-intl';
-import catalogs from 'virtual:bf-canvas-messages';
-import { BrainProvider, localTransport, type BrainConfig, type BrainTransport } from '@seanhogg/builderforce-brain-embedded';
 import { CreationCanvas } from '@/components/creation-canvas/CreationCanvas';
-import { ToastProvider } from '@/components/ToastProvider';
-import { ConfirmProvider } from '@/components/ConfirmProvider';
 import { sanitizeCanvasSurface } from '@/lib/canvasSurfaces';
-import { getToken, hostFetch, onInit, onTokenChange, post, refreshToken, type InitData } from './vscodeBridge';
-import { installCanvasHost } from './canvas/hostActions';
+import { getToken, onInit, onTokenChange, post, refreshToken, type InitData } from './vscodeBridge';
 import { useBoardAuth } from './canvas/useBoardAuth';
 import { BoardAuthNotice } from './canvas/BoardAuthNotice';
 import { invalidateGatewayModelOptions } from '@seanhogg/builderforce-brain-embedded';
-import { createHostPersistence } from './hostPersistence';
-import { installHostRunDriver } from './hostRunDriver';
 import { CanvasBoundary } from './CanvasBoundary';
 import { HostScopeProviders } from './canvas/HostScopeProviders';
-import { buildIdeSystemPrompt } from './systemPrompt';
-import { webviewLocalFetch } from './pageEngines';
-import { onHostMessage } from './vscodeBridge';
+import { CanvasScreenProviders, canvasMessages } from './canvas/CanvasScreenProviders';
 import { makeT } from './chat/chatLabels';
 import { VsCodeChatSurface } from './chat/VsCodeChatSurface';
 import { Project360Screen } from './Project360Screen';
 import { ProjectPageScreen } from './ProjectPageScreen';
 import { EvermindScreen } from './EvermindScreen';
 import { VisualizationPanel } from './visualization/VisualizationPanel';
+import { usePendingDiff } from './visualization/usePendingDiff';
 import { CodeAuditVisualizer } from '@/components/tools/CodeAuditVisualizer';
-
-const LOCALES = ['en', 'zh', 'es', 'fr', 'de'] as const;
-type CanvasLocale = (typeof LOCALES)[number];
-
-/** Map VS Code's display language (`zh-cn`, `pt-br`, …) onto a shipped catalog. */
-function pickLocale(value: string | undefined): CanvasLocale {
-  const base = (value ?? 'en').toLowerCase().split(/[-_]/)[0];
-  return (LOCALES as readonly string[]).includes(base) ? (base as CanvasLocale) : 'en';
-}
 
 /** Root: wait for the host's init frame, then mount the screen it asked for. */
 export function WorkspaceApp() {
@@ -139,8 +122,8 @@ export function WorkspaceApp() {
   // The destinations that are not a board. Same bundle, same transport, no Brain
   // providers — they fetch their own data, exactly as they did before the merge.
   if (init.view === 'audit-result' && init.auditResult?.codeAnalysis) {
-    const locale = pickLocale(init.labels['canvas.locale']);
-    return <IntlProvider locale={locale} messages={catalogs[locale] ?? catalogs.en}>
+    const { locale, messages } = canvasMessages(init);
+    return <IntlProvider locale={locale} messages={messages}>
       <main style={{ padding: 20 }}><CodeAuditVisualizer analysis={init.auditResult.codeAnalysis} openSource={(location, commit) => post('audit.source', { location, commit })} /></main>
     </IntlProvider>;
   }
@@ -153,58 +136,14 @@ export function WorkspaceApp() {
   return <WorkspaceScreen init={init} />;
 }
 
-/**
- * The canvas, with the editor's chat as one of its surfaces.
- *
- * The Brain providers wrap the WHOLE screen rather than the chat surface alone: the
- * run store they configure is global (a run started here keeps going while you work
- * on the board, and the cross-chat indicator reads every one of them), so scoping
- * them to the surface would tear the runtime down every time somebody looked at their
- * board.
- */
+/** The canvas, with the editor's chat as one of its surfaces. */
 function WorkspaceScreen({ init }: { init: InitData }) {
-  const session = init.session;
-  const locale = pickLocale(init.labels['canvas.locale']);
-  const messages = catalogs[locale] ?? catalogs.en;
-
-  useEffect(() => {
-    installCanvasHost(
-      init.labels,
-      session?.webOrigin ?? 'https://builderforce.ai',
-      init.extensionVersion ?? null,
-    );
-  }, [init.labels, session?.webOrigin, init.extensionVersion]);
-
-  // The canvas declares BOTH themes and treats dark as the default, opting into light
-  // via `html[data-theme='light']` — so this is the whole theme bridge.
-  useEffect(() => {
-    document.documentElement.dataset.theme = init.colorTheme === 'light' ? 'light' : 'dark';
-  }, [init.colorTheme]);
-
-  useEffect(() => {
-    if (session?.title) document.title = session.title;
-  }, [session?.title]);
-
   return (
-    <IntlProvider
-      locale={locale}
-      messages={messages}
-      // A missing key must not blank the board: `use-intl` throws on lookup failure by
-      // default, and one stale key would take the whole canvas down inside an editor
-      // panel where there is no reload button.
-      onError={(error) => post('canvas.i18nError', { message: String(error) })}
-      getMessageFallback={({ key }) => key}
-    >
-      <ChatRuntimeProvider init={init}>
-        <ToastProvider>
-          <ConfirmProvider>
-            {/* The sidebar chat view holds the conversation only — its board opens in the
-                visualization panel beside it, so nothing is drawn above the chat. */}
-            {init.boardBeside ? <VsCodeChatSurface init={init} /> : <BoardWithChat init={init} />}
-          </ConfirmProvider>
-        </ToastProvider>
-      </ChatRuntimeProvider>
-    </IntlProvider>
+    <CanvasScreenProviders init={init}>
+      {/* The sidebar chat view holds the conversation only — its board opens in the
+          visualization panel beside it, so nothing is drawn above the chat. */}
+      {init.boardBeside ? <VsCodeChatSurface init={init} /> : <BoardWithChat init={init} />}
+    </CanvasScreenProviders>
   );
 }
 
@@ -260,93 +199,14 @@ function BoardWithChat({ init }: { init: InitData }) {
 }
 
 /**
- * The chat surface's RUNTIME: the transport that streams a turn, the store the
- * transcript is kept in, and the driver that hands the agent loop to the extension
- * host.
- *
- * It is a provider around the whole screen rather than state inside the chat surface
- * because a run outlives the surface being looked at — that is the property the
- * editor exists for.
- */
-function ChatRuntimeProvider({ init, children }: { init: InitData; children: React.ReactNode }) {
-  // The extension host owns the durable local application store; panel visibility never
-  // decides whether history survives. ONE adapter for the life of the panel: it holds the
-  // attachment preview URLs, so rebuilding it on a token re-mint or grounding refresh
-  // would blank every image already in the conversation.
-  const [persistence] = useState(createHostPersistence);
-
-  // The gateway, as a transport. It funds two DIFFERENT jobs: streaming a turn when no
-  // on-device model is pinned, and serving the platform tool catalogue always. Built
-  // once so those two uses cannot drift to different URLs or auth.
-  const gatewayTransport = useMemo<BrainTransport>(
-    () => ({
-      baseUrl: init.baseUrl,
-      getToken,
-      onUnauthorized: () => void refreshToken(),
-      defaultModel: init.model,
-    }),
-    [init.baseUrl, init.model],
-  );
-
-  const config = useMemo<BrainConfig>(
-    () => ({
-      // Two transports, one streamer. An on-device route points at the runtime on this
-      // machine, sends no bearer token (it has no account), and performs its request
-      // through the HOST — the webview cannot open a plain-HTTP localhost connection
-      // itself. Everything else is unchanged, so the agent loop and tool-call protocol
-      // are identical either way.
-      //
-      // All chat history is host-local first; account synchronization is a separate
-      // permissioned batch job, not a different persistence implementation.
-      transport: init.localRoute
-        ? { ...localTransport({ baseUrl: init.localRoute.baseUrl }, webviewLocalFetch(hostFetch)), defaultModel: init.localRoute.model }
-        : gatewayTransport,
-      persistence,
-      resolveSystemPrompt: () => buildIdeSystemPrompt({ hasWorkspace: init.hasWorkspace, grounding: init.grounding }),
-    }),
-    [init.baseUrl, init.model, init.hasWorkspace, init.grounding, init.localRoute, gatewayTransport, persistence],
-  );
-
-  return (
-    <BrainProvider config={config}>
-      <HostRunBridge />
-      {children}
-    </BrainProvider>
-  );
-}
-
-/**
- * Runs execute in the EXTENSION HOST, not in this webview (see `hostRunDriver.ts`):
- * closing or switching away from the tab no longer ends the agent's work. The host
- * owns the tools — the local file tools AND the shared gateway platform catalog, the
- * same list the native chat participant uses — so this panel registers none. What it
- * still does is refresh in-webview views (the chat↔ticket panel) after a platform
- * write, off the host's `run.tool` announcement, mirroring the web app's event bus.
- */
-function HostRunBridge() {
-  useEffect(() => {
-    const uninstall = installHostRunDriver();
-    const offTool = onHostMessage<{ name: string; mutating: boolean; remote: boolean; ok: boolean }>('run.tool', (m) => {
-      if (m.remote && m.mutating && m.ok) {
-        window.dispatchEvent(new CustomEvent('bf:mcp-write', { detail: { name: m.name } }));
-      }
-    });
-    return () => {
-      offTool();
-      uninstall();
-    };
-  }, []);
-  return null;
-}
-
-/**
  * The VISUALIZATION panel — the right-hand half of the chat split (AC3/AC4/AC5).
  *
- * Same bundle, same transport, same init frame as the chat panel; the host only
- * changes `init.view`. Nothing here re-implements the canvas: the SAME
- * `CreationCanvas` is mounted with the SAME props `WorkspaceScreen` gives it, and
- * the panel receives it as `children` so there is exactly one canvas on screen
- * and no second copy to drift.
+ * Same bundle, same transport, same init frame as the chat panel (the host hosts the
+ * same `WorkspaceSurface`; only `init.view` differs), and the SAME provider stack
+ * (`CanvasScreenProviders`) — the board mounted outside it is what failed to draw.
+ * Nothing here re-implements the canvas: the SAME `CreationCanvas` is mounted with the
+ * SAME props `WorkspaceScreen` gives it, and the panel receives it as `children` so
+ * there is exactly one canvas on screen and no second copy to drift.
  *
  * The difference is what surrounds it. `WorkspaceScreen` passes the conversation
  * as a canvas `hostSurface` — the chat behind the board. This panel passes none:
@@ -361,37 +221,40 @@ function HostRunBridge() {
 function VisualizationScreen({ init }: { init: InitData }) {
   const session = init.session;
   const board = useBoardAuth(session, init.signedIn);
+  const diff = usePendingDiff();
 
-  // A board with no account behind it cannot be written to the gateway — every read
-  // would 401 — so it persists in this panel, exactly as the chat surface's does.
-  // Signed out, the panel still mounts: the canvas is where an on-device user works.
+  // The boundary wraps the CANVAS, not the panel: a board that fails to draw leaves
+  // the toggle and the change tree working, which is exactly what the tree is for.
+  // The boundary prints the notice and Try again itself, so its fallback is empty
+  // rather than a second copy of the same sentence.
   const canvas = session && board.state === 'ready' ? (
-    <HostScopeProviders projectId={init.project?.id ?? null}>
-      <CreationCanvas
-        sessionId={session.id}
-        persistence={session.durable === false ? 'local' : 'server'}
-        initialSurface={sanitizeCanvasSurface(init.surface)}
-        // NO hostSurfaces: the chat is not drawn here. The panel owns the frame.
-        hostSurfaces={{}}
-      />
-    </HostScopeProviders>
-  ) : <BoardAuthNotice auth={board} labels={init.labels} />;
-
-  // The fallback keeps the panel ALIVE on a failure: no board is drawn, but the
-  // user is still in a working panel rather than a dead frame — and the change
-  // tree (which the panel renders around the canvas) is unaffected by a canvas
-  // crash, which is exactly what the tree is for.
-  return (
     <CanvasBoundary
-      fallback={<div className="bf-center">{init.labels['canvas.degraded'] ?? 'The board could not be drawn.'}</div>}
+      fallback={null}
       notice={init.labels['canvas.degraded'] ?? 'The board could not be drawn.'}
       retryLabel={init.labels['canvas.retry'] ?? 'Try again'}
+      resetKey={session.id}
     >
-      {/* No `chatId`: the visualization frame (`buildVisualizationInitFrame`) names no
-          chat, so every run drives the canvas/changes swap. */}
-      <VisualizationPanel labels={init.labels}>
+      <HostScopeProviders projectId={init.project?.id ?? null}>
+        <CreationCanvas
+          sessionId={session.id}
+          // A board with no account behind it cannot be written to the gateway —
+          // every read would 401 — so it persists in this panel.
+          persistence={session.durable === false ? 'local' : 'server'}
+          initialSurface={sanitizeCanvasSurface(init.surface)}
+          // NO hostSurfaces: the chat is not drawn here. The panel owns the frame.
+          hostSurfaces={{}}
+        />
+      </HostScopeProviders>
+    </CanvasBoundary>
+  ) : <BoardAuthNotice auth={board} labels={init.labels} />;
+
+  return (
+    <CanvasScreenProviders init={init}>
+      {/* No `chatId`: the visualization frame names no chat, so every run drives the
+          canvas/changes swap. */}
+      <VisualizationPanel labels={init.labels} diffText={diff}>
         {canvas}
       </VisualizationPanel>
-    </CanvasBoundary>
+    </CanvasScreenProviders>
   );
 }

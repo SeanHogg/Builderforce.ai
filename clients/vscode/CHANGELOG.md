@@ -2,6 +2,24 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.78] — Sub-agents get on with the work, Stop works everywhere, long chats stay responsive
+
+- **A sub-agent does its slice instead of delegating it again.** A child told to implement part of a plan was nudged to "stop reading and delegate" because its brief mentioned sub-agents, and spent its time spawning more researchers. Only your own request can ask for sub-agents now. A child can still spawn helpers when it needs them.
+- **Owners read their children's reports in full.** Each report now carries up to 8,000 characters, up from 4,000, and waiting on four children returns all four reports whole, so the owner no longer re-spawns researchers to recover what was cut.
+- **Routing learns from runs that delivered nothing.** A change request that ran for 20 or more turns without changing code or delegating now counts as a failure for the model that did the work, so that model stops being picked to lead the next coding run.
+- **Stop and the time limit end the whole command on Linux and macOS.** A stopped command used to leave the program it started running, and the run waited on it. A command that prints without end is now stopped at 4 MB of output instead of running to the 10-minute limit.
+
+- **The Visualization tab draws the board.** It opens beside the chat and showed only "The board could not be drawn." It now draws the same board as the editor tab. If the board ever fails, the Changes view and its file list keep working.
+- **See each changed line.** The Changes view used to list files with "No diff to show". It now shows each file's before and after, line by line. This also works in a repository with no commit yet, and with any `diff.mnemonicPrefix` setting. A very large file, such as a lockfile, is skipped so the other files still show their changes.
+- **Opening the board no longer slows your chat's on-device model.** In-editor models stay with the chat, so closing the board can't end a reply mid-stream.
+
+- **Long chats no longer freeze the panel.** A conversation with thousands of steps now shows its newest page. **Show earlier steps** at the top loads older ones, and nothing is removed from the chat. Streaming a reply no longer redraws every past step.
+- **See how full the context is.** A small meter beside **To** in the composer shows how much of the model's context window the last turn used. It turns amber, then red, as the window fills.
+- **See when the context was compacted.** When a long run summarizes its older steps into a memory to stay within the model's window, the transcript now shows it as a step you can expand to read that memory. Before, it happened silently.
+- **Reopening a long chat no longer re-summarizes its whole history.** A run's compacted memory is now saved with the chat. After a reload, or from another surface, the next run continues from that memory.
+- **Consolidate and Fork work in the panel again.** For chats kept on this machine they used to fail every time with "needs a BuilderForce account". They now summarize through the same model route your runs use.
+- **Paging through a long chat holds its place.** Once you load earlier steps, they no longer scroll away while a run keeps going. **Show newer steps** and **Jump to latest** bring you back down, and jumping to an open question loads the steps around it.
+
 ## [2026.10.69] — The chat gets the whole sidebar; the board opens beside it
 
 - **The conversation is no longer squeezed under the board.** The chat in the side panel now shows only the conversation. The board, with your codebase and the run's changes, opens in its own tab in the editor area, so you can watch the work and read the conversation at the same time. It appears once you're signed in, and it doesn't split the file you have open or take the cursor from you.

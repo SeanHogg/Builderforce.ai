@@ -396,7 +396,7 @@ export function activate(context: vscode.ExtensionContext): void {
       // The class, not an inline `createWebviewPanel`: the webview posts `ready` at
       // module load, and only a panel that ANSWERS it ever leaves the boot screen.
       // See `src/visualizationPanel.ts` for what was broken before this existed.
-      return VisualizationPanel.open(context, runHost);
+      return VisualizationPanel.open(context);
     }),
   );
 

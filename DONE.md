@@ -1,20 +1,51 @@
+## ✅ RESOLVED 2026-10-25 — Long chats stay responsive, show context use and compaction; the context logic moves into builderforce-memory (builderforce-memory 2026.10.25 + 2026.10.26 · VSIX 2026.10.79)
+
+**Reported:** the VS Code panel froze ("window unresponsive") on long chats, and nothing showed how full the context was or when a run compacted it.
+
+- **Freeze.** `BrainTimeline` rendered every node: one chat had 529 messages and 4,535 run steps, all redrawn on every streamed token. It now renders a key-anchored window (`packages/brain-ui/src/timeline/useRenderWindow.ts`, 150 nodes) with Show earlier / Show newer / Jump to latest. The window stays bounded: expanding pins both ends, a reveal applies once per nonce, and switching chats opens the newest page. Rows are memoized, message and trace nodes are derived once per object (WeakMap caches in `timelineNodes.ts`), and `hasSubagents` reads messages instead of nodes.
+- **Context meter.** `ContextMeter` in every composer (VS Code, web, Rovr, canvas, guest) shows the last turn's `usage.prompt` against the serving model's window, which the run now stamps on `llm.complete` (`contextUsageOf`). It is localized in all catalogs and themed by tokens.
+- **Compaction is visible.** A fold renders as one expandable row with its note: from the durable auto marker, else from the run's `context.compacted` step when no marker was saved.
+- **Defect 1, the fold was not durable.** Every new run re-summarized the whole history. A fold is now persisted as an auto consolidation marker carrying `keepFromId`, the first persisted message it did not cover. The run records which persisted message each transcript entry is (`runStore/runFoldMarker.ts`). It matches history persisted between runs and clamps `keepFromId` to any message the cell never saw (an @agent reply, another surface's turn). An unplaceable marker is ignored, never read as covering everything.
+- **Defect 2, Consolidate and Fork were dead in VS Code.** The local-first `summarizeChat` now summarizes through the gateway (`clients/vscode/src/chatSummarizer.ts`). Over-long input is summarized in 48k-token chunks.
+- **Markers are not replies.** `isModelReply` (`brain-embedded/src/modelReply.ts`) is used by retry, newest-reply actions, triage claim detectors and child reports. The api's `learnFromPersistedTurns` skips markers.
+- **Architecture (operator: "split by layer").** The pure logic now lives in `@seanhogg/builderforce-memory/working`: `buildWorkingTranscript`, `summarizeTranscript`, consolidation markers, `scopeToConsolidation` and `foldKeepFromId`, each with jest tests. The old vitest tests were ported with unchanged assertions. `brain-embedded` keeps the bindings: `transcriptSummarizer.ts` (the stream adapter), the run store and the hooks (`useChatTranscript` was split out of `useBrainConversation`). `windowFit/` stays in brain-embedded as a binding: its pure core is `/handoff`'s `packHandoff`, and the rest depends on run-policy, cost-levers, local-inference and the model catalog. Recorded in PRD 35 §3.1.
+
+## ✅ RESOLVED 2026-10-25 — VS Code Visualization panel draws the board and shows real before/after diffs (VSIX 2026.10.78)
+
+**Why.** Every open of the Visualization panel showed "The board could not be drawn." twice and nothing else.
+- **Root cause (webview).** `VisualizationScreen` mounted `CreationCanvas` outside every provider it reads: intl, the Brain runtime, toasts, confirms, the canvas host install and the theme. The first `useTranslations` threw.
+- **Root cause (host).** The panel posted a narrow frame of its own and answered only `ready`, so the canvas's persistence, capture, run and error calls were never answered.
+
+**What shipped:**
+- **The panel is a third host of the ONE `WorkspaceSurface`**, beside the editor tab and the sidebar chat. Its frame is `buildWorkspaceInit`'s, run through the pure `asVisualizationFrame`: `view` is the literal "visualization", and `surface`, `boardBeside` and an undefined `pendingChanges` are dropped. It inherits the run mirror, the live working tree, theme re-push and sign-in refresh. `buildVisualizationInitFrame` is deleted.
+- **`webview/src/canvas/CanvasScreenProviders.tsx` is the one provider stack** for every board screen. `WorkspaceScreen` and `VisualizationScreen` both mount it. The wiring test moved with it.
+- **The error boundary now wraps only the canvas**, so a board that fails to draw leaves the Changes toggle and tree working, and the notice prints once.
+- **The change tree renders hunks.** Before this, every file read "No diff to show".
+  - `detectPendingDiff` (`gitChanges.ts`) is served as `changes.diff`, and `usePendingDiff` re-asks on every `pendingChanges` push.
+  - The pure `pendingDiffModel.ts` (tested) picks the commands: `diff HEAD`, or `--cached` plus worktree when a repository has no commit yet. It pins the `a/` and `b/` prefixes against `diff.mnemonicPrefix`, and bounds the result by file, so one huge first file no longer blanks every row.
+  - Reads are untrimmed (`runGitRaw`), so the last context row survives. Concurrent asks share one read, and a generation counter stops a read that crossed an invalidation from being cached.
+- **The panel offers no page engines** (`offersPageEngines: false`). The host prefers the newest webview, so the panel would otherwise have loaded the chat's WebGPU models and ended a turn when it closed.
+- **`WorkspaceSurface` stays host-agnostic:** the host supplies its `frame` transform.
+
 ## ✅ RESOLVED 2026-10-25 — Connected accounts in every chat: see each provider account's health, Test it and Reconnect it from the composer's `/` menu (web, canvas, VS Code, Rovr)
 
 **Why.** A Grok 403 left no way to check or reconnect the account from the chat surface. Status lived only in Settings ▸ API Keys and the VS Code command palette's QuickPick, and that QuickPick ignored the dispatch-observed alert.
 
 **What shipped:**
 - **`@builderforce/provider-connect` `connections.ts`.** `listProviderConnections` (`GET /llm/provider-keys`; 403 → `null`), `testProviderConnection`, `completePasteConnect`, `connectionHealth` and `createProviderConnectionsClient` (one port: list, test, start, completePaste, awaitDevice). Brand names come from `@builderforce/model-catalog`. `ProviderConnectError` now carries `detail`.
-- **brain-ui `connections/`.** `ConnectionsPanel` sits under the Status tab of the ONE `BrainComposer` (`account.connections`). Each row shows its health (working, usage limit, not entitled, sign-in expired, unreadable), a Test button that repaints the row from the probe's verdict, and an in-place Reconnect (paste code or device approval) for subscription rows. `useProviderReconnect` is THE connect state machine. The panel hides itself for non-owners. Copy goes through `connectionsLabelsFrom` (`connections.<key>`). All colours are theme tokens, and the actions wrap.
+- **brain-ui `connections/`.** `ConnectionsPanel` sits under the Status tab of the ONE `BrainComposer` (`account.connections`). Each row shows its health (working, usage limit, not entitled, sign-in expired, unreadable), a Test button that repaints the row from the probe's verdict, and an in-place Reconnect (paste code or device approval) for subscription rows. THE connect state machine is `reconnectFlow.ts`: one flow per (client, provider) that lives OUTSIDE React, read through `useProviderReconnect`. It does this so that closing the menu mid-connect neither aborts a device approval (which the server redeems only when a poll sees it) nor loses a paste step. Every await is fenced by a generation number. A gateway 403 on the list shows a "not available from here" line rather than hiding the section. A probe that persisted no verdict leaves the row's health alone. Copy goes through `connectionsLabelsFrom` (`connections.<key>`). All colours are theme tokens, and the actions wrap.
 - **Hosts.**
   - Web: `lib/providerConnections.ts` (`webConnections`), `providerConnections.*` in all 5 catalogs.
-  - VS Code: `editorConnections` over the new `authedGateway`, which shares `authedFetch`'s token-refresh send. The host's new `open.external` opens https URLs only. `conn.*` keys are in `connectionsLabels.ts` and all l10n bundles.
-  - Rovr: `services.kimi.request`, with `conn*` messages in all 5 locales.
+  - VS Code: `editorConnections` over the new `authedGateway`, which shares `authedFetch`'s token-refresh send. The host's new `open.external` opens only a provider sign-in URL (`isSubscriptionSignInUrl`, from the per-provider `signInDomains` in `@builderforce/model-catalog`). `conn.*` keys are in `connectionsLabels.ts` and all l10n bundles.
+  - Rovr: `PanelServices.gateway` (one status-preserving call, which the Kimi account now takes too) and `PanelServices.connections`, with `conn*` messages in all 5 locales. `useKimiConnect` now runs on the same flow, so a Kimi connect started from Settings or from the Status tab shows in both.
 - **Duplicates removed.**
-  - The web settings card's own start/paste/device-poll state now runs on `useProviderReconnect`.
+  - The web settings card's own start/paste/device-poll state now runs on `useProviderReconnect`. Remove and Save stay disabled while a connect is in flight. The web lookup passes `{code}` through literally.
   - Deleted: `providerKeysApi.oauthStart` and `oauthComplete`, `isDeadConnectCode`, the unused `providerKeys.errStartConnect`, and the VSIX `bfApi.completeByoOAuth` and `ByoOAuthCompleteResult` (now `completePasteConnect`).
   - The VSIX `byoConnections.ts` provider list is derived from `LLM_PROVIDER_INFO`.
 
-**Tests:** new `provider-connect/src/connections.test.ts` and `brain-ui/src/connections/ConnectionsPanel.test.tsx`. Existing `provider-connect` tests unchanged.
+**Tests:** new `provider-connect/src/connections.test.ts`, `brain-ui/src/connections/ConnectionsPanel.test.tsx` (including survives-menu-close and late-device-approval cases) and the `isSubscriptionSignInUrl` cases in `model-catalog/src/providers.test.ts`. Existing tests unchanged.
+
+**Still open:** whether only owners/managers may reconnect is an operator decision, logged in ROADMAP (OTHER).
 
 ## ✅ RESOLVED 2026-10-25 — PRD 35 WS8i–o: the overnight run that did nothing — children stop delegating, routing finds the coder, dead and nearly-spent accounts stop leading (api 2026.10.81 · brain-embedded 2026.10.52 · agent-tools 2026.10.14 · model-router 2026.10.18 · tool-output-policy 2026.10.2)
 

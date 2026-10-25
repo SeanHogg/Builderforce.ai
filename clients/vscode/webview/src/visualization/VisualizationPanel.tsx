@@ -79,11 +79,9 @@ export interface VisualizationPanelProps {
    */
   pendingChanges?: PendingChangeSet | null;
   /**
-   * The run's unified diff. A PROP, not a new host message: nothing sends one today
-   * (the host pushes file LISTs, never text — `detectPendingChanges` in
-   * `src/gitChanges.ts` carries status only), and inventing a frame this panel
-   * listens for alone would be a frame that always arrives empty. The moment the host
-   * grows a diff source it is wired to this prop and nothing else changes.
+   * The working tree's unified diff — the before/after rows. A PROP so this panel stays
+   * host-free: the editor supplies it from `usePendingDiff` (the host's `changes.diff`,
+   * `detectPendingDiff` in `src/gitChanges.ts`); another host supplies its own.
    */
   diffText?: string;
   /** Which chat's changes to show. Omitted ⇒ the union of every chat's. */

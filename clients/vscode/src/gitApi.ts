@@ -124,15 +124,29 @@ export function watchGitRepositories(onChange: () => void): vscode.Disposable {
  * consumers cannot disagree about timeout, quoting or failure handling.
  */
 export async function runGit(cwd: string, args: string): Promise<string | undefined> {
+  const out = (await runGitRaw(cwd, args))?.trim();
+  return out || undefined;
+}
+
+/**
+ * {@link runGit}, UNTRIMMED and with empty output kept distinct from failure (`""` vs
+ * `undefined`) — for callers that parse whitespace-significant output (a diff's last
+ * context row is a lone space) or must tell "nothing to show" from "git refused".
+ * Larger output and a longer timeout are the caller's to ask for.
+ */
+export async function runGitRaw(
+  cwd: string,
+  args: string,
+  limits: { timeoutMs?: number; maxBuffer?: number } = {},
+): Promise<string | undefined> {
   try {
     const { stdout } = await execAsync(`git -c core.quotepath=false ${args}`, {
       cwd,
-      timeout: 5_000,
+      timeout: limits.timeoutMs ?? 5_000,
       windowsHide: true,
-      maxBuffer: 8 * 1024 * 1024,
+      maxBuffer: limits.maxBuffer ?? 8 * 1024 * 1024,
     });
-    const out = stdout.trim();
-    return out || undefined;
+    return stdout;
   } catch {
     return undefined;
   }

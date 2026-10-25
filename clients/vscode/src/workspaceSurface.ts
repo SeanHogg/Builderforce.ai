@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { isSubscriptionSignInUrl } from "@builderforce/model-catalog";
 import { artifactRoutePath } from "@seanhogg/builderforce-brain-embedded";
 import { getCurrentUserId } from "./bfApi";
 import type { BrainRunHost, WebviewRunStart } from "./brainRunHost";
@@ -6,7 +7,7 @@ import { getWebBaseUrl } from "./gateway";
 import { turnLimbicBlock } from "./personalityLimbic";
 import { confirmChatDelete } from "./chatDeletion";
 import { getEditorContext, watchEditorContext } from "./editorContext";
-import { detectPendingChanges, watchPendingChanges } from "./gitChanges";
+import { detectPendingChanges, detectPendingDiff, watchPendingChanges } from "./gitChanges";
 import { setSelectedModel, setSelectedModelPool } from "./modelState";
 import { hostPageEngines } from "./pageEngineBridge";
 import type { ModelFileServer } from "./hostBfi/modelFileServer";
@@ -127,6 +128,13 @@ export interface WorkspaceSurfaceHost {
   /** This host holds only the conversation; the board and the run's changes open in the
    *  visualization panel beside it (the sidebar chat view, which has no room for both). */
   readonly boardBeside?: boolean;
+  /** Re-address the workspace init frame for this host (the visualization panel routes
+   *  the webview to its own screen). Omitted ⇒ the frame is sent as built. */
+  readonly frame?: (init: Record<string, unknown>) => Record<string, unknown>;
+  /** Whether this webview offers its page engines (WebGPU `bfi`, WebLLM) to the host's
+   *  model routes. Default true. The host prefers the NEWEST offer, so a panel that
+   *  holds no conversation must opt out or it takes over the chat's model turns. */
+  readonly offersPageEngines?: boolean;
   /** The webview reported the chat it is showing (a tab names itself after it). */
   onSessionMeta?(chatId: number | undefined, title: string | undefined): void;
 }
@@ -244,7 +252,9 @@ export class WorkspaceSurface implements vscode.Disposable {
         // This webview runs the page engines (WebGPU `bfi`, WebLLM); offer them to the
         // host's pinned and local-first routes for as long as it is up.
         this.detachPageEngines?.();
-        this.detachPageEngines = hostPageEngines.attach({ post: (m) => this.post(m) });
+        this.detachPageEngines = this.host.offersPageEngines === false
+          ? undefined
+          : hostPageEngines.attach({ post: (m) => this.post(m) });
         // A reloaded webview abandoned any model load it was streaming.
         hooks.modelFiles?.release(this);
         await this.sendInit();
@@ -362,6 +372,15 @@ export class WorkspaceSurface implements vscode.Disposable {
         }
         break;
       }
+      // Connected accounts → Reconnect: the provider's sign-in page, whose URL the
+      // gateway minted (it carries the PKCE challenge, so the host cannot build it).
+      // Opened only on a provider's own sign-in domains (the shared provider table),
+      // so a compromised webview cannot turn this into an open redirect.
+      case "open.external": {
+        const url = typeof msg.url === "string" ? msg.url : "";
+        if (isSubscriptionSignInUrl(url)) void vscode.env.openExternal(vscode.Uri.parse(url));
+        break;
+      }
       // The chat's pending-changes bar: open ONE changed file's diff, or take the
       // user to the full Changes list. Both go through the same commands the sidebar
       // uses, so "open" and "review" mean exactly one thing across the extension.
@@ -375,6 +394,15 @@ export class WorkspaceSurface implements vscode.Disposable {
         break;
       case "changes.review":
         void vscode.commands.executeCommand("builderforce.reviewChanges");
+        break;
+      // The Visualization panel's before/after rows: the diff text for the same working
+      // tree `pendingChanges` lists, re-asked whenever that list moves.
+      case "changes.diff":
+        try {
+          this.respond(msg.id, true, await detectPendingDiff());
+        } catch (error) {
+          this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
+        }
         break;
       // Run the existing connection-diagnostics command (opens the output channel).
       case "diagnose":
@@ -482,7 +510,8 @@ export class WorkspaceSurface implements vscode.Disposable {
   }
 
   private async sendInit(): Promise<void> {
-    this.post(await buildWorkspaceInit(this.ctx, { session: this.session, surface: this.surfaceRequest, boardBeside: !!this.host.boardBeside }));
+    const init = await buildWorkspaceInit(this.ctx, { session: this.session, surface: this.surfaceRequest, boardBeside: !!this.host.boardBeside });
+    this.post(this.host.frame ? this.host.frame(init) : init);
   }
 
   dispose(): void {

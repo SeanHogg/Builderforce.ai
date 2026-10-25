@@ -102,9 +102,13 @@ export const BRAIN_HOST_MESSAGES = [
    *  refused while its run is live). The webview then deletes through its own store. */
   'chat.confirmDelete',
   'open.web',
+  /** Open a provider's sign-in page (Connected accounts → Reconnect) in the browser. */
+  'open.external',
   'open.artifact',
   'changes.open',
   'changes.review',
+  /** The working tree's unified diff (request → string) — the Visualization panel's before/after rows. */
+  'changes.diff',
   'fetchLimbic',
 ] as const;
 
