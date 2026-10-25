@@ -276,6 +276,20 @@ export interface VendorCallParams {
    *  {@link VendorModule.requiresLocalEgress}; every other vendor calls `fetch`
    *  directly, exactly as before. */
   egress?: VendorEgress;
+  /** Handed the upstream response's headers the moment they arrive — a success or a
+   *  refusal alike — so the gateway can read how much of the ACCOUNT's quota is left
+   *  (`providerHeadroom.ts`). Set per attempt by `dispatchInternal`; absent = unread. */
+  observeHeaders?: (headers: Headers) => void;
+}
+
+/** Hand a response's headers to an observer without letting it touch the call it observes. */
+export function observeUpstream(observe: ((headers: Headers) => void) | undefined, response: Response): void {
+  if (!observe) return;
+  try {
+    observe(response.headers);
+  } catch (error) { /* advisory — reading quota headers never fails a call */
+    reportCaughtError(error, { source: 'application/llm/vendors/types.ts', operation: 'observeUpstream' });
+  }
 }
 
 /**
@@ -916,7 +930,7 @@ export const CAPACITY_LIMIT_MARKER = 'capacity/usage limit';
 export function isCapacityLimitBody(text: string | undefined | null): boolean {
   if (!text) return false;
   return (
-    /usage\s+limit|weekly\b[^.]{0,40}\blimit|hit\s+(?:your|the)\b[^.]{0,40}\blimit|credit\s+balance|extra\s+usage\s+credits|insufficient[_\s-]?quota|exceeded\s+your\s+(current\s+)?quota|(?:usage\s+)?allowance\b[^.]{0,30}\b(depleted|exhausted|used)|spend(ing)?\s+limit|billing\s+(hard\s+)?limit|reached\s+your[^.]*\blimit/i.test(text)
+    /usage\s+limit|weekly\b[^.]{0,40}\blimit|hit\s+(?:your|the)\b[^.]{0,40}\blimit|credit\s+balance|extra\s+usage\s+credits|out\s+of\s+credits?\b|insufficient[_\s-]?quota|exceeded\s+your\s+(current\s+)?quota|(?:usage\s+)?allowance\b[^.]{0,30}\b(depleted|exhausted|used)|spend(ing)?\s+limit|billing\s+(hard\s+)?limit|reached\s+your[^.]*\blimit/i.test(text)
     || isAccountUnusableBody(text)
   );
 }
@@ -1070,6 +1084,8 @@ export async function fetchWithVendorTimeout(
    *  abort, subrequest-cap sentinel, error classification) is identical, which is
    *  the point of putting the seam HERE: one choke point, no per-vendor variants. */
   egress?: VendorEgress,
+  /** See {@link VendorCallParams.observeHeaders}. */
+  observeHeaders?: (headers: Headers) => void,
 ): Promise<Response> {
   const timeoutMs = timeoutMsArg && timeoutMsArg > 0 ? timeoutMsArg : DEFAULT_VENDOR_CALL_TIMEOUT_MS;
   const controller = new AbortController();
@@ -1084,9 +1100,11 @@ export async function fetchWithVendorTimeout(
     else externalSignal.addEventListener('abort', onExternalAbort, { once: true });
   }
   try {
-    return await (egress
+    const response = await (egress
       ? egress(endpoint, init, controller.signal)
       : fetch(endpoint, { ...init, signal: controller.signal }));
+    observeUpstream(observeHeaders, response);
+    return response;
   } catch (err) {
     if (externalSignal?.aborted) {
       throw new RequestAbortedError(vendorId, model);
@@ -1183,12 +1201,14 @@ export function forwardCallOpts(params: VendorCallParams): {
   timeoutMs?: number;
   signal?: AbortSignal;
   egress?: VendorEgress;
+  observeHeaders?: (headers: Headers) => void;
 } {
   return {
     ...(params.title ? { title: params.title } : {}),
     ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
     ...(params.signal ? { signal: params.signal } : {}),
     ...(params.egress ? { egress: params.egress } : {}),
+    ...(params.observeHeaders ? { observeHeaders: params.observeHeaders } : {}),
   };
 }
 
@@ -1217,6 +1237,8 @@ export async function executeVendorPost<T>(args: {
   signal?: AbortSignal;
   /** Alternate origin for this call — see {@link VendorEgress}. */
   egress?: VendorEgress;
+  /** See {@link VendorCallParams.observeHeaders}. */
+  observeHeaders?: (headers: Headers) => void;
   /** HTTP method. `GET` sends no body (the request is fully described by the
    *  endpoint URL — e.g. Pollinations' prompt-in-path image API). Default `POST`. */
   method?: 'POST' | 'GET';
@@ -1240,7 +1262,7 @@ export async function executeVendorPost<T>(args: {
   onFatal: (vendorId: string, model: string, status: number, errText: string) => never;
 }): Promise<T> {
   const {
-    vendorId, endpoint, apiKey, model, body, headers, timeoutMs, signal, egress,
+    vendorId, endpoint, apiKey, model, body, headers, timeoutMs, signal, egress, observeHeaders,
     logPrefix, authFailoverNoun, parseResponse, onEmbeddedError, onFatal,
   } = args;
   const method = args.method ?? 'POST';
@@ -1256,7 +1278,7 @@ export async function executeVendorPost<T>(args: {
       ...(headers ?? {}),
     },
     ...(method === 'POST' ? { body: JSON.stringify(body) } : {}),
-  }, timeoutMs, signal, egress);
+  }, timeoutMs, signal, egress, observeHeaders);
 
   if (resp.ok) {
     const raw = args.readOk ? await args.readOk(resp) : await resp.json();
@@ -1319,8 +1341,9 @@ export async function executeChatCompletion(args: {
   timeoutMs?: number;
   signal?: AbortSignal;
   egress?: VendorEgress;
+  observeHeaders?: (headers: Headers) => void;
 }): Promise<VendorCallResult> {
-  const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs, signal, egress } = args;
+  const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs, signal, egress, observeHeaders } = args;
   const parseResponse = args.parseResponse ?? parseOpenAIResponse;
 
   return executeVendorPost<VendorCallResult>({
@@ -1334,6 +1357,7 @@ export async function executeChatCompletion(args: {
     ...(timeoutMs != null ? { timeoutMs } : {}),
     ...(signal ? { signal } : {}),
     ...(egress ? { egress } : {}),
+    ...(observeHeaders ? { observeHeaders } : {}),
     logPrefix: 'vendors',
     authFailoverNoun: 'model',
     parseResponse: (raw): VendorCallResult => {
@@ -1376,8 +1400,9 @@ export async function executeChatCompletionStream(args: {
   timeoutMs?: number;
   signal?: AbortSignal;
   egress?: VendorEgress;
+  observeHeaders?: (headers: Headers) => void;
 }): Promise<VendorStreamResult> {
-  const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs, signal, egress } = args;
+  const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs, signal, egress, observeHeaders } = args;
 
   const resp = await fetchWithVendorTimeout(vendorId, model, endpoint, {
     method: 'POST',
@@ -1388,7 +1413,7 @@ export async function executeChatCompletionStream(args: {
       ...(headers ?? {}),
     },
     body: JSON.stringify({ ...body, stream: true }),
-  }, timeoutMs, signal, egress);
+  }, timeoutMs, signal, egress, observeHeaders);
 
   if (!resp.ok) {
     const errText = (await resp.text()).slice(0, 400);

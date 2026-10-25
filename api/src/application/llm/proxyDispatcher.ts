@@ -37,6 +37,7 @@ import { exhaustedResponse, requestErrorResponse, subrequestExhaustedResponse } 
 import { toLlmUsage, type ChatCompletionRequest, type FailoverEvent, type ProxyResult } from './proxyTypes';
 import type { ProxyConfig } from './proxyConfig';
 import type { ProxyFunding } from './proxyFunding';
+import { createHeadroomObserver } from './providerHeadroom';
 
 /** Per-dispatch overrides — the backstop's credited env + budget, a caller's abort
  *  signal, and the last-chance probe's cooldown bypass. */
@@ -141,6 +142,7 @@ export class ProxyDispatcher {
       ?? this.cfg.vendorCallTimeoutMs;
     const vendorEnv = overrides?.vendorEnv ?? this.funding.vendorEnv();
     const cacheTtl = resolveCacheTtl(sanitizedBody as unknown as Record<string, unknown>);
+    const observeHeadroom = createHeadroomObserver(this.cfg.env, this.cfg.tenantId, (model) => this.funding.isOwnerServedModel(model));
     const callParams = {
       messages,
       ...(liftedTools ? { tools: liftedTools } : {}),
@@ -171,12 +173,14 @@ export class ProxyDispatcher {
       // so re-filtering the probe by the very state it exists to override would skip
       // every hop after the first and hand the caller back the same dead end.
       ...(overrides?.ignoreCooldown ? {} : { isCooled: this.midCascadeCooldownCheck() }),
+      // How much of each connected account is left, from the provider's own headers — a
+      // nearly-spent account stops leading the next request (`providerHeadroom.ts`).
+      onUpstreamHeaders: observeHeadroom,
     };
 
-    if (sanitizedBody.stream) {
-      return this.dispatchStream(candidates, callParams, vendorEnv, requestHeaders);
-    }
-    return this.dispatchJson(candidates, callParams, vendorEnv, sanitizedBody);
+    return sanitizedBody.stream
+      ? this.dispatchStream(candidates, callParams, vendorEnv, requestHeaders)
+      : this.dispatchJson(candidates, callParams, vendorEnv, sanitizedBody);
   }
 
   /**

@@ -239,6 +239,21 @@ export async function exchangeSubscriptionCode(
 }
 
 /**
+ * Did a subscription refresh fail because the GRANT is gone — reconnect, don't retry?
+ *
+ * 400 (OAuth2 `invalid_grant`: the refresh token was rotated away or expired), 401 and
+ * 403. ONE verdict for every subscription resolver: the xAI and Kimi resolvers already
+ * counted 400 as dead while the Anthropic and OpenAI ones called it transient, so a dead
+ * Claude refresh token was reported as "expired — often transient, retry" for a whole night
+ * (VS Code chat #6) when the only fix was to reconnect. 5xx, 429 and network failures stay
+ * transient.
+ */
+export function isRevokedRefresh(error: unknown): boolean {
+  const status = (error as { status?: number } | null | undefined)?.status;
+  return status === 400 || status === 401 || status === 403;
+}
+
+/**
  * Re-mint subscription tokens. Throws the shared {@link TokenEndpointError},
  * whose `status` is the UPSTREAM status — the resolvers read it to tell a revoked
  * refresh token (401/403) from a transient failure, which a 400/403/502 API

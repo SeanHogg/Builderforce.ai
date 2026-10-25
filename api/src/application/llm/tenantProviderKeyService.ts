@@ -33,6 +33,7 @@ import { tenantLlmProviderKeys, tenantMembers } from '../../infrastructure/datab
 import { encryptSecretForStorage, decryptSecretFromStorage } from '../../infrastructure/auth/MfaService';
 import { credentialSecret } from '../integrations/credentialCrypto';
 import { refreshAnthropicToken, OAUTH_SAFETY_MARGIN_MS, type AnthropicOAuthTokens } from './anthropicOAuth';
+import { isRevokedRefresh } from './subscriptionOAuthCode';
 import { refreshOpenAICodexToken, type OpenAICodexOAuthTokens } from './openaiCodexOAuth';
 import { refreshXaiToken, type XaiOAuthTokens } from './xaiOAuth';
 import { refreshKimiOAuth, type KimiOAuthTokens } from './kimiOAuth';
@@ -40,6 +41,7 @@ import {
   listOpenRouterConnections,
   resolveOpenRouterConnectionKeys,
   connectionModelRefs,
+  demoteAlertedConnections,
   type OpenRouterConnection,
 } from './openRouterConnectionService';
 // The provider catalog (which providers exist, which vendor each dispatches on) lives
@@ -55,7 +57,8 @@ import {
   type LlmProvider,
   type ProviderAuthType,
 } from './llmProviderCatalog';
-import { loadAlertedByoVendors } from './providerAuthAlerts';
+import { loadAlertedByoVendors, loadAlertedConnectionIds } from './providerAuthAlerts';
+import { loadLowHeadroomVendors } from './providerHeadroom';
 import { listProviderModelSelections, type ProviderModelSelections } from './providerModelSelection';
 import { invalidateProviderModelCaches } from './providerModelCacheKeys';
 import { loadTenantProviderRows, invalidateTenantProviderRows } from './tenantProviderRows';
@@ -269,8 +272,7 @@ export async function resolveOpenAICodexResolution(env: Env, tenantId: number, f
     await setTenantProviderOAuth(env, tenantId, 'openai', refreshed, null);
     return { auth: { accessToken: refreshed.access, accountId: refreshed.accountId } };
   } catch (e) {
-    const status = (e as { status?: number }).status;
-    if (status === 401 || status === 403) return { auth: null, reason: 'revoked' };
+    if (isRevokedRefresh(e)) return { auth: null, reason: 'revoked' };
     if (Date.now() < tokens.expires + OAUTH_SAFETY_MARGIN_MS) return { auth: { accessToken: tokens.access, accountId: tokens.accountId } };
     return { auth: null, reason: 'expired' };
   }
@@ -293,8 +295,7 @@ export async function resolveXaiOAuthResolution(env: Env, tenantId: number, fres
     await setTenantProviderOAuth(env, tenantId, 'xai', refreshed, null);
     return { token: refreshed.access };
   } catch (e) {
-    const status = (e as { status?: number }).status;
-    if (status === 400 || status === 401 || status === 403) return { token: null, reason: 'revoked' };
+    if (isRevokedRefresh(e)) return { token: null, reason: 'revoked' };
     if (Date.now() < tokens.expires + OAUTH_SAFETY_MARGIN_MS) return { token: tokens.access };
     return { token: null, reason: 'expired' };
   }
@@ -337,8 +338,7 @@ export async function resolveKimiOAuthResolution(env: Env, tenantId: number, fre
     await setTenantProviderOAuth(env, tenantId, 'kimi', refreshed, null);
     return { token: refreshed.access, expires: refreshed.expires };
   } catch (e) {
-    const status = (e as { status?: number }).status;
-    if (status === 400 || status === 401 || status === 403) return { token: null, reason: 'revoked' };
+    if (isRevokedRefresh(e)) return { token: null, reason: 'revoked' };
     // A refresh that failed for a transient reason must not disconnect a working account:
     // inside the safety margin the existing token is still worth trying.
     if (Date.now() < tokens.expires + OAUTH_SAFETY_MARGIN_MS) return { token: tokens.access, expires: tokens.expires };
@@ -447,9 +447,8 @@ export async function resolveAnthropicResolution(
     await setTenantProviderOAuth(env, tenantId, 'anthropic', refreshed, null);
     return { auth: { mode: 'oauth', accessToken: refreshed.access } };
   } catch (e) {
-    const status = (e as { status?: number } | undefined)?.status;
-    // A revoked/expired refresh token (401/403) is terminal — reconnect required.
-    if (status === 401 || status === 403) return { auth: null, reason: 'revoked' };
+    // A dead refresh token (400 invalid_grant / 401 / 403) is terminal — reconnect required.
+    if (isRevokedRefresh(e)) return { auth: null, reason: 'revoked' };
     // Transient refresh failure (5xx/429/network): if the access token is still within
     // its REAL validity window, keep using it rather than degrading to the shared pool.
     if (Date.now() < tokens.expires + OAUTH_SAFETY_MARGIN_MS) {
@@ -651,14 +650,24 @@ export async function resolveTenantLlmCredentials(env: Env, tenantId: number): P
   // cycle that used to block this is gone (the provider catalog is a leaf now).
   // Degrades to "none alerted": failing to read a warning must never demote a working
   // account, which would be a worse failure than the one this prevents.
-  creds.alertedVendors = [
-    ...await loadAlertedByoVendors(env, tenantId, byoVendorIdsFromSummaries(configured))
-      .catch(() => new Set<string>()),
-  ];
+  // An account that is about to run out is demoted the same way (`providerHeadroom.ts`):
+  // its own headers said it is past 90% of a window, so it stops leading until the window
+  // resets instead of leading until it refuses a turn.
+  const byoVendorIds = byoVendorIdsFromSummaries(configured);
+  // The same for OpenRouter connections: one the gateway has seen refused (401/403, or a
+  // key that will not apply) moves behind every healthy account instead of leading each
+  // request with a dead attempt (VS Code chat #6: ~1,770 such attempts in one night).
+  const [alerted, lowHeadroom, alertedConnections] = await Promise.all([
+    loadAlertedByoVendors(env, tenantId, byoVendorIds).catch(() => new Set<string>()),
+    loadLowHeadroomVendors(env, tenantId, byoVendorIds),
+    loadAlertedConnectionIds(env, tenantId, openRouterConnections.map((c) => c.id)),
+  ]);
+  creds.alertedVendors = [...new Set([...alerted, ...lowHeadroom])];
+  if (alertedConnections.size) creds.openRouterConnections = demoteAlertedConnections(openRouterConnections, alertedConnections);
   const usableProviderRanks = configured
     .filter((p) => usable.has(p.provider))
     .map((p) => p.priority ?? Number.POSITIVE_INFINITY);
-  const leadingConnection = openRouterConnections[0];
+  const leadingConnection = openRouterConnections.find((c) => !alertedConnections.has(c.id));
   const connectionRank = leadingConnection?.priority ?? Number.POSITIVE_INFINITY;
   const providerRank = usableProviderRanks.length
     ? Math.min(...usableProviderRanks)

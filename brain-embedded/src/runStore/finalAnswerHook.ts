@@ -23,7 +23,8 @@ import { takeRunSteering } from './steerInterrupt';
 import { askStopHook } from '../stopHooks';
 import { leftChangeUnshipped, unshippedChangeNudge } from '../selfReviewShip';
 import { leftChangeUnreviewed, unreviewedChangeNudge } from '../previewReview';
-import { leftDelegationUndone, undelegatedRequestNudge } from '../delegationRequest';
+import { undelegatedRequestNudge } from '../delegationRequest';
+import { runLeftDelegationUndone } from './earlyDelegation';
 import { isRestatedReply, restatedReplyNudge } from '../restatedReply';
 import { emit, nowIso, pushTrace, runTrace } from './runCells';
 import { persistMidTurnText } from './turnPersistence';
@@ -192,11 +193,7 @@ export function finalAnswerHook(run: RunLoopContext): NonNullable<LoopHooks<Chat
     // started one. Sent back once with the delegation contract; quiet once a spawn was
     // attempted (a refused or failed child is a result to report) and on any host that
     // cannot spawn. The `ask_user` twin of this gate is in `beforeToolCalls`.
-    if (runTool && !run.delegationRecoveryUsed && leftDelegationUndone({
-      toolNames: catalogToolNames,
-      requestText: userRequest,
-      events: runTrace(c),
-    })) {
+    if (runTool && !run.delegationRecoveryUsed && runLeftDelegationUndone(run)) {
       run.delegationRecoveryUsed = true;
       await requeueWithNudge(undelegatedRequestNudge(catalogToolNames));
       pushTrace(c, {

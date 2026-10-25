@@ -18,6 +18,7 @@ import type { CatalogView } from '@builderforce/model-catalog';
 import type { WorkloadProfile } from '@builderforce/workload';
 import { orderByExpectedCost } from './expectedCost.js';
 import { isCostFirstObjective, resolveRoleObjective, roleUsesLearnedRanking } from './objective.js';
+import { liftUntriedStronger } from './untriedStronger.js';
 
 export type PoolWorkload = Pick<WorkloadProfile, 'role' | 'arcStage' | 'inputTokens' | 'outputTokens'>;
 
@@ -43,8 +44,9 @@ export function orderPoolForWorkload(
 ): string[] {
   const ordered = poolOrderIsCostFirst(workload) ? orderByExpectedCost(pool, workload, view) : [...pool];
   if (!evidence.stats || !roleUsesLearnedRanking(workload.role, workload.arcStage)) return ordered;
-  return rankModelsForAction(ordered, evidence.stats, {
+  const learned = rankModelsForAction(ordered, evidence.stats, {
     minSamples: evidence.minSamples,
     ...(evidence.explore ? { explore: evidence.explore } : {}),
   });
+  return liftUntriedStronger(learned, evidence.stats, resolveRoleObjective(workload.role, workload.arcStage), view, evidence.minSamples);
 }

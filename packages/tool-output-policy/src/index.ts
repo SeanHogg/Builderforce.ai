@@ -1,7 +1,7 @@
 /**
  * @builderforce/tool-output-policy — THE tool-output budget (PRD C7). One policy for the
- * Brain (brain-embedded), agent-runtime, the cloud durable loop (via the agent-loop
- * codec) and the container image (compiled by `api/scripts/gen-tool-output-policy.mjs`).
+ * Brain (brain-embedded), agent-runtime and the cloud durable loop (via the agent-loop
+ * codec).
  */
 
 export {

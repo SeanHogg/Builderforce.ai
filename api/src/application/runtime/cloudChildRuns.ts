@@ -16,7 +16,7 @@
  */
 
 import { eq, inArray } from 'drizzle-orm';
-import { childReportText, type ChildReportLike, type ModelRole } from '@builderforce/agent-tools';
+import { childReportText, clipChildOutput, type ChildReportLike, type ModelRole } from '@builderforce/agent-tools';
 import { subagentSystemPrompt } from '@builderforce/agent-loop';
 import { executions } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
@@ -155,7 +155,7 @@ function reportOf(row: ChildRow, spec: CloudChildSpec): ChildReportLike {
     name: spec.asAgent?.name ?? spec.persona?.name ?? spec.label,
     state,
     label: spec.label,
-    output: (state === 'done' ? row.result : row.errorMessage ?? row.result) ?? '',
+    output: clipChildOutput((state === 'done' ? row.result : row.errorMessage ?? row.result) ?? ''),
     ...(spec.ticket ? { ticket: spec.ticket } : {}),
   };
 }

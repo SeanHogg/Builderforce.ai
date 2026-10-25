@@ -6,7 +6,9 @@
  * 1. The role orders by tier and price ({@link orderForRole}).
  * 2. Where the role lets the system choose ({@link roleUsesLearnedRanking}), models
  *    with enough evidence re-rank by what they actually delivered; the role order
- *    stays the tie-break and the order for everything still cold.
+ *    stays the tie-break and the order for everything still cold — except that an
+ *    untried model stronger than every measured one keeps the lead on a quality-first
+ *    role ({@link liftUntriedStronger}), so evidence cannot seal out a better coder.
  * 3. Vendor HEALTH is re-applied last, so a good history cannot lift a vendor that is
  *    failing right now back to the lead.
  *
@@ -19,6 +21,7 @@ import type { CatalogView } from '@builderforce/model-catalog';
 import type { ArcStage } from '@builderforce/workload';
 import { resolveRoleObjective, roleUsesLearnedRanking } from './objective.js';
 import { orderForRole } from './orderForRole.js';
+import { liftUntriedStronger } from './untriedStronger.js';
 
 export interface RankConnectedOptions {
   role?: ModelRole;
@@ -41,7 +44,8 @@ export function rankConnectedForRole(
   view: CatalogView,
   opts: RankConnectedOptions = {},
 ): string[] {
-  const byRole = orderForRole(models, resolveRoleObjective(opts.role, opts.arcStage), view, opts.demotedVendors);
+  const objective = resolveRoleObjective(opts.role, opts.arcStage);
+  const byRole = orderForRole(models, objective, view, opts.demotedVendors);
   if (!roleUsesLearnedRanking(opts.role, opts.arcStage)) return byRole;
   const bias = opts.bias && Object.keys(opts.bias).length > 0 ? opts.bias : undefined;
   const learned = rankModelsForAction(byRole, opts.stats, {
@@ -49,5 +53,5 @@ export function rankConnectedForRole(
     ...(bias ? { bias } : {}),
     ...(opts.explore ? { explore: opts.explore } : {}),
   });
-  return orderForRole(learned, 0, view, opts.demotedVendors);
+  return orderForRole(liftUntriedStronger(learned, opts.stats, objective, view, opts.minSamples), 0, view, opts.demotedVendors);
 }

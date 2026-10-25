@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Approved design, in progress. **WS0 landed** (clean tree, `main` = `origin/main` at `6b1a1469e`, 2026-10-25). **WS8a–h shipped 2026-10-25 in VSIX 2026.10.76** (DONE.md); its leftovers are in ROADMAP. **WS1 is running** (contract, package skeleton, conformance harness, guards) on branch `feat/agent-run-ws1`; WS2a–g and WS6 are queued behind it, then WS3/WS4/WS5, then WS7. Board: epic 5979, one ticket per workstream. Revised 2026-10-25: adds run efficiency (§2.1, WS8, §6.10, §8.4). Evidence: one VS Code run took 79 turns to update this PRD and never updated it. |
+| Status | Approved design, in progress. **WS0 landed** (clean tree, `main` = `origin/main` at `6b1a1469e`, 2026-10-25). **WS8a–h shipped 2026-10-25 in VSIX 2026.10.76** (DONE.md); its leftovers are in ROADMAP. **WS8i–o shipped 2026-10-25** (api 2026.10.81, brain-embedded 2026.10.52, agent-tools 2026.10.14, model-router 2026.10.18, tool-output-policy 2026.10.2; DONE.md), after the overnight WS1 run (VS Code chat #6) delivered 5 files in 6.5 hours. **WS1 is running** (contract, package skeleton, conformance harness, guards) on branch `feat/agent-run-ws1`; WS2a–g and WS6 are queued behind it, then WS3/WS4/WS5, then WS7. Board: epic 5979, one ticket per workstream. Revised 2026-10-25: adds run efficiency (§2.1, WS8, §6.10, §8.4). Evidence: one VS Code run took 79 turns to update this PRD and never updated it. |
 | Owner | Agents program (planning: the session model; implementation: Opus agents; verify: Sonnet agents) |
 | Entry points | VS Code · Rovr / Web / canvas · On-prem agent · Cloud / container |
 | Design reference | [`docs/design/one-agent-one-kernel.html`](../design/one-agent-one-kernel.html), the picture: end state, both matrices, retention ledger, telemetry. Live copy: https://claude.ai/artifact/Ggc3G5y2ZLkJsVe1jDHag8 |
@@ -305,6 +305,31 @@ entry points, carrying the tests unchanged.
 | 8f | **E2 context pack** + recall query | `brainRunHost.ts` `runContextFor` gains a third part, the pack (§3.2 `ContextPack`). It is built once per run with no model call, time-boxed and failure-tolerant:<br>• focus files: inlined if ≤16k chars, otherwise their outline;<br>• the chat's linked tickets and runs;<br>• git state for each checkout;<br>• matching `codemap:` facts.<br>The pack renders as the volatile turn-context block. Recall queries with the prompt plus a host hint built from the focus paths and headings. |
 | 8g | **E4 reads** + **E6 background shell** | `windowedCap` with the run's resolved window, threaded into `trimToolResult`. `read_file` `paths[]` (≤8) and a markdown outline when a file is over the cap. `run_command` `background` / `yieldMs` plus `command_status` / `command_stop` on a `ShellCapability.start/poll/kill` job API. Jobs die with the run. |
 | 8h | **E7 model preflight** | Before turn 1, check BYO health (refreshing first where the API supports it). An expired, revoked or unresolved provider is announced in the run before any work. `llm.model_downgrade` fires for auto-routed turns too. |
+
+Added 2026-10-25 (evening), after the overnight run of VS Code chat #6 ("implement the PRD
+using subagents", 857 turns, ~6.5 hours, 11 children, 5 files written). Diagnosed from the
+chat's local journal and the ops DB. Each item ships on today's home now; the WS2 module that
+owns the area ports it, tests unchanged.
+
+| WS | Defect (verified) | Fix on today's home | Ported by |
+|---|---|---|---|
+| 8i | **Children were told to delegate.** `leftDelegationUndone` read a child's BRIEF as the user's ask; every PRD 35 brief names the sub-agent policy, so the WS1 coder was told "STOP READING AND DELEGATE" at step 2, spawned four researchers and waited 90 minutes before its first write; a research child fanned out four more. | `DelegationRequestInput.delegatedRun`; one `runLeftDelegationUndone(run)` (`brain-embedded/src/runStore/earlyDelegation.ts`) behind all three gates, exempting any run with `lineage`. A child keeps its owner's catalog and may still spawn. | WS2c (`RunPolicy.delegation` is set from the user's request only, never from `RunTask.dispatch.source: 'subagent'`) |
+| 8j | **Child reports were cut twice.** 4K per report in VS Code, then the 6K default cap on `wait_agents`; owners re-asked finished children and re-spawned researchers. | `SUBAGENT_REPORT_CHARS` (8K) + `clipChildOutput` in agent-tools, used by the VS Code and cloud report builders; `wait_agents: 32_000` in `tool-output-policy`. | WS2c / WS2f |
+| 8k | **Learned routing sealed out stronger coders.** Any model with ≥8 samples ranked ahead of every cold one, so a STANDARD model with history led `code` turns over a never-tried ULTRA coder indefinitely. | `liftUntriedStronger` (`packages/model-router`), quality-first roles only, on both the connected-account and plan-pool paths. | WS2g |
+| 8l | **Empty-handed runs taught the router nothing.** IDE outcomes were reported only when code changed. | `codeRunOutcome` grades `failed` for a change request that ran ≥20 turns and changed and delegated nothing (stopped or not). | WS2g + WS6 |
+| 8m | **Dead OpenRouter connection led every request** (~1,770 401s in one night): only the daily probe alerted a connection and the seed never read connection alerts. | Live-failover connection alerts (keyed connections) + `demoteAlertedConnections` in the credential resolver. | WS2g |
+| 8n | **No consumption awareness.** An account was demoted only after it refused a turn. | `providerHeadroom.ts`: provider rate-limit headers (Anthropic unified/API, OpenAI-style, Codex) observed per attempt; an owner account ≥90% used is demoted until its window resets. | WS2g |
+| 8o | **A dead Claude refresh token read as transient** ("expired — retry") for the whole night: Anthropic/OpenAI resolvers treated 400 `invalid_grant` as transient, xAI/Kimi as revoked. | One `isRevokedRefresh` (400/401/403) for all four subscription resolvers. | WS2g |
+
+Not code: that night every frontier account the tenant had was refused — Anthropic (refresh
+token dead), Grok (403 "out of credits or need a Grok subscription"), Codex (403), Kimi (429)
+and the OpenRouter connection (401). With 8k–8o the router routes and reports this honestly,
+but a coder can only be used once the owner reconnects or tops up an account.
+
+Still open from that run, owned by WS2d (A3 progress detector on every entry point): a child
+that keeps announcing "one final check, then I write" never trips any guard in VS Code, because
+the progress detector is bound only in the cloud's `costLoop/loopGuards.ts`. It is ported, not
+copied, in WS2d and reaches VS Code at WS4.
 
 E9, one catalog strategy across executions, stays in WS2f. VS Code's lexical ranking works as
 it is. The fix is to unify the other executions onto one strategy, and it needs WS6's

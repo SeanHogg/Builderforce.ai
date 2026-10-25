@@ -27,6 +27,19 @@ function counterOf(run: RunLoopContext): ReadsWithoutSpawn {
   return counter;
 }
 
+/**
+ * THE delegation gate for one run — the early nudge, the prose-end backstop and the
+ * `ask_user` redirect all ask it, so a sub-agent is exempt on every path at once.
+ */
+export function runLeftDelegationUndone(run: RunLoopContext): boolean {
+  return leftDelegationUndone({
+    toolNames: run.catalogToolNames,
+    requestText: run.userRequest,
+    events: runTrace(run.c),
+    delegatedRun: !!run.req.lineage,
+  });
+}
+
 /** What this call is to the counter. `isReadTool` is dispatch's own `isDedupableRead`. */
 export function delegationCallKind(name: string, args: unknown, isReadTool: boolean): DelegationCallKind {
   if (isSpawnTool(name)) return 'spawn';
@@ -44,7 +57,7 @@ export function earlyDelegationAdvisory(run: RunLoopContext, name: string, args:
   const kind = delegationCallKind(name, args, isReadTool);
   const reads = counter.record(kind);
   if (kind !== 'read' || !counter.due(READS_BEFORE_DELEGATION_NUDGE)) return null;
-  if (!leftDelegationUndone({ toolNames: run.catalogToolNames, requestText: run.userRequest, events: runTrace(run.c) })) return null;
+  if (!runLeftDelegationUndone(run)) return null;
   counter.markNudged();
   const nudge = earlyDelegationNudge(run.catalogToolNames, reads);
   pushTrace(run.c, {

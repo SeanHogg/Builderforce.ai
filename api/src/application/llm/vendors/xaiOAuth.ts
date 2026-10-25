@@ -1,4 +1,4 @@
-import { CAPACITY_LIMIT_MARKER, VendorFatalError, VendorRetryableError, fetchWithVendorTimeout, isCapacityLimitBody, throwWithUpstreamDiagnostic, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
+import { CAPACITY_LIMIT_MARKER, VendorFatalError, VendorRetryableError, fetchWithVendorTimeout, isCapacityLimitBody, observeUpstream, throwWithUpstreamDiagnostic, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { pseudoStreamFromCall } from './pseudoStream';
 import { peekResponsesStreamError, responsesStreamResponse } from './responsesStream';
@@ -123,8 +123,8 @@ async function xaiFetch(params: VendorCallParams, chain: ReasoningChain, extra?:
     // bounding a long answer — the timer clears once headers land. The buffered call only
     // answers when the whole generation exists, so it keeps the caller's signal alone.
     return streamed
-      ? fetchWithVendorTimeout('xai-oauth', params.model, ENDPOINT, init, params.timeoutMs, params.signal)
-      : fetch(ENDPOINT, { ...init, signal: params.signal });
+      ? fetchWithVendorTimeout('xai-oauth', params.model, ENDPOINT, init, params.timeoutMs, params.signal, undefined, params.observeHeaders)
+      : fetch(ENDPOINT, { ...init, signal: params.signal }).then((r) => { observeUpstream(params.observeHeaders, r); return r; });
   };
   let response = await send(chain);
   // Replayed reasoning is the one thing in this body the request never carried before.

@@ -160,6 +160,8 @@ export interface AuthFailoverLike {
   vendor: string;
   code: number;
   detail?: string;
+  /** The model ref that failed — names WHICH OpenRouter connection a failure belongs to. */
+  model?: string;
 }
 
 /**
@@ -252,6 +254,32 @@ export function authAlertsFromFailovers(
     byProvider.set(alert.provider, alert);
   }
   return [...byProvider.values()];
+}
+
+/**
+ * Project a cascade's failovers onto the tenant's OpenRouter CONNECTIONS that need
+ * attention — the connection twin of {@link authAlertsFromFailovers}, deduped per
+ * connection, first occurrence kept.
+ *
+ * Before this only the daily probe ever alerted a connection, so a revoked connection key
+ * kept leading every request between sweeps: VS Code chat #6 spent ~1,770 attempts in one
+ * night on three models of a connection that answered 401 every time. `connectionOf` maps a
+ * failed model ref to the connection that serves it on the tenant's OWN key, or null — a
+ * keyless connection runs on the operator's key, whose failure is not the owner's to fix.
+ */
+export function connectionAuthAlertsFromFailovers(
+  failovers: ReadonlyArray<AuthFailoverLike>,
+  connectionOf: (modelRef: string) => number | null,
+  now: number = Date.now(),
+): ConnectionAuthAlert[] {
+  const byConnection = new Map<number, ConnectionAuthAlert>();
+  for (const f of failovers) {
+    const connectionId = f.model ? connectionOf(f.model) : null;
+    if (connectionId == null || byConnection.has(connectionId)) continue;
+    const alert = connectionAlertFromFailure(connectionId, f.vendor, f.code, f.detail, now);
+    if (alert) byConnection.set(connectionId, alert);
+  }
+  return [...byConnection.values()];
 }
 
 // ---------------------------------------------------------------------------
@@ -513,6 +541,30 @@ async function clearAuthAlert(
   try { await env.AUTH_CACHE_KV.delete(key); } catch (error) { /* advisory */ 
     reportCaughtError(error, { source: "application/llm/providerAuthAlerts.ts", operation: "clearProviderAuthAlert" });
   }
+}
+
+/**
+ * The tenant's OpenRouter connections currently KNOWN-BROKEN — the connection twin of
+ * {@link loadAlertedByoVendors}, read for the same reason: so a dead connection stops
+ * leading the seed. Same contract: cached per connection, demote never remove, and an
+ * unreadable alert degrades to "healthy".
+ */
+export async function loadAlertedConnectionIds(
+  env: ProviderAuthAlertEnv,
+  tenantId: number,
+  connectionIds: Iterable<number>,
+): Promise<Set<number>> {
+  const ids = [...new Set(connectionIds)];
+  if (ids.length === 0) return new Set();
+  const alerted = await Promise.all(ids.map(async (id) => {
+    try {
+      return (await loadConnectionAuthAlert(env, tenantId, id)) ? [id] : [];
+    } catch (error) {
+      reportCaughtError(error, { source: 'application/llm/providerAuthAlerts.ts', operation: 'loadAlertedConnectionIds' });
+      return [];
+    }
+  }));
+  return new Set(alerted.flat());
 }
 
 /**

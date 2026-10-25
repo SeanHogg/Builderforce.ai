@@ -1,5 +1,5 @@
 import { parseSseDataFrames } from '@seanhogg/builderforce-memory/wire';
-import { AUTH_STATUSES, VendorFatalError, VendorRetryableError, throwWithUpstreamDiagnostic, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
+import { AUTH_STATUSES, VendorFatalError, VendorRetryableError, observeUpstream, throwWithUpstreamDiagnostic, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
 import { pseudoStreamFromCall } from './pseudoStream';
 import { peekResponsesStreamError, responsesStreamResponse } from './responsesStream';
 import { buildResponsesBody, normalizeResponsesPayload, type ResponsesPayload } from './responsesApi';
@@ -162,6 +162,7 @@ async function codexFetch(params: VendorCallParams): Promise<Response> {
     body: JSON.stringify(codexRequestBody(params)),
     signal: params.signal,
   });
+  observeUpstream(params.observeHeaders, response);
   if (!response.ok) {
     const message = (await response.text()).slice(0, 500);
     throwWithUpstreamDiagnostic(ENDPOINT, response, message, () => classifyCodexFailure(params.model, response.status, message));

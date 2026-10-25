@@ -35,8 +35,10 @@ import type { Env } from '../../env';
 import { getManagerEmails } from '../approval/approvalNotifier';
 import { sendTransactionalEmail } from '../email/sendEmail';
 import { sendByoCredentialAlertEmail, type ByoCredentialAlertRow } from '../../infrastructure/email/EmailService';
+import { connectionOwnerOf, listOpenRouterConnections } from './openRouterConnectionService';
 import {
   authAlertsFromFailovers,
+  connectionAuthAlertsFromFailovers,
   loadConnectionAuthAlert,
   loadProviderAuthAlert,
   recordConnectionAuthAlert,
@@ -135,14 +137,38 @@ export async function raiseProviderAuthAlertsFromFailovers(
   failovers: ReadonlyArray<AuthFailoverLike>,
 ): Promise<void> {
   const alerts = authAlertsFromFailovers(failovers);
-  if (alerts.length === 0) return;
   // Sequential: the alerts are ≤1 per provider and this runs off the response path, while
   // parallel raises against the same tenant would each build their own DB handle.
   for (const alert of alerts) {
     const detail = failovers.find((f) => f.vendor === alert.vendor)?.detail ?? '';
-    await raiseProviderAuthAlert(env, tenantId, alert, detail).catch((error) => { /* advisory */ 
+    await raiseProviderAuthAlert(env, tenantId, alert, detail).catch((error) => { /* advisory */
       reportCaughtError(error, { source: "application/llm/byoCredentialAlerting.ts", operation: "raiseProviderAuthAlertsFromFailovers" });
     });
+  }
+  await raiseConnectionAlertsFromFailovers(env, tenantId, failovers);
+}
+
+/**
+ * The OpenRouter-connection half of the dispatch-observed path. Reads the tenant's
+ * connections (cached) only when a connection model actually failed, so the common path
+ * costs one array scan.
+ */
+async function raiseConnectionAlertsFromFailovers(
+  env: Env,
+  tenantId: number,
+  failovers: ReadonlyArray<AuthFailoverLike>,
+): Promise<void> {
+  if (!failovers.some((f) => f.model?.startsWith('openrouter/'))) return;
+  try {
+    const connections = await listOpenRouterConnections(env, tenantId);
+    const owner = connectionOwnerOf(connections);
+    for (const alert of connectionAuthAlertsFromFailovers(failovers, owner)) {
+      const label = connections.find((c) => c.id === alert.connectionId)?.label ?? `#${alert.connectionId}`;
+      const detail = failovers.find((f) => f.model && owner(f.model) === alert.connectionId)?.detail ?? '';
+      await raiseConnectionAuthAlert(env, tenantId, alert, label, detail);
+    }
+  } catch (error) { /* advisory — alerting never fails the request it observed */
+    reportCaughtError(error, { source: 'application/llm/byoCredentialAlerting.ts', operation: 'raiseConnectionAlertsFromFailovers' });
   }
 }
 

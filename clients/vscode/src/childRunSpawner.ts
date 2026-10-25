@@ -20,7 +20,7 @@ import {
   queueRunSteering,
   type RunLineage,
 } from "@seanhogg/builderforce-brain-embedded";
-import { WAIT_INTERRUPTED_NOTE, childReportText as reportText, ownerDirectionText as directionText } from "@builderforce/agent-tools";
+import { WAIT_INTERRUPTED_NOTE, childReportText as reportText, clipChildOutput, ownerDirectionText as directionText } from "@builderforce/agent-tools";
 import { MAX_CHILD_DEPTH, type ChildReport, type ChildRuns } from "./childRuns";
 
 /** One delegation, as the spawn tools describe it. */
@@ -144,9 +144,6 @@ export function childControls(host: ChildRunHost, owner: ChildOwner): ChildContr
   };
 }
 
-/** Longest child answer carried back to the owner; the chat holds the whole of it. */
-const REPORT_OUTPUT_CHARS = 4000;
-
 /** What a settled child run reported — read from the run itself, never re-derived. */
 function reportOf(key: number, lineage: RunLineage, req: ChildRequest, stopped: boolean): ChildReport {
   const snapshot = getRunSnapshot(key);
@@ -163,7 +160,7 @@ function reportOf(key: number, lineage: RunLineage, req: ChildRequest, stopped: 
     name: lineage.agent.name,
     label: lineage.label,
     state,
-    output: output.length > REPORT_OUTPUT_CHARS ? `${output.slice(0, REPORT_OUTPUT_CHARS)}…` : output,
+    output: clipChildOutput(output),
     ...(req.ticket ? { ticket: req.ticket } : {}),
     ...(files.size ? { changedFiles: [...files] } : {}),
   };

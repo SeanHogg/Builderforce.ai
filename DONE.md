@@ -1,3 +1,39 @@
+## ✅ RESOLVED 2026-10-25 — Connected accounts in every chat: see each provider account's health, Test it and Reconnect it from the composer's `/` menu (web, canvas, VS Code, Rovr)
+
+**Why.** A Grok 403 left no way to check or reconnect the account from the chat surface. Status lived only in Settings ▸ API Keys and the VS Code command palette's QuickPick, and that QuickPick ignored the dispatch-observed alert.
+
+**What shipped:**
+- **`@builderforce/provider-connect` `connections.ts`.** `listProviderConnections` (`GET /llm/provider-keys`; 403 → `null`), `testProviderConnection`, `completePasteConnect`, `connectionHealth` and `createProviderConnectionsClient` (one port: list, test, start, completePaste, awaitDevice). Brand names come from `@builderforce/model-catalog`. `ProviderConnectError` now carries `detail`.
+- **brain-ui `connections/`.** `ConnectionsPanel` sits under the Status tab of the ONE `BrainComposer` (`account.connections`). Each row shows its health (working, usage limit, not entitled, sign-in expired, unreadable), a Test button that repaints the row from the probe's verdict, and an in-place Reconnect (paste code or device approval) for subscription rows. `useProviderReconnect` is THE connect state machine. The panel hides itself for non-owners. Copy goes through `connectionsLabelsFrom` (`connections.<key>`). All colours are theme tokens, and the actions wrap.
+- **Hosts.**
+  - Web: `lib/providerConnections.ts` (`webConnections`), `providerConnections.*` in all 5 catalogs.
+  - VS Code: `editorConnections` over the new `authedGateway`, which shares `authedFetch`'s token-refresh send. The host's new `open.external` opens https URLs only. `conn.*` keys are in `connectionsLabels.ts` and all l10n bundles.
+  - Rovr: `services.kimi.request`, with `conn*` messages in all 5 locales.
+- **Duplicates removed.**
+  - The web settings card's own start/paste/device-poll state now runs on `useProviderReconnect`.
+  - Deleted: `providerKeysApi.oauthStart` and `oauthComplete`, `isDeadConnectCode`, the unused `providerKeys.errStartConnect`, and the VSIX `bfApi.completeByoOAuth` and `ByoOAuthCompleteResult` (now `completePasteConnect`).
+  - The VSIX `byoConnections.ts` provider list is derived from `LLM_PROVIDER_INFO`.
+
+**Tests:** new `provider-connect/src/connections.test.ts` and `brain-ui/src/connections/ConnectionsPanel.test.tsx`. Existing `provider-connect` tests unchanged.
+
+## ✅ RESOLVED 2026-10-25 — PRD 35 WS8i–o: the overnight run that did nothing — children stop delegating, routing finds the coder, dead and nearly-spent accounts stop leading (api 2026.10.81 · brain-embedded 2026.10.52 · agent-tools 2026.10.14 · model-router 2026.10.18 · tool-output-policy 2026.10.2)
+
+**Why.** VS Code chat #6 ("implement the PRD using subagents") ran ~6.5 hours overnight: 857 turns, 11 children, 5 files written, all on `MiniMax-M3.1-Flash-Preview`. Diagnosed from the chat's local journal and the ops DB (`llm_failover_log`, `llm_usage_log`).
+
+**What shipped:**
+- **8i: a child is never told it must delegate.** Every PRD 35 brief names the sub-agent policy, and the delegation gate read the brief as the user's ask, so the WS1 coder was told "STOP READING AND DELEGATE" at step 2 and spent 90 minutes spawning and waiting on researchers. `leftDelegationUndone` takes `delegatedRun`; one `runLeftDelegationUndone(run)` serves the early nudge, the prose-end backstop and the `ask_user` redirect. A child keeps its full catalog and may still spawn.
+- **8j: child reports reach the owner whole.** One `SUBAGENT_REPORT_CHARS` (8K) and `clipChildOutput` in agent-tools, used by the VS Code and cloud report builders; `wait_agents` budgeted at 34K, so four clipped reports and their headers fit (`subagentReportBudget.test` holds the two numbers together). Before: 4K per report, then 6K for the whole wait.
+- **8k: evidence cannot seal out a stronger coder.** `liftUntriedStronger` (model-router): on quality-first roles an untried model stronger than every measured one keeps its lead until it is measured. Connected-account and plan-pool paths both.
+- **8l: empty-handed runs count.** An IDE change request that ran ≥20 turns and changed and delegated nothing reports `failed` (score 0) for the model that served most of its turns. Only the person's own request is graded this way: a sub-agent's brief and an owner's wake turn on its children's reports are not.
+- **8m: a refused OpenRouter connection stops leading.** Live failovers now raise connection alerts (keyed connections), and the credential resolver demotes alerted connections behind every healthy account (`demoteAlertedConnections`). ~1,770 401 attempts that night came from one connection. Resolves the auth-failover half of the roadmap's "Autonomous trigger errors and auth failovers" entry.
+- **8n: routing reads how much of an account is left.** `providerHeadroom.ts` parses each attempt's rate-limit headers (Anthropic unified/API key, OpenAI-style `x-ratelimit-*`, Codex `x-codex-*`) via a per-attempt `observeHeaders` hook; an owner account ≥90% used is demoted until its window resets. Each header family is read in its own unit (Codex percent, Anthropic fraction). Per-minute TPM/RPM buckets are not quota: a remaining/limit window counts only when it resets ≥5 minutes out. The record is written past the response (`deferPastResponse`), once per window per isolate.
+- **8o: one refresh verdict.** `isRevokedRefresh` (400/401/403) for the Anthropic, OpenAI, xAI and Kimi subscription resolvers. A dead Claude refresh token now reads "revoked — reconnect", not "expired — retry".
+- Also: xAI's "out of credits or need a Grok subscription" 403 is classified as capacity (another session's change, same release); the repo scanners skip `.builderforce/` worktrees.
+
+**Tests:** new `untriedStronger.test`, `runOutcomeReport.noDeliverable.test`, `earlyDelegation.child.test`, `providerHeadroom.test`, `openRouterConnectionDemotion.test`, `subscriptionRefreshVerdict.test`; existing router, role, delegation, outcome, resolver and capacity tests unchanged.
+
+**Left for the operator (accounts, not code):** reconnect Claude (refresh token dead), top up or resubscribe Grok, check the Codex entitlement (403), and re-enter the OpenRouter connection key (401).
+
 ## ✅ RESOLVED 2026-10-25 — PRD 35 WS8: VS Code runs read once, delegate early, stop when told
 
 **Why.** A VS Code run took 79 turns to update PRD 35, dispatched nothing and never edited the PRD. "STOP" and "write the update now" were both ignored (PRD 35 §2.1, E1–E10).

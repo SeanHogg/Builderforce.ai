@@ -26,6 +26,12 @@ export const TOOL_OUTPUT_CAPS: Readonly<Record<string, number>> = {
   git_sync_latest: 20_000,
   git_undo: 20_000,
   git_redo: 20_000,
+  // Up to four children's reports in one result, each capped by agent-tools'
+  // `SUBAGENT_REPORT_CHARS`. A research child's report IS its deliverable: under the 6K
+  // default a wait on four left the owner ~1.5K of each, and it re-spawned researchers
+  // to recover what was cut (VS Code chat #6). Four full reports plus each one's header
+  // and cut marker; `subagentReportBudget.test.ts` (brain-embedded) holds the two together.
+  wait_agents: 34_000,
 };
 
 /** The tool whose results are paged by line rather than sliced by char. */

@@ -8,8 +8,8 @@
 import { ASK_USER_TOOL, askUserBlock, type LoopHooks } from '@builderforce/agent-loop';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { isFailedToolResult } from '../brainTriage';
-import { leftDelegationUndone } from '../delegationRequest';
-import { emit, nowIso, nowMs, pushTrace, runTrace } from './runCells';
+import { runLeftDelegationUndone } from './earlyDelegation';
+import { emit, nowIso, nowMs, pushTrace } from './runCells';
 import { persistMidTurnText } from './turnPersistence';
 import { emitEvermindLearnReconcile } from './runMemory';
 import { metaOf, settleReply, type RunLoopContext } from './runLoopContext';
@@ -20,7 +20,7 @@ type Hooks = LoopHooks<ChatCompletionMessage>;
 /** `beforeToolCalls`: a terminal `ask_user` settles the run; otherwise the turn's
  *  narration is committed before the calls run. */
 export function beforeToolCallsHook(run: RunLoopContext): NonNullable<Hooks['beforeToolCalls']> {
-  const { c, chatId, catalogToolNames, userRequest } = run;
+  const { c, chatId } = run;
   const { runTool, persistence, onActivity } = run.req;
   return async (ctx, turn, calls) => {
     const { result, requested } = metaOf(turn);
@@ -39,11 +39,7 @@ export function beforeToolCallsHook(run: RunLoopContext): NonNullable<Hooks['bef
     // the reply: the call dispatches and `beforeDispatch` answers it with the
     // delegation contract, so the model's next turn spawns. Once per run — asked
     // again after that, the question is the answer.
-    if (askCall && runTool && !run.delegationRecoveryUsed && leftDelegationUndone({
-      toolNames: catalogToolNames,
-      requestText: userRequest,
-      events: runTrace(c),
-    })) {
+    if (askCall && runTool && !run.delegationRecoveryUsed && runLeftDelegationUndone(run)) {
       run.delegationRecoveryUsed = true;
       run.redirectAskToDelegation = true;
       pushTrace(c, {

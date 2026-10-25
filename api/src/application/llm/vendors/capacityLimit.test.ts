@@ -24,6 +24,8 @@ describe('isCapacityLimitBody', () => {
       'You hit your weekly limit. Extra Usage Credits are being used.',
       'Weekly SuperGrok Limit: 100% used',
       'Your weekly API usage allowance is depleted.',
+      // xAI's depleted-allowance 403 as it actually arrives (trace llm-099fe0b0, 2026-10-25).
+      'You have run out of credits or need a Grok subscription. Add credits at https://grok.com/?_s=usage or upgrade at https://grok.com/supergrok.',
       // Kimi Code subscription billing-cycle allowance (HTTP 403 upstream).
       "You've reached your usage limit for this billing cycle.",
     ];

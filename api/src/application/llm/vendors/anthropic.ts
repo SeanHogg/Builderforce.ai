@@ -803,7 +803,7 @@ export const anthropicModule: VendorModule = {
     try {
       resp = await fetchWithVendorTimeout('anthropic', params.model, ENDPOINT, {
         method: 'POST', headers, body: JSON.stringify(body),
-      }, params.timeoutMs, params.signal);
+      }, params.timeoutMs, params.signal, undefined, params.observeHeaders);
     } catch (err) {
       // A THROW here (vs a non-OK Response) is the `code 0 / no response` case — the
       // fetch never got an HTTP status (transport error, timeout, or a synchronous
@@ -825,7 +825,7 @@ export const anthropicModule: VendorModule = {
     const { headers, body, isOAuth } = prepareAnthropicRequest(params, true);
     const resp = await fetchWithVendorTimeout('anthropic', params.model, ENDPOINT, {
       method: 'POST', headers, body: JSON.stringify(body),
-    }, params.timeoutMs, params.signal);
+    }, params.timeoutMs, params.signal, undefined, params.observeHeaders);
     if (!resp.ok) return throwAnthropicHttpError(resp, params.model, isOAuth);
     if (!resp.body) throw new VendorRetryableError('anthropic', params.model, 0, 'empty stream body');
     return {

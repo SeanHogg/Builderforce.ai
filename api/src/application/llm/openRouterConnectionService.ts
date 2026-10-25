@@ -126,6 +126,41 @@ export function keyedConnectionModelRefs(connections: readonly OpenRouterConnect
   return set;
 }
 
+/**
+ * Which connection serves a model ref on the tenant's OWN key — the first (highest-priority)
+ * keyed connection that lists it, as {@link connectionModelRefs} dedupes. Null for a model no
+ * keyed connection claims: it runs on the operator's key, and that key failing is ours to fix.
+ */
+export function connectionOwnerOf(connections: readonly OpenRouterConnection[]): (modelRef: string) => number | null {
+  const owner = new Map<string, number>();
+  for (const conn of connections) {
+    for (const model of conn.models) {
+      const ref = connectionModelRef(model);
+      if (!owner.has(ref)) owner.set(ref, conn.hasKey ? conn.id : -1);
+    }
+  }
+  return (ref) => {
+    const id = owner.get(ref);
+    return id == null || id < 0 ? null : id;
+  };
+}
+
+/**
+ * Move connections with a live auth alert behind the healthy ones and drop their precedence,
+ * so the seed tries every healthy account first. DEMOTE, never remove: an alert can be stale
+ * the moment the owner re-enters the key, and a removed connection would silently move the
+ * funding to the shared pool. Order is otherwise kept.
+ */
+export function demoteAlertedConnections(
+  connections: readonly OpenRouterConnection[],
+  alerted: ReadonlySet<number>,
+): OpenRouterConnection[] {
+  if (alerted.size === 0) return [...connections];
+  const healthy = connections.filter((c) => !alerted.has(c.id));
+  const broken = connections.filter((c) => alerted.has(c.id)).map((c) => ({ ...c, priority: null }));
+  return [...healthy, ...broken];
+}
+
 /** Coerce a stored `models` value to a clean string array. JSONB is schema-less at the driver
  *  boundary, and a malformed row must degrade to "no models", never throw on the hot path. */
 function toModelList(raw: unknown): string[] {

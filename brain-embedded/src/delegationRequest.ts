@@ -71,17 +71,28 @@ export interface DelegationRequestInput {
   requestText: string | null | undefined;
   /** THIS run's trace events. */
   events: readonly BrainTraceEvent[];
+  /**
+   * This run IS a sub-agent. Its request is its owner's BRIEF, not the user's ask, and a
+   * brief names sub-agents as a topic far more often than it asks for them (VS Code chat
+   * #6: every PRD 35 workstream brief mentions the sub-agent policy). Nudging a child to
+   * delegate sent a coding child into 90 minutes of spawning researchers and waiting on
+   * them, and a research child into fanning out four more. A child still MAY spawn — it
+   * holds its owner's catalog — it is just never told it must.
+   */
+  delegatedRun?: boolean;
 }
 
 /**
  * Is this run about to stop (or ask) without starting the sub-agents the user asked for?
  * Every condition must hold, so the gate stays quiet whenever stopping is right:
+ *  - the run is the user's own, not a sub-agent;
  *  - the host can spawn local children;
  *  - the user explicitly asked for sub-agents, and did not say not to;
  *  - nothing in this run called `spawn_agent` / `spawn_agents`.
  */
 export function leftDelegationUndone(input: DelegationRequestInput): boolean {
-  return canSpawnHere(input.toolNames) && asksForSubagents(input.requestText) && !attemptedDelegation(input.events);
+  return !input.delegatedRun
+    && canSpawnHere(input.toolNames) && asksForSubagents(input.requestText) && !attemptedDelegation(input.events);
 }
 
 /**

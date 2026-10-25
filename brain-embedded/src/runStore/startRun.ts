@@ -8,7 +8,10 @@ import { batchStepPersistence, stepDurabilityFor } from '../stepOutbox';
 import { getRunDriver } from '../runDriver';
 import { chatErrorAction } from '../chatError';
 import { linkedTicketsToAdvance, linkedTicketsToComplete, linkedTicketsReviewedComplete } from '../chatWorkLinking';
+import { asksForChange } from '@builderforce/agent-stall';
+import { contentText } from '../localSuccess/turnFeatures';
 import { codeRunOutcome } from '../runOutcomeReport';
+import { attemptedDelegation } from '../delegationRequest';
 import { shippedToBaseBranch } from '../shipVerification';
 import { ticketsReviewedInPreview } from '../previewReview';
 import { lineagePersistence } from '../runLineage';
@@ -21,6 +24,15 @@ import { resolveServerChatId } from './serverChat';
 import { runLoop } from './runLoop';
 import { beginRun } from './beginRun';
 import type { BrainRunRequest } from './runTypes';
+import type { RunCell } from './runCell';
+
+/**
+ * Cells whose conversation has handed work to sub-agents. A wake turn — the owner started
+ * again on its children's reports — runs in the same cell with a fresh trace, so its own
+ * trace shows no spawn and its children's edits are not its `codeChanged`; this is what
+ * keeps such a turn from being graded as a change request it failed.
+ */
+const delegatingCells = new WeakSet<RunCell>();
 
 /**
  * Start (or no-op join) the agent loop for a chat. Single-flight per chat: if a
@@ -146,9 +158,15 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
     }
     // Teach learned routing how this run's CODER did. Not awaited — a report must
     // never hold the run open or fail it.
+    // Only the person's own change request is graded empty-handed: a sub-agent's brief
+    // ("research X and write a summary") and an owner's wake turn are not one.
+    const trace = runTrace(c);
+    const personsRequest = !lineage && !delegatingCells.has(c);
+    if (attemptedDelegation(trace)) delegatingCells.add(c);
     const outcome = req.reportOutcome && codeRunOutcome({
       runId: c.runId, codeModel: c.codeModel, codeChanged: c.codeChanged, aborted,
-      failed: c.error !== '', shipped, trace: runTrace(c), projectId: req.projectId,
+      failed: c.error !== '', shipped, trace, projectId: req.projectId,
+      askedForChange: personsRequest && asksForChange(req.userTurn === undefined ? undefined : contentText(req.userTurn)),
     });
     if (outcome) void req.reportOutcome!(outcome).catch(() => undefined);
     c.persistStep = null;

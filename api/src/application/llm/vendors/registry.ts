@@ -496,6 +496,12 @@ export interface DispatchParams extends DispatchBody {
    * cost.
    */
   isCooled?: (vendor: VendorId, model: string) => Promise<boolean>;
+  /**
+   * Handed each attempt's upstream response headers, named by the candidate that drew
+   * them — the account-quota read (`providerHeadroom.ts`). `dispatchInternal` turns it
+   * into the per-attempt {@link VendorCallParams.observeHeaders}. Absent = unread.
+   */
+  onUpstreamHeaders?: (model: string, vendor: VendorId, headers: Headers) => void;
 }
 
 export interface DispatchResult extends VendorCallResult {
@@ -556,7 +562,7 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
   params: DispatchParams,
   cfg: SurfaceConfig<R>,
 ): Promise<R & { modelUsed: string; vendorUsed: VendorId; attempts: DispatchAttempt[] }> {
-  const { env, modelChain, reasoningIntent, isCooled, ...rest } = params;
+  const { env, modelChain, reasoningIntent, isCooled, onUpstreamHeaders, ...rest } = params;
   if (modelChain.length === 0) {
     throw new Error(`${cfg.fnName}: modelChain is empty`);
   }
@@ -651,6 +657,7 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
         ...egressForVendor,
         apiKey,
         model: vendorModel,
+        ...(onUpstreamHeaders ? { observeHeaders: (headers: Headers) => onUpstreamHeaders(model, vendorId, headers) } : {}),
         ...(attemptTimeoutMs ? { timeoutMs: attemptTimeoutMs } : {}),
         ...(reasoningParams ? { extraBody: { ...rest.extraBody, ...reasoningParams } } : {}),
       });

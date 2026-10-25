@@ -37,6 +37,22 @@ export function ownerDirectionText(ownerName: string, text: string): string {
   return `[${ownerName}] ${text.trim()}`;
 }
 
+/**
+ * Longest child answer carried back to its owner; the chat holds the whole of it. ONE
+ * number for every surface. A research child's report IS its deliverable — at the editor's
+ * old 4K the owner read reports cut mid-list and spawned more researchers to recover what
+ * was lost (VS Code chat #6). The owner's `wait_agents` result is budgeted to hold four.
+ */
+export const SUBAGENT_REPORT_CHARS = 8_000;
+
+/** A child's answer at the length its owner is handed, marked when it was cut. Applied
+ *  once, where each surface builds its `ChildReportLike`. */
+export function clipChildOutput(output: string): string {
+  return output.length > SUBAGENT_REPORT_CHARS
+    ? `${output.slice(0, SUBAGENT_REPORT_CHARS)}… [report cut at ${SUBAGENT_REPORT_CHARS} of ${output.length} chars — the full text is in the chat]`
+    : output;
+}
+
 /** A child's report as its owner reads it in its inbox. */
 export function childReportText(report: ChildReportLike): string {
   const head = `[Sub-agent ${report.handle} · ${report.name} — ${report.state}] ${report.label}${report.ticket ? ` (ticket ${report.ticket})` : ""}`;
