@@ -7,7 +7,7 @@
  * Regenerate with `node scripts/gen-container-shared.mjs` (from `api/`).
  * `--check` fails the build when the source no longer matches the hash below.
  *
- * @source-sha256 df1c83039ec92566c889b68a761c027cadda48c12dfbba3a7697e41205dfbc48
+ * @source-sha256 b077980d5f5bac352fe3758cffac61bfea3f3521477eb347fc1bd760e9cd7265
  */
 // ── caps.ts ──
 /**
@@ -36,6 +36,12 @@ const TOOL_OUTPUT_CAPS = {
     git_sync_latest: 20_000,
     git_undo: 20_000,
     git_redo: 20_000,
+    // Up to four children's reports in one result, each capped by agent-tools'
+    // `SUBAGENT_REPORT_CHARS`. A research child's report IS its deliverable: under the 6K
+    // default a wait on four left the owner ~1.5K of each, and it re-spawned researchers
+    // to recover what was cut (VS Code chat #6). Four full reports plus each one's header
+    // and cut marker; `subagentReportBudget.test.ts` (brain-embedded) holds the two together.
+    wait_agents: 34_000,
 };
 /** The tool whose results are paged by line rather than sliced by char. */
 const READ_FILE_TOOL = 'read_file';
