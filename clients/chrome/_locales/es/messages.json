@@ -1525,5 +1525,13 @@
   },
   "suggestAuditPrompt": {
     "message": "Lista auditorías con audits.list, ayúdame a elegir proyecto y auditoría e iníciala con audits.run. Muestra estado, hallazgos y tickets de corrección."
+  },
+  "spSourceLocalModel": {
+    "message": "En este equipo",
+    "description": "Saving source label"
+  },
+  "spHintLocalModel": {
+    "message": "Un modelo en este equipo atendió la llamada: lo que tu ruta de pago habría cobrado por los mismos tokens",
+    "description": "Saving source explanation"
   }
 }

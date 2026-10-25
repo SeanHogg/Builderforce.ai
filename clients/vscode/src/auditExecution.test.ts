@@ -20,7 +20,6 @@ vi.mock('vscode', () => ({
   l10n: { t: (s: string) => s },
 }));
 vi.mock('./systemAuditApi', () => ({
-  createBrainChat: vi.fn(async () => 42),
   startSystemAudit: vi.fn(async () => ({ runId: 'run', briefing: 'Inspect source' })),
   getSystemAuditRun: vi.fn(async () => ({ status: 'completed', ticketIds: [] })),
 }));
@@ -51,7 +50,7 @@ vi.mock('./localFirstStore', () => ({
 import { AuditExecution } from './auditExecution';
 import { auditToolCatalog } from './auditToolCatalog';
 import { ensureLocalAuditDefinitions, getLocalAuditRun, listLocalAuditFindings, saveLocalAuditFindings, startLocalAuditRun } from './localAuditStore';
-import { createBrainChat, startSystemAudit } from './systemAuditApi';
+import { startSystemAudit } from './systemAuditApi';
 
 const memento = {
   get: (key: string, fallback: unknown) => state.stored.get(key) ?? fallback,
@@ -68,7 +67,6 @@ describe('audit lifecycle triggers', () => {
     local.store = createMemoryLocalFirstStore();
     state.stored.set('builderforce.localDeviceId', 'device-1');
     vi.mocked(startSystemAudit).mockClear().mockResolvedValue({ runId: 'run', briefing: 'Inspect source' });
-    vi.mocked(createBrainChat).mockClear();
   });
   it('keeps startup and close opt-in', async () => {
     const execution = new AuditExecution(ctx as never, host() as never);
@@ -84,7 +82,6 @@ describe('audit lifecycle triggers', () => {
     expect(startSystemAudit).not.toHaveBeenCalled();
     await execution.flushClose();
     expect(startSystemAudit).not.toHaveBeenCalled();
-    expect(createBrainChat).not.toHaveBeenCalled();
     expect((await getLocalAuditRun(local.store!, intent.requestId))?.record.payload).toMatchObject({
       closedLocally: true, trigger: 'close', status: 'completed',
     });
@@ -112,7 +109,6 @@ describe('audit lifecycle triggers', () => {
     expect(startSystemAudit).not.toHaveBeenCalled();
     await execution.flushClose();
     expect(startSystemAudit).not.toHaveBeenCalled();
-    expect(createBrainChat).not.toHaveBeenCalled();
     expect(state.stored.get(closeKey)).toEqual([]);
     expect((await getLocalAuditRun(store, 'request'))?.record.payload).toMatchObject({
       closedLocally: true, trigger: 'close', status: 'completed',
@@ -132,7 +128,6 @@ describe('audit lifecycle triggers', () => {
     const execution = new AuditExecution(ctx as never, runHost as never);
     await vi.waitFor(() => expect(runHost.start).toHaveBeenCalledOnce());
     expect(startSystemAudit).not.toHaveBeenCalled();
-    expect(createBrainChat).not.toHaveBeenCalled();
     const started = runHost.start.mock.calls[0]?.[0] as { systemPrompt: string; audit: { runId: string } };
     expect(started).toMatchObject({ projectId: 7, autoApprove: false, audit: { auditId: 'quality-audit' } });
     expect(started.systemPrompt).toContain('Quality Audit');
@@ -165,7 +160,6 @@ describe('audit lifecycle triggers', () => {
     const execution = new AuditExecution(ctx as never, runHost as never);
     await vi.waitFor(() => expect(state.stored.get(closeKey)).toEqual([]));
     await execution.run('quality-audit', 7);
-    expect(createBrainChat).not.toHaveBeenCalled();
     expect(startSystemAudit).not.toHaveBeenCalled();
     expect(runHost.start).toHaveBeenCalledOnce();
     const started = runHost.start.mock.calls[0]?.[0] as { systemPrompt: string; audit: { runId: string } };
@@ -191,7 +185,6 @@ describe('audit lifecycle triggers', () => {
     const execution = new AuditExecution(ctx as never, runHost as never);
     await vi.waitFor(() => expect(state.stored.get(closeKey)).toEqual([]));
     await execution.run('quality-audit', 7);
-    expect(createBrainChat).not.toHaveBeenCalled();
     expect(startSystemAudit).not.toHaveBeenCalled();
     expect(runHost.start).toHaveBeenCalledOnce();
     const started = runHost.start.mock.calls[0]?.[0] as { chatId: number; systemPrompt: string; audit: { runId: string } };
@@ -221,7 +214,6 @@ describe('audit lifecycle triggers', () => {
     await vi.waitFor(() => expect(state.stored.get(closeKey)).toEqual([]));
     await execution.run('quality-audit', 7, 'manual', 'imported');
     expect(runHost.start).not.toHaveBeenCalled();
-    expect(createBrainChat).not.toHaveBeenCalled();
     expect(startSystemAudit).not.toHaveBeenCalled();
     expect(await listLocalAuditFindings(store, 'imported')).toEqual(before);
     execution.dispose();
@@ -249,7 +241,6 @@ describe('audit lifecycle triggers', () => {
     const intent = (state.stored.get(closeKey) as Array<{ requestId: string }>)[0]!;
     await execution.flushClose();
     expect(startSystemAudit).not.toHaveBeenCalled();
-    expect(createBrainChat).not.toHaveBeenCalled();
     expect(runHost.start).not.toHaveBeenCalled();
     expect((await getLocalAuditRun(store, intent.requestId))?.record.payload).toMatchObject({
       status: 'completed', trigger: 'close', closedLocally: true,
@@ -267,7 +258,6 @@ describe('audit lifecycle triggers', () => {
     const intent = (state.stored.get(closeKey) as Array<{ requestId: string }>)[0]!;
     await execution.flushClose();
     expect(startSystemAudit).not.toHaveBeenCalled();
-    expect(createBrainChat).not.toHaveBeenCalled();
     expect(runHost.start).not.toHaveBeenCalled();
     const saved = await getLocalAuditRun(store, intent.requestId);
     expect(saved?.record.payload).toMatchObject({
@@ -290,7 +280,6 @@ describe('audit lifecycle triggers', () => {
     const execution = new AuditExecution(ctx as never, runHost as never);
     await vi.waitFor(() => expect(state.stored.get(closeKey)).toEqual([]));
     expect(startSystemAudit).not.toHaveBeenCalled();
-    expect(createBrainChat).not.toHaveBeenCalled();
     expect(runHost.start).not.toHaveBeenCalled();
     expect((await getLocalAuditRun(store, 'close-imported'))?.record.payload.status).toBe('completed');
     execution.dispose();
@@ -302,7 +291,6 @@ describe('audit lifecycle triggers', () => {
     const execution = new AuditExecution(ctx as never, runHost as never);
     await vi.waitFor(() => expect(state.stored.get(closeKey)).toEqual([]));
     await expect(execution.run('quality-audit', 7)).rejects.toThrow('The audit has not saved its findings');
-    expect(createBrainChat).not.toHaveBeenCalled();
     expect(startSystemAudit).not.toHaveBeenCalled();
     const started = runHost.start.mock.calls[0]?.[0] as { audit: { runId: string } };
     expect((await getLocalAuditRun(store, started.audit.runId))?.record.payload.status).toBe('failed');
@@ -314,7 +302,6 @@ describe('audit lifecycle triggers', () => {
     const execution = new AuditExecution(ctx as never, runHost as never);
     await vi.waitFor(() => expect(state.stored.get(closeKey)).toEqual([]));
     await expect(execution.run('quality-audit', 7)).rejects.toThrow('The audit has not saved its findings');
-    expect(createBrainChat).not.toHaveBeenCalled();
     expect(startSystemAudit).not.toHaveBeenCalled();
     expect(runHost.start).toHaveBeenCalledOnce();
     execution.dispose();

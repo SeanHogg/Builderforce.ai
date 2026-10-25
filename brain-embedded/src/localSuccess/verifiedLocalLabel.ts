@@ -193,9 +193,11 @@ export function createDeferredLocalRecords(opts: DeferredLocalRecordsOptions = {
 /** This page's one registry — a host builds its stream per turn, so the pending turn must outlive it. */
 export const deferredLocalRecords: DeferredLocalRecords = createDeferredLocalRecords();
 
-/** The chat key a call is deferred under, or null when the call names no chat (it records at once). */
-export function conversationKeyOf(call: { metadata?: { chatId?: number } }): string | null {
-  const chatId = call.metadata?.chatId;
+/** The chat key a call is deferred under, or null when the call names no chat (it records
+ *  at once). The run's own key first — on a local-first host the metadata's chat is the
+ *  SERVER chat (or absent), while a verdict names the chat the person is looking at. */
+export function conversationKeyOf(call: { conversationKey?: number; metadata?: { chatId?: number } }): string | null {
+  const chatId = call.conversationKey ?? call.metadata?.chatId;
   return typeof chatId === 'number' && Number.isFinite(chatId) ? `chat:${chatId}` : null;
 }
 

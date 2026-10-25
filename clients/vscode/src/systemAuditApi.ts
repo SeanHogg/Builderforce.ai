@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { authed, type BfProjectDiagnostic } from './bfApi';
 import { getGitApi, findRepository } from './gitApi';
-export { createBrainChat } from './bfApi';
 
 export interface SystemAuditStart { runId: string; briefing: string; dispatch?: { executionId: number | null; refusal?: { message: string } } }
 

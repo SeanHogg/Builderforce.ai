@@ -35579,7 +35579,8 @@
       "evermind_answer": "Respondido por Evermind",
       "response_cache": "Solicitud repetida",
       "context_trim": "Contexto ajustado",
-      "recall_overhead": "Recuerdo añadido"
+      "recall_overhead": "Recuerdo añadido",
+      "local_model": "En este equipo"
     },
     "sourceHints": {
       "prompt_cache": "El proveedor sirvió parte del prompt desde su caché a una décima parte del precio",
@@ -35587,7 +35588,8 @@
       "evermind_answer": "Respondió el Evermind del proyecto, sin llamar a un modelo de pago",
       "response_cache": "Una solicitud idéntica se respondió desde la caché de la pasarela, sin llamar al modelo",
       "context_trim": "La compactación dejó los turnos anteriores fuera de cada llamada",
-      "recall_overhead": "Lo que los recuerdos recuperados añadieron a cada prompt: el coste del recuerdo"
+      "recall_overhead": "Lo que los recuerdos recuperados añadieron a cada prompt: el coste del recuerdo",
+      "local_model": "Un modelo en este equipo atendió la llamada: lo que tu ruta de pago habría cobrado por los mismos tokens"
     }
   },
   "codeAudit": {

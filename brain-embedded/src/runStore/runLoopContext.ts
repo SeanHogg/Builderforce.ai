@@ -46,7 +46,11 @@ export interface TurnMeta { result: StreamChatResult; resolved: string; requeste
 export const metaOf = (turn: LoopTurn): TurnMeta => turn.meta as TurnMeta;
 
 export interface RunLoopContext {
+  /** The chat's key in the host's persistence — where the run's turns are written. */
   chatId: number;
+  /** The server chat the run's server-addressed work names (`resolveServerChatId`);
+   *  null on an unbound local chat, whose id never leaves the machine. */
+  serverChatId: number | null;
   /** The run's OWN cell key — a sub-agent's differs from the chat it lives in. */
   runKey: number;
   c: RunCell;

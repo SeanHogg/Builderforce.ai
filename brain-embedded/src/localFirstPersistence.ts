@@ -2,32 +2,35 @@ import {
   newLocalRecord,
   UNBOUND_DESTINATION,
   type EntityDestination,
-  type JournalOperation,
   type LocalFirstStore,
   type LocalFirstTransaction,
   type LocalRecord,
 } from '@builderforce/local-first';
+import { combineSpendSavings, type SpendSavingsSummary } from '@builderforce/spend-contract';
 import type { BrainPersistenceAdapter } from './config';
 import type { BrainChat, BrainMessage } from './types';
-
-interface ChatValue {
-  clientId: string;
-  chat: BrainChat;
-}
-
-interface MessageValue {
-  clientId: string;
-  chatId: number;
-  chatClientId: string;
-  eventKey: string;
-  message: BrainMessage;
-}
+import { boundServerId } from './localChat/chatIdentity';
+import { journalWrite } from './localChat/journal';
+import { liveRecords, type ChatValue, type MessageValue } from './localChat/records';
+import { ledgerSpend, usageRowsByChat, type RunUsageValue } from './localChat/usageLedger';
 
 export interface LocalBrainPersistenceOptions {
   store: LocalFirstStore;
   deviceId: string;
   destination?: EntityDestination;
   summarizeUnavailable: string;
+  /**
+   * The account destination chats bind into right now (PRD 36) — what `serverId` is
+   * projected from. Omitted or undefined (signed out): every chat reads as unbound.
+   */
+  accountDestination?: () => EntityDestination | undefined;
+  /**
+   * The platform's spend for bound chats, by server id — the authoritative figure for
+   * the calls the gateway served. Omitted, or failing: the device's own estimate stands.
+   */
+  serverSpend?: (serverIds: readonly number[]) => Promise<ReadonlyMap<number, SpendSavingsSummary>>;
+  /** Bind a chat now (the host's chat identity). Omitted: the adapter offers no `bindChat`. */
+  bindChat?: (chatId: number) => Promise<number | undefined>;
   createObjectURL?: (file: File) => string;
   now?: () => Date;
   newId?: () => string;
@@ -35,40 +38,25 @@ export interface LocalBrainPersistenceOptions {
 
 const chatValue = (record: LocalRecord<ChatValue>): BrainChat => record.payload.chat;
 
+/** A chat as its surfaces read it: its bound server id and its spend projected on. */
+interface ProjectionInput {
+  record: LocalRecord<ChatValue>;
+  serverId: number | undefined;
+  usage: readonly RunUsageValue[];
+}
+
 export function createLocalBrainPersistence(options: LocalBrainPersistenceOptions): BrainPersistenceAdapter {
   const destination = options.destination ?? UNBOUND_DESTINATION;
   const now = options.now ?? (() => new Date());
   const newId = options.newId ?? (() => crypto.randomUUID());
   const blobs = new Map<string, string>();
 
-  const records = <T>(tx: LocalFirstTransaction, type: 'chat' | 'message') =>
-    tx.list<T>(type).then((rows) => rows.filter((row) => !row.deletedAt));
-  const chats = (tx: LocalFirstTransaction) => records<ChatValue>(tx, 'chat');
-  const messages = (tx: LocalFirstTransaction) => records<MessageValue>(tx, 'message');
+  const chats = (tx: LocalFirstTransaction) => liveRecords<ChatValue>(tx, 'chat', options.deviceId);
+  const messages = (tx: LocalFirstTransaction) => liveRecords<MessageValue>(tx, 'message', options.deviceId);
   const chatFor = async (tx: LocalFirstTransaction, id: number): Promise<LocalRecord<ChatValue>> => {
     const chat = (await chats(tx)).find((row) => row.payload.chat.id === id);
     if (!chat) throw new Error(`No such local chat: ${id}`);
     return chat;
-  };
-  const append = async <T>(
-    tx: LocalFirstTransaction,
-    record: LocalRecord<T>,
-    operation: JournalOperation,
-    eventId: string,
-    dependsOn: string[] = [],
-  ) => {
-    await tx.append({
-      eventId,
-      clientEntityId: record.id,
-      entityType: record.entityType,
-      operation,
-      schemaVersion: record.schemaVersion,
-      occurredAt: record.occurredAt,
-      ...(record.baseVersion !== undefined ? { baseVersion: record.baseVersion } : {}),
-      dependsOn,
-      destination: record.destination,
-      payload: record.payload,
-    });
   };
   const nextId = async (tx: LocalFirstTransaction): Promise<number> => {
     const [chatRows, messageRows] = await Promise.all([chats(tx), messages(tx)]);
@@ -79,19 +67,64 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
     ) + 1;
   };
 
+  /** Read the chats' projection inputs in one pass: bindings and ledger rows. */
+  const projectionInputs = async (tx: LocalFirstTransaction, rows: readonly LocalRecord<ChatValue>[]): Promise<ProjectionInput[]> => {
+    const account = options.accountDestination?.();
+    const usage = await usageRowsByChat(tx, options.deviceId);
+    return Promise.all(rows.map(async (record) => ({
+      record,
+      serverId: await boundServerId(tx, record.id, account),
+      usage: usage.get(record.id) ?? [],
+    })));
+  };
+
+  /**
+   * The spend each chat shows (§3.2): unbound — the device's fold over every call, the
+   * gateway's priced from the bundled list (≈); bound — the platform's figure for the
+   * gateway's calls plus the device's for the calls the platform never saw.
+   */
+  const project = async (inputs: readonly ProjectionInput[]): Promise<BrainChat[]> => {
+    const bound = inputs.flatMap((input) => (input.serverId !== undefined ? [input.serverId] : []));
+    let server: ReadonlyMap<number, SpendSavingsSummary> | null = null;
+    if (bound.length > 0 && options.serverSpend) {
+      try {
+        server = await options.serverSpend(bound);
+      } catch {
+        server = null; // offline: the device's own estimate stands
+      }
+    }
+    return inputs.map(({ record, serverId, usage }) => {
+      const chat = chatValue(record);
+      // The platform's figure covers the gateway's calls only when it HAS this chat; a
+      // chat it could not report keeps the device's estimate of every call.
+      const fromServer = serverId !== undefined ? server?.get(serverId) ?? null : null;
+      const local = ledgerSpend(usage, { excludeGateway: fromServer !== null });
+      const spend = fromServer && local ? combineSpendSavings(fromServer, local) : fromServer ?? local;
+      return {
+        ...chat,
+        ...(serverId !== undefined ? { serverId } : {}),
+        ...(spend ? { spend } : {}),
+      };
+    });
+  };
+
   return {
     async listChats(params) {
-      return options.store.read(async (tx) => {
+      const inputs = await options.store.read(async (tx) => {
         const all = (await chats(tx))
-          .map(chatValue)
-          .filter((chat) => !chat.isArchived)
-          .filter((chat) => params?.projectId == null || String(chat.projectId) === params.projectId)
-          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.id - a.id);
+          .filter((row) => !row.payload.chat.isArchived)
+          .filter((row) => params?.projectId == null || String(row.payload.chat.projectId) === params.projectId)
+          .sort((a, b) => b.payload.chat.updatedAt.localeCompare(a.payload.chat.updatedAt) || b.payload.chat.id - a.payload.chat.id);
         const offset = params?.offset ?? 0;
-        return params?.limit != null ? all.slice(offset, offset + params.limit) : all.slice(offset);
+        const page = params?.limit != null ? all.slice(offset, offset + params.limit) : all.slice(offset);
+        return projectionInputs(tx, page);
       });
+      return project(inputs);
     },
-    getChat: (id) => options.store.read((tx) => chatFor(tx, id).then(chatValue)),
+    async getChat(id) {
+      const inputs = await options.store.read(async (tx) => projectionInputs(tx, [await chatFor(tx, id)]));
+      return (await project(inputs))[0]!;
+    },
     async createChat(body) {
       return options.store.transact(async (tx) => {
         const [id, clientId] = [await nextId(tx), newId()];
@@ -116,7 +149,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
           occurredAt: stamp,
         });
         await tx.put(record);
-        await append(tx, record, 'create', `chat:${clientId}`);
+        await journalWrite(tx, record, 'create', { key: `chat:${clientId}` });
         return chat;
       });
     },
@@ -132,7 +165,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
           payload: { ...current.payload, chat },
         };
         await tx.put(next, current.version);
-        await append(tx, next, 'update', `chat:${current.id}:v${next.version}`);
+        await journalWrite(tx, next, 'update', { key: `chat:${current.id}:v${next.version}` });
         return chat;
       });
     },
@@ -141,13 +174,18 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
         const chat = await chatFor(tx, id);
         const stamp = now().toISOString();
         const deleted = { ...chat, version: chat.version + 1, baseVersion: chat.version, deletedAt: stamp, updatedAt: stamp };
+        const chatDeleteKey = `chat:${chat.id}:delete:v${deleted.version}`;
         await tx.put(deleted, chat.version);
-        await append(tx, deleted, 'delete', `chat:${chat.id}:delete:v${deleted.version}`);
+        await journalWrite(tx, deleted, 'delete', { key: chatDeleteKey });
         const rows = (await messages(tx)).filter((row) => row.payload.chatId === id);
         for (const row of rows) {
           const tombstone = { ...row, version: row.version + 1, baseVersion: row.version, deletedAt: stamp, updatedAt: stamp };
           await tx.put(tombstone, row.version);
-          await append(tx, tombstone, 'delete', `message:${row.id}:delete:v${tombstone.version}`, [`chat:${chat.id}:delete:v${deleted.version}`]);
+          await journalWrite(tx, tombstone, 'delete', {
+            key: `message:${row.id}:delete:v${tombstone.version}`,
+            dependsOn: [chatDeleteKey],
+            chatClientId: chat.id,
+          });
         }
         return {};
       });
@@ -171,11 +209,12 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
           payload: { ...current.payload, chat },
         };
         await tx.put(next, current.version);
-        await append(tx, next, 'update', `chat:${current.id}:archive:v${next.version}`);
+        await journalWrite(tx, next, 'update', { key: `chat:${current.id}:archive:v${next.version}` });
         return { archived: true };
       });
     },
     summarizeChat: async () => ({ error: options.summarizeUnavailable }),
+    ...(options.bindChat ? { bindChat: options.bindChat } : {}),
     async getMessages(chatId, limit) {
       return options.store.read(async (tx) => {
         const all = (await messages(tx))
@@ -213,7 +252,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
             occurredAt: stamp,
           });
           await tx.put(record);
-          await append(tx, record, 'create', eventKey, [`chat:${chat.id}`]);
+          await journalWrite(tx, record, 'create', { key: eventKey, dependsOn: [`chat:${chat.id}`], chatClientId: chat.id });
         }
         if (added.length > 0) {
           const nextChat = { ...chat, version: chat.version + 1, updatedAt: stamp, payload: { ...chat.payload, chat: { ...chat.payload.chat, updatedAt: stamp } } };
@@ -237,7 +276,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
           payload: { ...row.payload, message: { ...row.payload.message, metadata: JSON.stringify(metadata) } },
         };
         await tx.put(next, row.version);
-        await append(tx, next, 'update', `message:${row.id}:feedback:v${next.version}`);
+        await journalWrite(tx, next, 'update', { key: `message:${row.id}:feedback:v${next.version}`, chatClientId: row.payload.chatClientId });
         return {};
       });
     },
@@ -254,7 +293,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
           destination,
         });
         await tx.put(record);
-        await append(tx, record, 'create', `attachment:${key}`);
+        await journalWrite(tx, record, 'create', { key: `attachment:${key}` });
       });
       return { key, name: file.name, type: file.type };
     },

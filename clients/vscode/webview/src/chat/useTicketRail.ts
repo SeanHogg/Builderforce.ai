@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { BrainChat } from '@seanhogg/builderforce-brain-embedded';
+import { serverChatIdOf, type BrainChat, type BrainPersistenceAdapter } from '@seanhogg/builderforce-brain-embedded';
 import { chatTicketsLabelsFromBundle } from '@seanhogg/builderforce-brain-ui';
 import type { AuthedFetch } from '../authedFetch';
 import { createChatTicketsAdapter } from '../chatTicketsAdapter';
@@ -16,11 +16,18 @@ import { usePendingChangesExtension } from '../usePendingChangesExtension';
 import { getToken, refreshToken, type InitData } from '../vscodeBridge';
 import { spendLabelsFrom } from './composerLabels';
 
-export function useTicketRail({ init, apiReq, chatId, chats, reloadChats, reloadMessages }: {
+/**
+ * Every call the rail makes is SERVER-addressed (`/api/brain/chats/{id}/…`), so it names
+ * the chat's bound server id (PRD 36) — never the local view key, which named whichever
+ * server chat shared its number. `serverChatId` null = the chat is only on this machine:
+ * no rail call is made.
+ */
+export function useTicketRail({ init, apiReq, serverChatId, chats, persistence, reloadChats, reloadMessages }: {
   init: InitData;
   apiReq: AuthedFetch;
-  chatId: number | null;
+  serverChatId: number | null;
   chats: BrainChat[];
+  persistence: BrainPersistenceAdapter;
   reloadChats: () => void;
   reloadMessages: () => void;
 }) {
@@ -35,12 +42,12 @@ export function useTicketRail({ init, apiReq, chatId, chats, reloadChats, reload
 
   // Stable references so a keystroke / streaming token doesn't hand the memoized
   // <ChatTicketsPanel> fresh props and force its whole subtree to re-render.
-  const ticketChatList = useMemo(() => chats.map((c) => ({
-    id: c.id,
-    title: c.title,
-    ticketCount: c.ticketCount,
-    ticketProgressPct: c.ticketProgressPct,
-  })), [chats]);
+  // By SERVER id — the rail merges and reads progress on the platform; an unbound chat
+  // is not one of its options.
+  const ticketChatList = useMemo(() => chats.flatMap((c) => {
+    const id = serverChatIdOf(c);
+    return id == null ? [] : [{ id, title: c.title, ticketCount: c.ticketCount, ticketProgressPct: c.ticketProgressPct }];
+  }), [chats]);
   const onTicketsChanged = useCallback(() => { reloadChats(); reloadMessages(); }, [reloadChats, reloadMessages]);
 
   // Bumped when the Brain mutates work items via MCP tools, so the rail refreshes live
@@ -53,20 +60,24 @@ export function useTicketRail({ init, apiReq, chatId, chats, reloadChats, reload
   }, [bumpTicketRefresh]);
 
   // "The agent changed code and nothing said so" — the chat's own signal, as a pill.
-  const chatFiles = useChatChangedFiles(apiReq, chatId, ticketRefresh);
+  const chatFiles = useChatChangedFiles(apiReq, serverChatId, ticketRefresh);
   const pendingChangesExtension = usePendingChangesExtension(init.labels, chatFiles);
 
   // Auto-link the work item that opened this chat (a task/epic/gap from the tree or
   // board, a roadmap/spec row from a project page) so the chat is tied to it and the
-  // rail shows it. Bumps the refresh signal so the just-mounted rail re-fetches.
+  // rail shows it. The chat was just created on this machine, so it is bound first —
+  // a signed-out editor has no platform chat to link to, and links nothing.
   const linkOpenedTicket = useCallback(
-    async (linkChatId: number, ticket: { kind: string; ref: string }) => {
+    async (localChatId: number, ticket: { kind: string; ref: string }) => {
       try {
+        const linkChatId = await persistence.bindChat?.(localChatId);
+        if (linkChatId == null) return;
         await ticketAdapter.linkTicket(linkChatId, { kind: ticket.kind as never, ref: ticket.ref, linkType: 'linked' });
+        reloadChats();
         bumpTicketRefresh();
       } catch { /* linking is best-effort — a failed link never blocks the chat */ }
     },
-    [ticketAdapter, bumpTicketRefresh],
+    [persistence, ticketAdapter, reloadChats, bumpTicketRefresh],
   );
 
   return {

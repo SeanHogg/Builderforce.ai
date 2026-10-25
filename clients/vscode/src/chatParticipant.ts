@@ -1,7 +1,7 @@
 import { RunKnowledgeRecorder } from "@builderforce/agent-tools";
 import { recordEditorRunEnd } from "./editorRunEnd";
 import * as vscode from "vscode";
-import { runAbortSignal, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
+import { runAbortSignal, withRunUsage, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
 import { ChatMessage, SECRET_KEY } from "./gateway";
 import { turnLimbicBlock } from "./personalityLimbic";
 import { resolveModelRoute, routeNeedsLocalModel, routeNeedsSpecificModel, routeRequiresSignIn, routeStream } from "./modelRouting";
@@ -22,7 +22,7 @@ import type { ToolDef } from "./fileTools";
 import type { PolicyGate } from "./policy";
 import { brainToolCatalog } from "./brainToolCatalog";
 import { withWorkspaceStaleness } from "./memoryStaleness";
-import { runNativeBrain, unlinkedRunId, type NativeApprovalRequest } from "./nativeBrainRun";
+import { runNativeBrain, type NativeApprovalRequest } from "./nativeBrainRun";
 
 const PARTICIPANT_ID = "builderforce.agent";
 
@@ -125,10 +125,34 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     // chat carried in prior turns' metadata) so the reconciler measures the delta against
     // what this chat was already told. Best-effort: '' when signed out / project-less.
     const selectedProject = getSelectedProject();
-    const priorChatId = priorBrainChatId(context.history);
+    const activeProject = selectedProject;
+    // Resolve THIS session's chat: reuse the one carried in prior turns' response
+    // metadata, else create one (scoped to the active project) so the work this chat does
+    // — created tickets, from_delta code-change captures — links back to a conversation,
+    // exactly like the webview Brain. The id is the LOCAL chat's view key (PRD 36): it
+    // never leaves the machine. Every server-addressed call below uses the chat's bound
+    // server id — bound here when signed in — or is not made.
+    const local = localBrainApplication(ctx);
+    const localPersistence = local.persistence;
+    let brainChatId = priorBrainChatId(context.history);
+    if (brainChatId != null) {
+      try {
+        await localPersistence.getChat(brainChatId);
+      } catch {
+        brainChatId = undefined;
+      }
+    }
+    if (brainChatId == null) {
+      const title = request.prompt.trim().slice(0, 80) || vscode.l10n.t("VS Code chat");
+      brainChatId = (await localPersistence.createChat({ title, projectId: activeProject?.id ?? null })).id;
+    }
+    const [serverChatId, clientChatId] = await Promise.all([
+      local.identity.bind(brainChatId).catch(() => undefined),
+      local.identity.clientIdFor(brainChatId),
+    ]);
     const platformContext = selectedProject
       ? await fetchRunContextSection(ctx.secrets, selectedProject.id, {
-          ...(priorChatId != null ? { scope: `chat:${priorChatId}` } : {}),
+          ...(serverChatId != null ? { scope: `chat:${serverChatId}` } : {}),
           query: request.prompt,
         })
       : "";
@@ -168,26 +192,6 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     // runs — best-effort, gated by `builderforce.evermindLearning`).
     let assistantText = "";
 
-    const activeProject = selectedProject;
-    // Resolve THIS session's Brain chat: reuse the one carried in prior turns'
-    // response metadata, else create one lazily (scoped to the active project) so the
-    // work this chat does — created tickets, from_delta code-change captures — links
-    // back to a real conversation, exactly like the webview Brain. Best-effort: a null
-    // id just runs unlinked (the chat-scoped backstops then have nothing to link to).
-    const localPersistence = localBrainApplication(ctx).persistence;
-    let brainChatId = priorChatId;
-    if (brainChatId != null) {
-      try {
-        await localPersistence.getChat(brainChatId);
-      } catch {
-        brainChatId = undefined;
-      }
-    }
-    if (brainChatId == null) {
-      const title = request.prompt.trim().slice(0, 80) || vscode.l10n.t("VS Code chat");
-      brainChatId = (await localPersistence.createChat({ title, projectId: activeProject?.id ?? null })).id;
-    }
-
     // The SAME brain as the web: local workspace tools (file edits) + Evermind's
     // write-through `remember_fact` + the SHARED, server-side platform catalog
     // (projects, tasks, OKRs, specs, …) fetched from the gateway MCP relay. File tools
@@ -208,12 +212,12 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
       return {};
     }
 
-    const runChatId = brainChatId ?? unlinkedRunId();
+    const runChatId = brainChatId;
     const { systemPrompt, seed } = splitSystemPrompt(messages);
     // Sub-agents run in the editor's run host as ordinary runs owned by THIS turn, and
-    // live in its Brain chat — so they need one. This view cannot render a run cell's
-    // confirm, so a child's write prompt is asked through the same modal as this turn's.
-    const children = runHost && brainChatId != null
+    // live in its Brain chat. This view cannot render a run cell's confirm, so a child's
+    // write prompt is asked through the same modal as this turn's.
+    const children = runHost
       ? runHost.childControls(
           { key: runChatId, rootChatId: brainChatId, name: OWNER_NAME, depth: 0 },
           {
@@ -241,23 +245,21 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     try {
       await runNativeBrain({
         knowledge,
-        // With no server chat (the platform was unreachable) the run still needs a cell
-        // key; a unique negative id keeps it isolated and unmistakable for a real chat.
+        // The local chat's view key is the run's cell key; the server chat (bound above,
+        // or null) is what every server-addressed call of the run names (PRD 36).
         chatId: runChatId,
+        serverChatId: serverChatId ?? null,
+        ...(clientChatId ? { clientChatId } : {}),
         systemPrompt,
         seed,
         userTurn: request.prompt,
         tools,
         root: root ?? "",
-        // The chat-scoped backstops (mint a ticket for an unrecorded code change, advance
-        // a linked ticket off backlog) write a link against a REAL conversation, so they
-        // are gated on one existing — minting a ticket against a chat id that does not
-        // exist would be worse than not minting it.
-        ...(activeProject && brainChatId != null ? { projectId: activeProject.id } : {}),
-        // Memory, by contrast, is scoped to the PROJECT and needs no chat: a turn that
-        // could not create a conversation can still be answered from memory for free.
-        ...(activeProject ? { evermind: withWorkspaceStaleness(projectEvermindHooks(ctx.secrets, activeProject.id), root) } : {}),
-        ...(brainChatId == null ? { chatMode: "chat" as const } : {}),
+        // The code-change backstops need a project. An unbound chat still gets its ticket
+        // (on the project, linked to no chat); only the chat-link steps stand down.
+        ...(activeProject ? { projectId: activeProject.id } : {}),
+        // Memory is scoped to the PROJECT, tiered on the conversation once it is bound.
+        ...(activeProject ? { evermind: withWorkspaceStaleness(projectEvermindHooks(ctx.secrets, activeProject.id, serverChatId ?? null), root) } : {}),
         ...(modelChoice.model ? { model: modelChoice.model } : {}),
         modelStrict: modelChoice.modelStrict,
         ...(modelChoice.routingMode ? { routingMode: modelChoice.routingMode } : {}),
@@ -268,9 +270,14 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
         // never here. The sign-in gate above guarantees a key on the gateway branch.
         // A Hybrid pick that failed (transport-class) and was answered with Auto says so in
         // the response — the same one line the panel shows; never a silent swap.
-        stream: routeStream(modelChoice, key, (event) => {
-          stream.markdown(`_${vscode.l10n.t("Your pick {0} failed; answered with Auto.", event.from)}_\n\n`);
-        }),
+        // Every call lands in the chat's run usage ledger — its spend, offline (PRD 36).
+        stream: withRunUsage(
+          routeStream(modelChoice, key, (event) => {
+            stream.markdown(`_${vscode.l10n.t("Your pick {0} failed; answered with Auto.", event.from)}_\n\n`);
+          }),
+          local.usage,
+          { chatId: runChatId, runKey: runChatId, mode: "work" },
+        ),
         signal: abort.signal,
         approve: (req: NativeApprovalRequest) => confirmToolCall(req),
         labels: {
@@ -307,7 +314,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
       // is on exactly when it has one) — the code map and the learned facts, into the
       // project this turn STARTED in. Best-effort, like every memory step.
       if (root && !knowledge.isEmpty) {
-        await recordEditorRunEnd(ctx.secrets, root, `chat-${brainChatId ?? runChatId}`, knowledge, {
+        await recordEditorRunEnd(ctx.secrets, root, `chat-${brainChatId}`, knowledge, {
           memory: !!activeProject,
           ...(activeProject ? { projectId: activeProject.id } : {}),
         }).catch(() => undefined);
@@ -324,7 +331,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
 
     // Return the chat id in the result metadata so the NEXT turn of this session
     // resolves the same conversation (see priorBrainChatId).
-    return brainChatId != null ? { metadata: { brainChatId } } : {};
+    return { metadata: { brainChatId } };
   };
 }
 

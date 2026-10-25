@@ -190,7 +190,10 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
           // output, and the Effort ceiling cut every one of them off mid-JSON.
           routingMode, maxTokens: turnMaxTokens(maxTokens, !!tools), reasoning, metadata: callMetadata, role: ask.role,
           ...(ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {}),
-          prompt_cache_key: `brain:${run.chatId}`,
+          // Keyed on the conversation's identity OFF this machine (PRD 36): the server
+          // chat, else the local chat's client id — never its local view key.
+          prompt_cache_key: `brain:${run.serverChatId ?? run.req.clientChatId ?? 'local'}`,
+          conversationKey: run.chatId,
           signal: c.abort?.signal,
         },
         handlers,

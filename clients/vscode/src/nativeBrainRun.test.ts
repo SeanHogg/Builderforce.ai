@@ -28,7 +28,6 @@ import {
   SURFACE_VALUE,
   toolLabel,
   transientRunPersistence,
-  unlinkedRunId,
   type NativeApprovalRequest,
   type NativeRunEvents,
 } from "./nativeBrainRun";
@@ -686,16 +685,6 @@ describe("chat ⇄ work linking", () => {
     // chat-scoped tools usable. Two copies of it would be the duplication this pass removed.
     expect(systemPrompt).toContain(`chatId=${chatId}`);
     expect(systemPrompt.match(/MODE: WORK/g)).toHaveLength(1);
-  });
-});
-
-describe("unlinkedRunId", () => {
-  it("hands out a distinct negative cell key per unlinked turn", () => {
-    const a = unlinkedRunId();
-    const b = unlinkedRunId();
-    expect(a).toBeLessThan(0);
-    expect(b).toBeLessThan(0);
-    expect(a).not.toBe(b);
   });
 });
 

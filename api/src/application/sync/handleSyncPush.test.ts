@@ -71,7 +71,7 @@ function batch(events: Record<string, unknown>[], destination: EntityDestination
   };
 }
 
-type Behaviour = 'applied' | 'conflict' | 'rejected';
+type Behaviour = 'applied' | 'conflict' | 'rejected' | 'pending';
 
 interface ImporterLog {
   calls: string[];
@@ -90,6 +90,7 @@ function importers(log: ImporterLog, behaviour: (entityType: string) => Behaviou
     log.ctxKeys.push(ctx.destinationKey);
     const status = behaviour(entityType);
     if (status === 'rejected') return { status: 'rejected', detail: 'entity_not_imported' };
+    if (status === 'pending') return { status: 'pending', detail: 'message_chat_pending' };
     if (status === 'conflict') {
       return { status: 'conflict', detail: 'base_version_conflict', serverId: '1', serverVersion: 3, payloadHash: 'fnv1a:0', destinationKey: 'k' };
     }
@@ -102,7 +103,14 @@ function importers(log: ImporterLog, behaviour: (entityType: string) => Behaviou
       payload: event.payload,
     };
   };
-  return { importSyncedTicket: run('ticket'), importSyncedProject: run('project'), importMirrorRecord: run('chat') };
+  return {
+    importSyncedTicket: run('ticket'),
+    importSyncedProject: run('project'),
+    importSyncedChat: run('chat'),
+    importSyncedMessage: run('message'),
+    importSyncedUsage: run('usage'),
+    importMirrorRecord: run('mirror'),
+  };
 }
 
 function harness(options: {
@@ -289,6 +297,18 @@ describe('handleSyncPush — refusals and holds write nothing', () => {
     expect(await h.push('nope')).toEqual({ ok: false, status: 400, code: 'invalid_batch' });
     expect(await h.push(null)).toEqual({ ok: false, status: 400, code: 'invalid_batch' });
     expect(await h.push({ ...batch([TICKET]), protocolVersion: 99 })).toEqual({ ok: false, status: 400, code: 'protocol_version_unsupported' });
+  });
+});
+
+describe('handleSyncPush — an importer whose parent has not landed', () => {
+  it('answers dependency_pending and writes nothing, so the event stays retryable', async () => {
+    const h = harness({ behaviour: () => 'pending' });
+    const response = await h.push(batch([CHAT]));
+    expect(response.ok && response.receipts.map((r) => [r.status, r.detail])).toEqual([['dependency_pending', 'message_chat_pending']]);
+    const state = h.stores.state();
+    expect(state.events).toHaveLength(0);
+    expect(state.mappings).toHaveLength(0);
+    expect(state.records).toHaveLength(0);
   });
 });
 

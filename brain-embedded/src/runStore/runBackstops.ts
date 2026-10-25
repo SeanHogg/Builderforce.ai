@@ -54,7 +54,7 @@ export function attachDeltaToRunTicket(toolName: string, args: unknown, deltaTic
  * the timeline, and never throws.
  */
 export async function recordCodeChangeTicket(
-  chatId: number,
+  serverChatId: number | null,
   c: RunCell,
   req: BrainRunRequest,
   phase: 'open' | 'settle',
@@ -65,9 +65,12 @@ export async function recordCodeChangeTicket(
   // Nothing new to say about a ticket that already exists — don't spend a call on it.
   if (phase === 'settle' && c.deltaTicketId != null && files.length === 0) return;
   const attachTo = c.deltaTicketId;
+  // An unbound local chat (PRD 36) still gets its ticket — on the project, linked to no
+  // chat, because it has none on the platform to link to.
+  const source = serverChatId != null ? `Brain chat #${serverChatId}` : 'a local editor chat';
   const summary = files.length
-    ? `Code change (${files.length} file${files.length === 1 ? '' : 's'}) from Brain chat #${chatId}`
-    : `Code change from Brain chat #${chatId}`;
+    ? `Code change (${files.length} file${files.length === 1 ? '' : 's'}) from ${source}`
+    : `Code change from ${source}`;
   const toolStart = nowMs();
   const args = {
     projectId: req.projectId,
@@ -79,7 +82,7 @@ export async function recordCodeChangeTicket(
     files,
     kind: 'improvement',
     modality: 'ide',
-    chatId,
+    ...(serverChatId != null ? { chatId: serverChatId } : {}),
     ...(attachTo != null ? { taskId: attachTo } : {}),
   };
   let out: unknown;
@@ -134,17 +137,18 @@ export async function recordCodeChangeTicket(
  * move. Best-effort and fail-closed per ticket, a durable step each, never throws.
  */
 export async function updateLinkedTickets(
-  chatId: number,
+  serverChatId: number | null,
   c: RunCell,
   req: BrainRunRequest,
   select: (listed: unknown) => LinkedTicketToAdvance[],
   status: 'in_progress' | 'done',
   reason: 'worked-ticket-off-backlog' | 'shipped-to-base-branch' | 'reviewed-in-preview',
 ): Promise<void> {
-  if (!req.runTool) return;
+  // An unbound local chat has no linked tickets on the platform to move.
+  if (!req.runTool || serverChatId == null) return;
   let listed: unknown;
   try {
-    listed = await req.runTool('builtin_chats_list_tickets', { chatId });
+    listed = await req.runTool('builtin_chats_list_tickets', { chatId: serverChatId });
   } catch {
     return; // can't read the links — nothing to move
   }
@@ -181,14 +185,16 @@ export async function updateLinkedTickets(
  * so the from_delta backstop stays quiet.
  */
 export async function autoLinkCreatedItem(
-  chatId: number,
+  serverChatId: number | null,
   c: RunCell,
   runTool: (name: string, args: unknown) => Promise<unknown>,
   toolName: string,
   out: unknown,
 ): Promise<void> {
   const link = workItemLinkFromCreate(toolName, out);
-  if (!link) return;
+  // An unbound local chat (PRD 36) has no platform chat to link the item to.
+  if (!link || serverChatId == null) return;
+  const chatId = serverChatId;
   const toolStart = nowMs();
   let result: unknown;
   try {

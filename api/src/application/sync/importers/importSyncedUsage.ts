@@ -1,0 +1,176 @@
+/**
+ * PRD 36.4 — import one model call the platform never saw.
+ *
+ * A VS Code chat that ran on this machine's model (route `local`) or straight on the
+ * person's own provider key (route `byo-direct`) leaves no `llm_usage_log` row: the
+ * gateway was never asked. The client ledger records every call; on sync, the calls
+ * the server could not observe arrive here and become ONE usage row each, written
+ * through the canonical ledger writer, attributed to the chat they served.
+ *
+ * NEVER TWICE. A `gateway` row is already on the server — the gateway logged it when
+ * it served the call — so it is refused (`usage_server_observed`). And because the
+ * usage ledger lives in a different database than the push's unit of work, a retry
+ * cannot be deduped by the sync transaction alone: the row carries the idempotency
+ * key `sync-usage:<clientEventId>`, and an existing row under it is never written again.
+ *
+ * WHO PAID. Both routes are tenant-funded on the person's own machine, so the row is
+ * `byo` on surface `vsix`: zero platform cost and exempt from the plan allowance, the
+ * same rule own-machine BYO usage already follows. A local call's saving — what the
+ * same tokens would have cost on the chat's paid route — was priced by the client at
+ * list (there is no catalog price for a local model) and is written as stamped,
+ * marked estimated.
+ *
+ * Immutable: a call that happened does not change. The projection is the payload
+ * verbatim, so a pull round-trips it unchanged.
+ */
+
+import { normalizeByoProvider } from '../../llm/usageLedger';
+import type { SyncEventInput, SyncImportContext, SyncStoreSet, SyncUsageLedger } from '../syncPorts';
+import {
+  appliedExisting,
+  appliedNew,
+  clampedClientTime,
+  conflict,
+  mappedChatId,
+  preludeRejection,
+  rejected,
+  type BoundedImportOutcome,
+} from './index';
+
+const ROUTES = new Set(['gateway', 'local', 'byo-direct']);
+const MODES = new Set(['chat', 'work']);
+/** `llm_usage_log.model` is varchar(200). */
+const MODEL_MAX = 200;
+
+export const USAGE_IDEMPOTENCY_PREFIX = 'sync-usage:';
+export const USAGE_USE_CASE = 'vsix-local-usage';
+
+interface UsageFields {
+  clientEventId: string;
+  clientChatId: string | null;
+  model: string;
+  route: 'gateway' | 'local' | 'byo-direct';
+  mode: 'chat' | 'work' | null;
+  promptTokens: number;
+  completionTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  localSaving: { savedPrompt: number; savedCompletion: number; recallPrompt: number; savedCostMc: number } | null;
+  at: unknown;
+}
+
+type Parsed<T> = { ok: true; value: T } | { ok: false; detail: string };
+
+/** A token count: a non-negative integer, else 0 (an estimate never turns into NaN). */
+const count = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value) : 0);
+
+function readUsage(payload: unknown, clientEntityId: string): Parsed<UsageFields> {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { ok: false, detail: 'payload_invalid' };
+  const raw = payload as Record<string, unknown>;
+  if (typeof raw.model !== 'string' || raw.model.trim() === '') return { ok: false, detail: 'usage_model_required' };
+  if (typeof raw.route !== 'string' || !ROUTES.has(raw.route)) return { ok: false, detail: 'usage_route_invalid' };
+  const clientEventId = typeof raw.clientEventId === 'string' && raw.clientEventId !== '' ? raw.clientEventId : clientEntityId;
+  const local = raw.savingsSource === 'local_model'
+    ? {
+        savedPrompt: count(raw.savedPrompt),
+        savedCompletion: count(raw.savedCompletion),
+        recallPrompt: count(raw.recallPrompt),
+        // Net value in millicents; may legitimately be 0, never negative for a local call.
+        savedCostMc: count(raw.savedCostMc),
+      }
+    : null;
+  return {
+    ok: true,
+    value: {
+      clientEventId,
+      clientChatId: typeof raw.clientChatId === 'string' ? raw.clientChatId : null,
+      model: raw.model.slice(0, MODEL_MAX),
+      route: raw.route as UsageFields['route'],
+      mode: typeof raw.mode === 'string' && MODES.has(raw.mode) ? (raw.mode as 'chat' | 'work') : null,
+      promptTokens: count(raw.promptTokens),
+      completionTokens: count(raw.completionTokens),
+      cacheReadTokens: count(raw.cacheReadTokens),
+      cacheCreationTokens: count(raw.cacheCreationTokens),
+      localSaving: local,
+      at: raw.at,
+    },
+  };
+}
+
+/** The vendor a `direct/<vendor>/<model>` id names, as the ledger's provider id. */
+function directProvider(model: string): string | null {
+  if (!model.startsWith('direct/')) return null;
+  const vendor = model.slice('direct/'.length).split('/')[0];
+  return vendor ? normalizeByoProvider(vendor) : null;
+}
+
+/** Apply one usage import. Create/import only; the write goes to the usage ledger port. */
+export async function importSyncedUsage(
+  event: SyncEventInput,
+  ctx: SyncImportContext,
+  stores: SyncStoreSet,
+  ledger: SyncUsageLedger,
+): Promise<BoundedImportOutcome> {
+  if (event.entityType !== 'usage') return rejected('entity_type_rejected');
+  const prelude = preludeRejection(event, ctx);
+  if (prelude) return prelude;
+  if (event.operation !== 'create' && event.operation !== 'import') return rejected('usage_immutable');
+  const parsed = readUsage(event.payload, event.clientEntityId);
+  if (!parsed.ok) return rejected(parsed.detail);
+  const usage = parsed.value;
+  if (usage.route === 'gateway') return rejected('usage_server_observed');
+
+  const tenantId = ctx.auth.tenantId;
+  const mapping = await stores.findMapping(tenantId, event.entityType, event.clientEntityId);
+  if (mapping) {
+    if (mapping.destinationKey !== ctx.destinationKey) return rejected('destination_mismatch');
+    if (mapping.payloadHash === event.payloadHash) return appliedExisting(mapping, event.payload);
+    return conflict(mapping, 'entity_already_imported');
+  }
+
+  const idempotencyKey = `${USAGE_IDEMPOTENCY_PREFIX}${usage.clientEventId}`;
+  if (!(await ledger.hasRow(tenantId, idempotencyKey))) {
+    // Unmapped chat ⇒ the row is still written, unattributed: spend is never dropped
+    // because its conversation has not landed.
+    const chatId = await mappedChatId(stores, tenantId, usage.clientChatId);
+    await ledger.record({
+      tenantId,
+      userId: ctx.auth.userId,
+      llmProduct: 'builderforceLLM',
+      model: usage.model,
+      usage: {
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        totalTokens: usage.promptTokens + usage.completionTokens,
+        cacheReadTokens: usage.cacheReadTokens,
+        cacheCreationTokens: usage.cacheCreationTokens,
+      },
+      metadata: {
+        ...(chatId !== null ? { chatId } : {}),
+        ...(usage.mode ? { mode: usage.mode } : {}),
+        clientEventId: usage.clientEventId,
+        source: 'client-reported',
+      },
+      idempotencyKey,
+      useCase: USAGE_USE_CASE,
+      byo: true,
+      byoProvider: usage.route === 'byo-direct' ? directProvider(usage.model) : null,
+      surface: 'vsix',
+      calls: 1,
+      createdAt: clampedClientTime(usage.at, ctx.now),
+      ...(usage.localSaving
+        ? {
+            savings: {
+              source: 'local_model' as const,
+              savedPromptTokens: usage.localSaving.savedPrompt,
+              savedCompletionTokens: usage.localSaving.savedCompletion,
+              recallPromptTokens: usage.localSaving.recallPrompt,
+              estimated: true,
+            },
+            savedCostMillicents: usage.localSaving.savedCostMc,
+          }
+        : {}),
+    });
+  }
+  return appliedNew(event.clientEntityId, 1, ctx.destinationKey, event.payload);
+}

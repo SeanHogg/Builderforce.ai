@@ -25,14 +25,13 @@ import { sql, type SQL } from 'drizzle-orm';
 import { addUsageToTenantTotals, getTenantUsageTotalsForEnv } from './tokenUsage';
 import { pickPersistedMetadata } from './usageMetadata';
 import { loadTenantProviderRows } from './tenantProviderRows';
-import type { UsageSurface } from '@builderforce/spend-contract';
+import { computeCostMillicents, type UsageSurface } from '@builderforce/spend-contract';
 import { COST_LEVER_ARMS_KEY, costLeverArmsStamp } from '../costMetrics/leverArms';
 
-/** Cache-tier multipliers relative to the base input (prompt) price. cache_read
- *  is billed ~0.1x input, cache_creation ~1.25x — both are subsets of
- *  promptTokens (see schema). Mirrors the discount the usage columns record. */
-export const CACHE_READ_MULTIPLIER = 0.1;
-export const CACHE_CREATION_MULTIPLIER = 1.25;
+/** The cache-tier multipliers and the per-call cost rule (millicents, cache tiers
+ *  discounted, 0 for an unpriced model) are the shared cost rule in
+ *  `@builderforce/spend-contract` — a device prices its own calls with the same one. */
+export { CACHE_CREATION_MULTIPLIER, CACHE_READ_MULTIPLIER, computeCostMillicents } from '@builderforce/spend-contract';
 
 /** Provider batch APIs (Anthropic Message Batches, OpenAI Batch) bill every token tier at
  *  half the synchronous rate. Applied to the catalog price, so the cache multipliers above
@@ -179,25 +178,6 @@ function clampOptionalCount(n: number | null | undefined): number | null {
   return n == null ? null : clampTokenCount(n);
 }
 
-/** Authoritative per-call cost in millicents (1/100000 USD), priced from the
- *  resolved model's catalog price incl. the cache-read/creation discount split.
- *  Returns 0 when the model isn't in the catalog (e.g. a BYO-key passthrough). */
-export function computeCostMillicents(
-  pricing: { prompt: number; completion: number } | undefined,
-  usage: LlmUsage,
-): number {
-  if (!pricing) return 0;
-  const cacheRead = usage.cacheReadTokens ?? 0;
-  const cacheCreation = usage.cacheCreationTokens ?? 0;
-  const fullPrompt = Math.max(0, usage.promptTokens - cacheRead - cacheCreation);
-  const usd =
-    fullPrompt * pricing.prompt +
-    cacheRead * pricing.prompt * CACHE_READ_MULTIPLIER +
-    cacheCreation * pricing.prompt * CACHE_CREATION_MULTIPLIER +
-    usage.completionTokens * pricing.completion;
-  return Math.round(usd * 100_000);
-}
-
 /** Final ledger cost rule: tenant-funded calls carry no token cost, while the
  * OpenRouter routing surcharge is independent and therefore applies to both
  * managed-key and BYO-key registrations. */
@@ -286,8 +266,11 @@ function readChatAttribution(metadata: Record<string, unknown> | null | undefine
 export interface UsageSavings {
   /** Set only on an avoided call (`calls` = 0): what stood in for the model.
    *  `deterministic` (D7) is a COUNTER row only — zero saved tokens, so no saving is
-   *  claimed for it; it exists so "served without a model" can be counted. */
-  source?: 'memory_answer' | 'evermind_answer' | 'response_cache' | 'deterministic' | null;
+   *  claimed for it; it exists so "served without a model" can be counted.
+   *  `local_model` (PRD 36) is a REAL call (`calls` = 1) served by a model on the
+   *  person's machine: the saving is what the same tokens would have cost on the
+   *  chat's paid route, priced by the client and passed as `savedCostMillicents`. */
+  source?: 'memory_answer' | 'evermind_answer' | 'response_cache' | 'deterministic' | 'local_model' | null;
   savedPromptTokens: number;
   savedCompletionTokens?: number;
   recallPromptTokens?: number;
@@ -401,6 +384,13 @@ export interface RecordUsageRow {
   /** How the provider billed the call. `batch` = a provider batch API (D6), priced at
    *  {@link BATCH_PRICE_MULTIPLIER} and stamped `metadata.pricingTier`. Absent = standard. */
   pricingTier?: UsagePricingTier | null;
+  /** The saving's NET value as its producer stamped it, written verbatim instead of
+   *  pricing `savings` against the catalog — for a row the catalog cannot price (a
+   *  local model's counterfactual, priced by the client at list; PRD 36). */
+  savedCostMillicents?: number | null;
+  /** When the call happened, for a row reported after the fact (a synced client
+   *  call, already clamped to now by the importer). Absent = now. */
+  createdAt?: Date | null;
 }
 
 /** Minimal shape of a ProxyResult this helper needs — avoids importing the full type.
@@ -593,7 +583,9 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       row.byo === true,
       row.premiumSurcharge === true,
     );
-    const savedCostUsdMillicents = computeSavedCostMillicents(pricing, savings);
+    const savedCostUsdMillicents = row.savedCostMillicents != null && Number.isFinite(row.savedCostMillicents)
+      ? Math.round(row.savedCostMillicents)
+      : computeSavedCostMillicents(pricing, savings);
     // Stamp the surcharge into metadata so an invoice/usage row can show it explicitly.
     // Only the non-denied, size-bounded keys are PERSISTED (see usageMetadata) — the raw caller bag held
     // guest prompt text and was the bulk of this table's size. `savings` above already read
@@ -677,6 +669,7 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       savedCompletionTokens:  clampTokenCount(savings?.savedCompletionTokens ?? 0),
       recallPromptTokens:     clampTokenCount(savings?.recallPromptTokens ?? 0),
       savedCostUsdMillicents,
+      ...(row.createdAt ? { createdAt: row.createdAt } : {}),
     });
 
     // Keep the cached cap totals exact between loads (see tokenUsage).

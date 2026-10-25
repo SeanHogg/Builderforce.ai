@@ -16,17 +16,19 @@ export interface SpendBreakdownProps {
 export function SpendBreakdown({ summary, labels, locale }: SpendBreakdownProps) {
   const { spend, saved, savedPct } = summary;
   const usd = (n: number) => formatUsd(n, locale);
+  // A spend the device priced from the bundled list (PRD 36) reads as an estimate.
+  const spent = (n: number) => `${spend.estimated ? '≈' : ''}${usd(n)}`;
   return (
     <div className="bf-spend">
       <div className="bf-spend__group">{labels.spendHeading}</div>
       <div className="bf-spend__row">
         <span className="bf-spend__k">{labels.platform}</span>
-        <span className="bf-spend__v">{usd(spend.platformUsd)}</span>
+        <span className="bf-spend__v">{spent(spend.platformUsd)}</span>
       </div>
       {spend.yourKeyUsd > 0 && (
         <div className="bf-spend__row" title={labels.yourKeyHint}>
           <span className="bf-spend__k">{labels.yourKey}</span>
-          <span className="bf-spend__v">{usd(spend.yourKeyUsd)}</span>
+          <span className="bf-spend__v">{spent(spend.yourKeyUsd)}</span>
         </div>
       )}
       <div className="bf-spend__meta">

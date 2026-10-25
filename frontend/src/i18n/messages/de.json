@@ -35579,7 +35579,8 @@
       "evermind_answer": "Von Evermind beantwortet",
       "response_cache": "Wiederholte Anfrage",
       "context_trim": "Schlanker Kontext",
-      "recall_overhead": "Abruf hinzugefügt"
+      "recall_overhead": "Abruf hinzugefügt",
+      "local_model": "Auf diesem Gerät"
     },
     "sourceHints": {
       "prompt_cache": "Der Anbieter hat einen Teil des Prompts aus seinem Cache zu einem Zehntel des Preises geliefert",
@@ -35587,7 +35588,8 @@
       "evermind_answer": "Das Evermind des Projekts hat geantwortet — ohne kostenpflichtigen Modellaufruf",
       "response_cache": "Eine identische Anfrage wurde aus dem Gateway-Cache beantwortet — ohne Modellaufruf",
       "context_trim": "Die Verdichtung hat frühere Runden aus jedem Aufruf herausgehalten",
-      "recall_overhead": "Was abgerufene Erinnerungen jedem Prompt hinzugefügt haben — die Kosten des Abrufs"
+      "recall_overhead": "Was abgerufene Erinnerungen jedem Prompt hinzugefügt haben — die Kosten des Abrufs",
+      "local_model": "Ein Modell auf diesem Gerät hat den Aufruf beantwortet – so viel hätte Ihre bezahlte Route für dieselben Tokens berechnet"
     }
   },
   "codeAudit": {

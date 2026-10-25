@@ -126,8 +126,12 @@ export interface StreamHandlers {
  * missing `chatId` as "not chat traffic" and records nothing.
  */
 export interface CompletionMetadata {
-  /** The Brain chat this completion is serving — the audit emit's switch. */
+  /** The SERVER Brain chat this completion is serving — the audit emit's switch. Never a
+   *  local chat's view key (PRD 36): an unbound local chat leaves it out. */
   chatId?: number;
+  /** The local chat's client id (a uuid), for diagnostics only — the server never
+   *  resolves it to a chat. */
+  clientChatId?: string;
   /** The chat's project, when it has one (scopes the audit row). */
   projectId?: number;
   /** Stable identifier of the answering agent. Defaults server-side to `brain-default`. */
@@ -222,6 +226,13 @@ export interface StreamChatOptions {
    * byte-identical to a pre-feature request (same discipline as `reasoning`).
    */
   metadata?: CompletionMetadata;
+  /**
+   * The run's own chat key on THIS device — what a host groups the conversation's calls
+   * by (the local-success label waits under it for the chat's verdict). Never on the
+   * wire: on a local-first host it is a view key that must not leave the machine
+   * (PRD 36), which is why it is not {@link CompletionMetadata.chatId}.
+   */
+  conversationKey?: number;
   /**
    * Silence that ends this request — no response headers, or zero bytes read, for this
    * long — defaulting to {@link STREAM_IDLE_MS}. A stalled upstream never settles, so

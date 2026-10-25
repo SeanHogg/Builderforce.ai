@@ -943,5 +943,7 @@
   "{0} is ready. Hybrid now runs turns on this machine first.": "{0} est prêt. Le mode hybride exécute désormais les tours d’abord sur cette machine.",
   "Could not download {0} for on-device turns: {1}": "Impossible de télécharger {0} pour les tours sur l’appareil : {1}",
   "Open the visualization beside the chat": "Ouvrir la visualisation à côté du chat",
-  "BuilderForce extension version {version}": "Version de l’extension BuilderForce : {version}"
+  "BuilderForce extension version {version}": "Version de l’extension BuilderForce : {version}",
+  "On this machine": "Sur cet appareil",
+  "A model on this machine served the call — what your paid route would have charged for the same tokens": "Un modèle sur cet appareil a traité l’appel — ce que votre route payante aurait facturé pour les mêmes jetons"
 }

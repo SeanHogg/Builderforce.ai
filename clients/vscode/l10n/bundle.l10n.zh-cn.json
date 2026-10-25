@@ -943,5 +943,7 @@
   "{0} is ready. Hybrid now runs turns on this machine first.": "{0} 已就绪。混合模式现在会优先在本机上运行对话轮次。",
   "Could not download {0} for on-device turns: {1}": "无法下载用于设备端对话轮次的 {0}：{1}",
   "Open the visualization beside the chat": "在聊天旁打开可视化视图",
-  "BuilderForce extension version {version}": "BuilderForce 扩展版本 {version}"
+  "BuilderForce extension version {version}": "BuilderForce 扩展版本 {version}",
+  "On this machine": "在本机运行",
+  "A model on this machine served the call — what your paid route would have charged for the same tokens": "本机上的模型处理了此次调用——这是付费路由对相同令牌本应收取的费用"
 }

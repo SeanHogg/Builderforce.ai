@@ -16,7 +16,7 @@
 
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import { requestDb, type DbHandle } from '../../application/shared/dbHandle';
 import { handleSyncPull } from '../../application/sync/handleSyncPull';
 import { handleSyncPush } from '../../application/sync/handleSyncPush';
@@ -27,8 +27,9 @@ export const SYNC_ROUTE_BASE = '/api/sync/v1';
 export const SYNC_PUSH_PATH = `${SYNC_ROUTE_BASE}/push`;
 export const SYNC_PULL_PATH = `${SYNC_ROUTE_BASE}/pull`;
 
-/** Builds the persistence port for a request's database handle (composition root supplies it). */
-export type SyncStoresFor = (db: DbHandle) => SyncStores;
+/** Builds the persistence port for a request's database handle (composition root supplies it).
+ *  nv reaches the usage ledger, which lives in its own database (PRD 36.4). */
+export type SyncStoresFor = (db: DbHandle, env: Env) => SyncStores;
 
 export function createSyncRoutes(storesFor: SyncStoresFor): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
@@ -42,14 +43,14 @@ export function createSyncRoutes(storesFor: SyncStoresFor): Hono<HonoEnv> {
 
   r.post('/push', async (c) => {
     const body = readSyncBody(await c.req.text());
-    const response = await handleSyncPush(body, { auth: auth(c), now: new Date(), stores: storesFor(requestDb(c)) });
+    const response = await handleSyncPush(body, { auth: auth(c), now: new Date(), stores: storesFor(requestDb(c), c.env) });
     if (!response.ok) return c.json({ error: response.code }, response.status);
     return c.json({ receipts: response.receipts }, 200);
   });
 
   r.post('/pull', async (c) => {
     const body = readSyncBody(await c.req.text());
-    const response = await handleSyncPull(body, { auth: auth(c), now: new Date(), stores: storesFor(requestDb(c)) });
+    const response = await handleSyncPull(body, { auth: auth(c), now: new Date(), stores: storesFor(requestDb(c), c.env) });
     if (!response.ok) return c.json({ error: response.code }, response.status);
     return c.json(response.result, 200);
   });

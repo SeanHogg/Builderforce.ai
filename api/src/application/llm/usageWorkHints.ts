@@ -29,6 +29,7 @@ import { buildDatabase } from '../../infrastructure/database/connection';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { projectInTenant } from '../project/projectOwnership';
 import { taskInTenant } from '../../infrastructure/database/tenantScope';
+import { chatInTenant } from '../brain/brainChatGuards';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 /** Ownership answers change only when a ticket/project is deleted or moved, which is
@@ -42,12 +43,16 @@ export interface UsageWorkHintInput {
   taskId?: unknown;
   /** `x-builderforce-project-id` header, or `metadata.projectId`. */
   projectId?: unknown;
+  /** `x-builderforce-chat-id` header, or `metadata.chatId` (`brainChatId`). */
+  chatId?: unknown;
 }
 
 /** Validated, tenant-owned ids ready to be written onto a usage row. */
 export interface UsageWorkHints {
   taskId?: number;
   projectId?: number;
+  /** The Brain chat the call served — only a chat in THIS tenant (PRD 36, D2). */
+  chatId?: number;
 }
 
 /** Accept an integer id from a header string or a JSON number; reject everything
@@ -71,6 +76,7 @@ export function readUsageWorkHints(
   return {
     taskId: header('x-builderforce-task-id') ?? md.taskId,
     projectId: header('x-builderforce-project-id') ?? md.projectId,
+    chatId: header('x-builderforce-chat-id') ?? md.chatId ?? md.brainChatId,
   };
 }
 
@@ -88,15 +94,21 @@ export async function resolveUsageWorkHints(
 ): Promise<UsageWorkHints> {
   const taskId = parseId(input.taskId);
   const projectId = parseId(input.projectId);
-  if (taskId === null && projectId === null) return {};
+  const chatId = parseId(input.chatId);
+  if (taskId === null && projectId === null && chatId === null) return {};
 
   const db = buildDatabase(env);
-  const owns = async (kind: 'task' | 'project', id: number): Promise<boolean> => {
+  const OWNERSHIP: Record<'task' | 'project' | 'chat', (id: number) => Promise<boolean>> = {
+    task: (id) => taskInTenant(db, id, tenantId),
+    project: (id) => projectInTenant(db, tenantId, id),
+    chat: (id) => chatInTenant(db, tenantId, id),
+  };
+  const owns = async (kind: 'task' | 'project' | 'chat', id: number): Promise<boolean> => {
     try {
       return await getOrSetCached(
         env,
         `usagehint:${kind}:${tenantId}:${id}`,
-        () => (kind === 'task' ? taskInTenant(db, id, tenantId) : projectInTenant(db, tenantId, id)),
+        () => OWNERSHIP[kind](id),
         { kvTtlSeconds: OWNERSHIP_TTL_SECONDS },
       );
     } catch (error) {
@@ -108,13 +120,42 @@ export async function resolveUsageWorkHints(
     }
   };
 
-  const [taskOk, projectOk] = await Promise.all([
+  const [taskOk, projectOk, chatOk] = await Promise.all([
     taskId !== null ? owns('task', taskId) : Promise.resolve(false),
     projectId !== null ? owns('project', projectId) : Promise.resolve(false),
+    chatId !== null ? owns('chat', chatId) : Promise.resolve(false),
   ]);
 
   return {
     ...(taskId !== null && taskOk ? { taskId } : {}),
     ...(projectId !== null && projectOk ? { projectId } : {}),
+    ...(chatId !== null && chatOk ? { chatId } : {}),
   };
+}
+
+/** The metadata keys a caller names its Brain chat with. */
+const CHAT_METADATA_KEYS = ['chatId', 'brainChatId'] as const;
+
+/**
+ * The caller's metadata with an UNPROVEN chat id removed (PRD 36, D2).
+ *
+ * `metadata.chatId` is what stamps `llm_usage_log.chat_id` and switches on the
+ * gateway's "agent replied in chat #N" activity row. A client that sent a number
+ * which is not a chat in its tenant — the VS Code panel used to send its LOCAL chat
+ * number — would bill and narrate some other conversation. Validated by
+ * {@link resolveUsageWorkHints}; this strips whatever did not validate, so every
+ * consumer downstream (usage, trace, activity) reads only a proven chat. Unchanged
+ * (same object) when there is nothing to strip.
+ */
+export function withVerifiedChat(
+  metadata: Record<string, unknown> | null,
+  hints: UsageWorkHints,
+): Record<string, unknown> | null {
+  if (!metadata) return metadata;
+  const named = CHAT_METADATA_KEYS.filter((key) => metadata[key] !== undefined && metadata[key] !== null);
+  if (named.length === 0) return metadata;
+  if (hints.chatId !== undefined && named.every((key) => parseId(metadata[key]) === hints.chatId)) return metadata;
+  const kept = { ...metadata };
+  for (const key of named) delete kept[key];
+  return kept;
 }

@@ -90,7 +90,7 @@ export function dispatchToolPort(run: RunLoopContext): LoopPorts<ChatCompletionM
       // and from here on the work is on the board and linked to this chat whatever
       // becomes of the rest of the turn.
       if (first && !c.ticketRecorded && req.projectId != null && req.runTool) {
-        await recordCodeChangeTicket(chatId, c, req, 'open').catch(() => { /* never fail the run on the backstop */ });
+        await recordCodeChangeTicket(run.serverChatId, c, req, 'open').catch(() => { /* never fail the run on the backstop */ });
       }
     }
     if (isTicketRecordingTool(call.name)) c.ticketRecorded = true;
@@ -100,7 +100,7 @@ export function dispatchToolPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // remember the advisory builtin_chats_link_ticket call (which it often skips,
     // leaving the item created but orphaned from the chat). Fires the same shared
     // link tool the model would, tied to the run's resolved chatId.
-    await autoLinkCreatedItem(chatId, c, runTool, call.name, out);
+    await autoLinkCreatedItem(run.serverChatId, c, runTool, call.name, out);
     // The MODEL transcript gets a size-capped copy so a big list result can't
     // flood the context window; the TRACE keeps the full result (bounded by
     // MAX_TRACE_EVENTS) for the timeline + triage copy, plus the pre-trim byte

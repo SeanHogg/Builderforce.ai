@@ -42,7 +42,7 @@ import { expandGatewayModelRefs, recordGatewayChatModelActivity } from '../../..
 import { isPaidOverflowExhausted, logFailovers, logProviderAuthAlerts, logUsage } from '../../../application/llm/gatewayUsageLog';
 import { isModelRole } from '@builderforce/agent-tools';
 import { isArcStage } from '@builderforce/workload';
-import { enforceTokenCaps, resolveUsageSurface, resolveWorkHints } from './gatewayGuards';
+import { enforceTokenCaps, resolveCallerAttribution, resolveUsageSurface } from './gatewayGuards';
 import { gatePremiumSelection, gateStrictPin, replayIdempotentRequest } from './chatCompletionGates';
 import { buildCompletionEnvelope, buildCompletionHeaders, stampTraceIdOnError } from './chatCompletionResponse';
 import { handleGuestChat } from './guestChat';
@@ -100,12 +100,12 @@ export function mountChatCompletionsRoutes(router: Hono<HonoEnv>): void {
     // Capture SDK transport metadata for usage logging — the body's `metadata`
     // and `useCase` are consumed here and stripped before vendor dispatch
     // (see STANDARD_BODY_FIELDS).
-    const callerMetadata = (bodyAny.metadata as Record<string, unknown> | undefined) ?? null;
     const callerUseCase  = typeof bodyAny.useCase === 'string' ? bodyAny.useCase : null;
     // Ticket/project attribution for this row — header first, then `metadata`, each
     // validated against THIS tenant (see `usageWorkHints`). Without it every gateway
     // and image row lands with a NULL ticket and vanishes from the cost rollups.
-    const workHints = await resolveWorkHints(c, access, callerMetadata);
+    // Chat attribution too: a chat id that is not this tenant's is dropped (PRD 36, D2).
+    const { workHints, callerMetadata } = await resolveCallerAttribution(c, access, bodyAny);
     // The ONE key grammar (`application/shared/idempotentReplay.ts`) — the same the
     // `idempotentReplay` middleware enforces on the outbox-replayed writes.
     const parsedIdempotencyKey = parseIdempotencyKey(c.req.header(IDEMPOTENCY_KEY_HEADER));

@@ -7,7 +7,7 @@
  */
 
 import * as vscode from "vscode";
-import { getRunSnapshot, isRunning, type BrainStreamFn, type ModelFallbackEvent } from "@seanhogg/builderforce-brain-embedded";
+import { getRunSnapshot, isRunning, withRunUsage, type BrainStreamFn, type ModelFallbackEvent } from "@seanhogg/builderforce-brain-embedded";
 import { getApiKey, postRunOutcome } from "./gateway";
 import { fetchRunContextSection, projectEvermindHooks } from "./bfApi";
 import { localBrainApplication } from "./localFirstStore";
@@ -274,14 +274,28 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     persistence: {
       sendMessages: (chatId, messages) => local.persistence.sendMessages(chatId, messages),
     },
+    // PRD 36: the panel's chats are LOCAL — their ids never leave the machine. A run binds
+    // its chat on sign-in (title + project only) and names the bound server chat, or none.
+    chatIdentity: async (chatId) => {
+      const [serverChatId, clientChatId] = await Promise.all([
+        local.identity.bind(chatId).catch((error: unknown) => {
+          hostLog(`[chat identity] bind failed for local chat ${chatId}: ${String(error)}`);
+          return undefined;
+        }),
+        local.identity.clientIdFor(chatId),
+      ]);
+      return { serverChatId: serverChatId ?? null, ...(clientChatId ? { clientChatId } : {}) };
+    },
+    recordUsage: (stream, run) =>
+      withRunUsage(stream, local.usage, run, (error) => hostLog(`[usage ledger] write failed: ${String(error)}`)),
     // How a code-changing run's coder did — so the next run's coder is picked on evidence.
     reportOutcome: (outcome) => postRunOutcome(outcome),
-    evermind: (projectId, chatId) => withWorkspaceStaleness(projectEvermindHooks(secrets, projectId, chatId), workspaceRoot() || undefined),
+    evermind: (projectId, serverChatId) => withWorkspaceStaleness(projectEvermindHooks(secrets, projectId, serverChatId), workspaceRoot() || undefined),
     // The ONE api `ContextSource` the native participant and the cloud engine read.
-    // Continuity-scoped to the chat (a real server chat only — an unlinked run has a
-    // negative id and no history to measure a delta against).
-    runContext: (projectId, chatId, query) =>
-      fetchRunContextSection(secrets, projectId, { ...(chatId > 0 ? { scope: `chat:${chatId}` } : {}), query }),
+    // Continuity-scoped to the conversation's server chat — an unbound chat has no
+    // history there to measure a delta against.
+    runContext: (projectId, serverChatId, query) =>
+      fetchRunContextSection(secrets, projectId, { ...(serverChatId != null ? { scope: `chat:${serverChatId}` } : {}), query }),
     // The tenant's effective governance gates — the one resolver both editor
     // surfaces share, so a gate holds in the panel exactly as in the participant.
     policyGates: (projectId) => resolveRunPolicyGates(secrets, projectId),

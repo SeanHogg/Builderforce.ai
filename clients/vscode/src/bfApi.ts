@@ -5,6 +5,7 @@ import type {
   EvermindRunHooks,
   BrainMessage,
   ProjectMemoryRequest,
+  SpendSavingsSummary,
 } from "@seanhogg/builderforce-brain-embedded";
 import { isManagerRole, projectMemoryHooks, NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
 import { renderPlatformContextSection, type RunContextEnvelope } from "@builderforce/run-context";
@@ -135,6 +136,12 @@ export function setSelectedWorkspace(tenantId: number | undefined): void {
 function effectiveTenantId(): number | undefined {
   if (!baseJwt) return selectedTenantId;
   return rescopeUnsupported ? baseJwt.tenantId : selectedTenantId ?? baseJwt.tenantId;
+}
+
+/** The workspace (tenant) `/api/*` calls act as right now — undefined until signed in.
+ *  What a local chat binds into (PRD 36, `chatAccount.ts`). */
+export function workspaceTenantId(): number | undefined {
+  return baseJwt ? effectiveTenantId() : undefined;
 }
 
 /** Tell the durable outboxes which tenants writes now go to (see `outboxStorage.ts`). */
@@ -909,6 +916,8 @@ export interface BfBrainChat {
   ticketCount?: number;
   /** Overall linked-ticket progress 0–100, or null when none are linked. */
   ticketProgressPct?: number | null;
+  /** What the chat cost and what memory saved it (`attachChatSpend`). Absent on older servers. */
+  spend?: SpendSavingsSummary | null;
 }
 
 /** An agent in the tenant's pool, id→display-name (for resolving participant refs). */

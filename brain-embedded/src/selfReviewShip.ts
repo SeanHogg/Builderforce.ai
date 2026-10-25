@@ -44,11 +44,16 @@ import { commandOf, gitCommandPattern } from './shipVerification';
  * tools, `builtin_*` for the platform ones (which also pins those into the advertised
  * set — the loop pins every `builtin_*` name the system prompt mentions).
  */
-export function selfReviewShipDirective(chatId: number): string {
+export function selfReviewShipDirective(chatId: number | null): string {
+  // Where the ticket tracking the change is found: this chat's links, or — on an unbound
+  // local chat (PRD 36), which has none — the ticket the change was recorded against.
+  const trackingTicket = chatId != null
+    ? 'builtin_chats_list_tickets with chatId=' + chatId + ' lists it'
+    : 'the one builtin_tickets_from_delta returned for it';
   return (
     'SHIP YOUR OWN CHANGE — in this session YOU are its reviewer. This is a local editor session: no other agent or reviewer can ever reach a change you leave in the working tree, so a ticket you leave "in_review" sits at 75% on the board forever. When your turn changes code, finish it in this order:\n' +
     '1. VERIFY — run the type-check / tests / build that cover what you touched (`run_command`) and fix whatever fails.\n' +
-    '2. SELF-REVIEW — read your own diff with `git_diff` against what the ticket and the user asked for: bugs, leftover debug code, edits unrelated to the task, missing tests or localisation. If you find a problem, FIX it and review again. Then record the pass with builtin_reviews_record (taskId = the ticket tracking this change — builtin_chats_list_tickets with chatId=' + chatId + ' lists it; verdict "complete"; a one-paragraph summary of what you checked).\n' +
+    '2. SELF-REVIEW — read your own diff with `git_diff` against what the ticket and the user asked for: bugs, leftover debug code, edits unrelated to the task, missing tests or localisation. If you find a problem, FIX it and review again. Then record the pass with builtin_reviews_record (taskId = the ticket tracking this change — ' + trackingTicket + '; verdict "complete"; a one-paragraph summary of what you checked).\n' +
     '3. SHIP — `git_commit` with allowBaseBranch:true and exactly the `paths` you changed (never a catch-all: the tree may hold the human\'s own work), then `git_push` with allowBaseBranch:true. Both are shown to the human for approval — that approval is their review of your review, so do not ask for it in prose as well.\n' +
     '4. CLOSE — the push reports the branch it landed on. Once it lands on the base branch with nothing left to push, the in_review ticket this chat opened for the change moves to done automatically. Move any OTHER linked ticket this change fully delivers to done yourself with builtin_tasks_update. Report the commit hash and the push result.\n' +
     'Exceptions, and only these: if the user asked for a pull request or a ticket branch, commit on a `branch` and `open_pull_request` instead (the ticket then closes when that PR merges); if the user said not to commit or push, leave the change uncommitted and say so. If a commit or push is refused or fails, report the exact error — never claim a change shipped when it did not.'

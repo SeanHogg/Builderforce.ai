@@ -119,9 +119,17 @@ export interface BrainRunHostPorts {
   localProbes?(): Promise<readonly LocalRuntimeProbe[]>;
   /** Where the loop persists its turns — the same Brain store the panel reads. */
   persistence: BrainRunPersistence;
+  /**
+   * PRD 36: which SERVER chat a run's local chat is — binding it first when signed in —
+   * and its client id. `serverChatId: null` = unbound: no chat id leaves the machine.
+   * Omitted ⇒ the run's chat id is itself a server chat.
+   */
+  chatIdentity?(chatId: number): Promise<{ serverChatId: number | null; clientChatId?: string }>;
+  /** PRD 36: wrap the run's streamer so every call lands in the chat's usage ledger. */
+  recordUsage?(stream: BrainStreamFn, run: { chatId: number; runKey: number; mode?: "chat" | "work" }): BrainStreamFn;
   /** Project-Evermind hooks for a project (recall, memory-first answer, cache), tiered on
-   *  the chat when it is a server chat. */
-  evermind(projectId: number, chatId: number): EvermindRunHooks | undefined;
+   *  the conversation when it has a server chat (`null` = none). */
+  evermind(projectId: number, serverChatId: number | null): EvermindRunHooks | undefined;
   /**
    * The api-assembled platform context for this turn — strategy / PRD / governance /
    * the project's durable memory (facts) / prior Evermind lessons — rendered as a
@@ -130,7 +138,7 @@ export interface BrainRunHostPorts {
    * participant already carried and the webview run did not: without it a run in the
    * panel started every task with no memory of what earlier runs had learned.
    */
-  runContext?(projectId: number, chatId: number, query: string): Promise<string>;
+  runContext?(projectId: number, serverChatId: number | null, query: string): Promise<string>;
   /**
    * The tenant's effective governance gates for a run — the same compiled rows the
    * cloud and on-prem loops enforce. Resolved once per run at loop start; a throw
@@ -362,7 +370,14 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // panel, which shows the one-line notice — a fallback is never silent.
     const transport = await ports.stream((event) => broadcast({ type: "run.modelFallback", chatId: key, from: event.from }));
     const role = p.child?.role;
-    const stream: BrainStreamFn = role ? (opts, handlers) => transport({ ...opts, role }, handlers) : transport;
+    const routed: BrainStreamFn = role ? (opts, handlers) => transport({ ...opts, role }, handlers) : transport;
+    const stream: BrainStreamFn = ports.recordUsage
+      ? ports.recordUsage(routed, { chatId, runKey: key, ...(p.chatMode ? { mode: p.chatMode } : {}) })
+      : routed;
+    // The run's chat OFF this machine (PRD 36) — bound now when signed in. Without the
+    // port the chat id is itself a server chat (and is what the server calls name).
+    const identity = ports.chatIdentity ? await ports.chatIdentity(chatId) : undefined;
+    const serverChatId = identity ? identity.serverChatId : chatId;
     const surface = p.modelSurface ?? null;
     try {
       // Gates render as binding directives ahead of the host prompt, then the workspace's
@@ -390,11 +405,12 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         stream,
         persistence: ports.persistence,
         onActivity: () => ports.onChatsChanged?.(),
-        ...(p.evermind && projectId != null ? { evermind: ports.evermind(projectId, chatId) } : {}),
+        ...(identity ? { serverChatId: identity.serverChatId, ...(identity.clientChatId ? { clientChatId: identity.clientChatId } : {}) } : {}),
+        ...(p.evermind && projectId != null ? { evermind: ports.evermind(projectId, serverChatId) } : {}),
         // Project memory + platform context, appended to the system prompt by the loop
         // (the same seam the limbic block uses) so the webview run starts from what the
         // project already knows instead of rediscovering it with tool calls.
-        ...runContextFor(projectId, chatId),
+        ...runContextFor(projectId, serverChatId),
         ...(p.seed ? { seed: p.seed } : {}),
         ...(p.priorResearch ? { priorResearch: p.priorResearch } : {}),
         ...(p.userTurn != null ? { userTurn: p.userTurn } : {}),
@@ -418,14 +434,14 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
    * project's platform context + memory, and the workspace's run notes as they are now.
    * Either half failing costs that half, never the run.
    */
-  const runContextFor = (projectId: number | undefined, chatId: number): { augmentSystemPrompt?: (text: string) => Promise<string | undefined> } => {
+  const runContextFor = (projectId: number | undefined, serverChatId: number | null): { augmentSystemPrompt?: (text: string) => Promise<string | undefined> } => {
     const platform = projectId != null && ports.runContext ? ports.runContext : undefined;
     const recent = ports.recentActivity;
     if (!platform && !recent) return {};
     return {
       augmentSystemPrompt: async (text: string) => {
         const parts = await Promise.all([
-          platform ? platform(projectId!, chatId, text).catch(() => "") : "",
+          platform ? platform(projectId!, serverChatId, text).catch(() => "") : "",
           recent ? recent().catch(() => "") : "",
         ]);
         return parts.filter((part) => part.trim()).join("\n\n") || undefined;

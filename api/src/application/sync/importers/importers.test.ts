@@ -1,107 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { destinationKey, hashSyncPayload, type LocalEntityType } from '../../../domain/sync/syncProtocol';
-import type { Tx } from '../../../infrastructure/database/connection';
-import { fakeDb } from '../../../../test/fakeDb';
-import type { SyncEntityMappingRow, SyncEventInput, SyncImportContext, SyncStoreSet } from '../syncPorts';
+import { hashSyncPayload, type LocalEntityType } from '../../../domain/sync/syncProtocol';
+import { boundKey, ctx, dbOf, event, mapping, stores } from './__fixtures__/importerHarness';
 import { importMirrorRecord, mirrorRefuses } from './importMirrorRecord';
 import { importSyncedProject } from './importSyncedProject';
 import { importSyncedTicket } from './importSyncedTicket';
 import { syncImporterFor } from './index';
 
-const destination = { kind: 'bound' as const, tenantId: '7', accountId: 'user-1' };
-const boundKey = destinationKey(destination);
-const now = new Date('2026-10-18T00:00:00.000Z');
-
-function ctx(overrides: Partial<SyncImportContext> = {}): SyncImportContext {
-  return {
-    auth: { tenantId: 7, userId: 'user-1', role: 'member' },
-    deviceId: 'device-1',
-    destination,
-    destinationKey: boundKey,
-    now,
-    resolveProjectId: async () => 3,
-    resolveTaskId: async () => null,
-    isTenantMember: async () => true,
-    ...overrides,
-  };
-}
-
-function event(partial: {
-  entityType: LocalEntityType;
-  operation: SyncEventInput['operation'];
-  payload: unknown;
-  clientEntityId?: string;
-  baseVersion?: number;
-  schemaVersion?: number;
-}): SyncEventInput {
-  return {
-    eventId: 'evt-1',
-    clientEntityId: partial.clientEntityId ?? '11111111-1111-4111-8111-111111111111',
-    entityType: partial.entityType,
-    operation: partial.operation,
-    schemaVersion: partial.schemaVersion ?? 1,
-    localSequence: 1,
-    occurredAt: '2026-01-01T00:00:00.000Z',
-    baseVersion: partial.baseVersion,
-    dependsOn: [],
-    destination,
-    payload: partial.payload,
-    payloadHash: hashSyncPayload(partial.payload),
-  };
-}
-
-function stores(mapping: SyncEntityMappingRow | null = null): SyncStoreSet & { writes: string[] } {
-  const writes: string[] = [];
-  const forbid = (name: string) => async () => {
-    writes.push(name);
-    throw new Error(`importer must not ${name}`);
-  };
-  return {
-    writes,
-    findEvent: async () => null,
-    insertEvent: forbid('insertEvent'),
-    acceptedEventIds: async () => new Set(),
-    findMapping: async () => mapping,
-    upsertMapping: forbid('upsertMapping'),
-    upsertRecord: forbid('upsertRecord'),
-    appendChange: forbid('appendChange'),
-  };
-}
-
-function mapping(partial: Partial<SyncEntityMappingRow> = {}): SyncEntityMappingRow {
-  return {
-    serverId: '42',
-    serverVersion: 2,
-    payloadHash: 'fnv1a:00000000',
-    destinationKey: boundKey,
-    ...partial,
-  };
-}
-
-/** The unit-of-work transaction double; `savepoints` counts nested `transaction()` calls. */
-function dbOf(results: Array<unknown[] | Error> = []) {
-  const db = fakeDb(results);
-  let savepoints = 0;
-  const transaction = db.transaction;
-  db.transaction = (fn) => {
-    savepoints += 1;
-    return transaction(fn);
-  };
-  return Object.assign(db as unknown as Tx & { calls: ReturnType<typeof fakeDb>['calls'] }, {
-    savepoints: () => savepoints,
-  });
-}
-
 describe('syncImporterFor', () => {
   it('names an owning importer or the mirror, and never a generic writer', () => {
     expect(syncImporterFor('ticket')).toBe('importSyncedTicket');
     expect(syncImporterFor('project')).toBe('importSyncedProject');
-    expect(syncImporterFor('chat')).toBe('importMirrorRecord');
+    expect(syncImporterFor('chat')).toBe('importSyncedChat');
+    expect(syncImporterFor('message')).toBe('importSyncedMessage');
+    expect(syncImporterFor('usage')).toBe('importSyncedUsage');
+    expect(syncImporterFor('execution')).toBe('importMirrorRecord');
     expect(syncImporterFor('remediation')).toBe('importMirrorRecord');
     expect(syncImporterFor('widget')).toBeNull();
     expect(mirrorRefuses('ticket')).toBe(true);
     expect(mirrorRefuses('project')).toBe(true);
     expect(mirrorRefuses('remediation')).toBe(false);
+    expect(mirrorRefuses('chat')).toBe(true);
   });
 });
 

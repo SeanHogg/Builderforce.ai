@@ -65,6 +65,7 @@ export const LOCAL_PERSISTENCE_METHODS = [
   'archiveChat',
   'summarizeChat',
   'getMessages',
+  'bindChat',
   'sendMessages',
   'setMessageFeedback',
   'upload',

@@ -10,9 +10,12 @@ import { useChatActivitySignal, useChatParticipants, useRecipientChoice } from '
 import type { createChatTicketsAdapter } from '../chatTicketsAdapter';
 import { childParticipants, useChatChildren, useChatSubagentRoster } from './chatChildren';
 
-export function useChatAudience({ ticketAdapter, chatId, messages, ticketRefresh, input, onRoster }: {
+export function useChatAudience({ ticketAdapter, chatId, serverChatId, messages, ticketRefresh, input, onRoster }: {
   ticketAdapter: ReturnType<typeof createChatTicketsAdapter>;
+  /** The chat's local view key — what its live sub-agents run under on this machine. */
   chatId: number | null;
+  /** The chat's bound SERVER id (PRD 36) — who is invited lives on the platform. Null when unbound. */
+  serverChatId: number | null;
   messages: BrainMessage[];
   ticketRefresh: number;
   input: string;
@@ -28,7 +31,7 @@ export function useChatAudience({ ticketAdapter, chatId, messages, ticketRefresh
   // over the live subscription is the signal to re-read the Agents list.
   const activitySignal = useChatActivitySignal(messages);
   const railRefresh = ticketRefresh + activitySignal;
-  const participants = useChatParticipants(ticketAdapter, chatId, railRefresh);
+  const participants = useChatParticipants(ticketAdapter, serverChatId, railRefresh);
   // The chat's live sub-agents are addressable too: `@Ada …` (or a `#ticket` one of them
   // is working) steers that child's run instead of starting a turn of the chat's own.
   const liveChildren = useChatChildren(chatId);

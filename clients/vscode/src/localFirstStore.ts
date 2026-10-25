@@ -18,8 +18,16 @@
 
 import * as vscode from "vscode";
 import type { LocalFirstStore } from "@builderforce/local-first";
-import { createLocalBrainPersistence, type BrainPersistenceAdapter } from "@seanhogg/builderforce-brain-embedded";
+import {
+  createLocalBrainPersistence,
+  createLocalChatIdentity,
+  createRunUsageLedger,
+  type BrainPersistenceAdapter,
+  type LocalChatIdentity,
+  type RunUsageLedger,
+} from "@seanhogg/builderforce-brain-embedded";
 import { createDurableLocalFirstStore, type DurableLocalFirstStore } from "./durableLocalFirstStore";
+import { chatAccountDestination, chatBindingPort, serverChatSpend } from "./chatAccount";
 
 /** The durable store over this extension's global storage. */
 export function createVsCodeLocalFirstStore(
@@ -33,7 +41,13 @@ interface LocalApplication {
   store: LocalFirstStore;
   /** G03: the journal-backed store. The JSON snapshot is its cache, not its state. */
   durableStore: DurableLocalFirstStore;
+  /** This install's durable device id. */
+  deviceId: string;
   persistence: BrainPersistenceAdapter;
+  /** PRD 36: which server chat a local chat is, and the bind on sign-in. */
+  identity: LocalChatIdentity;
+  /** PRD 36: one row per model call a run made — the chat's spend, offline. */
+  usage: RunUsageLedger;
 }
 
 const applications = new WeakMap<vscode.ExtensionContext, LocalApplication>();
@@ -52,14 +66,21 @@ export function localBrainApplication(ctx: vscode.ExtensionContext): LocalApplic
   // G03: one journal frame per committed transaction. The promise resolves
   // only after that frame is fsynced. `local-first-v1.json` is a cache.
   const store = createVsCodeLocalFirstStore(ctx, devicePersisted);
-  const application = {
+  const identity = createLocalChatIdentity({ store, deviceId, port: chatBindingPort(ctx.secrets) });
+  const application: LocalApplication = {
     store,
     durableStore: store,
+    deviceId,
     persistence: createLocalBrainPersistence({
       store,
       deviceId,
       summarizeUnavailable: vscode.l10n.t("Summarizing a chat needs a BuilderForce account. This conversation is only on this machine."),
+      accountDestination: chatAccountDestination,
+      serverSpend: serverChatSpend(ctx.secrets),
+      bindChat: (chatId) => identity.bind(chatId),
     }),
+    identity,
+    usage: createRunUsageLedger({ store, deviceId }),
   };
   applications.set(ctx, application);
   return application;

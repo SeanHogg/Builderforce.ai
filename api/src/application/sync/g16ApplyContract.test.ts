@@ -63,7 +63,14 @@ function harness() {
     };
   };
   const stores = createMemorySyncStores({
-    importers: { importSyncedTicket: importer, importSyncedProject: importer, importMirrorRecord: importer },
+    importers: {
+      importSyncedTicket: importer,
+      importSyncedProject: importer,
+      importSyncedChat: importer,
+      importSyncedMessage: importer,
+      importSyncedUsage: importer,
+      importMirrorRecord: importer,
+    },
   });
   const push = (events: Array<{ eventId: string; clientEntityId: string; dependsOn?: string[]; title?: string }>, deviceId = 'device-a') =>
     handleSyncPush({

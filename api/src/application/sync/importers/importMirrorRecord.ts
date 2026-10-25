@@ -1,7 +1,7 @@
 /**
  * G17 — mirror importer for history-only entity types.
  *
- * Chat, message, execution, audit, change-set, memory, and the rest have no
+ * Execution, audit, change-set, memory, and the rest have no
  * owning server aggregate. This importer accepts them as client-reported
  * history and refuses ticket and project so they cannot fall through into a
  * generic payload writer. It does not insert a domain row, does not open a
@@ -22,10 +22,11 @@ import {
   type BoundedImportOutcome,
 } from './index';
 
-/** History-only types. Ticket and project are deliberately absent. */
+/**
+ * History-only types. Ticket and project are deliberately absent, and so are chat,
+ * message and usage (PRD 36.4): those have owning importers that write real rows.
+ */
 export const MIRROR_ENTITY_TYPES = [
-  'chat',
-  'message',
   'execution',
   'step',
   'approval',

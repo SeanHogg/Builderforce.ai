@@ -129,6 +129,8 @@ function applyEvent(
       await persistConflict(tx, event, scope, outcome);
       return receipt(event.eventId, 'conflict', receivedAt, outcome);
     }
+    // A parent the importer could not resolve yet: held, nothing written (step c's twin).
+    if (outcome.status === 'pending') return receipt(event.eventId, 'dependency_pending', receivedAt, { detail: outcome.detail });
     return receipt(event.eventId, 'rejected', receivedAt, { detail: outcome.detail });
   });
 }

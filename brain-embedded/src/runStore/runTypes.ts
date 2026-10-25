@@ -170,6 +170,20 @@ export interface BrainRunRequest {
    */
   onStop?: RunStopHook;
   /**
+   * The SERVER chat this run's server-addressed work names (PRD 36) — the gateway's
+   * `metadata.chatId`, the model's chatId, the ticket backstops' links, the prompt-cache
+   * key. Omitted ⇒ the run's chat id IS a server chat (a host whose persistence is the
+   * server: the web Brain, the canvas). `null` ⇒ the chat lives only on this machine
+   * and is not bound: no chat id leaves it, and the chat-scoped backstops stand down.
+   * A host with a local store always passes it, bound or not.
+   */
+  serverChatId?: number | null;
+  /**
+   * The local chat's stable client id (a uuid) — rides the gateway metadata for
+   * diagnostics only (`clientChatId`); the server never resolves it to a chat.
+   */
+  clientChatId?: string;
+  /**
    * This run has an OWNER — it is a sub-agent another run spawned (`runLineage.ts`).
    * Nothing about the loop changes: the run keeps its own key (its own transcript, Stop
    * and approval prompt) while everything it persists or asks the server about goes to

@@ -17,6 +17,7 @@ import { emit, getCell, recordRunFailure, runTrace } from './runCells';
 import { appendRunMessage } from './runControl';
 import { keepStoppedTurn, persistStep } from './turnPersistence';
 import { recordCodeChangeTicket, updateLinkedTickets } from './runBackstops';
+import { resolveServerChatId } from './serverChat';
 import { runLoop } from './runLoop';
 import { beginRun } from './beginRun';
 import type { BrainRunRequest } from './runTypes';
@@ -40,6 +41,8 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
   // persists is attributed to the child and spliced into the owner's live view.
   const lineage = request.lineage;
   const chatId = lineage?.rootChatId ?? runKey;
+  // The SERVER chat its backstops link to (PRD 36) — null on an unbound local chat.
+  const serverChatId = resolveServerChatId(chatId, request);
   // Step rows are batched (see `stepOutbox.ts`) INSIDE the lineage wrap: a row is
   // attributed to the child before it is queued, so a queue replayed after a restart —
   // by the host's run-independent sender, with no run and no lineage in hand — still
@@ -105,7 +108,7 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
     // still mints one in the case the opening call failed. It is skipped on a Stop, but
     // a stopped run is no longer the case where nothing gets recorded.
     if (!aborted && c.codeChanged && req.projectId != null && req.runTool && (!c.ticketRecorded || c.deltaTicketId != null)) {
-      await recordCodeChangeTicket(chatId, c, req, 'settle').catch(() => { /* never fail the run on the backstop */ });
+      await recordCodeChangeTicket(serverChatId, c, req, 'settle').catch(() => { /* never fail the run on the backstop */ });
     }
     // Keep the board honest about STATUS: if this run CHANGED code, advance any
     // task/epic/gap linked to this chat that is still sitting in a not-started lane
@@ -116,7 +119,7 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
     // Gated on a project (like the from_delta backstop) — an IDE code-change run always
     // has one; a project-less chat has no board to reconcile.
     if (!aborted && c.codeChanged && req.projectId != null && req.runTool) {
-      await updateLinkedTickets(chatId, c, req, linkedTicketsToAdvance, 'in_progress', 'worked-ticket-off-backlog').catch(() => { /* never fail the run on the backstop */ });
+      await updateLinkedTickets(serverChatId, c, req, linkedTicketsToAdvance, 'in_progress', 'worked-ticket-off-backlog').catch(() => { /* never fail the run on the backstop */ });
     }
     // And if the run MERGED its change to the base branch, the review lane is moot —
     // the code is live. Runs last, after the mint above, so a ticket this run created
@@ -127,7 +130,7 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
     // Evaluated once: it gates ticket completion AND is the reported outcome's `merged`.
     const shipped = !aborted && c.codeChanged && shippedToBaseBranch(runTrace(c), { touchedFiles: c.touchedFiles });
     if (shipped && req.projectId != null && req.runTool) {
-      await updateLinkedTickets(chatId, c, req, linkedTicketsToComplete, 'done', 'shipped-to-base-branch').catch(() => { /* never fail the run on the backstop */ });
+      await updateLinkedTickets(serverChatId, c, req, linkedTicketsToComplete, 'done', 'shipped-to-base-branch').catch(() => { /* never fail the run on the backstop */ });
     }
     // The Studio's equivalent of a verified push: a "complete" review recorded after a
     // passing preview inspection of THIS run's last change. Closes exactly the tickets
@@ -135,7 +138,7 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
     const reviewedInPreview = !aborted && c.codeChanged ? ticketsReviewedInPreview(runTrace(c)) : [];
     if (reviewedInPreview.length && req.projectId != null && req.runTool) {
       await updateLinkedTickets(
-        chatId, c, req,
+        serverChatId, c, req,
         (listed) => linkedTicketsReviewedComplete(listed, reviewedInPreview),
         'done',
         'reviewed-in-preview',

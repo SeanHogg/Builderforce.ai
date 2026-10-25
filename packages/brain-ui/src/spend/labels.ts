@@ -73,6 +73,7 @@ export const DEFAULT_SPEND_LABELS: SpendLabels = {
     response_cache: 'Repeated request',
     context_trim: 'Context kept lean',
     recall_overhead: 'Recall added',
+    local_model: 'On this machine',
   },
   sourceHints: {
     prompt_cache: 'The provider served part of the prompt from its cache at a tenth of the price',
@@ -81,6 +82,7 @@ export const DEFAULT_SPEND_LABELS: SpendLabels = {
     response_cache: 'An identical request was answered from the gateway cache — no model call',
     context_trim: 'Compaction kept earlier turns out of each call',
     recall_overhead: 'What recalled memories added to each prompt — the cost of recall',
+    local_model: 'A model on this machine served the call — what your paid route would have charged for the same tokens',
   },
 };
 

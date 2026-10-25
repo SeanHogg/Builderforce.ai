@@ -23,7 +23,8 @@ import type { Env } from '../../env';
 import { isUsageSurface, recordUsageRow, type UsageSavings, type UsageSurface } from './usageLedger';
 
 /** What can stand in for a model call. */
-export type AvoidedCallSource = NonNullable<UsageSavings['source']>;
+/** local_model is a REAL call on the person's machine (PRD 36), never an avoided one. */
+export type AvoidedCallSource = Exclude<NonNullable<UsageSavings['source']>, 'local_model'>;
 
 /**
  * A caller-supplied surface, or `web` — the same default the usage ledger records.

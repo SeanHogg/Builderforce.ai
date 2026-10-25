@@ -62,8 +62,29 @@ export interface BrainChat {
   /**
    * What this conversation cost and what memory saved it — attached by the api to
    * every chat payload beside the ticket rollup. Null/absent until it has usage.
+   * A LOCAL chat (PRD 36) carries its own, folded on the device from its run usage
+   * ledger, merged with the server's figure once the chat is bound.
    */
   spend?: SpendSavingsSummary | null;
+  /**
+   * The SERVER chat a local chat is bound to (PRD 36) — a projection of the local
+   * store's mapping, never stored on the chat row. `id` on a local chat is a view key
+   * that never leaves the machine; every server-addressed call (the ticket rail, the
+   * gateway's chat attribution, run context, the model's chatId) uses this, or is not
+   * made. Absent on a server chat (its `id` IS the server id) and on an unbound one.
+   */
+  serverId?: number;
+}
+
+/**
+ * The id a server-addressed call names for `chat`: its bound server id on a local
+ * chat, its own id on a server chat, null on a local chat that is not bound — in which
+ * case the call is not made.
+ */
+export function serverChatIdOf(chat: Pick<BrainChat, 'id' | 'origin' | 'serverId'> | null | undefined): number | null {
+  if (!chat) return null;
+  if (chat.serverId != null) return chat.serverId;
+  return chat.origin === 'local' ? null : chat.id;
 }
 
 /**

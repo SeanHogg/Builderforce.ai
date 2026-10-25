@@ -18,6 +18,7 @@ export function createHostPersistence(): BrainPersistenceAdapter {
     archiveChat: (id) => call('archiveChat', [id]),
     summarizeChat: (id) => call('summarizeChat', [id]),
     getMessages: (chatId, limit) => call('getMessages', limit === undefined ? [chatId] : [chatId, limit]),
+    bindChat: (chatId) => call('bindChat', [chatId]),
     sendMessages: (chatId, messages) => call('sendMessages', [chatId, messages]),
     setMessageFeedback: (messageId, feedback, context) => call('setMessageFeedback', [messageId, feedback, context]),
     upload: async (file) => {

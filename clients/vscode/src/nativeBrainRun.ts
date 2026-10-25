@@ -96,10 +96,17 @@ export interface NativeRunLabels {
 export interface NativeBrainRunOptions {
   /**
    * The Brain chat this turn belongs to. Also the run store's cell key, so a run
-   * survives anything that happens on the host side while it is in flight. Pass a
-   * unique NEGATIVE id (see {@link unlinkedRunId}) for a turn with no server chat.
+   * survives anything that happens on the host side while it is in flight.
    */
   chatId: number;
+  /**
+   * The SERVER chat this turn's server-addressed work names (PRD 36): `chatId` is a
+   * local view key that never leaves the machine. `null` = an unbound local chat (no
+   * chat id is sent); omitted = `chatId` is itself a server chat.
+   */
+  serverChatId?: number | null;
+  /** The local chat's client id — diagnostics on the gateway metadata only. */
+  clientChatId?: string;
   /** The whole system prompt, already assembled by the host (persona + grounding +
    *  editor context + limbic + governance directives). */
   systemPrompt: string;
@@ -419,17 +426,6 @@ export function transientRunPersistence(): BrainRunPersistence {
 }
 
 /**
- * Cell id for a turn that has no server-side Brain chat (chat creation failed — the
- * platform is unreachable). Negative and unique per run, so such a turn still gets its
- * own run cell instead of colliding with a real chat or with another unlinked turn.
- */
-let unlinkedSeq = 0;
-export function unlinkedRunId(): number {
-  unlinkedSeq += 1;
-  return -unlinkedSeq;
-}
-
-/**
  * Run one native chat turn on the shared loop.
  *
  * Resolves when the loop has settled — including its post-run backstops, which run
@@ -502,6 +498,8 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<void>
       ...(opts.modelStrict != null ? { modelStrict: opts.modelStrict } : {}),
       ...(opts.routingMode ? { routingMode: opts.routingMode } : {}),
       ...(opts.chatMode ? { chatMode: opts.chatMode } : {}),
+      ...(opts.serverChatId !== undefined ? { serverChatId: opts.serverChatId } : {}),
+      ...(opts.clientChatId ? { clientChatId: opts.clientChatId } : {}),
       ...(opts.projectId != null ? { projectId: opts.projectId } : {}),
       ...(opts.evermind ? { evermind: opts.evermind } : {}),
       ...(opts.knowledge ? { knowledge: opts.knowledge } : {}),

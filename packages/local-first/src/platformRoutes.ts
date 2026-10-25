@@ -53,6 +53,10 @@ export const PLATFORM_ROUTE_RULES: readonly PlatformRouteRule[] = Object.freeze(
   { path: '/api/projects/*/evermind', match: 'contains', capability: 'connected-feature', content: true, note: "a project's Evermind memory" },
   { path: '/api/evermind', match: 'contains', capability: 'connected-feature', content: true, note: 'Evermind memory' },
   { path: '/api/sync', match: 'prefix', capability: 'synchronize', content: true, note: 'the local-first sync transport — the records themselves' },
+  // PRD 36: a signed-in editor BINDS its local chat to a server chat so the chat's
+  // tickets, usage and memory land on it. The bind sends a title and a project — never
+  // the transcript (that is `/messages`, below, and the sync transport above).
+  { path: '/api/brain/chats', capability: 'connected-feature', note: 'binding a chat to the account — its title and project only' },
   { path: '/api/brain/chats/*/messages', content: true, note: "a Brain chat's transcript" },
   { path: '/api/chats/*/messages', content: true, note: "a chat's transcript" },
   { path: '/api/brain/upload', content: true, note: 'an uploaded file' },

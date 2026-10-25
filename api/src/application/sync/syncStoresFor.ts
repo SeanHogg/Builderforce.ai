@@ -6,10 +6,13 @@
  * reference reader, which reuses each context's own tenant gate rather than a
  * sync-local copy: project ownership (`projectOwnership.projectInTenant`), task
  * ownership (`tenantScope.taskInTenant`), and active membership
- * (`tenantRoles.isActiveTenantMember`).
+ * (`tenantRoles.isActiveTenantMember`). The usage importer writes through the
+ * usage ledger port (`syncUsageLedger`), which needs `env` for its own database.
  */
 
+import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { syncUsageLedger } from './syncUsageLedger';
 import { taskInTenant } from '../../infrastructure/database/tenantScope';
 import { createSyncRepository } from '../../infrastructure/repositories/SyncRepository';
 import { projectInTenant } from '../project/projectOwnership';
@@ -25,6 +28,7 @@ export function syncReferenceReader(db: Db): SyncReferenceReader {
   };
 }
 
-export function syncStoresFor(db: Db): SyncStores {
-  return createSyncRepository(db, namedSyncImporters, syncReferenceReader(db));
+export function syncStoresFor(db: Db, env: Env): SyncStores {
+  const usage = syncUsageLedger(db, env);
+  return createSyncRepository(db, (tx) => namedSyncImporters(tx, usage), syncReferenceReader(db));
 }

@@ -6,8 +6,9 @@
  * long-context tiers, `priceTiers.ts`), residency and the CatalogView port. Each host keeps its own registry and binds it to the port. The two
  * tables it does own are ones every host must agree on word for word: the BYO provider
  * list (`providers.ts`) and Anthropic's release line (`anthropic.ts`) — plus the account's
- * cloud funding order (`cloudOrder.ts`), the free tier vs connected providers. Pure and
- * I/O-free.
+ * cloud funding order (`cloudOrder.ts`), the free tier vs connected providers. It also
+ * owns the PriceBook port (`priceBook.ts`) and the release's bundled price snapshot
+ * (`snapshotPriceBook.ts`) a device prices its own calls with. Pure and I/O-free.
  */
 
 export {
@@ -33,6 +34,15 @@ export {
   type PriceTier,
 } from './price.js';
 export { PRICE_TIERS, priceTierBoundary, priceTierFamily, priceTiersFor, withPriceTiers } from './priceTiers.js';
+export {
+  EMPTY_PRICE_BOOK,
+  catalogPriceId,
+  directCatalogId,
+  listPriceOf,
+  priceBookFromPrices,
+  type PriceBook,
+} from './priceBook.js';
+export { snapshotPriceBook } from './snapshotPriceBook.js';
 export { residencyOf, type CatalogView, type ModelResidency } from './view.js';
 export {
   LLM_PROVIDERS,

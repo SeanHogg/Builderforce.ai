@@ -1645,5 +1645,13 @@
   },
   "suggestAuditPrompt": {
     "message": "List available audits with audits.list, help me select a project and audit, then start it with audits.run. Show the cloud run status, findings, and remediation tickets."
+  },
+  "spSourceLocalModel": {
+    "message": "On this machine",
+    "description": "Saving source label"
+  },
+  "spHintLocalModel": {
+    "message": "A model on this machine served the call — what your paid route would have charged for the same tokens",
+    "description": "Saving source explanation"
   }
 }

@@ -15,6 +15,10 @@
 export { BrainProvider, resolveBrainStream, useBrainConfig } from './config';
 export type { BrainConfig, BrainRuntime, BrainPersistenceAdapter } from './config';
 export { createLocalBrainPersistence, type LocalBrainPersistenceOptions } from './localFirstPersistence';
+// PRD 36 — a local chat's identity off the machine, its run usage ledger, and its sync.
+export { createLocalChatIdentity, type ChatBindingPort, type LocalChatIdentity } from './localChat/chatIdentity';
+export { createRunUsageLedger, withRunUsage, type RunUsageLedger } from './localChat/usageLedger';
+export { bindChatHistoryForSync } from './localChat/chatSync';
 
 // Streaming client + tool/message types
 // RepetitionLoopError: a model stuck repeating one block of prose, cut mid-stream.
@@ -674,6 +678,7 @@ export { getLastResolvedModel, setLastResolvedModel, withObservedModel, forgetRe
 
 // Shared data shapes
 export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment, EvermindLearnOutcome, EvermindLearnTarget } from './types';
+export { serverChatIdOf } from './types';
 export { routingQueryForTurn, turnOptimizationDirective } from './turnOptimization';
 export { STEP_MESSAGE_ROLE, isStepMessage, attachEvermindLearn, formatEvermindLearnStep } from './types';
 

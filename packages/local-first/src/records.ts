@@ -15,7 +15,9 @@ export type LocalEntityType =
   | 'memory-fact'
   | 'attachment-manifest'
   | 'policy-snapshot'
-  | 'remediation';
+  | 'remediation'
+  /** One model call's token usage on this device (PRD 36 run usage ledger). */
+  | 'usage';
 
 export interface DestinationBinding {
   platformInstance?: string;

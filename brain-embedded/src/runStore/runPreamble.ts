@@ -37,6 +37,7 @@ import { answerFromMemory, recallForRun } from './runMemory';
 import type { RunLoopContext } from './runLoopContext';
 import type { BrainRunRequest } from './runTypes';
 import { attachTurnContext, restoreTurnContext, turnContextBlock } from './turnContext';
+import { resolveServerChatId } from './serverChat';
 
 /**
  * B1 (`b1_stable_prefix`): per-turn blocks ride AFTER the history instead of in the
@@ -98,8 +99,13 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
   // metadata below and the system-prompt directive further down need it, and they must
   // never disagree about which mode this run was.
   const runMode = normalizeChatMode(req.chatMode ?? 'work');
+  // The SERVER chat (PRD 36): on a local-first host `chatId` is a view key that never
+  // leaves the machine, so an unbound chat sends no chat id at all — never its own number,
+  // which named (and billed) whichever server chat happened to share it.
+  const serverChatId = resolveServerChatId(chatId, req);
   const metadata: CompletionMetadata = {
-    chatId,
+    ...(serverChatId != null ? { chatId: serverChatId } : {}),
+    ...(req.clientChatId ? { clientChatId: req.clientChatId } : {}),
     guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     guestTurnInput: latestUserText(convo),
     mode: runMode,
@@ -164,15 +170,15 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
   // capability separately — and a host that gains or loses the file tools stays
   // consistent with the post-run backstop, which reads the same set.
   const canEditHere = canChangeCodeHere(catalogToolNames);
-  systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, chatId, { canEditHere, canDelegate: catalogToolNames.includes('spawn_agent'), canFanOut: catalogToolNames.includes('spawn_agents'), roster: req.chatRoster })}\n\n${turnOptimizationDirective()}`;
+  systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, serverChatId, { canEditHere, canDelegate: catalogToolNames.includes('spawn_agent'), canFanOut: catalogToolNames.includes('spawn_agents'), roster: req.chatRoster })}\n\n${turnOptimizationDirective()}`;
   // A session that can commit AND push holds the only copy of its change — nobody else
   // will review or land it — so it is told it IS the reviewer (see `selfReviewShip.ts`).
   // Rides both modes: it only binds a turn that changes code.
   const canShip = canShipHere(catalogToolNames);
-  if (canShip) systemPrompt = `${systemPrompt}\n\n${selfReviewShipDirective(chatId)}`;
+  if (canShip) systemPrompt = `${systemPrompt}\n\n${selfReviewShipDirective(serverChatId)}`;
   // The Studio's twin: its change lives in a preview no one else can reach, so the
   // session reviews it there and the reviewed tickets close (see `previewReview.ts`).
-  if (canReviewInPreview(catalogToolNames)) systemPrompt = `${systemPrompt}\n\n${previewReviewDirective(chatId)}`;
+  if (canReviewInPreview(catalogToolNames)) systemPrompt = `${systemPrompt}\n\n${previewReviewDirective(serverChatId)}`;
   // The tool work of this chat's earlier turns, which a transcript seeded from history
   // does not carry — so "continue" builds on what was read instead of reading it again.
   if (c.priorResearch) systemPrompt = `${systemPrompt}\n\n${c.priorResearch}`;
@@ -254,6 +260,7 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
 
   const run: RunLoopContext = {
     chatId,
+    serverChatId,
     runKey,
     c,
     req,

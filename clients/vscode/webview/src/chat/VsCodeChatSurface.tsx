@@ -46,10 +46,11 @@ import {
   useToolConfirmationGate,
   reasoningForRun,
   lastServedModel,
+  serverChatIdOf,
   type ChatRosterAgent,
 } from '@seanhogg/builderforce-brain-embedded';
 import {
-  AiSurface, BrainTimeline, ChatTicketsPanel, PendingQuestionBanner, SurfaceFooter, ToolConfirmBar,
+  AiSurface, BrainTimeline, ChatTicketsPanel, PendingQuestionBanner, SpendPill, SurfaceFooter, ToolConfirmBar,
   askUserAnchorId, selectPendingAskUser,
 } from '@seanhogg/builderforce-brain-ui';
 import { authedFetch } from '../authedFetch';
@@ -77,6 +78,8 @@ import { VsCodeChatNotices } from './VsCodeChatNotices';
 import { VsCodeComposer } from './VsCodeComposer';
 
 const HISTORY_ID = 'bf-chat-history';
+/** Layout only (no colour): the local chat's rail is its spend pill, right-aligned. */
+const LOCAL_RAIL_STYLE = { display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', padding: '4px 8px' } as const;
 
 export function VsCodeChatSurface({ init }: { init: InitData }) {
   const t = useMemo(() => makeT(init.labels), [init.labels]);
@@ -177,14 +180,17 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     chatRoster,
   });
 
-  const rail = useTicketRail({ init, apiReq, chatId, chats, reloadChats, reloadMessages: conv.reloadMessages });
+  // The chat OFF this machine (PRD 36): every server-addressed call — the rail, who is
+  // invited, the diagnostics — names its bound server id, or is not made.
+  const serverChatId = serverChatIdOf(activeChat);
+  const rail = useTicketRail({ init, apiReq, serverChatId, chats, persistence, reloadChats, reloadMessages: conv.reloadMessages });
   const { ticketAdapter, ticketRefresh, linkOpenedTicket } = rail;
   // A host intent switches chat the way a row does: History closes onto it.
   useHostIntents({ persistence, projectId: init.project?.id ?? null, setChatId: openChat, setInput, reloadChats, linkOpenedTicket, t });
 
   // Multi-party chat: who a message goes to (the BRAIN executes; an invited agent/human is
   // talked to), and the live sub-agents a message can steer.
-  const audience = useChatAudience({ ticketAdapter, chatId, messages: conv.messages, ticketRefresh, input, onRoster: setChatRoster });
+  const audience = useChatAudience({ ticketAdapter, chatId, serverChatId, messages: conv.messages, ticketRefresh, input, onRoster: setChatRoster });
   const { participants, liveChildren, mentionable, recipient, chooseRecipient } = audience;
 
   // A run's steps are persisted as durable step rows by the run loop the HOST drives
@@ -237,9 +243,15 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           onVisualize={init.boardBeside ? () => post('visualization.open') : undefined}
         />
       )}
-      rail={chatId != null && !historyOpen && (
+      rail={chatId != null && !historyOpen && (serverChatId == null ? (
+        // A chat only on this machine has no platform rail — its spend, folded on the
+        // device from its run usage ledger, still shows (PRD 36).
+        activeChat?.spend && <div style={LOCAL_RAIL_STYLE}>
+          <SpendPill summary={activeChat?.spend} labels={rail.spendLabels} locale={init.locale} />
+        </div>
+      ) : (
         <ChatTicketsPanel
-          chatId={chatId}
+          chatId={serverChatId}
           projectId={init.project?.id ?? null}
           chatList={rail.ticketChatList}
           adapter={ticketAdapter}
@@ -259,7 +271,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           // The chat's first prompt, kept verbatim (1245) — rides the chat row like spend.
           originalRequest={activeChat?.originalRequest}
         />
-      )}
+      ))}
       empty={historyOpen ? (
         <VsCodeChatHistory
           id={HISTORY_ID}

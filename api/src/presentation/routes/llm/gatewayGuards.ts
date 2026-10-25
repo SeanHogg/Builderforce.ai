@@ -7,7 +7,7 @@
 import type { Context } from 'hono';
 import type { Env, HonoEnv } from '../../../env';
 import { reportCaughtError } from '../../../application/observability/caughtErrorReporter';
-import { readUsageWorkHints, resolveUsageWorkHints, type UsageWorkHints } from '../../../application/llm/usageWorkHints';
+import { readUsageWorkHints, resolveUsageWorkHints, withVerifiedChat, type UsageWorkHints } from '../../../application/llm/usageWorkHints';
 import { isUsageSurface, type UsageSurface } from '../../../application/llm/usageLedger';
 import { IMAGE_PRODUCT_NAMES, IMAGE_TOKEN_COST } from '../../../application/llm/mediaProducts';
 import { toTenantPlan } from '../../../application/tenant/featureEntitlements';
@@ -70,6 +70,26 @@ export async function resolveWorkHints(c: Context<HonoEnv>, access: TenantAccess
     access.tenantId,
     readUsageWorkHints((name) => c.req.header(name), metadata),
   );
+}
+
+/**
+ * THE caller attribution of a gateway request, read once at the trust boundary: the
+ * validated work hints, and the caller's metadata with any chat id that is not a chat
+ * in this tenant removed (PRD 36, D2 — a device-local chat number must not bill or
+ * narrate somebody else's conversation). `body.metadata` is rewritten to match, so the
+ * trace's stored request body and every later reader agree with the usage row.
+ * Never fails the request: an unverifiable id is dropped, not refused.
+ */
+export async function resolveCallerAttribution(
+  c: Context<HonoEnv>,
+  access: TenantAccess,
+  body: Record<string, unknown>,
+): Promise<{ workHints: UsageWorkHints; callerMetadata: Record<string, unknown> | null }> {
+  const raw = (body.metadata as Record<string, unknown> | undefined) ?? null;
+  const workHints = await resolveWorkHints(c, access, raw);
+  const callerMetadata = withVerifiedChat(raw, workHints);
+  if (callerMetadata !== raw) body.metadata = callerMetadata;
+  return { workHints, callerMetadata };
 }
 
 /** What a passing {@link enforceTokenCaps} returns for the response headers/body. */

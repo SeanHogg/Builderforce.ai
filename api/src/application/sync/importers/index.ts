@@ -1,9 +1,10 @@
 /**
  * Bounded sync import use cases (G17).
  *
- * Three named importers, and nothing else. There is no `importEntity(type, body)`
- * writer: ticket and project go to their owning use case, every other accepted
- * history type goes to the mirror, and an unknown type is rejected by the caller.
+ * Named importers, and nothing else. There is no `importEntity(type, body)`
+ * writer: ticket, project, chat, message and usage go to their owning use case,
+ * every other accepted history type goes to the mirror, and an unknown type is
+ * rejected by the caller.
  * These functions write the domain row (or, for the mirror, no row) and return
  * the mapping fields a push transaction persists beside the receipt.
  */
@@ -19,29 +20,72 @@ import type {
   SyncEntityMappingRow,
   SyncEventInput,
   SyncImportContext,
+  SyncStoreSet,
 } from '../syncPorts';
 import { MIRROR_ENTITY_TYPES } from './importMirrorRecord';
 
 export { importMirrorRecord, MIRROR_ENTITY_TYPES } from './importMirrorRecord';
 export { importSyncedProject } from './importSyncedProject';
 export { importSyncedTicket } from './importSyncedTicket';
+export { importSyncedChat } from './importSyncedChat';
+export { importSyncedMessage } from './importSyncedMessage';
+export { importSyncedUsage } from './importSyncedUsage';
 export type { BoundedImportOutcome, SyncImportMapping } from '../syncPorts';
 
-export type SyncImporterName = 'importSyncedTicket' | 'importSyncedProject' | 'importMirrorRecord';
+export type SyncImporterName =
+  | 'importSyncedTicket'
+  | 'importSyncedProject'
+  | 'importSyncedChat'
+  | 'importSyncedMessage'
+  | 'importSyncedUsage'
+  | 'importMirrorRecord';
+
+/** Entity type → its owning importer. Data, not branches: a new owner is a new row. */
+const OWNED_BY: Readonly<Record<string, SyncImporterName>> = {
+  ticket: 'importSyncedTicket',
+  project: 'importSyncedProject',
+  // PRD 36.4: a VS Code chat, its transcript and its local usage land as real rows.
+  chat: 'importSyncedChat',
+  message: 'importSyncedMessage',
+  usage: 'importSyncedUsage',
+};
 
 /**
  * Which named importer owns this entity type. `null` means the push rejects
  * the type — it must not fall through into a generic payload writer.
  */
 export function syncImporterFor(entityType: string): SyncImporterName | null {
-  if (entityType === 'ticket') return 'importSyncedTicket';
-  if (entityType === 'project') return 'importSyncedProject';
+  const owner = OWNED_BY[entityType];
+  if (owner) return owner;
   if ((MIRROR_ENTITY_TYPES as readonly string[]).includes(entityType)) return 'importMirrorRecord';
   return null;
 }
 
 export function rejected(detail: string): BoundedImportOutcome {
   return { status: 'rejected', detail };
+}
+
+/** A parent that has not landed yet — answered `dependency_pending`, nothing written. */
+export function pending(detail: string): BoundedImportOutcome {
+  return { status: 'pending', detail };
+}
+
+/** Client time is client-reported: a clock ahead of ours is clamped to now. */
+export function clampedClientTime(raw: unknown, now: Date): Date {
+  const at = typeof raw === 'string' ? new Date(raw) : null;
+  if (!at || Number.isNaN(at.getTime())) return now;
+  return at.getTime() > now.getTime() ? now : at;
+}
+
+/** The server chat a client chat uuid was imported as in this tenant, or null. */
+export async function mappedChatId(
+  stores: Pick<SyncStoreSet, 'findMapping'>,
+  tenantId: number,
+  chatClientId: unknown,
+): Promise<number | null> {
+  if (typeof chatClientId !== 'string' || chatClientId.trim() === '') return null;
+  const mapping = await stores.findMapping(tenantId, 'chat', chatClientId);
+  return mapping ? serverNumericId(mapping.serverId) : null;
 }
 
 export function conflict(row: SyncEntityMappingRow, detail: string): BoundedImportOutcome {

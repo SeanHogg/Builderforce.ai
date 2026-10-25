@@ -46,7 +46,7 @@ export type SyncReceiptStatus = 'accepted' | 'duplicate' | 'conflict' | 'rejecte
  * Every other accepted `LocalEntityType` lands in the mirror as client-reported
  * history (see `application/sync/importers/importMirrorRecord`).
  */
-export const DOMAIN_IMPORTED_ENTITY_TYPES = ['ticket', 'project'] as const satisfies readonly LocalEntityType[];
+export const DOMAIN_IMPORTED_ENTITY_TYPES = ['ticket', 'project', 'chat', 'message', 'usage'] as const satisfies readonly LocalEntityType[];
 
 /** The highest event `schemaVersion` this build understands. */
 export const MAX_SUPPORTED_SCHEMA_VERSION = 1;

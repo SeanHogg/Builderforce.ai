@@ -44,7 +44,8 @@ export function SpendPill({ summary, labels: overrides, locale }: SpendPillProps
         aria-expanded={open}
         onClick={toggle}
       >
-        <span className="bf-spend-pill__spent">{formatUsd(spend.totalUsd, locale)}</span>
+        {/* ≈ when the device priced it from the bundled list rather than the platform recording it. */}
+        <span className="bf-spend-pill__spent">{spend.estimated ? '≈' : ''}{formatUsd(spend.totalUsd, locale)}</span>
         <span className="bf-spend-pill__sep" aria-hidden>·</span>
         <span className="bf-spend-pill__tok">{fill(labels.tokens, { tokens: formatTokens(spend.totalTokens, locale) })}</span>
         {savedText && (

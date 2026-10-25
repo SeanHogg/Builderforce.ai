@@ -21,7 +21,7 @@ import { IMAGE_TOKEN_COST } from '../../../application/llm/mediaProducts';
 import { logTrace, imageTraceResult } from '../../../application/llm/traceLogger';
 import { isPaidOverflowExhausted, logFailovers, logUsage } from '../../../application/llm/gatewayUsageLog';
 import { enforceMediaCreditCap } from '../mediaCreditGate';
-import { IMAGE_CREDIT_POLICY, resolveUsageSurface, resolveWorkHints } from './gatewayGuards';
+import { IMAGE_CREDIT_POLICY, resolveCallerAttribution, resolveUsageSurface } from './gatewayGuards';
 import { requireTenantAccess, respondToAccessError, type TenantAccess } from './access';
 
 export function mountImageGenerationRoutes(router: Hono<HonoEnv>): void {
@@ -58,12 +58,12 @@ export function mountImageGenerationRoutes(router: Hono<HonoEnv>): void {
     // Capture SDK transport metadata for usage logging — stripped before vendor dispatch
     // by `stripStandardFields` in ImageProxyService.
     const bodyAny = body as Record<string, unknown>;
-    const callerMetadata = (bodyAny.metadata as Record<string, unknown> | undefined) ?? null;
     const callerUseCase  = typeof bodyAny.useCase === 'string' ? bodyAny.useCase : null;
     // Ticket/project attribution for this row — header first, then `metadata`, each
     // validated against THIS tenant (see `usageWorkHints`). Without it every gateway
     // and image row lands with a NULL ticket and vanishes from the cost rollups.
-    const workHints = await resolveWorkHints(c, access, callerMetadata);
+    // Chat attribution too: a chat id that is not this tenant's is dropped (PRD 36, D2).
+    const { workHints, callerMetadata } = await resolveCallerAttribution(c, access, bodyAny);
     const idempotencyKey = c.req.header('Idempotency-Key') ?? null;
 
     const productName = imageProductNameForPlan(access.effectivePlan, access.premiumOverride);

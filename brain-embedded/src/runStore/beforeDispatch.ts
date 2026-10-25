@@ -97,7 +97,7 @@ export function beforeDispatchHook(run: RunLoopContext): NonNullable<LoopHooks<C
         runTool: (name, args) => runTool!(name, args),
         toolNames: new Set(catalogToolNames),
         ...(req.projectId != null ? { projectId: req.projectId } : {}),
-        afterCreate: (toolName, out) => autoLinkCreatedItem(chatId, c, runTool!, toolName, out),
+        afterCreate: (toolName, out) => autoLinkCreatedItem(run.serverChatId, c, runTool!, toolName, out),
         step: (label, args, out, durationMs) => pushTrace(c, {
           ts: nowIso(), category: 'tool', label, durationMs, args, result: out ?? null, isError: isFailedToolResult(out),
         }),

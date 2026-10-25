@@ -943,5 +943,7 @@
   "{0} is ready. Hybrid now runs turns on this machine first.": "{0} is ready. Hybrid now runs turns on this machine first.",
   "Could not download {0} for on-device turns: {1}": "Could not download {0} for on-device turns: {1}",
   "Open the visualization beside the chat": "Open the visualization beside the chat",
-  "BuilderForce extension version {version}": "BuilderForce extension version {version}"
+  "BuilderForce extension version {version}": "BuilderForce extension version {version}",
+  "On this machine": "On this machine",
+  "A model on this machine served the call — what your paid route would have charged for the same tokens": "A model on this machine served the call — what your paid route would have charged for the same tokens"
 }

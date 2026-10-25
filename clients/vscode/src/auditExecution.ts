@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import type { BrainRunHost } from './brainRunHost';
-import { createBrainChat, startSystemAudit, getSystemAuditRun } from './systemAuditApi';
+import { startSystemAudit, getSystemAuditRun } from './systemAuditApi';
 import { openWorkspace } from './openWorkspace';
 import { getSelectedProject, onProjectChange } from './projectState';
-import { appendBrainMessages, listSystemAudits } from './bfApi';
+import { listSystemAudits } from './bfApi';
 import { AuditResultsPanel } from './auditResultsPanel';
 import { registerAuditFindingsSink } from './auditToolCatalog';
 import { findRepository, getGitApi } from './gitApi';
@@ -116,10 +116,13 @@ export class AuditExecution implements vscode.Disposable {
       await vscode.window.showInformationMessage(vscode.l10n.t('This audit was closed locally and will not be relaunched.'));
       return;
     }
-    const chatId = await createBrainChat(this.ctx.secrets, { title: vscode.l10n.t('Audit: {0}', auditId), projectId });
-    if (chatId == null) throw new Error(vscode.l10n.t('Sign in to save the audit conversation.'));
     const run = await startSystemAudit(this.ctx.secrets, auditId, projectId, 'local', trigger);
-    await appendBrainMessages(this.ctx.secrets, chatId, [{ role: 'user', content: run.briefing }]);
+    // The audit conversation is a LOCAL chat like every editor chat (PRD 36): the run host
+    // keys its run by the chat's view key and binds it to a server chat on sign-in. A
+    // server chat id used as the run key named a chat the local store does not hold.
+    const { persistence } = localBrainApplication(this.ctx);
+    const chatId = (await persistence.createChat({ title: vscode.l10n.t('Audit: {0}', auditId), projectId })).id;
+    await persistence.sendMessages(chatId, [{ role: 'user', content: run.briefing }]);
     const detach = this.host.attach({ post: (message) => {
       if (message.chatId === chatId && message.type === 'run.sync' && message.snapshot.pendingConfirm) {
         void openWorkspace(this.ctx, { kind: 'focus', chatId });

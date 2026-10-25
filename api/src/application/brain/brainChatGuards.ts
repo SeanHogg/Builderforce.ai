@@ -125,6 +125,21 @@ export async function verifyProjectInTenant(db: Db, projectId: number, tenantId:
   return loadProjectInTenant(db, tenantId, projectId, { id: projects.id, name: projects.name });
 }
 
+/**
+ * Whether a chat id names a chat in this tenant — the ownership gate for a chat id
+ * a CALLER supplied as attribution (`metadata.chatId` on a gateway completion). Not
+ * an access check: it answers "may this tenant's spend and activity name that chat",
+ * which a guessed or a device-local number must not (PRD 36, D2).
+ */
+export async function chatInTenant(db: Db, tenantId: number, chatId: number): Promise<boolean> {
+  const [chat] = await db
+    .select({ id: brainChats.id })
+    .from(brainChats)
+    .where(and(eq(brainChats.id, chatId), eq(brainChats.tenantId, tenantId)))
+    .limit(1);
+  return !!chat;
+}
+
 export async function verifyTeamInTenant(db: Db, teamId: number, tenantId: number) {
   const [team] = await db
     .select({ id: teams.id, name: teams.name })

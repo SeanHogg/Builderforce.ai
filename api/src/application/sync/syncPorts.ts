@@ -16,6 +16,7 @@ import type {
   LocalRecord,
   SyncReceiptStatus,
 } from '../../domain/sync/syncProtocol';
+import type { RecordUsageRow } from '../llm/usageLedger';
 
 /** The authenticated caller a sync request runs as. Tenant comes from auth only. */
 export interface SyncAuthContext {
@@ -205,7 +206,13 @@ export interface SyncImportMapping {
 export type BoundedImportOutcome =
   | ({ status: 'applied'; payload: unknown } & SyncImportMapping)
   | ({ status: 'conflict'; detail: string } & SyncImportMapping)
-  | { status: 'rejected'; detail: string };
+  | { status: 'rejected'; detail: string }
+  /**
+   * The entity's parent has not landed yet (a message whose chat is not mapped).
+   * Answered `dependency_pending` and NOTHING is written, so the event stays
+   * retryable — the same hold an unmet `dependsOn` gets before the importer runs.
+   */
+  | { status: 'pending'; detail: string };
 
 /**
  * One owning context's import use case, already bound to the unit of work's
@@ -218,11 +225,30 @@ export type SyncMutationImporter = (
   stores: SyncStoreSet,
 ) => Promise<BoundedImportOutcome>;
 
-/** The three importers a push may call. There is no fourth, generic writer. */
+/**
+ * The named importers a push may call. There is no generic writer: each one is the
+ * owning context's import use case (ticket, project, the Brain chat, its messages, the
+ * usage ledger) or the history-only mirror.
+ */
 export interface SyncNamedImporters {
   importSyncedTicket: SyncMutationImporter;
   importSyncedProject: SyncMutationImporter;
+  importSyncedChat: SyncMutationImporter;
+  importSyncedMessage: SyncMutationImporter;
+  importSyncedUsage: SyncMutationImporter;
   importMirrorRecord: SyncMutationImporter;
+}
+
+/**
+ * The usage ledger as the usage importer sees it (PRD 36.4). `llm_usage_log` lives in
+ * a DIFFERENT database than the push's unit of work, so its writes cannot ride the
+ * sync transaction: a retried event is deduped by the row's idempotency key instead.
+ */
+export interface SyncUsageLedger {
+  /** Whether a usage row with this idempotency key already exists for the tenant. */
+  hasRow(tenantId: number, idempotencyKey: string): Promise<boolean>;
+  /** Write one row through the canonical ledger writer. Best-effort, never throws. */
+  record(row: RecordUsageRow): Promise<void>;
 }
 
 /** Everything one atomic event apply writes through: sync stores AND importers, one transaction. */

@@ -35579,7 +35579,8 @@
       "evermind_answer": "Répondu par Evermind",
       "response_cache": "Requête répétée",
       "context_trim": "Contexte allégé",
-      "recall_overhead": "Rappel ajouté"
+      "recall_overhead": "Rappel ajouté",
+      "local_model": "Sur cet appareil"
     },
     "sourceHints": {
       "prompt_cache": "Le fournisseur a servi une partie du prompt depuis son cache, au dixième du prix",
@@ -35587,7 +35588,8 @@
       "evermind_answer": "L’Evermind du projet a répondu — sans appel à un modèle payant",
       "response_cache": "Une requête identique a reçu sa réponse depuis le cache de la passerelle — sans appel au modèle",
       "context_trim": "La compaction a tenu les tours précédents hors de chaque appel",
-      "recall_overhead": "Ce que les souvenirs rappelés ont ajouté à chaque prompt — le coût du rappel"
+      "recall_overhead": "Ce que les souvenirs rappelés ont ajouté à chaque prompt — le coût du rappel",
+      "local_model": "Un modèle sur cet appareil a traité l’appel — ce que votre route payante aurait facturé pour les mêmes jetons"
     }
   },
   "codeAudit": {

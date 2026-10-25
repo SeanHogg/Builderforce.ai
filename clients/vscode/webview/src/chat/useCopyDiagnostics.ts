@@ -16,6 +16,7 @@ import {
   fetchApiVersionVia,
   gatherChatDiagnostics,
   getMcpToolStatus,
+  serverChatIdOf,
   traceWithPersistedSteps,
   type BrainChat,
   type ChatMode,
@@ -52,6 +53,9 @@ export function useCopyDiagnostics({
   t: (key: string, fallback: string) => string;
 }) {
   const [copyState, setCopyState] = useState<CopyState>('idle');
+  // The chat-scoped server reads and the stored report name the BOUND server chat (PRD 36);
+  // the report itself still shows the local view key the person sees.
+  const serverChatId = serverChatIdOf(activeChat);
   const canCopy = hasTranscriptContent({ messages: conv.messages, trace: conv.trace, error: conv.error });
 
   const copyTranscript = useCallback(async () => {
@@ -93,7 +97,7 @@ export function useCopyDiagnostics({
         posixShell: init.posixShell ?? null,
         baseUrl: init.baseUrl ?? null,
         // The chat-scoped reads (agents, tickets, runs) — ONE shared wiring over the adapter.
-        ...chatDiagnosticsReads(ticketAdapter, chatId),
+        ...chatDiagnosticsReads(ticketAdapter, serverChatId),
         readEvermind: () =>
           pid != null
             ? apiReq<{ version: number; mode: string; inferenceEnabled: boolean; teacherModel: string | null; contributions: number; pending: number; lastLearnedAt: string | null }>(
@@ -116,8 +120,8 @@ export function useCopyDiagnostics({
         surface: 'VS Code (VSIX)',
       });
       // Best-effort store — the copy must NEVER fail because persistence did.
-      if (chatId != null) {
-        void apiReq(`/api/brain/chats/${chatId}/diagnostics`, {
+      if (serverChatId != null) {
+        void apiReq(`/api/brain/chats/${serverChatId}/diagnostics`, {
           method: 'POST',
           body: JSON.stringify({ report }),
         }).catch(() => {});
@@ -152,7 +156,7 @@ export function useCopyDiagnostics({
       );
       window.setTimeout(() => setCopyState('idle'), 3000);
     }
-  }, [conv, init.model, init.extensionVersion, init.buildId, init.builtAt, init.posixShell, init.baseUrl, modelSurface, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatMode, chatId, ticketAdapter, apiReq, init.project?.id, init.project?.name, t]);
+  }, [conv, init.model, init.extensionVersion, init.buildId, init.builtAt, init.posixShell, init.baseUrl, modelSurface, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatMode, chatId, serverChatId, ticketAdapter, apiReq, init.project?.id, init.project?.name, t]);
 
   return { copyState, canCopy, copyTranscript };
 }

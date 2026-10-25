@@ -34,7 +34,14 @@ const apply: SyncMutationImporter = async (event, ctx) => ({
 
 function app() {
   const stores = createMemorySyncStores({
-    importers: { importSyncedTicket: apply, importSyncedProject: apply, importMirrorRecord: apply },
+    importers: {
+      importSyncedTicket: apply,
+      importSyncedProject: apply,
+      importSyncedChat: apply,
+      importSyncedMessage: apply,
+      importSyncedUsage: apply,
+      importMirrorRecord: apply,
+    },
   });
   const seen: unknown[] = [];
   const routes = createSyncRoutes((db) => {

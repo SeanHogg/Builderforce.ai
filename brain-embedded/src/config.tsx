@@ -38,6 +38,13 @@ export interface BrainPersistenceAdapter {
   archiveChat(id: number): Promise<unknown>;
   summarizeChat(id: number): Promise<{ summary: string } | { error: string }>;
   getMessages(chatId: number, limit?: number): Promise<BrainMessage[]>;
+  /**
+   * Bind a LOCAL chat to a server chat now, when signed in (PRD 36) — for a
+   * server-addressed action on a chat that has not run yet (linking the ticket the chat
+   * was opened for). Resolves the server id, or undefined while the chat stays local.
+   * Omitted by an adapter whose chats ARE server chats.
+   */
+  bindChat?(chatId: number): Promise<number | undefined>;
   /** Subscribe to durable message invalidations for one chat. The callback carries
    * no data; the hook reconciles from persistence as the source of truth. */
   subscribeMessages?(chatId: number, onChanged: () => void): () => void;

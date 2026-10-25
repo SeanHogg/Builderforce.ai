@@ -35579,7 +35579,8 @@
       "evermind_answer": "由 Evermind 回答",
       "response_cache": "重复请求",
       "context_trim": "精简上下文",
-      "recall_overhead": "回忆附加"
+      "recall_overhead": "回忆附加",
+      "local_model": "在本机运行"
     },
     "sourceHints": {
       "prompt_cache": "服务商以十分之一的价格从缓存中提供了部分提示",
@@ -35587,7 +35588,8 @@
       "evermind_answer": "由项目的 Evermind 作答 — 无需调用付费模型",
       "response_cache": "相同的请求由网关缓存作答 — 无需调用模型",
       "context_trim": "压缩使较早的轮次不进入每次调用",
-      "recall_overhead": "回忆的记忆为每个提示增加的内容 — 回忆的成本"
+      "recall_overhead": "回忆的记忆为每个提示增加的内容 — 回忆的成本",
+      "local_model": "本机上的模型处理了此次调用——这是付费路由对相同令牌本应收取的费用"
     }
   },
   "codeAudit": {

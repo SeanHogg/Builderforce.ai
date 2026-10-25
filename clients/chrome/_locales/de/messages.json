@@ -1525,5 +1525,13 @@
   },
   "suggestAuditPrompt": {
     "message": "Liste verfügbare Audits mit audits.list auf, hilf mir bei der Projekt- und Auditauswahl und starte es mit audits.run. Zeige Status, Ergebnisse und Behebungstickets."
+  },
+  "spSourceLocalModel": {
+    "message": "Auf diesem Gerät",
+    "description": "Saving source label"
+  },
+  "spHintLocalModel": {
+    "message": "Ein Modell auf diesem Gerät hat den Aufruf beantwortet – so viel hätte Ihre bezahlte Route für dieselben Tokens berechnet",
+    "description": "Saving source explanation"
   }
 }
