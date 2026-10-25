@@ -8,6 +8,7 @@ import {
   type VisitorFlowGraph,
 } from '../../domain/marketing/visitorFlowGraph';
 import { kindFromVerb, visitorRowsSql } from './visitorActivity';
+import { activityDatabase } from '../activity/activityLog';
 
 /**
  * Where anonymous visitors GO — the read side of the journey.
@@ -30,6 +31,8 @@ import { kindFromVerb, visitorRowsSql } from './visitorActivity';
  * 1111) — see `visitorActivity.ts` for the column mapping. These queries stay raw
  * SQL because they are bounded analytical scans, and they take their predicate and
  * their verb→kind translation from that module rather than restating either.
+ * `activity_log` is read from {@link activityDatabase} (the operational endpoint);
+ * the lead and prompt tables stay on core.
  */
 
 /** One step on a single visitor's timeline. */
@@ -80,7 +83,11 @@ export interface VisitorFlowResult extends VisitorFlowGraph {
 }
 
 export class VisitorJourneyService {
-  constructor(private readonly db: Db) {}
+  private readonly activity: Db;
+
+  constructor(private readonly db: Db, private readonly env: Env) {
+    this.activity = activityDatabase(env, db);
+  }
 
   /**
    * The aggregate flow, read-through cached.
@@ -90,9 +97,9 @@ export class VisitorJourneyService {
    * that makes a funnel panel unusable exactly when traffic makes it interesting.
    * Sixty seconds of staleness on an append-only stream costs nothing.
    */
-  async flowGraph(env: Env, days: number): Promise<VisitorFlowResult> {
+  async flowGraph(days: number): Promise<VisitorFlowResult> {
     const windowDays = clampDays(days);
-    return getOrSetCached(env, visitorFlowCacheKey(windowDays), async () => {
+    return getOrSetCached(this.env, visitorFlowCacheKey(windowDays), async () => {
       const [events, prompts, conversions] = await Promise.all([
         this.loadEvents(windowDays),
         this.loadPrompts(windowDays),
@@ -115,7 +122,7 @@ export class VisitorJourneyService {
    */
   async journeyFor(visitorId: string): Promise<VisitorJourney> {
     const [events, prompts] = await Promise.all([
-      this.db.execute(sql`
+      this.activity.execute(sql`
         SELECT target_id AS "visitId", verb, target_label AS "path", metadata,
                occurred_at AS "occurredAt"
         FROM activity_log
@@ -140,7 +147,7 @@ export class VisitorJourneyService {
   }
 
   private async loadEvents(days: number) {
-    const rows = await this.db.execute(sql`
+    const rows = await this.activity.execute(sql`
       SELECT actor_ref AS "visitorId", target_id AS "visitId", verb,
              target_label AS "path", occurred_at AS "occurredAt"
       FROM activity_log

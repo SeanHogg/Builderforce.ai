@@ -308,7 +308,7 @@ export class PlatformBroadcastService {
             COUNT(DISTINCT actor_ref)::int                             AS reach
           FROM activity_log
           WHERE target_type = 'announcement_banner'
-            AND target_id = ANY(${ids})
+            AND target_id IN ${ids}
           GROUP BY target_id
         `);
         for (const row of counts.rows as Array<Record<string, unknown>>) engagement.set(String(row.target_id), row);

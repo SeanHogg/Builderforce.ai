@@ -4,7 +4,6 @@ import type { SQL } from 'drizzle-orm';
 import { REDACT_BATCH_ROWS } from './boundedPurge';
 import {
   COLUMN_RETENTION,
-  brainStepPayloadStatement,
   canvasCommandsStatement,
 } from './columnRetention';
 import { EXECUTION_OUTPUT_KEEP_CHARS, EXECUTION_OUTPUT_TRUNCATION_MARKER, truncateTerminalOutputStatement } from '../runtime/executionPayloadRetention';
@@ -13,31 +12,6 @@ const dialect = new PgDialect();
 const toSql = (s: SQL) => dialect.sqlToQuery(s);
 const CUTOFF = new Date('2026-10-01T00:00:00.000Z');
 const flat = (text: string) => text.replace(/\s+/g, ' ').trim();
-
-describe('brain step payload redaction', () => {
-  const q = toSql(brainStepPayloadStatement(CUTOFF));
-  const text = flat(q.sql);
-
-  it('strips only result (args stay, so prior-research digests keep what was run) from role=tool rows, through jsonb', () => {
-    expect(text).toContain("SET metadata = ((metadata::jsonb) - 'result')::text");
-    expect(text).toContain("role = 'tool'");
-  });
-
-  it('is idempotent: only rows that still hold a result are selected', () => {
-    expect(text).toContain("(metadata::jsonb) ? 'result'");
-  });
-
-  it('guards the jsonb cast so a non-object or NUL-escape row cannot abort the batch', () => {
-    expect(text).toContain("WHEN left(ltrim(metadata), 1) = '{' AND strpos(metadata, chr(92) || 'u0000') = 0");
-    expect(text).toContain('ELSE false');
-  });
-
-  it('is bounded and aged by the cutoff it is given', () => {
-    expect(text).toContain('ctid = ANY(ARRAY(');
-    expect(q.params).toContain(REDACT_BATCH_ROWS);
-    expect(q.params).toContain(CUTOFF.toISOString());
-  });
-});
 
 describe('canvas command body redaction', () => {
   const q = toSql(canvasCommandsStatement(CUTOFF));
@@ -61,13 +35,12 @@ describe('canvas command body redaction', () => {
 });
 
 describe('COLUMN_RETENTION registry', () => {
-  it('declares the two domain-table entries with unique names and non-negative windows', () => {
+  it('declares the domain-table entry with a unique name and a non-negative window', () => {
     expect(COLUMN_RETENTION.map((e) => e.name)).toEqual([
-      'brain_chat_messages.step_payloads',
       'creation_session_events.commands',
     ]);
     for (const e of COLUMN_RETENTION) expect(e.afterDays).toBeGreaterThanOrEqual(0);
-    expect(COLUMN_RETENTION.filter((e) => e.afterDays === 14)).toHaveLength(2);
+    expect(COLUMN_RETENTION.filter((e) => e.afterDays === 14)).toHaveLength(1);
   });
 });
 

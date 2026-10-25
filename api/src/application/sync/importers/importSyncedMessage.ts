@@ -121,9 +121,12 @@ async function createMessage(
   // A run step is telemetry: it goes to the operational step store, not the transcript.
   if (isStepRow(fields)) {
     try {
+      // The step commits on the operational store, outside this sync transaction; if
+      // the transaction rolls back the client retries, so an unkeyed step is keyed by
+      // its client entity id — the retry then answers the step the first attempt wrote.
       const id = await steps.append(ctx.auth.tenantId, chatId, {
         metadata: fields.metadata as string,
-        eventKey: fields.eventKey,
+        eventKey: fields.eventKey ?? `sync:${event.clientEntityId}`.slice(0, EVENT_KEY_MAX),
         createdAt: clampedClientTime(fields.createdAt, ctx.now),
       });
       if (id === null) return rejected('message_insert_failed');

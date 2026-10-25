@@ -5,15 +5,18 @@
  * (`brain_chat_steps` via {@link runTelemetryDatabase}), never to core's
  * `brain_chat_messages`. The conversation and its steps are still ONE transcript to a
  * client: every step is handed back shaped as the `role:'tool'` message it always was
- * ({@link toMessageRow}), with `seq: 0` so it can never advance a poller's seq cursor.
+ * ({@link toMessageRow}), carrying the seq of the conversation row it sits before
+ * ({@link anchorStepSeqs}) — never a seq of its own, so it cannot advance a poller's
+ * cursor, and a client's stable seq sort keeps it where it happened.
  *
  * Writers: `appendRaw` (web + VS Code runs, the server's addressed-agent reply) and the
  * VS Code sync importer. Reader: the transcript tail (`getMessages` → {@link mergeSteps}).
  */
 
-import { and, asc, desc, eq, gte, inArray, isNotNull } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import { brainChatSteps, STEP_ID_FLOOR } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import type { BrainChatMessageRow } from './brainChatShapes';
 
@@ -68,7 +71,7 @@ export async function appendSteps(core: Db, tenantId: number, chatId: number, st
   const existing = keys.length === 0 ? [] : await db
     .select({ id: brainChatSteps.id, metadata: brainChatSteps.metadata, createdAt: brainChatSteps.createdAt, eventKey: brainChatSteps.eventKey })
     .from(brainChatSteps)
-    .where(and(eq(brainChatSteps.chatId, chatId), inArray(brainChatSteps.eventKey, keys)));
+    .where(scopedToTenant(brainChatSteps, tenantId, eq(brainChatSteps.chatId, chatId), inArray(brainChatSteps.eventKey, keys)));
   const byKey = new Map(existing.map((r) => [r.eventKey, r]));
   const fresh = written.filter((r) => !r.eventKey);
   let next = 0;
@@ -92,45 +95,74 @@ export async function readSteps(core: Db, chatId: number, since: Date | null): P
 }
 
 /**
- * Interleave a chat's steps into a window of its messages by time. Stable: a message
- * and a step at the same instant keep the message first.
+ * Give each step in an ordered transcript the seq of the conversation row after it
+ * (a run's steps precede its reply), or — for steps nothing follows yet, a run still
+ * going — of the row before it, `before` when there is none. Clients order a merged
+ * transcript by seq with a stable sort; an anchored step therefore stays where it
+ * happened instead of sorting to the top. ONE rule for the write answer and the read.
+ */
+export function anchorStepSeqs(rows: readonly BrainChatMessageRow[], before: number): BrainChatMessageRow[] {
+  const out = [...rows];
+  let next: number | null = null;
+  for (let k = out.length - 1; k >= 0; k--) {
+    const row = out[k]!;
+    if (!isStepId(row.id)) next = row.seq;
+    else if (next !== null) out[k] = { ...row, seq: next };
+  }
+  let prev = before;
+  for (let k = 0; k < out.length; k++) {
+    const row = out[k]!;
+    if (!isStepId(row.id)) prev = row.seq;
+    else if (row.seq === 0) out[k] = { ...row, seq: prev };
+  }
+  return out;
+}
+
+/**
+ * Interleave a chat's steps into a window of its messages by time, steps anchored
+ * ({@link anchorStepSeqs}). Stable: a message and a step at the same instant keep the
+ * message first. Both halves of one write share one clock (`appendRaw`), so a run's
+ * steps sort before the reply written with them.
  */
 export function interleaveByTime(messages: readonly BrainChatMessageRow[], steps: readonly BrainChatMessageRow[]): BrainChatMessageRow[] {
   if (steps.length === 0) return [...messages];
   const out: BrainChatMessageRow[] = [];
   let i = 0;
   let j = 0;
-  while (i < messages.length || j < steps.length) {
-    if (j >= steps.length || (i < messages.length && messages[i].createdAt.getTime() <= steps[j].createdAt.getTime())) out.push(messages[i++]);
-    else out.push(steps[j++]);
+  for (;;) {
+    const message = messages[i];
+    const step = steps[j];
+    if (!message && !step) return anchorStepSeqs(out, 0);
+    if (message && (!step || message.createdAt.getTime() <= step.createdAt.getTime())) { out.push(message); i++; }
+    else if (step) { out.push(step); j++; }
   }
-  return out;
 }
 
 /** The transcript tail with its steps merged back in. A TRUNCATED tail only takes steps
  *  from its oldest message on — older ones belong to messages the reader did not ask for. */
 export async function mergeSteps(core: Db, chatId: number, messages: readonly BrainChatMessageRow[], truncated: boolean): Promise<BrainChatMessageRow[]> {
-  const windowStart = truncated && messages.length > 0 ? messages[0].createdAt : null;
+  const windowStart = truncated ? messages[0]?.createdAt ?? null : null;
   const steps = await readSteps(core, chatId, windowStart);
   return interleaveByTime(messages, steps);
 }
 
-/** Copy a set of chats' steps onto another chat (chat consolidation). Returns the count. */
+/**
+ * Copy a set of chats' steps onto another chat (chat consolidation), keeping their
+ * times so they interleave with the copied conversation. ONE `INSERT … SELECT` on the
+ * step store: a long chat has thousands of steps, which as bound VALUES would pass
+ * Postgres's parameter limit. Returns the count.
+ */
 export async function copySteps(core: Db, tenantId: number, sourceChatIds: readonly number[], targetChatId: number): Promise<number> {
   if (sourceChatIds.length === 0) return 0;
-  const db = runTelemetryDatabase(core);
-  const rows = await db
-    .select({ metadata: brainChatSteps.metadata, eventKey: brainChatSteps.eventKey, createdAt: brainChatSteps.createdAt })
-    .from(brainChatSteps)
-    .where(and(eq(brainChatSteps.tenantId, tenantId), inArray(brainChatSteps.chatId, [...sourceChatIds])))
-    .orderBy(asc(brainChatSteps.createdAt));
-  if (rows.length === 0) return 0;
-  const inserted = await db
-    .insert(brainChatSteps)
-    .values(rows.map((r) => ({ tenantId, chatId: targetChatId, metadata: r.metadata, eventKey: r.eventKey, createdAt: r.createdAt })))
-    .onConflictDoNothing()
-    .returning({ id: brainChatSteps.id });
-  return inserted.length;
+  const result = await runTelemetryDatabase(core).execute(sql`
+    INSERT INTO ${brainChatSteps} (tenant_id, chat_id, metadata, event_key, created_at)
+    SELECT ${brainChatSteps.tenantId}, ${targetChatId}, ${brainChatSteps.metadata}, ${brainChatSteps.eventKey}, ${brainChatSteps.createdAt}
+    FROM ${brainChatSteps}
+    WHERE ${scopedToTenant(brainChatSteps, tenantId, inArray(brainChatSteps.chatId, [...sourceChatIds]))}
+    ORDER BY ${brainChatSteps.createdAt}
+    ON CONFLICT DO NOTHING
+  `);
+  return Number((result as unknown as { rowCount?: number }).rowCount ?? 0);
 }
 
 /** Rewrite one step's metadata (a synced feedback edit). Null when no such step. */

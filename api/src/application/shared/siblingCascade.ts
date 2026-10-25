@@ -2,6 +2,7 @@ import { and, eq, inArray, notExists, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   agentHosts,
+  brainChats,
   brainChatSteps,
   executionClaimEvidence,
   executionClaims,
@@ -104,21 +105,25 @@ export interface SegmentTelemetryKeys {
   segmentId: string;
   executionIds: number[];
   agentHostIds: number[];
+  /** The segment's chats — their run steps (`brain_chat_steps`) go with them. */
+  chatIds: number[];
 }
 
 export async function collectSegmentTelemetryKeys(core: Db, tenantId: number, segmentId: string): Promise<SegmentTelemetryKeys> {
-  const [runs, hosts] = await Promise.all([
+  const [runs, hosts, chats] = await Promise.all([
     core.select({ id: executions.id }).from(executions)
       .where(and(eq(executions.tenantId, tenantId), eq(executions.segmentId, segmentId))),
     core.select({ id: agentHosts.id }).from(agentHosts)
       .where(and(eq(agentHosts.tenantId, tenantId), eq(agentHosts.segmentId, segmentId))),
+    core.select({ id: brainChats.id }).from(brainChats)
+      .where(and(eq(brainChats.tenantId, tenantId), eq(brainChats.segmentId, segmentId))),
   ]);
-  return { tenantId, segmentId, executionIds: runs.map((r) => r.id), agentHostIds: hosts.map((h) => h.id) };
+  return { tenantId, segmentId, executionIds: runs.map((r) => r.id), agentHostIds: hosts.map((h) => h.id), chatIds: chats.map((c) => c.id) };
 }
 
 /**
  * After a segment is erased (DSR / right-to-erasure): the telemetry of its runs and
- * hosts goes. Rows copied from core still carry `segment_id`; rows written since the
+ * hosts goes, and the run steps of its chats. Rows copied from core still carry `segment_id`; rows written since the
  * move do not (the operational endpoint has no default-segment trigger), so they are
  * found through the run or host they belong to.
  */
@@ -146,6 +151,10 @@ export async function cascadeSegmentDelete(core: Db, keys: SegmentTelemetryKeys)
       telemetry.delete(usageSnapshots)
         .where(and(eq(usageSnapshots.tenantId, tenantId), inArray(usageSnapshots.agentHostId, ids))),
     );
+  }
+  for (const ids of chunks(keys.chatIds)) {
+    statements.push(telemetry.delete(brainChatSteps)
+      .where(and(eq(brainChatSteps.tenantId, tenantId), inArray(brainChatSteps.chatId, ids))));
   }
   await withRetention(telemetry, statements);
 }

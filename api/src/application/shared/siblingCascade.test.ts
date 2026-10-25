@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Db } from '../../infrastructure/database/connection';
-import { executionClaims, toolAuditEvents } from '../../infrastructure/database/schema';
+import { brainChatSteps, executionClaims, toolAuditEvents } from '../../infrastructure/database/schema';
 import { cascadeAgentHostDelete, cascadeSegmentDelete, cascadeTenantDelete } from './siblingCascade';
 
 function sqlOf(item: unknown): string {
@@ -59,9 +59,15 @@ describe('siblingCascade retention gate', () => {
 
   it('SET LOCALs on segment erasure but still skips cited events', async () => {
     const { db, batches } = fakeDb();
-    await cascadeSegmentDelete(db, { tenantId: 7, segmentId: 'seg', executionIds: [1], agentHostIds: [2] });
+    await cascadeSegmentDelete(db, { tenantId: 7, segmentId: 'seg', executionIds: [1], agentHostIds: [2], chatIds: [] });
     expect(batches).toHaveLength(1);
     expect(sqlOf(batches[0]![0])).toMatch(/SET LOCAL app\.retention = 'on'/);
     expect(batches[0]!.some((item) => (item as { table?: unknown }).table === executionClaims)).toBe(false);
+  });
+
+  it("erases the run steps of the segment's chats", async () => {
+    const { db, batches } = fakeDb();
+    await cascadeSegmentDelete(db, { tenantId: 7, segmentId: 'seg', executionIds: [], agentHostIds: [], chatIds: [11, 12] });
+    expect(batches[0]!.some((item) => (item as { table?: unknown }).table === brainChatSteps)).toBe(true);
   });
 });

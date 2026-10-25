@@ -1903,7 +1903,7 @@ var PRICE_SNAPSHOT = {
   "~deepseek/deepseek-v4-flash-latest": [422e-10, 1694e-10],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [189e-9, 119e-7],
+  "~moonshotai/kimi-latest": [19e-8, 894e-8],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -1911,7 +1911,7 @@ var PRICE_SNAPSHOT = {
   "~openai/gpt-terra-latest": [2e-6, 12e-6],
   "~unbiased/pareto-latest": [8e-7, 32e-7],
   "~x-ai/grok-latest": [2e-6, 6e-6],
-  "~z-ai/glm-flash-latest": [191e-10, 1352e-10],
+  "~z-ai/glm-flash-latest": [511e-10, 761e-10],
   "~z-ai/glm-latest": [703e-10, 43843e-10],
   "aion-labs/aion-2.0": [8e-7, 16e-7],
   "aion-labs/aion-3.0": [3e-6, 6e-6],
@@ -10750,7 +10750,7 @@ async function listIndexedDbOutboxPartitions(opts) {
 // src/stepOutbox.ts
 var STEP_BATCH_MAX = 25;
 var STEP_BATCH_WAIT_MS = 5e3;
-var isStepRow = (m) => m.role === "tool";
+var isStepRow2 = (m) => m.role === "tool";
 var durability = null;
 var stores2 = /* @__PURE__ */ new Map();
 var runKeys = /* @__PURE__ */ new Set();
@@ -10832,7 +10832,7 @@ function batchStepPersistence(base, opts = {}) {
     send: (chatId, rows, ctx) => base.sendMessages(chatId, withEventKeys(rows, ctx.ids), ctx.scope !== void 0 ? { scope: ctx.scope } : void 0)
   });
   const sendMessages = async (chatId, messages) => {
-    if (messages.length > 0 && messages.every(isStepRow)) {
+    if (messages.length > 0 && messages.every(isStepRow2)) {
       for (const m of messages) steps.enqueue(chatId, m);
       return [];
     }
@@ -19017,6 +19017,11 @@ function formatChatDiagnostics(d) {
   }
   lines.push(`- Chat: ${d.chatTitle?.trim() ? `"${d.chatTitle.trim()}"` : "Untitled"}${d.chatId != null ? ` (#${d.chatId})` : ""}${d.chatVisibility ? ` \xB7 ${d.chatVisibility}` : ""}`);
   if (d.mode) lines.push(`- Mode: ${d.mode}`);
+  if (d.history) {
+    lines.push(
+      `- History (loaded): ${d.history.messages} message(s) \xB7 ${d.history.steps} run step(s) \xB7 full dialogue: ${d.history.location ?? "not reported by this surface"}`
+    );
+  }
   lines.push(`- Chat's project: ${fmtProject(d.projectId, d.projectName)}`);
   lines.push(
     `- Panel's selected project: ${fmtProject(d.selectedProjectId, d.selectedProjectName)}` + (d.selectedProjectId != null && d.selectedProjectId === d.projectId ? " (same as the chat's)" : "")
@@ -19201,6 +19206,13 @@ async function gatherChatDiagnostics(src) {
     surface: src.surface,
     chatId: src.chatId ?? null,
     chatTitle: src.chatTitle ?? null,
+    history: {
+      // What this view has LOADED (a web chat holds a tail window), split so the count
+      // of the conversation is not inflated by the run's steps.
+      messages: msgs.filter((m) => !isStepMessage(m)).length,
+      steps: msgs.filter(isStepMessage).length,
+      location: src.historyLocation?.trim() || null
+    },
     chatVisibility: src.chatVisibility ?? null,
     mode: src.mode ?? null,
     projectId: src.projectId ?? null,

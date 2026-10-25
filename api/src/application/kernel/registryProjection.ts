@@ -37,6 +37,7 @@ import { registeredEntities } from '../domains/entityCatalog';
 import { DOMAINS, isDomain, type Domain } from './ObjectRegistry';
 import { resultRows, rowsTable, type RowsColumn } from './metricRollup';
 import { databaseForTable } from '../shared/databaseForTable';
+import { activityDatabase } from '../activity/activityLog';
 
 /**
  * The projection map: which existing table becomes which registry kind.
@@ -248,24 +249,59 @@ export async function projectRegistry(env: Env, db: Db = buildDatabase(env)): Pr
   `);
   facts += Number((itemFacts as unknown as { rowCount?: number }).rowCount ?? 0);
 
-  const eventFacts = await db.execute(sql`
-    INSERT INTO metric_facts (tenant_id, metric, bucket, bucket_at, dimension_key, value, unit, computed_at)
-    SELECT a.tenant_id,
-           o.domain || '.events',
-           'day',
-           DATE_TRUNC('day', a.occurred_at),
-           '',
-           COUNT(*),
-           'count',
-           NOW()
-    FROM activity_log a
-    JOIN objects o ON o.id = a.object_id
-    WHERE a.tenant_id IS NOT NULL AND a.occurred_at >= NOW() - INTERVAL '30 days'
-    GROUP BY a.tenant_id, o.domain, DATE_TRUNC('day', a.occurred_at)
-    ON CONFLICT (tenant_id, metric, bucket, bucket_at, dimension_key) DO UPDATE
-      SET value = EXCLUDED.value, computed_at = NOW()
-  `);
-  facts += Number((eventFacts as unknown as { rowCount?: number }).rowCount ?? 0);
+  facts += await writeEventFacts(env, db);
 
   return { registered, facts, skipped };
+}
+
+/** Object ids per domain lookup — bounds the `IN` list a lookup builds. */
+const EVENT_OBJECT_CHUNK = 1000;
+
+/**
+ * `<domain>.events`: a day's activity per object's domain over the last 30 days.
+ *
+ * `activity_log` lives on the operational endpoint and `objects` on core, so the
+ * join is done here: an aggregate per (tenant, object, day) on the activity side,
+ * one lookup of those objects' domains on core, folded to (tenant, domain, day).
+ */
+async function writeEventFacts(env: Env, db: Db): Promise<number> {
+  const perObject = resultRows(await activityDatabase(env, db).execute(sql`
+    SELECT tenant_id AS "tenantId", object_id AS "objectId", TO_CHAR(DATE_TRUNC('day', occurred_at), 'YYYY-MM-DD') AS "day", COUNT(*)::int AS "n"
+    FROM activity_log
+    WHERE tenant_id IS NOT NULL AND object_id IS NOT NULL AND occurred_at >= NOW() - INTERVAL '30 days'
+    GROUP BY tenant_id, object_id, DATE_TRUNC('day', occurred_at)
+  `)) as unknown as Array<{ tenantId: number; objectId: string; day: string; n: number }>;
+  if (perObject.length === 0) return 0;
+
+  const ids = [...new Set(perObject.map((r) => r.objectId))];
+  const domainOf = new Map<string, string>();
+  for (let i = 0; i < ids.length; i += EVENT_OBJECT_CHUNK) {
+    const chunk = ids.slice(i, i + EVENT_OBJECT_CHUNK);
+    const rows = resultRows(await db.execute(sql`SELECT id, domain FROM objects WHERE id IN ${chunk}`)) as unknown as Array<{ id: string; domain: string }>;
+    for (const r of rows) domainOf.set(r.id, r.domain);
+  }
+
+  const totals = new Map<string, { tenantId: number; domain: string; day: string; n: number }>();
+  for (const r of perObject) {
+    const domain = domainOf.get(r.objectId);
+    if (!domain) continue;
+    const key = `${r.tenantId}|${domain}|${r.day}`;
+    const t = totals.get(key);
+    if (t) t.n += r.n;
+    else totals.set(key, { tenantId: r.tenantId, domain, day: r.day, n: r.n });
+  }
+  const points = [...totals.values()];
+  let written = 0;
+  for (let i = 0; i < points.length; i += EVENT_OBJECT_CHUNK) {
+    const values = sql.join(points.slice(i, i + EVENT_OBJECT_CHUNK).map((t) =>
+      sql`(${t.tenantId}, ${`${t.domain}.events`}, 'day', ${t.day}::timestamp, '', ${t.n}, 'count', NOW())`), sql`, `);
+    const result = await db.execute(sql`
+      INSERT INTO metric_facts (tenant_id, metric, bucket, bucket_at, dimension_key, value, unit, computed_at)
+      VALUES ${values}
+      ON CONFLICT (tenant_id, metric, bucket, bucket_at, dimension_key) DO UPDATE
+        SET value = EXCLUDED.value, computed_at = NOW()
+    `);
+    written += Number((result as unknown as { rowCount?: number }).rowCount ?? 0);
+  }
+  return written;
 }

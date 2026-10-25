@@ -1,3 +1,22 @@
+## ✅ RESOLVED 2026-10-25 — Core holds no run telemetry: writers fixed, steps moved to ops
+
+- **Core cleanup (prod).** Eight run-telemetry tables copied to ops (`db:copy-run-telemetry`, `run_context_state` verified on its natural key), checked, and truncated on core. 142,605 superadmin step rows and the remaining 253 other-user step rows deleted from `brain_chat_messages` (core now holds none), and 94 `activity_log` `task.created` rows moved to ops. `VACUUM FULL` took core from 621 MB to 319 MB.
+- **Writers that still reached core, fixed.**
+  - The retention sweep listed `primary` beside `transactional`, and its rollups INSERT rows, so sweeping core wrote telemetry back into core. Every swept table is now `OPERATIONAL` only (`sweptTablesBounded.ts`).
+  - `siblingDatabase` returned core when the caller passed no env. It now falls back to the env the handle was built with.
+  - `PlatformBroadcastService` and `StakeholderMapService` wrote `activity_log` directly. Both go through `activityDatabase`, and the broadcast console reads its engagement there.
+- **Run steps on ops.** New `brain_chat_steps` table (ops `0023`, core mirror `1276`; ids start at 1e12 so they can never equal a message id). `appendRaw` and the VS Code sync importer (`SyncStepStore` port) send `isStepRow` rows there. The transcript tail read merges them back by time, so released clients are unchanged. Chat consolidation copies steps, and tenant delete cascades them. Retention is 30 days (14-day floor).
+- **Diagnostics.** The shared copy-diagnostics report shows `History (loaded): N message(s) · M run step(s) · full dialogue: <location>`. N counts conversation rows only, and both counts are what the view has loaded. On VS Code the location is the local journal path plus the chat ids. On web it is the chat URL (origin and path only, because a query string can carry a share token) plus its messages API path.
+- **Opus review fixes, same pass.**
+  - **Steps keep their place on the web.** A merged step now carries the seq of the conversation row it precedes, or of the last row when nothing follows it (`anchorStepSeqs`). Before, it had seq 0, and the client's seq sort (`mergeTranscript`) jumped every step to the top after each turn, which broke `ratedTurnTool` and the prior-research readers.
+  - **One clock per write.** `appendRaw` stamps both halves of a batch from one app clock, rising with the batch index. The two databases' separate `now()` no longer decide whether a step renders before or after its reply.
+  - **Consolidation.** Copied messages keep their `createdAt`. Before, every copied step sorted ahead of the conversation and fell outside a truncated tail. Message inserts are chunked, and `copySteps` is one `INSERT … SELECT`, so a long chat no longer passes Postgres's bind-parameter limit.
+  - **Sync retry.** A synced step without an event key is keyed `sync:<clientEntityId>`. It commits outside the sync transaction, and the key keeps a rollback retry from duplicating it.
+  - **Segment erasure (DSR)** also erases the run steps of the segment's chats (`SegmentTelemetryKeys.chatIds`).
+  - **`activity_log` readers left on core.** The visitor-journey flow and the journey reads now go through `activityDatabase`. The registry projection's `<domain>.events` facts used a cross-database JOIN. They are now an ops aggregate per object, a core domain lookup and an in-memory fold.
+  - **`= ANY(${array})`** is a row value under Drizzle and Postgres rejects it. It is now `IN ${array}` in the broadcast console, the suspect-accounts read and the revoke route.
+  - **Removed** the core `brain_chat_messages.step_payloads` column retention. Core has no steps, and the ops row sweep replaces it.
+
 ## ✅ RESOLVED 2026-10-25 — Docs cleanup: shipped PRDs recorded, their files removed (docs only)
 
 - **What changed.** Five read-only triage passes checked every doc in `docs/specs/` and `docs/design/` against the code and both ledgers. Anything still outstanding was ported to ROADMAP.md first. Shipped docs are recorded here and their files removed, and git history keeps them. Superseded docs were folded into the doc that replaced them. `docs/specs/README.md` is now a status index of the numbered PRDs that remain. `PRD-coordinated-role-participation.md` became **PRD 37** (`37-prd-coordinated-role-participation.md`). `EMAIL_IMPLEMENTATION.md` and `MULTI_AUTH_IMPLEMENTATION.md` moved to `docs/guides/`. The stray `specs/PRD.md` (an agent artifact from task #470) was deleted. Removing PRD 27 (staffed work) also ends the 27/27 number collision.

@@ -86,8 +86,10 @@ export function useBrainCaptureExecution({
         userId: user?.id ?? null,
         messages: conv.messages,
         // The full dialogue is the server chat, opened at the page it was captured from.
+        // Origin + path only: a query string can carry a share or invite token, and this
+        // line is pasted into tickets.
         historyLocation: typeof window !== 'undefined' && chatId != null
-          ? `${window.location.origin}${window.location.pathname}${window.location.search} (Brain chat #${chatId}; API GET /api/brain/chats/${chatId}/messages)`
+          ? `${window.location.origin}${window.location.pathname} (Brain chat #${chatId}; API GET /api/brain/chats/${chatId}/messages)`
           : null,
         // What the model could actually CALL. The COUNT is the live registry the
         // conversation runs on (`toolSpecs` — navigation + MCP catalog together), not

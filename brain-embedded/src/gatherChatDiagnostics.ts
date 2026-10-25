@@ -228,7 +228,9 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
     chatId: src.chatId ?? null,
     chatTitle: src.chatTitle ?? null,
     history: {
-      messages: msgs.length,
+      // What this view has LOADED (a web chat holds a tail window), split so the count
+      // of the conversation is not inflated by the run's steps.
+      messages: msgs.filter((m) => !isStepMessage(m)).length,
       steps: msgs.filter(isStepMessage).length,
       location: src.historyLocation?.trim() || null,
     },

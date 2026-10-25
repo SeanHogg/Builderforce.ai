@@ -151,7 +151,7 @@ export async function runRetentionPurge(
     // R2 day-prefixes that hold their bytes, then stale live presence. The registry's
     // `replay_recordings` entry is only the 90-day backstop and the vacuum.
     { name: 'replay_recordings', run: () => runReplayRetention(env, db, new Date(now)) },
-    // Domain-table column/surplus retention (brain step payloads, canvas command bodies,
+    // Domain-table column/surplus retention (canvas command bodies,
     // surplus snapshots). Core only: none of these relations has a transactional copy.
     ...COLUMN_RETENTION.map((entry) => ({
       name: entry.name,

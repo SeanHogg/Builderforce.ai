@@ -881,14 +881,14 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         (u.email_verified_at IS NOT NULL
           AND ABS(EXTRACT(EPOCH FROM (u.email_verified_at - u.created_at))) < 2) AS "backfilledVerification",
         (u.last_login_at IS NULL) AS "neverSignedIn",
-        (lower(split_part(u.email, '@', 2)) = ANY(${DISPOSABLE_DOMAINS})) AS "disposableDomain",
+        (lower(split_part(u.email, '@', 2)) IN ${DISPOSABLE_DOMAINS}) AS "disposableDomain",
         COUNT(DISTINCT tm.tenant_id)::int AS "tenantCount"
       FROM users u
       LEFT JOIN tenant_members tm ON tm.user_id = u.id AND tm.is_active = true
       WHERE u.is_superadmin = false
         AND (
           u.last_login_at IS NULL
-          OR lower(split_part(u.email, '@', 2)) = ANY(${DISPOSABLE_DOMAINS})
+          OR lower(split_part(u.email, '@', 2)) IN ${DISPOSABLE_DOMAINS}
         )
         AND u.email_verified_at IS NOT NULL
         AND ABS(EXTRACT(EPOCH FROM (u.email_verified_at - u.created_at))) < 2
@@ -912,7 +912,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const rows = await db.execute(sql`
       UPDATE users
       SET email_verified_at = NULL
-      WHERE id = ANY(${userIds}) AND is_superadmin = false
+      WHERE id IN ${userIds} AND is_superadmin = false
       RETURNING id
     `);
     return c.json({ revoked: rows.rows.length });
@@ -1050,15 +1050,15 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // aggregation live in one place instead of as SQL inside a route handler.
   // -------------------------------------------------------------------------
   router.get('/visitor-flow', async (c) => {
-    const service = new VisitorJourneyService(requestDb(c));
+    const service = new VisitorJourneyService(requestDb(c), c.env as Env);
     const days = Number(c.req.query('days') ?? VISITOR_FLOW_WINDOWS.defaultDays);
-    return c.json(await service.flowGraph(c.env as Env, days));
+    return c.json(await service.flowGraph(days));
   });
 
   router.get('/visitor-flow/:visitorId', async (c) => {
     const visitorId = c.req.param('visitorId');
     if (!isValidVisitorId(visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
-    const service = new VisitorJourneyService(requestDb(c));
+    const service = new VisitorJourneyService(requestDb(c), c.env as Env);
     return c.json(await service.journeyFor(visitorId));
   });
 

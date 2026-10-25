@@ -806,7 +806,7 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
   // location is how a reader gets from it to the whole conversation.
   if (d.history) {
     lines.push(
-      `- History: ${d.history.messages} message(s) · ${d.history.steps} run step(s)`
+      `- History (loaded): ${d.history.messages} message(s) · ${d.history.steps} run step(s)`
         + ` · full dialogue: ${d.history.location ?? 'not reported by this surface'}`,
     );
   }

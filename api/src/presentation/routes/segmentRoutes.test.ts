@@ -14,7 +14,7 @@ vi.mock('../middleware/authMiddleware', () => ({
 
 // Run telemetry lives on its own database, so erasure is an explicit cascade the route
 // performs — captured here so the tests can assert it happens (and only on a real delete).
-const KEYS = { tenantId: TENANT, segmentId: 'seg-acme', executionIds: [7], agentHostIds: [3] };
+const KEYS = { tenantId: TENANT, segmentId: 'seg-acme', executionIds: [7], agentHostIds: [3], chatIds: [] };
 const cascade = vi.hoisted(() => ({
   collectSegmentTelemetryKeys: vi.fn(),
   cascadeSegmentDelete: vi.fn(async () => {}),

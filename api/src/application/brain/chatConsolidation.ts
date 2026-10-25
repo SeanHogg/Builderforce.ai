@@ -19,6 +19,9 @@ export interface ConsolidateResult {
   linksMoved: number;
 }
 
+/** Messages per insert — 6 bound columns each, well under Postgres's 65,535. */
+const CONSOLIDATE_INSERT_CHUNK = 2000;
+
 /**
  * Merge source chats into a target: source messages are appended to the target
  * in chronological order, their ticket links + agent invites move to the target,
@@ -62,16 +65,18 @@ export async function consolidateChats(
     if (!advisoryThreadHistoryAdmitted(rows)) return { error: ADVISORY_THREAD_AI_CONTEXT_ERROR };
   }
 
-  // One multi-row insert for every message. seq BECOMES the generated id inside the
-  // INSERT (migration 1233's trigger). The VALUES keep chronological order, so the
-  // ids (and seq) still ascend with it.
+  // Multi-row inserts, chunked under Postgres's bind-parameter limit. seq BECOMES the
+  // generated id inside the INSERT (migration 1233's trigger). The VALUES keep
+  // chronological order, so the ids (and seq) still ascend with it. Each message keeps
+  // its time: the copied steps keep theirs, and the transcript read interleaves the two
+  // by time (a consolidation-time stamp put every step ahead of the conversation).
   let messagesMoved = 0;
-  if (srcMsgs.length > 0) {
-    const inserted = await db.insert(brainChatMessages).values(srcMsgs.map((m) => ({
+  for (let i = 0; i < srcMsgs.length; i += CONSOLIDATE_INSERT_CHUNK) {
+    const inserted = await db.insert(brainChatMessages).values(srcMsgs.slice(i, i + CONSOLIDATE_INSERT_CHUNK).map((m) => ({
       chatId: input.targetChatId, role: m.role, content: m.content,
-      metadata: m.metadata, eventKey: m.eventKey,
+      metadata: m.metadata, eventKey: m.eventKey, createdAt: m.createdAt,
     }))).onConflictDoNothing().returning({ id: brainChatMessages.id });
-    messagesMoved = inserted.length;
+    messagesMoved += inserted.length;
   }
   // The sources' run steps live in their own store; they follow the conversation.
   messagesMoved += await copySteps(db, tenantId, sources, input.targetChatId);
