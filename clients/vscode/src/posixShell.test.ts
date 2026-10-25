@@ -169,6 +169,7 @@ describe("toBashNullDevice", () => {
     expect(toBashNullDevice("git fetch >nul 2>&1")).toBe("git fetch >/dev/null 2>&1");
     expect(toBashNullDevice("echo x >> Nul && ls")).toBe("echo x >>/dev/null && ls");
     expect(toBashNullDevice("npm test &>nul")).toBe("npm test &>/dev/null");
+    expect(toBashNullDevice("set /p x=ok <nul")).toBe("set /p x=ok </dev/null");
   });
 
   it("leaves anything that is not exactly a nul target alone", () => {
@@ -178,6 +179,9 @@ describe("toBashNullDevice", () => {
       "ls nul",
       "cp a > nulls/x",
       "git log --oneline 2>/dev/null | head -5",
+      // cmd parses the quoted string, so there nul IS the null device.
+      "cmd //c \"dir dist >nul\"",
+      "grep -F '2>nul' notes.md",
     ]) expect(toBashNullDevice(cmd)).toBe(cmd);
   });
 });

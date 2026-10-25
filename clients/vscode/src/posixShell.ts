@@ -109,10 +109,11 @@ export function cmdCannotRun(output: string): boolean {
  * Explorer and `git clean` cannot delete it and it sits untracked in `git status`
  * (`packages/brain-ui/nul`, holding the stderr of a `findstr … 2>nul`).
  *
- * Rewrite only a redirection TARGET of exactly `nul` (any case): `foo.nul`, `nullable`
- * and `> nul.txt` are untouched.
+ * Rewrite only a redirection TARGET of exactly `nul` (any case), including cmd's `<nul`
+ * input idiom: `foo.nul`, `nullable`, `> nul.txt` and a quoted `"…>nul"` (a nested
+ * `cmd //c "dir >nul"`, where nul IS the device) are untouched.
  */
-const CMD_NULL_REDIRECT = /(\d?>>?|&>>?)\s*nul(?![\w.\/\\:-])/gi;
+const CMD_NULL_REDIRECT = /(\d?>>?|&>>?|<)\s*nul(?![\w.\/\\:"'-])/gi;
 
 export function toBashNullDevice(command: string): string {
   return command.replace(CMD_NULL_REDIRECT, "$1/dev/null");

@@ -1,4 +1,4 @@
-## ✅ RESOLVED 2026-10-25 — Agent commands no longer leave undeletable `nul` files (VSIX 2026.10.92)
+## ✅ RESOLVED 2026-10-25 — Agent commands no longer leave undeletable `nul` files (VSIX 2026.10.92 · hardened in 2026.10.93)
 
 Kimi sometimes wrote Windows-style commands with `2>nul`. When `run_command` sent one to Git Bash, bash created a real file named `nul` (at the repo root and in `packages/brain-ui/`). Windows treats `nul` as a reserved name, so `git clean` failed with "Permission denied" and the files stayed untracked in `git status`. `spawnCommand` (`clients/vscode/src/processTree.ts`) now passes every bash command through `toBashNullDevice` (`posixShell.ts`), which turns a redirect to exactly `nul` into `/dev/null`. Commands run by `cmd.exe` are unchanged. Guarded in `posixShell.test.ts`.
 
