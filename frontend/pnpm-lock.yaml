@@ -55,8 +55,8 @@ importers:
         specifier: link:../builderforce-embedded
         version: link:../builderforce-embedded
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.10.23
-        version: 2026.10.23(@seanhogg/builderforce-memory-engine@2026.10.23)
+        specifier: ^2026.10.24
+        version: 2026.10.24(@seanhogg/builderforce-memory-engine@2026.10.23)
       '@seanhogg/builderforce-memory-engine':
         specifier: ^2026.10.23
         version: 2026.10.23
@@ -1388,11 +1388,11 @@ packages:
     resolution: {integrity: sha512-g1BBr1119eNNdxDRP1lVzrSRbBQc6UD5FHUu5EoPE7m5wUizBLBeATZGcTq+FlaUu8PFRRBN6+ukG4fjdeQilw==}
     engines: {node: '>=18.0.0'}
 
-  '@seanhogg/builderforce-memory@2026.10.23':
-    resolution: {integrity: sha512-UBVA81KJfYZ97IK/wE5gmc+ln0EBQYrIJ0ZkQIpG66e8Xb+O/p7H1IHul4mB1NChiEOWGbFlS6LhVM5dnquFZw==}
+  '@seanhogg/builderforce-memory@2026.10.24':
+    resolution: {integrity: sha512-4Czs3VdzmUN0zt9wq+bqOlFLlEQK9ta7Wa9xCRwbhNdpL+kSilKJ7Xmspef0glafTvGvN06aIycSXOZFLPdQKw==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@seanhogg/builderforce-memory-engine': ^2026.10.23
+      '@seanhogg/builderforce-memory-engine': ^2026.10.24
 
   '@seanhogg/builderforce-quality@2026.7.5':
     resolution: {integrity: sha512-TPI+SVch4YxgaYuIGSupP3RlvdB2N1kYbxFH5e1cdGsrYJZunR5wN2PYcj4WtanThy28kLSWXVsU+I9XQ9iiiA==}
@@ -3034,6 +3034,7 @@ packages:
   eslint@9.39.4:
     resolution: {integrity: sha512-XoMjdBOwe/esVgEvLmNsD3IRHkm7fbKIUGvrleloJXUZgDHig2IPWNniv+GwjyJXzuNqVjlr5+4yVUZjycJwfQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'
@@ -4916,6 +4917,7 @@ packages:
 
   stream-to-promise@2.2.0:
     resolution: {integrity: sha512-HAGUASw8NT0k8JvIVutB2Y/9iBk7gpgEyAudXwNJmZERdMITGdajOa4VJfD/kNiA3TppQpTP4J+CtcHwdzKBAw==}
+    deprecated: Deprecated. Use node:stream/promises and node:stream/consumers instead.
 
   string-width@4.2.3:
     resolution: {integrity: sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g==}
@@ -6629,7 +6631,7 @@ snapshots:
 
   '@seanhogg/builderforce-memory-engine@2026.10.23': {}
 
-  '@seanhogg/builderforce-memory@2026.10.23(@seanhogg/builderforce-memory-engine@2026.10.23)':
+  '@seanhogg/builderforce-memory@2026.10.24(@seanhogg/builderforce-memory-engine@2026.10.23)':
     dependencies:
       '@seanhogg/builderforce-memory-engine': 2026.10.23
 
