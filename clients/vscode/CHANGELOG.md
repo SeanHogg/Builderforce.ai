@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.79] — A sub-agent follows the same rules as the agent that started it
+
+- **A sub-agent follows the same rules as the agent that started it.** In 2026.10.78 a sub-agent was simply never asked to delegate. Now every run, top-level or sub-agent, follows one rule. Only a request that actually asks for sub-agents ("use sub-agents", "spawn agents") counts. A brief that only mentions them, as every plan brief does, no longer prompts any run to delegate, while a sub-agent whose brief asks for sub-agents is prompted exactly as its parent would be.
+- **Research briefs are not graded as unfinished changes.** "Research…", "investigate…", "find…" and "trace…" now read as questions, so a run that answers them is not counted as a failed change request.
+
 ## [2026.10.78] — Sub-agents get on with the work, Stop works everywhere, long chats stay responsive
 
 - **A sub-agent does its slice instead of delegating it again.** A child told to implement part of a plan was nudged to "stop reading and delegate" because its brief mentioned sub-agents, and spent its time spawning more researchers. Only your own request can ask for sub-agents now. A child can still spawn helpers when it needs them.
