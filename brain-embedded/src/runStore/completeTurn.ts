@@ -252,10 +252,14 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // about to make (`coderHandoffBrief`) — given the transcript alone, it started the
     // analysis over. A pinned model is the user's choice for the whole run (the policy
     // declines the re-ask under one), and a tool-less chat turn is never re-asked.
-    if (turnRole === 'plan' && result.toolCalls.some((tc) => isCodeChangeTool(tc.name))
-      && reportToPolicy(run, { type: 'code_change_attempted' }).outcome.kind === 'reask_as_coder') {
+    // Under a pin or lock there is no re-ask, but the run is coding all the same: the
+    // phase (and the chat's `codePhaseReached`) moves so planning cannot outlive the edit.
+    const codeChangeOutcome = turnRole === 'plan' && result.toolCalls.some((tc) => isCodeChangeTool(tc.name))
+      ? reportToPolicy(run, { type: 'code_change_attempted' }).outcome
+      : null;
+    if (codeChangeOutcome) c.codePhaseReached = true;
+    if (codeChangeOutcome?.kind === 'reask_as_coder') {
       turnRole = nextTurn(run.policy, { hasTools: !!tools }).role;
-      c.codePhaseReached = true;
       const brief = coderHandoffBrief(replayTextOf(result.text), result.toolCalls);
       pushTrace(c, coderReaskTrace(nowIso(), iter, result.resolvedModel));
       restartTurn();

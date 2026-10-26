@@ -1,12 +1,15 @@
 /**
  * Planning ends in TASKS, and the tasks are the hand-off to the coding model.
  *
- * Until now the plan→code hand-off happened by accident: the planning model drifted into
- * its first edit, the run threw that edit away and re-asked the coder inline. Nothing was
- * filed, nothing could run in parallel, and the coder inherited a transcript instead of
- * a work breakdown (chat #133: MiniMax planned for 22 turns, Grok then re-did it).
+ * Two ways a run leaves planning. A SMALL change is simply made: the planner's first edit
+ * moves the run into coding (auto-routed, that edit is re-asked of the coding model —
+ * `code_change_attempted` in `@builderforce/run-policy`). Telling the planner it must never
+ * edit kept Hybrid runs reading for hundreds of turns without touching a file, so the tool
+ * below is OPTIONAL. MULTI-TASK work ends in `hand_off` instead, because the implicit path
+ * files nothing and cannot run in parallel (chat #133: MiniMax planned for 22 turns, Grok
+ * then re-did it).
  *
- * `hand_off` is the planner's deliverable. It names the tasks; the run then:
+ * `hand_off` names the tasks; the run then:
  *   1. files ONE ticket per task, linked to the chat (the board shows the plan);
  *   2. posts the plan into the chat;
  *   3. switches the run to the coding role, and
@@ -42,8 +45,8 @@ export const HAND_OFF_TOOL_SPEC: BrainToolSpec = {
   function: {
     name: HAND_OFF_TOOL,
     description:
-      'END THE ANALYSIS and hand the work to the coding model(s). You are the planning model: read what you need, then call this ONCE with the tasks — do NOT edit files yourself. ' +
-      'Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. ' +
+      'OPTIONAL — for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. ' +
+      'When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. ' +
       'Every task must stand alone — the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.',
     parameters: {
       type: 'object',

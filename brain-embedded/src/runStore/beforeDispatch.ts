@@ -85,7 +85,12 @@ export function beforeDispatchHook(run: RunLoopContext): NonNullable<LoopHooks<C
     // coder this run becomes. The result tells the coder which (see `planHandoff.ts`).
     if (call.name === HAND_OFF_TOOL) {
       if (!offersHandOff(run.policy)) {
-        return { result: { data: { ok: false, error: 'The plan was already handed off — you are the coding model now. Implement the tasks; do not re-plan.' } } };
+        // Two ways planning is over: a real hand-off already ran, or the run started
+        // editing (a pinned/locked model's edit in this same batch). Only the first filed tickets.
+        const error = usedTools.has(HAND_OFF_TOOL)
+          ? 'The plan was already handed off — you are the coding model now. Implement the tasks; do not re-plan.'
+          : 'This run has already started editing, so it is coding now and hand_off is closed. Implement the work directly; use spawn_agents for separate slices that own disjoint files.';
+        return { result: { data: { ok: false, error } } };
       }
       const plan = parseHandOff(call.args);
       if (typeof plan === 'string') return { result: { data: { ok: false, error: plan } } };

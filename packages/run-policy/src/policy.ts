@@ -293,9 +293,13 @@ export function reduceRunPolicy(state: RunPolicyState, event: RunPolicyEvent): R
       return succeeded(s, event.model, event.acted === true);
     case 'code_change_attempted':
       // The analysis model just decided to change code; that edit is the first line of
-      // the deliverable, so it is re-asked of the coding model. Only when nothing is
-      // pinned or locked: a pinned model is the user's choice for the whole run.
-      return s.phase === 'plan' && !s.model ? { ...s, phase: 'code', outcome: { kind: 'reask_as_coder' } } : s;
+      // the deliverable, so it is re-asked of the coding model. The RE-ASK only when
+      // nothing is pinned or locked: a pinned model is the user's choice for the whole
+      // run. The PHASE moves either way — a run that has started editing is coding, and
+      // one left in `plan` kept `hand_off` ("do not edit files yourself") on its menu
+      // for every remaining turn once a pin, lock or stall failover had set a model.
+      if (s.phase !== 'plan') return s;
+      return { ...s, phase: 'code', outcome: s.model ? NONE : { kind: 'reask_as_coder' } };
     case 'hand_off':
       return s.phase === 'plan'
         ? { ...s, phase: 'code', outcome: { kind: 'handed_off' } }

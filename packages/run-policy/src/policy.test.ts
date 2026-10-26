@@ -45,10 +45,11 @@ describe('plan → code', () => {
     expect(nextTurn(s, TOOLS).role).toBe('code');
   });
 
-  it('a pinned model disables the implicit switch', () => {
+  it('a pinned model is never re-asked, but the run is coding from its first edit', () => {
     const s = run(initialRunPolicy({ pinnedModel: 'grok' }), { type: 'code_change_attempted' });
     expect(s.outcome).toEqual({ kind: 'none' });
-    expect(s.phase).toBe('plan');
+    expect(s.phase).toBe('code');
+    expect(offersHandOff(s)).toBe(false);
   });
 
   it('re-asks only once — a run already coding just carries on', () => {
@@ -57,14 +58,15 @@ describe('plan → code', () => {
     expect(s.phase).toBe('code');
   });
 
-  it('a locked model disables it too', () => {
+  it('a locked model is never re-asked either, and still leaves planning', () => {
     const s = run(
       initialRunPolicy({ lockAfterFirstSuccess: true }),
       { type: 'turn_succeeded', model: 'minimax' },
       { type: 'code_change_attempted' },
     );
     expect(s.outcome.kind).toBe('none');
-    expect(s.phase).toBe('plan');
+    expect(s.phase).toBe('code');
+    expect(offersHandOff(s)).toBe(false);
   });
 });
 

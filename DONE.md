@@ -1,3 +1,13 @@
+## ✅ RESOLVED 2026-10-25 — Hybrid runs get past analysis and make the change (VSIX 2026.10.94 · brain-embedded 2026.10.60 · run-policy 2026.10.19)
+
+Under Hybrid (auto-routed), even a one-line change was analysed for hundreds of turns and never edited. In chat #172, MiniMax took 877 turns and read the PRD 65 times without making the change. Auto-routed runs start in run-policy's `plan` phase. While planning, the `hand_off` tool is always on the menu, and its description said "You are the planning model … do NOT edit files yourself". The design is the opposite: the planner's first edit re-asks the coding model automatically (`code_change_attempted` → `reask_as_coder`). The model obeyed the description and never edited.
+
+- `HAND_OFF_TOOL_SPEC` (`brain-embedded/src/planHandoff.ts`) is now OPTIONAL and only for multi-task plans. A small change is simply made, and the first edit moves the run into coding.
+- Second bug: `reduceRunPolicy` ignored `code_change_attempted` whenever a model was set (a pin, a lock or a stall failover), so the phase stayed `plan` for the whole run and the prohibition stayed on the menu. The phase now moves to `code` on any edit. The re-ask still happens only when no model is set.
+- `completeTurn.ts` sets `codePhaseReached` whenever the event fires, so the chat's next run starts in coding.
+- `beforeDispatch.ts` explains a `hand_off` sent in the same batch as an edit, instead of claiming a hand-off that never ran.
+- Guarded in `policy.test.ts`. The pin and lock cases now expect the phase to be `code` and `hand_off` to be off the menu.
+
 ## ✅ RESOLVED 2026-10-25 — Agent commands no longer leave undeletable `nul` files (VSIX 2026.10.92 · hardened in 2026.10.93)
 
 Kimi sometimes wrote Windows-style commands with `2>nul`. When `run_command` sent one to Git Bash, bash created a real file named `nul` (at the repo root and in `packages/brain-ui/`). Windows treats `nul` as a reserved name, so `git clean` failed with "Permission denied" and the files stayed untracked in `git status`. `spawnCommand` (`clients/vscode/src/processTree.ts`) now passes every bash command through `toBashNullDevice` (`posixShell.ts`), which turns a redirect to exactly `nul` into `/dev/null`. Commands run by `cmd.exe` are unchanged. Guarded in `posixShell.test.ts`.
