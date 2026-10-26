@@ -58,6 +58,13 @@ export default [
   // the shared baseline in scripts/silent-catches.baseline.json. api's chain runs
   // the full sweep; frontend's runs only its own tree for fast local feedback.
   ['check:silent-catches', '../../scripts/check-silent-catches.mjs'],
+  // Repo-level (PRD 35 §3.3 / §5.1): report-mode guards for the one-agent-one-kernel
+  // program. check:one-execution lists every importer of `runAgentLoop` so the program
+  // works against the "runAgent is the only loop driver" baseline; check:tests-unchanged
+  // diffs test files touched on a feat/agent-run-ws* branch against main so §5.1's
+  // import-only rule is visible. Both are report-only in WS1; WS7 flips them to enforced.
+  ['check:one-execution', '../../scripts/check-one-execution.mjs'],
+  ['check:tests-unchanged', '../../scripts/check-tests-unchanged.mjs'],
   // Per-file ratchet over raw `c.req.json` reads; parseBody (requestBody.ts) is the
   // one validated read. Seeded 2026-09-06; the counts can only fall.
   ['check:unvalidated-bodies', 'check-unvalidated-bodies.mjs'],
