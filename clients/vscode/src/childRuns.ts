@@ -31,6 +31,8 @@ export interface ChildReport {
   output: string;
   ticket?: string;
   changedFiles?: string[];
+  /** What its report left for the owner to resolve (`parseSubagentReport`). */
+  openIssues?: string[];
 }
 
 /** One child as the panel shows it. */

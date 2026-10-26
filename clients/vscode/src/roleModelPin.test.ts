@@ -51,10 +51,16 @@ describe("modelForChildRun", () => {
   });
 
   it("inherits the parent model when the role has no pin", () => {
-    expect(modelForChildRun({ model: "parent-sonnet" }, "verify", {})).toBe("parent-sonnet");
+    expect(modelForChildRun({ model: "parent-sonnet" }, "code", {})).toBe("parent-sonnet");
     expect(modelForChildRun({ model: "parent-sonnet" }, "plan", { [ROLE_MODELS_ENV]: '{"code":"opus"}' })).toBe(
       "parent-sonnet",
     );
+  });
+
+  it("leaves a checking or reading child to the gateway's cheaper tier instead of the coder's model", () => {
+    for (const role of ["verify", "explore", "utility"]) {
+      expect(modelForChildRun({ model: "parent-opus" }, role, {})).toBeUndefined();
+    }
   });
 
   it("leaves the child unpinned when neither side has a model", () => {

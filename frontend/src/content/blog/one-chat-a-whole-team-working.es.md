@@ -70,7 +70,7 @@ El trabajo en Builderforce sigue un arco — **Idea → Hacer → Operar → Med
 
 Los subagentes son una función de **Hacer**, y sobre todo cambian el paso **Construir**. Construir es donde ocurre el trabajo caro, y es donde más duele una sola línea de trabajo: cada parte espera a la anterior. Al dividirlo, Construir cuesta lo que la parte más larga, no la suma de todas.
 
-También mantienen honesto el paso **Probar**. Los subagentes no tienen shell ni git. Cambian sus propios archivos e informan. La prueba queda en manos de quien lidera: compilar el cambio conjunto, ejecutar las pruebas, arreglar lo que las partes rompieron entre sí y solo entonces hacer commit. Trabajo en paralelo, un solo veredicto.
+También mantienen honesto el paso **Probar**. Cada subagente termina con el mismo informe breve: qué cambió, qué comprobó y qué asuntos dejó pendientes. Quien lidera se hace cargo de cada asunto pendiente hasta resolverlo. La comprobación la hace un subagente de verificación con un modelo más económico: ejecuta la verificación de tipos y las pruebas que cubren el cambio e informa de cada fallo al pie de la letra. Quien lidera arregla lo que encuentra, y solo se hace commit de lo que pasa la comprobación. Trabajo en paralelo, un solo veredicto.
 
 ## Lo que puedes hacer hoy
 

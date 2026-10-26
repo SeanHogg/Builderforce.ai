@@ -27,6 +27,31 @@ export const MODEL_ROLE_DESCRIPTIONS: Readonly<Record<ModelRole, string>> = {
   utility: "Small, mechanical, low-stakes work — formatting, extraction, a lookup.",
 };
 
+/**
+ * What each role is FOR, as a number routing can use: +1 pulls toward the strongest model,
+ * -1 toward the cheapest, 0 leaves the tenant's own order alone. CODE is written by the
+ * strongest model on offer; ANALYSIS runs on the tenant's order; checking and reading lead
+ * with the cheapest capable model. Here, beside the vocabulary, so the gateway's ordering
+ * (`@builderforce/model-router`) and a host choosing a child's model read ONE table.
+ */
+export const MODEL_ROLE_OBJECTIVE: Readonly<Record<ModelRole, number>> = {
+  code: 1,
+  plan: 0,
+  chat: 0,
+  verify: -0.5,
+  explore: -1,
+  utility: -1,
+};
+
+/**
+ * Does this role lead with the cheaper models? A delegation of that role must not inherit
+ * its owner's model as a hint: a verify child handed the coder's model checks on the most
+ * expensive tier, which is the cost the role exists to avoid.
+ */
+export function roleLeansCheap(role: unknown): boolean {
+  return isModelRole(role) && MODEL_ROLE_OBJECTIVE[role] < 0;
+}
+
 const ROLE_SET = new Set<string>(MODEL_ROLES);
 
 export function isModelRole(value: unknown): value is ModelRole {

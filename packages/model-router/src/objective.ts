@@ -8,17 +8,8 @@
  * every role the same way its question points.
  */
 
-import type { ModelRole } from '@builderforce/agent-tools';
+import { MODEL_ROLE_OBJECTIVE as ROLE_OBJECTIVE, type ModelRole } from '@builderforce/agent-tools';
 import type { ArcStage } from '@builderforce/workload';
-
-const ROLE_OBJECTIVE: Readonly<Record<ModelRole, number>> = {
-  code: 1,
-  plan: 0,
-  chat: 0,
-  verify: -0.5,
-  explore: -1,
-  utility: -1,
-};
 
 /** Idea and Reach are breadth and volume (cheaper), Make ships the thing (stronger),
  *  Run/Measure sit near neutral. */

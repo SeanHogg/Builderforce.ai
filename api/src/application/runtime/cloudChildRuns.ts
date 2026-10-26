@@ -17,7 +17,7 @@
 
 import { eq, inArray } from 'drizzle-orm';
 import { childReportText, clipChildOutput, type ChildReportLike, type ModelRole } from '@builderforce/agent-tools';
-import { subagentSystemPrompt } from '@builderforce/agent-loop';
+import { parseSubagentReport, subagentSystemPrompt } from '@builderforce/agent-loop';
 import { executions } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -93,7 +93,7 @@ export function childPayload(parentPayload: string | undefined, spec: CloudChild
 /** The child's prompt and first turn — the sub-agent brief in front of its owner's prompt. */
 export function childBrief(spec: CloudChildSpec, basePrompt: string): { systemPrompt: string; userContent: string } {
   return {
-    systemPrompt: `${subagentSystemPrompt(spec.persona, { owner: spec.owner })}\n\n${basePrompt}`,
+    systemPrompt: `${subagentSystemPrompt(spec.persona, { owner: spec.owner, ...(spec.role ? { role: spec.role } : {}) })}\n\n${basePrompt}`,
     userContent: spec.task,
   };
 }
@@ -150,13 +150,16 @@ export async function absorbChildWrites(db: Db, tenantId: number, parentExecutio
 
 function reportOf(row: ChildRow, spec: CloudChildSpec): ChildReportLike {
   const state = row.status === 'completed' ? 'done' : row.status === 'cancelled' ? 'stopped' : 'failed';
+  const answer = (state === 'done' ? row.result : row.errorMessage ?? row.result) ?? '';
+  const { openIssues } = parseSubagentReport(answer);
   return {
     handle: spec.handle,
     name: spec.asAgent?.name ?? spec.persona?.name ?? spec.label,
     state,
     label: spec.label,
-    output: clipChildOutput((state === 'done' ? row.result : row.errorMessage ?? row.result) ?? ''),
+    output: clipChildOutput(answer),
     ...(spec.ticket ? { ticket: spec.ticket } : {}),
+    ...(openIssues.length ? { openIssues } : {}),
   };
 }
 

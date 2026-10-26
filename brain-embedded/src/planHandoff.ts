@@ -23,7 +23,7 @@
  */
 
 import type { BrainToolSpec } from './streamChatCompletion';
-import { overlappingScopes } from '@builderforce/agent-tools';
+import { RESOLVE_OPEN_ISSUES, VERIFY_DELEGATION_STEP, VERIFY_STEP, overlappingScopes } from '@builderforce/agent-tools';
 
 export const HAND_OFF_TOOL = 'hand_off';
 
@@ -72,6 +72,10 @@ export const HAND_OFF_TOOL_SPEC: BrainToolSpec = {
                 description: 'Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel.',
               },
               acceptance: { type: 'string', description: 'How to know it is done (tests, behaviour).' },
+              constraints: {
+                type: 'string',
+                description: 'What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change.',
+              },
             },
             required: ['title', 'brief'],
           },
@@ -87,6 +91,8 @@ export interface HandOffTask {
   brief: string;
   paths: string[];
   acceptance?: string;
+  /** What not to touch, copy or grow — the limits a standalone brief must carry. */
+  constraints?: string;
 }
 
 export interface HandOffPlan {
@@ -114,7 +120,8 @@ export function parseHandOff(args: unknown): HandOffPlan | string {
     if (!title || !brief) return `task ${i + 1} needs both a title and a brief`;
     const paths = Array.isArray(t.paths) ? t.paths.map(str).filter(Boolean) : [];
     const acceptance = str(t.acceptance);
-    tasks.push({ title, brief, paths, ...(acceptance ? { acceptance } : {}) });
+    const constraints = str(t.constraints);
+    tasks.push({ title, brief, paths, ...(acceptance ? { acceptance } : {}), ...(constraints ? { constraints } : {}) });
   }
   return { summary, tasks };
 }
@@ -125,25 +132,42 @@ function ticketDescription(task: HandOffTask, summary: string): string {
     task.brief,
     task.paths.length ? `Paths: ${task.paths.join(', ')}` : '',
     task.acceptance ? `Done when: ${task.acceptance}` : '',
+    task.constraints ? `Do not: ${task.constraints}` : '',
     summary ? `Context: ${summary}` : '',
   ].filter(Boolean).join('\n\n');
 }
 
+/** What every task of one plan shares — the run's side of a child's brief. */
+export interface BriefContext {
+  /** The planner's summary of the research. */
+  summary: string;
+  /** What the user asked for, in their words — the goal every slice serves. */
+  request?: string | null;
+  /** The planning run's record of what it read and searched (`RunKnowledgeLog.brief`). */
+  knowledge?: string | null;
+}
+
+/** Longest request quoted into a brief; a pasted transcript is not the goal. */
+const MAX_REQUEST_CHARS = 2_000;
+
 /**
- * A child's whole brief. It sees nothing else, so the research rides along: the planner's
- * summary of what it and its research sub-agents established, and the run's own record
- * of what was already read and searched (`knowledge`) — so the coder starts from the
- * research instead of repeating it.
+ * A child's whole brief. It sees nothing else, so everything the coder would otherwise
+ * have to rediscover rides along: the goal in the user's words, the slice and its limits,
+ * how it is accepted, the planner's summary of the research and the run's record of what
+ * was already read. How it REPORTS is its standing instructions (`subagentSystemPrompt`).
  */
-export function childTaskBrief(task: HandOffTask, summary: string, ticketId?: number, knowledge?: string | null): string {
+export function childTaskBrief(task: HandOffTask, ctx: BriefContext, ticketId?: number): string {
+  const request = ctx.request?.trim();
   return [
     ticketId != null ? `Ticket #${ticketId}: ${task.title}` : task.title,
+    request ? `The goal — what the user asked for: ${request.length > MAX_REQUEST_CHARS ? `${request.slice(0, MAX_REQUEST_CHARS)}…` : request}` : '',
     task.brief,
     task.paths.length ? `Your slice covers: ${task.paths.join(', ')}. Sibling slices are working beside you on other paths.` : '',
+    task.constraints ? `Do not: ${task.constraints}` : '',
     task.acceptance ? `Done when: ${task.acceptance}` : '',
-    summary ? `Research handed to you (the analysis is finished — do not redo it): ${summary}` : '',
-    knowledge ? `What the research already read and searched (read again only what your change itself needs):\n${knowledge}` : '',
-    'Make the change now. Read only what the change itself needs. Finish with what you changed and anything outside your slice that must still change.',
+    ctx.summary ? `Research handed to you (the analysis is finished — do not redo it): ${ctx.summary}` : '',
+    ctx.knowledge ? `What the research already read and searched (read again only what your change itself needs):\n${ctx.knowledge}` : '',
+    'Make the change now. Read only what the change itself needs.',
   ].filter(Boolean).join('\n\n');
 }
 
@@ -179,6 +203,8 @@ export interface HandOffPorts {
   toolNames: ReadonlySet<string>;
   /** The planning run's record of what it read and searched (`RunKnowledgeLog.brief`). */
   knowledge?: string | null;
+  /** What the user asked for — every child's brief opens with the goal. */
+  request?: string | null;
   projectId?: number;
   /** Called with each created ticket's result, so the run links it to the chat. */
   afterCreate?(toolName: string, out: unknown): Promise<void>;
@@ -255,17 +281,21 @@ function asRecord(out: unknown): Record<string, unknown> | null {
 
 const INLINE_NEXT =
   'HAND-OFF: the analysis is complete and you are the coding model. Implement the tasks below in order — do not re-plan or re-read what the planner already read. ' +
-  'After each task, verify it, then move to the next. When all are done, build and test, commit and push, and report per ticket.';
+  `When all are done, check them. ${VERIFY_STEP} Then commit and push, and report per ticket.`;
 
+/** What every fan-out leaves the coder: the children's open issues are its work now. */
+const RESOLVE_REPORTS =
+  `Each report ends with its Open issues — ${RESOLVE_OPEN_ISSUES}. Fix what the slices broke between them, and implement any task that failed.`;
+
+// A host that fanned out can spawn, so the checking is always delegated from here.
 const PARALLEL_NEXT =
-  'HAND-OFF: the tasks ran side by side, one coding agent each, and each has reported into the chat. The children had no shell and no git. ' +
-  'You are the coding model: verify the combined change (build and test), fix what the slices broke between them and anything they said was outside their paths, ' +
-  'implement any task that failed, then commit, push and report per ticket.';
+  'HAND-OFF: the tasks ran side by side, one coding agent each, and each has reported into the chat. ' +
+  `You are the coding model. ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
 
 const BACKGROUND_NEXT =
-  'HAND-OFF: one coding agent per task is now running IN THE BACKGROUND, each posting into the chat under its own name; the children have no shell and no git. ' +
-  'You are the coding model: do not redo their tasks. Work on anything not delegated, then call wait_agents for their reports (or act on each as it arrives), ' +
-  'verify the combined change (build and test), fix what the slices broke between them, implement any task that failed, then commit, push and report per ticket.';
+  'HAND-OFF: one coding agent per task is now running IN THE BACKGROUND, each posting into the chat under its own name. ' +
+  'You are the coding model: do not redo their tasks. Work on anything not delegated, then call wait_agents for their reports (or act on each as it arrives). ' +
+  `${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
 
 /**
  * Carry the plan out. Never throws: a failed ticket or a refused fan-out degrades to the
@@ -275,6 +305,7 @@ export async function executeHandOff(plan: HandOffPlan, ports: HandOffPorts): Pr
   const ids = await fileTickets(plan, ports);
   const tickets = plan.tasks.map((t, i) => ({ title: t.title, ...(ids[i] != null ? { id: ids[i] } : {}) }));
   const parallel = ports.toolNames.has(FAN_OUT_TOOL) && canRunInParallel(plan.tasks);
+  const briefContext: BriefContext = { summary: plan.summary, request: ports.request, knowledge: ports.knowledge };
   await ports.postPlan?.(planMessage(plan, ids, parallel)).catch(() => undefined);
 
   if (parallel) {
@@ -292,7 +323,7 @@ export async function executeHandOff(plan: HandOffPlan, ports: HandOffPorts): Pr
           const id = ids[start + k];
           return {
             label: id != null ? `#${id} ${t.title}` : t.title,
-            task: childTaskBrief(t, plan.summary, id, ports.knowledge),
+            task: childTaskBrief(t, briefContext, id),
             role: 'code',
             ...(id != null ? { ticket: String(id) } : {}),
           };
@@ -331,6 +362,6 @@ export async function executeHandOff(plan: HandOffPlan, ports: HandOffPorts): Pr
     ok: true,
     mode: 'inline',
     tickets,
-    next: `${INLINE_NEXT}\n\n${plan.tasks.map((t, i) => `${i + 1}. ${ids[i] != null ? `#${ids[i]} ` : ''}${t.title}\n${childTaskBrief(t, plan.summary, ids[i], ports.knowledge)}`).join('\n\n')}`,
+    next: `${INLINE_NEXT}\n\n${plan.tasks.map((t, i) => `${i + 1}. ${ids[i] != null ? `#${ids[i]} ` : ''}${t.title}\n${childTaskBrief(t, briefContext, ids[i])}`).join('\n\n')}`,
   };
 }

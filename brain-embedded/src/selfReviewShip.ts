@@ -35,6 +35,7 @@
  */
 
 import { asksForChange } from '@builderforce/agent-stall';
+import { VERIFY_STEP } from '@builderforce/agent-tools';
 import type { BrainTraceEvent } from './brainTriage';
 import { canShipHere } from './localWorkspaceTools';
 import { commandOf, gitCommandPattern } from './shipVerification';
@@ -52,7 +53,7 @@ export function selfReviewShipDirective(chatId: number | null): string {
     : 'the one builtin_tickets_from_delta returned for it';
   return (
     'SHIP YOUR OWN CHANGE — in this session YOU are its reviewer. This is a local editor session: no other agent or reviewer can ever reach a change you leave in the working tree, so a ticket you leave "in_review" sits at 75% on the board forever. When your turn changes code, finish it in this order:\n' +
-    '1. VERIFY — run the type-check / tests / build that cover what you touched (`run_command`) and fix whatever fails.\n' +
+    `1. VERIFY — ${VERIFY_STEP}\n` +
     '2. SELF-REVIEW — read your own diff with `git_diff` against what the ticket and the user asked for: bugs, leftover debug code, edits unrelated to the task, missing tests or localisation. If you find a problem, FIX it and review again. Then record the pass with builtin_reviews_record (taskId = the ticket tracking this change — ' + trackingTicket + '; verdict "complete"; a one-paragraph summary of what you checked).\n' +
     '3. SHIP — `git_commit` with allowBaseBranch:true and exactly the `paths` you changed (never a catch-all: the tree may hold the human\'s own work), then `git_push` with allowBaseBranch:true. Both are shown to the human for approval — that approval is their review of your review, so do not ask for it in prose as well.\n' +
     '4. CLOSE — the push reports the branch it landed on. Once it lands on the base branch with nothing left to push, the in_review ticket this chat opened for the change moves to done automatically. Move any OTHER linked ticket this change fully delivers to done yourself with builtin_tasks_update. Report the commit hash and the push result.\n' +
@@ -132,7 +133,7 @@ export function leftChangeUnshipped(input: UnshippedChangeInput): boolean {
 export function unshippedChangeNudge(): string {
   return (
     'You changed code in this run and ended the turn without shipping it. In this local session you are the reviewer — no one else can pick the change up, so leaving it uncommitted parks its ticket in review forever. Finish it now:'
-    + ' verify it (`run_command` for the type-check / tests that cover it), self-review your diff with `git_diff` and record builtin_reviews_record (verdict "complete") on the ticket tracking it,'
+    + ' verify it — ' + VERIFY_STEP + ' Then self-review your diff with `git_diff` and record builtin_reviews_record (verdict "complete") on the ticket tracking it,'
     + ' then `git_commit` (allowBaseBranch:true, exactly the paths you changed) and `git_push` (allowBaseBranch:true).'
     + ' If the user asked for a pull request, commit on a `branch` and `open_pull_request` instead.'
     + ' If you genuinely cannot ship — the change is unfinished, or verification fails and you cannot fix it — say so plainly at the TOP of your answer and name exactly what is left.'

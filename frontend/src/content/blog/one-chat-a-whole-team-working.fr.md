@@ -70,7 +70,7 @@ Le travail dans Builderforce suit un arc — **Idée → Faire → Exploiter →
 
 Les sous-agents sont une fonctionnalité de **Faire**, et ils changent surtout l'étape **Construire**. Construire, c'est là que se fait le travail coûteux, et c'est là qu'une seule file de travail fait le plus de mal : chaque morceau attend le précédent. Une fois découpé, Construire coûte le morceau le plus long, pas la somme de tous.
 
-Ils gardent aussi l'étape **Prouver** honnête. Les sous-agents n'ont ni shell ni git. Ils modifient leurs propres fichiers et font leur rapport. La preuve reste au responsable : compiler le changement d'ensemble, lancer les tests, corriger ce que les morceaux ont cassé entre eux, et seulement ensuite faire le commit. Un travail en parallèle, un seul verdict.
+Ils gardent aussi l'étape **Prouver** honnête. Chaque sous-agent termine par le même court rapport : ce qu'il a modifié, ce qu'il a vérifié et les points restés ouverts. Le responsable prend en charge chaque point ouvert jusqu'à ce qu'il soit réglé. La vérification elle-même revient à un sous-agent de vérification sur un modèle moins coûteux : il lance la vérification des types et les tests qui couvrent le changement, et rapporte chaque échec mot pour mot. Le responsable corrige ce qu'il trouve, et seul ce qui passe la vérification est commité. Un travail en parallèle, un seul verdict.
 
 ## Ce que vous pouvez faire dès aujourd'hui
 

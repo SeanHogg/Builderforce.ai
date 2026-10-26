@@ -334,7 +334,7 @@ export {
   childTaskBrief,
   planMessage,
 } from './planHandoff';
-export type { HandOffPlan, HandOffTask, HandOffPorts, HandOffOutcome } from './planHandoff';
+export type { BriefContext, HandOffPlan, HandOffTask, HandOffPorts, HandOffOutcome } from './planHandoff';
 // The run-driver seam: a host whose UI process is disposable (the VS Code webview)
 // executes runs in a longer-lived process and mirrors them back with `applyRemoteRun`.
 export { applyRemoteRun } from './brainRunStore';

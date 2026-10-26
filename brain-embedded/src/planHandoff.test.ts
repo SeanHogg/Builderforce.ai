@@ -80,12 +80,16 @@ describe('executeHandOff', () => {
     expect(out.next).toContain('wait_agents');
   });
 
-  it('hands every implementation child the research: the summary and what was already read', async () => {
+  it('hands every implementation child the goal, its limits and the research: the summary and what was already read', async () => {
     const briefs: string[] = [];
     await executeHandOff(
-      { summary: 'runPolicy owns the phase; hand_off is advertised in completeTurn.', tasks: [task('A', ['a']), task('B', ['b'])] },
+      {
+        summary: 'runPolicy owns the phase; hand_off is advertised in completeTurn.',
+        tasks: [{ ...task('A', ['a']), constraints: 'do not grow completeTurn.ts' }, task('B', ['b'])],
+      },
       ports({
         knowledge: 'Read: packages/run-policy/src/policy.ts\nSearched: offersHandOff',
+        request: 'Make Hybrid runs stop analysing and code.',
         runTool: async (name, args) => {
           if (name !== 'spawn_agents') return { id: 1 };
           for (const w of args.workstreams as Array<{ task: string }>) briefs.push(w.task);
@@ -95,10 +99,40 @@ describe('executeHandOff', () => {
     );
     expect(briefs).toHaveLength(2);
     for (const brief of briefs) {
+      expect(brief).toContain('The goal — what the user asked for: Make Hybrid runs stop analysing and code.');
       expect(brief).toContain('Research handed to you');
       expect(brief).toContain('runPolicy owns the phase');
       expect(brief).toContain('Read: packages/run-policy/src/policy.ts');
     }
+    expect(briefs[0]).toContain('Do not: do not grow completeTurn.ts');
+    expect(briefs[1]).not.toContain('Do not:');
+  });
+
+  it('keeps the limits a planner set on a task', () => {
+    expect(parseHandOff({ summary: 's', tasks: [{ title: 'A', brief: 'b', constraints: ' leave api/ alone ' }] })).toEqual({
+      summary: 's',
+      tasks: [{ title: 'A', brief: 'b', paths: [], constraints: 'leave api/ alone' }],
+    });
+  });
+
+  it('hands the checking to a verify sub-agent where the host can spawn, and makes the reports’ open issues the coder’s', async () => {
+    const out = await executeHandOff(
+      { summary: '', tasks: [task('A', ['a']), task('B', ['b'])] },
+      ports({
+        runTool: async (name, args) =>
+          name === 'spawn_agents'
+            ? { ok: true, running: true, agents: (args.workstreams as unknown[]).map((_, i) => ({ ok: true, handle: `a${i + 1}` })) }
+            : { id: 1 },
+      }),
+    );
+    expect(out.next).toContain('role "verify"');
+    expect(out.next).toContain('resolve every open issue the reports name');
+  });
+
+  it('tells an inline coder to delegate the checks, or run the narrowest ones itself where it cannot spawn', async () => {
+    const out = await executeHandOff({ summary: '', tasks: [task('A')] }, ports({ toolNames: new Set() }));
+    expect(out.next).toContain('role "verify"');
+    expect(out.next).toContain('Where you cannot spawn, run the narrowest type-check');
   });
 
   it('falls back to the coder, in order, when the fan-out refuses before any child starts', async () => {

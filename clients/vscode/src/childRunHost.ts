@@ -91,7 +91,7 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
       const model = modelForChildRun(parent, req.role);
       return deps.start({
         chatId: key,
-        systemPrompt: `${subagentSystemPrompt(req.persona, { owner: owner.name })}\n\n${base}`,
+        systemPrompt: `${subagentSystemPrompt(req.persona, { owner: owner.name, role: req.role })}\n\n${base}`,
         basePrompt: base,
         ...(model ? { model } : {}),
         ...(parent.modelStrict != null ? { modelStrict: parent.modelStrict } : {}),

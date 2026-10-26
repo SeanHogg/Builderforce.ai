@@ -381,6 +381,8 @@ export interface ChildReportLike {
   output: string;
   ticket?: string;
   changedFiles?: string[];
+  /** What the child's report left for its owner (`parseSubagentReport` in agent-loop). */
+  openIssues?: string[];
 }
 
 /** What the parent asks a sub-agent to do. */

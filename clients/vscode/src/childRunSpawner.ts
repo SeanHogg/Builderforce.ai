@@ -21,6 +21,7 @@ import {
   queueRunSteering,
   type RunLineage,
 } from "@seanhogg/builderforce-brain-embedded";
+import { parseSubagentReport } from "@builderforce/agent-loop";
 import { WAIT_INTERRUPTED_NOTE, childReportText as reportText, clipChildOutput, ownerDirectionText as directionText } from "@builderforce/agent-tools";
 import { MAX_CHILD_DEPTH, type ChildReport, type ChildRuns } from "./childRuns";
 
@@ -156,6 +157,7 @@ function reportOf(key: number, lineage: RunLineage, req: ChildRequest, stopped: 
   }
   const state = stopped ? "stopped" : snapshot.error || !answer ? "failed" : "done";
   const output = state === "failed" && !answer ? snapshot.error || "it stopped without a report" : answer;
+  const { openIssues } = parseSubagentReport(answer);
   return {
     handle: lineage.handle,
     name: lineage.agent.name,
@@ -164,6 +166,7 @@ function reportOf(key: number, lineage: RunLineage, req: ChildRequest, stopped: 
     output: clipChildOutput(output),
     ...(req.ticket ? { ticket: req.ticket } : {}),
     ...(files.size ? { changedFiles: [...files] } : {}),
+    ...(openIssues.length ? { openIssues } : {}),
   };
 }
 

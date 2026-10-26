@@ -16,9 +16,33 @@ import type { ChildReportLike, LiveChildControls } from "./capabilities.js";
 export const LIVE_DELEGATION_NOTE =
   "HERE the child runs IN THE BACKGROUND: the call returns its handle at once and you keep working — plan, code, or start more children — while it does its slice. Its messages appear in the chat under its own name, and its report reaches you on its own when it finishes (call wait_agents only when you cannot go on without it). Redirect it with message_agent; cancel it with stop_agent. Do not edit the files a child is working on while it runs.";
 
+/**
+ * How an owner checks finished code: the type-check, build and tests go to ONE `verify`
+ * sub-agent, which the gateway routes to the cheaper models (the verify role is cost-first),
+ * while the fixing stays with the coder. ONE wording for every place that tells a coder
+ * to verify — the hand-off, the fan-out and the ship gate.
+ */
+export const VERIFY_DELEGATION_STEP =
+  'Hand the checking to ONE verify sub-agent (spawn_agent, role "verify"): brief it with the files changed and how to know the change is done; it runs the narrowest type-check, build and tests on a cheaper model and reports each failure verbatim. ' +
+  "Fix what it reports — yourself or with a code sub-agent — and verify again until it passes.";
+
+/** The verify step for a run that may not be able to spawn (a child at the depth cap,
+ *  a host without delegation): delegate where it can, check itself where it cannot. */
+export const VERIFY_STEP =
+  `${VERIFY_DELEGATION_STEP} Where you cannot spawn, run the narrowest type-check, build and tests that cover what you touched yourself, and fix whatever fails.`;
+
+/** How an owner resolves what a child's report left — ONE wording for the report itself,
+ *  the fan-out and the hand-off. */
+export const RESOLVE_OPEN_ISSUES =
+  "resolve every open issue the reports name: fix it yourself, send it back with message_agent, or hand it to a code sub-agent";
+
 /** What a parent is told once a fan-out has STARTED (not finished). */
 export const LIVE_FANOUT_NEXT =
-  "Keep working on anything not delegated; when their reports are in (they arrive on their own, or call wait_agents), check the combined result, fix anything the slices broke between them, and report per workstream and ticket.";
+  `Keep working on anything not delegated. When their reports are in (they arrive on their own, or call wait_agents), ${RESOLVE_OPEN_ISSUES}; fix anything the slices broke between them, then check the combined result. ` +
+  `${VERIFY_DELEGATION_STEP} Report per workstream and ticket.`;
+
+/** Said under a child's report when it left work: the owner owns it, and finishes it. */
+const OPEN_ISSUES_HEAD = `Open issues — yours before you finish (${RESOLVE_OPEN_ISSUES}; then verify again):`;
 
 /** The owner's verbs, by name — ONE list every surface's catalog and pin guard read. */
 export const SUBAGENT_CONTROL_TOOL_NAMES = { wait: "wait_agents", message: "message_agent", stop: "stop_agent" } as const;
@@ -57,7 +81,12 @@ export function clipChildOutput(output: string): string {
 export function childReportText(report: ChildReportLike): string {
   const head = `[Sub-agent ${report.handle} · ${report.name} — ${report.state}] ${report.label}${report.ticket ? ` (ticket ${report.ticket})` : ""}`;
   const files = report.changedFiles?.length ? `Changed: ${report.changedFiles.join(", ")}` : "";
-  return [head, report.output, files].filter(Boolean).join("\n\n");
+  const issues = report.openIssues?.length
+    ? `${OPEN_ISSUES_HEAD}\n${report.openIssues.map((i) => `- ${i}`).join("\n")}`
+    : report.state === "failed"
+      ? `${OPEN_ISSUES_HEAD}\n- the whole slice: it failed — finish it yourself or delegate it again`
+      : "";
+  return [head, report.output, files, issues].filter(Boolean).join("\n\n");
 }
 
 const handlesOf = (v: unknown): string[] =>

@@ -80,7 +80,7 @@ Builderforce work moves along one arc — **Idea → Make → Run → Measure** 
 
 Sub-agents are a **Make** feature, and they change the **Build** step most. Build is where the expensive work happens, and it is where a single line of work hurts most: every slice waits for the last. Splitting it means the cost of Build is the longest slice, not the sum of them.
 
-They also keep **Prove** honest. Sub-agents get no shell and no git. They change their own files and report back. The proof step stays with the lead: build the combined change, run the tests, fix what the slices broke between them, and only then commit. Parallel work, one verdict.
+They also keep **Prove** honest. Every sub-agent ends with the same short report: what it changed, what it checked, and the open issues it left. The lead owns each open issue until it is fixed. The checking itself goes to a verify sub-agent on a cheaper model, which runs the type-check and tests that cover the change and reports every failure word for word. The lead fixes what it finds, and only a passing check is committed. Parallel work, one verdict.
 
 ## What you can do with it today
 

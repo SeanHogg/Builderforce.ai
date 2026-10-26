@@ -13,6 +13,7 @@
  * (same contract as the package docs).
  */
 
+import { roleLeansCheap } from "@builderforce/agent-tools";
 import { parseRoleModelConfig, resolveModelForRole } from "@builderforce/learned-routing";
 
 /** Native editor turns are coding turns (same default as spawn_agent). */
@@ -31,7 +32,9 @@ export function roleModelPin(
  *
  * A strict parent pick (the user's explicit model) is copied as-is. Otherwise a
  * role pin wins when present, else the parent's model (which may itself be
- * undefined — gateway auto).
+ * undefined — gateway auto) — except for a role that leads with the cheaper models
+ * (`verify`, `explore`, `utility`): that child is left to the gateway, which routes its
+ * role cost-first, instead of checking or reading on the coder's model.
  */
 export function modelForChildRun(
   parent: { model?: string; modelStrict?: boolean },
@@ -39,5 +42,5 @@ export function modelForChildRun(
   env: NodeJS.ProcessEnv = process.env,
 ): string | undefined {
   if (parent.modelStrict) return parent.model;
-  return roleModelPin(role, env) ?? parent.model;
+  return roleModelPin(role, env) ?? (roleLeansCheap(role) ? undefined : parent.model);
 }

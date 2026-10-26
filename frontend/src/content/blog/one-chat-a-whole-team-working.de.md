@@ -70,7 +70,7 @@ Arbeit in Builderforce folgt einem Bogen — **Idee → Machen → Betreiben →
 
 Sub-Agenten sind ein Feature von **Machen**, und sie verändern vor allem den Schritt **Bauen**. Beim Bauen passiert die teure Arbeit, und dort schadet eine einzige Arbeitslinie am meisten: Jeder Teil wartet auf den vorherigen. Aufgeteilt kostet das Bauen so viel wie der längste Teil, nicht wie die Summe aller.
 
-Sie halten auch **Beweisen** ehrlich. Sub-Agenten bekommen keine Shell und kein Git. Sie ändern ihre eigenen Dateien und melden sich zurück. Der Beweisschritt bleibt bei der Leitung: die Gesamtänderung bauen, die Tests laufen lassen, beheben, was die Teile untereinander kaputt gemacht haben, und erst dann committen. Parallele Arbeit, ein Urteil.
+Sie halten auch **Beweisen** ehrlich. Jeder Sub-Agent schließt mit demselben kurzen Bericht ab: was er geändert hat, was er geprüft hat und welche offenen Punkte bleiben. Die Leitung ist für jeden offenen Punkt verantwortlich, bis er behoben ist. Das Prüfen selbst übernimmt ein Prüf-Sub-Agent auf einem günstigeren Modell: Er führt die Typprüfung und die Tests aus, die die Änderung abdecken, und meldet jeden Fehler wörtlich. Die Leitung behebt, was er findet, und committet wird nur, was die Prüfung besteht. Parallele Arbeit, ein Urteil.
 
 ## Was Sie heute damit tun können
 
