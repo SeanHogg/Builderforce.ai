@@ -23,6 +23,7 @@ import { createComposingActivity, toolCallArgBytes } from '../composingActivity'
 import { hasCallMarkup } from '../xmlToolCalls';
 import { turnInterruption } from '../finishReason.js';
 import { takeRunSteering } from './steerInterrupt';
+import { steerModelContent } from '../runSteering';
 import { buildWorkingTranscript } from '@seanhogg/builderforce-memory/working';
 import { summarizeMiddle } from '../transcriptSummarizer';
 import { persistFoldMarker } from './runFoldMarker';
@@ -31,7 +32,7 @@ import { callMemoryEffect } from '../memorySavings';
 import { accrueByoUnresolved, accrueProviderCap, emit, emitStreaming, nowIso, nowMs, pushTrace, runTrace, setActivity } from './runCells';
 import { modelDowngradeEvent } from './modelDowngrade';
 import { gatewayRoutingArgs } from './gatewayRoutingTrace';
-import { planBudgetTurn } from './planBudget';
+import { changeBudgetTurn, planBudgetTurn } from './progressBudget';
 import { asLiveTurn, connectRetryStep, liveTurnModel } from './turnPersistence';
 import { reportToPolicy, type RunLoopContext, type TurnMeta } from './runLoopContext';
 
@@ -44,8 +45,9 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     emit(c);
     // Direction that arrived while the run was working — an owner redirecting its
     // sub-agent, or a child's report reaching its owner — goes in front of this turn,
-    // recorded as one `steer.applied` step.
-    for (const text of takeRunSteering(c, runKey, iter)) convo.push({ role: 'user', content: text });
+    // recorded as one `steer.applied` step. Attachments become vision parts so a
+    // mid-run message with images reaches the model like a normal send.
+    for (const steer of takeRunSteering(c, runKey, iter)) convo.push({ role: 'user', content: steerModelContent(steer) });
     // Auto-compact BEFORE the turn: summarize the older middle into a memory note
     // when the transcript exceeds the token budget (instead of silently dropping it
     // and making the model thrash into "LOOP EXHAUSTED"). Falls back to the
@@ -90,13 +92,10 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // whole turn. Stays undefined for a pure tool-call / empty turn.
     let firstTokenAt: number | undefined;
     let result: StreamChatResult;
-    // Analysis that has spent its budget ends HERE (`planBudget.ts`), BEFORE selection:
+    // Analysis that has spent its budget ends HERE (`progressBudget.ts`), BEFORE selection:
     // the hand-off turn offers `hand_off` alone with a call required, and a forced turn
     // that still did not hand off ends planning, so this turn already selects as code.
     const handOffTurn = planBudgetTurn(run, iter);
-    // What the turn's FIRST request carries beyond the transcript — every retry of the same
-    // turn sends it again, or a forced hand-off would retry with no instruction.
-    const opening: ChatCompletionMessage[] = handOffTurn ? [handOffTurn.brief] : [];
     // Advertise a RELEVANT subset rather than the whole catalog. ~300 tool
     // definitions push most providers past the point where they reliably emit any
     // tool call at all (observed: 308 tools → three consecutive turns with zero
@@ -128,8 +127,14 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // The ROUTER rides along whenever selection actually trimmed something, so the
     // tools that missed the cut stay REACHABLE instead of silently ceasing to exist.
     // Three fixed schemas buy back the whole catalog; see toolRouter.ts.
-    const advertised = handOffTurn
-      ? handOffTurn.tools
+    // Coding that has spent the same budget without changing anything is made to change
+    // something on THIS turn — the change tools alone (`progressBudget.ts`).
+    const forced = handOffTurn ?? changeBudgetTurn(run, iter, selected);
+    // What the turn's FIRST request carries beyond the transcript — every retry of the same
+    // turn sends it again, or a forced turn would retry with no instruction.
+    const opening: ChatCompletionMessage[] = forced ? [forced.brief] : [];
+    const advertised = forced
+      ? forced.tools
       : selection.trimmed
         ? [...selected, ...routerToolSpecs(allTools?.length ?? 0)]
         : selected;
@@ -138,7 +143,7 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // answer, at the only point that knows both halves, "did it narrate a tool it was
     // never shown?" — see `narratedUnadvertised` below.
     const advertisedNames = new Set(advertised.map((t) => t.function.name));
-    if (selection.trimmed && !handOffTurn) {
+    if (selection.trimmed && !forced) {
       pushTrace(c, {
         ts: nowIso(),
         category: 'message',
@@ -186,7 +191,7 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // re-ask below asks for what the policy says AFTER the event that caused it.
     let turnRole = nextTurn(run.policy, { hasTools: !!tools }).role;
     // Consume a one-shot forced tool_choice from stall recovery (if any).
-    const turnToolChoice = handOffTurn ? handOffTurn.toolChoice : run.forceToolChoice;
+    const turnToolChoice = forced ? forced.toolChoice : run.forceToolChoice;
     run.forceToolChoice = undefined;
     // `extra` rides THIS request only (the hand-off brief); it never enters the transcript.
     // What the run has already established, in front of THIS turn only — so the model
@@ -264,11 +269,10 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // analysis over. A pinned model is the user's choice for the whole run (the policy
     // declines the re-ask under one), and a tool-less chat turn is never re-asked.
     // Under a pin or lock there is no re-ask, but the run is coding all the same: the
-    // phase (and the chat's `codePhaseReached`) moves so planning cannot outlive the edit.
+    // phase moves so planning cannot outlive the edit.
     const codeChangeOutcome = turnRole === 'plan' && result.toolCalls.some((tc) => isCodeChangeTool(tc.name))
       ? reportToPolicy(run, { type: 'code_change_attempted' }).outcome
       : null;
-    if (codeChangeOutcome) c.codePhaseReached = true;
     if (codeChangeOutcome?.kind === 'reask_as_coder') {
       turnRole = nextTurn(run.policy, { hasTools: !!tools }).role;
       const brief = coderHandoffBrief(replayTextOf(result.text), result.toolCalls);

@@ -18,6 +18,7 @@ import {
   type BrainPersonaAgent,
   type BrainPersonaChoice,
   type ChatMode,
+  type ChatInputAttachment,
   type DirectedRecipient,
   type UseBrainConversation,
 } from '@seanhogg/builderforce-brain-embedded';
@@ -47,10 +48,14 @@ import type { useRunShaping } from './useRunShaping';
 
 type ChatTicket = { id: number; title: string; status?: string; key?: string };
 
-/** What a held VS Code turn carries — its text and who it is addressed to. */
+/** What a held VS Code turn carries — its text, who it is addressed to, and any
+ *  attachments it was sent with. The steer path clears the composer's `pendingAttachments`
+ *  at queue time, so a held turn must keep its own snapshot or `send` would see an empty
+ *  composer when it finally drains. */
 export interface QueuedTurn {
   text: string;
   recipient: DirectedRecipient | null;
+  attachments?: ChatInputAttachment[];
 }
 
 export interface VsCodeComposerProps {
@@ -246,7 +251,7 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
           textOf={(turn) => turn.text}
           onRemove={onRemoveQueued}
           {...(conv.sending && chatId != null ? {
-            onSteer: (item: QueuedItem<QueuedTurn>) => { steerRun(chatId, item.value.text); onRemoveQueued(item.id); },
+            onSteer: (item: QueuedItem<QueuedTurn>) => { steerRun(chatId, item.value.text, item.value.attachments); onRemoveQueued(item.id); },
             canSteer: (item: QueuedItem<QueuedTurn>) => !item.value.recipient,
           } : {})}
           labels={queuedLabels}

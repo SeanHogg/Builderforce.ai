@@ -17,7 +17,7 @@
  * No `vscode` import: tested through the host (`brainRunHost.steer.test.ts`).
  */
 
-import { drainRunSteering, isRunning, queueRunSteering } from "@seanhogg/builderforce-brain-embedded";
+import { drainRunSteering, isRunning, queueRunSteering, type ChatInputAttachment } from "@seanhogg/builderforce-brain-embedded";
 import { stopIntent } from "@builderforce/run-guards";
 import { directionText, type ChildRunHost } from "./childRunSpawner";
 
@@ -33,7 +33,7 @@ export interface RunSteerDeps {
 }
 
 export interface RunSteer {
-  steer(runKey: number, text: string): void;
+  steer(runKey: number, text: string, attachments?: ChatInputAttachment[]): void;
   /** The Stop button (or a typed stop): stop the run, and drop what waits for it. */
   stop(runKey: number): void;
   /** A run settled: what still waits for it is its next turn (a stopped run's is dropped). */
@@ -58,7 +58,7 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
   return {
     stop,
 
-    steer(runKey, text) {
+    steer(runKey, text, attachments) {
       if (!text.trim()) return;
       const lineage = deps.registry.lineageOf(runKey);
       // A sub-agent hears it as direction from its owner; the chat's own run hears the person.
@@ -75,7 +75,8 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
       }
       if (running) {
         // In front of the run's NEXT turn, not after it — and it INTERRUPTS the step now.
-        queueRunSteering(runKey, heard, { interrupt: true });
+        // Attachments the person attached ride along so a mid-run image reaches the model.
+        queueRunSteering(runKey, heard, { interrupt: true, attachments });
         // A run sitting in `wait_agents` would otherwise hear this only once every child
         // settled; the wait gives way and the next turn answers.
         deps.registry.interrupt(runKey);

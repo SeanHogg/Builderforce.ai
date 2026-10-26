@@ -321,7 +321,8 @@ export { useRunSnapshot } from './useRunSnapshot';
 // mid-run through the same inbox any run has (`runSteering.ts`).
 export { parseSubagentOrigin, SUBAGENT_OF_META_KEY } from './runLineage';
 export type { RunLineage, SubagentOrigin } from './runLineage';
-export { queueRunSteering, drainRunSteering } from './runSteering';
+export { queueRunSteering, drainRunSteering, steerModelContent } from './runSteering';
+export type { RunSteerMessage } from './runSteering';
 export type { BrainRunOutcome } from './runOutcomeReport';
 export { isCoderReask } from '@builderforce/run-policy';
 // Planning ends in tasks: the `hand_off` tool, its executor, and the per-child chat report.

@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { isSubscriptionSignInUrl } from "@builderforce/model-catalog";
-import { artifactRoutePath } from "@seanhogg/builderforce-brain-embedded";
+import { artifactRoutePath, type ChatInputAttachment } from "@seanhogg/builderforce-brain-embedded";
 import { getCurrentUserId } from "./bfApi";
 import type { BrainRunHost, WebviewRunStart } from "./brainRunHost";
 import { getWebBaseUrl } from "./gateway";
@@ -33,6 +33,9 @@ export interface BrainInbound extends WebviewInbound {
   run?: WebviewRunStart;
   /** For `run.confirm`: the human's answer to the paused tool call. */
   ok?: boolean;
+  /** For `run.steer`: image attachments the message was sent with, riding along as
+   *  vision parts of the steered turn (a mid-run message keeps its images). */
+  attachments?: ChatInputAttachment[];
   /** For `run.autoApprove`: the panel's Auto-mode switch (with `chatId`, the chat it
    *  was flipped in — it applies to that conversation's run and no other). */
   on?: boolean;
@@ -276,7 +279,8 @@ export class WorkspaceSurface implements vscode.Disposable {
         if (typeof msg.chatId === "number") hooks.runHost?.confirm(msg.chatId, msg.ok === true);
         break;
       case "run.steer":
-        if (typeof msg.chatId === "number" && typeof msg.text === "string") hooks.runHost?.steer(msg.chatId, msg.text);
+        if (typeof msg.chatId === "number" && typeof msg.text === "string")
+          hooks.runHost?.steer(msg.chatId, msg.text, Array.isArray(msg.attachments) ? msg.attachments : undefined);
         break;
       case "run.clearError":
         if (typeof msg.chatId === "number") hooks.runHost?.clearError(msg.chatId);

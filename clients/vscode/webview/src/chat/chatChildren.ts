@@ -7,7 +7,7 @@
  */
 
 import { useMemo, useSyncExternalStore } from 'react';
-import { getRunSnapshot, getRunTrace, isModelReply, type DirectedRecipient, type SubagentDiagnosticsInput } from '@seanhogg/builderforce-brain-embedded';
+import { getRunSnapshot, getRunTrace, isModelReply, type ChatInputAttachment, type DirectedRecipient, type SubagentDiagnosticsInput } from '@seanhogg/builderforce-brain-embedded';
 import type { ChatSubagentVM } from '@seanhogg/builderforce-brain-ui';
 import type { ChildView } from '../../../src/childRuns';
 import { post } from '../vscodeBridge';
@@ -75,10 +75,11 @@ export function subagentDiagnosticsOf(chatId: number | null): SubagentDiagnostic
 
 /**
  * Put the person's words in front of a RUNNING run's next turn — the chat's own run (a
- * message that would otherwise wait in the queue) or one of its sub-agents.
+ * message that would otherwise wait in the queue) or one of its sub-agents. Attachments
+ * the person picked ride along so a mid-run message keeps its images, like a normal send.
  */
-export function steerRun(runKey: number, text: string): void {
-  post('run.steer', { chatId: runKey, text });
+export function steerRun(runKey: number, text: string, attachments?: ChatInputAttachment[]): void {
+  post('run.steer', { chatId: runKey, text, ...(attachments?.length ? { attachments } : {}) });
 }
 
 /** How a live sub-agent is addressed in the composer's @-picker — by its run key. */

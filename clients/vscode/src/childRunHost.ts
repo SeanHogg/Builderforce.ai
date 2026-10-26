@@ -69,8 +69,14 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
       deferred.add(ownerKey);
       return true;
     }
-    const turn = drainRunSteering(ownerKey).join("\n\n");
-    if (!turn) return false;
+    const steered = drainRunSteering(ownerKey);
+    if (!steered.length) return false;
+    // A wake that carries images becomes vision content parts; text-only stays a string.
+    const imageAtts = steered.flatMap((m) => (m.attachments ?? []).filter((a) => a.imageUrl));
+    const joinedText = steered.map((m) => m.text).join("\n\n");
+    const turn = imageAtts.length
+      ? [{ type: 'text' as const, text: joinedText }, ...imageAtts.map((a) => ({ type: 'image_url' as const, image_url: { url: a.imageUrl! } }))]
+      : joinedText;
     // The transcript is still in the store, so the wake is just the next turn of it.
     const { seed: _seed, priorResearch: _prior, ...rest } = spec;
     void deps.start({ ...rest, userTurn: turn, autoApprove: deps.autoApproveOf(spec.child?.lineage.rootChatId ?? spec.chatId) });

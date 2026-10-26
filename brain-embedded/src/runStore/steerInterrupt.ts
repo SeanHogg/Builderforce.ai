@@ -17,7 +17,7 @@
 
 import type { AfterDispatchDecision, LoopHooks } from '@builderforce/agent-loop';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
-import { drainRunSteering, hasRunInterrupt, onRunInterrupt } from '../runSteering';
+import { drainRunSteering, hasRunInterrupt, onRunInterrupt, type RunSteerMessage } from '../runSteering';
 import type { RunCell } from './runCell';
 import { nowIso, pushTrace } from './runCells';
 
@@ -116,16 +116,16 @@ export function skipOnSteer(runKey: number, inner: AfterDispatch): AfterDispatch
 }
 
 /** Drain the run's waiting direction for this turn and record it as `steer.applied`. */
-export function takeRunSteering(c: RunCell, runKey: number, step: number): string[] {
-  const texts = drainRunSteering(runKey);
-  if (texts.length > 0) {
+export function takeRunSteering(c: RunCell, runKey: number, step: number): RunSteerMessage[] {
+  const messages = drainRunSteering(runKey);
+  if (messages.length > 0) {
     pushTrace(c, {
       ts: nowIso(),
       category: 'message',
       label: 'steer.applied',
-      args: { step, messages: texts.length },
-      result: texts.map((t) => t.slice(0, 200)).join('\n'),
+      args: { step, messages: messages.length },
+      result: messages.map((m) => m.text.slice(0, 200)).join('\n'),
     });
   }
-  return texts;
+  return messages;
 }

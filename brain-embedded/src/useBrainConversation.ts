@@ -428,7 +428,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   }, [prepareRun]);
 
   const send = useCallback(
-    async (text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null }): Promise<boolean> => {
+    async (text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null; attachments?: ChatInputAttachment[] }): Promise<boolean> => {
       const trimmed = text.trim();
       // Busy only for THIS chat: a run in flight elsewhere never blocks this one.
       if (!trimmed || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
@@ -461,7 +461,10 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       // re-answered by the trailing-user-message auto-reply effect.
       autoRepliedChatIdRef.current = id;
 
-      const attachments = [...pendingAttachments];
+      // An explicit opts.attachments (a turn queued while the composer still held them —
+      // by the time a queued turn sends, the composer snapshot has moved on) wins over
+      // the live composer snapshot.
+      const attachments = [...(opts?.attachments ?? pendingAttachments)];
       setPendingAttachments([]);
       setLocalError('');
 

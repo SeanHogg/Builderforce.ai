@@ -15,7 +15,20 @@
  * turn — the host decides whether to start one.
  */
 
-const inboxes = new Map<number, string[]>();
+import type { ContentPart } from './streamChatCompletion';
+import type { ChatInputAttachment } from './types';
+
+/**
+ * A queued direction for a run. Carries its attachments so a message steered
+ * mid-run reaches the model with the same vision parts a normal send builds —
+ * a bare string here is what dropped mid-run images.
+ */
+export interface RunSteerMessage {
+  text: string;
+  attachments?: ChatInputAttachment[];
+}
+
+const inboxes = new Map<number, RunSteerMessage[]>();
 
 /**
  * Runs whose waiting direction INTERRUPTS the step in flight — the person's own words
@@ -28,13 +41,13 @@ const interruptListeners = new Map<number, Set<() => void>>();
 /**
  * Queue one message for a run's next turn. Blank text is ignored. `interrupt` also
  * aborts the run's interruptible step now (a foreground command) and skips the rest of
- * its turn's calls.
+ * its turn's calls. Attachments ride along so mid-run messages keep their images.
  */
-export function queueRunSteering(runKey: number, text: string, opts?: { interrupt?: boolean }): void {
+export function queueRunSteering(runKey: number, text: string, opts?: { interrupt?: boolean; attachments?: ChatInputAttachment[] }): void {
   const trimmed = text.trim();
   if (!trimmed) return;
   const queue = inboxes.get(runKey) ?? [];
-  queue.push(trimmed);
+  queue.push({ text: trimmed, attachments: opts?.attachments });
   inboxes.set(runKey, queue);
   if (!opts?.interrupt) return;
   interrupting.add(runKey);
@@ -42,12 +55,27 @@ export function queueRunSteering(runKey: number, text: string, opts?: { interrup
 }
 
 /** Take every message queued for a run, oldest first. Empty when none are waiting. */
-export function drainRunSteering(runKey: number): string[] {
+export function drainRunSteering(runKey: number): RunSteerMessage[] {
   interrupting.delete(runKey);
   const queue = inboxes.get(runKey);
   if (!queue?.length) return [];
   inboxes.delete(runKey);
   return queue;
+}
+
+/**
+ * Model-visible content for one steered message: inline images as `image_url` vision
+ * parts (the same shape a normal send builds in `useBrainConversation.send`), so a
+ * steered message reaches the model identically whether it arrived mid-run or not.
+ * Without an image it stays a plain string.
+ */
+export function steerModelContent(msg: RunSteerMessage): string | ContentPart[] {
+  const imageAtts = (msg.attachments ?? []).filter((a) => a.imageUrl);
+  if (imageAtts.length === 0) return msg.text;
+  return [
+    { type: 'text', text: msg.text },
+    ...imageAtts.map((a) => ({ type: 'image_url' as const, image_url: { url: a.imageUrl! } })),
+  ];
 }
 
 /** True while an interrupting message waits for the run's next turn. */

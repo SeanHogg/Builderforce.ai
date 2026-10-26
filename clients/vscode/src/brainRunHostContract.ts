@@ -9,6 +9,7 @@ import type {
   BrainRunOutcome,
   BrainRunPersistence,
   BrainStreamFn,
+  ChatInputAttachment,
   EvermindRunHooks,
   ModelFallbackEvent,
   ModelPreflightResult,
@@ -186,8 +187,9 @@ export interface BrainRunHost {
   setAutoApprove(chatId: number, on: boolean): void;
   /** Put the person's words in front of a RUNNING run's next turn — the chat's own run
    *  (instead of queueing behind it) or one of its sub-agents. A run that is no longer
-   *  running takes them as its next turn instead: a message is never dropped. */
-  steer(runKey: number, text: string): void;
+   *  running takes them as its next turn instead: a message is never dropped. Image
+   *  attachments ride along as vision parts of that turn. */
+  steer(runKey: number, text: string, attachments?: ChatInputAttachment[]): void;
   /**
    * Sub-agent controls for a run this host did NOT start — the native chat participant.
    * Its children run here, as ordinary runs; it cannot be woken (its turn belongs to the

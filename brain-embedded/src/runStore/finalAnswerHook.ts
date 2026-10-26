@@ -17,7 +17,7 @@ import {
   MAX_ANNOUNCEMENT_RECOVERIES,
   stallRecoveryToolChoice,
 } from '@builderforce/agent-stall';
-import type { ChatCompletionMessage } from '../streamChatCompletion';
+import type { ChatCompletionMessage, ContentPart } from '../streamChatCompletion';
 import { modelFailoverTrace } from '../runPolicyTraces';
 import { takeRunSteering } from './steerInterrupt';
 import { askStopHook } from '../stopHooks';
@@ -69,7 +69,7 @@ export function finalAnswerHook(run: RunLoopContext): NonNullable<LoopHooks<Chat
      * treatment a narration-before-tool-calls turn gets), then queues the nudge. Shared
      * by every re-prompt below so they cannot drift on what "re-prompted" leaves behind.
      */
-    const requeueWithNudge = async (nudge: string): Promise<void> => {
+    const requeueWithNudge = async (nudge: string | ContentPart[]): Promise<void> => {
       await persistMidTurnText(chatId, c, persistence, result, requested);
       convo.push({ role: 'assistant', content: replayTextOf(result.text) });
       convo.push({ role: 'user', content: nudge });
@@ -77,9 +77,18 @@ export function finalAnswerHook(run: RunLoopContext): NonNullable<LoopHooks<Chat
     // Direction arrived while this turn was being written (an owner redirecting its
     // sub-agent, a child reporting to its owner): the run is not over — what the model
     // said stays as its own block, and the next turn answers the new direction.
+    // Multiple queued steers join into one text part; their images ride as vision parts.
     const steering = takeRunSteering(c, runKey, iter);
     if (steering.length > 0) {
-      await requeueWithNudge(steering.join('\n\n'));
+      const joinedText = steering.map((m) => m.text).join('\n\n');
+      const imageAtts = steering.flatMap((m) => (m.attachments ?? []).filter((a) => a.imageUrl));
+      const nudge: string | ContentPart[] = imageAtts.length > 0
+        ? [
+            { type: 'text', text: joinedText },
+            ...imageAtts.map((a) => ({ type: 'image_url' as const, image_url: { url: a.imageUrl! } })),
+          ]
+        : joinedText;
+      await requeueWithNudge(nudge);
       c.streamingText = '';
       emit(c);
       return { action: 'continue' };

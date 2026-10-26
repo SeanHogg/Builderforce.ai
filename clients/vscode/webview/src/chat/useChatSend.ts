@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { useChatTurns, useRunRefreshTick, type BrainMessage, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
+import { useChatTurns, useRunRefreshTick, type BrainMessage, type ChatInputAttachment, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { request } from '../vscodeBridge';
 import { childTarget, steerRun, type useChatChildren } from './chatChildren';
 import type { QueuedTurn } from './VsCodeComposer';
@@ -44,7 +44,7 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
   // run request's system prompt) FIRST. So the send fetches the block, sets turnLimbic +
   // bumps this nonce, and the effect runs the send on the NEXT render — where `conv`
   // already reflects the new system prompt. This is the webview's per-turn limbic seam.
-  const pendingSendRef = useRef<{ text: string; recipient: DirectedRecipient | null } | null>(null);
+  const pendingSendRef = useRef<{ text: string; recipient: DirectedRecipient | null; attachments?: ChatInputAttachment[] } | null>(null);
   const [sendNonce, setSendNonce] = useState(0);
   useEffect(() => {
     if (sendNonce === 0) return;
@@ -54,7 +54,9 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
     // Restore the typed text if the send fails before it's persisted (e.g. the token
     // expired) so the user's message is never silently lost. `addressedTo` routes the
     // turn: a participant is talked to (no BRAIN run); null (default) runs the BRAIN.
-    void conv.send(queued.text, { addressedTo: queued.recipient }).then((ok) => {
+    // A held turn carries its OWN attachment snapshot (the composer was cleared when the
+    // turn queued), passed explicitly so the images survive the wait.
+    void conv.send(queued.text, { addressedTo: queued.recipient, ...(queued.attachments ? { attachments: queued.attachments } : {}) }).then((ok) => {
       if (!ok) setInput((cur) => cur || queued.text);
     });
     // Keyed only on the nonce: `conv` is read fresh from this render's closure, which
@@ -63,11 +65,13 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
   }, [sendNonce]);
 
   // Fetch this turn's limbic block, fold it into extraSystem, THEN stage the send.
-  // Shared by the direct composer submit AND the queue drain below.
-  const dispatchSend = useCallback(async (text: string, to: DirectedRecipient | null) => {
+  // Shared by the direct composer submit AND the queue drain below. Attachments ride
+  // in `pendingSendRef` (already detached from the composer), so `conv.send`'s own
+  // snapshot+clear of `pendingAttachments` never sees them twice.
+  const dispatchSend = useCallback(async (text: string, to: DirectedRecipient | null, attachments?: ChatInputAttachment[]) => {
     const block = await requestLimbic(text);
     setTurnLimbic(block);
-    pendingSendRef.current = { text, recipient: to };
+    pendingSendRef.current = { text, recipient: to, attachments };
     setSendNonce((n) => n + 1);
   }, [setTurnLimbic]);
 
@@ -78,24 +82,25 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
   const turns = useChatTurns<QueuedTurn>({
     running: conv.sending,
     runKey: chatId,
-    send: (m) => dispatchSend(m.text, m.recipient),
+    send: (m) => dispatchSend(m.text, m.recipient, m.attachments),
     textOf: (m) => m.text,
     // The editor's steer: a live sub-agent takes its message straight into its run, and
     // the chat's own RUNNING run is spoken to now (PRD 35 E10) — the message interrupts
     // the step in flight and reaches the next model call, instead of waiting behind a run
     // that may hold for minutes. A stop command ("STOP executing") stops it (the host
     // reads that). Holding it for after the run is the explicit alternative: `queueAfter`.
-    steer: ({ text, recipient: to }) => {
+    steer: ({ text, recipient: to, attachments }) => {
       const child = childTarget(text, to, liveChildren);
-      if (child) {
-        steerRun(child.key, text);
-        return true;
-      }
-      if (conv.sending && !to && chatId != null) {
-        steerRun(chatId, text);
-        return true;
-      }
-      return false;
+      if (!child && !(conv.sending && !to && chatId != null)) return false;
+      // Reaching here means we WILL steer (a live sub-agent or the running chat run),
+      // and the steer path bypasses `conv.send` — which is what normally snapshots +
+      // clears `pendingAttachments`. The turn already carries its own attachment
+      // snapshot (taken at submit, before the composer's clear), so ride it along
+      // explicitly or a mid-run image would be silently dropped.
+      const atts = attachments ?? [];
+      if (child) steerRun(child.key, text, atts);
+      else steerRun(chatId as number, text, atts);
+      return true;
     },
   });
   const { submit: submitTurn } = turns;
@@ -109,9 +114,19 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
     if (refreshTick > 0) reloadChats();
   }, [refreshTick, reloadChats]);
 
-  const sendOrQueue = useCallback((text: string, to: DirectedRecipient | null) => {
-    void submitTurn({ text, recipient: to });
-  }, [submitTurn]);
+  // Snapshot the composer's pending attachments onto THIS turn. `conv.send` clears the
+  // composer when a turn actually goes out, but a held turn waits behind a running run —
+  // and the steer path clears the composer at queue time — so by drain time the live
+  // snapshot is gone. Each turn carries its own copy so its images survive the wait.
+  const takeAttachments = useCallback((): ChatInputAttachment[] => {
+    const attachments = [...conv.pendingAttachments];
+    for (const a of attachments) conv.removeAttachment(a.key);
+    return attachments;
+  }, [conv]);
+
+  const sendOrQueue = useCallback((text: string, to: DirectedRecipient | null, attachments?: ChatInputAttachment[]) => {
+    void submitTurn({ text, recipient: to, attachments: attachments ?? takeAttachments() });
+  }, [submitTurn, takeAttachments]);
 
   const submit = useCallback(() => {
     const text = input.trim();
@@ -126,8 +141,11 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
     const text = input.trim();
     if (!text) return;
     setInput('');
-    if (!holdTurn({ text, recipient })) sendOrQueue(text, recipient);
-  }, [holdTurn, input, recipient, sendOrQueue, setInput]);
+    // Take the snapshot ONCE — if `holdTurn` refuses (no run to wait for), the same
+    // attachments go to the immediate send; taking them again would see an empty composer.
+    const attachments = takeAttachments();
+    if (!holdTurn({ text, recipient, attachments })) sendOrQueue(text, recipient, attachments);
+  }, [holdTurn, input, recipient, sendOrQueue, setInput, takeAttachments]);
 
   // Answering an ask_user card posts the chosen option(s) as the user's next turn.
   const answerQuestion = useCallback((answer: string) => {
