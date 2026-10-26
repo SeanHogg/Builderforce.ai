@@ -25,30 +25,9 @@
  * the build the way it does today, not break an install that used to succeed.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
-import { isAbsolute, join, resolve } from 'node:path';
-
-const LINK_PREFIXES = ['link:', 'file:'];
-
-function readManifest(dir) {
-  const file = join(dir, 'package.json');
-  if (!existsSync(file)) return undefined;
-  try {
-    return JSON.parse(readFileSync(file, 'utf8'));
-  } catch {
-    return undefined;
-  }
-}
-
-/** Local packages this manifest links, as absolute directories. */
-function linkedTargets(dir, manifest) {
-  const specs = { ...manifest.dependencies, ...manifest.devDependencies };
-  return Object.values(specs)
-    .filter((spec) => typeof spec === 'string' && LINK_PREFIXES.some((p) => spec.startsWith(p)))
-    .map((spec) => spec.slice(spec.indexOf(':') + 1))
-    .map((target) => (isAbsolute(target) ? target : resolve(dir, target)))
-    .filter((target) => existsSync(join(target, 'package.json')));
-}
+import { existsSync, realpathSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { linkedTargets, readManifest } from './linkedPackages.mjs';
 
 /**
  * True when every declared dependency already has a directory under the package's

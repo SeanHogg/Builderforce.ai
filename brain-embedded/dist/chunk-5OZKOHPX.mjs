@@ -55,7 +55,7 @@ var LOCAL_RUNTIMES = [
     tools: "unknown",
     reach: "page"
   },
-  { id: "kimi-code", automaticRank: Number.POSITIVE_INFINITY, label: "Kimi Code", onDevice: false, catalog: "declared", tools: "all", reach: "http", gatewayVendor: "kimi-code", providerSampling: true }
+  { id: "kimi-code", automaticRank: Number.POSITIVE_INFINITY, label: "Kimi Code", onDevice: false, catalog: "declared", tools: "all", reach: "http", gatewayVendor: "kimi-code", providerSampling: true, accountProvider: "kimi" }
 ];
 var HTTP_LOCAL_RUNTIMES = LOCAL_RUNTIMES.filter((r) => r.reach === "http");
 var LOCAL_RUNTIME_IDS = LOCAL_RUNTIMES.map((r) => r.id);
@@ -297,6 +297,26 @@ var LOCAL_COMPLETIONS_PATH = "/v1/chat/completions";
 function rewriteToLocalUrl(url) {
   return url.endsWith(GATEWAY_COMPLETIONS_PATH) ? `${url.slice(0, -GATEWAY_COMPLETIONS_PATH.length)}${LOCAL_COMPLETIONS_PATH}` : url;
 }
+async function fetchLocal(endpoint, fetchImpl, url, init) {
+  const credential = endpoint.credential;
+  if (!credential) return fetchImpl(url, init);
+  const send = (token2) => fetchImpl(url, { ...init, headers: withBearer(init.headers, token2) });
+  const token = await credential();
+  const res = await send(token);
+  if (res.status !== 401 || !token) return res;
+  const replacement = await credential(token);
+  if (!replacement || replacement === token) return res;
+  await res.body?.cancel().catch(() => void 0);
+  return send(replacement);
+}
+function withBearer(headers, token) {
+  const out = {};
+  new Headers(headers).forEach((value, key) => {
+    if (key !== "authorization") out[key] = value;
+  });
+  if (token) out.authorization = `Bearer ${token}`;
+  return out;
+}
 function localAuthHeaders(endpoint) {
   return endpoint.token ? { authorization: `Bearer ${endpoint.token}` } : {};
 }
@@ -379,7 +399,9 @@ function localFirstPlan(input) {
   const preferredIndex = input.preferred ? candidates.findIndex((c) => c.kind === "local" && c.ref === input.preferred) : -1;
   if (preferredIndex > 0) candidates.unshift(...candidates.splice(preferredIndex, 1));
   const local = candidates.slice(0, Math.max(0, input.maxLocalAttempts ?? 1));
-  return input.cloud ? [...local, { kind: "cloud", ...input.cloud.model ? { model: input.cloud.model } : {} }] : local;
+  const accounts = (input.accounts ?? []).map((account) => ({ kind: "local", ...account }));
+  const leading = [...local, ...accounts];
+  return input.cloud ? [...leading, { kind: "cloud", ...input.cloud.model ? { model: input.cloud.model } : {} }] : leading;
 }
 
 // ../packages/local-inference/src/failover.ts
@@ -1296,6 +1318,7 @@ export {
   normalizeLocalBaseUrl,
   localChatCompletionsUrl,
   rewriteToLocalUrl,
+  fetchLocal,
   localAuthHeaders,
   LOCAL_MODEL_CATALOG,
   localCatalogModel,
@@ -1337,4 +1360,4 @@ export {
   createHfModelStore,
   catalogProbe
 };
-//# sourceMappingURL=chunk-SMC65WVE.mjs.map
+//# sourceMappingURL=chunk-5OZKOHPX.mjs.map

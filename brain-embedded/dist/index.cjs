@@ -1880,6 +1880,21 @@ function readUpstreamEvidence(frame) {
     recovered: typeof raw.recovered === "number" ? raw.recovered : 0
   };
 }
+var GATEWAY_ROUTING_FIELD = "_builderforce";
+function readGatewayRouting(frame) {
+  const raw = frame?.[GATEWAY_ROUTING_FIELD];
+  if (!raw || !Array.isArray(raw.failovers)) return void 0;
+  const failovers = raw.failovers.flatMap((f) => {
+    const o = f;
+    return o && typeof o.model === "string" ? [{ model: o.model, vendor: String(o.vendor ?? ""), code: Number.isFinite(Number(o.code)) ? Number(o.code) : 0, ...o.kind ? { kind: String(o.kind) } : {} }] : [];
+  });
+  const candidates = Array.isArray(raw.candidates) ? raw.candidates.filter((c) => typeof c === "string") : void 0;
+  return {
+    failovers,
+    ...candidates?.length ? { candidates } : {},
+    ...typeof raw.traceId === "string" ? { traceId: raw.traceId } : {}
+  };
+}
 var StreamInterruptedError = class extends Error {
   model;
   constructor(message2, model) {
@@ -2072,6 +2087,7 @@ async function runStreamChatCompletion(opts, handlers, request) {
     if (next.prompt != null || next.completion != null || next.total != null) usage = next;
   };
   let upstream;
+  let routing;
   const toolAcc = /* @__PURE__ */ new Map();
   const xml = new XmlToolCallFilter();
   let finishReason = null;
@@ -2095,7 +2111,7 @@ async function runStreamChatCompletion(opts, handlers, request) {
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...typeXmlToolArgs(xmlCalls, opts.tools)], finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream };
+    return { text, toolCalls: [...assemble(toolAcc), ...typeXmlToolArgs(xmlCalls, opts.tools)], finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream, ...routing ? { gateway: routing } : {} };
   }
   const decoder = new TextDecoder();
   let buffer = "";
@@ -2123,7 +2139,7 @@ async function runStreamChatCompletion(opts, handlers, request) {
         const tail2 = xml.flush();
         if (tail2) handlers.onTextDelta?.(tail2);
         handlers.onDone?.(finishReason);
-        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream, ...routing ? { gateway: routing } : {} };
       }
       let parsed;
       try {
@@ -2140,6 +2156,7 @@ async function runStreamChatCompletion(opts, handlers, request) {
       announceModel();
       if (parsed.usage) readUsage(parsed.usage);
       upstream = readUpstreamEvidence(parsed) ?? upstream;
+      routing = readGatewayRouting(parsed) ?? routing;
       const choice = parsed.choices?.[0];
       if (choice?.finish_reason) finishReason = choice.finish_reason;
       const contentDelta = (typeof choice?.delta?.content === "string" ? choice.delta.content : null) || parsed.response || parsed.text || parsed.delta || "";
@@ -2177,7 +2194,7 @@ async function runStreamChatCompletion(opts, handlers, request) {
   const tail = xml.flush();
   if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream, ...routing ? { gateway: routing } : {} };
 }
 function assemble(acc) {
   return [...acc.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => ({ id: v.id, name: v.name, args: v.args })).filter((c) => c.name.length > 0);
@@ -2481,11 +2498,11 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-opus-latest": [4e-6, 2e-5],
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
   "~deepseek/deepseek-flash-latest": [2e-8, 1e-6],
-  "~deepseek/deepseek-pro-latest": [1188e-10, 8e-6],
-  "~deepseek/deepseek-v4-flash-latest": [422e-10, 1763e-10],
+  "~deepseek/deepseek-pro-latest": [2565e-10, 8e-6],
+  "~deepseek/deepseek-v4-flash-latest": [475e-10, 1568e-10],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [226e-9, 16e-6],
+  "~moonshotai/kimi-latest": [152e-9, 2e-5],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -2493,8 +2510,8 @@ var PRICE_SNAPSHOT = {
   "~openai/gpt-terra-latest": [2e-6, 12e-6],
   "~unbiased/pareto-latest": [8e-7, 32e-7],
   "~x-ai/grok-latest": [2e-6, 6e-6],
-  "~z-ai/glm-flash-latest": [513e-10, 701e-10],
-  "~z-ai/glm-latest": [703e-10, 43843e-10],
+  "~z-ai/glm-flash-latest": [413e-10, 758e-10],
+  "~z-ai/glm-latest": [699e-10, 14e-7],
   "aion-labs/aion-2.0": [8e-7, 16e-7],
   "aion-labs/aion-3.0": [3e-6, 6e-6],
   "aion-labs/aion-3.0-mini": [7e-7, 14e-7],
@@ -2560,12 +2577,12 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v3.2": [28e-8, 42e-8],
   "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
   "deepseek/deepseek-v4-flash": [91e-9, 182e-9],
-  "deepseek/deepseek-v4-flash-0731": [4444e-11, 13332e-11],
+  "deepseek/deepseek-v4-flash-0731": [44e-8, 132e-8],
   "deepseek/deepseek-v4-flash-vision-exp": [2156e-10, 6468e-10],
-  "deepseek/deepseek-v4-pro": [2088e-10, 4176e-10],
-  "deepseek/deepseek-v4-pro-0813": [66e-8, 198e-8],
+  "deepseek/deepseek-v4-pro": [95526e-11, 191052e-11],
+  "deepseek/deepseek-v4-pro-0813": [132e-8, 396e-8],
   "deepseek/deepseek-v4.1-flash": [2e-8, 1e-6],
-  "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
+  "deepseek/deepseek-v4.1-flash-1017": [3e-7, 12e-7],
   "deepseek/deepseek-v4.1-flash:batch": [5e-8, 15e-8],
   "dots-studio/dots-3-note-preview:free": [0, 0],
   "elorian/glimpse": [6e-7, 3e-6],
@@ -2607,7 +2624,7 @@ var PRICE_SNAPSHOT = {
   "google/gemma-3-4b-it": [4e-8, 5e-8],
   "google/gemma-4-26b-a4b-it": [675e-10, 225e-9],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
-  "google/gemma-4-31b-it": [2e-7, 4e-7],
+  "google/gemma-4-31b-it": [1e-7, 34e-8],
   "google/gemma-4-31b-it:free": [0, 0],
   "google/lyria-3-clip-preview": [0, 0],
   "google/lyria-3-pro-preview": [0, 0],
@@ -2687,7 +2704,7 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2.5": [5e-7, 25e-7],
   "moonshotai/kimi-k2.6": [65e-8, 341e-8],
   "moonshotai/kimi-k2.7-code": [6712e-10, 335e-8],
-  "moonshotai/kimi-k3": [239e-9, 108e-7],
+  "moonshotai/kimi-k3": [152e-9, 2e-5],
   "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
   "moonshotai/kimi-k3.1-pro": [2e-6, 1e-5],
   "morph/morph-v3-fast": [8e-7, 12e-7],
@@ -2850,7 +2867,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3-vl-30b-a3b-instruct": [15e-8, 6e-7],
   "qwen/qwen3-vl-30b-a3b-thinking": [29e-8, 1e-6],
   "qwen/qwen3-vl-8b-instruct": [25e-8, 75e-8],
-  "qwen/qwen3.5-122b-a10b": [4e-7, 32e-7],
+  "qwen/qwen3.5-122b-a10b": [26e-8, 208e-8],
   "qwen/qwen3.5-27b": [27e-8, 216e-8],
   "qwen/qwen3.5-35b-a3b": [14e-8, 1e-6],
   "qwen/qwen3.5-397b-a17b": [5e-7, 36e-7],
@@ -2893,9 +2910,9 @@ var PRICE_SNAPSHOT = {
   "tencent/hy-mt2-1.8b": [44e-9, 177e-9],
   "tencent/hy-mt2-30b-a3b": [74e-9, 295e-9],
   "tencent/hy-mt2-7b": [74e-9, 295e-9],
-  "tencent/hy3": [825e-10, 33e-8],
+  "tencent/hy3": [132e-9, 528e-9],
   "tencent/hy3-preview": [18e-8, 6e-7],
-  "tencent/hy4-preview": [7506e-10, 22509e-10],
+  "tencent/hy4-preview": [834e-9, 2501e-9],
   "thedrummer/cydonia-24b-v4.1": [3e-7, 5e-7],
   "thedrummer/skyfall-36b-v2": [55e-8, 8e-7],
   "thedrummer/unslopnemo-12b": [4e-7, 4e-7],
@@ -2936,7 +2953,7 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
   "z-ai/glm-5.1": [14e-7, 44e-7],
   "z-ai/glm-5.2": [341e-10, 7e-6],
-  "z-ai/glm-5.3": [79e-9, 14e-7],
+  "z-ai/glm-5.3": [699e-10, 14e-7],
   "z-ai/glm-5.3-flash": [15e-8, 5e-7],
   "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
@@ -2962,7 +2979,7 @@ var LLM_PROVIDER_INFO = [
   { id: "meta", label: "Meta AI (MUSE)", credential: "api_key", keyPlaceholder: "meta-\u2026", subscription: null },
   // A Kimi Code subscription issues no API key at all — its own config leaves `api_key`
   // empty beside an OAuth record — so it connects by device-code redirect, never paste.
-  { id: "kimi", label: "Kimi", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "device", signInDomains: ["kimi.com"] },
+  { id: "kimi", label: "Kimi", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "device", signInDomains: ["kimi.ai", "kimi.com"] },
   { id: "moonshot", label: "Moonshot AI", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
   { id: "qwen", label: "Qwen", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
   { id: "minimax", label: "MiniMax", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
@@ -5282,7 +5299,7 @@ var LOCAL_RUNTIMES = [
     tools: "unknown",
     reach: "page"
   },
-  { id: "kimi-code", automaticRank: Number.POSITIVE_INFINITY, label: "Kimi Code", onDevice: false, catalog: "declared", tools: "all", reach: "http", gatewayVendor: "kimi-code", providerSampling: true }
+  { id: "kimi-code", automaticRank: Number.POSITIVE_INFINITY, label: "Kimi Code", onDevice: false, catalog: "declared", tools: "all", reach: "http", gatewayVendor: "kimi-code", providerSampling: true, accountProvider: "kimi" }
 ];
 var HTTP_LOCAL_RUNTIMES = LOCAL_RUNTIMES.filter((r) => r.reach === "http");
 var LOCAL_RUNTIME_IDS = LOCAL_RUNTIMES.map((r) => r.id);
@@ -5340,6 +5357,26 @@ var GATEWAY_COMPLETIONS_PATH = "/llm/v1/chat/completions";
 var LOCAL_COMPLETIONS_PATH = "/v1/chat/completions";
 function rewriteToLocalUrl(url) {
   return url.endsWith(GATEWAY_COMPLETIONS_PATH) ? `${url.slice(0, -GATEWAY_COMPLETIONS_PATH.length)}${LOCAL_COMPLETIONS_PATH}` : url;
+}
+async function fetchLocal(endpoint, fetchImpl, url, init) {
+  const credential = endpoint.credential;
+  if (!credential) return fetchImpl(url, init);
+  const send = (token2) => fetchImpl(url, { ...init, headers: withBearer(init.headers, token2) });
+  const token = await credential();
+  const res = await send(token);
+  if (res.status !== 401 || !token) return res;
+  const replacement = await credential(token);
+  if (!replacement || replacement === token) return res;
+  await res.body?.cancel().catch(() => void 0);
+  return send(replacement);
+}
+function withBearer(headers, token) {
+  const out = {};
+  new Headers(headers).forEach((value, key) => {
+    if (key !== "authorization") out[key] = value;
+  });
+  if (token) out.authorization = `Bearer ${token}`;
+  return out;
 }
 function localAuthHeaders(endpoint) {
   return endpoint.token ? { authorization: `Bearer ${endpoint.token}` } : {};
@@ -5592,9 +5629,9 @@ function localModelUnfitReason(model, workload) {
   return null;
 }
 function localFirstPlan(input) {
-  const onDevice = new Set(LOCAL_RUNTIMES.filter((r) => r.onDevice).map((r) => r.id));
+  const onDevice2 = new Set(LOCAL_RUNTIMES.filter((r) => r.onDevice).map((r) => r.id));
   const rank = (id) => LOCAL_RUNTIMES.find((r) => r.id === id)?.automaticRank ?? Number.POSITIVE_INFINITY;
-  const candidates = input.probes.filter((p) => p.reachable && onDevice.has(p.provider)).sort((a, b) => rank(a.provider) - rank(b.provider)).flatMap(
+  const candidates = input.probes.filter((p) => p.reachable && onDevice2.has(p.provider)).sort((a, b) => rank(a.provider) - rank(b.provider)).flatMap(
     (p) => p.models.filter((m) => localModelUnfitReason(m, input.workload) === null).map((m) => ({
       kind: "local",
       ref: m.ref,
@@ -5606,7 +5643,9 @@ function localFirstPlan(input) {
   const preferredIndex = input.preferred ? candidates.findIndex((c) => c.kind === "local" && c.ref === input.preferred) : -1;
   if (preferredIndex > 0) candidates.unshift(...candidates.splice(preferredIndex, 1));
   const local = candidates.slice(0, Math.max(0, input.maxLocalAttempts ?? 1));
-  return input.cloud ? [...local, { kind: "cloud", ...input.cloud.model ? { model: input.cloud.model } : {} }] : local;
+  const accounts = (input.accounts ?? []).map((account) => ({ kind: "local", ...account }));
+  const leading = [...local, ...accounts];
+  return input.cloud ? [...leading, { kind: "cloud", ...input.cloud.model ? { model: input.cloud.model } : {} }] : leading;
 }
 
 // ../packages/local-inference/src/failover.ts
@@ -6073,13 +6112,21 @@ async function bindChatHistoryForSync(store, deviceId, destination) {
 }
 
 // ../packages/agent-stall/src/requestIntent.ts
-var CHANGE_VERB = /\b(add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge)\b/i;
-var QUESTION_SHAPE = /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|can|could|should|would|will|explain|describe|summar|tell me|show me|list|compare|review|analyse|analyze|research|investigate|find|locate|trace|audit|look into|search)\b|\?\s*$/i;
+var CHANGE_VERBS = "add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge";
+var CHANGE_VERB = new RegExp(`\\b(${CHANGE_VERBS})\\b`, "i");
+var QUESTION_SHAPE = /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|can|could|should|would|will)\b|\?\s*$/i;
+var RESEARCH_LEAD = /^\s*(explain|describe|summar\w*|tell me|show me|list|compare|review|analyse|analyze|research|investigate|find|locate|trace|audit|look into|search)\b/i;
+var REPORT_OBJECTS = "summary|report|findings|notes|overview|write-?up|answer|explanation|list|table|recommendations?";
+var CHAINED_CHANGE = new RegExp(
+  `(\\band|\\bthen|[,.;])\\s+((also|then|please|now)\\s+)*(${CHANGE_VERBS})\\b(?!\\s+(me|us)\\b|\\s+(up\\s+)?((a|an|the|your|me|us|my)\\s+)?(short\\s+|brief\\s+)?(${REPORT_OBJECTS})\\b)`,
+  "i"
+);
 function asksForChange(text) {
   const t = (text ?? "").trim();
   if (!t) return false;
   const head = t.slice(0, 600);
   if (QUESTION_SHAPE.test(head)) return false;
+  if (RESEARCH_LEAD.test(head)) return CHAINED_CHANGE.test(head);
   return CHANGE_VERB.test(head);
 }
 var NOTHING_DONE = /\b(nothing (has been|was|is) (changed|modified|applied|edited|written|saved)|no (changes?|edits?) (have been|were|was) (made|applied|written|saved)|(not|never) (yet )?(been )?(applied|written|saved|committed)|has not been (changed|applied|modified)|before (applying|making) the edit)\b/i;
@@ -6474,6 +6521,8 @@ function initialRunPolicy(opts = {}) {
     tried: [],
     failovers: 0,
     turnRetries: 0,
+    planTurns: 0,
+    handOffForced: false,
     outcome: NONE,
     options: {
       pinReleasable: !!opts.pinReleasable,
@@ -6516,13 +6565,22 @@ function nextTurn(state, turn) {
 function offersHandOff(state) {
   return state.phase === "plan";
 }
+var PLAN_TURN_BUDGET = 20;
+function handOffDue(state) {
+  return state.phase === "plan" && state.planTurns >= PLAN_TURN_BUDGET;
+}
 function reduceRunPolicy(state, event) {
   const s = { ...state, outcome: NONE };
   switch (event.type) {
     case "turn_succeeded":
       return succeeded(s, event.model, event.acted === true);
     case "code_change_attempted":
-      return s.phase === "plan" && !s.model ? { ...s, phase: "code", outcome: { kind: "reask_as_coder" } } : s;
+      if (s.phase !== "plan") return s;
+      return { ...s, phase: "code", outcome: s.model ? NONE : { kind: "reask_as_coder" } };
+    case "plan_budget_spent":
+      return s.phase === "plan" ? { ...s, phase: "code" } : s;
+    case "hand_off_forced":
+      return { ...s, handOffForced: true };
     case "hand_off":
       return s.phase === "plan" ? { ...s, phase: "code", outcome: { kind: "handed_off" } } : { ...s, outcome: { kind: "hand_off_rejected" } };
     case "verify_started": {
@@ -6560,7 +6618,7 @@ function reduceRunPolicy(state, event) {
 }
 function succeeded(s, resolved, acted) {
   const proven = acted && resolved && resolved !== "default" && !s.proven.includes(resolved) ? [...s.proven, resolved] : s.proven;
-  const next = { ...s, turnRetries: 0, proven };
+  const next = { ...s, turnRetries: 0, proven, planTurns: s.phase === "plan" ? s.planTurns + 1 : s.planTurns };
   if (s.options.lockAfterFirstSuccess && !(s.model && s.strictPin) && resolved && resolved !== "default") {
     return { ...next, model: resolved, locked: true };
   }
@@ -9227,7 +9285,11 @@ var skillListTool = defineTool({
 
 // ../packages/agent-tools/src/live-subagent-tools.ts
 var LIVE_DELEGATION_NOTE = "HERE the child runs IN THE BACKGROUND: the call returns its handle at once and you keep working \u2014 plan, code, or start more children \u2014 while it does its slice. Its messages appear in the chat under its own name, and its report reaches you on its own when it finishes (call wait_agents only when you cannot go on without it). Redirect it with message_agent; cancel it with stop_agent. Do not edit the files a child is working on while it runs.";
-var LIVE_FANOUT_NEXT = "Keep working on anything not delegated; when their reports are in (they arrive on their own, or call wait_agents), check the combined result, fix anything the slices broke between them, and report per workstream and ticket.";
+var VERIFY_DELEGATION_STEP = 'Hand the checking to ONE verify sub-agent (spawn_agent, role "verify"): brief it with the files changed and how to know the change is done; it runs the narrowest type-check, build and tests on a cheaper model and reports each failure verbatim. Fix what it reports \u2014 yourself or with a code sub-agent \u2014 and verify again until it passes.';
+var VERIFY_STEP = `${VERIFY_DELEGATION_STEP} Where you cannot spawn, run the narrowest type-check, build and tests that cover what you touched yourself, and fix whatever fails.`;
+var RESOLVE_OPEN_ISSUES = "resolve every open issue the reports name: fix it yourself, send it back with message_agent, or hand it to a code sub-agent";
+var LIVE_FANOUT_NEXT = `Keep working on anything not delegated. When their reports are in (they arrive on their own, or call wait_agents), ${RESOLVE_OPEN_ISSUES}; fix anything the slices broke between them, then check the combined result. ${VERIFY_DELEGATION_STEP} Report per workstream and ticket.`;
+var OPEN_ISSUES_HEAD = `Open issues \u2014 yours before you finish (${RESOLVE_OPEN_ISSUES}; then verify again):`;
 var SUBAGENT_CONTROL_TOOL_NAMES = { wait: "wait_agents", message: "message_agent", stop: "stop_agent" };
 var MAX_WAIT_SECONDS = 600;
 var DEFAULT_WAIT_SECONDS = 300;
@@ -9617,7 +9679,7 @@ function localTransport(endpoint, fetchImpl = globalFetch, options = {}) {
     ...options.runtime && localRuntime(options.runtime).providerSampling ? { providerSampling: true } : {},
     fetch: async (input, init) => {
       try {
-        return await fetchImpl(rewriteToLocalUrl(input), init);
+        return await fetchLocal(endpoint, fetchImpl, rewriteToLocalUrl(input), init);
       } catch (e) {
         if (!options.failFast || init.signal?.aborted) throw e;
         throw new Error(`local_runtime_unreachable: ${e instanceof Error ? e.message : String(e)}`);
@@ -9725,6 +9787,7 @@ function createLocalFirstStream(input) {
     const routed = opts.model ? { ...opts, model: void 0 } : opts;
     const planned = localFirstPlan({
       probes: input.probes,
+      ...input.accounts?.length ? { accounts: input.accounts } : {},
       workload: localFirstWorkload(input.fit ? { ...routed, messages: coreMessages(routed.messages) } : routed),
       cloud: input.cloud ? {} : null
     });
@@ -9745,7 +9808,7 @@ function createLocalFirstStream(input) {
   };
 }
 async function completeLocal(endpoint, model, messages, signal, fetchImpl = globalFetch) {
-  const res = await fetchImpl(localChatCompletionsUrl(endpoint.baseUrl), {
+  const res = await fetchLocal(endpoint, fetchImpl, localChatCompletionsUrl(endpoint.baseUrl), {
     method: "POST",
     headers: { "content-type": "application/json", ...localAuthHeaders(endpoint) },
     body: JSON.stringify({ model, messages, stream: false }),
@@ -10110,6 +10173,9 @@ function submitLocalTurnVerdict(chatId, passed) {
 }
 
 // src/localSuccess/hybridLocalSuccess.ts
+function onDevice(attempt) {
+  return attempt.kind === "local" && runsOnDevice(attempt.ref);
+}
 function cloudResult(records, error) {
   const cloud = records.find((r) => r.attempt.kind === "cloud");
   if (!cloud) return void 0;
@@ -10128,12 +10194,12 @@ function hybridLocalSuccessTurn(router, probes, signal, deferred = deferredLocal
         deferred.observe(conversation, call2);
         submit = { conversation, prompt: submitPrompt(call2) };
       }
-      const local = plan.find((a) => a.kind === "local");
-      if (!local || !plan.some((a) => a.kind === "cloud")) return plan;
+      const local = plan.find(onDevice);
+      if (!local || !plan.some((a) => !onDevice(a))) return plan;
       try {
         const verdict = await router.assess(local.ref, localTurnFeatures(call2, contextWindowOf(local.ref, { probes })));
         assessed = { ref: local.ref, outcome: { turn: verdict.turn } };
-        return verdict.skip ? plan.filter((a) => a.kind === "cloud") : plan;
+        return verdict.skip ? plan.filter((a) => !onDevice(a)) : plan;
       } catch {
         return plan;
       }
@@ -10441,6 +10507,10 @@ function localSuccessRouterFor(store) {
 }
 
 // src/hostModelStream.ts
+function accountsUnavailable(error) {
+  console.warn(`Hybrid: connected accounts unavailable for this call (${error instanceof Error ? error.message : String(error)})`);
+  return [];
+}
 var handoffFit = createHandoffFit();
 function createHostModelStream(input) {
   const resolveLocal = input.localPin ?? pageRuntimePin;
@@ -10461,7 +10531,8 @@ function createHostModelStream(input) {
       const local2 = localRef ? resolveLocal(localRef) : null;
       if (local2 && localRef) return createLocalStream(local2.endpoint, local2.model, input.fetch, { ref: localRef, cloud, fit })(call2, h);
       const probes = input.probes ? await input.probes() : [];
-      if (probes.length === 0) {
+      const accounts = mode === "hybrid" && input.accounts ? await input.accounts().catch(accountsUnavailable) : [];
+      if (probes.length === 0 && accounts.length === 0) {
         if (!cloud) throw new Error(noModel);
         return cloud(call2, h);
       }
@@ -10479,6 +10550,7 @@ function createHostModelStream(input) {
       } : void 0;
       const stream = createLocalFirstStream({
         probes,
+        ...accounts.length > 0 ? { accounts } : {},
         cloud,
         fit,
         noModel,
@@ -14828,7 +14900,9 @@ function modelTurnLog(events) {
       ...typeof args?.argBytes === "number" && args.argBytes > 0 ? { argBytes: args.argBytes } : {},
       ...typeof ev.usage?.completion === "number" && ev.usage.completion > 0 ? { completionTokens: ev.usage.completion } : {},
       ...typeof ev.durationMs === "number" ? { durationMs: ev.durationMs } : {},
-      ...args?.unliftedCallMarkup === true ? { unliftedCallMarkup: true } : {}
+      ...args?.unliftedCallMarkup === true ? { unliftedCallMarkup: true } : {},
+      ...typeof args?.role === "string" ? { role: args.role } : {},
+      ...typeof args?.failovers === "string" && args.failovers ? { failovers: args.failovers } : {}
     };
     if (typeof args?.upstreamFunctionCalls === "number") {
       turn.upstreamFunctionCalls = args.upstreamFunctionCalls;
@@ -14840,6 +14914,7 @@ function modelTurnLog(events) {
 }
 function formatOneTurn(t) {
   const model = t.requestedModel ? `${t.model} (requested ${t.requestedModel})` : t.model;
+  const role = t.role ? `[${t.role}] ` : "";
   const parts = [];
   if (t.failed) {
     parts.push("FAILED");
@@ -14855,7 +14930,8 @@ function formatOneTurn(t) {
   if (t.argBytes) parts.push(`${formatBytes(t.argBytes)} of arguments`);
   if (t.completionTokens) parts.push(`${t.completionTokens.toLocaleString("en-US")} completion tok`);
   if (typeof t.durationMs === "number") parts.push(`${t.durationMs}ms`);
-  return `  ${t.index}. ${model} \xB7 ${parts.join(" \xB7 ")}`;
+  if (t.failovers) parts.push(`gateway left: ${t.failovers}`);
+  return `  ${t.index}. ${role}${model} \xB7 ${parts.join(" \xB7 ")}`;
 }
 function formatModelTurnLog(turns) {
   if (!turns.length) return [];
@@ -15898,6 +15974,70 @@ function runProgressVerdict(p) {
   return `${loop}${effect}${remedy}`;
 }
 
+// src/runStore/gatewayRoutingTrace.ts
+var FAILOVER_SEPARATOR = ", ";
+function formatFailovers(routing) {
+  const failovers = routing?.failovers ?? [];
+  if (failovers.length === 0) return void 0;
+  return failovers.map((f) => `${f.model}:${f.code}${f.kind ? ` ${f.kind}` : ""}`).join(FAILOVER_SEPARATOR);
+}
+function gatewayRoutingArgs(routing) {
+  if (!routing) return {};
+  const failovers = formatFailovers(routing);
+  return {
+    ...failovers ? { failovers } : {},
+    ...routing.candidates?.length ? { candidates: routing.candidates.join(" > ") } : {},
+    ...routing.traceId ? { traceId: routing.traceId } : {}
+  };
+}
+
+// src/routingByRole.ts
+var ranked = (counts) => [...counts.entries()].sort((a, b) => b[1] - a[1]);
+function routingByRole(turns, events) {
+  const byRole = /* @__PURE__ */ new Map();
+  for (const t of turns) {
+    if (t.failed || !t.role) continue;
+    const entry = byRole.get(t.role) ?? { turns: 0, models: /* @__PURE__ */ new Map(), failovers: /* @__PURE__ */ new Map() };
+    entry.turns += 1;
+    entry.models.set(t.model, (entry.models.get(t.model) ?? 0) + 1);
+    for (const f of t.failovers?.split(FAILOVER_SEPARATOR) ?? []) if (f) entry.failovers.set(f, (entry.failovers.get(f) ?? 0) + 1);
+    byRole.set(t.role, entry);
+  }
+  const count2 = (label) => events.filter((e) => e.label === label).length;
+  const roleHandoffs = events.filter((e) => e.label === "llm.role_handoff");
+  const hasArg = (e, key) => !!e.args && typeof e.args === "object" && key in e.args;
+  return {
+    roles: [...byRole.entries()].map(([role, e]) => ({
+      role,
+      turns: e.turns,
+      models: ranked(e.models).map(([model, n]) => ({ model, turns: n })),
+      failovers: ranked(e.failovers).map(([failover, n]) => ({ failover, turns: n }))
+    })),
+    coderReasks: roleHandoffs.filter((e) => hasArg(e, "from")).length,
+    handOffs: roleHandoffs.filter((e) => hasArg(e, "via")).length,
+    handOffsForced: count2("loop.hand_off_due"),
+    planBudgetsSpent: count2("loop.plan_budget_spent")
+  };
+}
+function formatRoutingByRole(r) {
+  if (!r || r.roles.length === 0) return [];
+  const lines = ["Routing by role:"];
+  for (const role of r.roles) {
+    const models = role.models.slice(0, 3).map((m) => `${m.model} \xD7${m.turns}`).join(", ");
+    const left = role.failovers.length ? ` \xB7 gateway left: ${role.failovers.slice(0, 4).map((f) => `${f.failover} \xD7${f.turns}`).join(", ")}` : "";
+    lines.push(`  \u2022 ${role.role}: ${role.turns} turn(s) \u2014 ${models}${left}`);
+  }
+  lines.push(
+    `  \u2022 analysis \u2192 code: ${r.coderReasks} re-ask(s) on a first edit \xB7 ${r.handOffs} hand_off call(s)` + (r.handOffsForced ? ` \xB7 ${r.handOffsForced} forced by the analysis budget` : "") + (r.planBudgetsSpent ? ` \xB7 ${r.planBudgetsSpent} ended analysis with no hand-off` : "")
+  );
+  const plan = r.roles.find((x) => x.role === "plan")?.models[0]?.model;
+  const code = r.roles.find((x) => x.role === "code");
+  if (r.coderReasks > 0 && plan && code && code.models.length === 1 && code.models[0].model === plan) {
+    lines.push(`  \u26A0 every code turn was answered by the planning model (${plan}) \u2014 no stronger connected coder served one. See "gateway left" above, or the connected accounts' health in the / menu.`);
+  }
+  return lines;
+}
+
 // src/staffingSummary.ts
 var DISPATCH_TOOL = /chats[._](dispatch_agent|execute_as_agent)|kanban[._](coordinate|materialize_work_items|assess_resource|assign_participant)|executions[._]submit|run[._-]?now/i;
 function isDispatchTool(label) {
@@ -16771,6 +16911,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const modelsUsed = modelsUsedInTrace(events);
   const modelScores = modelScorecard(events);
   const modelTurns = modelTurnLog(events);
+  const routing = routingByRole(modelTurns, events);
   const evermindUsed = modelsUsed.filter(isEvermindModel);
   const memoryAnswers = memoryAnswersInTrace(events);
   const recoveredToolEvents = toolEvents2.filter((e) => e.recovered).length;
@@ -16818,6 +16959,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     modelsUsed,
     modelScores,
     modelTurns,
+    routing,
     evermindUsed,
     downgradeEvents,
     emptyOrLengthFinishes,
@@ -16912,6 +17054,7 @@ function formatBrainDiagnostics(d) {
     lines.push(`Stream retries: ${d.streamRetries.length} \u2014 ${d.streamRetries.join(", ")} broke mid-turn and the turn was retried on another model (one retry per turn).`);
   }
   lines.push(...formatModelScorecard(d.modelScores ?? []));
+  lines.push(...formatRoutingByRole(d.routing));
   lines.push(...formatModelTurnLog(d.modelTurns ?? []));
   if (d.downgradeEvents > 0) lines.push(`Model downgrades: ${d.downgradeEvents} turn(s) answered by a different model than requested (gateway failover).`);
   if (d.emptyOrLengthFinishes > 0) lines.push(`Degenerate turns: ${d.emptyOrLengthFinishes} ended on \`length\` or returned empty text.`);
@@ -17585,11 +17728,14 @@ var HAND_OFF_TOOL_SPEC = {
   type: "function",
   function: {
     name: HAND_OFF_TOOL,
-    description: "END THE ANALYSIS and hand the work to the coding model(s). You are the planning model: read what you need, then call this ONCE with the tasks \u2014 do NOT edit files yourself. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone \u2014 the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
+    description: "OPTIONAL \u2014 for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone \u2014 the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
     parameters: {
       type: "object",
       properties: {
-        summary: { type: "string", description: "What the analysis concluded, in a few sentences \u2014 the coders read this first." },
+        summary: {
+          type: "string",
+          description: "The research, summarised for the coders \u2014 they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did."
+        },
         tasks: {
           type: "array",
           minItems: 1,
@@ -17604,7 +17750,11 @@ var HAND_OFF_TOOL_SPEC = {
                 items: { type: "string" },
                 description: "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
               },
-              acceptance: { type: "string", description: "How to know it is done (tests, behaviour)." }
+              acceptance: { type: "string", description: "How to know it is done (tests, behaviour)." },
+              constraints: {
+                type: "string",
+                description: "What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change."
+              }
             },
             required: ["title", "brief"]
           }
@@ -17632,7 +17782,8 @@ function parseHandOff(args) {
     if (!title || !brief) return `task ${i + 1} needs both a title and a brief`;
     const paths = Array.isArray(t.paths) ? t.paths.map(str3).filter(Boolean) : [];
     const acceptance = str3(t.acceptance);
-    tasks.push({ title, brief, paths, ...acceptance ? { acceptance } : {} });
+    const constraints = str3(t.constraints);
+    tasks.push({ title, brief, paths, ...acceptance ? { acceptance } : {}, ...constraints ? { constraints } : {} });
   }
   return { summary, tasks };
 }
@@ -17641,17 +17792,24 @@ function ticketDescription(task, summary) {
     task.brief,
     task.paths.length ? `Paths: ${task.paths.join(", ")}` : "",
     task.acceptance ? `Done when: ${task.acceptance}` : "",
+    task.constraints ? `Do not: ${task.constraints}` : "",
     summary ? `Context: ${summary}` : ""
   ].filter(Boolean).join("\n\n");
 }
-function childTaskBrief(task, summary, ticketId) {
+var MAX_REQUEST_CHARS = 2e3;
+function childTaskBrief(task, ctx, ticketId) {
+  const request = ctx.request?.trim();
   return [
     ticketId != null ? `Ticket #${ticketId}: ${task.title}` : task.title,
+    request ? `The goal \u2014 what the user asked for: ${request.length > MAX_REQUEST_CHARS ? `${request.slice(0, MAX_REQUEST_CHARS)}\u2026` : request}` : "",
     task.brief,
     task.paths.length ? `Your slice covers: ${task.paths.join(", ")}. Sibling slices are working beside you on other paths.` : "",
+    task.constraints ? `Do not: ${task.constraints}` : "",
     task.acceptance ? `Done when: ${task.acceptance}` : "",
-    summary ? `Background (the analysis is finished \u2014 do not redo it): ${summary}` : "",
-    "Make the change now. Read only what the change itself needs. Finish with what you changed and anything outside your slice that must still change."
+    ctx.summary ? `Research handed to you (the analysis is finished \u2014 do not redo it): ${ctx.summary}` : "",
+    ctx.knowledge ? `What the research already read and searched (read again only what your change itself needs):
+${ctx.knowledge}` : "",
+    "Make the change now. Read only what the change itself needs."
   ].filter(Boolean).join("\n\n");
 }
 function canRunInParallel(tasks) {
@@ -17714,13 +17872,15 @@ function asRecord(out) {
   }
   return out && typeof out === "object" ? out : null;
 }
-var INLINE_NEXT = "HAND-OFF: the analysis is complete and you are the coding model. Implement the tasks below in order \u2014 do not re-plan or re-read what the planner already read. After each task, verify it, then move to the next. When all are done, build and test, commit and push, and report per ticket.";
-var PARALLEL_NEXT = "HAND-OFF: the tasks ran side by side, one coding agent each, and each has reported into the chat. The children had no shell and no git. You are the coding model: verify the combined change (build and test), fix what the slices broke between them and anything they said was outside their paths, implement any task that failed, then commit, push and report per ticket.";
-var BACKGROUND_NEXT = "HAND-OFF: one coding agent per task is now running IN THE BACKGROUND, each posting into the chat under its own name; the children have no shell and no git. You are the coding model: do not redo their tasks. Work on anything not delegated, then call wait_agents for their reports (or act on each as it arrives), verify the combined change (build and test), fix what the slices broke between them, implement any task that failed, then commit, push and report per ticket.";
+var INLINE_NEXT = `HAND-OFF: the analysis is complete and you are the coding model. Implement the tasks below in order \u2014 do not re-plan or re-read what the planner already read. When all are done, check them. ${VERIFY_STEP} Then commit and push, and report per ticket.`;
+var RESOLVE_REPORTS = `Each report ends with its Open issues \u2014 ${RESOLVE_OPEN_ISSUES}. Fix what the slices broke between them, and implement any task that failed.`;
+var PARALLEL_NEXT = `HAND-OFF: the tasks ran side by side, one coding agent each, and each has reported into the chat. You are the coding model. ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
+var BACKGROUND_NEXT = `HAND-OFF: one coding agent per task is now running IN THE BACKGROUND, each posting into the chat under its own name. You are the coding model: do not redo their tasks. Work on anything not delegated, then call wait_agents for their reports (or act on each as it arrives). ${RESOLVE_REPORTS} Then check the combined change. ${VERIFY_DELEGATION_STEP} Then commit, push and report per ticket.`;
 async function executeHandOff(plan, ports) {
   const ids2 = await fileTickets(plan, ports);
   const tickets = plan.tasks.map((t, i) => ({ title: t.title, ...ids2[i] != null ? { id: ids2[i] } : {} }));
   const parallel = ports.toolNames.has(FAN_OUT_TOOL) && canRunInParallel(plan.tasks);
+  const briefContext = { summary: plan.summary, request: ports.request, knowledge: ports.knowledge };
   await ports.postPlan?.(planMessage(plan, ids2, parallel)).catch(() => void 0);
   if (parallel) {
     const workstreams = [];
@@ -17735,7 +17895,7 @@ async function executeHandOff(plan, ports) {
           const id = ids2[start + k];
           return {
             label: id != null ? `#${id} ${t.title}` : t.title,
-            task: childTaskBrief(t, plan.summary, id),
+            task: childTaskBrief(t, briefContext, id),
             role: "code",
             ...id != null ? { ticket: String(id) } : {}
           };
@@ -17776,7 +17936,7 @@ async function executeHandOff(plan, ports) {
     next: `${INLINE_NEXT}
 
 ${plan.tasks.map((t, i) => `${i + 1}. ${ids2[i] != null ? `#${ids2[i]} ` : ""}${t.title}
-${childTaskBrief(t, plan.summary, ids2[i])}`).join("\n\n")}`
+${childTaskBrief(t, briefContext, ids2[i])}`).join("\n\n")}`
   };
 }
 
@@ -17857,7 +18017,9 @@ function turnOptimizationDirective() {
 // src/selfReviewShip.ts
 function selfReviewShipDirective(chatId) {
   const trackingTicket = chatId != null ? "builtin_chats_list_tickets with chatId=" + chatId + " lists it" : "the one builtin_tickets_from_delta returned for it";
-  return 'SHIP YOUR OWN CHANGE \u2014 in this session YOU are its reviewer. This is a local editor session: no other agent or reviewer can ever reach a change you leave in the working tree, so a ticket you leave "in_review" sits at 75% on the board forever. When your turn changes code, finish it in this order:\n1. VERIFY \u2014 run the type-check / tests / build that cover what you touched (`run_command`) and fix whatever fails.\n2. SELF-REVIEW \u2014 read your own diff with `git_diff` against what the ticket and the user asked for: bugs, leftover debug code, edits unrelated to the task, missing tests or localisation. If you find a problem, FIX it and review again. Then record the pass with builtin_reviews_record (taskId = the ticket tracking this change \u2014 ' + trackingTicket + '; verdict "complete"; a one-paragraph summary of what you checked).\n3. SHIP \u2014 `git_commit` with allowBaseBranch:true and exactly the `paths` you changed (never a catch-all: the tree may hold the human\'s own work), then `git_push` with allowBaseBranch:true. Both are shown to the human for approval \u2014 that approval is their review of your review, so do not ask for it in prose as well.\n4. CLOSE \u2014 the push reports the branch it landed on. Once it lands on the base branch with nothing left to push, the in_review ticket this chat opened for the change moves to done automatically. Move any OTHER linked ticket this change fully delivers to done yourself with builtin_tasks_update. Report the commit hash and the push result.\nExceptions, and only these: if the user asked for a pull request or a ticket branch, commit on a `branch` and `open_pull_request` instead (the ticket then closes when that PR merges); if the user said not to commit or push, leave the change uncommitted and say so. If a commit or push is refused or fails, report the exact error \u2014 never claim a change shipped when it did not.';
+  return `SHIP YOUR OWN CHANGE \u2014 in this session YOU are its reviewer. This is a local editor session: no other agent or reviewer can ever reach a change you leave in the working tree, so a ticket you leave "in_review" sits at 75% on the board forever. When your turn changes code, finish it in this order:
+1. VERIFY \u2014 ${VERIFY_STEP}
+2. SELF-REVIEW \u2014 read your own diff with \`git_diff\` against what the ticket and the user asked for: bugs, leftover debug code, edits unrelated to the task, missing tests or localisation. If you find a problem, FIX it and review again. Then record the pass with builtin_reviews_record (taskId = the ticket tracking this change \u2014 ` + trackingTicket + '; verdict "complete"; a one-paragraph summary of what you checked).\n3. SHIP \u2014 `git_commit` with allowBaseBranch:true and exactly the `paths` you changed (never a catch-all: the tree may hold the human\'s own work), then `git_push` with allowBaseBranch:true. Both are shown to the human for approval \u2014 that approval is their review of your review, so do not ask for it in prose as well.\n4. CLOSE \u2014 the push reports the branch it landed on. Once it lands on the base branch with nothing left to push, the in_review ticket this chat opened for the change moves to done automatically. Move any OTHER linked ticket this change fully delivers to done yourself with builtin_tasks_update. Report the commit hash and the push result.\nExceptions, and only these: if the user asked for a pull request or a ticket branch, commit on a `branch` and `open_pull_request` instead (the ticket then closes when that PR merges); if the user said not to commit or push, leave the change uncommitted and say so. If a commit or push is refused or fails, report the exact error \u2014 never claim a change shipped when it did not.';
 }
 var PUBLISH_TOOLS = /* @__PURE__ */ new Set(["git_commit", "git_push", "open_pull_request"]);
 var RAW_PUBLISH = gitCommandPattern("commit|push");
@@ -17874,7 +18036,7 @@ function leftChangeUnshipped(input) {
   return input.codeChanged && canShipHere(input.toolNames) && asksForChange(input.requestText) && !declinesShipping(input.requestText) && !attemptedPublish(input.events);
 }
 function unshippedChangeNudge() {
-  return 'You changed code in this run and ended the turn without shipping it. In this local session you are the reviewer \u2014 no one else can pick the change up, so leaving it uncommitted parks its ticket in review forever. Finish it now: verify it (`run_command` for the type-check / tests that cover it), self-review your diff with `git_diff` and record builtin_reviews_record (verdict "complete") on the ticket tracking it, then `git_commit` (allowBaseBranch:true, exactly the paths you changed) and `git_push` (allowBaseBranch:true). If the user asked for a pull request, commit on a `branch` and `open_pull_request` instead. If you genuinely cannot ship \u2014 the change is unfinished, or verification fails and you cannot fix it \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
+  return "You changed code in this run and ended the turn without shipping it. In this local session you are the reviewer \u2014 no one else can pick the change up, so leaving it uncommitted parks its ticket in review forever. Finish it now: verify it \u2014 " + VERIFY_STEP + ' Then self-review your diff with `git_diff` and record builtin_reviews_record (verdict "complete") on the ticket tracking it, then `git_commit` (allowBaseBranch:true, exactly the paths you changed) and `git_push` (allowBaseBranch:true). If the user asked for a pull request, commit on a `branch` and `open_pull_request` instead. If you genuinely cannot ship \u2014 the change is unfinished, or verification fails and you cannot fix it \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
 }
 
 // src/restatedReply.ts
@@ -18570,7 +18732,10 @@ ${turnContext}` : systemPrompt),
     policy: initialRunPolicy({
       pinnedModel: model,
       strictPin: modelStrict,
-      startPhase: c.codeChanged || c.codePhaseReached ? "code" : "plan"
+      // A sub-agent is a delegated SLICE: its owner already planned it, and its host routes
+      // its turns for its own role. Started in `plan` it was offered `hand_off` and the
+      // analysis phase all over again, inside work it was handed to carry out.
+      startPhase: c.codeChanged || c.codePhaseReached || req.lineage ? "code" : "plan"
     }),
     // Bounded counter for the announced-but-never-made tool call recovery, so a model
     // that keeps narrating instead of acting cannot spin the loop. Not one-shot: a model
@@ -19062,6 +19227,36 @@ async function settleReply(run, rawText, result, requested) {
   return assistantMsg;
 }
 
+// src/runStore/planBudget.ts
+var HAND_OFF_DUE_BRIEF = `ANALYSIS IS OVER. You have spent ${PLAN_TURN_BUDGET} turns analysing without changing anything. Call hand_off NOW. summary = the research for the coders: everything you and any research sub-agents established that the change needs (files, functions, what they do today, decisions, traps). tasks = each one standalone: the files, the change, and how to know it is done. The coding agents start from exactly what you write here; they do not see this conversation.`;
+function budgeted(run) {
+  return run.metadata.mode !== "chat" && (asksForChange(run.userRequest) || isContinuationDirective(run.userRequest));
+}
+function planBudgetTurn(run, step) {
+  if (!handOffDue(run.policy) || !budgeted(run)) return null;
+  if (run.policy.handOffForced || !run.canAskUser) {
+    reportToPolicy(run, { type: "plan_budget_spent" });
+    run.c.codePhaseReached = true;
+    pushTrace(run.c, {
+      ts: nowIso(),
+      category: "message",
+      label: "loop.plan_budget_spent",
+      args: { step, planTurns: run.policy.planTurns },
+      result: run.canAskUser ? "The forced hand-off turn did not hand off \u2014 analysis ends here and the coding role takes the next turn." : "Analysis budget spent where hand_off cannot be offered \u2014 analysis ends here and the coding role takes the next turn."
+    });
+    return null;
+  }
+  reportToPolicy(run, { type: "hand_off_forced" });
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "loop.hand_off_due",
+    args: { step, planTurns: run.policy.planTurns },
+    result: `${run.policy.planTurns} analysis turn(s) with no change and no hand-off \u2014 this turn offers hand_off alone and requires the call.`
+  });
+  return { tools: [HAND_OFF_TOOL_SPEC], toolChoice: "required", brief: { role: "user", content: HAND_OFF_DUE_BRIEF } };
+}
+
 // src/runStore/completeTurn.ts
 function completeTurnPort(run) {
   const { c, chatId, runKey, req, convo, systemPrompt, metadata, recallBlockTokens, allTools, requestQuery, usedTools, canAskUser, alwaysAdvertised } = run;
@@ -19095,6 +19290,8 @@ function completeTurnPort(run) {
     const llmStart = nowMs2();
     let firstTokenAt;
     let result;
+    const handOffTurn = planBudgetTurn(run, iter);
+    const opening = handOffTurn ? [handOffTurn.brief] : [];
     const selection = selectToolsForTurn(allTools, {
       // The REQUEST, captured once before the loop — never "the latest user message".
       // The loop pushes its own `role:'user'` turns (the stall-recovery nudge, the
@@ -19117,10 +19314,10 @@ function completeTurnPort(run) {
       required: offersHandOff(run.policy) && canAskUser ? [...alwaysAdvertised, HAND_OFF_TOOL] : alwaysAdvertised
     });
     const selected = offersHandOff(run.policy) ? selection.tools : selection.tools.filter((t) => t.function.name !== HAND_OFF_TOOL);
-    const advertised = selection.trimmed ? [...selected, ...routerToolSpecs(allTools?.length ?? 0)] : selected;
+    const advertised = handOffTurn ? handOffTurn.tools : selection.trimmed ? [...selected, ...routerToolSpecs(allTools?.length ?? 0)] : selected;
     const tools = advertised.length > 0 ? advertised : void 0;
     const advertisedNames = new Set(advertised.map((t) => t.function.name));
-    if (selection.trimmed) {
+    if (selection.trimmed && !handOffTurn) {
       pushTrace(c, {
         ts: nowIso(),
         category: "message",
@@ -19157,7 +19354,7 @@ function completeTurnPort(run) {
       }
     };
     let turnRole = nextTurn(run.policy, { hasTools: !!tools }).role;
-    const turnToolChoice = run.forceToolChoice;
+    const turnToolChoice = handOffTurn ? handOffTurn.toolChoice : run.forceToolChoice;
     run.forceToolChoice = void 0;
     const ledger = tools ? (0, import_handoff7.volatileTail)([run.knowledge.brief()]) : null;
     const request = async (extra = []) => {
@@ -19200,7 +19397,7 @@ function completeTurnPort(run) {
       emit(c);
     };
     try {
-      result = await request();
+      result = await request(opening);
     } catch (e) {
       if (c.abort?.signal.aborted) throw e;
       const failure = providerFailureEvent(e);
@@ -19209,15 +19406,16 @@ function completeTurnPort(run) {
       pushTrace(c, transportRetryTrace(nowIso(), iter, outcome, e.message));
       restartTurn();
       try {
-        result = await request();
+        result = await request(opening);
       } catch (retryError) {
         if (c.abort?.signal.aborted) throw retryError;
         throw turnError(retryError);
       }
     }
-    if (turnRole === "plan" && result.toolCalls.some((tc) => isCodeChangeTool(tc.name)) && reportToPolicy(run, { type: "code_change_attempted" }).outcome.kind === "reask_as_coder") {
+    const codeChangeOutcome = turnRole === "plan" && result.toolCalls.some((tc) => isCodeChangeTool(tc.name)) ? reportToPolicy(run, { type: "code_change_attempted" }).outcome : null;
+    if (codeChangeOutcome) c.codePhaseReached = true;
+    if (codeChangeOutcome?.kind === "reask_as_coder") {
       turnRole = nextTurn(run.policy, { hasTools: !!tools }).role;
-      c.codePhaseReached = true;
       const brief = coderHandoffBrief(replayTextOf(result.text), result.toolCalls);
       pushTrace(c, coderReaskTrace(nowIso(), iter, result.resolvedModel));
       restartTurn();
@@ -19285,6 +19483,11 @@ function completeTurnPort(run) {
         // connected Claude account (expired?)" apart from "nothing connected".
         account: result.account,
         byoUnresolved: result.byoUnresolved,
+        // How the gateway ROUTED the turn: the candidates it walked and every model it
+        // tried and left (`model:status kind`). The only record of why a coding turn
+        // landed where it did — a connected coder never seeded reads differently from
+        // one seeded and refused.
+        ...gatewayRoutingArgs(result.gateway),
         // How many tools the turn was actually OFFERED, out of the whole catalog.
         // A zero here is the difference between "the model refused to act" and "it had
         // nothing to act with" — previously unanswerable from a copied report, which
@@ -19499,7 +19702,8 @@ function beforeDispatchHook(run) {
     }
     if (call2.name === HAND_OFF_TOOL) {
       if (!offersHandOff(run.policy)) {
-        return { result: { data: { ok: false, error: "The plan was already handed off \u2014 you are the coding model now. Implement the tasks; do not re-plan." } } };
+        const error = usedTools.has(HAND_OFF_TOOL) ? "The plan was already handed off \u2014 you are the coding model now. Implement the tasks; do not re-plan." : "This run has already started editing, so it is coding now and hand_off is closed. Implement the work directly; use spawn_agents for separate slices that own disjoint files.";
+        return { result: { data: { ok: false, error } } };
       }
       const plan = parseHandOff(call2.args);
       if (typeof plan === "string") return { result: { data: { ok: false, error: plan } } };
@@ -19509,6 +19713,10 @@ function beforeDispatchHook(run) {
       const outcome = await executeHandOff(plan, {
         runTool: (name, args2) => runTool(name, args2),
         toolNames: new Set(catalogToolNames),
+        // The research the coders inherit: what this planning run read and searched.
+        knowledge: run.knowledge.brief(),
+        // …and the goal, in the user's words: a child sees none of this conversation.
+        request: run.userRequest,
         ...req.projectId != null ? { projectId: req.projectId } : {},
         afterCreate: (toolName, out) => autoLinkCreatedItem(run.serverChatId, c, runTool, toolName, out),
         step: (label, args2, out, durationMs) => pushTrace(c, {

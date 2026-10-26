@@ -1,3 +1,10 @@
+## ✅ RESOLVED 2026-10-26 — The VSIX ships the run loop that was tested (VSIX 2026.10.99)
+
+VS Code chat #5739 ran 105 turns on MiniMax Flash on VSIX 2026.10.98 and never implemented the change. None of the turns carried a role, and the diagnostics had no "Routing by role". The cause was not the run loop: the extension never ran it. The extension bundles `@seanhogg/builderforce-brain-embedded` (and `brain-ui`) through their `main` → `dist/`. That dist was built by `prepare` on install (2026-10-25 13:52) and by nothing after, so VSIX 2026.10.97 and 2026.10.98 shipped a run loop from before the analysis budget, the `code` role, the hand-off brief and the routing record. Every test of those changes imports source, so all of them were green.
+
+- **`scripts/ensure-linked-builds.mjs`** rebuilds every linked package whose `dist/` entry is older than its inputs. The inputs are its `src/`, manifest and tsup config, and, recursively, every package it links, since tsup bundles linked source in. Links are built before their dependents. A failed rebuild fails the script, so a stale dist is never bundled. It is wired into `clients/vscode` `vscode:prepublish`, `compile` and `build:webview` (for the frontend's links).
+- **`scripts/linkedPackages.mjs`** holds the link-graph helpers (`readManifest`, `linkedTargets`), now shared by `ensure-linked-deps.mjs` and the new script.
+
 ## ✅ RESOLVED 2026-10-26 — Delegation works like a team lead's: full briefs, reports the owner acts on, checks on the cheaper tier (VSIX 2026.10.98 · api 2026.10.87 · brain-embedded 2026.10.62 · agent-tools 2026.10.15 · agent-loop 2026.10.13 · model-router 2026.10.19)
 
 Compared with how Claude Code delegates (a brief that carries the whole task, a report it expects back and acts on, and compile/test on a cheaper model), Builderforce's hand-off fell short in three places. Children got the slice but not the goal or its limits. They ended with free prose, and nothing obliged the owner to act on what they left. And the coder ran build and test itself, on the strongest and most expensive model.
