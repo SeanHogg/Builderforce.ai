@@ -189,6 +189,10 @@ export interface ModelTurn {
   failed?: boolean;
   /** Call markup present that no dialect lifted. */
   unliftedCallMarkup?: boolean;
+  /** The role the turn asked the gateway for — `plan`, `code`, `verify`, `chat`. */
+  role?: string;
+  /** Models the gateway tried and left before this one (`model:status kind`). */
+  failovers?: string;
 }
 
 /**
@@ -208,6 +212,8 @@ export function modelTurnLog(events: BrainTraceEvent[]): ModelTurn[] {
       upstreamRecovered?: unknown;
       unliftedCallMarkup?: unknown;
       argBytes?: unknown;
+      role?: unknown;
+      failovers?: unknown;
     } | undefined;
     const requested = typeof args?.requestedModel === 'string' && args.requestedModel && args.requestedModel !== 'default' && args.requestedModel !== model
       ? args.requestedModel
@@ -238,6 +244,8 @@ export function modelTurnLog(events: BrainTraceEvent[]): ModelTurn[] {
       ...(typeof ev.usage?.completion === 'number' && ev.usage.completion > 0 ? { completionTokens: ev.usage.completion } : {}),
       ...(typeof ev.durationMs === 'number' ? { durationMs: ev.durationMs } : {}),
       ...(args?.unliftedCallMarkup === true ? { unliftedCallMarkup: true } : {}),
+      ...(typeof args?.role === 'string' ? { role: args.role } : {}),
+      ...(typeof args?.failovers === 'string' && args.failovers ? { failovers: args.failovers } : {}),
     };
     if (typeof args?.upstreamFunctionCalls === 'number') {
       turn.upstreamFunctionCalls = args.upstreamFunctionCalls;
@@ -251,6 +259,7 @@ export function modelTurnLog(events: BrainTraceEvent[]): ModelTurn[] {
 /** One turn-log line: `1. xai-oauth/grok-4.6 · 0 tool call(s) · text-only · raw response: 0 structured call(s)`. */
 function formatOneTurn(t: ModelTurn): string {
   const model = t.requestedModel ? `${t.model} (requested ${t.requestedModel})` : t.model;
+  const role = t.role ? `[${t.role}] ` : '';
   const parts: string[] = [];
   if (t.failed) {
     parts.push('FAILED');
@@ -268,7 +277,8 @@ function formatOneTurn(t: ModelTurn): string {
   if (t.argBytes) parts.push(`${formatBytes(t.argBytes)} of arguments`);
   if (t.completionTokens) parts.push(`${t.completionTokens.toLocaleString('en-US')} completion tok`);
   if (typeof t.durationMs === 'number') parts.push(`${t.durationMs}ms`);
-  return `  ${t.index}. ${model} · ${parts.join(' · ')}`;
+  if (t.failovers) parts.push(`gateway left: ${t.failovers}`);
+  return `  ${t.index}. ${role}${model} · ${parts.join(' · ')}`;
 }
 
 /**

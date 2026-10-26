@@ -60,6 +60,31 @@ describe('asksForChange', () => {
     ]) expect(asksForChange(t)).toBe(false);
   });
 
+  it('reads a research-led request with a chained change as the work order it is', () => {
+    for (const t of [
+      'Review docs/specs/35-prd-one-agent-one-kernel.md and implement WS1',
+      'Investigate the crash, then fix it',
+      'Audit the seed order and also update the tier for MiniMax',
+      'Review the PRD. Implement WS1.',
+      'Review X; fix Y',
+      'Review the module and please fix the gate',
+      'Summarize the PRD and create the tickets',
+    ]) expect(asksForChange(t)).toBe(true);
+  });
+
+  it('keeps a research-led request with no chained change a question', () => {
+    for (const t of [
+      'Review the PRD',
+      'Investigate why the coder never served a turn',
+      'Find where the hand-off tool is advertised',
+      'Explain how to add a column',
+      'Research the run store and write a summary with file paths',
+      'Audit the routes, then write up the findings',
+      'Review the PRD and show me the gaps',
+      'Investigate the crash and make a list of causes',
+    ]) expect(asksForChange(t)).toBe(false);
+  });
+
   it('is empty-safe', () => {
     expect(asksForChange('')).toBe(false);
     expect(asksForChange(null)).toBe(false);

@@ -314,7 +314,50 @@ function readUpstreamEvidence(frame: unknown): UpstreamTurnEvidence | undefined 
   };
 }
 
+/** One model the gateway tried and left before the one that answered. */
+export interface GatewayFailover {
+  model: string;
+  vendor: string;
+  code: number;
+  kind?: string;
+}
+
+/**
+ * How the gateway routed this turn — its terminal `_builderforce` frame
+ * (`api/.../streamDiagnostics.ts`). Without it a run could only see the model that
+ * answered, never the coders it was seeded with or the ones that refused: chat #6 ran
+ * hundreds of `code` turns on MiniMax Flash with Grok and Kimi connected, and nothing
+ * on the client could say why.
+ */
+export interface GatewayRouting {
+  /** Every model tried and left, in order. */
+  failovers: GatewayFailover[];
+  /** The head of the candidate chain the gateway walked. */
+  candidates?: string[];
+  traceId?: string;
+}
+
+/** The chunk field the gateway's terminal diagnostics frame carries. */
+const GATEWAY_ROUTING_FIELD = '_builderforce';
+
+function readGatewayRouting(frame: unknown): GatewayRouting | undefined {
+  const raw = (frame as Record<string, unknown> | null)?.[GATEWAY_ROUTING_FIELD] as Record<string, unknown> | undefined;
+  if (!raw || !Array.isArray(raw.failovers)) return undefined;
+  const failovers = raw.failovers.flatMap((f): GatewayFailover[] => {
+    const o = f as Partial<GatewayFailover> | null;
+    return o && typeof o.model === 'string' ? [{ model: o.model, vendor: String(o.vendor ?? ''), code: Number.isFinite(Number(o.code)) ? Number(o.code) : 0, ...(o.kind ? { kind: String(o.kind) } : {}) }] : [];
+  });
+  const candidates = Array.isArray(raw.candidates) ? raw.candidates.filter((c): c is string => typeof c === 'string') : undefined;
+  return {
+    failovers,
+    ...(candidates?.length ? { candidates } : {}),
+    ...(typeof raw.traceId === 'string' ? { traceId: raw.traceId } : {}),
+  };
+}
+
 export interface StreamChatResult {
+  /** How the gateway routed the turn — absent off the gateway or on an older one. */
+  gateway?: GatewayRouting;
   /**
    * What the vendor's raw response carried before translation — see
    * {@link UpstreamTurnEvidence}. Absent for vendors that do not report it.
@@ -669,6 +712,7 @@ async function runStreamChatCompletion(
   };
   // The vendor's raw-response count, from whichever chunk carried it (the finishing one).
   let upstream: UpstreamTurnEvidence | undefined;
+  let routing: GatewayRouting | undefined;
 
   // Tool calls are accumulated by index across deltas.
   const toolAcc = new Map<number, { id: string; name: string; args: string }>();
@@ -704,7 +748,7 @@ async function runStreamChatCompletion(
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...typeXmlToolArgs(xmlCalls, opts.tools)], finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream };
+    return { text, toolCalls: [...assemble(toolAcc), ...typeXmlToolArgs(xmlCalls, opts.tools)], finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream, ...(routing ? { gateway: routing } : {}) };
   }
 
   const decoder = new TextDecoder();
@@ -738,7 +782,7 @@ async function runStreamChatCompletion(
         const tail = xml.flush();
         if (tail) handlers.onTextDelta?.(tail);
         handlers.onDone?.(finishReason);
-        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream, ...(routing ? { gateway: routing } : {}) };
       }
       let parsed: {
         model?: string;
@@ -771,6 +815,7 @@ async function runStreamChatCompletion(
       // often with an empty `choices` array — read it whenever present.
       if (parsed.usage) readUsage(parsed.usage);
       upstream = readUpstreamEvidence(parsed) ?? upstream;
+      routing = readGatewayRouting(parsed) ?? routing;
       const choice = parsed.choices?.[0];
       if (choice?.finish_reason) finishReason = choice.finish_reason;
 
@@ -822,7 +867,7 @@ async function runStreamChatCompletion(
   const tail = xml.flush();
   if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream, ...(routing ? { gateway: routing } : {}) };
 }
 
 function assemble(acc: Map<number, { id: string; name: string; args: string }>): AssembledToolCall[] {

@@ -51,7 +51,12 @@ export const HAND_OFF_TOOL_SPEC: BrainToolSpec = {
     parameters: {
       type: 'object',
       properties: {
-        summary: { type: 'string', description: 'What the analysis concluded, in a few sentences — the coders read this first.' },
+        summary: {
+          type: 'string',
+          description:
+            'The research, summarised for the coders — they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: '
+            + 'the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did.',
+        },
         tasks: {
           type: 'array',
           minItems: 1,
@@ -124,14 +129,20 @@ function ticketDescription(task: HandOffTask, summary: string): string {
   ].filter(Boolean).join('\n\n');
 }
 
-/** A child's whole brief. It sees nothing else, so the plan's conclusion rides along. */
-export function childTaskBrief(task: HandOffTask, summary: string, ticketId?: number): string {
+/**
+ * A child's whole brief. It sees nothing else, so the research rides along: the planner's
+ * summary of what it and its research sub-agents established, and the run's own record
+ * of what was already read and searched (`knowledge`) — so the coder starts from the
+ * research instead of repeating it.
+ */
+export function childTaskBrief(task: HandOffTask, summary: string, ticketId?: number, knowledge?: string | null): string {
   return [
     ticketId != null ? `Ticket #${ticketId}: ${task.title}` : task.title,
     task.brief,
     task.paths.length ? `Your slice covers: ${task.paths.join(', ')}. Sibling slices are working beside you on other paths.` : '',
     task.acceptance ? `Done when: ${task.acceptance}` : '',
-    summary ? `Background (the analysis is finished — do not redo it): ${summary}` : '',
+    summary ? `Research handed to you (the analysis is finished — do not redo it): ${summary}` : '',
+    knowledge ? `What the research already read and searched (read again only what your change itself needs):\n${knowledge}` : '',
     'Make the change now. Read only what the change itself needs. Finish with what you changed and anything outside your slice that must still change.',
   ].filter(Boolean).join('\n\n');
 }
@@ -166,6 +177,8 @@ export interface HandOffPorts {
   runTool(name: string, args: Record<string, unknown>): Promise<unknown>;
   /** Every tool name the host advertises this run. */
   toolNames: ReadonlySet<string>;
+  /** The planning run's record of what it read and searched (`RunKnowledgeLog.brief`). */
+  knowledge?: string | null;
   projectId?: number;
   /** Called with each created ticket's result, so the run links it to the chat. */
   afterCreate?(toolName: string, out: unknown): Promise<void>;
@@ -279,7 +292,7 @@ export async function executeHandOff(plan: HandOffPlan, ports: HandOffPorts): Pr
           const id = ids[start + k];
           return {
             label: id != null ? `#${id} ${t.title}` : t.title,
-            task: childTaskBrief(t, plan.summary, id),
+            task: childTaskBrief(t, plan.summary, id, ports.knowledge),
             role: 'code',
             ...(id != null ? { ticket: String(id) } : {}),
           };
@@ -318,6 +331,6 @@ export async function executeHandOff(plan: HandOffPlan, ports: HandOffPorts): Pr
     ok: true,
     mode: 'inline',
     tickets,
-    next: `${INLINE_NEXT}\n\n${plan.tasks.map((t, i) => `${i + 1}. ${ids[i] != null ? `#${ids[i]} ` : ''}${t.title}\n${childTaskBrief(t, plan.summary, ids[i])}`).join('\n\n')}`,
+    next: `${INLINE_NEXT}\n\n${plan.tasks.map((t, i) => `${i + 1}. ${ids[i] != null ? `#${ids[i]} ` : ''}${t.title}\n${childTaskBrief(t, plan.summary, ids[i], ports.knowledge)}`).join('\n\n')}`,
   };
 }

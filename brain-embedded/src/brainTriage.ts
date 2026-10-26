@@ -16,6 +16,7 @@ import { isModelReply } from './modelReply';
 import { traceWithPersistedSteps } from './persistedSteps';
 import { computeRunProgress, formatRunProgress, runProgressVerdict, type RunProgress } from './runProgress';
 import { formatModelScorecard, formatModelTurnLog, modelScorecard, modelTurnLog, type ModelScore, type ModelTurn } from './modelScorecard';
+import { formatRoutingByRole, routingByRole, type RoutingByRole } from './routingByRole';
 import { formatStaffingSummary, staffingSummaryInTrace, workFiledNotStaffedVerdict, type StaffingSummary } from './staffingSummary';
 import { parseMessageProvenance } from './provenance';
 import { STOPPED_TURN_STEP } from './stoppedTurn';
@@ -575,6 +576,8 @@ export interface BrainDiagnostics {
   modelScores: ModelScore[];
   /** Each `llm.complete` in run order — which model produced which output. */
   modelTurns: ModelTurn[];
+  /** Which model served each role, and how analysis ended — see `routingByRole.ts`. */
+  routing?: RoutingByRole;
   /** Distinct Evermind/SSM artifacts among them. */
   evermindUsed: string[];
   /** Turns where the resolved model differed from what was requested. */
@@ -943,6 +946,7 @@ export function computeBrainDiagnostics(
   const modelsUsed = modelsUsedInTrace(events);
   const modelScores = modelScorecard(events);
   const modelTurns = modelTurnLog(events);
+  const routing = routingByRole(modelTurns, events);
   const evermindUsed = modelsUsed.filter(isEvermindModel);
   const memoryAnswers = memoryAnswersInTrace(events);
 
@@ -1055,6 +1059,7 @@ export function computeBrainDiagnostics(
     modelsUsed,
     modelScores,
     modelTurns,
+    routing,
     evermindUsed,
     downgradeEvents,
     emptyOrLengthFinishes,
@@ -1227,6 +1232,7 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
   // WHICH model did what. "Models used: a, b" cannot say that one of them never called
   // a tool, or that its calls were written in markup nothing parsed; these lines can.
   lines.push(...formatModelScorecard(d.modelScores ?? []));
+  lines.push(...formatRoutingByRole(d.routing));
   // Ordered per-output attribution — the scorecard aggregates; this lists each
   // llm.complete so "which outputs were Grok rambling" is answerable without counting.
   // Clearer diagnostics do NOT fix Grok tool calling: production API must include the

@@ -101,6 +101,8 @@ export function beforeDispatchHook(run: RunLoopContext): NonNullable<LoopHooks<C
       const outcome = await executeHandOff(plan, {
         runTool: (name, args) => runTool!(name, args),
         toolNames: new Set(catalogToolNames),
+        // The research the coders inherit: what this planning run read and searched.
+        knowledge: run.knowledge.brief(),
         ...(req.projectId != null ? { projectId: req.projectId } : {}),
         afterCreate: (toolName, out) => autoLinkCreatedItem(run.serverChatId, c, runTool!, toolName, out),
         step: (label, args, out, durationMs) => pushTrace(c, {

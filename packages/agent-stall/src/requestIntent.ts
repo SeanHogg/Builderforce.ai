@@ -37,8 +37,9 @@
  * state, so a false positive requires the user to have used an action verb about
  * a non-action.
  */
-const CHANGE_VERB =
-  /\b(add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge)\b/i;
+const CHANGE_VERBS =
+  'add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge';
+const CHANGE_VERB = new RegExp(`\\b(${CHANGE_VERBS})\\b`, 'i');
 
 /**
  * Shapes that ask a QUESTION rather than demand a change. Checked FIRST, because
@@ -46,7 +47,31 @@ const CHANGE_VERB =
  * column?") is a question about a change, not a request for one.
  */
 const QUESTION_SHAPE =
-  /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|can|could|should|would|will|explain|describe|summar|tell me|show me|list|compare|review|analyse|analyze|research|investigate|find|locate|trace|audit|look into|search)\b|\?\s*$/i;
+  /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|can|could|should|would|will)\b|\?\s*$/i;
+
+/**
+ * Requests that open by asking to LOOK at something — read, explain, review, research.
+ * On their own they are questions; "Review the PRD and implement WS1" and "Investigate
+ * the crash, then fix it" are work orders that happen to start by looking, and reading
+ * every one of them as a question exempted real change requests from every "asked for a
+ * change, made none" check (chat #6: "Review … 35-prd …" ran 778 analysis turns).
+ */
+const RESEARCH_LEAD =
+  /^\s*(explain|describe|summar\w*|tell me|show me|list|compare|review|analyse|analyze|research|investigate|find|locate|trace|audit|look into|search)\b/i;
+
+/** What a research request asks to be handed back — writing one is the answer, not a change. */
+const REPORT_OBJECTS = 'summary|report|findings|notes|overview|write-?up|answer|explanation|list|table|recommendations?';
+
+/**
+ * A change verb CHAINED onto the look ("… and fix it", "…, then implement …", "Review the
+ * PRD. Implement WS1.") — unless what it acts on is the report itself ("… and write a
+ * summary with file paths") or the reader ("… and show me the gaps").
+ */
+const CHAINED_CHANGE = new RegExp(
+  `(\\band|\\bthen|[,.;])\\s+((also|then|please|now)\\s+)*(${CHANGE_VERBS})\\b`
+    + `(?!\\s+(me|us)\\b|\\s+(up\\s+)?((a|an|the|your|me|us|my)\\s+)?(short\\s+|brief\\s+)?(${REPORT_OBJECTS})\\b)`,
+  'i',
+);
 
 /**
  * Does this text ask for something to be CHANGED (as opposed to found, explained
@@ -63,6 +88,7 @@ export function asksForChange(text: string | null | undefined): boolean {
   // to quote an action verb in paragraph nine does not make it a work order.
   const head = t.slice(0, 600);
   if (QUESTION_SHAPE.test(head)) return false;
+  if (RESEARCH_LEAD.test(head)) return CHAINED_CHANGE.test(head);
   return CHANGE_VERB.test(head);
 }
 

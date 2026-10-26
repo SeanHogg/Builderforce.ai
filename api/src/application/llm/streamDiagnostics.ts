@@ -39,6 +39,8 @@ export interface StreamDiagnosticsPayload {
   /** The model that actually served the stream. */
   resolvedModel: string;
   resolvedVendor: string;
+  /** The head of the candidate chain the request walked, in order. */
+  candidates?: readonly string[];
   /** Gateway trace id — the same value as the `x-builderforce-trace-id` header, so a
    *  caller can quote it back without having read the headers. */
   traceId?: string;
@@ -104,6 +106,7 @@ export function instrumentStream(
         failovers: opts.payload.failovers,
         resolvedModel: opts.payload.resolvedModel,
         resolvedVendor: opts.payload.resolvedVendor,
+        ...(opts.payload.candidates?.length ? { candidates: opts.payload.candidates } : {}),
         ...(opts.payload.traceId ? { traceId: opts.payload.traceId } : {}),
       },
     };

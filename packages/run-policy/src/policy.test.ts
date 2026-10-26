@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { MAX_MODEL_FAILOVERS } from '@builderforce/agent-stall';
 import {
   PIN_RELEASE_STATUSES,
+  PLAN_TURN_BUDGET,
+  handOffDue,
   initialRunPolicy,
   isRequestRefusalStatus,
   nextTurn,
@@ -67,6 +69,31 @@ describe('plan → code', () => {
     expect(s.outcome.kind).toBe('none');
     expect(s.phase).toBe('code');
     expect(offersHandOff(s)).toBe(false);
+  });
+});
+
+describe('analysis budget', () => {
+  const planTurns = (n: number) => Array.from({ length: n }, () => ({ type: 'turn_succeeded' as const, model: 'minimax' }));
+
+  it('is due once the run has answered PLAN_TURN_BUDGET turns while still planning', () => {
+    expect(handOffDue(run(initialRunPolicy(), ...planTurns(PLAN_TURN_BUDGET - 1)))).toBe(false);
+    const s = run(initialRunPolicy(), ...planTurns(PLAN_TURN_BUDGET));
+    expect(s.planTurns).toBe(PLAN_TURN_BUDGET);
+    expect(handOffDue(s)).toBe(true);
+  });
+
+  it('never counts turns once the run is coding', () => {
+    const s = run(initialRunPolicy({ startPhase: 'code' }), ...planTurns(PLAN_TURN_BUDGET + 5));
+    expect(s.planTurns).toBe(0);
+    expect(handOffDue(s)).toBe(false);
+  });
+
+  it('a spent budget ends planning: the next turn is code and hand_off leaves the menu', () => {
+    const s = run(initialRunPolicy(), ...planTurns(PLAN_TURN_BUDGET), { type: 'plan_budget_spent' });
+    expect(s.phase).toBe('code');
+    expect(nextTurn(s, TOOLS).role).toBe('code');
+    expect(offersHandOff(s)).toBe(false);
+    expect(handOffDue(s)).toBe(false);
   });
 });
 

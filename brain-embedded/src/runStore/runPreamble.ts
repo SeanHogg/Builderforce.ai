@@ -336,7 +336,10 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
     policy: initialRunPolicy({
       pinnedModel: model,
       strictPin: modelStrict,
-      startPhase: c.codeChanged || c.codePhaseReached ? 'code' : 'plan',
+      // A sub-agent is a delegated SLICE: its owner already planned it, and its host routes
+      // its turns for its own role. Started in `plan` it was offered `hand_off` and the
+      // analysis phase all over again, inside work it was handed to carry out.
+      startPhase: c.codeChanged || c.codePhaseReached || req.lineage ? 'code' : 'plan',
     }),
     // Bounded counter for the announced-but-never-made tool call recovery, so a model
     // that keeps narrating instead of acting cannot spin the loop. Not one-shot: a model

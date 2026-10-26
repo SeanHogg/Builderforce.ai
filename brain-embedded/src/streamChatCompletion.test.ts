@@ -47,6 +47,38 @@ describe('streamChatCompletion onModel', () => {
   });
 });
 
+describe('streamChatCompletion gateway routing', () => {
+  it('keeps the gateway terminal frame: the models it left and the candidates it walked', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => sseResponse([
+      `data: ${JSON.stringify({ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] })}\n`,
+      `data: ${JSON.stringify({
+        object: 'chat.completion.chunk', model: 'direct/minimax/MiniMax-M3.1-Flash-Preview', choices: [],
+        _builderforce: {
+          failovers: [{ model: 'direct/xai/grok-4.7', vendor: 'xai', code: 403, kind: 'capacity' }],
+          resolvedModel: 'direct/minimax/MiniMax-M3.1-Flash-Preview', resolvedVendor: 'minimax',
+          candidates: ['direct/xai/grok-4.7', 'direct/minimax/MiniMax-M3.1-Flash-Preview'], traceId: 't1',
+        },
+      })}\n`,
+      'data: [DONE]\n',
+    ])));
+    const result = await streamChatCompletion({ messages: [], transport: baseTransport }, {});
+    expect(result.gateway).toEqual({
+      failovers: [{ model: 'direct/xai/grok-4.7', vendor: 'xai', code: 403, kind: 'capacity' }],
+      candidates: ['direct/xai/grok-4.7', 'direct/minimax/MiniMax-M3.1-Flash-Preview'],
+      traceId: 't1',
+    });
+    expect(result.text).toBe('ok');
+  });
+
+  it('leaves it unset when the gateway sent no frame', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => sseResponse([
+      `data: ${JSON.stringify({ choices: [{ delta: { content: 'hi' }, finish_reason: 'stop' }] })}\n`,
+      'data: [DONE]\n',
+    ])));
+    expect((await streamChatCompletion({ messages: [], transport: baseTransport }, {})).gateway).toBeUndefined();
+  });
+});
+
 describe('streamChatCompletion upstream evidence', () => {
   it('surfaces what the vendor\'s raw response carried, from the finishing chunk', async () => {
     const evidence = { items: { reasoning: 1, message: 1 }, functionCalls: 0, recovered: 0 };

@@ -150,6 +150,10 @@ export interface RunPolicyState {
   readonly failovers: number;
   /** Transport retries spent on the CURRENT turn; a success resets it. */
   readonly turnRetries: number;
+  /** Turns answered while the run was still planning — what {@link handOffDue} reads. */
+  readonly planTurns: number;
+  /** The analysis budget already spent its one forced hand-off turn this run. */
+  readonly handOffForced: boolean;
   readonly outcome: RunPolicyOutcome;
   /**
    * The model that wrote the change, captured when verification starts. Every later
@@ -182,6 +186,11 @@ export type RunPolicyEvent =
   | { type: 'code_change_attempted' }
   /** The model called `hand_off` (planning ends explicitly). */
   | { type: 'hand_off' }
+  /** The analysis budget was spent and the forced hand-off turn still did not hand off:
+   *  planning ends anyway, so the coding role takes the next turn. */
+  | { type: 'plan_budget_spent' }
+  /** The host made this turn the hand-off (`hand_off` alone, a call required). */
+  | { type: 'hand_off_forced' }
   /** The run moved on to verifying its change. */
   | { type: 'verify_started' }
   /**
@@ -231,6 +240,8 @@ export function initialRunPolicy(opts: RunPolicyOptions = {}): RunPolicyState {
     tried: [],
     failovers: 0,
     turnRetries: 0,
+    planTurns: 0,
+    handOffForced: false,
     outcome: NONE,
     options: {
       pinReleasable: !!opts.pinReleasable,
@@ -286,6 +297,21 @@ export function offersHandOff(state: RunPolicyState): boolean {
   return state.phase === 'plan';
 }
 
+/**
+ * Turns a run may spend analysing before planning must end. Analysis had no ceiling, so a
+ * planner that neither edited nor called `hand_off` read for the whole run: VS Code chat
+ * #6 spent 778 plan turns on MiniMax Flash, made no hand-off and filed nothing for the
+ * coders. Twenty is past every healthy plan this repo has measured (chat #133 handed off
+ * after 22 turns and that was called slow).
+ */
+export const PLAN_TURN_BUDGET = 20;
+
+/** Whether the analysis budget is spent and the run is still planning — the host then
+ *  makes its next turn the hand-off (`hand_off` alone, a tool call required). */
+export function handOffDue(state: RunPolicyState): boolean {
+  return state.phase === 'plan' && state.planTurns >= PLAN_TURN_BUDGET;
+}
+
 export function reduceRunPolicy(state: RunPolicyState, event: RunPolicyEvent): RunPolicyState {
   const s: RunPolicyState = { ...state, outcome: NONE };
   switch (event.type) {
@@ -300,6 +326,10 @@ export function reduceRunPolicy(state: RunPolicyState, event: RunPolicyEvent): R
       // for every remaining turn once a pin, lock or stall failover had set a model.
       if (s.phase !== 'plan') return s;
       return { ...s, phase: 'code', outcome: s.model ? NONE : { kind: 'reask_as_coder' } };
+    case 'plan_budget_spent':
+      return s.phase === 'plan' ? { ...s, phase: 'code' } : s;
+    case 'hand_off_forced':
+      return { ...s, handOffForced: true };
     case 'hand_off':
       return s.phase === 'plan'
         ? { ...s, phase: 'code', outcome: { kind: 'handed_off' } }
@@ -344,7 +374,7 @@ function succeeded(s: RunPolicyState, resolved: string | undefined, acted: boole
   const proven = acted && resolved && resolved !== 'default' && !s.proven.includes(resolved)
     ? [...s.proven, resolved]
     : s.proven;
-  const next = { ...s, turnRetries: 0, proven };
+  const next = { ...s, turnRetries: 0, proven, planTurns: s.phase === 'plan' ? s.planTurns + 1 : s.planTurns };
   // Lock the non-strict run onto what actually served it. A strict pin already
   // resolves to itself, so this is a no-op for one.
   if (s.options.lockAfterFirstSuccess && !(s.model && s.strictPin) && resolved && resolved !== 'default') {

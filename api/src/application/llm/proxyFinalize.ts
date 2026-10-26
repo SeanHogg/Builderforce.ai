@@ -11,6 +11,10 @@ import type { ProxyResult } from './proxyTypes';
 import type { ProxyConfig } from './proxyConfig';
 import type { ProxyFunding } from './proxyFunding';
 
+/** Candidates the stream's terminal frame names — the head of the chain is what routing
+ *  decided; the tail is the plan pool every request ends in. */
+const MAX_REPORTED_CANDIDATES = 8;
+
 /** Stamp request-level diagnostics onto a ProxyResult before it leaves
  *  complete(). Single place that owns the trace id, total duration, candidate
  *  chain, final status, rolled-up classification, and outcome — so every
@@ -74,6 +78,9 @@ function instrumentStreamingResult(
       })),
       resolvedModel: result.resolvedModel,
       resolvedVendor: result.resolvedVendor,
+      // The order this request walked, so a run can tell a coder that was never seeded
+      // (or seeded behind another) from one that was tried and refused (`failovers`).
+      ...(result.candidateChain?.length ? { candidates: result.candidateChain.slice(0, MAX_REPORTED_CANDIDATES) } : {}),
       traceId,
     },
     onEmptyStream: () => {

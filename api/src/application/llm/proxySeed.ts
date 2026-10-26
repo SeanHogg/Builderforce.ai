@@ -272,6 +272,26 @@ export async function composeCompletionSeed(
     ...(opts?.roleStats ? { stats: opts.roleStats } : {}),
     ...(explore ? { explore } : {}),
   }, catalogView);
+  // Structured single line — greppable in Workers logs as `gateway.byo_seed`. Why a
+  // coding turn led with the model it did was unanswerable: demotions, the tenant's
+  // ranking and the role order all happen here and left no trace (chat #6).
+  // Only when something MOVED the order — a demotion, learned evidence, or a role order
+  // that differs from the tenant's own — so a 778-turn run is not 778 identical lines.
+  const reordered = byoSeeds.some((m, i) => m !== rankMerged[i]);
+  if (rankMerged.length > 0 && (demotedVendors.size > 0 || reordered || !!opts?.roleStats?.length)) {
+    console.log(JSON.stringify({
+      event: 'gateway.byo_seed',
+      tenantId: cfg.tenantId,
+      role: workload.role ?? null,
+      arcStage: workload.arcStage ?? null,
+      connected: rankMerged,
+      demoted: [...demotedVendors],
+      ranked: byoSeeds,
+      learned: !!opts?.roleStats?.length,
+      // An honoured caller model leads ahead of `ranked` (below).
+      callerLeads: !!callerLeads,
+    }));
+  }
   // An honoured caller model LEADS, but it never stands alone: the tenant's OTHER
   // connected accounts follow it as failover. BYO is an execution boundary — the
   // chain composer below drops every operator-funded model — so a lead-only head

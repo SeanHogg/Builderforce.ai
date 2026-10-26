@@ -30,6 +30,8 @@ import { compactionSavedTokens, stampOncePerCall } from './compactionSaved';
 import { callMemoryEffect } from '../memorySavings';
 import { accrueByoUnresolved, accrueProviderCap, emit, emitStreaming, nowIso, nowMs, pushTrace, runTrace, setActivity } from './runCells';
 import { modelDowngradeEvent } from './modelDowngrade';
+import { gatewayRoutingArgs } from './gatewayRoutingTrace';
+import { planBudgetTurn } from './planBudget';
 import { asLiveTurn, connectRetryStep, liveTurnModel } from './turnPersistence';
 import { reportToPolicy, type RunLoopContext, type TurnMeta } from './runLoopContext';
 
@@ -88,6 +90,13 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // whole turn. Stays undefined for a pure tool-call / empty turn.
     let firstTokenAt: number | undefined;
     let result: StreamChatResult;
+    // Analysis that has spent its budget ends HERE (`planBudget.ts`), BEFORE selection:
+    // the hand-off turn offers `hand_off` alone with a call required, and a forced turn
+    // that still did not hand off ends planning, so this turn already selects as code.
+    const handOffTurn = planBudgetTurn(run, iter);
+    // What the turn's FIRST request carries beyond the transcript — every retry of the same
+    // turn sends it again, or a forced hand-off would retry with no instruction.
+    const opening: ChatCompletionMessage[] = handOffTurn ? [handOffTurn.brief] : [];
     // Advertise a RELEVANT subset rather than the whole catalog. ~300 tool
     // definitions push most providers past the point where they reliably emit any
     // tool call at all (observed: 308 tools → three consecutive turns with zero
@@ -119,15 +128,17 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // The ROUTER rides along whenever selection actually trimmed something, so the
     // tools that missed the cut stay REACHABLE instead of silently ceasing to exist.
     // Three fixed schemas buy back the whole catalog; see toolRouter.ts.
-    const advertised = selection.trimmed
-      ? [...selected, ...routerToolSpecs(allTools?.length ?? 0)]
-      : selected;
+    const advertised = handOffTurn
+      ? handOffTurn.tools
+      : selection.trimmed
+        ? [...selected, ...routerToolSpecs(allTools?.length ?? 0)]
+        : selected;
     const tools = advertised.length > 0 ? advertised : undefined;
     // What the model could actually call THIS turn. Kept as a set so the turn can
     // answer, at the only point that knows both halves, "did it narrate a tool it was
     // never shown?" — see `narratedUnadvertised` below.
     const advertisedNames = new Set(advertised.map((t) => t.function.name));
-    if (selection.trimmed) {
+    if (selection.trimmed && !handOffTurn) {
       pushTrace(c, {
         ts: nowIso(),
         category: 'message',
@@ -175,7 +186,7 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // re-ask below asks for what the policy says AFTER the event that caused it.
     let turnRole = nextTurn(run.policy, { hasTools: !!tools }).role;
     // Consume a one-shot forced tool_choice from stall recovery (if any).
-    const turnToolChoice = run.forceToolChoice;
+    const turnToolChoice = handOffTurn ? handOffTurn.toolChoice : run.forceToolChoice;
     run.forceToolChoice = undefined;
     // `extra` rides THIS request only (the hand-off brief); it never enters the transcript.
     // What the run has already established, in front of THIS turn only — so the model
@@ -219,7 +230,7 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
       emit(c);
     };
     try {
-      result = await request();
+      result = await request(opening);
     } catch (e) {
       // Aborting the fetch rejects the stream — that's a user Stop; the kernel
       // reports it as `cancelled` (no error trace, no error message).
@@ -239,7 +250,7 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
       pushTrace(c, transportRetryTrace(nowIso(), iter, outcome, (e as Error).message));
       restartTurn();
       try {
-        result = await request();
+        result = await request(opening);
       } catch (retryError) {
         if (c.abort?.signal.aborted) throw retryError;
         throw turnError(retryError);
@@ -365,6 +376,11 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
         // connected Claude account (expired?)" apart from "nothing connected".
         account: result.account,
         byoUnresolved: result.byoUnresolved,
+        // How the gateway ROUTED the turn: the candidates it walked and every model it
+        // tried and left (`model:status kind`). The only record of why a coding turn
+        // landed where it did — a connected coder never seeded reads differently from
+        // one seeded and refused.
+        ...gatewayRoutingArgs(result.gateway),
         // How many tools the turn was actually OFFERED, out of the whole catalog.
         // A zero here is the difference between "the model refused to act" and "it had
         // nothing to act with" — previously unanswerable from a copied report, which

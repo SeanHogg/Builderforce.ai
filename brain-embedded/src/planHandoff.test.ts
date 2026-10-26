@@ -80,6 +80,27 @@ describe('executeHandOff', () => {
     expect(out.next).toContain('wait_agents');
   });
 
+  it('hands every implementation child the research: the summary and what was already read', async () => {
+    const briefs: string[] = [];
+    await executeHandOff(
+      { summary: 'runPolicy owns the phase; hand_off is advertised in completeTurn.', tasks: [task('A', ['a']), task('B', ['b'])] },
+      ports({
+        knowledge: 'Read: packages/run-policy/src/policy.ts\nSearched: offersHandOff',
+        runTool: async (name, args) => {
+          if (name !== 'spawn_agents') return { id: 1 };
+          for (const w of args.workstreams as Array<{ task: string }>) briefs.push(w.task);
+          return { ok: true, workstreams: briefs.map(() => ({ ok: true })) };
+        },
+      }),
+    );
+    expect(briefs).toHaveLength(2);
+    for (const brief of briefs) {
+      expect(brief).toContain('Research handed to you');
+      expect(brief).toContain('runPolicy owns the phase');
+      expect(brief).toContain('Read: packages/run-policy/src/policy.ts');
+    }
+  });
+
   it('falls back to the coder, in order, when the fan-out refuses before any child starts', async () => {
     const out = await executeHandOff(
       { summary: '', tasks: [task('A', ['a']), task('B', ['b'])] },
