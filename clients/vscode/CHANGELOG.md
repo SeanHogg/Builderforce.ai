@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.101] — Mid-run messages keep their attached images
+
+- **A message with images sent while a run is executing no longer loses the images.** Previously only the text reached the model — an image attached to a mid-run steer (or a queued message drained after the run) was silently dropped. The whole path now threads attachments through: the composer snapshots them onto each held turn, the steer payload carries them, and the run builds the same `text + image` vision content a normal send builds. A mid-run message now reaches the model exactly as if it had been sent before the run started.
+- **"Queue for after" keeps its attachments.** A message explicitly queued for after the run used to clear the composer's image preview but send without the image; the held turn now carries its own attachment snapshot through to the send.
+
 ## [2026.10.81] — The model you pick is the model that runs
 
 - **Picking a model selects Specific.** Under Hybrid a picked model was only tried first, so another model could answer, for example MiniMax answering a Kimi pick, while the mode control still showed Hybrid. Picking a model or "your connected accounts" now switches the mode to Specific, which holds the pick with no fallback. Picking Auto switches back to Hybrid. This applies to every picker: the `/` menu, **Select BuilderForce model**, and connecting a Kimi model.

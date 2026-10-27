@@ -1972,17 +1972,17 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-haiku-latest": [1e-7, 5e-7],
   "~anthropic/claude-opus-latest": [4e-6, 2e-5],
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
-  "~deepseek/deepseek-flash-latest": [2e-8, 1e-6],
-  "~deepseek/deepseek-pro-latest": [2565e-10, 8e-6],
+  "~deepseek/deepseek-flash-latest": [4e-8, 5e-7],
+  "~deepseek/deepseek-pro-latest": [2374e-10, 8e-6],
   "~deepseek/deepseek-v4-flash-latest": [475e-10, 1568e-10],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [226e-9, 2e-5],
+  "~moonshotai/kimi-latest": [1605e-10, 101583e-10],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
   "~openai/gpt-sol-latest": [2e-6, 1e-5],
-  "~openai/gpt-terra-latest": [2e-6, 12e-6],
+  "~openai/gpt-terra-latest": [1e-6, 5e-6],
   "~unbiased/pareto-latest": [8e-7, 32e-7],
   "~x-ai/grok-latest": [2e-6, 6e-6],
   "~z-ai/glm-flash-latest": [413e-10, 758e-10],
@@ -2029,7 +2029,6 @@ var PRICE_SNAPSHOT = {
   "anthropic/claude-sonnet-5:batch": [1e-6, 5e-6],
   "anthropic/claude-sonnet-5.5": [2e-6, 1e-5],
   "anthropic/claude-sonnet-5.5:batch": [1e-6, 5e-6],
-  "arcee-ai/trinity-large-thinking": [25e-8, 8e-7],
   "bytedance-seed/seed-1.6": [25e-8, 2e-6],
   "bytedance-seed/seed-1.6-flash": [75e-9, 3e-7],
   "bytedance-seed/seed-2-1-turbo": [5e-7, 25e-7],
@@ -2056,7 +2055,7 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v4-flash-vision-exp": [2156e-10, 6468e-10],
   "deepseek/deepseek-v4-pro": [95526e-11, 191052e-11],
   "deepseek/deepseek-v4-pro-0813": [66e-8, 198e-8],
-  "deepseek/deepseek-v4.1-flash": [2e-8, 1e-6],
+  "deepseek/deepseek-v4.1-flash": [43156e-12, 1e-8],
   "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
   "deepseek/deepseek-v4.1-flash:batch": [5e-8, 15e-8],
   "dots-studio/dots-3-note-preview:free": [0, 0],
@@ -2097,14 +2096,13 @@ var PRICE_SNAPSHOT = {
   "google/gemma-3-12b-it": [5e-8, 15e-8],
   "google/gemma-3-27b-it": [8e-8, 35e-8],
   "google/gemma-3-4b-it": [4e-8, 5e-8],
-  "google/gemma-4-26b-a4b-it": [675e-10, 225e-9],
+  "google/gemma-4-26b-a4b-it": [765e-10, 255e-9],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
-  "google/gemma-4-31b-it": [1e-7, 34e-8],
+  "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
   "google/lyria-3-clip-preview": [0, 0],
   "google/lyria-3-pro-preview": [0, 0],
   "gryphe/mythomax-l2-13b": [8e-8, 11e-8],
-  "ibm-granite/granite-4.0-h-micro": [17e-9, 112e-9],
   "ibm-granite/granite-4.2-8b": [6e-8, 25e-8],
   "inception/mercury-2": [25e-8, 75e-8],
   "inception/mercury-2.5": [4e-8, 15e-8],
@@ -2146,27 +2144,22 @@ var PRICE_SNAPSHOT = {
   "minimax/minimax-m3": [3e-7, 12e-7],
   "minimax/minimax-m3.1-flash": [15e-8, 6e-7],
   "mistralai/codestral-2508": [3e-7, 9e-7],
-  "mistralai/codestral-2508:batch": [15e-8, 45e-8],
   "mistralai/devstral-2512": [4e-7, 2e-6],
   "mistralai/ministral-14b-2512": [2e-7, 2e-7],
   "mistralai/ministral-3b-2512": [1e-7, 1e-7],
   "mistralai/ministral-8b-2512": [15e-8, 15e-8],
-  "mistralai/ministral-8b-2512:batch": [75e-9, 75e-9],
   "mistralai/mistral-large": [2e-6, 6e-6],
   "mistralai/mistral-large-2407": [2e-6, 6e-6],
   "mistralai/mistral-large-2512": [5e-7, 15e-7],
-  "mistralai/mistral-large-2512:batch": [25e-8, 75e-8],
   "mistralai/mistral-large-4-0": [136e-8, 418e-8],
   "mistralai/mistral-medium-3": [4e-7, 2e-6],
   "mistralai/mistral-medium-3-5": [15e-7, 75e-7],
   "mistralai/mistral-medium-3-5:batch": [75e-8, 375e-8],
   "mistralai/mistral-medium-3.1": [4e-7, 2e-6],
-  "mistralai/mistral-medium-3.1:batch": [2e-7, 1e-6],
   "mistralai/mistral-nemo": [29e-9, 3e-8],
   "mistralai/mistral-saba": [2e-7, 6e-7],
   "mistralai/mistral-small-24b-instruct-2501": [5e-8, 8e-8],
   "mistralai/mistral-small-2603": [15e-8, 6e-7],
-  "mistralai/mistral-small-2603:batch": [75e-9, 3e-7],
   "mistralai/mistral-small-3.1-24b-instruct": [351e-9, 555e-9],
   "mistralai/mistral-small-3.2-24b-instruct": [75e-9, 2e-7],
   "mistralai/mixtral-8x22b-instruct": [2e-6, 6e-6],
@@ -2178,8 +2171,8 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2-thinking": [6e-7, 25e-7],
   "moonshotai/kimi-k2.5": [5e-7, 25e-7],
   "moonshotai/kimi-k2.6": [65e-8, 341e-8],
-  "moonshotai/kimi-k2.7-code": [6712e-10, 335e-8],
-  "moonshotai/kimi-k3": [226e-9, 2e-5],
+  "moonshotai/kimi-k2.7-code": [56e-8, 31e-7],
+  "moonshotai/kimi-k3": [169e-9, 2e-5],
   "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
   "moonshotai/kimi-k3.1-pro": [2e-6, 1e-5],
   "morph/morph-v3-fast": [8e-7, 12e-7],
@@ -2284,6 +2277,8 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-6.1-sol-pro": [2e-6, 1e-5],
   "openai/gpt-6.1-sol-pro:batch": [1e-6, 5e-6],
   "openai/gpt-6.1-sol:batch": [1e-6, 5e-6],
+  "openai/gpt-6.1-terra": [1e-6, 5e-6],
+  "openai/gpt-6.1-terra:batch": [5e-7, 25e-7],
   "openai/gpt-audio": [25e-7, 1e-5],
   "openai/gpt-audio-mini": [6e-7, 24e-7],
   "openai/gpt-chat-latest": [5e-6, 3e-5],
@@ -2330,7 +2325,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3-235b-a22b-2507": [9e-8, 55e-8],
   "qwen/qwen3-235b-a22b-thinking-2507": [45e-8, 35e-7],
   "qwen/qwen3-30b-a3b": [12e-8, 5e-7],
-  "qwen/qwen3-30b-a3b-instruct-2507": [9e-8, 3e-7],
+  "qwen/qwen3-30b-a3b-instruct-2507": [1e-7, 3e-7],
   "qwen/qwen3-32b": [8e-8, 28e-8],
   "qwen/qwen3-coder": [3e-7, 1e-6],
   "qwen/qwen3-coder-30b-a3b-instruct": [7e-8, 28e-8],
@@ -2351,7 +2346,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
   "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
   "qwen/qwen3.6-27b": [32e-8, 32e-7],
-  "qwen/qwen3.6-35b-a3b": [1e-7, 95e-8],
+  "qwen/qwen3.6-35b-a3b": [1e-7, 9e-7],
   "qwen/qwen3.6-flash": [1875e-10, 1125e-9],
   "qwen/qwen3.6-plus": [325e-9, 195e-8],
   "qwen/qwen3.7-flash": [3e-8, 13e-8],
@@ -2385,9 +2380,9 @@ var PRICE_SNAPSHOT = {
   "tencent/hy-mt2-1.8b": [44e-9, 177e-9],
   "tencent/hy-mt2-30b-a3b": [74e-9, 295e-9],
   "tencent/hy-mt2-7b": [74e-9, 295e-9],
-  "tencent/hy3": [132e-9, 528e-9],
+  "tencent/hy3": [825e-10, 33e-8],
   "tencent/hy3-preview": [18e-8, 6e-7],
-  "tencent/hy4-preview": [834e-9, 2501e-9],
+  "tencent/hy4-preview": [7506e-10, 22509e-10],
   "thedrummer/cydonia-24b-v4.1": [3e-7, 5e-7],
   "thedrummer/skyfall-36b-v2": [55e-8, 8e-7],
   "thedrummer/unslopnemo-12b": [4e-7, 4e-7],
@@ -5556,6 +5551,8 @@ function initialRunPolicy(opts = {}) {
     turnRetries: 0,
     planTurns: 0,
     handOffForced: false,
+    codeTurns: 0,
+    changeForced: false,
     outcome: NONE,
     options: {
       pinReleasable: !!opts.pinReleasable,
@@ -5602,6 +5599,9 @@ var PLAN_TURN_BUDGET = 20;
 function handOffDue(state) {
   return state.phase === "plan" && state.planTurns >= PLAN_TURN_BUDGET;
 }
+function changeDue(state, progressed) {
+  return state.phase === "code" && !progressed && !state.changeForced && state.codeTurns >= PLAN_TURN_BUDGET;
+}
 function reduceRunPolicy(state, event) {
   const s = { ...state, outcome: NONE };
   switch (event.type) {
@@ -5614,6 +5614,8 @@ function reduceRunPolicy(state, event) {
       return s.phase === "plan" ? { ...s, phase: "code" } : s;
     case "hand_off_forced":
       return { ...s, handOffForced: true };
+    case "change_forced":
+      return { ...s, changeForced: true };
     case "hand_off":
       return s.phase === "plan" ? { ...s, phase: "code", outcome: { kind: "handed_off" } } : { ...s, outcome: { kind: "hand_off_rejected" } };
     case "verify_started": {
@@ -5651,7 +5653,13 @@ function reduceRunPolicy(state, event) {
 }
 function succeeded(s, resolved, acted) {
   const proven = acted && resolved && resolved !== "default" && !s.proven.includes(resolved) ? [...s.proven, resolved] : s.proven;
-  const next = { ...s, turnRetries: 0, proven, planTurns: s.phase === "plan" ? s.planTurns + 1 : s.planTurns };
+  const next = {
+    ...s,
+    turnRetries: 0,
+    proven,
+    planTurns: s.phase === "plan" ? s.planTurns + 1 : s.planTurns,
+    codeTurns: s.phase === "code" ? s.codeTurns + 1 : s.codeTurns
+  };
   if (s.options.lockAfterFirstSuccess && !(s.model && s.strictPin) && resolved && resolved !== "default") {
     return { ...next, model: resolved, locked: true };
   }
@@ -11770,7 +11778,6 @@ function makeCell() {
     turn: null,
     codeChanged: false,
     codeModel: null,
-    codePhaseReached: false,
     runId: "",
     ticketRecorded: false,
     touchedFiles: [],
@@ -16656,7 +16663,7 @@ async function applyModelPreflight(c, preflight, pinnedModel) {
   } catch {
     return;
   }
-  const plan = c.codeChanged || c.codePhaseReached ? null : planModelWarning(pinnedModel);
+  const plan = c.codeChanged ? null : planModelWarning(pinnedModel);
   const event = modelPreflightEvent(result, nowIso(), plan);
   if (!event) return;
   if (result?.byoUnresolved.length) accrueByoUnresolved(c, result.byoUnresolved.join(","));
@@ -16923,10 +16930,13 @@ ${turnContext}` : systemPrompt),
     policy: initialRunPolicy({
       pinnedModel: model,
       strictPin: modelStrict,
-      // A sub-agent is a delegated SLICE: its owner already planned it, and its host routes
-      // its turns for its own role. Started in `plan` it was offered `hand_off` and the
-      // analysis phase all over again, inside work it was handed to carry out.
-      startPhase: c.codeChanged || c.codePhaseReached || req.lineage ? "code" : "plan"
+      // Every run starts the same way, whatever the chat's history: a chat that coded
+      // before used to start every later run in `code`, which skipped the analysis
+      // budget and let an old chat read forever while a fresh one handed off (chat
+      // #5739). The one exception is a ROLE, not history — a sub-agent is a delegated
+      // SLICE its owner already planned; started in `plan` it was offered `hand_off` and
+      // the analysis all over again, inside work it was handed to carry out.
+      startPhase: req.lineage ? "code" : "plan"
     }),
     // Bounded counter for the announced-but-never-made tool call recovery, so a model
     // that keeps narrating instead of acting cannot spin the loop. Not one-shot: a model
@@ -17239,7 +17249,7 @@ function queueRunSteering(runKey, text, opts) {
   const trimmed = text.trim();
   if (!trimmed) return;
   const queue = inboxes.get(runKey) ?? [];
-  queue.push(trimmed);
+  queue.push({ text: trimmed, attachments: opts?.attachments });
   inboxes.set(runKey, queue);
   if (!opts?.interrupt) return;
   interrupting.add(runKey);
@@ -17251,6 +17261,14 @@ function drainRunSteering(runKey) {
   if (!queue?.length) return [];
   inboxes.delete(runKey);
   return queue;
+}
+function steerModelContent(msg) {
+  const imageAtts = (msg.attachments ?? []).filter((a) => a.imageUrl);
+  if (imageAtts.length === 0) return msg.text;
+  return [
+    { type: "text", text: msg.text },
+    ...imageAtts.map((a) => ({ type: "image_url", image_url: { url: a.imageUrl } }))
+  ];
 }
 function hasRunInterrupt(runKey) {
   return interrupting.has(runKey);
@@ -17323,17 +17341,17 @@ function skipOnSteer(runKey, inner) {
   };
 }
 function takeRunSteering(c, runKey, step) {
-  const texts = drainRunSteering(runKey);
-  if (texts.length > 0) {
+  const messages = drainRunSteering(runKey);
+  if (messages.length > 0) {
     pushTrace(c, {
       ts: nowIso(),
       category: "message",
       label: "steer.applied",
-      args: { step, messages: texts.length },
-      result: texts.map((t) => t.slice(0, 200)).join("\n")
+      args: { step, messages: messages.length },
+      result: messages.map((m) => m.text.slice(0, 200)).join("\n")
     });
   }
-  return texts;
+  return messages;
 }
 
 // src/runStore/completeTurn.ts
@@ -17418,8 +17436,9 @@ async function settleReply(run, rawText, result, requested) {
   return assistantMsg;
 }
 
-// src/runStore/planBudget.ts
+// src/runStore/progressBudget.ts
 var HAND_OFF_DUE_BRIEF = `ANALYSIS IS OVER. You have spent ${PLAN_TURN_BUDGET} turns analysing without changing anything. Call hand_off NOW. summary = the research for the coders: everything you and any research sub-agents established that the change needs (files, functions, what they do today, decisions, traps). tasks = each one standalone: the files, the change, and how to know it is done. The coding agents start from exactly what you write here; they do not see this conversation.`;
+var CHANGE_DUE_BRIEF = `STOP READING. You have spent ${PLAN_TURN_BUDGET} coding turns without changing anything. Make the change now with what you already know \u2014 the edit tools are the only ones offered this turn. If something genuinely blocks the change, call ask_user and say exactly what.`;
 function budgeted(run) {
   return run.metadata.mode !== "chat" && (asksForChange(run.userRequest) || isContinuationDirective(run.userRequest));
 }
@@ -17427,7 +17446,6 @@ function planBudgetTurn(run, step) {
   if (!handOffDue(run.policy) || !budgeted(run)) return null;
   if (run.policy.handOffForced || !run.canAskUser) {
     reportToPolicy(run, { type: "plan_budget_spent" });
-    run.c.codePhaseReached = true;
     pushTrace(run.c, {
       ts: nowIso(),
       category: "message",
@@ -17447,6 +17465,21 @@ function planBudgetTurn(run, step) {
   });
   return { tools: [HAND_OFF_TOOL_SPEC], toolChoice: "required", brief: { role: "user", content: HAND_OFF_DUE_BRIEF } };
 }
+function changeBudgetTurn(run, step, selected) {
+  const progressed = run.c.codeChanged || run.usedTools.has(HAND_OFF_TOOL);
+  if (!changeDue(run.policy, progressed) || !budgeted(run)) return null;
+  const tools = selected.filter((t) => isCodeChangeTool(t.function.name) || run.canAskUser && t.function.name === ASK_USER_TOOL);
+  if (!tools.some((t) => isCodeChangeTool(t.function.name))) return null;
+  reportToPolicy(run, { type: "change_forced" });
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "loop.change_due",
+    args: { step, codeTurns: run.policy.codeTurns },
+    result: `${run.policy.codeTurns} coding turn(s) with no change and no hand-off \u2014 this turn offers the change tools alone and requires a call.`
+  });
+  return { tools, toolChoice: "required", brief: { role: "user", content: CHANGE_DUE_BRIEF } };
+}
 
 // src/runStore/completeTurn.ts
 function completeTurnPort(run) {
@@ -17456,7 +17489,7 @@ function completeTurnPort(run) {
     const iter = ctx.step;
     c.streamingText = "";
     emit(c);
-    for (const text of takeRunSteering(c, runKey, iter)) convo.push({ role: "user", content: text });
+    for (const steer of takeRunSteering(c, runKey, iter)) convo.push({ role: "user", content: steerModelContent(steer) });
     const working = await buildWorkingTranscript(
       c,
       systemPrompt,
@@ -17482,7 +17515,6 @@ function completeTurnPort(run) {
     let firstTokenAt;
     let result;
     const handOffTurn = planBudgetTurn(run, iter);
-    const opening = handOffTurn ? [handOffTurn.brief] : [];
     const selection = selectToolsForTurn(allTools, {
       // The REQUEST, captured once before the loop — never "the latest user message".
       // The loop pushes its own `role:'user'` turns (the stall-recovery nudge, the
@@ -17505,10 +17537,12 @@ function completeTurnPort(run) {
       required: offersHandOff(run.policy) && canAskUser ? [...alwaysAdvertised, HAND_OFF_TOOL] : alwaysAdvertised
     });
     const selected = offersHandOff(run.policy) ? selection.tools : selection.tools.filter((t) => t.function.name !== HAND_OFF_TOOL);
-    const advertised = handOffTurn ? handOffTurn.tools : selection.trimmed ? [...selected, ...routerToolSpecs(allTools?.length ?? 0)] : selected;
+    const forced = handOffTurn ?? changeBudgetTurn(run, iter, selected);
+    const opening = forced ? [forced.brief] : [];
+    const advertised = forced ? forced.tools : selection.trimmed ? [...selected, ...routerToolSpecs(allTools?.length ?? 0)] : selected;
     const tools = advertised.length > 0 ? advertised : void 0;
     const advertisedNames = new Set(advertised.map((t) => t.function.name));
-    if (selection.trimmed && !handOffTurn) {
+    if (selection.trimmed && !forced) {
       pushTrace(c, {
         ts: nowIso(),
         category: "message",
@@ -17545,7 +17579,7 @@ function completeTurnPort(run) {
       }
     };
     let turnRole = nextTurn(run.policy, { hasTools: !!tools }).role;
-    const turnToolChoice = handOffTurn ? handOffTurn.toolChoice : run.forceToolChoice;
+    const turnToolChoice = forced ? forced.toolChoice : run.forceToolChoice;
     run.forceToolChoice = void 0;
     const ledger = tools ? volatileTail([run.knowledge.brief()]) : null;
     const request = async (extra = []) => {
@@ -17604,7 +17638,6 @@ function completeTurnPort(run) {
       }
     }
     const codeChangeOutcome = turnRole === "plan" && result.toolCalls.some((tc) => isCodeChangeTool(tc.name)) ? reportToPolicy(run, { type: "code_change_attempted" }).outcome : null;
-    if (codeChangeOutcome) c.codePhaseReached = true;
     if (codeChangeOutcome?.kind === "reask_as_coder") {
       turnRole = nextTurn(run.policy, { hasTools: !!tools }).role;
       const brief = coderHandoffBrief(replayTextOf(result.text), result.toolCalls);
@@ -17899,7 +17932,6 @@ function beforeDispatchHook(run) {
       const plan = parseHandOff(call2.args);
       if (typeof plan === "string") return { result: { data: { ok: false, error: plan } } };
       reportToPolicy(run, { type: "hand_off" });
-      c.codePhaseReached = true;
       pushTrace(c, handOffTrace(nowIso(), ctx.step, plan.tasks.length, HAND_OFF_TOOL));
       const outcome = await executeHandOff(plan, {
         runTool: (name, args2) => runTool(name, args2),
@@ -18178,7 +18210,13 @@ function finalAnswerHook(run) {
     };
     const steering = takeRunSteering(c, runKey, iter);
     if (steering.length > 0) {
-      await requeueWithNudge(steering.join("\n\n"));
+      const joinedText = steering.map((m) => m.text).join("\n\n");
+      const imageAtts = steering.flatMap((m) => (m.attachments ?? []).filter((a) => a.imageUrl));
+      const nudge = imageAtts.length > 0 ? [
+        { type: "text", text: joinedText },
+        ...imageAtts.map((a) => ({ type: "image_url", image_url: { url: a.imageUrl } }))
+      ] : joinedText;
+      await requeueWithNudge(nudge);
       c.streamingText = "";
       emit(c);
       return { action: "continue" };
@@ -18912,7 +18950,7 @@ ${extraSystem}` : resolvedSystemPrompt;
       const runChatId = id;
       const stillOpen = () => chatIdRef.current === runChatId || chatIdRef.current === origin;
       autoRepliedChatIdRef.current = id;
-      const attachments = [...pendingAttachments];
+      const attachments = [...opts?.attachments ?? pendingAttachments];
       setPendingAttachments([]);
       setLocalError("");
       let displayContent = trimmed;
@@ -21080,6 +21118,7 @@ export {
   stallUnrecoveredInTrace,
   startEngineRun,
   startRun,
+  steerModelContent,
   stepRow,
   stepSig,
   stopRun,
