@@ -116,9 +116,27 @@ export function scopedLocalSuccessRouter(router: LocalSuccessRouter, scope: Loca
   };
 }
 
-export interface LocalSuccessRouterOptions {
+/** A tuning value: fixed, or read per turn (a host setting the person can change live). */
+export type LocalSuccessTunable = number | (() => number | undefined);
+
+/** The host's tuning of WHEN a confident "fails" verdict skips local — the editor's
+ *  `builderforce.localModels.skipConfidence` / `.explore` settings. */
+export interface LocalSuccessTuning {
+  /** Skip local only when P(fails) exceeds this; default {@link LOCAL_SKIP_CONFIDENCE}. */
+  skipConfidence?: LocalSuccessTunable;
+  /** Of the turns that would skip, the share still tried locally; default {@link LOCAL_SKIP_EXPLORE}. */
+  explore?: LocalSuccessTunable;
+}
+
+export interface LocalSuccessRouterOptions extends LocalSuccessTuning {
   random?: () => number;
   now?: () => number;
+}
+
+/** `value`'s current reading when it is a share in [0, 1], else `fallback`. */
+function shareOf(value: LocalSuccessTunable | undefined, fallback: number): number {
+  const v = typeof value === 'function' ? value() : value;
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1 ? v : fallback;
 }
 
 const registry = createMlRegistry();
@@ -211,7 +229,9 @@ export function createLocalSuccessRouter(store: LocalSuccessStore, opts: LocalSu
       if (!models || !trusted(snapshot.head)) return { turn, skip: false, probability: null };
       try {
         const { output } = await runMlTask<LocalSuccess>(LOCAL_SUCCESS_TASK.id, turn, { registry, mode: 'local-only', models });
-        const skip = 1 - output.probability > LOCAL_SKIP_CONFIDENCE && random() >= LOCAL_SKIP_EXPLORE;
+        const skipConfidence = shareOf(opts.skipConfidence, LOCAL_SKIP_CONFIDENCE);
+        const explore = shareOf(opts.explore, LOCAL_SKIP_EXPLORE);
+        const skip = 1 - output.probability > skipConfidence && random() >= explore;
         return { turn, skip, probability: output.probability };
       } catch {
         return { turn, skip: false, probability: null };
@@ -358,11 +378,12 @@ export function webStorageLocalSuccessStore(key = 'bf.ml.run.local-success'): Lo
 /** One router per store, so a host that builds its stream per turn still trains one history. */
 const routers = new WeakMap<LocalSuccessStore, LocalSuccessRouter>();
 
-/** The router for `store`, created on first use. */
-export function localSuccessRouterFor(store: LocalSuccessStore): LocalSuccessRouter {
+/** The router for `store`, created on first use with the host's `tuning` (a getter-valued
+ *  tuning is read per turn, so one router follows the host's live settings). */
+export function localSuccessRouterFor(store: LocalSuccessStore, tuning: LocalSuccessTuning = {}): LocalSuccessRouter {
   let r = routers.get(store);
   if (!r) {
-    r = createLocalSuccessRouter(store);
+    r = createLocalSuccessRouter(store, tuning);
     routers.set(store, r);
   }
   return r;

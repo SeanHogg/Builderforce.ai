@@ -24,6 +24,8 @@ import type { RunDirectives } from "./hooks/runHooks";
 import type { RunSink, WebviewRunStart } from "./brainRunHostProtocol";
 import type { ChildControls, ChildOwner } from "./childRunSpawner";
 import type { ChildApprover } from "./childApprovalRelay";
+import type { EditorRunSettings } from "./stageModels";
+import type { RunEndOutcome } from "@seanhogg/builderforce-brain-embedded";
 
 /** The top-level owner's name, as the chat shows it (a brand, not translated). */
 export const OWNER_NAME = "BuilderForce";
@@ -73,6 +75,12 @@ export interface BrainRunHostPorts {
   chatIdentity?(chatId: number): Promise<{ serverChatId: number | null; clientChatId?: string }>;
   /** PRD 36: wrap the run's streamer so every call lands in the chat's usage ledger. */
   recordUsage?(stream: BrainStreamFn, run: { chatId: number; runKey: number; mode?: "chat" | "work" }): BrainStreamFn;
+  /** The editor's per-run settings — stage models, pipeline routing, the USD cap
+   *  (`editorRunSettings.ts`). Read once per run; omitted ⇒ none apply. */
+  runSettings?(): Promise<EditorRunSettings>;
+  /** PRD 36 / WS-R: how a run ended, under the id its usage rows carry — beside the
+   *  chat's usage ledger, for the pipeline route report. */
+  recordRunOutcome?(run: { chatId: number }, end: { runId: string; outcome: RunEndOutcome }): Promise<void>;
   /** Project-Evermind hooks for a project (recall, memory-first answer, cache), tiered on
    *  the conversation when it has a server chat (`null` = none). */
   evermind(projectId: number, serverChatId: number | null): EvermindRunHooks | undefined;
@@ -126,6 +134,12 @@ export interface BrainRunHostPorts {
    * it inlined whole are the run's reads already. Omitted ⇒ none.
    */
   contextPack?(input: { projectId?: number; serverChatId: number | null; request: string; memory: boolean }): Promise<RunContextPack | undefined>;
+  /**
+   * The answer the run adopts INSTEAD of calling a model, when the request is one the
+   * workspace answers deterministically — "where is X defined?" with every name resolved
+   * by the symbol index (`contextPack/preSearchSource.ts`). Undefined ⇒ the run proceeds.
+   */
+  answerWithoutModel?(request: string): Promise<string | undefined>;
   /**
    * PRD 35 E7: the BYO health check before turn 1 — unresolved accounts in the gateway
    * header's `provider:reason` form, shown on the run's banner before any work.

@@ -138,19 +138,31 @@ export function lastStableIndex<T>(
  *  to Anthropic as a `tool_result` content block carrying the marker. */
 const HISTORY_ROLES = new Set(['user', 'assistant', 'tool']);
 
+/** Roles whose marker reaches Anthropic as a plain TEXT block — the fallback breakpoint. */
+const TEXT_ROLES = new Set(['user', 'assistant']);
+
+/** Anthropic's cap on `cache_control` breakpoints per request (tools + system + messages). */
+export const ANTHROPIC_MAX_BREAKPOINTS = 4;
+
 /**
  * Inject `cache_control` breakpoints into an OpenAI-format `messages` array for
  * caching-capable Anthropic models. No-op (returns the input reference) for
  * non-Anthropic models, empty input, or caller-managed caching.
  *
- * Breakpoints (≤ 2, well within Anthropic's cap of 4):
+ * Breakpoints (≤ 3; this path marks no tools, so with Anthropic's cap of 4 —
+ * {@link ANTHROPIC_MAX_BREAKPOINTS}, tools + system + messages — one slot stays free):
  *   1. the last `system` message — the largest stable prefix, the biggest win;
  *   2. the last STABLE history message ({@link lastStableIndex}) — so the next request
  *      reads the whole conversation so far as a cached prefix. Tool results count: in
  *      a tool loop the newest stable message IS a tool result, and skipping it parked
  *      the breakpoint on the last text turn, so every tool turn after it was re-billed
  *      at full price. Only a text-less assistant tool-call turn (nothing to attach to)
- *      and the trailing `<run-state>` tail are walked past.
+ *      and the trailing `<run-state>` tail are walked past;
+ *   3. when (2) landed on a `tool` message, ALSO the last stable user/assistant TEXT
+ *      message before it. A marker on a tool-role content part relies on OpenRouter
+ *      carrying it onto the translated `tool_result` block; the text-message marker is
+ *      the documented shape, so if the tool-part marker is ever dropped in translation
+ *      the prefix through the last text turn still caches instead of nothing at all.
  *
  * `ttl` (default `'5m'`) selects the breakpoint retention — pass `'1h'` (from a
  * caller's `_builderforce.cacheTtl` hint) to keep the prefix warm across idle
@@ -181,35 +193,17 @@ export function applyPromptCaching(messages: Array<Msg>, model: string, ttl?: Ca
   );
   if (history >= 0) marks.add(history);
 
+  // (3) Fallback: a tool-result breakpoint also gets a text one behind it.
+  if (history >= 0 && (messages[history] as { role?: unknown }).role === 'tool') {
+    const text = lastStableIndex(
+      messages.slice(0, history),
+      isVolatileTailMessage,
+      (m) => TEXT_ROLES.has(String((m as { role?: unknown }).role)) && withCacheControl(m, marker) !== m,
+      lastSystem,
+    );
+    if (text >= 0) marks.add(text);
+  }
+
   if (marks.size === 0) return messages;
   return messages.map((m, i) => (marks.has(i) ? withCacheControl(m, marker) : m));
-}
-
-/** A block-content message as the direct Anthropic Messages vendor sends it. */
-export interface AnthropicBlockMessage {
-  role: string;
-  content: Array<Record<string, unknown>>;
-}
-
-/**
- * Mark the FINAL message's last content block for the direct Anthropic vendor — the
- * same incremental-conversation breakpoint as above, in native Messages shape, where
- * ANY block may carry it (text, tool_use, tool_result, image). The direct vendor
- * cached tools + system and nothing else, so a 26-turn tool loop with a 24k-token
- * transcript (chat #101) paid full price for that transcript on every turn. With the
- * breakpoint on the last block, turn N+1 reads turn N's whole prefix at ~0.1x.
- * Non-destructive: a new array, and only the last message and block are cloned. An
- * empty final message (nothing to attach to) is returned untouched.
- */
-export function markAnthropicHistoryBreakpoint<M extends AnthropicBlockMessage>(
-  messages: readonly M[],
-  marker: Record<string, unknown> = EPHEMERAL,
-): M[] {
-  if (messages.length === 0) return [...messages];
-  const last = messages[messages.length - 1]!;
-  if (!Array.isArray(last.content) || last.content.length === 0) return [...messages];
-  const blocks = last.content;
-  const marked = { ...blocks[blocks.length - 1]!, cache_control: marker };
-  const next = { ...last, content: [...blocks.slice(0, -1), marked] } as M;
-  return [...messages.slice(0, -1), next];
 }

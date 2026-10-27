@@ -75,7 +75,7 @@ import {
 } from './localFirstTransport';
 import { pageRuntimePin } from './pageEngines/pageRuntimePin';
 import { hybridLocalSuccessTurn } from './localSuccess/hybridLocalSuccess';
-import { localSuccessRouterFor, scopedLocalSuccessRouter, type LocalSuccessStore } from './localSuccess/localSuccessRouter';
+import { localSuccessRouterFor, scopedLocalSuccessRouter, type LocalSuccessStore, type LocalSuccessTuning } from './localSuccess/localSuccessRouter';
 import { localSuccessScope, type LocalSuccessFederation } from './localSuccess/localSuccessFederation';
 import { StreamInterruptedError, TransportError, type StreamChatOptions, type StreamChatResult, type StreamHandlers } from './streamChatCompletion';
 
@@ -142,6 +142,12 @@ export interface HostModelStreamInput {
    */
   localSuccess?: LocalSuccessStore;
   /**
+   * When the predictor's "fails" verdict skips local (the editor's
+   * `builderforce.localModels.skipConfidence` / `.explore`); getters are read per turn.
+   * Absent = the defaults (`LOCAL_SKIP_CONFIDENCE`, `LOCAL_SKIP_EXPLORE`).
+   */
+  localSuccessTuning?: LocalSuccessTuning;
+  /**
    * How this host federates that predictor's head with its project's fleet (its own
    * authed transport, built with `createLocalSuccessFederation`). Absent = the head
    * stays on this device. Used only with `localSuccess`, on a signed-in Hybrid turn.
@@ -166,7 +172,8 @@ function accountsUnavailable(error: unknown): LocalFirstAccount[] {
   return [];
 }
 
-/** Packs a local attempt for its model's window — `@seanhogg/builderforce-memory/handoff`. */
+/** Packs a local attempt for its model's window — `@seanhogg/builderforce-memory/handoff`.
+ *  One per process; its pack memo is kept per conversation (the call's `conversationKey`). */
 const handoffFit = createHandoffFit();
 
 /** The ONE host routing step: see the module comment for the rows it decides. */
@@ -210,7 +217,7 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
       const learned = mode === 'hybrid' && cloud && input.localSuccess
         ? hybridLocalSuccessTurn(
           scopedLocalSuccessRouter(
-            localSuccessRouterFor(input.localSuccess),
+            localSuccessRouterFor(input.localSuccess, input.localSuccessTuning),
             signedIn ? await localSuccessScope(input.localSuccessFederation, call.metadata?.projectId) : undefined,
           ),
           probes,

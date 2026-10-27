@@ -1,11 +1,17 @@
 {
   "name": "@builderforce/spend-contract",
-  "version": "2026.10.1",
+  "version": "2026.10.2",
   "private": true,
   "type": "module",
   "description": "The SPENT vs SAVED wire contract — what a conversation or a workspace cost (Builderforce plan + own keys at list) and what memory saved it, by source, recorded vs estimated — and the one fold and cost rule that produce it from usage slices. Declared once: the api folds its ledger with it, a device folds its own run usage with it, brain-embedded / brain-ui and every client surface read it.",
   "exports": {
     ".": "./src/index.ts"
   },
-  "types": "./src/index.ts"
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
 }

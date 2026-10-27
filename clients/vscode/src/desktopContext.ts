@@ -17,6 +17,7 @@ export {
   setDesktopClientName,
   catalogDesktopSemantic,
   discoveryFilePath,
+  forgetDesktopProbe,
   readDesktopModelsEndpoint,
   liveDesktop,
   desktopSemanticCapability,
@@ -24,4 +25,5 @@ export {
   registerWorkspace,
   checkReferences,
   desktopRepoMapSection,
+  desktopCompressProse,
 } from "@builderforce/agent-tools/node-desktop";

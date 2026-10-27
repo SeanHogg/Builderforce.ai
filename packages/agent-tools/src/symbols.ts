@@ -116,10 +116,16 @@ const JS_RULES: Array<{ re: RegExp; kind: SymbolKind }> = [
   { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?type\\s+(${ID})\\s*[<=]`), kind: "type" },
   { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:const\\s+)?enum\\s+(${ID})`), kind: "enum" },
   { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:const|let|var)\\s+(${ID})`), kind: "const" },
+  // `namespace A.B {`, `declare module "x" {` — the module's name, its quotes dropped.
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:namespace|module)\\s+(${ID}(?:\\.${ID})*|"[^"]+"|'[^']+')\\s*\\{`), kind: "module" },
 ];
 /** A class-body member: one indent level, a name, a parameter list, a body brace. */
 const JS_METHOD = new RegExp(
   `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|abstract|async|get|set)\\s+)*\\*?\\s*(${ID})\\s*(?:<[^>]*>)?\\s*\\(.*\\)?[^;]*\\{\\s*$`,
+);
+/** An abstract member SIGNATURE — it has no body brace, so {@link JS_METHOD} never sees it. */
+const JS_ABSTRACT_METHOD = new RegExp(
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override)\\s+)*abstract\\s+(?:(?:public|private|protected|static|readonly|override|async)\\s+)*(${ID})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`,
 );
 const JS_KEYWORDS = new Set(["if", "for", "while", "switch", "catch", "return", "function", "with", "do", "else", "try"]);
 
@@ -133,12 +139,12 @@ function extractJs(lines: string[], out: CodeSymbol[]): void {
       const exported = !!m[1];
       // A non-exported declaration only counts at column 0 (top level).
       if (!exported && /^\s/.test(line)) continue;
-      out.push({ name: group(m, 2), kind: rule.kind, line: lineNo, exported });
+      out.push({ name: group(m, 2).replace(/^["']|["']$/g, ""), kind: rule.kind, line: lineNo, exported });
       if (rule.kind === "class") inClass = true;
       return;
     }
     if (!inClass) return;
-    const method = JS_METHOD.exec(line);
+    const method = JS_METHOD.exec(line) ?? JS_ABSTRACT_METHOD.exec(line);
     const name = method ? group(method, 1) : "";
     if (name && !JS_KEYWORDS.has(name)) out.push({ name, kind: "method", line: lineNo, exported: false });
   });

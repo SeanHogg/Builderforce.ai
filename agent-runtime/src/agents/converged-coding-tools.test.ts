@@ -112,7 +112,7 @@ describe("catalogConvergedFileTools — repo.semantic probe", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it("withholds semantic_search/repo_map when the desktop probe is absent", async () => {
+  it("serves repo_map from the local symbol index and withholds semantic_search when the desktop probe is absent", async () => {
     setDesktopFetchForTests(fakeDesktop());
     const tools = await catalogConvergedFileTools({ workspaceRoot: root });
     expect(tools.map((t) => t.name).toSorted()).toEqual([
@@ -120,6 +120,7 @@ describe("catalogConvergedFileTools — repo.semantic probe", () => {
       "delete_file",
       "edit",
       "list_files",
+      "repo_map",
       "write",
     ]);
   });

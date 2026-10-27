@@ -112,7 +112,21 @@ export async function probeLocalFirstRuntimes(
   config: LocalModelsConfig,
   pageProbe: () => Promise<LocalRuntimeProbe[]> = () => hostPageEngines.probe(),
 ): Promise<LocalRuntimeProbe[]> {
-  if (!config.enabled || !config.localFirst) return [];
+  if (!config.localFirst) return [];
+  return probeOnDeviceRuntimes(config, pageProbe);
+}
+
+/**
+ * Every runtime on this machine that could serve a call, gated only on local models being
+ * enabled — the SAME memoized probe the local-first route reads. For work that is local BY
+ * DEFINITION (`local_research`), which local-first (a routing choice for unpinned turns)
+ * does not govern.
+ */
+export async function probeOnDeviceRuntimes(
+  config: LocalModelsConfig,
+  pageProbe: () => Promise<LocalRuntimeProbe[]> = () => hostPageEngines.probe(),
+): Promise<LocalRuntimeProbe[]> {
+  if (!config.enabled) return [];
   const [http, page] = await Promise.all([
     localFirstProber.probe(config.endpoints),
     pageProbe().catch((): LocalRuntimeProbe[] => []),

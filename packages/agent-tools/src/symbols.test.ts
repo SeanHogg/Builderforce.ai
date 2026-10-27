@@ -107,3 +107,27 @@ describe("formatSymbol", () => {
     expect(formatSymbol({ name: "## Gaps", kind: "heading", line: 9, exported: true })).toBe("L9 heading ## Gaps");
   });
 });
+
+describe("extractSymbols — TS module and abstract shapes", () => {
+  it("names a namespace and a declare module (quotes dropped), and an abstract method signature", () => {
+    const source = [
+      "namespace Billing.Internal {",
+      "  export const rate = 1;",
+      "}",
+      "declare module 'pricing' {",
+      "}",
+      "abstract class Gateway {",
+      "  public abstract connect<T>(url: string): T;",
+      "  abstract readonly name: string;",
+      "}",
+      "module.exports = {};",
+    ].join("\n");
+    expect(extractSymbols("src/a.ts", source).map((s) => `${s.line}:${s.kind}:${s.name}`)).toEqual([
+      "1:module:Billing.Internal",
+      "2:const:rate",
+      "4:module:pricing",
+      "6:class:Gateway",
+      "7:method:connect",
+    ]);
+  });
+});

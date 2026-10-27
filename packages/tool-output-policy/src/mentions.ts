@@ -32,7 +32,7 @@ export const CLOUD_MENTION_BUDGET: Readonly<MentionBudget> = { perFileChars: 48_
 export const LOCAL_MENTION_BUDGET: Readonly<MentionBudget> = { perFileChars: 6_000, totalChars: 10_000 };
 
 /** Share of a known local window the turn's mentions may take. */
-export const LOCAL_MENTION_WINDOW_SHARE = 0.3;
+const LOCAL_MENTION_WINDOW_SHARE = 0.3;
 
 export interface MentionBudgetOptions {
   /** The serving model's context window (tokens), when known. Used for `local`. */
@@ -74,7 +74,7 @@ export interface FittedMention extends Mention {
 }
 
 /** The marker after a cut — names the file and how much of it the model saw. */
-export function mentionCutMarker(name: string, keptChars: number, originalChars: number): string {
+function mentionCutMarker(name: string, keptChars: number, originalChars: number): string {
   return keptChars <= 0
     ? `[${name} omitted — this turn's attachment budget was already spent (${originalChars.toLocaleString('en-US')} chars). Read the file with a tool if it is needed.]`
     : `[${name} truncated — showing the first ${keptChars.toLocaleString('en-US')} of ${originalChars.toLocaleString('en-US')} chars. Read the file with a tool for the rest.]`;

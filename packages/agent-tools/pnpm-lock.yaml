@@ -9,8 +9,14 @@ importers:
   .:
     dependencies:
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.10.26
-        version: 2026.10.26(@seanhogg/builderforce-memory-engine@2026.10.24)
+        specifier: ^2026.10.28
+        version: 2026.10.28(@seanhogg/builderforce-memory-engine@2026.10.24)
+      tree-sitter-wasms:
+        specifier: ^0.1.11
+        version: 0.1.13
+      web-tree-sitter:
+        specifier: ^0.22.6
+        version: 0.22.6
     devDependencies:
       '@types/node':
         specifier: ^24.7.2
@@ -147,11 +153,11 @@ packages:
     resolution: {integrity: sha512-61A44q1dybxys+4+njCD+E8IELzOxTa/zE4DQD8uHIXoS1BgpHnvQ7FIL9NazYTb/LDFMl/SkGYbGFomUXivuQ==}
     engines: {node: '>=18.0.0'}
 
-  '@seanhogg/builderforce-memory@2026.10.26':
-    resolution: {integrity: sha512-02v031fqacT99H7k73PhuZCoLc2y+3KJ15QZns7Ny5P69OWvON0FCaH8i25XeDV2ZAkTKtDI5RuMvyMCzr0KjQ==}
+  '@seanhogg/builderforce-memory@2026.10.28':
+    resolution: {integrity: sha512-Umw1Vjfck0YoXW85r6hDplstfv7JxVT9i5nYfKRLyiihX586rctg5+d8Uy2KDYw62oAR+BYWErcw3pZv2VbUnw==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@seanhogg/builderforce-memory-engine': ^2026.10.26
+      '@seanhogg/builderforce-memory-engine': ^2026.10.28
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -372,6 +378,9 @@ packages:
     resolution: {integrity: sha512-Bf+ILmBgretUrdJxzXM0SgXLZ3XfiaUuOj/IKQHuTXip+05Xn+uyEYdVg0kYDipTBcLrCVyUzAPz7QmArb0mmw==}
     engines: {node: '>=14.0.0'}
 
+  tree-sitter-wasms@0.1.13:
+    resolution: {integrity: sha512-wT+cR6DwaIz80/vho3AvSF0N4txuNx/5bcRKoXouOfClpxh/qqrF4URNLQXbbt8MaAxeksZcZd1j8gcGjc+QxQ==}
+
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
@@ -467,6 +476,9 @@ packages:
       jsdom:
         optional: true
 
+  web-tree-sitter@0.22.6:
+    resolution: {integrity: sha512-hS87TH71Zd6mGAmYCvlgxeGDjqd9GTeqXNqTT+u0Gs51uIozNIaaq/kUAbV/Zf56jb2ZOyG8BxZs2GG9wbLi6Q==}
+
   why-is-node-running@2.3.0:
     resolution: {integrity: sha512-hUrmaWBdVDcxvYqnyh09zunKzROWjbZTiNy8dBEjkS7ehEDQibXJ7XvlmtbwuTclUiIyN+CyXQD4Vmko8fNm8w==}
     engines: {node: '>=8'}
@@ -554,7 +566,7 @@ snapshots:
 
   '@seanhogg/builderforce-memory-engine@2026.10.24': {}
 
-  '@seanhogg/builderforce-memory@2026.10.26(@seanhogg/builderforce-memory-engine@2026.10.24)':
+  '@seanhogg/builderforce-memory@2026.10.28(@seanhogg/builderforce-memory-engine@2026.10.24)':
     dependencies:
       '@seanhogg/builderforce-memory-engine': 2026.10.24
 
@@ -751,6 +763,8 @@ snapshots:
 
   tinyrainbow@3.1.0: {}
 
+  tree-sitter-wasms@0.1.13: {}
+
   tslib@2.8.1:
     optional: true
 
@@ -795,6 +809,8 @@ snapshots:
       '@types/node': 24.19.0
     transitivePeerDependencies:
       - msw
+
+  web-tree-sitter@0.22.6: {}
 
   why-is-node-running@2.3.0:
     dependencies:

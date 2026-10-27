@@ -17,6 +17,8 @@ import { postToWebview, respondToWebview, type WebviewInbound, type WebviewOwner
 import { buildWorkspaceInit } from "./workspaceInit";
 import { LocalFetchProxy } from "./localFetchProxy";
 import { pickWorkspaceContext } from "./contextPicker";
+import { hostAttachmentIngress } from "./hostIngress";
+import type { AttachmentIngressRequest } from "./attachmentIngress";
 
 /** Inbound messages unique to the workspace surface (the shared cases live in the bridge). */
 export interface BrainInbound extends WebviewInbound {
@@ -279,8 +281,14 @@ export class WorkspaceSurface implements vscode.Disposable {
         if (typeof msg.chatId === "number") hooks.runHost?.confirm(msg.chatId, msg.ok === true);
         break;
       case "run.steer":
-        if (typeof msg.chatId === "number" && typeof msg.text === "string")
-          hooks.runHost?.steer(msg.chatId, msg.text, Array.isArray(msg.attachments) ? msg.attachments : undefined);
+        if (typeof msg.chatId === "number" && typeof msg.text === "string") {
+          const attachments = Array.isArray(msg.attachments) ? msg.attachments : undefined;
+          // A text attachment reaches the running run as its text, like a normal send;
+          // pictures stay vision parts of the steered turn. Queued at once: the texts are
+          // only FITTED (synchronously, no compressor or route lookup in front of the steer).
+          const text = hostAttachmentIngress(this.ctx.secrets).withInlined(msg.text, attachments?.filter((a) => !a.imageUrl));
+          hooks.runHost?.steer(msg.chatId, text, attachments);
+        }
         break;
       case "run.clearError":
         if (typeof msg.chatId === "number") hooks.runHost?.clearError(msg.chatId);
@@ -435,6 +443,16 @@ export class WorkspaceSurface implements vscode.Disposable {
       // editor selection) and hand its text back so the webview attaches it.
       case "context.pick":
         this.respond(msg.id, true, await pickWorkspaceContext());
+        break;
+      // The panel's attachments, through the host so they reach the model: a text kept
+      // for the turn's inlined block, a binary uploaded with the extension's credential.
+      // A refusal (signed out, upload refused) answers with its sentence for the person.
+      case "attachment.ingress":
+        try {
+          this.respond(msg.id, true, await hostAttachmentIngress(this.ctx.secrets).handle(msg as AttachmentIngressRequest));
+        } catch (error) {
+          this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
+        }
         break;
       // Per-turn LIMBIC parity: the webview round-trips the turn's text here, where the
       // session's personality (signed-in user's id → their tone and setpoints) is cached.

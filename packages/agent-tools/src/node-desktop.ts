@@ -82,6 +82,12 @@ export function setDesktopFetchForTests(f: FetchFn | null): void {
   probe = null;
 }
 
+/** Forget the cached probe verdict — Desktop just (re)started, so the next call re-probes
+ *  instead of trusting a "down" read for the rest of {@link PROBE_TTL_MS}. */
+export function forgetDesktopProbe(): void {
+  probe = null;
+}
+
 /** Name this client shows under in the desktop app's "Recent activity". */
 export function setDesktopClientName(name: string): void {
   desktopClientName = name;

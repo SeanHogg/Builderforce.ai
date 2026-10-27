@@ -77,10 +77,22 @@ export function isValidRegex(query: string): boolean {
  * same text escaped and matched literally. A query that is not a valid regex is searched
  * LITERALLY rather than refused — the model reaches for this tool with text it just read
  * (`?task=`, `foo(bar`, `a[0]`), and "invalid regex: Nothing to repeat" once made it
- * retry the same words for a whole turn. Case-insensitive either way.
+ * retry the same words for a whole turn. Case-insensitive unless `caseSensitive` (the
+ * searches pass {@link smartCaseSensitive}).
  */
-export function compileSearchPattern(query: string): RegExp {
-  return isValidRegex(query) ? new RegExp(query, "i") : new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+export function compileSearchPattern(query: string, caseSensitive = false): RegExp {
+  const flags = caseSensitive ? "" : "i";
+  return isValidRegex(query) ? new RegExp(query, flags) : new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), flags);
+}
+
+/**
+ * Smart case, ripgrep's rule: a query with an upper-case letter is case-SENSITIVE, an
+ * all-lower-case one is not. `BfBrainChat` then finds the type and not every
+ * `bfbrainchat` in a URL, while `brain chat` still finds both spellings. A regex escape
+ * (`\W`, `\S`, `\D`) is syntax, not a letter the user typed, so it does not count.
+ */
+export function smartCaseSensitive(query: string): boolean {
+  return /[A-Z]/.test(query.replace(/\\./g, ""));
 }
 
 /** A repo-relative POSIX path from an absolute one under `root`. */
@@ -162,7 +174,16 @@ export interface WorkspaceSearchOptions {
   query: string;
   /** The ripgrep binary to run, or null to walk the tree in-process. */
   ripgrep: string | null;
+  /** The run's Stop: kills ripgrep and ends the walk. */
+  signal?: AbortSignal;
 }
+
+/** What a search run carries beyond its target: the run's Stop. */
+export interface SearchRunOptions {
+  signal?: AbortSignal;
+}
+
+const STOPPED = "search stopped";
 
 /**
  * Search `start` for `query`. A file target is scanned directly; a directory goes to
@@ -176,14 +197,15 @@ export async function searchWorkspace(opts: WorkspaceSearchOptions): Promise<Rep
   if (stat.isFile()) {
     // The file-scope case: search exactly that file. The walker's readdir threw here
     // and reported "not referenced" — the false negative that started this module.
-    const matches = await searchOneFile(root, start, compileSearchPattern(query), stat.size);
+    const matches = await searchOneFile(root, start, compileSearchPattern(query, smartCaseSensitive(query)), stat.size);
     return { ok: true, query, total: matches.length, truncated: false, matches };
   }
+  const run: SearchRunOptions = opts.signal ? { signal: opts.signal } : {};
   if (opts.ripgrep) {
-    const r = await ripgrepSearch(root, start, query, opts.ripgrep);
+    const r = await ripgrepSearch(root, start, query, opts.ripgrep, run);
     if (r) return r;
   }
-  return walkSearch(root, start, query);
+  return walkSearch(root, start, query, run);
 }
 
 /** Scan one file's lines with the JS pattern, honouring the size and binary guards. */
@@ -208,12 +230,15 @@ async function searchOneFile(root: string, abs: string, re: RegExp, size: number
  * it failed to spawn, or rejected the pattern — so the caller falls back to the walk.
  * A timeout or the match cap hands back what was found, marked truncated.
  */
-export function ripgrepSearch(root: string, start: string, query: string, ripgrep: string): Promise<RepoSearchResult | null> {
+export function ripgrepSearch(root: string, start: string, query: string, ripgrep: string, run: SearchRunOptions = {}): Promise<RepoSearchResult | null> {
   const target = relPosix(root, start) || ".";
+  if (run.signal?.aborted) return Promise.resolve({ ok: false, query, error: STOPPED });
   const args = [
     // JSON events, not `path:line:text` — on Windows that colon format collides with
     // drive letters and a directory search silently reported total:0 (chat #111).
-    "--json", "--ignore-case", "--max-columns", "400", "--max-filesize", `${SEARCH_MAX_FILE_BYTES}`,
+    // The case rule (smart case) is decided HERE and passed explicitly, so ripgrep and
+    // the walk always agree on what a query matches.
+    "--json", smartCaseSensitive(query) ? "--case-sensitive" : "--ignore-case", "--max-columns", "400", "--max-filesize", `${SEARCH_MAX_FILE_BYTES}`,
     // Mirror the walker's skip list so the two backends agree on what "the repo" is.
     ...[...SKIP_DIRS].flatMap((dir) => ["--glob", `!**/${dir}/**`]),
     // The JS engine's escaping rule, expressed as ripgrep's own flag: a query that is not
@@ -227,17 +252,23 @@ export function ripgrepSearch(root: string, start: string, query: string, ripgre
     let truncated = false;
     let settled = false;
     let pending = "";
-    let child: ReturnType<typeof spawn>;
+    let child: ReturnType<typeof spawn> | undefined;
     const finish = (value: RepoSearchResult | null): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      run.signal?.removeEventListener("abort", onStop);
       resolve(value);
+    };
+    // Stop kills the child: a stopped run must not leave a repo-wide rg running.
+    const onStop = (): void => {
+      try { child?.kill(); } catch { /* already gone */ }
+      finish({ ok: false, query, error: STOPPED });
     };
     const done = (): void => finish({ ok: true, query, total: matches.length, truncated, matches: ordered(matches) });
     const timer = setTimeout(() => {
       truncated = true;
-      try { child.kill(); } catch { /* already gone */ }
+      try { child?.kill(); } catch { /* already gone */ }
       done();
     }, RIPGREP_TIMEOUT_MS);
     try {
@@ -246,6 +277,7 @@ export function ripgrepSearch(root: string, start: string, query: string, ripgre
       finish(null);
       return;
     }
+    run.signal?.addEventListener("abort", onStop, { once: true });
     child.on("error", () => finish(null));
     child.stdout?.setEncoding("utf8");
     child.stdout?.on("data", (chunk: string) => {
@@ -259,7 +291,7 @@ export function ripgrepSearch(root: string, start: string, query: string, ripgre
         matches.push(match);
         if (matches.length >= SEARCH_MAX_MATCHES) {
           truncated = true;
-          try { child.kill(); } catch { /* already gone */ }
+          try { child?.kill(); } catch { /* already gone */ }
           done();
           return;
         }
@@ -286,13 +318,14 @@ export function ripgrepSearch(root: string, start: string, query: string, ripgre
  * pattern. Bounded by {@link WALK_MAX_FILES}, and honest about it: a capped scan with no
  * matches is reported `truncated`, never as "absent".
  */
-export async function walkSearch(root: string, start: string, query: string): Promise<RepoSearchResult> {
-  const re = compileSearchPattern(query);
+export async function walkSearch(root: string, start: string, query: string, run: SearchRunOptions = {}): Promise<RepoSearchResult> {
+  const re = compileSearchPattern(query, smartCaseSensitive(query));
   const matches: SearchMatch[] = [];
   let filesScanned = 0;
   let truncated = false;
   const queue: string[] = [start];
   outer: while (queue.length > 0) {
+    if (run.signal?.aborted) return { ok: false, query, error: STOPPED };
     if (matches.length >= SEARCH_MAX_MATCHES || filesScanned >= WALK_MAX_FILES) { truncated = true; break; }
     const dir = queue.shift()!;
     let entries: import("fs").Dirent[];

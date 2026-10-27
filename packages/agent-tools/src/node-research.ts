@@ -8,6 +8,10 @@
  * the on-prem runtime), so the cache file, its format and its write discipline are one
  * implementation. The surface supplies only the model: {@link nodeResearchCapability}.
  *
+ * The cache QUOTES workspace code, and `.builderforce/` is a folder teams commit
+ * (`rules.md`, `hooks.json`), so the store keeps its file out of git: before the first
+ * write it makes sure a `.gitignore` beside the cache lists it ({@link ensureGitIgnored}).
+ *
  * Node-only (`fs`), so it rides the `./node-research` export condition.
  */
 
@@ -23,6 +27,26 @@ export const RESEARCH_CACHE_FILE = path.join(".builderforce", "research-cache.js
 const stores = new Map<string, ResearchAnswerStore>();
 
 /**
+ * Make sure `<dir>/.gitignore` lists `name` — appended when the file exists without it,
+ * created when there is none; a team's other entries are never touched. A `.gitignore`
+ * inside the folder (rather than the repo root's) travels with the folder and needs no
+ * knowledge of where the repo root is.
+ */
+export async function ensureGitIgnored(dir: string, name: string): Promise<void> {
+  const file = path.join(dir, ".gitignore");
+  let current = "";
+  try {
+    current = await fs.readFile(file, "utf-8");
+  } catch {
+    /* none yet */
+  }
+  const listed = current.split(/\r?\n/).some((line) => line.trim().replace(/^\//, "") === name);
+  if (listed) return;
+  const prefix = current && !current.endsWith("\n") ? "\n" : "";
+  await fs.appendFile(file, `${prefix}${name}\n`, "utf-8");
+}
+
+/**
  * A store over `file`: loaded once, written back after each new answer (serialized,
  * best-effort — an unwritable cache only costs a re-ask). The keying and the LRU bound
  * are the shared, pure {@link ResearchLru}.
@@ -30,6 +54,7 @@ const stores = new Map<string, ResearchAnswerStore>();
 export function fileResearchStore(file: string, maxEntries?: number): ResearchAnswerStore {
   let lru: Promise<ResearchLru> | null = null;
   let writing: Promise<void> = Promise.resolve();
+  let ignored = false;
   const load = (): Promise<ResearchLru> => {
     lru ??= fs.readFile(file, "utf-8").then(
       (raw) => ResearchLru.fromJSON(JSON.parse(raw), maxEntries),
@@ -47,6 +72,11 @@ export function fileResearchStore(file: string, maxEntries?: number): ResearchAn
       writing = writing.then(async () => {
         try {
           await fs.mkdir(path.dirname(file), { recursive: true });
+          // Ignored BEFORE the first write, so quoted code never sits untracked-but-addable.
+          if (!ignored) {
+            await ensureGitIgnored(path.dirname(file), path.basename(file));
+            ignored = true;
+          }
           await fs.writeFile(file, JSON.stringify(cache.toJSON()), "utf-8");
         } catch {
           /* best-effort */

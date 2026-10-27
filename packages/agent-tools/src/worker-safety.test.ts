@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 const SRC = dirname(fileURLToPath(import.meta.url));
 
 /** Modules published behind a node-only export condition (see package.json `exports`). */
-const NODE_ONLY_MODULES = new Set(["node-path.ts", "node-symbols.ts", "node-git-ignore.ts", "node-desktop.ts", "node-tree-sitter.ts"]);
+const NODE_ONLY_MODULES = new Set(["node-path.ts", "node-symbols.ts", "node-git-ignore.ts", "node-desktop.ts", "node-tree-sitter.ts", "node-research.ts"]);
 
 function sourceFiles(): string[] {
   return readdirSync(SRC)

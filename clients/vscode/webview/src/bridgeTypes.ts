@@ -157,4 +157,7 @@ export interface InitData {
   /** Absolute path of the file the full chat history is committed to (the local-first
    *  journal), so a diagnostics report can say where the whole dialogue lives. */
   chatHistoryPath?: string;
+  /** `builderforce.images.*`: the long-edge cap and first quality an attached picture is
+   *  prepared with. Absent from an older host ⇒ the defaults. */
+  images?: { maxEdge?: number; jpegQuality?: number };
 }

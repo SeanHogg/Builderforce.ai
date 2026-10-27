@@ -59,6 +59,8 @@
   "config.localModels.freetokenUrl.desc": "你的 FreeToken 引擎的基础 URL。会自动追加 OpenAI 兼容路径 `/v1/models` 和 `/v1/chat/completions`，因此 `http://127.0.0.1:1919` 和 `http://127.0.0.1:1919/v1` 均可使用。",
   "config.localModels.synapseUrl.desc": "Synapse 原生引擎（`bfi serve`）的基础 URL。留空则自动发现：Synapse 桌面应用会发布该地址，独立运行的 `bfi serve` 会在 `~/.builderforce/bfi.json` 中公布其端口（从 11434 开始，若该端口被 Ollama 占用则向上顺延）。其 API 密钥也通过同一发现机制获取。`http://127.0.0.1:11435` 和 `http://127.0.0.1:11435/v1` 均可使用。",
   "config.localModels.localFirst.desc": "优先使用本机上的兼容模型：先使用内置引擎（WebGPU 上的 WebLLM 和 Builderforce 引擎，其次是 Synapse），最后才是 Ollama 和 FreeToken。回退到网关需要单独的网关推理权限；明确固定的本地模型始终优先。",
+  "config.localModels.skipConfidence.desc": "仅混合模式：当本机学习到的预测器至少有此把握认为本地模型会失败时（0–1），该轮跳过本地模型。数值越高越常尝试本地；预测器仅在训练完成且优于随机猜测后才生效。",
+  "config.localModels.explore.desc": "仅混合模式：在预测器本会跳过的轮次中，仍在本地模型上尝试的比例（0–1），让变好的模型能赢回它的轮次。0 表示被跳过的轮次永不再在本地尝试。",
   "config.inferenceMode.desc": "模型在哪里运行。不设置时使用默认值：登录后为**混合**，未登录为**仅本地**。`builderforce.platform.*` 设置是对此模式所允许内容的高级覆盖。",
   "config.inferenceMode.hybrid": "**混合**（推荐）——优先使用本设备，需要时再使用 BuilderForce 云（网关优先使用免费层级）。",
   "config.inferenceMode.localOnly": "**仅本地**——只使用本设备上的模型，不向 BuilderForce 网关发送任何内容。",
@@ -106,5 +108,18 @@
   "command.deleteTask": "BuilderForce：删除任务",
   "config.audits.atStartup": "打开此工作区时在后台对话中运行所选审计。",
   "config.audits.atClose": "关闭工作区时在云端运行所选审计。使用已连接的代码仓库，不上传本地更改。中断的提交将在下次启动时重试。",
-  "config.audits.selected": "启动和关闭时运行的审计类型。"
+  "config.audits.selected": "启动和关闭时运行的审计类型。",
+  "command.pipelineRouteReport": "流水线路由报告",
+  "config.models.plan.desc": "运行的**规划**阶段使用的模型。留空：使用环境变量 `ROLE_MODELS` 的 `plan` 项，否则由网关为规划排序你的模型。仅在运行没有自身模型时生效（自动模式，且 `#builderforce.defaultModel#` 为空）。",
+  "config.models.code.desc": "运行的**编码**阶段使用的模型。留空：使用 `ROLE_MODELS` 的 `code` 项，否则网关优先使用你最强的编码模型。仅在运行没有自身模型时生效（自动模式，且 `#builderforce.defaultModel#` 为空）。",
+  "config.models.review.desc": "运行修改代码后**审查**（验证）阶段使用的模型。始终与编写该修改的模型不同。留空：使用 `ROLE_MODELS` 的 `verify` 项，否则由网关选择更便宜且胜任的审查模型。",
+  "config.models.subagent.desc": "每个**子代理**运行所用的模型，除非你明确选择了模型。留空：使用 `ROLE_MODELS` 中该子代理角色的项，否则由网关按该角色排序。",
+  "config.pipeline.routing.desc": "运行如何在**完整流水线**（规划 → 编码 → 审查）与**快速处理**（单次编码，无规划和审查阶段）之间分配。请求中写入 \"full pipeline\" 时始终使用完整流水线。参见 **BuilderForce：流水线路由报告**。",
+  "config.pipeline.routing.auto": "为每个请求打分，低于阈值时使用快速处理。",
+  "config.pipeline.routing.always": "每次运行都使用完整流水线（仍会记录分数）。",
+  "config.pipeline.routeThreshold.desc": "路由分数（0–1，请求需要完整流水线的可能性）达到或超过该值时，运行使用完整流水线。如果快速处理经常需要重跑，请调低该值；路由报告会给出建议值。",
+  "config.pipeline.quickModel.desc": "**快速处理**编码所用的模型。它会取代软性默认模型（编码阶段的模型、`#builderforce.defaultModel#` 或项目学习到的模型），但绝不会取代你为该聊天明确选择的模型。留空：使用编码阶段的模型（`#builderforce.models.code#`），否则按网关的顺序。",
+  "config.maxRunBudgetUsd.desc": "每次运行的花费上限，单位为美元（0 = 关闭）。达到 80% 时会提醒运行，达到上限时运行停止并总结已完成的工作；不会回滚任何内容。按内置价格表计价；本机上的模型不产生费用。",
+  "config.images.maxEdge.desc": "附加图片发送给模型前缩放到的最长边（像素）（视觉模型本身也会缩小更大的图片）。较小的 PNG、WebP 和 JPEG 图片以及所有 GIF 按原样发送。",
+  "config.images.jpegQuality.desc": "附加图片需要重新编码时（JPEG，若有透明度则为 WebP）首先尝试的质量（0.3–1）；只有在仍然太大而无法内联发送时才会使用更低的级别。"
 }

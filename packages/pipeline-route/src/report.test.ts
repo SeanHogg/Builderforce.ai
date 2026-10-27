@@ -59,7 +59,8 @@ describe('suggestThreshold', () => {
   it('lowers it when too many quick runs are misrouted', () => {
     const s = suggestThreshold(many(10, 4, 0.32), 0.5);
     expect(s.suggestedThreshold).toBe(0.3);
-    expect(s.suggestion).toContain('Lower');
+    // The report carries the number only; each host words it (the VSIX localizes it).
+    expect(s).not.toHaveProperty('suggestion');
   });
 
   it('raises it when almost none are', () => {

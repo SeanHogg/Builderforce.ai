@@ -21,9 +21,12 @@
       "@builderforce/device-auth": ["../../packages/device-auth/src/index.ts"],
       "@builderforce/run-context": ["../../packages/run-context/src/index.ts"],
       "@builderforce/run-guards": ["../../packages/run-guards/src/index.ts"],
+      "@builderforce/spend-contract": ["../../packages/spend-contract/src/index.ts"],
+      "@builderforce/tool-output-policy": ["../../packages/tool-output-policy/src/index.ts"],
       "@builderforce/kimi-oauth": ["../../packages/kimi-oauth/src/index.ts"],
       "@builderforce/local-inference": ["../../packages/local-inference/src/index.ts"],
       "@builderforce/model-catalog": ["../../packages/model-catalog/src/index.ts"],
+      "@builderforce/pipeline-route": ["../../packages/pipeline-route/src/index.ts"],
       "@builderforce/provider-connect": ["../../packages/provider-connect/src/index.ts"],
       "@builderforce/provider-connect/accounts": ["../../packages/provider-connect/src/connectedAccounts.ts"],
       "@builderforce/write-outbox": ["../../packages/write-outbox/src/index.ts"]

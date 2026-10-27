@@ -18,18 +18,22 @@ import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
 import { afterWorkspaceScan, syncWorkspaceFacts } from "./workspaceFactsSync";
 import { watchWorkspaceSymbols } from "./workspaceSymbolWatch";
+import { workspaceSymbolIndex } from "./workspaceSymbols";
+import { activateLocalLevers } from "./localLevers";
 import { getModels, getWebBaseUrl, getKimiCodeUnavailableReason, getLocalModelsConfig, SECRET_KEY, invalidateKimiInstallMemo } from "./gateway";
 import { clearPersonalityBlockCache } from "./personalityLimbic";
 import { listLocalModels, localModelOptions, type LocalModel } from "./localModels";
 import { pickSynapseInstall, runSynapseInstall, synapseInstallRows, type SynapsePickRow } from "./synapseInstall";
 import { resolveModelRoute, routeNeedsLocalModel, routeNeedsSpecificModel, routeRequiresSignIn } from "./modelRouting";
 import { registerInferenceModeCommands, showNoLocalModelPrompt } from "./noLocalModelPrompt";
+import { registerPipelineRouteReport } from "./pipelineRouteReport";
 import { PERMISSION_MODE_SETTING } from "./permissionMode";
 import { InsightsController } from "./insights";
 import { EvermindViewProvider } from "./evermindView";
 import { DiagnosticsController } from "./diagnostics";
 import { clearPlatformToolsCache } from "./platformTools";
 import { setGroundingSummary } from "./grounding";
+import { onDesktopStart, watchDesktopStarts } from "./desktopConnect";
 import { registerWorkspace } from "./desktopContext";
 import { bindModelPickStore, onModelChange, setSelectedModel } from "./modelState";
 import { applyModelPick } from "./modelPick";
@@ -140,10 +144,14 @@ async function syncSignedInContext(context: vscode.ExtensionContext): Promise<vo
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  // Lever bucketing by install id, the symbol index's grammars, the local research model.
+  activateLocalLevers(context);
   // Installs the fetch guard now; the policy RESOLVES after the signed-in read —
   // `platformPolicyResolved()`, which every platform call started below waits on.
   void bindPlatformPolicy(context, SECRET_KEY);
   registerInferenceModeCommands(context, () => refreshWorkspaceSurfaces());
+  // `BuilderForce: Pipeline Route Report` — the router's last 30 days, from the local ledger.
+  registerPipelineRouteReport(context);
   // G08: install the local audit-close path at activation. `AuditExecution.closeLocally`
   // now routes through `closeAuditLocally`, which recovers interrupted runs and refuses
   // the cloud launch, but the helper surface is only reachable once activation has
@@ -770,6 +778,8 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     // Keep the find_symbol / file_outline definition index current as files change.
     ...watchWorkspaceSymbols(),
+    // Desktop started after the workspace was grounded: its repo map joins the next run.
+    watchDesktopStarts(() => onDesktopStart(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath)),
     // Switching the active project re-pushes Brain init so an open chat's system
     // prompt (and new-chat scoping) tracks the current project without a reopen.
     // (The Work view relabels its own header from the same selection.)
@@ -787,7 +797,8 @@ export function activate(context: vscode.ExtensionContext): void {
     // as long as the panel stays open — which is the whole failure this seam exists to
     // prevent, just delayed.
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration(PERMISSION_MODE_SETTING)) refreshWorkspaceSurfaces();
+      // The picture caps ride `init` too, so an open panel prepares the next picture with them.
+      if (e.affectsConfiguration(PERMISSION_MODE_SETTING) || e.affectsConfiguration("builderforce.images")) refreshWorkspaceSurfaces();
       // Local-model settings changed: re-discover the Kimi Code install on the next read.
       if (e.affectsConfiguration("builderforce.localModels")) invalidateKimiInstallMemo();
     }),
@@ -1645,6 +1656,9 @@ async function maybeScan(context: vscode.ExtensionContext, force: boolean): Prom
   // Hand the folder to Builderforce Desktop (when it runs) so its index starts building
   // now — before any sign-in gate, because the local index needs no account.
   void registerWorkspace(root);
+  // A rescan the person asked for re-walks the definition index FIRST: it needs no model
+  // and no account, so neither gate below may skip it (they used to return before it ran).
+  if (force) void workspaceSymbolIndex(root).refresh().catch((e) => console.error("BuilderForce symbol index refresh failed:", e));
   // The route reads the inference mode, which is only real once the policy resolved.
   await platformPolicyResolved();
   const key = await context.secrets.get(SECRET_KEY);

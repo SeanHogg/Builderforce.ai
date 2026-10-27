@@ -45,7 +45,7 @@ export interface RunContextInput {
   child: boolean;
 }
 
-type RunContextFields = Pick<BrainRunRequest, "augmentSystemPrompt" | "turnContext" | "recallHint" | "servedReads" | "modelPreflight">;
+type RunContextFields = Pick<BrainRunRequest, "augmentSystemPrompt" | "turnContext" | "recallHint" | "servedReads" | "modelPreflight" | "answerWithoutModel">;
 
 /**
  * The system-prompt augmentation (the same seam the limbic block uses): the project's
@@ -94,5 +94,7 @@ export function runContextFields(ports: BrainRunHostPorts, input: RunContextInpu
         }
       : {}),
     ...(preflight ? { modelPreflight: () => preflight() } : {}),
+    // "Where is X defined?" from the symbol index: adopted instead of a model call.
+    ...(ports.answerWithoutModel ? { answerWithoutModel: ports.answerWithoutModel } : {}),
   };
 }

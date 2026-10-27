@@ -2,6 +2,22 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.102] — Spend less for the same work, and attachments the model can read
+
+- **Attachments reach the model.** Attached text files and **Add context** used to arrive as a link only the editor could open, so the model never saw them. They are now put into the message, within a per-file and per-message budget (smaller for a model on your machine). Binaries upload to your BuilderForce account. Signed out, you get a clear error instead of a dead link. `#file` references in the chat panel work the same way.
+- **Long prose is compressed, code never is.** Markdown, logs and text over 2,000 characters are compressed before they are sent. Command output and fetched pages are compressed again too; the compressor had been switched off in the editor.
+- **Images keep their format.** GIFs keep their animation, transparent images stay transparent, and small PNGs are sent untouched. The resized copy is what gets uploaded, not the original. New settings: `builderforce.images.maxEdge` and `builderforce.images.jpegQuality`.
+- **Quick or full pipeline, chosen per request.** Each request is scored. A small one runs as one quick stage, with no separate plan and review; a big one gets plan → code → review. Writing "full pipeline" forces it. Settings: `builderforce.pipeline.routing`, `.routeThreshold`, `.quickModel`.
+- **A model per stage.** `builderforce.models.plan`, `.code`, `.review` and `.subagent`. Planning no longer runs on the coding model.
+- **Per-run spend cap.** `builderforce.maxRunBudgetUsd` stops a run at the cap and warns the model at 80%.
+- **Pipeline route report.** A new command shows each route's runs, cost and score over the last 30 days, which runs looked misrouted, and a suggested threshold.
+- **Answers with no model call.** "Where is `X` defined" is answered from the symbol index when it knows every name you asked about.
+- **Code reading on your machine.** With a local model running, the agent can hand reading to it with `local_research`. Answers are cached until the files change. `read_compressed` reads long prose compressed.
+- **A real repo map.** Symbols are extracted with tree-sitter (TypeScript, JavaScript, Python, Go, Rust, Java, C#, PHP), with the old extractor as a fallback. `repo_map` works without BuilderForce Desktop. **Rescan Codebase** refreshes the index even when signed out.
+- **The agent starts where it worked before.** Code maps of the files a run used are recalled when a request names a file, a symbol in that area, or the area itself.
+- **Lower cost on long runs.** The parts of the prompt that never change now stay byte-identical from turn to turn, so provider prompt caching keeps working through tool loops and small-window models.
+- **Fixes.** Stop now ends a running search. Search is case-sensitive when your query has a capital letter. The symbol index no longer picks up skipped folders or its own files.
+
 ## [2026.10.101] — Mid-run messages keep their attached images
 
 - **A message with images sent while a run is executing no longer loses the images.** Previously only the text reached the model — an image attached to a mid-run steer (or a queued message drained after the run) was silently dropped. The whole path now threads attachments through: the composer snapshots them onto each held turn, the steer payload carries them, and the run builds the same `text + image` vision content a normal send builds. A mid-run message now reaches the model exactly as if it had been sent before the run started.

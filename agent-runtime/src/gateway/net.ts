@@ -377,3 +377,19 @@ export function isLoopbackHost(host: string): boolean {
   const unbracket = h.startsWith("[") && h.endsWith("]") ? h.slice(1, -1) : h;
   return isLoopbackAddress(unbracket);
 }
+
+/**
+ * Does this URL point at the local machine ({@link isLoopbackHost} on its hostname)?
+ * False for an empty, `"null"` or unparsable value — a URL we cannot read is not local.
+ */
+export function isLoopbackUrl(value: string | undefined): boolean {
+  const v = value?.trim();
+  if (!v || v === "null") {
+    return false;
+  }
+  try {
+    return isLoopbackHost(new URL(v).hostname);
+  } catch {
+    return false;
+  }
+}

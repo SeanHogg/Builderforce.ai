@@ -4,7 +4,8 @@ import { getProjectEvermindHead } from "./bfApi";
 import { getModels, isModelAllowed } from "./gateway";
 import { isLocalModelRef } from "./localModels";
 import { getSelectedProject } from "./projectState";
-import { NATIVE_RUN_ROLE, roleModelPin } from "./roleModelPin";
+import { explicitRoleModelPin, NATIVE_RUN_ROLE, roleModelPin } from "./roleModelPin";
+import { stageModels, type StageModels } from "./stageModels";
 
 /**
  * The gateway pin (`project_evermind:<projectId>`) that expands to a project's
@@ -95,13 +96,46 @@ export async function resolveEffectiveModelChoice(secrets: vscode.SecretStorage)
       return { model: `${PROJECT_EVERMIND_PIN}${project.id}` };
     }
   }
-  // Operator role pin (ROLE_MODELS / ROLE_MODEL_DEFAULT). Explicit user pick and
-  // the project's Evermind pin above still win; undefined pin falls through.
-  const rolePin = await entitled(secrets, roleModelPin(NATIVE_RUN_ROLE));
-  // A soft pin (role / configured default) is not a routing choice: no `routingMode`.
-  if (rolePin) return { model: rolePin };
+  // The operator's role pins (ROLE_MODELS / ROLE_MODEL_DEFAULT) are no longer a model
+  // pinned to the WHOLE run: they are the run's stage models ({@link resolveStageModels}),
+  // so planning, coding and review each ask for their own. A soft pin (the configured
+  // default) is not a routing choice: no `routingMode`.
   const model = await entitled(secrets, defaultModel());
   return model ? { model } : {};
+}
+
+/** `builderforce.models.*` and `builderforce.pipeline.quickModel`, as written. */
+function stageModelSettings(): Parameters<typeof stageModels>[0] {
+  const config = vscode.workspace.getConfiguration("builderforce");
+  return {
+    plan: config.get<string>("models.plan"),
+    code: config.get<string>("models.code"),
+    review: config.get<string>("models.review"),
+    subagent: config.get<string>("models.subagent"),
+    quick: config.get<string>("pipeline.quickModel"),
+  };
+}
+
+/**
+ * The run's stage models: the editor's settings over the operator's role pins — the
+ * coding stage is the coding-role pin (`NATIVE_RUN_ROLE`) — each dropped when the
+ * tenant's plan cannot use it (see {@link entitled}).
+ */
+export async function resolveStageModels(secrets: vscode.SecretStorage): Promise<StageModels> {
+  const resolved = stageModels(stageModelSettings(), {
+    plan: roleModelPin("plan"),
+    code: roleModelPin(NATIVE_RUN_ROLE),
+    verify: roleModelPin("verify"),
+    // Never the operator's catch-all default: it would shadow every per-role child pin.
+    subagent: explicitRoleModelPin("subagent"),
+    quick: explicitRoleModelPin("quick"),
+  });
+  const out: StageModels = {};
+  for (const stage of Object.keys(resolved) as Array<keyof StageModels>) {
+    const model = await entitled(secrets, resolved[stage]);
+    if (model) out[stage] = model;
+  }
+  return out;
 }
 
 /**

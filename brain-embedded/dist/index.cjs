@@ -37,9 +37,12 @@ __export(src_exports, {
   ASK_USER_TOOL: () => ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC: () => ASK_USER_TOOL_SPEC,
   AUTHORED_BY_META_KEY: () => AUTHORED_BY_META_KEY,
+  AttachmentRefusedError: () => AttachmentRefusedError,
   BACK_TO_BACK_AT: () => BACK_TO_BACK_AT,
   BASE_BRANCHES: () => BASE_BRANCHES,
   BRAIN_AGENT_ASSIGNMENTS_PATH: () => BRAIN_AGENT_ASSIGNMENTS_PATH,
+  BRAIN_UPLOAD_PATH: () => BRAIN_UPLOAD_PATH,
+  BRAIN_UPLOAD_SIGN_PATH: () => BRAIN_UPLOAD_SIGN_PATH,
   BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS: () => BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS,
   BROWSER_ENGINE_MODEL: () => BROWSER_ENGINE_MODEL,
   BUILDERFORCE_PRODUCT_NAME: () => BUILDERFORCE_PRODUCT_NAME,
@@ -61,6 +64,7 @@ __export(src_exports, {
   DEFAULT_MODEL_FALLBACK_TEMPLATE: () => DEFAULT_MODEL_FALLBACK_TEMPLATE,
   DEFAULT_MODEL_IDENTITY: () => DEFAULT_MODEL_IDENTITY,
   DEFAULT_PERSONA: () => DEFAULT_PERSONA,
+  DEFAULT_ROUTE_THRESHOLD: () => DEFAULT_ROUTE_THRESHOLD,
   DEFAULT_TOOL_FAILURE_STREAK: () => DEFAULT_TOOL_FAILURE_STREAK,
   DEFAULT_TOOL_LIMIT: () => DEFAULT_TOOL_LIMIT,
   EMPTY_GATEWAY_MODEL_OPTIONS: () => EMPTY_GATEWAY_MODEL_OPTIONS,
@@ -80,6 +84,7 @@ __export(src_exports, {
   LOCAL_SKIP_CONFIDENCE: () => LOCAL_SKIP_CONFIDENCE,
   LOCAL_SKIP_EXPLORE: () => LOCAL_SKIP_EXPLORE,
   LOCAL_WORKSPACE_TOOLS: () => LOCAL_WORKSPACE_TOOLS,
+  MAX_INLINE_TEXT_BYTES: () => MAX_INLINE_TEXT_BYTES,
   MAX_STOP_HOOK_ROUNDS: () => MAX_STOP_HOOK_ROUNDS,
   MAX_TOOL_RESULT_CHARS: () => MAX_TOOL_RESULT_CHARS,
   MODALITY_PERSONAS: () => MODALITY_PERSONAS,
@@ -151,6 +156,7 @@ __export(src_exports, {
   bindChatHistoryForSync: () => bindChatHistoryForSync,
   brainPersonaAgents: () => brainPersonaAgents,
   brainRequestError: () => brainRequestError,
+  brainUploadUrl: () => brainUploadUrl,
   buildBrainTriageReport: () => buildBrainTriageReport,
   buildChatDiagnosticsReport: () => buildChatDiagnosticsReport,
   buildComposerDirectives: () => buildComposerDirectives,
@@ -159,6 +165,7 @@ __export(src_exports, {
   byoUnresolvedInTrace: () => byoUnresolvedInTrace,
   byoUnresolvedSummary: () => byoUnresolvedSummary,
   byoVendorLabel: () => byoVendorLabel,
+  callCostMillicents: () => callCostMillicents,
   canChangeCodeHere: () => canChangeCodeHere,
   canReviewInPreview: () => canReviewInPreview,
   canRunInParallel: () => canRunInParallel,
@@ -395,11 +402,13 @@ __export(src_exports, {
   retryOnConnectFailure: () => retryOnConnectFailure,
   revealsModelId: () => revealsModelId,
   revisitAdvisory: () => revisitAdvisory,
+  routeRunRecords: () => routeRunRecords,
   routerToolSpecs: () => routerToolSpecs,
   routingModeForSelection: () => routingModeForSelection,
   routingQueryForTurn: () => routingQueryForTurn,
   runAbortSignal: () => runAbortSignal,
   runBrainLoop: () => startRun,
+  runOutcomesSince: () => runOutcomesSince,
   runProgressVerdict: () => runProgressVerdict,
   savePendingPrompt: () => savePendingPrompt,
   scopeToConsolidation: () => import_working17.scopeToConsolidation,
@@ -414,6 +423,7 @@ __export(src_exports, {
   setMcpToolStatus: () => setMcpToolStatus,
   shippedToBaseBranch: () => shippedToBaseBranch,
   shortenTarget: () => shortenTarget,
+  signedBrainFileUrl: () => signedBrainFileUrl,
   stableStringify: () => stableStringify,
   staffingSummaryInTrace: () => staffingSummaryInTrace,
   stallRecoveriesInTrace: () => stallRecoveriesInTrace,
@@ -434,6 +444,7 @@ __export(src_exports, {
   subscribeRunStore: () => subscribeRunStore,
   subscribeToChatMessages: () => subscribeToChatMessages,
   summarizeLocalFirstAttempt: () => summarizeLocalFirstAttempt,
+  summarizeRouteRuns: () => summarizeRouteRuns,
   takePendingPrompt: () => takePendingPrompt,
   ticketsReviewedInPreview: () => ticketsReviewedInPreview,
   toPromptApiTurn: () => toPromptApiTurn,
@@ -452,6 +463,7 @@ __export(src_exports, {
   turnOptimizationDirective: () => turnOptimizationDirective,
   unreviewedChangeNudge: () => unreviewedChangeNudge,
   unshippedChangeNudge: () => unshippedChangeNudge,
+  usageRowsSince: () => usageRowsSince,
   useArmedNewChat: () => useArmedNewChat,
   useBrainActions: () => useBrainActions,
   useBrainChats: () => useBrainChats,
@@ -512,7 +524,7 @@ var PARTIAL_MAP_KEY = /^(?:"\d*"?\s*:?\s*)?$/;
 var MAP_KEY = /^"\d+"\s*:\s*/;
 var MAP_TERMINATOR = /^\}?\s*\??\s*\|?>?/;
 function callMapEnd(buf, final) {
-  const unfinished = (at) => final ? { at, length: buf.length - at } : null;
+  const unfinished = (at2) => final ? { at: at2, length: buf.length - at2 } : null;
   let i = skipSpace(buf, 0);
   if (buf[i] === "{") i = skipSpace(buf, i + 1);
   for (; ; ) {
@@ -608,8 +620,8 @@ function findOpen(buf) {
 }
 function callEnd(dialect, buf) {
   if (isSelfClosing(dialect)) return dialect.closeAt(buf, false);
-  const at = buf.indexOf(dialect.close);
-  return at >= 0 ? { at, length: dialect.close.length } : null;
+  const at2 = buf.indexOf(dialect.close);
+  return at2 >= 0 ? { at: at2, length: dialect.close.length } : null;
 }
 function coerceArg(raw) {
   const v = raw.trim();
@@ -823,8 +835,8 @@ function asType(value, type) {
       if (t === "array" ? Array.isArray(parsed) : parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
     }
     if ((t === "number" || t === "integer") && /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(text)) {
-      const n = Number(text);
-      if (t === "number" || Number.isInteger(n)) return n;
+      const n2 = Number(text);
+      if (t === "number" || Number.isInteger(n2)) return n2;
     }
     if (t === "boolean" && (text === "true" || text === "false")) return text === "true";
   }
@@ -1313,6 +1325,20 @@ function unwrapFinalTags(text) {
     out = out.slice(0, cut.start) + out.slice(cut.start + cut.length);
   }
   return out;
+}
+function stripReasoningTagsFromText(text, options) {
+  if (!text) return text;
+  if (!QUICK_TAG_RE.test(text)) return text;
+  const mode = options?.mode ?? "strict";
+  const trimMode = options?.trim ?? "both";
+  const cleaned = unwrapFinalTags(text);
+  let result = "";
+  for (const span of scanReasoning(cleaned)) {
+    if (span.kind === "answer") result += cleaned.slice(span.contentStart, span.contentEnd);
+    else if (span.unterminated && mode === "preserve") result += cleaned.slice(span.contentStart, span.contentEnd);
+  }
+  if (trimMode === "none") return result;
+  return trimMode === "start" ? result.trimStart() : result.trim();
 }
 var MAX_FRAGMENT_CHARS = 40;
 var REPLY_OPENER = /^[A-Z0-9#*\-_>`[|("']/;
@@ -2217,7 +2243,8 @@ function BrainProvider({
       transport: config.transport,
       persistence: config.persistence,
       resolveSystemPrompt: config.resolveSystemPrompt ?? (() => DEFAULT_SYSTEM_PROMPT),
-      stream: resolveBrainStream(config)
+      stream: resolveBrainStream(config),
+      ...config.imagePrep ? { imagePrep: config.imagePrep } : {}
     }),
     [config]
   );
@@ -2295,15 +2322,15 @@ var UNBOUND_DESTINATION = { kind: "unbound" };
 
 // ../packages/local-first/src/store.ts
 function newLocalRecord(input) {
-  const at = input.occurredAt ?? (/* @__PURE__ */ new Date()).toISOString();
+  const at2 = input.occurredAt ?? (/* @__PURE__ */ new Date()).toISOString();
   return {
     id: input.id,
     entityType: input.entityType,
     schemaVersion: input.schemaVersion ?? 1,
     version: 1,
     destination: input.destination ?? UNBOUND_DESTINATION,
-    occurredAt: at,
-    updatedAt: at,
+    occurredAt: at2,
+    updatedAt: at2,
     payload: input.payload,
     provenance: { deviceId: input.deviceId, source: "local" }
   };
@@ -2393,8 +2420,8 @@ function computeCostMillicents(pricing, usage) {
   const cacheRead = usage.cacheReadTokens ?? 0;
   const cacheCreation = usage.cacheCreationTokens ?? 0;
   const fullPrompt = Math.max(0, usage.promptTokens - cacheRead - cacheCreation);
-  const usd2 = fullPrompt * pricing.prompt + cacheRead * pricing.prompt * CACHE_READ_MULTIPLIER + cacheCreation * pricing.prompt * CACHE_CREATION_MULTIPLIER + usage.completionTokens * pricing.completion;
-  return Math.round(usd2 * 1e5);
+  const usd3 = fullPrompt * pricing.prompt + cacheRead * pricing.prompt * CACHE_READ_MULTIPLIER + cacheCreation * pricing.prompt * CACHE_CREATION_MULTIPLIER + usage.completionTokens * pricing.completion;
+  return Math.round(usd3 * 1e5);
 }
 
 // ../packages/model-catalog/src/price.ts
@@ -3117,6 +3144,26 @@ function combineSpendSavings(a, b) {
     addSaving(acc, row.source, Math.round(row.usd * 1e5), row.tokens, row.events, row.estimated);
   }
   return { spend, ...savedFrom(acc, spend.totalUsd) };
+}
+
+// ../packages/spend-contract/src/runBudget.ts
+var RUN_BUDGET_WARN_AT = 0.8;
+var capOf = (n2) => typeof n2 === "number" && Number.isFinite(n2) ? n2 : null;
+function runBudgetBreach(caps, usage) {
+  const spendCap = capOf(caps.maxSpendMillicents);
+  if (spendCap != null && usage.spendMillicents >= spendCap) return { kind: "spend", used: usage.spendMillicents, cap: spendCap };
+  const tokenCap = capOf(caps.maxTokens);
+  const tokens2 = usage.tokens ?? 0;
+  if (tokenCap != null && tokens2 >= tokenCap) return { kind: "tokens", used: tokens2, cap: tokenCap };
+  return null;
+}
+function runBudgetUsedShare(caps, usage) {
+  const spend = caps.maxSpendMillicents ? usage.spendMillicents / caps.maxSpendMillicents : 0;
+  const tokens2 = caps.maxTokens ? (usage.tokens ?? 0) / caps.maxTokens : 0;
+  return Math.max(spend, tokens2);
+}
+function runBudgetWarnDue(caps, usage) {
+  return runBudgetUsedShare(caps, usage) >= RUN_BUDGET_WARN_AT;
 }
 
 // ../packages/spend-contract/src/index.ts
@@ -4971,6 +5018,220 @@ var isInquiryStatus = inList(INQUIRY_STATUSES);
 // src/transcriptSeed.ts
 var import_working = require("@seanhogg/builderforce-memory/working");
 
+// src/imagePrep.ts
+var DEFAULT_IMAGE_MAX_EDGE = 1568;
+var DEFAULT_IMAGE_QUALITY = 0.85;
+var MAX_DATA_URL_BYTES = 35e5;
+var LOWER_QUALITY_STEPS = [0.7, 0.55, 0.4];
+function isRasterImage(type) {
+  return /^image\/(png|jpeg|jpg|gif|webp|bmp)$/i.test(type);
+}
+function isKeepableType(type) {
+  return /^image\/(png|jpeg|jpg|webp|gif)$/i.test(type);
+}
+function mayHaveAlpha(type) {
+  return /^image\/(png|webp)$/i.test(type);
+}
+function isGif(type) {
+  return /^image\/gif$/i.test(type);
+}
+function base64Bytes(raw) {
+  return Math.ceil(raw / 3) * 4;
+}
+function qualityLadder(first) {
+  const q = typeof first === "number" && Number.isFinite(first) ? Math.min(1, Math.max(0.3, first)) : DEFAULT_IMAGE_QUALITY;
+  return [q, ...LOWER_QUALITY_STEPS.filter((s) => s < q - 0.01)];
+}
+function maxEdgeOf(opts = {}) {
+  const edge = opts.maxEdge;
+  return typeof edge === "number" && Number.isFinite(edge) && edge >= 64 ? Math.round(edge) : DEFAULT_IMAGE_MAX_EDGE;
+}
+function decideImageEncoding(input, opts = {}) {
+  if (isGif(input.type)) return { kind: "keep" };
+  const withinEdge = Math.max(input.width, input.height) <= maxEdgeOf(opts);
+  if (withinEdge && isKeepableType(input.type) && base64Bytes(input.size) <= MAX_DATA_URL_BYTES) return { kind: "keep" };
+  const qualities = qualityLadder(opts.jpegQuality);
+  return input.hasAlpha ? { kind: "encode", mime: "image/webp", qualities, matte: false } : { kind: "encode", mime: "image/jpeg", qualities, matte: true };
+}
+function loadImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not decode image"));
+    };
+    img.src = url;
+  });
+}
+function fileDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read image"));
+    reader.readAsDataURL(file);
+  });
+}
+function dataUrlBytes(dataUrl) {
+  const comma = dataUrl.indexOf(",");
+  const b64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+  return Math.floor(b64.length * 3 / 4);
+}
+var EXT_BY_MIME = { "image/jpeg": "jpg", "image/webp": "webp", "image/png": "png" };
+function dataUrlFile(dataUrl, original) {
+  const comma = dataUrl.indexOf(",");
+  const mime = /^data:([^;,]+)/.exec(dataUrl)?.[1] ?? "image/jpeg";
+  const bin = atob(dataUrl.slice(comma + 1));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  const base = original.replace(/\.[^./\\]+$/, "") || "image";
+  return new File([bytes], `${base}.${EXT_BY_MIME[mime] ?? "img"}`, { type: mime });
+}
+function canvasHasAlpha(ctx, w, h) {
+  try {
+    const data = ctx.getImageData(0, 0, w, h).data;
+    for (let i = 3; i < data.length; i += 4) if (data[i] < 255) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
+async function keepOriginal(file) {
+  if (base64Bytes(file.size) > MAX_DATA_URL_BYTES) return { tooLarge: true };
+  return { dataUrl: await fileDataUrl(file) };
+}
+async function prepareImageDataUrl(file, opts = {}) {
+  if (typeof document === "undefined" || !isRasterImage(file.type)) return null;
+  if (isGif(file.type)) return keepOriginal(file);
+  const img = await loadImage(file);
+  const scale = Math.min(1, maxEdgeOf(opts) / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.drawImage(img, 0, 0, w, h);
+  const hasAlpha = mayHaveAlpha(file.type) && canvasHasAlpha(ctx, w, h);
+  const decision = decideImageEncoding({ type: file.type, size: file.size, width: img.width, height: img.height, hasAlpha }, opts);
+  if (decision.kind === "keep") return keepOriginal(file);
+  if (decision.matte) {
+    ctx.globalCompositeOperation = "destination-over";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = "source-over";
+  }
+  let last = "";
+  for (const q of decision.qualities) {
+    last = canvas.toDataURL(decision.mime, q);
+    if (dataUrlBytes(last) <= MAX_DATA_URL_BYTES) return { dataUrl: last, file: dataUrlFile(last, file.name) };
+  }
+  return last ? { tooLarge: true, file: dataUrlFile(last, file.name) } : { tooLarge: true };
+}
+
+// src/attachmentContent.ts
+var MAX_INLINE_TEXT_BYTES = 2e6;
+var AttachmentRefusedError = class extends Error {
+  constructor(message2) {
+    super(message2);
+    this.name = "AttachmentRefusedError";
+  }
+};
+function attachmentLink(a, uploadUrl) {
+  return `[Attached: ${a.name}](${uploadUrl(a.key)})`;
+}
+async function prepareAttachment(file, persistence, imagePrep) {
+  let prepared = null;
+  try {
+    prepared = await prepareImageDataUrl(file, imagePrep);
+  } catch {
+    prepared = null;
+  }
+  const kept = prepared?.file ?? file;
+  const result = prepared?.dataUrl && persistence.keepLocal ? await persistence.keepLocal(kept) : await persistence.upload(kept);
+  const attachment = { key: result.key, name: prepared?.file ? file.name : result.name, type: result.type };
+  if (prepared?.dataUrl) {
+    attachment.imageUrl = prepared.dataUrl;
+  } else if (prepared?.tooLarge && persistence.signedUploadUrl) {
+    try {
+      attachment.imageUrl = await persistence.signedUploadUrl(result.key);
+    } catch (e) {
+      if (e instanceof AttachmentRefusedError) throw e;
+    }
+  }
+  return attachment;
+}
+async function attachmentTurnContent(trimmed, attachments, persistence) {
+  const images = attachments.filter((a) => a.imageUrl);
+  const readable = attachments.filter((a) => !a.imageUrl);
+  let inlined = { text: "", keys: /* @__PURE__ */ new Set() };
+  if (readable.length > 0 && persistence.inlineAttachments) {
+    try {
+      const r = await persistence.inlineAttachments(readable);
+      if (r && r.text) inlined = { text: r.text, keys: new Set(r.keys) };
+    } catch {
+      inlined = { text: "", keys: /* @__PURE__ */ new Set() };
+    }
+  }
+  const links = readable.filter((a) => !inlined.keys.has(a.key)).map((a) => attachmentLink(a, persistence.uploadUrl)).join("\n");
+  if (images.length === 0) {
+    if (attachments.length === 0) return trimmed;
+    if (!inlined.text) return `${trimmed}
+
+${links}`;
+    return [trimmed, links, inlined.text].filter(Boolean).join("\n\n");
+  }
+  return [
+    { type: "text", text: [trimmed, links, inlined.text].filter(Boolean).join("\n\n") },
+    ...images.map((a) => ({ type: "image_url", image_url: { url: a.imageUrl } }))
+  ];
+}
+
+// src/attachmentTranscript.ts
+var MODEL_TEXT_META_KEY = "modelText";
+var BLOB_LINK = /\[([^\]\n]*)\]\(blob:[^)\s]*\)/g;
+function withoutBlobLinks(text) {
+  return text.replace(BLOB_LINK, "[$1]");
+}
+function recordedModelText(content) {
+  const text = typeof content === "string" ? content : content.filter((p) => p.type === "text").map((p) => p.text).join("\n\n");
+  return withoutBlobLinks(text);
+}
+async function attachmentTurn(trimmed, displayContent, attachments, persistence) {
+  if (attachments.length === 0) return { content: trimmed, meta: void 0 };
+  const content = await attachmentTurnContent(trimmed, attachments, persistence);
+  const modelText = recordedModelText(content);
+  return {
+    content,
+    meta: { attachments: [...attachments], ...modelText !== displayContent ? { [MODEL_TEXT_META_KEY]: modelText } : {} }
+  };
+}
+function metaOf(m) {
+  if (!m.metadata) return null;
+  try {
+    const parsed = JSON.parse(m.metadata);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+function userTurnTextOf(m) {
+  const recorded = metaOf(m)?.[MODEL_TEXT_META_KEY];
+  return withoutBlobLinks(typeof recorded === "string" ? recorded : m.content);
+}
+function userTurnContentOf(m) {
+  const text = userTurnTextOf(m);
+  const attachments = metaOf(m)?.attachments;
+  const images = Array.isArray(attachments) ? attachments.map((a) => a && typeof a === "object" ? a.imageUrl : void 0).filter((url) => typeof url === "string" && url.startsWith("data:")) : [];
+  if (images.length === 0) return text;
+  return [{ type: "text", text }, ...images.map((url) => ({ type: "image_url", image_url: { url } }))];
+}
+
 // src/provenance.ts
 var PROVENANCE_META_KEY = "provenance";
 function asProvenanceAccount(value) {
@@ -5089,6 +5350,8 @@ function transcriptSeedOf(history) {
       const content = replayTextOf(m.content);
       if (!content) continue;
       messages.push({ role: "assistant", content });
+    } else if (m.role === "user") {
+      messages.push({ role: "user", content: userTurnTextOf(m) });
     } else {
       messages.push({ role: m.role, content: m.content });
     }
@@ -5680,6 +5943,32 @@ async function runLocalFirst(plan, run, options = {}) {
   throw new LocalFirstUnavailableError();
 }
 
+// src/localChat/callCost.ts
+var n = (v) => typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0;
+function routeOfModel(model) {
+  if (isLocalModelRef(model)) return "local";
+  return directCatalogId(model) !== void 0 ? "byo-direct" : "gateway";
+}
+function isOwnKeySpend(route) {
+  return route === "byo-direct";
+}
+function callCostMillicents(model, tokens2, book2 = snapshotPriceBook(), route) {
+  if (!model) return 0;
+  const via = route ?? routeOfModel(model);
+  if (via === "local" || isLocalModelRef(model)) return 0;
+  const price = isOwnKeySpend(via) ? listPriceOf(book2, model) : book2.priceOf(model);
+  if (!price) return 0;
+  const prompt = n(tokens2.prompt);
+  const completion = n(tokens2.completion);
+  return computeCostMillicents({ prompt: price.input, completion: price.output }, {
+    promptTokens: prompt,
+    completionTokens: completion,
+    totalTokens: prompt + completion,
+    cacheReadTokens: Math.min(n(tokens2.cacheRead), prompt),
+    cacheCreationTokens: Math.min(n(tokens2.cacheCreation), prompt)
+  });
+}
+
 // src/localChat/usageLedger.ts
 var DEFAULT_PAID_ROUTE = `anthropic/claude-sonnet-${ANTHROPIC_RELEASES.sonnet[0]}`;
 function usageRouteOf(result, requested) {
@@ -5688,7 +5977,7 @@ function usageRouteOf(result, requested) {
   if (isLocalModelRef(model)) return "local";
   return directCatalogId(model) !== void 0 ? "byo-direct" : "gateway";
 }
-var count = (n) => typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+var count = (n2) => typeof n2 === "number" && Number.isFinite(n2) && n2 > 0 ? Math.round(n2) : 0;
 function paidRouteOf(rows, book2) {
   for (let i = rows.length - 1; i >= 0; i -= 1) {
     const row = rows[i];
@@ -5701,6 +5990,14 @@ function paidRouteOf(rows, book2) {
 }
 async function usageRowsOf(tx, deviceId, clientChatId) {
   return (await liveRecords(tx, "usage", deviceId)).map((row) => row.payload).filter((row) => row.clientChatId === clientChatId).sort((a, b) => a.at.localeCompare(b.at));
+}
+function runAttribution(input) {
+  return {
+    ...input.role ? { role: input.role } : {},
+    ...input.pipelineRoute === "full" || input.pipelineRoute === "quick" ? { pipelineRoute: input.pipelineRoute } : {},
+    ...typeof input.routeScore === "number" && Number.isFinite(input.routeScore) ? { routeScore: input.routeScore } : {},
+    ...input.runId ? { runId: input.runId } : {}
+  };
 }
 function createRunUsageLedger(options) {
   const book2 = options.book ?? snapshotPriceBook;
@@ -5715,7 +6012,7 @@ function createRunUsageLedger(options) {
         const chat = await chatRecordById(tx, options.deviceId, input.chatId);
         if (!chat) return;
         const id = newId();
-        const at = now().toISOString();
+        const at2 = now().toISOString();
         let value = {
           clientEventId: id,
           clientChatId: chat.id,
@@ -5723,11 +6020,12 @@ function createRunUsageLedger(options) {
           model: input.model,
           route: input.route,
           ...input.mode ? { mode: input.mode } : {},
+          ...runAttribution(input),
           promptTokens,
           completionTokens,
           cacheReadTokens: Math.min(count(input.usage?.cacheRead), promptTokens),
           cacheCreationTokens: Math.min(count(input.usage?.cacheCreation), promptTokens),
-          at
+          at: at2
         };
         if (input.route === "local") {
           const pricing = paidRouteOf(await usageRowsOf(tx, options.deviceId, chat.id), book2());
@@ -5745,12 +6043,28 @@ function createRunUsageLedger(options) {
           payload: value,
           deviceId: options.deviceId,
           destination: chat.destination,
-          occurredAt: at
+          occurredAt: at2
         });
         await tx.put(record2);
         if (input.route !== "gateway") {
           await journalWrite(tx, record2, "create", { key: `usage:${id}`, dependsOn: [`chat:${chat.id}`], chatClientId: chat.id });
         }
+      });
+    },
+    async recordOutcome(input) {
+      if (!input.runId) return;
+      await options.store.transact(async (tx) => {
+        const chat = await chatRecordById(tx, options.deviceId, input.chatId);
+        if (!chat) return;
+        const at2 = now().toISOString();
+        await tx.put(newLocalRecord({
+          id: input.runId,
+          entityType: "run-outcome",
+          payload: { runId: input.runId, clientChatId: chat.id, outcome: input.outcome, at: at2 },
+          deviceId: options.deviceId,
+          destination: chat.destination,
+          occurredAt: at2
+        }));
       });
     }
   };
@@ -5764,7 +6078,11 @@ function withRunUsage(stream, ledger, context, onError = () => void 0) {
       model: result.resolvedModel ?? opts.model ?? "auto",
       route: usageRouteOf(result, opts.model),
       usage: result.usage,
-      ...context.mode ? { mode: context.mode } : {}
+      ...context.mode ? { mode: context.mode } : {},
+      ...opts.role ? { role: opts.role } : {},
+      ...opts.metadata?.pipelineRoute ? { pipelineRoute: opts.metadata.pipelineRoute } : {},
+      ...opts.metadata?.routeScore !== void 0 ? { routeScore: opts.metadata.routeScore } : {},
+      ...opts.metadata?.guestTurnId ? { runId: opts.metadata.guestTurnId } : {}
     }).catch(onError);
     return result;
   };
@@ -5772,10 +6090,16 @@ function withRunUsage(stream, ledger, context, onError = () => void 0) {
 function sliceOf(row, book2) {
   const total = row.promptTokens + row.completionTokens;
   const local = row.savingsSource === "local_model";
-  const price = local ? void 0 : book2.priceOf(row.model);
+  const ownKey = isOwnKeySpend(row.route);
+  const costMc = local || ownKey ? 0 : callCostMillicents(row.model, {
+    prompt: row.promptTokens,
+    completion: row.completionTokens,
+    cacheRead: row.cacheReadTokens,
+    cacheCreation: row.cacheCreationTokens
+  }, book2, row.route);
   return {
     model: row.model,
-    byo: row.route === "byo-direct",
+    byo: ownKey,
     savingsSource: local ? "local_model" : null,
     savingsEstimated: local,
     prompt: row.promptTokens,
@@ -5783,13 +6107,7 @@ function sliceOf(row, book2) {
     cacheRead: row.cacheReadTokens,
     cacheCreation: row.cacheCreationTokens,
     total,
-    costMc: row.route === "gateway" && price ? computeCostMillicents({ prompt: price.input, completion: price.output }, {
-      promptTokens: row.promptTokens,
-      completionTokens: row.completionTokens,
-      totalTokens: total,
-      cacheReadTokens: row.cacheReadTokens,
-      cacheCreationTokens: row.cacheCreationTokens
-    }) : 0,
+    costMc,
     calls: 1,
     cacheCalls: row.cacheReadTokens > 0 ? 1 : 0,
     savedPrompt: row.savedPrompt ?? 0,
@@ -6079,6 +6397,215 @@ function createLocalBrainPersistence(options) {
   };
 }
 
+// src/localChat/routeLedger.ts
+async function usageRowsSince(store, deviceId, since) {
+  const from = since.toISOString();
+  return store.transact(
+    async (tx) => (await liveRecords(tx, "usage", deviceId)).map((row) => row.payload).filter((row) => row.at >= from).sort((a, b) => a.at.localeCompare(b.at))
+  );
+}
+async function runOutcomesSince(store, deviceId, since) {
+  const from = since.toISOString();
+  return store.transact(async (tx) => {
+    const out = /* @__PURE__ */ new Map();
+    for (const row of await liveRecords(tx, "run-outcome", deviceId)) {
+      if (row.payload.at >= from) out.set(row.payload.runId, row.payload.outcome);
+    }
+    return out;
+  });
+}
+function routeRunRecords(rows, book2, outcomes) {
+  const runs = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    if (row.pipelineRoute !== "full" && row.pipelineRoute !== "quick") continue;
+    const key = row.runId ?? `${row.clientChatId}:${row.runKey}`;
+    const costMc = callCostMillicents(row.model, {
+      prompt: row.promptTokens,
+      completion: row.completionTokens,
+      cacheRead: row.cacheReadTokens,
+      cacheCreation: row.cacheCreationTokens
+    }, book2, row.route);
+    const seen = runs.get(key);
+    if (seen) {
+      seen.costMc += costMc;
+      if (row.at < seen.startedAt) seen.startedAt = row.at;
+      continue;
+    }
+    const outcome = row.runId ? outcomes?.get(row.runId) : void 0;
+    runs.set(key, {
+      route: row.pipelineRoute,
+      score: typeof row.routeScore === "number" ? row.routeScore : null,
+      costMc,
+      conversation: row.clientChatId,
+      startedAt: row.at,
+      ...outcome ? { failed: outcome === "failed" } : {}
+    });
+  }
+  return [...runs.values()].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+}
+
+// ../packages/pipeline-route/src/score.ts
+var LENGTH_FLOOR_CHARS = 80;
+var MAX_FILE_MENTIONS = 4;
+var DEFAULT_ROUTE_THRESHOLD = 0.5;
+var ROUTE_WEIGHTS = {
+  bias: -0.4,
+  length: 0.9,
+  fileMentions: 0.35,
+  multiStep: 1.2,
+  broadScope: 1,
+  questionOnly: -1.3,
+  followUp: -0.3,
+  actionType: {
+    data_migration: 1,
+    refactor: 0.9,
+    provisioning: 0.6,
+    backend_api: 0.4,
+    decision: 0.3,
+    devops_ci: 0.3,
+    frontend_ui: 0.2,
+    analysis: -0.4,
+    docs: -0.6
+  }
+};
+var sigmoid = (z) => 1 / (1 + Math.exp(-z));
+var round2 = (n2) => Math.round(n2 * 100) / 100;
+function routeThreshold(raw) {
+  return typeof raw === "number" && Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : DEFAULT_ROUTE_THRESHOLD;
+}
+function contributions(f, w) {
+  const decades = f.requestChars > LENGTH_FLOOR_CHARS ? Math.min(2, Math.log10(f.requestChars / LENGTH_FLOOR_CHARS)) : 0;
+  return [
+    ["long request", w.length * decades],
+    ["files named", w.fileMentions * Math.min(MAX_FILE_MENTIONS, Math.max(0, f.fileMentions))],
+    ["multi-step", f.multiStep ? w.multiStep : 0],
+    ["broad scope", f.broadScope ? w.broadScope : 0],
+    ["question only", f.questionOnly ? w.questionOnly : 0],
+    ["follow-up", f.followUp ? w.followUp : 0],
+    [f.actionType, w.actionType[f.actionType] ?? 0]
+  ];
+}
+function scorePipeline(f, opts = {}) {
+  const w = opts.weights ?? ROUTE_WEIGHTS;
+  const threshold = routeThreshold(opts.threshold);
+  const parts = contributions(f, w);
+  const score2 = round2(sigmoid(parts.reduce((z, [, c]) => z + c, w.bias)));
+  const strongest = parts.filter(([, c]) => c !== 0).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 3).map(([name]) => name);
+  const why = strongest.length ? ` (${strongest.join(", ")})` : "";
+  if (f.forceFull) return { score: score2, route: "full", reason: `the request asks for the full pipeline; score ${score2}${why}` };
+  if (opts.mode === "always") return { score: score2, route: "full", reason: `routing is set to always; score ${score2}${why}` };
+  return score2 >= threshold ? { score: score2, route: "full", reason: `score ${score2} \u2265 ${threshold}${why}` } : { score: score2, route: "quick", reason: `score ${score2} < ${threshold}${why}` };
+}
+var FILE_RE = /(?:[\w@.-]+\/)+[\w.-]+|\b[\w-]+\.(?:tsx?|jsx?|mjs|cjs|py|go|rs|java|kt|cs|php|rb|swift|c|cc|cpp|h|hpp|md|json|ya?ml|toml|sql|css|scss|html|vue|svelte|sh)\b/gi;
+var LIST_ITEM_RE = /^\s*(?:\d+[.)]|[-*•])\s+\S/gm;
+var CHAIN_RE = /\b(?:and then|then|after that|afterwards|next|also|finally|as well as)\b/gi;
+var BROAD_RE = /\b(?:every|each|across|throughout|entire|whole|codebase|repo-?wide|end[- ]to[- ]end|architecture|redesign|overhaul|migrate|migration|all (?:the )?(?:files|modules|services|packages|pages|endpoints|tests|callers|places))\b/i;
+var QUESTION_LEAD_RE = /^(?:what|why|how|where|when|which|who|is|are|does|do|did|can|could|should|would|explain|describe|summari[sz]e|show me|tell me)\b/i;
+var CHANGE_VERB_RE = /\b(?:add|implement|create|build|fix|change|refactor|update|remove|delete|rename|write|migrate|make|move|replace|convert|upgrade|bump|wire|port)\b/i;
+var FORCE_FULL_RE = /\bfull[- ]pipeline\b/i;
+function pipelineFeaturesOf(request, context = {}) {
+  const text = request.trim();
+  const files = new Set((text.match(FILE_RE) ?? []).map((m) => m.toLowerCase()));
+  const listItems = (text.match(LIST_ITEM_RE) ?? []).length;
+  const chained = (text.match(CHAIN_RE) ?? []).length;
+  const asks = text.endsWith("?") || QUESTION_LEAD_RE.test(text);
+  return {
+    requestChars: text.length,
+    fileMentions: files.size,
+    multiStep: listItems >= 2 || chained >= 2,
+    broadScope: BROAD_RE.test(text),
+    questionOnly: asks && !CHANGE_VERB_RE.test(text),
+    followUp: context.followUp === true,
+    actionType: context.actionType ?? "other",
+    forceFull: FORCE_FULL_RE.test(text)
+  };
+}
+
+// ../packages/pipeline-route/src/report.ts
+var RERUN_WINDOW_MS = 30 * 6e4;
+var MIN_QUICK_RUNS_FOR_SUGGESTION = 10;
+var MISROUTE_HIGH = 0.15;
+var MISROUTE_LOW = 0.05;
+var HISTOGRAM_BINS = 10;
+var STEP = 0.05;
+var floorStep = (n2) => Math.floor(n2 / STEP + 1e-9) * STEP;
+var round22 = (n2) => Math.round(n2 * 100) / 100;
+function misroutedRuns(runs, windowMs = RERUN_WINDOW_MS) {
+  const out = /* @__PURE__ */ new Set();
+  const byConversation = /* @__PURE__ */ new Map();
+  runs.forEach((r, i) => {
+    const list2 = byConversation.get(r.conversation) ?? [];
+    list2.push(i);
+    byConversation.set(r.conversation, list2);
+  });
+  for (const indexes of byConversation.values()) {
+    indexes.sort((a, b) => runs[a].startedAt.localeCompare(runs[b].startedAt));
+    indexes.forEach((i, k) => {
+      const run = runs[i];
+      if (run.route !== "quick") return;
+      if (run.failed) {
+        out.add(i);
+        return;
+      }
+      const next = indexes[k + 1] !== void 0 ? runs[indexes[k + 1]] : void 0;
+      if (next?.route === "full" && Date.parse(next.startedAt) - Date.parse(run.startedAt) <= windowMs) out.add(i);
+    });
+  }
+  return out;
+}
+function totals(runs) {
+  const scored = runs.filter((r) => typeof r.score === "number");
+  return {
+    runs: runs.length,
+    costMc: runs.reduce((sum, r) => sum + (Number.isFinite(r.costMc) ? r.costMc : 0), 0),
+    avgScore: scored.length ? round22(scored.reduce((s, r) => s + r.score, 0) / scored.length) : null
+  };
+}
+function histogramOf(runs) {
+  const bins = Array.from({ length: HISTOGRAM_BINS }, (_, i) => ({
+    from: round22(i / HISTOGRAM_BINS),
+    to: round22((i + 1) / HISTOGRAM_BINS),
+    full: 0,
+    quick: 0
+  }));
+  for (const r of runs) {
+    if (typeof r.score !== "number" || !Number.isFinite(r.score)) continue;
+    const i = Math.min(HISTOGRAM_BINS - 1, Math.max(0, Math.floor(r.score * HISTOGRAM_BINS)));
+    bins[i][r.route] += 1;
+  }
+  return bins;
+}
+function suggestThreshold(runs, threshold, misrouted = misroutedRuns(runs)) {
+  const quick = runs.filter((r) => r.route === "quick").length;
+  if (quick < MIN_QUICK_RUNS_FOR_SUGGESTION) return { suggestedThreshold: null };
+  const rate = misrouted.size / quick;
+  if (rate > MISROUTE_HIGH) {
+    const scores = [...misrouted].map((i) => runs[i].score).filter((s) => typeof s === "number").sort((a, b) => a - b);
+    const quartile = scores.length ? scores[Math.floor((scores.length - 1) / 4)] : threshold - STEP;
+    const next = round22(Math.max(STEP * 2, Math.min(threshold - STEP, floorStep(quartile))));
+    return { suggestedThreshold: next };
+  }
+  if (rate < MISROUTE_LOW && runs.some((r) => r.route === "full")) {
+    const next = round22(Math.min(0.9, threshold + STEP));
+    return { suggestedThreshold: next > threshold ? next : null };
+  }
+  return { suggestedThreshold: null };
+}
+function summarizeRouteRuns(runs, opts = {}) {
+  const threshold = opts.threshold ?? DEFAULT_ROUTE_THRESHOLD;
+  const misrouted = misroutedRuns(runs, opts.rerunWindowMs);
+  const quick = runs.filter((r) => r.route === "quick");
+  return {
+    runs: runs.length,
+    byRoute: { full: totals(runs.filter((r) => r.route === "full")), quick: totals(quick) },
+    histogram: histogramOf(runs),
+    misroutes: misrouted.size,
+    misrouteRate: quick.length ? round22(misrouted.size / quick.length) : null,
+    threshold,
+    ...suggestThreshold(runs, threshold, misrouted)
+  };
+}
+
 // src/localChat/chatSync.ts
 async function bindChatHistoryForSync(store, deviceId, destination) {
   if (destination.kind !== "bound") return 0;
@@ -6110,6 +6637,9 @@ async function bindChatHistoryForSync(store, deviceId, destination) {
 // ../packages/agent-stall/src/requestIntent.ts
 var CHANGE_VERBS = "add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge";
 var CHANGE_VERB = new RegExp(`\\b(${CHANGE_VERBS})\\b`, "i");
+var FINISH_OBJECT = "(complete|finish|finali[sz]e)\\s+(the|this|that|these|those|it|my|our|your|all|implementation|work|task|change)\\b";
+var FINISH_ORDER = new RegExp(`^\\s*(please\\s+)?(now\\s+)?${FINISH_OBJECT}`, "i");
+var CHAINED_FINISH = new RegExp(`(\\band|\\bthen|[,.;])\\s+((also|then|please|now)\\s+)*${FINISH_OBJECT}`, "i");
 var QUESTION_SHAPE = /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|can|could|should|would|will)\b|\?\s*$/i;
 var RESEARCH_LEAD = /^\s*(explain|describe|summar\w*|tell me|show me|list|compare|review|analyse|analyze|research|investigate|find|locate|trace|audit|look into|search)\b/i;
 var REPORT_OBJECTS = "summary|report|findings|notes|overview|write-?up|answer|explanation|list|table|recommendations?";
@@ -6122,8 +6652,8 @@ function asksForChange(text) {
   if (!t) return false;
   const head = t.slice(0, 600);
   if (QUESTION_SHAPE.test(head)) return false;
-  if (RESEARCH_LEAD.test(head)) return CHAINED_CHANGE.test(head);
-  return CHANGE_VERB.test(head);
+  if (RESEARCH_LEAD.test(head)) return CHAINED_CHANGE.test(head) || CHAINED_FINISH.test(head);
+  return CHANGE_VERB.test(head) || FINISH_ORDER.test(head) || CHAINED_FINISH.test(head);
 }
 var NOTHING_DONE = /\b(nothing (has been|was|is) (changed|modified|applied|edited|written|saved)|no (changes?|edits?) (have been|were|was) (made|applied|written|saved)|(not|never) (yet )?(been )?(applied|written|saved|committed)|has not been (changed|applied|modified)|before (applying|making) the edit)\b/i;
 var DEFERRED_PROMISE = /\b(re-?run me|run me again|ask me again|in a follow-?up|next run|on the next turn|say the word|let me know and I'?ll|I'?ll (then )?(apply|make|write|implement|create|edit|fix|update|do|proceed|carry)|I will (then )?(apply|make|write|implement|create|edit|fix|update|proceed))\b/i;
@@ -6174,7 +6704,7 @@ var EXECUTION_TOOLS = /* @__PURE__ */ new Set([
   "builtin_chats_execute_as_agent"
 ]);
 function canExecuteCommands(toolNames) {
-  return (toolNames ?? []).some((n) => EXECUTION_TOOLS.has(n.toLowerCase()));
+  return (toolNames ?? []).some((n2) => EXECUTION_TOOLS.has(n2.toLowerCase()));
 }
 var RUNNER = "(?:npm|pnpm|yarn|npx|bun|deno|node|git|make|cargo|go|dotnet|mvn|gradle|python3?|pip3?|poetry|uv|ruby|rake|bundle|composer|php|docker(?:\\s+compose)?|kubectl|helm|terraform|wrangler|vercel|netlify|vite|webpack|tsc|tsgo|eslint|prettier|pytest|jest|vitest|playwright|cypress|bash|sh|zsh|pwsh|powershell|curl|wget|sed|awk|rsync|vsce)\\b";
 var SCRIPT_NOUN = "(?:build|tests?|test suite|type-?check(?:ing)?|typecheck|lint(?:er|ing)?|guards?|checks?|install|dev server|migrations?|deploy(?:ment)?|codegen|bundle|vsix|package|commit|push|pull request|pr\\b|branch|lockfile|extension host)";
@@ -6298,7 +6828,7 @@ function pausesOnUsersOwnChoice(text) {
 }
 var ASK_USER_TOOL_NAME = "ask_user";
 function askUserAdvertised(toolNames) {
-  return (toolNames ?? []).some((n) => n.toLowerCase() === ASK_USER_TOOL_NAME);
+  return (toolNames ?? []).some((n2) => n2.toLowerCase() === ASK_USER_TOOL_NAME);
 }
 function asksPermissionForRequestedWork(text, ctx) {
   if (!asksForChange(ctx.requestText)) return false;
@@ -6544,11 +7074,16 @@ function configuredPhaseModel(options, phase) {
   }
   return void 0;
 }
+function phaseDefaultModel(state) {
+  if (state.phase === "verify" || state.options.fixedRole) return void 0;
+  const model = configuredPhaseModel(state.options, state.phase);
+  return model && !state.broken.includes(model) ? model : void 0;
+}
 function nextTurn(state, turn) {
   const verifying = state.phase === "verify";
   const author = state.authorModel;
   const mapped = verifying ? configuredPhaseModel(state.options, "verify") : void 0;
-  let model = mapped ?? state.model;
+  let model = mapped ?? state.model ?? phaseDefaultModel(state);
   if (verifying && author && model === author) model = void 0;
   const excludeModels = [...state.broken];
   if (verifying && author && !excludeModels.includes(author)) excludeModels.push(author);
@@ -6567,9 +7102,10 @@ var PLAN_TURN_BUDGET = 20;
 function handOffDue(state) {
   return state.phase === "plan" && state.planTurns >= PLAN_TURN_BUDGET;
 }
-function changeDue(state, progressed) {
-  return state.phase === "code" && !progressed && !state.changeForced && state.codeTurns >= PLAN_TURN_BUDGET;
+function changeDue(state, progressed2, budget = PLAN_TURN_BUDGET) {
+  return state.phase === "code" && !progressed2 && !state.changeForced && state.codeTurns >= budget;
 }
+var QUICK_CHANGE_TURN_BUDGET = 8;
 function reduceRunPolicy(state, event) {
   const s = { ...state, outcome: NONE };
   switch (event.type) {
@@ -6588,7 +7124,7 @@ function reduceRunPolicy(state, event) {
       return s.phase === "plan" ? { ...s, phase: "code", outcome: { kind: "handed_off" } } : { ...s, outcome: { kind: "hand_off_rejected" } };
     case "verify_started": {
       if (s.phase === "verify") return s;
-      const author = s.authorModel ?? s.model;
+      const author = s.authorModel ?? s.model ?? phaseDefaultModel(s);
       const review = configuredPhaseModel(s.options, "verify");
       const distinct = review && review !== author ? review : void 0;
       return {
@@ -6695,7 +7231,10 @@ function transportFailed(s, e) {
     };
   }
   if (s.model) return { ...s, outcome: { kind: "fail_turn" } };
-  const broken = e.kind === "interrupted" && e.model && !s.broken.includes(e.model) ? [...s.broken, e.model] : s.broken;
+  const phaseModel = phaseDefaultModel(s);
+  const releasedPhase = phaseModel && e.status !== void 0 && releasesPin(s, phaseModel, e.status) ? phaseModel : void 0;
+  const interrupted = e.kind === "interrupted" && e.model ? e.model : void 0;
+  const broken = [.../* @__PURE__ */ new Set([...s.broken, ...interrupted ? [interrupted] : [], ...releasedPhase ? [releasedPhase] : []])];
   return {
     ...s,
     broken,
@@ -7104,10 +7643,10 @@ function readJsonKey(text, key) {
     const segment = segments[i];
     const container = node !== null && typeof node === "object" ? node : null;
     if (!container || !Object.prototype.hasOwnProperty.call(container, segment)) {
-      const at = segments.slice(0, i).join(".") || "(root)";
+      const at2 = segments.slice(0, i).join(".") || "(root)";
       return {
         ok: false,
-        error: `key "${segments.slice(0, i + 1).join(".")}" not found \u2014 ${at} has no "${segment}"`,
+        error: `key "${segments.slice(0, i + 1).join(".")}" not found \u2014 ${at2} has no "${segment}"`,
         availableKeys: keysOf(node).slice(0, MAX_LISTED_KEYS)
       };
     }
@@ -7259,8 +7798,8 @@ function extensionOf(path2) {
 function languageOf(path2) {
   return LANGUAGE_BY_EXT[extensionOf(path2.replace(/\\/g, "/"))];
 }
-function group(m, n) {
-  return m[n] ?? "";
+function group(m, n2) {
+  return m[n2] ?? "";
 }
 function eachLine(lines, out, visit) {
   for (let i = 0; i < lines.length && out.length < MAX_SYMBOLS_PER_FILE; i += 1) {
@@ -7274,10 +7813,15 @@ var JS_RULES = [
   { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?interface\\s+(${ID})`), kind: "interface" },
   { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?type\\s+(${ID})\\s*[<=]`), kind: "type" },
   { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:const\\s+)?enum\\s+(${ID})`), kind: "enum" },
-  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:const|let|var)\\s+(${ID})`), kind: "const" }
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:const|let|var)\\s+(${ID})`), kind: "const" },
+  // `namespace A.B {`, `declare module "x" {` — the module's name, its quotes dropped.
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:namespace|module)\\s+(${ID}(?:\\.${ID})*|"[^"]+"|'[^']+')\\s*\\{`), kind: "module" }
 ];
 var JS_METHOD = new RegExp(
   `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|abstract|async|get|set)\\s+)*\\*?\\s*(${ID})\\s*(?:<[^>]*>)?\\s*\\(.*\\)?[^;]*\\{\\s*$`
+);
+var JS_ABSTRACT_METHOD = new RegExp(
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override)\\s+)*abstract\\s+(?:(?:public|private|protected|static|readonly|override|async)\\s+)*(${ID})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`
 );
 var JS_KEYWORDS = /* @__PURE__ */ new Set(["if", "for", "while", "switch", "catch", "return", "function", "with", "do", "else", "try"]);
 function extractJs(lines, out) {
@@ -7289,12 +7833,12 @@ function extractJs(lines, out) {
       if (!m) continue;
       const exported = !!m[1];
       if (!exported && /^\s/.test(line2)) continue;
-      out.push({ name: group(m, 2), kind: rule.kind, line: lineNo, exported });
+      out.push({ name: group(m, 2).replace(/^["']|["']$/g, ""), kind: rule.kind, line: lineNo, exported });
       if (rule.kind === "class") inClass = true;
       return;
     }
     if (!inClass) return;
-    const method = JS_METHOD.exec(line2);
+    const method = JS_METHOD.exec(line2) ?? JS_ABSTRACT_METHOD.exec(line2);
     const name = method ? group(method, 1) : "";
     if (name && !JS_KEYWORDS.has(name)) out.push({ name, kind: "method", line: lineNo, exported: false });
   });
@@ -8239,7 +8783,7 @@ var GIT_TOOLS = [
 var ADAPTIVE_K_START = 3;
 var ADAPTIVE_K_FLOOR = 0.5;
 var ADAPTIVE_K_HEAD_MARGIN = 0.15;
-var positiveInt = (n, fallback) => typeof n === "number" && Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : fallback;
+var positiveInt = (n2, fallback) => typeof n2 === "number" && Number.isFinite(n2) ? Math.max(0, Math.trunc(n2)) : fallback;
 function hasClearHead(scores, start = ADAPTIVE_K_START, floor = ADAPTIVE_K_FLOOR, headMargin = ADAPTIVE_K_HEAD_MARGIN) {
   const top = Number(scores[0]);
   if (!Number.isFinite(top) || top < floor || top <= 0) return false;
@@ -8249,9 +8793,9 @@ function hasClearHead(scores, start = ADAPTIVE_K_START, floor = ADAPTIVE_K_FLOOR
   return (top - firstDropped) / top >= headMargin;
 }
 function chooseK(input) {
-  const n = input.scores.length;
+  const n2 = input.scores.length;
   const requested = positiveInt(input.requested, 0);
-  const ceiling = Math.min(requested, positiveInt(input.max, requested), n);
+  const ceiling = Math.min(requested, positiveInt(input.max, requested), n2);
   if (ceiling <= 0) return 0;
   const start = Math.max(1, Math.min(positiveInt(input.start, ADAPTIVE_K_START), ceiling));
   let k = hasClearHead(input.scores, start, input.floor ?? ADAPTIVE_K_FLOOR, input.headMargin ?? ADAPTIVE_K_HEAD_MARGIN) ? start : ceiling;
@@ -8268,6 +8812,82 @@ function chooseK(input) {
   }
   return k;
 }
+
+// ../packages/agent-tools/src/proseCompress.ts
+var PROSE_BY_EXT = {
+  md: "markdown",
+  mdx: "markdown",
+  markdown: "markdown",
+  rst: "markdown",
+  adoc: "markdown",
+  asciidoc: "markdown",
+  org: "markdown",
+  txt: "text",
+  text: "text",
+  log: "log"
+};
+var PROSE_EXTENSIONS = Object.keys(PROSE_BY_EXT).map((e) => `.${e}`);
+function proseKindOf(path2) {
+  const base = path2.replace(/\\/g, "/").split("/").pop() ?? "";
+  const dot = base.lastIndexOf(".");
+  const ext = dot > 0 ? base.slice(dot + 1).toLowerCase() : "";
+  return PROSE_BY_EXT[ext] ?? "code";
+}
+async function compressProse(text, kind, opts = {}) {
+  if (kind === "code" || !opts.compress) return { text, compressed: false, originalTokens: 0, keptTokens: 0 };
+  return compressLargeContext(text, {
+    compress: opts.compress,
+    ...opts.minChars !== void 0 ? { minChars: opts.minChars } : {},
+    ...opts.rate !== void 0 ? { rate: opts.rate } : {}
+  });
+}
+
+// ../packages/agent-tools/src/read-compressed-tool.ts
+var READ_COMPRESSED_MIN_CHARS = 1500;
+var RATE_MIN = 0.2;
+var RATE_MAX = 0.9;
+var readCompressedTool = defineTool({
+  name: "read_compressed",
+  description: `Read a long PROSE file \u2014 docs, design notes, READMEs, logs (${PROSE_EXTENSIONS.join(" ")}) \u2014 compressed to about half its tokens (LLMLingua-2; code fences, paths and numbers kept verbatim). Use it to UNDERSTAND a big document without paying for every token; never to edit (read_file gives the exact text). Code files are refused.`,
+  parameters: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: 'Repo-relative path of the prose file, e.g. "docs/design/billing.md".' },
+      rate: { type: "number", description: `Share of tokens to keep, ${RATE_MIN}\u2013${RATE_MAX} (default 0.5).` }
+    },
+    required: ["path"]
+  },
+  requires: ["repo.read", "repo.compress"],
+  async execute(args, ctx) {
+    const path2 = typeof args.path === "string" ? args.path.trim() : "";
+    if (!path2) return { data: { ok: false, error: "path is required" } };
+    const kind = proseKindOf(path2);
+    if (kind === "code") {
+      return { data: { ok: false, path: path2, error: `read_compressed only reads prose (${PROSE_EXTENSIONS.join(" ")}). Use read_file for code \u2014 an edit needs the exact text.` } };
+    }
+    const semantic = ctx.caps.semantic;
+    if (!semantic?.compress) return { data: { ok: false, path: path2, error: "Compression is not available on this surface right now \u2014 use read_file." } };
+    const read = await ctx.caps.repoRead.readFile(path2);
+    if (!read.ok || typeof read.content !== "string") return { data: read };
+    const rate = typeof args.rate === "number" && Number.isFinite(args.rate) ? Math.min(RATE_MAX, Math.max(RATE_MIN, args.rate)) : void 0;
+    const r = await compressProse(read.content, kind, {
+      compress: (t, k) => semantic.compress(t, k),
+      minChars: READ_COMPRESSED_MIN_CHARS,
+      ...rate !== void 0 ? { rate } : {}
+    });
+    const data = { ok: true, path: path2, content: r.text, compressed: r.compressed };
+    if (r.compressed) {
+      data.originalTokens = r.originalTokens;
+      data.keptTokens = r.keptTokens;
+      data.note = "Compressed for reading \u2014 do not quote it as the file's exact text; read_file before editing.";
+    } else {
+      data.note = read.content.length < READ_COMPRESSED_MIN_CHARS ? "Short enough to read as-is \u2014 returned uncompressed." : "Compression did not shorten this text \u2014 returned as-is.";
+    }
+    if (read.truncated) data.truncated = true;
+    if (r.compressed) ctx.emit?.({ level: "debug", message: "read_compressed: compressed (C8)", detail: { originalTokens: r.originalTokens, keptTokens: r.keptTokens } });
+    return { data };
+  }
+});
 
 // ../packages/agent-tools/src/semantic-tools.ts
 var SEARCH_DEFAULT_LIMIT = 8;
@@ -8341,7 +8961,261 @@ var repoMapTool = defineTool({
     return { data };
   }
 });
-var SEMANTIC_TOOLS = [semanticSearchTool, repoMapTool];
+var SEMANTIC_TOOLS = [semanticSearchTool, repoMapTool, readCompressedTool];
+
+// ../packages/agent-tools/src/preSearch.ts
+var DEFAULTS = {
+  maxIdentifiers: 6,
+  definitionsPerIdentifier: 3,
+  referencesPerIdentifier: 4,
+  maxChars: 3e3
+};
+var TOKEN = /[A-Za-z_$][\w$]*/g;
+var REFERENCE_TEXT_MAX = 140;
+function looksLikeIdentifier(word) {
+  if (word.length < 3) return false;
+  if (/^_+$/.test(word)) return false;
+  if (word.includes("_") || word.includes("$")) return true;
+  if (/[a-z][A-Z]/.test(word)) return true;
+  if (/[0-9][A-Z]/.test(word) && /[a-z]/.test(word)) return true;
+  if (/^[A-Z][A-Z0-9]*\d$/.test(word)) return true;
+  return false;
+}
+function extractIdentifiers(request, max = DEFAULTS.maxIdentifiers) {
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  const add = (word) => {
+    if (!word || seen.has(word) || out.length >= max) return;
+    seen.add(word);
+    out.push(word);
+  };
+  const text = request ?? "";
+  for (const span of text.matchAll(/`([^`\n]{1,120})`/g)) {
+    const words3 = span[1].match(TOKEN) ?? [];
+    const last = words3[words3.length - 1];
+    if (last && last.length >= 2) add(last);
+  }
+  for (const m of text.matchAll(/([A-Za-z_$][\w$]*)(\s*\()?/g)) {
+    const word = m[1];
+    const after = text.charAt((m.index ?? 0) + word.length);
+    if (after === "." && /[A-Za-z]/.test(text.charAt((m.index ?? 0) + word.length + 1)) && !looksLikeIdentifier(word)) continue;
+    if (m[2] && word.length >= 3 && /[a-z]/.test(word)) add(word);
+    else if (looksLikeIdentifier(word)) add(word);
+  }
+  return out;
+}
+function escapeRegex(identifier) {
+  return identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function clip(s, n2) {
+  const t = s.replace(/\s+/g, " ").trim();
+  return t.length > n2 ? `${t.slice(0, n2 - 1)}\u2026` : t;
+}
+function renderPreSearchBlock(r, maxChars = DEFAULTS.maxChars) {
+  if (r.definitions.length === 0 && r.references.length === 0) return "";
+  const lines = [
+    "## Pre-search (symbol index + text search, gathered before this run with no model call)",
+    `Identifiers in the request: ${r.identifiers.map((i) => `\`${i}\``).join(", ")}`
+  ];
+  for (const id of r.identifiers) {
+    for (const d of r.definitions.filter((x) => x.identifier === id)) {
+      lines.push(`- \`${id}\` defined at ${d.path}:${d.line} (${d.kind}${d.exported ? ", exported" : ""})`);
+    }
+    for (const ref of r.references.filter((x) => x.identifier === id)) {
+      lines.push(`- \`${id}\` at ${ref.path}:${ref.line} \u2014 ${clip(ref.text, REFERENCE_TEXT_MAX)}`);
+    }
+  }
+  lines.push("Start from these locations (read_file with a line range) instead of searching for them again.");
+  let out = lines.join("\n");
+  if (out.length > maxChars) out = `${out.slice(0, maxChars).replace(/\n[^\n]*$/, "")}
+- \u2026`;
+  return out;
+}
+async function preSearch(request, ports, options = {}) {
+  const o = { ...DEFAULTS, ...options };
+  const { signal } = options;
+  const identifiers = extractIdentifiers(request, o.maxIdentifiers);
+  const empty = { identifiers, definitions: [], references: [], block: "" };
+  if (identifiers.length === 0 || signal?.aborted) return empty;
+  const perId = await Promise.all(identifiers.map(async (identifier) => {
+    const [defs, refs] = await Promise.all([
+      ports.findSymbol ? ports.findSymbol(identifier).catch(() => ({ ok: false })) : Promise.resolve({ ok: false }),
+      ports.searchText ? ports.searchText(escapeRegex(identifier), signal).catch(() => ({ ok: false })) : Promise.resolve({ ok: false })
+    ]);
+    const exact = (defs.ok ? defs.matches ?? [] : []).filter((m) => m.name === identifier && m.kind !== "heading");
+    const definitions2 = exact.slice(0, o.definitionsPerIdentifier).map((m) => ({
+      identifier,
+      path: m.path,
+      line: m.line,
+      kind: m.kind,
+      exported: m.exported
+    }));
+    const defined = new Set(definitions2.map((d) => `${d.path}:${d.line}`));
+    const references2 = [];
+    for (const m of refs.ok ? refs.matches ?? [] : []) {
+      if (references2.length >= o.referencesPerIdentifier) break;
+      const line2 = typeof m.line === "number" ? m.line : Number(m.line);
+      if (!Number.isFinite(line2) || defined.has(`${m.path}:${line2}`)) continue;
+      references2.push({ identifier, path: m.path, line: line2, text: typeof m.text === "string" ? m.text : "" });
+    }
+    return { definitions: definitions2, references: references2 };
+  }));
+  const definitions = perId.flatMap((p) => p.definitions);
+  const references = perId.flatMap((p) => p.references);
+  const result = { identifiers, definitions, references };
+  return { ...result, block: renderPreSearchBlock(result, o.maxChars) };
+}
+function preSearchFiles(r, max = 6) {
+  const out = [];
+  for (const p of [...r.definitions.map((d) => d.path), ...r.references.map((x) => x.path)]) {
+    if (!out.includes(p)) out.push(p);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+// ../packages/agent-tools/src/researchCache.ts
+function researchCacheKey(question, files) {
+  const q = question.replace(/\s+/g, " ").trim();
+  const sorted = [...files].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+  return JSON.stringify([q, ...sorted.map((f) => `${f.path}@${Math.round(f.mtimeMs)}:${f.size}`)]);
+}
+
+// ../packages/agent-tools/src/local-research-tool.ts
+var MAX_PATHS = 8;
+var DEFAULT_TIME_LIMIT_MS = 45e3;
+var EXCERPT_BUDGET_CHARS = 24e3;
+var HIT_WINDOW_LINES = 30;
+var SYSTEM = [
+  "You answer a question about a codebase using ONLY the file excerpts given.",
+  "Cite every claim as path:line. Be brief and concrete: names, locations, what calls what.",
+  "If the excerpts do not contain the answer, say exactly what is missing \u2014 never guess."
+].join(" ");
+function excerptAround(content, lines, budget, radius = HIT_WINDOW_LINES) {
+  const all = content.split(/\r?\n/);
+  const ranges = [];
+  const anchors = lines.length > 0 ? [...lines].sort((a, b) => a - b) : [1];
+  for (const line2 of anchors) {
+    const start = Math.max(1, lines.length > 0 ? line2 - radius : 1);
+    const end = Math.min(all.length, lines.length > 0 ? line2 + radius : radius * 4);
+    const last = ranges[ranges.length - 1];
+    if (last && start <= last[1] + 1) last[1] = Math.max(last[1], end);
+    else ranges.push([start, end]);
+  }
+  const out = [];
+  let used = 0;
+  for (const [start, end] of ranges) {
+    if (out.length > 0) out.push("\u2026");
+    for (let n2 = start; n2 <= end; n2++) {
+      const row = `${n2}: ${all[n2 - 1] ?? ""}`;
+      if (used + row.length + 1 > budget) return `${out.join("\n")}
+\u2026`;
+      out.push(row);
+      used += row.length + 1;
+    }
+  }
+  return out.join("\n");
+}
+function hitLinesFor(path2, hits) {
+  if (!hits) return [];
+  return [...hits.definitions, ...hits.references].filter((h) => h.path === path2).map((h) => h.line);
+}
+async function readExcerpts(ctx, files, hits) {
+  const out = [];
+  const per = Math.floor(EXCERPT_BUDGET_CHARS / Math.max(1, files.length));
+  for (const path2 of files) {
+    const r = await ctx.caps.repoRead.readFile(path2).catch(() => null);
+    if (!r?.ok || typeof r.content !== "string") continue;
+    out.push({ path: path2, text: excerptAround(r.content, hitLinesFor(path2, hits), per) });
+  }
+  return out;
+}
+function researchMessages(question, excerpts) {
+  const body = excerpts.map((e) => `### ${e.path}
+${e.text}`).join("\n\n");
+  return [
+    { role: "system", content: SYSTEM },
+    { role: "user", content: `Question: ${question}
+
+Excerpts (each line is "line: text"):
+
+${body}` }
+  ];
+}
+function deadlineSignal(limitMs, outer) {
+  const ctl = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    ctl.abort(new Error("local_research time limit"));
+  }, limitMs);
+  const onOuter = () => ctl.abort(outer?.reason);
+  if (outer?.aborted) ctl.abort(outer.reason);
+  else outer?.addEventListener("abort", onOuter, { once: true });
+  return {
+    signal: ctl.signal,
+    timedOut: () => timedOut,
+    dispose: () => {
+      clearTimeout(timer);
+      outer?.removeEventListener("abort", onOuter);
+    }
+  };
+}
+var localResearchTool = defineTool({
+  name: "local_research",
+  description: 'Ask a question about this codebase and have a LOCAL model on this machine read the relevant files and answer it \u2014 free, no paid tokens. Name the files in `paths`; without them, files are chosen by a symbol-index + text search for the identifiers in the question. Use it for "how does X work", "what calls Y", "summarize these files" before reading large files yourself. Answers cite path:line and are cached until a file changes. If the local model runs out of time you get the search hits instead.',
+  parameters: {
+    type: "object",
+    properties: {
+      question: { type: "string", description: 'What you want to know, naming identifiers where you can, e.g. "how does resolveMembership pick the tenant?".' },
+      paths: { type: "array", items: { type: "string" }, description: `Optional repo-relative files to read (max ${MAX_PATHS}).` }
+    },
+    required: ["question"]
+  },
+  requires: ["repo.read", "local.research"],
+  async execute(args, ctx) {
+    const question = typeof args.question === "string" ? args.question.trim() : "";
+    if (!question) return { data: { ok: false, error: "question is required" } };
+    const research = ctx.caps.research;
+    if (!research) return { data: { ok: false, error: "No local model is available on this machine right now." } };
+    const named = Array.isArray(args.paths) ? [...new Set(args.paths.filter((p) => typeof p === "string" && p.trim() !== "").map((p) => p.trim()))].slice(0, MAX_PATHS) : [];
+    const hits = await preSearch(question, {
+      ...ctx.caps.symbols ? { findSymbol: (q) => ctx.caps.symbols.find(q, { limit: 20 }) } : {},
+      ...ctx.caps.repoRead ? { searchText: (q, signal) => ctx.caps.repoRead.searchCode(q, void 0, signal ? { signal } : void 0) } : {}
+    }, ctx.signal ? { signal: ctx.signal } : {}).catch(() => null);
+    const chosen = named.length > 0 ? named : hits ? preSearchFiles(hits) : [];
+    if (chosen.length === 0) {
+      return { data: { ok: false, question, error: "No files matched the question \u2014 pass `paths`, or name an identifier from the code." } };
+    }
+    const fingerprints = await research.fingerprint(chosen);
+    const files = fingerprints.map((f) => f.path);
+    if (files.length === 0) return { data: { ok: false, question, error: `None of these files could be read: ${chosen.join(", ")}` } };
+    const key = researchCacheKey(question, fingerprints);
+    const cached2 = await research.cache?.get(key).catch(() => void 0);
+    if (cached2) return { data: { ok: true, question, files, answer: cached2, cached: true } };
+    const excerpts = await readExcerpts(ctx, files, hits);
+    const deadline = deadlineSignal(research.timeLimitMs ?? DEFAULT_TIME_LIMIT_MS, ctx.signal);
+    const partial = (reason) => ({
+      data: { ok: true, partial: true, question, files, reason, ...hits?.block ? { hits: hits.block } : {}, note: "The local model did not finish \u2014 these are the deterministic search hits. Read the files they name directly." }
+    });
+    try {
+      const stopped = new Promise((_, reject) => {
+        if (deadline.signal.aborted) reject(deadline.signal.reason ?? new Error("aborted"));
+        deadline.signal.addEventListener("abort", () => reject(deadline.signal.reason ?? new Error("aborted")), { once: true });
+      });
+      stopped.catch(() => void 0);
+      const answer2 = (await Promise.race([research.complete(researchMessages(question, excerpts), deadline.signal), stopped])).trim();
+      if (!answer2) return partial("the local model returned an empty answer");
+      await research.cache?.set(key, answer2).catch(() => void 0);
+      return { data: { ok: true, question, files, answer: answer2 } };
+    } catch (e) {
+      if (ctx.signal?.aborted) throw e;
+      return partial(deadline.timedOut() ? "the local model ran out of time" : `the local model failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      deadline.dispose();
+    }
+  }
+});
 
 // ../packages/agent-tools/src/codeAnalysis.ts
 var record = (v) => v && typeof v === "object" ? v : {};
@@ -8349,10 +9223,10 @@ var list = (v) => Array.isArray(v) ? v : [];
 var path = (v) => String(v ?? "").replace(/\\/g, "/").replace(/^\.\//, "");
 var line = (v) => Math.max(1, Number(v) || 1);
 var hash = (value) => {
-  let n = BigInt("14695981039346656037");
+  let n2 = BigInt("14695981039346656037");
   const prime = BigInt("1099511628211");
-  for (let i = 0; i < value.length; i++) n = BigInt.asUintN(64, (n ^ BigInt(value.charCodeAt(i))) * prime);
-  return n.toString(16);
+  for (let i = 0; i < value.length; i++) n2 = BigInt.asUintN(64, (n2 ^ BigInt(value.charCodeAt(i))) * prime);
+  return n2.toString(16);
 };
 function normalizeAnalysis(dependencies, duplicates, unused, scope = ".") {
   const unusedPath = (value) => {
@@ -8863,12 +9737,12 @@ var workspaceReadTool = defineTool({
   async execute(args, ctx) {
     const query = typeof args.query === "string" && args.query.trim() ? args.query : void 0;
     const limit = typeof args.limit === "number" && Number.isFinite(args.limit) ? args.limit : void 0;
-    const [notes, leases] = await Promise.all([
+    const [notes2, leases] = await Promise.all([
       ctx.caps.coordination.readNotes(query, limit),
       ctx.caps.coordination.listClaims()
     ]);
-    if (!notes.ok) return { data: notes };
-    return { data: { ok: true, notes: notes.notes ?? [], heldResources: leases.ok ? leases.leases ?? [] : [] } };
+    if (!notes2.ok) return { data: notes2 };
+    return { data: { ok: true, notes: notes2.notes ?? [], heldResources: leases.ok ? leases.leases ?? [] : [] } };
   }
 });
 var webFetchTool = defineTool({
@@ -9026,6 +9900,7 @@ var CORE_TOOLS = [
   readFileTool,
   ...SYMBOL_TOOLS,
   ...SEMANTIC_TOOLS,
+  localResearchTool,
   writeFileTool,
   editFileTool,
   deleteFileTool,
@@ -9608,7 +10483,7 @@ var TYPICAL_OUTPUT_TOKENS = {
   utility: 400
 };
 var DEFAULT_OUTPUT_TOKENS = 1e3;
-var nonNegative = (n) => typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.ceil(n) : void 0;
+var nonNegative = (n2) => typeof n2 === "number" && Number.isFinite(n2) && n2 > 0 ? Math.ceil(n2) : void 0;
 function profileWorkload(input) {
   const role = isModelRole(input.role) ? input.role : void 0;
   const { actionType, confidence } = classifyRunAction(input.instruction);
@@ -9656,7 +10531,7 @@ function localFallbackTrace(ts, step, attempts) {
 }
 
 // src/windowFit/modelWindow.ts
-var positive = (n) => typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.floor(n) : void 0;
+var positive = (n2) => typeof n2 === "number" && Number.isFinite(n2) && n2 > 0 ? Math.floor(n2) : void 0;
 function contextWindowOf(modelRef, sources = {}) {
   if (!modelRef) return void 0;
   if (isLocalModelRef(modelRef)) {
@@ -9711,7 +10586,8 @@ async function fittedFor(target, opts, fit, probes) {
     ref: target.ref,
     ...contextTokens ? { contextTokens } : {},
     ...opts.tools ? { tools: opts.tools } : {},
-    ...opts.maxTokens ? { maxTokens: opts.maxTokens } : {}
+    ...opts.maxTokens ? { maxTokens: opts.maxTokens } : {},
+    ...opts.conversationKey !== void 0 ? { conversation: opts.conversationKey } : {}
   });
 }
 async function streamOnLocal(target, opts, handlers, transport, messages) {
@@ -9850,7 +10726,7 @@ async function completeLocalFirst(input) {
 }
 
 // src/windowFit/packForModel.ts
-var import_handoff4 = require("@seanhogg/builderforce-memory/handoff");
+var import_handoff5 = require("@seanhogg/builderforce-memory/handoff");
 var import_evermind = require("@seanhogg/builderforce-memory/evermind");
 
 // ../packages/cost-levers/src/index.ts
@@ -9914,8 +10790,8 @@ function costLeverRollout(env, id) {
   if (raw !== void 0 && raw !== "") {
     if (raw === "on" || raw === "1" || raw === "true") return 100;
     if (raw === "off" || raw === "0" || raw === "false") return 0;
-    const n = Number(raw);
-    if (Number.isFinite(n)) return Math.max(0, Math.min(100, Math.round(n)));
+    const n2 = Number(raw);
+    if (Number.isFinite(n2)) return Math.max(0, Math.min(100, Math.round(n2)));
   }
   const all = readEnv(env, "COST_LEVERS_ALL");
   if (all === "off" || all === "0" || all === "false") return 0;
@@ -9940,22 +10816,52 @@ function streamSummaryCompletion(stream, model) {
       reasoning: { level: "off" },
       signal
     });
-    return res.text;
+    const text = res.text ?? "";
+    return stripReasoningTagsFromText(answerTextOf(text) || thoughtTextOf(text));
   };
 }
 function summarizeMiddle(stream, model, msgs, signal) {
   return (0, import_working5.summarizeTranscript)(streamSummaryCompletion(stream, model), msgs, signal);
 }
 
+// src/windowFit/packMemo.ts
+var import_handoff4 = require("@seanhogg/builderforce-memory/handoff");
+function splitVolatileTail(messages) {
+  let cut = messages.length;
+  while (cut > 0 && (0, import_handoff4.isVolatileTail)(messages[cut - 1])) cut -= 1;
+  return { history: messages.slice(0, cut), tail: messages.slice(cut) };
+}
+function sameMessage(a, b) {
+  return a === b || a.role === b.role && a.content === b.content && a.tool_calls === b.tool_calls && a.tool_call_id === b.tool_call_id;
+}
+function packMemoOf(input, output) {
+  return { history: splitVolatileTail(input).history, packed: splitVolatileTail(output).history };
+}
+function reusePack(memo, messages, budgetTokens) {
+  const { history, tail } = splitVolatileTail(messages);
+  if (history.length < memo.history.length) return null;
+  for (let i = 0; i < memo.history.length; i++) if (!sameMessage(history[i], memo.history[i])) return null;
+  const out = [...memo.packed, ...history.slice(memo.history.length), ...tail];
+  return (0, import_handoff4.tokensOf)(out, import_handoff4.defaultEstimateTokens) <= budgetTokens ? out : null;
+}
+
 // src/windowFit/packForModel.ts
 var DEFAULT_HANDOFF_TIMEOUT_MS = 2e4;
 function toolSchemaTokens2(tools) {
-  return toolSchemaTokens(tools, import_handoff4.defaultEstimateTokens);
+  return toolSchemaTokens(tools, import_handoff5.defaultEstimateTokens);
 }
 function packTargetTokens(to, contextTokens, reserve) {
   const boundary = isCostLeverOn(void 0, "c9_price_tier_budget", null) ? priceTierBoundary(to) : void 0;
   const budget = handoffTokenBudget({ contextWindow: contextTokens, reserveOutputTokens: reserve, priceTierBoundary: boundary });
   return budget === void 0 ? contextTokens : Math.min(contextTokens, budget + reserve);
+}
+function packBudgetTokens(input) {
+  const reserve = handoffReserveTokens(input.maxTokens);
+  return (0, import_handoff5.handoffBudget)({
+    targetContextTokens: packTargetTokens(input.to, input.contextTokens, reserve),
+    reserveOutputTokens: reserve,
+    toolsTokens: toolSchemaTokens2(input.tools)
+  });
 }
 function recallBlock(recall) {
   return async (query, budgetChars) => {
@@ -9967,7 +10873,7 @@ function recallBlock(recall) {
 async function packForModel(input) {
   const summarizer = input.summarizer;
   const reserve = handoffReserveTokens(input.maxTokens);
-  const pack = await (0, import_handoff4.packHandoff)({
+  const pack = await (0, import_handoff5.packHandoff)({
     messages: input.messages,
     targetContextTokens: packTargetTokens(input.to, input.contextTokens, reserve),
     reserveOutputTokens: reserve,
@@ -9991,17 +10897,32 @@ async function packForModel(input) {
   });
   return { messages: pack.messages, pack };
 }
+var HANDOFF_FIT_MEMOS = 16;
 function createHandoffFit(options = {}) {
+  const packs = /* @__PURE__ */ new Map();
+  const remember = (key, memo) => {
+    packs.delete(key);
+    packs.set(key, memo);
+    while (packs.size > HANDOFF_FIT_MEMOS) packs.delete(packs.keys().next().value);
+  };
   return async (messages, target) => {
     if (!target.contextTokens) return messages;
-    const { messages: packed } = await packForModel({
-      messages,
+    const fitInput = {
       to: target.ref,
       contextTokens: target.contextTokens,
       ...target.tools ? { tools: target.tools } : {},
-      ...target.maxTokens ? { maxTokens: target.maxTokens } : {},
-      ...options
-    });
+      ...target.maxTokens ? { maxTokens: target.maxTokens } : {}
+    };
+    const key = `${target.conversation ?? "-"}|${target.ref}|${target.contextTokens}`;
+    const memo = packs.get(key);
+    const reused = memo ? reusePack(memo, messages, packBudgetTokens(fitInput)) : null;
+    if (reused) {
+      remember(key, memo);
+      return reused;
+    }
+    const { messages: packed, pack } = await packForModel({ messages, ...fitInput, ...options });
+    if (pack.fits) remember(key, packMemoOf(messages, packed));
+    else packs.delete(key);
     return packed;
   };
 }
@@ -10016,7 +10937,7 @@ function pageRuntimePin(ref) {
 }
 
 // src/localSuccess/turnFeatures.ts
-var import_handoff5 = require("@seanhogg/builderforce-memory/handoff");
+var import_handoff6 = require("@seanhogg/builderforce-memory/handoff");
 var CODE_HEAVY = /```|^diff --git |^@@ [-+]\d|^\s+at \S+ \(?\S+:\d+:\d+\)?$|Traceback \(most recent call last\)/m;
 function contentText(content) {
   if (typeof content === "string") return content;
@@ -10026,10 +10947,10 @@ function contentChars(content) {
   return typeof content === "string" ? content.length : JSON.stringify(content).length;
 }
 function localTurnFeatures(call2, servedContextTokens) {
-  const users = call2.messages.filter((m) => m.role === "user" && !(0, import_handoff5.isVolatileTail)(m));
+  const users = call2.messages.filter((m) => m.role === "user" && !(0, import_handoff6.isVolatileTail)(m));
   const last = users[users.length - 1];
   const promptChars = last ? contentChars(last.content) : 0;
-  const totalChars = call2.messages.reduce((n, m) => n + contentChars(m.content), 0) + (call2.tools?.length ? JSON.stringify(call2.tools).length : 0);
+  const totalChars = call2.messages.reduce((n2, m) => n2 + contentChars(m.content), 0) + (call2.tools?.length ? JSON.stringify(call2.tools).length : 0);
   const promptTokens = estimateTokensFromChars(promptChars);
   const attachments = last && typeof last.content !== "string" ? last.content.filter((p) => p.type !== "text").length : 0;
   return {
@@ -10044,7 +10965,7 @@ function localTurnFeatures(call2, servedContextTokens) {
 }
 
 // src/localSuccess/verifiedLocalLabel.ts
-var import_handoff6 = require("@seanhogg/builderforce-memory/handoff");
+var import_handoff7 = require("@seanhogg/builderforce-memory/handoff");
 
 // src/pageEngines/engineFailure.ts
 function reportPageEngineFailure(runtime, stage, error) {
@@ -10071,13 +10992,13 @@ function memoizedProbe(runtime, run, config = {}) {
   let memo;
   return {
     probe(options = {}) {
-      const at = now();
-      if (!options.fresh && memo && at - memo.at < ttlMs) return memo.value;
+      const at2 = now();
+      if (!options.fresh && memo && at2 - memo.at < ttlMs) return memo.value;
       const value = run().catch((e) => {
         reportPageEngineFailure(runtime, "probe", e);
         return null;
       });
-      memo = { at, value };
+      memo = { at: at2, value };
       return value;
     },
     invalidate() {
@@ -10103,7 +11024,7 @@ function labelWithVerdict(outcome, leverOn = verifiedLocalLabelOn()) {
   return engine;
 }
 function requestOf(call2) {
-  return call2.messages.filter((m) => !(0, import_handoff6.isVolatileTail)(m));
+  return call2.messages.filter((m) => !(0, import_handoff7.isVolatileTail)(m));
 }
 function lastUserIndex(messages) {
   for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === "user") return i;
@@ -10279,7 +11200,7 @@ function pushDue(prev, next, ats, pushedAt, now) {
   if (!headTrusted(next)) return false;
   if (prev?.holdoutLoss != null && !(next.holdoutLoss < prev.holdoutLoss)) return false;
   if (pushedAt != null && now - pushedAt < FEDERATE_MIN_INTERVAL_MS) return false;
-  const fresh = pushedAt == null ? ats.length : ats.filter((at) => at > pushedAt).length;
+  const fresh = pushedAt == null ? ats.length : ats.filter((at2) => at2 > pushedAt).length;
   return fresh >= FEDERATE_MIN_NEW_OUTCOMES;
 }
 function localSuccessContribution(base, trained, examples, samples) {
@@ -10333,6 +11254,10 @@ function scopedLocalSuccessRouter(router, scope) {
     assess: (ref, base) => router.assess(ref, base, scope),
     record: (ref, outcome) => router.record(ref, outcome, scope)
   };
+}
+function shareOf(value, fallback) {
+  const v = typeof value === "function" ? value() : value;
+  return typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1 ? v : fallback;
 }
 var registry = (0, import_builderforce_memory_engine2.createMlRegistry)();
 var ENGINE_KEY2 = (0, import_builderforce_memory_engine2.engineKey)(import_builderforce_memory_engine2.LOCAL_SUCCESS_TASK.engines[0]);
@@ -10405,7 +11330,9 @@ function createLocalSuccessRouter(store, opts = {}) {
       if (!models || !trusted(snapshot.head)) return { turn, skip: false, probability: null };
       try {
         const { output } = await (0, import_builderforce_memory_engine2.runMlTask)(import_builderforce_memory_engine2.LOCAL_SUCCESS_TASK.id, turn, { registry, mode: "local-only", models });
-        const skip = 1 - output.probability > LOCAL_SKIP_CONFIDENCE && random() >= LOCAL_SKIP_EXPLORE;
+        const skipConfidence = shareOf(opts.skipConfidence, LOCAL_SKIP_CONFIDENCE);
+        const explore = shareOf(opts.explore, LOCAL_SKIP_EXPLORE);
+        const skip = 1 - output.probability > skipConfidence && random() >= explore;
         return { turn, skip, probability: output.probability };
       } catch {
         return { turn, skip: false, probability: null };
@@ -10506,10 +11433,10 @@ function webStorageLocalSuccessStore(key = "bf.ml.run.local-success") {
   };
 }
 var routers = /* @__PURE__ */ new WeakMap();
-function localSuccessRouterFor(store) {
+function localSuccessRouterFor(store, tuning = {}) {
   let r = routers.get(store);
   if (!r) {
-    r = createLocalSuccessRouter(store);
+    r = createLocalSuccessRouter(store, tuning);
     routers.set(store, r);
   }
   return r;
@@ -10547,7 +11474,7 @@ function createHostModelStream(input) {
       }
       const learned = mode === "hybrid" && cloud && input.localSuccess ? hybridLocalSuccessTurn(
         scopedLocalSuccessRouter(
-          localSuccessRouterFor(input.localSuccess),
+          localSuccessRouterFor(input.localSuccess, input.localSuccessTuning),
           signedIn ? await localSuccessScope(input.localSuccessFederation, call2.metadata?.projectId) : void 0
         ),
         probes,
@@ -11283,9 +12210,9 @@ function createEngineWorker(options) {
   const crashes = /* @__PURE__ */ new Map();
   const failed = /* @__PURE__ */ new Set();
   const recordCrash = (key) => {
-    const at = now();
-    const recent = (crashes.get(key) ?? []).filter((t) => at - t < ENGINE_WORKER_CRASH_WINDOW_MS);
-    recent.push(at);
+    const at2 = now();
+    const recent = (crashes.get(key) ?? []).filter((t) => at2 - t < ENGINE_WORKER_CRASH_WINDOW_MS);
+    recent.push(at2);
     crashes.set(key, recent);
     if (recent.length >= ENGINE_WORKER_CRASH_LIMIT && !failed.has(key)) {
       failed.add(key);
@@ -12443,53 +13370,15 @@ function localStorageConfirmationPersistence(key) {
   };
 }
 
-// src/imagePrep.ts
-var MAX_EDGE = 1568;
-var MAX_DATA_URL_BYTES = 35e5;
-var QUALITY_STEPS = [0.85, 0.7, 0.55, 0.4];
-function isRasterImage(type) {
-  return /^image\/(png|jpeg|jpg|gif|webp|bmp)$/i.test(type);
+// src/uploadUrls.ts
+function brainUploadUrl(baseUrl, key) {
+  return `${baseUrl}/api/brain/uploads/${key}`;
 }
-function loadImage(file) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve(img);
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Could not decode image"));
-    };
-    img.src = url;
-  });
+function signedBrainFileUrl(baseUrl, key, signed) {
+  return `${baseUrl}/api/brain-files/${key}?exp=${signed.exp}&sig=${encodeURIComponent(signed.sig)}`;
 }
-function dataUrlBytes(dataUrl) {
-  const comma = dataUrl.indexOf(",");
-  const b64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
-  return Math.floor(b64.length * 3 / 4);
-}
-async function prepareImageDataUrl(file) {
-  if (typeof document === "undefined" || !isRasterImage(file.type)) return null;
-  const img = await loadImage(file);
-  const scale = Math.min(1, MAX_EDGE / Math.max(img.width, img.height));
-  const w = Math.max(1, Math.round(img.width * scale));
-  const h = Math.max(1, Math.round(img.height * scale));
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, w, h);
-  ctx.drawImage(img, 0, 0, w, h);
-  for (const q of QUALITY_STEPS) {
-    const dataUrl = canvas.toDataURL("image/jpeg", q);
-    if (dataUrlBytes(dataUrl) <= MAX_DATA_URL_BYTES) return { dataUrl };
-  }
-  return { tooLarge: true };
-}
+var BRAIN_UPLOAD_SIGN_PATH = "/api/brain/uploads/sign";
+var BRAIN_UPLOAD_PATH = "/api/brain/upload";
 
 // src/evermindMemory.ts
 var MAX_CITED_ANCHORS = 16;
@@ -12929,8 +13818,8 @@ function BrainContextProvider({ children }) {
     if (readSession(OPEN_KEY) === "1") setOpen(true);
     const savedChat = readSession(CHAT_KEY);
     if (savedChat != null) {
-      const n = Number(savedChat);
-      if (Number.isFinite(n)) setActiveChatId(n);
+      const n2 = Number(savedChat);
+      if (Number.isFinite(n2)) setActiveChatId(n2);
     }
   }, []);
   (0, import_react5.useEffect)(() => {
@@ -14134,14 +15023,14 @@ function takeBatch(l, scope, upTo, maxItems) {
   const start = l.entries.findIndex(due);
   if (start < 0) return null;
   const head = l.entries[start];
-  let n = 0;
-  const at = (i) => l.entries[start + i];
+  let n2 = 0;
+  const at2 = (i) => l.entries[start + i];
   if (head.batch) {
-    while (at(n) && at(n).batch === head.batch) n += 1;
+    while (at2(n2) && at2(n2).batch === head.batch) n2 += 1;
   } else {
-    while (at(n) && n < maxItems && !at(n).batch && due(at(n))) n += 1;
+    while (at2(n2) && n2 < maxItems && !at2(n2).batch && due(at2(n2))) n2 += 1;
   }
-  const batch = l.entries.splice(start, n);
+  const batch = l.entries.splice(start, n2);
   const sealed = !head.batch;
   if (sealed) {
     for (const e of batch) {
@@ -14250,9 +15139,9 @@ function createOutbox(opts) {
     return total;
   };
   const durableQueued = () => {
-    let n = 0;
-    for (const l of lanes.values()) for (const entry of l.entries) if (retentionOf(entry) === "durable") n += 1;
-    return n;
+    let n2 = 0;
+    for (const l of lanes.values()) for (const entry of l.entries) if (retentionOf(entry) === "durable") n2 += 1;
+    return n2;
   };
   const evictBestEffortWhileOver = (limit) => {
     let total = totalQueued();
@@ -14427,10 +15316,10 @@ function createOutbox(opts) {
       else discarded.push(entry);
     }
     if (dead.length) {
-      const at = (/* @__PURE__ */ new Date()).toISOString();
+      const at2 = (/* @__PURE__ */ new Date()).toISOString();
       const reason = error instanceof Error ? error.message : String(error);
       for (const entry of dead) {
-        entry.deadLetter = { reason, at };
+        entry.deadLetter = { reason, at: at2 };
         entry.retention = "durable";
       }
       requeue(l, dead);
@@ -14466,7 +15355,7 @@ function createOutbox(opts) {
     l.entries.push(entry);
     const persisted = persist((s) => s.put([entry]));
     if (retention === "best-effort") enforceBound();
-    const unsealed = l.entries.reduce((n, e) => e.batch || e.deadLetter ? n : n + 1, 0);
+    const unsealed = l.entries.reduce((n2, e) => e.batch || e.deadLetter ? n2 : n2 + 1, 0);
     if (unsealed >= maxItems) void flushKey(key, { final: false, auto: true });
     else armTimer(key, l);
     return { id: entry.id, persisted };
@@ -14563,9 +15452,9 @@ function createOutbox(opts) {
     },
     size(key) {
       if (key !== void 0) return lanes.get(key)?.entries.length ?? 0;
-      let n = 0;
-      for (const l of lanes.values()) n += l.entries.length;
-      return n;
+      let n2 = 0;
+      for (const l of lanes.values()) n2 += l.entries.length;
+      return n2;
     },
     stats() {
       let queued = 0;
@@ -14766,7 +15655,7 @@ function asksForSubagents(text) {
   return ASKS_FOR_SUBAGENTS.test(t) && !DECLINES_SUBAGENTS.test(t);
 }
 function canSpawnHere(toolNames) {
-  return toolNames.some((n) => SPAWN_TOOLS.has(n));
+  return toolNames.some((n2) => SPAWN_TOOLS.has(n2));
 }
 function isSpawnTool(name) {
   return SPAWN_TOOLS.has(name);
@@ -14964,9 +15853,9 @@ function codeRunOutcome(args) {
   if (!model) return null;
   return { ...base, model, terminalStatus: "failed", merged: false };
 }
-function busiestModel(trace) {
+function busiestModel(trace2) {
   let best = null;
-  for (const s of modelScorecard([...trace])) if (!best || s.turns > best.turns) best = s;
+  for (const s of modelScorecard([...trace2])) if (!best || s.turns > best.turns) best = s;
   return best && best.turns > 0 ? best.model : null;
 }
 
@@ -15016,9 +15905,9 @@ function isActivityMessage(msg) {
   return parseChatActivity(msg) !== null;
 }
 function activityMessageCount(messages) {
-  let n = 0;
-  for (const m of messages) if (isActivityMessage(m)) n += 1;
-  return n;
+  let n2 = 0;
+  for (const m of messages) if (isActivityMessage(m)) n2 += 1;
+  return n2;
 }
 var DEFAULT_CHAT_ACTIVITY_LABELS = {
   milestoneStarted: "{agent} started working on {kind} #{ref}",
@@ -15116,9 +16005,9 @@ function parseStepMessage(metadata) {
     return null;
   }
 }
-function traceWithPersistedSteps(messages, trace) {
+function traceWithPersistedSteps(messages, trace2) {
   const seen = /* @__PURE__ */ new Set();
-  for (const ev of trace) seen.add(stepSig(ev.category, ev.label, ev.ts));
+  for (const ev of trace2) seen.add(stepSig(ev.category, ev.label, ev.ts));
   const fromMessages = [];
   for (const message2 of messages) {
     if (!isStepMessage(message2)) continue;
@@ -15145,8 +16034,8 @@ function traceWithPersistedSteps(messages, trace) {
       ...s.textChars != null ? { textChars: s.textChars } : {}
     });
   }
-  if (fromMessages.length === 0) return trace;
-  return [...trace, ...fromMessages].sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
+  if (fromMessages.length === 0) return trace2;
+  return [...trace2, ...fromMessages].sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
 }
 
 // src/localWorkspaceTools.ts
@@ -15166,6 +16055,12 @@ var LOCAL_WORKSPACE_TOOLS = /* @__PURE__ */ new Set([
   // Inert where the host does not advertise them (desktop app not running, web Brain).
   "semantic_search",
   "repo_map",
+  // The free-token readers (cost levers, WS-L): a long doc read compressed, and a question
+  // answered by a LOCAL model over the files it names. "summarize the design notes" shares
+  // no stem with either name, and they exist to be reached for BEFORE a paid read.
+  // Inert where the host did not advertise them (no compressor / no local model).
+  "read_compressed",
+  "local_research",
   "write_file",
   "edit_file",
   "delete_file",
@@ -15414,7 +16309,7 @@ function canonicalReadArgs(tool, args) {
   if (tool === "read_file" && (out.offset === 1 || out.offset === 0)) delete out.offset;
   return out;
 }
-var TREE_WIDE_READ_TOOLS = /* @__PURE__ */ new Set(["search_code", "find_symbol", "list_files", "semantic_search", "repo_map"]);
+var TREE_WIDE_READ_TOOLS = /* @__PURE__ */ new Set(["search_code", "find_symbol", "list_files", "semantic_search", "repo_map", "local_research"]);
 function resultObject(result) {
   if (result && typeof result === "object" && !Array.isArray(result)) return result;
   if (typeof result === "string") {
@@ -15656,25 +16551,25 @@ function printedLines(argv) {
   const [program, ...args] = argv;
   if (program === "cat" && args.length === 1) return { file: args[0], from: 1 };
   if (program === "head" || program === "tail") {
-    let n;
+    let n2;
     let file;
     if (args.length === 1) [file] = args;
-    else if (args.length === 2 && /^-\d+$/.test(args[0])) [n, file] = [args[0].slice(1), args[1]];
-    else if (args.length === 2 && /^-n\+?\d+$/.test(args[0])) [n, file] = [args[0].slice(2), args[1]];
-    else if (args.length === 2 && /^--lines=\+?\d+$/.test(args[0])) [n, file] = [args[0].slice(8), args[1]];
-    else if (args.length === 3 && args[0] === "-n") [n, file] = [args[1], args[2]];
+    else if (args.length === 2 && /^-\d+$/.test(args[0])) [n2, file] = [args[0].slice(1), args[1]];
+    else if (args.length === 2 && /^-n\+?\d+$/.test(args[0])) [n2, file] = [args[0].slice(2), args[1]];
+    else if (args.length === 2 && /^--lines=\+?\d+$/.test(args[0])) [n2, file] = [args[0].slice(8), args[1]];
+    else if (args.length === 3 && args[0] === "-n") [n2, file] = [args[1], args[2]];
     else return null;
     if (!file) return null;
-    if (n === void 0) n = "10";
+    if (n2 === void 0) n2 = "10";
     if (program === "head") {
-      const count3 = positiveInt2(n);
+      const count3 = positiveInt2(n2);
       return count3 ? { file, from: 1, count: count3 } : null;
     }
-    if (n.startsWith("+")) {
-      const from = positiveInt2(n.slice(1));
+    if (n2.startsWith("+")) {
+      const from = positiveInt2(n2.slice(1));
       return from ? { file, from } : null;
     }
-    const count2 = positiveInt2(n);
+    const count2 = positiveInt2(n2);
     return count2 ? { file, count: count2 } : null;
   }
   if (program === "sed" && args.length === 3 && args[0] === "-n") {
@@ -15833,6 +16728,52 @@ var ReadsWithoutSpawn = class {
   }
 };
 
+// src/runSlices.ts
+var at = (iso) => {
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : Number.NaN;
+};
+var stepOf = (ev) => {
+  if (ev.label !== "llm.complete") return null;
+  const step = ev.args?.step;
+  return typeof step === "number" && Number.isFinite(step) ? step : null;
+};
+function runStarts(events, persons) {
+  const turns = events.map((ev) => ({ t: at(ev.ts), step: stepOf(ev) })).filter((x) => x.step !== null && Number.isFinite(x.t)).sort((a, b) => a.t - b.t);
+  if (turns.length === 0) return persons.map((m) => ({ t: at(m.createdAt), ask: m.content }));
+  const starts = [];
+  let prevStep = Number.POSITIVE_INFINITY;
+  let prevTurn = Number.NEGATIVE_INFINITY;
+  let prevStart = Number.NEGATIVE_INFINITY;
+  for (const turn of turns) {
+    const messaged = persons.some((m) => at(m.createdAt) > prevTurn && at(m.createdAt) <= turn.t);
+    const reset = starts.length === 0 || turn.step < prevStep || turn.step === prevStep && messaged;
+    prevStep = turn.step;
+    prevTurn = turn.t;
+    if (!reset) continue;
+    const asked = [...persons].reverse().find((m) => at(m.createdAt) <= turn.t && at(m.createdAt) > prevStart);
+    const t = asked ? at(asked.createdAt) : turn.t;
+    starts.push({ t, ask: asked?.content ?? "" });
+    prevStart = t;
+  }
+  return starts;
+}
+function splitRuns(events, messages) {
+  const persons = messages.filter((m) => m.role === "user" && Number.isFinite(at(m.createdAt))).sort((a, b) => at(a.createdAt) - at(b.createdAt));
+  const starts = persons.length === 0 ? [] : runStarts(events, persons);
+  if (starts.length <= 1) return [{ ask: starts[0]?.ask ?? persons[0]?.content ?? "", events: [...events], messages: [...messages] }];
+  const slices = starts.map((s) => ({ ask: s.ask, events: [], messages: [] }));
+  const sliceAt = (iso) => {
+    const t = at(iso);
+    let i = 0;
+    if (Number.isFinite(t)) while (i + 1 < starts.length && starts[i + 1].t <= t) i++;
+    return slices[i];
+  };
+  for (const ev of events) sliceAt(ev.ts).events.push(ev);
+  for (const m of messages) sliceAt(m.createdAt).messages.push(m);
+  return slices;
+}
+
 // src/runProgress.ts
 var MUTATION_TOOL = /(^|_)(write|edit|save|create|update|delete|apply|patch|publish|send|dispatch|run_command|assign|link|move|set)(_|$)/i;
 function isMutationTool(name) {
@@ -15845,15 +16786,43 @@ function callSignature(ev) {
   return callFingerprint(ev.label, ev.args);
 }
 function targetSignature(ev) {
-  const target = visitTarget(ev.args);
+  const target = subjectOf(ev);
   return target ? `${ev.label}:${target}` : null;
+}
+function subjectOf(ev) {
+  return visitTarget(ev.args)?.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+function isCacheAnswered(ev) {
+  const r = ev.result;
+  if (!r || typeof r !== "object") return false;
+  const o = r;
+  return o.covered === true || o.replayed === true || o.derived === true || o.skipped === true && typeof o.note === "string" || typeof o.note === "string" && /^Duplicate \S+ call/.test(o.note);
 }
 var IDLE_GAP_MS = 12e4;
 function computeRunProgress(events, messages = []) {
+  const slices = splitRuns(events, messages);
+  if (slices.length === 1) return { ...progressOf(events, hasEditIntent(messages)), runs: [] };
+  const intentOf = (ask, own) => hasEditIntent(own) || isContinuationDirective(ask) && hasEditIntent(messages);
+  const each = slices.map((s) => ({ s, p: progressOf(s.events, intentOf(s.ask, s.messages)) }));
+  const runs = each.map(({ s, p }) => ({
+    ask: s.ask,
+    turns: s.events.filter((e) => e.label === "llm.complete").length,
+    calls: s.events.filter((e) => e.category === "tool").length,
+    cacheAnswered: p.cacheAnswered,
+    mutationsSucceeded: p.mutationsSucceeded,
+    spinning: p.spinning
+  }));
+  return { ...each[each.length - 1].p, runs };
+}
+function progressOf(events, editIntent) {
   const tools = events.filter((e) => e.category === "tool");
-  const seenCalls = /* @__PURE__ */ new Set();
+  const seenCalls = /* @__PURE__ */ new Map();
   let duplicateCalls = 0;
+  let cacheAnswered = 0;
   const targetCounts = /* @__PURE__ */ new Map();
+  const sinceEdit = /* @__PURE__ */ new Map();
+  const revisitsOf = /* @__PURE__ */ new Map();
+  let revisits = 0;
   let targetedCalls = 0;
   let mutationsAttempted = 0;
   let mutationsSucceeded = 0;
@@ -15862,8 +16831,11 @@ function computeRunProgress(events, messages = []) {
   let current = null;
   for (const ev of tools) {
     const sig2 = callSignature(ev);
+    const subject = subjectOf(ev);
     if (seenCalls.has(sig2)) duplicateCalls += 1;
-    else seenCalls.add(sig2);
+    else seenCalls.set(sig2, subject);
+    const cached2 = isCacheAnswered(ev);
+    if (cached2) cacheAnswered += 1;
     const failed = Boolean(ev.isError) || isFailedToolResult(ev.result);
     if (current && current.sig === sig2) {
       current.streak.count += 1;
@@ -15877,15 +16849,26 @@ function computeRunProgress(events, messages = []) {
     if (target) {
       targetedCalls += 1;
       targetCounts.set(target, (targetCounts.get(target) ?? 0) + 1);
+      const seen = sinceEdit.get(target) ?? 0;
+      if (seen > 0) {
+        revisits += 1;
+        revisitsOf.set(target, (revisitsOf.get(target) ?? 0) + 1);
+      }
+      sinceEdit.set(target, seen + 1);
     }
     if (isMutationTool(ev.label)) {
       mutationsAttempted += 1;
-      if (!ev.isError && !isFailedToolResult(ev.result)) mutationsSucceeded += 1;
+      if (!cached2 && !ev.isError && !isFailedToolResult(ev.result)) {
+        mutationsSucceeded += 1;
+        if (subject) {
+          for (const key of sinceEdit.keys()) if (key.endsWith(`:${subject}`)) sinceEdit.set(key, 0);
+          for (const [s, t] of seenCalls) if (t === subject) seenCalls.delete(s);
+        }
+      }
     }
   }
-  const repeatedTargets = [...targetCounts.entries()].filter(([, count2]) => count2 > 1).map(([label, count2]) => ({ label, count: count2 })).sort((a, b) => b.count - a.count);
+  const repeatedTargets = [...revisitsOf.entries()].map(([label, again]) => ({ label, count: again + 1 })).sort((a, b) => b.count - a.count);
   const distinctTargets = targetCounts.size;
-  const revisits = repeatedTargets.reduce((sum, t) => sum + (t.count - 1), 0);
   const revisitRatio = targetedCalls > 0 ? revisits / targetedCalls : 0;
   let modelMs = 0;
   let toolMs = 0;
@@ -15906,13 +16889,13 @@ function computeRunProgress(events, messages = []) {
     if (uncovered > IDLE_GAP_MS) idleMs += uncovered;
   }
   const wallClockMs = timed.length > 1 ? timed[timed.length - 1].t - timed[0].t : 0;
-  const editIntent = hasEditIntent(messages);
   const didWork = tools.length > 0;
   const noEffect = editIntent && didWork && mutationsSucceeded === 0;
   const stuckOnCall = longestStreak !== null && longestStreak.count >= BACK_TO_BACK_AT;
   const spinning = targetedCalls >= 6 && revisitRatio >= 0.4 || stuckOnCall;
   return {
     duplicateCalls,
+    cacheAnswered,
     longestStreak,
     streaks,
     stuckOnCall,
@@ -15932,6 +16915,8 @@ function computeRunProgress(events, messages = []) {
     slowestStep
   };
 }
+
+// src/runProgressReport.ts
 function progressDuration(ms) {
   if (!Number.isFinite(ms) || ms <= 0) return "0s";
   if (ms < 1e3) return `${ms}ms`;
@@ -15945,17 +16930,34 @@ function formatStreak(s) {
   const outcome = s.failed === 0 ? "" : s.failed === s.count ? ` (all ${s.count} failed)` : ` (${s.failed} of ${s.count} failed)`;
   return `\`${s.label}\` \xD7${s.count} BACK-TO-BACK${outcome}`;
 }
+function spunEarlier(p) {
+  if (p.spinning) return null;
+  for (let i = p.runs.length - 2; i >= 0; i--) if (p.runs[i].spinning) return { run: p.runs[i], index: i };
+  return null;
+}
+var MAX_NAMED_RUNS = 8;
+var ASK_LABEL_CHARS = 48;
+function formatRuns(runs) {
+  const first = Math.max(0, runs.length - MAX_NAMED_RUNS);
+  const named = runs.slice(first).map((r, i) => {
+    const ask = r.ask.replace(/\s+/g, " ").trim();
+    const label = ask.length > ASK_LABEL_CHARS ? `${ask.slice(0, ASK_LABEL_CHARS)}\u2026` : ask;
+    return `#${first + i + 1} "${label}" ${r.turns} turn(s) \xB7 ${r.calls} call(s)${r.cacheAnswered ? ` \xB7 ${r.cacheAnswered} cache-answered` : ""} \xB7 ${r.mutationsSucceeded} changed${r.spinning ? " \u26A0 SPUN" : ""}`;
+  });
+  return `Runs (latest last; the figures above are run #${runs.length}'s): ${first ? `(${first} earlier) ` : ""}${named.join(" | ")}`;
+}
 function formatRunProgress(p) {
   const lines = [];
   const reach = p.targetedCalls > 0 ? `${p.distinctTargets} distinct target(s) over ${p.targetedCalls} targeted call(s)` : "no targeted calls";
   lines.push(
-    `Progress: ${reach}${p.repeatedTargets.length ? ` \xB7 ${Math.round(p.revisitRatio * 100)}% of calls revisited ground already covered` : " \xB7 no repeats"}${p.duplicateCalls ? ` \xB7 ${p.duplicateCalls} EXACT duplicate call(s)` : ""}${p.longestStreak ? ` \xB7 ${formatStreak(p.longestStreak)}${p.streaks > 1 ? ` (${p.streaks} such streaks)` : ""}` : ""}`
+    `Progress: ${reach}${p.repeatedTargets.length ? ` \xB7 ${Math.round(p.revisitRatio * 100)}% of calls revisited ground already covered` : " \xB7 no repeats"}${p.duplicateCalls ? ` \xB7 ${p.duplicateCalls} EXACT duplicate call(s)` : ""}${p.cacheAnswered ? ` \xB7 ${p.cacheAnswered} call(s) answered from the read cache, never re-run` : ""}${p.longestStreak ? ` \xB7 ${formatStreak(p.longestStreak)}${p.streaks > 1 ? ` (${p.streaks} such streaks)` : ""}` : ""}`
   );
   if (p.repeatedTargets.length) {
     const named = p.repeatedTargets.slice(0, MAX_NAMED_TARGETS).map((t) => `${t.label} \xD7${t.count}`).join(" \xB7 ");
     const rest = p.repeatedTargets.length - MAX_NAMED_TARGETS;
     lines.push(`Revisited: ${named}${rest > 0 ? ` (+${rest} more)` : ""}`);
   }
+  if (p.runs.length > 1) lines.push(formatRuns(p.runs));
   if (p.editIntent) {
     lines.push(
       `Effect: the request asked for a CHANGE \xB7 ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded${p.noEffect ? " \xB7 \u26A0 NOTHING WAS CHANGED" : ""}`
@@ -15972,7 +16974,12 @@ function formatRunProgress(p) {
   return lines;
 }
 function runProgressVerdict(p) {
-  if (!p.spinning && !p.noEffect) return null;
+  if (!p.spinning && !p.noEffect) {
+    const earlier = spunEarlier(p);
+    if (!earlier) return null;
+    const { run, index } = earlier;
+    return `NO PROGRESS in run #${index + 1} of ${p.runs.length} ("${run.ask.replace(/\s+/g, " ").trim().slice(0, ASK_LABEL_CHARS)}"): it went back over ground it had already covered \u2014 ${run.turns} turn(s), ${run.calls} call(s)${run.cacheAnswered ? `, ${run.cacheAnswered} of them answered from the read cache` : ""}, ${run.mutationsSucceeded} change(s). The latest run did not spin; the figures above are its own. This is a LOOP in that run, not context pressure \u2014 see the Runs line.`;
+  }
   const worst = p.repeatedTargets[0];
   const streak = p.stuckOnCall && p.longestStreak ? `it made the same call ${p.longestStreak.count} times in a row \u2014 ${formatStreak(p.longestStreak)} \u2014 with nothing else attempted between them${p.longestStreak.failed === p.longestStreak.count ? ", re-asking a question it had already been answered the same way each time" : ""}` : null;
   const revisit = p.repeatedTargets.length ? `${Math.round(p.revisitRatio * 100)}% of its targeted calls revisited a target it had already read${worst ? `, worst \`${worst.label}\` \xD7${worst.count}` : ""}` : null;
@@ -16018,8 +17025,8 @@ function routingByRole(turns, events) {
     roles: [...byRole.entries()].map(([role, e]) => ({
       role,
       turns: e.turns,
-      models: ranked(e.models).map(([model, n]) => ({ model, turns: n })),
-      failovers: ranked(e.failovers).map(([failover, n]) => ({ failover, turns: n }))
+      models: ranked(e.models).map(([model, n2]) => ({ model, turns: n2 })),
+      failovers: ranked(e.failovers).map(([failover, n2]) => ({ failover, turns: n2 }))
     })),
     coderReasks: roleHandoffs.filter((e) => hasArg(e, "from")).length,
     handOffs: roleHandoffs.filter((e) => hasArg(e, "via")).length,
@@ -16117,7 +17124,7 @@ function staffingSummaryInTrace(events) {
 function formatDispatchRefusals(refusals) {
   const counts = /* @__PURE__ */ new Map();
   for (const r of refusals) counts.set(r.message, (counts.get(r.message) ?? 0) + 1);
-  return [...counts.entries()].map(([msg, n]) => n > 1 ? `${msg} \xD7${n}` : msg).join("; ");
+  return [...counts.entries()].map(([msg, n2]) => n2 > 1 ? `${msg} \xD7${n2}` : msg).join("; ");
 }
 function workFiledNotStaffedVerdict(s) {
   const refused = s.dispatchRefusals.length ? ` (${s.dispatchRefusals.length} refused: ${formatDispatchRefusals(s.dispatchRefusals)})` : "";
@@ -16202,9 +17209,9 @@ function cutHead(text, maxChars, opts = {}) {
 }
 var MARKER_RESERVE = 160;
 function countLines(text) {
-  let n = 0;
-  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) n++;
-  return n;
+  let n2 = 0;
+  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) n2++;
+  return n2;
 }
 function cutHeadTail(text, maxChars, opts = {}) {
   if (text.length <= maxChars) return text;
@@ -16353,7 +17360,7 @@ function summarizeShellOutput(raw, opts) {
   }
   const header = `[output summarised${runner === "unknown" ? "" : ` (${runner})`}: ${lines.length.toLocaleString("en-US")} lines / ${raw.length.toLocaleString("en-US")} chars \u2192 failing tests, error lines, assertion diffs and the last ${tail.length} lines; ${droppedNoise.toLocaleString("en-US")} passing/progress lines dropped. Re-run a narrower command (one test file, grep) for more.]`;
   const failingBlock = failing.length > 0 ? `Failing tests (${failing.length}):
-${failing.slice(0, 50).map((n) => `  - ${n}`).join("\n")}${failing.length > 50 ? `
+${failing.slice(0, 50).map((n2) => `  - ${n2}`).join("\n")}${failing.length > 50 ? `
   \u2026 +${failing.length - 50} more` : ""}` : "";
   const tailBlock = `--- last ${tail.length} lines ---
 ${tail.join("\n")}`;
@@ -16461,9 +17468,9 @@ function windowReadFiles(out, opts = {}) {
   const servedFiles = files.slice();
   let remaining = Math.max(0, maxChars - overhead);
   let truncated = false;
-  order.forEach(({ i, size }, n) => {
+  order.forEach(({ i, size }, n2) => {
     const file = files[i];
-    const share = Math.floor(remaining / (order.length - n));
+    const share = Math.floor(remaining / (order.length - n2));
     if (isReadFileResult(file) && size > share) {
       const windowed2 = windowReadFile(file, { maxChars: share });
       servedFiles[i] = windowed2.served;
@@ -16515,9 +17522,9 @@ function capFor(tool, opts) {
 function shrinkLogFields(tool, out, cap2, overhead) {
   const fields = LOG_FIELDS.filter((f) => typeof out[f] === "string" && out[f].length > 0);
   if (fields.length === 0) return null;
-  const logChars = fields.reduce((n, f) => n + out[f].length, 0);
+  const logChars = fields.reduce((n2, f) => n2 + out[f].length, 0);
   const rest = JSON.stringify({ ...out, ...Object.fromEntries(fields.map((f) => [f, ""])) }).length;
-  const escapedLog = fields.reduce((n, f) => n + JSON.stringify(out[f]).length - 2, 0);
+  const escapedLog = fields.reduce((n2, f) => n2 + JSON.stringify(out[f]).length - 2, 0);
   const inflation = logChars > 0 ? escapedLog / logChars : 1;
   const budget = Math.floor((cap2 - rest - overhead) / inflation);
   if (budget < 500) return null;
@@ -16683,8 +17690,8 @@ function narratedUnadvertisedInTrace(events) {
   for (const ev of events) {
     const raw = ev.args?.narratedUnadvertised;
     if (!Array.isArray(raw)) continue;
-    for (const n of raw) {
-      if (typeof n === "string" && n && !seen.includes(n)) seen.push(n);
+    for (const n2 of raw) {
+      if (typeof n2 === "string" && n2 && !seen.includes(n2)) seen.push(n2);
     }
   }
   return seen;
@@ -16693,20 +17700,20 @@ function memoryAnswersInTrace(events) {
   const out = [];
   for (const ev of events) {
     if (ev.category !== "recall") continue;
-    if (ev.label !== "evermind.answer" && ev.label !== "memory.answer") continue;
+    if (ev.label !== "evermind.answer" && ev.label !== "memory.answer" && ev.label !== "symbols.answer") continue;
     const r = ev.result;
     if (r?.skippedLlm !== true) continue;
     out.push({
-      source: r.source === "evermind" ? "evermind" : "qa-cache",
+      source: r.source === "evermind" ? "evermind" : r.source === "symbol-index" ? "symbol-index" : "qa-cache",
       ...typeof r.version === "number" ? { version: r.version } : {},
       ...typeof r.evermindProjectId === "number" ? { projectId: r.evermindProjectId } : {}
     });
   }
   return out;
 }
-function cap(s, n = 2e3) {
+function cap(s, n2 = 2e3) {
   const str4 = typeof s === "string" ? s : JSON.stringify(s ?? "");
-  return str4.length > n ? str4.slice(0, n) + `\u2026 (+${str4.length - n} chars)` : str4;
+  return str4.length > n2 ? str4.slice(0, n2) + `\u2026 (+${str4.length - n2} chars)` : str4;
 }
 function isEvermindModel(model) {
   return /(^|\/)evermind\b|^project_evermind:|^tenant_model:/i.test(model);
@@ -16858,12 +17865,12 @@ function formatMemoryUsage(m) {
   return `BuilderForce memory: Evermind recalls ${m.evermindRecalls} (${m.evermindItems} item(s)${tok}) \xB7 learn steps ${m.learnSteps} \xB7 reconcile ${m.reconcileSteps} \xB7 project-fact reads ${m.factsRead} \xB7 project-fact writes ${m.factsWritten}`;
 }
 function sessionShippedInTrace(events) {
-  let n = 0;
+  let n2 = 0;
   for (const ev of events) {
     if (ev.category !== "tool" || ev.isError || isFailedToolResult(ev.result)) continue;
-    if (isCodeChangeTool(ev.label) || ev.label === "git_commit" || ev.label === "git_push") n += 1;
+    if (isCodeChangeTool(ev.label) || ev.label === "git_commit" || ev.label === "git_push") n2 += 1;
   }
-  return n;
+  return n2;
 }
 function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}) {
   const llm = events.filter((e) => e.category === "llm");
@@ -16942,7 +17949,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const noToolsAdvertised = exposure.min === 0 && toolEvents2.length === 0;
   const memoryOnlyRun = memoryAnswers.length > 0 && llm.length === 0;
   const progress = computeRunProgress(events, messages);
-  const noProgress = progress.spinning || progress.noEffect && !ctx.running;
+  const noProgress = progress.spinning || spunEarlier(progress) !== null || progress.noEffect && !ctx.running;
   const staffing = staffingSummaryInTrace(events);
   const sessionShipped = sessionShippedInTrace(events);
   const memoryUsage = memoryUsageInTrace(events);
@@ -17014,7 +18021,7 @@ function contextPressureLine(d) {
 }
 function formatBrainDiagnostics(d) {
   const evermindAnswers = d.memoryAnswers?.filter((m) => m.source === "evermind") ?? [];
-  const verdict = d.likelyCause === "memory-answered" ? `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.` : d.likelyCause === "no-tools-advertised" ? 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.' : d.likelyCause === "tool-not-advertised" ? `TOOL NOT ADVERTISED \u2014 a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(", ")} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for \u2014 not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.` : d.likelyCause === "tool-calls-not-emitted" ? 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.' : d.likelyCause === "no-progress" ? (d.progress && runProgressVerdict(d.progress)) ?? "NO PROGRESS \u2014 the run repeated work without advancing." : d.likelyCause === "context-exhaustion" ? `Likely CONTEXT EXHAUSTION (case A) \u2014 ${contextEvidence(d)}.` : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "app-errors-unresolved" ? `APP STILL BROKEN \u2014 every tool call succeeded, but the run's last diagnostics read still reported ${d.unresolvedAppFailures} build/runtime failure(s) in the app it was working on. The tools are fine; the app is not. Read that diagnostics result in the trace below for the error \u2014 if it points into a package CDN or the preview runtime rather than the project's own files, the fault is the platform's, and rewriting project files will not fix it.` : d.likelyCause === "work-filed-not-staffed" ? workFiledNotStaffedVerdict(d.staffing) : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
+  const verdict = d.likelyCause === "memory-answered" ? `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : m.source === "symbol-index" ? "the workspace symbol index" : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : (d.memoryAnswers ?? []).every((m) => m.source === "symbol-index") ? 'The request was only "where is X defined?" and the symbol index resolved every name, so the definitions were listed without a model; ask for anything more to reach the model.' : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.` : d.likelyCause === "no-tools-advertised" ? 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.' : d.likelyCause === "tool-not-advertised" ? `TOOL NOT ADVERTISED \u2014 a turn wrote out ${d.narratedUnadvertisedTools.map((n2) => `\`${n2}\``).join(", ")} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for \u2014 not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.` : d.likelyCause === "tool-calls-not-emitted" ? 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.' : d.likelyCause === "no-progress" ? (d.progress && runProgressVerdict(d.progress)) ?? "NO PROGRESS \u2014 the run repeated work without advancing." : d.likelyCause === "context-exhaustion" ? `Likely CONTEXT EXHAUSTION (case A) \u2014 ${contextEvidence(d)}.` : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "app-errors-unresolved" ? `APP STILL BROKEN \u2014 every tool call succeeded, but the run's last diagnostics read still reported ${d.unresolvedAppFailures} build/runtime failure(s) in the app it was working on. The tools are fine; the app is not. Read that diagnostics result in the trace below for the error \u2014 if it points into a package CDN or the preview runtime rather than the project's own files, the fault is the platform's, and rewriting project files will not fix it.` : d.likelyCause === "work-filed-not-staffed" ? workFiledNotStaffedVerdict(d.staffing) : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
   const lines = ["--- Diagnostics ---", `Likely cause: ${verdict}`];
   const scope = d.turnCoveragePartial ? " (this session)" : "";
   lines.push(`Turns${scope}: ${d.turns} \xB7 Tool calls: ${d.toolCalls} \xB7 Errors: ${d.errors}${d.loopExhausted ? " \xB7 LOOP EXHAUSTED" : ""}`);
@@ -17069,7 +18076,7 @@ function formatBrainDiagnostics(d) {
   if (d.evermindUsed.length) lines.push(`Evermind/SSM answered: ${d.evermindUsed.join(", ")}`);
   if (d.memoryAnswers?.length) {
     lines.push(
-      `Answered from memory (LLM skipped): ${d.memoryAnswers.length} turn(s) \u2014 ` + d.memoryAnswers.map((m) => m.source === "evermind" ? `Evermind SSM${m.projectId != null ? ` (project #${m.projectId}` : ""}${m.version != null ? `${m.projectId != null ? ", " : " ("}v${m.version}` : ""}${m.projectId != null || m.version != null ? ")" : ""}` : "Q&A cache").join(", ")
+      `Answered from memory (LLM skipped): ${d.memoryAnswers.length} turn(s) \u2014 ` + d.memoryAnswers.map((m) => m.source === "evermind" ? `Evermind SSM${m.projectId != null ? ` (project #${m.projectId}` : ""}${m.version != null ? `${m.projectId != null ? ", " : " ("}v${m.version}` : ""}${m.projectId != null || m.version != null ? ")" : ""}` : m.source === "symbol-index" ? "symbol index" : "Q&A cache").join(", ")
     );
   }
   return lines;
@@ -17341,12 +18348,12 @@ function directedAgentRecipients(recipient) {
   return out;
 }
 function activeMentionToken(text, caret) {
-  const at = text.lastIndexOf("@", Math.max(0, caret - 1));
-  if (at < 0 || at >= caret) return null;
-  if (at > 0 && !/\s/.test(text[at - 1])) return null;
-  const query = text.slice(at + 1, caret);
+  const at2 = text.lastIndexOf("@", Math.max(0, caret - 1));
+  if (at2 < 0 || at2 >= caret) return null;
+  if (at2 > 0 && !/\s/.test(text[at2 - 1])) return null;
+  const query = text.slice(at2 + 1, caret);
   if (/[\s@]/.test(query)) return null;
-  return { query, start: at, end: caret };
+  return { query, start: at2, end: caret };
 }
 function filterMentionCandidates(participants, query) {
   const q = query.trim().toLowerCase();
@@ -17553,10 +18560,10 @@ var MAX_ANSWER_ANCHORS = 16;
 function normalizePath(p) {
   return p.trim().split("\\").join("/").replace(/^\.\/+/, "");
 }
-function readFileAnchors(trace) {
+function readFileAnchors(trace2) {
   const seen = /* @__PURE__ */ new Set();
   const out = [];
-  for (const ev of trace) {
+  for (const ev of trace2) {
     if (ev.category !== "tool" || ev.isError || !FILE_READ_TOOLS.has(ev.label)) continue;
     const args = ev.args ?? {};
     const paths = Array.isArray(args.paths) ? args.paths : PATH_KEYS.map((k) => args[k]);
@@ -17576,12 +18583,14 @@ function readFileAnchors(trace) {
 function latestUserText(convo) {
   for (let i = convo.length - 1; i >= 0; i--) {
     const m = convo[i];
-    if (m.role !== "user") continue;
-    if (typeof m.content === "string") return m.content.trim();
-    if (Array.isArray(m.content)) {
-      return m.content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ").trim();
-    }
-    return "";
+    if (m.role === "user") return userTextOf(m);
+  }
+  return "";
+}
+function userTextOf(m) {
+  if (typeof m.content === "string") return m.content.trim();
+  if (Array.isArray(m.content)) {
+    return m.content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ").trim();
   }
   return "";
 }
@@ -17599,6 +18608,37 @@ function lastAssistantText(convo) {
     if (m.role === "assistant") return typeof m.content === "string" ? m.content.trim() : "";
   }
   return "";
+}
+
+// src/runStore/adoptAnswer.ts
+async function adoptAnswerWithoutModel(chatId, c, req, text, step) {
+  const finalText = canonicalTurnText(text);
+  if (!finalText) return false;
+  c.transcript.push({ role: "assistant", content: replayTextOf(finalText) });
+  const [assistantMsg] = await req.persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
+  c.streamingText = "";
+  recordAppended(c, assistantMsg);
+  pushTrace(c, { ts: nowIso(), category: "recall", label: step.label, args: step.args, result: { ...step.result, skippedLlm: true } });
+  emit(c);
+  req.onActivity?.(chatId);
+  return true;
+}
+async function answerDeterministically(chatId, c, req) {
+  if (!req.answerWithoutModel || c.abort?.signal.aborted) return false;
+  const query = latestUserText(c.transcript);
+  if (!query) return false;
+  let text;
+  try {
+    text = await req.answerWithoutModel(query);
+  } catch {
+    text = void 0;
+  }
+  if (!text) return false;
+  return adoptAnswerWithoutModel(chatId, c, req, text, {
+    label: "symbols.answer",
+    args: { query },
+    result: { source: "symbol-index" }
+  });
 }
 
 // src/runStore/runMemory.ts
@@ -17643,7 +18683,8 @@ async function recallForRun(c, convo, evermind, hint) {
   return { recalled, block: null, blockTokens: 0 };
 }
 async function answerFromMemory(chatId, c, req, allTools, memoryReplay) {
-  const { evermind, persistence, onActivity, model } = req;
+  if (await answerDeterministically(chatId, c, req)) return true;
+  const { evermind, model } = req;
   const convo = c.transcript;
   if (!(evermind?.answer && memoryReplay && !c.abort?.signal.aborted)) return false;
   const query = latestUserText(convo);
@@ -17658,20 +18699,12 @@ async function answerFromMemory(chatId, c, req, allTools, memoryReplay) {
   } catch {
     memAnswer = null;
   }
-  const finalText = canonicalTurnText(memAnswer?.text ?? "");
-  if (!finalText) return false;
-  convo.push({ role: "assistant", content: replayTextOf(finalText) });
-  const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
-  c.streamingText = "";
-  recordAppended(c, assistantMsg);
-  pushTrace(c, {
-    ts: nowIso(),
-    category: "recall",
+  if (!memAnswer) return false;
+  return adoptAnswerWithoutModel(chatId, c, req, memAnswer.text ?? "", {
     label: memAnswer.source === "evermind" ? "evermind.answer" : "memory.answer",
     args: { query },
     result: {
       source: memAnswer.source,
-      skippedLlm: true,
       ...memAnswer.evermindVersion != null ? { version: memAnswer.evermindVersion } : {},
       // WHICH head served it — a project can target several, so without this a
       // memory hit from a sibling IDE build's Evermind is indistinguishable from
@@ -17679,9 +18712,6 @@ async function answerFromMemory(chatId, c, req, allTools, memoryReplay) {
       ...memAnswer.evermindProjectId != null ? { evermindProjectId: memAnswer.evermindProjectId } : {}
     }
   });
-  emit(c);
-  onActivity?.(chatId);
-  return true;
 }
 function emitEvermindLearnReconcile(run, assistantMsg, finalText) {
   const { c, recalled } = run;
@@ -18113,6 +19143,244 @@ var ReadCoverage2 = class extends ReadCoverage {
   }
 };
 
+// src/runStore/runLoopContext.ts
+var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files", "find_symbol", "file_outline", "semantic_search", "repo_map", "read_compressed", "local_research"]);
+var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isRepoStateReadTool(name) || isReadOnlyPlatformTool(name);
+var metaOf2 = (turn) => turn.meta;
+function reportToPolicy(run, event) {
+  return run.policy = reduceRunPolicy(run.policy, event);
+}
+function failureAdvisoryFor(run, name, args, out, step) {
+  const attempts = run.failures.record(name, args);
+  const advisory = repeatedFailureAdvisory(name, attempts, failureReason(out));
+  if (advisory) {
+    pushTrace(run.c, {
+      ts: nowIso(),
+      category: "message",
+      label: "tools.repeat_failure_guard",
+      args: { step, tool: name, attempts },
+      result: advisory
+    });
+  }
+  return advisory;
+}
+async function settleReply(run, rawText, result, requested) {
+  const { c, chatId, convo } = run;
+  const text = canonicalTurnText(rawText);
+  convo.push({ role: "assistant", content: replayTextOf(text) });
+  const meta = provenanceMetadata(result, requested);
+  const [assistantMsg] = await run.req.persistence.sendMessages(chatId, [{ role: "assistant", content: text, ...meta ? { metadata: meta } : {} }]);
+  c.streamingText = "";
+  recordAppended(c, assistantMsg);
+  return assistantMsg;
+}
+
+// src/runStore/pipelineRoute.ts
+function decideRunPipeline(req, request, context) {
+  if (!req.pipeline || req.lineage) return null;
+  const { actionType } = classifyRunAction(request);
+  return scorePipeline(pipelineFeaturesOf(request, { actionType, followUp: context.followUp }), {
+    mode: req.pipeline.routing,
+    ...req.pipeline.threshold !== void 0 ? { threshold: req.pipeline.threshold } : {}
+  });
+}
+function pipelinePolicyOptions(req, pipeline) {
+  const quick = pipeline?.route === "quick";
+  const startPhase = req.lineage || quick ? "code" : "plan";
+  const phaseModels = { ...req.phaseModels ?? {} };
+  const quickModel = req.pipeline?.quickModel?.trim();
+  if (quick && quickModel) phaseModels.code = quickModel;
+  return {
+    startPhase,
+    ...Object.keys(phaseModels).length ? { phaseModels } : {},
+    ...quick && quickModel && !req.modelStrict ? { pinnedModel: quickModel } : {}
+  };
+}
+function pipelineMetadata(pipeline) {
+  return pipeline ? { pipelineRoute: pipeline.route, routeScore: pipeline.score } : {};
+}
+function skipsVerifyStage(pipeline) {
+  return pipeline?.route === "quick";
+}
+
+// src/runStore/progressBudget.ts
+function handOffBrief(reason) {
+  return `${reason} Call hand_off NOW. summary = the research for the coders: everything you and any research sub-agents established that the change needs (files, functions, what they do today, decisions, traps). tasks = each one standalone: the files, the change, and how to know it is done. The coding agents start from exactly what you write here; they do not see this conversation.`;
+}
+function changeBrief(reason, canAskUser) {
+  return `${reason} Make the change now with what you already know \u2014 the edit tools are the only ones offered this turn.` + (canAskUser ? " If something genuinely blocks the change, call ask_user and say exactly what." : "");
+}
+var HAND_OFF_DUE_BRIEF = handOffBrief(`ANALYSIS IS OVER. You have spent ${PLAN_TURN_BUDGET} turns analysing without changing anything.`);
+function isChangeRequest(mode, text) {
+  return mode !== "chat" && (asksForChange(text) || isContinuationDirective(text));
+}
+function budgeted(run) {
+  return isChangeRequest(run.metadata.mode, run.userRequest);
+}
+function progressed(run) {
+  return run.c.codeChanged || run.usedTools.has(HAND_OFF_TOOL);
+}
+function planBudgetTurn(run, step) {
+  if (!handOffDue(run.policy) || !budgeted(run)) return null;
+  if (run.policy.handOffForced || !run.canAskUser) {
+    reportToPolicy(run, { type: "plan_budget_spent" });
+    pushTrace(run.c, {
+      ts: nowIso(),
+      category: "message",
+      label: "loop.plan_budget_spent",
+      args: { step, planTurns: run.policy.planTurns },
+      result: run.canAskUser ? "The forced hand-off turn did not hand off \u2014 analysis ends here and the coding role takes the next turn." : "Analysis budget spent where hand_off cannot be offered \u2014 analysis ends here and the coding role takes the next turn."
+    });
+    return null;
+  }
+  reportToPolicy(run, { type: "hand_off_forced" });
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "loop.hand_off_due",
+    args: { step, planTurns: run.policy.planTurns },
+    result: `${run.policy.planTurns} analysis turn(s) with no change and no hand-off \u2014 this turn offers hand_off alone and requires the call.`
+  });
+  return { tools: [HAND_OFF_TOOL_SPEC], toolChoice: "required", brief: { role: "user", content: HAND_OFF_DUE_BRIEF } };
+}
+function changeToolsOf(run, selected) {
+  const tools = selected.filter((t) => isCodeChangeTool(t.function.name) || run.canAskUser && t.function.name === ASK_USER_TOOL);
+  return tools.some((t) => isCodeChangeTool(t.function.name)) ? tools : null;
+}
+function changeBudgetTurn(run, step, selected) {
+  const budget = skipsVerifyStage(run.pipeline) ? QUICK_CHANGE_TURN_BUDGET : PLAN_TURN_BUDGET;
+  if (!changeDue(run.policy, progressed(run), budget) || !budgeted(run)) return null;
+  const tools = changeToolsOf(run, selected);
+  if (!tools) return null;
+  reportToPolicy(run, { type: "change_forced" });
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "loop.change_due",
+    args: { step, codeTurns: run.policy.codeTurns },
+    result: `${run.policy.codeTurns} coding turn(s) with no change and no hand-off \u2014 this turn offers the change tools alone and requires a call.`
+  });
+  return { tools, toolChoice: "required", brief: { role: "user", content: changeBrief(`STOP READING. You have spent ${run.policy.codeTurns} coding turns without changing anything.`, run.canAskUser) } };
+}
+
+// src/runStore/cacheServedStreak.ts
+var CACHE_SERVED_STREAK = 6;
+var MIN_STREAK_TURNS = 2;
+var MAX_NO_PROGRESS_TURNS = 2;
+var CacheServedStreak = class {
+  streak = 0;
+  turns = /* @__PURE__ */ new Set();
+  fired = 0;
+  /** A repeat the read cache answered (stub, covered window, replay, repeated write), on `step`. */
+  served(step) {
+    this.streak += 1;
+    this.turns.add(step);
+  }
+  /** A call the host actually ran — the run touched the world again. */
+  ran() {
+    this.streak = 0;
+    this.turns.clear();
+  }
+  get count() {
+    return this.streak;
+  }
+  /** Whether the streak is due a forced turn. */
+  due() {
+    return this.streak >= CACHE_SERVED_STREAK && this.turns.size >= MIN_STREAK_TURNS && this.fired < MAX_NO_PROGRESS_TURNS;
+  }
+  /** A forced turn was spent on the streak: the count starts over. */
+  consume() {
+    this.ran();
+    this.fired += 1;
+  }
+};
+var circling = (n2) => `YOU ARE CIRCLING. Your last ${n2} calls were all answered from this run's read cache \u2014 you already have every one of those results, and re-reading them changes nothing.`;
+function noProgressTurn(run, step, selected) {
+  if (!budgeted(run) || progressed(run) || run.policy.phase === "verify" || !run.cacheStreak.due()) return null;
+  const n2 = run.cacheStreak.count;
+  if (offersHandOff(run.policy) && run.canAskUser && !run.policy.handOffForced) {
+    run.cacheStreak.consume();
+    reportToPolicy(run, { type: "hand_off_forced" });
+    trace(run, step, n2, "hand_off");
+    return { tools: [HAND_OFF_TOOL_SPEC], toolChoice: "required", brief: { role: "user", content: handOffBrief(circling(n2)) } };
+  }
+  const tools = changeToolsOf(run, selected.filter((t) => t.function.name !== HAND_OFF_TOOL_SPEC.function.name));
+  if (!tools) return null;
+  run.cacheStreak.consume();
+  if (offersHandOff(run.policy)) reportToPolicy(run, { type: "plan_budget_spent" });
+  reportToPolicy(run, { type: "change_forced" });
+  trace(run, step, n2, "change");
+  return { tools, toolChoice: "required", brief: { role: "user", content: changeBrief(circling(n2), run.canAskUser) } };
+}
+function trace(run, step, streak, forced) {
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "loop.no_progress",
+    args: { step, streak, forced },
+    result: `${streak} consecutive call(s) answered from the read cache \u2014 this turn offers ${forced === "hand_off" ? "hand_off alone" : "the change tools alone"} and requires a call.`
+  });
+}
+
+// src/runStore/chatAsks.ts
+var personTurns = /* @__PURE__ */ new WeakSet();
+function markPersonTurn(m) {
+  if (m.role === "user") personTurns.add(m);
+  return m;
+}
+var MAX_ASKS = 4;
+var MAX_ASK_CHARS = 300;
+function chatAsks(convo) {
+  const seen = /* @__PURE__ */ new Set();
+  const asks = [];
+  for (let i = convo.length - 1; i >= 0 && asks.length < MAX_ASKS; i--) {
+    const m = convo[i];
+    if (m?.role !== "user" || !personTurns.has(m)) continue;
+    const text = userTextOf(m).replace(/\s+/g, " ").trim();
+    if (!text || isContinuationDirective(text) || !asksForChange(text)) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    asks.unshift(text.length > MAX_ASK_CHARS ? `${text.slice(0, MAX_ASK_CHARS)}\u2026` : text);
+  }
+  return asks;
+}
+var numbered = (asks) => asks.map((a, i) => `${i + 1}. ${a}`).join("\n");
+var EARLIER_ASKS = "Earlier change asks in this chat (oldest first) \u2014 CONTEXT ONLY: some may already be done or superseded by a later one. Act on your own task; the request above is authoritative.";
+function chatGoalText(convo) {
+  const latest = latestUserText(convo);
+  const asks = chatAsks(convo);
+  if (asks.length <= 1) return latest;
+  return `${latest}
+
+${EARLIER_ASKS}
+${numbered(asks)}`;
+}
+function chatAsksDirective(convo) {
+  const asks = chatAsks(convo);
+  if (asks.length <= 1) return null;
+  return "CHANGE ASKS IN THIS CHAT (oldest first). The latest message is authoritative; it continues these, it does not silently drop them. An earlier ask may already be done, or superseded by a later one. Before your final answer, check each against the code: do what is still open and still wanted, and say plainly which are done.\n" + numbered(asks);
+}
+
+// src/runStore/requestReading.ts
+function readRequest(c, convo, mode) {
+  const userRequest = latestUserText(convo);
+  const directives = [];
+  if (isContinuationDirective(userRequest) && promisesUnfinishedWork(lastAssistantText(convo))) {
+    directives.push(continuationDirective());
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "turn.continuation_resolved",
+      result: "The user's bare directive was resolved against the previous turn's unfinished proposal, so the run carries that proposal out instead of asking what to fix."
+    });
+  }
+  const changeRequest = isChangeRequest(mode, userRequest);
+  const asks = changeRequest ? chatAsksDirective(convo) : null;
+  if (asks) directives.push(asks);
+  return { userRequest, directives, goal: changeRequest ? chatGoalText(convo) : userRequest };
+}
+
 // src/codeChanges.ts
 var DELEGATION_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents", "wait_agents", HAND_OFF_TOOL]);
 function isDelegationTool(name) {
@@ -18281,17 +19549,17 @@ function entryKey(m) {
   return `${m.role}\0${m.role === "assistant" ? replayTextOf(contentText(m.content ?? "")) : contentText(m.content ?? "")}`;
 }
 function anchorPersistedHistory(c, seed, seedIds) {
-  const at = /* @__PURE__ */ new Map();
+  const at2 = /* @__PURE__ */ new Map();
   c.transcript.forEach((m, i) => {
     const key = entryKey(m);
-    const list2 = at.get(key);
+    const list2 = at2.get(key);
     if (list2) list2.push(i);
-    else at.set(key, [i]);
+    else at2.set(key, [i]);
   });
   let from = 0;
   seed.forEach((m, k) => {
     const id = seedIds[k];
-    const index = at.get(entryKey(m))?.find((i) => i >= from);
+    const index = at2.get(entryKey(m))?.find((i) => i >= from);
     if (index === void 0) {
       c.unseenFromId = c.unseenFromId === void 0 ? id : Math.min(c.unseenFromId, id);
       return;
@@ -18377,6 +19645,7 @@ function createRunWindowFit(deps) {
   let lastServed;
   let lastAsked;
   const capWindows = /* @__PURE__ */ new Map();
+  const packs = /* @__PURE__ */ new Map();
   const recalls = /* @__PURE__ */ new Map();
   if (deps.priorRecall) recalls.set(deps.priorRecall.query, Promise.resolve(deps.priorRecall.result));
   const recallFor = (step) => deps.recall ? (query) => {
@@ -18399,8 +19668,13 @@ function createRunWindowFit(deps) {
       if (window2 === void 0) return req.messages;
       const differs = lastServed !== void 0 && lastServed !== to;
       if (!differs && window2 >= deps.workingBudgetTokens) return req.messages;
+      const memoKey = `${to}|${window2}`;
+      const memo = packs.get(memoKey);
+      const budget = packBudgetTokens({ to, contextTokens: window2, ...req.tools ? { tools: req.tools } : {}, ...req.maxTokens ? { maxTokens: req.maxTokens } : {} });
+      const reused = memo ? reusePack(memo, req.messages, budget) : null;
+      if (reused) return reused;
       const recall = recallFor(req.step);
-      const { messages } = await packForModel({
+      const { messages, pack } = await packForModel({
         messages: req.messages,
         to,
         ...lastServed ? { from: lastServed } : {},
@@ -18413,6 +19687,8 @@ function createRunWindowFit(deps) {
           if (differs || t.dropped > 0 || !t.fits) deps.trace(windowFitTrace(deps.now(), req.step, t));
         }
       });
+      if (pack.fits) packs.set(memoKey, packMemoOf(req.messages, messages));
+      else packs.delete(memoKey);
       return messages;
     },
     served(model) {
@@ -18583,13 +19859,24 @@ async function prepareRunLoop(chatId, c, req, runKey) {
   const allTools = catalog && catalog.length > 0 ? catalog : void 0;
   const runMode = normalizeChatMode(req.chatMode ?? "work");
   const serverChatId = resolveServerChatId(chatId, req);
+  const pipeline = decideRunPipeline(req, latestUserText(convo), { followUp: isFollowUpTurn(convo) });
+  if (pipeline) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "run.pipeline_route",
+      args: { route: pipeline.route, score: pipeline.score },
+      result: `${pipeline.route === "quick" ? "Quick pass" : "Full pipeline"}: ${pipeline.reason}`
+    });
+  }
   const metadata = {
     ...serverChatId != null ? { chatId: serverChatId } : {},
     ...req.clientChatId ? { clientChatId: req.clientChatId } : {},
     guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     guestTurnInput: latestUserText(convo),
     mode: runMode,
-    ...req.projectId != null ? { projectId: req.projectId } : {}
+    ...req.projectId != null ? { projectId: req.projectId } : {},
+    ...pipelineMetadata(pipeline)
   };
   const host = await gatherHostRunContext(c, req, !!evermind?.recall);
   const { recalled, block: recallBlock2, blockTokens: recallBlockTokens } = await recallForRun(c, convo, evermind, host.recallHint);
@@ -18633,18 +19920,13 @@ ${previewReviewDirective(serverChatId)}`;
   if (c.priorResearch) systemPrompt = `${systemPrompt}
 
 ${c.priorResearch}`;
-  const userRequest = latestUserText(convo);
-  if (isContinuationDirective(userRequest) && promisesUnfinishedWork(lastAssistantText(convo))) {
-    if (stablePrefix) turnParts.push(continuationDirective());
+  const reading = readRequest(c, convo, runMode);
+  const { userRequest } = reading;
+  for (const directive of reading.directives) {
+    if (stablePrefix) turnParts.push(directive);
     else systemPrompt = `${systemPrompt}
 
-${continuationDirective()}`;
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "turn.continuation_resolved",
-      result: "The user's bare directive was resolved against the previous turn's unfinished proposal, so the run carries that proposal out instead of asking what to fix."
-    });
+${directive}`;
   }
   const turnContext = turnContextBlock(turnParts);
   const alwaysAdvertised = [
@@ -18694,6 +19976,9 @@ ${turnContext}` : systemPrompt),
     recallBlockTokens,
     memoryReplay,
     userRequest,
+    // The goal a hand-off states to coders who see none of this chat: the latest
+    // message, and for a change request the chat's earlier change asks (`chatAsks.ts`).
+    goal: reading.goal,
     // One re-prompt per run for a final reply that repeats the previous turn's answer
     // (see `restatedReply.ts`). Captured before the loop: the transcript grows as it runs.
     priorReply: previousReplyText(convo),
@@ -18708,6 +19993,9 @@ ${turnContext}` : systemPrompt),
     // starts circling. Both are invalidated together, and only for what a later
     // mutation actually touched — never wiped wholesale by an unrelated call.
     readCoverage: new ReadCoverage2(),
+    // How many calls in a row that cache has answered — a run circling its own reads
+    // is forced to hand off or change (`cacheServedStreak.ts`).
+    cacheStreak: new CacheServedStreak(),
     // What the run did and read, restated in front of every turn (its `brief()`) —
     // the host's recorder when it keeps one, so the ledger and its code map agree.
     knowledge: recorderFor(userRequest, req.knowledge),
@@ -18745,9 +20033,12 @@ ${turnContext}` : systemPrompt),
       // budget and let an old chat read forever while a fresh one handed off (chat
       // #5739). The one exception is a ROLE, not history — a sub-agent is a delegated
       // SLICE its owner already planned; started in `plan` it was offered `hand_off` and
-      // the analysis all over again, inside work it was handed to carry out.
-      startPhase: req.lineage ? "code" : "plan"
+      // the analysis all over again, inside work it was handed to carry out. A QUICK
+      // run (`pipelineRoute.ts`) starts in `code` too, on the quick model. The host's
+      // stage models ride as `phaseModels`, never as one model pinned to the whole run.
+      ...pipelinePolicyOptions(req, pipeline)
     }),
+    pipeline,
     // Bounded counter for the announced-but-never-made tool call recovery, so a model
     // that keeps narrating instead of acting cannot spin the loop. Not one-shot: a model
     // that stalls once frequently stalls again on the very next turn, and spending the
@@ -18781,217 +20072,7 @@ ${turnContext}`;
 }
 
 // src/runStore/completeTurn.ts
-var import_handoff7 = require("@seanhogg/builderforce-memory/handoff");
-
-// src/toolVocabulary.ts
-var EQUIVALENCE_CLASSES = [
-  // The work item itself. `ticket` is the product's word and `task` is the catalog's;
-  // this one class is what makes every `tasks.*` tool reachable from a ticket question.
-  ["task", "ticket", "issue", "story", "backlog", "todo"],
-  // The board and its geography.
-  ["kanban", "board", "lane", "swimlane", "column", "card"],
-  // Source control.
-  ["repo", "repository", "codebase", "git"],
-  ["branch", "commit", "merge", "rebase"],
-  ["pr", "pull", "pullrequest"],
-  // People. `member` is the catalog's word; the rest are what users type.
-  ["member", "teammate", "colleague", "people", "person", "staff"],
-  // Conversations.
-  ["chat", "conversation", "thread"],
-  // Delivery planning. `epic` stays OUT of the objective class on purpose — see the
-  // header: objectives/OKRs and epics are different entities with different tools.
-  ["epic", "feature"],
-  ["objective", "okr", "keyresult"],
-  // Runs.
-  ["execution", "run", "dispatch"]
-];
-var SYNONYMS = (() => {
-  const map = /* @__PURE__ */ new Map();
-  for (const group2 of EQUIVALENCE_CLASSES) {
-    for (const term of group2) {
-      const existing = map.get(term) ?? [];
-      for (const other of group2) if (!existing.includes(other)) existing.push(other);
-      map.set(term, existing);
-    }
-  }
-  return map;
-})();
-function synonymsFor(stem) {
-  return SYNONYMS.get(stem) ?? [];
-}
-function expandWithSynonyms(stems) {
-  const expanded = /* @__PURE__ */ new Set();
-  for (const stem of stems) {
-    for (const synonym of synonymsFor(stem)) {
-      if (!stems.has(synonym)) expanded.add(synonym);
-    }
-  }
-  return expanded;
-}
-
-// src/selectTools.ts
-var DEFAULT_TOOL_LIMIT = 64;
-var NAME_HIT = LEXICAL_WEIGHTS.name;
-var NAME_SYNONYM_HIT = 7;
-var DESCRIPTION_HIT = LEXICAL_WEIGHTS.description;
-function synonymText(text) {
-  return [...expandWithSynonyms(lexicalStems(text))].join(" ");
-}
-function toolFields(tool) {
-  const name = tool.function?.name ?? "";
-  if (!name) return [];
-  const description = tool.function?.description ?? "";
-  return [
-    { text: name, weight: NAME_HIT },
-    { text: synonymText(name), weight: NAME_SYNONYM_HIT },
-    { text: description, weight: DESCRIPTION_HIT },
-    { text: synonymText(description), weight: DESCRIPTION_HIT }
-  ];
-}
-function selectToolsForTurn(tools, options) {
-  const available = tools?.length ?? 0;
-  const limit = options.limit ?? DEFAULT_TOOL_LIMIT;
-  if (!tools || available <= limit) {
-    return { tools: tools ?? [], trimmed: false, available };
-  }
-  const required = new Set(options.required ?? []);
-  const pinned = new Set(options.pinned ?? []);
-  const chosen = [];
-  const taken = /* @__PURE__ */ new Set();
-  const take = (tool) => {
-    const name = tool.function?.name;
-    if (!name || taken.has(name)) return;
-    taken.add(name);
-    chosen.push(tool);
-  };
-  for (const tool of tools) {
-    if (chosen.length >= limit) break;
-    if (required.has(tool.function?.name ?? "")) take(tool);
-  }
-  for (const tool of tools) {
-    if (chosen.length >= limit) break;
-    if (pinned.has(tool.function?.name ?? "")) take(tool);
-  }
-  for (const tool of rankLexically(tools, options.query, toolFields, tools.length)) {
-    if (chosen.length >= limit) break;
-    take(tool);
-  }
-  for (const tool of tools) {
-    if (chosen.length >= limit) break;
-    take(tool);
-  }
-  const position = new Map(tools.map((t, i) => [t, i]));
-  chosen.sort((a, b) => (position.get(a) ?? 0) - (position.get(b) ?? 0));
-  return { tools: chosen, trimmed: true, available };
-}
-
-// src/toolRouter.ts
-var TOOL_ROUTER_FIND = "builtin_tools_find";
-var TOOL_ROUTER_DESCRIBE = "builtin_tools_describe";
-var TOOL_ROUTER_INVOKE = "builtin_tools_invoke";
-function isRouterTool(name) {
-  return name === TOOL_ROUTER_FIND || name === TOOL_ROUTER_DESCRIBE || name === TOOL_ROUTER_INVOKE;
-}
-var FIND_LIMIT = 25;
-function routerToolSpecs(catalogSize) {
-  const preamble = `This conversation has ${catalogSize} platform tools available in total, but only the most relevant ones are listed directly on each turn.`;
-  return [
-    {
-      type: "function",
-      function: {
-        name: TOOL_ROUTER_FIND,
-        description: `${preamble} Search ALL of them by keyword and get back their names and descriptions. Use this FIRST whenever the tool you want is not in your visible list \u2014 do NOT assume a capability is missing, and never write a tool call as plain text.`,
-        parameters: {
-          type: "object",
-          properties: {
-            query: { type: "string", description: 'Keywords, e.g. "tickets backlog status" or "pull request".' }
-          },
-          required: ["query"]
-        }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: TOOL_ROUTER_DESCRIBE,
-        description: `${preamble} Get the exact parameter schema for one tool by name, so you can build its arguments before calling it with ${TOOL_ROUTER_INVOKE}.`,
-        parameters: {
-          type: "object",
-          properties: {
-            name: { type: "string", description: `Exact tool name, e.g. "builtin_chats_list_tickets".` }
-          },
-          required: ["name"]
-        }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: TOOL_ROUTER_INVOKE,
-        description: `${preamble} Call ANY of them by name, including ones not listed on this turn. This is a real call and it really executes \u2014 use it instead of describing what you would call.`,
-        parameters: {
-          type: "object",
-          properties: {
-            name: { type: "string", description: "Exact tool name to call." },
-            args: { type: "object", description: "Arguments object for that tool." }
-          },
-          required: ["name"]
-        }
-      }
-    }
-  ];
-}
-function words2(text) {
-  return text.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
-}
-function findTools(catalog, query, limit = FIND_LIMIT) {
-  const terms = words2(query);
-  if (terms.length === 0) return [];
-  const scored = [];
-  catalog.forEach((tool, index) => {
-    const name = tool.function?.name ?? "";
-    if (!name) return;
-    const description = tool.function?.description ?? "";
-    const haystackName = name.toLowerCase();
-    const haystackDesc = description.toLowerCase();
-    let score2 = 0;
-    for (const t of terms) {
-      if (haystackName.includes(t)) score2 += 10;
-      else if (haystackDesc.includes(t)) score2 += 1;
-    }
-    if (score2 > 0) scored.push({ m: { name, description }, score: score2, index });
-  });
-  return scored.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, limit).map((e) => e.m);
-}
-function describeTool(catalog, name) {
-  return catalog.find((t) => t.function?.name === name) ?? null;
-}
-function handleRouterCall(catalog, name, args) {
-  const a = args ?? {};
-  if (name === TOOL_ROUTER_FIND) {
-    const query = typeof a.query === "string" ? a.query : "";
-    const matches = findTools(catalog, query);
-    return {
-      result: matches.length ? { matches, note: `Call one with ${TOOL_ROUTER_INVOKE}, or ${TOOL_ROUTER_DESCRIBE} first for its arguments.` } : { matches: [], note: `No tool matches "${query}". Try broader keywords; ${catalog.length} tools exist.` }
-    };
-  }
-  if (name === TOOL_ROUTER_DESCRIBE) {
-    const target2 = typeof a.name === "string" ? a.name : "";
-    const spec = describeTool(catalog, target2);
-    return {
-      result: spec ? { name: target2, description: spec.function?.description ?? "", parameters: spec.function?.parameters ?? {} } : { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
-    };
-  }
-  const target = typeof a.name === "string" ? a.name : "";
-  if (!target) return { result: { error: `${TOOL_ROUTER_INVOKE} requires a "name".` } };
-  if (isRouterTool(target)) {
-    return { result: { error: `${target} cannot be invoked through the router.` } };
-  }
-  if (!describeTool(catalog, target)) {
-    return { result: { error: `Unknown tool "${target}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
-  }
-  return { dispatch: { name: target, args: asToolArgs(a.args) ?? {} } };
-}
+var import_handoff8 = require("@seanhogg/builderforce-memory/handoff");
 
 // src/composingActivity.ts
 function utf8ByteLength2(text) {
@@ -19059,7 +20140,7 @@ function queueRunSteering(runKey, text, opts) {
   const trimmed = text.trim();
   if (!trimmed) return;
   const queue = inboxes.get(runKey) ?? [];
-  queue.push({ text: trimmed, attachments: opts?.attachments });
+  queue.push({ text: trimmed, attachments: opts?.attachments, ...opts?.fromPerson ? { fromPerson: true } : {} });
   inboxes.set(runKey, queue);
   if (!opts?.interrupt) return;
   interrupting.add(runKey);
@@ -19214,92 +20295,280 @@ function modelDowngradeEvent(input) {
   };
 }
 
-// src/runStore/runLoopContext.ts
-var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files", "find_symbol", "file_outline", "semantic_search", "repo_map"]);
-var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isRepoStateReadTool(name) || isReadOnlyPlatformTool(name);
-var metaOf = (turn) => turn.meta;
-function reportToPolicy(run, event) {
-  return run.policy = reduceRunPolicy(run.policy, event);
-}
-function failureAdvisoryFor(run, name, args, out, step) {
-  const attempts = run.failures.record(name, args);
-  const advisory = repeatedFailureAdvisory(name, attempts, failureReason(out));
-  if (advisory) {
-    pushTrace(run.c, {
-      ts: nowIso(),
-      category: "message",
-      label: "tools.repeat_failure_guard",
-      args: { step, tool: name, attempts },
-      result: advisory
-    });
+// src/toolVocabulary.ts
+var EQUIVALENCE_CLASSES = [
+  // The work item itself. `ticket` is the product's word and `task` is the catalog's;
+  // this one class is what makes every `tasks.*` tool reachable from a ticket question.
+  ["task", "ticket", "issue", "story", "backlog", "todo"],
+  // The board and its geography.
+  ["kanban", "board", "lane", "swimlane", "column", "card"],
+  // Source control.
+  ["repo", "repository", "codebase", "git"],
+  ["branch", "commit", "merge", "rebase"],
+  ["pr", "pull", "pullrequest"],
+  // People. `member` is the catalog's word; the rest are what users type.
+  ["member", "teammate", "colleague", "people", "person", "staff"],
+  // Conversations.
+  ["chat", "conversation", "thread"],
+  // Delivery planning. `epic` stays OUT of the objective class on purpose — see the
+  // header: objectives/OKRs and epics are different entities with different tools.
+  ["epic", "feature"],
+  ["objective", "okr", "keyresult"],
+  // Runs.
+  ["execution", "run", "dispatch"]
+];
+var SYNONYMS = (() => {
+  const map = /* @__PURE__ */ new Map();
+  for (const group2 of EQUIVALENCE_CLASSES) {
+    for (const term of group2) {
+      const existing = map.get(term) ?? [];
+      for (const other of group2) if (!existing.includes(other)) existing.push(other);
+      map.set(term, existing);
+    }
   }
-  return advisory;
+  return map;
+})();
+function synonymsFor(stem) {
+  return SYNONYMS.get(stem) ?? [];
 }
-async function settleReply(run, rawText, result, requested) {
-  const { c, chatId, convo } = run;
-  const text = canonicalTurnText(rawText);
-  convo.push({ role: "assistant", content: replayTextOf(text) });
-  const meta = provenanceMetadata(result, requested);
-  const [assistantMsg] = await run.req.persistence.sendMessages(chatId, [{ role: "assistant", content: text, ...meta ? { metadata: meta } : {} }]);
-  c.streamingText = "";
-  recordAppended(c, assistantMsg);
-  return assistantMsg;
+function expandWithSynonyms(stems) {
+  const expanded = /* @__PURE__ */ new Set();
+  for (const stem of stems) {
+    for (const synonym of synonymsFor(stem)) {
+      if (!stems.has(synonym)) expanded.add(synonym);
+    }
+  }
+  return expanded;
 }
 
-// src/runStore/progressBudget.ts
-var HAND_OFF_DUE_BRIEF = `ANALYSIS IS OVER. You have spent ${PLAN_TURN_BUDGET} turns analysing without changing anything. Call hand_off NOW. summary = the research for the coders: everything you and any research sub-agents established that the change needs (files, functions, what they do today, decisions, traps). tasks = each one standalone: the files, the change, and how to know it is done. The coding agents start from exactly what you write here; they do not see this conversation.`;
-var CHANGE_DUE_BRIEF = `STOP READING. You have spent ${PLAN_TURN_BUDGET} coding turns without changing anything. Make the change now with what you already know \u2014 the edit tools are the only ones offered this turn. If something genuinely blocks the change, call ask_user and say exactly what.`;
-function budgeted(run) {
-  return run.metadata.mode !== "chat" && (asksForChange(run.userRequest) || isContinuationDirective(run.userRequest));
+// src/selectTools.ts
+var DEFAULT_TOOL_LIMIT = 64;
+var PINNED_OVERFLOW = 16;
+var NAME_HIT = LEXICAL_WEIGHTS.name;
+var NAME_SYNONYM_HIT = 7;
+var DESCRIPTION_HIT = LEXICAL_WEIGHTS.description;
+function synonymText(text) {
+  return [...expandWithSynonyms(lexicalStems(text))].join(" ");
 }
-function planBudgetTurn(run, step) {
-  if (!handOffDue(run.policy) || !budgeted(run)) return null;
-  if (run.policy.handOffForced || !run.canAskUser) {
-    reportToPolicy(run, { type: "plan_budget_spent" });
-    pushTrace(run.c, {
+function toolFields(tool) {
+  const name = tool.function?.name ?? "";
+  if (!name) return [];
+  const description = tool.function?.description ?? "";
+  return [
+    { text: name, weight: NAME_HIT },
+    { text: synonymText(name), weight: NAME_SYNONYM_HIT },
+    { text: description, weight: DESCRIPTION_HIT },
+    { text: synonymText(description), weight: DESCRIPTION_HIT }
+  ];
+}
+function selectToolsForTurn(tools, options) {
+  const available = tools?.length ?? 0;
+  const limit = options.limit ?? DEFAULT_TOOL_LIMIT;
+  if (!tools || available <= limit) {
+    return { tools: tools ?? [], trimmed: false, available };
+  }
+  const required = new Set(options.required ?? []);
+  const pinned = new Set(options.pinned ?? []);
+  const chosen = [];
+  const taken = /* @__PURE__ */ new Set();
+  const take = (tool) => {
+    const name = tool.function?.name;
+    if (!name || taken.has(name)) return;
+    taken.add(name);
+    chosen.push(tool);
+  };
+  for (const tool of tools) {
+    if (chosen.length >= limit) break;
+    if (required.has(tool.function?.name ?? "")) take(tool);
+  }
+  for (const tool of rankLexically(tools, options.query, toolFields, tools.length)) {
+    if (chosen.length >= limit) break;
+    take(tool);
+  }
+  for (const tool of tools) {
+    if (chosen.length >= limit) break;
+    take(tool);
+  }
+  const position = new Map(tools.map((t, i) => [t, i]));
+  chosen.sort((a, b) => (position.get(a) ?? 0) - (position.get(b) ?? 0));
+  const ceiling = limit + PINNED_OVERFLOW;
+  const byName = new Map(tools.map((t) => [t.function?.name ?? "", t]));
+  for (const name of pinned) {
+    if (chosen.length >= ceiling) break;
+    const tool = byName.get(name);
+    if (tool) take(tool);
+  }
+  return { tools: chosen, trimmed: true, available };
+}
+
+// src/toolRouter.ts
+var TOOL_ROUTER_FIND = "builtin_tools_find";
+var TOOL_ROUTER_DESCRIBE = "builtin_tools_describe";
+var TOOL_ROUTER_INVOKE = "builtin_tools_invoke";
+function isRouterTool(name) {
+  return name === TOOL_ROUTER_FIND || name === TOOL_ROUTER_DESCRIBE || name === TOOL_ROUTER_INVOKE;
+}
+var FIND_LIMIT = 25;
+function routerToolSpecs(catalogSize) {
+  const preamble = `This conversation has ${catalogSize} platform tools available in total, but only the most relevant ones are listed directly on each turn.`;
+  return [
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_FIND,
+        description: `${preamble} Search ALL of them by keyword and get back their names and descriptions. Use this FIRST whenever the tool you want is not in your visible list \u2014 do NOT assume a capability is missing, and never write a tool call as plain text.`,
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: 'Keywords, e.g. "tickets backlog status" or "pull request".' }
+          },
+          required: ["query"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_DESCRIBE,
+        description: `${preamble} Get the exact parameter schema for one tool by name, so you can build its arguments before calling it with ${TOOL_ROUTER_INVOKE}.`,
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: `Exact tool name, e.g. "builtin_chats_list_tickets".` }
+          },
+          required: ["name"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_INVOKE,
+        description: `${preamble} Call ANY of them by name, including ones not listed on this turn. This is a real call and it really executes \u2014 use it instead of describing what you would call.`,
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Exact tool name to call." },
+            args: { type: "object", description: "Arguments object for that tool." }
+          },
+          required: ["name"]
+        }
+      }
+    }
+  ];
+}
+function words2(text) {
+  return text.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
+}
+function findTools(catalog, query, limit = FIND_LIMIT) {
+  const terms = words2(query);
+  if (terms.length === 0) return [];
+  const scored = [];
+  catalog.forEach((tool, index) => {
+    const name = tool.function?.name ?? "";
+    if (!name) return;
+    const description = tool.function?.description ?? "";
+    const haystackName = name.toLowerCase();
+    const haystackDesc = description.toLowerCase();
+    let score2 = 0;
+    for (const t of terms) {
+      if (haystackName.includes(t)) score2 += 10;
+      else if (haystackDesc.includes(t)) score2 += 1;
+    }
+    if (score2 > 0) scored.push({ m: { name, description }, score: score2, index });
+  });
+  return scored.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, limit).map((e) => e.m);
+}
+function describeTool(catalog, name) {
+  return catalog.find((t) => t.function?.name === name) ?? null;
+}
+function handleRouterCall(catalog, name, args) {
+  const a = args ?? {};
+  if (name === TOOL_ROUTER_FIND) {
+    const query = typeof a.query === "string" ? a.query : "";
+    const matches = findTools(catalog, query);
+    return {
+      result: matches.length ? { matches, note: `Call one with ${TOOL_ROUTER_INVOKE}, or ${TOOL_ROUTER_DESCRIBE} first for its arguments.` } : { matches: [], note: `No tool matches "${query}". Try broader keywords; ${catalog.length} tools exist.` }
+    };
+  }
+  if (name === TOOL_ROUTER_DESCRIBE) {
+    const target2 = typeof a.name === "string" ? a.name : "";
+    const spec = describeTool(catalog, target2);
+    return {
+      result: spec ? { name: target2, description: spec.function?.description ?? "", parameters: spec.function?.parameters ?? {} } : { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
+    };
+  }
+  const target = typeof a.name === "string" ? a.name : "";
+  if (!target) return { result: { error: `${TOOL_ROUTER_INVOKE} requires a "name".` } };
+  if (isRouterTool(target)) {
+    return { result: { error: `${target} cannot be invoked through the router.` } };
+  }
+  if (!describeTool(catalog, target)) {
+    return { result: { error: `Unknown tool "${target}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
+  }
+  return { dispatch: { name: target, args: asToolArgs(a.args) ?? {} } };
+}
+
+// src/runStore/turnMenu.ts
+function turnMenu(run, step) {
+  const { c, allTools, requestQuery, usedTools, canAskUser, alwaysAdvertised } = run;
+  const handOffTurn = planBudgetTurn(run, step);
+  const selection = selectToolsForTurn(allTools, {
+    // The REQUEST, captured once before the loop — never "the latest user message".
+    // The loop pushes its own `role:'user'` turns (the stall-recovery nudge, the
+    // tool-budget close-out), so reading the newest one re-rolled the advertised
+    // set from text WE wrote: after one recovery the query became "…made zero tool
+    // calls… answer using its result…", which scores `key_results`/`dashboards`/
+    // `incidents` and drops the ticket tools the user actually asked for. The tool
+    // the model was told to call then genuinely did not exist, and it narrated.
+    // Holding the request steady also keeps the advertised set STABLE across turns
+    // — a tool must not vanish between one turn and the next.
+    query: requestQuery,
+    pinned: usedTools,
+    // Tools the SYSTEM PROMPT instructs the model to call (e.g. the chat↔ticket
+    // directive names `builtin_chats_list_tickets`) are never optional: telling a
+    // model to call a tool we then decline to advertise is the exact contradiction
+    // that produces a narrated call. Derived from the prompt text, so a directive
+    // edit can never silently desync from this list — plus the local workspace
+    // tools, which the prompt names in prose the pattern cannot see.
+    // While planning, the planner's deliverable is never off-topic either.
+    required: offersHandOff(run.policy) && canAskUser ? [...alwaysAdvertised, HAND_OFF_TOOL] : alwaysAdvertised
+  });
+  const selected = offersHandOff(run.policy) ? selection.tools : selection.tools.filter((t) => t.function.name !== HAND_OFF_TOOL);
+  const forced = handOffTurn ?? changeBudgetTurn(run, step, selected) ?? noProgressTurn(run, step, selected);
+  const advertised = forced ? forced.tools : selection.trimmed ? [...selected, ...routerToolSpecs(allTools?.length ?? 0)] : selected;
+  if (selection.trimmed && !forced) {
+    pushTrace(c, {
       ts: nowIso(),
       category: "message",
-      label: "loop.plan_budget_spent",
-      args: { step, planTurns: run.policy.planTurns },
-      result: run.canAskUser ? "The forced hand-off turn did not hand off \u2014 analysis ends here and the coding role takes the next turn." : "Analysis budget spent where hand_off cannot be offered \u2014 analysis ends here and the coding role takes the next turn."
+      label: "tools.selected",
+      args: { step },
+      result: `${selected.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`
     });
-    return null;
   }
-  reportToPolicy(run, { type: "hand_off_forced" });
-  pushTrace(run.c, {
-    ts: nowIso(),
-    category: "message",
-    label: "loop.hand_off_due",
-    args: { step, planTurns: run.policy.planTurns },
-    result: `${run.policy.planTurns} analysis turn(s) with no change and no hand-off \u2014 this turn offers hand_off alone and requires the call.`
-  });
-  return { tools: [HAND_OFF_TOOL_SPEC], toolChoice: "required", brief: { role: "user", content: HAND_OFF_DUE_BRIEF } };
-}
-function changeBudgetTurn(run, step, selected) {
-  const progressed = run.c.codeChanged || run.usedTools.has(HAND_OFF_TOOL);
-  if (!changeDue(run.policy, progressed) || !budgeted(run)) return null;
-  const tools = selected.filter((t) => isCodeChangeTool(t.function.name) || run.canAskUser && t.function.name === ASK_USER_TOOL);
-  if (!tools.some((t) => isCodeChangeTool(t.function.name))) return null;
-  reportToPolicy(run, { type: "change_forced" });
-  pushTrace(run.c, {
-    ts: nowIso(),
-    category: "message",
-    label: "loop.change_due",
-    args: { step, codeTurns: run.policy.codeTurns },
-    result: `${run.policy.codeTurns} coding turn(s) with no change and no hand-off \u2014 this turn offers the change tools alone and requires a call.`
-  });
-  return { tools, toolChoice: "required", brief: { role: "user", content: CHANGE_DUE_BRIEF } };
+  return {
+    forced,
+    advertised,
+    tools: advertised.length > 0 ? advertised : void 0,
+    advertisedNames: new Set(advertised.map((t) => t.function.name)),
+    // Every retry of the same turn sends it again, or a forced turn would retry with no
+    // instruction. It rides the turn's tagged volatile tail, never as a message of its own.
+    opening: forced ? [userTextOf(forced.brief)] : []
+  };
 }
 
 // src/runStore/completeTurn.ts
 function completeTurnPort(run) {
-  const { c, chatId, runKey, req, convo, systemPrompt, metadata, recallBlockTokens, allTools, requestQuery, usedTools, canAskUser, alwaysAdvertised } = run;
+  const { c, chatId, runKey, req, convo, systemPrompt, metadata, recallBlockTokens, allTools } = run;
   const { stream, routingMode, maxTokens, reasoning, runTool } = req;
   return async (ctx) => {
     const iter = ctx.step;
     c.streamingText = "";
     emit(c);
-    for (const steer of takeRunSteering(c, runKey, iter)) convo.push({ role: "user", content: steerModelContent(steer) });
+    for (const steer of takeRunSteering(c, runKey, iter)) {
+      const msg = { role: "user", content: steerModelContent(steer) };
+      convo.push(steer.fromPerson ? markPersonTurn(msg) : msg);
+    }
     const working = await (0, import_working12.buildWorkingTranscript)(
       c,
       systemPrompt,
@@ -19324,43 +20593,7 @@ function completeTurnPort(run) {
     const llmStart = nowMs2();
     let firstTokenAt;
     let result;
-    const handOffTurn = planBudgetTurn(run, iter);
-    const selection = selectToolsForTurn(allTools, {
-      // The REQUEST, captured once before the loop — never "the latest user message".
-      // The loop pushes its own `role:'user'` turns (the stall-recovery nudge, the
-      // tool-budget close-out), so reading the newest one re-rolled the advertised
-      // set from text WE wrote: after one recovery the query became "…made zero tool
-      // calls… answer using its result…", which scores `key_results`/`dashboards`/
-      // `incidents` and drops the ticket tools the user actually asked for. The tool
-      // the model was told to call then genuinely did not exist, and it narrated.
-      // Holding the request steady also keeps the advertised set STABLE across turns
-      // — a tool must not vanish between one turn and the next.
-      query: requestQuery,
-      pinned: usedTools,
-      // Tools the SYSTEM PROMPT instructs the model to call (e.g. the chat↔ticket
-      // directive names `builtin_chats_list_tickets`) are never optional: telling a
-      // model to call a tool we then decline to advertise is the exact contradiction
-      // that produces a narrated call. Derived from the prompt text, so a directive
-      // edit can never silently desync from this list — plus the local workspace
-      // tools, which the prompt names in prose the pattern cannot see.
-      // While planning, the planner's deliverable is never off-topic either.
-      required: offersHandOff(run.policy) && canAskUser ? [...alwaysAdvertised, HAND_OFF_TOOL] : alwaysAdvertised
-    });
-    const selected = offersHandOff(run.policy) ? selection.tools : selection.tools.filter((t) => t.function.name !== HAND_OFF_TOOL);
-    const forced = handOffTurn ?? changeBudgetTurn(run, iter, selected);
-    const opening = forced ? [forced.brief] : [];
-    const advertised = forced ? forced.tools : selection.trimmed ? [...selected, ...routerToolSpecs(allTools?.length ?? 0)] : selected;
-    const tools = advertised.length > 0 ? advertised : void 0;
-    const advertisedNames = new Set(advertised.map((t) => t.function.name));
-    if (selection.trimmed && !forced) {
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "message",
-        label: "tools.selected",
-        args: { step: iter },
-        result: `${selected.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`
-      });
-    }
+    const { forced, advertised, tools, advertisedNames, opening } = turnMenu(run, iter);
     setActivity(c, { phase: "thinking", startedAt: Date.now(), step: iter });
     const composing = createComposingActivity(
       { set: (a) => {
@@ -19391,11 +20624,12 @@ function completeTurnPort(run) {
     let turnRole = nextTurn(run.policy, { hasTools: !!tools }).role;
     const turnToolChoice = forced ? forced.toolChoice : run.forceToolChoice;
     run.forceToolChoice = void 0;
-    const ledger = tools ? (0, import_handoff7.volatileTail)([run.knowledge.brief()]) : null;
-    const request = async (extra = []) => {
+    const ledger = tools ? run.knowledge.brief() : "";
+    const request = async (extra = [], tailSections = []) => {
       const ask = nextTurn(run.policy, { hasTools: !!tools });
       const callMetadata = nextCallMetadata();
-      const perTurn = ledger ? [...extra, ledger] : extra;
+      const tail = (0, import_handoff8.volatileTail)([ledger, ...tailSections]);
+      const perTurn = tail ? [...extra, tail] : extra;
       const messages = await run.windowFit.prepare({ messages: perTurn.length > 0 ? [...working, ...perTurn] : working, model: ask.model, tools, maxTokens: turnMaxTokens(maxTokens, !!tools), step: iter });
       return asLiveTurn(c, () => stream(
         {
@@ -19432,7 +20666,7 @@ function completeTurnPort(run) {
       emit(c);
     };
     try {
-      result = await request(opening);
+      result = await request([], opening);
     } catch (e) {
       if (c.abort?.signal.aborted) throw e;
       const failure = providerFailureEvent(e);
@@ -19441,7 +20675,7 @@ function completeTurnPort(run) {
       pushTrace(c, transportRetryTrace(nowIso(), iter, outcome, e.message));
       restartTurn();
       try {
-        result = await request(opening);
+        result = await request([], opening);
       } catch (retryError) {
         if (c.abort?.signal.aborted) throw retryError;
         throw turnError(retryError);
@@ -19486,7 +20720,7 @@ function completeTurnPort(run) {
     if (downgrade) pushTrace(c, downgrade);
     const localFallback = localFallbackTrace(nowIso(), iter, result.localFirst);
     if (localFallback) pushTrace(c, localFallback);
-    const narratedUnadvertised = result.toolCalls.length === 0 ? toolNamesMentionedIn(result.text).filter((n) => !advertisedNames.has(n)) : [];
+    const narratedUnadvertised = result.toolCalls.length === 0 ? toolNamesMentionedIn(result.text).filter((n2) => !advertisedNames.has(n2)) : [];
     const argBytes = toolCallArgBytes(result.toolCalls);
     const contextWindow = await run.windowFit.contextWindow?.();
     pushTrace(c, {
@@ -19749,7 +20983,7 @@ function beforeDispatchHook(run) {
         // The research the coders inherit: what this planning run read and searched.
         knowledge: run.knowledge.brief(),
         // …and the goal, in the user's words: a child sees none of this conversation.
-        request: run.userRequest,
+        request: run.goal,
         ...req.projectId != null ? { projectId: req.projectId } : {},
         afterCreate: (toolName, out) => autoLinkCreatedItem(run.serverChatId, c, runTool, toolName, out),
         step: (label, args2, out, durationMs) => pushTrace(c, {
@@ -19812,12 +21046,14 @@ ${revisit}` : replayNote,
             resultBytes: replayed.bytes,
             truncated: replayed.truncated
           });
+          run.cacheStreak.served(iter);
           return { result: { data: replayed.content } };
         }
         const stub = {
           note: `Duplicate ${call2.name} call \u2014 identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`
         };
         pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: stub });
+        run.cacheStreak.served(iter);
         return { result: { data: stub } };
       }
       const covered = readCoverage.coveredRead(call2.name, args);
@@ -19841,10 +21077,12 @@ ${revisit}` : covered.note;
             resultBytes: replayed.bytes,
             truncated: replayed.truncated
           });
+          run.cacheStreak.served(iter);
           return { result: { data: replayed.content } };
         }
         const stub = { note };
         pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: { covered: true, note } });
+        run.cacheStreak.served(iter);
         return { result: { data: stub } };
       }
       const derived = readCoverage.derivedSearch(call2.name, args);
@@ -19870,6 +21108,7 @@ ${revisit}` : covered.note;
         const note = repeatedWriteNote(call2.name, String(args.path ?? "").trim());
         pushTrace(c, { ts: nowIso(), category: "message", label: "tools.repeat_write_guard", args: { step: iter, tool: call2.name }, result: note });
         pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: { skipped: true, note } });
+        run.cacheStreak.served(iter);
         return { result: { data: { ok: true, applied: false, unchanged: true, note } } };
       }
       readCoverage.invalidate(call2.name, args);
@@ -19905,7 +21144,7 @@ function beforeToolCallsHook(run) {
   const { c, chatId } = run;
   const { runTool, persistence, onActivity } = run.req;
   return async (ctx, turn, calls) => {
-    const { result, requested } = metaOf(turn);
+    const { result, requested } = metaOf2(turn);
     const askCall = calls.find((tc) => tc.name === ASK_USER_TOOL);
     if (askCall && runTool && !run.delegationRecoveryUsed && runLeftDelegationUndone(run)) {
       run.delegationRecoveryUsed = true;
@@ -19954,6 +21193,7 @@ function afterDispatchHook(run) {
     const ran = run.pendingRun;
     run.pendingRun = null;
     if (!ran) return void 0;
+    run.cacheStreak.ran();
     const args = call2.args;
     if (ran.threw) {
       pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, durationMs: nowMs2() - ran.toolStart, args, result: ran.out, isError: true });
@@ -19995,7 +21235,7 @@ async function askStopHook(hook, input) {
 
 // src/runStore/finalAnswerHook.ts
 function enterVerifyIfChanged(run) {
-  if (!run.c.codeChanged || run.policy.phase === "verify") return;
+  if (!run.c.codeChanged || run.policy.phase === "verify" || skipsVerifyStage(run.pipeline)) return;
   reportToPolicy(run, { type: "verify_started" });
 }
 function finalAnswerHook(run) {
@@ -20003,7 +21243,7 @@ function finalAnswerHook(run) {
   const { tools: toolSpecs, pickFallbackModel, runTool, persistence, onActivity } = req;
   return async (ctx, turn) => {
     const iter = ctx.step;
-    const { result, resolved, requested, advertised, advertisedNames } = metaOf(turn);
+    const { result, resolved, requested, advertised, advertisedNames } = metaOf2(turn);
     const stallInput = {
       text: result.text,
       toolCallCount: result.toolCalls.length,
@@ -20163,11 +21403,120 @@ function finalAnswerHook(run) {
   };
 }
 
+// src/runStore/runSpendBudget.ts
+var import_handoff9 = require("@seanhogg/builderforce-memory/handoff");
+
+// src/runStore/runEndOutcome.ts
+var notes = /* @__PURE__ */ new WeakMap();
+function noteRunId(c, runId) {
+  if (runId) notes.set(c, { runId, contained: false });
+}
+function noteBudgetContained(c) {
+  const n2 = notes.get(c);
+  if (n2) n2.contained = true;
+}
+function runEndOutcome(state) {
+  if (state.contained) return "budget-contained";
+  if (state.aborted) return "stopped";
+  return state.failed ? "failed" : "succeeded";
+}
+function reportRunEnd(c, req, state) {
+  const n2 = notes.get(c);
+  notes.delete(c);
+  if (!n2 || !req.recordRunOutcome) return;
+  try {
+    void Promise.resolve(req.recordRunOutcome({ runId: n2.runId, outcome: runEndOutcome({ ...state, contained: n2.contained }) })).catch((e) => unrecorded(c, e));
+  } catch (e) {
+    unrecorded(c, e);
+  }
+}
+function unrecorded(c, e) {
+  pushTrace(c, { ts: nowIso(), category: "message", label: "run.outcome_unrecorded", result: e instanceof Error ? e.message : String(e) });
+}
+
+// src/runStore/runSpendBudget.ts
+var usd = (millicents) => `$${(millicents / MILLICENTS_PER_USD).toFixed(2)}`;
+function runBudgetCapMillicents(maxRunBudgetUsd) {
+  return typeof maxRunBudgetUsd === "number" && Number.isFinite(maxRunBudgetUsd) && maxRunBudgetUsd > 0 ? Math.round(maxRunBudgetUsd * MILLICENTS_PER_USD) : null;
+}
+function budgetWarning(spentMc, capMc) {
+  return `[Run budget] This run has spent ${usd(spentMc)} of its ${usd(capMc)} budget \u2014 over 80%. Stop exploring and converge: finish the essential change now, then answer with what you did and exactly what is left.`;
+}
+function budgetContainedReply(spentMc, capMc) {
+  return `Run stopped: it reached its ${usd(capMc)} spend budget (${usd(spentMc)} spent). Nothing was rolled back \u2014 the changes made so far are in place. Ask to continue to resume from here, or raise the "builderforce.maxRunBudgetUsd" setting (0 turns the cap off).`;
+}
+var spendTrees = /* @__PURE__ */ new WeakMap();
+function runSpendTree(run, capMc) {
+  const ownerKey = run.req.lineage?.ownerKey;
+  const ownerCell = ownerKey !== void 0 ? cells.get(ownerKey) : void 0;
+  const owned = ownerCell && ownerCell !== run.c ? spendTrees.get(ownerCell) : void 0;
+  const tree = owned ?? { spentMc: 0, capMc };
+  spendTrees.set(run.c, tree);
+  return tree;
+}
+function runSpendBudget(run, book2) {
+  const ownCapMc = runBudgetCapMillicents(run.req.maxRunBudgetUsd);
+  if (ownCapMc == null) {
+    spendTrees.delete(run.c);
+    return {};
+  }
+  const tree = runSpendTree(run, ownCapMc);
+  const capMc = Math.min(ownCapMc, tree.capMc);
+  const caps = { maxSpendMillicents: capMc };
+  let warned = false;
+  const contain = async () => {
+    const { c, chatId, convo, req } = run;
+    const spentMc = tree.spentMc;
+    const text = budgetContainedReply(spentMc, capMc);
+    noteBudgetContained(c);
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "run.budget_contained",
+      args: { spentMillicents: spentMc, capMillicents: capMc },
+      result: text
+    });
+    convo.push({ role: "assistant", content: text });
+    const [msg] = await req.persistence.sendMessages(chatId, [{ role: "assistant", content: text }]);
+    c.streamingText = "";
+    if (msg) recordAppended(c, msg);
+    emit(c);
+    req.onActivity?.(chatId);
+    return { action: "stop", ok: true, finished: true, output: text };
+  };
+  return {
+    async beforeTurn() {
+      const spentMc = tree.spentMc;
+      const usage = { spendMillicents: spentMc };
+      if (runBudgetBreach(caps, usage)) return contain();
+      if (!warned && runBudgetWarnDue(caps, usage)) {
+        warned = true;
+        const warning = budgetWarning(spentMc, capMc);
+        run.convo.push((0, import_handoff9.volatileTail)([warning]));
+        pushTrace(run.c, { ts: nowIso(), category: "message", label: "run.budget_warning", args: { spentMillicents: spentMc, capMillicents: capMc }, result: warning });
+      }
+      return void 0;
+    },
+    afterTurn(_ctx, turn) {
+      const meta = turn.meta;
+      const usage = meta?.result.usage;
+      if (!meta || !usage) return;
+      tree.spentMc += callCostMillicents(meta.result.resolvedModel ?? meta.requested, {
+        prompt: usage.prompt ?? 0,
+        completion: usage.completion ?? 0,
+        cacheRead: usage.cacheRead ?? 0,
+        cacheCreation: usage.cacheCreation ?? 0
+      }, book2, usageRouteOf(meta.result, meta.requested));
+    }
+  };
+}
+
 // src/runStore/runLoop.ts
 var runCodec = openAiChatCodec((r) => typeof r.data === "string" ? r.data : JSON.stringify(r.data));
 async function runLoop(chatId, c, req, runKey) {
   const run = await prepareRunLoop(chatId, c, req, runKey);
   if (!run) return;
+  noteRunId(c, run.metadata.guestTurnId);
   const { convo, systemPrompt, metadata } = run;
   const { routingMode, stream, persistence, onActivity, maxTokens, reasoning } = req;
   const loop = await runAgentLoop({
@@ -20175,6 +21524,9 @@ async function runLoop(chatId, c, req, runKey) {
     codec: runCodec,
     ports: { complete: completeTurnPort(run), dispatch: dispatchToolPort(run) },
     hooks: {
+      // The run's USD cap, when it has one: the cost accrues after each turn and is held
+      // to the cap before the next (`runSpendBudget.ts`). No cap ⇒ no hooks.
+      ...runSpendBudget(run),
       beforeToolCalls: beforeToolCallsHook(run),
       beforeDispatch: beforeDispatchHook(run),
       // The person's message skips the rest of the turn it interrupted (PRD 35 E10).
@@ -20302,10 +21654,10 @@ async function startRun(runKey, request) {
   c.persistStep = (ev) => persistStep(chatId, runPersistence, ev);
   beginRun(c, chatId);
   if (req.seed && c.transcript.length === 0) {
-    c.transcript = req.seed.slice();
+    c.transcript = req.seed.map(markPersonTurn);
     c.priorResearch = req.priorResearch ?? null;
   }
-  if (req.userTurn !== void 0) c.transcript.push({ role: "user", content: req.userTurn });
+  if (req.userTurn !== void 0) c.transcript.push(markPersonTurn({ role: "user", content: req.userTurn }));
   emit(c);
   c.runUsage = emptyRunUsage();
   try {
@@ -20352,9 +21704,9 @@ async function startRun(runKey, request) {
       ).catch(() => {
       });
     }
-    const trace = runTrace(c);
+    const trace2 = runTrace(c);
     const wakeTurn = delegatingCells.has(c);
-    if (attemptedDelegation(trace)) delegatingCells.add(c);
+    if (attemptedDelegation(trace2)) delegatingCells.add(c);
     const outcome = req.reportOutcome && codeRunOutcome({
       runId: c.runId,
       codeModel: c.codeModel,
@@ -20362,11 +21714,12 @@ async function startRun(runKey, request) {
       aborted,
       failed: c.error !== "",
       shipped,
-      trace,
+      trace: trace2,
       projectId: req.projectId,
       askedForChange: !wakeTurn && asksForChange(req.userTurn === void 0 ? void 0 : contentText(req.userTurn))
     });
     if (outcome) void req.reportOutcome(outcome).catch(() => void 0);
+    reportRunEnd(c, req, { aborted, failed: c.error !== "" });
     c.persistStep = null;
     c.activity = null;
     emit(c);
@@ -20449,7 +21802,7 @@ function useChatTranscript(persistence, chatId, snapshot, callbacks) {
   }, []);
   const [loadingMessages, setLoadingMessages] = (0, import_react9.useState)(false);
   const [reloadNonce, setReloadNonce] = (0, import_react9.useState)(0);
-  const reloadMessages = (0, import_react9.useCallback)(() => setReloadNonce((n) => n + 1), []);
+  const reloadMessages = (0, import_react9.useCallback)(() => setReloadNonce((n2) => n2 + 1), []);
   (0, import_react9.useEffect)(() => {
     let cancelled = false;
     if (chatId == null) {
@@ -20499,7 +21852,7 @@ var import_working15 = require("@seanhogg/builderforce-memory/working");
 
 // src/contextUsage.ts
 var LLM_COMPLETE = "llm.complete";
-var positive2 = (n) => typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.floor(n) : void 0;
+var positive2 = (n2) => typeof n2 === "number" && Number.isFinite(n2) && n2 > 0 ? Math.floor(n2) : void 0;
 function usageFrom(args, usage) {
   const promptTokens = positive2(usage?.prompt);
   if (promptTokens === void 0) return null;
@@ -20519,9 +21872,9 @@ function usageOfRow(m) {
   rowUsage.set(m, found);
   return found;
 }
-function contextUsageOf(messages, trace) {
-  for (let i = trace.length - 1; i >= 0; i--) {
-    const ev = trace[i];
+function contextUsageOf(messages, trace2) {
+  for (let i = trace2.length - 1; i >= 0; i--) {
+    const ev = trace2[i];
     if (ev.category !== "llm" || ev.label !== LLM_COMPLETE) continue;
     const found = usageFrom(ev.args, ev.usage);
     if (found) return found;
@@ -20545,7 +21898,7 @@ var HEADER = [
   "Earlier turns of this conversation already ran the tool calls below (newest first, each result trimmed). Their results are NOT in the transcript above \u2014 this list is the record of them.",
   "Build on it. Do not repeat a call listed here to rediscover what it already answered; re-run one only when you need a part of its result that is not shown, or when the target may have changed since (for example, a file this chat has edited)."
 ].join("\n");
-function clip(text, max) {
+function clip2(text, max) {
   return text.length > max ? `${text.slice(0, max - 1)}\u2026` : text;
 }
 function resultText(result) {
@@ -20571,8 +21924,8 @@ function priorResearchDigest(history) {
     const key = `${label}|${fullArgs}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const entry = `- ${label}(${clip(fullArgs, ENTRY_ARGS_CHARS)})${isError ? " \u2014 FAILED" : ""}
-  \u2192 ${clip(resultText(result), ENTRY_RESULT_CHARS)}`;
+    const entry = `- ${label}(${clip2(fullArgs, ENTRY_ARGS_CHARS)})${isError ? " \u2014 FAILED" : ""}
+  \u2192 ${clip2(resultText(result), ENTRY_RESULT_CHARS)}`;
     if (size + entry.length + 1 > DIGEST_CHARS) break;
     entries.push(entry);
     size += entry.length + 1;
@@ -20625,7 +21978,7 @@ function unansweredTurnIndex(messages) {
   return -1;
 }
 function useBrainConversation(options) {
-  const { persistence, resolveSystemPrompt, stream } = useBrainConfig();
+  const { persistence, resolveSystemPrompt, stream, imagePrep } = useBrainConfig();
   const {
     chatId,
     modality = "designer",
@@ -20765,23 +22118,14 @@ ${extraSystem}` : resolvedSystemPrompt;
       setLocalError("");
       let displayContent = trimmed;
       if (attachments.length > 0) {
-        const refs = attachments.map((a) => `[Attached: ${a.name}](${persistence.uploadUrl(a.key)})`).join("\n");
+        const refs = attachments.map((a) => attachmentLink(a, persistence.uploadUrl)).join("\n");
         displayContent = `${trimmed}
 
 ${refs}`;
       }
       const addressedList = addressedTo == null ? null : Array.isArray(addressedTo) ? addressedTo : addressedTo.kind === "group" ? addressedTo.members : [addressedTo];
-      const metadata = withDirectedMetadata(addressedList, attachments.length > 0 ? { attachments } : void 0);
-      const imageAtts = attachments.filter((a) => a.imageUrl);
-      let modelContent = displayContent;
-      if (imageAtts.length > 0) {
-        const nonImageRefs = attachments.filter((a) => !a.imageUrl).map((a) => `[Attached: ${a.name}](${persistence.uploadUrl(a.key)})`).join("\n");
-        const textPart = [trimmed, nonImageRefs].filter(Boolean).join("\n\n");
-        modelContent = [
-          { type: "text", text: textPart },
-          ...imageAtts.map((a) => ({ type: "image_url", image_url: { url: a.imageUrl } }))
-        ];
-      }
+      const turn = await attachmentTurn(trimmed, displayContent, attachments, persistence);
+      const metadata = withDirectedMetadata(addressedList, turn.meta);
       try {
         const [userMsg] = await persistence.sendMessages(id, [{ role: "user", content: displayContent, metadata }]);
         updateMessages(id, (prev) => [...prev, userMsg]);
@@ -20808,7 +22152,7 @@ ${refs}`;
           }
           return true;
         }
-        await launch(id, buildRequest(messages, messages, modelContent, userMsg?.id));
+        await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id));
         return true;
       } catch (e) {
         if (stillOpen()) {
@@ -20832,7 +22176,7 @@ ${refs}`;
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError("");
-    void launch(chatId, buildRequest(messages.slice(0, -1), messages, last.content, last.id));
+    void launch(chatId, buildRequest(messages.slice(0, -1), messages, userTurnContentOf(last), last.id));
   }, [chatId, loadingMessages, localSending, messages, buildRequest, launch]);
   const retryLastTurn = (0, import_react10.useCallback)(() => {
     if (chatId == null || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
@@ -20843,7 +22187,7 @@ ${refs}`;
     autoRepliedChatIdRef.current = chatId;
     setLocalError("");
     clearRunError(chatId);
-    void launch(chatId, buildRequest(messages.slice(0, index), messages, turn.content, turn.id));
+    void launch(chatId, buildRequest(messages.slice(0, index), messages, userTurnContentOf(turn), turn.id));
     return true;
   }, [chatId, messages, buildRequest, launch]);
   const rateMessage = (0, import_react10.useCallback)(async (msg, rating) => {
@@ -20863,24 +22207,14 @@ ${refs}`;
   const attach2 = (0, import_react10.useCallback)(async (file) => {
     setUploading(true);
     try {
-      const result = await persistence.upload(file);
-      const attachment = { key: result.key, name: result.name, type: result.type };
-      try {
-        const prepared = await prepareImageDataUrl(file);
-        if (prepared?.dataUrl) {
-          attachment.imageUrl = prepared.dataUrl;
-        } else if (prepared?.tooLarge && persistence.signedUploadUrl) {
-          attachment.imageUrl = await persistence.signedUploadUrl(result.key);
-        }
-      } catch {
-      }
+      const attachment = await prepareAttachment(file, persistence, imagePrep);
       setPendingAttachments((prev) => [...prev, attachment]);
     } catch (e) {
       setLocalError(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setUploading(false);
     }
-  }, [persistence]);
+  }, [persistence, imagePrep]);
   const removeAttachment = (0, import_react10.useCallback)((key) => {
     setPendingAttachments((prev) => prev.filter((a) => a.key !== key));
   }, []);
@@ -21072,21 +22406,21 @@ function createBrainRestPersistence(opts) {
       if (opts.uploadFile) return opts.uploadFile(file);
       const form = new FormData();
       form.append("file", file);
-      return request("/api/brain/upload", { method: "POST", body: form });
+      return request(BRAIN_UPLOAD_PATH, { method: "POST", body: form });
     },
     /** URL to view/download an uploaded file by key. */
-    uploadUrl: (key) => `${baseUrl}/api/brain/uploads/${key}`,
+    uploadUrl: (key) => brainUploadUrl(baseUrl, key),
     /**
      * Mint a short-lived signed public URL for an uploaded object so an upstream
      * LLM provider can fetch it (vision). Used only for an image too large to
      * inline as a data URL — see the image prep in the run loop.
      */
     signedUploadUrl: async (key) => {
-      const { exp, sig: sig2 } = await request("/api/brain/uploads/sign", {
+      const signed = await request(BRAIN_UPLOAD_SIGN_PATH, {
         method: "POST",
         body: JSON.stringify({ key })
       });
-      return `${baseUrl}/api/brain-files/${key}?exp=${exp}&sig=${encodeURIComponent(sig2)}`;
+      return signedBrainFileUrl(baseUrl, key, signed);
     }
   };
 }
@@ -21179,18 +22513,18 @@ function createPayloadBudget(opts) {
     }
   };
 }
-function ordinalWord(n) {
-  const rem100 = n % 100;
-  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
-  switch (n % 10) {
+function ordinalWord(n2) {
+  const rem100 = n2 % 100;
+  if (rem100 >= 11 && rem100 <= 13) return `${n2}th`;
+  switch (n2 % 10) {
     case 1:
-      return `${n}st`;
+      return `${n2}st`;
     case 2:
-      return `${n}nd`;
+      return `${n2}nd`;
     case 3:
-      return `${n}rd`;
+      return `${n2}rd`;
     default:
-      return `${n}th`;
+      return `${n2}th`;
   }
 }
 
@@ -21882,16 +23216,16 @@ function fmtAdvertised(tools) {
   }
   return "";
 }
-function usd(n) {
-  return String.fromCharCode(36) + n.toFixed(n >= 1 ? 2 : 4);
+function usd2(n2) {
+  return String.fromCharCode(36) + n2.toFixed(n2 >= 1 ? 2 : 4);
 }
 function formatChatSpend(spend) {
   if (!spend?.spend) return null;
   const s = spend.spend;
   const saved = spend.saved;
-  const savedBit = saved && (saved.measuredUsd > 0 || saved.estimatedUsd > 0) ? ` \xB7 saved ${usd(saved.measuredUsd)} measured / ${usd(saved.estimatedUsd)} estimated (${saved.tokensSaved.toLocaleString("en-US")} tok)` : "";
+  const savedBit = saved && (saved.measuredUsd > 0 || saved.estimatedUsd > 0) ? ` \xB7 saved ${usd2(saved.measuredUsd)} measured / ${usd2(saved.estimatedUsd)} estimated (${saved.tokensSaved.toLocaleString("en-US")} tok)` : "";
   const unpriced = s.unpricedTokens > 0 ? ` \xB7 ${s.unpricedTokens.toLocaleString("en-US")} tok unpriced` : "";
-  return `- This chat's cost: platform ${usd(s.platformUsd)} \xB7 your key ${usd(s.yourKeyUsd)} \xB7 total ${usd(s.totalUsd)} \xB7 ${s.promptTokens.toLocaleString("en-US")} prompt + ${s.completionTokens.toLocaleString("en-US")} completion tok \xB7 ${s.requests} request(s)${unpriced}${savedBit}`;
+  return `- This chat's cost: platform ${usd2(s.platformUsd)} \xB7 your key ${usd2(s.yourKeyUsd)} \xB7 total ${usd2(s.totalUsd)} \xB7 ${s.promptTokens.toLocaleString("en-US")} prompt + ${s.completionTokens.toLocaleString("en-US")} completion tok \xB7 ${s.requests} request(s)${unpriced}${savedBit}`;
 }
 function formatChatDiagnostics(d) {
   const lines = ["## Chat diagnostics"];
@@ -22255,10 +23589,10 @@ function pmoFocusValue(kind, ref) {
 }
 function parsePmoFocus(value) {
   if (!value) return null;
-  const at = value.indexOf(":");
-  if (at <= 0) return null;
-  const kind = value.slice(0, at);
-  const id = value.slice(at + 1);
+  const at2 = value.indexOf(":");
+  if (at2 <= 0) return null;
+  const kind = value.slice(0, at2);
+  const id = value.slice(at2 + 1);
   if (!id) return null;
   return kind === "objective" || kind === "initiative" || kind === "portfolio" ? { kind, id } : null;
 }
@@ -22483,10 +23817,10 @@ function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
   const [tick, setTick] = (0, import_react14.useState)(0);
   const wasRunning = (0, import_react14.useRef)(running);
   (0, import_react14.useEffect)(() => {
-    if (wasRunning.current && !running) setTick((n) => n + 1);
+    if (wasRunning.current && !running) setTick((n2) => n2 + 1);
     wasRunning.current = running;
     if (!running) return;
-    const timer = setInterval(() => setTick((n) => n + 1), intervalMs);
+    const timer = setInterval(() => setTick((n2) => n2 + 1), intervalMs);
     return () => clearInterval(timer);
   }, [running, intervalMs]);
   return tick;
@@ -22537,9 +23871,12 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
   AUTHORED_BY_META_KEY,
+  AttachmentRefusedError,
   BACK_TO_BACK_AT,
   BASE_BRANCHES,
   BRAIN_AGENT_ASSIGNMENTS_PATH,
+  BRAIN_UPLOAD_PATH,
+  BRAIN_UPLOAD_SIGN_PATH,
   BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS,
   BROWSER_ENGINE_MODEL,
   BUILDERFORCE_PRODUCT_NAME,
@@ -22561,6 +23898,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   DEFAULT_MODEL_FALLBACK_TEMPLATE,
   DEFAULT_MODEL_IDENTITY,
   DEFAULT_PERSONA,
+  DEFAULT_ROUTE_THRESHOLD,
   DEFAULT_TOOL_FAILURE_STREAK,
   DEFAULT_TOOL_LIMIT,
   EMPTY_GATEWAY_MODEL_OPTIONS,
@@ -22580,6 +23918,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   LOCAL_SKIP_CONFIDENCE,
   LOCAL_SKIP_EXPLORE,
   LOCAL_WORKSPACE_TOOLS,
+  MAX_INLINE_TEXT_BYTES,
   MAX_STOP_HOOK_ROUNDS,
   MAX_TOOL_RESULT_CHARS,
   MODALITY_PERSONAS,
@@ -22651,6 +23990,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   bindChatHistoryForSync,
   brainPersonaAgents,
   brainRequestError,
+  brainUploadUrl,
   buildBrainTriageReport,
   buildChatDiagnosticsReport,
   buildComposerDirectives,
@@ -22659,6 +23999,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   byoUnresolvedInTrace,
   byoUnresolvedSummary,
   byoVendorLabel,
+  callCostMillicents,
   canChangeCodeHere,
   canReviewInPreview,
   canRunInParallel,
@@ -22895,11 +24236,13 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   retryOnConnectFailure,
   revealsModelId,
   revisitAdvisory,
+  routeRunRecords,
   routerToolSpecs,
   routingModeForSelection,
   routingQueryForTurn,
   runAbortSignal,
   runBrainLoop,
+  runOutcomesSince,
   runProgressVerdict,
   savePendingPrompt,
   scopeToConsolidation,
@@ -22914,6 +24257,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   setMcpToolStatus,
   shippedToBaseBranch,
   shortenTarget,
+  signedBrainFileUrl,
   stableStringify,
   staffingSummaryInTrace,
   stallRecoveriesInTrace,
@@ -22934,6 +24278,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   subscribeRunStore,
   subscribeToChatMessages,
   summarizeLocalFirstAttempt,
+  summarizeRouteRuns,
   takePendingPrompt,
   ticketsReviewedInPreview,
   toPromptApiTurn,
@@ -22952,6 +24297,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   turnOptimizationDirective,
   unreviewedChangeNudge,
   unshippedChangeNudge,
+  usageRowsSince,
   useArmedNewChat,
   useBrainActions,
   useBrainChats,

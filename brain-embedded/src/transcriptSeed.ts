@@ -10,11 +10,14 @@
  * (`stoppedTurn.ts`): that is a record of a model going wrong, kept for the reader —
  * replayed, the next model reads a loop as its own last word and continues it. Assistant
  * turns go back as `replayTextOf` reads them: without the `<think>` blocks they were
- * persisted with, which a model copies as markup instead of calling tools.
+ * persisted with, which a model copies as markup instead of calling tools. User turns go
+ * back as the model READ them (`attachmentTranscript.ts`): the inlined attachment text it
+ * was sent, never the display's `blob:` preview links.
  */
 import { replayTextOf } from '@builderforce/agent-loop';
 import { advisoryThreadHistoryAdmitted } from '@builderforce/creation-canvas-contract';
 import { scopeToConsolidation } from '@seanhogg/builderforce-memory/working';
+import { userTurnTextOf } from './attachmentTranscript';
 import { isStoppedTurn } from './stoppedTurn';
 import type { ChatCompletionMessage } from './streamChatCompletion';
 import { isStepMessage, type BrainMessage } from './types';
@@ -36,6 +39,8 @@ export function transcriptSeedOf(history: BrainMessage[]): { messages: ChatCompl
       const content = replayTextOf(m.content);
       if (!content) continue;
       messages.push({ role: 'assistant', content });
+    } else if (m.role === 'user') {
+      messages.push({ role: 'user', content: userTurnTextOf(m) });
     } else {
       messages.push({ role: m.role as ChatCompletionMessage['role'], content: m.content });
     }

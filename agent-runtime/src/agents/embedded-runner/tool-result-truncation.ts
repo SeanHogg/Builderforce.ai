@@ -2,7 +2,7 @@ import type { AgentMessage } from "../../builderforce/model/agent-types.js";
 import type { TextContent } from "../../builderforce/model/types.js";
 import { SessionManager } from "../../builderforce/agent-loop/index.js";
 import { log } from "./logger.js";
-import { isCostLeverOn } from "@builderforce/cost-levers";
+import { onDeviceCostLeverOn } from "../../infra/cost-levers.js";
 import {
   DEFAULT_TRUNCATION_SUFFIX,
   HARD_MAX_TOOL_RESULT_CHARS,
@@ -22,9 +22,9 @@ import {
  */
 export { HARD_MAX_TOOL_RESULT_CHARS };
 
-/** The C7 lever for an on-device host (no tenant: on only when fully rolled out). */
+/** The C7 lever for an on-device host (bucketed by the install id). */
 function summarizeLogs(): boolean {
-  return isCostLeverOn(process.env, "c7_tool_output_policy", null);
+  return onDeviceCostLeverOn("c7_tool_output_policy");
 }
 
 /**

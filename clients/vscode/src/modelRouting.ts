@@ -60,12 +60,12 @@ import {
 import { authorizeLocalEndpoint } from "./localEndpointAuth";
 import { editorAccounts } from "./providerConnect";
 import { logLine } from "./errorReporter";
-import { probeLocalFirstRuntimes, type LocalModelsConfig } from "./localModels";
+import { probeLocalFirstRuntimes, probeOnDeviceRuntimes, type LocalModelsConfig } from "./localModels";
 import { resolveEffectiveModelChoice } from "./modelState";
 import { createNativeStream } from "./nativeBrainRun";
 import { hostModelProvisioner } from "./hostBfi/provision";
 import { hostPageEngines } from "./pageEngineBridge";
-import { localSuccessFederation, localSuccessStore } from "./localSuccessStorage";
+import { localSuccessFederation, localSuccessStore, localSuccessTuning } from "./localSuccessStorage";
 import { assertPlatformCapability, platformPolicy } from "./platformPolicy";
 import { currentInferenceMode } from "./inferenceModeSetting";
 import type { InferenceMode } from "@builderforce/local-first";
@@ -319,6 +319,7 @@ export function routeStream(
     // Hybrid's local-success predictor, trained on this machine's routed turns, and its
     // head shared with the turn's project (signed-in Hybrid only — the shared step decides).
     localSuccess: localSuccessStore,
+    localSuccessTuning,
     localSuccessFederation,
     ...(onFallback ? { onFallback } : {}),
   });
@@ -355,4 +356,28 @@ export async function routeComplete(
   if (localOnly(route)) throw new Error(NO_LOCAL_MODEL);
   assertPlatformCapability("gateway-inference");
   return complete(secrets, messages, route.model, signal);
+}
+
+/**
+ * A completion on THIS machine only — never the gateway, whatever the inference mode — for
+ * work that is local by definition (`local_research`: free tokens or nothing). The SAME
+ * on-device path a local-first turn takes (the memoized probe, the shared plan's ranking,
+ * the shared non-streaming completion) with no cloud to fall over to. Gated on local
+ * models being enabled, not on local-first (a routing choice for unpinned turns).
+ */
+export async function completeOnDevice(messages: readonly ChatMessage[], signal?: AbortSignal): Promise<string> {
+  return completeLocalFirst({
+    probes: await probeOnDeviceRuntimes(getLocalModelsConfig()),
+    messages,
+    cloud: null,
+    noModel: NO_LOCAL_MODEL,
+    fetch: hostPageEngines.fetch(),
+    ...(signal ? { signal } : {}),
+    onAttempt: logLocalFirstAttempt,
+  });
+}
+
+/** Whether anything on this machine could serve {@link completeOnDevice} right now. */
+export async function onDeviceModelAvailable(): Promise<boolean> {
+  return (await probeOnDeviceRuntimes(getLocalModelsConfig())).some((p) => p.models.length > 0);
 }

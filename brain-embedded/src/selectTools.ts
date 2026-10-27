@@ -17,8 +17,8 @@
  * no network — and the scoring is the shared `rankLexically` from
  * `@builderforce/agent-tools` (the same ranker the Worker's `tool_search` uses), fed
  * this module's product synonyms as extra weighted fields. It scores each tool against the live turn's text and keeps the best
- * `limit`, while pinning anything the run has already touched so a multi-step task
- * never loses a tool mid-flight.
+ * `limit`, then adds anything the run has already touched (beyond the limit) so a
+ * multi-step task never loses a tool mid-flight.
  *
  * Safety posture: when in doubt, INCLUDE. A catalog at or under the limit is
  * returned untouched, so small deployments behave exactly as before.
@@ -34,6 +34,13 @@ import { expandWithSynonyms } from './toolVocabulary';
  * several domains at once.
  */
 export const DEFAULT_TOOL_LIMIT = 64;
+
+/**
+ * How far past the cap the run's already-used (pinned) tools may lengthen the list. A
+ * pin is appended rather than evicting a fixed tool (the cached prefix holds), but a run
+ * that reaches tool after tool through the router must not grow the list without bound.
+ */
+export const PINNED_OVERFLOW = 16;
 
 /** Score for a tool NAME stem the user typed verbatim. */
 const NAME_HIT = LEXICAL_WEIGHTS.name;
@@ -108,9 +115,10 @@ export interface ToolSelection {
 /**
  * Choose the tools to advertise for one turn.
  *
- * Order of inclusion: pinned tools first (continuity), then by descending
- * relevance, then — if the limit is still unmet — catalog order, so a vague query
- * ("help me") still gets a usable, stable set rather than an arbitrary one.
+ * Order of inclusion: prompt-required tools, then by descending relevance, then — if
+ * the limit is still unmet — catalog order, so a vague query ("help me") still gets a
+ * usable, stable set rather than an arbitrary one. Pinned tools (already called this
+ * run) are added on top, beyond the limit, so a pin never evicts a fixed tool.
  */
 export function selectToolsForTurn(
   tools: BrainToolSpec[] | undefined,
@@ -136,27 +144,21 @@ export function selectToolsForTurn(
     chosen.push(tool);
   };
 
-  // 0. Tools the system prompt NAMES. These outrank even continuity: a prompt that
-  //    says "call builtin_chats_list_tickets" while the tool is absent leaves the
-  //    model no honest move, and it narrates the call instead of making it.
+  // 0. Tools the system prompt NAMES. These outrank everything: a prompt that says
+  //    "call builtin_chats_list_tickets" while the tool is absent leaves the model no
+  //    honest move, and it narrates the call instead of making it.
   for (const tool of tools) {
     if (chosen.length >= limit) break;
     if (required.has(tool.function?.name ?? '')) take(tool);
   }
 
-  // 1. Tools this run already used — never drop one mid-task.
-  for (const tool of tools) {
-    if (chosen.length >= limit) break;
-    if (pinned.has(tool.function?.name ?? '')) take(tool);
-  }
-
-  // 2. Relevance to the turn — the ONE shared lexical ranker. Ties keep catalog order.
+  // 1. Relevance to the turn — the ONE shared lexical ranker. Ties keep catalog order.
   for (const tool of rankLexically(tools, options.query, toolFields, tools.length)) {
     if (chosen.length >= limit) break;
     take(tool);
   }
 
-  // 3. Backfill in catalog order so a vague query still gets a full, stable set.
+  // 2. Backfill in catalog order so a vague query still gets a full, stable set.
   for (const tool of tools) {
     if (chosen.length >= limit) break;
     take(tool);
@@ -165,13 +167,29 @@ export function selectToolsForTurn(
   // Emit in CATALOG order, whichever pass chose each tool. The passes above decide
   // the SET; they must not decide the ORDER, because the order is what the vendor's
   // prompt cache hashes. Tools precede the system prompt in Anthropic's cached prefix,
-  // so any reordering — a tool the run just called moving from the "relevant" pass to
-  // the "pinned" pass and therefore ahead of its neighbours — invalidated the cached
-  // tools block AND the system prompt behind it on the very next turn. A tool loop
-  // pins a new tool on most of its early turns, so the ~13k-token prefix was re-billed
-  // at full price for most of the run. Same set ⇒ same bytes ⇒ a cache read.
+  // so any reordering — a tool the run just called moving ahead of its neighbours —
+  // invalidated the cached tools block AND the system prompt behind it on the very next
+  // turn. Same set ⇒ same bytes ⇒ a cache read.
   const position = new Map(tools.map((t, i) => [t, i] as const));
   chosen.sort((a, b) => (position.get(a) ?? 0) - (position.get(b) ?? 0));
+
+  // 3. Tools this run already used — never dropped mid-task, and APPENDED beyond the
+  //    cap, in the order the run first called them, rather than taken inside it. The
+  //    set above depends only on the catalog, the request and the prompt, which hold for
+  //    the whole of a run's phase, so it is the same every turn; a newly pinned tool only
+  //    ever lengthens the list at its END. When a pin counted toward the cap, every tool
+  //    the run reached through the router evicted a fixed tool from the set, and the
+  //    advertised list — the front of the vendor's cached prefix — changed mid-run.
+  //    Appending has a hard ceiling ({@link PINNED_OVERFLOW} past the cap): a run that
+  //    reached dozens of tools through the router stops ADDING there, and never evicts
+  //    one already advertised — the list only ever grows, then holds.
+  const ceiling = limit + PINNED_OVERFLOW;
+  const byName = new Map(tools.map((t) => [t.function?.name ?? '', t] as const));
+  for (const name of pinned) {
+    if (chosen.length >= ceiling) break;
+    const tool = byName.get(name);
+    if (tool) take(tool);
+  }
 
   return { tools: chosen, trimmed: true, available };
 }

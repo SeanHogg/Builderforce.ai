@@ -4,19 +4,18 @@
  * provenance (plus the answer-cache write) after a reply settles.
  */
 
-import { replayTextOf } from '@builderforce/agent-loop';
 import { formatEvermindMemoryBlock, countReconciledMemories, type EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import type { BrainMessage } from '../types';
 import type { BrainToolSpec, ChatCompletionMessage } from '../streamChatCompletion';
 import type { EvermindRunHooks, MemoryFirstAnswer } from '../evermindMemory';
 import { transcriptTokens } from '@seanhogg/builderforce-memory/working';
 import type { RunCell } from './runCell';
-import { emit, nowIso, pushTrace, recordAppended, runTrace } from './runCells';
+import { nowIso, pushTrace, runTrace } from './runCells';
 import { readFileAnchors } from './answerAnchors';
-import { canonicalTurnText } from './turnPersistence';
 import { latestUserText } from './convoText';
 import type { BrainRunRequest } from './runTypes';
 import type { RunLoopContext } from './runLoopContext';
+import { adoptAnswerWithoutModel, answerDeterministically } from './adoptAnswer';
 
 /** The pre-turn recall, the memory block it adds to the prompt, and that block's cost. */
 export interface RunRecall {
@@ -103,7 +102,10 @@ export async function recallForRun(
  * one from the Evermind SSM — the SSM cannot call a tool, so letting it answer
  * stranded any request whose answer lives behind one.
  *
- * Returns true when memory answered — the run is over.
+ * The host's DETERMINISTIC answer (`answerWithoutModel`, e.g. "where is X defined?" from
+ * its symbol index) is asked first, outside the memory gates — see `adoptAnswer.ts`.
+ *
+ * Returns true when memory (or the deterministic answer) answered — the run is over.
  */
 export async function answerFromMemory(
   chatId: number,
@@ -112,7 +114,8 @@ export async function answerFromMemory(
   allTools: BrainToolSpec[] | undefined,
   memoryReplay: boolean,
 ): Promise<boolean> {
-  const { evermind, persistence, onActivity, model } = req;
+  if (await answerDeterministically(chatId, c, req)) return true;
+  const { evermind, model } = req;
   const convo = c.transcript;
   if (!(evermind?.answer && memoryReplay && !c.abort?.signal.aborted)) return false;
   const query = latestUserText(convo);
@@ -125,31 +128,20 @@ export async function answerFromMemory(
       model: model || c.lastServedModel || undefined,
     });
   } catch { memAnswer = null; }
-  const finalText = canonicalTurnText(memAnswer?.text ?? '');
-  if (!finalText) return false;
-  convo.push({ role: 'assistant', content: replayTextOf(finalText) });
-  const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: finalText }]);
-  c.streamingText = '';
-  recordAppended(c, assistantMsg);
+  if (!memAnswer) return false;
   // Visible on the timeline: memory answered, the LLM was skipped.
-  pushTrace(c, {
-    ts: nowIso(),
-    category: 'recall',
-    label: memAnswer!.source === 'evermind' ? 'evermind.answer' : 'memory.answer',
+  return adoptAnswerWithoutModel(chatId, c, req, memAnswer.text ?? '', {
+    label: memAnswer.source === 'evermind' ? 'evermind.answer' : 'memory.answer',
     args: { query },
     result: {
-      source: memAnswer!.source,
-      skippedLlm: true,
-      ...(memAnswer!.evermindVersion != null ? { version: memAnswer!.evermindVersion } : {}),
+      source: memAnswer.source,
+      ...(memAnswer.evermindVersion != null ? { version: memAnswer.evermindVersion } : {}),
       // WHICH head served it — a project can target several, so without this a
       // memory hit from a sibling IDE build's Evermind is indistinguishable from
       // the chat project's own.
-      ...(memAnswer!.evermindProjectId != null ? { evermindProjectId: memAnswer!.evermindProjectId } : {}),
+      ...(memAnswer.evermindProjectId != null ? { evermindProjectId: memAnswer.evermindProjectId } : {}),
     },
   });
-  emit(c);
-  onActivity?.(chatId);
-  return true;
 }
 
 /**

@@ -4,10 +4,7 @@ import { resolveBootstrapContextForRun } from "../../agents/bootstrap-files.js";
 import { resolveDefaultModelForAgent } from "../../agents/model-selection.js";
 import type { EmbeddedContextFile } from "../../agents/embedded-helpers.js";
 import { createBuilderForceAgentsCodingTools } from "../../agents/coding-tools.js";
-import {
-  catalogDesktopSemantic,
-  setDesktopClientName,
-} from "@builderforce/agent-tools/node-desktop.js";
+import { resolveOnPremLocalBackings } from "../../agents/on-prem-local-backings.js";
 import { resolveSandboxRuntimeStatus } from "../../agents/sandbox.js";
 import { buildWorkspaceSkillSnapshot } from "../../agents/skills.js";
 import { getSkillsSnapshotVersion } from "../../agents/skills/refresh.js";
@@ -54,8 +51,10 @@ export async function resolveCommandsSystemPromptBundle(
     cfg: params.cfg,
     sessionKey: params.ctx.SessionKey ?? params.sessionKey,
   });
-  setDesktopClientName("on-prem");
-  const semantic = await catalogDesktopSemantic(workspaceDir);
+  const { semantic, research } = await resolveOnPremLocalBackings({
+    workspaceRoot: workspaceDir,
+    config: params.cfg,
+  });
   const tools = (() => {
     try {
       return createBuilderForceAgentsCodingTools({
@@ -71,6 +70,7 @@ export async function resolveCommandsSystemPromptBundle(
         modelProvider: params.provider,
         modelId: params.model,
         semantic,
+        research,
       });
     } catch {
       return [];

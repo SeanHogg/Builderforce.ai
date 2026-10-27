@@ -92,6 +92,8 @@ export function afterDispatchHook(run: RunLoopContext): NonNullable<Hooks['after
     run.pendingRun = null;
     // Router answers, declined confirms and dedupe stubs carry no run of their own.
     if (!ran) return undefined;
+    // The host ran this call: the run touched the world again (`cacheServedStreak.ts`).
+    run.cacheStreak.ran();
     const args = call.args;
     if (ran.threw) {
       pushTrace(c, { ts: nowIso(), category: 'tool', label: call.name, durationMs: nowMs() - ran.toolStart, args, result: ran.out, isError: true });

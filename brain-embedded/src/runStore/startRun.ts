@@ -22,7 +22,9 @@ import { keepStoppedTurn, persistStep } from './turnPersistence';
 import { recordCodeChangeTicket, updateLinkedTickets } from './runBackstops';
 import { resolveServerChatId } from './serverChat';
 import { runLoop } from './runLoop';
+import { reportRunEnd } from './runEndOutcome';
 import { beginRun } from './beginRun';
+import { markPersonTurn } from './chatAsks';
 import type { BrainRunRequest } from './runTypes';
 import type { RunCell } from './runCell';
 
@@ -73,10 +75,11 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
   // here (inside the single-flight claim) so a racing send + auto-reply can't
   // both append the user turn to the transcript.
   if (req.seed && c.transcript.length === 0) {
-    c.transcript = req.seed.slice();
+    // The persisted history holds the person's own turns only — the loop's nudges are never stored.
+    c.transcript = req.seed.map(markPersonTurn);
     c.priorResearch = req.priorResearch ?? null;
   }
-  if (req.userTurn !== undefined) c.transcript.push({ role: 'user', content: req.userTurn });
+  if (req.userTurn !== undefined) c.transcript.push(markPersonTurn({ role: 'user', content: req.userTurn }));
   emit(c);
 
   c.runUsage = emptyRunUsage();
@@ -170,6 +173,8 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
       askedForChange: !wakeTurn && asksForChange(req.userTurn === undefined ? undefined : contentText(req.userTurn)),
     });
     if (outcome) void req.reportOutcome!(outcome).catch(() => undefined);
+    // How the run ended, under the id its calls carry — the route report's other half.
+    reportRunEnd(c, req, { aborted, failed: c.error !== '' });
     c.persistStep = null;
     // The run is over: nothing is in flight, so no indicator may claim otherwise.
     // Cleared LAST, after the backstops above, so `finishing` stays visible for them.

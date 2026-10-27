@@ -15,7 +15,8 @@
 import { and, asc, eq, gt, isNull, or } from 'drizzle-orm';
 import { bm25Search, chunkText, type Bm25Doc } from '@seanhogg/builderforce-memory/retrieval';
 import type { Env } from '../../env';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { bumpCacheVersion, getCacheVersion, getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { sha256Hex } from '../../domain/shared/hash';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentKnowledgeChunks, ideAgents } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -29,6 +30,18 @@ export interface KnowledgeChunk {
 export const RECALL_TOP_K = 5;
 
 const cacheKey = (tenantId: number, agentId: string) => `agent_knowledge:chunks:${tenantId}:${agentId}`;
+
+/** The agent's knowledge version token — bumped by every ingest, folded into every recall key. */
+const versionKey = (tenantId: number, agentId: string) => `agent_knowledge:${tenantId}:${agentId}`;
+
+/** How long one recall answer is reused. Long enough to cover a whole tool loop on one
+ *  user message; an ingest orphans it at once through the version token. */
+const RECALL_CACHE = { kvTtlSeconds: 1_800, l1TtlMs: 300_000 } as const;
+
+/** The query as recall keys it: whitespace collapsed, case folded (BM25 ignores both). */
+export function normalizeRecallQuery(query: string): string {
+  return query.replace(/\s+/g, ' ').trim().toLowerCase();
+}
 
 /**
  * Pure: pick the top-K most relevant chunks for `query` (Okapi BM25) and assemble
@@ -78,6 +91,12 @@ export async function loadAgentChunks(env: Env, db: Db, tenantId: number, agentI
  * Recall the grounded context for `query` from an agent's ingested knowledge.
  * Returns '' when the agent has no knowledge or nothing is relevant — so callers
  * can pass it straight to `recalledContext` (the lowering renders nothing for '').
+ *
+ * Memoised per (agent, normalised query, topK, knowledge version token): a tool loop
+ * re-resolves the workforce model on EVERY turn with the same latest user message, and
+ * the recall rides that message (`gatewayChatSupport`), so it must come back byte-identical
+ * or the prompt-cache prefix breaks at that message on every turn. With the memo it changes
+ * only when the user's message does (once per user turn) or an ingest bumps the token.
  */
 export async function recallAgentKnowledge(
   env: Env,
@@ -87,8 +106,18 @@ export async function recallAgentKnowledge(
   query: string,
   topK: number = RECALL_TOP_K,
 ): Promise<string> {
-  const chunks = await loadAgentChunks(env, db, tenantId, agentId);
-  return selectRecallContext(query, chunks, topK);
+  const normalized = normalizeRecallQuery(query);
+  if (!normalized) return '';
+  const [version, queryHash] = await Promise.all([
+    getCacheVersion(env, versionKey(tenantId, agentId)),
+    sha256Hex(normalized),
+  ]);
+  return getOrSetCached(
+    env,
+    `agent_knowledge:recall:${tenantId}:${agentId}:v:${version}:k${topK}:${queryHash}`,
+    async () => selectRecallContext(normalized, await loadAgentChunks(env, db, tenantId, agentId), topK),
+    RECALL_CACHE,
+  );
 }
 
 /**
@@ -126,5 +155,7 @@ export async function ingestAgentKnowledge(
     );
   }
   await invalidateCached(env, cacheKey(tenantId, agentId));
+  // Orphans every memoised recall over the old chunk set (`recallAgentKnowledge`).
+  await bumpCacheVersion(env, versionKey(tenantId, agentId));
   return texts.length;
 }

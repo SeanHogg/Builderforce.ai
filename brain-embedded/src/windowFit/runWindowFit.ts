@@ -9,7 +9,9 @@
  * it asks for differs from the one that served the last turn OR when that model's known
  * window is smaller than the working budget (a pinned 4k WebLLM model every turn). A
  * request that names no model (auto-routing) is fitted by the gateway, and a model whose
- * window nobody knows keeps today's budget: both pass through untouched.
+ * window nobody knows keeps today's budget: both pass through untouched. A pack is
+ * memoised per (model, window) for the run (`packMemo.ts`): the next request reuses it,
+ * with its new turns appended, until that overflows the window.
  *
  * Kept out of the run store: it supplies the summarizer, the recall, the window sources
  * and the trace hook; this module owns the decision and the `llm.handoff` step.
@@ -19,7 +21,8 @@ import type { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermin
 import type { BrainTraceEvent } from '../brainTriage';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { resolveContextWindow, type RunWindowSources } from './modelWindow';
-import { packForModel, type WindowFitRecall, type WindowFitSummarizer, type WindowFitTrace } from './packForModel';
+import { packBudgetTokens, packForModel, type WindowFitRecall, type WindowFitSummarizer, type WindowFitTrace } from './packForModel';
+import { packMemoOf, reusePack, type PackMemo } from './packMemo';
 
 export interface RunWindowFitDeps {
   /** The tokens the working transcript is built to (`HISTORY_TOKEN_BUDGET`). */
@@ -107,6 +110,9 @@ export function createRunWindowFit(deps: RunWindowFitDeps): RunWindowFit {
   let lastAsked: string | undefined;
   // The result cap's window, once per model: a run's tool results need no live re-probe.
   const capWindows = new Map<string, Promise<number | undefined>>();
+  // The run's last pack per (model, window): reused while the transcript still fits it,
+  // so a pinned small model is re-packed — and re-summarized — only on overflow.
+  const packs = new Map<string, PackMemo>();
   // One recall per directive for the whole run; the pre-turn recall seeds it.
   const recalls = new Map<string, Promise<EvermindRecallResult | null>>();
   if (deps.priorRecall) recalls.set(deps.priorRecall.query, Promise.resolve(deps.priorRecall.result));
@@ -134,8 +140,13 @@ export function createRunWindowFit(deps: RunWindowFitDeps): RunWindowFit {
       if (window === undefined) return req.messages;
       const differs = lastServed !== undefined && lastServed !== to;
       if (!differs && window >= deps.workingBudgetTokens) return req.messages;
+      const memoKey = `${to}|${window}`;
+      const memo = packs.get(memoKey);
+      const budget = packBudgetTokens({ to, contextTokens: window, ...(req.tools ? { tools: req.tools } : {}), ...(req.maxTokens ? { maxTokens: req.maxTokens } : {}) });
+      const reused = memo ? reusePack(memo, req.messages, budget) : null;
+      if (reused) return reused;
       const recall = recallFor(req.step);
-      const { messages } = await packForModel({
+      const { messages, pack } = await packForModel({
         messages: req.messages,
         to,
         ...(lastServed ? { from: lastServed } : {}),
@@ -149,6 +160,9 @@ export function createRunWindowFit(deps: RunWindowFitDeps): RunWindowFit {
           if (differs || t.dropped > 0 || !t.fits) deps.trace(windowFitTrace(deps.now(), req.step, t));
         },
       });
+      // A pack that could not fit is never reused: the next request packs afresh.
+      if (pack.fits) packs.set(memoKey, packMemoOf(req.messages, messages));
+      else packs.delete(memoKey);
       return messages;
     },
     served(model) {

@@ -38,8 +38,9 @@ describe('OpenRouter placer — tool loops cache their history', () => {
     const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-5');
     expect(out[5]!.content).toEqual([{ type: 'text', text: 'file c2', cache_control: EPHEMERAL }]);
     expect((out[5] as { tool_call_id?: string }).tool_call_id).toBe('c2');
-    // Only the system prompt and the newest stable message are marked.
-    expect(out[1]).toBe(messages[1]);
+    // The system prompt, the newest stable message, and — as a fallback in case a
+    // provider drops a tool-role marker — the last stable TEXT turn before it.
+    expect(out[1]!.content).toEqual([{ type: 'text', text: 'q', cache_control: EPHEMERAL }]);
     expect(out[3]).toBe(messages[3]);
   });
 
@@ -67,8 +68,9 @@ describe('OpenRouter placer — tool loops cache their history', () => {
     const turnN = [{ role: 'system', content: 'sys' }, { role: 'user', content: 'q' }, call('c1'), result('c1')];
     const turnN1 = [...turnN, call('c2'), result('c2')];
     const marked = (out: Array<Record<string, unknown>>) => out.flatMap((m, i) => (JSON.stringify(m).includes('cache_control') ? [i] : []));
-    expect(marked(applyPromptCaching(turnN, 'anthropic/claude-sonnet-5'))).toEqual([0, 3]);
-    expect(marked(applyPromptCaching(turnN1, 'anthropic/claude-sonnet-5'))).toEqual([0, 5]);
+    // Index 1 is the fallback text breakpoint (stable across turns); the tool mark moves.
+    expect(marked(applyPromptCaching(turnN, 'anthropic/claude-sonnet-5'))).toEqual([0, 1, 3]);
+    expect(marked(applyPromptCaching(turnN1, 'anthropic/claude-sonnet-5'))).toEqual([0, 1, 5]);
   });
 });
 

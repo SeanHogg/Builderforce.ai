@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { VOLATILE_TAIL_TAG } from '@seanhogg/builderforce-memory/handoff';
-import { applyPromptCaching, markAnthropicHistoryBreakpoint, modelSupportsExplicitCaching } from './promptCaching';
+import { ANTHROPIC_MAX_BREAKPOINTS, applyPromptCaching, modelSupportsExplicitCaching } from './promptCaching';
 
 // ---------------------------------------------------------------------------
 // modelSupportsExplicitCaching — gate to the Anthropic family (the only gateway
@@ -119,7 +119,43 @@ describe('applyPromptCaching — history boundary', () => {
     const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-5');
     expect(out[3]!.content).toEqual([{ type: 'text', text: 'tool-result', cache_control: { type: 'ephemeral' } }]);
     expect(out[2]!.content).toBe(''); // nothing to attach to
-    expect(out[1]!.content).toBe('q');
+    // Fallback (review #16): the last stable TEXT message behind a tool-result breakpoint
+    // is marked too, so the prefix still caches if the tool-part marker is dropped.
+    expect(out[1]!.content).toEqual([{ type: 'text', text: 'q', cache_control: { type: 'ephemeral' } }]);
+  });
+
+  it('adds no fallback when the history breakpoint is already on a text message', () => {
+    const messages = [
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: 'q1' },
+      { role: 'assistant', content: 'a1' },
+      { role: 'user', content: 'q2' },
+    ];
+    const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-5');
+    expect(out[2]).toBe(messages[2]);
+    expect(out[1]).toBe(messages[1]);
+  });
+
+  it('places the fallback behind the volatile tail and never exceeds the breakpoint cap', () => {
+    const tail = `${VOLATILE_TAIL_TAG}
+budget: 40%
+</run-state>`;
+    const messages = [
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: 'q' },
+      { role: 'assistant', content: 'thinking', tool_calls: [{ id: 'c1' }] },
+      { role: 'tool', content: 'r1' },
+      { role: 'assistant', content: '', tool_calls: [{ id: 'c2' }] },
+      { role: 'tool', content: 'r2' },
+      { role: 'user', content: tail },
+    ];
+    const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-5');
+    const marked = out
+      .map((m, i) => (Array.isArray(m.content) && (m.content as Array<Record<string, unknown>>).some((p) => 'cache_control' in p) ? i : -1))
+      .filter((i) => i >= 0);
+    expect(marked).toEqual([0, 2, 5]); // system, the assistant text turn, the newest tool result
+    expect(out[6]).toBe(messages[6]);
+    expect(marked.length).toBeLessThanOrEqual(ANTHROPIC_MAX_BREAKPOINTS - 1); // one slot left for tools
   });
 
   it('never marks the per-turn volatile tail (B1) — the breakpoint goes on the message before it', () => {
@@ -146,29 +182,6 @@ x` }] },
     const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-5');
     expect(out[1]).toBe(messages[1]);
     expect(out[0]!.content).toEqual([{ type: 'text', text: 'q1', cache_control: { type: 'ephemeral' } }]);
-  });
-});
-
-describe('markAnthropicHistoryBreakpoint (direct Messages shape)', () => {
-  it('marks the last block of the last message — a tool_result included — and clones only that', () => {
-    const messages = [
-      { role: 'user', content: [{ type: 'text', text: 'q' }] },
-      { role: 'assistant', content: [{ type: 'tool_use', id: 'c1', name: 'read_file', input: {} }] },
-      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'c1', content: '...' }, { type: 'tool_result', tool_use_id: 'c2', content: '...' }] },
-    ];
-    const out = markAnthropicHistoryBreakpoint(messages);
-    expect(out).toHaveLength(3);
-    expect(out[0]).toBe(messages[0]);
-    expect(out[1]).toBe(messages[1]);
-    expect(out[2]!.content[0]).toBe(messages[2]!.content[0]);
-    expect(out[2]!.content[1]).toEqual({ type: 'tool_result', tool_use_id: 'c2', content: '...', cache_control: { type: 'ephemeral' } });
-    expect(messages[2]!.content[1]).not.toHaveProperty('cache_control'); // input untouched
-  });
-
-  it('leaves an empty final message alone', () => {
-    const messages = [{ role: 'user', content: [] as Array<Record<string, unknown>> }];
-    expect(markAnthropicHistoryBreakpoint(messages)[0]!.content).toEqual([]);
-    expect(markAnthropicHistoryBreakpoint([])).toEqual([]);
   });
 });
 

@@ -319,8 +319,11 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     const toolMsg = turn2Messages.find((m) => m.role === 'tool');
     expect(toolMsg?.tool_call_id).toBe('t1');
     expect(toolMsg?.content).toContain('"id":123');
-    // Both user turns are present and distinct (no clobbering).
-    expect(turn2Messages.filter((m) => m.role === 'user').map((m) => m.content)).toEqual([
+    // Both user turns are present and distinct (no clobbering). The latest carries this
+    // turn's context block (the chat's change asks ride it — `chatAsks.ts`); the person's
+    // own words are what is compared.
+    const ownWords = (content: unknown) => String(content).replace(/\n\n<turn_context>[\s\S]*<\/turn_context>$/, '');
+    expect(turn2Messages.filter((m) => m.role === 'user').map((m) => ownWords(m.content))).toEqual([
       'update A url',
       'update another url',
     ]);

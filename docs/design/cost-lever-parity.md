@@ -63,7 +63,15 @@ stream is edited only minimally and re-read before every edit. Other sessions ha
 - packHandoff result is memoised per run and re-packed only on overflow; drop-oldest windowing drops in
   chunks (hysteresis) so the prefix moves rarely.
 - `getStableGrounding` is computed once per rescan. Workforce recall moves out of the system prompt.
-  Tool pins append, never evict a fixed tool mid-run. Thinking setting constant across a run's turns.
+  Tool pins append, never evict a fixed tool mid-run.
+- The workforce recall that rides the latest user message is memoised per (agent, normalised query,
+  knowledge version token), so every tool-loop turn sends it byte-identical; the cached prefix breaks at
+  that message once per user turn (and once after an ingest bumps the token), never per tool turn.
+- A history breakpoint on a `tool` message is backed by a second one on the last stable user/assistant
+  TEXT message before it (system + tool + text = 3, within Anthropic's 4 even with a tools marker).
+- **Decision (review #13): thinking stays first-turn-only on direct Anthropic.** A thinking flip
+  invalidates only the cached MESSAGES — system and tools stay cached — and on turn 2 those messages are
+  small, so the miss is cheap; first-turn planning quality wins over holding the setting constant.
 
 ## WS-I  Context ingress (owner: ingress agent, after WS-L)
 

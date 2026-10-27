@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { SQL } from 'drizzle-orm';
 import { upsertProjectFact } from './projectFactsWrite';
 import { buildProjectFactsBlock, recallProjectFacts } from './projectFactsRecall';
-import { codemapWriteAnchors, withCurrentAnchors } from './projectFactsCodemap';
+import { MAX_CODEMAP_ANCHORS, codemapAnchorsForWrite, codemapWriteAnchors, pathKey, withCurrentAnchors } from './projectFactsCodemap';
 import { areasForQuery, recallAreaCodemaps } from './projectFactsAreaRecall';
 import type { Env } from '../../env';
 
@@ -212,5 +212,60 @@ describe('area-targeted code-map recall', () => {
     expect(block).toContain('Invoices are raised once per order.');
     // Served maps are stamped as recalled.
     expect(calls.updates.some((u) => 'recallCount' in u.set)).toBe(true);
+  });
+});
+
+describe('upsertProjectFact — a map written without anchors (on-prem / V2 relay / cloud)', () => {
+  it('derives path anchors from the listed files and hashes them from the host directory index', async () => {
+    // Every select resolves to this row: the prior read sees no prior (no `key`/content), the
+    // host-directory hash read sees `contentHash`.
+    const { db, calls } = makeDb([{ recallCount: 0, content: null, expiresAt: null, supersededBy: 1, contentHash: 'idx' }]);
+    await upsertProjectFact(env, db, 7, 42, 'codemap:w/s', MAP, 'agent');
+    expect(calls.values?.fileAnchors).toEqual([
+      { path: 'w/s/a.ts', contentHash: 'idx' },
+      { path: 'w/s/b.ts', contentHash: 'idx' },
+      { path: 'w/s/c.ts', contentHash: 'idx' },
+    ]);
+  });
+
+  it('keeps the prior map hash for a file this write did not list, and anchors every listed file', () => {
+    const merged = [MAP, '- w/s/d.ts'].join('\n');
+    const incoming = ['Code map for `w/s` (mapped 2026-10-26).', '- w/s/d.ts'].join('\n');
+    expect(codemapAnchorsForWrite(merged, incoming, [{ path: 'w/s/a.ts', contentHash: 'p-a' }], undefined)).toEqual([
+      { path: 'w/s/d.ts' },
+      { path: 'w/s/a.ts', contentHash: 'p-a' },
+      { path: 'w/s/b.ts' },
+      { path: 'w/s/c.ts' },
+    ]);
+  });
+
+  it('uses the caller anchors when it sent some (the VSIX path) and caps the set', () => {
+    expect(codemapAnchorsForWrite(MAP, MAP, null, [{ path: 'w/s/b.ts', contentHash: 'n-b' }])).toEqual([
+      { path: 'w/s/b.ts', contentHash: 'n-b' },
+      { path: 'w/s/a.ts' },
+      { path: 'w/s/c.ts' },
+    ]);
+    const many = ['Code map', ...Array.from({ length: 30 }, (_, i) => `- w/s/f${i}.ts`)].join('\n');
+    expect((codemapAnchorsForWrite(many, many, null, null) ?? []).length).toBeLessThanOrEqual(MAX_CODEMAP_ANCHORS);
+    expect(codemapAnchorsForWrite('no files here', 'no files here', null, null)).toBeNull();
+  });
+});
+
+describe('one path identity for anchors', () => {
+  it('pathKey folds slashes, a leading ./ and case', () => {
+    expect(pathKey(' .\\W\\s\\A.ts ')).toBe('w/s/a.ts');
+    expect(pathKey('./w/s/a.ts')).toBe('w/s/a.ts');
+  });
+
+  it('the ordinary-fact anchor sweep binds pathKey values and normalises the stored path the same way', async () => {
+    const { db, calls } = makeDb();
+    await upsertProjectFact(env, db, 7, 42, 'step-cap', 'there is no step cap', 'agent', {
+      fileAnchors: [{ path: '.\\W\\s\\A.ts', contentHash: 'h' }],
+    });
+    const where = calls.updates[0]!.where;
+    expect(where).toContain('w/s/a.ts');
+    expect(where).not.toContain('A.ts');
+    expect(where).toContain('regexp_replace');
+    expect(where).toContain('chr(92)');
   });
 });

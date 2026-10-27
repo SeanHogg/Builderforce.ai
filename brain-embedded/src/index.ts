@@ -13,11 +13,18 @@
 
 // Injection seam
 export { BrainProvider, resolveBrainStream, useBrainConfig } from './config';
-export type { BrainConfig, BrainRuntime, BrainPersistenceAdapter } from './config';
+export type { BrainConfig, BrainRuntime, BrainPersistenceAdapter, InlinedAttachments } from './config';
 export { createLocalBrainPersistence, type LocalBrainPersistenceOptions } from './localFirstPersistence';
 // PRD 36 — a local chat's identity off the machine, its run usage ledger, and its sync.
 export { createLocalChatIdentity, type ChatBindingPort, type LocalChatIdentity } from './localChat/chatIdentity';
 export { createRunUsageLedger, withRunUsage, type RunUsageLedger } from './localChat/usageLedger';
+// The pipeline route report (WS-R): the device ledger's routed runs, priced with the one
+// device cost rule, and the pure report math they feed (`@builderforce/pipeline-route`).
+export { routeRunRecords, runOutcomesSince, usageRowsSince } from './localChat/routeLedger';
+export { callCostMillicents } from './localChat/callCost';
+export type { RunEndOutcome, RunOutcomeValue, RunUsageValue, UsagePipelineRoute } from './localChat/usageLedger';
+export { DEFAULT_ROUTE_THRESHOLD, summarizeRouteRuns } from '@builderforce/pipeline-route';
+export type { RouteReport, RouteRunRecord, ScoreBin } from '@builderforce/pipeline-route';
 export { bindChatHistoryForSync } from './localChat/chatSync';
 
 // Streaming client + tool/message types
@@ -211,7 +218,10 @@ export type {
 
 // Client-side image prep for vision messages (downscale → inline data URL)
 export { prepareImageDataUrl } from './imagePrep';
-export type { PreparedImage } from './imagePrep';
+export type { ImageEncodeDecision, ImagePrepOptions, PreparedImage } from './imagePrep';
+// Attachments into a turn: prepare + upload, and the model-visible content (inlined text).
+export { AttachmentRefusedError, MAX_INLINE_TEXT_BYTES } from './attachmentContent';
+export { BRAIN_UPLOAD_PATH, BRAIN_UPLOAD_SIGN_PATH, brainUploadUrl, signedBrainFileUrl } from './uploadUrls';
 
 // Project-Evermind memory hooks for the run loop (recall → learn → reconcile).
 export { projectMemoryHooks } from './evermindMemory';
@@ -309,6 +319,7 @@ export {
   startEngineRun,
 } from './brainRunStore';
 export type { BrainRunRequest, BrainRunSnapshot, BrainRunPersistence, BrainStreamFn, BrainRunEngine, RunEngineControl, RunKey, RunTurn } from './brainRunStore';
+export type { RunPipelineSettings, RunStageModels } from './runStore/runTypes';
 // PRD 35 E7: what a host's pre-turn BYO health check hands the run.
 export type { ModelPreflightResult } from './runStore/modelPreflight';
 export type { ServedRead } from './runStore/hostRunContext';
@@ -396,7 +407,8 @@ export type { StaffingSummary, DispatchRefusal, PersonaSubagent } from './staffi
 // separate "every turn succeeded and nothing got done" from a real context or model
 // failure. Folded into the diagnostics verdict; exported for surfaces that show them
 // on their own.
-export { computeRunProgress, formatRunProgress, runProgressVerdict, hasEditIntent, isMutationTool, progressDuration, BACK_TO_BACK_AT } from './runProgress';
+export { computeRunProgress, hasEditIntent, isMutationTool, BACK_TO_BACK_AT } from './runProgress';
+export { formatRunProgress, runProgressVerdict, progressDuration } from './runProgressReport';
 export type { RunProgress, RepeatedTarget, RepeatStreak } from './runProgress';
 
 // Live, in-flight activity — what the run is doing RIGHT NOW, so a surface can animate

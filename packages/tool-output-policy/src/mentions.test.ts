@@ -3,11 +3,12 @@ import {
   CLOUD_MENTION_BUDGET,
   LOCAL_MENTION_BUDGET,
   MIN_KEEP_CHARS,
-  fitMentions,
   inlineMentions,
   mentionBudget,
-  renderMentions,
 } from './index.js';
+// The fit and the render are the module's internals, tested directly (the package exports
+// only their composition, `inlineMentions`).
+import { fitMentions, renderMentions } from './mentions.js';
 
 describe('mentionBudget', () => {
   it('gives the cloud its fixed row', () => {

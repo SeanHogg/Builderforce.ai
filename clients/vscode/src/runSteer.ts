@@ -76,14 +76,14 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
       if (running) {
         // In front of the run's NEXT turn, not after it — and it INTERRUPTS the step now.
         // Attachments the person attached ride along so a mid-run image reaches the model.
-        queueRunSteering(runKey, heard, { interrupt: true, attachments });
+        queueRunSteering(runKey, heard, { interrupt: true, attachments, fromPerson: true });
         // A run sitting in `wait_agents` would otherwise hear this only once every child
         // settled; the wait gives way and the next turn answers.
         deps.registry.interrupt(runKey);
         say(runKey, text);
         return;
       }
-      queueRunSteering(runKey, heard);
+      queueRunSteering(runKey, heard, { fromPerson: true });
       if (deps.isSettingUp(runKey)) {
         // Heard before the first turn as direction — shown now, as a steer always is.
         say(runKey, text);

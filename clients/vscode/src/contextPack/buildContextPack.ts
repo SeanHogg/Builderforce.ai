@@ -15,11 +15,13 @@
 import * as fs from "node:fs/promises";
 import type * as vscode from "vscode";
 import type { ServedRead } from "@seanhogg/builderforce-brain-embedded";
-import { extractSymbols } from "@builderforce/agent-tools";
+import { extractSymbols, type RepoSymbolsCapability } from "@builderforce/agent-tools";
 import { recallProjectFacts } from "../bfApi";
 import { readChatState } from "./chatStateReads";
 import { readCheckoutState } from "./checkoutState";
-import { areasNamed, codemapFactsFor } from "./codemapFacts";
+import { workspaceSymbolIndex } from "../workspaceSymbols";
+import { codemapFactsForRequest } from "./requestAreas";
+import { withinMs } from "./withinMs";
 import { extractFocusPaths, resolveUnderRoot, workspaceRelative } from "./focusPaths";
 import {
   FOCUS_INLINE_CHARS,
@@ -35,8 +37,6 @@ import {
 export const CONTEXT_PACK_DEADLINE_MS = 1_500;
 /** A file larger than this is not read at all — its outline would not be worth the read. */
 const MAX_FOCUS_BYTES = 2_000_000;
-/** Facts pulled before the area filter keeps the codemap ones. */
-const FACTS_PULLED = 20;
 
 export interface ContextPackInput {
   root: string;
@@ -47,6 +47,9 @@ export interface ContextPackInput {
   serverChatId: number | null;
   /** The chat's Memory switch: off ⇒ no project facts are read into the pack. */
   memory: boolean;
+  /** The run's shared symbol look-up (`requestSymbolLookup`) — the pre-search reads the
+   *  same answers; absent ⇒ the workspace index at `root`. */
+  symbols?: Pick<RepoSymbolsCapability, "find">;
 }
 
 export interface ContextPackResult {
@@ -57,11 +60,6 @@ export interface ContextPackResult {
   dropped: string[];
   /** The focus files the block carries whole — recorded as the run's reads (E2 ↔ E1). */
   servedReads: ServedRead[];
-}
-
-/** `p`, or `fallback` once `deadline` passes or `p` throws. */
-function within<T>(p: Promise<T>, deadline: Promise<void>, fallback: T): Promise<T> {
-  return Promise.race([p.catch(() => fallback), deadline.then(() => fallback)]);
 }
 
 /** One named file: whole when small, otherwise its outline. undefined = not a readable file. */
@@ -98,38 +96,33 @@ export async function buildContextPack(
 ): Promise<ContextPackResult | undefined> {
   const candidates = input.root ? extractFocusPaths(input.request) : [];
   if (input.projectId == null && candidates.length === 0) return undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<void>((resolve) => {
-    timer = setTimeout(resolve, deadlineMs);
-  });
-  try {
-    const focusLoad = Promise.all(candidates.map((c) => loadFocusFile(input.root, c))).then((all) => all.filter((f): f is NonNullable<typeof f> => !!f));
-    const projectId = input.projectId;
-    const facts: Promise<Array<{ key: string; content: string }>> = projectId == null || !input.memory
-      ? Promise.resolve([])
-      : focusLoad.then(async (loaded) => {
-          const areas = areasNamed(loaded.map((f) => f.focus.path), loaded.map((f) => f.text));
-          if (areas.length === 0) return [];
-          const pulled = await recallProjectFacts(secrets, projectId, areas.join(" "), FACTS_PULLED);
-          return codemapFactsFor(pulled, areas);
-        });
-    const [loaded, chat, repos, codemap] = await Promise.all([
-      within(focusLoad, deadline, []),
-      input.serverChatId != null ? within<ContextPackChat | undefined>(readChatState(secrets, input.serverChatId), deadline, undefined) : Promise.resolve(undefined),
-      within<ContextPackRepo[]>(readCheckoutState(), deadline, []),
-      within<Array<{ key: string; content: string }>>(facts, deadline, []),
-    ]);
-    const parts: ContextPackParts = {
-      focus: loaded.map((f) => f.focus),
-      ...(chat ? { chat } : {}),
-      ...(repos.length ? { repos } : {}),
-      facts: codemap.map((f) => ({ key: f.key, content: f.content })),
-    };
-    const rendered = renderContextPack(parts);
-    const servedReads = parts.focus.flatMap((f) =>
-      f.content !== undefined && rendered.inlined.includes(f.path) ? [{ path: f.path, content: f.content, totalLines: f.totalLines }] : []);
-    return { block: rendered.block, recallHint: contextPackRecallHint(parts), dropped: rendered.dropped, servedReads };
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
+  const focusLoad = Promise.all(candidates.map((c) => loadFocusFile(input.root, c))).then((all) => all.filter((f): f is NonNullable<typeof f> => !!f));
+  const projectId = input.projectId;
+  const facts: Promise<Array<{ key: string; content: string }>> = projectId == null || !input.memory
+    ? Promise.resolve([])
+    : focusLoad.then((loaded) =>
+        // Areas from the focus paths, the request's identifiers and its words (requestAreas.ts).
+        codemapFactsForRequest(
+          { request: input.request, focusPaths: loaded.map((f) => f.focus.path), focusContents: loaded.map((f) => f.text) },
+          {
+            recall: (query, limit) => recallProjectFacts(secrets, projectId, query, limit),
+            ...(input.symbols ? { symbols: input.symbols } : input.root ? { symbols: workspaceSymbolIndex(input.root) } : {}),
+          },
+        ));
+  const [loaded, chat, repos, codemap] = await Promise.all([
+    withinMs(focusLoad, deadlineMs, []),
+    input.serverChatId != null ? withinMs<ContextPackChat | undefined>(readChatState(secrets, input.serverChatId), deadlineMs, undefined) : Promise.resolve(undefined),
+    withinMs<ContextPackRepo[]>(readCheckoutState(), deadlineMs, []),
+    withinMs<Array<{ key: string; content: string }>>(facts, deadlineMs, []),
+  ]);
+  const parts: ContextPackParts = {
+    focus: loaded.map((f) => f.focus),
+    ...(chat ? { chat } : {}),
+    ...(repos.length ? { repos } : {}),
+    facts: codemap.map((f) => ({ key: f.key, content: f.content })),
+  };
+  const rendered = renderContextPack(parts);
+  const servedReads = parts.focus.flatMap((f) =>
+    f.content !== undefined && rendered.inlined.includes(f.path) ? [{ path: f.path, content: f.content, totalLines: f.totalLines }] : []);
+  return { block: rendered.block, recallHint: contextPackRecallHint(parts), dropped: rendered.dropped, servedReads };
 }

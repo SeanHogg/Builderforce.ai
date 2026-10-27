@@ -12,7 +12,8 @@
  */
 
 import { createContext, useContext, useMemo } from 'react';
-import type { BrainChat, BrainMessage } from './types';
+import type { BrainChat, BrainMessage, ChatInputAttachment } from './types';
+import type { ImagePrepOptions } from './imagePrep';
 import { streamChatCompletion, type BrainTransport } from './streamChatCompletion';
 import type { BrainStreamFn } from './brainRunStore';
 import type { LocalRatingVerdict } from './turnRating';
@@ -85,6 +86,13 @@ export interface BrainPersistenceAdapter {
    */
   requestAgentReply?(chatId: number, input: { agentRef: string; agentName?: string }): Promise<BrainMessage>;
   upload(file: File): Promise<{ key: string; name: string; type: string }>;
+  /**
+   * Record a file the model receives INLINE (a picture sent as a data URL) without sending
+   * it anywhere — the attachment exists for this conversation, but no platform copy is
+   * made of what the model never needs to fetch. Optional: when absent, such a file is
+   * {@link upload}ed like any other (the web, whose uploads are its record).
+   */
+  keepLocal?(file: File): Promise<{ key: string; name: string; type: string }>;
   uploadUrl(key: string): string;
   /**
    * Mint a short-lived, signature-authenticated public URL for an uploaded
@@ -93,6 +101,22 @@ export interface BrainPersistenceAdapter {
    * absent, the conversation falls back to the (auth-scoped) text link.
    */
   signedUploadUrl?(key: string): Promise<string>;
+  /**
+   * The model-facing text of the attachments this host can READ (text files, an editor's
+   * "Add context"), already compressed (prose only) and fitted to the turn's mention
+   * budget, with the keys it covered — those attachments reach the model as their text
+   * instead of as a link. Null (or absent) ⇒ every attachment stays a link, which is
+   * right for a host whose links the model can read (the web's uploads).
+   */
+  inlineAttachments?(attachments: readonly ChatInputAttachment[]): Promise<InlinedAttachments | null>;
+}
+
+/** What {@link BrainPersistenceAdapter.inlineAttachments} answers. */
+export interface InlinedAttachments {
+  /** The fenced blocks, '' when nothing could be inlined. */
+  text: string;
+  /** The attachment keys `text` covers. */
+  keys: string[];
 }
 
 export interface BrainConfig {
@@ -110,6 +134,9 @@ export interface BrainConfig {
    * comparison) uses `transport` directly and never passes through here.
    */
   stream?: BrainStreamFn;
+  /** How attached pictures are prepared for a vision turn (long-edge cap, first quality).
+   *  Omitted = the defaults (`imagePrep.ts`); the editor passes its `builderforce.images.*`. */
+  imagePrep?: ImagePrepOptions;
 }
 
 /**
@@ -132,6 +159,8 @@ export interface BrainRuntime {
   resolveSystemPrompt: (modality: string) => string;
   /** Stream a completion — the config's own stream, else the configured transport. */
   stream: BrainStreamFn;
+  /** {@link BrainConfig.imagePrep}, as configured. */
+  imagePrep?: ImagePrepOptions;
 }
 
 const BrainConfigContext = createContext<BrainRuntime | null>(null);
@@ -149,6 +178,7 @@ export function BrainProvider({
       persistence: config.persistence,
       resolveSystemPrompt: config.resolveSystemPrompt ?? (() => DEFAULT_SYSTEM_PROMPT),
       stream: resolveBrainStream(config),
+      ...(config.imagePrep ? { imagePrep: config.imagePrep } : {}),
     }),
     [config],
   );

@@ -150,6 +150,18 @@ function isExported(family: Family, name: string, line: string): boolean {
   }
 }
 
+/**
+ * What the JS/TS query does not capture, read from the regex extractor and unioned into a
+ * parsed file's symbols: a `namespace` / `declare module` and the declarations exported
+ * inside it (an indented `export`, never under `program`), an abstract method SIGNATURE
+ * (no body), and an `export var`.
+ */
+function queryBlindSpot(symbol: CodeSymbol, lineText: string): boolean {
+  if (symbol.kind === "module") return true;
+  if (symbol.kind === "method") return /\babstract\b/.test(lineText);
+  return /^\s+export\b/.test(lineText) || /^\s*export\s+(?:declare\s+)?var\b/.test(lineText);
+}
+
 /** The wasm locations: an explicit directory, else this package's installed deps. */
 function wasmLocator(wasmDir?: string): { runtime: string; grammar: (file: string) => string } | null {
   if (wasmDir) return { runtime: path.join(wasmDir, TREE_SITTER_RUNTIME_WASM), grammar: (f) => path.join(wasmDir, f) };
@@ -236,6 +248,12 @@ export function treeSitterSymbolExtractor(opts: TreeSitterExtractorOptions = {})
           if (prior && (KIND_PRIORITY[kind as SymbolKind] ?? 2) <= (KIND_PRIORITY[prior.kind] ?? 2)) continue;
           const lineText = lines[line - 1] ?? "";
           byNode.set(key, { name, kind: kind as SymbolKind, line, exported: isExported(grammar.family, name, lineText) });
+        }
+        if (grammar.family === "js") {
+          for (const symbol of extractSymbols(relPath, content)) {
+            const key = `${symbol.line}:${symbol.name}`;
+            if (!byNode.has(key) && queryBlindSpot(symbol, lines[symbol.line - 1] ?? "")) byNode.set(key, symbol);
+          }
         }
         return [...byNode.values()].sort((a, b) => a.line - b.line).slice(0, MAX_SYMBOLS_PER_FILE);
       } catch {

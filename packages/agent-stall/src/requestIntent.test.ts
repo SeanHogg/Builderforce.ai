@@ -85,6 +85,20 @@ describe('asksForChange', () => {
     ]) expect(asksForChange(t)).toBe(false);
   });
 
+  it('reads "complete / finish the implementation" as a work order (chat #5739)', () => {
+    for (const t of ['complete the implementation detail', 'complete the implementation', 'Finish the migration', 'finalize the header change']) {
+      expect(asksForChange(t)).toBe(true);
+    }
+    expect(asksForChange('did you complete the original request?')).toBe(false);
+    expect(asksForChange('Review the PRD and finish the migration')).toBe(true);
+  });
+
+  it('never reads the adjective "complete" as a work order', () => {
+    for (const t of ['Give me a complete list of the API routes', 'List the endpoints, complete with paths', 'a complete overview of the run store']) {
+      expect(asksForChange(t)).toBe(false);
+    }
+  });
+
   it('is empty-safe', () => {
     expect(asksForChange('')).toBe(false);
     expect(asksForChange(null)).toBe(false);

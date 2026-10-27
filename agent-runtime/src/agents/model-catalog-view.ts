@@ -17,7 +17,7 @@
  *                  other zero is an UNKNOWN price — never evidence of cheapness.
  *   • residency  — `local` for a model served by the user's own machine: a local
  *                  inference api (ollama / llama.cpp / transformers), a loopback
- *                  `baseUrl` (`isLoopbackHost`, vLLM / LM Studio / FreeToken / Synapse on
+ *                  `baseUrl` (`isLoopbackUrl`, vLLM / LM Studio / FreeToken / Synapse on
  *                  127.0.0.1), or a provider that only ever runs locally — the shared
  *                  on-device registry (`@builderforce/local-inference`), the BYO table's
  *                  `local_runtime` providers, and the engines only this host drives.
@@ -39,7 +39,7 @@ import {
 } from "@builderforce/model-catalog";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import type { ModelApi } from "../config/types.models.js";
-import { isLoopbackHost } from "../gateway/net.js";
+import { isLoopbackUrl } from "../gateway/net.js";
 import { logDebug } from "../logger.js";
 import { resolveBuilderForceAgentsAgentDir } from "./agent-paths.js";
 import { discoverAuthStorage, discoverModels } from "./model-discovery.js";
@@ -104,17 +104,6 @@ export function isExplicitlyFree(provider: string, id: string): boolean {
 
 const isZeroCost = (cost: PerMillionCost | undefined): boolean =>
   cost !== undefined && cost.input === 0 && cost.output === 0;
-
-function isLoopbackUrl(baseUrl: string | undefined): boolean {
-  if (!baseUrl) {
-    return false;
-  }
-  try {
-    return isLoopbackHost(new URL(baseUrl).hostname);
-  } catch {
-    return false;
-  }
-}
 
 /** Does this provider/row execute on the user's own machine? Pure. */
 export function isLocalModel(provider: string, entry?: Pick<OnPremCatalogEntry, "api" | "baseUrl">): boolean {

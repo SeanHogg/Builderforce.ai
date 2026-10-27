@@ -20,7 +20,7 @@
  * `createLocalFirstStream` (its public name is kept: every host lends it by that name).
  */
 
-import { defaultEstimateTokens, packHandoff, type HandoffMessage, type HandoffPack } from '@seanhogg/builderforce-memory/handoff';
+import { defaultEstimateTokens, handoffBudget, packHandoff, type HandoffMessage, type HandoffPack } from '@seanhogg/builderforce-memory/handoff';
 import { formatEvermindMemoryBlock, type EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import { isCostLeverOn } from '@builderforce/cost-levers';
 import { priceTierBoundary } from '@builderforce/model-catalog';
@@ -28,6 +28,7 @@ import { handoffReserveTokens, handoffTokenBudget, toolSchemaTokens as schemaTok
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { summarizeMiddle, type SummaryStreamFn } from '../transcriptSummarizer';
 import type { LocalAttemptFit } from '../localFirstTransport';
+import { packMemoOf, reusePack, type PackMemo } from './packMemo';
 
 /** Ceiling on each of the summarize / recall calls — a hand-off never waits longer. */
 export const DEFAULT_HANDOFF_TIMEOUT_MS = 20_000;
@@ -93,6 +94,20 @@ function packTargetTokens(to: string, contextTokens: number, reserve: number): n
   return budget === undefined ? contextTokens : Math.min(contextTokens, budget + reserve);
 }
 
+/**
+ * The token budget {@link packForModel} packs `messages` into for these inputs — the
+ * packer's own `handoffBudget` over the same target, reply reserve and tool schemas — so
+ * a caller can check a memoised pack still fits without re-packing (`packMemo.ts`).
+ */
+export function packBudgetTokens(input: Pick<PackForModelInput, 'to' | 'contextTokens' | 'tools' | 'maxTokens'>): number {
+  const reserve = handoffReserveTokens(input.maxTokens);
+  return handoffBudget({
+    targetContextTokens: packTargetTokens(input.to, input.contextTokens, reserve),
+    reserveOutputTokens: reserve,
+    toolsTokens: toolSchemaTokens(input.tools),
+  });
+}
+
 /** A `recall` callback for the packer: the run's recall rendered as the memory block. */
 function recallBlock(recall: WindowFitRecall): (query: string, budgetChars: number) => Promise<string> {
   return async (query, budgetChars) => {
@@ -137,6 +152,9 @@ export async function packForModel(input: PackForModelInput): Promise<PackForMod
   return { messages: pack.messages as ChatCompletionMessage[], pack };
 }
 
+/** Conversations whose last pack {@link createHandoffFit} remembers at once. */
+export const HANDOFF_FIT_MEMOS = 16;
+
 /** What a host may lend {@link createHandoffFit}. */
 export interface HandoffFitOptions {
   summarizer?: WindowFitSummarizer;
@@ -147,19 +165,39 @@ export interface HandoffFitOptions {
 
 /**
  * The per-attempt `fit` for `createLocalFirstStream`: pack the call for the local model
- * about to take it. A target whose window is unknown gets the messages untouched.
+ * about to take it. A target whose window is unknown gets the messages untouched. The
+ * last pack per (conversation, model, window) is memoised (`packMemo.ts`) and reused —
+ * the turns since appended — until it overflows, so a local model is not re-packed and
+ * re-summarized on every call of a conversation. Keyed by the CONVERSATION too: the fit
+ * is one per host process, and two chats on one local model must not overwrite each
+ * other's pack. At most {@link HANDOFF_FIT_MEMOS} are kept, least recently used first out.
  */
 export function createHandoffFit(options: HandoffFitOptions = {}): LocalAttemptFit {
+  const packs = new Map<string, PackMemo>();
+  const remember = (key: string, memo: PackMemo): void => {
+    packs.delete(key);
+    packs.set(key, memo);
+    while (packs.size > HANDOFF_FIT_MEMOS) packs.delete(packs.keys().next().value!);
+  };
   return async (messages, target) => {
     if (!target.contextTokens) return messages;
-    const { messages: packed } = await packForModel({
-      messages,
+    const fitInput = {
       to: target.ref,
       contextTokens: target.contextTokens,
       ...(target.tools ? { tools: target.tools } : {}),
       ...(target.maxTokens ? { maxTokens: target.maxTokens } : {}),
-      ...options,
-    });
+    };
+    const key = `${target.conversation ?? '-'}|${target.ref}|${target.contextTokens}`;
+    const memo = packs.get(key);
+    const reused = memo ? reusePack(memo, messages, packBudgetTokens(fitInput)) : null;
+    if (reused) {
+      // Refresh recency only: the memo itself is the pack the reuse extends.
+      remember(key, memo!);
+      return reused;
+    }
+    const { messages: packed, pack } = await packForModel({ messages, ...fitInput, ...options });
+    if (pack.fits) remember(key, packMemoOf(messages, packed));
+    else packs.delete(key);
     return packed;
   };
 }

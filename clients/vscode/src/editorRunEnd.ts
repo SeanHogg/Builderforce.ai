@@ -77,8 +77,6 @@ export async function recordEditorRunEnd(
             return result.text;
           },
           remember: async (key, content) => rememberProjectFact(secrets, projectId, key, content, await chatMeta()),
-          rememberCodemap: async (key, content, meta) =>
-            rememberProjectFact(secrets, projectId, key, content, { ...(await chatMeta()), fileAnchors: meta.fileAnchors }),
         },
     note,
   );

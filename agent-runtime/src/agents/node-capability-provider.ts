@@ -29,19 +29,19 @@ import {
   writeFile as fsWriteFile,
 } from "node:fs/promises";
 import { join, relative, resolve as resolvePath, sep } from "node:path";
-import { isCostLeverOn } from "@builderforce/cost-levers";
-import { applyStringEdit, editFacts, matchGlobInScope, dirMayContainGlobMatch, normalizeScopeDir, isUnderScopeDir } from "@builderforce/agent-tools";
+import { applyStringEdit, editFacts, matchGlobInScope, dirMayContainGlobMatch, normalizeScopeDir, isUnderScopeDir, semanticCapabilitiesOf } from "@builderforce/agent-tools";
 // The ONE workspace-containment resolver, shared with the VS Code local provider.
 // Node-only, so it comes from the `/node-path` export condition (the package root stays
 // node-builtin-free for the Worker).
 import { resolveInsideRoot as resolveInside } from "@builderforce/agent-tools/node-path.js";
 // The ONE definition index (shared with the VS Code workspace) behind `find_symbol` /
-// `file_outline`. Node-only, so it too comes from its own export condition.
-import { sharedSymbolIndex } from "@builderforce/agent-tools/node-symbols.js";
+// `file_outline`, in its one on-prem configuration (tree-sitter, persisted snapshot).
+import { onPremSymbolIndex } from "./on-prem-symbol-index.js";
 import type {
   Capability,
   CapabilityProvider,
   HumanAskResult,
+  LocalResearchCapability,
   RepoDeleteResult,
   RepoEditResult,
   RepoListResult,
@@ -50,10 +50,8 @@ import type {
   RepoSemanticCapability,
   RepoWriteResult,
 } from "@builderforce/agent-tools";
-import {
-  catalogDesktopSemantic,
-  setDesktopClientName,
-} from "@builderforce/agent-tools/node-desktop.js";
+import { onDeviceCostLeverOn } from "../infra/cost-levers.js";
+import { resolveOnPremSemantic } from "./on-prem-semantic.js";
 import { IGNORED_DIRS, runCodebaseSearch } from "../builderforce/shared-tools/node-code-tools.js";
 import { requestHumanInput, type HumanInputRequest, type HumanInputResult } from "../infra/approval-gate.js";
 
@@ -172,13 +170,18 @@ export interface NodeProviderOptions {
    *  answers in the Builderforce portal (or auto-answers in standalone mode). */
   requestHuman?: (req: HumanInputRequest) => Promise<HumanInputResult>;
   /**
-   * Desktop-backed `repo.semantic` (search + repo map). Catalog-time only:
-   * {@link catalogNodeCapabilityProvider} probes Builderforce Desktop and
-   * attaches this when the service answers. The sync builder never always-on
-   * advertises the cap — a run without a live desktop must not see
-   * `semantic_search` / `repo_map`.
+   * `repo.semantic` (repo map, plus search with Desktop). Catalog-time only:
+   * {@link catalogNodeCapabilityProvider} resolves it (`on-prem-semantic.ts`) —
+   * Desktop when the service answers, else the definition index serving `repo_map`.
+   * The sync builder never always-on advertises the cap: omitted, no semantic tool.
    */
   semantic?: RepoSemanticCapability;
+  /**
+   * `local.research` (`local_research`): a model on this machine reads files and answers.
+   * Catalog-time only (`local-research/on-prem-research-model.ts`), set while a local
+   * model answers. Omitted ⇒ the tool is not advertised.
+   */
+  research?: LocalResearchCapability;
 }
 
 /**
@@ -201,18 +204,22 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
       : (p: string) => resolvePath(root, p);
   // Process-wide per root: a provider is built per session, and an index per provider
   // would re-walk the tree every time. Persisted beside the on-prem search index.
-  const symbols = sharedSymbolIndex(root, {
-    skipDirs: LIST_IGNORED_DIRS,
-    cachePath: join(root, ".builderForceAgents", "symbols.json"),
-  });
+  const symbols = onPremSymbolIndex(root);
 
-  const capabilities: ReadonlySet<Capability> = options.semantic
-    ? new Set<Capability>([...NODE_SURFACE_CAPS, "repo.semantic"])
-    : NODE_SURFACE_CAPS;
+  // `repo.compress` (read_compressed) rides the semantic backing only while it has a compressor.
+  const capabilities: ReadonlySet<Capability> =
+    options.semantic || options.research
+      ? new Set<Capability>([
+          ...NODE_SURFACE_CAPS,
+          ...semanticCapabilitiesOf(options.semantic),
+          ...(options.research ? (["local.research"] as const) : []),
+        ])
+      : NODE_SURFACE_CAPS;
 
   return {
     capabilities,
     ...(options.semantic ? { semantic: options.semantic } : {}),
+    ...(options.research ? { research: options.research } : {}),
     symbols,
     human: {
       async ask(question, context): Promise<HumanAskResult> {
@@ -381,18 +388,17 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
 }
 
 /**
- * Catalog-time builder: probes Builderforce Desktop and advertises `repo.semantic`
- * only when the health probe succeeds. The sync {@link buildNodeCapabilityProvider}
- * stays always-off for that cap so callers that skip the catalog probe cannot
- * leak `semantic_search` / `repo_map` into a run with no backing.
+ * Catalog-time builder: resolves `repo.semantic` (`on-prem-semantic.ts`) — Builderforce
+ * Desktop when its health probe succeeds, else the definition index serving `repo_map`.
+ * The sync {@link buildNodeCapabilityProvider} stays always-off for that cap so callers
+ * that skip the catalog resolve cannot leak a semantic tool into a run with no backing.
  */
 export async function catalogNodeCapabilityProvider(
   options: NodeProviderOptions,
 ): Promise<CapabilityProvider> {
-  setDesktopClientName("on-prem");
-  const semantic = options.semantic ?? (await catalogDesktopSemantic(options.workspaceRoot, {
-      // C4 for an on-device host (no tenant: on only when fully rolled out).
-      adaptive: isCostLeverOn(process.env, "c4_adaptive_context", null),
+  const semantic = options.semantic ?? (await resolveOnPremSemantic(options.workspaceRoot, {
+      // C4 for an on-device host (bucketed by the install id).
+      adaptive: onDeviceCostLeverOn("c4_adaptive_context"),
     }));
   return buildNodeCapabilityProvider({ ...options, semantic });
 }

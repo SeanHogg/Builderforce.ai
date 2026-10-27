@@ -48,4 +48,34 @@ describe("runEmbeddedAgent overflow compaction trigger routing", () => {
       }),
     );
   });
+
+  it("hands the attempt's resolved local backings to compaction, so the tool lists match", async () => {
+    const overflowError = new Error("request_too_large: Request size exceeds model context window");
+    const localBackings = {
+      semantic: { repoMap: async () => "map" },
+      research: { complete: async () => "answer", fingerprint: async () => [] },
+    } as never;
+
+    mockedRunEmbeddedAttempt
+      .mockResolvedValueOnce(makeAttemptResult({ promptError: overflowError, localBackings }))
+      .mockResolvedValueOnce(makeAttemptResult({ promptError: null }));
+    mockedCompactDirect.mockResolvedValueOnce({
+      ok: true,
+      compacted: true,
+      result: { summary: "Compacted session", firstKeptEntryId: "entry-5", tokensBefore: 150000 },
+    });
+
+    await runEmbeddedAgent({
+      sessionId: "test-session",
+      sessionKey: "test-key",
+      sessionFile: "/tmp/session.json",
+      workspaceDir: "/tmp/workspace",
+      prompt: "hello",
+      timeoutMs: 30000,
+      runId: "run-1",
+    });
+
+    expect(mockedCompactDirect).toHaveBeenCalledWith(expect.objectContaining({ trigger: "overflow", localBackings }));
+    expect(mockedCompactDirect.mock.calls[0]![0].localBackings).toBe(localBackings);
+  });
 });

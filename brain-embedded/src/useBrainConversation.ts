@@ -34,7 +34,8 @@ import type { BrainToolSpec, ContentPart } from './streamChatCompletion';
 import type { EvermindRunHooks } from './evermindMemory';
 import type { ReasoningIntent } from './effort';
 import type { RunWindowSources } from './windowFit/modelWindow';
-import { prepareImageDataUrl } from './imagePrep';
+import { attachmentLink, prepareAttachment } from './attachmentContent';
+import { attachmentTurn, userTurnContentOf } from './attachmentTranscript';
 import { isConsolidationMarker, scopeToConsolidation } from '@seanhogg/builderforce-memory/working';
 import { contextUsageOf, type ContextUsage } from './contextUsage';
 import { priorResearchDigest } from './priorResearch';
@@ -287,7 +288,7 @@ export function unansweredTurnIndex(messages: readonly BrainMessage[]): number {
 }
 
 export function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation {
-  const { persistence, resolveSystemPrompt, stream } = useBrainConfig();
+  const { persistence, resolveSystemPrompt, stream, imagePrep } = useBrainConfig();
   const {
     chatId,
     modality = 'designer',
@@ -472,7 +473,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       // string): every attachment shows as a markdown link the user can click.
       let displayContent = trimmed;
       if (attachments.length > 0) {
-        const refs = attachments.map((a) => `[Attached: ${a.name}](${persistence.uploadUrl(a.key)})`).join('\n');
+        const refs = attachments.map((a) => attachmentLink(a, persistence.uploadUrl)).join('\n');
         displayContent = `${trimmed}\n\n${refs}`;
       }
       const addressedList = addressedTo == null
@@ -482,24 +483,13 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
           : (addressedTo as DirectedRecipient | DirectedGroup).kind === 'group'
             ? (addressedTo as DirectedGroup).members
             : [addressedTo as DirectedRecipient];
-      const metadata = withDirectedMetadata(addressedList, attachments.length > 0 ? { attachments } : undefined);
-
-      // Model-visible content: inline images as `image_url` vision parts (the
-      // gateway routes these to a vision model), keeping any non-image
-      // attachments as text links. Without an image it stays a plain string.
-      const imageAtts = attachments.filter((a) => a.imageUrl);
-      let modelContent: string | ContentPart[] = displayContent;
-      if (imageAtts.length > 0) {
-        const nonImageRefs = attachments
-          .filter((a) => !a.imageUrl)
-          .map((a) => `[Attached: ${a.name}](${persistence.uploadUrl(a.key)})`)
-          .join('\n');
-        const textPart = [trimmed, nonImageRefs].filter(Boolean).join('\n\n');
-        modelContent = [
-          { type: 'text', text: textPart },
-          ...imageAtts.map((a) => ({ type: 'image_url' as const, image_url: { url: a.imageUrl! } })),
-        ];
-      }
+      // Model-visible content: images as `image_url` vision parts (the gateway routes
+      // these to a vision model), attachments the host can read inlined as text under
+      // the mention budget, anything else a link (`attachmentContent.ts`). Resolved BEFORE
+      // the persist: the row records the text the model read, so the next run's
+      // transcript, a retry and a reload re-send it (`attachmentTranscript.ts`). Never rejects.
+      const turn = await attachmentTurn(trimmed, displayContent, attachments, persistence);
+      const metadata = withDirectedMetadata(addressedList, turn.meta);
 
       try {
         const [userMsg] = await persistence.sendMessages(id, [{ role: 'user', content: displayContent, metadata }]);
@@ -539,7 +529,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
           }
           return true;
         }
-        await launch(id, buildRequest(messages, messages, modelContent, userMsg?.id));
+        await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id));
         return true;
       } catch (e) {
         // Persisting the user turn failed (commonly an expired token) — the turn
@@ -576,7 +566,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError('');
-    void launch(chatId, buildRequest(messages.slice(0, -1), messages, last.content, last.id));
+    void launch(chatId, buildRequest(messages.slice(0, -1), messages, userTurnContentOf(last), last.id));
   }, [chatId, loadingMessages, localSending, messages, buildRequest, launch]);
 
   const retryLastTurn = useCallback((): boolean => {
@@ -589,7 +579,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     autoRepliedChatIdRef.current = chatId;
     setLocalError('');
     clearRunError(chatId);
-    void launch(chatId, buildRequest(messages.slice(0, index), messages, turn.content, turn.id));
+    void launch(chatId, buildRequest(messages.slice(0, index), messages, userTurnContentOf(turn), turn.id));
     return true;
   }, [chatId, messages, buildRequest, launch]);
 
@@ -618,27 +608,16 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   const attach = useCallback(async (file: File) => {
     setUploading(true);
     try {
-      // Always upload the original so it persists + renders in chat history.
-      const result = await persistence.upload(file);
-      const attachment: ChatInputAttachment = { key: result.key, name: result.name, type: result.type };
-      // For raster images, also resolve a model-visible source so the vision
-      // model can actually see it: inline a downscaled data URL when it fits,
-      // else fall back to a short-lived signed URL of the uploaded object.
-      try {
-        const prepared = await prepareImageDataUrl(file);
-        if (prepared?.dataUrl) {
-          attachment.imageUrl = prepared.dataUrl;
-        } else if (prepared?.tooLarge && persistence.signedUploadUrl) {
-          attachment.imageUrl = await persistence.signedUploadUrl(result.key);
-        }
-      } catch { /* non-fatal: fall back to the text-link path */ }
+      // Uploaded (a picture as its prepared copy), with a model-visible source for a
+      // picture: an inline data URL when it fits, else a signed URL (`attachmentContent.ts`).
+      const attachment = await prepareAttachment(file, persistence, imagePrep);
       setPendingAttachments((prev) => [...prev, attachment]);
     } catch (e) {
       setLocalError(e instanceof Error ? e.message : 'Upload failed');
     } finally {
       setUploading(false);
     }
-  }, [persistence]);
+  }, [persistence, imagePrep]);
 
   const removeAttachment = useCallback((key: string) => {
     setPendingAttachments((prev) => prev.filter((a) => a.key !== key));

@@ -143,7 +143,9 @@ describe("commitRunKnowledge", () => {
     await fs.writeFile(path.join(root, "a.ts"), "export const a = 1;\n");
     const complete = vi.fn(async () => JSON.stringify([{ key: "map-token", kind: "decision", content: DECISION }]));
     const remember = vi.fn(async (_key: string, _content: string) => true);
-    await commitRunKnowledge(root, ran([["edit_file", { path: "a.ts" }]]), { complete, remember });
+    // builderforce-memory 2026.10.27: the 3-file code-map floor holds for a run that
+    // changed files too, so the run also reads two files to be worth a map.
+    await commitRunKnowledge(root, ran([["edit_file", { path: "a.ts" }], ["read_file", { path: "b.ts" }], ["read_file", { path: "c.ts" }]]), { complete, remember });
     expect(remember.mock.calls.map((c) => c[0])).toEqual(["codemap:(root)", "learned:map-token"]);
   });
 

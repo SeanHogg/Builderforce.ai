@@ -24,12 +24,20 @@ import {
   type UsageSlice,
 } from '@builderforce/spend-contract';
 import type { CompletionUsage, StreamChatResult } from '../streamChatCompletion';
-import type { BrainStreamFn } from '../runStore/runTypes';
+import type { BrainStreamFn, RunEndOutcome } from '../runStore/runTypes';
 import { isImported, journalWrite } from './journal';
 import { chatRecordById, liveRecords } from './records';
+import { callCostMillicents, isOwnKeySpend } from './callCost';
 
-/** Where a call ran: through the gateway, on this machine, or straight to a provider. */
+/**
+ * Where a call ran — its TRANSPORT: through the gateway, on this machine, or straight to
+ * a provider. Not the run's pipeline route (`full` / `quick`), which is
+ * {@link RunUsageValue.pipelineRoute}.
+ */
 export type UsageRoute = 'gateway' | 'local' | 'byo-direct';
+
+/** The run's pipeline route, as the ledger stores it (`@builderforce/pipeline-route`). */
+export type UsagePipelineRoute = 'full' | 'quick';
 
 /** One model call's usage — the `usage` record's payload, and the sync wire shape. */
 export interface RunUsageValue {
@@ -38,8 +46,17 @@ export interface RunUsageValue {
   /** The run's local key (diagnostics; never resolved off the device). */
   runKey: number;
   model: string;
+  /** The call's transport (see {@link UsageRoute}) — not its pipeline route. */
   route: UsageRoute;
   mode?: 'chat' | 'work';
+  /** What kind of call it was (plan / code / verify / explore / chat / utility). */
+  role?: string;
+  /** The run's pipeline route and the router's score, when the run was routed. */
+  pipelineRoute?: UsagePipelineRoute;
+  routeScore?: number;
+  /** The run (one user submit) the call belongs to — what the route report groups by.
+   *  A chat's runs share its {@link runKey}, so the key alone cannot tell them apart. */
+  runId?: string;
   promptTokens: number;
   completionTokens: number;
   cacheReadTokens: number;
@@ -75,6 +92,10 @@ export interface RecordRunUsageInput {
   route: UsageRoute;
   usage: CompletionUsage | undefined;
   mode?: 'chat' | 'work';
+  role?: string;
+  pipelineRoute?: UsagePipelineRoute;
+  routeScore?: number;
+  runId?: string;
 }
 
 export interface RunUsageLedgerOptions {
@@ -86,9 +107,24 @@ export interface RunUsageLedgerOptions {
   newId?: () => string;
 }
 
+/** How a run ended — what the route report's misroute proxy reads (`runEndOutcome.ts`). */
+export type { RunEndOutcome };
+
+/** One run's end, as the ledger stores it (`run-outcome` record, local only). */
+export interface RunOutcomeValue {
+  /** The run id its usage rows carry ({@link RunUsageValue.runId}). */
+  runId: string;
+  clientChatId: string;
+  outcome: RunEndOutcome;
+  at: string;
+}
+
 export interface RunUsageLedger {
   /** Record one call. A call with no usage, or in a chat this store does not hold, is skipped. */
   record(input: RecordRunUsageInput): Promise<void>;
+  /** Record how a run ended, once, by its run id. Never journaled: it is this device's
+   *  own reading of its runs, not spend. A chat this store does not hold is skipped. */
+  recordOutcome(input: { chatId: number; runId: string; outcome: RunEndOutcome }): Promise<void>;
 }
 
 /** What the chat's paid route charges per token: its latest priced gateway call's model, else the default. */
@@ -109,6 +145,16 @@ async function usageRowsOf(tx: LocalFirstTransaction, deviceId: string, clientCh
     .map((row) => row.payload)
     .filter((row) => row.clientChatId === clientChatId)
     .sort((a, b) => a.at.localeCompare(b.at));
+}
+
+/** The call's role, pipeline route, score and run id — only the fields that are set and valid. */
+function runAttribution(input: Pick<RecordRunUsageInput, 'role' | 'pipelineRoute' | 'routeScore' | 'runId'>): Pick<RunUsageValue, 'role' | 'pipelineRoute' | 'routeScore' | 'runId'> {
+  return {
+    ...(input.role ? { role: input.role } : {}),
+    ...(input.pipelineRoute === 'full' || input.pipelineRoute === 'quick' ? { pipelineRoute: input.pipelineRoute } : {}),
+    ...(typeof input.routeScore === 'number' && Number.isFinite(input.routeScore) ? { routeScore: input.routeScore } : {}),
+    ...(input.runId ? { runId: input.runId } : {}),
+  };
 }
 
 export function createRunUsageLedger(options: RunUsageLedgerOptions): RunUsageLedger {
@@ -132,6 +178,7 @@ export function createRunUsageLedger(options: RunUsageLedgerOptions): RunUsageLe
           model: input.model,
           route: input.route,
           ...(input.mode ? { mode: input.mode } : {}),
+          ...runAttribution(input),
           promptTokens,
           completionTokens,
           cacheReadTokens: Math.min(count(input.usage?.cacheRead), promptTokens),
@@ -163,6 +210,23 @@ export function createRunUsageLedger(options: RunUsageLedgerOptions): RunUsageLe
         }
       });
     },
+
+    async recordOutcome(input) {
+      if (!input.runId) return;
+      await options.store.transact(async (tx) => {
+        const chat = await chatRecordById(tx, options.deviceId, input.chatId);
+        if (!chat) return;
+        const at = now().toISOString();
+        await tx.put(newLocalRecord<RunOutcomeValue>({
+          id: input.runId,
+          entityType: 'run-outcome',
+          payload: { runId: input.runId, clientChatId: chat.id, outcome: input.outcome, at },
+          deviceId: options.deviceId,
+          destination: chat.destination,
+          occurredAt: at,
+        }));
+      });
+    },
   };
 }
 
@@ -180,6 +244,9 @@ export function withRunUsage(
 ): BrainStreamFn {
   return async (opts, handlers) => {
     const result = await stream(opts, handlers);
+    // The call's role and the run's pipeline route ride the request itself (the role on
+    // the body, the route in the metadata the gateway stamps on its own row), so the
+    // device's row says what the platform's says.
     void ledger.record({
       chatId: context.chatId,
       runKey: context.runKey,
@@ -187,19 +254,35 @@ export function withRunUsage(
       route: usageRouteOf(result, opts.model),
       usage: result.usage,
       ...(context.mode ? { mode: context.mode } : {}),
+      ...(opts.role ? { role: opts.role } : {}),
+      ...(opts.metadata?.pipelineRoute ? { pipelineRoute: opts.metadata.pipelineRoute } : {}),
+      ...(opts.metadata?.routeScore !== undefined ? { routeScore: opts.metadata.routeScore } : {}),
+      ...(opts.metadata?.guestTurnId ? { runId: opts.metadata.guestTurnId } : {}),
     }).catch(onError);
     return result;
   };
 }
 
-/** One ledger row as a fold slice. A gateway call is priced from `book` (an estimate). */
+/**
+ * One ledger row as a fold slice, priced by the device's ONE call-cost rule
+ * (`callCost.ts`, keyed by the row's route). A gateway call's cost is platform spend (an
+ * estimate). A BYO call is the person's own money and IS counted — but as "your key":
+ * the fold values `byo` slices at the same list price into `yourKeyUsd`, so the slice's
+ * platform cost stays 0 and the call is never counted twice.
+ */
 function sliceOf(row: RunUsageValue, book: PriceBook): UsageSlice {
   const total = row.promptTokens + row.completionTokens;
   const local = row.savingsSource === 'local_model';
-  const price = local ? undefined : book.priceOf(row.model);
+  const ownKey = isOwnKeySpend(row.route);
+  const costMc = local || ownKey ? 0 : callCostMillicents(row.model, {
+    prompt: row.promptTokens,
+    completion: row.completionTokens,
+    cacheRead: row.cacheReadTokens,
+    cacheCreation: row.cacheCreationTokens,
+  }, book, row.route);
   return {
     model: row.model,
-    byo: row.route === 'byo-direct',
+    byo: ownKey,
     savingsSource: local ? 'local_model' : null,
     savingsEstimated: local,
     prompt: row.promptTokens,
@@ -207,12 +290,7 @@ function sliceOf(row: RunUsageValue, book: PriceBook): UsageSlice {
     cacheRead: row.cacheReadTokens,
     cacheCreation: row.cacheCreationTokens,
     total,
-    costMc: row.route === 'gateway' && price
-      ? computeCostMillicents({ prompt: price.input, completion: price.output }, {
-          promptTokens: row.promptTokens, completionTokens: row.completionTokens, totalTokens: total,
-          cacheReadTokens: row.cacheReadTokens, cacheCreationTokens: row.cacheCreationTokens,
-        })
-      : 0,
+    costMc,
     calls: 1,
     cacheCalls: row.cacheReadTokens > 0 ? 1 : 0,
     savedPrompt: row.savedPrompt ?? 0,

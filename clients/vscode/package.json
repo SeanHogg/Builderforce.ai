@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.10.101",
+  "version": "2026.10.102",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -134,6 +134,11 @@
       }
     ],
     "commands": [
+      {
+        "command": "builderforce.pipelineRouteReport",
+        "title": "%command.pipelineRouteReport%",
+        "category": "BuilderForce"
+      },
       {
         "command": "builderforce.openCreateCanvas",
         "title": "%command.openCreateCanvas%",
@@ -851,6 +856,65 @@
           "default": "",
           "description": "%config.defaultModel.desc%"
         },
+        "builderforce.models.plan": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "%config.models.plan.desc%"
+        },
+        "builderforce.models.code": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "%config.models.code.desc%"
+        },
+        "builderforce.models.review": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "%config.models.review.desc%"
+        },
+        "builderforce.models.subagent": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "%config.models.subagent.desc%"
+        },
+        "builderforce.pipeline.routing": {
+          "type": "string",
+          "enum": ["auto", "always"],
+          "enumDescriptions": ["%config.pipeline.routing.auto%", "%config.pipeline.routing.always%"],
+          "default": "auto",
+          "markdownDescription": "%config.pipeline.routing.desc%"
+        },
+        "builderforce.pipeline.routeThreshold": {
+          "type": "number",
+          "default": 0.5,
+          "minimum": 0,
+          "maximum": 1,
+          "markdownDescription": "%config.pipeline.routeThreshold.desc%"
+        },
+        "builderforce.pipeline.quickModel": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "%config.pipeline.quickModel.desc%"
+        },
+        "builderforce.maxRunBudgetUsd": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "markdownDescription": "%config.maxRunBudgetUsd.desc%"
+        },
+        "builderforce.images.maxEdge": {
+          "type": "number",
+          "default": 1568,
+          "minimum": 64,
+          "maximum": 8192,
+          "markdownDescription": "%config.images.maxEdge.desc%"
+        },
+        "builderforce.images.jpegQuality": {
+          "type": "number",
+          "default": 0.85,
+          "minimum": 0.3,
+          "maximum": 1,
+          "markdownDescription": "%config.images.jpegQuality.desc%"
+        },
         "builderforce.localModels.enabled": {
           "type": "boolean",
           "default": true,
@@ -875,6 +939,20 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "%config.localModels.localFirst.desc%"
+        },
+        "builderforce.localModels.skipConfidence": {
+          "type": "number",
+          "default": 0.8,
+          "minimum": 0,
+          "maximum": 1,
+          "markdownDescription": "%config.localModels.skipConfidence.desc%"
+        },
+        "builderforce.localModels.explore": {
+          "type": "number",
+          "default": 0.1,
+          "minimum": 0,
+          "maximum": 1,
+          "markdownDescription": "%config.localModels.explore.desc%"
         },
         "builderforce.inferenceMode": {
           "scope": "application",
@@ -1030,8 +1108,8 @@
     "@seanhogg/bfi-web": "link:../../packages/bfi-web",
     "@seanhogg/builderforce-brain-embedded": "link:../../brain-embedded",
     "@seanhogg/builderforce-brain-ui": "link:../../packages/brain-ui",
-    "@seanhogg/builderforce-memory": "^2026.10.26",
-    "@seanhogg/builderforce-memory-engine": "^2026.10.26",
+    "@seanhogg/builderforce-memory": "^2026.10.28",
+    "@seanhogg/builderforce-memory-engine": "^2026.10.28",
     "@seanhogg/builderforce-memory-mcp": "^2026.10.23",
     "@seanhogg/builderforce-studio": "link:../../studio",
     "@seanhogg/builderforce-voice": "link:../../voice",

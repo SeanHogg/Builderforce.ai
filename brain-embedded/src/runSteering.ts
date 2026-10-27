@@ -26,6 +26,8 @@ import type { ChatInputAttachment } from './types';
 export interface RunSteerMessage {
   text: string;
   attachments?: ChatInputAttachment[];
+  /** The person typed it — not a child's report or an owner's direction to a sub-agent. */
+  fromPerson?: boolean;
 }
 
 const inboxes = new Map<number, RunSteerMessage[]>();
@@ -43,11 +45,11 @@ const interruptListeners = new Map<number, Set<() => void>>();
  * aborts the run's interruptible step now (a foreground command) and skips the rest of
  * its turn's calls. Attachments ride along so mid-run messages keep their images.
  */
-export function queueRunSteering(runKey: number, text: string, opts?: { interrupt?: boolean; attachments?: ChatInputAttachment[] }): void {
+export function queueRunSteering(runKey: number, text: string, opts?: { interrupt?: boolean; attachments?: ChatInputAttachment[]; fromPerson?: boolean }): void {
   const trimmed = text.trim();
   if (!trimmed) return;
   const queue = inboxes.get(runKey) ?? [];
-  queue.push({ text: trimmed, attachments: opts?.attachments });
+  queue.push({ text: trimmed, attachments: opts?.attachments, ...(opts?.fromPerson ? { fromPerson: true } : {}) });
   inboxes.set(runKey, queue);
   if (!opts?.interrupt) return;
   interrupting.add(runKey);

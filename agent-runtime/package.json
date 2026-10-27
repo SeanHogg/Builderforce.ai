@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-agents",
-  "version": "2026.10.19",
+  "version": "2026.10.20",
   "description": "BuilderForce Agents — distributed AI coding agent runtime with secure orchestration",
   "keywords": [
     "ai",
@@ -62,7 +62,7 @@
     "android:run": "cd ../apps/android && ./gradlew :app:installDebug && adb shell am start -n ai.builderforce.android/.MainActivity",
     "android:test": "cd ../apps/android && ./gradlew :app:testDebugUnitTest",
     "bootstrap": "pnpm install --ignore-scripts && pnpm install",
-    "build": "pnpm canvas:a2ui:bundle && tsdown && pnpm build:plugin-sdk:dts && node --import tsx scripts/write-plugin-sdk-entry-dts.ts && node --import tsx scripts/canvas-a2ui-copy.ts && node --import tsx scripts/copy-hook-metadata.ts && node --import tsx scripts/copy-export-html-templates.ts && node --import tsx scripts/write-build-info.ts && node --import tsx scripts/write-cli-compat.ts",
+    "build": "pnpm canvas:a2ui:bundle && tsdown && pnpm build:plugin-sdk:dts && node --import tsx scripts/write-plugin-sdk-entry-dts.ts && node --import tsx scripts/canvas-a2ui-copy.ts && node --import tsx scripts/copy-hook-metadata.ts && node --import tsx scripts/copy-export-html-templates.ts && node --import tsx scripts/copy-tree-sitter-wasm.ts && node --import tsx scripts/write-build-info.ts && node --import tsx scripts/write-cli-compat.ts",
     "build:clean": "node scripts/clean-dist.mjs && pnpm build",
     "build:plugin-sdk:dts": "tsc -p tsconfig.plugin-sdk.dts.json",
     "build:windows": "set \"PATH=C:\\Program Files\\Git\\bin;%PATH%\" && pnpm build",
@@ -148,7 +148,7 @@
     "@lydell/node-pty": "1.2.0-beta.3",
     "@mariozechner/pi-tui": "0.54.0",
     "@mozilla/readability": "^0.6.0",
-    "@seanhogg/builderforce-memory-engine": "^2026.10.23",
+    "@seanhogg/builderforce-memory-engine": "^2026.10.28",
     "@sinclair/typebox": "0.34.48",
     "@slack/bolt": "^4.6.0",
     "@slack/web-api": "^7.14.1",
@@ -217,7 +217,7 @@
     "node-llama-cpp": "3.15.1"
   },
   "optionalDependencies": {
-    "@seanhogg/builderforce-memory": "^2026.10.26",
+    "@seanhogg/builderforce-memory": "^2026.10.28",
     "@seanhogg/builderforce-memory-mcp": "^2026.10.23"
   },
   "engines": {

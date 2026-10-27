@@ -103,7 +103,7 @@ export function beforeDispatchHook(run: RunLoopContext): NonNullable<LoopHooks<C
         // The research the coders inherit: what this planning run read and searched.
         knowledge: run.knowledge.brief(),
         // …and the goal, in the user's words: a child sees none of this conversation.
-        request: run.userRequest,
+        request: run.goal,
         ...(req.projectId != null ? { projectId: req.projectId } : {}),
         afterCreate: (toolName, out) => autoLinkCreatedItem(run.serverChatId, c, runTool!, toolName, out),
         step: (label, args, out, durationMs) => pushTrace(c, {
@@ -186,12 +186,14 @@ export function beforeDispatchHook(run: RunLoopContext): NonNullable<LoopHooks<C
             resultBytes: replayed.bytes,
             truncated: replayed.truncated,
           });
+          run.cacheStreak.served(iter);
           return { result: { data: replayed.content } };
         }
         const stub = {
           note: `Duplicate ${call.name} call — identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`,
         };
         pushTrace(c, { ts: nowIso(), category: 'tool', label: call.name, args, result: stub });
+        run.cacheStreak.served(iter);
         return { result: { data: stub } };
       }
       // A `read_file` window fully inside an earlier successful window of the same
@@ -220,10 +222,12 @@ export function beforeDispatchHook(run: RunLoopContext): NonNullable<LoopHooks<C
             resultBytes: replayed.bytes,
             truncated: replayed.truncated,
           });
+          run.cacheStreak.served(iter);
           return { result: { data: replayed.content } };
         }
         const stub = { note };
         pushTrace(c, { ts: nowIso(), category: 'tool', label: call.name, args, result: { covered: true, note } });
+        run.cacheStreak.served(iter);
         return { result: { data: stub } };
       }
       // A narrower search whose answer is already held: the same query run earlier
@@ -253,6 +257,7 @@ export function beforeDispatchHook(run: RunLoopContext): NonNullable<LoopHooks<C
         const note = repeatedWriteNote(call.name, String((args as { path?: unknown }).path ?? '').trim());
         pushTrace(c, { ts: nowIso(), category: 'message', label: 'tools.repeat_write_guard', args: { step: iter, tool: call.name }, result: note });
         pushTrace(c, { ts: nowIso(), category: 'tool', label: call.name, args, result: { skipped: true, note } });
+        run.cacheStreak.served(iter);
         return { result: { data: { ok: true, applied: false, unchanged: true, note } } };
       }
       readCoverage.invalidate(call.name, args);

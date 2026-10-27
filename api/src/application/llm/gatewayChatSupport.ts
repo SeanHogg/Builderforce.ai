@@ -89,13 +89,20 @@ export async function expandGatewayModelRefs(
     // The request, never a loop's per-turn volatile tail (`<run-state>`) that rides after it.
     const latestUserIdx = latestUserIndex(messages);
     const latestUser = latestUserIdx >= 0 ? messages[latestUserIdx] : undefined;
-    const recallQuery = typeof latestUser?.content === 'string' ? latestUser.content : undefined;
+    const recallQuery = messageText(latestUser?.content);
     // The recall is per REQUEST (it follows the latest user message), so it never goes in
     // the system prompt: there it changed the very first bytes of the prompt whenever the
     // request did, and no turn could read the persona + history from the prefix cache.
     // It rides the latest user message instead — the same per-run placement the Brain
     // uses (`brain-embedded/src/runStore/turnContext.ts`) — so every turn of a tool loop
-    // on that message sends identical bytes up to and including it.
+    // on that message sends identical bytes up to and including it. That holds because
+    // the recall is MEMOISED per (agent, normalised query, knowledge version token)
+    // (`recallAgentKnowledge`): this expansion re-runs on every tool-loop turn, and a
+    // recomputed recall that drifted (a chunk expired, the chunk cache refreshed) would
+    // rewrite this message every turn. Cost, stated plainly: the cached prefix breaks at
+    // this message ONCE PER USER TURN — a new user message is a new query, a new recall,
+    // and the message carrying it is new anyway. An ingest bumps the token (a fresh
+    // recall, once); nothing else moves it.
     const wf = await resolveWorkforceModel(env, tenantId, body.model, recallQuery, { recall: 'separate' });
     body.model = wf?.baseModel ?? undefined;
     // Before the persona: prepending a system message shifts every index after it.
@@ -110,6 +117,17 @@ function latestUserIndex(messages: readonly ChatMessage[]): number {
     if (messages[i]!.role === 'user' && !isVolatileContent(messages[i]!.content)) return i;
   }
   return -1;
+}
+
+/** A message's text: the string, or a vision message's text parts joined. Undefined when none. */
+function messageText(content: unknown): string | undefined {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return undefined;
+  const text = content
+    .map((part) => (part && typeof part === 'object' && (part as { type?: unknown }).type === 'text' ? (part as { text?: unknown }).text : undefined))
+    .filter((t): t is string => typeof t === 'string' && t.length > 0)
+    .join('\n');
+  return text || undefined;
 }
 
 /** A copy of `message` with `block` appended — a trailing text part for array content. */

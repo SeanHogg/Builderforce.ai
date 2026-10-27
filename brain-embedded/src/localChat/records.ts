@@ -34,7 +34,7 @@ export function isOwnRecord(row: LocalRecord, deviceId: string): boolean {
 }
 
 /** This device's live rows of one type. */
-export async function liveRecords<T>(tx: LocalFirstTransaction, type: 'chat' | 'message' | 'usage', deviceId: string): Promise<LocalRecord<T>[]> {
+export async function liveRecords<T>(tx: LocalFirstTransaction, type: 'chat' | 'message' | 'usage' | 'run-outcome', deviceId: string): Promise<LocalRecord<T>[]> {
   const rows = await tx.list<T>(type);
   return rows.filter((row) => !row.deletedAt && isOwnRecord(row, deviceId));
 }

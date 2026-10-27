@@ -67,6 +67,37 @@ describe("treeSitterSymbolExtractor", () => {
     expect(await ex.extract("src/billing.ts", TS_SOURCE)).toEqual(extractSymbols("src/billing.ts", TS_SOURCE));
   });
 
+  it("unions in what the TS query cannot see: namespaces / declare module, abstract signatures, export var", async () => {
+    const source = [
+      "export namespace Billing {",
+      "  export function charge() {}",
+      "}",
+      "declare module \"pricing\" {",
+      "  export interface Plan { id: string }",
+      "}",
+      "export abstract class Gateway {",
+      "  abstract connect(url: string): Promise<void>;",
+      "  protected abstract close(): void;",
+      "}",
+      "export var legacyFlag = true;",
+      "",
+    ].join("\n");
+    const symbols = await treeSitterSymbolExtractor().extract("src/gateway.ts", source);
+    const names = symbols.map((s) => `${s.line}:${s.kind}:${s.name}:${s.exported ? "x" : "-"}`);
+    expect(names).toEqual(expect.arrayContaining([
+      "1:module:Billing:x",
+      "2:function:charge:x",
+      "4:module:pricing:-",
+      "5:interface:Plan:x",
+      "7:class:Gateway:x",
+      "8:method:connect:-",
+      "9:method:close:-",
+      "11:const:legacyFlag:x",
+    ]));
+    // Each definition once: the union never duplicates what the parse tree already found.
+    expect(new Set(names.map((n) => n.split(":").slice(0, 1).concat(n.split(":")[2]!).join(":"))).size).toBe(names.length);
+  });
+
   it("names the grammar wasm files a bundler must ship", () => {
     expect(TREE_SITTER_GRAMMAR_WASMS).toEqual(expect.arrayContaining(["tree-sitter-typescript.wasm", "tree-sitter-python.wasm", "tree-sitter-c_sharp.wasm"]));
   });

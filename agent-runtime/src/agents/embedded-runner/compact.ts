@@ -44,10 +44,7 @@ import {
   resolveCompactionReserveTokensFloor,
 } from "../agent-settings.js";
 import { createBuilderForceAgentsCodingTools } from "../coding-tools.js";
-import {
-  catalogDesktopSemantic,
-  setDesktopClientName,
-} from "@builderforce/agent-tools/node-desktop.js";
+import { resolveOnPremLocalBackings, type OnPremLocalBackings } from "../on-prem-local-backings.js";
 import { resolveSandboxContext } from "../sandbox.js";
 import { repairSessionFileIfNeeded } from "../session-file-repair.js";
 import { guardSessionManager } from "../session-tool-result-guard-wrapper.js";
@@ -128,6 +125,10 @@ export type CompactEmbeddedSessionParams = {
   enqueue?: typeof enqueueCommand;
   extraSystemPrompt?: string;
   ownerNumbers?: string[];
+  /** The calling attempt's resolved local backings (overflow compaction). Reused as-is so
+   *  the compaction session's tool list matches the attempt's; resolved here only for a
+   *  compaction with no attempt behind it (manual `/compact`). */
+  localBackings?: OnPremLocalBackings;
 };
 
 type CompactionMessageMetrics = {
@@ -370,8 +371,12 @@ export async function compactEmbeddedSessionDirect(
       warn: makeBootstrapWarn({ sessionLabel, warn: (message) => log.warn(message) }),
     });
     const runAbortController = new AbortController();
-    setDesktopClientName("on-prem");
-    const semantic = await catalogDesktopSemantic(effectiveWorkspace);
+    const { semantic, research } =
+      params.localBackings ??
+      (await resolveOnPremLocalBackings({
+        workspaceRoot: effectiveWorkspace,
+        config: params.config,
+      }));
     const toolsRaw = createBuilderForceAgentsCodingTools({
       exec: {
         elevated: params.bashElevated,
@@ -394,6 +399,7 @@ export async function compactEmbeddedSessionDirect(
       modelContextWindowTokens: model.contextWindow,
       modelAuthMode: await resolveModelAuthMode(model.provider, params.config),
       semantic,
+      research,
     });
     const tools = sanitizeToolsForGoogle({ tools: toolsRaw, provider });
     logToolSchemasForGoogle({ tools, provider });

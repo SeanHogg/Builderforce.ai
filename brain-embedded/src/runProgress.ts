@@ -29,12 +29,13 @@
  * so every copy surface computes the identical block.
  */
 
-import { asksForChange } from '@builderforce/agent-stall';
+import { asksForChange, isContinuationDirective } from '@builderforce/agent-stall';
 import { isCodeChangeTool } from './localWorkspaceTools';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { visitTarget } from './runActivity';
 import { BACK_TO_BACK_AT, callFingerprint } from '@builderforce/run-guards';
 import type { BrainMessage } from './types';
+import { splitRuns } from './runSlices';
 
 /** One target the run went back to more than once. */
 export interface RepeatedTarget {
@@ -108,13 +109,53 @@ function callSignature(ev: BrainTraceEvent): string {
  * was working on.
  */
 function targetSignature(ev: BrainTraceEvent): string | null {
-  const target = visitTarget(ev.args);
+  const target = subjectOf(ev);
   return target ? `${ev.label}:${target}` : null;
+}
+
+/** What a call was aimed at, one spelling per file: `./src/a.ts`, `src\a.ts` and
+ *  `src/a.ts` are the same target, so an edit of one resets reads of the others. */
+function subjectOf(ev: BrainTraceEvent): string | undefined {
+  return visitTarget(ev.args)?.replace(/\\/g, '/').replace(/^\.\//, '');
+}
+
+/**
+ * A call the run's READ CACHE answered instead of the host: an exact-repeat stub, a
+ * covered window, a replay, a derived search, a repeated write not re-applied (see
+ * `runStore/beforeDispatch.ts`). The model asked again; nothing ran. Counted on its own so
+ * "EXACT duplicate" never reads as work the tools repeated, and never as a mutation.
+ */
+export function isCacheAnswered(ev: BrainTraceEvent): boolean {
+  const r = ev.result;
+  if (!r || typeof r !== 'object') return false;
+  const o = r as Record<string, unknown>;
+  // `skipped` alone is also a steer's skipped remainder (`steerInterrupt.ts`) — the
+  // repeated-write guard's answer is the one that carries its `note`.
+  return o.covered === true || o.replayed === true || o.derived === true
+    || (o.skipped === true && typeof o.note === 'string')
+    || (typeof o.note === 'string' && /^Duplicate \S+ call/.test(o.note));
+}
+
+/** One run of a multi-run chat, in the per-run line (`runProgressReport.ts`). */
+export interface RunSummary {
+  ask: string;
+  turns: number;
+  calls: number;
+  cacheAnswered: number;
+  mutationsSucceeded: number;
+  spinning: boolean;
 }
 
 export interface RunProgress {
   /** Tool calls whose label AND arguments exactly repeated an earlier call. */
   duplicateCalls: number;
+  /** Of every call, those the read cache answered without running (see {@link isCacheAnswered}). */
+  cacheAnswered: number;
+  /**
+   * Every run in the chat, oldest first — empty for a single-run trace. The figures above
+   * are the LATEST run's: a chat's trace spans every run in it (see `runSlices.ts`).
+   */
+  runs: RunSummary[];
   /**
    * The longest run of CONSECUTIVE identical calls, or null when no call was ever
    * repeated back to back. See {@link RepeatStreak}.
@@ -180,13 +221,42 @@ export interface RunProgress {
  */
 const IDLE_GAP_MS = 120_000;
 
-/** Compute the progress/repetition picture for a recorded run. Pure. */
+/**
+ * Compute the progress/repetition picture for a recorded trace. Pure. A chat's trace is
+ * cut into its runs; the picture is the LATEST run's, and `runs` names every one so the
+ * run that actually spun is visible.
+ */
 export function computeRunProgress(events: BrainTraceEvent[], messages: BrainMessage[] = []): RunProgress {
+  const slices = splitRuns(events, messages);
+  if (slices.length === 1) return { ...progressOf(events, hasEditIntent(messages)), runs: [] };
+  const intentOf = (ask: string, own: BrainMessage[]) =>
+    hasEditIntent(own) || (isContinuationDirective(ask) && hasEditIntent(messages));
+  const each = slices.map((s) => ({ s, p: progressOf(s.events, intentOf(s.ask, s.messages)) }));
+  const runs = each.map(({ s, p }) => ({
+    ask: s.ask,
+    turns: s.events.filter((e) => e.label === 'llm.complete').length,
+    calls: s.events.filter((e) => e.category === 'tool').length,
+    cacheAnswered: p.cacheAnswered,
+    mutationsSucceeded: p.mutationsSucceeded,
+    spinning: p.spinning,
+  }));
+  return { ...each[each.length - 1]!.p, runs };
+}
+
+function progressOf(events: BrainTraceEvent[], editIntent: boolean): Omit<RunProgress, 'runs'> {
   const tools = events.filter((e) => e.category === 'tool');
 
-  const seenCalls = new Set<string>();
+  const seenCalls = new Map<string, string | undefined>();
   let duplicateCalls = 0;
+  let cacheAnswered = 0;
+  // Visits per target, and visits since that target was last CHANGED: a read after the
+  // run's own edit of the file is new ground (the bytes are new), not a revisit.
   const targetCounts = new Map<string, number>();
+  const sinceEdit = new Map<string, number>();
+  // Revisits per target, counted since its last change — what `repeatedTargets` names, so
+  // the list and the ratio beside it are the same measurement.
+  const revisitsOf = new Map<string, number>();
+  let revisits = 0;
   let targetedCalls = 0;
   let mutationsAttempted = 0;
   let mutationsSucceeded = 0;
@@ -199,8 +269,11 @@ export function computeRunProgress(events: BrainTraceEvent[], messages: BrainMes
 
   for (const ev of tools) {
     const sig = callSignature(ev);
+    const subject = subjectOf(ev);
     if (seenCalls.has(sig)) duplicateCalls += 1;
-    else seenCalls.add(sig);
+    else seenCalls.set(sig, subject);
+    const cached = isCacheAnswered(ev);
+    if (cached) cacheAnswered += 1;
 
     const failed = Boolean(ev.isError) || isFailedToolResult(ev.result);
     if (current && current.sig === sig) {
@@ -216,22 +289,34 @@ export function computeRunProgress(events: BrainTraceEvent[], messages: BrainMes
     if (target) {
       targetedCalls += 1;
       targetCounts.set(target, (targetCounts.get(target) ?? 0) + 1);
+      const seen = sinceEdit.get(target) ?? 0;
+      if (seen > 0) {
+        revisits += 1;
+        revisitsOf.set(target, (revisitsOf.get(target) ?? 0) + 1);
+      }
+      sinceEdit.set(target, seen + 1);
     }
 
     if (isMutationTool(ev.label)) {
       mutationsAttempted += 1;
-      if (!ev.isError && !isFailedToolResult(ev.result)) mutationsSucceeded += 1;
+      if (!cached && !ev.isError && !isFailedToolResult(ev.result)) {
+        mutationsSucceeded += 1;
+        // The target changed: its earlier reads and calls describe bytes that are gone.
+        if (subject) {
+          for (const key of sinceEdit.keys()) if (key.endsWith(`:${subject}`)) sinceEdit.set(key, 0);
+          for (const [s, t] of seenCalls) if (t === subject) seenCalls.delete(s);
+        }
+      }
     }
   }
 
-  const repeatedTargets = [...targetCounts.entries()]
-    .filter(([, count]) => count > 1)
-    .map(([label, count]) => ({ label, count }))
+  const repeatedTargets = [...revisitsOf.entries()]
+    .map(([label, again]) => ({ label, count: again + 1 }))
     .sort((a, b) => b.count - a.count);
 
   const distinctTargets = targetCounts.size;
-  // Every targeted call beyond the first for a given target is a revisit.
-  const revisits = repeatedTargets.reduce((sum, t) => sum + (t.count - 1), 0);
+  // Every targeted call beyond the first for a given target is a revisit — counted since
+  // the target last changed, so re-reading a file the run just edited is not one.
   const revisitRatio = targetedCalls > 0 ? revisits / targetedCalls : 0;
 
   // Timing. `durationMs` is recorded per step; the wall clock comes from the
@@ -259,7 +344,6 @@ export function computeRunProgress(events: BrainTraceEvent[], messages: BrainMes
   }
   const wallClockMs = timed.length > 1 ? timed[timed.length - 1]!.t - timed[0]!.t : 0;
 
-  const editIntent = hasEditIntent(messages);
   const didWork = tools.length > 0;
   const noEffect = editIntent && didWork && mutationsSucceeded === 0;
   // Enough calls to have a shape, and most of them retreading. 6 is the smallest
@@ -271,6 +355,7 @@ export function computeRunProgress(events: BrainTraceEvent[], messages: BrainMes
 
   return {
     duplicateCalls,
+    cacheAnswered,
     longestStreak,
     streaks,
     stuckOnCall,
@@ -289,110 +374,4 @@ export function computeRunProgress(events: BrainTraceEvent[], messages: BrainMes
     toolMs,
     slowestStep,
   };
-}
-
-/** Compact duration for a report line (0.4s / 12s / 3m 20s). */
-export function progressDuration(ms: number): string {
-  if (!Number.isFinite(ms) || ms <= 0) return '0s';
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`;
-  const m = Math.floor(ms / 60_000);
-  const s = Math.round((ms % 60_000) / 1000);
-  return s ? `${m}m ${s}s` : `${m}m`;
-}
-
-/** How many repeated targets to name before summarizing the tail. */
-const MAX_NAMED_TARGETS = 4;
-
-/** `git_status ×3 BACK-TO-BACK (all 3 failed)` — one phrasing for the report line and the verdict. */
-function formatStreak(s: RepeatStreak): string {
-  const outcome = s.failed === 0 ? '' : s.failed === s.count ? ` (all ${s.count} failed)` : ` (${s.failed} of ${s.count} failed)`;
-  return `\`${s.label}\` ×${s.count} BACK-TO-BACK${outcome}`;
-}
-
-/**
- * Render the progress picture as report lines. Emitted only when there is
- * something to say — a run that advanced cleanly adds a single "Progress:" line
- * rather than four sections of zeroes.
- */
-export function formatRunProgress(p: RunProgress): string[] {
-  const lines: string[] = [];
-
-  const reach = p.targetedCalls > 0
-    ? `${p.distinctTargets} distinct target(s) over ${p.targetedCalls} targeted call(s)`
-    : 'no targeted calls';
-  lines.push(
-    `Progress: ${reach}${p.repeatedTargets.length ? ` · ${Math.round(p.revisitRatio * 100)}% of calls revisited ground already covered` : ' · no repeats'}`
-    + `${p.duplicateCalls ? ` · ${p.duplicateCalls} EXACT duplicate call(s)` : ''}`
-    + `${p.longestStreak ? ` · ${formatStreak(p.longestStreak)}${p.streaks > 1 ? ` (${p.streaks} such streaks)` : ''}` : ''}`,
-  );
-
-  if (p.repeatedTargets.length) {
-    const named = p.repeatedTargets.slice(0, MAX_NAMED_TARGETS)
-      .map((t) => `${t.label} ×${t.count}`)
-      .join(' · ');
-    const rest = p.repeatedTargets.length - MAX_NAMED_TARGETS;
-    lines.push(`Revisited: ${named}${rest > 0 ? ` (+${rest} more)` : ''}`);
-  }
-
-  if (p.editIntent) {
-    lines.push(
-      `Effect: the request asked for a CHANGE · ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded`
-      + `${p.noEffect ? ' · ⚠ NOTHING WAS CHANGED' : ''}`,
-    );
-  } else if (p.mutationsAttempted > 0) {
-    lines.push(`Effect: ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded.`);
-  }
-
-  if (p.wallClockMs > 0) {
-    const active = Math.max(0, p.wallClockMs - p.idleMs);
-    lines.push(
-      `Time: ${progressDuration(active)} wall clock · ${progressDuration(p.modelMs)} in the model · ${progressDuration(p.toolMs)} in tools`
-      + `${p.slowestStep ? ` · slowest ${p.slowestStep.label} (${progressDuration(p.slowestStep.ms)})` : ''}`
-      + `${p.idleMs > 0 ? ` · ${progressDuration(p.idleMs)} waiting on the user between turns, excluded (span ${progressDuration(p.wallClockMs)})` : ''}`,
-    );
-  }
-
-  return lines;
-}
-
-/**
- * The one-sentence verdict for a run that spun or had no effect. Returned
- * separately from {@link formatRunProgress} because it belongs in the "Likely
- * cause" header, above every other signal — a reader who acts on the header alone
- * must be sent at the real fault. Null when neither condition holds.
- */
-export function runProgressVerdict(p: RunProgress): string | null {
-  if (!p.spinning && !p.noEffect) return null;
-
-  const worst = p.repeatedTargets[0];
-  // A back-to-back streak is named FIRST: it is the tightest loop there is — the
-  // same call, the same answer, and another identical call with nothing tried in
-  // between — and it stands on its own even when the revisit ratio is low.
-  const streak = p.stuckOnCall && p.longestStreak
-    ? `it made the same call ${p.longestStreak.count} times in a row — ${formatStreak(p.longestStreak)} — with nothing else attempted between them${p.longestStreak.failed === p.longestStreak.count ? ', re-asking a question it had already been answered the same way each time' : ''}`
-    : null;
-  const revisit = p.repeatedTargets.length
-    ? `${Math.round(p.revisitRatio * 100)}% of its targeted calls revisited a target it had already read${worst ? `, worst \`${worst.label}\` ×${worst.count}` : ''}`
-    : null;
-  const loop = p.spinning
-    ? `NO PROGRESS — ${streak ? `${streak}${revisit ? `; ${revisit}` : ''}` : `the run kept going back over ground it had already covered: ${revisit}`}${p.duplicateCalls ? `, and ${p.duplicateCalls} call(s) repeated earlier arguments EXACTLY` : ''}. `
-    : 'NO EFFECT — ';
-  const effect = p.noEffect
-    ? `The request asked for a change and the run finished with ZERO successful mutating calls${p.mutationsAttempted ? ` (${p.mutationsAttempted} attempted, all failed)` : ' — it never attempted one'}, so nothing was actually modified. `
-    : '';
-  // The remedy differs from every other verdict's, which is the whole reason this
-  // one has to outrank them: shrinking context or swapping models does nothing to
-  // a run that is re-reading the same file.
-  const remedy = p.spinning
-    ? `This is a LOOP, not context pressure and not a model that "won't call tools" — the numbers on those signals are a consequence of the repetition, not its cause. ${
-      streak && p.longestStreak && p.longestStreak.failed > 0
-        ? 'A call repeated back-to-back after FAILING is the model ignoring the error it was given: the failure text usually names the exact change to make (a `repo`, a path, a missing argument). Check that the tool result reached the model un-truncated, and that the repeated-failure advisory fired; if it did and the model still repeated the call, the model is not reading tool results — switch models for this run.'
-        : streak
-          ? 'A call repeated back-to-back after SUCCEEDING is the model not retaining the answer it already has: the result was truncated, or too large to keep in the transcript. Check the truncated-results count above, and shrink or page that result rather than the transcript.'
-          : 'Look at the repeated targets above: the agent is not retaining what it already read (the result was truncated, or the read was too narrow to answer the question). Widen the read, or cache the file in the transcript, rather than shrinking context or switching models.'
-    }`
-    : 'Check the "Answered from memory" line first — a turn served from the Q&A cache or an Evermind head does NO work by construction, so a run made largely of those has no mutating call to find. Otherwise check whether the agent was ever offered a mutating tool this run (see the tools-advertised line) before concluding the model refused to act.';
-
-  return `${loop}${effect}${remedy}`;
 }
