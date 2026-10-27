@@ -1,6 +1,6 @@
 {
   "name": "@builderforce/run-policy",
-  "version": "2026.10.20",
+  "version": "2026.10.21",
   "private": true,
   "type": "module",
   "description": "THE model hand-off policy for one agent run: which role each turn asks for (plan -> code -> verify, or chat when no tools are offered), which model it asks for and how strictly, which models are routed around after breaking mid-stream, when a spent model fails over and how often, and when a pinned or locked model is released. One pure reducer every agent loop drives — the browser Brain, the cloud durable and container loops, the server addressed reply, the canvas and the on-prem runtime — so the same events produce the same choice everywhere. Dispatch, traces and I/O stay with the host.",

@@ -204,6 +204,66 @@ describe('a change request goes from analysis to code that runs (end to end)', (
     expect(calls.some((c) => c.name === 'edit_file')).toBe(true);
   });
 
+  it('runs a chat that has coded before exactly like a fresh chat — one rule, whatever its history (chat #5739)', async () => {
+    // The chat's first run edits, so the chat has "reached code".
+    let first = 0;
+    await startRun(6105, {
+      resolvedSystemPrompt: 'sys',
+      tools: TOOLS,
+      runTool: host([]),
+      stream: async (opts) => {
+        first += 1;
+        if (!opts.tools || first > 2) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+        return { text: '', toolCalls: [{ id: `e${first}`, name: 'edit_file', args: JSON.stringify({ path: 'a.ts', old: 'x', new: 'y' }) }], finishReason: 'tool_calls' };
+      },
+      persistence,
+      userTurn: 'fix a.ts',
+    });
+    // Its next change request goes through the same chain a fresh chat's does.
+    const turns: Turn[] = [];
+    const calls: Call[] = [];
+    await startRun(6105, { resolvedSystemPrompt: 'sys', tools: TOOLS, projectId: 11, runTool: host(calls), stream: analysisParalysis(turns, 'hand_off'), persistence, userTurn: REQUEST });
+    expect(turns[0]!.role).toBe('plan');
+    expect(turns.findIndex((t) => t.tools.length === 1 && t.tools[0] === 'hand_off')).toBe(PLAN_TURN_BUDGET);
+    expect(calls.some((c) => c.name === 'spawn_agents')).toBe(true);
+    expect(calls.some((c) => c.name === 'edit_file')).toBe(true);
+  });
+
+  it('makes a coding run that only reads change something, once its budget is spent', async () => {
+    const turns: Turn[] = [];
+    const calls: Call[] = [];
+    let reads = 0;
+    let edited = false;
+    await startRun(77, { resolvedSystemPrompt: 'sys', stream: async () => ({ text: 'Delegating.', toolCalls: [], finishReason: 'stop' }), persistence, userTurn: REQUEST });
+    await startRun(-6106, {
+      resolvedSystemPrompt: 'sys',
+      tools: TOOLS,
+      runTool: host(calls),
+      stream: async (opts) => {
+        const tools = (opts.tools ?? []).map((t) => t.function.name);
+        turns.push({ role: String(opts.role), tools, toolChoice: opts.tool_choice });
+        if (!opts.tools || edited) return { text: 'Removed the title.', toolCalls: [], finishReason: 'stop', resolvedModel: GROK };
+        if (tools.includes('read_file')) {
+          reads += 1;
+          return { text: '', toolCalls: [{ id: `r${reads}`, name: 'read_file', args: JSON.stringify({ path: `src/c${reads}.ts` }) }], finishReason: 'tool_calls', resolvedModel: GROK };
+        }
+        edited = true;
+        return { text: '', toolCalls: [{ id: 'e1', name: 'edit_file', args: JSON.stringify({ path: PLAN.tasks[0]!.paths[0], old: 'a', new: 'b' }) }], finishReason: 'tool_calls', resolvedModel: GROK };
+      },
+      persistence,
+      userTurn: REQUEST,
+      lineage: { rootChatId: 77, ownerKey: 77, ownerName: 'BuilderForce', handle: 'a2', label: 'Drop the header title', agent: { ref: 'subagent:a2', name: 'Developer' }, depth: 1 },
+    });
+    // A sub-agent starts coding; after the budget in reads, the turn offers only change tools and requires a call.
+    expect(turns.slice(0, PLAN_TURN_BUDGET).every((t) => t.role === 'code' && t.tools.includes('read_file'))).toBe(true);
+    const forced = turns[PLAN_TURN_BUDGET]!;
+    expect(forced.toolChoice).toBe('required');
+    expect(forced.tools).toContain('edit_file');
+    expect(forced.tools).not.toContain('read_file');
+    expect(getRunTrace(-6106).some((e) => e.label === 'loop.change_due')).toBe(true);
+    expect(calls.some((c) => c.name === 'edit_file')).toBe(true);
+  });
+
   it('never forces a hand-off on a QUESTION, however many reads answering it takes', async () => {
     const turns: Turn[] = [];
     let reads = 0;

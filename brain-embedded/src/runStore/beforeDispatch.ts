@@ -96,7 +96,6 @@ export function beforeDispatchHook(run: RunLoopContext): NonNullable<LoopHooks<C
       if (typeof plan === 'string') return { result: { data: { ok: false, error: plan } } };
       // The role flips BEFORE the children start: they and every later turn are code.
       reportToPolicy(run, { type: 'hand_off' });
-      c.codePhaseReached = true;
       pushTrace(c, handOffTrace(nowIso(), ctx.step, plan.tasks.length, HAND_OFF_TOOL));
       const outcome = await executeHandOff(plan, {
         runTool: (name, args) => runTool!(name, args),

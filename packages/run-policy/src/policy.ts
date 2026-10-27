@@ -101,9 +101,14 @@ export interface RunPolicyOptions {
    *  proved). They join {@link RunPolicyState.broken}. */
   excludeModels?: readonly string[];
   /**
-   * Optional pin per phase. Only `verify` overrides the run's locked model — a code
-   * pin must survive stall failover. `null` means no pin for that phase.
-   * `reviewModel` is the legacy alias for `phaseModels.verify`.
+   * Optional model per phase, read by {@link nextTurn} for every phase. `verify`
+   * overrides the run's own model (a review is never the author's). `plan` and `code`
+   * are the DEFAULT beneath it: they apply only while the run holds no model of its
+   * own — no pin, lock or stall failover — so a failover that moved the run off its
+   * coder is never undone by the phase table, and a fixed-role run (`explore`) is never
+   * handed the coder's model. A phase model that broke this run is routed around like
+   * any other. `null` means no model for that phase. `reviewModel` is the legacy alias
+   * for `phaseModels.verify`.
    */
   phaseModels?: Partial<Record<RunPhase, string | null>>;
   /** Review model for the verify phase. `null` means none is configured. */
@@ -154,6 +159,10 @@ export interface RunPolicyState {
   readonly planTurns: number;
   /** The analysis budget already spent its one forced hand-off turn this run. */
   readonly handOffForced: boolean;
+  /** Turns answered while the run was coding — what {@link changeDue} reads. */
+  readonly codeTurns: number;
+  /** The coding budget already spent its one forced change turn this run. */
+  readonly changeForced: boolean;
   readonly outcome: RunPolicyOutcome;
   /**
    * The model that wrote the change, captured when verification starts. Every later
@@ -191,6 +200,8 @@ export type RunPolicyEvent =
   | { type: 'plan_budget_spent' }
   /** The host made this turn the hand-off (`hand_off` alone, a call required). */
   | { type: 'hand_off_forced' }
+  /** The host made this coding turn the change (the change tools alone, a call required). */
+  | { type: 'change_forced' }
   /** The run moved on to verifying its change. */
   | { type: 'verify_started' }
   /**
@@ -242,6 +253,8 @@ export function initialRunPolicy(opts: RunPolicyOptions = {}): RunPolicyState {
     turnRetries: 0,
     planTurns: 0,
     handOffForced: false,
+    codeTurns: 0,
+    changeForced: false,
     outcome: NONE,
     options: {
       pinReleasable: !!opts.pinReleasable,
@@ -271,14 +284,26 @@ function configuredPhaseModel(
   return undefined;
 }
 
+/**
+ * The plan / code model a run with no model of its own asks for: its phase's entry in
+ * `phaseModels`, unless the run has a fixed role (a delegated `explore` slice is not
+ * the phase's work) or the model already broke in this run.
+ */
+function phaseDefaultModel(state: RunPolicyState): string | undefined {
+  if (state.phase === 'verify' || state.options.fixedRole) return undefined;
+  const model = configuredPhaseModel(state.options, state.phase);
+  return model && !state.broken.includes(model) ? model : undefined;
+}
+
 /** A tool-less turn is conversation, not analysis or code. */
 export function nextTurn(state: RunPolicyState, turn: { hasTools: boolean }): TurnRequest {
   const verifying = state.phase === 'verify';
   const author = state.authorModel;
-  // Only verify overrides the locked model. A per-phase code pin must not undo a
+  // Verify overrides the run's model; plan / code only stand in when the run holds
+  // none (see `RunPolicyOptions.phaseModels`) — a per-phase code model must not undo a
   // stall failover that already moved the run off the original coder.
   const mapped = verifying ? configuredPhaseModel(state.options, 'verify') : undefined;
-  let model = mapped ?? state.model;
+  let model = mapped ?? state.model ?? phaseDefaultModel(state);
   if (verifying && author && model === author) model = undefined;
   const excludeModels = [...state.broken];
   if (verifying && author && !excludeModels.includes(author)) excludeModels.push(author);
@@ -312,6 +337,26 @@ export function handOffDue(state: RunPolicyState): boolean {
   return state.phase === 'plan' && state.planTurns >= PLAN_TURN_BUDGET;
 }
 
+/**
+ * Whether a CODING run has spent the same budget without changing anything — the host
+ * then makes its next turn the change (the change tools alone, a call required), once.
+ * Analysis was bounded and coding was not: a run that STARTS in `code` (a chat that has
+ * coded before, a sub-agent) skipped the analysis budget entirely and could read for
+ * the whole run (VS Code chat #5739). `progressed` — the run changed code or handed it
+ * off — is the host's to say; the policy never sees a tool result.
+ */
+export function changeDue(state: RunPolicyState, progressed: boolean, budget: number = PLAN_TURN_BUDGET): boolean {
+  return state.phase === 'code' && !progressed && !state.changeForced && state.codeTurns >= budget;
+}
+
+/**
+ * The coding budget of a QUICK pass — a run routed as one small change, which starts in
+ * `code` with nothing to analyse first. Twenty turns is a plan's length, not a one-line
+ * edit's: chat #5739's "remove the title from the top of the VSIX" named the component at
+ * turn 13 and read on until the user pressed Stop at 14.
+ */
+export const QUICK_CHANGE_TURN_BUDGET = 8;
+
 export function reduceRunPolicy(state: RunPolicyState, event: RunPolicyEvent): RunPolicyState {
   const s: RunPolicyState = { ...state, outcome: NONE };
   switch (event.type) {
@@ -330,6 +375,8 @@ export function reduceRunPolicy(state: RunPolicyState, event: RunPolicyEvent): R
       return s.phase === 'plan' ? { ...s, phase: 'code' } : s;
     case 'hand_off_forced':
       return { ...s, handOffForced: true };
+    case 'change_forced':
+      return { ...s, changeForced: true };
     case 'hand_off':
       return s.phase === 'plan'
         ? { ...s, phase: 'code', outcome: { kind: 'handed_off' } }
@@ -338,7 +385,8 @@ export function reduceRunPolicy(state: RunPolicyState, event: RunPolicyEvent): R
       // Already reviewing — a second finish block must not recapture the review
       // model as the author and exclude it.
       if (s.phase === 'verify') return s;
-      const author = s.authorModel ?? s.model;
+      // With no model of its own, the run wrote the change on its phase model.
+      const author = s.authorModel ?? s.model ?? phaseDefaultModel(s);
       const review = configuredPhaseModel(s.options, 'verify');
       const distinct = review && review !== author ? review : undefined;
       return {
@@ -374,7 +422,13 @@ function succeeded(s: RunPolicyState, resolved: string | undefined, acted: boole
   const proven = acted && resolved && resolved !== 'default' && !s.proven.includes(resolved)
     ? [...s.proven, resolved]
     : s.proven;
-  const next = { ...s, turnRetries: 0, proven, planTurns: s.phase === 'plan' ? s.planTurns + 1 : s.planTurns };
+  const next = {
+    ...s,
+    turnRetries: 0,
+    proven,
+    planTurns: s.phase === 'plan' ? s.planTurns + 1 : s.planTurns,
+    codeTurns: s.phase === 'code' ? s.codeTurns + 1 : s.codeTurns,
+  };
   // Lock the non-strict run onto what actually served it. A strict pin already
   // resolves to itself, so this is a no-op for one.
   if (s.options.lockAfterFirstSuccess && !(s.model && s.strictPin) && resolved && resolved !== 'default') {
@@ -485,7 +539,12 @@ function transportFailed(s: RunPolicyState, e: Extract<RunPolicyEvent, { type: '
     };
   }
   if (s.model) return { ...s, outcome: { kind: 'fail_turn' } };
-  const broken = e.kind === 'interrupted' && e.model && !s.broken.includes(e.model) ? [...s.broken, e.model] : s.broken;
+  // A phase model (`phaseModels.plan` / `code`) is a soft default, not the user's pin: a
+  // release status on it routes the rest of the run around it, like a released pin.
+  const phaseModel = phaseDefaultModel(s);
+  const releasedPhase = phaseModel && e.status !== undefined && releasesPin(s, phaseModel, e.status) ? phaseModel : undefined;
+  const interrupted = e.kind === 'interrupted' && e.model ? e.model : undefined;
+  const broken = [...new Set([...s.broken, ...(interrupted ? [interrupted] : []), ...(releasedPhase ? [releasedPhase] : [])])];
   return {
     ...s,
     broken,

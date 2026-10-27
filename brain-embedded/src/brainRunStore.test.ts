@@ -407,7 +407,7 @@ describe('analysis first, then the strongest coder writes the code', () => {
     expect(getRunSnapshot(5104).appended.some((m) => String(m?.content ?? '').startsWith('HAND-OFF'))).toBe(false);
   });
 
-  it('a follow-up run in a chat that already handed off starts on the coder, not a second analysis', async () => {
+  it('a later run in a chat that already coded starts like any run — one rule, whatever the chat history (chat #5739)', async () => {
     const roles: string[] = [];
     let turn = 0;
     const stream: BrainStreamFn = async (opts) => {
@@ -419,7 +419,7 @@ describe('analysis first, then the strongest coder writes the code', () => {
     await startRun(5105, { resolvedSystemPrompt: 'sys', tools: TOOLS, runTool: async () => ({ ok: true, content: 'ok' }), stream, persistence, userTurn: 'fix a.ts' });
     roles.length = 0;
     await startRun(5105, { resolvedSystemPrompt: 'sys', tools: TOOLS, runTool: async () => ({ ok: true, content: 'ok' }), stream, persistence, userTurn: 'continue' });
-    expect(roles[0]).toBe('code');
+    expect(roles[0]).toBe('plan');
   });
 
   it('a model pinned by the user writes its own code — no hand-off', async () => {

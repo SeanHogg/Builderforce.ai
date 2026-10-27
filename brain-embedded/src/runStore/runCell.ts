@@ -75,13 +75,6 @@ export interface RunCell {
   codeChanged: boolean;
   /** The model that made this run's code changes — what its outcome grades as a coder. */
   codeModel: string | null;
-  /**
-   * This chat has handed its analysis to the coding model. NOT reset per run: a follow-up
-   * ("Start S0", "continue") in the same chat is implementation of a plan already made,
-   * and starting it in the plan phase re-ran the analysis on the planner and then handed
-   * off again — chat #133 did both halves of the work twice.
-   */
-  codePhaseReached: boolean;
   /** This run's outcome idempotency key ({@link runOutcomeId}). */
   runId: string;
   ticketRecorded: boolean;
@@ -200,7 +193,6 @@ export function makeCell(): RunCell {
     turn: null,
     codeChanged: false,
     codeModel: null,
-    codePhaseReached: false,
     runId: '',
     ticketRecorded: false,
     touchedFiles: [],

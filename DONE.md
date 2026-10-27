@@ -1,3 +1,11 @@
+## ✅ RESOLVED 2026-10-26 — One rule for every run, whatever the chat's history (VSIX 2026.10.101 · brain-embedded 2026.10.63 · run-policy 2026.10.21)
+
+An old chat did not behave like a fresh one. Once a chat had made one edit, the run cell's `codePhaseReached` started every later run in that chat in `code`. That skipped the analysis budget, so the hand-off was never forced, and coding had no bound at all, so the run could read for its whole life (chat #5739). A fresh chat got the full chain. That chat-history state is gone.
+
+- **Every run starts the same way.** `runPreamble` starts every run in `plan`. The one exception is a role, not history: a sub-agent starts in `code`. `codePhaseReached` is deleted from the run cell, `beforeDispatch`, `completeTurn`, the budget module and `modelPreflight`. The run-store test that asserted the old carry-over now asserts the reverse.
+- **Coding is bounded like analysis.** Policy `codeTurns` + `changeDue` + the `change_forced` event apply to every coding run. One that has spent `PLAN_TURN_BUDGET` coding turns without changing code or handing it off gets one turn offering only the change tools (plus `ask_user`), with a call required: make the change, or say what blocks it. Trace: `loop.change_due`. `runStore/planBudget.ts` became `progressBudget.ts`, holding both budgets (`planBudgetTurn`, `changeBudgetTurn`).
+- **Proven end to end.** `handOffExecution.e2e.test.ts` covers both: a chat that has already coded runs its next change request through the same chain as a fresh chat, and a coding sub-agent that only reads is made to edit at the budget.
+
 ## ✅ RESOLVED 2026-10-26 — The VSIX ships the run loop that was tested (VSIX 2026.10.99)
 
 VS Code chat #5739 ran 105 turns on MiniMax Flash on VSIX 2026.10.98 and never implemented the change. None of the turns carried a role, and the diagnostics had no "Routing by role". The cause was not the run loop: the extension never ran it. The extension bundles `@seanhogg/builderforce-brain-embedded` (and `brain-ui`) through their `main` → `dist/`. That dist was built by `prepare` on install (2026-10-25 13:52) and by nothing after, so VSIX 2026.10.97 and 2026.10.98 shipped a run loop from before the analysis budget, the `code` role, the hand-off brief and the routing record. Every test of those changes imports source, so all of them were green.

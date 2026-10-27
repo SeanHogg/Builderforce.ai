@@ -3,6 +3,8 @@ import { MAX_MODEL_FAILOVERS } from '@builderforce/agent-stall';
 import {
   PIN_RELEASE_STATUSES,
   PLAN_TURN_BUDGET,
+  QUICK_CHANGE_TURN_BUDGET,
+  changeDue,
   handOffDue,
   initialRunPolicy,
   isRequestRefusalStatus,
@@ -94,6 +96,34 @@ describe('analysis budget', () => {
     expect(nextTurn(s, TOOLS).role).toBe('code');
     expect(offersHandOff(s)).toBe(false);
     expect(handOffDue(s)).toBe(false);
+  });
+});
+
+describe('coding budget', () => {
+  const turns = (n: number) => Array.from({ length: n }, () => ({ type: 'turn_succeeded' as const, model: 'grok' }));
+
+  it('is due once a coding run has answered PLAN_TURN_BUDGET turns without progress', () => {
+    expect(changeDue(run(initialRunPolicy({ startPhase: 'code' }), ...turns(PLAN_TURN_BUDGET - 1)), false)).toBe(false);
+    const s = run(initialRunPolicy({ startPhase: 'code' }), ...turns(PLAN_TURN_BUDGET));
+    expect(s.codeTurns).toBe(PLAN_TURN_BUDGET);
+    expect(changeDue(s, false)).toBe(true);
+  });
+
+  it('is never due for a run that changed code or handed it off, nor while planning', () => {
+    expect(changeDue(run(initialRunPolicy({ startPhase: 'code' }), ...turns(PLAN_TURN_BUDGET)), true)).toBe(false);
+    expect(changeDue(run(initialRunPolicy(), ...turns(PLAN_TURN_BUDGET)), false)).toBe(false);
+  });
+
+  it('forces the change once per run', () => {
+    const s = run(initialRunPolicy({ startPhase: 'code' }), ...turns(PLAN_TURN_BUDGET), { type: 'change_forced' }, ...turns(PLAN_TURN_BUDGET));
+    expect(changeDue(s, false)).toBe(false);
+  });
+
+  it('a quick pass is due at its own, shorter budget (chat #5739: a one-line edit read to turn 14)', () => {
+    const s = run(initialRunPolicy({ startPhase: 'code' }), ...turns(QUICK_CHANGE_TURN_BUDGET));
+    expect(QUICK_CHANGE_TURN_BUDGET).toBeLessThan(PLAN_TURN_BUDGET);
+    expect(changeDue(s, false, QUICK_CHANGE_TURN_BUDGET)).toBe(true);
+    expect(changeDue(s, false)).toBe(false);
   });
 });
 

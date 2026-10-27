@@ -336,10 +336,13 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
     policy: initialRunPolicy({
       pinnedModel: model,
       strictPin: modelStrict,
-      // A sub-agent is a delegated SLICE: its owner already planned it, and its host routes
-      // its turns for its own role. Started in `plan` it was offered `hand_off` and the
-      // analysis phase all over again, inside work it was handed to carry out.
-      startPhase: c.codeChanged || c.codePhaseReached || req.lineage ? 'code' : 'plan',
+      // Every run starts the same way, whatever the chat's history: a chat that coded
+      // before used to start every later run in `code`, which skipped the analysis
+      // budget and let an old chat read forever while a fresh one handed off (chat
+      // #5739). The one exception is a ROLE, not history — a sub-agent is a delegated
+      // SLICE its owner already planned; started in `plan` it was offered `hand_off` and
+      // the analysis all over again, inside work it was handed to carry out.
+      startPhase: req.lineage ? 'code' : 'plan',
     }),
     // Bounded counter for the announced-but-never-made tool call recovery, so a model
     // that keeps narrating instead of acting cannot spin the loop. Not one-shot: a model

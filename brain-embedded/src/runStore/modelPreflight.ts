@@ -85,8 +85,8 @@ export async function applyModelPreflight(
   } catch {
     return;
   }
-  // A run that already reached its code phase (a resumed turn) has no plan phase left.
-  const plan = c.codeChanged || c.codePhaseReached ? null : planModelWarning(pinnedModel);
+  // A run that already changed code has no plan phase left.
+  const plan = c.codeChanged ? null : planModelWarning(pinnedModel);
   const event = modelPreflightEvent(result, nowIso(), plan);
   if (!event) return;
   if (result?.byoUnresolved.length) accrueByoUnresolved(c, result.byoUnresolved.join(','));
