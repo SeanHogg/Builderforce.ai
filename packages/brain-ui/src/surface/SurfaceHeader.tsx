@@ -66,7 +66,7 @@ export function SurfaceHeader({
     <header className={['bf-shead', className].filter(Boolean).join(' ')}>
       <span className="bf-shead__brand">
         <span className="bf-shead__mark"><BrainMark running={running} /></span>
-        <span className="bf-shead__title">{title}</span>
+        {title != null && <span className="bf-shead__title">{title}</span>}
       </span>
       <div className="bf-shead__context">{context}</div>
       {presence && <div className="bf-shead__presence">{presence}</div>}

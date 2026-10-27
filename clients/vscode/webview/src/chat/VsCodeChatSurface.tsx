@@ -230,7 +230,6 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
       label={t('app.conversation', 'Conversation')}
       header={(
         <VsCodeChatHeader
-          projectName={associatedProject?.name ?? null}
           chatTitle={activeChat ? titleOf(activeChat) : t('app.newChat', 'New chat')}
           chatId={activeChat ? activeChat.id : null}
           onRename={vsChats.rename}

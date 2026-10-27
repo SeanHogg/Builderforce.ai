@@ -18,8 +18,6 @@ const COPY_ICON: Record<CopyState, string> = {
 };
 
 export interface VsCodeChatHeaderProps {
-  /** The chat's project (chat-first); the brand when it has none. */
-  projectName: string | null;
   /** The open chat's title (or "New chat"). */
   chatTitle: string;
   /** The open chat's id — null while there is no chat yet, so nothing offers to rename. */
@@ -38,10 +36,9 @@ export interface VsCodeChatHeaderProps {
   onVisualize?: () => void;
 }
 
-export function VsCodeChatHeader({ projectName, chatTitle, chatId, onRename, running, copy, history, onNewChat, bundle, version, onVisualize }: VsCodeChatHeaderProps) {
+export function VsCodeChatHeader({ chatTitle, chatId, onRename, running, copy, history, onNewChat, bundle, version, onVisualize }: VsCodeChatHeaderProps) {
   const t = makeT(bundle);
   const headerLabels = useMemo(() => surfaceHeaderLabels(bundle), [bundle]);
-  const title = projectName ?? 'BuilderForce';
   const copyLabel = copy.state === 'error'
     ? t('app.copyFailed', 'Could not build the chat diagnostics report.')
     : t('app.copyChat', 'Copy chat diagnostics (identity + Evermind state + transcript)');
@@ -50,7 +47,7 @@ export function VsCodeChatHeader({ projectName, chatTitle, chatId, onRename, run
   const versionLabel = version ? t('app.version', 'BuilderForce extension version {version}').replace('{version}', version) : '';
   return (
     <SurfaceHeader
-      title={<span title={title}>{title}</span>}
+      title={null}
       running={running}
       context={(
         // The CHAT's own name, editable in place — not the brand row above it.
