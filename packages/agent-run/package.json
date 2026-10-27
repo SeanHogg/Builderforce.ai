@@ -12,9 +12,6 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
-  "dependencies": {
-    "@seanhogg/builderforce-memory": "^2026.10.24"
-  },
   "devDependencies": {
     "typescript": "^6.0.3",
     "vitest": "^4.0.18"
