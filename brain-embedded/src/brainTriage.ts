@@ -14,7 +14,8 @@ import { turnInterruption } from './finishReason';
 import type { BrainMessage } from './types';
 import { isModelReply } from './modelReply';
 import { traceWithPersistedSteps } from './persistedSteps';
-import { computeRunProgress, formatRunProgress, runProgressVerdict, type RunProgress } from './runProgress';
+import { computeRunProgress, type RunProgress } from './runProgress';
+import { formatRunProgress, runProgressVerdict, spunEarlier } from './runProgressReport';
 import { formatModelScorecard, formatModelTurnLog, modelScorecard, modelTurnLog, type ModelScore, type ModelTurn } from './modelScorecard';
 import { formatRoutingByRole, routingByRole, type RoutingByRole } from './routingByRole';
 import { formatStaffingSummary, staffingSummaryInTrace, workFiledNotStaffedVerdict, type StaffingSummary } from './staffingSummary';
@@ -340,8 +341,9 @@ export function narratedUnadvertisedInTrace(events: BrainTraceEvent[]): string[]
 
 /** One turn the memory-first short-circuit answered — the LLM was never called. */
 export interface MemoryAnsweredTurn {
-  /** `evermind` = the project's SSM GENERATED the reply; `qa-cache` = a stored answer was replayed. */
-  source: 'evermind' | 'qa-cache';
+  /** `evermind` = the project's SSM GENERATED the reply; `qa-cache` = a stored answer was replayed;
+   *  `symbol-index` = the host answered "where is X defined?" from its definition index. */
+  source: 'evermind' | 'qa-cache' | 'symbol-index';
   /** Evermind head version that served it (evermind source only). */
   version?: number;
   /** WHICH project's Evermind served it — a project can target several heads. */
@@ -362,11 +364,11 @@ export function memoryAnswersInTrace(events: BrainTraceEvent[]): MemoryAnsweredT
   const out: MemoryAnsweredTurn[] = [];
   for (const ev of events) {
     if (ev.category !== 'recall') continue;
-    if (ev.label !== 'evermind.answer' && ev.label !== 'memory.answer') continue;
+    if (ev.label !== 'evermind.answer' && ev.label !== 'memory.answer' && ev.label !== 'symbols.answer') continue;
     const r = ev.result as { source?: unknown; skippedLlm?: unknown; version?: unknown; evermindProjectId?: unknown } | undefined;
     if (r?.skippedLlm !== true) continue;
     out.push({
-      source: r.source === 'evermind' ? 'evermind' : 'qa-cache',
+      source: r.source === 'evermind' ? 'evermind' : r.source === 'symbol-index' ? 'symbol-index' : 'qa-cache',
       ...(typeof r.version === 'number' ? { version: r.version } : {}),
       ...(typeof r.evermindProjectId === 'number' ? { projectId: r.evermindProjectId } : {}),
     });
@@ -1015,7 +1017,8 @@ export function computeBrainDiagnostics(
   // was gone — see `runProgress.ts`. A run captured mid-flight is exempt from the
   // "no effect" half: it has not declined to act, it is still acting.
   const progress = computeRunProgress(events, messages);
-  const noProgress = progress.spinning || (progress.noEffect && !ctx.running);
+  // The picture is the LATEST run's; an earlier run of the chat that spun is still the finding (`runSlices.ts`).
+  const noProgress = progress.spinning || spunEarlier(progress) !== null || (progress.noEffect && !ctx.running);
   // Filed versus staffed — the outcome question no other signal here asks.
   const staffing = staffingSummaryInTrace(events);
   const sessionShipped = sessionShippedInTrace(events);
@@ -1134,7 +1137,7 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
   const evermindAnswers = d.memoryAnswers?.filter((m) => m.source === 'evermind') ?? [];
   const verdict =
     d.likelyCause === 'memory-answered'
-      ? `ANSWERED FROM MEMORY — no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === 'evermind' ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ''}${m.version != null ? ` v${m.version}` : ''}` : 'the Q&A cache').join(', ')}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? 'The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work — if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head.' : 'The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model.'} Switching models changes nothing here.`
+      ? `ANSWERED FROM MEMORY — no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === 'evermind' ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ''}${m.version != null ? ` v${m.version}` : ''}` : m.source === 'symbol-index' ? 'the workspace symbol index' : 'the Q&A cache').join(', ')}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? 'The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work — if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head.' : (d.memoryAnswers ?? []).every((m) => m.source === 'symbol-index') ? 'The request was only "where is X defined?" and the symbol index resolved every name, so the definitions were listed without a model; ask for anything more to reach the model.' : 'The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model.'} Switching models changes nothing here.`
     : d.likelyCause === 'no-tools-advertised'
       ? 'NO TOOLS ADVERTISED — at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.'
       : d.likelyCause === 'tool-not-advertised'
@@ -1250,7 +1253,7 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
       + d.memoryAnswers
         .map((m) => m.source === 'evermind'
           ? `Evermind SSM${m.projectId != null ? ` (project #${m.projectId}` : ''}${m.version != null ? `${m.projectId != null ? ', ' : ' ('}v${m.version}` : ''}${m.projectId != null || m.version != null ? ')' : ''}`
-          : 'Q&A cache')
+          : m.source === 'symbol-index' ? 'symbol index' : 'Q&A cache')
         .join(', '),
     );
   }

@@ -42,6 +42,16 @@ const CHANGE_VERBS =
 const CHANGE_VERB = new RegExp(`\\b(${CHANGE_VERBS})\\b`, 'i');
 
 /**
+ * "Complete / finish / finalize THE work" — a work order (chat #5739: "complete the
+ * implementation" read as a question, bought no analysis budget, and ran 52 plan turns
+ * with no edit). Only as an imperative with its object: the adjective ("a complete list",
+ * "complete with paths") is not a change. Opens the request, or chains onto one.
+ */
+const FINISH_OBJECT = '(complete|finish|finali[sz]e)\\s+(the|this|that|these|those|it|my|our|your|all|implementation|work|task|change)\\b';
+const FINISH_ORDER = new RegExp(`^\\s*(please\\s+)?(now\\s+)?${FINISH_OBJECT}`, 'i');
+const CHAINED_FINISH = new RegExp(`(\\band|\\bthen|[,.;])\\s+((also|then|please|now)\\s+)*${FINISH_OBJECT}`, 'i');
+
+/**
  * Shapes that ask a QUESTION rather than demand a change. Checked FIRST, because
  * an action verb inside a question ("why did you change X?", "how do I add a
  * column?") is a question about a change, not a request for one.
@@ -88,8 +98,8 @@ export function asksForChange(text: string | null | undefined): boolean {
   // to quote an action verb in paragraph nine does not make it a work order.
   const head = t.slice(0, 600);
   if (QUESTION_SHAPE.test(head)) return false;
-  if (RESEARCH_LEAD.test(head)) return CHAINED_CHANGE.test(head);
-  return CHANGE_VERB.test(head);
+  if (RESEARCH_LEAD.test(head)) return CHAINED_CHANGE.test(head) || CHAINED_FINISH.test(head);
+  return CHANGE_VERB.test(head) || FINISH_ORDER.test(head) || CHAINED_FINISH.test(head);
 }
 
 /**

@@ -13,15 +13,19 @@ import type { ChatCompletionMessage } from '../streamChatCompletion';
 export function latestUserText(convo: ChatCompletionMessage[]): string {
   for (let i = convo.length - 1; i >= 0; i--) {
     const m = convo[i];
-    if (m.role !== 'user') continue;
-    if (typeof m.content === 'string') return m.content.trim();
-    if (Array.isArray(m.content)) {
-      return m.content
-        .map((p) => (p && typeof p === 'object' && 'text' in p && typeof p.text === 'string' ? p.text : ''))
-        .join(' ')
-        .trim();
-    }
-    return '';
+    if (m.role === 'user') return userTextOf(m);
+  }
+  return '';
+}
+
+/** One user turn's text — a vision turn's text parts joined, never its image bytes. */
+export function userTextOf(m: ChatCompletionMessage): string {
+  if (typeof m.content === 'string') return m.content.trim();
+  if (Array.isArray(m.content)) {
+    return m.content
+      .map((p) => (p && typeof p === 'object' && 'text' in p && typeof p.text === 'string' ? p.text : ''))
+      .join(' ')
+      .trim();
   }
   return '';
 }

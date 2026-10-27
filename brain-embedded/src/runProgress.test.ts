@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { computeRunProgress, formatRunProgress, runProgressVerdict, hasEditIntent, isMutationTool } from './runProgress';
+import { computeRunProgress, hasEditIntent, isMutationTool } from './runProgress';
+import { formatRunProgress, runProgressVerdict } from './runProgressReport';
 import { computeBrainDiagnostics, formatBrainDiagnostics, type BrainTraceEvent } from './brainTriage';
 import type { BrainMessage } from './types';
 

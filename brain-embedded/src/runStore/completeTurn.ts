@@ -7,18 +7,15 @@
 
 import { volatileTail } from '@seanhogg/builderforce-memory/handoff';
 import { replayTextOf, type LoopPorts } from '@builderforce/agent-loop';
-import { coderHandoffBrief, nextTurn, offersHandOff } from '@builderforce/run-policy';
+import { coderHandoffBrief, nextTurn } from '@builderforce/run-policy';
 import { toolNamesMentionedIn } from '@builderforce/agent-stall';
 import { StreamInterruptedError, type ChatCompletionMessage, type CompletionMetadata, type StreamChatResult, type StreamHandlers } from '../streamChatCompletion';
 import { turnMaxTokens } from '../effort';
 import { providerFailureEvent } from '../providerFailure';
 import { coderReaskTrace, providerFailureTrace, transportRetryTrace } from '../runPolicyTraces';
 import { localFallbackTrace } from '../localFirstTraces';
-import { selectToolsForTurn } from '../selectTools';
-import { routerToolSpecs } from '../toolRouter';
 import { setLastResolvedModel } from '../lastResolvedModel';
 import { isCodeChangeTool } from '../localWorkspaceTools';
-import { HAND_OFF_TOOL } from '../planHandoff';
 import { createComposingActivity, toolCallArgBytes } from '../composingActivity';
 import { hasCallMarkup } from '../xmlToolCalls';
 import { turnInterruption } from '../finishReason.js';
@@ -32,12 +29,13 @@ import { callMemoryEffect } from '../memorySavings';
 import { accrueByoUnresolved, accrueProviderCap, emit, emitStreaming, nowIso, nowMs, pushTrace, runTrace, setActivity } from './runCells';
 import { modelDowngradeEvent } from './modelDowngrade';
 import { gatewayRoutingArgs } from './gatewayRoutingTrace';
-import { changeBudgetTurn, planBudgetTurn } from './progressBudget';
+import { turnMenu } from './turnMenu';
+import { markPersonTurn } from './chatAsks';
 import { asLiveTurn, connectRetryStep, liveTurnModel } from './turnPersistence';
 import { reportToPolicy, type RunLoopContext, type TurnMeta } from './runLoopContext';
 
 export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionMessage>['complete'] {
-  const { c, chatId, runKey, req, convo, systemPrompt, metadata, recallBlockTokens, allTools, requestQuery, usedTools, canAskUser, alwaysAdvertised } = run;
+  const { c, chatId, runKey, req, convo, systemPrompt, metadata, recallBlockTokens, allTools } = run;
   const { stream, routingMode, maxTokens, reasoning, runTool } = req;
   return async (ctx) => {
     const iter = ctx.step;
@@ -47,7 +45,12 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // sub-agent, or a child's report reaching its owner — goes in front of this turn,
     // recorded as one `steer.applied` step. Attachments become vision parts so a
     // mid-run message with images reaches the model like a normal send.
-    for (const steer of takeRunSteering(c, runKey, iter)) convo.push({ role: 'user', content: steerModelContent(steer) });
+    // Only the person's own steer is one of the chat's asks (`chatAsks.ts`); a child's
+    // report or an owner's direction is not.
+    for (const steer of takeRunSteering(c, runKey, iter)) {
+      const msg: ChatCompletionMessage = { role: 'user', content: steerModelContent(steer) };
+      convo.push(steer.fromPerson ? markPersonTurn(msg) : msg);
+    }
     // Auto-compact BEFORE the turn: summarize the older middle into a memory note
     // when the transcript exceeds the token budget (instead of silently dropping it
     // and making the model thrash into "LOOP EXHAUSTED"). Falls back to the
@@ -92,66 +95,8 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // whole turn. Stays undefined for a pure tool-call / empty turn.
     let firstTokenAt: number | undefined;
     let result: StreamChatResult;
-    // Analysis that has spent its budget ends HERE (`progressBudget.ts`), BEFORE selection:
-    // the hand-off turn offers `hand_off` alone with a call required, and a forced turn
-    // that still did not hand off ends planning, so this turn already selects as code.
-    const handOffTurn = planBudgetTurn(run, iter);
-    // Advertise a RELEVANT subset rather than the whole catalog. ~300 tool
-    // definitions push most providers past the point where they reliably emit any
-    // tool call at all (observed: 308 tools → three consecutive turns with zero
-    // calls), besides dominating the prompt budget. No-ops for small catalogs.
-    const selection = selectToolsForTurn(allTools, {
-      // The REQUEST, captured once before the loop — never "the latest user message".
-      // The loop pushes its own `role:'user'` turns (the stall-recovery nudge, the
-      // tool-budget close-out), so reading the newest one re-rolled the advertised
-      // set from text WE wrote: after one recovery the query became "…made zero tool
-      // calls… answer using its result…", which scores `key_results`/`dashboards`/
-      // `incidents` and drops the ticket tools the user actually asked for. The tool
-      // the model was told to call then genuinely did not exist, and it narrated.
-      // Holding the request steady also keeps the advertised set STABLE across turns
-      // — a tool must not vanish between one turn and the next.
-      query: requestQuery,
-      pinned: usedTools,
-      // Tools the SYSTEM PROMPT instructs the model to call (e.g. the chat↔ticket
-      // directive names `builtin_chats_list_tickets`) are never optional: telling a
-      // model to call a tool we then decline to advertise is the exact contradiction
-      // that produces a narrated call. Derived from the prompt text, so a directive
-      // edit can never silently desync from this list — plus the local workspace
-      // tools, which the prompt names in prose the pattern cannot see.
-      // While planning, the planner's deliverable is never off-topic either.
-      required: offersHandOff(run.policy) && canAskUser ? [...alwaysAdvertised, HAND_OFF_TOOL] : alwaysAdvertised,
-    });
-    // Once the run is coding, the plan is handed off: `hand_off` is gone from the menu,
-    // so a coder can never re-plan the work it was just given.
-    const selected = offersHandOff(run.policy) ? selection.tools : selection.tools.filter((t) => t.function.name !== HAND_OFF_TOOL);
-    // The ROUTER rides along whenever selection actually trimmed something, so the
-    // tools that missed the cut stay REACHABLE instead of silently ceasing to exist.
-    // Three fixed schemas buy back the whole catalog; see toolRouter.ts.
-    // Coding that has spent the same budget without changing anything is made to change
-    // something on THIS turn — the change tools alone (`progressBudget.ts`).
-    const forced = handOffTurn ?? changeBudgetTurn(run, iter, selected);
-    // What the turn's FIRST request carries beyond the transcript — every retry of the same
-    // turn sends it again, or a forced turn would retry with no instruction.
-    const opening: ChatCompletionMessage[] = forced ? [forced.brief] : [];
-    const advertised = forced
-      ? forced.tools
-      : selection.trimmed
-        ? [...selected, ...routerToolSpecs(allTools?.length ?? 0)]
-        : selected;
-    const tools = advertised.length > 0 ? advertised : undefined;
-    // What the model could actually call THIS turn. Kept as a set so the turn can
-    // answer, at the only point that knows both halves, "did it narrate a tool it was
-    // never shown?" — see `narratedUnadvertised` below.
-    const advertisedNames = new Set(advertised.map((t) => t.function.name));
-    if (selection.trimmed && !forced) {
-      pushTrace(c, {
-        ts: nowIso(),
-        category: 'message',
-        label: 'tools.selected',
-        args: { step: iter },
-        result: `${selected.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`,
-      });
-    }
+    // What this turn offers: the relevance-selected menu, or a forced turn's (`turnMenu.ts`).
+    const { forced, advertised, tools, advertisedNames, opening } = turnMenu(run, iter);
     // The completion is open and no token has arrived yet — the phase that used to
     // be indistinguishable from a hang. It flips to `writing` on the first delta.
     setActivity(c, { phase: 'thinking', startedAt: Date.now(), step: iter });
@@ -193,17 +138,22 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // Consume a one-shot forced tool_choice from stall recovery (if any).
     const turnToolChoice = forced ? forced.toolChoice : run.forceToolChoice;
     run.forceToolChoice = undefined;
-    // `extra` rides THIS request only (the hand-off brief); it never enters the transcript.
     // What the run has already established, in front of THIS turn only — so the model
     // reasons from its own record instead of re-deriving the codebase every turn (its
     // reasoning is stripped from the transcript, and old tool results compact away).
-    // A tagged volatile tail: the cache breakpoint lands before it and the packer keeps
-    // it last without mistaking it for the user's request.
-    const ledger = tools ? volatileTail([run.knowledge.brief()]) : null;
-    const request = async (extra: ChatCompletionMessage[] = []): Promise<StreamChatResult> => {
+    const ledger = tools ? run.knowledge.brief() : '';
+    // `tailSections` (a forced turn's brief) and `extra` (the coder re-ask brief) ride THIS
+    // request only; neither enters the transcript. The run's record and a forced brief go
+    // in ONE tagged volatile tail, LAST: the cache breakpoint lands before it and the
+    // packer keeps it last without mistaking it for the user's request. An untagged forced
+    // brief in front of the tail took the history breakpoint itself, so the next turn
+    // missed the cache. The re-ask brief stays an untagged user turn before the tail: it is
+    // the coder's directive for that one request (the packer protects it as such).
+    const request = async (extra: ChatCompletionMessage[] = [], tailSections: string[] = []): Promise<StreamChatResult> => {
       const ask = nextTurn(run.policy, { hasTools: !!tools });
       const callMetadata = nextCallMetadata();
-      const perTurn: ChatCompletionMessage[] = ledger ? [...extra, ledger] : extra;
+      const tail = volatileTail([ledger, ...tailSections]);
+      const perTurn: ChatCompletionMessage[] = tail ? [...extra, tail] : extra;
       const messages = await run.windowFit.prepare({ messages: perTurn.length > 0 ? [...working, ...perTurn] : working, model: ask.model, tools, maxTokens: turnMaxTokens(maxTokens, !!tools), step: iter });
       return asLiveTurn(c, () => stream(
         {
@@ -235,7 +185,7 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
       emit(c);
     };
     try {
-      result = await request(opening);
+      result = await request([], opening);
     } catch (e) {
       // Aborting the fetch rejects the stream — that's a user Stop; the kernel
       // reports it as `cancelled` (no error trace, no error message).
@@ -255,7 +205,7 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
       pushTrace(c, transportRetryTrace(nowIso(), iter, outcome, (e as Error).message));
       restartTurn();
       try {
-        result = await request(opening);
+        result = await request([], opening);
       } catch (retryError) {
         if (c.abort?.signal.aborted) throw retryError;
         throw turnError(retryError);

@@ -22,23 +22,31 @@
 
 import { ASK_USER_TOOL } from '@builderforce/agent-loop';
 import { asksForChange, isContinuationDirective } from '@builderforce/agent-stall';
-import { PLAN_TURN_BUDGET, changeDue, handOffDue } from '@builderforce/run-policy';
+import { PLAN_TURN_BUDGET, QUICK_CHANGE_TURN_BUDGET, changeDue, handOffDue } from '@builderforce/run-policy';
 import { isCodeChangeTool } from '../localWorkspaceTools';
 import { HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC } from '../planHandoff';
 import type { BrainToolSpec, ChatCompletionMessage } from '../streamChatCompletion';
 import { nowIso, pushTrace } from './runCells';
 import { reportToPolicy, type RunLoopContext } from './runLoopContext';
+import { skipsVerifyStage } from './pipelineRoute';
 
-const HAND_OFF_DUE_BRIEF =
-  `ANALYSIS IS OVER. You have spent ${PLAN_TURN_BUDGET} turns analysing without changing anything. ` +
-  'Call hand_off NOW. summary = the research for the coders: everything you and any research sub-agents established that the change needs ' +
-  '(files, functions, what they do today, decisions, traps). tasks = each one standalone: the files, the change, and how to know it is done. ' +
-  'The coding agents start from exactly what you write here; they do not see this conversation.';
+/** A forced hand-off's brief: why it is forced, then the one hand-off instruction. */
+export function handOffBrief(reason: string): string {
+  return `${reason} ` +
+    'Call hand_off NOW. summary = the research for the coders: everything you and any research sub-agents established that the change needs ' +
+    '(files, functions, what they do today, decisions, traps). tasks = each one standalone: the files, the change, and how to know it is done. ' +
+    'The coding agents start from exactly what you write here; they do not see this conversation.';
+}
 
-const changeDueBrief = (turns: number): string =>
-  `STOP READING. You have spent ${turns} coding turns without changing anything. ` +
-  'Make the change now with what you already know — the edit tools are the only ones offered this turn. ' +
-  'If something genuinely blocks the change, call ask_user and say exactly what.';
+/** A forced change's brief: why it is forced, then the one change instruction — naming
+ *  `ask_user` only when this turn offers it. */
+export function changeBrief(reason: string, canAskUser: boolean): string {
+  return `${reason} ` +
+    'Make the change now with what you already know — the edit tools are the only ones offered this turn.' +
+    (canAskUser ? ' If something genuinely blocks the change, call ask_user and say exactly what.' : '');
+}
+
+const HAND_OFF_DUE_BRIEF = handOffBrief(`ANALYSIS IS OVER. You have spent ${PLAN_TURN_BUDGET} turns analysing without changing anything.`);
 
 /** A turn a budget decides: the tools it offers, a call required, and the brief. */
 export interface ForcedTurn {
@@ -47,9 +55,20 @@ export interface ForcedTurn {
   brief: ChatCompletionMessage;
 }
 
-/** Is this run asked to CHANGE something — the only kind any progress rule forces. */
+/** Is `text`, in a run of `mode`, a request to CHANGE something — the only kind any
+ *  progress rule forces, and the only kind the chat's asks ledger carries. */
+export function isChangeRequest(mode: string | undefined, text: string): boolean {
+  return mode !== 'chat' && (asksForChange(text) || isContinuationDirective(text));
+}
+
+/** Is this run asked to CHANGE something (see {@link isChangeRequest}). */
 export function budgeted(run: RunLoopContext): boolean {
-  return run.metadata.mode !== 'chat' && (asksForChange(run.userRequest) || isContinuationDirective(run.userRequest));
+  return isChangeRequest(run.metadata.mode, run.userRequest);
+}
+
+/** Has the run made its change — edited code itself or handed it to coders? */
+export function progressed(run: RunLoopContext): boolean {
+  return run.c.codeChanged || run.usedTools.has(HAND_OFF_TOOL);
 }
 
 /**
@@ -98,8 +117,9 @@ export function changeToolsOf(run: RunLoopContext, selected: readonly BrainToolS
  * change tool to force.
  */
 export function changeBudgetTurn(run: RunLoopContext, step: number, selected: readonly BrainToolSpec[]): ForcedTurn | null {
-  const progressed = run.c.codeChanged || run.usedTools.has(HAND_OFF_TOOL);
-  if (!changeDue(run.policy, progressed) || !budgeted(run)) return null;
+  // A QUICK pass is one small change with nothing to plan: its budget is a quick pass's.
+  const budget = skipsVerifyStage(run.pipeline) ? QUICK_CHANGE_TURN_BUDGET : PLAN_TURN_BUDGET;
+  if (!changeDue(run.policy, progressed(run), budget) || !budgeted(run)) return null;
   const tools = changeToolsOf(run, selected);
   if (!tools) return null;
   reportToPolicy(run, { type: 'change_forced' });
@@ -110,5 +130,5 @@ export function changeBudgetTurn(run: RunLoopContext, step: number, selected: re
     args: { step, codeTurns: run.policy.codeTurns },
     result: `${run.policy.codeTurns} coding turn(s) with no change and no hand-off — this turn offers the change tools alone and requires a call.`,
   });
-  return { tools, toolChoice: 'required', brief: { role: 'user', content: changeDueBrief(run.policy.codeTurns) } };
+  return { tools, toolChoice: 'required', brief: { role: 'user', content: changeBrief(`STOP READING. You have spent ${run.policy.codeTurns} coding turns without changing anything.`, run.canAskUser) } };
 }

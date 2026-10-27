@@ -8,13 +8,7 @@
 import { ASK_USER_TOOL, ASK_USER_TOOL_SPEC } from '@builderforce/agent-loop';
 import { initialRunPolicy } from '@builderforce/run-policy';
 import { isCostLeverOn } from '@builderforce/cost-levers';
-import {
-  toolNamesMentionedIn,
-  isContinuationDirective,
-  promisesUnfinishedWork,
-  continuationDirective,
-  memoryReplayable,
-} from '@builderforce/agent-stall';
+import { toolNamesMentionedIn, memoryReplayable } from '@builderforce/agent-stall';
 import type { CompletionMetadata } from '../streamChatCompletion';
 import { HAND_OFF_TOOL_SPEC } from '../planHandoff';
 import { canChangeCodeHere, canShipHere, canReviewInPreview, localToolsIn, memoryToolsIn, studioToolsIn } from '../localWorkspaceTools';
@@ -25,6 +19,8 @@ import { selfReviewShipDirective } from '../selfReviewShip';
 import { previewReviewDirective } from '../previewReview';
 import { previousReplyText } from '../restatedReply';
 import { ReadCoverage } from '../readCoverage';
+import { CacheServedStreak } from './cacheServedStreak';
+import { readRequest } from './requestReading';
 import { RunKnowledgeRecorder, type RunKnowledgeLog } from '@builderforce/agent-tools';
 import { FailureTally, WriteLedger } from '@builderforce/run-guards';
 import { PlaceholderLedger } from '../completionGuard';
@@ -33,13 +29,14 @@ import { recordTranscriptAnchors } from './runFoldMarker';
 import { createRunWindowFit } from '../windowFit/runWindowFit';
 import type { RunCell } from './runCell';
 import { nowIso, pushTrace } from './runCells';
-import { isFollowUpTurn, lastAssistantText, latestUserText } from './convoText';
+import { isFollowUpTurn, latestUserText } from './convoText';
 import { answerFromMemory, recallForRun } from './runMemory';
 import { gatherHostRunContext, recordServedReads } from './hostRunContext';
 import type { RunLoopContext } from './runLoopContext';
 import type { BrainRunRequest } from './runTypes';
 import { attachTurnContext, restoreTurnContext, turnContextBlock, turnContextCarrier } from './turnContext';
 import { resolveServerChatId } from './serverChat';
+import { decideRunPipeline, pipelineMetadata, pipelinePolicyOptions } from './pipelineRoute';
 
 /**
  * B1 (`b1_stable_prefix`): per-turn blocks ride AFTER the history instead of in the
@@ -107,6 +104,19 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
   // leaves the machine, so an unbound chat sends no chat id at all — never its own number,
   // which named (and billed) whichever server chat happened to share it.
   const serverChatId = resolveServerChatId(chatId, req);
+  // Full pipeline or a quick pass — decided ONCE, on the user's own request, before any
+  // turn (see `pipelineRoute.ts`). Every call carries the route, so the gateway's usage
+  // row and the device's ledger row both say which pipeline spent the tokens.
+  const pipeline = decideRunPipeline(req, latestUserText(convo), { followUp: isFollowUpTurn(convo) });
+  if (pipeline) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: 'message',
+      label: 'run.pipeline_route',
+      args: { route: pipeline.route, score: pipeline.score },
+      result: `${pipeline.route === 'quick' ? 'Quick pass' : 'Full pipeline'}: ${pipeline.reason}`,
+    });
+  }
   const metadata: CompletionMetadata = {
     ...(serverChatId != null ? { chatId: serverChatId } : {}),
     ...(req.clientChatId ? { clientChatId: req.clientChatId } : {}),
@@ -114,6 +124,7 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
     guestTurnInput: latestUserText(convo),
     mode: runMode,
     ...(req.projectId != null ? { projectId: req.projectId } : {}),
+    ...pipelineMetadata(pipeline),
   };
 
   // What the host hands the run before turn 1, in one wait (see `hostRunContext.ts`): the
@@ -195,31 +206,14 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
   // does not carry — so "continue" builds on what was read instead of reading it again.
   if (c.priorResearch) systemPrompt = `${systemPrompt}\n\n${c.priorResearch}`;
 
-  // A bare "Fix" / "do it" / "go ahead" has no subject of its own — it points at the
-  // proposal in the previous assistant turn. Read as a fresh, contextless request it
-  // is genuinely ambiguous, and the model then does the reasonable-looking thing: it
-  // asks what to fix, while the answer sits one message above it in the same
-  // transcript. The user has to re-explain something they already said, and the turn
-  // produced nothing.
-  //
-  // Resolved HERE rather than left to the model to notice, because the connection is
-  // structural and cheap to verify — a contentless directive landing directly on a
-  // turn that promised unfinished work — and because a model that misreads it burns a
-  // whole turn asking.
-  // The user's OWN request for this run, captured once. Every later read of the
-  // transcript would find the loop's own recovery nudge instead — and the handoff gate
-  // in the final-answer hook asks "did the USER ask for a change?", a question a nudge
-  // cannot answer.
-  const userRequest = latestUserText(convo);
-  if (isContinuationDirective(userRequest) && promisesUnfinishedWork(lastAssistantText(convo))) {
-    if (stablePrefix) turnParts.push(continuationDirective());
-    else systemPrompt = `${systemPrompt}\n\n${continuationDirective()}`;
-    pushTrace(c, {
-      ts: nowIso(),
-      category: 'message',
-      label: 'turn.continuation_resolved',
-      result: "The user's bare directive was resolved against the previous turn's unfinished proposal, so the run carries that proposal out instead of asking what to fix.",
-    });
+  // What the person's request means for this run: their own words, the directives
+  // they imply (a bare continuation, the chat's change asks) and the hand-off goal
+  // (`requestReading.ts`). The directives ride the same channel as every other.
+  const reading = readRequest(c, convo, runMode);
+  const { userRequest } = reading;
+  for (const directive of reading.directives) {
+    if (stablePrefix) turnParts.push(directive);
+    else systemPrompt = `${systemPrompt}\n\n${directive}`;
   }
 
   // Tool names the resolved system prompt tells the model to call. Always advertised.
@@ -290,6 +284,9 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
     recallBlockTokens,
     memoryReplay,
     userRequest,
+    // The goal a hand-off states to coders who see none of this chat: the latest
+    // message, and for a change request the chat's earlier change asks (`chatAsks.ts`).
+    goal: reading.goal,
     // One re-prompt per run for a final reply that repeats the previous turn's answer
     // (see `restatedReply.ts`). Captured before the loop: the transcript grows as it runs.
     priorReply: previousReplyText(convo),
@@ -304,6 +301,9 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
     // starts circling. Both are invalidated together, and only for what a later
     // mutation actually touched — never wiped wholesale by an unrelated call.
     readCoverage: new ReadCoverage(),
+    // How many calls in a row that cache has answered — a run circling its own reads
+    // is forced to hand off or change (`cacheServedStreak.ts`).
+    cacheStreak: new CacheServedStreak(),
     // What the run did and read, restated in front of every turn (its `brief()`) —
     // the host's recorder when it keeps one, so the ledger and its code map agree.
     knowledge: recorderFor(userRequest, req.knowledge),
@@ -341,9 +341,12 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
       // budget and let an old chat read forever while a fresh one handed off (chat
       // #5739). The one exception is a ROLE, not history — a sub-agent is a delegated
       // SLICE its owner already planned; started in `plan` it was offered `hand_off` and
-      // the analysis all over again, inside work it was handed to carry out.
-      startPhase: req.lineage ? 'code' : 'plan',
+      // the analysis all over again, inside work it was handed to carry out. A QUICK
+      // run (`pipelineRoute.ts`) starts in `code` too, on the quick model. The host's
+      // stage models ride as `phaseModels`, never as one model pinned to the whole run.
+      ...pipelinePolicyOptions(req, pipeline),
     }),
+    pipeline,
     // Bounded counter for the announced-but-never-made tool call recovery, so a model
     // that keeps narrating instead of acting cannot spin the loop. Not one-shot: a model
     // that stalls once frequently stalls again on the very next turn, and spending the

@@ -23,14 +23,18 @@ import type { RunCell } from './runCell';
 import { nowIso, pushTrace, recordAppended } from './runCells';
 import { canonicalTurnText, provenanceMetadata } from './turnPersistence';
 import type { BrainRunRequest } from './runTypes';
+import type { RunPipeline } from './pipelineRoute';
+import type { CacheServedStreak } from './cacheServedStreak';
 
 /** Read-only, idempotent LOCAL file/search tools whose exact-repeat call within a run is
  *  suppressed (the result is already in context). Read-only PLATFORM (`builtin_*`) tools
  *  are covered separately by {@link isReadOnlyPlatformTool} — together they are the
  *  `isDedupableRead` set. Deliberately narrow — only tools that observe and can't mutate,
  *  so a stubbed repeat never hides a real change (a mutation clears the dedupe set anyway;
- *  see `readDedupe.ts`). */
-const DEDUP_READ_TOOLS = new Set(['read_file', 'search_code', 'list_files', 'find_symbol', 'file_outline', 'semantic_search', 'repo_map']);
+ *  see `readDedupe.ts`). The repeat key is the tool plus ALL its canonical args, so a
+ *  `local_research` call is a repeat only when it asks the same question of the same
+ *  files; a code change forgets it like any tree-wide read (`run-guards` readCoverage). */
+const DEDUP_READ_TOOLS = new Set(['read_file', 'search_code', 'list_files', 'find_symbol', 'file_outline', 'semantic_search', 'repo_map', 'read_compressed', 'local_research']);
 
 /** A tool whose identical-args repeat within a run is safe to suppress: a local file/search
  *  tool, a host read of repository state (`review_ticket_branches` — forgotten by every
@@ -78,6 +82,8 @@ export interface RunLoopContext {
   memoryReplay: boolean;
   /** The user's OWN request for this run, captured before the loop writes any nudge. */
   userRequest: string;
+  /** The goal a hand-off states to its coders — {@link userRequest} plus the chat's earlier asks. */
+  goal: string;
   /** The previous turn's reply — what a restated final answer is compared against. */
   priorReply: string;
   /** The request every turn's tool selection scores against. */
@@ -85,11 +91,16 @@ export interface RunLoopContext {
   /** The window-fit gate every request passes through. */
   windowFit: RunWindowFit;
   readCoverage: ReadCoverage;
+  /** Consecutive calls the read cache answered — the no-progress breaker (`cacheServedStreak.ts`). */
+  cacheStreak: CacheServedStreak;
   /** The run's ONE record of what it did and read — the source of each turn's ledger. */
   knowledge: RunKnowledgeLog;
   failures: FailureTally;
   writeLedger: WriteLedger;
   placeholderLedger: PlaceholderLedger;
+
+  /** The run's pipeline route (`pipelineRoute.ts`), or null when the run was not routed. */
+  pipeline: RunPipeline | null;
 
   /** THE model hand-off policy's state — advanced only through {@link reportToPolicy}. */
   policy: RunPolicyState;
