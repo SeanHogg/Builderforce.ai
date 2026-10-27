@@ -17,8 +17,11 @@
       "@builderforce/agent-stall": ["../agent-stall/src/index.ts"],
       "@builderforce/agent-tools": ["../agent-tools/src/index.ts"],
       "@builderforce/cost-levers": ["../cost-levers/src/index.ts"],
+      "@builderforce/difficulty-router": ["../difficulty-router/src/index.ts"],
       "@builderforce/run-guards": ["../run-guards/src/index.ts"],
-      "@builderforce/run-policy": ["../run-policy/src/index.ts"]
+      "@builderforce/run-policy": ["../run-policy/src/index.ts"],
+      "@builderforce/tool-output-policy": ["../tool-output-policy/src/index.ts"],
+      "@seanhogg/builderforce-memory/working": ["../../../../../../builderforce-memory/packages/memory/dist/working/index.d.ts"]
     }
   },
   "include": ["src/**/*.ts", "test/**/*.ts"],

@@ -1,23 +1,41 @@
 /**
- * policy/context — `policy/context/**` — the recall query built from the prompt plus the focus files' headings, never the bare sentence.
+ * policy/context — `policy/context/**` — the recall query built from the prompt plus the
+ * focus files' terms, never the bare sentence.
  *
- * Owned by WS2e. Until WS2e lands, this hook is a NO-OP and says so: it does
- * the honest "not yet" of a module whose workstream has not shipped, so the agent
- * runs today exactly as it did before the split.
+ * Owned by WS2e. This module is the context policy the composition in `policy/index.ts`
+ * already calls. It supplies the recall LINES the run should carry — the prompt plus
+ * the focus-file terms, as the query the surface's memory recall runs on. The
+ * `ContextPack` itself is built by the adapter's `ContextSource.port` (§6.10); this
+ * hook names WHAT to recall, the port runs the search and owns the pack.
  *
- * WS2e replaces THIS FOLDER and nothing else. It ports the behaviour, brings the
- * source's existing tests along unchanged, and exposes the hook the composition in
- * `policy/index.ts` already calls.
+ * It ports `brain-embedded/src/runStore/runMemory.ts` `recallQuery` (PRD 35 E2) —
+ * today's recall searched with the raw user sentence alone, so a run grounding on
+ * "the PRD" found the wrong memory — and reads the pack's focus files into the hint,
+ * the third part of the editor's `runContextFor` (the pack's recall line is built once
+ * per run with no model call, time-boxed and failure-tolerant).
  *
  * No `node:*` imports, no DOM: this file is compiled into the Worker, the browser
  * and Node.
  */
 
 import type { ContextHook, PolicyContext } from "../hooks.js";
+import { focusHint, recallQuery } from "./recall.js";
 
 /** The context hook, as it stands. */
 export const contextHook: ContextHook = {
-  recall(_ctx: PolicyContext) {
-    return undefined;
+  /**
+   * The recall lines the run should carry, queried with the prompt and the focus terms.
+   * Returns the query the surface's memory recall runs on, or nothing when there is no
+   * request to ground the recall on (a hint alone is not a question).
+   */
+  async recall(ctx: PolicyContext) {
+    let pack;
+    try {
+      pack = await ctx.ports.context.pack(ctx.task);
+    } catch {
+      return undefined; // best-effort: a pack that cannot build carries no recall
+    }
+    const query = recallQuery(ctx.task.prompt, focusHint(pack));
+    return query ? [query] : undefined;
   },
 };

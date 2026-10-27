@@ -9,11 +9,11 @@
  * Each WS2 workstream owns ONE folder — `policy/compaction`, `policy/stall`,
  * `policy/steering`, `policy/ask`, `policy/subagents`, `policy/finish`,
  * `policy/guards`, `policy/verify`, `policy/memory`, `policy/context`,
- * `policy/tools`, `policy/model` — and nothing else in this package. Every one of
- * those folders exists NOW, holding a NO-OP hook, because the agent has to run
- * before any of them lands. A workstream replaces the contents of ITS folder and
- * nothing else: this file imports the twelve folders, so the wiring is already in
- * place and no two workstreams ever touch the same file.
+ * `policy/tools`, `policy/model` — and nothing else in this package. WS1 stood
+ * every one of those folders up with a NO-OP hook so the agent could run before
+ * any behaviour landed; a workstream then replaced the contents of ITS folder and
+ * nothing else. This file imports the twelve folders, so the wiring was already in
+ * place and no two workstreams ever touched the same file.
  *
  * That is the whole point of the split. The alternative — one file with twelve
  * behaviour blocks, or a registry the modules register into at import time — makes
@@ -21,9 +21,9 @@
  * A module that cannot change the composition cannot change the agent's behaviour
  * by accident.
  *
- * The no-op hooks are NOT placeholders for behaviour written here later. They are
- * the honest "not yet" of a module whose workstream has not landed, and each says
- * so.
+ * As of the WS2 workstream (all twelve landed), each hook is a real module, not a
+ * no-op. The doc above is kept because it records the ownership contract WS2 ran
+ * under — future workstreams keep replacing ONE folder and never this file.
  */
 
 import type {
