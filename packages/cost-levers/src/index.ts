@@ -14,6 +14,11 @@
  * A percentage is applied by a stable FNV-1a bucket of `<leverId>:<tenantId>`,
  * so a tenant stays in the same arm across requests and isolates, and different
  * levers split tenants independently. No tenant id → the lever is on only at 100.
+ *
+ * On-device hosts (the VS Code extension, the on-prem runtime) have no tenant on the
+ * local path, so they bucket by a stable INSTALL id instead ({@link isOnDeviceCostLeverOn})
+ * — one install stays in one arm, and a 10% lever reaches about 10% of installs rather
+ * than none of them.
  */
 
 export type CostLeverId =
@@ -153,4 +158,24 @@ export function isCostLeverOn(env: unknown, id: CostLeverId, tenantId: string | 
 /** Which arm a tenant is in for every lever — stamped on usage rows so A4 can compare arms. */
 export function costLeverArms(env: unknown, tenantId: string | number | null | undefined): CostLeverId[] {
   return COST_LEVERS.filter((l) => isCostLeverOn(env, l.id, tenantId)).map((l) => l.id);
+}
+
+/**
+ * The bucket subject for an on-device install. Prefixed so an install id can never land
+ * in the same bucket as a tenant that happens to share its spelling.
+ */
+export function onDeviceLeverSubject(installId: string | null | undefined): string | null {
+  const id = (installId ?? '').trim();
+  return id ? `device:${id}` : null;
+}
+
+/**
+ * THE gate for an on-device host — the one resolver the VS Code extension and the on-prem
+ * runtime share. Env overrides and the manifest default resolve exactly as
+ * {@link isCostLeverOn}; a partial rollout is bucketed by the host's stable install id
+ * (`vscode.env.machineId`, the runtime's device id). No install id ⇒ on only at 100,
+ * the same answer a tenant-less call gets.
+ */
+export function isOnDeviceCostLeverOn(env: unknown, id: CostLeverId, installId: string | null | undefined): boolean {
+  return isCostLeverOn(env, id, onDeviceLeverSubject(installId));
 }

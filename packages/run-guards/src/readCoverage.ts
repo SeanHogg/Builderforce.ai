@@ -80,8 +80,9 @@ export function canonicalReadArgs(tool: string, args: unknown): Record<string, u
 }
 
 /** Reads whose answer depends on files OTHER than a named target. An edit to any file
- *  can change them, so a code change forgets their cached answers. */
-const TREE_WIDE_READ_TOOLS = new Set(["search_code", "find_symbol", "list_files", "semantic_search", "repo_map"]);
+ *  can change them, so a code change forgets their cached answers. `local_research`
+ *  picks its files from the question (or names several), so it is tree-wide too. */
+const TREE_WIDE_READ_TOOLS = new Set(["search_code", "find_symbol", "list_files", "semantic_search", "repo_map", "local_research"]);
 
 /** A tool result as an object — the host may hand it back already parsed or as JSON text. */
 function resultObject(result: unknown): Record<string, unknown> | null {

@@ -2004,6 +2004,12 @@ export const llmUsageLog = pgTable('llm_usage_log', {
    *  product report, so it gets indexed columns rather than a JSON scan. */
   chatId:           integer('chat_id'),
   chatMode:         varchar('chat_mode', { length: 16 }).$type<'chat' | 'work'>(),
+  /** The run's PIPELINE route — `full` (plan → code → verify) or `quick` (one coding
+   *  pass) — and the router's score in [0, 1] (`@builderforce/pipeline-route`), migration
+   *  1277 / transactional 0024. Promoted from the run's `metadata.pipelineRoute` /
+   *  `routeScore`; NULL for a call whose run was not routed. */
+  pipelineRoute:    varchar('pipeline_route', { length: 8 }).$type<'full' | 'quick'>(),
+  routeScore:       real('route_score'),
   /** SDK-supplied Idempotency-Key — gateway will use this to dedupe retries (TTL TBD). */
   idempotencyKey:   varchar('idempotency_key', { length: 128 }),
   /** Opaque telemetry slug from `body.useCase`. Free-form; tenant taxonomy. */

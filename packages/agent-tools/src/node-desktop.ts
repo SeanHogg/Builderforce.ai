@@ -32,6 +32,9 @@ import type {
   SemanticSearchResult,
 } from "./capabilities.js";
 import { SEMANTIC_TOOLS } from "./semantic-tools.js";
+import { readCompressedTool } from "./read-compressed-tool.js";
+import { compressProse, type CompressProseOptions, type ProseKind } from "./proseCompress.js";
+import type { CompressLargeContextResult } from "./compress.js";
 
 export interface DesktopDiscovery {
   port: number;
@@ -278,10 +281,35 @@ export async function catalogDesktopSemantic(root: string, opts?: { adaptive?: b
 /**
  * The run's local tools with the semantic ones kept only while the desktop service
  * answers — decided per run, so starting or quitting the app takes effect next turn.
+ * `read_compressed` additionally needs the service's compressor. `localRepoMap`: the
+ * surface serves `repo_map` from its own definition index (`symbolIndexSemantic`), so
+ * that one tool stays when the service is down.
  */
-export async function desktopBackedTools<T extends { name: string }>(defs: readonly T[]): Promise<T[]> {
+export async function desktopBackedTools<T extends { name: string }>(
+  defs: readonly T[],
+  opts: { localRepoMap?: boolean } = {},
+): Promise<T[]> {
   const live = (await liveDesktop()) != null;
-  return live ? [...defs] : defs.filter((d) => !SEMANTIC_TOOL_NAMES.has(d.name));
+  const compress = live && probe?.compress === true;
+  return defs.filter((d) => {
+    if (d.name === readCompressedTool.name) return compress;
+    if (!SEMANTIC_TOOL_NAMES.has(d.name)) return true;
+    return live || (opts.localRepoMap === true && d.name === "repo_map");
+  });
+}
+
+/**
+ * `compressProse` through the desktop compressor when the service has one (code is never
+ * compressed; no compressor ⇒ the text unchanged). For context ingress: callers gate it on
+ * cost lever `c8_token_compression` themselves — this module reads no lever.
+ */
+export async function desktopCompressProse(
+  text: string,
+  kind: ProseKind,
+  opts: Omit<CompressProseOptions, "compress"> = {},
+): Promise<CompressLargeContextResult> {
+  const compress = (await desktopCompressAvailable()) ? desktopCompress : undefined;
+  return compressProse(text, kind, { ...opts, ...(compress ? { compress } : {}) });
 }
 
 /** Ask the service to index (and watch) a workspace. Fire-and-forget on folder open. */

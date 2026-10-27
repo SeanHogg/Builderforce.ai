@@ -1,3 +1,5 @@
+import { runBudgetBreach, runBudgetUsedShare as sharedUsedShare } from '@builderforce/spend-contract';
+
 export interface RunLimits {
   maxFiles: number | null;
   maxRepositories: number | null;
@@ -15,12 +17,30 @@ export interface RunUsage {
   tokens?: number;
 }
 
-export function checkRunLimits(limits: RunLimits, usage: RunUsage): string | null {
+/**
+ * The run's FOOTPRINT caps alone — files written and repositories touched. What a tool
+ * call is checked against before it runs: spend accrues per model turn and is checked
+ * there ({@link checkRunLimits} in the cost loop's pre-turn check), never per tool.
+ */
+export function checkFootprintLimits(
+  limits: Pick<RunLimits, 'maxFiles' | 'maxRepositories'>,
+  usage: Pick<RunUsage, 'files' | 'repositories'>,
+): string | null {
   if (limits.maxFiles != null && usage.files > limits.maxFiles) return `file limit exceeded (${usage.files}/${limits.maxFiles})`;
   if (limits.maxRepositories != null && usage.repositories > limits.maxRepositories) return `repository limit exceeded (${usage.repositories}/${limits.maxRepositories})`;
-  if (limits.maxSpendMillicents != null && usage.spendMillicents >= limits.maxSpendMillicents) return `spend limit reached (${usage.spendMillicents}/${limits.maxSpendMillicents} millicents)`;
-  if (limits.maxTokens != null && (usage.tokens ?? 0) >= limits.maxTokens) return `token limit reached (${usage.tokens ?? 0}/${limits.maxTokens} tokens)`;
   return null;
+}
+
+export function checkRunLimits(limits: RunLimits, usage: RunUsage): string | null {
+  const footprint = checkFootprintLimits(limits, usage);
+  if (footprint) return footprint;
+  // The spend / token caps are the ONE budget rule the editor's run store also holds a
+  // run to (`@builderforce/spend-contract` `runBudget.ts`); only the wording is ours.
+  const breach = runBudgetBreach(limits, usage);
+  if (!breach) return null;
+  return breach.kind === 'spend'
+    ? `spend limit reached (${breach.used}/${breach.cap} millicents)`
+    : `token limit reached (${breach.used}/${breach.cap} tokens)`;
 }
 
 /** Default per-run token ceiling by plan (cost lever A2). An unknown plan gets the free cap. */
@@ -42,7 +62,5 @@ export function resolveRunTokenCap(plan: string | null | undefined, override?: u
 
 /** Fraction (0..1+) of a run's budget used — the larger of the spend and token shares. */
 export function runBudgetUsedShare(limits: RunLimits, usage: RunUsage): number {
-  const spend = limits.maxSpendMillicents ? usage.spendMillicents / limits.maxSpendMillicents : 0;
-  const tokens = limits.maxTokens ? (usage.tokens ?? 0) / limits.maxTokens : 0;
-  return Math.max(spend, tokens);
+  return sharedUsedShare(limits, usage);
 }

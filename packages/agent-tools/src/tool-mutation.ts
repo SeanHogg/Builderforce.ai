@@ -44,6 +44,10 @@ export const TOOL_SIDE_EFFECT = {
   file_outline: "read",
   semantic_search: "read",
   repo_map: "read",
+  read_compressed: "read",
+  // Its answer cache under .builderforce/ is a cache, like the symbol index
+  // find_symbol keeps there — no change the person would review.
+  local_research: "read",
   // Shells out to the analyzers and writes their artifacts under
   // .builderforce/code-analysis/, so it is a working-tree write, not a read.
   analyze_codebase: "mutate",

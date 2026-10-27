@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/pipeline-route",
+  "version": "2026.10.0",
+  "private": true,
+  "type": "module",
+  "description": "The pipeline router: does this request need the FULL plan -> code -> verify pipeline, or will a QUICK single coding pass do? A logistic score over a request's lexical features (length, files named, multi-step, broad scope, question-only, action type) with the weights as data, a threshold, an `always` mode and a 'full pipeline' override; plus the pure route-report math (runs and cost per route, score histogram, misroute proxy, suggested threshold). Pure, dependency-free and I/O-free: hosts decide once per run and record the route on the usage ledger.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

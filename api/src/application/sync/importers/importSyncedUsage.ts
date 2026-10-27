@@ -27,6 +27,7 @@
 
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { normalizeByoProvider, SYNC_USAGE_IDEMPOTENCY_PREFIX } from '../../llm/usageLedger';
+import { readPipelineAttribution, type PipelineAttribution } from '../../llm/pipelineRouteAttribution';
 import type { SyncEventInput, SyncImportContext, SyncStoreSet, SyncUsageLedger } from '../syncPorts';
 import {
   appliedExisting,
@@ -44,6 +45,8 @@ const ROUTES = new Set(['gateway', 'local', 'byo-direct']);
 const MODES = new Set(['chat', 'work']);
 /** `llm_usage_log.model` is varchar(200). */
 const MODEL_MAX = 200;
+/** `llm_usage_log.role` is varchar(16). */
+const ROLE_MAX = 16;
 
 export const USAGE_USE_CASE = 'vsix-local-usage';
 
@@ -53,6 +56,9 @@ interface UsageFields {
   model: string;
   route: 'gateway' | 'local' | 'byo-direct';
   mode: 'chat' | 'work' | null;
+  /** The call's role and the run's pipeline route / score (`RunUsageValue`), when stamped. */
+  role: string | null;
+  pipeline: PipelineAttribution;
   promptTokens: number;
   completionTokens: number;
   cacheReadTokens: number;
@@ -101,6 +107,8 @@ function readUsage(payload: unknown, clientEntityId: string): Parsed<UsageFields
       model: raw.model.slice(0, MODEL_MAX),
       route: raw.route as UsageFields['route'],
       mode: typeof raw.mode === 'string' && MODES.has(raw.mode) ? (raw.mode as 'chat' | 'work') : null,
+      role: typeof raw.role === 'string' && raw.role.length > 0 && raw.role.length <= ROLE_MAX ? raw.role : null,
+      pipeline: readPipelineAttribution(raw),
       promptTokens: count(raw.promptTokens),
       completionTokens: count(raw.completionTokens),
       cacheReadTokens: count(raw.cacheReadTokens),
@@ -163,6 +171,10 @@ export async function importSyncedUsage(
       metadata: {
         ...(chatId !== null ? { chatId } : {}),
         ...(usage.mode ? { mode: usage.mode } : {}),
+        // The same metadata keys a gateway call carries, so the writer promotes them to
+        // the `pipeline_route` / `route_score` columns for a device's own calls too.
+        ...(usage.pipeline.pipelineRoute ? { pipelineRoute: usage.pipeline.pipelineRoute } : {}),
+        ...(usage.pipeline.routeScore !== null ? { routeScore: usage.pipeline.routeScore } : {}),
         clientEventId: usage.clientEventId,
         source: 'client-reported',
       },
@@ -171,6 +183,7 @@ export async function importSyncedUsage(
       byo: true,
       byoProvider: usage.route === 'byo-direct' ? directProvider(usage.model) : null,
       surface: 'vsix',
+      ...(usage.role ? { attribution: { role: usage.role } } : {}),
       calls: 1,
       createdAt: clampedClientTime(usage.at, ctx.now),
       ...(usage.localSaving

@@ -24,6 +24,20 @@ import { isUnderScopeDir, normalizeScopeDir } from "./glob.js";
 import { gitIgnoredMatcher, gitIgnoredSubset } from "./node-git-ignore.js";
 import { extractSymbols, isSymbolIndexable, SYMBOL_KINDS, type CodeSymbol, type SymbolKind } from "./symbols.js";
 
+// The tree-sitter extractor (web-tree-sitter WASM, regex fallback per language) lives in
+// its own module and is re-exported from this export condition.
+export { treeSitterSymbolExtractor, type TreeSitterExtractorOptions } from "./node-tree-sitter.js";
+
+/** How a file's definitions are read. `id` is stamped on the snapshot: a snapshot built by
+ *  a different extractor is re-parsed, never trusted. */
+export interface SymbolExtractor {
+  readonly id: string;
+  extract(relPath: string, content: string): CodeSymbol[] | Promise<CodeSymbol[]>;
+}
+
+/** The dependency-free line-regex extractor (`symbols.ts`) — the default and the fallback. */
+export const REGEX_SYMBOL_EXTRACTOR: SymbolExtractor = { id: "regex", extract: extractSymbols };
+
 /** Directories never indexed — build output, dependencies, VCS and tool caches. */
 export const SYMBOL_INDEX_SKIP_DIRS: ReadonlySet<string> = new Set([
   "node_modules", ".git", "dist", "build", "out", ".next", "coverage", ".turbo", ".vercel", ".cache",
@@ -41,6 +55,8 @@ export interface SymbolIndexOptions {
   cachePath?: string;
   /** Minimum gap between full stat walks. A host with a file watcher can set it high. */
   fullRefreshMs?: number;
+  /** How definitions are read (default {@link REGEX_SYMBOL_EXTRACTOR}). */
+  extractor?: SymbolExtractor;
 }
 
 interface FileEntry {
@@ -53,6 +69,8 @@ interface FileEntry {
 type SnapshotFile = [string, number, number, Array<[string, number, number, 0 | 1]>];
 interface Snapshot {
   v: 1;
+  /** The {@link SymbolExtractor.id} that parsed it; absent = the regex extractor. */
+  extractor?: string;
   files: SnapshotFile[];
 }
 
@@ -101,6 +119,7 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
   private readonly maxFileBytes: number;
   private readonly cachePath?: string;
   private readonly fullRefreshMs: number;
+  private readonly extractor: SymbolExtractor;
   private files = new Map<string, FileEntry>();
   private readonly dirty = new Set<string>();
   private lastFullRefresh = 0;
@@ -115,6 +134,15 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
     this.maxFileBytes = options.maxFileBytes ?? 1_000_000;
     this.cachePath = options.cachePath;
     this.fullRefreshMs = options.fullRefreshMs ?? 60_000;
+    this.extractor = options.extractor ?? REGEX_SYMBOL_EXTRACTOR;
+  }
+
+  /** True when the walk would never visit `rel`: under a skipped or dot directory (which
+   *  covers this index's own `.builderforce/symbols.json`). A watcher reports everything. */
+  private skipped(rel: string): boolean {
+    const segments = rel.split("/");
+    const dirs = isSymbolIndexable(rel) ? segments.slice(0, -1) : segments;
+    return dirs.some((d) => d.startsWith(".") || this.skipDirs.has(d));
   }
 
   /** Repo-relative POSIX path for an absolute or relative path, or null when outside. */
@@ -128,7 +156,7 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
   /** Re-parse `p` (absolute or root-relative) on the next query. Cheap; safe to over-call. */
   markDirty(p: string): void {
     const rel = this.relative(p);
-    if (!rel) return;
+    if (!rel || this.skipped(rel)) return;
     if (isSymbolIndexable(rel)) {
       this.dirty.add(rel);
       return;
@@ -259,7 +287,12 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
     if (existing && existing.mtime === stat.mtimeMs && existing.size === stat.size) return false;
     const content = await fs.readFile(abs, "utf-8").catch(() => null);
     if (content == null) return this.files.delete(rel);
-    this.files.set(rel, { mtime: stat.mtimeMs, size: stat.size, symbols: extractSymbols(rel, content) });
+    // An extractor that fails (a grammar that will not load, a parse that throws) costs
+    // that file the better parse, never its symbols: the regex extractor reads it instead.
+    const symbols = await Promise.resolve()
+      .then(() => this.extractor.extract(rel, content))
+      .catch(() => extractSymbols(rel, content));
+    this.files.set(rel, { mtime: stat.mtimeMs, size: stat.size, symbols });
     return true;
   }
 
@@ -302,6 +335,8 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
     try {
       const snap = JSON.parse(await fs.readFile(this.cachePath, "utf-8")) as Snapshot;
       if (snap?.v !== 1 || !Array.isArray(snap.files)) return;
+      // Another extractor's symbols are not this one's: re-parse rather than serve them.
+      if ((snap.extractor ?? REGEX_SYMBOL_EXTRACTOR.id) !== this.extractor.id) return;
       for (const [rel, mtime, size, symbols] of snap.files) {
         this.files.set(rel, {
           mtime,
@@ -322,7 +357,8 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
     }
     try {
       await fs.mkdir(path.dirname(this.cachePath), { recursive: true });
-      await fs.writeFile(this.cachePath, JSON.stringify({ v: 1, files } satisfies Snapshot), "utf-8");
+      const snapshot: Snapshot = { v: 1, ...(this.extractor.id !== REGEX_SYMBOL_EXTRACTOR.id ? { extractor: this.extractor.id } : {}), files };
+      await fs.writeFile(this.cachePath, JSON.stringify(snapshot), "utf-8");
     } catch {
       /* best-effort: an unwritable snapshot only costs a re-read on the next start */
     }

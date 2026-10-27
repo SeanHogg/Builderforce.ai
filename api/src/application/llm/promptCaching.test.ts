@@ -109,7 +109,7 @@ describe('applyPromptCaching — history boundary', () => {
     expect(out[3]!.content).toEqual([{ type: 'text', text: 'q2', cache_control: { type: 'ephemeral' } }]);
   });
 
-  it('walks back past tool turns and text-less tool-call turns to the nearest markable one', () => {
+  it('marks the latest tool result so a tool loop caches its whole history; skips text-less tool-call turns', () => {
     const messages = [
       { role: 'system', content: 'sys' },
       { role: 'user', content: 'q' },
@@ -117,9 +117,9 @@ describe('applyPromptCaching — history boundary', () => {
       { role: 'tool', content: 'tool-result' },
     ];
     const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-5');
-    expect(out[3]!.content).toBe('tool-result'); // tool turn never promoted on this path
+    expect(out[3]!.content).toEqual([{ type: 'text', text: 'tool-result', cache_control: { type: 'ephemeral' } }]);
     expect(out[2]!.content).toBe(''); // nothing to attach to
-    expect(out[1]!.content).toEqual([{ type: 'text', text: 'q', cache_control: { type: 'ephemeral' } }]);
+    expect(out[1]!.content).toBe('q');
   });
 
   it('never marks the per-turn volatile tail (B1) — the breakpoint goes on the message before it', () => {

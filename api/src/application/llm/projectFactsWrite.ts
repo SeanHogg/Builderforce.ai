@@ -3,8 +3,8 @@
  * accumulate) and the by-key delete. Every write bumps the project's fact version so no
  * cached read serves a stale set. Primitives live in `projectFactsStore`.
  */
-import { mergeConsolidated } from '@seanhogg/builderforce-memory/working';
-import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { CONSOLIDATED_KEY_PREFIX, mergeConsolidated } from '@seanhogg/builderforce-memory/working';
+import { and, eq, isNull, ne, notLike, sql } from 'drizzle-orm';
 import { memoryEmbeddingText } from '../memory/memoryEmbedding';
 import { NO_MEMORY_EMBEDDING, memoryEmbeddingFieldsFor } from '../memory/memoryEmbeddingPolicy';
 import { projectFacts } from '../../infrastructure/database/schema';
@@ -13,6 +13,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { clamp01 } from '../../domain/shared/numbers';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { codemapWriteAnchors, isCodemapKey } from './projectFactsCodemap';
 import {
   bumpProjectFactsVersion,
   factContentHash,
@@ -68,11 +69,11 @@ export async function upsertProjectFact(
   const originCost = originCostColumns(origin);
   // Content score, then a small lift from how often recall has already returned
   // this key. A brand-new key has no prior count, so it keeps the content score.
-  type PriorFact = { recallCount: number; content: string | null; expiresAt: Date | null; supersededBy: number | null };
+  type PriorFact = { recallCount: number; content: string | null; expiresAt: Date | null; supersededBy: number | null; fileAnchors?: unknown };
   let prior: PriorFact[] = [];
   try {
     const result = await db
-      .select({ recallCount: projectFacts.recallCount, content: projectFacts.content, expiresAt: projectFacts.expiresAt, supersededBy: projectFacts.supersededBy })
+      .select({ recallCount: projectFacts.recallCount, content: projectFacts.content, expiresAt: projectFacts.expiresAt, supersededBy: projectFacts.supersededBy, fileAnchors: projectFacts.fileAnchors })
       .from(projectFacts)
       .where(and(eq(projectFacts.tenantId, tenantId), eq(projectFacts.projectId, projectId), eq(projectFacts.key, k)))
       .limit(1);
@@ -93,12 +94,17 @@ export async function upsertProjectFact(
   // was retired on purpose, and folding it back in would resurrect it.
   const live = prior[0] && prior[0].supersededBy == null && !(prior[0].expiresAt && prior[0].expiresAt.getTime() <= Date.now());
   const c = mergeConsolidated(k, live ? prior[0]!.content : null, incoming);
+  // A map's anchors follow its merge: the union of the live prior's and this write's,
+  // limited to the files the merged map lists — so an earlier run's files stay anchored
+  // (and can go stale one by one) instead of being wiped by a write that did not name them.
+  const codemap = isCodemapKey(k);
+  const anchorsIn = codemap ? codemapWriteAnchors(c, live ? prior[0]!.fileAnchors : null, opts?.fileAnchors) : opts?.fileAnchors;
   const baseImportance = opts?.importance ?? factImportance(c, opts?.kind);
   const importance = clamp01(baseImportance + Math.min(0.1, recallCount * 0.01));
   // Stamped on every write, on BOTH branches below. This digest is what tells a
   // corrected belief from a re-assertion of the same one.
   const contentHash = await factContentHash(k, c);
-  const fileAnchors = await stampAnchorHashes(db, tenantId, normalizeFileAnchors(opts?.fileAnchors));
+  const fileAnchors = await stampAnchorHashes(db, tenantId, normalizeFileAnchors(anchorsIn));
   // Embed on write so the fact is semantically reachable on the next recall (1134).
   // Best-effort, and now actually so: the `catch` used to be MISSING, so a provider
   // error propagated out of this function and the belief was never written at all —
@@ -127,7 +133,14 @@ export async function upsertProjectFact(
   // Best-effort, like everything else here: if the UPDATE fails the new belief still
   // gets written, and the worst case is the old one lingering — which is the state
   // this code ran in for months — rather than the write being lost.
-  if (opts?.fileAnchors?.length) {
+  //
+  // CODE MAPS are not single-subject beliefs, so neither side of this applies to them.
+  // A map anchors every file it lists (up to sixteen), so retiring by its anchors retired
+  // the maps of OTHER areas and unrelated facts that merely shared a file; and a map's
+  // first anchor is just its first-listed file, so an ordinary fact about that file
+  // retired a whole area's map. A map is retired by its own KEY only — the merge below
+  // replaces it in place — and the anchor sweep never selects a map.
+  if (!codemap && opts?.fileAnchors?.length) {
     const anchors = opts.fileAnchors.map((a) => a.path.trim().toLowerCase()).filter(Boolean);
     if (anchors.length) {
       await db
@@ -142,6 +155,7 @@ export async function upsertProjectFact(
           // the first anchor identifies it without an array-containment operator that
           // cannot use an index.
           sql`lower(${projectFacts.fileAnchors}->0->>'path') IN (${sql.join(anchors.map((p) => sql`${p}`), sql`, `)})`,
+          notLike(projectFacts.key, `${CONSOLIDATED_KEY_PREFIX}%`),
         ))
         .catch((err: unknown) => {
           reportCaughtError(err, { source: 'project-facts', operation: 'supersede-by-anchor', level: 'warning', context: { tenantId, projectId } });

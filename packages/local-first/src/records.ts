@@ -17,7 +17,10 @@ export type LocalEntityType =
   | 'policy-snapshot'
   | 'remediation'
   /** One model call's token usage on this device (PRD 36 run usage ledger). */
-  | 'usage';
+  | 'usage'
+  /** How one run ended on this device (succeeded / failed / stopped / budget-contained),
+   *  keyed by its run id — read by the pipeline route report. Local only, never synced. */
+  | 'run-outcome';
 
 export interface DestinationBinding {
   platformInstance?: string;

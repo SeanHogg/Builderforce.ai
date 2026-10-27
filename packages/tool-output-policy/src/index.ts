@@ -31,4 +31,15 @@ export type { AttachAdvisory, ReadFileResult, ReadFilesResult, ReadFileWindowed,
 export { fitToolText, isLogLike, shapeToolResult } from './policy.js';
 export type { FitToolTextOptions, ShapeToolResultOptions, ShapedToolResult } from './policy.js';
 export { modelToolResultPolicy } from './modelPolicy.js';
+export {
+  CLOUD_MENTION_BUDGET,
+  LOCAL_MENTION_BUDGET,
+  LOCAL_MENTION_WINDOW_SHARE,
+  fitMentions,
+  inlineMentions,
+  mentionBudget,
+  mentionCutMarker,
+  renderMentions,
+} from './mentions.js';
+export type { FittedMention, Mention, MentionBudget, MentionBudgetOptions, MentionTarget } from './mentions.js';
 export type { ModelToolResultPolicyOptions, ToolResultPolicyFn } from './modelPolicy.js';

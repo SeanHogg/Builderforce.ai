@@ -3916,7 +3916,13 @@
       "grouping": {
         "label": "Regrouper par",
         "actionType": "Type de travail",
-        "role": "Rôle"
+        "role": "Rôle",
+        "model": "Modèle",
+        "route": "Route du pipeline"
+      },
+      "route": {
+        "full": "Pipeline complet",
+        "quick": "Passe rapide"
       },
       "group": {
         "title": "Où va la dépense",
@@ -11927,6 +11933,8 @@
       "memoryAnswerCache": "Réponse tirée d’une réponse enregistrée — aucun modèle n’a été appelé",
       "memoryAnswerEvermind": "Réponse d’Evermind v{version} — aucun autre modèle n’a été appelé",
       "memoryAnswerHint": "La mémoire de ce projet contenait déjà une réponse à cette même question ; elle a été rejouée au lieu d’exécuter un modèle.",
+      "memoryAnswerSymbols": "Réponse tirée de l’index des symboles de l’espace de travail — aucun modèle n’a été appelé",
+      "memoryAnswerSymbolsHint": "La demande portait seulement sur l’endroit où ces noms sont définis, et l’index des symboles les a tous résolus ; les définitions ont donc été listées au lieu d’exécuter un modèle.",
       "learnTitle": "Ce tour a été versé à Evermind v{version}",
       "learnHint": "Ce tour a été renvoyé à l'Evermind du projet — il sera fusionné dans le modèle appris.",
       "learnSkippedTitle": "Non appris ce tour — {reason}",

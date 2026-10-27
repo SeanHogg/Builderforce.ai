@@ -45,3 +45,15 @@ export * from "./toolSearch.js";
 export * from "./compress.js";
 // Adaptive retrieval depth (cost lever C4): start at 3, widen only on a flat score field.
 export * from "./retrievalK.js";
+// Prose-only compression (`compressProse`, code never) + the `read_compressed` tool (C8).
+export * from "./proseCompress.js";
+export * from "./read-compressed-tool.js";
+// Deterministic pre-search (identifiers → symbol index + text search, no model call) and
+// the model-free "where is X defined" answer.
+export * from "./preSearch.js";
+export * from "./symbolAnswer.js";
+// `local_research`: a local model reads files and answers; its (question, file set) cache.
+export * from "./researchCache.js";
+export * from "./local-research-tool.js";
+// `repo_map` from the local definition index when Builderforce Desktop is absent.
+export * from "./symbolRepoMap.js";

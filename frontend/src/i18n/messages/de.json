@@ -3916,7 +3916,13 @@
       "grouping": {
         "label": "Gruppieren nach",
         "actionType": "Arbeitstyp",
-        "role": "Rolle"
+        "role": "Rolle",
+        "model": "Modell",
+        "route": "Pipeline-Route"
+      },
+      "route": {
+        "full": "Vollständige Pipeline",
+        "quick": "Schnelldurchlauf"
       },
       "group": {
         "title": "Wohin die Kosten fließen",
@@ -11927,6 +11933,8 @@
       "memoryAnswerCache": "Mit einer gespeicherten Antwort beantwortet — kein Modell wurde aufgerufen",
       "memoryAnswerEvermind": "Von Evermind v{version} beantwortet — kein anderes Modell wurde aufgerufen",
       "memoryAnswerHint": "Das Gedächtnis dieses Projekts enthielt bereits eine Antwort auf genau diese Frage, daher wurde sie wiedergegeben, statt ein Modell auszuführen.",
+      "memoryAnswerSymbols": "Aus dem Symbolindex des Arbeitsbereichs beantwortet — kein Modell wurde aufgerufen",
+      "memoryAnswerSymbolsHint": "Die Anfrage fragte nur, wo diese Namen definiert sind, und der Symbolindex hat jeden davon aufgelöst, daher wurden die Definitionen aufgelistet, statt ein Modell auszuführen.",
       "learnTitle": "Dieser Beitrag wurde an Evermind v{version} übermittelt",
       "learnHint": "Dieser Beitrag wurde an das Projekt-Evermind zurückgegeben — er wird in das gelernte Modell eingemischt.",
       "learnSkippedTitle": "Diese Runde nicht gelernt — {reason}",

@@ -28,7 +28,9 @@
  * `SUM` over all-NULL stays NULL, so "the vendor reported no reasoning split" survives
  * the fold instead of becoming a reported zero — and `turn_index` keeps its MAX, which
  * for a folded run row (grouped by `execution_id`) is the run's turn count, the one thing
- * a position-in-the-loop still says once the loop's rows are one row. `created_at`
+ * a position-in-the-loop still says once the loop's rows are one row. The run's
+ * pipeline route (1277) is a dimension, and its `route_score` is AVERAGED — a folded
+ * row's score is its runs' mean, which is what the route report reads. `created_at`
  * becomes the day's EARLIEST, so a folded row stays inside the calendar day every range
  * filter buckets it into.
  *
@@ -71,7 +73,7 @@ const foldDay = (db: Db, day: string) => db.execute(sql`
     SELECT tenant_id, user_id, llm_product, model, chat_id, chat_mode, use_case,
            tenant_api_key_id, agent_host_id, cloud_agent_ref, execution_id, task_id,
            project_id, paid_overflow, premium, byo, byo_provider, byo_credential_id,
-           surface, role, streamed, savings_source, savings_estimated,
+           surface, role, streamed, savings_source, savings_estimated, pipeline_route,
            SUM(calls)::int                 AS calls,
            SUM(prompt_tokens)::int         AS prompt_tokens,
            SUM(completion_tokens)::int     AS completion_tokens,
@@ -84,13 +86,14 @@ const foldDay = (db: Db, day: string) => db.execute(sql`
            SUM(saved_completion_tokens)::int   AS saved_completion_tokens,
            SUM(recall_prompt_tokens)::int      AS recall_prompt_tokens,
            SUM(saved_cost_usd_millicents)::int AS saved_cost_usd_millicents,
+           AVG(route_score)::real          AS route_score,
            SUM(reasoning_tokens)::int      AS reasoning_tokens,
            SUM(tool_schema_tokens)::int    AS tool_schema_tokens,
            MAX(turn_index)                 AS turn_index,
            MIN(created_at)                 AS created_at
       FROM llm_usage_log
      WHERE created_at >= ${day}::date AND created_at < ${day}::date + interval '1 day'
-     GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23
+     GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24
   ),
   removed AS (
     DELETE FROM llm_usage_log
@@ -102,17 +105,17 @@ const foldDay = (db: Db, day: string) => db.execute(sql`
       (tenant_id, user_id, llm_product, model, chat_id, chat_mode, use_case,
        tenant_api_key_id, agent_host_id, cloud_agent_ref, execution_id, task_id,
        project_id, paid_overflow, premium, byo, byo_provider, byo_credential_id,
-       surface, role, streamed, savings_source, savings_estimated, calls, prompt_tokens,
+       surface, role, streamed, savings_source, savings_estimated, pipeline_route, calls, prompt_tokens,
        completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, retries,
        cost_usd_millicents, saved_prompt_tokens, saved_completion_tokens, recall_prompt_tokens,
-       saved_cost_usd_millicents, reasoning_tokens, tool_schema_tokens, turn_index, created_at)
+       saved_cost_usd_millicents, route_score, reasoning_tokens, tool_schema_tokens, turn_index, created_at)
     SELECT tenant_id, user_id, llm_product, model, chat_id, chat_mode, use_case,
            tenant_api_key_id, agent_host_id, cloud_agent_ref, execution_id, task_id,
            project_id, paid_overflow, premium, byo, byo_provider, byo_credential_id,
-           surface, role, streamed, savings_source, savings_estimated, calls, prompt_tokens,
+           surface, role, streamed, savings_source, savings_estimated, pipeline_route, calls, prompt_tokens,
            completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, retries,
            cost_usd_millicents, saved_prompt_tokens, saved_completion_tokens, recall_prompt_tokens,
-           saved_cost_usd_millicents, reasoning_tokens, tool_schema_tokens, turn_index, created_at
+           saved_cost_usd_millicents, route_score, reasoning_tokens, tool_schema_tokens, turn_index, created_at
       FROM folded
     RETURNING 1
   )

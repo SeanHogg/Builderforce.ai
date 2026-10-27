@@ -317,6 +317,12 @@ export interface Env {
   /** $/second-of-audio synthesis cost basis for ledger billing, in millicents
    *  per second. Defaults to 5 (≈ $0.05/min). `wrangler secret put VOICE_CLONE_COST_MC_PER_SEC`. */
   VOICE_CLONE_COST_MC_PER_SEC?: string;
+  /** D2 difficulty router thresholds (`difficultyGate.ts` `difficultyPolicyFromEnv`):
+   *  skip the weak attempt when P(weak fails) is above `DIFFICULTY_SKIP_ABOVE` (default
+   *  0.75), still trying a `DIFFICULTY_EXPLORE` share of those skips (default 0.1). Both
+   *  are shares in [0, 1]; unset or out of range keeps the default. A `[vars]` entry. */
+  DIFFICULTY_SKIP_ABOVE?: string;
+  DIFFICULTY_EXPLORE?: string;
 
   /** Durable Object namespace for per-tenant sliding-window rate limiting.
    *  Bind in wrangler.toml:  [[durable_objects.bindings]]  name = "TENANT_RATE_LIMITER" */

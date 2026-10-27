@@ -15,13 +15,18 @@ import { useCostMetricFormat } from './costMetricFormat';
 export const GROUPING_LABEL_KEY: Record<CostGrouping, string> = {
   actionType: 'grouping.actionType',
   role: 'grouping.role',
+  model: 'grouping.model',
+  route: 'grouping.route',
 };
+
+/** The pipeline routes the wire names, and their labels (under `insights.cost`). */
+export const ROUTE_LABEL_KEY: Readonly<Record<string, string>> = { full: 'route.full', quick: 'route.quick' };
 
 /** The wire's "no attribution" bucket — the one group key the UI names itself. */
 const UNATTRIBUTED = 'unattributed';
 
 /**
- * Where the spend goes, by work type or by role: the spend bars answer "which group
+ * Where the spend goes, by work type, role, model or pipeline route: the spend bars answer "which group
  * is the money", the table beside them answers "is that group efficient" — cache hit
  * rate, context size and cost per merged PR on the same row as the spend.
  */
@@ -37,7 +42,11 @@ export function CostGroupBreakdown({
   const f = useCostMetricFormat();
   const t = useTranslations('insights.cost');
   const tc = useTranslations('common');
-  const nameOf = (g: string): string => (g === UNATTRIBUTED ? t('unattributed') : g);
+  const nameOf = (g: string): string => {
+    if (g === UNATTRIBUTED) return t('unattributed');
+    const routeKey = grouping === 'route' ? ROUTE_LABEL_KEY[g] : undefined;
+    return routeKey ? t(routeKey as never) : g;
+  };
 
   let body: ReactNode;
   if (error) body = <PmError message={t('loadFailed')} />;

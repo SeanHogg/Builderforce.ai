@@ -341,6 +341,17 @@ export function evaluatePolicyGate(
 }
 
 /**
+ * The recalled-memory block — how an agent's recalled knowledge is rendered, wherever it
+ * rides: in the lowered system prompt here, or (the gateway's workforce models) on the
+ * latest user message, so a per-request recall never changes the cached system prefix.
+ * '' when there is nothing recalled.
+ */
+export function recalledKnowledgeBlock(recalledContext: string | undefined): string {
+  const recalled = recalledContext?.trim();
+  return recalled ? `Relevant knowledge (recalled from this agent's memory):\n${recalled}` : "";
+}
+
+/**
  * THE canonical lowering: an {@link AgentSpec} → system prompt + model + exec
  * params. Every surface lowers through this so identity, personality, and recalled
  * memory render identically wherever the agent runs. Pure and deterministic, so it
@@ -362,10 +373,8 @@ export function lowerAgentSpec(spec: AgentSpec): LoweredAgent {
   }
 
   // --- Recalled memory ---------------------------------------------------
-  const recalled = spec.memory?.recalledContext?.trim();
-  if (recalled) {
-    sections.push(`Relevant knowledge (recalled from this agent's memory):\n${recalled}`);
-  }
+  const recalled = recalledKnowledgeBlock(spec.memory?.recalledContext);
+  if (recalled) sections.push(recalled);
   const sig = spec.memory?.stateSignal;
   if (sig) {
     sections.push(`[Memory: step=${sig.step} signal=${sig.signal} context="persistent agent state"]`);

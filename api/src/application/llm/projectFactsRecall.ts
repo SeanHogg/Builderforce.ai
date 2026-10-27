@@ -17,9 +17,10 @@ import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { isExpired } from '../../domain/memory/memoryScope';
 import { queryTerms } from '../../domain/shared/queryTerms';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { withCurrentAnchors } from './projectFactsCodemap';
+import { recallAreaCodemaps } from './projectFactsAreaRecall';
 import {
   QA_CACHE_SOURCE,
-  anchorsAreStale,
   hostDirectoryHashReader,
   normalizeFileAnchors,
   projectFactsVersion,
@@ -180,12 +181,13 @@ export async function recallProjectFacts(
     // The cache key is the fact-table version token, so a file changing does not bust
     // it — a check folded inside the loader would keep serving a belief about a file
     // for up to the 60s TTL after the file changed. With no reader nothing is
-    // excluded, so this changes no caller's current behaviour.
+    // excluded, so this changes no caller's current behaviour. A CODE MAP is not
+    // excluded for one changed file: that file's line is dropped and the map stays.
     const readHash = opts?.readFileHash;
     const kept: ProjectFact[] = [];
     for (const fact of live) {
-      if (readHash && await anchorsAreStale(fact.fileAnchors, readHash)) continue;
-      kept.push(fact);
+      const current = readHash ? await withCurrentAnchors(fact, readHash) : fact;
+      if (current) kept.push(current);
     }
     // Stamp what recall actually RETURNED (1248) — the kept facts, so a fact dropped
     // as stale is not counted as recalled and cannot be rescued by the decay sweep.
@@ -327,7 +329,15 @@ export function formatProjectFactsBlock(facts: ProjectFact[]): string {
   return `[Project memory — durable facts recalled for this project]\n${facts.map((f) => `- ${f.content}`).join('\n')}`;
 }
 
-/** Recall + format in one call — the shared server-side prompt injector. */
+/**
+ * Recall + format in one call — the shared server-side prompt injector (the run-context
+ * source's memory block, for cloud and on-prem alike).
+ *
+ * Alongside the semantic recall, the code maps for the AREAS the query names
+ * (`recallAreaCodemaps`) — a map is "open these files first", and similarity to the
+ * request text is a poor way to find the one for the area the request is about. Maps
+ * lead the block; a map both arms found appears once.
+ */
 export async function buildProjectFactsBlock(
   env: Env,
   db: Db,
@@ -336,11 +346,28 @@ export async function buildProjectFactsBlock(
   query?: string,
   opts?: { readFileHash?: FileContentHashReader },
 ): Promise<string> {
-  const facts = await recallProjectFacts(env, db, tenantId, projectId, {
-    ...(query != null ? { query } : {}),
-    // Run-start default: a fact whose anchored files changed is excluded. Callers
-    // that already have a reader (tests, a workspace walk) pass their own.
-    readFileHash: opts?.readFileHash ?? hostDirectoryHashReader(db, tenantId),
-  });
-  return formatProjectFactsBlock(facts);
+  // Run-start default: a fact whose anchored files changed is excluded (a map drops
+  // just those files). Callers that already have a reader (tests, a workspace walk)
+  // pass their own.
+  const readFileHash = opts?.readFileHash ?? hostDirectoryHashReader(db, tenantId);
+  const [facts, maps] = await Promise.all([
+    recallProjectFacts(env, db, tenantId, projectId, { ...(query != null ? { query } : {}), readFileHash }),
+    query?.trim()
+      ? recallAreaCodemaps(env, db, tenantId, projectId, query, { readFileHash }).catch((err: unknown): ProjectFact[] => {
+          reportCaughtError(err, { source: 'project-facts', operation: 'area-codemap-recall', level: 'warning', context: { tenantId, projectId } });
+          return [];
+        })
+      : Promise.resolve([] as ProjectFact[]),
+  ]);
+  const mapped = new Set(maps.map((m) => m.key));
+  // Recall stamped what IT returned; a map only the area arm found is stamped here, so
+  // the decay sweep keeps a map that runs are actually handed.
+  const recalled = new Set(facts.map((f) => f.key));
+  const onlyMapped = maps.map((m) => m.key).filter((k) => !recalled.has(k));
+  if (onlyMapped.length) {
+    await stampFactRecall(db, tenantId, projectId, onlyMapped).catch((err: unknown) => {
+      reportCaughtError(err, { source: 'project-facts', operation: 'stamp-area-codemap-recall', level: 'warning', context: { tenantId, projectId } });
+    });
+  }
+  return formatProjectFactsBlock([...maps, ...facts.filter((f) => !mapped.has(f.key))]);
 }

@@ -112,17 +112,45 @@ function withCacheControl(msg: Msg, marker: Record<string, unknown>): Msg {
 }
 
 /**
+ * The ONE "last stable item" rule both history placers share — this OpenRouter path
+ * (over OpenAI-format messages) and the direct Anthropic vendor (over a message's
+ * native blocks): walk back from the end, past the per-turn volatile tail (B1, whose
+ * bytes change every turn and would make the breakpoint miss) and past anything that
+ * cannot carry a marker, and return the index of the first item left — or -1. Items at
+ * or before `floor` are never considered.
+ */
+export function lastStableIndex<T>(
+  items: readonly T[],
+  isVolatile: (item: T) => boolean,
+  canMark: (item: T) => boolean,
+  floor = -1,
+): number {
+  for (let i = items.length - 1; i > floor; i--) {
+    const item = items[i]!;
+    if (isVolatile(item) || !canMark(item)) continue;
+    return i;
+  }
+  return -1;
+}
+
+/** Roles whose OpenAI-format message can take the history breakpoint. A `tool` result
+ *  qualifies: its string content is promoted to a text part, which OpenRouter forwards
+ *  to Anthropic as a `tool_result` content block carrying the marker. */
+const HISTORY_ROLES = new Set(['user', 'assistant', 'tool']);
+
+/**
  * Inject `cache_control` breakpoints into an OpenAI-format `messages` array for
  * caching-capable Anthropic models. No-op (returns the input reference) for
  * non-Anthropic models, empty input, or caller-managed caching.
  *
  * Breakpoints (≤ 2, well within Anthropic's cap of 4):
  *   1. the last `system` message — the largest stable prefix, the biggest win;
- *   2. the LATEST user/assistant turn that carries text — so the next request
- *      reads the whole conversation so far as a cached prefix. `tool` turns are
- *      skipped: an OpenAI-format tool message carries string content, and this
- *      OpenRouter path does not promote it to a block (the direct vendor marks
- *      tool results natively — see {@link markAnthropicHistoryBreakpoint}).
+ *   2. the last STABLE history message ({@link lastStableIndex}) — so the next request
+ *      reads the whole conversation so far as a cached prefix. Tool results count: in
+ *      a tool loop the newest stable message IS a tool result, and skipping it parked
+ *      the breakpoint on the last text turn, so every tool turn after it was re-billed
+ *      at full price. Only a text-less assistant tool-call turn (nothing to attach to)
+ *      and the trailing `<run-state>` tail are walked past.
  *
  * `ttl` (default `'5m'`) selects the breakpoint retention — pass `'1h'` (from a
  * caller's `_builderforce.cacheTtl` hint) to keep the prefix warm across idle
@@ -144,18 +172,14 @@ export function applyPromptCaching(messages: Array<Msg>, model: string, ttl?: Ca
   }
   if (lastSystem >= 0) marks.add(lastSystem);
 
-  // (2) The latest user/assistant turn that can carry a marker — walking back
-  // past tool turns, past an assistant tool-call turn with no text, and past the
-  // per-turn volatile tail (B1), whose bytes change every turn and would make the
-  // breakpoint miss; the marker lands on the stable message before it instead.
-  for (let i = messages.length - 1; i > lastSystem; i--) {
-    const role = (messages[i] as { role?: unknown }).role;
-    if (role !== 'user' && role !== 'assistant') continue;
-    if (isVolatileTailMessage(messages[i]!)) continue;
-    if (withCacheControl(messages[i]!, marker) === messages[i]) continue; // nothing markable
-    marks.add(i);
-    break;
-  }
+  // (2) The last stable history message that can carry a marker.
+  const history = lastStableIndex(
+    messages,
+    isVolatileTailMessage,
+    (m) => HISTORY_ROLES.has(String((m as { role?: unknown }).role)) && withCacheControl(m, marker) !== m,
+    lastSystem,
+  );
+  if (history >= 0) marks.add(history);
 
   if (marks.size === 0) return messages;
   return messages.map((m, i) => (marks.has(i) ? withCacheControl(m, marker) : m));

@@ -52,6 +52,7 @@ import { GIT_TOOLS } from "./git-tools.js";
 // is gated on `repo.symbols`, so only a surface with a definition index advertises it.
 import { SYMBOL_TOOLS } from "./symbol-tools.js";
 import { SEMANTIC_TOOLS } from "./semantic-tools.js";
+import { localResearchTool } from "./local-research-tool.js";
 import { analyzeCodebaseTool } from './codeAnalysisTool.js';
 import { probeFromRepoRead, refuseWriteOverwrite } from "./writeOverwriteGuard.js";
 import { emptyGlobListingNote } from "./glob.js";
@@ -644,6 +645,7 @@ export const CORE_TOOLS: readonly ToolDefinition[] = [
   readFileTool,
   ...SYMBOL_TOOLS,
   ...SEMANTIC_TOOLS,
+  localResearchTool,
   writeFileTool,
   editFileTool,
   deleteFileTool,

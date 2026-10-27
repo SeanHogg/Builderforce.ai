@@ -29,6 +29,8 @@ import type { SymbolKind } from "./symbols.js";
 import type { ModelRole } from "./modelRoles.js";
 import type { ShellJobStart, ShellJobStatus, ShellRunOptions } from "./shell-job-types.js";
 export type { ShellJobStart, ShellJobStatus, ShellRunOptions } from "./shell-job-types.js";
+import type { LocalResearchCapability } from "./research-capability.js";
+export type { LocalResearchCapability, LocalResearchMessage, ResearchFileFingerprint, ResearchAnswerStore } from "./research-capability.js";
 
 /**
  * The set of capabilities a tool can require / a surface can provide. Adding a new
@@ -53,6 +55,14 @@ export type Capability =
    *  questions phrased in words ("where do we enforce plan limits?") by meaning, not
    *  exact substring. */
   | "repo.semantic"
+  /** LLMLingua-2 compression of prose (`read_compressed`). Split from `repo.semantic`
+   *  because the service backs it only when built with the compressor, which its health
+   *  probe reports — a surface advertises it only while `semantic.compress` is present. */
+  | "repo.compress"
+  /** A LOCAL model on this machine that reads files and answers a question about them
+   *  (`local_research`) — free tokens beside the paid model. Backed by
+   *  {@link LocalResearchCapability}; advertised only while a local runtime can serve. */
+  | "local.research"
   /** Create / update whole files in the working tree (committed or on disk). */
   | "repo.write"
   /** Surgical in-place string edits. Separate from write so a surface can offer whole
@@ -547,6 +557,7 @@ export interface CapabilityProvider {
   readonly repoWrite?: RepoWriteCapability;
   readonly symbols?: RepoSymbolsCapability;
   readonly semantic?: RepoSemanticCapability;
+  readonly research?: LocalResearchCapability;
   readonly shell?: ShellCapability;
   readonly staticCheck?: StaticCheckCapability;
   readonly human?: HumanCapability;

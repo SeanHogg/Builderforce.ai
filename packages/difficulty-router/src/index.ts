@@ -19,6 +19,7 @@ export {
   DIFFICULTY_HEAD_VERSION,
   DIFFICULTY_POLICY,
   binaryFromSoftmaxParams,
+  difficultyPolicyWith,
   headTrusted,
   parseDifficultyHead,
   predictWeakFailure,

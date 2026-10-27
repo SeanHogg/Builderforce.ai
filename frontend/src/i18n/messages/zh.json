@@ -3916,7 +3916,13 @@
       "grouping": {
         "label": "分组依据",
         "actionType": "工作类型",
-        "role": "角色"
+        "role": "角色",
+        "model": "模型",
+        "route": "流水线路由"
+      },
+      "route": {
+        "full": "完整流水线",
+        "quick": "快速处理"
       },
       "group": {
         "title": "支出流向",
@@ -11927,6 +11933,8 @@
       "memoryAnswerCache": "使用已保存的回复作答 — 未调用任何模型",
       "memoryAnswerEvermind": "由 Evermind v{version} 作答 — 未调用其他模型",
       "memoryAnswerHint": "本项目的记忆中已有这个问题的答案，因此直接重放该答案，而没有运行模型。",
+      "memoryAnswerSymbols": "使用工作区符号索引作答 — 未调用任何模型",
+      "memoryAnswerSymbolsHint": "该请求只询问这些名称的定义位置，且符号索引解析了每一个名称，因此直接列出定义，而没有运行模型。",
       "learnTitle": "本轮已贡献给 Evermind v{version}",
       "learnHint": "本轮已回馈给项目 Evermind——它将被合并进已学习的模型。",
       "learnSkippedTitle": "本轮未学习——{reason}",

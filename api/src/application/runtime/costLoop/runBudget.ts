@@ -16,6 +16,7 @@ import { computeRecordedCostMillicents, usageDatabaseOf } from '../../llm/usageL
 import { loadPriceBook } from '../../llm/catalogView';
 import type { ProxyResult } from '../../llm/proxyTypes';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
+import { RUN_BUDGET_WARN_AT } from '@builderforce/spend-contract';
 import { resolveRunTokenCap, runBudgetUsedShare, type RunLimits, type RunUsage } from '../../../domain/containment/runLimits';
 
 export interface RunSpend {
@@ -62,8 +63,9 @@ export async function turnSpend(env: Env, result: Pick<ProxyResult, 'usage' | 'r
   }
 }
 
-/** Share of the budget at which the run is told to converge. */
-export const CONVERGE_AT = 0.8;
+/** Share of the budget at which the run is told to converge — the shared budget rule's
+ *  warning line, which the editor's run store warns at too. */
+export const CONVERGE_AT = RUN_BUDGET_WARN_AT;
 
 /** The per-turn budget line (and, past {@link CONVERGE_AT}, the converge instruction). */
 export function renderBudget(limits: RunLimits, usage: RunUsage): string {

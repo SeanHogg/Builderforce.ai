@@ -24,6 +24,7 @@ import { providerForVendor } from './llmProviderCatalog';
 import { sql, type SQL } from 'drizzle-orm';
 import { addUsageToTenantTotals, getTenantUsageTotalsForEnv } from './tokenUsage';
 import { pickPersistedMetadata } from './usageMetadata';
+import { readPipelineAttribution } from './pipelineRouteAttribution';
 import { IDEMPOTENCY_KEY_MAX_LENGTH } from '../shared/idempotentReplay';
 import { loadTenantProviderRows } from './tenantProviderRows';
 import { computeCostMillicents, type UsageSurface } from '@builderforce/spend-contract';
@@ -660,6 +661,8 @@ export async function writeUsageRow(
   // silently drops every row whose metadata is absent or not an object. It stays
   // in metadata as well — the SDK's billing trace-back contract reads it there.
   const chatAttribution = readChatAttribution(metadata);
+  // The run's pipeline route + router score (1277), promoted the same way.
+  const pipelineAttribution = readPipelineAttribution(metadata);
   // WHICH key instance paid (0953). Resolved here — the single write boundary —
   // rather than threaded through the proxy, because every producer already reaches
   // this function with the two facts it needs (tenant + the provider we stamped)
@@ -690,6 +693,8 @@ export async function writeUsageRow(
     metadata:            metadata ?? null,
     chatId:              chatAttribution.chatId,
     chatMode:            chatAttribution.chatMode,
+    pipelineRoute:       pipelineAttribution.pipelineRoute,
+    routeScore:          pipelineAttribution.routeScore,
     idempotencyKey,
     useCase:             row.useCase ?? null,
     tenantApiKeyId:      row.tenantApiKeyId ?? null,

@@ -1,7 +1,7 @@
 /**
  * Cost metrics (LLM Cost Optimization · A4) — /api/cost
  *
- *   GET /metrics?window=7d|30d&groupBy=none|actionType|role|lever|day
+ *   GET /metrics?window=7d|30d&groupBy=none|actionType|role|model|route|lever|day
  *       cache hit rate, median turns per completed run, median context tokens per turn,
  *       output/input ratio, reasoning share, cost per merged PR (per-run attribution),
  *       and — groupBy=lever — each lever's on-arm vs off-arm comparison; groupBy=day
@@ -37,7 +37,7 @@ export function createCostMetricsRoutes(db: Db): Hono<HonoEnv> {
     const window = c.req.query('window') ?? '7d';
     const groupBy = c.req.query('groupBy') ?? 'none';
     if (!isCostMetricWindow(window)) return c.json({ error: 'window must be 7d or 30d' }, 400);
-    if (!isCostMetricGroupBy(groupBy)) return c.json({ error: 'groupBy must be none, actionType, role, lever or day' }, 400);
+    if (!isCostMetricGroupBy(groupBy)) return c.json({ error: 'groupBy must be none, actionType, role, model, route, lever or day' }, 400);
     return c.json(await getCostMetrics(db, c.env as Env, tenantId, window, groupBy));
   });
 

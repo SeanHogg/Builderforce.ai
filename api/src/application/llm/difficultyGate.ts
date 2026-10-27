@@ -22,11 +22,13 @@
 import { isCostLeverOn } from '@builderforce/cost-levers';
 import {
   DIFFICULTY_HEAD_VERSION,
+  difficultyPolicyWith,
   headTrusted,
   parseDifficultyHead,
   skipWeakAttempt,
   type DifficultyFeatures,
   type DifficultyHead,
+  type DifficultyPolicy,
 } from '@builderforce/difficulty-router';
 import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
@@ -71,15 +73,41 @@ export async function difficultyHeadFor(env: unknown, tenantId: number | null): 
   return readHead(cacheEnv, 'global');
 }
 
+/**
+ * The router's thresholds for this deployment: `DIFFICULTY_SKIP_ABOVE` /
+ * `DIFFICULTY_EXPLORE` from the Worker env over the shipped policy. Unset, empty or out
+ * of range keeps the default (`difficultyPolicyWith` ignores it), so a mistyped var can
+ * never switch the router into skipping everything.
+ */
+export function difficultyPolicyFromEnv(env: unknown): DifficultyPolicy {
+  const bag = (env && typeof env === 'object' ? env : {}) as { DIFFICULTY_SKIP_ABOVE?: unknown; DIFFICULTY_EXPLORE?: unknown };
+  const num = (raw: unknown): number | undefined => {
+    if (typeof raw === 'number') return raw;
+    if (typeof raw !== 'string' || raw.trim() === '') return undefined;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const skipAbove = num(bag.DIFFICULTY_SKIP_ABOVE);
+  const explore = num(bag.DIFFICULTY_EXPLORE);
+  return difficultyPolicyWith({
+    ...(skipAbove !== undefined ? { skipAbove } : {}),
+    ...(explore !== undefined ? { explore } : {}),
+  });
+}
+
 export async function shouldSkipWeakAttempt(
   env: unknown,
   tenantId: number | null,
   f: DifficultyFeatures,
-  opts: { random?: () => number } = {},
+  opts: { random?: () => number; policy?: DifficultyPolicy } = {},
 ): Promise<boolean> {
   if (!isCostLeverOn(env, 'd2_difficulty_router', tenantId)) return false;
   try {
-    return skipWeakAttempt(await difficultyHeadFor(env, tenantId), f, opts.random ? { random: opts.random } : {});
+    // The thresholds: the caller's, else the deployment's env, else the shipped policy.
+    return skipWeakAttempt(await difficultyHeadFor(env, tenantId), f, {
+      ...(opts.random ? { random: opts.random } : {}),
+      policy: opts.policy ?? difficultyPolicyFromEnv(env),
+    });
   } catch (error) {
     // A cache read that failed is reported and the weak model is tried — the router
     // never blocks a step.

@@ -153,7 +153,7 @@ import type { Env } from '../../env';
 import { isAgentRunnable } from '../../domain/containment/agentState';
 import { recordTypedExecutionClaim } from '../provenance/finishClaimService';
 import { authorizeCredentialDelegation, delegateCredential, ensureAgentRunIdentity, revokeRunPrincipal } from '../agentIdentity/agentRunIdentity';
-import { checkRunLimits } from '../../domain/containment/runLimits';
+import { checkFootprintLimits } from '../../domain/containment/runLimits';
 import { isHumanOrExternalOutputTool, trustNotice } from '../../domain/trust/contentTrust';
 import { inspectOutboundContent, recordContextContribution } from '../trust/trustService';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
@@ -1186,8 +1186,9 @@ async function runCloudToolLoop(
       const candidatePath = typeof parsed.path === 'string' ? parsed.path : null;
       const prospectiveFiles = candidatePath && /^(write_file|edit_file|delete_file)$/.test(name) && !writtenPaths.has(candidatePath)
         ? writtenPaths.size + 1 : writtenPaths.size;
-      const containmentBlock = declaredLimits ? checkRunLimits(declaredLimits, {
-        files: prospectiveFiles, repositories: repoCtx ? 1 : 0, spendMillicents: 0,
+      // Footprint only: spend is the cost loop's per-turn check, not a tool's.
+      const containmentBlock = declaredLimits ? checkFootprintLimits(declaredLimits, {
+        files: prospectiveFiles, repositories: repoCtx ? 1 : 0,
       }) : null;
       const outboundInspection = isHumanOrExternalOutputTool(name)
         ? await inspectOutboundContent(db, { tenantId, executionId, seam: 'tool_output', target: name, content: JSON.stringify(parsed) })

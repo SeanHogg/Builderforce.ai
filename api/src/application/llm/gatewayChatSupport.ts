@@ -85,14 +85,38 @@ export async function expandGatewayModelRefs(
   if (typeof body.model === 'string' && body.model.startsWith(WORKFORCE_MODEL_REF_PREFIX)) {
     // The caller's latest user message grounds the agent's recall (Phase C3), so a
     // stock OpenAI-SDK call to a workforce model id gets the agent's own docs too.
-    const msgsForRecall = body.messages as ChatMessage[];
+    const messages = body.messages as ChatMessage[];
     // The request, never a loop's per-turn volatile tail (`<run-state>`) that rides after it.
-    const latestUser = [...msgsForRecall].reverse().find((m) => m.role === 'user' && !isVolatileContent(m.content));
+    const latestUserIdx = latestUserIndex(messages);
+    const latestUser = latestUserIdx >= 0 ? messages[latestUserIdx] : undefined;
     const recallQuery = typeof latestUser?.content === 'string' ? latestUser.content : undefined;
-    const wf = await resolveWorkforceModel(env, tenantId, body.model, recallQuery);
+    // The recall is per REQUEST (it follows the latest user message), so it never goes in
+    // the system prompt: there it changed the very first bytes of the prompt whenever the
+    // request did, and no turn could read the persona + history from the prefix cache.
+    // It rides the latest user message instead — the same per-run placement the Brain
+    // uses (`brain-embedded/src/runStore/turnContext.ts`) — so every turn of a tool loop
+    // on that message sends identical bytes up to and including it.
+    const wf = await resolveWorkforceModel(env, tenantId, body.model, recallQuery, { recall: 'separate' });
     body.model = wf?.baseModel ?? undefined;
-    if (wf?.directives) prependSystemDirectives(body.messages as ChatMessage[], wf.directives);
+    // Before the persona: prepending a system message shifts every index after it.
+    if (wf?.recallBlock && latestUser) messages[latestUserIdx] = withBlock(latestUser, wf.recallBlock);
+    if (wf?.directives) prependSystemDirectives(messages, wf.directives);
   }
+}
+
+/** Index of the latest real user message (never a `<run-state>` tail), or -1. */
+function latestUserIndex(messages: readonly ChatMessage[]): number {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]!.role === 'user' && !isVolatileContent(messages[i]!.content)) return i;
+  }
+  return -1;
+}
+
+/** A copy of `message` with `block` appended — a trailing text part for array content. */
+function withBlock(message: ChatMessage, block: string): ChatMessage {
+  if (typeof message.content === 'string') return { ...message, content: `${message.content}\n\n${block}` };
+  if (Array.isArray(message.content)) return { ...message, content: [...message.content, { type: 'text', text: block }] };
+  return message;
 }
 
 /**

@@ -4,7 +4,7 @@ import { apiRequest } from './apiClient';
  * "Cost efficiency" (LLM Cost Optimization · A4) — client mirror of
  * api/src/application/costMetrics/costMetricsShape.ts, served by
  *
- *   GET /api/cost/metrics?window=7d|30d&groupBy=none|actionType|role|lever|day
+ *   GET /api/cost/metrics?window=7d|30d&groupBy=none|actionType|role|model|route|lever|day
  *   GET /api/cost/runs/:executionId
  *
  * Manager role + premium insights plan feature server-side (`insights.costEfficiency`
@@ -15,9 +15,10 @@ import { apiRequest } from './apiClient';
 
 export type CostMetricWindow = '7d' | '30d';
 /** `day` = one group per UTC day, keyed `YYYY-MM-DD`, ascending — the trend series. */
-export type CostMetricGroupBy = 'none' | 'actionType' | 'role' | 'lever' | 'day';
-/** The dimensions the lens's grouping switch offers (lever has its own table). */
-export const COST_GROUPINGS = ['actionType', 'role'] as const;
+export type CostMetricGroupBy = 'none' | 'actionType' | 'role' | 'model' | 'route' | 'lever' | 'day';
+/** The dimensions the lens's grouping switch offers (lever has its own table). `route` is
+ *  the run's pipeline route — `full` (plan → code → verify) or `quick` (one coding pass). */
+export const COST_GROUPINGS = ['actionType', 'role', 'model', 'route'] as const;
 export type CostGrouping = (typeof COST_GROUPINGS)[number];
 
 export interface CostGroupMetrics {

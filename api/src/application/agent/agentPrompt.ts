@@ -18,6 +18,7 @@ import {
   agentMemorySignal,
   compilePsychometricProfile,
   lowerAgentSpec,
+  recalledKnowledgeBlock,
   type AgentExecParams,
   type AgentSpec,
   type PsychProfile,
@@ -109,6 +110,17 @@ export interface ResolvedWorkforceModel {
    *  psychometric personality, so a caller applies the persona's temperature/reasoning
    *  instead of a hardcoded default. Empty object when the agent has no profile. */
   execParams: AgentExecParams;
+  /** The recalled-knowledge block, when the caller asked for it SEPARATELY
+   *  (`recall: 'separate'`) — then `directives` carries none of it. '' when nothing was
+   *  recalled; absent when the recall is folded into `directives` (the default). */
+  recallBlock?: string;
+}
+
+/** Where {@link resolveWorkforceModel} puts the recalled knowledge: folded into the
+ *  system `directives` (the default — a one-shot reply), or returned as its own
+ *  `recallBlock` so a multi-turn caller keeps the system prompt byte-stable. */
+export interface WorkforceRecallOptions {
+  recall?: 'system' | 'separate';
 }
 
 /** Parse the stored `ide_agents.psychometric` JSON into a profile, or `undefined`
@@ -200,6 +212,7 @@ export async function resolveWorkforceModel(
   tenantId: number,
   ref: string | undefined | null,
   query?: string,
+  opts: WorkforceRecallOptions = {},
 ): Promise<ResolvedWorkforceModel | null> {
   if (!ref || !ref.startsWith(WORKFORCE_MODEL_REF_PREFIX)) return null;
   const agentId = ref.slice(WORKFORCE_MODEL_REF_PREFIX.length).trim();
@@ -211,13 +224,14 @@ export async function resolveWorkforceModel(
   const recalledContext = query?.trim()
     ? await recallAgentKnowledge(env, buildDatabase(env), tenantId, agentId, query)
     : '';
+  const separate = opts.recall === 'separate';
 
   // `buildAgentInference` lowers the descriptor to BOTH the system prompt (now carrying
   // the compiled persona directives) AND the persona exec levers — so a caller injects
   // the personality into the prompt AND applies its temperature/reasoning, from one lowering.
   const { systemPrompt, execParams } = buildAgentInference({
     ...base.descriptor,
-    recalledContext: recalledContext || undefined,
+    recalledContext: separate ? undefined : recalledContext || undefined,
   });
 
   return {
@@ -225,5 +239,6 @@ export async function resolveWorkforceModel(
     directives: systemPrompt,
     inferenceMode: base.inferenceMode,
     execParams,
+    ...(separate ? { recallBlock: recalledKnowledgeBlock(recalledContext) } : {}),
   };
 }

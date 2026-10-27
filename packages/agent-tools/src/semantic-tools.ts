@@ -10,8 +10,9 @@
  * that answers it; `repo_map` hands over the codebase's shape in one call.
  */
 
-import type { RepoMapResult, SemanticSearchResult } from "./capabilities.js";
+import type { Capability, RepoMapResult, RepoSemanticCapability, SemanticSearchResult } from "./capabilities.js";
 import { chooseK } from "./retrievalK.js";
+import { readCompressedTool } from "./read-compressed-tool.js";
 import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
 
 const SEARCH_DEFAULT_LIMIT = 8;
@@ -92,5 +93,14 @@ export const repoMapTool: ToolDefinition = defineTool({
   },
 });
 
-/** The semantic tools, spliced into `CORE_TOOLS` beside the code-navigation tools. */
-export const SEMANTIC_TOOLS: readonly ToolDefinition[] = [semanticSearchTool, repoMapTool];
+/** The semantic tools, spliced into `CORE_TOOLS` beside the code-navigation tools.
+ *  `read_compressed` rides the same backing (the Desktop service's compressor) and is
+ *  gated on its own capability, `repo.compress`. */
+export const SEMANTIC_TOOLS: readonly ToolDefinition[] = [semanticSearchTool, repoMapTool, readCompressedTool];
+
+/** The capabilities a semantic backing grants: `repo.semantic`, plus `repo.compress` only
+ *  while the backing really has a compressor. None without a backing. */
+export function semanticCapabilitiesOf(semantic: RepoSemanticCapability | undefined): Capability[] {
+  if (!semantic) return [];
+  return semantic.compress ? ["repo.semantic", "repo.compress"] : ["repo.semantic"];
+}

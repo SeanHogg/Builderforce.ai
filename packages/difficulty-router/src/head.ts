@@ -56,6 +56,28 @@ export const DIFFICULTY_POLICY: DifficultyPolicy = {
   vocabMax: 16,
 };
 
+/**
+ * {@link DIFFICULTY_POLICY} with a caller's overrides — the thresholds are options with
+ * the shipped constants as defaults. An override that is not a finite number in its
+ * field's range (a share or probability in [0, 1], a count ≥ 0, a loss > 0) is ignored,
+ * so a bad setting can never switch the router into skipping everything.
+ */
+export function difficultyPolicyWith(overrides: Partial<DifficultyPolicy> = {}, base: DifficultyPolicy = DIFFICULTY_POLICY): DifficultyPolicy {
+  const share = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1 ? v : d);
+  const count = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : d);
+  return {
+    minSamples: count(overrides.minSamples, base.minSamples),
+    maxHoldoutLoss: typeof overrides.maxHoldoutLoss === 'number' && Number.isFinite(overrides.maxHoldoutLoss) && overrides.maxHoldoutLoss > 0
+      ? overrides.maxHoldoutLoss
+      : base.maxHoldoutLoss,
+    skipAbove: share(overrides.skipAbove, base.skipAbove),
+    explore: share(overrides.explore, base.explore),
+    holdoutFraction: share(overrides.holdoutFraction, base.holdoutFraction),
+    vocabMinCount: count(overrides.vocabMinCount, base.vocabMinCount),
+    vocabMax: count(overrides.vocabMax, base.vocabMax),
+  };
+}
+
 /** A trained head, as cached. */
 export interface DifficultyHead {
   v: typeof DIFFICULTY_HEAD_VERSION;

@@ -96,3 +96,12 @@ export {
   type TokenUsage,
 } from './cost.js';
 export { combineSpendSavings, foldSpendSavings, type UsageSlice } from './fold.js';
+export {
+  RUN_BUDGET_WARN_AT,
+  runBudgetBreach,
+  runBudgetUsedShare,
+  runBudgetWarnDue,
+  type RunBudgetBreach,
+  type RunBudgetCaps,
+  type RunBudgetUsage,
+} from './runBudget.js';

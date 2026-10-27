@@ -3916,7 +3916,13 @@
       "grouping": {
         "label": "Agrupar por",
         "actionType": "Tipo de trabajo",
-        "role": "Rol"
+        "role": "Rol",
+        "model": "Modelo",
+        "route": "Ruta del pipeline"
+      },
+      "route": {
+        "full": "Pipeline completo",
+        "quick": "Pasada rápida"
       },
       "group": {
         "title": "A dónde va el gasto",
@@ -11927,6 +11933,8 @@
       "memoryAnswerCache": "Respondido con una respuesta guardada — no se llamó a ningún modelo",
       "memoryAnswerEvermind": "Respondido por Evermind v{version} — no se llamó a ningún otro modelo",
       "memoryAnswerHint": "La memoria de este proyecto ya tenía una respuesta a esta misma pregunta, así que se reprodujo en lugar de ejecutar un modelo.",
+      "memoryAnswerSymbols": "Respondido desde el índice de símbolos del espacio de trabajo — no se llamó a ningún modelo",
+      "memoryAnswerSymbolsHint": "La solicitud solo preguntaba dónde se definen estos nombres y el índice de símbolos los resolvió todos, así que se listaron las definiciones en lugar de ejecutar un modelo.",
       "learnTitle": "Este turno se aportó a Evermind v{version}",
       "learnHint": "Este turno se devolvió al Evermind del proyecto: se fusionará en el modelo aprendido.",
       "learnSkippedTitle": "No se aprendió este turno — {reason}",

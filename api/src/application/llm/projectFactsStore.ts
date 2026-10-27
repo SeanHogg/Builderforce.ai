@@ -290,7 +290,22 @@ interface FileAnchor { path?: unknown; contentHash?: unknown }
  * silently drop a belief.
  */
 export async function anchorsAreStale(anchors: unknown, readHash: FileContentHashReader): Promise<boolean> {
-  if (!Array.isArray(anchors)) return false;
+  return (await staleAnchorPaths(anchors, readHash, { first: true })).length > 0;
+}
+
+/**
+ * The anchored paths whose file now hashes differently from when the fact was written,
+ * by the same rule as {@link anchorsAreStale}. `first` stops at the first stale one —
+ * enough to hide a single-subject fact; a code map needs every one, so it can drop just
+ * those files and keep the rest.
+ */
+export async function staleAnchorPaths(
+  anchors: unknown,
+  readHash: FileContentHashReader,
+  opts: { first?: boolean } = {},
+): Promise<string[]> {
+  const stale: string[] = [];
+  if (!Array.isArray(anchors)) return stale;
   for (const anchor of anchors as FileAnchor[]) {
     const recorded = typeof anchor?.contentHash === 'string' ? anchor.contentHash : '';
     const path = typeof anchor?.path === 'string' ? anchor.path : '';
@@ -303,9 +318,12 @@ export async function anchorsAreStale(anchors: unknown, readHash: FileContentHas
       reportCaughtError(err, { source: 'project-facts', operation: 'anchor-hash-read', level: 'warning', context: { path } });
       return null;
     });
-    if (current != null && current !== recorded) return true;
+    if (current != null && current !== recorded) {
+      stale.push(path);
+      if (opts.first) break;
+    }
   }
-  return false;
+  return stale;
 }
 
 /** The origin-cost columns for a write — all three or none, so a half-known cost is

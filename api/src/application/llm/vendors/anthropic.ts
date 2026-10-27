@@ -50,7 +50,7 @@ import {
 import { currentAnthropicModelId, supersededAnthropicModelIds } from '@builderforce/model-catalog';
 import { ANTHROPIC_OAUTH_BETA, CLAUDE_CODE_SYSTEM_PROMPT } from '../anthropicOAuth';
 import { isVolatileContent } from '@seanhogg/builderforce-memory/handoff';
-import { markAnthropicHistoryBreakpoint } from '../promptCaching';
+import { lastStableIndex } from '../promptCaching';
 import { applySchemaDialect } from '../jsonSchemaSanitize';
 
 const ENDPOINT = 'https://api.anthropic.com/v1/messages';
@@ -212,15 +212,21 @@ function isVolatileTail(block: AnthropicBlock | undefined): block is AnthropicBl
   return block?.type === 'text' && isVolatileContent([block]);
 }
 
-/** {@link markAnthropicHistoryBreakpoint}, but placed BEFORE a trailing volatile block. */
+/**
+ * The history breakpoint (`markAnthropicHistoryBreakpoint`), placed on the last STABLE block — before a
+ * trailing volatile block — by the same {@link lastStableIndex} rule the OpenRouter placer
+ * uses: the last message with a non-volatile block, then that message's last such block.
+ * Any block type takes the marker here (tool_result included). Non-destructive: only the
+ * marked message and block are cloned.
+ */
 function markStableHistory(messages: AnthropicMessage[], marker: Record<string, unknown>): AnthropicMessage[] {
-  const last = messages[messages.length - 1];
-  const tail = last?.content[last.content.length - 1];
-  if (!last || !isVolatileTail(tail)) return markAnthropicHistoryBreakpoint(messages, marker);
-  if (last.content.length === 1) return [...markAnthropicHistoryBreakpoint(messages.slice(0, -1), marker), last];
-  const marked = markAnthropicHistoryBreakpoint([...messages.slice(0, -1), { ...last, content: last.content.slice(0, -1) }], marker);
-  const head = marked[marked.length - 1]!;
-  return [...marked.slice(0, -1), { ...head, content: [...head.content, tail] }];
+  const hasStableBlock = (m: AnthropicMessage) => m.content.some((b) => !isVolatileTail(b));
+  const m = lastStableIndex(messages, () => false, hasStableBlock);
+  if (m < 0) return [...messages];
+  const blocks = messages[m]!.content;
+  const b = lastStableIndex(blocks, isVolatileTail, () => true);
+  const marked = { ...messages[m]!, content: blocks.map((block, i) => (i === b ? { ...block, cache_control: marker } : block)) };
+  return messages.map((msg, i) => (i === m ? marked : msg));
 }
 
 /**
@@ -508,7 +514,9 @@ export function prepareAnthropicRequest(
   // 400. The cloud loop ALSO threads an explicit `firstTurn` hint (via
   // reasoningCapability → extraBody); the hint can only NARROW past the invariant
   // (a caller may veto with `false`), never widen it. If in doubt we do NOT enable
-  // (fail safe, never 400).
+  // (fail safe, never 400). Flipping thinking off after turn 1 invalidates only the cached
+  // MESSAGES (system + tools stay cached), and on turn 2 those are small — first-turn
+  // planning quality is worth that one miss, so the flip is deliberate.
   //
   // NOTE — inherent API-shape constraint, an ENHANCEMENT not a bug: full CONTINUATION-
   // turn thinking would require a NATIVE Anthropic Messages round-trip that preserves
