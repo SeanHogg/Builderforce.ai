@@ -12,11 +12,16 @@
  * brain-embedded's shared `createLocalSuccessFederation` over the extension's authed
  * transport `bfApiRequest`). brain-embedded lends it only to a signed-in Hybrid turn;
  * unbound, every call refuses and the head stays on this machine.
+ *
+ * WHEN a confident "fails" verdict skips local is the person's to tune
+ * (`builderforce.localModels.skipConfidence` / `.explore`, `localSuccessTuning` below),
+ * read per turn so a change applies to the next one.
  */
 
-import type * as vscode from "vscode";
+import * as vscode from "vscode";
 import {
   createLocalSuccessFederation,
+  type HostModelStreamInput,
   type LocalSuccessFederation,
   type LocalSuccessStore,
   type ProjectMemoryRequest,
@@ -46,3 +51,16 @@ export const localSuccessFederation: LocalSuccessFederation = createLocalSuccess
   <T>(path: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) =>
     federationRequest ? federationRequest<T>(path, init) : Promise.reject(new Error("local-success federation: the extension has not activated")),
 );
+
+/** A `builderforce.localModels.*` share setting, read live; undefined (⇒ the predictor's
+ *  default) when unset or out of [0, 1]. */
+function shareSetting(key: string): number | undefined {
+  const v = vscode.workspace.getConfiguration("builderforce.localModels").get<number>(key);
+  return typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1 ? v : undefined;
+}
+
+/** The ONE tuning the editor lends every routed stream — the person's two settings. */
+export const localSuccessTuning: NonNullable<HostModelStreamInput["localSuccessTuning"]> = {
+  skipConfidence: () => shareSetting("skipConfidence"),
+  explore: () => shareSetting("explore"),
+};

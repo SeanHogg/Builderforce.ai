@@ -93,6 +93,9 @@ export const BRAIN_HOST_MESSAGES = [
   'session.meta',
   'settings',
   'context.pick',
+  /** The panel's attachments through the host (`attachmentIngress.ts`): store a text,
+   *  upload a binary to the account, sign a large picture, inline a turn's texts. */
+  'attachment.ingress',
   'copy',
   'diagnose',
   /** Open (or reveal) the visualization panel — the board and the run's changes — beside the chat. */

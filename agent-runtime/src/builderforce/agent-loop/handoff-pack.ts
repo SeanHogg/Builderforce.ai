@@ -19,10 +19,10 @@ import {
   tokensOf,
   type HandoffMessage,
 } from "@seanhogg/builderforce-memory/handoff";
-import { isCostLeverOn } from "@builderforce/cost-levers";
 import { priceTierBoundary } from "@builderforce/model-catalog";
 import { handoffReserveTokens, handoffTokenBudget, toolSchemaTokens } from "@builderforce/run-policy";
 import { resolveContextWindowTokens } from "../../agents/context-window.js";
+import { onDeviceCostLeverOn } from "../../infra/cost-levers.js";
 import type { AgentMessage, AgentTool } from "../model/agent-types.js";
 import type { Model } from "../model/types.js";
 import { modelRef } from "./stall-recovery.js";
@@ -60,10 +60,11 @@ function toolsTokens(tools: readonly AgentTool<any>[] | undefined): number {
  * lever `c9_price_tier_budget`) so the packed INPUT stays under the model's lowest
  * long-context price boundary — the packer takes the reply reserve back off this, so the
  * cap is the boundary plus that reserve. A flat-priced model packs to its window exactly.
+ * The lever is read through the on-device gate, so a partial rollout buckets by install.
  */
 function packTargetTokens(to: Model, reserve: number): number {
   const contextWindow = resolveContextWindowTokens(to);
-  const boundary = isCostLeverOn(process.env, "c9_price_tier_budget", null) ? priceTierBoundary(to.id) : undefined;
+  const boundary = onDeviceCostLeverOn("c9_price_tier_budget") ? priceTierBoundary(to.id) : undefined;
   const budget = handoffTokenBudget({ contextWindow, reserveOutputTokens: reserve, priceTierBoundary: boundary });
   return budget === undefined ? contextWindow : Math.min(contextWindow, budget + reserve);
 }

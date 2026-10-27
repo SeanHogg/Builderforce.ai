@@ -13,7 +13,13 @@
  */
 
 import * as path from "path";
-import { sharedSymbolIndex, SYMBOL_INDEX_SKIP_DIRS, type WorkspaceSymbolIndex } from "@builderforce/agent-tools/node-symbols";
+import {
+  sharedSymbolIndex,
+  SYMBOL_INDEX_SKIP_DIRS,
+  treeSitterSymbolExtractor,
+  type SymbolExtractor,
+  type WorkspaceSymbolIndex,
+} from "@builderforce/agent-tools/node-symbols";
 import { SKIP_DIRS } from "./workspaceSearch";
 
 /** Watcher-backed, so the full re-walk is a 10-minute backstop rather than per query. */
@@ -29,12 +35,30 @@ const NOISY_ROOTS = ["bf-verify-fdc", "_cubecl_src"] as const;
 
 const skipDirs: ReadonlySet<string> = new Set([...SYMBOL_INDEX_SKIP_DIRS, ...SKIP_DIRS, ...NOISY_ROOTS]);
 
+/** Where the bundle ships the tree-sitter wasm (`out/tree-sitter`), set at activation.
+ *  Unset (tests, the harness) ⇒ the grammars resolve from the installed packages. */
+let grammarDir: string | undefined;
+let extractor: SymbolExtractor | undefined;
+
+/** Called once at activation, before the first index is built. */
+export function setSymbolGrammarDir(dir: string): void {
+  grammarDir = dir;
+  extractor = undefined;
+}
+
+/** Tree-sitter where a grammar loads, the line-regex extractor everywhere else. */
+function editorExtractor(): SymbolExtractor {
+  extractor ??= treeSitterSymbolExtractor(grammarDir ? { wasmDir: grammarDir } : {});
+  return extractor;
+}
+
 /** The process-wide definition index for the workspace folder at `root`. */
 export function workspaceSymbolIndex(root: string): WorkspaceSymbolIndex {
   return sharedSymbolIndex(root, {
     skipDirs,
     cachePath: path.join(root, ".builderforce", "symbols.json"),
     fullRefreshMs: FULL_REFRESH_MS,
+    extractor: editorExtractor(),
   });
 }
 

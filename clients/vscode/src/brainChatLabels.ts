@@ -59,6 +59,8 @@ export function brainChatLabels(): Record<string, string> {
     "tl.memoryAnswerCache": t("Answered from a saved reply — no model was called"),
     "tl.memoryAnswerEvermind": t("Answered by Evermind v{version} — no other model was called"),
     "tl.memoryAnswerHint": t("This project's memory already held an answer to this exact question, so it was replayed instead of running a model."),
+    "tl.memoryAnswerSymbols": t("Answered from the workspace symbol index — no model was called"),
+    "tl.memoryAnswerSymbolsHint": t("The request only asked where these names are defined, and the symbol index resolved every one of them, so the definitions were listed instead of running a model."),
     "tl.learnTitle": t("Contributed this turn to Evermind v{version}"),
     "tl.learnHint": t("This turn was contributed back to the project Evermind — it will be merged into the learned model."),
     "tl.learnTargetContributed": t("Contributed to {name} (project #{projectId} v{version})"),

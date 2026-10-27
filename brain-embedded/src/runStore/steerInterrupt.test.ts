@@ -35,7 +35,8 @@ describe('a steer interrupts the step in flight (PRD 35 E10)', () => {
     const out = (await pending) as Record<string, unknown>;
     expect(out).toMatchObject({ ok: false, aborted: true, interrupted: true, error: INTERRUPTED_BY_STEER, stdout: 'partial' });
     expect(hasRunInterrupt(7)).toBe(true);
-    expect(drainRunSteering(7)).toEqual(['write the update now']);
+    // Steered messages carry their attachments since ffe912880 — the drained shape is a turn, not a string.
+    expect(drainRunSteering(7)).toEqual([{ text: 'write the update now', attachments: undefined }]);
     expect(hasRunInterrupt(7)).toBe(false);
   });
 

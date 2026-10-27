@@ -37,6 +37,11 @@ export default defineConfig({
         find: "@builderforce/agent-tools/node-desktop.js",
         replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-desktop.ts"),
       },
+      {
+        // local_research's Node half (fingerprints + persisted answer cache), same form.
+        find: "@builderforce/agent-tools/node-research.js",
+        replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-research.ts"),
+      },
       // Every source-only package under `packages/`, derived from their manifests.
       // These were six hand-written entries and had already fallen behind the
       // registry: `canvas-widget-protocol`, `creation-canvas-contract`,

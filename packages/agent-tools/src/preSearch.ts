@@ -17,8 +17,10 @@ import type { RepoSearchResult, SymbolFindResult } from "./capabilities.js";
 export interface PreSearchPorts {
   /** The definition index (`repo.symbols`). */
   findSymbol?: (name: string) => Promise<SymbolFindResult>;
-  /** A text search over the tree (ripgrep on the editor). */
-  searchText?: (query: string) => Promise<RepoSearchResult>;
+  /** A text search over the tree (ripgrep on the editor). `query` is a REGEX with the
+   *  identifier's metacharacters escaped (`\$scope`). `signal` is the pre-search's own
+   *  stop (its caller's deadline or Stop): a searcher that spawns a process kills it. */
+  searchText?: (query: string, signal?: AbortSignal) => Promise<RepoSearchResult>;
 }
 
 export interface PreSearchDefinition {
@@ -50,9 +52,12 @@ export interface PreSearchOptions {
   referencesPerIdentifier?: number;
   /** Hard cap on the rendered block. */
   maxChars?: number;
+  /** Stops the pre-search: handed to every text search, and an aborted pre-search
+   *  starts no further look-ups. */
+  signal?: AbortSignal;
 }
 
-const DEFAULTS: Required<PreSearchOptions> = {
+const DEFAULTS: Required<Omit<PreSearchOptions, "signal">> = {
   maxIdentifiers: 6,
   definitionsPerIdentifier: 3,
   referencesPerIdentifier: 4,
@@ -68,7 +73,8 @@ function looksLikeIdentifier(word: string): boolean {
   if (/^_+$/.test(word)) return false;
   if (word.includes("_") || word.includes("$")) return true;
   if (/[a-z][A-Z]/.test(word)) return true; // camelCase / PascalCase with two humps
-  if (/^[A-Z][A-Z0-9]{2,}$/.test(word) && /\d/.test(word)) return true; // e.g. SHA256
+  if (/[0-9][A-Z]/.test(word) && /[a-z]/.test(word)) return true; // base64Encode, Win32Api — not B2B
+  if (/^[A-Z][A-Z0-9]*\d$/.test(word)) return true; // SHA256, MD5, ES2015 — not B2B (a trailing digit, not a sandwiched one)
   return false;
 }
 
@@ -104,6 +110,11 @@ export function extractIdentifiers(request: string, max = DEFAULTS.maxIdentifier
   return out;
 }
 
+/** `identifier` as a literal in a regex search — `$scope` must not read as end-of-line. */
+export function escapeRegex(identifier: string): string {
+  return identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function clip(s: string, n: number): string {
   const t = s.replace(/\s+/g, " ").trim();
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
@@ -136,13 +147,16 @@ export function renderPreSearchBlock(r: Omit<PreSearchResult, "block">, maxChars
  */
 export async function preSearch(request: string, ports: PreSearchPorts, options: PreSearchOptions = {}): Promise<PreSearchResult> {
   const o = { ...DEFAULTS, ...options };
+  const { signal } = options;
   const identifiers = extractIdentifiers(request, o.maxIdentifiers);
   const empty: PreSearchResult = { identifiers, definitions: [], references: [], block: "" };
-  if (identifiers.length === 0) return empty;
+  if (identifiers.length === 0 || signal?.aborted) return empty;
   const perId = await Promise.all(identifiers.map(async (identifier) => {
     const [defs, refs] = await Promise.all([
       ports.findSymbol ? ports.findSymbol(identifier).catch((): SymbolFindResult => ({ ok: false })) : Promise.resolve<SymbolFindResult>({ ok: false }),
-      ports.searchText ? ports.searchText(identifier).catch((): RepoSearchResult => ({ ok: false })) : Promise.resolve<RepoSearchResult>({ ok: false }),
+      ports.searchText
+        ? ports.searchText(escapeRegex(identifier), signal).catch((): RepoSearchResult => ({ ok: false }))
+        : Promise.resolve<RepoSearchResult>({ ok: false }),
     ]);
     const exact = (defs.ok ? defs.matches ?? [] : []).filter((m) => m.name === identifier && m.kind !== "heading");
     const definitions: PreSearchDefinition[] = exact.slice(0, o.definitionsPerIdentifier).map((m) => ({

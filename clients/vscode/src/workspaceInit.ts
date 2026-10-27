@@ -156,5 +156,13 @@ export async function buildWorkspaceInit(
     // The sidebar chat view draws the conversation only; its board opens beside it.
     ...(opts.boardBeside ? { boardBeside: true } : {}),
     colorTheme: isLightTheme() ? "light" : "dark",
+    // How an attached picture is prepared for the model (`builderforce.images.*`).
+    images: imagePrepSettings(),
   };
+}
+
+/** The `builderforce.images.*` caps the panel's picture prep runs with (brain-embedded `ImagePrepOptions`). */
+export function imagePrepSettings(): { maxEdge: number; jpegQuality: number } {
+  const cfg = vscode.workspace.getConfiguration("builderforce.images");
+  return { maxEdge: cfg.get<number>("maxEdge", 1568), jpegQuality: cfg.get<number>("jpegQuality", 0.85) };
 }

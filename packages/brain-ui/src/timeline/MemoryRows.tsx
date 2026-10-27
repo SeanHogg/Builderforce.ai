@@ -54,6 +54,9 @@ function RecallRowInner({ node, labels }: { node: Extract<TimelineNode, { kind: 
 }
 
 function MemoryAnswerRowInner({ node, labels }: { node: Extract<TimelineNode, { kind: 'memoryAnswer' }>; labels: BrainTimelineLabels }) {
+  if (node.source === 'symbol-index') {
+    return <MemoryLine kind="memoryAnswer" title={labels.memoryAnswerSymbols} hint={labels.memoryAnswerSymbolsHint} />;
+  }
   const title = node.source === 'evermind' && node.version != null
     ? labels.memoryAnswerEvermind.replace('{version}', String(node.version))
     : labels.memoryAnswerCache;

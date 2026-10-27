@@ -74,6 +74,11 @@ export interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels {
   memoryAnswerEvermind: string;
   /** Tooltip on the memory-first answer step. */
   memoryAnswerHint: string;
+  /** Deterministic answer step: "where is X defined?" answered from the workspace symbol
+   *  index and no model ran. */
+  memoryAnswerSymbols: string;
+  /** Tooltip on the symbol-index answer step. */
+  memoryAnswerSymbolsHint: string;
   /** Evermind learn step — the turn was contributed back. Must contain `{version}`. */
   learnTitle: string;
   /** Tooltip on the learn step. */
@@ -161,6 +166,8 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   memoryAnswerCache: 'Answered from a saved reply — no model was called',
   memoryAnswerEvermind: 'Answered by Evermind v{version} — no other model was called',
   memoryAnswerHint: "This project's memory already held an answer to this exact question, so it was replayed instead of running a model.",
+  memoryAnswerSymbols: 'Answered from the workspace symbol index — no model was called',
+  memoryAnswerSymbolsHint: 'The request only asked where these names are defined, and the symbol index resolved every one of them, so the definitions were listed instead of running a model.',
   learnTitle: 'Contributed this turn to Evermind v{version}',
   learnHint: 'This turn was contributed back to the project Evermind — it will be merged into the learned model.',
   learnSkippedTitle: 'Not learned this turn — {reason}',

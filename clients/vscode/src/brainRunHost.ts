@@ -38,6 +38,7 @@ import {
   subscribeRunStore,
   type BrainRunOutcome,
   type BrainStreamFn,
+  type RunEndOutcome,
 } from "@seanhogg/builderforce-brain-embedded";
 import type { ToolDef } from "./fileTools";
 import { approvalRequestFor, createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs } from "./nativeBrainRun";
@@ -52,6 +53,7 @@ import { createChildApprovalRelay } from "./childApprovalRelay";
 import { createRunWatches } from "./runWatches";
 import { OWNER_NAME, type BrainRunHost, type BrainRunHostPorts, type RunNoteOptions, type ToolRunInfo } from "./brainRunHostContract";
 import { runContextFields, startRunRepo } from "./runSetup";
+import { runRequestFields } from "./stageModels";
 import { createRunSteer } from "./runSteer";
 
 export { syncMessageFor } from "./brainRunHostProtocol";
@@ -253,6 +255,9 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     const identity = ports.chatIdentity ? await ports.chatIdentity(chatId) : undefined;
     const serverChatId = identity ? identity.serverChatId : chatId;
     const surface = p.modelSurface ?? null;
+    // Stage models, pipeline routing and the USD cap (`editorRunSettings.ts`); a sub-agent
+    // takes only the cap — its model is `modelForChildRun`'s and it is never routed.
+    const runSettings = runRequestFields(await ports.runSettings?.(), { child: !!p.child });
     try {
       // Gates render as binding directives ahead of the host prompt, then the workspace's
       // rules — the one preamble the native participant shares.
@@ -300,6 +305,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         ...(p.chatMode ? { chatMode: p.chatMode } : {}),
         ...(ports.reportOutcome ? { reportOutcome: (o: BrainRunOutcome) => ports.reportOutcome!(o) } : {}),
         ...(p.child ? { lineage: p.child.lineage } : {}),
+        ...runSettings,
+        ...(ports.recordRunOutcome ? { recordRunOutcome: (end: { runId: string; outcome: RunEndOutcome }) => ports.recordRunOutcome!({ chatId }, end) } : {}),
         ...(directives ? { onStop: directives.hooks.onStop } : {}),
       });
     } finally {
@@ -330,6 +337,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
   const childHost = createChildRunHost({
     registry,
     specOf: (key) => specs.get(key),
+    // `builderforce.models.subagent` — what a sub-agent codes on unless its owner's pick is strict.
+    ...(ports.runSettings ? { subagentModel: async () => (await ports.runSettings!()).subagentModel } : {}),
     start,
     isBusy: (key) => active.has(key) || isRunning(key),
     autoApproveOf,

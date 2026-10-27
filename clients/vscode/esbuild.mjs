@@ -156,11 +156,64 @@ const options = integration
  * extension bundle — it is Node, CJS, and needs the same `import.meta.url` shim.
  */
 const hostWorker = harness || integration ? null : { ...options, entryPoints: ["src/hostBfi/worker.ts"], outfile: "out/bfiHostWorker.js" };
-function copyBfiWasm() {
+async function copyBfiWasm() {
   const wasm = createRequire(import.meta.url).resolve("@seanhogg/bfi-web/bfi_web_bg.wasm");
   fs.mkdirSync("out", { recursive: true });
   fs.copyFileSync(wasm, path.join("out", "bfi_web_bg.wasm"));
   copyBfiNative();
+  await copyTreeSitterWasm();
+}
+
+/**
+ * The symbol index's tree-sitter wasm (`@builderforce/agent-tools/node-symbols` →
+ * `node-tree-sitter.ts`): the web-tree-sitter runtime plus the grammars it loads, copied to
+ * `out/tree-sitter/` (`out/` ships in the .vsix; activation points the extractor there).
+ * The grammar list is IMPORTED from that module (`TREE_SITTER_GRAMMAR_WASMS`, the same
+ * constant `agent-runtime/scripts/copy-tree-sitter-wasm.ts` imports), so a grammar added
+ * there ships without a second list to remember. Resolved from agent-tools, which
+ * declares both packages; a machine without them ships the regex extractor, with a warning.
+ */
+async function copyTreeSitterWasm() {
+  const agentTools = path.join(repoRoot, "packages", "agent-tools");
+  const req = createRequire(path.join(agentTools, "package.json"));
+  const { TREE_SITTER_GRAMMAR_WASMS, TREE_SITTER_RUNTIME_WASM } = await treeSitterManifest(agentTools);
+  let runtimeWasm;
+  let grammarDir;
+  try {
+    runtimeWasm = path.join(path.dirname(req.resolve("web-tree-sitter")), TREE_SITTER_RUNTIME_WASM);
+    grammarDir = path.join(path.dirname(req.resolve("tree-sitter-wasms/package.json")), "out");
+  } catch (err) {
+    console.warn(`[esbuild] tree-sitter packages not installed (${String(err)}): symbols use the regex extractor.`);
+    return;
+  }
+  const target = path.join("out", "tree-sitter");
+  fs.mkdirSync(target, { recursive: true });
+  fs.copyFileSync(runtimeWasm, path.join(target, TREE_SITTER_RUNTIME_WASM));
+  for (const file of TREE_SITTER_GRAMMAR_WASMS) {
+    const from = path.join(grammarDir, file);
+    if (fs.existsSync(from)) fs.copyFileSync(from, path.join(target, file));
+    else console.warn(`[esbuild] no tree-sitter grammar ${file}: that language's symbols use the regex extractor.`);
+  }
+}
+
+/**
+ * `node-tree-sitter.ts`'s exports, imported for real. This script is plain Node and cannot
+ * import TypeScript, so esbuild bundles the module in memory (with the same `.js` → `.ts`
+ * resolver as the extension) and the result is imported from a data URL — no regex over
+ * its source, no copy of its list.
+ */
+async function treeSitterManifest(agentTools) {
+  const built = await esbuild.build({
+    entryPoints: [path.join(agentTools, "src", "node-tree-sitter.ts")],
+    bundle: true,
+    write: false,
+    format: "esm",
+    platform: "node",
+    target: "node20",
+    plugins: [agentToolsTsResolve],
+    logLevel: "silent",
+  });
+  return import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`);
 }
 
 /**
@@ -185,13 +238,13 @@ if (watch) {
   await ctx.watch();
   if (hostWorker) {
     await (await esbuild.context(hostWorker)).watch();
-    copyBfiWasm();
+    await copyBfiWasm();
   }
   console.log("[esbuild] watching…");
 } else {
   await esbuild.build(options);
   if (hostWorker) {
     await esbuild.build(hostWorker);
-    copyBfiWasm();
+    await copyBfiWasm();
   }
 }

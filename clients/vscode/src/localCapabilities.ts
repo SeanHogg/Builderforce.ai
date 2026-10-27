@@ -32,7 +32,7 @@ import type {
   RepoWriteResult,
 } from "@builderforce/agent-tools";
 
-import type { RepoSemanticCapability, RepoSymbolsCapability } from "@builderforce/agent-tools";
+import type { LocalResearchCapability, RepoSemanticCapability, RepoSymbolsCapability } from "@builderforce/agent-tools";
 import { desktopSemanticCapability } from "./desktopContext";
 import { createLocalShell } from "./localShell";
 import { SKIP_DIRS, searchWorkspace } from "./workspaceSearch";
@@ -67,6 +67,11 @@ export const LOCAL_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   // Desktop (see desktopContext.ts). Declared here so the tools are built; each run's
   // catalog then withholds them while the desktop service is not running.
   "repo.semantic",
+  // `read_compressed` (the Desktop service's LLMLingua-2 compressor) and `local_research`
+  // (a local model reads files and answers). Declared so the tools are built; the run's
+  // catalog withholds each while its backing is absent (`brainToolCatalog.ts`).
+  "repo.compress",
+  "local.research",
   // Publishing (commit / push / open a pull request). Backed HERE and on no cloud
   // surface: those already publish by a different mechanism (a write IS a commit, and
   // the engine opens the PR at finish), whereas the editor could change a working tree
@@ -152,8 +157,14 @@ export interface LocalProviderOptions {
   ripgrep?: () => Promise<string | null>;
   /** The definition index. Defaults to the workspace's shared one; a test can pin its own. */
   symbols?: RepoSymbolsCapability & { markDirty(path: string): void };
-  /** The semantic index. Defaults to Builderforce Desktop's; a test can pin its own. */
+  /** The semantic index — the catalog-time resolution (`localSemantic.ts`: Desktop when
+   *  it answers, with its compressor; else `repo_map` from the symbol index). Defaults to
+   *  Desktop's without the compressor; a test can pin its own. */
   semantic?: RepoSemanticCapability;
+  /** The local model `local_research` asks (`localResearch/`). Absent ⇒ that tool refuses. */
+  research?: LocalResearchCapability;
+  /** The call's Stop — kills a running ripgrep and ends the fallback walk. */
+  signal?: AbortSignal;
   /** The run's default checkout (`resolveDefaultRepo`), handed to the shell. */
   defaultRepo?: string;
   /** The run this provider's background jobs belong to (its run key) — scoped ids, and
@@ -206,7 +217,7 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
         await handle.close();
       }
     },
-    async searchCode(query: string, scope?: string): Promise<RepoSearchResult> {
+    async searchCode(query: string, scope?: string, searchOpts?: { signal?: AbortSignal }): Promise<RepoSearchResult> {
       // Optional scope: a subdirectory OR a single file inside the workspace. Resolved
       // here (the containment guard is the provider's job); the search itself — ripgrep
       // when the editor has one, the bounded walk otherwise — lives in workspaceSearch.
@@ -220,7 +231,10 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
         }
       }
       const ripgrep = options.ripgrep ? await options.ripgrep().catch(() => null) : null;
-      return searchWorkspace({ root: rootResolved, start, query, ripgrep });
+      // The run's Stop and this one search's own stop (a pre-search deadline) both kill rg.
+      const stops = [options.signal, searchOpts?.signal].filter((s): s is AbortSignal => !!s);
+      const signal = stops.length > 1 ? AbortSignal.any(stops) : stops[0];
+      return searchWorkspace({ root: rootResolved, start, query, ripgrep, ...(signal ? { signal } : {}) });
     },
   };
 
@@ -264,5 +278,5 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
   const shell = { ...createLocalShell(rootResolved, { jobOwner: options.jobOwner }), ...(options.defaultRepo ? { defaultRepo: options.defaultRepo } : {}) };
 
   const semantic = options.semantic ?? desktopSemanticCapability(rootResolved, { adaptive: hostCostLeverOn("c4_adaptive_context") });
-  return { capabilities: LOCAL_SURFACE_CAPS, repoRead, repoWrite, symbols, semantic, shell };
+  return { capabilities: LOCAL_SURFACE_CAPS, repoRead, repoWrite, symbols, semantic, shell, ...(options.research ? { research: options.research } : {}) };
 }

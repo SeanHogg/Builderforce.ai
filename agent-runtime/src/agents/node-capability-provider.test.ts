@@ -184,11 +184,12 @@ describe("catalogNodeCapabilityProvider — repo.semantic probe", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it("does not advertise repo.semantic when the desktop probe is absent", async () => {
+  it("backs repo.semantic with the local symbol index when the desktop probe is absent", async () => {
     setDesktopFetchForTests(fakeDesktop());
     const provider = await catalogNodeCapabilityProvider({ workspaceRoot: root });
-    expect(provider.capabilities.has("repo.semantic")).toBe(false);
-    expect(provider.semantic).toBeUndefined();
+    expect(provider.capabilities.has("repo.semantic")).toBe(true);
+    expect(provider.semantic).toBeDefined();
+    expect(provider.semantic?.compress).toBeUndefined(); // no compressor without Desktop
   });
 
   it("advertises repo.semantic and backs it when the desktop probe succeeds", async () => {

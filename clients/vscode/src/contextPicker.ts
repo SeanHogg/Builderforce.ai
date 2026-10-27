@@ -3,8 +3,10 @@ import * as vscode from "vscode";
 /**
  * Let the user attach workspace context to a message: the active editor's
  * selection, an already-open file, or any file chosen from disk. Returns the
- * relative path + text (or null if cancelled) — the webview attaches it through
- * the same upload pipeline as a dropped file, so the model gets the content.
+ * relative path + text (or null if cancelled). The webview attaches it like a dropped
+ * text file: the text is handed back to this host (`attachment.ingress` → `store`) and
+ * inlined into the turn at send under the mention budget (`attachmentIngress.ts`) — the
+ * webview's own `blob:` preview is never what the model is given.
  */
 export async function pickWorkspaceContext(): Promise<{ path: string; text: string } | null> {
   // Note: the discriminator is `ctxKind`, not `kind` — `QuickPickItem.kind` is

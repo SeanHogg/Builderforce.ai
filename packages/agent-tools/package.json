@@ -1,16 +1,18 @@
 {
   "name": "@builderforce/agent-tools",
-  "version": "2026.10.15",
+  "version": "2026.10.16",
   "private": true,
   "type": "module",
-  "description": "Runtime-agnostic agent tool contract shared by the cloud (Worker) and on-prem (Node) engines. The package ROOT is node-builtin-free (the Worker imports it); node-only helpers live behind `./node-path`, `./node-symbols`, `./node-git-ignore`, and `./node-desktop` export conditions, which the Worker never imports.",
+  "description": "Runtime-agnostic agent tool contract shared by the cloud (Worker) and on-prem (Node) engines. The package ROOT is node-builtin-free (the Worker imports it); node-only helpers live behind `./node-path`, `./node-symbols`, `./node-git-ignore`, and `./node-desktop` export conditions, which the Worker never imports. `./node-tree-sitter` is the symbol index's tree-sitter extractor (web-tree-sitter + tree-sitter-wasms grammars, loaded lazily; the regex extractor is the fallback), re-exported from `./node-symbols`. `./node-research` is the Node half of `local.research` (file fingerprints + the persisted answer cache).",
   "exports": {
     ".": "./src/index.ts",
     "./symbols": "./src/symbols.ts",
     "./node-path": "./src/node-path.ts",
     "./node-symbols": "./src/node-symbols.ts",
     "./node-git-ignore": "./src/node-git-ignore.ts",
-    "./node-desktop": "./src/node-desktop.ts"
+    "./node-desktop": "./src/node-desktop.ts",
+    "./node-tree-sitter": "./src/node-tree-sitter.ts",
+    "./node-research": "./src/node-research.ts"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -18,7 +20,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@seanhogg/builderforce-memory": "^2026.10.26"
+    "@seanhogg/builderforce-memory": "^2026.10.28",
+    "tree-sitter-wasms": "^0.1.11",
+    "web-tree-sitter": "^0.22.6"
   },
   "devDependencies": {
     "@types/node": "^24.7.2",

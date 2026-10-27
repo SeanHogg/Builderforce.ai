@@ -677,7 +677,7 @@ function stepNode(step, ts, key) {
     case "recall": {
       const r = step.result ?? {};
       if (r.skippedLlm === true || step.label === "memory.answer" || step.label === "evermind.answer") {
-        const source = r.source === "evermind" || step.label === "evermind.answer" ? "evermind" : "qa-cache";
+        const source = r.source === "evermind" || step.label === "evermind.answer" ? "evermind" : r.source === "symbol-index" ? "symbol-index" : "qa-cache";
         return { key, kind: "memoryAnswer", ts, order: ORDER.memoryAnswer, source, version: typeof r.version === "number" && r.version > 0 ? r.version : null };
       }
       return { key, kind: "recall", ts, order: ORDER.recall, version: typeof r.version === "number" ? r.version : 0, count: typeof r.count === "number" ? r.count : Array.isArray(r.items) ? r.items.length : 0, items: Array.isArray(r.items) ? r.items : [] };
@@ -1066,6 +1066,8 @@ var DEFAULT_TIMELINE_LABELS = {
   memoryAnswerCache: "Answered from a saved reply \u2014 no model was called",
   memoryAnswerEvermind: "Answered by Evermind v{version} \u2014 no other model was called",
   memoryAnswerHint: "This project's memory already held an answer to this exact question, so it was replayed instead of running a model.",
+  memoryAnswerSymbols: "Answered from the workspace symbol index \u2014 no model was called",
+  memoryAnswerSymbolsHint: "The request only asked where these names are defined, and the symbol index resolved every one of them, so the definitions were listed instead of running a model.",
   learnTitle: "Contributed this turn to Evermind v{version}",
   learnHint: "This turn was contributed back to the project Evermind \u2014 it will be merged into the learned model.",
   learnSkippedTitle: "Not learned this turn \u2014 {reason}",
@@ -1550,6 +1552,9 @@ function RecallRowInner({ node, labels }) {
   ] });
 }
 function MemoryAnswerRowInner({ node, labels }) {
+  if (node.source === "symbol-index") {
+    return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(MemoryLine, { kind: "memoryAnswer", title: labels.memoryAnswerSymbols, hint: labels.memoryAnswerSymbolsHint });
+  }
   const title = node.source === "evermind" && node.version != null ? labels.memoryAnswerEvermind.replace("{version}", String(node.version)) : labels.memoryAnswerCache;
   return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(MemoryLine, { kind: "memoryAnswer", title, hint: labels.memoryAnswerHint });
 }
@@ -2526,7 +2531,7 @@ function SurfaceHeader({
   return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("header", { className: ["bf-shead", className].filter(Boolean).join(" "), children: [
     /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("span", { className: "bf-shead__brand", children: [
       /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "bf-shead__mark", children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(BrainMark, { running }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "bf-shead__title", children: title })
+      title != null && /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "bf-shead__title", children: title })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { className: "bf-shead__context", children: context }),
     presence && /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { className: "bf-shead__presence", children: presence }),

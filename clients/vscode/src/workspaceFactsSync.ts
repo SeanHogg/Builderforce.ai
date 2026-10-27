@@ -22,6 +22,7 @@ import { destinationKey, type EntityDestination } from "@builderforce/local-firs
 import { classifyQueue } from "@builderforce/write-outbox";
 import { forgetProjectFact, rememberProjectFact } from "./bfApi";
 import type { ScanResult } from "./codebaseScan";
+import { invalidateStableGrounding } from "./grounding";
 import { getSelectedProject, type SelectedProject } from "./projectState";
 import { buildWorkspaceFacts, WORKSPACE_FACT_PREFIX, type WorkspaceDigest } from "./workspaceFacts";
 import { workspaceSymbolIndex } from "./workspaceSymbols";
@@ -238,6 +239,8 @@ export async function afterWorkspaceScan(secrets: vscode.SecretStorage, root: st
   // Before any await: a selection change during the index refresh must not redirect this digest.
   const captured = snapshotSelection(getSelectedProject());
   await workspaceSymbolIndex(root).refresh();
+  // The rescan's fresh index belongs in the stable grounding: recompute it on the next turn.
+  invalidateStableGrounding();
   latest = {
     root,
     digest: { manifests: scan.manifests, overview: scan.overview, packages: await readPackages(root, scan.manifests) },

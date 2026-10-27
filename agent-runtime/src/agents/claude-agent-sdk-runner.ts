@@ -1,10 +1,11 @@
 import { query, type McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
-import { renderPolicyDirectives, type PolicyGate } from "@builderforce/agent-tools";
+import { renderPolicyDirectives, type PolicyGate, type RunKnowledgeLog } from "@builderforce/agent-tools";
 import { logDebug, logWarn } from "../logger.js";
 import { mapSdkMessage } from "./claude-agent-v2-events.js";
 import { createSteeringChannel, type SteeringChannel } from "../infra/relay-steering.js";
 import { buildSdkMemoryServer, SDK_MEMORY_SERVER, SDK_MEMORY_TOOLS } from "./sdk-memory-server.js";
 import { canUseToolDecision } from "./policy-gate-seam.js";
+import { sdkKnowledgeFeed } from "./sdk-run-knowledge.js";
 
 /**
  * The on-prem SDK tool vocabulary — the names a `block` gate can remove.
@@ -82,6 +83,13 @@ export interface V2RunParams {
    * first result (plain single-turn behaviour).
    */
   steering?: SteeringChannel;
+  /**
+   * The run's record (`RunKnowledgeRecorder`): every SUCCESSFUL tool call and the task
+   * are recorded into it, so the caller can consolidate the run's code map at the end —
+   * what the native loop and the knowledge loop do for every other runtime. Omitted ⇒
+   * nothing is recorded.
+   */
+  knowledge?: RunKnowledgeLog;
 }
 
 /** Tools the SDK may use after `block` gates are applied (case-insensitive match on
@@ -127,6 +135,9 @@ export async function runClaudeAgentSdkV2(
   const preamble = [governance, params.appendSystemPrompt?.trim()].filter(Boolean).join("\n\n");
 
   const steering = params.steering ?? createSteeringChannel();
+  // The run's record: the task now, each tool call once its result says it succeeded.
+  params.knowledge?.setPrompt(params.prompt);
+  const knowledge = params.knowledge ? sdkKnowledgeFeed(params.knowledge) : null;
   // Active cross-run memory — V1 parity (the loop's memory_recall/memory_remember).
   const memory = await buildSdkMemoryServer();
   const initialPrompt = preamble ? `${preamble}
@@ -176,7 +187,10 @@ ${params.prompt}` : params.prompt;
         if (ev.kind === "assistant_text") {
           sinks.onAssistantText(ev.text);
         } else if (ev.kind === "tool_use") {
+          knowledge?.toolUse(ev.toolName, ev.toolUseId, ev.args);
           sinks.onToolUse(ev.toolName, ev.toolUseId, ev.args);
+        } else if (ev.kind === "tool_result") {
+          knowledge?.toolResult(ev.toolUseId, ev.isError);
         } else if (ev.kind === "result") {
           sawResult = true;
           ok = ev.ok;

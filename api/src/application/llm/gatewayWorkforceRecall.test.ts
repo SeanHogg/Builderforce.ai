@@ -60,7 +60,14 @@ describe('workforce model recall placement', () => {
       messages: [{ role: 'user', content: [{ type: 'text', text: 'Is this refundable?' }, { type: 'image_url', image_url: { url: 'data:x' } }] }],
     };
     await expandGatewayModelRefs(env, getDb, 1, body);
-    const content = (body.messages as Array<{ content: unknown[] }>)[0]!.content;
+    // The request had no system message, so the persona is PREPENDED (as in the test
+    // above) and the user message is at index 1 — index 0 is the persona string.
+    const msgs = body.messages as Array<{ role: string; content: unknown[] }>;
+    expect(msgs[0]).toEqual({ role: 'system', content: 'You are Ada.' });
+    const content = msgs.find((m) => m.role === 'user')!.content;
     expect(content.at(-1)).toEqual({ type: 'text', text: RECALL });
+    // The vision message's text grounds the recall, as a string message's does.
+    expect(resolveWorkforceModel).toHaveBeenCalledWith(env, 1, 'builderforce/workforce-42', 'Is this refundable?', { recall: 'separate' });
+    expect(content.slice(0, 2)).toEqual([{ type: 'text', text: 'Is this refundable?' }, { type: 'image_url', image_url: { url: 'data:x' } }]);
   });
 });

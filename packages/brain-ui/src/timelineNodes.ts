@@ -55,7 +55,7 @@ export type TimelineNode =
   // A memory-first ANSWER: the model was skipped and memory replied. Not a recall — it
   // grounded nothing and carries no memories, so it must not render as "Recalled 0
   // memories from Evermind v0". `version` is set only when Evermind generated it.
-  | { key: string; kind: 'memoryAnswer'; ts: number; order: number; source: 'qa-cache' | 'evermind'; version: number | null }
+  | { key: string; kind: 'memoryAnswer'; ts: number; order: number; source: 'qa-cache' | 'evermind' | 'symbol-index'; version: number | null }
   | { key: string; kind: 'learn'; ts: number; order: number; version: number; skipped?: BrainLearnSkipReason; targets?: EvermindLearnTarget[] }
   | { key: string; kind: 'reconcile'; ts: number; order: number; version: number; count: number }
   // The run moved models — its transcript re-packed for the next model's window, or a
@@ -162,7 +162,7 @@ export function stepNode(step: PersistedStep, ts: number, key: string): Timeline
       // an answer, not recalled items — see the run loop's `memory.answer` /
       // `evermind.answer` step.
       if (r.skippedLlm === true || step.label === 'memory.answer' || step.label === 'evermind.answer') {
-        const source = r.source === 'evermind' || step.label === 'evermind.answer' ? 'evermind' : 'qa-cache';
+        const source = r.source === 'evermind' || step.label === 'evermind.answer' ? 'evermind' : r.source === 'symbol-index' ? 'symbol-index' : 'qa-cache';
         return { key, kind: 'memoryAnswer', ts, order: ORDER.memoryAnswer, source, version: typeof r.version === 'number' && r.version > 0 ? r.version : null };
       }
       return { key, kind: 'recall', ts, order: ORDER.recall, version: typeof r.version === 'number' ? r.version : 0, count: typeof r.count === 'number' ? r.count : (Array.isArray(r.items) ? r.items.length : 0), items: Array.isArray(r.items) ? r.items : [] };

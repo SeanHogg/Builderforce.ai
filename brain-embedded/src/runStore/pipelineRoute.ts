@@ -35,17 +35,26 @@ export function decideRunPipeline(
  * Where the run starts and which model each phase asks for. A sub-agent starts in
  * `code` (see `runPreamble.ts`); a quick run does too, coding on the quick model (else
  * the code model). Every other run plans first.
+ *
+ * The quick model also wins over the run's SOFT model (a default model, an Evermind
+ * head, Auto's lock) — a phase model alone never would, since the run's own model
+ * outranks `phaseModels`. A strict pin (Specific mode, the person's pick) is never
+ * overridden. Spread AFTER `pinnedModel` in the preamble so the override takes.
  */
 export function pipelinePolicyOptions(
-  req: Pick<BrainRunRequest, 'phaseModels' | 'pipeline' | 'lineage'>,
+  req: Pick<BrainRunRequest, 'phaseModels' | 'pipeline' | 'lineage' | 'modelStrict'>,
   pipeline: RunPipeline | null,
-): Pick<RunPolicyOptions, 'startPhase' | 'phaseModels'> {
+): Pick<RunPolicyOptions, 'startPhase' | 'phaseModels' | 'pinnedModel'> {
   const quick = pipeline?.route === 'quick';
   const startPhase: RunPhase = req.lineage || quick ? 'code' : 'plan';
   const phaseModels: Partial<Record<RunPhase, string>> = { ...(req.phaseModels ?? {}) };
   const quickModel = req.pipeline?.quickModel?.trim();
   if (quick && quickModel) phaseModels.code = quickModel;
-  return { startPhase, ...(Object.keys(phaseModels).length ? { phaseModels } : {}) };
+  return {
+    startPhase,
+    ...(Object.keys(phaseModels).length ? { phaseModels } : {}),
+    ...(quick && quickModel && !req.modelStrict ? { pinnedModel: quickModel } : {}),
+  };
 }
 
 /** The keys every call of a routed run carries — to the gateway's row and the device's. */

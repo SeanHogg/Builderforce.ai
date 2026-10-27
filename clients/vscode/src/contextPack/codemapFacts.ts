@@ -4,24 +4,22 @@
  * modules it changes). A map is the run-end consolidation of an earlier run
  * (`memoryCommit.ts`) — "open these first instead of searching" for that area.
  *
+ * The area rules are the shared ones (`@seanhogg/builderforce-memory/working`), so the
+ * editor and the run-context source pick maps the same way — a root-level file maps to
+ * the root area a root-only run is filed under. A request that names no path reaches its
+ * areas through `requestAreas.ts`.
+ *
  * Pure.
  */
 
+import { CONSOLIDATED_KEY_PREFIX, MAX_RECALLED_MAPS, areaOfPath, consolidatedFactsFor } from "@seanhogg/builderforce-memory/working";
 import { extractFocusPaths } from "./focusPaths";
 
-export const CODEMAP_PREFIX = "codemap:";
+export const CODEMAP_PREFIX = CONSOLIDATED_KEY_PREFIX;
 /** Facts a pack carries. */
-export const MAX_PACK_FACTS = 6;
+export const MAX_PACK_FACTS = MAX_RECALLED_MAPS;
 /** Directories named, at most — the area query is a search, not a listing. */
 const MAX_AREAS = 24;
-
-function dirOf(p: string): string {
-  const norm = p.replace(/\\/g, "/").replace(/^\.\//, "");
-  const i = norm.lastIndexOf("/");
-  // A path with no extension may itself be a directory ("clients/vscode/src").
-  if (!/\.[A-Za-z][A-Za-z0-9]{0,7}$/.test(norm)) return norm.replace(/\/+$/, "");
-  return i > 0 ? norm.slice(0, i) : "";
-}
 
 /**
  * The directories a pack is about: each focus file's own, then those of every
@@ -32,7 +30,7 @@ export function areasNamed(focusPaths: readonly string[], focusContents: readonl
   const out: string[] = [];
   const add = (p: string): void => {
     if (/^[A-Za-z]:|^[\\/]/.test(p)) return;
-    const d = dirOf(p);
+    const d = areaOfPath(p);
     if (d && !out.includes(d) && out.length < MAX_AREAS) out.push(d);
   };
   for (const p of focusPaths) add(p);
@@ -40,22 +38,7 @@ export function areasNamed(focusPaths: readonly string[], focusContents: readonl
   return out;
 }
 
-/** True when `area` and `dir` are the same directory or one contains the other. */
-function overlaps(area: string, dir: string): boolean {
-  return area === dir || dir.startsWith(`${area}/`) || area.startsWith(`${dir}/`);
-}
-
 /** The `codemap:` facts whose area overlaps a named directory, most specific first, capped. */
 export function codemapFactsFor<F extends { key: string; content: string }>(facts: readonly F[], areas: readonly string[], max: number = MAX_PACK_FACTS): F[] {
-  if (areas.length === 0) return [];
-  const scored: Array<{ fact: F; depth: number }> = [];
-  const seen = new Set<string>();
-  for (const fact of facts) {
-    if (!fact.key.startsWith(CODEMAP_PREFIX) || seen.has(fact.key)) continue;
-    const area = fact.key.slice(CODEMAP_PREFIX.length);
-    if (!areas.some((d) => overlaps(area, d))) continue;
-    seen.add(fact.key);
-    scored.push({ fact, depth: area.split("/").length });
-  }
-  return scored.sort((a, b) => b.depth - a.depth).slice(0, max).map((s) => s.fact);
+  return consolidatedFactsFor(facts, areas, max);
 }

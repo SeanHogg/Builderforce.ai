@@ -7,7 +7,11 @@
  * prompt differ on every run, so no provider prefix cache ever hit across runs of a
  * chat — the persona, the mode contract and the whole history were re-billed at full
  * price each time. These blocks belong to THIS turn, so they ride with this turn's user
- * message, AFTER the history: everything before them is byte-identical to last run.
+ * message, AFTER the history. What that buys across runs is narrower than "everything
+ * before them": the system prompt and the history up to the message that carried LAST
+ * run's block can match last run's bytes (when the system prompt, tools and history did
+ * not change themselves); that message does not, because its block is taken off again
+ * when this run starts (below), so last run's cache is read up to the message before it.
  *
  * Mechanics. The latest user message in the run's transcript is REPLACED, in its own
  * slot, by a copy with the block appended (a trailing text part for a vision turn) —

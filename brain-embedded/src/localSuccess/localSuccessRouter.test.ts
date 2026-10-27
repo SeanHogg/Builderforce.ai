@@ -74,6 +74,30 @@ describe('createLocalSuccessRouter', () => {
     expect((await router.assess(REF, huge)).skip).toBe(false);
   });
 
+  it('follows the host\'s live skipConfidence / explore tuning, and ignores an out-of-range value', async () => {
+    let confidence: number | undefined = 1;
+    let explore: number | undefined;
+    const router = createLocalSuccessRouter(memoryStore(), { random: () => 0.5, skipConfidence: () => confidence, explore: () => explore });
+    await teach(router, 10);
+    // No P(fails) is ever above a bar of 1: local is always tried.
+    expect((await router.assess(REF, huge)).skip).toBe(false);
+    confidence = 0.5;
+    expect((await router.assess(REF, huge)).skip).toBe(true);
+    // An explore share above the draw tries local anyway.
+    explore = 0.9;
+    expect((await router.assess(REF, huge)).skip).toBe(false);
+    // Nonsense reads as the defaults (skip at 0.8 confidence, explore 0.1 < 0.5 draw).
+    confidence = 7;
+    explore = -1;
+    expect((await router.assess(REF, huge)).skip).toBe(true);
+  });
+
+  it('takes a fixed tuning too', async () => {
+    const router = createLocalSuccessRouter(memoryStore(), { random: () => 0.5, explore: 1 });
+    await teach(router, 10);
+    expect((await router.assess(REF, huge)).skip).toBe(false);
+  });
+
   it('a host that reloads the stored snapshot answers from the persisted head', async () => {
     const store = memoryStore();
     await teach(createLocalSuccessRouter(store, { random: () => 0.5 }), 10);

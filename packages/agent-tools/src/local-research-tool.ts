@@ -131,10 +131,11 @@ export const localResearchTool: ToolDefinition = defineTool({
       : [];
     // Deterministic hits: they pick the files when none were named, anchor the excerpts,
     // and are the partial answer when the model cannot finish.
+    // The run's Stop reaches the searcher, so a stopped run leaves no text search behind.
     const hits = await preSearch(question, {
       ...(ctx.caps.symbols ? { findSymbol: (q: string) => ctx.caps.symbols!.find(q, { limit: 20 }) } : {}),
-      ...(ctx.caps.repoRead ? { searchText: (q: string) => ctx.caps.repoRead!.searchCode(q) } : {}),
-    }).catch(() => null);
+      ...(ctx.caps.repoRead ? { searchText: (q: string, signal?: AbortSignal) => ctx.caps.repoRead!.searchCode(q, undefined, signal ? { signal } : undefined) } : {}),
+    }, ctx.signal ? { signal: ctx.signal } : {}).catch(() => null);
     const chosen = named.length > 0 ? named : hits ? preSearchFiles(hits) : [];
     if (chosen.length === 0) {
       return { data: { ok: false, question, error: "No files matched the question — pass `paths`, or name an identifier from the code." } };

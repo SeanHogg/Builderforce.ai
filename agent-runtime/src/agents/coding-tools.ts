@@ -224,10 +224,13 @@ export function createBuilderForceAgentsCodingTools(options?: {
    */
   convergedFileTools?: boolean;
   /**
-   * Catalog-time Desktop backing for `repo.semantic`. Set only when the health probe
-   * succeeded; omitted (the common case) withholds `semantic_search` / `repo_map`.
+   * Catalog-time backing for `repo.semantic` (`resolveOnPremLocalBackings`): Desktop, or
+   * the definition index serving `repo_map` alone. Omitted withholds both semantic tools.
    */
   semantic?: import("@builderforce/agent-tools").RepoSemanticCapability;
+  /** Catalog-time `local.research` backing, set while a local model answers; omitted
+   *  withholds `local_research`. */
+  research?: import("@builderforce/agent-tools").LocalResearchCapability;
 }): AnyAgentTool[] {
   const sandbox = options?.sandbox?.enabled ? options.sandbox : undefined;
   const {
@@ -437,6 +440,7 @@ export function createBuilderForceAgentsCodingTools(options?: {
         // implementation and never the security boundary.
         scope: workspaceOnly ? "workspace" : "unconfined",
         semantic: options?.semantic,
+        research: options?.research,
       }).map((tool) =>
         // …and the same outer guard native gets, so the path normalization and
         // `assertSandboxPath` check are identical on both sides of the flag too.

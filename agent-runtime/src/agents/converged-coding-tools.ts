@@ -22,9 +22,11 @@ import {
   deleteFileTool,
   editFileTool,
   listFilesTool,
+  localResearchTool,
   SEMANTIC_TOOLS,
   ToolRegistry,
   writeFileTool,
+  type LocalResearchCapability,
   type RepoSemanticCapability,
 } from "@builderforce/agent-tools";
 import { registryToAgentTools } from "../builderforce/agent-loop/tool-adapter.js";
@@ -33,11 +35,13 @@ import {
   buildNodeCapabilityProvider,
   catalogNodeCapabilityProvider,
 } from "./node-capability-provider.js";
+import { withoutUnbackedSemanticTools } from "./on-prem-semantic.js";
 
 /** Shared definitions converged on-prem this pass (read/exec/process/search stay native —
  *  see the module note). One source of truth: the cloud loop runs these exact objects.
  *  `ask_human` (cap `human`) lets the on-prem coding agent pause for a human through the
- *  SAME shared tool the cloud loop uses — on-prem human-in-the-loop parity. */
+ *  SAME shared tool the cloud loop uses — on-prem human-in-the-loop parity. The semantic
+ *  tools and `local_research` are capability-gated: listed here, offered only with a backing. */
 const CONVERGED_FILE_TOOLS = [
   writeFileTool,
   editFileTool,
@@ -45,6 +49,7 @@ const CONVERGED_FILE_TOOLS = [
   listFilesTool,
   askHumanTool,
   ...SEMANTIC_TOOLS,
+  localResearchTool,
 ] as const;
 
 /** The registry is workspace-INDEPENDENT (the tool defs are static), so it is built once
@@ -85,23 +90,30 @@ export function buildConvergedFileTools(params: {
   scope?: Parameters<typeof buildNodeCapabilityProvider>[0]["scope"];
   requestHuman?: Parameters<typeof buildNodeCapabilityProvider>[0]["requestHuman"];
   /**
-   * Catalog-time Desktop backing for `repo.semantic`. When omitted, `semantic_search` /
-   * `repo_map` stay withheld (the probe did not succeed). Never always-on.
+   * Catalog-time backing for `repo.semantic` (`on-prem-semantic.ts`): Desktop, or the
+   * definition index serving `repo_map` alone (`semantic_search` is then withheld).
+   * When omitted, both stay withheld. Never always-on.
    */
   semantic?: RepoSemanticCapability;
+  /** Catalog-time `local.research` backing; omitted ⇒ no `local_research`. */
+  research?: LocalResearchCapability;
 }): AnyAgentTool[] {
   const provider = buildNodeCapabilityProvider({
     workspaceRoot: params.workspaceRoot,
     scope: params.scope,
     requestHuman: params.requestHuman,
     semantic: params.semantic,
+    research: params.research,
   });
-  return registryToAgentTools(CONVERGED_REGISTRY, provider, params.workspaceRoot, NATIVE_NAME_ALIASES);
+  return withoutUnbackedSemanticTools(
+    registryToAgentTools(CONVERGED_REGISTRY, provider, params.workspaceRoot, NATIVE_NAME_ALIASES),
+    params.semantic,
+  );
 }
 
 /**
- * Catalog-time converged tools: probes Builderforce Desktop and includes
- * `semantic_search` / `repo_map` only when the health probe succeeds.
+ * Catalog-time converged tools: `repo_map` always (Desktop, else the definition index),
+ * `semantic_search` only when the Desktop health probe succeeds.
  */
 export async function catalogConvergedFileTools(
   params: Omit<Parameters<typeof buildConvergedFileTools>[0], "semantic">,
@@ -110,6 +122,10 @@ export async function catalogConvergedFileTools(
     workspaceRoot: params.workspaceRoot,
     scope: params.scope,
     requestHuman: params.requestHuman,
+    research: params.research,
   });
-  return registryToAgentTools(CONVERGED_REGISTRY, provider, params.workspaceRoot, NATIVE_NAME_ALIASES);
+  return withoutUnbackedSemanticTools(
+    registryToAgentTools(CONVERGED_REGISTRY, provider, params.workspaceRoot, NATIVE_NAME_ALIASES),
+    provider.semantic,
+  );
 }

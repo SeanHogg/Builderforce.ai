@@ -166,6 +166,14 @@ export interface BrainRunRequest {
    */
   servedReads?: () => Promise<readonly ServedRead[] | undefined>;
   /**
+   * The host's DETERMINISTIC answer to the request, adopted instead of a model call — e.g.
+   * "where is X defined?" resolved entirely by its symbol index. Asked once before the
+   * first turn, ahead of the memory-first answer and outside its replay gate (the answer
+   * is computed from the workspace now, not replayed). Undefined / a throw ⇒ the run
+   * proceeds as before.
+   */
+  answerWithoutModel?: (request: string) => Promise<string | undefined>;
+  /**
    * The host's MODEL PREFLIGHT (PRD 35 E7): its BYO health check, awaited once before
    * the first turn. Unresolved accounts are seeded into the run's BYO banner state and
    * recorded as `model.preflight`, so the user hears it before any work. Best-effort.
@@ -225,6 +233,47 @@ export interface BrainRunRequest {
    * the root chat, attributed to the child. Absent for a top-level run.
    */
   lineage?: RunLineage;
+  /**
+   * The model each working phase asks for when the run holds no model of its own
+   * (`@builderforce/run-policy` `phaseModels`): the host's stage models instead of one
+   * model pinned to the whole run. `verify` also overrides a pin, as the review model.
+   */
+  phaseModels?: RunStageModels;
+  /**
+   * Route this run's pipeline (`runStore/pipelineRoute.ts`): decided ONCE, before turn
+   * 1 — `quick` starts in `code` on {@link RunPipelineSettings.quickModel} with no plan
+   * phase and no verify stage; `full` is the plan → code → verify pipeline. Absent ⇒
+   * the run is not routed (every run takes the full pipeline, nothing is recorded).
+   */
+  pipeline?: RunPipelineSettings;
+  /**
+   * The run's spend cap in USD (`runStore/runSpendBudget.ts`): checked before every turn
+   * against what the run's calls cost so far; the run stops with a contained outcome at
+   * the cap and the model is warned at 80%. Absent or 0 = no cap.
+   */
+  maxRunBudgetUsd?: number;
+  /**
+   * Told once, at run end, how the run ended and under which run id its calls were
+   * recorded (`runEndOutcome.ts`) — the host stores it beside its usage ledger for the
+   * pipeline route report. Omit and nothing is reported. Best-effort.
+   */
+  recordRunOutcome?: (end: { runId: string; outcome: RunEndOutcome }) => Promise<unknown> | void;
+}
+
+/** How a run ended. */
+export type RunEndOutcome = 'succeeded' | 'failed' | 'stopped' | 'budget-contained';
+
+/** The host's per-phase models — absent phase ⇒ the gateway orders by role. */
+export type RunStageModels = Partial<Record<'plan' | 'code' | 'verify', string>>;
+
+/** How a host wants its runs routed between the full pipeline and a quick pass. */
+export interface RunPipelineSettings {
+  /** `auto` routes on the score; `always` keeps every run on the full pipeline. */
+  routing: 'auto' | 'always';
+  /** P(full) at or above which a run takes the full pipeline. Default 0.5. */
+  threshold?: number;
+  /** The model a quick run codes on. Absent ⇒ the code model, else the gateway's order. */
+  quickModel?: string;
 }
 
 /** Live, observable snapshot of a chat's run (what the hook renders). */

@@ -44,7 +44,17 @@ export const nextId = (prefix: string): string => `${prefix}${++seq}`;
  * See `src/bridgeProtocol.ts`.
  */
 export function post(type: HostMessageType, payload?: Record<string, unknown>): void {
-  api.postMessage({ type, ...(payload ?? {}) });
+  api.postMessage(envelope(payload, { type }));
+}
+
+/**
+ * The frame as posted: the payload with the ENVELOPE (`type`, and `id` for a request)
+ * laid over it, so a payload field of the same name can never re-address the frame. An
+ * attachment's MIME type once rode as `type` and turned `attachment.ingress` into
+ * `application/pdf`, which no host case matched — the request hung until its timeout.
+ */
+export function envelope(payload: Record<string, unknown> | undefined, head: { type: HostMessageType; id?: string }): Record<string, unknown> {
+  return { ...(payload ?? {}), ...head };
 }
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> };
@@ -74,7 +84,7 @@ export function request<T = unknown>(type: HostMessageType, payload?: Record<str
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => settlePending(id, new Error(`Request "${type}" timed out`)), REQUEST_TIMEOUT_MS);
     pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
-    api.postMessage({ type, id, ...(payload ?? {}) });
+    api.postMessage(envelope(payload, { type, id }));
   });
 }
 

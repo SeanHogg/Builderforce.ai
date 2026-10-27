@@ -4,6 +4,7 @@ import type { ThinkLevel } from "../../../auto-reply/thinking.js";
 import type { SessionSystemPromptReport } from "../../../config/sessions/types.js";
 import type { MessagingToolSend } from "../../embedded-messaging.js";
 import type { AuthStorage, ModelRegistry } from "../../model-discovery.js";
+import type { OnPremLocalBackings } from "../../on-prem-local-backings.js";
 import type { NormalizedUsage } from "../../usage.js";
 import type { RunEmbeddedAgentParams } from "./params.js";
 
@@ -48,6 +49,9 @@ export type EmbeddedRunAttemptResult = {
   cloudCodeAssistFormatError: boolean;
   attemptUsage?: NormalizedUsage;
   compactionCount?: number;
+  /** The local backings this attempt built its tools with — handed to overflow compaction
+   *  so the compaction session sees the SAME tool list (absent when tools were disabled). */
+  localBackings?: OnPremLocalBackings;
   /** Client tool call detected (OpenResponses hosted tools). */
   clientToolCall?: { name: string; params: Record<string, unknown> };
 };

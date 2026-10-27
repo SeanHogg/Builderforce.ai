@@ -1,3 +1,41 @@
+## ✅ RESOLVED 2026-10-26 — Cost-lever parity: spend less for the same work, and attachments the model can read (VSIX 2026.10.102 · api · brain-embedded · agent-tools · agent-runtime · builderforce-memory 2026.10.27–28)
+
+We audited a competitor's VS Code extension (TIP Code) against ours on 13 cost levers. None was fully present in our extension, and the audit found working features that were switched off or half-wired. All of it is now built; design and contracts are in [docs/design/cost-lever-parity.md](docs/design/cost-lever-parity.md).
+
+- **Attachments reach the model.** In VS Code, attachments and "Add context" arrived as a `blob:vscode-webview://` link no model could read. The host now inlines text under a mention budget (`@builderforce/tool-output-policy` `mentionBudget`: cloud 48K per file and 96K per turn, local sized to the model's window). Binaries upload through `POST /api/brain/upload` with the extension's login. `#file` references in the chat participant use the same path (`clients/vscode/src/{contextIngress,attachmentIngress,chatReferences}.ts`).
+- **Compression works in the editor.** C8 was off twice: `localCapabilities` built the Desktop capability without the compressor, and rollout levers were always off for a null on-device tenant. On-device hosts now bucket by install id (`cost-levers` `isOnDeviceCostLeverOn`). Attached prose (.md .txt .log .rst .adoc) over 2,000 chars is compressed and code never is. A new `read_compressed` tool reads prose files compressed.
+- **Images keep their format.** `imagePrep` keeps GIFs, small PNG/WebP/JPEG and transparency, and uploads the prepared file instead of the original. Settings `builderforce.images.{maxEdge,jpegQuality}`.
+- **A model per stage.** `run-policy` `nextTurn` now reads the plan and code phase models as well as verify. The VSIX resolves `builderforce.models.{plan,code,review,subagent}` (then `ROLE_MODELS`) and no longer pins the code model to the whole run.
+- **Quick or full pipeline.** `@builderforce/pipeline-route` scores each request with a logistic model and routes it to the full plan → code → review pipeline or a single quick pass. Settings: `builderforce.pipeline.{routing,routeThreshold,quickModel}`; writing "full pipeline" forces it. The route and score are recorded per call in the local ledger and in `llm_usage_log` (migrations `1277` / transactional `0024`, expand only). The **Pipeline route report** command summarises 30 days of runs, cost, scores, misroutes and a suggested threshold. Cloud cost metrics gained `model` and `route` groupings.
+- **Per-run spend cap in the editor.** `builderforce.maxRunBudgetUsd` stops a run at the cap and warns at 80%. The rule is one shared primitive (`spend-contract` `runBudget.ts`) used by the cloud cost loop and the run store. Run outcomes (succeeded, failed, stopped, budget-contained) are recorded locally for misroute measurement. Difficulty thresholds are tunable with `DIFFICULTY_SKIP_ABOVE` / `DIFFICULTY_EXPLORE`.
+- **Cheaper reading.** `local_research` hands code reading to a local model, in the VSIX and on-prem. Its answer cache is keyed by file mtime and size. Pre-search (symbol index plus ripgrep) feeds the first turn. "Where is X defined" is answered from the symbol index with no model call, in the webview and in the chat participant.
+- **A real repo map.** A tree-sitter extractor (`agent-tools/node-tree-sitter.ts`; TS/JS, Python, Go, Rust, Java, C#, PHP) falls back to regex. Its wasm ships in the VSIX and agent-runtime builds. `repo_map` is served from the local index without Desktop.
+- **Code maps work.** In builderforce-memory, the 3-file minimum applies to every run and the root area is recallable. A codemap write no longer retires other areas' maps. A merged map keeps the union of anchors, and a changed file drops just its line. Recall now works from identifiers and area words as well as paths. Cloud and on-prem get area-targeted recall through `buildProjectFactsBlock`, and Claude Agent SDK (V2) runs record and write maps.
+- **The prompt prefix stays stable.**
+  - One `lastStableIndex` rule places the history breakpoint, tool turns included, for both OpenRouter and direct Anthropic. Before, tool loops cached almost nothing.
+  - The forced-turn brief goes in the `<run-state>` tail.
+  - `packHandoff` results are memoised per run (`windowFit/packMemo.ts`).
+  - History windowing drops in chunks.
+  - `getStableGrounding` is computed once per rescan.
+  - Workforce recall rides the user turn, not the system prompt. This also fixed the recall overwriting the persona when the request had no system message.
+  - Tool pins never evict a fixed tool.
+  - Kept as is: thinking still turns off after turn 1 on direct Anthropic. Only the turn-2 message cache misses, and first-turn planning quality is worth it.
+- **Fixes.** Stop kills ripgrep. Search is smart-case. The watcher skips noisy folders and its own `.builderforce` files. **Rescan Codebase** refreshes the index without a model route. The two new tools are classified as reads and dedup-guarded.
+- **Review fixes (fresh Opus review, 36 findings).**
+  - **Attachment uploads.** Every binary attach hung: the upload payload's `type` field overwrote the bridge envelope's. The envelope now always wins and the field is renamed to `mime`. A test runs through the real envelope.
+  - **Transcripts.** The text the model read is persisted (`attachmentTranscript.ts`). Retries, reloads and the next run's seed send it, never a `blob:` link.
+  - **Privacy and size.** Images that go inline never upload. Local-only refuses any cloud upload. Sizes are refused before encoding, at the server's limit.
+  - **On-prem `local_research`.** It requires a loopback `baseUrl`, and keyless loopback servers work.
+  - **Code maps from every writer.** Anchors are derived server-side for all writers, so cloud, on-prem and V2 maps go stale per file. The VSIX's own anchor port is deleted.
+  - **Cache.**
+    - Workforce recall is memoised behind the facts version token.
+    - A fallback text breakpoint rides behind the tool-result breakpoint. A live OpenRouter probe read 9,634 of 10,664 prompt tokens from cache on turn 2.
+    - The pack memo is keyed per chat.
+  - **Spend.** The per-run cap covers the whole sub-agent tree, and one cost rule prices device ledger rows.
+  - **Pre-search.** It aborts `rg` at its deadline and on Stop, and shares one identifier extractor and one `withinMs`.
+  - Kept by decision: thinking stays first-turn-only on direct Anthropic, and the one-per-run coder re-ask brief stays an untagged directive before the tail.
+- **builderforce-memory 2026.10.27–28** documents the `volatileTail` cache rule (per-turn content tagged, last, never persisted, never in the system prompt) and code maps in both READMEs, the npm description and keywords.
+
 ## ✅ RESOLVED 2026-10-26 — A run that circles is made to act, and a follow-up never drops the original ask (brain-embedded · run-policy · agent-stall)
 
 VS Code chat #5739's journal, split into its 11 runs, showed what the chat-wide diagnostics could not. The one-line ask ("remove the title from the top of the VSIX") was located in run 0 and never edited. Run 5 made 52 plan turns with 40 exact repeats, 20 covered re-reads, 60 cache replays, 4 folds and no write. Run 8 needed 33 plan turns before coding.
@@ -11,7 +49,7 @@ VS Code chat #5739's journal, split into its 11 runs, showed what the chat-wide 
 - **No file grew past its limit.** The turn's menu (selection, forced turn, router, trace) moved out of `completeTurn.ts` into `runStore/turnMenu.ts` (451 → 372 lines). The request reading moved out of `runPreamble.ts` (415 → 383 lines).
 - Guarded in `requestIntent.test.ts`, `policy.test.ts`, `transcriptSummarizer.test.ts`, `cacheServedStreak.test.ts`, `chatAsks.test.ts` and `runSlices.test.ts`. `useBrainConversation.test.tsx` now compares the person's own words, without this turn's context block.
 
-## ✅ RESOLVED 2026-10-26 — One rule for every run, whatever the chat's history (VSIX 2026.10.101 · brain-embedded 2026.10.63 · run-policy 2026.10.21)
+## ✅ RESOLVED 2026-10-26 — One rule for every run, whatever the chat's history (VSIX 2026.10.100 · brain-embedded 2026.10.63 · run-policy 2026.10.21)
 
 An old chat did not behave like a fresh one. Once a chat had made one edit, the run cell's `codePhaseReached` started every later run in that chat in `code`. That skipped the analysis budget, so the hand-off was never forced, and coding had no bound at all, so the run could read for its whole life (chat #5739). A fresh chat got the full chain. That chat-history state is gone.
 

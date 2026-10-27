@@ -53,6 +53,12 @@ export const LOCAL_WORKSPACE_TOOLS: ReadonlySet<string> = new Set([
   // Inert where the host does not advertise them (desktop app not running, web Brain).
   'semantic_search',
   'repo_map',
+  // The free-token readers (cost levers, WS-L): a long doc read compressed, and a question
+  // answered by a LOCAL model over the files it names. "summarize the design notes" shares
+  // no stem with either name, and they exist to be reached for BEFORE a paid read.
+  // Inert where the host did not advertise them (no compressor / no local model).
+  'read_compressed',
+  'local_research',
   'write_file',
   'edit_file',
   'delete_file',

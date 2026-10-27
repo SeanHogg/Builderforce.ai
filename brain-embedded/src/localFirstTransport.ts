@@ -103,10 +103,13 @@ export function localTransport(
  * embedded's `createHandoffFit` (the `@seanhogg/builderforce-memory/handoff` packer).
  * `contextTokens` is the target's window when known (its runtime's report, else the
  * shipped catalog row); a fit given no window returns the messages untouched.
+ * `conversation` is the call's conversation (`StreamChatOptions.conversationKey`): a fit
+ * that remembers its last pack keeps one per conversation, so two chats on one local
+ * model never reuse each other's pack.
  */
 export type LocalAttemptFit = (
   messages: ChatCompletionMessage[],
-  target: { ref: string; contextTokens?: number; tools?: readonly unknown[]; maxTokens?: number },
+  target: { ref: string; contextTokens?: number; tools?: readonly unknown[]; maxTokens?: number; conversation?: number },
 ) => Promise<ChatCompletionMessage[]>;
 
 /** A local model resolved to where it runs. */
@@ -142,6 +145,7 @@ async function fittedFor(
     ...(contextTokens ? { contextTokens } : {}),
     ...(opts.tools ? { tools: opts.tools } : {}),
     ...(opts.maxTokens ? { maxTokens: opts.maxTokens } : {}),
+    ...(opts.conversationKey !== undefined ? { conversation: opts.conversationKey } : {}),
   });
 }
 

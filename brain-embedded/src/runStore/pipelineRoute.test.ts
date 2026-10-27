@@ -49,6 +49,18 @@ describe('pipelinePolicyOptions — stage resolution', () => {
     expect(pipelineMetadata(quick)).toEqual({ pipelineRoute: 'quick', routeScore: quick!.score });
   });
 
+  it('quick: the quick model wins over a SOFT run model, never over a strict pin', () => {
+    const quick = decideRunPipeline({ pipeline: { routing: 'auto' } }, SMALL, { followUp: false });
+    const soft = pipelinePolicyOptions({ pipeline: { routing: 'auto', quickModel: 'fast' } }, quick);
+    expect(soft.pinnedModel).toBe('fast');
+    // Spread after the run's own model, as runPreamble does.
+    expect(nextTurn(initialRunPolicy({ pinnedModel: 'default-model', ...soft }), { hasTools: true })).toMatchObject({ model: 'fast' });
+    const strict = pipelinePolicyOptions({ modelStrict: true, pipeline: { routing: 'auto', quickModel: 'fast' } }, quick);
+    expect(strict).not.toHaveProperty('pinnedModel');
+    const full = decideRunPipeline({ pipeline: { routing: 'always' } }, SMALL, { followUp: false });
+    expect(pipelinePolicyOptions({ pipeline: { routing: 'always', quickModel: 'fast' } }, full)).not.toHaveProperty('pinnedModel');
+  });
+
   it('quick with no quick model codes on the code model', () => {
     const quick = decideRunPipeline({ pipeline: { routing: 'auto' } }, SMALL, { followUp: false });
     expect(pipelinePolicyOptions({ phaseModels, pipeline: { routing: 'auto' } }, quick).phaseModels?.code).toBe('coder');

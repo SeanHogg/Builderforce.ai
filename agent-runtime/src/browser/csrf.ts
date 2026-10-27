@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { isLoopbackHost } from "../gateway/net.js";
+import { isLoopbackUrl } from "../gateway/net.js";
 
 function firstHeader(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
@@ -8,19 +8,6 @@ function firstHeader(value: string | string[] | undefined): string {
 function isMutatingMethod(method: string): boolean {
   const m = (method || "").trim().toUpperCase();
   return m === "POST" || m === "PUT" || m === "PATCH" || m === "DELETE";
-}
-
-function isLoopbackUrl(value: string): boolean {
-  const v = value.trim();
-  if (!v || v === "null") {
-    return false;
-  }
-  try {
-    const parsed = new URL(v);
-    return isLoopbackHost(parsed.hostname);
-  } catch {
-    return false;
-  }
 }
 
 export function shouldRejectBrowserMutation(params: {

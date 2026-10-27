@@ -217,10 +217,10 @@ export type {
 } from './useToolConfirmationGate';
 
 // Client-side image prep for vision messages (downscale → inline data URL)
-export { DEFAULT_IMAGE_MAX_EDGE, DEFAULT_IMAGE_QUALITY, decideImageEncoding, maxEdgeOf, prepareImageDataUrl, qualityLadder } from './imagePrep';
+export { prepareImageDataUrl } from './imagePrep';
 export type { ImageEncodeDecision, ImagePrepOptions, PreparedImage } from './imagePrep';
 // Attachments into a turn: prepare + upload, and the model-visible content (inlined text).
-export { AttachmentRefusedError, MAX_INLINE_TEXT_BYTES, attachmentLink, attachmentTurnContent, prepareAttachment } from './attachmentContent';
+export { AttachmentRefusedError, MAX_INLINE_TEXT_BYTES } from './attachmentContent';
 export { BRAIN_UPLOAD_PATH, BRAIN_UPLOAD_SIGN_PATH, brainUploadUrl, signedBrainFileUrl } from './uploadUrls';
 
 // Project-Evermind memory hooks for the run loop (recall → learn → reconcile).

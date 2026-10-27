@@ -13,7 +13,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { clamp01 } from '../../domain/shared/numbers';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { codemapWriteAnchors, isCodemapKey } from './projectFactsCodemap';
+import { codemapAnchorsForWrite, isCodemapKey, pathKey, pathKeySql } from './projectFactsCodemap';
 import {
   bumpProjectFactsVersion,
   factContentHash,
@@ -97,8 +97,10 @@ export async function upsertProjectFact(
   // A map's anchors follow its merge: the union of the live prior's and this write's,
   // limited to the files the merged map lists — so an earlier run's files stay anchored
   // (and can go stale one by one) instead of being wiped by a write that did not name them.
+  // A map written WITHOUT anchors (on-prem, V2 relay, cloud run end) is anchored here from
+  // the files it lists, so per-file staleness holds for every runtime, not just the VSIX.
   const codemap = isCodemapKey(k);
-  const anchorsIn = codemap ? codemapWriteAnchors(c, live ? prior[0]!.fileAnchors : null, opts?.fileAnchors) : opts?.fileAnchors;
+  const anchorsIn = codemap ? codemapAnchorsForWrite(c, incoming, live ? prior[0]!.fileAnchors : null, opts?.fileAnchors) : opts?.fileAnchors;
   const baseImportance = opts?.importance ?? factImportance(c, opts?.kind);
   const importance = clamp01(baseImportance + Math.min(0.1, recallCount * 0.01));
   // Stamped on every write, on BOTH branches below. This digest is what tells a
@@ -141,7 +143,9 @@ export async function upsertProjectFact(
   // retired a whole area's map. A map is retired by its own KEY only — the merge below
   // replaces it in place — and the anchor sweep never selects a map.
   if (!codemap && opts?.fileAnchors?.length) {
-    const anchors = opts.fileAnchors.map((a) => a.path.trim().toLowerCase()).filter(Boolean);
+    // One path identity (`pathKey`) on both sides: a `.\src\a.ts` anchor and a stored
+    // `src/a.ts` are the same file, as they already are for code-map staleness.
+    const anchors = opts.fileAnchors.map((a) => pathKey(a.path)).filter(Boolean);
     if (anchors.length) {
       await db
         .update(projectFacts)
@@ -154,7 +158,7 @@ export async function upsertProjectFact(
           // `->0` is the FIRST anchor: one fact asserts one thing about one place, so
           // the first anchor identifies it without an array-containment operator that
           // cannot use an index.
-          sql`lower(${projectFacts.fileAnchors}->0->>'path') IN (${sql.join(anchors.map((p) => sql`${p}`), sql`, `)})`,
+          sql`${pathKeySql(sql`${projectFacts.fileAnchors}->0->>'path'`)} IN (${sql.join(anchors.map((p) => sql`${p}`), sql`, `)})`,
           notLike(projectFacts.key, `${CONSOLIDATED_KEY_PREFIX}%`),
         ))
         .catch((err: unknown) => {

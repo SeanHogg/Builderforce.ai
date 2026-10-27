@@ -9,7 +9,8 @@
  *   - `dispatchTool.ts`    — the tool port (ticket on first edit, guards' advisories);
  *   - `beforeDispatch.ts`  — router, `ask_user` / `hand_off`, confirm gate, read dedupe;
  *   - `toolCallHooks.ts`   — a terminal question, narration, the post-call step;
- *   - `finalAnswerHook.ts` — the end-of-run gates, the reply, the stall failover.
+ *   - `finalAnswerHook.ts` — the end-of-run gates, the reply, the stall failover;
+ *   - `runSpendBudget.ts`  — the run's USD cap (warn at 80%, contained stop at the cap).
  *
  * Nothing here iterates. What is left is the forced closing answer when the kernel's
  * consecutive-failure breaker stops the run.
@@ -39,6 +40,8 @@ import { beforeDispatchHook } from './beforeDispatch';
 import { afterDispatchHook, beforeToolCallsHook } from './toolCallHooks';
 import { skipOnSteer } from './steerInterrupt';
 import { finalAnswerHook } from './finalAnswerHook';
+import { runSpendBudget } from './runSpendBudget';
+import { noteRunId } from './runEndOutcome';
 import type { BrainRunRequest } from './runTypes';
 
 /** The tool row's content: a STRING payload was already budgeted by `trimToolResult` in
@@ -50,6 +53,8 @@ export async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, 
   const run = await prepareRunLoop(chatId, c, req, runKey);
   // Memory answered: the run is over before a model was asked.
   if (!run) return;
+  // The id this run's calls carry — what its end is reported under (`runEndOutcome.ts`).
+  noteRunId(c, run.metadata.guestTurnId);
   const { convo, systemPrompt, metadata } = run;
   const { routingMode, stream, persistence, onActivity, maxTokens, reasoning } = req;
   const loop = await runAgentLoop<ChatCompletionMessage>({
@@ -57,6 +62,9 @@ export async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, 
     codec: runCodec,
     ports: { complete: completeTurnPort(run), dispatch: dispatchToolPort(run) },
     hooks: {
+      // The run's USD cap, when it has one: the cost accrues after each turn and is held
+      // to the cap before the next (`runSpendBudget.ts`). No cap ⇒ no hooks.
+      ...runSpendBudget(run),
       beforeToolCalls: beforeToolCallsHook(run),
       beforeDispatch: beforeDispatchHook(run),
       // The person's message skips the rest of the turn it interrupted (PRD 35 E10).

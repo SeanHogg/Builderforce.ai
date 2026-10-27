@@ -33,6 +33,7 @@
 import { subscribeToChatMessages } from './chatMessageSubscription';
 import { attachEvermindLearn } from './types';
 import type { BrainChat, BrainMessage, EvermindLearnOutcome } from './types';
+import { BRAIN_UPLOAD_PATH, BRAIN_UPLOAD_SIGN_PATH, brainUploadUrl, signedBrainFileUrl } from './uploadUrls';
 
 /**
  * An authenticated JSON call, relative to the gateway origin.
@@ -173,11 +174,11 @@ export function createBrainRestPersistence(opts: BrainRestOptions) {
       if (opts.uploadFile) return opts.uploadFile(file);
       const form = new FormData();
       form.append('file', file);
-      return request<{ key: string; name: string; type: string }>('/api/brain/upload', { method: 'POST', body: form });
+      return request<{ key: string; name: string; type: string }>(BRAIN_UPLOAD_PATH, { method: 'POST', body: form });
     },
 
     /** URL to view/download an uploaded file by key. */
-    uploadUrl: (key: string) => `${baseUrl}/api/brain/uploads/${key}`,
+    uploadUrl: (key: string) => brainUploadUrl(baseUrl, key),
 
     /**
      * Mint a short-lived signed public URL for an uploaded object so an upstream
@@ -185,11 +186,11 @@ export function createBrainRestPersistence(opts: BrainRestOptions) {
      * inline as a data URL — see the image prep in the run loop.
      */
     signedUploadUrl: async (key: string): Promise<string> => {
-      const { exp, sig } = await request<{ exp: number; sig: string }>('/api/brain/uploads/sign', {
+      const signed = await request<{ exp: number; sig: string }>(BRAIN_UPLOAD_SIGN_PATH, {
         method: 'POST',
         body: JSON.stringify({ key }),
       });
-      return `${baseUrl}/api/brain-files/${key}?exp=${exp}&sig=${encodeURIComponent(sig)}`;
+      return signedBrainFileUrl(baseUrl, key, signed);
     },
   };
 }

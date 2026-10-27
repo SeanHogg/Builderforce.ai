@@ -1,5 +1,6 @@
 import { RunKnowledgeRecorder } from "@builderforce/agent-tools";
 import { recordEditorRunEnd } from "./editorRunEnd";
+import { editorRunSettings } from "./editorRunSettings";
 import * as vscode from "vscode";
 import { runAbortSignal, withRunUsage, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
 import { ChatMessage, SECRET_KEY } from "./gateway";
@@ -23,6 +24,10 @@ import type { PolicyGate } from "./policy";
 import { brainToolCatalog } from "./brainToolCatalog";
 import { withWorkspaceStaleness } from "./memoryStaleness";
 import { runNativeBrain, type NativeApprovalRequest } from "./nativeBrainRun";
+import { referencesTurnBlock, workspaceReferenceReader } from "./chatReferences";
+import { hostIngressDeps, routeMentionBudget } from "./hostIngress";
+import { preSearchBlock, whereDefinedAnswer } from "./contextPack/preSearchSource";
+import { CONTEXT_PACK_DEADLINE_MS } from "./contextPack/buildContextPack";
 
 const PARTICIPANT_ID = "builderforce.agent";
 
@@ -103,6 +108,25 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     }
 
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    // The deterministic pre-search (identifiers → symbol index + ripgrep, no model call),
+    // started now so its ~1.5 s deadline overlaps the setup below — the same hits block the
+    // panel's runs carry in their context pack (`runSetupPorts.ts`).
+    const preSearch = root ? preSearchBlock(root, request.prompt, CONTEXT_PACK_DEADLINE_MS) : undefined;
+    // "Where is X defined?" answered from the symbol index — memoized, so the reference
+    // read below and the run ask it once between them.
+    let whereDefined: Promise<string | undefined> | undefined;
+    const answerWithoutModel = root ? () => (whereDefined ??= whereDefinedAnswer(root, request.prompt, CONTEXT_PACK_DEADLINE_MS)) : undefined;
+    // `#file` / `#selection` references, inlined into the turn under the route's mention
+    // budget (long prose compressed first) — the panel's attachment ingress. Started now,
+    // overlapping the setup below; never read for a turn answered without a model, and
+    // abandoned once the request is cancelled.
+    const referencedReady = referencesTurnBlock(request.references, {
+      reader: workspaceReferenceReader(),
+      budget: () => routeMentionBudget(modelChoice),
+      deps: hostIngressDeps(),
+      ...(answerWithoutModel ? { answerWithoutModel } : {}),
+      cancelled: () => token.isCancellationRequested,
+    }).catch(() => "");
     const cfg = vscode.workspace.getConfiguration("builderforce");
     const permissionMode = resolvePermissionMode();
 
@@ -242,6 +266,8 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     // then the note + code map at the end — the same record the panel's runs keep.
     const knowledge = new RunKnowledgeRecorder();
     knowledge.setPrompt(request.prompt);
+    const referenced = await referencedReady;
+    if (token.isCancellationRequested) return {};
     try {
       await runNativeBrain({
         knowledge,
@@ -252,7 +278,12 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
         ...(clientChatId ? { clientChatId } : {}),
         systemPrompt,
         seed,
-        userTurn: request.prompt,
+        userTurn: referenced ? `${request.prompt}\n\n${referenced}` : request.prompt,
+        // The pre-search hits as the run's volatile turn context, and "where is X defined?"
+        // answered from the symbol index with no model call — parity with the panel.
+        ...(preSearch ? { turnContext: async () => (await preSearch) || undefined } : {}),
+        // Asked of the person's own words, not the turn with its inlined references.
+        ...(answerWithoutModel ? { answerWithoutModel } : {}),
         tools,
         root: root ?? "",
         // The code-change backstops need a project. An unbound chat still gets its ticket
@@ -263,6 +294,10 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
         ...(modelChoice.model ? { model: modelChoice.model } : {}),
         modelStrict: modelChoice.modelStrict,
         ...(modelChoice.routingMode ? { routingMode: modelChoice.routingMode } : {}),
+        // Stage models, pipeline routing and the USD cap — the same reader the panel's runs use.
+        runSettings: await editorRunSettings(ctx.secrets),
+        // How the run ended, beside its usage rows — the route report's misroute proxy.
+        recordRunOutcome: (end) => local.usage.recordOutcome({ chatId: runChatId, ...end }),
         permissionMode,
         ...(policyGates.length ? { policyGates } : {}),
         ...(directives ? { directives } : {}),

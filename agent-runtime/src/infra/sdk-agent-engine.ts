@@ -19,7 +19,7 @@
  * `run()` the same runtime-agnostic shape as every other `AgentEngine`.
  */
 
-import type { AgentEngine, AgentRunInput, AgentRunResult } from "@builderforce/agent-tools";
+import type { AgentEngine, AgentRunInput, AgentRunResult, RunKnowledgeLog } from "@builderforce/agent-tools";
 import { CURRENT_ENGINE_ID } from "@builderforce/agent-tools";
 import { runClaudeAgentSdkV2, type V2RunnerSinks } from "../agents/claude-agent-sdk-runner.js";
 import type { SteeringChannel } from "./relay-steering.js";
@@ -45,6 +45,9 @@ export interface ClaudeSdkEngineDeps {
    *  SDK consumes it as the next user turn (the same portal steer the cloud loop
    *  drains between steps). Omitted ⇒ single-turn run. */
   steering?: SteeringChannel;
+  /** The run's record, fed every successful tool call — the caller consolidates its code
+   *  map once the run ends. Omitted ⇒ nothing is recorded. */
+  knowledge?: RunKnowledgeLog;
 }
 
 /** The on-prem Claude-Agent-SDK loop, behind the shared {@link AgentEngine} seam. */
@@ -73,6 +76,7 @@ export class ClaudeSdkAgentEngine implements AgentEngine {
         ...(this.deps.executionId != null ? { executionId: this.deps.executionId } : {}),
         abortController: this.deps.abortController,
         ...(this.deps.steering ? { steering: this.deps.steering } : {}),
+        ...(this.deps.knowledge ? { knowledge: this.deps.knowledge } : {}),
       },
       this.deps.sinks,
     );

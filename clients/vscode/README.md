@@ -23,6 +23,16 @@ A codebase-aware BuilderForce AI coding agent in your editor sidebar.
   list) used to fill up and stall the assistant part-way through. Now the chat keeps only what
   matters as it works, so it stays responsive and finishes the job instead of dying after a
   few steps.
+- **Spends less for the same work** — a small request runs as one quick stage on a cheaper
+  model; a big one gets the full plan → code → review pipeline, each stage on its own model.
+  Questions such as "where is X defined" are answered from the symbol index with no model call.
+  The agent can hand code reading to a model on your machine (`local_research`), starts from
+  the files your past runs mapped for that area, and keeps its prompt stable so provider
+  caching applies. Set a per-run spend cap, and open **Pipeline route report** to see what
+  each route cost over the last 30 days.
+- **Attach files and context that the model actually reads** — attached text files, **Add
+  context** and `#file` references are put into the message within a size budget. Long prose
+  (Markdown, logs, text) is compressed first; code never is. Binaries upload to your account.
 - **Show it a screenshot** — paste or attach an image of a bug, error, or design and the agent
   acts on what it sees.
 - **See exactly what it did — and why it stopped** — every step (its reasoning, each tool call
@@ -102,6 +112,14 @@ with a local model picked and no account signed in.
 | `builderforce.localModels.enabled` | `false` | Offer models served by a runtime on this machine (Ollama, FreeToken) in the model picker. |
 | `builderforce.localModels.ollamaUrl` | `http://127.0.0.1:11434` | Your Ollama runtime. `/v1/models` and `/v1/chat/completions` are appended, so the bare address and the `/v1` form both work. |
 | `builderforce.localModels.freetokenUrl` | `http://127.0.0.1:1919` | Your FreeToken engine, same URL rules as above. |
+| `builderforce.models.plan` / `.code` / `.review` | `""` | Model for each pipeline stage when the run has no model of its own (empty = the gateway picks by stage). The review model applies even to a picked model, so the author never reviews its own change. |
+| `builderforce.models.subagent` | `""` | Model every sub-agent runs on, unless your model pick is explicit (empty = the `ROLE_MODELS` entry for its role, else the gateway orders by that role). |
+| `builderforce.pipeline.routing` | `auto` | `auto` scores each request and runs a small one as one quick stage; `always` runs the full pipeline. Writing "full pipeline" in a request forces it. |
+| `builderforce.pipeline.routeThreshold` | `0.5` | Score at or above which a request gets the full pipeline. Tune it with **Pipeline route report**. |
+| `builderforce.pipeline.quickModel` | `""` | Model a quick pass codes on (empty = the coding-stage model, else the gateway's order). |
+| `builderforce.maxRunBudgetUsd` | `0` | Stop a run once it has spent this many US dollars (0 = no cap). The model is warned at 80%. |
+| `builderforce.images.maxEdge` | `1568` | Longest edge, in pixels, an attached image is resized to before it is sent. |
+| `builderforce.images.jpegQuality` | `0.85` | First quality tried when an image has to be re-encoded (JPEG, or WebP when it is transparent). GIFs, and PNG/WebP/JPEG images within the size caps, are sent as they are. |
 
 ## Development
 

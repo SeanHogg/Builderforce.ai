@@ -165,8 +165,10 @@ export interface RepoReadCapability {
   readFile(path: string): Promise<RepoReadResult>;
   /** Search the tree for `query`. Pass `scope` (a repo-relative subdirectory) to
    *  restrict the search — essential on a large monorepo where an unscoped walk can
-   *  be truncated before it reaches the relevant subtree. */
-  searchCode(query: string, scope?: string): Promise<RepoSearchResult>;
+   *  be truncated before it reaches the relevant subtree. `opts.signal` stops this one
+   *  search (a caller's deadline or the run's Stop): a surface that spawns a searcher
+   *  kills it. */
+  searchCode(query: string, scope?: string, opts?: { signal?: AbortSignal }): Promise<RepoSearchResult>;
 }
 
 /** Look up where symbols are DEFINED (capability `repo.symbols`). The surface owns the

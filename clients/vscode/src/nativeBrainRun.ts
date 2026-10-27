@@ -35,6 +35,7 @@ import {
   type UsageSurface,
   type BrainAction,
   type BrainRunPersistence,
+  type BrainRunRequest,
   type BrainRunSnapshot,
   type BrainStreamFn,
   type BrainToolSpec,
@@ -49,6 +50,7 @@ import { resolveToolAlias } from "@builderforce/agent-tools";
 import { describeTool, type ToolDef } from "./fileTools";
 import { evaluatePolicyGate, toolCallPaths, type PolicyGate } from "./policy";
 import { withRunPreamble } from "./runPreamble";
+import { runRequestFields, type EditorRunSettings } from "./stageModels";
 import type { RunDirectives, RunHooks } from "./hooks/runHooks";
 
 /**
@@ -123,6 +125,10 @@ export interface NativeBrainRunOptions {
   model?: string;
   modelStrict?: boolean;
   routingMode?: "auto" | "byo_pool";
+  /** Stage models, pipeline routing and the USD cap (`editorRunSettings.ts`). */
+  runSettings?: EditorRunSettings;
+  /** How the run ended, for the chat's usage ledger (the pipeline route report). */
+  recordRunOutcome?: BrainRunRequest["recordRunOutcome"];
   /** Conversation vs execution (0409). Defaults to `work` inside the loop. */
   chatMode?: ChatMode;
   permissionMode: "ask" | "acceptEdits";
@@ -142,6 +148,12 @@ export interface NativeBrainRunOptions {
   persistence?: BrainRunPersistence;
   /** Project-Evermind hooks: recall, the memory-first answer, the answer cache. */
   evermind?: EvermindRunHooks;
+  /** The run's volatile turn context, awaited before turn 1 — the participant hands the
+   *  deterministic pre-search hits here, as the panel's run host does in its context pack. */
+  turnContext?: BrainRunRequest["turnContext"];
+  /** "Where is X defined?" answered with no model call (the symbol index), adopted when it
+   *  answers — the same port the panel's run host passes. */
+  answerWithoutModel?: BrainRunRequest["answerWithoutModel"];
   /** The run's record of what it did and read — the per-turn ledger, and what the caller
    *  commits at run end (`recordEditorRunEnd`). Omitted ⇒ the loop keeps its own. */
   knowledge?: RunKnowledgeLog;
@@ -513,7 +525,11 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<void>
       ...(opts.clientChatId ? { clientChatId: opts.clientChatId } : {}),
       ...(opts.projectId != null ? { projectId: opts.projectId } : {}),
       ...(opts.evermind ? { evermind: opts.evermind } : {}),
+      ...(opts.turnContext ? { turnContext: opts.turnContext } : {}),
+      ...(opts.answerWithoutModel ? { answerWithoutModel: opts.answerWithoutModel } : {}),
       ...(opts.knowledge ? { knowledge: opts.knowledge } : {}),
+      ...runRequestFields(opts.runSettings, { child: false }),
+      ...(opts.recordRunOutcome ? { recordRunOutcome: opts.recordRunOutcome } : {}),
       runTool,
       needsConfirm: nativeNeedsConfirm(tools, permissionMode, policyGates),
       stream: opts.stream,

@@ -38,6 +38,8 @@ export interface RunSpec extends WebviewRunStart {
   basePrompt?: string;
   /** False for an owner this host cannot start a turn for (the native chat participant). */
   wakeable?: boolean;
+  /** The sub-agent stage model its children code on (see `modelForChildRun`). */
+  subagentModel?: string;
 }
 
 export interface ChildRunHostDeps {
@@ -53,6 +55,8 @@ export interface ChildRunHostDeps {
   persistence: BrainRunPersistence;
   /** Tell every panel what a chat's live children are. */
   announce(rootChatId: number): void;
+  /** The editor's sub-agent stage model (`builderforce.models.subagent`), read per spawn. */
+  subagentModel?(): Promise<string | undefined>;
 }
 
 export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { afterRun(key: number): void } {
@@ -90,9 +94,11 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
 
     registry: deps.registry,
 
-    startChild(key, lineage, owner, req) {
-      const parent = deps.specOf(owner.key);
-      if (!parent) return Promise.reject(new Error("the run that spawned this sub-agent is not known to this host"));
+    async startChild(key, lineage, owner, req) {
+      const spec = deps.specOf(owner.key);
+      if (!spec) throw new Error("the run that spawned this sub-agent is not known to this host");
+      const subagentModel = await deps.subagentModel?.();
+      const parent: RunSpec = subagentModel ? { ...spec, subagentModel } : spec;
       const base = parent.basePrompt ?? parent.systemPrompt;
       const model = modelForChildRun(parent, req.role);
       return deps.start({

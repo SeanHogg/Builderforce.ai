@@ -1,6 +1,6 @@
 import type { AgentMessage } from "../../builderforce/model/agent-types.js";
 import { CHARS_PER_TOKEN } from "@builderforce/workload";
-import { isCostLeverOn } from "@builderforce/cost-levers";
+import { onDeviceCostLeverOn } from "../../infra/cost-levers.js";
 import { cutHead, fitToolText } from "@builderforce/tool-output-policy";
 
 // Keep a conservative input budget to absorb tokenizer variance and provider framing overhead.
@@ -174,7 +174,7 @@ function truncateTextToBudget(text: string, maxChars: number): string {
   // head with this guard's notice — or, with the C7 lever on, a summary of a
   // shell/test/build log that keeps its failures and its tail.
   return fitToolText(text, maxChars, {
-    summarize: isCostLeverOn(process.env, "c7_tool_output_policy", null),
+    summarize: onDeviceCostLeverOn("c7_tool_output_policy"),
     fallback: (t, max) =>
       cutHead(t, max, {
         suffix: CONTEXT_LIMIT_TRUNCATION_SUFFIX,

@@ -126,8 +126,10 @@ function ChatRuntimeProvider({ init, children }: { init: InitData; children: Rea
         : gatewayTransport,
       persistence,
       resolveSystemPrompt: () => buildIdeSystemPrompt({ hasWorkspace: init.hasWorkspace, grounding: init.grounding }),
+      // `builderforce.images.*` — how an attached picture is scaled and re-encoded.
+      ...(init.images ? { imagePrep: init.images } : {}),
     }),
-    [init.baseUrl, init.model, init.hasWorkspace, init.grounding, init.localRoute, gatewayTransport, persistence],
+    [init.baseUrl, init.model, init.hasWorkspace, init.grounding, init.localRoute, init.images, gatewayTransport, persistence],
   );
 
   return (

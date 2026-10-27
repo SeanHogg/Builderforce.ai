@@ -28,7 +28,7 @@
     "durable-object-direct-report": 0
   },
   "brain-embedded/src": {
-    "empty-catch": 18,
+    "empty-catch": 17,
     "empty-promise-catch": 10,
     "literal-promise-catch": 20,
     "console-only": 0,

@@ -7,6 +7,9 @@
 export interface IKnowledgeLoop {
   pullTeamMemory(limit?: number): Promise<unknown[]>;
   pushMemoryToMesh(runId: string, summary: string, tags?: string[]): Promise<void>;
+  /** Write a finished run's code map (`knowledge.consolidate({ root })`) to the shared
+   *  project facts store — for a run whose loop keeps its own record. */
+  commitCodeMap?(knowledge: { consolidate(opts?: { root?: string }): { key: string; content: string } | null }, root: string): void;
 }
 
 let _knowledgeLoop: IKnowledgeLoop | null = null;

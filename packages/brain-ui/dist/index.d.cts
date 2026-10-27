@@ -361,6 +361,11 @@ interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels {
     memoryAnswerEvermind: string;
     /** Tooltip on the memory-first answer step. */
     memoryAnswerHint: string;
+    /** Deterministic answer step: "where is X defined?" answered from the workspace symbol
+     *  index and no model ran. */
+    memoryAnswerSymbols: string;
+    /** Tooltip on the symbol-index answer step. */
+    memoryAnswerSymbolsHint: string;
     /** Evermind learn step — the turn was contributed back. Must contain `{version}`. */
     learnTitle: string;
     /** Tooltip on the learn step. */
@@ -2978,7 +2983,7 @@ type TimelineNode = {
     kind: 'memoryAnswer';
     ts: number;
     order: number;
-    source: 'qa-cache' | 'evermind';
+    source: 'qa-cache' | 'evermind' | 'symbol-index';
     version: number | null;
 } | {
     key: string;

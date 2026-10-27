@@ -11,6 +11,7 @@ import { getGlobalRunState, getRunSnapshot, isRunning, withRunUsage, type BrainS
 import { getApiKey, postRunOutcome } from "./gateway";
 import { fetchRunContextSection, projectEvermindHooks } from "./bfApi";
 import { localBrainApplication } from "./localFirstStore";
+import { editorRunSettings } from "./editorRunSettings";
 import { auditToolCatalog } from "./auditToolCatalog";
 import { brainToolCatalog } from "./brainToolCatalog";
 import { localWindowProbes, resolveModelRoute, routeStream } from "./modelRouting";
@@ -308,6 +309,9 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     },
     recordUsage: (stream, run) =>
       withRunUsage(stream, local.usage, run, (error) => hostLog(`[usage ledger] write failed: ${String(error)}`)),
+    // Stage models, pipeline routing and the USD cap — read per run (`editorRunSettings.ts`).
+    runSettings: () => editorRunSettings(secrets),
+    recordRunOutcome: (run, end) => local.usage.recordOutcome({ chatId: run.chatId, ...end }),
     // How a code-changing run's coder did — so the next run's coder is picked on evidence.
     reportOutcome: (outcome) => postRunOutcome(outcome),
     evermind: (projectId, serverChatId) => withWorkspaceStaleness(projectEvermindHooks(secrets, projectId, serverChatId), workspaceRoot() || undefined),

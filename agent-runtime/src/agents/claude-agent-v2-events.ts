@@ -12,6 +12,8 @@
 export type V2Event =
   | { kind: "assistant_text"; text: string }
   | { kind: "tool_use"; toolName: string; toolUseId: string; args: unknown }
+  /** A tool call's outcome (the SDK's `tool_result` block in the next user turn). */
+  | { kind: "tool_result"; toolUseId: string; isError: boolean }
   | { kind: "result"; ok: boolean; text: string; inputTokens: number; outputTokens: number }
   | { kind: "error"; message: string }
   | { kind: "system"; subtype: string };
@@ -22,6 +24,8 @@ interface ContentBlock {
   id?: unknown;
   name?: unknown;
   input?: unknown;
+  tool_use_id?: unknown;
+  is_error?: unknown;
 }
 
 function num(v: unknown): number {
@@ -53,6 +57,20 @@ export function mapSdkMessage(msg: unknown): V2Event[] {
             toolUseId: typeof b.id === "string" ? b.id : "",
             args: b.input ?? {},
           });
+        }
+      }
+      return out;
+    }
+
+    case "user": {
+      // The SDK hands each tool's outcome back as a `tool_result` block of the next user
+      // turn — the only place a run can tell a call that succeeded from one that threw.
+      const message = m.message as { content?: unknown } | undefined;
+      const blocks = Array.isArray(message?.content) ? (message!.content as ContentBlock[]) : [];
+      const out: V2Event[] = [];
+      for (const b of blocks) {
+        if (b?.type === "tool_result" && typeof b.tool_use_id === "string" && b.tool_use_id) {
+          out.push({ kind: "tool_result", toolUseId: b.tool_use_id, isError: b.is_error === true });
         }
       }
       return out;

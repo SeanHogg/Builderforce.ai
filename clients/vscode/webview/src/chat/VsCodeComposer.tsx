@@ -158,7 +158,8 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
   }, [conv]);
 
   // "Add context": the host picks a workspace file (or the active selection) and the
-  // text goes through the SAME upload pipeline as a dropped file.
+  // text is attached like a dropped text file — the host keeps it and inlines it into
+  // the turn (`hostPersistence.ts` → `attachment.ingress`).
   const addContext = useCallback(() => {
     void (async () => {
       try {

@@ -19,6 +19,7 @@ import {
   coercePolicyGates,
   CURRENT_ENGINE_ID,
   resolveEngineById,
+  RunKnowledgeRecorder,
 } from "@builderforce/agent-tools";
 import { WebSocket } from "ws";
 import { buildAssignedCapabilityAppend } from "../agents/assigned-capabilities.js";
@@ -77,6 +78,7 @@ import {
   type ToolAuditEvent,
   type ToolAuditPersister,
 } from "./builderforce-relay-outboxes.js";
+import { getKnowledgeLoop } from "./memory-bridge.js";
 import { createGitRepoSync } from "./repo-sync.js";
 import { ClaudeSdkAgentEngine } from "./sdk-agent-engine.js";
 import {
@@ -478,6 +480,9 @@ export class BuilderforceRelayService implements IRelayService {
       this.lateSteers.open(payload.executionId);
     }
 
+    // The run's record (successful tool calls), consolidated into its code map at the end.
+    const knowledge = new RunKnowledgeRecorder();
+
     // Drive the on-prem loop through the SHARED `AgentEngine` contract (the same
     // interface the cloud `CloudToolLoopEngine` implements) — so a future V3 is a
     // sibling `AgentEngine` constructed here, not a rewrite of this path (PRD 12).
@@ -496,6 +501,7 @@ export class BuilderforceRelayService implements IRelayService {
       abortController,
       steering,
       sinks,
+      knowledge,
     });
     // The terminal state this run ended in, or null when it completed normally (the
     // ticket stays open and KEEPS its workspace — it is the shared ticket context).
@@ -527,6 +533,9 @@ export class BuilderforceRelayService implements IRelayService {
         // Run end: land the batched audit trail before the terminal state is reported,
         // so a finished run's timeline is complete when the portal shows it finished.
         await this.toolAudit.flush();
+        // …and the run's code map, into the same shared facts store every runtime
+        // writes to (paths are relative to the ticket workspace). Fire-and-forget.
+        getKnowledgeLoop()?.commitCodeMap?.(knowledge, cwd);
       }
 
       // If the run was cancelled, the API already flipped the row to CANCELLED (a

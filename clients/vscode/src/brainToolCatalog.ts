@@ -22,6 +22,7 @@ import { subagentControlToolDefs } from "./subagentControlTools";
 import type { ChildControls } from "./childRunSpawner";
 import { ticketBranchReviewToolDef } from "./ticketBranchTool";
 import { desktopBackedTools } from "./desktopContext";
+import { withLocalResearch } from "./localResearch/researchPort";
 
 export async function brainToolCatalog(
   secrets: vscode.SecretStorage,
@@ -41,10 +42,16 @@ export async function brainToolCatalog(
   const platformTools = await listPlatformTools(secrets);
   // The ticket branch review needs both halves: the project's tickets AND a checkout to
   // compare their branches in.
-  // `semantic_search` / `repo_map` stay only while Builderforce Desktop answers — a run
-  // never sees a tool whose only backing is a service that is not running.
+  // `semantic_search` stays only while Builderforce Desktop answers and `read_compressed`
+  // only while it has its compressor — a run never sees a tool whose only backing is a
+  // service that is not running. `repo_map` always stays: without Desktop it is served
+  // from the workspace's own symbol index (`localSemantic.ts`). `local_research` stays only
+  // while a model on this machine can answer it.
   const localTools = root
-    ? await desktopBackedTools([...TOOL_DEFS, ...(projectId != null ? [ticketBranchReviewToolDef(secrets, projectId)] : [])])
+    ? await withLocalResearch(await desktopBackedTools(
+        [...TOOL_DEFS, ...(projectId != null ? [ticketBranchReviewToolDef(secrets, projectId)] : [])],
+        { localRepoMap: true },
+      ))
     : [];
   // Delegation needs a workspace AND a host that can run the child. Spawning stops at the
   // depth cap, but the collect / redirect / stop verbs stay while children may be live.

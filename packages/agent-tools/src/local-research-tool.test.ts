@@ -77,6 +77,19 @@ describe("local_research", () => {
     expect(calls).toBe(2);
   });
 
+  it("hands the run's Stop to the pre-search's text searches", async () => {
+    const { caps } = surface({ complete: async () => "ok" });
+    const signals: Array<AbortSignal | undefined> = [];
+    const searchCode = caps.repoRead!.searchCode;
+    caps.repoRead!.searchCode = (q, scope, opts) => {
+      signals.push(opts?.signal);
+      return searchCode(q, scope, opts);
+    };
+    const stop = new AbortController();
+    await localResearchTool.execute({ question: "how does resolveMembership pick the tenant?" }, { caps, signal: stop.signal });
+    expect(signals).toEqual([stop.signal]);
+  });
+
   it("refuses without a question, without a local model, and when nothing matches", async () => {
     const { caps } = surface({ complete: async () => "x" });
     expect((await localResearchTool.execute({}, { caps })).data.ok).toBe(false);

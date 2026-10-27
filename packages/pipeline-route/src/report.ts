@@ -51,9 +51,9 @@ export interface RouteReport {
   misroutes: number;
   misrouteRate: number | null;
   threshold: number;
-  /** The threshold the evidence points to, or null when it says keep the current one. */
+  /** The threshold the evidence points to, or null when it says keep the current one.
+   *  A number, never a sentence: each host words (and localizes) it itself. */
   suggestedThreshold: number | null;
-  suggestion: string;
 }
 
 /** A quick run re-asked as full within this long counts as misrouted. */
@@ -128,26 +128,23 @@ export function suggestThreshold(
   runs: readonly RouteRunRecord[],
   threshold: number,
   misrouted: ReadonlySet<number> = misroutedRuns(runs),
-): { suggestedThreshold: number | null; suggestion: string } {
+): { suggestedThreshold: number | null } {
   const quick = runs.filter((r) => r.route === 'quick').length;
-  if (quick < MIN_QUICK_RUNS_FOR_SUGGESTION) {
-    return { suggestedThreshold: null, suggestion: `Keep ${threshold}: only ${quick} quick runs, fewer than the ${MIN_QUICK_RUNS_FOR_SUGGESTION} a suggestion needs.` };
-  }
+  if (quick < MIN_QUICK_RUNS_FOR_SUGGESTION) return { suggestedThreshold: null };
   const rate = misrouted.size / quick;
-  const pct = Math.round(rate * 100);
   if (rate > MISROUTE_HIGH) {
     const scores = [...misrouted].map((i) => runs[i]!.score).filter((s): s is number => typeof s === 'number').sort((a, b) => a - b);
     const quartile = scores.length ? scores[Math.floor((scores.length - 1) / 4)]! : threshold - STEP;
     const next = round2(Math.max(STEP * 2, Math.min(threshold - STEP, floorStep(quartile))));
-    return { suggestedThreshold: next, suggestion: `Lower to ${next}: ${pct}% of quick runs were re-run on the full pipeline or failed.` };
+    return { suggestedThreshold: next };
   }
   if (rate < MISROUTE_LOW && runs.some((r) => r.route === 'full')) {
     const next = round2(Math.min(0.9, threshold + STEP));
-    return next > threshold
-      ? { suggestedThreshold: next, suggestion: `Raise to ${next}: only ${pct}% of quick runs were misrouted, so quick can take more.` }
-      : { suggestedThreshold: null, suggestion: `Keep ${threshold}: already at the ceiling.` };
+    // Already at the ceiling: keep it.
+    return { suggestedThreshold: next > threshold ? next : null };
   }
-  return { suggestedThreshold: null, suggestion: `Keep ${threshold}: ${pct}% of quick runs were misrouted, inside the ${Math.round(MISROUTE_LOW * 100)}–${Math.round(MISROUTE_HIGH * 100)}% band.` };
+  // Inside the MISROUTE_LOW–MISROUTE_HIGH band: keep it.
+  return { suggestedThreshold: null };
 }
 
 /** The whole report over `runs` at the current `threshold`. */

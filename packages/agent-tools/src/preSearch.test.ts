@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RepoSearchResult, SymbolFindResult, SymbolMatch } from "./capabilities.js";
-import { extractIdentifiers, preSearch, preSearchFiles } from "./preSearch.js";
+import { escapeRegex, extractIdentifiers, preSearch, preSearchFiles } from "./preSearch.js";
 
 const match = (name: string, path: string, line: number, kind: SymbolMatch["kind"] = "function"): SymbolMatch => ({ name, path, line, kind, exported: true });
 
@@ -62,6 +62,30 @@ describe("preSearch", () => {
     });
     expect(r.definitions).toEqual([]);
     expect(r.references).toHaveLength(1);
+  });
+
+  it("searches an identifier's regex metacharacters literally", async () => {
+    const p = ports({}, { "\\$scope": [{ path: "app.js", line: 3, text: "$scope.value = 1" }] });
+    const r = await preSearch("why is $scope empty", p);
+    expect(p.asked).toContain("rg:\\$scope");
+    expect(r.references.map((x) => x.path)).toEqual(["app.js"]);
+    expect(new RegExp(escapeRegex("$scope")).test("$scope.value")).toBe(true);
+  });
+
+  it("hands its stop to every text search, and starts none once stopped", async () => {
+    const seen: Array<AbortSignal | undefined> = [];
+    const stop = new AbortController();
+    await preSearch("how does resolveMembership work?", {
+      searchText: async (_q, signal) => {
+        seen.push(signal);
+        return { ok: true, matches: [] };
+      },
+    }, { signal: stop.signal });
+    expect(seen).toEqual([stop.signal]);
+    stop.abort();
+    const p = ports({}, {});
+    expect((await preSearch("how does resolveMembership work?", p, { signal: stop.signal })).block).toBe("");
+    expect(p.asked).toEqual([]);
   });
 
   it("caps the block", async () => {

@@ -60,6 +60,8 @@
   "config.localModels.freetokenUrl.desc": "Base URL of your FreeToken engine. The OpenAI-compatible paths `/v1/models` and `/v1/chat/completions` are appended automatically, so both `http://127.0.0.1:1919` and `http://127.0.0.1:1919/v1` work.",
   "config.localModels.synapseUrl.desc": "Base URL of Synapse's native engine (`bfi serve`). Leave empty to discover it: the Synapse desktop app publishes it, and a standalone `bfi serve` announces its port in `~/.builderforce/bfi.json` (it starts at 11434 and moves up when Ollama holds that port). Its API key is picked up from the same discovery. Both `http://127.0.0.1:11435` and `http://127.0.0.1:11435/v1` work.",
   "config.localModels.localFirst.desc": "Prefer a compatible model on THIS machine: the built-in engines first (WebLLM and the Builderforce engine on WebGPU, then Synapse), Ollama and FreeToken last. Gateway fallback requires the separate Gateway inference permission; explicit local pins always win.",
+  "config.localModels.skipConfidence.desc": "Hybrid only: skip the local model for a turn when this machine's learned predictor is at least this sure it would fail (0–1). Higher tries local more often; the predictor acts only once it has trained and beats a coin.",
+  "config.localModels.explore.desc": "Hybrid only: of the turns the predictor would skip, the share still tried on the local model (0–1), so a model that improves can win its turns back. 0 never retries a skipped turn locally.",
   "config.inferenceMode.desc": "Where models run. Leave unset for the default: **Hybrid** once signed in, **Local only** signed out. The `builderforce.platform.*` settings are advanced overrides of what this mode allows.",
   "config.inferenceMode.hybrid": "**Hybrid** (recommended) — this device first, then BuilderForce cloud when it needs to (the gateway puts the free tier first).",
   "config.inferenceMode.localOnly": "**Local only** — only models on this device. Nothing is sent to the BuilderForce gateway.",
@@ -106,5 +108,18 @@
   "command.deleteTask": "BuilderForce: Delete Task",
   "config.audits.atStartup": "Run selected audits in background chats when this workspace opens.",
   "config.audits.atClose": "Run selected audits in the cloud when this workspace closes. Uses connected repository source; local edits are not uploaded. Interrupted submissions retry on next startup.",
-  "config.audits.selected": "Audit types to run at startup and close."
+  "config.audits.selected": "Audit types to run at startup and close.",
+  "command.pipelineRouteReport": "Pipeline Route Report",
+  "config.models.plan.desc": "Model for the **planning** stage of a run. Empty: the `ROLE_MODELS` env `plan` entry, else the gateway orders your models for planning. Applies while the run holds no model of its own (Auto, and `#builderforce.defaultModel#` empty).",
+  "config.models.code.desc": "Model for the **coding** stage of a run. Empty: the `ROLE_MODELS` env `code` entry, else the gateway leads with your strongest coding model. Applies while the run holds no model of its own (Auto, and `#builderforce.defaultModel#` empty).",
+  "config.models.review.desc": "Model for the **review** (verify) stage, after a run changed code. Always a different model from the one that wrote the change. Empty: the `ROLE_MODELS` env `verify` entry, else the gateway picks a cheaper capable reviewer.",
+  "config.models.subagent.desc": "Model every **sub-agent** runs on, unless your model pick is explicit. Empty: the `ROLE_MODELS` entry for the sub-agent's role, else the gateway orders by that role.",
+  "config.pipeline.routing.desc": "How runs are routed between the **full pipeline** (plan → code → review) and a **quick pass** (one coding pass, no planning or review stage). Writing \"full pipeline\" in a request always takes the full pipeline. See **BuilderForce: Pipeline Route Report**.",
+  "config.pipeline.routing.auto": "Score each request and take the quick pass below the route threshold.",
+  "config.pipeline.routing.always": "Every run takes the full pipeline (the score is still recorded).",
+  "config.pipeline.routeThreshold.desc": "Router score (0–1, the likelihood a request needs the full pipeline) at or above which a run takes the full pipeline. Lower it if quick runs keep needing a re-run; the route report suggests a value.",
+  "config.pipeline.quickModel.desc": "Model a **quick pass** codes on. It replaces a soft default — the coding-stage model, `#builderforce.defaultModel#` or the project's learned model — but never a model you picked explicitly for the chat. Empty: the coding-stage model (`#builderforce.models.code#`), else the gateway's order.",
+  "config.maxRunBudgetUsd.desc": "Spend cap per run, in US dollars (0 = off). The run is warned at 80% and stops at the cap with a summary of what it did; nothing is rolled back. Priced from the bundled price list; models on this machine cost nothing.",
+  "config.images.maxEdge.desc": "Longest edge, in pixels, an attached picture is scaled to before it is sent to the model (vision models downsample larger pictures anyway). Smaller PNG, WebP and JPEG pictures and every GIF are sent as they are.",
+  "config.images.jpegQuality.desc": "First quality (0.3–1) tried when an attached picture has to be re-encoded (JPEG, or WebP when it has transparency); lower steps follow only if it is still too large to send inline."
 }

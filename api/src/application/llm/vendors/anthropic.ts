@@ -213,7 +213,7 @@ function isVolatileTail(block: AnthropicBlock | undefined): block is AnthropicBl
 }
 
 /**
- * The history breakpoint (`markAnthropicHistoryBreakpoint`), placed on the last STABLE block — before a
+ * The history breakpoint, placed on the last STABLE block — before a
  * trailing volatile block — by the same {@link lastStableIndex} rule the OpenRouter placer
  * uses: the last message with a non-volatile block, then that message's last such block.
  * Any block type takes the marker here (tool_result included). Non-destructive: only the

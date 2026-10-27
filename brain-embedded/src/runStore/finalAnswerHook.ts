@@ -30,10 +30,12 @@ import { emit, nowIso, pushTrace, runTrace } from './runCells';
 import { persistMidTurnText } from './turnPersistence';
 import { emitEvermindLearnReconcile } from './runMemory';
 import { metaOf, reportToPolicy, settleReply, type RunLoopContext } from './runLoopContext';
+import { skipsVerifyStage } from './pipelineRoute';
 
-/** A blocked finish that already wrote files continues on the review model, not the author. */
+/** A blocked finish that already wrote files continues on the review model, not the author.
+ *  A QUICK run has no verify stage (`pipelineRoute.ts`): it finishes on its coding pass. */
 function enterVerifyIfChanged(run: RunLoopContext): void {
-  if (!run.c.codeChanged || run.policy.phase === 'verify') return;
+  if (!run.c.codeChanged || run.policy.phase === 'verify' || skipsVerifyStage(run.pipeline)) return;
   reportToPolicy(run, { type: 'verify_started' });
 }
 

@@ -57,11 +57,7 @@ import {
   createBuilderForceAgentsCodingTools,
   resolveToolLoopDetectionConfig,
 } from "../../coding-tools.js";
-import {
-  catalogDesktopSemantic,
-  setDesktopClientName,
-} from "@builderforce/agent-tools/node-desktop.js";
-import { isCostLeverOn } from "@builderforce/cost-levers";
+import { resolveOnPremLocalBackings } from "../../on-prem-local-backings.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../defaults.js";
 import { resolveBuilderForceAgentsDocsPath } from "../../docs-path.js";
 import {
@@ -440,13 +436,18 @@ export async function runEmbeddedAttempt(
 
     // Check if the model supports native image input
     const modelHasVision = params.model.input?.includes("image") ?? false;
-    if (!params.disableTools) setDesktopClientName("on-prem");
-    const semantic = params.disableTools
+    // repo_map (Desktop, else the definition index) and local_research (while a local
+    // model answers) — the run's local backings, resolved once.
+    // C4 for an on-device host (bucketed by the install id) is decided inside, the same
+    // way for every caller. Kept on the result so overflow compaction reuses THIS set.
+    const localBackings = params.disableTools
       ? undefined
-      : await catalogDesktopSemantic(effectiveWorkspace, {
-          // C4 for an on-device host (no tenant: on only when fully rolled out).
-          adaptive: isCostLeverOn(process.env, "c4_adaptive_context", null),
+      : await resolveOnPremLocalBackings({
+          workspaceRoot: effectiveWorkspace,
+          config: params.config,
         });
+    const semantic = localBackings?.semantic;
+    const research = localBackings?.research;
     const toolsRaw = params.disableTools
       ? []
       : createBuilderForceAgentsCodingTools({
@@ -486,6 +487,7 @@ export async function runEmbeddedAttempt(
             params.requireExplicitMessageTarget ?? isSubagentSessionKey(params.sessionKey),
           disableMessageTool: params.disableMessageTool,
           semantic,
+          research,
         });
     const tools = sanitizeToolsForGoogle({ tools: toolsRaw, provider: params.provider });
     logToolSchemasForGoogle({ tools, provider: params.provider });
@@ -1502,6 +1504,7 @@ export async function runEmbeddedAttempt(
         ),
         attemptUsage: getUsageTotals(),
         compactionCount: getCompactionCount(),
+        ...(localBackings ? { localBackings } : {}),
         // Client tool call detected (OpenResponses hosted tools)
         clientToolCall: clientToolCallDetected ?? undefined,
       };

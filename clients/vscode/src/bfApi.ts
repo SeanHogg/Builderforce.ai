@@ -399,7 +399,13 @@ async function fetchAuthed(
     assertActsAs(t, asTenant);
     return trackReachability(fetch(`${getBaseUrl()}${path}`, {
       ...init,
-      headers: { ...(init.headers ?? {}), authorization: `Bearer ${t}`, "content-type": "application/json" },
+      // A multipart body (an attachment upload) carries its own boundary in the header
+      // fetch writes for it; forcing JSON there would make the body unreadable.
+      headers: {
+        ...(init.headers ?? {}),
+        authorization: `Bearer ${t}`,
+        ...(init.body instanceof FormData ? {} : { "content-type": "application/json" }),
+      },
     }));
   };
   let res = await call(token);

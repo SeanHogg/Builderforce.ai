@@ -47,41 +47,6 @@ export interface MemoryCommitDeps {
   complete(user: string): Promise<string>;
   /** Write-through project fact. The same key replaces. */
   remember(key: string, content: string): Promise<boolean>;
-  /**
-   * The CODE MAP write, with what the facts route records beside it (PRD 35 E8): the
-   * files it anchors to (so a later change to one can retire it). The
-   * implementation adds the run's server chat (`chatId`), which is what puts the write
-   * behind the chat's Memory gate server-side. Omitted ⇒ the map goes through
-   * {@link remember} like any other fact.
-   */
-  rememberCodemap?(key: string, content: string, meta: CodemapFactMeta): Promise<boolean>;
-}
-
-/**
- * What a code map is stored with, beyond its key and text. No `tags`: the facts route
- * (`projectFactsRoutes.ts` `RememberFactBody`) has no tags field and `project_facts` no
- * tags column — the `codemap:` key prefix is the tag every reader filters on.
- */
-export interface CodemapFactMeta {
-  /** Repo-relative files the map lists — never a deleted one. */
-  fileAnchors: Array<{ path: string }>;
-}
-
-/** Anchors per map — the consolidation already caps the files it lists. */
-const MAX_CODEMAP_ANCHORS = 16;
-/** A map entry: `- <path>` with an optional trailing `(note)` (`consolidate`'s format). */
-const MAP_ENTRY = /^- (.+?)(?: \(([^()]*)\))?$/;
-
-/** The file anchors for a consolidated code map. Pure. */
-export function codemapFactMeta(content: string): CodemapFactMeta {
-  const fileAnchors: Array<{ path: string }> = [];
-  for (const line of content.split("\n")) {
-    const m = MAP_ENTRY.exec(line.trim());
-    if (!m || m[2] === "deleted" || fileAnchors.some((a) => a.path === m[1])) continue;
-    fileAnchors.push({ path: m[1]! });
-    if (fileAnchors.length >= MAX_CODEMAP_ANCHORS) break;
-  }
-  return { fileAnchors };
 }
 
 /** The run-trace line a run gets when its chat's Memory switch kept every fact unwritten. */
@@ -319,8 +284,9 @@ export async function commitRunKnowledge(
     try {
       // A read-only investigation counts: `consolidate` maps ≥3 files READ as readily as
       // ≥3 changed (PRD 35 E8) — the next run asked about this area starts warm.
-      if (deps.rememberCodemap) await deps.rememberCodemap(map.key, map.content, codemapFactMeta(map.content));
-      else await deps.remember(map.key, map.content);
+      // Its file anchors are derived by the facts store from the files the map lists
+      // (`projectFactsCodemap.ts` codemapAnchorsForWrite) — one rule for every writer.
+      await deps.remember(map.key, map.content);
     } catch {
       /* the map is an accelerant; the learned facts below still get their chance */
     }

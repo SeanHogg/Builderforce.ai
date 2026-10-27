@@ -741,6 +741,8 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
                 extraSystemPrompt: params.extraSystemPrompt,
                 ownerNumbers: params.ownerNumbers,
                 trigger: "overflow",
+                // The attempt's own local backings, so compaction rebuilds the same tools.
+                ...(attempt.localBackings ? { localBackings: attempt.localBackings } : {}),
                 diagId: overflowDiagId,
                 attempt: overflowCompactionAttempts,
                 maxAttempts: MAX_OVERFLOW_COMPACTION_ATTEMPTS,

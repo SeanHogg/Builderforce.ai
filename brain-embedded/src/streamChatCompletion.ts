@@ -169,6 +169,15 @@ export interface CompletionMetadata {
    * call's own usage row, so the savings ledger costs no request of its own.
    */
   memory?: { trimmedTokens: number; recallTokens: number };
+  /**
+   * The run's PIPELINE route (`@builderforce/pipeline-route`) — `full` (plan → code →
+   * verify) or `quick` (one coding pass) — and the router's score, decided once in the
+   * run preamble. The gateway's usage writer promotes both to `llm_usage_log` columns;
+   * the device's run usage ledger reads them off the same call. Absent when the run was
+   * not routed (a host that sends no pipeline settings, a sub-agent).
+   */
+  pipelineRoute?: 'full' | 'quick';
+  routeScore?: number;
 }
 
 export interface StreamChatOptions {

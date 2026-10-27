@@ -29,8 +29,11 @@
  * the fold instead of becoming a reported zero — and `turn_index` keeps its MAX, which
  * for a folded run row (grouped by `execution_id`) is the run's turn count, the one thing
  * a position-in-the-loop still says once the loop's rows are one row. The run's
- * pipeline route (1277) is a dimension, and its `route_score` is AVERAGED — a folded
- * row's score is its runs' mean, which is what the route report reads. `created_at`
+ * pipeline route (1277) is a dimension, and its `route_score` is AVERAGED PER CALL —
+ * `AVG` over the day's rows, one vote per logged call, NOT per run. For a row grouped by
+ * a non-null `execution_id` that is one run's calls, so the mean is that run's score; a
+ * row with no execution id pools many runs, and a long run weighs more than a short one.
+ * The route report reads it as a per-call mean. `created_at`
  * becomes the day's EARLIEST, so a folded row stays inside the calendar day every range
  * filter buckets it into.
  *

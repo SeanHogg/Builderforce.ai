@@ -4,6 +4,7 @@ import {
   buildKnowledgeMemoryEntry as buildSharedKnowledgeMemoryEntry,
   deriveActivitySummary,
   KNOWLEDGE_DIRS,
+  type RunKnowledgeLog,
   type RunKnowledgeRecorder,
   toolCallPaths,
 } from "@builderforce/agent-tools";
@@ -192,6 +193,20 @@ export class KnowledgeLoopService {
     logDebug("[knowledge-loop] started");
   }
 
+  /**
+   * Consolidate a finished run's record into its code map and write it to the shared
+   * project facts store — the ONE run-end map commit for this host. Event-fed runs reach
+   * it from {@link onRunComplete}; a run whose loop keeps its own record (the Claude
+   * Agent SDK relay run, which works in a ticket workspace under `root`) calls it
+   * directly. Fire-and-forget; no-op without project credentials or a map worth keeping.
+   */
+  commitCodeMap(knowledge: Pick<RunKnowledgeLog, "consolidate">, root: string): void {
+    const factsCfg = this.projectEvermindConfig();
+    if (!factsCfg) return;
+    const codeMap = knowledge.consolidate({ root });
+    if (codeMap) void pushProjectFact(factsCfg, codeMap.key, codeMap.content);
+  }
+
   /** Stop listening and clear accumulated state. */
   stop(): void {
     if (this.unsub) {
@@ -337,9 +352,7 @@ export class KnowledgeLoopService {
     // the editor and the cloud engine write theirs to, so the next run on this area —
     // on any surface — opens those files first instead of searching for them.
     // The workspace root: the native file tools take absolute paths as readily as relative.
-    const codeMap = acc?.knowledge.consolidate({ root: this.opts.workspaceDir }) ?? null;
-    const factsCfg = this.projectEvermindConfig();
-    if (codeMap && factsCfg) void pushProjectFact(factsCfg, codeMap.key, codeMap.content);
+    if (acc) this.commitCodeMap(acc.knowledge, this.opts.workspaceDir);
 
     if (!entry) {
       return;

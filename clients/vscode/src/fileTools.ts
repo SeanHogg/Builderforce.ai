@@ -13,6 +13,8 @@ import { buildCoreToolRegistry } from "@builderforce/agent-tools";
 import { buildLocalCapabilityProvider, LOCAL_SURFACE_CAPS } from "./localCapabilities";
 import { findRipgrep } from "./ripgrep";
 import { hostCostLeverOn } from "./hostCostLevers";
+import { resolveLocalSemantic } from "./localSemantic";
+import { editorResearchCapability } from "./localResearch/researchCapability";
 
 /**
  * One definition per tool: name, JSON-schema params, whether it mutates the
@@ -53,7 +55,10 @@ const EXCLUDED_TOOLS = new Set(["finish"]);
 
 /** Tools that read but never change the workspace — so they skip the approval gate
  *  even though they ride a write/shell-capable surface. */
-const READ_ONLY_TOOLS = new Set(["list_files", "read_file", "search_code", "find_symbol", "file_outline", "git_status", "git_diff", "git_history"]);
+const READ_ONLY_TOOLS = new Set([
+  "list_files", "read_file", "search_code", "find_symbol", "file_outline", "git_status", "git_diff", "git_history",
+  "semantic_search", "repo_map", "read_compressed", "local_research",
+]);
 
 // `git.write` is here for the same reason `shell` is, and more so: committing, pushing
 // and opening a pull request move work out of the working tree, and a push to the base
@@ -64,6 +69,16 @@ const MUTATING_CAPS: ReadonlySet<Capability> = new Set<Capability>(["repo.write"
 function isMutating(name: string, requires: readonly Capability[]): boolean {
   if (READ_ONLY_TOOLS.has(name)) return false;
   return requires.some((c) => MUTATING_CAPS.has(c));
+}
+
+/**
+ * Whether a call can reach `repo.semantic`: the tools that require it (`semantic_search`,
+ * `repo_map`, `read_compressed`), and — with C8 on — the shell tools, whose output the
+ * Desktop compressor shortens. Only those resolve the Desktop-or-index backing
+ * (`resolveLocalSemantic`, a Desktop probe); every other call skips it.
+ */
+export function callUsesSemantic(requires: readonly Capability[], compressOutputs: boolean): boolean {
+  return requires.some((c) => c === "repo.semantic" || c === "repo.compress" || (compressOutputs && c === "shell"));
 }
 
 /** Adapt the shared registry's tools (for the local surface) to the extension's
@@ -77,16 +92,24 @@ export const TOOL_DEFS: ToolDef[] = registry
     parameters: def.schema.function.parameters as Record<string, unknown>,
     mutating: isMutating(def.name, def.requires),
     execute: async (args, root, run) => {
+      const research = editorResearchCapability(root);
+      const compressLargeOutputs = hostCostLeverOn("c8_token_compression");
+      const semantic = callUsesSemantic(def.requires, compressLargeOutputs) ? await resolveLocalSemantic(root) : undefined;
       const result = await registry.dispatch(def.name, args, {
         // The ripgrep VS Code ships (or one on PATH) backs `search_code`, so a repo-wide
         // symbol search covers the whole workspace instead of the first 4,000 files.
         caps: buildLocalCapabilityProvider(root, {
           ripgrep: () => findRipgrep(),
+          // Desktop with its compressor when it answers, else `repo_map` from the symbol
+          // index — resolved only for a call that can use it (`callUsesSemantic`).
+          ...(semantic ? { semantic } : {}),
+          ...(research ? { research } : {}),
+          ...(run?.signal ? { signal: run.signal } : {}),
           ...(run?.defaultRepo ? { defaultRepo: run.defaultRepo } : {}),
           ...(run?.runKey !== undefined ? { jobOwner: run.runKey } : {}),
         }),
         workspaceRoot: root,
-        compressLargeOutputs: hostCostLeverOn("c8_token_compression"),
+        compressLargeOutputs,
         // Stop reaches the tool (and `run_command`'s process tree) through here.
         ...(run?.signal ? { signal: run.signal } : {}),
       });
@@ -120,6 +143,10 @@ export function describeTool(name: string, args: Record<string, unknown>): strin
       return `semantic search ${typeof args.query === "string" ? `"${args.query.slice(0, 60)}"` : ""}`;
     case "repo_map":
       return `repo map${Array.isArray(args.focus) && args.focus.length ? ` of ${args.focus.slice(0, 2).join(", ")}` : ""}`;
+    case "read_compressed":
+      return `read compressed ${p}`;
+    case "local_research":
+      return `ask local model ${typeof args.question === "string" ? `"${args.question.slice(0, 60)}"` : ""}`;
     case "review_ticket_branches":
       return `review ticket branches${typeof args.repo === "string" ? ` in ${args.repo}` : ""}`;
     // The project-memory pair (cognition.ts): named by what is being recalled/kept, so
