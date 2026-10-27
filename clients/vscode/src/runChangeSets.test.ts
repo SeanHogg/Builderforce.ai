@@ -37,7 +37,10 @@ vi.mock("vscode", () => ({
   },
 }));
 
-vi.mock("@seanhogg/builderforce-brain-embedded", () => ({
+vi.mock("@seanhogg/builderforce-brain-embedded", async (importOriginal) => ({
+  // The rest stays real: modules this test loads (localModels → the page-engine
+  // bridge) call into the package when they are imported.
+  ...(await importOriginal<typeof import("@seanhogg/builderforce-brain-embedded")>()),
   isRunning: () => hostPorts.running,
 }));
 
