@@ -46,7 +46,7 @@ import { withRunPreamble } from "./runPreamble";
 import { replaceWorkspaceMap } from "./idePersona";
 import { RunKnowledgeRecorder, recordingOnly } from "@builderforce/agent-tools";
 import { createChildRuns } from "./childRuns";
-import { syncMessageFor, type RunHostMessage, type SinkEntry } from "./brainRunHostProtocol";
+import { createRunRelay } from "./runRelay";
 import { childControls } from "./childRunSpawner";
 import { createChildRunHost, ownerOf, type RunSpec } from "./childRunHost";
 import { createChildApprovalRelay } from "./childApprovalRelay";
@@ -83,7 +83,7 @@ function argsRecord(value: unknown): Record<string, unknown> {
 }
 
 export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
-  const sinks = new Set<SinkEntry>();
+  const relay = createRunRelay();
   const notes = new Map<number, RunKnowledgeRecorder>();
   /** Live per-run gate flags; `needsConfirm` reads them so a switch flipped mid-run
    *  takes effect on the NEXT call instead of after the run (the shared gate's rule). */
@@ -99,21 +99,14 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     resolve: resolveRunConfirm,
   });
 
-  const broadcast = (message: RunHostMessage): void => {
-    for (const entry of sinks) entry.sink.post(message);
-  };
-  const broadcastSync = (chatId: number): void => {
-    for (const entry of sinks) entry.sink.post(syncMessageFor(entry, chatId));
-  };
+  const { broadcast } = relay;
   /** The runs this host relays: subscribed while live, the recent ones replayed to a new panel. */
   const watches = createRunWatches(
     (chatId) => {
-      broadcastSync(chatId);
+      relay.sync(chatId);
       approvals.changed(chatId);
     },
-    (chatId) => {
-      for (const entry of sinks) entry.sent.delete(chatId);
-    },
+    relay.forget,
   );
   const offStore = subscribeRunStore(() => ports.onRunsChanged?.(getGlobalRunState()));
 
@@ -362,7 +355,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // A settled run is no longer subscribed, so its cleared error is relayed here.
     clearError: (runKey) => {
       clearRunError(runKey);
-      broadcastSync(runKey);
+      relay.sync(runKey);
     },
     // The person's words at a run — steer, stop, or its next turn (`runSteer.ts`).
     steer: (runKey, text, attachments) => steering.steer(runKey, text, attachments),
@@ -387,20 +380,17 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         if (on) resolveRunConfirm(key, true);
       }
     },
+    resync: (runKey) => relay.resync(runKey),
     attach(sink) {
-      const entry: SinkEntry = { sink, sent: new Map() };
-      sinks.add(entry);
       const known = watches.known();
-      for (const chatId of known) sink.post(syncMessageFor(entry, chatId));
+      const detach = relay.attach(sink, known);
       for (const chatId of known) if (chatId > 0) sink.post({ type: "run.children", chatId, children: registry.viewsIn(chatId) });
-      return () => {
-        sinks.delete(entry);
-      };
+      return detach;
     },
     dispose() {
       offStore();
       watches.dispose();
-      sinks.clear();
+      relay.dispose();
     },
   };
 }

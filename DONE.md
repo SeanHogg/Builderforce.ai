@@ -1,3 +1,15 @@
+## ✅ RESOLVED 2026-10-27 — The chat panel keeps up with typing and streaming in a long chat (VSIX 2026.10.105)
+
+- **Symptom.** In VS Code chat #6 (1,572 messages, a 500-event live trace), typing in the composer lagged, and a streaming reply appeared slowly.
+- **Every keystroke re-rendered the transcript.** `useChatSend.takeAttachments` was keyed on `conv`, which is a new object every render. The new identity cascaded through `sendOrQueue` into `answerQuestion` / `replayMessage`, which are props of the memoized `<BrainTimeline>` and its rows. So every keystroke, and every frame, re-rendered about 150 rows, each re-parsing its metadata and `<think>` text. It is now keyed on `pendingAttachments` / `removeAttachment`.
+- **Every 32 ms streaming frame rebuilt the transcript.** The webview built a new trace array per `run.sync` frame even when no event had arrived, so the settled timeline was re-mapped and re-sorted per token. Each frame also re-shipped `snapshot.appended` (up to 50 replies) through `postMessage`. Its fresh identity re-fired `useChatTranscript`'s splice, which re-rendered the whole chat surface a second time.
+- **A trace at its 500-event bound was resent whole on every new event.** The delta only understood growth, not a head trim.
+- **One delta rule for both lists** (`clients/vscode/src/listDelta.ts`). The host ships the head trim plus the new items (`traceDrop`/`traceFrom`, `appendedDrop`/`appendedFrom`). The webview applies them and keeps the SAME array when nothing changed. A replaced list, or a new panel, is resent whole as before.
+  - The host finds the last-sent TAIL in the current list; the old head is gone after a trim.
+  - A panel whose copy is out of step posts `run.resync` instead of building a short list. This happens when its store evicted the cell between runs. The host then resends that run whole.
+- **The relay moved out of `brainRunHost.ts`** (406 lines) into `runRelay.ts`, which owns the sinks and their delta bookkeeping. `brainRunHost.ts` is now 396 lines. The webview driver reads the host's `RunSyncMessage` type instead of a hand-copied frame, and the frame's type now says `snapshot.appended` is a delta.
+- **Tests.** `listDelta.test.ts` is new. Two relay cases were appended to `brainRunHost.test.ts` and two frame cases to `webview/src/hostRunDriver.test.ts`. Their existing cases run unchanged.
+
 ## ✅ RESOLVED 2026-10-27 — A run that says it is ready now acts (PRD 35 WS8p · VSIX 2026.10.104 · run-guards 2026.10.2 · brain-embedded 2026.10.65 · agent-run 2026.10.82 · api 2026.10.89)
 
 - **Symptom.** VS Code chat #6 said "Now I have everything I need" and read one more file, turn after turn (run #562: 105 turns, `⚠ SPUN`). Nothing tripped:

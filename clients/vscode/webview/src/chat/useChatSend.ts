@@ -118,11 +118,15 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
   // composer when a turn actually goes out, but a held turn waits behind a running run —
   // and the steer path clears the composer at queue time — so by drain time the live
   // snapshot is gone. Each turn carries its own copy so its images survive the wait.
+  // Keyed on the two fields it reads, never on `conv`: that object is new every render,
+  // and this identity flows into `answerQuestion` / `replayMessage` — the transcript's
+  // props — so keying on it re-rendered every visible row on each keystroke and frame.
+  const { pendingAttachments, removeAttachment } = conv;
   const takeAttachments = useCallback((): ChatInputAttachment[] => {
-    const attachments = [...conv.pendingAttachments];
-    for (const a of attachments) conv.removeAttachment(a.key);
+    const attachments = [...pendingAttachments];
+    for (const a of attachments) removeAttachment(a.key);
     return attachments;
-  }, [conv]);
+  }, [pendingAttachments, removeAttachment]);
 
   const sendOrQueue = useCallback((text: string, to: DirectedRecipient | null, attachments?: ChatInputAttachment[]) => {
     void submitTurn({ text, recipient: to, attachments: attachments ?? takeAttachments() });

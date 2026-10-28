@@ -22,14 +22,13 @@ import {
   applyRemoteRun,
   createModelFallbackChannel,
   getRunSnapshot,
-  getRunTrace,
   installRunDriver,
   setMcpToolStatus,
   type BrainRunRequest,
-  type BrainRunSnapshot,
-  type BrainTraceEvent,
   type ModelFallbackSurface,
 } from '@seanhogg/builderforce-brain-embedded';
+import { applyListDelta } from '../../src/listDelta';
+import type { RunSyncMessage } from '../../src/brainRunHostProtocol';
 import { onHostMessage, post } from './vscodeBridge';
 import { setChatChildren, type ChildView } from './chat/chatChildren';
 
@@ -75,16 +74,6 @@ export function setHostRunContext(next: HostRunContext): void {
   if (changed && next.chatId != null) post('run.autoApprove', { chatId: next.chatId, on: next.autoApprove });
 }
 
-interface RunSyncFrame {
-  chatId: number;
-  snapshot: Omit<BrainRunSnapshot, 'trace' | 'streamingText'>;
-  traceFrom: number;
-  trace: BrainTraceEvent[];
-  /** The streamed text arrives as a delta from this offset (0 = the whole text). */
-  textFrom: number;
-  text: string;
-}
-
 /** Serialize the request: functions stay behind, the host supplies its own. */
 function serialize(chatId: number, req: BrainRunRequest): Record<string, unknown> {
   return {
@@ -117,11 +106,19 @@ export function installHostRunDriver(): () => void {
   /** Awaited starts, settled by the host's `run.settled` / `run.failed`. */
   const pending = new Map<number, { resolve: () => void; reject: (e: Error) => void }>();
 
-  const offSync = onHostMessage<RunSyncFrame>('run.sync', (m) => {
-    const prior = getRunTrace(m.chatId);
-    const trace = m.traceFrom > 0 ? [...prior.slice(0, m.traceFrom), ...m.trace] : m.trace;
-    const streamingText = m.textFrom > 0 ? getRunSnapshot(m.chatId).streamingText.slice(0, m.textFrom) + m.text : m.text;
-    applyRemoteRun(m.chatId, { ...m.snapshot, streamingText, trace, hasTrace: trace.length > 0 });
+  const offSync = onHostMessage<RunSyncMessage>('run.sync', (m) => {
+    const prior = getRunSnapshot(m.chatId);
+    // A frame with nothing new keeps the SAME arrays (`applyListDelta`), so a streamed
+    // token re-renders the streaming row, not the whole transcript.
+    const trace = applyListDelta(prior.trace, { drop: m.traceDrop, from: m.traceFrom, items: m.trace });
+    const appended = applyListDelta(prior.appended, { drop: m.appendedDrop, from: m.appendedFrom, items: m.snapshot.appended });
+    // Out of step (this store evicted the cell between runs): the host resends it whole.
+    if (!trace || !appended || prior.streamingText.length < m.textFrom) {
+      post('run.resync', { chatId: m.chatId });
+      return;
+    }
+    const streamingText = m.textFrom > 0 ? prior.streamingText.slice(0, m.textFrom) + m.text : m.text;
+    applyRemoteRun(m.chatId, { ...m.snapshot, appended, streamingText, trace, hasTrace: trace.length > 0 });
   });
   const offSettled = onHostMessage<{ chatId: number }>('run.settled', (m) => {
     pending.get(m.chatId)?.resolve();

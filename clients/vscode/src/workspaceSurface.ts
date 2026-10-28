@@ -293,6 +293,9 @@ export class WorkspaceSurface implements vscode.Disposable {
       case "run.clearError":
         if (typeof msg.chatId === "number") hooks.runHost?.clearError(msg.chatId);
         break;
+      case "run.resync":
+        if (typeof msg.chatId === "number") hooks.runHost?.resync(msg.chatId);
+        break;
       // Scoped to the chat the surface is showing: several chats run at once out in the
       // host, and a switch flipped in one must not answer a confirm parked in another.
       case "run.autoApprove":

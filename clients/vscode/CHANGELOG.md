@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.105] — Typing and streaming keep up in a long chat
+
+- **The prompt box no longer lags in a long chat.** Every keystroke re-rendered every visible message in the transcript (about 150 rows) and re-parsed each one's details. A keystroke now leaves the transcript alone.
+- **Replies stream smoothly again.** Each streamed update (about 30 a second) used to carry the run's recent replies again and rebuild the whole transcript, even when only the reply being written had changed. Now only the reply being written repaints. A run that has passed 500 steps no longer resends all of them after each new step.
+
 ## [2026.10.104] — A run that says it is ready now acts
 
 - **"Now I have everything I need" no longer leads to another read.** A run that kept saying it was ready (or about to write) and then read one more file never tripped anything, because each new file looked like progress. The second time a run says it is ready and then only reads, it is told to act. The next time, it is given only the tools that make the change (or hand the work off). If it still doesn't act, it stops and asks you what to do. This applies to every run, sub-agents included, before and after it has edited anything. A long review that reads many files without claiming to be done is not affected.
