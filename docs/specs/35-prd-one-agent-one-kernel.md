@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Approved design, in progress. **WS0 landed** (clean tree, `main` = `origin/main` at `6b1a1469e`, 2026-10-25). **WS8a–h shipped 2026-10-25 in VSIX 2026.10.76** (DONE.md); its leftovers are in ROADMAP. **WS8i–o shipped 2026-10-25** (api 2026.10.81, brain-embedded 2026.10.52, agent-tools 2026.10.14, model-router 2026.10.18, tool-output-policy 2026.10.2; DONE.md), after the overnight WS1 run (VS Code chat #6) delivered 5 files in 6.5 hours. **WS1 is running** (contract, package skeleton, conformance harness, guards) on branch `feat/agent-run-ws1`; WS2a–g and WS6 are queued behind it, then WS3/WS4/WS5, then WS7. Board: epic 5979, one ticket per workstream. Revised 2026-10-25: adds run efficiency (§2.1, WS8, §6.10, §8.4). Evidence: one VS Code run took 79 turns to update this PRD and never updated it. |
+| Status | Approved design, in progress. **WS0 landed** (clean tree, `main` = `origin/main` at `6b1a1469e`, 2026-10-25). **WS8a–h shipped 2026-10-25 in VSIX 2026.10.76** (DONE.md); its leftovers are in ROADMAP. **WS8i–o shipped 2026-10-25** (api 2026.10.81, brain-embedded 2026.10.52, agent-tools 2026.10.14, model-router 2026.10.18, tool-output-policy 2026.10.2; DONE.md), after the overnight WS1 run (VS Code chat #6) delivered 5 files in 6.5 hours. **WS1 merged** (#878: contract, package skeleton, conformance harness, report-mode guards). **WS2a–g merged** (#880: all twelve policy modules under `packages/agent-run/src/policy/`). No entry point imports `@builderforce/agent-run` yet, so the old homes still run every execution. **Next: WS6** (telemetry; `src/telemetry/` does not exist yet), then WS3/WS4/WS5, then WS7. Status checked 2026-10-27. Board: epic 5979, one ticket per workstream. Revised 2026-10-25: adds run efficiency (§2.1, WS8, §6.10, §8.4). Evidence: one VS Code run took 79 turns to update this PRD and never updated it. |
 | Owner | Agents program (planning: the session model; implementation: Opus agents; verify: Sonnet agents) |
 | Entry points | VS Code · Rovr / Web / canvas · On-prem agent · Cloud / container |
 | Design reference | [`docs/design/one-agent-one-kernel.html`](../design/one-agent-one-kernel.html), the picture: end state, both matrices, retention ledger, telemetry. Live copy: https://claude.ai/artifact/Ggc3G5y2ZLkJsVe1jDHag8 |
@@ -678,13 +678,17 @@ Explore subagents in parallel.
         HumanChannel shows it before any work starts.
       - `llm.model_downgrade` also fires for auto-routed turns.
     - **Write-back.** Every entry point that reads ≥3 files commits a `codemap:` consolidation
-      at run end, with `tags`, `chatId` and `fileAnchors`. Read-only runs count.
+      at run end, with `chatId` and `fileAnchors` (the anchors are derived server-side for
+      every writer). There is no `tags` field: the `codemap:` key prefix is what readers
+      filter on (WS8d). Read-only runs count.
 
 ## 7. Retention ledger (nothing is lost)
 
 The full ledger, grouped by the parts of the one agent, is in the design reference
-("Every capability, and where it lives at the end"). WS1 copies it here in full and fills
-"Proven by" (§5.1). The rows most at risk:
+("Every capability, and where it lives at the end"). WS1 delivered the filled copy, with a
+"Proven by" entry per row, at [`packages/agent-run/docs/retention-ledger.md`](../../packages/agent-run/docs/retention-ledger.md).
+That file is the working ledger. 19 of its rows are marked **needs characterization test**;
+the WS that owns each one writes it first (§5.1 step 2). The rows most at risk:
 
 | Capability | Lives in, at the end | Found today in | Proven by |
 |---|---|---|---|

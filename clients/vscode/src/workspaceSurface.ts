@@ -543,7 +543,13 @@ export class WorkspaceSurface implements vscode.Disposable {
   private sendInit(): Promise<void> {
     const seq = ++this.initSeq;
     const run = (async (): Promise<void> => {
-      const init = await buildWorkspaceInit(this.ctx, { session: this.session, surface: this.surfaceRequest, boardBeside: !!this.host.boardBeside });
+      const init = await buildWorkspaceInit(this.ctx, {
+        session: this.session,
+        surface: this.surfaceRequest,
+        boardBeside: !!this.host.boardBeside,
+        // Only the newest init re-pushes: a superseded build's callback would post a duplicate.
+        onGroundingLate: () => { if (live.has(this) && seq === this.initSeq) this.refresh(); },
+      });
       if (seq !== this.initSeq) return this.latestInit;
       this.post(this.host.frame ? this.host.frame(init) : init);
     })();

@@ -2,6 +2,7 @@ import { readRecentSessionNotes } from "./sessionNotes";
 import { desktopRepoMapSection } from "./desktopContext";
 import { hostCostLeverOn } from "./hostCostLevers";
 import { symbolIndexGrounding } from "./workspaceSymbols";
+import { withinMs } from "./contextPack/withinMs";
 
 /** Single source of truth for the current workspace grounding summary, shared by the
  *  chat panels and the native chat participant (so none holds its own copy). */
@@ -40,7 +41,7 @@ export function invalidateStableGrounding(): void {
  * symbol index degrades to what remains, never to a failed turn.
  */
 export async function getGroundingWithHistory(root: string | undefined): Promise<string | undefined> {
-  const [stable, history] = await Promise.all([getStableGrounding(root), recentActivitySection(root)]);
+  const [stable, history] = await Promise.all([stableGroundingWithin(root, RUN_GROUNDING_BUDGET_MS), recentActivitySection(root)]);
   const sections = [stable, history].filter((s): s is string => !!s);
   return sections.length ? sections.join("\n\n") : undefined;
 }
@@ -67,6 +68,37 @@ export function getStableGrounding(root: string | undefined): Promise<string | u
     });
   }
   return stableGrounding.value;
+}
+
+/** How long the panel's `init` waits for the grounding before it posts without the index. */
+export const INIT_GROUNDING_BUDGET_MS = 1_500;
+/** How long a run's start (panel run or chat participant) waits for the grounding. */
+export const RUN_GROUNDING_BUDGET_MS = 3_000;
+
+/**
+ * {@link getStableGrounding}, waited on for at most `ms`. A cold definition index (a new
+ * workspace, or a snapshot written by another extractor) is a whole-workspace parse that
+ * can take minutes; nothing that renders or starts a run waits on it. Late, the build
+ * carries on and `onLate` fires once it lands, so the caller can re-read the now-memoised
+ * value. What a late caller gets meanwhile is `late`: the rescan's map alone (`"map"`, the
+ * default), or `undefined` (`"nothing"`) for a caller that already holds a fuller map and
+ * keeps it when handed nothing (the run port: `replaceWorkspaceMap(prompt, undefined)`).
+ */
+export async function stableGroundingWithin(
+  root: string | undefined,
+  ms: number,
+  opts: { onLate?: () => void; late?: "map" | "nothing" } = {},
+): Promise<string | undefined> {
+  const { onLate } = opts;
+  const work = getStableGrounding(root);
+  let settled = false;
+  // Registered before the race, so a build that beats the deadline is marked settled first.
+  const built = work.then(() => { settled = true; return true; }, () => { settled = true; return false; });
+  const value = await withinMs(work, ms, opts.late === "nothing" ? undefined : groundingSummary);
+  // Only a build that LANDED re-pushes: a failed one is cleared from the memo, and
+  // re-reading it would start the slow build again.
+  if (!settled && onLate) void built.then((ok) => { if (ok) onLate(); });
+  return value;
 }
 
 async function buildStableGrounding(root: string, map: string | undefined): Promise<string | undefined> {

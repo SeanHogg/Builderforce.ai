@@ -19,7 +19,7 @@ import { refreshPendingChanges } from "./gitChanges";
 import { editorRunSetupPorts } from "./runSetupPorts";
 import { recordEditorRunEnd } from "./editorRunEnd";
 import { boundServerIds } from "./sessionChats";
-import { getStableGrounding, recentActivitySection } from "./grounding";
+import { recentActivitySection, RUN_GROUNDING_BUDGET_MS, stableGroundingWithin } from "./grounding";
 import { setLocalChatRuns } from "./attention";
 import { createBrainRunHost, type BrainRunHost } from "./brainRunHost";
 import { changeSetIdentityForHostRun, recordChangeSetAroundRun } from "./runChangeSets";
@@ -348,7 +348,10 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
       recordEditorRunEnd(secrets, workspaceRoot(), `chat-${chatId}`, run, opts, { ledger: local.usage, chatId, runKey: chatId, identity: local.identity }),
     // Fresh per run: the notes of the run that just finished, not the panel's copy.
     recentActivity: () => recentActivitySection(workspaceRoot() || undefined),
-    grounding: () => getStableGrounding(workspaceRoot() || undefined),
+    // Bounded like the panel's init: a run never waits on a cold definition index's
+    // whole-workspace parse; the runs after it lands get the memoised index. Late, it
+    // hands back nothing, so the prompt keeps the (possibly fuller) map it already has.
+    grounding: () => stableGroundingWithin(workspaceRoot() || undefined, RUN_GROUNDING_BUDGET_MS, { late: "nothing" }),
     // PRD 35 E2 / E3 / E7: default checkout, context pack, BYO preflight; and a settled
     // run's background jobs die with it.
     ...editorRunSetupPorts(secrets, workspaceRoot),

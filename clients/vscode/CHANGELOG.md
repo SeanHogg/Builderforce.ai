@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.103] — The chat panel opens straight away again
+
+- **The panel no longer sits on "Connecting…" after an update.** 2026.10.102 changed how the symbol index reads code, so the first time a workspace opened, the whole index had to be rebuilt. The panel waited for that rebuild before it showed anything, which took minutes in a large workspace. It now opens at once and picks up the index when the rebuild finishes. The first run in a fresh workspace and the `@builderforce` chat participant no longer wait for it either.
+
 ## [2026.10.102] — Spend less for the same work, and attachments the model can read
 
 - **Attachments reach the model.** Attached text files and **Add context** used to arrive as a link only the editor could open, so the model never saw them. They are now put into the message, within a per-file and per-message budget (smaller for a model on your machine). Binaries upload to your BuilderForce account. Signed out, you get a clear error instead of a dead link. `#file` references in the chat panel work the same way.

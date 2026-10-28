@@ -8,7 +8,7 @@ import { posixShellReport } from "./posixShell";
 import { getTenantJwt, getCurrentUserId } from "./bfApi";
 import { getBaseUrl, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY } from "./gateway";
 import { fetchPersonalityBlock } from "./personalityLimbic";
-import { getStableGrounding } from "./grounding";
+import { INIT_GROUNDING_BUDGET_MS, stableGroundingWithin } from "./grounding";
 import { getEditorContextLive } from "./editorContext";
 import { detectPendingChanges } from "./gitChanges";
 import { resolveModelRoute } from "./modelRouting";
@@ -37,7 +37,13 @@ import type { WorkspaceCanvasSession } from "./workspaceSession";
  */
 export async function buildWorkspaceInit(
   ctx: vscode.ExtensionContext,
-  opts: { session: WorkspaceCanvasSession; surface: "chat" | "graph"; boardBeside?: boolean },
+  opts: {
+    session: WorkspaceCanvasSession;
+    surface: "chat" | "graph";
+    boardBeside?: boolean;
+    /** The definition index was still building at the deadline and has now landed: re-push init. */
+    onGroundingLate?: () => void;
+  },
 ): Promise<Record<string, unknown>> {
   const signedIn = !!(await ctx.secrets.get(SECRET_KEY));
   const token = signedIn ? ((await getTenantJwt(ctx.secrets)) ?? null) : null;
@@ -119,7 +125,9 @@ export async function buildWorkspaceInit(
     localModels: localModelOptions(await listLocalModels(getLocalModelsConfig())),
     // The workspace SHAPE only: run notes change after every run and reach each run
     // fresh through the host (`recentActivitySection`), so this prompt stays cacheable.
-    grounding: await getStableGrounding(root),
+    // Bounded: a cold definition index is a whole-workspace parse, and the panel shows
+    // "Connecting…" until init lands — it is re-pushed when the index arrives.
+    grounding: await stableGroundingWithin(root, INIT_GROUNDING_BUDGET_MS, { onLate: opts.onGroundingLate }),
     // Live editor context (active file / selection / open tabs). Seeds the React
     // app's ambient system channel; refreshed via `editorContext` messages.
     editorContext,

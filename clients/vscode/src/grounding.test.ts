@@ -12,7 +12,7 @@ vi.mock("./workspaceSymbols", () => ({ symbolIndexGrounding: symbols }));
 vi.mock("./hostCostLevers", () => ({ hostCostLeverOn: () => false }));
 vi.mock("./sessionNotes", () => ({ readRecentSessionNotes: async () => "" }));
 
-import { getStableGrounding, invalidateStableGrounding, setGroundingSummary } from "./grounding";
+import { getStableGrounding, invalidateStableGrounding, setGroundingSummary, stableGroundingWithin } from "./grounding";
 
 beforeEach(() => {
   setGroundingSummary("## Map");
@@ -49,5 +49,49 @@ describe("getStableGrounding memo", () => {
   it("with no root, is just the map", async () => {
     expect(await getStableGrounding(undefined)).toBe("## Map");
     expect(symbols).not.toHaveBeenCalled();
+  });
+});
+
+// A cold definition index is a whole-workspace parse (minutes on a big root, e.g. the
+// first open after the extractor changed). The panel's init and a run's start never wait
+// on it: they post the rescan's map now and re-read once the index lands.
+describe("stableGroundingWithin", () => {
+  it("serves the full grounding when the build beats the deadline, and never fires onLate", async () => {
+    invalidateStableGrounding();
+    const onLate = vi.fn();
+    expect(await stableGroundingWithin("/repo", 1_000, { onLate })).toBe("## Map\n\n## Repo map\n\n## Symbol index");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(onLate).not.toHaveBeenCalled();
+  });
+
+  it("serves the map alone past the deadline, then fires onLate once the index lands", async () => {
+    invalidateStableGrounding();
+    let finish!: (v: string) => void;
+    symbols.mockImplementationOnce(() => new Promise<string>((r) => { finish = r; }));
+    const onLate = vi.fn();
+    expect(await stableGroundingWithin("/repo", 10, { onLate })).toBe("## Map");
+    expect(onLate).not.toHaveBeenCalled();
+    finish("## Symbol index");
+    await vi.waitFor(() => expect(onLate).toHaveBeenCalledTimes(1));
+    expect(await getStableGrounding("/repo")).toBe("## Map\n\n## Repo map\n\n## Symbol index");
+  });
+
+  it("does not fire onLate for a build that failed after the deadline", async () => {
+    invalidateStableGrounding();
+    let fail!: (e: Error) => void;
+    repoMap.mockImplementationOnce(() => new Promise<string>((_, reject) => { fail = reject; }));
+    const onLate = vi.fn();
+    expect(await stableGroundingWithin("/repo", 10, { onLate })).toBe("## Map");
+    fail(new Error("desktop gone"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(onLate).not.toHaveBeenCalled();
+  });
+
+  it("late with late: \"nothing\", hands back undefined so a run keeps the map its prompt already has", async () => {
+    invalidateStableGrounding();
+    let finish!: (v: string) => void;
+    symbols.mockImplementationOnce(() => new Promise<string>((r) => { finish = r; }));
+    expect(await stableGroundingWithin("/repo", 10, { late: "nothing" })).toBeUndefined();
+    finish("## Symbol index");
   });
 });
