@@ -26,3 +26,18 @@ describe('stoppedTurn', () => {
     expect(isStoppedTurn({ metadata: '{not json' })).toBe(false);
   });
 });
+
+describe('a run stopped before it started', () => {
+  it('is a stopped turn of its own kind, and never a model reply', async () => {
+    const { isStoppedBeforeStart, stoppedBeforeStartRow } = await import('./stoppedTurn');
+    const { isModelReply } = await import('./modelReply');
+    const row = stoppedBeforeStartRow();
+    expect(isStoppedTurn(row)).toBe(true);
+    expect(isStoppedBeforeStart(row)).toBe(true);
+    expect(isModelReply(row)).toBe(false);
+    // A mid-run Stop keeps what the model wrote: still a reply, not a never-started run.
+    const midRun = { role: 'assistant', metadata: stoppedTurnMetadata({ model: 'm' }) };
+    expect(isStoppedBeforeStart(midRun)).toBe(false);
+    expect(isModelReply(midRun)).toBe(true);
+  });
+});

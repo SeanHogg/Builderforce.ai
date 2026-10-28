@@ -6,6 +6,7 @@
 
 import {
   getRunSnapshot,
+  type BrainMessage,
   type BrainRunSnapshot,
   type BrainTraceEvent,
   type ChatCompletionMessage,
@@ -15,6 +16,7 @@ import {
   type ReasoningIntent,
 } from "@seanhogg/builderforce-brain-embedded";
 import type { ChildView } from "./childRuns";
+import { listDelta, sentOf, type SentList } from "./listDelta";
 
 /** The serializable half of a `BrainRunRequest`, as the webview posts it. */
 export interface WebviewRunStart {
@@ -43,13 +45,21 @@ export interface WebviewRunStart {
   modelSurface?: ModelFallbackSurface | null;
 }
 
-/** One relayed change of a run — the snapshot, plus only the trace events and the
- *  streamed text not yet sent. */
+/** One relayed change of a run — the snapshot, plus only the trace events, appended
+ *  messages and streamed text not yet sent (`listDelta.ts`). */
 export interface RunSyncMessage {
   type: "run.sync";
   chatId: number;
-  snapshot: Omit<BrainRunSnapshot, "trace" | "streamingText">;
-  /** Index the delta continues from; 0 with a full trace when the sink must resync. */
+  snapshot: Omit<BrainRunSnapshot, "trace" | "streamingText" | "appended"> & {
+    /** A DELTA, like `trace`: the messages after `appendedFrom` (all of them when 0). */
+    appended: BrainMessage[];
+  };
+  appendedDrop: number;
+  appendedFrom: number;
+  /** Events the sink drops from the head of its trace — the store trimmed its bound. */
+  traceDrop: number;
+  /** How many of the sink's events (after the drop) the delta continues from; 0 with a
+   *  full trace when the sink must resync. */
   traceFrom: number;
   trace: BrainTraceEvent[];
   /** Offset the streamed text continues from; 0 with the whole text when the sink must resync. */
@@ -84,17 +94,18 @@ export interface RunSink {
   post(message: RunHostMessage): void;
 }
 
-/** Per-sink bookkeeping for the deltas: what was last sent for each chat. */
+/** Per-sink bookkeeping for the deltas: what was last sent for each chat — the trace's
+ *  {@link SentList} at the top level, the appended messages' beside it. */
 export interface SinkEntry {
   sink: RunSink;
-  sent: Map<number, { len: number; first: BrainTraceEvent | undefined; text?: string }>;
+  sent: Map<number, SentList<BrainTraceEvent> & { text?: string; appended?: SentList<BrainMessage> }>;
 }
 
 /**
- * The relay message for one chat, to one sink. The trace is shipped as a DELTA: the
- * store appends in place and trims from the head only past its bound, so the events
- * after the last sent index are new unless the head moved (or the sink is new) — in
- * which case the whole bounded trace is resent from 0.
+ * The relay message for one chat, to one sink. The trace and the appended messages are
+ * shipped as DELTAS (`listDelta.ts`): the store appends in place and trims from the head
+ * only past its bound, so a frame carries the trim and the new items — never the whole
+ * bounded list again unless the sink is new or the list was replaced.
  *
  * The streamed text is a delta too: a reply only grows within a turn, and resending all
  * of it on every frame made a long reply O(n²) bytes through the host. It continues from
@@ -102,13 +113,23 @@ export interface SinkEntry {
  */
 export function syncMessageFor(entry: SinkEntry, chatId: number): RunSyncMessage {
   const snapshot = getRunSnapshot(chatId);
-  const trace = snapshot.trace;
   const last = entry.sent.get(chatId);
-  const continues = last !== undefined && last.len <= trace.length && (last.len === 0 || trace[0] === last.first);
-  const traceFrom = continues ? last.len : 0;
+  const trace = listDelta(snapshot.trace, last);
+  const appended = listDelta(snapshot.appended, last?.appended);
   const text = snapshot.streamingText;
   const textFrom = last?.text !== undefined && text.startsWith(last.text) ? last.text.length : 0;
-  entry.sent.set(chatId, { len: trace.length, first: trace[0], text });
+  entry.sent.set(chatId, { ...sentOf(snapshot.trace), text, appended: sentOf(snapshot.appended) });
   const { trace: _omit, streamingText: _text, ...rest } = snapshot;
-  return { type: "run.sync", chatId, snapshot: rest, traceFrom, trace: trace.slice(traceFrom), textFrom, text: text.slice(textFrom) };
+  return {
+    type: "run.sync",
+    chatId,
+    snapshot: { ...rest, appended: appended.items },
+    appendedDrop: appended.drop,
+    appendedFrom: appended.from,
+    traceDrop: trace.drop,
+    traceFrom: trace.from,
+    trace: trace.items,
+    textFrom,
+    text: text.slice(textFrom),
+  };
 }

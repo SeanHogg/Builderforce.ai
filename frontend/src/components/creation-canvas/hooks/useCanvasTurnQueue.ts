@@ -2,7 +2,7 @@
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useInsertionEffect, useRef } from 'react';
 import type { CanvasExportAction } from '@/lib/canvasExports';
 import { useLatestRef } from './useLatestRef';
-import { clearRunError, useChatTurns, type BrainRunSnapshot } from '@seanhogg/builderforce-brain-embedded';
+import { clearRunError, startsRun, useChatTurns, type BrainRunSnapshot } from '@seanhogg/builderforce-brain-embedded';
 import { canvasRunKey } from '../brainTurn/canvasRunKey';
 import { creationSessionsApi, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import type { useTranslations } from 'next-intl';
@@ -115,6 +115,13 @@ export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRun, e
   const startCanvasTurn = useCallback((text?: string) => {
     const value = (text ?? prompt).trim();
     if (!value || !assistantGate.assistantAllowed) return; // a closed-book assessment refuses every turn, composer or not
+    // A stop ("Stop the run" — the progress guard's pause offers it) is the Stop: it stops
+    // this turn, and with nothing running it starts nothing rather than a fresh run.
+    if (!startsRun(value)) {
+      if (text === undefined) setPrompt('');
+      stopCanvasRun();
+      return;
+    }
     // The raw hold-or-not step of the door, so an undefined `text` (the composer's own
     // prompt) reaches `evaluateCanvas` as undefined — it reads and clears the prompt itself.
     if (holdTurn(value)) {
@@ -122,7 +129,7 @@ export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRun, e
       return;
     }
     evaluateCanvasRef.current(text);
-  }, [assistantGate.assistantAllowed, evaluateCanvasRef, holdTurn, prompt, setPrompt]);
+  }, [assistantGate.assistantAllowed, evaluateCanvasRef, holdTurn, prompt, setPrompt, stopCanvasRun]);
   // eslint-disable-next-line react-hooks/refs
   // Same timing as `useLatestRef`: after commit, before any layout effect.
   useInsertionEffect(() => { startCanvasTurnRef.current = startCanvasTurn; });

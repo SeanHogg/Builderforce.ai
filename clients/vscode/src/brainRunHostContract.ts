@@ -182,6 +182,8 @@ export interface BrainRunHost {
   stop(chatId: number): void;
   confirm(chatId: number, ok: boolean): void;
   clearError(chatId: number): void;
+  /** The panel's copy of this run fell out of step: resend it whole (`runRelay.ts`). */
+  resync(chatId: number): void;
   /**
    * The Auto-mode switch moved for ONE chat — the one whose panel it was flipped in.
    *

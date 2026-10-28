@@ -11904,6 +11904,7 @@
       "thought": "Razonamiento",
       "replyFromThought": "Recuperado del razonamiento del modelo: este turno terminó sin una respuesta aparte.",
       "stoppedReply": "Detenido por ti: esto es lo que el modelo había escrito cuando pulsaste Detener.",
+      "stoppedBeforeStart": "Detenido por ti antes de que empezara la ejecución: no se hizo nada.",
       "subagentOf": "subagente de {owner}",
       "ownerTag": "responsable",
       "you": "Tú",

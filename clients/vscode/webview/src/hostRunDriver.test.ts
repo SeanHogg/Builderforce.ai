@@ -112,3 +112,34 @@ describe("the host's Hybrid-fallback announcement", () => {
     stop();
   });
 });
+
+describe("the run.sync frames", () => {
+  const ev = (label: string) => ({ ts: "t", category: "tool", label, result: "ok" });
+  const frame = (chatId: number, over: Record<string, unknown>) => ({
+    type: "run.sync", chatId,
+    snapshot: { running: true, error: "", errorAction: null, pendingConfirm: null, messagesEpoch: 0, appended: [], hasTrace: true, activity: null, byoUnresolved: [], providerCap: [], turn: null },
+    appendedDrop: 0, appendedFrom: 0, traceDrop: 0, traceFrom: 0, trace: [], textFrom: 0, text: "",
+    ...over,
+  });
+
+  it("a token frame keeps the trace the transcript already holds", async () => {
+    const { driver, brain } = await load();
+    const stop = driver.installHostRunDriver();
+    fromHost(frame(51, { trace: [ev("a"), ev("b")] }));
+    const held = brain.getRunSnapshot(51).trace;
+    fromHost(frame(51, { traceFrom: 2, text: "Now I" }));
+    expect(brain.getRunSnapshot(51).trace).toBe(held);
+    expect(brain.getRunSnapshot(51).streamingText).toBe("Now I");
+    stop();
+  });
+
+  it("a delta this panel cannot be in step with asks for the run whole instead of applying it", async () => {
+    const { driver, brain } = await load();
+    const stop = driver.installHostRunDriver();
+    posted.length = 0;
+    fromHost(frame(52, { traceFrom: 3, trace: [ev("d")] }));
+    expect(posted).toContainEqual({ type: "run.resync", chatId: 52 });
+    expect(brain.getRunSnapshot(52).trace).toEqual([]);
+    stop();
+  });
+});

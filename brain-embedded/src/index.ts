@@ -301,6 +301,7 @@ export {
   startRun,
   runBrainLoop,
   stopRun,
+  stopBeforeStart,
   isRunning,
   subscribeRun,
   getRunSnapshot,
@@ -682,7 +683,7 @@ export { modelScorecard, formatModelScorecard, modelTurnLog, formatModelTurnLog 
 export type { ModelScore, ModelTurn } from './modelScorecard';
 
 // A reply the user stopped mid-stream — kept, attributed, and never replayed to a model
-export { STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, stoppedTurnMetadata, isStoppedTurn } from './stoppedTurn';
+export { STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, stoppedTurnMetadata, isStoppedTurn, isStoppedBeforeStart, stoppedBeforeStartRow } from './stoppedTurn';
 export type { StoppedTurnSource } from './stoppedTurn';
 
 // WHICH model name a viewer is allowed to see — the routed product ("Builderforce
@@ -808,6 +809,7 @@ export { USAGE_SURFACE_HEADER, USAGE_SURFACES, isUsageSurface, withUsageSurface,
 // under it (moved from brain-ui, which re-exports it), and "the first message creates
 // the chat" (single in-flight create + first-turn auto-title port).
 export { useChatTurns } from './useChatTurns';
+export { startsRun } from './userTurnRuns';
 export type { ChatTurns, ChatTurnsOptions } from './useChatTurns';
 export { useRunRefreshTick, RUN_REFRESH_MS } from './useRunRefreshTick';
 export { useQueuedTurns } from './useQueuedTurns';

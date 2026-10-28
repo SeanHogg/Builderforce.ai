@@ -32,6 +32,7 @@ export function brainChatLabels(): Record<string, string> {
     "tl.thought": t("Thought"),
     "tl.replyFromThought": t("Recovered from the model's reasoning — the turn ended without a separate reply."),
     "tl.stoppedReply": t("Stopped by you — this is what the model had written when you pressed Stop."),
+    "tl.stoppedBeforeStart": t("Stopped by you before the run started — nothing was done."),
     "tl.you": t("You"),
     "tl.assistant": "BuilderForce",
     "tl.input": t("Input"),
@@ -103,10 +104,6 @@ export function brainChatLabels(): Record<string, string> {
     "app.renamePlaceholder": t("Chat name"),
     // The inline-editable chat title in the header: the button's accessible name, the
     // field's label, and the two outcomes (which are also Enter/Escape).
-    "app.editTitle": t("Edit chat title"),
-    "app.titleLabel": t("Chat title"),
-    "app.saveTitle": t("Save chat title"),
-    "app.cancelTitle": t("Cancel"),
     // The actionable half of an entitlement error: the banner buttons take the user
     // to the page that unblocks the turn.
     "app.upgrade": t("Upgrade"),

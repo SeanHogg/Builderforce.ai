@@ -137,3 +137,29 @@ describe("Stop and steer reach the command in flight (PRD 35 E10)", () => {
     expect(getRunTrace(chatId).some((e) => e.label === "steer.applied")).toBe(true);
   });
 });
+
+describe("a Stop while the run is still setting up", () => {
+  it("never starts its loop, records the stop, and answers the turn so a reopened chat does not start it", async () => {
+    const chatId = freshChatId();
+    const gateway = fakeGateway([{ text: "never asked" }]);
+    let releaseTools!: () => void;
+    const toolsReady = new Promise<void>((r) => { releaseTools = r; });
+    const base = ports(gateway, []);
+    const saved: Array<{ role: string; content: string; metadata?: string }> = [];
+    const persistence = {
+      ...base.persistence,
+      sendMessages: async (id: number, msgs: Array<{ role: string; content: string; metadata?: string }>) => {
+        saved.push(...msgs);
+        return base.persistence.sendMessages(id, msgs as never);
+      },
+    };
+    const host = createBrainRunHost({ ...base, persistence: persistence as never, tools: async () => { await toolsReady; return []; } });
+    const run = host.start({ chatId, systemPrompt: "sys", userTurn: "do the work", autoApprove: true, evermind: false });
+    host.stop(chatId);
+    releaseTools();
+    await run;
+    expect(gateway.requests).toHaveLength(0);
+    expect(getRunTrace(chatId).some((e) => e.label === "agent.stopped")).toBe(true);
+    expect(saved.some((m) => m.role === "assistant" && (m.metadata ?? "").includes("stoppedByUser"))).toBe(true);
+  });
+});

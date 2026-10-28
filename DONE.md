@@ -1,3 +1,53 @@
+## ✅ RESOLVED 2026-10-28 — Stop before start: the last windows (brain-embedded 2026.10.68 · brain-ui 2026.10.28 · VSIX 2026.10.108)
+
+Round-4 review of the "Stop the run" fix (below) found six gaps; all closed:
+- **Stop during the change-set baseline was dropped.** The editor start captures a git baseline before the host claims the chat, and `runSteer.stop` ignores an unclaimed key. `clients/vscode/src/hostStartGate.ts` (`gateStarts`) holds a Stop (or a typed stop) asked in that window and hands it to the host as soon as `host.start` has claimed the key; `brainRunHostPorts.ts` routes its start through it. Test: `hostStartGate.test.ts`.
+- **Wrong caption.** A before-start row carries `stoppedBeforeStart` metadata (`isStoppedBeforeStart`); `MessageRows` shows the new `stoppedBeforeStart` label in place of the body (labels.ts, brainChatLabels.ts, 5 l10n bundles, 5 frontend catalogs).
+- **Not mirrored on the host path.** `stopBeforeStart` now `recordAppended`s the row, so `run.sync` carries it.
+- **Counted as a model reply.** `isModelReply` excludes it (Retry, newest-reply actions, triage claim detectors).
+- **No durable stop step.** `stopBeforeStart` persists the `agent.stopped` step row ahead of the answer row, so reopened-chat diagnostics count it.
+- **Draft chat's first send.** `useBrainConversation.stop` marks the draft (`null`) and `send` moves the mark to the chat id `ensureChatId` returns.
+
+## ✅ RESOLVED 2026-10-27 — "Stop the run" stops the run (brain-embedded 2026.10.66 · VSIX 2026.10.106)
+
+- **Symptom.** In VS Code chat #6 the WS8p pause asked "Continue with guidance / Stop the run". The person chose Stop, and the run kept going.
+- **Cause.** An `ask_user` question ends the run, and the question becomes its reply. The answer then reached an idle chat as an ordinary send, and `useBrainConversation.send` launched a run on it. The editor's `runSteer.ts` already treats a stop as the Stop button, but only while a run is live. Two other paths would have started a run on the same trailing "stop": reopening the chat (the auto-reply on load) and Retry.
+- **Fix.** One rule, `brain-embedded/src/userTurnRuns.ts`:
+  - `startsRun(text)` = `!stopIntent(text)`, from `@builderforce/run-guards`, the same matcher `runSteer.ts` uses.
+  - `send` keeps a stop turn as the answer and launches nothing.
+  - The auto-reply skips a trailing stop. It was lifted into `useAutoReplyTrailingTurn.ts`, so `useBrainConversation.ts` shrank from 691 to about 665 lines.
+  - `unansweredTurnIndex` (moved here, re-exported) treats a trailing stop as answered, so Retry never relaunches it.
+- **The shared turn door** (`useChatTurns`): a stop typed mid-run now stops the run on every surface that shares it, instead of waiting in the queue as the next turn. On the web it is the Stop button and is not saved as a message; in the editor the host shows it in the chat.
+- **Review follow-ups (brain-embedded 2026.10.67 · VSIX 2026.10.107).**
+  - A mid-run stop is the Stop and is never held, so nothing is stranded behind it (`useQueuedTurns` flushes one turn per run edge).
+  - A new `isDirected` port means a stop addressed to a participant is never the Stop. The editor and the web panel pass it.
+  - A stop the host routes (the editor's run) still clears the panel's queue.
+  - `conv.stop` drops a launch whose send was still getting ready (`cancelledLaunchRef`), and the editor and the web panel now stop through it.
+  - A stop carrying an attachment runs, so send and reload agree.
+  - The Creation Canvas's `startCanvasTurn` applies `startsRun` too.
+  - A Stop is honoured in every window before a run starts:
+    - while a send is persisting;
+    - after `prepareRun`: `launch` re-checks, and a `launchingRef` covers the auto-reply and Retry too;
+    - during the host's setup: `runSteer.stopped(key)` is checked inside `runTurn`'s `try`, so its cleanup still runs;
+    - during the editor's limbic fetch: `useChatSend`'s `preparing` clears only in the same commit as `conv.sending`, so the queue never flushes into the gap. A send dropped there goes back to the composer.
+  - One `stopBeforeStart` (`runControl.ts`) settles a run stopped before it starts, for both the conversation and the host:
+    - an `agent.stopped` step, so the run journal reads cancelled, not completed;
+    - a durable "Stopped before it started." answer row, so a reopened chat does not start the work.
+  - `runSteer.stop` with nothing claimed leaves no mark. That mark used to swallow the next run's waiting words. `runSteer.test.ts` is new, plus a setup-stop case in `brainRunHost.steer.test.ts`.
+- **Tests.** `userTurnRuns.test.ts` is new. Cases were appended to `useBrainConversation.test.tsx` and `useChatTurns.test.tsx`, and their existing cases run unchanged.
+
+## ✅ RESOLVED 2026-10-27 — The chat panel keeps up with typing and streaming in a long chat (VSIX 2026.10.105)
+
+- **Symptom.** In VS Code chat #6 (1,572 messages, a 500-event live trace), typing in the composer lagged, and a streaming reply appeared slowly.
+- **Every keystroke re-rendered the transcript.** `useChatSend.takeAttachments` was keyed on `conv`, which is a new object every render. The new identity cascaded through `sendOrQueue` into `answerQuestion` / `replayMessage`, which are props of the memoized `<BrainTimeline>` and its rows. So every keystroke, and every frame, re-rendered about 150 rows, each re-parsing its metadata and `<think>` text. It is now keyed on `pendingAttachments` / `removeAttachment`.
+- **Every 32 ms streaming frame rebuilt the transcript.** The webview built a new trace array per `run.sync` frame even when no event had arrived, so the settled timeline was re-mapped and re-sorted per token. Each frame also re-shipped `snapshot.appended` (up to 50 replies) through `postMessage`. Its fresh identity re-fired `useChatTranscript`'s splice, which re-rendered the whole chat surface a second time.
+- **A trace at its 500-event bound was resent whole on every new event.** The delta only understood growth, not a head trim.
+- **One delta rule for both lists** (`clients/vscode/src/listDelta.ts`). The host ships the head trim plus the new items (`traceDrop`/`traceFrom`, `appendedDrop`/`appendedFrom`). The webview applies them and keeps the SAME array when nothing changed. A replaced list, or a new panel, is resent whole as before.
+  - The host finds the last-sent TAIL in the current list; the old head is gone after a trim.
+  - A panel whose copy is out of step posts `run.resync` instead of building a short list. This happens when its store evicted the cell between runs. The host then resends that run whole.
+- **The relay moved out of `brainRunHost.ts`** (406 lines) into `runRelay.ts`, which owns the sinks and their delta bookkeeping. `brainRunHost.ts` is now 396 lines. The webview driver reads the host's `RunSyncMessage` type instead of a hand-copied frame, and the frame's type now says `snapshot.appended` is a delta.
+- **Tests.** `listDelta.test.ts` is new. Two relay cases were appended to `brainRunHost.test.ts` and two frame cases to `webview/src/hostRunDriver.test.ts`. Their existing cases run unchanged.
+
 ## ✅ RESOLVED 2026-10-27 — A run that says it is ready now acts (PRD 35 WS8p · VSIX 2026.10.104 · run-guards 2026.10.2 · brain-embedded 2026.10.65 · agent-run 2026.10.82 · api 2026.10.89)
 
 - **Symptom.** VS Code chat #6 said "Now I have everything I need" and read one more file, turn after turn (run #562: 105 turns, `⚠ SPUN`). Nothing tripped:

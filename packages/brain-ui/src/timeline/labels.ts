@@ -32,6 +32,8 @@ export interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels {
    *  when Stop was pressed, kept so the reader can see what went wrong and (from the
    *  provenance chip) which model did it. See `stoppedTurn.ts` in brain-embedded. */
   stoppedReply: string;
+  /** In place of a stopped turn's body when its run never started (`isStoppedBeforeStart`). */
+  stoppedBeforeStart: string;
   you: string;
   assistant: string;
   /** Beside a SUB-AGENT's name: whose it is — must contain `{owner}`. */
@@ -136,6 +138,7 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   thought: 'Thought',
   replyFromThought: "Recovered from the model's reasoning — the turn ended without a separate reply.",
   stoppedReply: 'Stopped by you — this is what the model had written when you pressed Stop.',
+  stoppedBeforeStart: 'Stopped by you before the run started — nothing was done.',
   you: 'You',
   assistant: 'BuilderForce',
   subagentOf: 'sub-agent of {owner}',

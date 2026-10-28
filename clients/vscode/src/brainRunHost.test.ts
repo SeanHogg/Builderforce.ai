@@ -572,3 +572,39 @@ describe("a sub-agent is a run of its own, in the background, owned by the run t
     expect(childReply?.chatId).toBe(chatId);
   });
 });
+
+describe("the relay's frames while a reply streams", () => {
+  const ev = (label: string) => ({ ts: "t", category: "tool" as const, label, result: "ok" });
+  const msg = (id: number) => ({ id, chatId: 1, seq: id, role: "assistant" as const, content: `reply ${id}`, createdAt: "" });
+  const snap = (trace: ReturnType<typeof ev>[], appended: ReturnType<typeof msg>[], streamingText = ""): BrainRunSnapshot => ({
+    running: true, streamingText, error: "", errorAction: null, pendingConfirm: null, messagesEpoch: appended.length,
+    appended, hasTrace: trace.length > 0, trace, activity: null, byoUnresolved: [], providerCap: [], turn: null,
+  } as unknown as BrainRunSnapshot);
+
+  it("a token frame carries no trace event and no appended message already sent", () => {
+    const chatId = freshChatId();
+    const trace = [ev("a"), ev("b")];
+    const appended = [msg(1), msg(2)];
+    applyRemoteRun(chatId, snap(trace, appended));
+    const entry: SinkEntry = { sink: { post: () => undefined }, sent: new Map() };
+    expect(syncMessageFor(entry, chatId).snapshot.appended).toHaveLength(2);
+    applyRemoteRun(chatId, snap(trace, appended, "Now I"));
+    const frame = syncMessageFor(entry, chatId);
+    expect(frame.trace).toEqual([]);
+    expect(frame.snapshot.appended).toEqual([]);
+    expect(frame.appendedFrom).toBe(2);
+    expect(frame.text).toBe("Now I");
+  });
+
+  it("a trace trimmed at its bound ships the trim and the new event, not the whole trace", () => {
+    const chatId = freshChatId();
+    const trace = [ev("a"), ev("b"), ev("c")];
+    applyRemoteRun(chatId, snap(trace, []));
+    const entry: SinkEntry = { sink: { post: () => undefined }, sent: new Map() };
+    syncMessageFor(entry, chatId);
+    const next = ev("d");
+    applyRemoteRun(chatId, snap([trace[1], trace[2], next], []));
+    const frame = syncMessageFor(entry, chatId);
+    expect(frame).toMatchObject({ traceDrop: 1, traceFrom: 2, trace: [next] });
+  });
+});

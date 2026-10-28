@@ -5,13 +5,15 @@
  * Starting a run is `startRun.ts`; the loop itself is `runLoop.ts`.
  */
 
+import { stepRow } from '@builderforce/agent-loop';
 import type { BrainMessage } from '../types';
 import type { BrainTraceEvent } from '../brainTriage';
 import { getRunDriver } from '../runDriver';
 import { forgetResolvedModels } from '../lastResolvedModel';
 import { toolActivity } from '../runActivity';
 import { EMPTY_SNAPSHOT } from './runCell';
-import { cells, emit, getCell, pushTrace, recordAppended, storeListeners } from './runCells';
+import { cells, emit, getCell, nowIso, pushTrace, recordAppended, storeListeners } from './runCells';
+import { STOPPED_TURN_STEP, stoppedBeforeStartRow } from '../stoppedTurn';
 import { stoppedTurnOf } from './turnPersistence';
 
 /**
@@ -21,7 +23,7 @@ import { stoppedTurnOf } from './turnPersistence';
 function driverFor(key: RunKey) {
   return typeof key === 'number' ? getRunDriver() : null;
 }
-import type { BrainRunSnapshot, GlobalRunState, RunKey } from './runTypes';
+import type { BrainRunPersistence, BrainRunSnapshot, GlobalRunState, RunKey } from './runTypes';
 
 /**
  * Drop all run state. For tests/teardown only — there's no per-chat eviction in
@@ -133,6 +135,35 @@ export function getRunTrace(chatId: RunKey | null): BrainTraceEvent[] {
  * `running` flips to false when `runLoop` unwinds and `startRun`'s `finally`
  * fires; we emit here too so the Stop is reflected immediately.
  */
+/**
+ * A run the Stop reached while it was still setting up, before its loop started — the ONE
+ * place both the conversation (`launch`) and the editor's host (`runTurn`) settle it:
+ *  - the same {@link STOPPED_TURN_STEP} a mid-run Stop records, so the run journal reads it
+ *    as cancelled (not completed) and the diagnostics count it as a stop;
+ *  - an answer row after the person's saved turn (`stoppedBeforeStartRow`), or a reopened
+ *    chat (the auto-reply on load, Retry) would start that work after all.
+ * Best-effort: the run did not start either way. Resolves to the saved row, if any.
+ */
+export async function stopBeforeStart(runKey: RunKey, chatId: number, persistence: Pick<BrainRunPersistence, 'sendMessages'>): Promise<BrainMessage | undefined> {
+  const c = getCell(runKey);
+  const step: BrainTraceEvent = { ts: nowIso(), category: 'message', label: STOPPED_TURN_STEP, result: 'Stopped by user before the run started.' };
+  pushTrace(c, step);
+  try {
+    // The step is durable too (no run is persisting steps yet), so a reopened chat's
+    // diagnostics count the stop; the answer row comes last, after the person's turn.
+    const rows = await persistence.sendMessages(chatId, [stepRow(step), stoppedBeforeStartRow()]);
+    const row = rows[rows.length - 1];
+    // Mirrored like every row a run persists, so a host-run panel sees it on `run.sync`.
+    if (row) {
+      recordAppended(c, row);
+      emit(c);
+    }
+    return row;
+  } catch {
+    return undefined;
+  }
+}
+
 export function stopRun(chatId: RunKey): void {
   const driver = driverFor(chatId);
   if (driver) return driver.stop(chatId as number);

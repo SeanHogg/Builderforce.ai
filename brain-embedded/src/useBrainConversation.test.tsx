@@ -759,3 +759,63 @@ describe('unansweredTurnIndex', () => {
     expect(unansweredTurnIndex([])).toBe(-1);
   });
 });
+
+describe('a stop sent to an idle chat (the pause question answered "Stop the run")', () => {
+  it('is kept as the answer and starts no run', async () => {
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 31, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+    await act(async () => { await hook.current.send('Stop the run'); });
+    expect(rowsOfRole('user').map((m) => m.content)).toEqual(['Stop the run']);
+    expect(mockStream).not.toHaveBeenCalled();
+    expect(hook.current.sending).toBe(false);
+  });
+
+  it('is not answered when the chat is reopened on it', async () => {
+    vi.mocked(persistence.getMessages).mockResolvedValue([
+      { id: 1, chatId: 32, role: 'user', content: 'Stop the run', metadata: null, seq: 1, createdAt: '' },
+    ] as never);
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 32, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+    await waitFor(() => expect(hook.current.messages).toHaveLength(1));
+    expect(mockStream).not.toHaveBeenCalled();
+    expect(hook.current.retryLastTurn()).toBe(false);
+  });
+
+  it('a stop with an attachment is work: it runs, as the reload would', async () => {
+    mockStream.mockResolvedValueOnce(result({ text: 'looked' }));
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 33, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+    const attachment = { key: 'a1', name: 'shot.png', type: 'image/png', imageUrl: 'data:image/png;base64,AA==' };
+    await act(async () => { await hook.current.send('stop', { attachments: [attachment as never] }); });
+    expect(mockStream).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Stop while a send is still getting ready', () => {
+  it('drops the launch that send would have started', async () => {
+    let persist!: () => void;
+    vi.mocked(persistence.sendMessages).mockImplementationOnce(
+      (_chatId: number, msgs: Array<{ role: string; content: string; metadata?: string }>) =>
+        new Promise((resolve) => {
+          persist = () => resolve(msgs.map((m) => ({ id: ++seq, role: m.role, content: m.content, metadata: m.metadata ?? null, seq, createdAt: '' })) as never);
+        }),
+    );
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 34, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+    let sent!: Promise<boolean>;
+    act(() => { sent = hook.current.send('do the work'); });
+    await waitFor(() => expect(hook.current.sending).toBe(true));
+    act(() => hook.current.stop());
+    await act(async () => { persist(); await sent; });
+    expect(mockStream).not.toHaveBeenCalled();
+    expect(rowsOfRole('user').map((m) => m.content)).toEqual(['do the work']);
+  });
+});

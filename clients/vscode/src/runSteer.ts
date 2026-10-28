@@ -14,7 +14,8 @@
  *     on, together and in order, as one new turn — unless the run was STOPPED, which ends
  *     the conversation's work, waiting words included.
  *
- * No `vscode` import: tested through the host (`brainRunHost.steer.test.ts`).
+ * No `vscode` import: tested through the host (`brainRunHost.steer.test.ts`) and directly
+ * (`runSteer.test.ts`).
  */
 
 import { drainRunSteering, isRunning, queueRunSteering, type ChatInputAttachment } from "@seanhogg/builderforce-brain-embedded";
@@ -38,6 +39,8 @@ export interface RunSteer {
   stop(runKey: number): void;
   /** A run settled: what still waits for it is its next turn (a stopped run's is dropped). */
   settled(runKey: number): void;
+  /** Stopped while it was still setting up — the host does not start its loop. */
+  stopped(runKey: number): boolean;
 }
 
 export function createRunSteer(deps: RunSteerDeps): RunSteer {
@@ -51,12 +54,15 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
   };
 
   const stop = (runKey: number): void => {
+    // Nothing claimed: nothing to stop, and no mark left to swallow the NEXT run's words.
+    if (!deps.isBusy(runKey)) return;
     stopped.add(runKey);
     deps.childHost.stop(runKey);
   };
 
   return {
     stop,
+    stopped: (runKey) => stopped.has(runKey),
 
     steer(runKey, text, attachments) {
       if (!text.trim()) return;

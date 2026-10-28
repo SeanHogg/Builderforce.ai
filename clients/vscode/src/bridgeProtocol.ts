@@ -87,6 +87,8 @@ export const BRAIN_HOST_MESSAGES = [
   'run.steer',
   'run.autoApprove',
   'run.clearError',
+  /** The panel's copy of a run fell out of step; the host resends it whole. */
+  'run.resync',
   'llm.fetch',
   'llm.abort',
   'model.set',

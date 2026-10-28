@@ -2,6 +2,30 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.108] — A stop right after you send is never lost
+
+- **Stop works while the run is still getting ready.** Before a run starts, the editor records where your files stand so it can show what the run changed. A Stop pressed (or "stop" typed) in that moment was dropped, and the run started anyway. It is now held and stops the run before it begins.
+- **Stop works on a brand-new chat's first message too,** while the chat itself is still being created.
+- **A run stopped before it started says so.** Its row reads "Stopped by you before the run started — nothing was done." instead of the caption for a cut-off reply. It no longer counts as the model's answer, so Retry, copy and rating skip it. The stop is also kept in the chat's diagnostics after you reopen it.
+
+## [2026.10.107] — Stop is the Stop, wherever you say it
+
+- **Nothing gets stuck behind a stop.** A message typed after "stop", while the stopped run was still winding down, could sit in the queue and not send until some later run ended. A stop is now acted on at once and never queued, so the next message goes out as soon as the run is down.
+- **A stop sent to an invited agent or person is a message to them.** It no longer stops BuilderForce's own run.
+- **Stop works the moment you send.** Pressing Stop, or typing "stop", while a message is still being prepared or the run is still starting up used to let the run start and do all its work anyway. That run is now never started.
+- **The Creation Canvas answers "Stop the run" the same way.** It stops the canvas's run, and with nothing running it starts nothing.
+- **A message that only says "stop" but carries an attachment is treated as work,** both when you send it and when the chat is reopened.
+
+## [2026.10.106] — "Stop the run" stops it
+
+- **Answering "Stop the run" no longer starts the work again.** When a run keeps saying it is ready and doesn't act, it stops and asks you to continue with guidance or stop the run. Asking ends the run, so choosing "Stop the run" was sent as a new message, and that message started a fresh run that kept working. A stop sent when nothing is running is now kept as your answer and starts nothing, and reopening the chat on it doesn't restart the work either.
+- **A stop typed while a run is going stops it everywhere.** In the editor it already did. On the other surfaces that share the chat (the web app, Rovr, the Creation Canvas), "stop", "Stop the run" or "cancel the task" used to wait behind the run as its next turn. It now stops the run at once.
+
+## [2026.10.105] — Typing and streaming keep up in a long chat
+
+- **The prompt box no longer lags in a long chat.** Every keystroke re-rendered every visible message in the transcript (about 150 rows) and re-parsed each one's details. A keystroke now leaves the transcript alone.
+- **Replies stream smoothly again.** Each streamed update (about 30 a second) used to carry the run's recent replies again and rebuild the whole transcript, even when only the reply being written had changed. Now only the reply being written repaints. A run that has passed 500 steps no longer resends all of them after each new step.
+
 ## [2026.10.104] — A run that says it is ready now acts
 
 - **"Now I have everything I need" no longer leads to another read.** A run that kept saying it was ready (or about to write) and then read one more file never tripped anything, because each new file looked like progress. The second time a run says it is ready and then only reads, it is told to act. The next time, it is given only the tools that make the change (or hand the work off). If it still doesn't act, it stops and asks you what to do. This applies to every run, sub-agents included, before and after it has edited anything. A long review that reads many files without claiming to be done is not affected.

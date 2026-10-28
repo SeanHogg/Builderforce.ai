@@ -11,8 +11,10 @@
 
 import { isConsolidationMarker } from '@seanhogg/builderforce-memory/working';
 import { isActivityMessage } from './chatActivity';
+import { isStoppedBeforeStart } from './stoppedTurn';
 import { isStepMessage } from './types';
 
 export function isModelReply(m: { role: string; metadata?: string | null }): boolean {
-  return m.role === 'assistant' && !isStepMessage(m) && !isConsolidationMarker(m) && !isActivityMessage(m);
+  // A run stopped before it started leaves a marker row, written by no model.
+  return m.role === 'assistant' && !isStepMessage(m) && !isConsolidationMarker(m) && !isActivityMessage(m) && !isStoppedBeforeStart(m);
 }

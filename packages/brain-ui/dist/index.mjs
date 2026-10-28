@@ -821,6 +821,7 @@ var DEFAULT_TIMELINE_LABELS = {
   thought: "Thought",
   replyFromThought: "Recovered from the model's reasoning \u2014 the turn ended without a separate reply.",
   stoppedReply: "Stopped by you \u2014 this is what the model had written when you pressed Stop.",
+  stoppedBeforeStart: "Stopped by you before the run started \u2014 nothing was done.",
   you: "You",
   assistant: "BuilderForce",
   subagentOf: "sub-agent of {owner}",
@@ -998,6 +999,7 @@ function useRenderWindow(nodes, conversationKey, reveal, scrollRef) {
 // src/timeline/MessageRows.tsx
 import { memo as memo2 } from "react";
 import {
+  isStoppedBeforeStart,
   isStoppedTurn,
   parseDirectedRecipients,
   parseMessageAuthor,
@@ -1255,6 +1257,7 @@ function AssistantRowInner({
   const answer = answerTextOf(bodyText);
   const rescued = node.key === stranded ? thoughtTextOf(bodyText) : "";
   const stopped = isStoppedTurn(node.message);
+  const neverStarted = isStoppedBeforeStart(node.message);
   if (!answer && bodyText && !card && !rescued && !stopped) {
     return /* @__PURE__ */ jsxs8("li", { id: brainMessageAnchorId(node.message.id), className: `bf-tl__item bf-tl__item--thought${focusClass}`, children: [
       /* @__PURE__ */ jsx9("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx9("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("thinking") }) }),
@@ -1272,8 +1275,8 @@ function AssistantRowInner({
         /* @__PURE__ */ jsx9(OriginTag, { message: node.message, owner: !author && hasSubagents, labels })
       ] }),
       rescued && /* @__PURE__ */ jsx9("div", { className: "bf-tl__rescued", children: labels.replyFromThought }),
-      stopped && /* @__PURE__ */ jsx9("div", { className: "bf-tl__rescued", children: labels.stoppedReply }),
-      bodyText && /* @__PURE__ */ jsx9("div", { className: "bf-tl__bubble", children: renderMsg(node.message, "assistant", rescued || bodyText) }),
+      stopped && /* @__PURE__ */ jsx9("div", { className: "bf-tl__rescued", children: neverStarted ? labels.stoppedBeforeStart : labels.stoppedReply }),
+      bodyText && !neverStarted && /* @__PURE__ */ jsx9("div", { className: "bf-tl__bubble", children: renderMsg(node.message, "assistant", rescued || bodyText) }),
       card && onAnswerQuestion && /* @__PURE__ */ jsx9(
         QuestionCard,
         {

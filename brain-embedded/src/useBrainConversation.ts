@@ -24,19 +24,20 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { isMidTurnMetadata } from '@builderforce/agent-loop';
 import { useBrainConfig } from './config';
 import { useRunSnapshot } from './useRunSnapshot';
-import { isStepMessage, type BrainMessage, type BrainModality, type ChatInputAttachment } from './types';
+import { type BrainMessage, type BrainModality, type ChatInputAttachment } from './types';
 import { transcriptSeedOf } from './transcriptSeed';
 import { useChatTranscript } from './useChatTranscript';
+import { useAutoReplyTrailingTurn } from './useAutoReplyTrailingTurn';
+import { startsRun, unansweredTurnIndex } from './userTurnRuns';
 import type { BrainToolSpec, ContentPart } from './streamChatCompletion';
 import type { EvermindRunHooks } from './evermindMemory';
 import type { ReasoningIntent } from './effort';
 import type { RunWindowSources } from './windowFit/modelWindow';
 import { attachmentLink, prepareAttachment } from './attachmentContent';
 import { attachmentTurn, userTurnContentOf } from './attachmentTranscript';
-import { isConsolidationMarker, scopeToConsolidation } from '@seanhogg/builderforce-memory/working';
+import { scopeToConsolidation } from '@seanhogg/builderforce-memory/working';
 import { contextUsageOf, type ContextUsage } from './contextUsage';
 import { priorResearchDigest } from './priorResearch';
 import { withDirectedMetadata, isDirectedToParticipant, directedAgentRecipients, type DirectedRecipient, type DirectedGroup } from './directedMessage';
@@ -49,6 +50,7 @@ import type { ChatMode, ChatRosterAgent } from './chatMode';
 import {
   startRun,
   stopRun,
+  stopBeforeStart,
   isRunning,
   getRunTrace,
   resolveRunConfirm,
@@ -272,20 +274,7 @@ export interface UseBrainConversation {
   buildTriageReport(agentLabel?: string, surface?: string): string;
 }
 
-/**
- * The index of the trailing user turn nothing answered — the last message that is not a
- * step row is a USER message — or -1. Step rows (the durable LLM/tool/error diagnostics)
- * after it are what a failed run leaves; any assistant reply means it was answered.
- */
-export function unansweredTurnIndex(messages: readonly BrainMessage[]): number {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message = messages[i]!;
-    // A step, or a compaction note a failed run persisted mid-run, is not an answer.
-    if (isStepMessage(message) || isConsolidationMarker(message)) continue;
-    return message.role === 'user' && !isMidTurnMetadata(message.metadata) ? i : -1;
-  }
-  return -1;
-}
+export { unansweredTurnIndex } from './userTurnRuns';
 
 export function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation {
   const { persistence, resolveSystemPrompt, stream, imagePrep } = useBrainConfig();
@@ -324,6 +313,11 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   // server row `ensureChatId` is still creating.
   const sendingRef = useRef<ReadonlySet<number | null>>(new Set());
   const [sendingChats, setSendingChats] = useState<ReadonlySet<number | null>>(sendingRef.current);
+  /** Chats whose Stop came while a send was getting ready — its launch is dropped. `null`
+   *  is a draft whose row is still being created; the mark moves to the chat it becomes. */
+  const cancelledLaunchRef = useRef(new Set<number | null>());
+  /** Chats with a launch (send, auto-reply or Retry) not yet started — a Stop drops it. */
+  const launchingRef = useRef(new Set<number>());
   const markSending = useCallback((key: number | null, on: boolean) => {
     const next = new Set(sendingRef.current);
     if (on) next.add(key);
@@ -416,17 +410,30 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
    * `prepareRun` refuses (its message becomes the conversation's error).
    */
   const launch = useCallback(async (id: number, request: BrainRunRequest): Promise<void> => {
-    let extra: Partial<BrainRunRequest> | null = null;
-    if (prepareRun) {
-      try {
-        extra = await prepareRun(id);
-      } catch (e) {
-        if (chatIdRef.current === id) setLocalError(e instanceof Error ? e.message : 'Could not start the run.');
+    launchingRef.current.add(id);
+    try {
+      let extra: Partial<BrainRunRequest> | null = null;
+      if (prepareRun) {
+        try {
+          extra = await prepareRun(id);
+        } catch (e) {
+          if (chatIdRef.current === id) setLocalError(e instanceof Error ? e.message : 'Could not start the run.');
+          return;
+        }
+      }
+      // A Stop while this run got ready (its send persisting, the host preparing): it never
+      // starts, and an answer row says so — or a reopened chat would start it after all.
+      if (cancelledLaunchRef.current.delete(id)) {
+        const row = await stopBeforeStart(id, id, persistence);
+        if (row) updateMessages(id, (prev) => [...prev, row]);
         return;
       }
+      await startRun(id, extra ? { ...request, ...extra } : request);
+    } finally {
+      launchingRef.current.delete(id);
+      cancelledLaunchRef.current.delete(id);
     }
-    await startRun(id, extra ? { ...request, ...extra } : request);
-  }, [prepareRun]);
+  }, [prepareRun, persistence, updateMessages]);
 
   const send = useCallback(
     async (text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null; attachments?: ChatInputAttachment[] }): Promise<boolean> => {
@@ -448,11 +455,14 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         } catch {
           id = null;
         }
+        // A Stop while the draft's row was being created is this chat's Stop.
+        const cancelled = cancelledLaunchRef.current.delete(origin);
         if (id == null) {
           markSending(origin, false);
           setLocalError('Could not start a chat.');
           return false;
         }
+        if (cancelled) cancelledLaunchRef.current.add(id);
         markSending(id, true);
         markSending(origin, false);
       }
@@ -529,7 +539,11 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
           }
           return true;
         }
-        await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id));
+        // A stop with nothing running is kept as the person's answer and starts nothing (an
+        // attachment is work: the reload reads the text with its links, so it runs too); a
+        // Stop pressed while this send got ready drops the launch.
+        const runs = attachments.length > 0 || startsRun(trimmed);
+        if (runs) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id));
         return true;
       } catch (e) {
         // Persisting the user turn failed (commonly an expired token) — the turn
@@ -541,33 +555,18 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         }
         return false;
       } finally {
+        cancelledLaunchRef.current.delete(runChatId);
         markSending(runChatId, false);
       }
     },
     [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages],
   );
 
-  // Auto-reply when a chat loads with a trailing unanswered user message
-  // (e.g. a chat seeded elsewhere and deep-linked into the Brain). Skipped when
-  // a run for this chat is already in flight (the store is single-flight, so
-  // this only guards against starting redundant work / a self re-answer).
-  useEffect(() => {
-    if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
-    if (isRunning(chatId)) return;
-    const last = messages[messages.length - 1];
-    if (last.role !== 'user') return;
-    // A trailing message addressed to a participant is NOT a directive for the
-    // BRAIN — leave it unanswered (the participant owns the reply).
-    if (isDirectedToParticipant(last)) return;
-    // A MID-TURN user row was already delivered — steered into the run that was live
-    // when it was sent (`run.steer`), which hears it before its next turn. It is not
-    // an unanswered request, and replaying it would start a second run on it.
-    if (isMidTurnMetadata(last.metadata)) return;
-    if (autoRepliedChatIdRef.current === chatId) return;
-    autoRepliedChatIdRef.current = chatId;
+  const replyToTrailingTurn = useCallback((id: number, last: BrainMessage) => {
     setLocalError('');
-    void launch(chatId, buildRequest(messages.slice(0, -1), messages, userTurnContentOf(last), last.id));
-  }, [chatId, loadingMessages, localSending, messages, buildRequest, launch]);
+    void launch(id, buildRequest(messages.slice(0, -1), messages, userTurnContentOf(last), last.id));
+  }, [messages, buildRequest, launch]);
+  useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending, messages, repliedRef: autoRepliedChatIdRef, reply: replyToTrailingTurn });
 
   const retryLastTurn = useCallback((): boolean => {
     if (chatId == null || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
@@ -633,7 +632,14 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   }, [chatId]);
 
   const stop = useCallback(() => {
-    if (chatId != null) stopRun(chatId);
+    if (chatId == null) {
+      // A draft's first send is still creating its chat: the launch is dropped once it has one.
+      if (sendingRef.current.has(null)) cancelledLaunchRef.current.add(null);
+      return;
+    }
+    // A send still getting ready has no run to stop yet: its launch is dropped instead.
+    if ((sendingRef.current.has(chatId) || launchingRef.current.has(chatId)) && !isRunning(chatId)) cancelledLaunchRef.current.add(chatId);
+    stopRun(chatId);
   }, [chatId]);
 
   const buildTriageReport = useCallback(

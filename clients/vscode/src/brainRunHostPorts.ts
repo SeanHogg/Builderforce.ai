@@ -22,6 +22,7 @@ import { boundServerIds } from "./sessionChats";
 import { recentActivitySection, RUN_GROUNDING_BUDGET_MS, stableGroundingWithin } from "./grounding";
 import { setLocalChatRuns } from "./attention";
 import { createBrainRunHost, type BrainRunHost } from "./brainRunHost";
+import { gateStarts } from "./hostStartGate";
 import { changeSetIdentityForHostRun, recordChangeSetAroundRun } from "./runChangeSets";
 import { installRunRecovery } from "./installRunRecovery";
 import { createHostRunLifecycle } from "./hostRunLifecycle";
@@ -381,10 +382,11 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
   // the chat is already running is a no-op in the host — don't finalize that, or the
   // live run's edits would be claimed twice, and don't journal a start that will never
   // finish. No upload, no apply to another checkout.
-  // Sub-agents start through the host's internal start, not this wrapper.
+  // Sub-agents start through the host's internal start, not this wrapper. A Stop during the
+  // baseline capture is held until the host has claimed the chat (`hostStartGate.ts`).
   return {
     ...host,
-    start(payload) {
+    ...gateStarts(host, (payload, start) => {
       const { runId, author } = changeSetIdentityForHostRun(payload, () => crypto.randomUUID());
       if (!isRunning(payload.chatId)) lifecycle.started(payload.chatId, runId);
       return recordChangeSetAroundRun(
@@ -395,9 +397,9 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
           author,
           stillRunning: () => isRunning(payload.chatId),
         },
-        () => host.start(payload),
+        start,
       );
-    },
+    }),
     dispose() {
       offBindings();
       detachLifecycle();

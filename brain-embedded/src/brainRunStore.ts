@@ -48,6 +48,7 @@ export {
   isRunning,
   getRunTrace,
   stopRun,
+  stopBeforeStart,
   clearRunError,
   resolveRunConfirm,
   applyRemoteRun,

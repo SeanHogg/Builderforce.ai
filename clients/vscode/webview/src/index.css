@@ -137,15 +137,6 @@ body {
 .bf-app .bf-surface__footer > .bf-composer {
   margin: 0;
 }
-/* The open chat's title in the header — the part that shrinks. */
-.bf-chat-context {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  color: var(--bf-text-muted);
-}
 /* A history row's marker: a run in flight, or a question waiting on you. */
 .bf-run-marker--running {
   color: var(--bf-accent);

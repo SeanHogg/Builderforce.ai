@@ -5,15 +5,15 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-10-28T00:47:13.607Z";
+export const PRICE_SNAPSHOT_AT = "2026-10-28T04:06:41.025Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
   "~anthropic/claude-haiku-latest": [1e-7, 5e-7],
   "~anthropic/claude-opus-latest": [0.000004, 0.00002],
   "~anthropic/claude-sonnet-latest": [0.000002, 0.00001],
-  "~deepseek/deepseek-flash-latest": [1.82e-8, 0.0000018],
-  "~deepseek/deepseek-pro-latest": [2.565e-7, 0.000008],
+  "~deepseek/deepseek-flash-latest": [1.51e-8, 0.0000018],
+  "~deepseek/deepseek-pro-latest": [2.542e-7, 0.000008],
   "~deepseek/deepseek-v4-flash-latest": [4.75e-8, 1.568e-7],
   "~google/gemini-flash-latest": [7.5e-7, 0.00000375],
   "~google/gemini-pro-latest": [0.000002, 0.00001],
@@ -25,7 +25,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "~openai/gpt-terra-latest": [0.000001, 0.000005],
   "~unbiased/pareto-latest": [8e-7, 0.0000032],
   "~x-ai/grok-latest": [0.000002, 0.000006],
-  "~z-ai/glm-flash-latest": [3.45e-8, 8.23e-8],
+  "~z-ai/glm-flash-latest": [4.64e-8, 7.37e-8],
   "~z-ai/glm-latest": [6.99e-8, 0.0000014],
   "aion-labs/aion-2.0": [8e-7, 0.0000016],
   "aion-labs/aion-3.0": [0.000003, 0.000006],
@@ -93,7 +93,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "deepseek/deepseek-v4-flash": [1.4e-7, 2.8e-7],
   "deepseek/deepseek-v4-flash-0731": [1.19e-7, 2.38e-7],
   "deepseek/deepseek-v4-flash-vision-exp": [2.156e-7, 6.468e-7],
-  "deepseek/deepseek-v4-pro": [8.75394e-7, 0.000001750788],
+  "deepseek/deepseek-v4-pro": [9.5526e-7, 0.00000191052],
   "deepseek/deepseek-v4-pro-0813": [6.6e-7, 0.00000198],
   "deepseek/deepseek-v4.1-flash": [1.4e-7, 4.2e-7],
   "deepseek/deepseek-v4.1-flash-1017": [1.5e-7, 6e-7],
@@ -212,7 +212,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "moonshotai/kimi-k2.5": [5e-7, 0.0000025],
   "moonshotai/kimi-k2.6": [6.5e-7, 0.00000341],
   "moonshotai/kimi-k2.7-code": [5.6e-7, 0.0000031],
-  "moonshotai/kimi-k3": [1.69e-7, 0.0000115],
+  "moonshotai/kimi-k3": [1.89e-7, 0.00002],
   "moonshotai/kimi-k3:batch": [0.00000228, 0.0000114],
   "moonshotai/kimi-k3.1-pro": [0.000002, 0.00001],
   "morph/morph-v3-fast": [8e-7, 0.0000012],
@@ -466,7 +466,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "z-ai/glm-5.1": [0.0000014, 0.0000044],
   "z-ai/glm-5.2": [3.41e-8, 0.000007],
   "z-ai/glm-5.3": [6.99e-8, 0.0000014],
-  "z-ai/glm-5.3-flash": [1.5e-7, 5e-7],
+  "z-ai/glm-5.3-flash": [4.64e-8, 7.37e-8],
   "z-ai/glm-5.3-flash:batch": [5e-8, 1.8e-7],
   "z-ai/glm-5.3-flashx": [3.7e-7, 0.00000125],
   "z-ai/glm-5.3-prime": [0.0000028, 0.0000088],

@@ -11904,6 +11904,7 @@
       "thought": "Réflexion",
       "replyFromThought": "Récupéré du raisonnement du modèle — ce tour s'est terminé sans réponse distincte.",
       "stoppedReply": "Arrêté par vous — voici ce que le modèle avait écrit quand vous avez appuyé sur Arrêter.",
+      "stoppedBeforeStart": "Arrêté par vous avant le début de l’exécution — rien n’a été fait.",
       "subagentOf": "sous-agent de {owner}",
       "ownerTag": "responsable",
       "you": "Vous",

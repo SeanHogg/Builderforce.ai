@@ -1992,7 +1992,7 @@ var PRICE_SNAPSHOT = {
   "~deepseek/deepseek-v4-flash-latest": [475e-10, 1568e-10],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [1605e-10, 105634e-10],
+  "~moonshotai/kimi-latest": [1605e-10, 894e-8],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -2000,7 +2000,7 @@ var PRICE_SNAPSHOT = {
   "~openai/gpt-terra-latest": [1e-6, 5e-6],
   "~unbiased/pareto-latest": [8e-7, 32e-7],
   "~x-ai/grok-latest": [2e-6, 6e-6],
-  "~z-ai/glm-flash-latest": [416e-10, 798e-10],
+  "~z-ai/glm-flash-latest": [464e-10, 737e-10],
   "~z-ai/glm-latest": [699e-10, 14e-7],
   "aion-labs/aion-2.0": [8e-7, 16e-7],
   "aion-labs/aion-3.0": [3e-6, 6e-6],
@@ -2068,10 +2068,10 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v4-flash": [14e-8, 28e-8],
   "deepseek/deepseek-v4-flash-0731": [119e-9, 238e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [2156e-10, 6468e-10],
-  "deepseek/deepseek-v4-pro": [875394e-12, 1750788e-12],
-  "deepseek/deepseek-v4-pro-0813": [132e-8, 396e-8],
+  "deepseek/deepseek-v4-pro": [95526e-11, 191052e-11],
+  "deepseek/deepseek-v4-pro-0813": [66e-8, 198e-8],
   "deepseek/deepseek-v4.1-flash": [14e-8, 42e-8],
-  "deepseek/deepseek-v4.1-flash-1017": [3e-7, 12e-7],
+  "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
   "deepseek/deepseek-v4.1-flash:batch": [5e-8, 15e-8],
   "dots-studio/dots-3-note-preview:free": [0, 0],
   "elorian/glimpse": [6e-7, 3e-6],
@@ -2187,7 +2187,7 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2.5": [5e-7, 25e-7],
   "moonshotai/kimi-k2.6": [65e-8, 341e-8],
   "moonshotai/kimi-k2.7-code": [56e-8, 31e-7],
-  "moonshotai/kimi-k3": [189e-9, 115e-7],
+  "moonshotai/kimi-k3": [189e-9, 2e-5],
   "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
   "moonshotai/kimi-k3.1-pro": [2e-6, 1e-5],
   "morph/morph-v3-fast": [8e-7, 12e-7],
@@ -2439,9 +2439,9 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5": [1e-6, 32e-7],
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
   "z-ai/glm-5.1": [14e-7, 44e-7],
-  "z-ai/glm-5.2": [298e-10, 7e-6],
+  "z-ai/glm-5.2": [341e-10, 7e-6],
   "z-ai/glm-5.3": [699e-10, 14e-7],
-  "z-ai/glm-5.3-flash": [15e-8, 5e-7],
+  "z-ai/glm-5.3-flash": [464e-10, 737e-10],
   "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
   "z-ai/glm-5.3-prime": [28e-7, 88e-7],
@@ -4752,13 +4752,23 @@ function stoppedTurnMetadata(source) {
   const provenance = source.model ? { model: source.model, ...account ? { account } : {} } : null;
   return withProvenanceMetadata(provenance, { [STOPPED_TURN_META_KEY]: true }) ?? "{}";
 }
-function isStoppedTurn(msg) {
+var STOPPED_BEFORE_START_META_KEY = "stoppedBeforeStart";
+var flagged = (msg, key) => {
   if (!msg.metadata) return false;
   try {
-    return JSON.parse(msg.metadata)?.[STOPPED_TURN_META_KEY] === true;
+    return JSON.parse(msg.metadata)?.[key] === true;
   } catch {
     return false;
   }
+};
+function isStoppedTurn(msg) {
+  return flagged(msg, STOPPED_TURN_META_KEY);
+}
+function isStoppedBeforeStart(msg) {
+  return flagged(msg, STOPPED_BEFORE_START_META_KEY);
+}
+function stoppedBeforeStartRow() {
+  return { role: "assistant", content: "Stopped before it started.", metadata: JSON.stringify({ [STOPPED_TURN_META_KEY]: true, [STOPPED_BEFORE_START_META_KEY]: true }) };
 }
 
 // src/types.ts
@@ -12506,7 +12516,7 @@ function useArmedNewChat(chats) {
 }
 
 // src/useBrainConversation.ts
-import { useCallback as useCallback8, useEffect as useEffect7, useMemo as useMemo6, useRef as useRef7, useState as useState8 } from "react";
+import { useCallback as useCallback8, useEffect as useEffect8, useMemo as useMemo6, useRef as useRef7, useState as useState8 } from "react";
 
 // src/useRunSnapshot.ts
 import { useCallback as useCallback6, useSyncExternalStore } from "react";
@@ -12911,6 +12921,22 @@ function isRunning(chatId) {
 function getRunTrace(chatId) {
   if (chatId == null) return [];
   return cells.get(chatId)?.trace ?? [];
+}
+async function stopBeforeStart(runKey, chatId, persistence) {
+  const c = getCell(runKey);
+  const step = { ts: nowIso(), category: "message", label: STOPPED_TURN_STEP, result: "Stopped by user before the run started." };
+  pushTrace(c, step);
+  try {
+    const rows = await persistence.sendMessages(chatId, [stepRow(step), stoppedBeforeStartRow()]);
+    const row = rows[rows.length - 1];
+    if (row) {
+      recordAppended(c, row);
+      emit(c);
+    }
+    return row;
+  } catch {
+    return void 0;
+  }
 }
 function stopRun(chatId) {
   const driver = driverFor(chatId);
@@ -14148,7 +14174,7 @@ function chatActivityText(activity, labels) {
 
 // src/modelReply.ts
 function isModelReply(m) {
-  return m.role === "assistant" && !isStepMessage(m) && !isConsolidationMarker(m) && !isActivityMessage(m);
+  return m.role === "assistant" && !isStepMessage(m) && !isConsolidationMarker(m) && !isActivityMessage(m) && !isStoppedBeforeStart(m);
 }
 
 // src/persistedSteps.ts
@@ -15258,6 +15284,55 @@ function progressPauseQuestion(signal, trip) {
 
 // ../packages/run-guards/src/streak.ts
 var BACK_TO_BACK_AT = 3;
+
+// ../packages/run-guards/src/stopIntent.ts
+function normalizeStopText(text) {
+  return text.trim().toLowerCase();
+}
+var BARE_VERBS = /* @__PURE__ */ new Set(["stop", "halt", "abort", "esc", "/stop"]);
+var OBJECT_VERBS = /* @__PURE__ */ new Set(["cancel"]);
+var LEADS = /* @__PURE__ */ new Set(["please", "ok", "okay", "hey", "now"]);
+var TAIL = /* @__PURE__ */ new Set([
+  "now",
+  "right",
+  "immediately",
+  "asap",
+  "please",
+  "it",
+  "this",
+  "that",
+  "everything",
+  "all",
+  "the",
+  "run",
+  "task",
+  "job",
+  "work",
+  "working",
+  "executing",
+  "execution",
+  "running",
+  "agent",
+  "current",
+  "stop",
+  "halt",
+  "abort",
+  "here"
+]);
+var CANCEL_OBJECTS = /* @__PURE__ */ new Set(["run", "task", "job", "execution", "it", "this", "that", "everything", "all", "work"]);
+var MAX_WORDS = 6;
+function stopIntent(text) {
+  if (!text) return false;
+  const words3 = normalizeStopText(text).replace(/[.!…]+$/u, "").split(/[\s,]+/).map((w) => w.replace(/^[!.]+|[!.]+$/g, "")).filter(Boolean);
+  if (words3.length === 0 || words3.length > MAX_WORDS) return false;
+  let i = 0;
+  while (i < words3.length - 1 && LEADS.has(words3[i])) i++;
+  const verb = words3[i];
+  const tail = words3.slice(i + 1);
+  if (!tail.every((w) => TAIL.has(w))) return false;
+  if (BARE_VERBS.has(verb)) return true;
+  return OBJECT_VERBS.has(verb) && tail.some((w) => CANCEL_OBJECTS.has(w));
+}
 
 // ../packages/run-guards/src/readsWithoutSpawn.ts
 var READS_BEFORE_DELEGATION_NUDGE = 6;
@@ -20520,8 +20595,41 @@ function useChatTranscript(persistence, chatId, snapshot, callbacks) {
   return { messages, updateMessages, loadingMessages, reloadMessages };
 }
 
+// src/useAutoReplyTrailingTurn.ts
+import { useEffect as useEffect7 } from "react";
+
+// src/userTurnRuns.ts
+import { isConsolidationMarker as isConsolidationMarker2 } from "@seanhogg/builderforce-memory/working";
+function startsRun(text) {
+  return !stopIntent(text);
+}
+function unansweredTurnIndex(messages) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (isStepMessage(message) || isConsolidationMarker2(message)) continue;
+    return message.role === "user" && !isMidTurnMetadata(message.metadata) && startsRun(message.content) ? i : -1;
+  }
+  return -1;
+}
+
+// src/useAutoReplyTrailingTurn.ts
+function useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending, messages, repliedRef, reply }) {
+  useEffect7(() => {
+    if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
+    if (isRunning(chatId)) return;
+    const last = messages[messages.length - 1];
+    if (last.role !== "user") return;
+    if (isDirectedToParticipant(last)) return;
+    if (isMidTurnMetadata(last.metadata)) return;
+    if (!startsRun(last.content)) return;
+    if (repliedRef.current === chatId) return;
+    repliedRef.current = chatId;
+    reply(chatId, last);
+  }, [chatId, loadingMessages, localSending, messages, repliedRef, reply]);
+}
+
 // src/useBrainConversation.ts
-import { isConsolidationMarker as isConsolidationMarker2, scopeToConsolidation as scopeToConsolidation2 } from "@seanhogg/builderforce-memory/working";
+import { scopeToConsolidation as scopeToConsolidation2 } from "@seanhogg/builderforce-memory/working";
 
 // src/contextUsage.ts
 var LLM_COMPLETE = "llm.complete";
@@ -20642,14 +20750,6 @@ function withRating(ratings, messageId, rating) {
 }
 
 // src/useBrainConversation.ts
-function unansweredTurnIndex(messages) {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message = messages[i];
-    if (isStepMessage(message) || isConsolidationMarker2(message)) continue;
-    return message.role === "user" && !isMidTurnMetadata(message.metadata) ? i : -1;
-  }
-  return -1;
-}
 function useBrainConversation(options) {
   const { persistence, resolveSystemPrompt, stream, imagePrep } = useBrainConfig();
   const {
@@ -20679,6 +20779,8 @@ function useBrainConversation(options) {
   } = options;
   const sendingRef = useRef7(/* @__PURE__ */ new Set());
   const [sendingChats, setSendingChats] = useState8(sendingRef.current);
+  const cancelledLaunchRef = useRef7(/* @__PURE__ */ new Set());
+  const launchingRef = useRef7(/* @__PURE__ */ new Set());
   const markSending = useCallback8((key, on) => {
     const next = new Set(sendingRef.current);
     if (on) next.add(key);
@@ -20701,7 +20803,7 @@ function useBrainConversation(options) {
   });
   const messagesRef = useRef7(messages);
   messagesRef.current = messages;
-  useEffect7(() => {
+  useEffect8(() => {
     const map = {};
     for (const msg of messages) {
       if (!msg.metadata) continue;
@@ -20750,17 +20852,28 @@ ${extraSystem}` : resolvedSystemPrompt;
     [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
   );
   const launch = useCallback8(async (id, request) => {
-    let extra = null;
-    if (prepareRun) {
-      try {
-        extra = await prepareRun(id);
-      } catch (e) {
-        if (chatIdRef.current === id) setLocalError(e instanceof Error ? e.message : "Could not start the run.");
+    launchingRef.current.add(id);
+    try {
+      let extra = null;
+      if (prepareRun) {
+        try {
+          extra = await prepareRun(id);
+        } catch (e) {
+          if (chatIdRef.current === id) setLocalError(e instanceof Error ? e.message : "Could not start the run.");
+          return;
+        }
+      }
+      if (cancelledLaunchRef.current.delete(id)) {
+        const row = await stopBeforeStart(id, id, persistence);
+        if (row) updateMessages(id, (prev) => [...prev, row]);
         return;
       }
+      await startRun(id, extra ? { ...request, ...extra } : request);
+    } finally {
+      launchingRef.current.delete(id);
+      cancelledLaunchRef.current.delete(id);
     }
-    await startRun(id, extra ? { ...request, ...extra } : request);
-  }, [prepareRun]);
+  }, [prepareRun, persistence, updateMessages]);
   const send = useCallback8(
     async (text, opts) => {
       const trimmed = text.trim();
@@ -20775,11 +20888,13 @@ ${extraSystem}` : resolvedSystemPrompt;
         } catch {
           id = null;
         }
+        const cancelled = cancelledLaunchRef.current.delete(origin);
         if (id == null) {
           markSending(origin, false);
           setLocalError("Could not start a chat.");
           return false;
         }
+        if (cancelled) cancelledLaunchRef.current.add(id);
         markSending(id, true);
         markSending(origin, false);
       }
@@ -20825,7 +20940,8 @@ ${refs}`;
           }
           return true;
         }
-        await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id));
+        const runs = attachments.length > 0 || startsRun(trimmed);
+        if (runs) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id));
         return true;
       } catch (e) {
         if (stillOpen()) {
@@ -20834,23 +20950,17 @@ ${refs}`;
         }
         return false;
       } finally {
+        cancelledLaunchRef.current.delete(runChatId);
         markSending(runChatId, false);
       }
     },
     [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages]
   );
-  useEffect7(() => {
-    if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
-    if (isRunning(chatId)) return;
-    const last = messages[messages.length - 1];
-    if (last.role !== "user") return;
-    if (isDirectedToParticipant(last)) return;
-    if (isMidTurnMetadata(last.metadata)) return;
-    if (autoRepliedChatIdRef.current === chatId) return;
-    autoRepliedChatIdRef.current = chatId;
+  const replyToTrailingTurn = useCallback8((id, last) => {
     setLocalError("");
-    void launch(chatId, buildRequest(messages.slice(0, -1), messages, userTurnContentOf(last), last.id));
-  }, [chatId, loadingMessages, localSending, messages, buildRequest, launch]);
+    void launch(id, buildRequest(messages.slice(0, -1), messages, userTurnContentOf(last), last.id));
+  }, [messages, buildRequest, launch]);
+  useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending, messages, repliedRef: autoRepliedChatIdRef, reply: replyToTrailingTurn });
   const retryLastTurn = useCallback8(() => {
     if (chatId == null || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
     const index = unansweredTurnIndex(messages);
@@ -20899,7 +21009,12 @@ ${refs}`;
     clearRunError(chatId);
   }, [chatId]);
   const stop = useCallback8(() => {
-    if (chatId != null) stopRun(chatId);
+    if (chatId == null) {
+      if (sendingRef.current.has(null)) cancelledLaunchRef.current.add(null);
+      return;
+    }
+    if ((sendingRef.current.has(chatId) || launchingRef.current.has(chatId)) && !isRunning(chatId)) cancelledLaunchRef.current.add(chatId);
+    stopRun(chatId);
   }, [chatId]);
   const buildTriageReport = useCallback8(
     (agentLabel, surface) => buildBrainTriageReport({
@@ -22427,7 +22542,7 @@ function withUsageSurface(fetchImpl, surface) {
 import { useCallback as useCallback10, useRef as useRef9 } from "react";
 
 // src/useQueuedTurns.ts
-import { useCallback as useCallback9, useEffect as useEffect8, useRef as useRef8, useState as useState10 } from "react";
+import { useCallback as useCallback9, useEffect as useEffect9, useRef as useRef8, useState as useState10 } from "react";
 function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2 }) {
   const [queued, setQueued] = useState10([]);
   const nextId = useRef8(0);
@@ -22448,7 +22563,7 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2 }) {
   const remove = useCallback9((id) => setQueued((current) => current.filter((item) => item.id !== id)), []);
   const clear = useCallback9(() => setQueued((current) => current.length ? [] : current), []);
   const prev = useRef8({ key: resetKey, running });
-  useEffect8(() => {
+  useEffect9(() => {
     const was = prev.current;
     prev.current = { key: resetKey, running };
     if (was.key !== resetKey || !was.running || running || queued.length === 0) return;
@@ -22456,16 +22571,16 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2 }) {
     setQueued(rest);
     if (next) sendRef.current(next.value);
   }, [running, queued, resetKey]);
-  useEffect8(() => {
+  useEffect9(() => {
     setQueued([]);
   }, [resetKey]);
   return { items: queued, count: queued.length, submit, remove, clear };
 }
 
 // src/useChatTurns.ts
-function useChatTurns({ running, runKey, send, steer, stop, textOf: textOf2 }) {
-  const ports = useRef9({ send, steer, stop, textOf: textOf2, runKey });
-  ports.current = { send, steer, stop, textOf: textOf2, runKey };
+function useChatTurns({ running, runKey, send, steer, stop, textOf: textOf2, isDirected }) {
+  const ports = useRef9({ send, steer, stop, textOf: textOf2, isDirected, runKey, running });
+  ports.current = { send, steer, stop, textOf: textOf2, isDirected, runKey, running };
   const queued = useQueuedTurns({
     running,
     send: (turn) => {
@@ -22475,30 +22590,38 @@ function useChatTurns({ running, runKey, send, steer, stop, textOf: textOf2 }) {
     textOf: textOf2
   });
   const { submit: hold, clear } = queued;
-  const submit = useCallback10(async (turn) => {
-    const { send: deliver, steer: route, textOf: text } = ports.current;
-    const body = typeof turn === "string" ? turn.trim() : (text?.(turn) ?? "").trim();
-    if (!body) return false;
-    if (route?.(turn)) return true;
-    if (hold(turn)) return true;
-    return await deliver(turn) !== false;
-  }, [hold]);
   const stopTurns = useCallback10(() => {
     clear();
     const { stop: halt, runKey: key } = ports.current;
     if (halt) halt();
     else if (key != null) stopRun(key);
   }, [clear]);
+  const submit = useCallback10(async (turn) => {
+    const { send: deliver, steer: route, textOf: text, isDirected: directed, running: live2 } = ports.current;
+    const body = typeof turn === "string" ? turn.trim() : (text?.(turn) ?? "").trim();
+    if (!body) return false;
+    const stopping = !startsRun(body) && !directed?.(turn);
+    if (route?.(turn)) {
+      if (stopping) stopTurns();
+      return true;
+    }
+    if (stopping && live2) {
+      stopTurns();
+      return true;
+    }
+    if (hold(turn)) return true;
+    return await deliver(turn) !== false;
+  }, [hold, stopTurns]);
   return { queued, submit, stop: stopTurns };
 }
 
 // src/useRunRefreshTick.ts
-import { useEffect as useEffect9, useRef as useRef10, useState as useState11 } from "react";
+import { useEffect as useEffect10, useRef as useRef10, useState as useState11 } from "react";
 var RUN_REFRESH_MS = 3e4;
 function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
   const [tick, setTick] = useState11(0);
   const wasRunning = useRef10(running);
-  useEffect9(() => {
+  useEffect10(() => {
     if (wasRunning.current && !running) setTick((n2) => n2 + 1);
     wasRunning.current = running;
     if (!running) return;
@@ -22509,7 +22632,7 @@ function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
 }
 
 // src/useChatCreation.ts
-import { useCallback as useCallback11, useEffect as useEffect10, useRef as useRef11 } from "react";
+import { useCallback as useCallback11, useEffect as useEffect11, useRef as useRef11 } from "react";
 function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }) {
   const chatIdRef = useRef11(chatId);
   chatIdRef.current = chatId;
@@ -22520,7 +22643,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   const captureRef = useRef11(onCaptureOriginalRequest);
   captureRef.current = onCaptureOriginalRequest;
   const creating = useRef11(null);
-  useEffect10(() => {
+  useEffect11(() => {
     if (chatId != null) creating.current = null;
   }, [chatId]);
   const ensureChatId = useCallback11(() => {
@@ -22815,6 +22938,7 @@ export {
   isRouterTool,
   isRunning,
   isStepMessage,
+  isStoppedBeforeStart,
   isStoppedTurn,
   isTicketRecordingTool,
   isTicketWriteTool,
@@ -22945,10 +23069,13 @@ export {
   stallUnrecoveredInTrace,
   startEngineRun,
   startRun,
+  startsRun,
   steerModelContent,
   stepRow,
   stepSig,
+  stopBeforeStart,
   stopRun,
+  stoppedBeforeStartRow,
   stoppedTurnMetadata,
   streamChatCompletion,
   streamSummaryCompletion,
