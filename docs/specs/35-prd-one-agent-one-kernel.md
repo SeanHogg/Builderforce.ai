@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Approved design, in progress. **WS0 landed** (clean tree, `main` = `origin/main` at `6b1a1469e`, 2026-10-25). **WS8a–h shipped 2026-10-25 in VSIX 2026.10.76** (DONE.md); its leftovers are in ROADMAP. **WS8i–o shipped 2026-10-25** (api 2026.10.81, brain-embedded 2026.10.52, agent-tools 2026.10.14, model-router 2026.10.18, tool-output-policy 2026.10.2; DONE.md), after the overnight WS1 run (VS Code chat #6) delivered 5 files in 6.5 hours. **WS1 merged** (#878: contract, package skeleton, conformance harness, report-mode guards). **WS2a–g merged** (#880: all twelve policy modules under `packages/agent-run/src/policy/`). No entry point imports `@builderforce/agent-run` yet, so the old homes still run every execution. **Next: WS6** (telemetry; `src/telemetry/` does not exist yet), then WS3/WS4/WS5, then WS7. Status checked 2026-10-27. Board: epic 5979, one ticket per workstream. Revised 2026-10-25: adds run efficiency (§2.1, WS8, §6.10, §8.4). Evidence: one VS Code run took 79 turns to update this PRD and never updated it. |
+| Status | Approved design, in progress. **WS0 landed** (clean tree, `main` = `origin/main` at `6b1a1469e`, 2026-10-25). **WS8a–h shipped 2026-10-25 in VSIX 2026.10.76** (DONE.md); its leftovers are in ROADMAP. **WS8i–o shipped 2026-10-25** (api 2026.10.81, brain-embedded 2026.10.52, agent-tools 2026.10.14, model-router 2026.10.18, tool-output-policy 2026.10.2; DONE.md), after the overnight WS1 run (VS Code chat #6) delivered 5 files in 6.5 hours. **WS1 merged** (#878: contract, package skeleton, conformance harness, report-mode guards). **WS2a–g merged** (#880: all twelve policy modules under `packages/agent-run/src/policy/`). No entry point imports `@builderforce/agent-run` yet, so the old homes still run every execution. **WS8p is open** (added 2026-10-27: a run that says it is ready and keeps reading trips no guard, and A3 itself counts new files as progress). It ships on today's VS Code home ahead of WS4. **Next: WS6** (telemetry; `src/telemetry/` does not exist yet), then WS3/WS4/WS5, then WS7. Status checked 2026-10-27. Board: epic 5979, one ticket per workstream. Revised 2026-10-25: adds run efficiency (§2.1, WS8, §6.10, §8.4). Evidence: one VS Code run took 79 turns to update this PRD and never updated it. |
 | Owner | Agents program (planning: the session model; implementation: Opus agents; verify: Sonnet agents) |
 | Entry points | VS Code · Rovr / Web / canvas · On-prem agent · Cloud / container |
 | Design reference | [`docs/design/one-agent-one-kernel.html`](../design/one-agent-one-kernel.html), the picture: end state, both matrices, retention ledger, telemetry. Live copy: https://claude.ai/artifact/Ggc3G5y2ZLkJsVe1jDHag8 |
@@ -204,7 +204,7 @@ in its hand-off note and keeps working against a local type until WS1 merges the
 | Matrix | The design's final matrix holds: one policy module per row, entry points differ only by port. |
 | No lost capability | Every §7 row's old tests pass against its new home before the old home is deleted. |
 | Telemetry | Every entry point writes the uniform outcome row (§8.2); VS Code stays at or better than baseline (§8.1). |
-| Efficiency | The §8.4 reference scenario replays through every adapter within its budgets: first spawn by parent turn 5, ≤15 parent turns, 0 covered-read stubs for unseen lines, 0 repo-resolution errors, 0 shell reads of workspace files. A stop settles the run in ≤2 s with no child process left, and a mid-run steer reaches the next model call. |
+| Efficiency | The §8.4 reference scenario replays through every adapter within its budgets: first spawn by parent turn 5, ≤15 parent turns, 0 covered-read stubs for unseen lines, 0 repo-resolution errors, 0 shell reads of workspace files, and no readiness claim left unkept for more than 2 turns. A stop settles the run in ≤2 s with no child process left, and a mid-run steer reaches the next model call. |
 
 ## 4. Workstreams
 
@@ -331,10 +331,26 @@ token dead), Grok (403 "out of credits or need a Grok subscription"), Codex (403
 and the OpenRouter connection (401). With 8k–8o the router routes and reports this honestly,
 but a coder can only be used once the owner reconnects or tops up an account.
 
-Still open from that run, owned by WS2d (A3 progress detector on every entry point): a child
-that keeps announcing "one final check, then I write" never trips any guard in VS Code, because
-the progress detector is bound only in the cloud's `costLoop/loopGuards.ts`. It is ported, not
-copied, in WS2d and reaches VS Code at WS4.
+Added 2026-10-27, after VS Code chat #6 kept saying it was ready and kept reading. Run #562
+went 105 turns and was flagged `⚠ SPUN` after 78 changes. The chat as a whole ran 2,067 turns,
+almost all of them on MiniMax Flash and local Kimi. The phrase is any of "Now I have everything
+I need", "one final check, then I write" or "let me now implement", and each one is followed
+by one more read.
+
+| WS | Defect (verified 2026-10-27) | Fix on today's home | Ported by |
+|---|---|---|---|
+| 8p | **A run that says it is ready and keeps reading trips no guard, on any entry point.** Three gaps:<br>1. **VS Code has no progress detector.** The A3 `ProgressDetector` (`packages/run-guards/src/progressDetector.ts`) is bound in the cloud's `costLoop/loopGuards.ts` and in `packages/agent-run/src/policy/guards` (WS2d). Nothing in brain-embedded or `clients/vscode` uses either.<br>2. **A3 would not catch this loop even where it is bound.** Its `no_progress` window counts a call that names a path the run has not touched before as progress (`noProgress.ts`: "exploring new files IS progress"). So "I have everything I need" followed by one more new file resets the window every turn.<br>3. **The VS Code breaker misses it.** `cacheServedStreak` counts only repeats the read cache answered, and a new file is new ground. It also switches off once the run has changed code, and it fires at most twice a run. The announced-call re-prompt fires only when no call is made. | **1. A new A3 signal, `unkept_ready`, in `run-guards`, so every binding gets it.**<br>• A pure `claimsReady(text)` matches the model's own declaration that it is done gathering or about to write: "I have everything I need", "I now have enough", "one final check, then I write", "now I'll implement / write / make the change", "let me write the update now". It does not match text inside code fences or quotes, or a negated claim ("I don't have enough yet").<br>• A turn whose text `claimsReady` and whose calls are all read-only is an **unkept claim**. Read-only means no write or edit, no `spawn_agent(s)`, no `hand_off` and no `ask_user`.<br>• A turn that changes a file, spawns, hands off or asks clears the count.<br>• The second unkept claim of a run is a trip. New paths do not reset it.<br>• `ProgressDetector` composes it as a fifth signal, ranked between `circling_read` and `no_progress`. Its state is plain JSON, so the cloud's one-turn ticks carry it.<br>**2. VS Code binds the detector now.** It binds the one `ProgressDetector`; it does not copy it. Every brain-embedded run gets it: parent and sub-agent, before and after edits, planning and coding (lever `a3_progress_detector`, already at 100%). The run store calls `observe` on every dispatched call and `endTurn` on every model turn. The detector's ladder maps onto what the editor already has:<br>• **steer:** the note goes in the next turn-context block;<br>• **escalate:** a forced change turn through `progressBudget.ts` (`changeToolsOf`, `changeBrief`; `hand_off` alone while planning);<br>• **pause:** `ask_user` with `progressPauseQuestion`.<br>Trace: `loop.progress_check`. The binding lives in its own `runStore/progressGuard.ts`, so no run-store file grows past its limit. | WS2d: `policy/guards` gets the signal through `run-guards`, so there is nothing to copy. At WS4 the VS Code binding is deleted for `policy/guards`, and its tests move over unchanged. |
+
+**8p accept.**
+- **Characterization test first, on today's code.** A fake model's turns each say "Now I have everything I need" and read one new file. Today no guard fires in 20 turns. This test flips when the fix lands, and it is the planning model's sanctioned behaviour change for 8p.
+- **New tests:**
+  - The second unkept claim trips. The turn after the trip offers only the change tools, or `hand_off` while planning.
+  - A review run that reads 30 new files and makes no readiness claim does not trip.
+  - A claim followed by a write, a spawn or a hand-off clears the count.
+  - A sub-agent follows the same rule.
+  - `claimsReady` cases: the matches above; a quoted or fenced phrase, a negated claim and the user's own words do not match.
+- **Unchanged:** the existing `progressDetector`, `noProgress`, `cacheServedStreak`, `loopGuards` and agent-run `guards` tests pass unchanged.
+- **Budget:** §8.4's "turns from a readiness claim to a change" row holds.
 
 E9, one catalog strategy across executions, stays in WS2f. VS Code's lexical ranking works as
 it is. The fix is to unify the other executions onto one strategy, and it needs WS6's
@@ -359,7 +375,7 @@ tests. Each module:
 | 2a | `compaction` | `api/src/application/llm/compactMessages.ts` (cloud + @-reply wiring); on-prem `agents/embedded-runner/compact.ts` + reserve tokens; SDK auto-compact behaviour | `compactMessages` tests; on-prem compaction / overflow tests |
 | 2b | `stall` | `cloudAgent/cloudRunModelPolicy.ts` (`cloudStallStep`, stall budget); `brain/agentReplyLoop.ts` (forced no-tools synthesis, `trimRepetitionLoop`); `brain-embedded/src/runStore/finalAnswerHook.ts` (prose ask-lift); `frontend/src/lib/canvasNoToolCalls.ts`; `agent-runtime/src/builderforce/agent-loop/stall-recovery.ts` (exhausted notice) | each source's stall tests; `packages/run-policy` stallStep tests |
 | 2c | `steering`, `ask`, `subagents` | `runtime/cloudLoopControl.ts` + `lateSteerStore.ts`; composer queue (`brain-embedded` run store); on-prem `steeringQueue`; SDK `SteeringChannel` semantics · kernel `ask_human`, `ASK_USER_TOOL` (options + pending), on-prem `askHumanTool` · `runtime/cloudSubagent.ts`, `cloudChildRuns.ts`, `clients/vscode/src/subagentTool.ts`, SDK `Task` · `brain-embedded/src/delegationRequest.ts` + the WS8c in-run nudge → `RunPolicy.delegation` on every entry point · stop and interrupt: WS8e `stopIntent`, signal-to-tool, the steer that interrupts a step; on-prem `agent-loop.ts` skip-remaining-calls + `bash-tools.exec.ts` kill-on-abort | steering relay, human-in-loop, sub-agent tests, `delegationRequest` tests, WS8e stop tests, on-prem `abort.test` + exec abort tests |
-| 2d | `finish`, `guards`, `verify` | `cloudAgent/finishGates.ts` (placeholder, no-deliverable, CI-pending, review verdict, **signoff**); @-reply verify pin; `costLoop/loopGuards.ts` (A3, D1, D7, D8); `cloudAgent/inRunVerify.ts`, `sandbox/sandboxVerify.ts`, `cloudAgent/runVerifyThenRemember.ts` | `loopGuards.test`, finish-gate tests, `inRunVerify.test`, `runEndMemory.test` |
+| 2d | `finish`, `guards`, `verify` | `cloudAgent/finishGates.ts` (placeholder, no-deliverable, CI-pending, review verdict, **signoff**); @-reply verify pin; `costLoop/loopGuards.ts` (A3, D1, D7, D8; A3 gains `unkept_ready` through `run-guards`, WS8p); `cloudAgent/inRunVerify.ts`, `sandbox/sandboxVerify.ts`, `cloudAgent/runVerifyThenRemember.ts` | `loopGuards.test`, finish-gate tests, `inRunVerify.test`, `runEndMemory.test` |
 | 2e | `memory` + `context` | `costLoop/volatileTail.ts`; `brain-embedded/src/runStore/completeTurn.ts` + `runPreamble.ts` + `runMemory.ts` (recall) + `turnContext.ts`; `clients/vscode/src/brainRunHost.ts` `runContextFor`; on-prem `agent-loop.ts` brief + `infra/knowledge-loop.ts`; `cloudAgent/runEndMemory.ts`; `clients/vscode/src/memoryCommit.ts`, `editorRunEnd.ts`, `sessionNotes.ts`; `agents/sdk-memory-server.ts` (→ memory tools); `brain-embedded/src/gatherChatDiagnostics.ts` readers (→ `ContextSource`). **Also builds (§6.10):** the `ContextPack`; the recall query from prompt + focus-file terms; the per-turn brief on @-reply and canvas (missing today); codemap write-back on every entry point with WS8d's fields. | `run-knowledge.test`, `knowledge-loop.test`, `runEndMemory*.test`, `memoryCommit.test`; new: context-pack conformance case |
 | 2f | `tools` | capability gate (`cloudAgent/runSurfaceCaps.ts`, `cloudAgentTools.ts`); `brain-embedded/src/selectTools.ts` (lexical rank, synonyms, pinning); `costLoop/deferredTools.ts` (core set + `tool_search`); `llm/cloudAgentToolset.ts` `CHAT_SCOPED_AGENT_TOOLS` → `toolScope: 'chat-reply'` data; canvas tool port; `SDK_TOOLS` + `allowedToolsAfterGates` → policy gates; read coverage (`packages/run-guards/src/readCoverage.ts` + brain-embedded binding, after WS8a); result caps (`tool-output-policy`, on-prem `tool-result-truncation.ts` + `tool-result-context-guard.ts`, @-reply 8k slice); on-prem `bash-tools.exec-runtime.ts` background exec + `process` poll; default repo (after WS8b). **Also (§6.10):** one catalog strategy, a core set plus `tool_search` with no lever; `find_symbol` on cloud; `read_file` `paths[]` and a large-markdown outline pointer; one window-sized cap. | `cloudSurfaceCaps.test`, `selectTools` tests, `claude-agent-sdk-runner.test` (gate cases), `readCoverage.test` (both), `tool-output-policy` tests, on-prem truncation / context-guard / exec tests, `git-repo-scope.test` |
 | 2g | `model` | `cloudAgent/cloudRunModelPolicy.ts`, cascade, learned routing, limbic state; @-reply cascade; `clients/vscode/src/modelRouting.ts` policy half (Local only / Hybrid / Specific); `frontend/src/lib/canvasModelPort.ts` policy half; on-prem gateway model config; BYO resolution signal (`tenantProviderKeyService.ts` `unresolvedReasons`, `byoCredentialHealth.ts`). **Also (§6.10):** a preflight before turn 1; `llm.model_downgrade` for auto-routed turns too. | `cloudRunModelPolicy.test`, `modelRouting` tests, routing package tests, `byoCredentialHealth` tests |
@@ -372,7 +388,7 @@ tests. Each module:
     - `llm_usage_log.entry_point` and `run_model_outcomes.entry_point`;
     - fill `turn_index` and `tool_schema_tokens`;
     - `run_model_outcomes.compactions` and `run_model_outcomes.verify`;
-    - the §8.2 efficiency fields: `first_spawn_turn`, `covered_read_stubs`, `shell_file_reads`, `repo_errors`, `context_pack_tokens`, `model_preflight`.
+    - the §8.2 efficiency fields: `first_spawn_turn`, `covered_read_stubs`, `shell_file_reads`, `repo_errors`, `context_pack_tokens`, `model_preflight`, `unkept_ready_claims`, `progress_trips`.
   - The ingest route changes that accept them.
   - `scripts/telemetry-baseline.cjs`: read-only, prints §8.1 per entry point.
 - **Accept.**
@@ -601,8 +617,12 @@ Explore subagents in parallel.
 4. **Finish.** Placeholder and no-deliverable blocks, the CI-pending wait, the review-verdict
    requirement and the **sign-off requirement**, with counters persisted across steps. The
    verify pin.
-5. **Guards.** A3 progress detector (steer → escalate → pause). D1 cascade with escalation
-   events. D7 post-edit checks, with the note shown on the next turn. D8 parallel reads.
+5. **Guards.** A3 progress detector (steer → escalate → pause), on every run of every entry
+   point: parent and sub-agent, before and after edits. Its five signals are edit-revert,
+   repeated failure, circling read, unkept readiness claims and no progress. An unkept claim is
+   a turn that says the run is ready ("I have everything I need") and then only reads (WS8p).
+   New files reset the no-progress window, but they never excuse an unkept claim. D1 cascade
+   with escalation events. D7 post-edit checks, with the note shown on the next turn. D8 parallel reads.
 6. **Verify.** Declared checks in a shell, or branch CI, with honest exit codes. A command
    that doesn't finish counts as not finished, never as a pass. Heartbeat and cancel.
 7. **Memory.** The per-turn brief in the volatile tail. Consolidation into `codemap:<area>`
@@ -731,7 +751,9 @@ with `execution_id`; @-reply = `use_case='brain_agent_reply'`. Telemetry tables 
 - `shell_file_reads`: `cat`/`sed`/`head`/`tail` of a workspace file;
 - `repo_errors`: not-a-repo results;
 - `context_pack_tokens`;
-- `model_preflight`: `ok` | `refreshed` | `degraded:<reason>`.
+- `model_preflight`: `ok` | `refreshed` | `degraded:<reason>`;
+- `unkept_ready_claims`: turns that claimed readiness and then only read (WS8p);
+- `progress_trips`: the A3 trips, by signal.
 
 Today VS Code rows lack tool counts, `turn_index` and `tool_schema_tokens` are always null,
 and compaction is unrecorded; WS6 closes those gaps.
@@ -762,6 +784,7 @@ PRD.
 | Planning model | Flash (silent fallback) | stated by `model_preflight` before turn 1 |
 | Time from a typed "write the update now" to the model seeing it | never: held until the run ends | the next model call; a foreground command running at the time is aborted |
 | Time from Stop / a typed "STOP" to the run settling | never: the 5 m+ command kept running | ≤ 2 s, with the child process gone |
+| Turns from a readiness claim ("I have everything I need") to a change, spawn or hand-off | never: chat #6 claimed and kept reading (run #562: 105 turns, `⚠ SPUN`) | ≤ 2 (WS8p) |
 
 The live check runs on WS8's VSIX and again on WS4's. A miss routes to the planning model.
 
