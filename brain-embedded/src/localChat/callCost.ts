@@ -7,7 +7,7 @@
  *
  * It is the device's ONE cost rule for a call, keyed by the call's TRANSPORT route
  * (`UsageRoute`, the ledger row's `route`): the run budget, the route report and the
- * chat spend panel's slices (`usageLedger.ts` `sliceOf`) all price through it.
+ * chat spend panel's slices (`ledgerSpend.ts` `sliceOf`) all price through it.
  *
  *   - `local` — served on this machine: costs nothing.
  *   - `gateway` — what the platform bills: the catalog price (`priceOf`).

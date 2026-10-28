@@ -136,6 +136,14 @@ const nextConfig = {
       // works in every runtime, so the only cost is a slightly larger dev client
       // bundle — and dev SSR now behaves like production.
       'hast-util-from-html-isomorphic': nodeSafeFromHtmlIsomorphicRelative,
+      // `@builderforce/knowledge-graph-view` is source-only with these as PEERS and no
+      // install of its own: its imports resolve to the frontend's one copy (webpack: the
+      // `resolve.modules` fallback below).
+      three: './node_modules/three/build/three.module.js',
+      '@react-three/fiber': './node_modules/@react-three/fiber/dist/react-three-fiber.esm.js',
+      '@react-three/drei': './node_modules/@react-three/drei/index.js',
+      '@seanhogg/builderforce-memory/knowledge': './node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.js',
+      '@seanhogg/builderforce-memory/ingest': './node_modules/@seanhogg/builderforce-memory/dist/ingest/index.js',
       'react-markdown': './node_modules/react-markdown/index.js',
       'remark-gfm': './node_modules/remark-gfm/index.js',
       sharp: './src/lib/turbopackEmptyModule.ts',
@@ -149,6 +157,12 @@ const nextConfig = {
     // declared path's parents — which are inside frontend/node_modules
     // where both packages exist together.
     config.resolve.symlinks = false;
+    // Source-only packages with PEER dependencies and no install of their own
+    // (`@builderforce/knowledge-graph-view`: react, three, @react-three/*, memory) resolve
+    // their bare imports from the frontend's node_modules. Appended, so every module that
+    // resolves today resolves the same way; only a lookup that would otherwise FAIL from a
+    // package directory falls through to here.
+    config.resolve.modules = [...(config.resolve.modules ?? ['node_modules']), path.join(__dirname, 'node_modules')];
     // NodeNext source packages: `./x.js` on disk is `./x.ts`.
     //
     // The source-only packages under `packages/` are consumed as TypeScript (their

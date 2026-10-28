@@ -387,7 +387,7 @@ export async function canManageActiveWorkspace(secrets: vscode.SecretStorage): P
  * out, or the forced refresh yielded none) so `authed` can degrade quietly while
  * `authedRaw` turns it into NOT_SIGNED_IN.
  */
-async function fetchAuthed(
+export async function fetchAuthed(
   secrets: vscode.SecretStorage,
   path: string,
   authedInit?: AuthedInit,

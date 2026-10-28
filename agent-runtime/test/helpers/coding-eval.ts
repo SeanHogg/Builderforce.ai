@@ -35,7 +35,7 @@ import {
   type ShellResult,
 } from "@builderforce/agent-tools";
 import { buildNodeCapabilityProvider } from "../../src/agents/node-capability-provider.js";
-import { Agent } from "../../src/builderforce/agent-loop/agent-loop.js";
+import { Agent } from "../../src/builderforce/agent-loop/agent.js";
 import { AssistantMessageEventStream } from "../../src/builderforce/agent-loop/event-stream.js";
 import { registryToAgentTools } from "../../src/builderforce/agent-loop/tool-adapter.js";
 import type { StreamFn } from "../../src/builderforce/agent-loop/stream.js";

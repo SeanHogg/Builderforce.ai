@@ -81,11 +81,11 @@ export const CANVAS_PHASES: readonly CanvasPhase[] = ARC_STAGES;
  * appeared in the header: the switcher offers only what this map allows.
  */
 const PHASE_SURFACES: Readonly<Record<CanvasPhase, readonly CanvasSurfaceId[]>> = {
-  idea: ['chat', 'graph', 'ideas', 'room'],
-  make: ['chat', 'graph', 'ideas', 'room', 'app'],
-  run: ['chat', 'graph', 'ideas', 'room', 'app', 'operate'],
-  measure: ['chat', 'graph', 'ideas', 'room', 'app', 'operate', 'insights', 'sessions'],
-  reach: ['chat', 'graph', 'ideas', 'room', 'app', 'operate', 'insights', 'sessions', 'launch'],
+  idea: ['chat', 'graph', 'ideas', 'knowledge', 'room'],
+  make: ['chat', 'graph', 'ideas', 'knowledge', 'room', 'app'],
+  run: ['chat', 'graph', 'ideas', 'knowledge', 'room', 'app', 'operate'],
+  measure: ['chat', 'graph', 'ideas', 'knowledge', 'room', 'app', 'operate', 'insights', 'sessions'],
+  reach: ['chat', 'graph', 'ideas', 'knowledge', 'room', 'app', 'operate', 'insights', 'sessions', 'launch'],
 };
 
 export function surfacesForPhase(phase: CanvasPhase): readonly CanvasSurfaceId[] {

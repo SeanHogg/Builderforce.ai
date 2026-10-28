@@ -1,3 +1,41 @@
+## ✅ RESOLVED 2026-10-28 — The knowledge graph, deterministic prefetch and the deterministic knowledge index (builderforce-memory 2026.10.29–31 · api 2026.10.90 · frontend 2026.10.95 · brain-embedded 2026.10.69 · brain-ui 2026.10.29 · agent-runtime 2026.10.21 · Rovr 2026.10.32 · VSIX 2026.10.110)
+
+Specs: [PRD 38 rev 3](docs/specs/38-prd-knowledge-graph.md), [deterministic-prefetch.md](docs/design/deterministic-prefetch.md) and [deterministic-knowledge-index.md](docs/design/deterministic-knowledge-index.md). The operator decided the surface name `knowledge`, a review budget of 200, fact delete for the author or an admin, and keeping unlinked folders local until they are linked.
+
+**Knowledge is memory.** builderforce-memory gains the `/knowledge` subpath:
+- `buildGraph` is bounded and byte-deterministic, and `reviewDirectory` / `planReview` run through the one `ingest` `ParserRegistry`.
+- Partitions and verdicts, `traceGraph`/`toMermaid`, findings, `toCards` and `localSnapshotStore` come with it.
+- The docs pack reuses the builtin parsers' new optional `extract`.
+- Store judgement, compute perception: extracted output is cached by content hash and never stored. Model facts go stale when their source hash changes, and re-review works per section.
+
+**The deterministic index.**
+- One total order (`compareHits`) across every ranker, and HNSW levels drawn from the id.
+- A LEANN-style knowledge index: a pruned CSR graph, int8 traversal, selective float recompute, the exact → lexical → dense cascade, `expand`, and an exact-scan mode below 20k cards so Workers pay no construction cost.
+- The cloud `repoSymbolVectors` brute force is folded into `KnowledgeIndexPort`, with its tests unchanged.
+- Desktop `bf-index` gets the same comparator.
+- Locally, the embedder chain is Synapse → Evermind CPU → Ollama, used only when warm, with distinct fingerprints.
+
+**The platform.**
+- Migrations 1278 (`project_fact_relations`, `knowledge_scopes`, `project_facts.created_by`/`origin`) and 1279 (`previous_digest`).
+- `writeKnowledge` is the single writer, with origin derived server-side.
+- Routes: scopes, graph (with `at` for the Compare baseline), facts plus viewer rights, write, judge, search, extracted output and the code-analysis snapshot. All are tenancy-checked, cached on `knowledgeVersion`, and mounted under both the person and agent-host doors.
+- R2 keeps one object per source path (no manifest race) and an immutable review snapshot per digest.
+- Run-end facts carry anchors with content hashes.
+
+**Packages and hosts.**
+- `@builderforce/knowledge-client` is the one HTTP client. `@builderforce/knowledge-graph-view` is the 3D view: lenses, layer/path trace, findings with Fix with agent, Compare, and a list fallback. `@builderforce/knowledge-browser` holds the shared browser host: the worker review, the IndexedDB manifest, upload and File System Access sources, and the labels.
+- `agent-tools/knowledge` holds the code pack (repo-map and analyzer adapters, N-layer partitions, generated dependency-cruiser rules), the shared review runner, judge, fact rights, root ids, skip list and index host.
+- The web canvas `knowledge` surface, with the VFS / Cloud Drive / upload sources. The VS Code Knowledge view (now the panel default), Review with BuilderForce on folders, and `/review` / `/graph`. The on-prem host. The Rovr Knowledge tab.
+- `CodeAuditVisualizer` is now an adapter over the view, with its test unchanged. `buildChangeGraph` is keyed by knowledge root id plus path.
+
+**Prefetch.**
+- `packages/prefetch` holds the gate: tier 1 exact, tier 2 lexical plus logistic, tier 3 local logprob when warm, per-action calibration and `runGate`. `answerWithoutModel` is replaced by `PrefetchPort` at every caller.
+- Shared executors cover typecheck, lint, dup/cycles/dead code through the code pack, boundaries, audit, secrets, related tests, and write actions (lint fix, scaffold, codegen, codemod, format) that are always confirmed with a chip showing the plan numbers.
+- The `knowledge.*` rows run on VS Code, on-prem, web and Rovr.
+- Avoided calls go on the savings ledger, and the Pipeline route report has a gate column.
+
+Also shipped: the release note (migration 1280) and the blog post "Point it at a folder and see what it knows" in five locales.
+
 ## ✅ RESOLVED 2026-10-28 — Stop before start: the last windows (brain-embedded 2026.10.68 · brain-ui 2026.10.28 · VSIX 2026.10.108)
 
 Round-4 review of the "Stop the run" fix (below) found six gaps; all closed:

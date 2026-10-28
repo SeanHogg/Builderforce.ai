@@ -28,10 +28,15 @@ export default defineConfig({
       // The transcript catalogs `build.mjs` serves from the web's `brain.timeline` — a
       // component test reads the empty stand-in (every label falls back to its default).
       { find: 'virtual:rovr-timeline-catalogs', replacement: path.resolve(here, 'src/test/timelineCatalogsStub.ts') },
+      // The Knowledge view's `knowledgeGraph` catalogs: the REAL web catalogs, trimmed the
+      // way `build.mjs` trims them — the destination test holds Rovr's labels to the web's.
+      { find: 'virtual:rovr-knowledge-catalogs', replacement: path.resolve(here, 'src/test/knowledgeCatalogs.ts') },
     ],
     // The `link:`ed brain packages resolve React from here too, so a component test has
     // ONE React (two copies break every hook).
-    dedupe: ['react', 'react-dom', 'react/jsx-runtime'],
+    // The source-only `@builderforce/knowledge-graph-view` has PEERS and no install of its
+    // own (three, @react-three/*, memory): they resolve from here too, as one copy.
+    dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'three', '@react-three/fiber', '@react-three/drei', '@seanhogg/builderforce-memory'],
   },
   test: {
     // Pure modules and fakes — no browser, no extension APIs. A component test

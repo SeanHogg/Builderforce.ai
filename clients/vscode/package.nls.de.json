@@ -7,6 +7,8 @@
   "command.openChat": "BuilderForce: Chat öffnen",
   "command.openCreateCanvas": "BuilderForce: Auf Canvas erstellen",
   "command.openVisualization": "BuilderForce: Visualisierung öffnen",
+  "command.reviewFolder": "Mit BuilderForce prüfen",
+  "command.openKnowledgeGraph": "BuilderForce: Wissensgraph öffnen",
   "command.refreshInsights": "BuilderForce: Einblicke aktualisieren",
   "command.refreshEvermind": "BuilderForce: Evermind aktualisieren",
   "command.signIn": "BuilderForce: Anmelden",

@@ -12,6 +12,7 @@ import type { BrainRunActivity } from '../runActivity';
 import type { CompactMemo } from '@seanhogg/builderforce-memory/working';
 import { emptyRunUsage, type RunUsageTally } from '../memorySavings';
 import type { BrainRunSnapshot, RunTurn } from './runTypes';
+import type { PendingGateOutcome } from './prefetchGate';
 
 /** The completion streaming right now — and, once the gateway names it, the model serving it. */
 export interface LiveTurn {
@@ -144,6 +145,9 @@ export interface RunCell {
   /** The model that last served a call in this chat — what a memory answer is priced
    *  against when this run has not called a model yet. Survives across runs. */
   lastServedModel: string | null;
+  /** The PreFetch gate's last acted decision, settled (accepted / re-asked) by this
+   *  chat's next request (`prefetchGate.ts`). Survives across runs. */
+  pendingGate: PendingGateOutcome | null;
   /**
    * The completion in flight ({@link asLiveTurn}), null between completions. The only
    * record of which model a Stop cut off: an aborted stream never returns its result.
@@ -205,6 +209,7 @@ export function makeCell(): RunCell {
     unseenFromId: undefined,
     runUsage: emptyRunUsage(),
     lastServedModel: null,
+    pendingGate: null,
     liveTurn: null,
     stoppedTurn: null,
     snapshot: EMPTY_SNAPSHOT,

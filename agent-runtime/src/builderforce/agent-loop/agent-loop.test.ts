@@ -3,7 +3,7 @@ import { Type } from "@sinclair/typebox";
 import { describe, expect, it } from "vitest";
 import type { AgentEvent, AgentTool } from "../model/agent-types.js";
 import type { AssistantMessage, ToolCall } from "../model/types.js";
-import { Agent } from "./agent-loop.js";
+import { Agent } from "./agent.js";
 import { AssistantMessageEventStream } from "./event-stream.js";
 import type { StreamFn } from "./stream.js";
 

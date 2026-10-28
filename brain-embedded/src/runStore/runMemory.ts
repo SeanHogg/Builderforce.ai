@@ -15,7 +15,7 @@ import { readFileAnchors } from './answerAnchors';
 import { latestUserText } from './convoText';
 import type { BrainRunRequest } from './runTypes';
 import type { RunLoopContext } from './runLoopContext';
-import { adoptAnswerWithoutModel, answerDeterministically } from './adoptAnswer';
+import { adoptAnswerWithoutModel } from './adoptAnswer';
 
 /** The pre-turn recall, the memory block it adds to the prompt, and that block's cost. */
 export interface RunRecall {
@@ -102,10 +102,11 @@ export async function recallForRun(
  * one from the Evermind SSM — the SSM cannot call a tool, so letting it answer
  * stranded any request whose answer lives behind one.
  *
- * The host's DETERMINISTIC answer (`answerWithoutModel`, e.g. "where is X defined?" from
- * its symbol index) is asked first, outside the memory gates — see `adoptAnswer.ts`.
+ * The PreFetch gate's DETERMINISTIC answers (`prefetchGate.ts`, e.g. "where is X
+ * defined?" from the symbol index) are asked first, by the preamble, outside the memory
+ * gates — this runs only when the gate did not settle the turn.
  *
- * Returns true when memory (or the deterministic answer) answered — the run is over.
+ * Returns true when memory answered — the run is over.
  */
 export async function answerFromMemory(
   chatId: number,
@@ -114,7 +115,6 @@ export async function answerFromMemory(
   allTools: BrainToolSpec[] | undefined,
   memoryReplay: boolean,
 ): Promise<boolean> {
-  if (await answerDeterministically(chatId, c, req)) return true;
   const { evermind, model } = req;
   const convo = c.transcript;
   if (!(evermind?.answer && memoryReplay && !c.abort?.signal.aborted)) return false;

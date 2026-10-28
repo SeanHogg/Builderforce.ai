@@ -44,6 +44,7 @@ import { useBrainPanelParticipants } from './useBrainPanelParticipants';
 import { useBrainPanelTurns } from './useBrainPanelTurns';
 import { routingModeForSelection } from '@seanhogg/builderforce-brain-embedded';
 import { useWebTurnGate } from '@/lib/localFirst/useWebInferenceMode';
+import { useWebKnowledgePrefetch } from '@/lib/knowledge/useWebKnowledgePrefetch';
 
 /**
  * The ONE Brain panel's state machine: composes the focused hooks (preferences,
@@ -189,8 +190,12 @@ export function useBrainPanelController({
   const activeChatId = chats.activeChat?.id ?? null;
   const { ticketAdapter, participants, bumpParticipants } = useBrainPanelParticipants(activeChatId);
 
+  // `/review`, `/graph` and knowledge questions about the project in context (PRD 38 §3.1).
+  const knowledgePrefetch = useWebKnowledgePrefetch(ctxProjectId ?? null);
+
   const conv = useBrainConversation({
     chatId: chats.activeChatId,
+    prepareRun: knowledgePrefetch.prepareRun,
     modality,
     extraSystem: ambientSystem,
     systemPrompt: persona.personaPrompt,
@@ -357,6 +362,7 @@ export function useBrainPanelController({
     // Transcript
     timeline,
     timelineTrace,
+    timelinePrefetch: knowledgePrefetch.timelinePrefetch,
     // Banners
     error,
     dismissError,

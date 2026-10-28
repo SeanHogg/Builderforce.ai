@@ -1543,6 +1543,14 @@
     "message": "Un modèle sur cet appareil a traité l’appel — ce que votre route payante aurait facturé pour les mêmes jetons",
     "description": "Saving source explanation"
   },
+  "spSourceDeterministic": {
+    "message": "Répondu par un outil de l’espace de travail",
+    "description": "Saving source label"
+  },
+  "spHintDeterministic": {
+    "message": "Une action déterministe de l’espace de travail a répondu — sans appel à un modèle (estimé sur un tour médian)",
+    "description": "Saving source explanation"
+  },
   "connHeading": {
     "message": "Comptes connectés",
     "description": "Composer Status tab, Connected accounts: heading"
@@ -1646,5 +1654,65 @@
   "connErrFailed": {
     "message": "Impossible de reconnecter.",
     "description": "Composer Status tab, Connected accounts: errFailed"
+  },
+  "tabKnowledge": {
+    "message": "Connaissances",
+    "description": "View tab"
+  },
+  "knowledgeDescription": {
+    "message": "Examinez un dossier de cet appareil et voyez ce qu’il sait, sous forme de graphe à interroger.",
+    "description": "Knowledge view: what the destination is for"
+  },
+  "knowledgeNoProjectTitle": {
+    "message": "Choisissez d’abord un projet",
+    "description": "Knowledge view: no project chosen (title)"
+  },
+  "knowledgeNoProjectBody": {
+    "message": "Les connaissances sont conservées par projet. Choisissez-en un dans les Paramètres (Classer les nouvelles tâches dans), puis examinez un dossier.",
+    "description": "Knowledge view: no project chosen (body)"
+  },
+  "knowledgeSignedOutTitle": {
+    "message": "Connectez-vous pour utiliser Connaissances",
+    "description": "Knowledge view: signed out (title)"
+  },
+  "knowledgeSignedOutBody": {
+    "message": "Les examens et leurs graphes sont conservés dans votre espace de travail Builderforce. Connectez-vous depuis les Paramètres.",
+    "description": "Knowledge view: signed out (body)"
+  },
+  "knowledgeOpenSettings": {
+    "message": "Ouvrir les Paramètres",
+    "description": "Knowledge view: button to Settings"
+  },
+  "prefetchAnsweredBy": {
+    "message": "Répondu par {action} — aucun modèle n’a été appelé",
+    "description": "Chat: a request a deterministic tool answered — {action} is the tool"
+  },
+  "prefetchAnsweredHint": {
+    "message": "Un outil déterministe a répondu directement à cette demande ; aucun modèle n’a été exécuté.",
+    "description": "Chat: tooltip on a deterministic answer"
+  },
+  "prefetchNextSteps": {
+    "message": "Étapes suivantes",
+    "description": "Chat: accessible name of a deterministic answer's chips"
+  },
+  "prefetchOpenInGraph": {
+    "message": "Ouvrir dans le graphe",
+    "description": "Chat: chip that opens the Knowledge tab focused on the answer"
+  },
+  "prefetchChooseFolderToReview": {
+    "message": "Choisir un dossier à analyser",
+    "description": "Chat: chip that opens the Knowledge tab on its review launcher"
+  },
+  "prefetchActionKnowledgeGraph": {
+    "message": "Graphe de connaissances",
+    "description": "Chat: name of the knowledge-graph action"
+  },
+  "prefetchActionKnowledgeReview": {
+    "message": "Analyse de dossier",
+    "description": "Chat: name of the folder-review action"
+  },
+  "prefetchActionKnowledgeAsk": {
+    "message": "Recherche de connaissances",
+    "description": "Chat: name of the knowledge-lookup action"
   }
 }

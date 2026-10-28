@@ -45,7 +45,7 @@ export interface UsageSlice {
   rows: number;
 }
 
-const AVOIDED_SOURCES = new Set(['memory_answer', 'evermind_answer', 'response_cache']);
+const AVOIDED_SOURCES = new Set(['memory_answer', 'evermind_answer', 'response_cache', 'deterministic']);
 
 /** A call a model on the person's own machine served: real tokens, nothing billed, and
  *  the paid route's price for the same tokens (stamped by the producer) saved. */

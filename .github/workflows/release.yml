@@ -804,10 +804,17 @@ jobs:
           # list and adding a guard reaches CI for free. A hand-named subset is how
           # `check:architecture`, `check:design-tokens` and the `'use client'` ratchet
           # once sat red with nothing but a local run ever reading them.
-          - name: guards + brain-ui
+          #
+          # The knowledge-graph view's own suite, and the shared browser host's
+          # (`knowledge-browser`, web + Rovr): source-only, they install nothing and
+          # resolve their peers from this frontend install (each `vitest.config.ts`).
+          # The step keeps its name so a required check that names it still matches.
+          - name: guards + brain-ui + knowledge-graph-view
             run: >-
               bash "$GITHUB_WORKSPACE/.github/scripts/run-parallel.sh"
               "pnpm --dir ../packages/brain-ui run test"
+              "pnpm --dir ../packages/knowledge-graph-view run test"
+              "pnpm --dir ../packages/knowledge-browser run test"
               "pnpm run check"
     steps:
       - uses: actions/checkout@v7

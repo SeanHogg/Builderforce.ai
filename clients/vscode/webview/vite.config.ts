@@ -98,7 +98,9 @@ function canvasMessages(): Plugin {
       if (id !== RESOLVED) return null;
       const { frontendSrc, entry } = canvasPaths(HERE);
       const namespaces = [...new Set([...collectCanvasNamespaces(entry, frontendSrc),
-        ...collectCanvasNamespaces(path.join(frontendSrc, 'components/tools/CodeAuditVisualizer.tsx'), frontendSrc)])];
+        ...collectCanvasNamespaces(path.join(frontendSrc, 'components/tools/CodeAuditVisualizer.tsx'), frontendSrc),
+        // The Visualization panel's Knowledge view reads `knowledgeGraph.*` through this adapter.
+        ...collectCanvasNamespaces(path.join(frontendSrc, 'lib/knowledge/labels.ts'), frontendSrc)])];
       const bundle: Record<string, Record<string, unknown>> = {};
       for (const locale of LOCALES) {
         const file = path.join(FRONTEND_SRC, `i18n/messages/${locale}.json`);
@@ -149,6 +151,28 @@ function dropWasmAssets(): Plugin {
 }
 
 /**
+ * The PEERS of `@builderforce/knowledge-graph-view` (PRD 38) — three, @react-three/fiber
+ * and @react-three/drei. The package is source-only with no install of its own, so a bare
+ * `three` from its files finds nothing by node resolution. They resolve exactly as the
+ * frontend's own sources resolve them (the 3D world already bundles that copy), so there
+ * is ONE three.js in the bundle; React and memory are the `dedupe`d copies below. The 3D
+ * scene stays a lazy chunk: the view imports it with `lazy(() => import(...))`.
+ */
+const KNOWLEDGE_VIEW_PEERS = /^(three|@react-three\/fiber|@react-three\/drei)(\/.*)?$/;
+
+function knowledgeViewPeers(): Plugin {
+  const anchor = path.join(FRONTEND_SRC, 'middleware.ts'); // must EXIST: Vite resolves bare imports from an importer's dir only when the file is on disk
+  return {
+    name: 'bf-knowledge-view-peers',
+    enforce: 'pre',
+    async resolveId(source, importer) {
+      if (!KNOWLEDGE_VIEW_PEERS.test(source) || !importer || importer === anchor) return null;
+      return this.resolve(source, anchor, { skipSelf: true });
+    },
+  };
+}
+
+/**
  * The shell loads `index.js` and `index.css` by name (`renderBundleShell`). Rollup
  * de-duplicates a colliding name by COUNTING, silently — so when anything else
  * claims `index.js` the entry lands at `index2.js`/`index3.js` and the panel boots
@@ -191,7 +215,7 @@ export default defineConfig({
     'process.env.NEXT_PUBLIC_WORKER_URL': JSON.stringify(''),
     'process.env.NEXT_PUBLIC_APP_URL': JSON.stringify('https://builderforce.ai'),
   },
-  plugins: [react(), canvasMessages(), dropWasmAssets(), entryKeepsShellNames()],
+  plugins: [react(), knowledgeViewPeers(), canvasMessages(), dropWasmAssets(), entryKeepsShellNames()],
   root: HERE,
   base: './',
   resolve: {
@@ -211,7 +235,9 @@ export default defineConfig({
     ],
     // The canvas closure and this package both pull React in; two copies would
     // break hooks. Resolve to this package's single instance.
-    dedupe: ['react', 'react-dom', '@xyflow/react'],
+    // `@seanhogg/builderforce-memory`: the knowledge packages (graph view, client, agent-tools'
+    // code pack, the browser host) are source-only and import it bare — ONE copy, this package's.
+    dedupe: ['react', 'react-dom', '@xyflow/react', '@seanhogg/builderforce-memory'],
   },
   css: {
     // THE webview's PostCSS config — there is only one, and this is its name.

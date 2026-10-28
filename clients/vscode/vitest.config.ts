@@ -33,6 +33,9 @@ export default defineConfig({
     // resolver), and losing it takes out the whole harness suite the moment
     // `localCapabilities.ts` imports it.
     alias: sourcePackageAliases(repoRoot),
+    // Source-only packages with PEERS and no install of their own (the knowledge graph
+    // view, client and browser host) import these bare: ONE copy, this package's.
+    dedupe: ['react', 'react-dom', '@seanhogg/builderforce-memory'],
   },
   test: {
     // The harness drives the run loop headlessly — no DOM, no extension host.

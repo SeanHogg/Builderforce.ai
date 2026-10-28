@@ -7,6 +7,8 @@
   "command.openChat": "BuilderForce：打开对话",
   "command.openCreateCanvas": "BuilderForce：在画布上创建",
   "command.openVisualization": "BuilderForce：打开可视化面板",
+  "command.reviewFolder": "使用 BuilderForce 审阅",
+  "command.openKnowledgeGraph": "BuilderForce：打开知识图谱",
   "command.refreshInsights": "BuilderForce：刷新洞察",
   "command.refreshEvermind": "BuilderForce：刷新 Evermind",
   "command.signIn": "BuilderForce：登录",

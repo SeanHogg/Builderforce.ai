@@ -40,7 +40,7 @@ describe('App starts at Make (PRD 32 · W0)', () => {
    *  is tested. A prototype that tests demand is an `experiment` card, not this surface. */
   it('does not offer App in Idea', () => {
     expect(surfacesForPhase('idea')).not.toContain('app');
-    expect(surfacesForPhase('idea')).toEqual(['chat', 'graph', 'ideas', 'room']);
+    expect(surfacesForPhase('idea')).toEqual(['chat', 'graph', 'ideas', 'knowledge', 'room']);
   });
 
   it('offers App from Make through Reach', () => {
@@ -67,7 +67,7 @@ describe('App starts at Make (PRD 32 · W0)', () => {
 
 describe('surfacesAddedByPhase — the phone sheet’s "adds …" line', () => {
   it('names exactly what each phase offers that the one before did not', () => {
-    expect(surfacesAddedByPhase('idea')).toEqual(['chat', 'graph', 'ideas', 'room']);
+    expect(surfacesAddedByPhase('idea')).toEqual(['chat', 'graph', 'ideas', 'knowledge', 'room']);
     expect(surfacesAddedByPhase('make')).toEqual(['app']);
     expect(surfacesAddedByPhase('run')).toEqual(['operate']);
     expect(surfacesAddedByPhase('measure')).toEqual(['insights', 'sessions']);

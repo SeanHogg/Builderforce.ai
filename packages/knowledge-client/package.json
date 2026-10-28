@@ -1,0 +1,20 @@
+{
+  "name": "@builderforce/knowledge-client",
+  "version": "2026.10.0",
+  "private": true,
+  "type": "module",
+  "description": "The ONE typed HTTP client for the knowledge API (PRD 38 §4.8): a KnowledgeStore and JudgementPort over /api/projects/:id/knowledge*, plus graph, scopes, search and analysis-snapshot calls. Every host (web, VS Code, Rovr, on-prem) injects its own authenticated fetch; this package holds no auth and no I/O of its own.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@seanhogg/builderforce-memory": "^2026.10.31"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

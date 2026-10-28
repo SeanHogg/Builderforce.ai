@@ -23,7 +23,7 @@
  * routing unchanged.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { IntlProvider } from 'use-intl';
 import { CreationCanvas } from '@/components/creation-canvas/CreationCanvas';
 import { sanitizeCanvasSurface } from '@/lib/canvasSurfaces';
@@ -41,6 +41,10 @@ import { ProjectPageScreen } from './ProjectPageScreen';
 import { EvermindScreen } from './EvermindScreen';
 import { VisualizationPanel } from './visualization/VisualizationPanel';
 import { usePendingDiff } from './visualization/usePendingDiff';
+import { applyLiveOverlay } from '@builderforce/knowledge-browser';
+import { useKnowledgeGraphLabels } from '@/lib/knowledge/labels';
+import { KnowledgeView } from './knowledgeGraph/KnowledgeView';
+import { useKnowledgeHost } from './knowledgeGraph/knowledgeHost';
 import { CodeAuditVisualizer } from '@/components/tools/CodeAuditVisualizer';
 
 /** Root: wait for the host's init frame, then mount the screen it asked for. */
@@ -250,11 +254,35 @@ function VisualizationScreen({ init }: { init: InitData }) {
 
   return (
     <CanvasScreenProviders init={init}>
-      {/* No `chatId`: the visualization frame names no chat, so every run drives the
-          canvas/changes swap. */}
-      <VisualizationPanel labels={init.labels} diffText={diff}>
-        {canvas}
-      </VisualizationPanel>
+      <VisualizationBody init={init} diff={diff} canvas={canvas} />
     </CanvasScreenProviders>
+  );
+}
+
+/**
+ * Inside the providers: the Knowledge view (PRD 38) reads the web's `knowledgeGraph.*`
+ * catalog through the ONE labels adapter, so it is built under `CanvasScreenProviders`.
+ */
+function VisualizationBody({ init, diff, canvas }: { init: InitData; diff: string; canvas: ReactNode }) {
+  const knowledge = useKnowledgeHost(applyLiveOverlay);
+  const labels = useKnowledgeGraphLabels();
+  return (
+    // No `chatId`: the visualization frame names no chat, so every run drives the swap.
+    <VisualizationPanel
+      labels={init.labels}
+      diffText={diff}
+      knowledgeRequests={knowledge.focusRequests}
+      knowledge={(
+        <KnowledgeView
+          source={knowledge.source}
+          labels={labels}
+          focus={knowledge.focus?.focus ?? null}
+          focusKey={knowledge.focusRequests}
+          onCompose={knowledge.compose}
+        />
+      )}
+    >
+      {canvas}
+    </VisualizationPanel>
   );
 }

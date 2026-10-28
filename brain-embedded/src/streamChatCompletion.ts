@@ -178,6 +178,12 @@ export interface CompletionMetadata {
    */
   pipelineRoute?: 'full' | 'quick';
   routeScore?: number;
+  /**
+   * How the PreFetch gate left this run's turn (`runStore/prefetchGate.ts`): `prefetch`
+   * when deterministic facts rode into it, `llm` when nothing did. A turn the gate
+   * ANSWERED made no call to carry it. Absent when the host has no gate.
+   */
+  gateRoute?: 'prefetch' | 'llm';
 }
 
 export interface StreamChatOptions {

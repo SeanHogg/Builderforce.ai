@@ -471,8 +471,9 @@ export class KnowledgeLoopService {
 
   /** Build project-Evermind sync config from the loop's gateway opts (reuses the
    *  same Bearer + X-AgentHost-Id auth `pushMemoryToMesh` uses). Null unless a
-   *  gateway key, numeric host id, and project id are all present. */
-  private projectEvermindConfig(): ProjectEvermindSyncConfig | null {
+   *  gateway key, numeric host id, and project id are all present. Public: the ONE
+   *  on-prem project link — the knowledge host (`onPremKnowledge.ts`) reads it too. */
+  projectEvermindConfig(): ProjectEvermindSyncConfig | null {
     const { apiKey, baseUrl, agentNodeId, projectId } = this.opts;
     const hostId = Number(agentNodeId);
     if (!apiKey || !Number.isInteger(hostId) || hostId <= 0 || !projectId) return null;

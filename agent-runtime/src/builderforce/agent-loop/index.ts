@@ -33,8 +33,11 @@ export {
 } from "./event-stream.js";
 export { createGatewayStreamFn, nativeStreamSimple } from "./stream.js";
 export type { StreamFn } from "./stream.js";
-export { Agent, agentLoop, defaultConvertToLlm } from "./agent-loop.js";
-export type { AgentLoopConfig, AgentState, AgentOptions } from "./agent-loop.js";
+export { agentLoop } from "./agent-loop.js";
+export { Agent } from "./agent.js";
+export { defaultConvertToLlm } from "./convert-to-llm.js";
+export type { AgentLoopConfig } from "./agent-loop-config.js";
+export type { AgentState, AgentOptions } from "./agent.js";
 export { AgentSession, createAgentSession } from "./agent-session.js";
 export type { CreateAgentSessionOptions, PromptOptions } from "./agent-session.js";
 export { estimateTokens, generateSummary, serializeConversation } from "./compaction.js";

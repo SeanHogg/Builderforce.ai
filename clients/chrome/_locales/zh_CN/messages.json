@@ -1543,6 +1543,14 @@
     "message": "本机上的模型处理了此次调用——这是付费路由对相同令牌本应收取的费用",
     "description": "Saving source explanation"
   },
+  "spSourceDeterministic": {
+    "message": "由工作区工具作答",
+    "description": "Saving source label"
+  },
+  "spHintDeterministic": {
+    "message": "由确定性的工作区操作作答——未调用模型（按中位轮次估算）",
+    "description": "Saving source explanation"
+  },
   "connHeading": {
     "message": "已连接的账户",
     "description": "Composer Status tab, Connected accounts: heading"
@@ -1646,5 +1654,65 @@
   "connErrFailed": {
     "message": "无法重新连接。",
     "description": "Composer Status tab, Connected accounts: errFailed"
+  },
+  "tabKnowledge": {
+    "message": "知识",
+    "description": "View tab"
+  },
+  "knowledgeDescription": {
+    "message": "审查此设备上的文件夹，以可提问的图谱查看其中的知识。",
+    "description": "Knowledge view: what the destination is for"
+  },
+  "knowledgeNoProjectTitle": {
+    "message": "请先选择一个项目",
+    "description": "Knowledge view: no project chosen (title)"
+  },
+  "knowledgeNoProjectBody": {
+    "message": "知识按项目保存。请在设置（新任务保存到）中选择一个项目，然后审查文件夹。",
+    "description": "Knowledge view: no project chosen (body)"
+  },
+  "knowledgeSignedOutTitle": {
+    "message": "登录后即可使用知识",
+    "description": "Knowledge view: signed out (title)"
+  },
+  "knowledgeSignedOutBody": {
+    "message": "审查及其图谱保存在您的 Builderforce 工作区中。请在设置中登录。",
+    "description": "Knowledge view: signed out (body)"
+  },
+  "knowledgeOpenSettings": {
+    "message": "打开设置",
+    "description": "Knowledge view: button to Settings"
+  },
+  "prefetchAnsweredBy": {
+    "message": "由 {action} 回答——未调用模型",
+    "description": "Chat: a request a deterministic tool answered — {action} is the tool"
+  },
+  "prefetchAnsweredHint": {
+    "message": "确定性工具直接回答了此请求，因此没有运行模型。",
+    "description": "Chat: tooltip on a deterministic answer"
+  },
+  "prefetchNextSteps": {
+    "message": "后续步骤",
+    "description": "Chat: accessible name of a deterministic answer's chips"
+  },
+  "prefetchOpenInGraph": {
+    "message": "在图谱中打开",
+    "description": "Chat: chip that opens the Knowledge tab focused on the answer"
+  },
+  "prefetchChooseFolderToReview": {
+    "message": "选择要审阅的文件夹",
+    "description": "Chat: chip that opens the Knowledge tab on its review launcher"
+  },
+  "prefetchActionKnowledgeGraph": {
+    "message": "知识图谱",
+    "description": "Chat: name of the knowledge-graph action"
+  },
+  "prefetchActionKnowledgeReview": {
+    "message": "文件夹审阅",
+    "description": "Chat: name of the folder-review action"
+  },
+  "prefetchActionKnowledgeAsk": {
+    "message": "知识查询",
+    "description": "Chat: name of the knowledge-lookup action"
   }
 }

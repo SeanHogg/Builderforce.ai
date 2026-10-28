@@ -10,7 +10,7 @@
 
 import type { AgentEvent, AgentMessage, AgentTool, ThinkingLevel } from "../model/agent-types.js";
 import type { ImageContent, Message, Model } from "../model/types.js";
-import { Agent } from "./agent-loop.js";
+import { Agent } from "./agent.js";
 import { type CompactionResult, estimateTokens, generateSummary } from "./compaction.js";
 import { SessionManager, type SessionMessageEntry } from "./session-manager.js";
 import { SettingsManager } from "./settings-manager.js";

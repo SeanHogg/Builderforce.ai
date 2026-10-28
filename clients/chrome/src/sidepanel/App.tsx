@@ -1,11 +1,11 @@
 /**
  * The side panel shell: header (brand, where the next turn runs, what is waiting to
- * sync, the History and New chat levers), five views and the services they share.
+ * sync, the History and New chat levers), six views and the services they share.
  * Whether chat history is showing lives here — the header's lever and the Chat view
  * both read it. Built for a panel from ~320px wide,
  * keyboard-first (the view switcher is a real tablist with arrow-key movement).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { InlineChatTitle, SurfaceHeader, SurfaceTabs, useChatRowActions, type SurfaceHeaderHistory } from '@seanhogg/builderforce-brain-ui';
 import { BrainProvider } from '@seanhogg/builderforce-brain-embedded';
 import { createPanelServices, type PanelServices } from '../host/panelServices';
@@ -18,13 +18,20 @@ import { ServicesContext, useLoaded, useOnline, useServices, useSignedIn, useSyn
 import { PlaybooksView } from './PlaybooksView';
 import { SettingsView } from './SettingsView';
 import { TasksView } from './TasksView';
+import type { KnowledgeChipIntent } from '@builderforce/knowledge-browser';
+import type { KnowledgeTabIntent } from './knowledge/knowledgeChips';
 
-type View = 'chat' | 'tasks' | 'actions' | 'playbooks' | 'settings';
+/** The Knowledge destination is a lazy chunk (its graph view, and that view's 3D scene a
+ *  chunk further) — opening the panel never parses it. */
+const KnowledgeDestination = lazy(() => import('./knowledge/KnowledgeDestination'));
+
+type View = 'chat' | 'tasks' | 'actions' | 'playbooks' | 'knowledge' | 'settings';
 const VIEWS: ReadonlyArray<{ id: View; label: MessageKey }> = [
   { id: 'chat', label: 'tabChat' },
   { id: 'tasks', label: 'tabTasks' },
   { id: 'actions', label: 'tabActions' },
   { id: 'playbooks', label: 'tabPlaybooks' },
+  { id: 'knowledge', label: 'tabKnowledge' },
   { id: 'settings', label: 'tabSettings' },
 ];
 
@@ -121,12 +128,63 @@ function Shell() {
     isArchived: (id) => Boolean(chats.find((c) => c.id === id)?.isArchived),
   });
 
+  // THE ONE composer, seeded from another view (Knowledge's *Fix with agent*): the text
+  // lands in the open chat's draft and the person presses send — never a send of its own.
+  const [draftSeed, setDraftSeed] = useState<string | null>(null);
+  const composeDraft = useCallback((text: string) => {
+    setDraftSeed(text);
+    setHistoryOpen(false);
+    setView('chat');
+  }, []);
+  const draftSeedTaken = useCallback(() => setDraftSeed(null), []);
+  const openSettings = useCallback(() => setView('settings'), []);
+  // A chat answer's knowledge chip: the Knowledge tab, on what the chip names (a new
+  // `seq` remounts the view so the same intent opens again).
+  const [knowledgeIntent, setKnowledgeIntent] = useState<KnowledgeTabIntent | null>(null);
+  const openKnowledge = useCallback((intent: KnowledgeChipIntent) => {
+    setKnowledgeIntent((prev) => ({ ...intent, seq: (prev?.seq ?? 0) + 1 }));
+    setView('knowledge');
+  }, []);
+
   // History belongs to the Chat view: from another view the lever opens it there.
   const showingHistory = historyOpen && view === 'chat';
   const toggleHistory = useCallback(() => {
     setHistoryOpen(view === 'chat' ? !historyOpen : true);
     setView('chat');
   }, [view, historyOpen]);
+
+  // One renderer per view — the strip above is data (`VIEWS`), and so is what each shows.
+  const content: Record<View, () => ReactNode> = {
+    chat: () => (
+      <>
+        {showingHistory && (
+          <RovrChatHistory id={HISTORY_ID} chats={live} loading={!chatsLoaded} chatId={chatId} rows={rows} />
+        )}
+        {/* Kept mounted under the history, so the draft and held turns survive a look. */}
+        <div className="rovr-chat-host" hidden={showingHistory}>
+          <ChatView
+            chats={live}
+            chatId={chatId}
+            onNewChat={newChat}
+            onChatsChanged={reloadChats}
+            onOpenSettings={openSettings}
+            draftSeed={draftSeed}
+            onOpenKnowledge={openKnowledge}
+            onDraftSeedTaken={draftSeedTaken}
+          />
+        </div>
+      </>
+    ),
+    tasks: () => <TasksView chatId={chatId} onNewChat={newChat} />,
+    actions: () => <ActionsView chatId={chatId} />,
+    playbooks: () => <PlaybooksView />,
+    knowledge: () => (
+      <Suspense fallback={<p className="rovr-empty">{t('loading')}</p>}>
+        <KnowledgeDestination onCompose={composeDraft} onOpenSettings={openSettings} intent={knowledgeIntent} />
+      </Suspense>
+    ),
+    settings: () => <SettingsView />,
+  };
 
   return (
     <div className="rovr-shell">
@@ -148,28 +206,7 @@ function Shell() {
         tabs={VIEWS.map((v) => ({
           id: v.id,
           label: t(v.label),
-          content: v.id === 'chat'
-            ? (
-              <>
-                {showingHistory && (
-                  <RovrChatHistory id={HISTORY_ID} chats={live} loading={!chatsLoaded} chatId={chatId} rows={rows} />
-                )}
-                {/* Kept mounted under the history, so the draft and held turns survive a look. */}
-                <div className="rovr-chat-host" hidden={showingHistory}>
-                  <ChatView
-                    chats={live}
-                    chatId={chatId}
-                    onNewChat={newChat}
-                    onChatsChanged={reloadChats}
-                    onOpenSettings={() => setView('settings')}
-                  />
-                </div>
-              </>
-            )
-            : v.id === 'tasks' ? <TasksView chatId={chatId} onNewChat={newChat} />
-              : v.id === 'actions' ? <ActionsView chatId={chatId} />
-                : v.id === 'playbooks' ? <PlaybooksView />
-                  : <SettingsView />,
+          content: content[v.id](),
         }))}
       />
     </div>

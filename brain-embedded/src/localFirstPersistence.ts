@@ -15,7 +15,8 @@ import { transcriptSeedOf } from './transcriptSeed';
 import { boundServerId } from './localChat/chatIdentity';
 import { journalWrite } from './localChat/journal';
 import { liveRecords, type ChatValue, type MessageValue } from './localChat/records';
-import { importedUsageIds, ledgerSpend, usageRowsByChat, type RunUsageValue } from './localChat/usageLedger';
+import { importedUsageIds, ledgerSpend, usageRowsByChat } from './localChat/ledgerSpend';
+import type { RunUsageValue } from './localChat/usageLedger';
 
 export interface LocalBrainPersistenceOptions {
   store: LocalFirstStore;

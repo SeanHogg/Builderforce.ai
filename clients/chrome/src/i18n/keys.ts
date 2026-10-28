@@ -355,6 +355,7 @@ export const MESSAGE_KEYS = [
   'spSourceContextTrim',
   'spSourceRecallOverhead',
   'spSourceLocalModel',
+  'spSourceDeterministic',
   'spHintPromptCache',
   'spHintMemoryAnswer',
   'spHintEvermindAnswer',
@@ -362,6 +363,7 @@ export const MESSAGE_KEYS = [
   'spHintContextTrim',
   'spHintRecallOverhead',
   'spHintLocalModel',
+  'spHintDeterministic',
   'mnTitle',
   'mnAgent',
   'mnHuman',
@@ -455,6 +457,26 @@ export const MESSAGE_KEYS = [
   'kimiK3Plan',
   'kimiCardTitle',
   'kimiCardBody',
+  // The Knowledge destination (PRD 38 WS6): its tab, what it is for, and why it cannot
+  // open yet (signed out, or no project chosen). The view's own copy is the web's
+  // `knowledgeGraph` catalog (`virtual:rovr-knowledge-catalogs`), not keys here.
+  'tabKnowledge',
+  'knowledgeDescription',
+  'knowledgeNoProjectTitle',
+  'knowledgeNoProjectBody',
+  'knowledgeSignedOutTitle',
+  'knowledgeSignedOutBody',
+  'knowledgeOpenSettings',
+  // A chat answer a deterministic tool gave (the knowledge PreFetch rows — `/graph`,
+  // `/review`, knowledge questions): its line, its chips and the actions' names.
+  'prefetchAnsweredBy',
+  'prefetchAnsweredHint',
+  'prefetchNextSteps',
+  'prefetchOpenInGraph',
+  'prefetchChooseFolderToReview',
+  'prefetchActionKnowledgeGraph',
+  'prefetchActionKnowledgeReview',
+  'prefetchActionKnowledgeAsk',
 ] as const;
 
 export type MessageKey = (typeof MESSAGE_KEYS)[number];

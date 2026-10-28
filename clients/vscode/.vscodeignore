@@ -19,3 +19,6 @@ vitest.config.ts
 out/harness.cjs
 .git/**
 .env*
+# Stray local artefacts that must never ship in the VSIX.
+*.log
+pnpm-lock.yaml

@@ -12,6 +12,7 @@
 
       "@builderforce/agent-skills": ["../../packages/agent-skills/src/index.ts"],
       "@builderforce/agent-tools": ["../../packages/agent-tools/src/index.ts"],
+      "@builderforce/knowledge-client": ["../../packages/knowledge-client/src/index.ts"],
       "@builderforce/agent-tools/*": ["../../packages/agent-tools/src/*"],
       "@builderforce/cost-levers": ["../../packages/cost-levers/src/index.ts"],
       "@builderforce/learned-routing": ["../../packages/learned-routing/src/index.ts"],
@@ -19,6 +20,7 @@
       "@builderforce/creation-canvas-contract/objectKinds": ["../../packages/creation-canvas-contract/src/objectKinds.ts"],
       "@builderforce/creation-canvas-contract/creativeCapabilities": ["../../packages/creation-canvas-contract/src/creativeCapabilities.ts"],
       "@builderforce/device-auth": ["../../packages/device-auth/src/index.ts"],
+      "@builderforce/ide-templates": ["../../packages/ide-templates/src/index.ts"],
       "@builderforce/run-context": ["../../packages/run-context/src/index.ts"],
       "@builderforce/run-guards": ["../../packages/run-guards/src/index.ts"],
       "@builderforce/spend-contract": ["../../packages/spend-contract/src/index.ts"],
@@ -27,6 +29,8 @@
       "@builderforce/local-inference": ["../../packages/local-inference/src/index.ts"],
       "@builderforce/model-catalog": ["../../packages/model-catalog/src/index.ts"],
       "@builderforce/pipeline-route": ["../../packages/pipeline-route/src/index.ts"],
+      "@builderforce/prefetch": ["../../packages/prefetch/src/index.ts"],
+      "@builderforce/prefetch/testing": ["../../packages/prefetch/src/testing.ts"],
       "@builderforce/provider-connect": ["../../packages/provider-connect/src/index.ts"],
       "@builderforce/provider-connect/accounts": ["../../packages/provider-connect/src/connectedAccounts.ts"],
       "@builderforce/write-outbox": ["../../packages/write-outbox/src/index.ts"]

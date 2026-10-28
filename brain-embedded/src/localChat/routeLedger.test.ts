@@ -12,7 +12,8 @@ import type { BrainStreamFn } from '../runStore/runTypes';
 import { callCostMillicents } from './callCost';
 import { routeRunRecords, runOutcomesSince, usageRowsSince } from './routeLedger';
 import { summarizeRouteRuns } from '@builderforce/pipeline-route';
-import { createRunUsageLedger, ledgerSpend, withRunUsage, type RunUsageValue } from './usageLedger';
+import { createRunUsageLedger, withRunUsage, type RunUsageValue } from './usageLedger';
+import { ledgerSpend } from './ledgerSpend';
 
 const DEVICE = 'device-1';
 /** $1 / $2 per million tokens. */

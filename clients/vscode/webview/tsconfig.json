@@ -41,7 +41,18 @@
       // rather than as `@/*`: the wildcard would hand this project the frontend's
       // whole import closure to type-check under the editor's stricter options,
       // which is exactly what `exclude` below exists to prevent.
-      "@/lib/tokenClaims": ["../../../frontend/src/lib/tokenClaims.ts"]
+      "@/lib/tokenClaims": ["../../../frontend/src/lib/tokenClaims.ts"],
+      // The Knowledge view's packages. Its files (`src/knowledgeGraph`) are checked by the
+      // canvas project (excluded below); declared here too so the source-package graph
+      // states every edge either project can reach.
+      "@builderforce/agent-tools/knowledge": ["../../../packages/agent-tools/src/knowledge/index.ts"],
+      "@builderforce/knowledge-client": ["../../../packages/knowledge-client/src/index.ts"],
+      "@builderforce/knowledge-browser": ["../../../packages/knowledge-browser/src/index.ts"],
+      "@builderforce/agent-tools/knowledge-index": ["../../../packages/agent-tools/src/knowledge-index.ts"],
+      "@builderforce/agent-tools/prefetch": ["../../../packages/agent-tools/src/prefetch/index.ts"],
+      "@builderforce/prefetch": ["../../../packages/prefetch/src/index.ts"],
+      "@builderforce/knowledge-graph-view": ["../../../packages/knowledge-graph-view/src/index.ts"],
+      "@builderforce/knowledge-graph-view/testing": ["../../../packages/knowledge-graph-view/src/testing.ts"]
     }
   },
   // The editor's OWN code, checked strictly. Everything that compiles FRONTEND
@@ -50,5 +61,5 @@
   // against `frontend/tsconfig.json`'s options, and checking them here reported this
   // project's lint preferences as errors in files this package does not own.
   "include": ["src"],
-  "exclude": ["src/canvas", "src/shims", "src/WorkspaceApp.tsx", "src/main.tsx"]
+  "exclude": ["src/canvas", "src/shims", "src/WorkspaceApp.tsx", "src/main.tsx", "src/knowledgeGraph"]
 }

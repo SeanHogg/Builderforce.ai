@@ -2,6 +2,19 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.110] — Point it at a folder and see what it knows
+
+- **Review any folder.** Right-click a folder in the explorer and choose **Review with BuilderForce**, or type `/review <folder>` in chat. A chip shows how many files will be read, how many are unchanged since the last review, and roughly how many model calls the review needs. Nothing runs until you confirm.
+  - Code and docs both work.
+  - A second review reads only the files that changed.
+- **See its shape in 3D.** The Visualization panel opens on a new **Knowledge** view:
+  - Layers are stacked planes, and dependencies are arrows. Arrows that break the layering are highlighted.
+  - Other lenses show cycles, duplicated code, near-duplicate sections, broken links and contradicting claims across documents.
+  - Pick any file to trace how it reaches down through the layers.
+  - Every finding has **Fix with agent**.
+- **Answers without a model when it can.** `/dup`, `/graph`, cycles, dead code, layer boundaries, and "where is X handled" are answered by fast local tools and your reviewed knowledge before any model is called. Writes such as lint fixes, scaffolds and codegen always ask first.
+- **Remembered across hosts.** What a review learns is kept in your project's memory, so the web canvas, Rovr and your agents see the same graph. A folder that isn't linked to a project stays on your machine until you link it.
+
 ## [2026.10.108] — A stop right after you send is never lost
 
 - **Stop works while the run is still getting ready.** Before a run starts, the editor records where your files stand so it can show what the run changed. A Stop pressed (or "stop" typed) in that moment was dropped, and the run started anyway. It is now held and stops the run before it begins.

@@ -48,6 +48,8 @@ export interface RovrRunHostPorts {
   runOptions?(chatId: number): Promise<RovrRunOptions>;
   /** The person declined a paused call — recorded on the action ledger. */
   onDeclined?(chatId: number, call: { name: string; args: unknown }): void;
+  /** The run's deterministic-first PreFetch port (`/review`, `/graph`, knowledge questions); absent or undefined ⇒ none. */
+  prefetch?(): Promise<BrainRunRequest['prefetch']>;
 }
 
 export interface RovrRunHost {
@@ -60,11 +62,12 @@ export interface RovrRunHost {
 export function createRovrRunHost(ports: RovrRunHostPorts): RovrRunHost {
   return {
     async prepareRun(chatId) {
-      const [catalog, systemPrompt, options, serverChatId] = await Promise.all([
+      const [catalog, systemPrompt, options, serverChatId, prefetch] = await Promise.all([
         ports.catalog(chatId),
         ports.systemPrompt(),
         ports.runOptions ? ports.runOptions(chatId) : Promise.resolve(null),
         ports.serverChatId ? ports.serverChatId(chatId) : Promise.resolve(undefined),
+        ports.prefetch ? ports.prefetch() : Promise.resolve(undefined),
       ]);
       return {
         resolvedSystemPrompt: options?.directives ? `${systemPrompt}\n\n${options.directives}` : systemPrompt,
@@ -79,6 +82,7 @@ export function createRovrRunHost(ports: RovrRunHostPorts): RovrRunHost {
         ...(options?.reasoning ? { reasoning: options.reasoning } : {}),
         ...(options?.evermind ? { evermind: options.evermind } : {}),
         ...(serverChatId !== undefined ? { serverChatId } : {}),
+        ...(prefetch ? { prefetch } : {}),
         projectId: null,
       };
     },

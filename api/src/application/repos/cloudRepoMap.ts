@@ -61,8 +61,9 @@ export interface CloudRepoMapDeps {
 
 export type LoadedRepoGraph = { ok: true; graph: RepoGraph; sha: string } | { ok: false; reason: string };
 
-/** ref → sha, cached per tenant + project (a sha is only ever learned with the caller's own credential). */
-async function commitShaFor(deps: CloudRepoMapDeps): Promise<{ ok: true; sha: string } | { ok: false; reason: string }> {
+/** ref → sha, cached per tenant + project (a sha is only ever learned with the caller's own credential).
+ *  Exported for the knowledge graph, which keys its cache on the commit without loading the map. */
+export async function commitShaFor(deps: CloudRepoMapDeps): Promise<{ ok: true; sha: string } | { ok: false; reason: string }> {
   const { repo } = deps;
   const scope = cacheScopeKey({ tenantId: deps.tenantId, projectId: deps.projectId ?? null, principal: TENANT_PRINCIPAL });
   const key = `repo-map-sha:${scope}:${repo.provider}:${repo.host ?? '-'}:${repo.owner}/${repo.repo}@${repo.ref}`;

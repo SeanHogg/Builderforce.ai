@@ -157,6 +157,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
     'how-to-build-a-3d-world-resume-in-hired-video-studio',
   ],
   product: [
+    'point-it-at-a-folder-and-see-what-it-knows',
     'bring-your-skills-with-you',
     'no-account-no-gpu-you-choose-where-it-runs',
     'kimi-k3-from-your-own-account',
@@ -262,7 +263,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   prompts: ['specs-and-planning-with-ai', 'product-ideation-with-builderforce', 'getting-started-with-ai-agents'],
   diagnostics: ['ai-development-maturity-diagnostic', 'cobit-governance-readiness-for-agentic-it', 'system-of-record-for-agentic-work'],
   // Newer enterprise surfaces.
-  knowledge: ['knowledge-management-sops-and-compliance', 'every-role-operating-picture', 'security-and-multi-tenant-architecture'],
+  knowledge: ['point-it-at-a-folder-and-see-what-it-knows', 'knowledge-management-sops-and-compliance', 'every-role-operating-picture', 'security-and-multi-tenant-architecture'],
   quality: ['quality-error-observability-one-click-fix', 'incident-management-on-call-and-war-rooms', 'agentic-tester-autonomous-qa', 'task-execution-and-observability'],
   // The salary guide — the four ported posts that send readers to a pay page.
   salary: [

@@ -54,6 +54,7 @@ export function BrainConversation() {
     newProject,
     timeline,
     timelineTrace,
+    timelinePrefetch,
     modelIdentity,
     repoContext,
     approveAll,
@@ -178,6 +179,8 @@ export function BrainConversation() {
               // rating against the model + MCP tool that served the turn.
               onRateMessage={conv.rateMessage}
               ratings={conv.ratings}
+              // A PreFetch answer's chips (Open in graph, Choose a folder to review).
+              prefetch={timelinePrefetch}
             />
           </div>
         )}

@@ -7,6 +7,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetBrainRunStore } from "@seanhogg/builderforce-brain-embedded";
 import { fakeGateway } from "../harness/fakeGateway";
+import { answerFunctionPort } from "@builderforce/prefetch/testing";
 import { runNativeBrain, transientRunPersistence, type NativeBrainRunOptions } from "./nativeBrainRun";
 
 const LABELS = { dispatchHint: "[dispatch hint]", blockedByPolicy: (reason: string) => reason };
@@ -47,10 +48,10 @@ describe("native participant parity with the panel's run host", () => {
   it("adopts the symbol-index answer with no model call", async () => {
     const asked: string[] = [];
     const { text, requests } = await turn({
-      answerWithoutModel: async (q) => {
+      prefetch: answerFunctionPort(async (q) => {
         asked.push(q);
         return "`Widget` is defined in src/widget.ts:12";
-      },
+      }),
     }, "where is Widget defined?");
     expect(asked).toEqual(["where is Widget defined?"]);
     expect(requests).toHaveLength(0);
@@ -58,7 +59,7 @@ describe("native participant parity with the panel's run host", () => {
   });
 
   it("asks the model when the index cannot answer", async () => {
-    const { text, requests } = await turn({ answerWithoutModel: async () => undefined }, "where is Widget defined?");
+    const { text, requests } = await turn({ prefetch: answerFunctionPort(async () => undefined) }, "where is Widget defined?");
     expect(requests).toHaveLength(1);
     expect(text).toContain("From the model.");
   });

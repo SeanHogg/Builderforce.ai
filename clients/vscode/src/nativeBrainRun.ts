@@ -129,6 +129,8 @@ export interface NativeBrainRunOptions {
   runSettings?: EditorRunSettings;
   /** How the run ended, for the chat's usage ledger (the pipeline route report). */
   recordRunOutcome?: BrainRunRequest["recordRunOutcome"];
+  /** A model call a PreFetch ANSWER avoided, for the chat's usage ledger. */
+  recordAvoidedCall?: BrainRunRequest["recordAvoidedCall"];
   /** Conversation vs execution (0409). Defaults to `work` inside the loop. */
   chatMode?: ChatMode;
   permissionMode: "ask" | "acceptEdits";
@@ -151,9 +153,9 @@ export interface NativeBrainRunOptions {
   /** The run's volatile turn context, awaited before turn 1 — the participant hands the
    *  deterministic pre-search hits here, as the panel's run host does in its context pack. */
   turnContext?: BrainRunRequest["turnContext"];
-  /** "Where is X defined?" answered with no model call (the symbol index), adopted when it
-   *  answers — the same port the panel's run host passes. */
-  answerWithoutModel?: BrainRunRequest["answerWithoutModel"];
+  /** The deterministic-first PreFetch port ("where is X defined?" answered with no model
+   *  call, and every registry row after it) — the same port the panel's run host passes. */
+  prefetch?: BrainRunRequest["prefetch"];
   /** The run's record of what it did and read — the per-turn ledger, and what the caller
    *  commits at run end (`recordEditorRunEnd`). Omitted ⇒ the loop keeps its own. */
   knowledge?: RunKnowledgeLog;
@@ -526,10 +528,11 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<void>
       ...(opts.projectId != null ? { projectId: opts.projectId } : {}),
       ...(opts.evermind ? { evermind: opts.evermind } : {}),
       ...(opts.turnContext ? { turnContext: opts.turnContext } : {}),
-      ...(opts.answerWithoutModel ? { answerWithoutModel: opts.answerWithoutModel } : {}),
+      ...(opts.prefetch ? { prefetch: opts.prefetch } : {}),
       ...(opts.knowledge ? { knowledge: opts.knowledge } : {}),
       ...runRequestFields(opts.runSettings, { child: false }),
       ...(opts.recordRunOutcome ? { recordRunOutcome: opts.recordRunOutcome } : {}),
+      ...(opts.recordAvoidedCall ? { recordAvoidedCall: opts.recordAvoidedCall } : {}),
       runTool,
       needsConfirm: nativeNeedsConfirm(tools, permissionMode, policyGates),
       stream: opts.stream,

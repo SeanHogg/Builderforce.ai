@@ -273,6 +273,7 @@ import { createStudioRoutes }          from './presentation/routes/studioWeightR
 import { createEvermindModelRoutes }   from './presentation/routes/evermindModelRoutes';
 import { createProjectEvermindRoutes }  from './presentation/routes/projectEvermindRoutes';
 import { createProjectFactsRoutes }  from './presentation/routes/projectFactsRoutes';
+import { createProjectKnowledgeRoutes } from './presentation/routes/projectKnowledgeRoutes';
 import { agentHostDoor } from './presentation/middleware/frontDoor';
 import { createProjectMediaRoutes } from './presentation/routes/projectMediaRoutes';
 import { createRunContextRoutes }    from './presentation/routes/runContextRoutes';
@@ -1219,6 +1220,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // The images and clips generated for a project — Studio's Media panel.
   app.route('/api/projects',  createProjectMediaRoutes(db));
   app.route('/api/agent/projects', createProjectFactsRoutes(db, agentHostDoor(db)));
+  // The knowledge graph (PRD 38 §4.8) — the same two front doors as project facts.
+  app.route('/api/projects',  createProjectKnowledgeRoutes(db));
+  app.route('/api/agent/projects', createProjectKnowledgeRoutes(db, agentHostDoor(db)));
   // The ONE run-context source every prompt-assembly surface consumes (the cloud engine
   // in-process; VS Code and the on-prem runner over HTTP). ONE router on both paths —
   // `hostOrTenantAuth` already accepts either a tenant JWT or an agent-host API key, so

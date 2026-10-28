@@ -49,6 +49,8 @@ import { rovrLookup } from './labels/rovrLookup';
 import { RovrComposer } from './RovrComposer';
 import { ROVR_STARTERS } from './rovrStarters';
 import { useRovrChatOptions } from './useRovrChatOptions';
+import { rovrPrefetchTimeline } from './knowledge/knowledgeChips';
+import type { KnowledgeChipIntent } from '@builderforce/knowledge-browser';
 
 /** brain-ui's canonical queued-turn keys → Rovr messages. */
 const QUEUED_KEY: Readonly<Record<string, MessageKey>> = { list: 'queuedList', hint: 'queuedHint', remove: 'queuedRemove' };
@@ -59,9 +61,18 @@ export interface ChatViewProps {
   onNewChat(): Promise<number>;
   onChatsChanged(): void;
   onOpenSettings(): void;
+  /** Text another view puts in THIS composer (Knowledge's *Fix with agent*); the person
+   *  presses send. Taken once — `onDraftSeedTaken` clears it, so a later remount of the
+   *  chat does not put it back. */
+  draftSeed?: string | null;
+  onDraftSeedTaken?(): void;
+  /** A chat answer's knowledge chip (Open in graph, Choose a folder to review) → the Knowledge tab. */
+  onOpenKnowledge?(intent: KnowledgeChipIntent): void;
 }
 
-export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSettings }: ChatViewProps) {
+export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSettings, draftSeed, onDraftSeedTaken, onOpenKnowledge }: ChatViewProps) {
+  // A deterministic answer's line and chips, in Rovr's words; its knowledge chips open the tab.
+  const prefetch = useMemo(() => (onOpenKnowledge ? rovrPrefetchTimeline(t, onOpenKnowledge) : undefined), [onOpenKnowledge]);
   const services = useServices();
   const inferenceMode = useInferenceModeState();
   // The notice names the chat it happened in; opening another chat retires it.
@@ -78,6 +89,11 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   const composerId = useId();
   const run = useRun(chatId);
   const [draft, setDraft] = useState('');
+  useEffect(() => {
+    if (!draftSeed) return;
+    setDraft(draftSeed);
+    onDraftSeedTaken?.();
+  }, [draftSeed, onDraftSeedTaken]);
   const chat = chats.find((c) => c.id === chatId);
   const chatOptions = useRovrChatOptions(chat, onChatsChanged);
   // The transcript's copy — and the pending question's, from the same `brain.timeline` catalog.
@@ -201,6 +217,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
           // record keeps no server rating, so the press is a verdict, not a stored fact.
           onRateMessage={conv.rateMessage}
           ratings={conv.ratings}
+          {...(prefetch ? { prefetch } : {})}
         />
       )}
       empty={empty ? (

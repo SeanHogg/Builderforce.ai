@@ -20,9 +20,14 @@
  * linked `brain-ui` / `brain-embedded` dists (each with its own dev install) never pull
  * in a second React.
  *
- * The transcript's copy is the web app's own `brain.timeline` catalog, trimmed to that
- * namespace for all five locales and served as `virtual:rovr-timeline-catalogs` — the
- * same strings the web Brain panel renders, never a second translation of them.
+ * The transcript's copy is the web app's own `brain.timeline` catalog, and the Knowledge
+ * view's its `knowledgeGraph` catalog — each trimmed to its namespace for all five locales
+ * and served as a virtual module (`webCatalogs` below): the same strings the web renders,
+ * never a second translation of them.
+ *
+ * The Knowledge view (PRD 38 WS6) is a lazy chunk of the side panel, and its 3D scene
+ * (three.js, @react-three/*) a lazy chunk of that — the panel's entry never grows by
+ * either. Its review worker is an entry of its own (`knowledgeReview.js`).
  */
 import * as esbuild from 'esbuild';
 import * as fs from 'node:fs';
@@ -54,20 +59,31 @@ const sharedPackageTsResolve = {
   },
 };
 
-/** `virtual:rovr-timeline-catalogs` — `{ en: {...}, de: {...}, … }` of `brain.timeline`. */
-const timelineCatalogs = {
-  name: 'rovr-timeline-catalogs',
+/**
+ * The web catalogs' namespaces Rovr renders verbatim, each served as a virtual module of
+ * `{ en: {...}, de: {...}, … }` trimmed to that namespace — the same strings the web
+ * renders, never a second translation of them:
+ *
+ *   virtual:rovr-timeline-catalogs    `brain.timeline` — the transcript (main bundle)
+ *   virtual:rovr-knowledge-catalogs   `knowledgeGraph` — the Knowledge view (its lazy chunk,
+ *                                     fed to `@builderforce/knowledge-browser`'s labels mapper)
+ */
+const WEB_CATALOG_NAMESPACES = {
+  'virtual:rovr-timeline-catalogs': (messages) => messages?.brain?.timeline ?? {},
+  'virtual:rovr-knowledge-catalogs': (messages) => messages?.knowledgeGraph ?? {},
+};
+
+const webCatalogs = {
+  name: 'rovr-web-catalogs',
   setup(build) {
-    build.onResolve({ filter: /^virtual:rovr-timeline-catalogs$/ }, () => ({
-      path: 'rovr-timeline-catalogs',
-      namespace: 'rovr-virtual',
-    }));
-    build.onLoad({ filter: /.*/, namespace: 'rovr-virtual' }, () => {
+    build.onResolve({ filter: /^virtual:rovr-[a-z]+-catalogs$/ }, (args) =>
+      (args.path in WEB_CATALOG_NAMESPACES ? { path: args.path, namespace: 'rovr-virtual' } : undefined));
+    build.onLoad({ filter: /.*/, namespace: 'rovr-virtual' }, (args) => {
+      const pick = WEB_CATALOG_NAMESPACES[args.path];
       const catalogs = {};
       for (const locale of CATALOG_LOCALES) {
         const file = path.join(repoRoot, 'frontend', 'src', 'i18n', 'messages', `${locale}.json`);
-        const messages = JSON.parse(fs.readFileSync(file, 'utf8'));
-        catalogs[locale] = messages?.brain?.timeline ?? {};
+        catalogs[locale] = pick(JSON.parse(fs.readFileSync(file, 'utf8')));
       }
       return { contents: JSON.stringify(catalogs), loader: 'json' };
     });
@@ -86,13 +102,17 @@ const shared = {
   legalComments: 'none',
   logLevel: 'info',
   define: { 'process.env.NODE_ENV': JSON.stringify(production ? 'production' : 'development') },
+  // Source-only packages with PEERS and no install of their own
+  // (`@builderforce/knowledge-graph-view`: three, @react-three/*, memory) resolve those
+  // bare imports from THIS package's install — a fallback only, after node's own walk.
+  nodePaths: [path.join(here, 'node_modules')],
   alias: {
     ...sourcePackageAliasMap(repoRoot),
     // One React for the whole panel — see the header.
     react: nodeModule('react'),
     'react-dom': nodeModule('react-dom'),
   },
-  plugins: [sharedPackageTsResolve, timelineCatalogs],
+  plugins: [sharedPackageTsResolve, webCatalogs],
 };
 
 fs.rmSync(outDir, { recursive: true, force: true });
@@ -103,6 +123,9 @@ await Promise.all([
   esbuild.build({ ...shared, entryPoints: { content: 'src/content/pageAgent.ts' }, format: 'iife', outdir: outDir }),
   // The `bfi` engine's Web Worker (`BFI_WORKER_FILE`): the panel starts it on first use.
   esbuild.build({ ...shared, entryPoints: { bfiWorker: 'src/host/bfiWorker.ts' }, format: 'esm', outdir: outDir }),
+  // The knowledge review's Web Worker (`KNOWLEDGE_WORKER_FILE`): the shared browser host's
+  // worker entry, reached through the ONE registry like every other source-only import.
+  esbuild.build({ ...shared, entryPoints: { knowledgeReview: shared.alias['@builderforce/knowledge-browser/worker'] }, format: 'esm', outdir: outDir }),
   esbuild.build({
     ...shared,
     entryPoints: { sidepanel: 'src/sidepanel/main.tsx' },

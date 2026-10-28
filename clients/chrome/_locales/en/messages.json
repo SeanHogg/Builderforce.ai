@@ -1663,6 +1663,14 @@
     "message": "A model on this machine served the call — what your paid route would have charged for the same tokens",
     "description": "Saving source explanation"
   },
+  "spSourceDeterministic": {
+    "message": "Answered by a workspace tool",
+    "description": "Saving source label"
+  },
+  "spHintDeterministic": {
+    "message": "A deterministic workspace action answered — no model call (estimated at a median turn)",
+    "description": "Saving source explanation"
+  },
   "connHeading": {
     "message": "Connected accounts",
     "description": "Composer Status tab, Connected accounts: heading"
@@ -1766,5 +1774,65 @@
   "connErrFailed": {
     "message": "Could not reconnect.",
     "description": "Composer Status tab, Connected accounts: errFailed"
+  },
+  "tabKnowledge": {
+    "message": "Knowledge",
+    "description": "View tab"
+  },
+  "knowledgeDescription": {
+    "message": "Review a folder on this device and see what it knows, as a graph you can ask about.",
+    "description": "Knowledge view: what the destination is for"
+  },
+  "knowledgeNoProjectTitle": {
+    "message": "Choose a project first",
+    "description": "Knowledge view: no project chosen (title)"
+  },
+  "knowledgeNoProjectBody": {
+    "message": "Knowledge is kept per project. Choose one in Settings (File new tasks in), then review a folder.",
+    "description": "Knowledge view: no project chosen (body)"
+  },
+  "knowledgeSignedOutTitle": {
+    "message": "Sign in to use Knowledge",
+    "description": "Knowledge view: signed out (title)"
+  },
+  "knowledgeSignedOutBody": {
+    "message": "Reviews and their graphs are kept in your Builderforce workspace. Sign in from Settings.",
+    "description": "Knowledge view: signed out (body)"
+  },
+  "knowledgeOpenSettings": {
+    "message": "Open Settings",
+    "description": "Knowledge view: button to Settings"
+  },
+  "prefetchAnsweredBy": {
+    "message": "Answered by {action} — no model was called",
+    "description": "Chat: a request a deterministic tool answered — {action} is the tool"
+  },
+  "prefetchAnsweredHint": {
+    "message": "A deterministic tool answered this request directly, so no model ran.",
+    "description": "Chat: tooltip on a deterministic answer"
+  },
+  "prefetchNextSteps": {
+    "message": "Next steps",
+    "description": "Chat: accessible name of a deterministic answer's chips"
+  },
+  "prefetchOpenInGraph": {
+    "message": "Open in graph",
+    "description": "Chat: chip that opens the Knowledge tab focused on the answer"
+  },
+  "prefetchChooseFolderToReview": {
+    "message": "Choose a folder to review",
+    "description": "Chat: chip that opens the Knowledge tab on its review launcher"
+  },
+  "prefetchActionKnowledgeGraph": {
+    "message": "Knowledge graph",
+    "description": "Chat: name of the knowledge-graph action"
+  },
+  "prefetchActionKnowledgeReview": {
+    "message": "Folder review",
+    "description": "Chat: name of the folder-review action"
+  },
+  "prefetchActionKnowledgeAsk": {
+    "message": "Knowledge lookup",
+    "description": "Chat: name of the knowledge-lookup action"
   }
 }

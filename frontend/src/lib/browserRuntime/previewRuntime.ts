@@ -39,6 +39,15 @@ export function bootSharedPreviewRuntime(): Promise<PreviewRuntime> {
   return booting;
 }
 
+/**
+ * The shared runtime only if something already booted it — never boots it. A reader of
+ * the workspace's files (the knowledge review) offers them only when they exist, rather
+ * than spinning up the relay to find an empty file system.
+ */
+export function peekSharedPreviewRuntime(): Promise<PreviewRuntime> | null {
+  return booting;
+}
+
 const INSTALLED = '/node_modules/';
 
 /**

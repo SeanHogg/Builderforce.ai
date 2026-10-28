@@ -78,6 +78,7 @@ export function workStatusLabels(): Record<string, string> {
     "spend.source.context_trim": t("Context kept lean"),
     "spend.source.recall_overhead": t("Recall added"),
     "spend.source.local_model": t("On this machine"),
+    "spend.source.deterministic": t("Answered by a workspace tool"),
     "spend.sourceHint.prompt_cache": t("The provider served part of the prompt from its cache at a tenth of the price"),
     "spend.sourceHint.memory_answer": t("A question asked before was answered from memory — no model call"),
     "spend.sourceHint.evermind_answer": t("The project’s Evermind answered — no paid model call"),
@@ -85,5 +86,6 @@ export function workStatusLabels(): Record<string, string> {
     "spend.sourceHint.context_trim": t("Compaction kept earlier turns out of each call"),
     "spend.sourceHint.recall_overhead": t("What recalled memories added to each prompt — the cost of recall"),
     "spend.sourceHint.local_model": t("A model on this machine served the call — what your paid route would have charged for the same tokens"),
+    "spend.sourceHint.deterministic": t("A deterministic workspace action answered — no model call (estimated at a median turn)"),
   };
 }

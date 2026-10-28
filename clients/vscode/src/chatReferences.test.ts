@@ -90,7 +90,7 @@ describe("referencesTurnBlock — lazy, cancellable", () => {
     const budget = vi.fn(async () => mentionBudget("cloud"));
     const r = reader({ "/ws/notes.md": prose });
     const read = vi.spyOn(r, "readRange");
-    const run = () => referencesTurnBlock(refs, { reader: r, budget, deps: { compress }, cancelled, ...(answer ? { answerWithoutModel: answer } : {}) });
+    const run = () => referencesTurnBlock(refs, { reader: r, budget, deps: { compress }, cancelled, ...(answer ? { deterministicAnswer: answer } : {}) });
     return { compress, budget, read, run };
   }
 

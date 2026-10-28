@@ -66,6 +66,23 @@
       "@builderforce/ide-templates": ["../../../packages/ide-templates/src/index.ts"],
       "@builderforce/canvas-widget-protocol": ["../../../packages/canvas-widget-protocol/src/index.ts"],
       "@builderforce/agent-tools/symbols": ["../../../packages/agent-tools/src/symbols.ts"],
+      "@builderforce/agent-tools/knowledge": ["../../../packages/agent-tools/src/knowledge/index.ts"],
+      "@builderforce/knowledge-client": ["../../../packages/knowledge-client/src/index.ts"],
+      "@builderforce/knowledge-graph-view": ["../../../packages/knowledge-graph-view/src/index.ts"],
+      "@builderforce/knowledge-graph-view/testing": ["../../../packages/knowledge-graph-view/src/testing.ts"],
+      "@builderforce/knowledge-browser": ["../../../packages/knowledge-browser/src/index.ts"],
+      "@builderforce/agent-tools/knowledge-index": ["../../../packages/agent-tools/src/knowledge-index.ts"],
+      "@builderforce/agent-tools/prefetch": ["../../../packages/agent-tools/src/prefetch/index.ts"],
+      "@builderforce/prefetch": ["../../../packages/prefetch/src/index.ts"],
+      // `@builderforce/knowledge-graph-view` is source-only with these as PEERS and no
+      // install of its own (as in frontend/tsconfig.json): three and @react-three/* are the
+      // frontend's copies (the bundle resolves them there too — vite.config.ts), memory is
+      // this package's. React is the one copy mapped above.
+      "three": ["../../../frontend/node_modules/@types/three"],
+      "@react-three/fiber": ["../../../frontend/node_modules/@react-three/fiber"],
+      "@react-three/drei": ["../../../frontend/node_modules/@react-three/drei"],
+      "@seanhogg/builderforce-memory/knowledge": ["../node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.d.ts"],
+      "@seanhogg/builderforce-memory/ingest": ["../node_modules/@seanhogg/builderforce-memory/dist/ingest/index.d.ts"],
       "@builderforce/model-catalog": ["../../../packages/model-catalog/src/index.ts"],
       "@builderforce/provider-connect": ["../../../packages/provider-connect/src/index.ts"],
       "@builderforce/run-policy": ["../../../packages/run-policy/src/index.ts"],
@@ -92,6 +109,9 @@
     // and reach it through `@/*`, so they are checked under the options that source
     // is written against — the same reason `src/canvas` is here.
     "src/WorkspaceApp.tsx",
+    // The Knowledge view's host side: it mounts the shared `@builderforce/knowledge-graph-view`
+    // (frontend-shaped source and peers), so it is checked with the canvas, not the strict project.
+    "src/knowledgeGraph",
     "src/main.tsx",
     "vite.config.ts",
     // The frontend's ambient module declarations. Pulled in explicitly because a

@@ -26,6 +26,9 @@ export const LOOPBACK_ORIGINS = ['http://127.0.0.1', 'http://localhost'] as cons
 export const BFI_WASM_FILE = 'bfi_web_bg.wasm';
 /** The `bfi` Web Worker `build.mjs` emits beside the panel (`src/host/bfiWorker.ts`). */
 export const BFI_WORKER_FILE = 'bfiWorker.js';
+/** The knowledge review's Web Worker `build.mjs` emits beside the panel
+ *  (`@builderforce/knowledge-browser/worker`); the Knowledge view starts it per review. */
+export const KNOWLEDGE_WORKER_FILE = 'knowledgeReview.js';
 
 /** The client name sent with a device sign-in (`POST /api/auth/device/code`). */
 export const DEVICE_CLIENT = 'chrome';

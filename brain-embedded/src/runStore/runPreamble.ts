@@ -32,6 +32,7 @@ import type { RunCell } from './runCell';
 import { nowIso, pushTrace } from './runCells';
 import { isFollowUpTurn, latestUserText } from './convoText';
 import { answerFromMemory, recallForRun } from './runMemory';
+import { answerDeterministically } from './prefetchGate';
 import { gatherHostRunContext, recordServedReads } from './hostRunContext';
 import type { RunLoopContext } from './runLoopContext';
 import type { BrainRunRequest } from './runTypes';
@@ -143,11 +144,23 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
   // conversation, not "status?" three turns in (which replayed another chat's ticket
   // report). The same gate covers every tier: on-device, the Q&A cache and Evermind.
   const memoryReplay = memoryReplayable(latestUserText(convo), { followUp: isFollowUpTurn(convo) });
+  // The PreFetch gate first (`prefetchGate.ts`): a deterministic ANSWER ends the run here;
+  // PREFETCH output joins the volatile tail below. Computed from the workspace NOW, so it
+  // is not held to the memory replay gate.
+  const gate = await answerDeterministically(chatId, c, req, metadata.guestTurnId, runKey);
+  if (gate.answered) return null;
+  // How the gate left the turn rides every model call it makes, so the device ledger's
+  // rows (and the gateway's own) say whether the model started from prefetched facts.
+  if (req.prefetch) metadata.gateRoute = gate.tail.length > 0 ? 'prefetch' : 'llm';
   if (await answerFromMemory(chatId, c, req, allTools, memoryReplay)) return null;
 
   // The host's task context (its context pack, E2) is ALWAYS volatile: it changes every
-  // run, so it rides after the history whatever the stable-prefix lever says.
+  // run, so it rides after the history whatever the stable-prefix lever says. The gate's
+  // PREFETCH output rides the same channel — never the system prompt, so the cached
+  // prefix is untouched — and a block the pack already carries (its pre-search hits) is
+  // not repeated.
   if (host.turnContext) turnParts.push(host.turnContext);
+  for (const block of gate.tail) if (!host.turnContext?.includes(block)) turnParts.push(block);
 
   // Per-turn system-prompt augmentation (the LIMBIC parity seam). Fetched once
   // at loop start with the latest user text; a non-empty return is appended to

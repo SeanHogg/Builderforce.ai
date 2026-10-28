@@ -18,7 +18,8 @@ const MAX_LOCATIONS = 5;
 /** A where-question is short; a long request is a task that happens to start with "where". */
 const MAX_QUESTION_CHARS = 160;
 
-const LEAD = /^\s*(?:(?:hey|ok|so|please)[,\s]+)?(?:where(?:'s|\s+is|\s+are|\s+do\s+we\s+define|\s+do\s+i\s+find|\s+can\s+i\s+find)?|in\s+which\s+file\s+(?:is|are)|which\s+file\s+(?:defines|declares|has|contains)|find\s+(?:the\s+)?definition\s+of|locate)\b/i;
+/** How a where-question opens — also the PreFetch gate's tier-1 rule for `symbols.where-defined`. */
+export const WHERE_DEFINED_LEAD = /^\s*(?:(?:hey|ok|so|please)[,\s]+)?(?:where(?:'s|\s+is|\s+are|\s+do\s+we\s+define|\s+do\s+i\s+find|\s+can\s+i\s+find)?|in\s+which\s+file\s+(?:is|are)|which\s+file\s+(?:defines|declares|has|contains)|find\s+(?:the\s+)?definition\s+of|locate)\b/i;
 
 /** Words a where-question may carry besides the names it asks about. */
 const FILLER = new Set([
@@ -36,7 +37,7 @@ const FILLER = new Set([
  */
 export function whereDefinedTargets(request: string): string[] | null {
   const text = (request ?? "").trim();
-  if (!text || text.length > MAX_QUESTION_CHARS || text.includes("\n") || !LEAD.test(text)) return null;
+  if (!text || text.length > MAX_QUESTION_CHARS || text.includes("\n") || !WHERE_DEFINED_LEAD.test(text)) return null;
   const names: string[] = [];
   // A plain lowercase word ("router", "config") is English as often as it is code, so a
   // name must be marked as code: backticked, or shaped like one (a capital, `_`, `$`).

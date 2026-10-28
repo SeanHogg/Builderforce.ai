@@ -63,6 +63,12 @@ export function collectCanvasNamespaces(entry: string, frontendSrc: string): str
     for (const match of source.matchAll(/useTranslations\(\s*(?:'([^']+)'|"([^"]+)")\s*\)/g)) {
       namespaces.add((match[1] ?? match[2]).split('.')[0]);
     }
+    // `useTranslations(KNOWLEDGE_GRAPH_NAMESPACE)` — a namespace named by a constant
+    // declared in the same file (`const X = 'ns'`).
+    for (const match of source.matchAll(/useTranslations\(\s*([A-Za-z_$][\w$]*)\s*\)/g)) {
+      const declared = new RegExp(`\\b${match[1].replace(/\$/g, '\\$')}\\s*=\\s*['"]([^'"]+)['"]`).exec(source);
+      if (declared) namespaces.add(declared[1].split('.')[0]);
+    }
   }
   return [...namespaces].sort();
 }

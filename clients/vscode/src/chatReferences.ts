@@ -95,9 +95,9 @@ export interface ReferencesTurnOptions {
   /** The mention budget of the turn's route. Asked only when there is something to fit. */
   budget(): Promise<MentionBudget>;
   deps: IngressDeps;
-  /** The turn's answer without a model ("where is X defined?"), when it has one — the
-   *  SAME memoized call the run makes, so asking it here costs nothing twice. */
-  answerWithoutModel?: () => Promise<string | undefined>;
+  /** The turn's deterministic answer ("where is X defined?"), when it has one — the SAME
+   *  memoized computation the run's PreFetch gate asks, so asking here costs nothing twice. */
+  deterministicAnswer?: () => Promise<string | undefined>;
   /** Whether the request was cancelled. */
   cancelled(): boolean;
 }
@@ -109,7 +109,7 @@ export interface ReferencesTurnOptions {
  */
 export async function referencesTurnBlock(refs: readonly ChatReferenceLike[], opts: ReferencesTurnOptions): Promise<string> {
   if (refs.length === 0 || opts.cancelled()) return "";
-  if (opts.answerWithoutModel && (await opts.answerWithoutModel().catch(() => undefined))) return "";
+  if (opts.deterministicAnswer && (await opts.deterministicAnswer().catch(() => undefined))) return "";
   if (opts.cancelled()) return "";
   const texts = await readChatReferences(refs, opts.reader);
   if (texts.length === 0 || opts.cancelled()) return "";

@@ -103,7 +103,7 @@ function catalogRows(json: unknown): Array<{ id: string; ownedBy?: string }> {
  * (`parameters`), which every request without options loads with. `undefined` = the runtime
  * gave no card (an older Ollama, or an Ollama-compatible server that lacks the route).
  */
-async function ollamaCard(
+export async function ollamaCard(
   fetchImpl: FetchLike,
   endpoint: LocalEndpoint,
   model: string,
@@ -154,21 +154,65 @@ async function ollamaLoadedWindows(
   endpoint: LocalEndpoint,
   timeoutMs: number,
 ): Promise<Map<string, number>> {
+  const loaded = new Map<string, number>();
+  for (const entry of await ollamaLoadedModels(fetchImpl, endpoint, timeoutMs)) {
+    if (!entry.contextLength) continue;
+    for (const id of entry.ids) loaded.set(id, entry.contextLength);
+  }
+  return loaded;
+}
+
+/** One model Ollama holds resident (`GET /api/ps` row). */
+export interface OllamaLoadedModel {
+  /** The ids it answers to (`name`, then `model`), first = the one to request it by. */
+  ids: string[];
+  /** The weights' digest, when reported — a re-pull under the same name changes it. */
+  digest?: string;
+  /** The window it was loaded with, when reported. */
+  contextLength?: number;
+}
+
+/**
+ * The models Ollama holds resident right now (`GET /api/ps`) — the ONE reader of that
+ * route. Empty when none is loaded or the runtime is not answering. Never loads a model.
+ */
+export async function ollamaLoadedModels(
+  fetchImpl: FetchLike,
+  endpoint: LocalEndpoint,
+  timeoutMs: number = DEFAULT_PROBE_TIMEOUT_MS,
+): Promise<OllamaLoadedModel[]> {
   const json = await fetchJson(
     fetchImpl,
     `${normalizeLocalBaseUrl(endpoint.baseUrl)}/api/ps`,
     { headers: { accept: 'application/json', ...localAuthHeaders(endpoint) } },
     timeoutMs,
   );
-  const loaded = new Map<string, number>();
   const models = (json as { models?: unknown } | undefined)?.models;
-  if (!Array.isArray(models)) return loaded;
-  for (const entry of models) {
-    const { name, model, context_length } = (entry ?? {}) as { name?: unknown; model?: unknown; context_length?: unknown };
-    if (typeof context_length !== 'number' || context_length <= 0) continue;
-    for (const id of [name, model]) if (typeof id === 'string' && id.length > 0) loaded.set(id, context_length);
-  }
-  return loaded;
+  if (!Array.isArray(models)) return [];
+  return models.flatMap((entry): OllamaLoadedModel[] => {
+    const { name, model, digest, context_length } = (entry ?? {}) as { name?: unknown; model?: unknown; digest?: unknown; context_length?: unknown };
+    const ids = [name, model].filter((id): id is string => typeof id === 'string' && id.length > 0);
+    if (ids.length === 0) return [];
+    return [{
+      ids,
+      ...(typeof digest === 'string' && digest.length > 0 ? { digest } : {}),
+      ...(typeof context_length === 'number' && context_length > 0 ? { contextLength: context_length } : {}),
+    }];
+  });
+}
+
+/**
+ * The model Ollama has RESIDENT right now (`GET /api/ps`), or undefined when none is
+ * loaded or the runtime is not answering — what the tier-3 logprob port's `warm()` reads
+ * (`residentModelTracker`). Asking never loads a model.
+ */
+export async function ollamaResidentModel(
+  fetchImpl: FetchLike,
+  endpoint: LocalEndpoint,
+  timeoutMs: number = DEFAULT_PROBE_TIMEOUT_MS,
+): Promise<string | undefined> {
+  const loaded = await ollamaLoadedWindows(fetchImpl, endpoint, timeoutMs);
+  return loaded.keys().next().value;
 }
 
 /**

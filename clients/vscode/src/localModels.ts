@@ -62,7 +62,7 @@ export interface LocalModelsConfig {
 }
 
 /** The global fetch, read at CALL time so a harness that swaps it is honoured. */
-const globalFetch: FetchLike = (input, init) => fetch(input, init);
+export const globalFetch: FetchLike = (input, init) => fetch(input, init);
 
 /**
  * The endpoint `url` belongs to, or null when this machine serves no such endpoint — the

@@ -54,10 +54,10 @@ const SYNC_ACTIVE = toSyncAction(SYNC_FRAME_ACTIVE);
 const SYNC_IDLE = toSyncAction(SYNC_FRAME_IDLE);
 
 describe('AC4 — the view swaps the moment a run begins mutating code', () => {
-  it('starts on the canvas, before any run has said anything', () => {
-    // Nothing has happened yet, so the canvas is not a default to be overridden — it
-    // is the correct thing to be showing.
-    expect(INITIAL_VIEW_STATE.view).toBe('canvas');
+  it('starts on the knowledge graph, before any run has said anything', () => {
+    // Nothing has happened yet, so the workspace's knowledge graph (PRD 38) is not a
+    // default to be overridden — it is the correct thing to be showing.
+    expect(INITIAL_VIEW_STATE.view).toBe('knowledge');
     expect(isRunActive(INITIAL_VIEW_STATE)).toBe(false);
   });
 
@@ -69,11 +69,11 @@ describe('AC4 — the view swaps the moment a run begins mutating code', () => {
     expect(toSyncAction(SYNC_FRAME_IDLE)).toEqual({ type: 'run.sync', chatId: 7, running: false });
   });
 
-  it('holds the canvas while a run is active but has not written yet', () => {
+  it('holds the resting view while a run is active but has not written yet', () => {
     // A run that is only reading does NOT flip the panel: swapping on `run.sync`
     // would yank the canvas away on every read-only question the user asks.
     const state = drive([SYNC_ACTIVE]);
-    expect(state.view).toBe('canvas');
+    expect(state.view).toBe('knowledge');
     expect(isRunActive(state)).toBe(true);
   });
 
@@ -90,7 +90,7 @@ describe('AC4 — the view swaps the moment a run begins mutating code', () => {
       SYNC_ACTIVE,
       { type: 'run.tool', mutating: false },
     ]);
-    expect(state.view).toBe('canvas');
+    expect(state.view).toBe('knowledge');
   });
 
   it('keeps the changes on screen once the run ends — that is what the user reads next', () => {
@@ -273,5 +273,20 @@ describe('reading a written path out of a trace event', () => {
     expect(toolCallFromArgs({ path: 42 })).toBeUndefined();
     expect(toolCallFromArgs(null)).toBeUndefined();
     expect(toolCallFromArgs('read_file')).toBeUndefined();
+  });
+});
+
+describe('the Knowledge view (PRD 38)', () => {
+  it('returns to the knowledge graph and pins it, so the next write does not yank it back', () => {
+    const changed = drive([SYNC_ACTIVE, { type: 'run.tool', mutating: true }]);
+    expect(changed.view).toBe('changes');
+    const shown = visualizationViewReducer(changed, { type: 'showKnowledge' });
+    expect(shown).toMatchObject({ view: 'knowledge', pinned: true });
+    expect(visualizationViewReducer(shown, { type: 'run.tool', mutating: true }).view).toBe('knowledge');
+  });
+
+  it('swaps from the knowledge graph to the changes on the first write, unpinned', () => {
+    expect(INITIAL_VIEW_STATE.pinned).toBe(false);
+    expect(drive([SYNC_ACTIVE, { type: 'run.tool', mutating: true }]).view).toBe('changes');
   });
 });

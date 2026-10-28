@@ -23,6 +23,7 @@ import type { RepoSymbolsCapability, SymbolFindResult, SymbolMatch } from "./cap
 import { isUnderScopeDir, normalizeScopeDir } from "./glob.js";
 import { gitIgnoredMatcher, gitIgnoredSubset } from "./node-git-ignore.js";
 import { extractSymbols, isSymbolIndexable, SYMBOL_KINDS, type CodeSymbol, type SymbolKind } from "./symbols.js";
+import { WORKSPACE_SKIP_DIRS } from "./skipDirs.js";
 
 // The tree-sitter extractor (web-tree-sitter WASM, regex fallback per language) lives in
 // its own module and is re-exported from this export condition.
@@ -39,10 +40,7 @@ export interface SymbolExtractor {
 export const REGEX_SYMBOL_EXTRACTOR: SymbolExtractor = { id: "regex", extract: extractSymbols };
 
 /** Directories never indexed — build output, dependencies, VCS and tool caches. */
-export const SYMBOL_INDEX_SKIP_DIRS: ReadonlySet<string> = new Set([
-  "node_modules", ".git", "dist", "build", "out", ".next", "coverage", ".turbo", ".vercel", ".cache",
-  "target", "vendor", ".venv", "venv", "__pycache__", ".idea", ".vscode-test",
-]);
+export const SYMBOL_INDEX_SKIP_DIRS: ReadonlySet<string> = WORKSPACE_SKIP_DIRS;
 
 export interface SymbolIndexOptions {
   /** Directory names to skip (dot-directories are always skipped). */

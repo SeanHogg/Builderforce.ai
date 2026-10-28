@@ -338,7 +338,21 @@ describe('the entity catalog', () => {
     // step, keyed by (chat_id, event_key), no title, no status, read only as a chat's
     // step timeline. Core's copy is the single-database mirror and stays empty in
     // production, the same reason the 1217 replay mirrors are exempt.
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(48);
+    //
+    // Ceiling moved 48 → 50 (2026-10-28) with the knowledge graph's stored half (1278,
+    // PRD 38 §4.2), adjudicated rather than counted — neither is a thing a person opens
+    // on its own:
+    //  - `project_fact_relations` is an EDGE between two NodeRefs (two `project_facts`
+    //    keys, or a fact and a source path). No title, no status; it is read only as part
+    //    of a server-built graph, and its single writer (`writeKnowledge`) enforces the
+    //    ≤ 500-row batch, the "extracted is never stored" rule and the version bump that
+    //    invalidates every cached graph. A generic PATCH would bypass all three — the
+    //    `job_invites` family reason, with `project_facts` (0276, predates the series)
+    //    as the unregistered parent.
+    //  - `knowledge_scopes` is a per-root REVIEW DIGEST: one row per reviewed directory,
+    //    upserted by that same writer, with a `last_digest` that names the graph state the
+    //    cache keys on. Editing it by hand would be a false statement about a review.
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(50);
   });
 
   it('declares nothing that no migration creates', () => {

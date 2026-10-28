@@ -3,6 +3,9 @@ import { WebviewPanelBase } from "./webviewShared";
 import { workspaceCanvasSession, type WorkspaceCanvasSession } from "./workspaceSession";
 import { WorkspaceSurface, type BrainInbound } from "./workspaceSurface";
 import { asVisualizationFrame } from "./visualizationInitFrame";
+import { postToWebview, respondToWebview } from "./webviewHostBridge";
+import { KnowledgeBridge, setPendingKnowledgeFocus } from "./knowledge/knowledgeBridge";
+import { KNOWLEDGE_CALL, KNOWLEDGE_FOCUS, type KnowledgeCall, type KnowledgeFocusFrame } from "./knowledge/knowledgeProtocol";
 
 /**
  * The RIGHT-HAND half of the chat split: the same Creation Canvas beside the live run's
@@ -30,6 +33,8 @@ export class VisualizationPanel extends WebviewPanelBase<BrainInbound> {
   private static opening: Promise<void> | undefined;
 
   private readonly surface: WorkspaceSurface;
+  /** The Knowledge view's host side (PRD 38): its calls never reach the board's surface. */
+  private readonly knowledge: KnowledgeBridge;
 
   private constructor(ctx: vscode.ExtensionContext, session: WorkspaceCanvasSession) {
     // In the editor area, NOT beside the user's file: the chat now lives in the sidebar,
@@ -51,6 +56,19 @@ export class VisualizationPanel extends WebviewPanelBase<BrainInbound> {
       session,
       "graph",
     );
+    this.knowledge = new KnowledgeBridge({ ctx, post: (msg) => postToWebview(this.panel.webview, msg, this.panel) });
+  }
+
+  /**
+   * Open (or reveal) the panel on its Knowledge view, focused on `frame.focus` — the
+   * `builderforce.openKnowledgeGraph` command (Open in graph chips, `/graph`). The focus
+   * waits for the view to take it when the panel is still booting.
+   */
+  static async openKnowledge(ctx: vscode.ExtensionContext, frame: KnowledgeFocusFrame): Promise<void> {
+    setPendingKnowledgeFocus(frame);
+    await VisualizationPanel.open(ctx);
+    const current = VisualizationPanel.current;
+    if (current) postToWebview(current.panel.webview, { type: KNOWLEDGE_FOCUS, ...frame }, current.panel);
   }
 
   /** Open (or reveal) the visualization panel in the editor area. Rejects when the
@@ -70,12 +88,19 @@ export class VisualizationPanel extends WebviewPanelBase<BrainInbound> {
     return VisualizationPanel.opening;
   }
 
-  protected onMessage(msg: BrainInbound): Promise<void> {
-    return this.surface.handle(msg);
+  protected async onMessage(msg: BrainInbound): Promise<void> {
+    if (msg.type !== KNOWLEDGE_CALL) return this.surface.handle(msg);
+    const { type: _type, id, ...call } = msg as unknown as KnowledgeCall & { type: string; id?: string };
+    try {
+      respondToWebview(this.panel.webview, id, true, await this.knowledge.handle(call as KnowledgeCall));
+    } catch (error) {
+      respondToWebview(this.panel.webview, id, false, undefined, error instanceof Error ? error.message : String(error));
+    }
   }
 
   protected onDispose(): void {
     this.surface.dispose();
+    this.knowledge.dispose();
     if (VisualizationPanel.current === this) VisualizationPanel.current = undefined;
   }
 }

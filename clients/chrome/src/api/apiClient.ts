@@ -50,9 +50,17 @@ export interface ApiClient {
   raw(path: string, init?: ApiRequestInit): Promise<{ status: number; body: unknown }>;
 }
 
-export function createApiClient(deps: { session: Session; baseUrl: string; fetch: ApiFetch }): ApiClient {
-  /** The ONE authenticated send both answers share. */
-  const send = async (path: string, init: ApiRequestInit): Promise<Response> => {
+/**
+ * The ONE authenticated send: the session's tenant JWT, the outbox scope pin, the JSON
+ * body and the idempotency key. Answers the raw `Response` — `createApiClient` reads it
+ * into its two shapes, and a shared client that maps statuses itself
+ * (`@builderforce/knowledge-client`) takes it as its `fetch`. A body the caller already
+ * serialized (`body`) passes through when there is no `json`.
+ */
+export type AuthenticatedFetch = (path: string, init?: ApiRequestInit & Pick<RequestInit, 'body'>) => Promise<Response>;
+
+export function createAuthenticatedFetch(deps: { session: Session; baseUrl: string; fetch: ApiFetch }): AuthenticatedFetch {
+  return async (path, init = {}) => {
     const { json, asScope, idempotencyKey, headers, ...rest } = init;
     if (asScope !== undefined && asScope !== deps.session.scope()) {
       throw new ApiError(undefined, 'parked: queued for another workspace');
@@ -64,7 +72,8 @@ export function createApiClient(deps: { session: Session; baseUrl: string; fetch
       return await deps.fetch(`${deps.baseUrl}${path}`, {
         ...rest,
         headers: {
-          ...(headers as Record<string, string> | undefined),
+          // A `Headers` instance spreads to nothing — read it into a plain record.
+          ...(headers ? Object.fromEntries(new Headers(headers).entries()) : {}),
           authorization: `Bearer ${token}`,
           ...(json !== undefined ? { 'content-type': 'application/json' } : {}),
           ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
@@ -75,6 +84,10 @@ export function createApiClient(deps: { session: Session; baseUrl: string; fetch
       throw new ApiError(undefined, e instanceof Error ? e.message : String(e));
     }
   };
+}
+
+export function createApiClient(deps: { session: Session; baseUrl: string; fetch: ApiFetch }): ApiClient {
+  const send = createAuthenticatedFetch(deps);
 
   return {
     async request<T>(path: string, init: ApiRequestInit = {}): Promise<T> {

@@ -8,7 +8,7 @@
  *
  *   GET  /facts?query=&limit=  — recall (read-through cached)
  *   POST /facts { key, content, source?, chatId? } — write-through upsert (replace by key)
- *   DELETE /facts/:key          — retire one fact (a writer removing what it owns)
+ *   DELETE /facts/:key          — retire one fact + its relations (author / admin; agent facts: any writer)
  *   GET  /answer?query=&chatId= — memory-first answer (honours the chat's Memory switch)
  *   POST /answer { question, answer, chatId? } — write a Q&A pair to the cache
  *
@@ -23,7 +23,9 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { hostDirectoryHashReader, parseFactFileAnchors, type FactOriginCost } from '../../application/llm/projectFactsStore';
 import { recallProjectFacts } from '../../application/llm/projectFactsRecall';
-import { deleteProjectFact, upsertProjectFact } from '../../application/llm/projectFactsWrite';
+import { knowledgeWritePortsFor } from '../../application/knowledge/knowledgeWritePorts';
+import { writeKnowledge } from '../../application/knowledge/writeKnowledge';
+import { deleteKnowledgeFact } from '../../application/knowledge/deleteKnowledgeFact';
 import { chatAnswerOrigin, parseAnswerChatId, resolveAnswerChat } from '../../application/llm/memoryAnswerChat';
 import { cloudExecutionIdFromRequest } from '../../application/llm/cloudByoPolicy';
 import { resolveMemoryAnswer, cacheProjectAnswer } from '../../application/llm/projectMemory';
@@ -109,7 +111,7 @@ async function recallCore(env: Env, db: Db, tenantId: number, projectId: number,
   return json({ facts });
 }
 
-async function rememberCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context, userId: string | null): Promise<Response> {
+async function rememberCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context, userId: string | null, authorId: string | null): Promise<Response> {
   if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const body = await parseOptionalBody(c, RememberFactBody);
   const key = typeof body.key === 'string' ? body.key : '';
@@ -122,21 +124,34 @@ async function rememberCore(env: Env, db: Db, tenantId: number, projectId: numbe
   // No chat-derived origin => the store fills it from the execution's own trace, or
   // leaves it unknown — never from a figure the caller asserted.
   const origin = await serverOrigin(db, tenantId, userId, gate);
-  const ok = await upsertProjectFact(env, db, tenantId, projectId, key, content, typeof body.source === 'string' ? body.source : 'agent', {
-    ...(originExecutionId != null ? { originExecutionId } : {}),
-    ...(origin ? { origin } : {}),
-    ...(fileAnchors ? { fileAnchors } : {}),
-  });
-  return json({ ok, key: key.trim() });
+  // Through the ONE knowledge writer (PRD 38 §4.2), with this route's long-standing fact
+  // semantics: server-side provenance and the single-subject anchor correction.
+  const ports = knowledgeWritePortsFor(env, db, tenantId, projectId);
+  const written = await writeKnowledge(
+    { env, db, tenantId, projectId, store: ports.store, blobs: ports.extracted, userId: authorId, legacyFact: { originExecutionId, origin, retireByAnchor: true } },
+    { facts: [{ key, content, source: typeof body.source === 'string' ? body.source : 'agent', fileAnchors: fileAnchors ?? [] }] },
+  );
+  return json({ ok: written.factsWritten > 0, key: key.trim() });
 }
 
-/** Retire one fact by key. `ok` says whether a fact was removed (absent is not an error). */
-async function forgetCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
+/**
+ * Retire one fact by key, with every knowledge relation that names it (PRD 38 §8.3). A
+ * person's fact may be deleted only by its author or a project admin; an agent's (no
+ * recorded author) by any caller, as before. `removed` says whether a fact was removed
+ * (absent is not an error).
+ */
+async function forgetCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context, userId: string | null): Promise<Response> {
   if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const key = decodeURIComponent(c.req.param('key') ?? '');
   if (!key.trim()) return json({ error: 'key is required' }, 400);
-  const removed = await deleteProjectFact(env, db, tenantId, projectId, key);
-  return json({ ok: true, removed, key: key.trim() });
+  const { store } = knowledgeWritePortsFor(env, db, tenantId, projectId);
+  const result = await deleteKnowledgeFact(
+    { env, db, tenantId, projectId, store },
+    { userId, role: (c.get('role') as string | undefined) ?? null },
+    key,
+  );
+  if (!result.ok) return json({ error: result.error }, result.status);
+  return json({ ok: true, removed: result.removed, relationsRemoved: result.relationsRemoved, key: key.trim() });
 }
 
 /**
@@ -242,10 +257,12 @@ export function createProjectFactsRoutes(db: Db, door: FrontDoor = tenantDoor): 
   const t = (c: Context) => c.get('tenantId') as number;
   // A host key acts for the agent host, not a person: no user to attribute savings to.
   const person = (c: Context) => (door.agentHost ? null : (c.get('userId') as string | undefined) ?? null);
+  // Authorship (PRD 38 §8.3): a machine token (`machineActor`) is not a person either.
+  const author = (c: Context) => (c.get('machineActor') ? null : person(c));
 
   router.get('/:projectId/facts', (c) => recallCore(c.env as Env, db, t(c), pid(c), c));
-  router.post('/:projectId/facts', (c) => rememberCore(c.env as Env, db, t(c), pid(c), c, person(c)));
-  router.delete('/:projectId/facts/:key', (c) => forgetCore(c.env as Env, db, t(c), pid(c), c));
+  router.post('/:projectId/facts', (c) => rememberCore(c.env as Env, db, t(c), pid(c), c, person(c), author(c)));
+  router.delete('/:projectId/facts/:key', (c) => forgetCore(c.env as Env, db, t(c), pid(c), c, author(c)));
   // Memory-first: resolve an answer from memory (skip the LLM) / cache a Q&A pair.
   router.get('/:projectId/answer', (c) => resolveAnswerCore(c.env as Env, db, t(c), pid(c), c, person(c)));
   router.post('/:projectId/answer', (c) => cacheAnswerCore(c.env as Env, db, t(c), pid(c), c, person(c)));

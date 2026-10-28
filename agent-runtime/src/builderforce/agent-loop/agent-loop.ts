@@ -14,8 +14,7 @@ import {
   type LoopHooks,
   type LoopPorts,
 } from "@builderforce/agent-loop";
-import { RunKnowledgeRecorder, type PolicyGate, type RunKnowledgeLog } from "@builderforce/agent-tools";
-import { volatileTail } from "@seanhogg/builderforce-memory/handoff";
+import { RunKnowledgeRecorder } from "@builderforce/agent-tools";
 import {
   evaluateOnPremPolicyGate,
   isPolicyRefusal,
@@ -25,177 +24,30 @@ import type {
   AgentContext,
   AgentEvent,
   AgentMessage,
-  AgentTool,
   AgentToolResult,
-  ThinkingLevel,
 } from "../model/agent-types.js";
-import type { AssistantMessage, Message, Model, ToolResultMessage } from "../model/types.js";
-import { EventStream } from "./event-stream.js";
+import type { AssistantMessage, Model, TextContent, ToolCall, ToolResultMessage } from "../model/types.js";
+import type { AgentLoopConfig } from "./agent-loop-config.js";
+import { createAgentStream, streamAssistantResponse } from "./assistant-stream.js";
+import type { EventStream } from "./event-stream.js";
 import { packContextForModel } from "./handoff-pack.js";
+import { gateRunConfig } from "./prefetch-preamble.js";
 import { initialOnPremRunPolicy, modelRef, resolveStallOutcome } from "./stall-recovery.js";
 import type { StreamFn } from "./stream.js";
 
-export interface AgentLoopConfig {
-  model: Model;
-  /**
-   * The next model to try once the current one has burned its whole stall budget
-   * without emitting a single tool call — i.e. re-prompting it is spent and only a
-   * DIFFERENT model can finish the request. `tried` holds every {@link modelRef}
-   * already attempted this run, the run's original pin included.
-   *
-   * OMITTED — or returning undefined — keeps the previous behaviour exactly: the run
-   * ends on {@link stallExhaustedNotice} rather than switching. That default is the
-   * point. An on-prem model is an operator's explicit pin, not a gateway auto-select,
-   * so this loop never reaches for a catalog of its own: the HOST decides whether a
-   * successor exists and what it may be (on-prem that is the operator's own configured
-   * `agents.defaults.model.fallbacks` chain — see `createStallFallbackPicker`), and a
-   * host that wired nothing up gets no substitution.
-   *
-   * The swap is never silent: it is announced on the transcript through
-   * {@link AgentLoopConfig.onModelFallback} and bounded by `MAX_MODEL_FAILOVERS`.
-   */
-  pickFallbackModel?: (tried: readonly string[]) => Model | undefined;
-  /**
-   * Called when the loop switches models mid-run, with the user-facing notice that
-   * says which model gave up and why. The loop also appends the notice to the
-   * transcript; this is the seam a host uses to update its own "current model" state
-   * and persist the swap (see {@link Agent}).
-   */
-  onModelFallback?: (from: Model, to: Model, notice: string) => void;
-  /** Converts AgentMessage[] to LLM-compatible Message[] before each LLM call. */
-  convertToLlm: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
-  /** Optional AgentMessage[] → AgentMessage[] transform applied before conversion. */
-  transformContext?: (
-    messages: AgentMessage[],
-    signal?: AbortSignal,
-  ) => AgentMessage[] | Promise<AgentMessage[]>;
-  getSteeringMessages?: () => AgentMessage[] | Promise<AgentMessage[]>;
-  getFollowUpMessages?: () => AgentMessage[] | Promise<AgentMessage[]>;
-  getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
-  apiKey?: string;
-  temperature?: number;
-  maxTokens?: number;
-  /**
-   * Compiled governance gates evaluated at tool dispatch (`beforeDispatch`).
-   * A `block` / `require-approval` hit short-circuits `ports.dispatch` so the
-   * tool never runs; the model sees the refusal as an error tool result.
-   */
-  policyGates?: readonly PolicyGate[];
-  /**
-   * THE run's record (`infra/run-knowledge-registry.ts`), when the host keeps one — so
-   * this loop's per-turn brief and the run's note and code map are one record. Omitted
-   * ⇒ the loop keeps its own for the brief.
-   */
-  knowledge?: RunKnowledgeLog;
-}
-
 type ToolResultLike = AgentToolResult<unknown>;
 
-function isToolCall(c: { type: string }): c is import("../model/types.js").ToolCall {
+function isToolCall(c: { type: string }): c is ToolCall {
   return c.type === "toolCall";
 }
 
 /** Visible text of an assistant turn — thinking blocks and tool calls excluded, since
  *  only what the USER was left holding decides whether the turn stalled. */
-function assistantText(message: import("../model/types.js").AssistantMessage): string {
+function assistantText(message: AssistantMessage): string {
   return message.content
-    .filter((c): c is import("../model/types.js").TextContent => c.type === "text")
+    .filter((c): c is TextContent => c.type === "text")
     .map((c) => c.text)
     .join("\n");
-}
-
-/** Default identity conversion: fold non-LLM AgentMessages into plain LLM messages. */
-export function defaultConvertToLlm(messages: AgentMessage[]): Message[] {
-  const out: Message[] = [];
-  for (const m of messages) {
-    switch (m.role) {
-      case "user":
-      case "assistant":
-      case "toolResult":
-        out.push(m);
-        break;
-      case "compactionSummary":
-        out.push({ role: "user", content: m.summary, timestamp: m.timestamp });
-        break;
-      case "branchSummary":
-        out.push({ role: "user", content: m.summary, timestamp: m.timestamp });
-        break;
-      case "custom":
-        if (m.display !== false) {
-          const content = typeof m.content === "string" ? m.content : m.content;
-          out.push({ role: "user", content, timestamp: m.timestamp });
-        }
-        break;
-      case "bashExecution":
-        if (!m.excludeFromContext) {
-          out.push({
-            role: "user",
-            content: `\$ ${m.command}\n${m.output}`,
-            timestamp: m.timestamp,
-          });
-        }
-        break;
-    }
-  }
-  return out;
-}
-
-function createAgentStream(): EventStream<AgentEvent, AgentMessage[]> {
-  return new EventStream<AgentEvent, AgentMessage[]>(
-    (event) => event.type === "agent_end",
-    (event) => (event.type === "agent_end" ? event.messages : []),
-  );
-}
-
-async function streamAssistantResponse(
-  context: AgentContext,
-  config: AgentLoopConfig,
-  /** The model THIS turn runs on — `config.model` for most runs, a successor after a
-   *  stall failover. Passed explicitly rather than read off `config` so the loop never
-   *  mutates a caller-owned config object to change who is answering. */
-  model: Model,
-  signal: AbortSignal | undefined,
-  stream: EventStream<AgentEvent, AgentMessage[]>,
-  streamFn: StreamFn,
-  /** The run's record of what it already did (its `brief()`), on THIS request only. */
-  ledger?: string | null,
-): Promise<import("../model/types.js").AssistantMessage> {
-  // A tagged volatile tail: the cache breakpoint lands before it, and it rides last.
-  const tail = volatileTail([ledger]);
-  let messages = context.messages;
-  if (config.transformContext) messages = await config.transformContext(messages, signal);
-  const llmMessages = await config.convertToLlm(messages);
-  const llmContext = {
-    systemPrompt: context.systemPrompt,
-    messages: tail ? [...llmMessages, { ...tail, timestamp: Date.now() }] : llmMessages,
-    tools: context.tools,
-  };
-
-  const resolvedApiKey =
-    (config.getApiKey ? await config.getApiKey(model.provider) : undefined) || config.apiKey;
-  const response = await streamFn(model, llmContext, {
-    apiKey: resolvedApiKey,
-    temperature: config.temperature,
-    maxTokens: config.maxTokens,
-    signal,
-  });
-
-  for await (const event of response) {
-    if (event.type === "start") {
-      stream.push({ type: "message_start", message: { ...event.partial } });
-    } else if (event.type === "done" || event.type === "error") {
-      const finalMessage = await response.result();
-      stream.push({ type: "message_end", message: finalMessage });
-      return finalMessage;
-    } else {
-      stream.push({
-        type: "message_update",
-        assistantMessageEvent: event,
-        message: { ...event.partial },
-      });
-    }
-  }
-  return response.result();
 }
 
 async function runLoop(
@@ -522,174 +374,10 @@ export function agentLoop(
       stream.push({ type: "message_start", message: prompt });
       stream.push({ type: "message_end", message: prompt });
     }
-    await runLoop(currentContext, newMessages, config, signal, stream, streamFn);
+    // The PreFetch gate (`prefetch-preamble.ts`): an ANSWER has already settled the run.
+    const runConfig = await gateRunConfig(config, prompts, signal, stream, newMessages);
+    if (!runConfig) return;
+    await runLoop(currentContext, newMessages, runConfig, signal, stream, streamFn);
   })();
   return stream;
-}
-
-// ── Agent — stateful wrapper over agentLoop ──────────────────────────────────
-
-export interface AgentState {
-  systemPrompt: string;
-  model: Model;
-  thinkingLevel: ThinkingLevel;
-  tools: AgentTool[];
-  messages: AgentMessage[];
-  isStreaming: boolean;
-}
-
-export interface AgentOptions {
-  systemPrompt?: string;
-  model: Model;
-  thinkingLevel?: ThinkingLevel;
-  tools?: AgentTool[];
-  convertToLlm?: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
-  transformContext?: (
-    messages: AgentMessage[],
-    signal?: AbortSignal,
-  ) => AgentMessage[] | Promise<AgentMessage[]>;
-  getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
-  /** See {@link AgentLoopConfig.pickFallbackModel}. Omitted ⇒ no model substitution. */
-  pickFallbackModel?: (tried: readonly string[]) => Model | undefined;
-  /** See {@link AgentLoopConfig.onModelFallback}. The agent updates its own
-   *  `state.model` on a swap regardless, so a host only needs this to persist it. */
-  onModelFallback?: (from: Model, to: Model, notice: string) => void;
-  /** See {@link AgentLoopConfig.policyGates}. */
-  policyGates?: readonly PolicyGate[];
-}
-
-/**
- * Stateful agent — holds conversation state + an injected {@link StreamFn}, exposes
- * `subscribe`/`prompt`/`steer`/`abort`. The pi-free analogue of pi-agent-core's `Agent`.
- */
-export class Agent {
-  streamFn!: StreamFn;
-  private _state: AgentState;
-  private listeners = new Set<(e: AgentEvent) => void>();
-  private abortController?: AbortController;
-  private convertToLlm: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
-  private transformContext?: (
-    messages: AgentMessage[],
-    signal?: AbortSignal,
-  ) => AgentMessage[] | Promise<AgentMessage[]>;
-  private steeringQueue: AgentMessage[] = [];
-  private followUpQueue: AgentMessage[] = [];
-  getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
-  sessionId?: string;
-  /** THE run's record (see {@link AgentLoopConfig.knowledge}); set by the host per run. */
-  knowledge?: RunKnowledgeLog;
-  private pickFallbackModel?: (tried: readonly string[]) => Model | undefined;
-  private onModelFallback?: (from: Model, to: Model, notice: string) => void;
-  private policyGates?: readonly PolicyGate[];
-
-  constructor(opts: AgentOptions) {
-    this._state = {
-      systemPrompt: opts.systemPrompt ?? "",
-      model: opts.model,
-      thinkingLevel: opts.thinkingLevel ?? "off",
-      tools: opts.tools ?? [],
-      messages: [],
-      isStreaming: false,
-    };
-    this.convertToLlm = opts.convertToLlm ?? defaultConvertToLlm;
-    this.transformContext = opts.transformContext;
-    this.getApiKey = opts.getApiKey;
-    this.pickFallbackModel = opts.pickFallbackModel;
-    this.onModelFallback = opts.onModelFallback;
-    this.policyGates = opts.policyGates;
-  }
-
-  get state(): AgentState {
-    return this._state;
-  }
-  get isStreaming(): boolean {
-    return this._state.isStreaming;
-  }
-  subscribe(fn: (e: AgentEvent) => void): () => void {
-    this.listeners.add(fn);
-    return () => this.listeners.delete(fn);
-  }
-  private emit(e: AgentEvent): void {
-    for (const fn of this.listeners) fn(e);
-  }
-  setSystemPrompt(v: string): void {
-    this._state.systemPrompt = v;
-  }
-  setModel(m: Model): void {
-    this._state.model = m;
-  }
-  setThinkingLevel(l: ThinkingLevel): void {
-    this._state.thinkingLevel = l;
-  }
-  setTools(t: AgentTool[]): void {
-    this._state.tools = t;
-  }
-  replaceMessages(ms: AgentMessage[]): void {
-    this._state.messages = [...ms];
-  }
-  appendMessage(m: AgentMessage): void {
-    this._state.messages.push(m);
-  }
-  /** Queue a steering message to interrupt the agent mid-run. */
-  steer(m: AgentMessage): void {
-    this.steeringQueue.push(m);
-  }
-  /** Queue a follow-up message processed after the current run would stop. */
-  followUp(m: AgentMessage): void {
-    this.followUpQueue.push(m);
-  }
-  abort(): void {
-    this.abortController?.abort();
-  }
-
-  /** Resolve once the agent is not mid-stream (best-effort idle barrier for flush points). */
-  async waitForIdle(): Promise<void> {
-    while (this._state.isStreaming) await new Promise((r) => setTimeout(r, 10));
-  }
-
-  /** Run the loop with new prompt message(s); resolves when the agent stops. */
-  async prompt(prompts: AgentMessage[]): Promise<AgentMessage[]> {
-    this.abortController = new AbortController();
-    this._state.isStreaming = true;
-    const config: AgentLoopConfig = {
-      model: this._state.model,
-      convertToLlm: this.convertToLlm,
-      transformContext: this.transformContext,
-      getApiKey: this.getApiKey,
-      getSteeringMessages: () => {
-        const q = this.steeringQueue;
-        this.steeringQueue = [];
-        return q;
-      },
-      getFollowUpMessages: () => {
-        const q = this.followUpQueue;
-        this.followUpQueue = [];
-        return q;
-      },
-      ...(this.pickFallbackModel ? { pickFallbackModel: this.pickFallbackModel } : {}),
-      // A stall failover changes who is answering for the REST of the session, not just
-      // the rest of the turn: `setModel` here is what makes the next `prompt()` (and any
-      // surface reading `state.model`) start from the model that actually works.
-      onModelFallback: (from: Model, to: Model, notice: string) => {
-        this.setModel(to);
-        this.onModelFallback?.(from, to, notice);
-      },
-      ...(this.policyGates?.length ? { policyGates: this.policyGates } : {}),
-      ...(this.knowledge ? { knowledge: this.knowledge } : {}),
-    };
-    const context: AgentContext = {
-      systemPrompt: this._state.systemPrompt,
-      messages: this._state.messages,
-      tools: this._state.tools,
-    };
-    const stream = agentLoop(prompts, context, config, this.abortController.signal, this.streamFn);
-    try {
-      for await (const event of stream) this.emit(event);
-      const all = await stream.result();
-      this._state.messages = [...this._state.messages, ...all];
-      return all;
-    } finally {
-      this._state.isStreaming = false;
-    }
-  }
 }

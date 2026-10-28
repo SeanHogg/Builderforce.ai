@@ -27,6 +27,12 @@
  * streaming. Asking for the canvas PINS it: later writes keep counting into the tree
  * (that is the data) but stop stealing the view.
  *
+ * ── THE KNOWLEDGE VIEW (PRD 38) ─────────────────────────────────────────────────
+ * A third view, beside the canvas and the changes: the workspace's knowledge graph,
+ * handed in mounted (`knowledge`) exactly as the canvas is. It is the resting view while
+ * no run has written anything; the first write still swaps to the changes (AC4), and
+ * Open in graph (`knowledgeRequests`) brings it back, pinned like the canvas.
+ *
  * ── WHY THIS IS NOT ITS OWN BUNDLE ENTRY ───────────────────────────────────────
  * The panel is opened through the SAME `renderWebviewHtml` shell as the board,
  * Project 360 and the Evermind sidebar view, so it loads the ONE bundle at
@@ -46,12 +52,15 @@ import { makeT } from '../chat/chatLabels';
 import { scopeChangesToChat } from '../chatChangeScope';
 import type { LabelBundle } from '../vscodeBridge';
 import type { PendingChange, PendingChangeSet } from '../../../src/gitChangeModel';
-import { buildChangeGraph, parseUnifiedDiff, type ChangeGraph, type FileDiff } from './diffModel';
+import { parseUnifiedDiff, type FileDiff } from './diffModel';
+import { buildChangeGraph, type ChangeGraph } from './changeGraph';
+import { ChangeTree } from './ChangeTree';
 import {
   hasChanges,
   isRunActive,
   visualizationViewReducer,
   INITIAL_VIEW_STATE,
+  type VisualizationView,
 } from './visualizationViewState';
 
 /** The frames `src/brainRunHostProtocol.ts` defines — read, never re-declared. */
@@ -96,7 +105,21 @@ export interface VisualizationPanelProps {
   chatFiles?: readonly string[] | null;
   /** The canvas, mounted and mounted UNCHANGED. See AC3 above. */
   children?: ReactNode;
+  /**
+   * The Knowledge view (PRD 38), handed in mounted like the canvas — this file never
+   * imports the graph view. Absent ⇒ the switch offers Canvas and Changes only.
+   */
+  knowledge?: ReactNode;
+  /** Moves whenever the host asks for the Knowledge view (Open in graph): it is shown and pinned. */
+  knowledgeRequests?: number;
 }
+
+/** The views, in the switch's order. */
+const VIEWS: ReadonlyArray<{ id: VisualizationView; action: 'showKnowledge' | 'showCanvas' | 'showChanges'; label: [string, string]; hint: [string, string] }> = [
+  { id: 'knowledge', action: 'showKnowledge', label: ['viz.button.knowledge', 'Knowledge'], hint: ['viz.showKnowledge', 'Show what this workspace knows: its knowledge graph'] },
+  { id: 'canvas', action: 'showCanvas', label: ['viz.button.canvas', 'Canvas'], hint: ['viz.showCanvas', 'Back to the Creation Canvas'] },
+  { id: 'changes', action: 'showChanges', label: ['viz.button.changes', 'Changes'], hint: ['viz.showChanges', 'Show the code changes this run made'] },
+];
 
 /**
  * Read the panel's working tree off the shared bridge, when the host pushed one.
@@ -121,9 +144,17 @@ export function VisualizationPanel({
   chatId = null,
   chatFiles = null,
   children,
+  knowledge,
+  knowledgeRequests = 0,
 }: VisualizationPanelProps) {
   const t = makeT(labels ?? {});
-  const [state, dispatch] = useReducer(visualizationViewReducer, INITIAL_VIEW_STATE);
+  const [state, dispatch] = useReducer(
+    visualizationViewReducer,
+    INITIAL_VIEW_STATE,
+    // No Knowledge view to rest on ⇒ the canvas is the resting view, as before PRD 38.
+    (initial) => (knowledge === undefined ? { ...initial, view: 'canvas' as const } : initial),
+  );
+  useEffect(() => { if (knowledgeRequests > 0) dispatch({ type: 'showKnowledge' }); }, [knowledgeRequests]);
 
   // ── The run frames (AC4) ─────────────────────────────────────────────────────
   // When the caller names a chat, only that chat's run drives the swap — every frame
@@ -189,10 +220,7 @@ export function VisualizationPanel({
   );
 
   const running = isRunActive(state);
-  const showCanvas = state.view === 'canvas';
-  const toggle = useCallback(() => {
-    dispatch({ type: showCanvas ? 'showChanges' : 'showCanvas' });
-  }, [showCanvas]);
+  const views = knowledge === undefined ? VIEWS.filter((v) => v.id !== 'knowledge') : VIEWS;
 
   return (
     <section className="bf-viz" aria-label={t('viz.ariaLabel', 'BuilderForce Visualization')} data-view={state.view}>
@@ -206,132 +234,34 @@ export function VisualizationPanel({
           <span className="bf-viz__stat bf-viz__stat--del">-{visible.removed}</span>
         </div>
 
-        {/* AC5. Always mounted, in BOTH views, never disabled — including mid-run,
+        {/* AC5. Always mounted, in EVERY view, never disabled — including mid-run,
             which is exactly when a user reaches for it. */}
-        <button
-          type="button"
-          className="bf-viz__toggle"
-          onClick={toggle}
-          aria-pressed={!showCanvas}
-          title={showCanvas
-            ? t('viz.showChanges', 'Show the code changes this run made')
-            : t('viz.showCanvas', 'Back to the Creation Canvas')}
-        >
-          {showCanvas ? t('viz.button.changes', 'Changes') : t('viz.button.canvas', 'Canvas')}
-        </button>
+        <div className="bf-viz__views" role="group" aria-label={t('viz.views', 'Visualization views')}>
+          {views.map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              className="bf-viz__toggle"
+              onClick={() => dispatch({ type: v.action })}
+              aria-pressed={state.view === v.id}
+              title={t(v.hint[0], v.hint[1])}
+            >
+              {t(v.label[0], v.label[1])}
+            </button>
+          ))}
+        </div>
       </header>
 
-      {showCanvas ? (
+      {state.view === 'knowledge' && knowledge !== undefined ? (
+        // Handed in mounted, like the canvas: this file never imports the graph view.
+        knowledge
+      ) : state.view === 'changes' ? (
+        <ChangeTree graph={visible} labels={labels ?? {}} hasEverWritten={hasChanges(state)} />
+      ) : (
         // AC3: handed in mounted. This file never imports CreationCanvas.
         <div className="bf-viz__canvas">{children}</div>
-      ) : (
-        <ChangeTree graph={visible} labels={labels ?? {}} hasEverWritten={hasChanges(state)} />
       )}
     </section>
-  );
-}
-
-/** Git's status word, as the Source Control view beside it words it. */
-const STATUS_GLYPH: Record<string, string> = {
-  added: 'A', untracked: 'U', modified: 'M', deleted: 'D', renamed: 'R', conflict: '!',
-};
-
-/**
- * THE CHANGE TREE — every file the run touched, its place in the graph, and the
- * before/after of each hunk.
- *
- * The diff ROWS are rendered, not summarised: `+`/`-`/` ` per line with the line
- * number on each side is the only representation of a change that reconciles with the
- * Source Control view the user has open in the same window.
- */
-function ChangeTree({ graph, labels, hasEverWritten }: { graph: ChangeGraph; labels: LabelBundle; hasEverWritten: boolean }) {
-  const t = makeT(labels);
-  /**
-   * WHICH file is expanded, as a tri-state:
-   *   undefined → follow the first node (the default: open what matters most);
-   *   a path   → the user picked this one;
-   *   null     → the user closed it, and "closed" must be distinguishable from
-   *              "not chosen yet" — otherwise collapsing the first file silently
-   *              re-opens it on the next render.
-   *
-   * It has to be derived rather than seeded: the panel swaps to this view on the
-   * FIRST write, which can beat the host's change list, so `nodes` is often still
-   * empty at mount and a value seeded once would open nothing when it fills in.
-   */
-  const [picked, setPicked] = useState<string | null | undefined>(undefined);
-  const open = picked === undefined ? graph.nodes[0]?.path ?? null : picked;
-  const linked = useMemo(() => {
-    const bySource = new Map<string, string[]>();
-    for (const edge of graph.edges) {
-      const list = bySource.get(edge.from);
-      if (list) list.push(edge.to);
-      else bySource.set(edge.from, [edge.to]);
-    }
-    return bySource;
-  }, [graph.edges]);
-
-  if (graph.nodes.length === 0) {
-    // Two empties that mean opposite things, so they must not read alike: a run that
-    // has not written yet is still coming, and "nothing has changed" as the answer to
-    // that would tell the user the opposite.
-    return (
-      <div className="bf-viz__empty">
-        <p>{hasEverWritten
-          ? t('viz.empty', 'This run has not changed any files yet.')
-          : t('viz.emptyIdle', 'No run has changed anything yet.')}</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bf-viz__tree">
-      <ul className="bf-viz__files" role="tree" aria-label={t('viz.filesLabel', 'Files changed by this run')}>
-        {graph.nodes.map((node) => {
-          const expanded = open === node.path;
-          const outs = linked.get(node.path) ?? [];
-          return (
-            <li key={node.path} role="treeitem" aria-expanded={expanded}>
-              <button type="button" className="bf-viz__file" onClick={() => setPicked(expanded ? null : node.path)}>
-                <span className="bf-viz__glyph" data-status={node.status}>{STATUS_GLYPH[node.status] ?? '?'}</span>
-                <span className="bf-viz__path">{node.dir ? `${node.dir}/` : ''}<strong>{node.name}</strong></span>
-                <span className="bf-viz__tally"><span className="bf-viz__add">+{node.diff.added}</span>{' '}<span className="bf-viz__del">-{node.diff.removed}</span></span>
-              </button>
-
-              {/* THE MATRIX: who this file talks to, and who touched it. */}
-              <dl className="bf-viz__matrix">
-                <dt>{t('viz.relations', 'References')}</dt>
-                <dd>{outs.length === 0 ? t('viz.noRelations', 'none in this change') : outs.join(', ')}</dd>
-                <dt>{t('viz.tools', 'Written by')}</dt>
-                <dd>{node.tools.length === 0 ? t('viz.noTools', 'no recorded tool call') : node.tools.join(', ')}</dd>
-                {!node.diff.tracked && <><dt>{t('viz.untracked', 'State')}</dt><dd>{t('viz.untrackedNote', 'untracked — git has no diff for it')}</dd></>}
-              </dl>
-
-              {expanded && (
-                <div className="bf-viz__diff" role="group" aria-label={t('viz.diffLabel', 'Before and after')}>
-                  {node.diff.hunks.length === 0
-                    ? <p className="bf-viz__nodiff">{t('viz.noDiff', 'No diff to show (untracked file).')}</p>
-                    : node.diff.hunks.map((hunk, i) => (
-                        <table key={i} className="bf-viz__hunk">
-                          <caption>{hunk.header}</caption>
-                          <tbody>
-                            {hunk.rows.map((row, j) => (
-                              <tr key={j} data-kind={row.kind} className={`bf-viz__row bf-viz__row--${row.kind}`}>
-                                <td className="bf-viz__num">{row.oldLine ?? ''}</td>
-                                <td className="bf-viz__num">{row.newLine ?? ''}</td>
-                                <td className="bf-viz__sign">{row.kind === 'add' ? '+' : row.kind === 'del' ? '-' : ' '}</td>
-                                <td className="bf-viz__code">{row.text}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      ))}
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
   );
 }
 

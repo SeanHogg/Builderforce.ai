@@ -10,7 +10,7 @@ import { estimateTokensFromChars } from "@builderforce/workload";
 import type { AgentMessage } from "../model/agent-types.js";
 import { nativeComplete } from "../model/native-llm.js";
 import type { AssistantMessage, Message, Model } from "../model/types.js";
-import { defaultConvertToLlm } from "./agent-loop.js";
+import { defaultConvertToLlm } from "./convert-to-llm.js";
 
 /** Result of a compaction pass (faithful to pi-coding-agent's `CompactionResult`). */
 export interface CompactionResult<T = unknown> {

@@ -15,6 +15,7 @@ import { CanvasTimelineSurface } from '../CanvasTimelineSurface';
 import { CanvasFacilitateSurface } from '../CanvasFacilitateSurface';
 import { CanvasFormSurface } from '../CanvasFormSurface';
 import { CanvasCalendarSurface } from '../CanvasCalendarSurface';
+import { CanvasKnowledgeSurface } from '../CanvasKnowledgeSurface';
 import { CanvasSceneGeneratorPanel, CanvasWorldView } from '../canvasLazyPanels';
 import type { CreationFlowNode } from '../CreationNode';
 import type { CreationNodeData, CreationObjectKind } from '../types';
@@ -57,6 +58,8 @@ export interface CanvasSurfaceStageProps {
   doors: CanvasPlaceDoors;
   /** Put a draft in THE ONE composer (and show it) — Measure ▸ Visitors' "Apply in composer". */
   composeDraft?: (text: string) => void;
+  /** The project this board belongs to (the knowledge surface stores per project), or null. */
+  projectId: number | null;
 }
 
 /**
@@ -67,7 +70,7 @@ export interface CanvasSurfaceStageProps {
  */
 export function CanvasSurfaceStage({
   surface, hostSurfaces, surfaceNode, exitSurface, setSurface, sessionApp, sessionTitle, entryAppPending, nodes, editable, updateNodeData, appendAtCenter,
-  revealObject, conversation, chatComposer, roster, room, resume, openGamePanel, setShareOpen, doors, composeDraft,
+  revealObject, conversation, chatComposer, roster, room, resume, openGamePanel, setShareOpen, doors, composeDraft, projectId,
 }: CanvasSurfaceStageProps) {
   const { persistence, lens } = useCanvasSessionFacts();
   // "Leave this surface" goes to the board — unless the lens keeps a HOME surface
@@ -121,6 +124,9 @@ export function CanvasSurfaceStage({
             // Measure ▸ Visitors — THE Insights home for this board's app (PRD 33 S7),
             // board-scoped like Insights: the app it reads is the board's primary app.
             sessions: <CanvasVisitorsSurface nodes={nodes} onExit={exitToBoard} composeDraft={composeDraft} />,
+            // What the project's folders KNOW (PRD 38): the knowledge graph, board-scoped.
+            // Fix with agent seeds the ONE composer, the same seam as Visitors.
+            knowledge: <CanvasKnowledgeSurface projectId={projectId} onExit={exitToBoard} composeDraft={composeDraft} />,
             // Reach as a PLACE: the Make-it-real doors laid out as sections.
             launch: <CanvasLaunchSurface nodes={nodes} doors={doors} onExit={exitToBoard} />,
             // The idea scratchpad — board-scoped like `insights`. It reads the `idea` cards

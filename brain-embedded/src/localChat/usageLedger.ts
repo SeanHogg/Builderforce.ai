@@ -3,31 +3,35 @@
  * local chat, so the chat's spend and savings are known on the device: offline, signed
  * out, and for the calls the platform never sees (a model on this machine).
  *
- * A row is priced only when read, by the ONE fold (`@builderforce/spend-contract`) over
- * the release's bundled price snapshot (`snapshotPriceBook`), so the device and the
- * api's ledger run the same arithmetic. The one figure stamped at write is a local
- * call's counterfactual — what the chat's paid route would have charged for the same
- * tokens — because a local model has no price of its own to read it back from.
+ * A row is priced only when read, by the ONE fold (`ledgerSpend.ts`) over the release's
+ * bundled price snapshot (`snapshotPriceBook`), so the device and the api's ledger run
+ * the same arithmetic. The one figure stamped at write is a local call's counterfactual
+ * — what the chat's paid route would have charged for the same tokens (`paidRoute.ts`)
+ * — because a local model has no price of its own to read it back from. The PreFetch
+ * gate's rows (an avoided call, a run's outcome) are `gateLedger.ts`.
  *
  * Gateway calls are journaled nowhere: the gateway already logged them, so sync never
  * sends them twice. Local and direct-provider calls are journaled for sync like the
  * chat's other rows (`journal.ts`).
  */
 
-import { newLocalRecord, type EntityDestination, type LocalFirstStore, type LocalFirstTransaction } from '@builderforce/local-first';
+import { newLocalRecord, type LocalFirstStore } from '@builderforce/local-first';
 import { isLocalModelRef } from '@builderforce/local-inference';
-import { ANTHROPIC_RELEASES, directCatalogId, listPriceOf, snapshotPriceBook, type PriceBook } from '@builderforce/model-catalog';
-import {
-  computeCostMillicents,
-  foldSpendSavings,
-  type SpendSavingsSummary,
-  type UsageSlice,
-} from '@builderforce/spend-contract';
+import { directCatalogId, snapshotPriceBook, type PriceBook } from '@builderforce/model-catalog';
+import { computeCostMillicents } from '@builderforce/spend-contract';
 import type { CompletionUsage, StreamChatResult } from '../streamChatCompletion';
-import type { BrainStreamFn, RunEndOutcome } from '../runStore/runTypes';
-import { isImported, journalWrite } from './journal';
-import { chatRecordById, liveRecords } from './records';
-import { callCostMillicents, isOwnKeySpend } from './callCost';
+import type { BrainStreamFn } from '../runStore/runTypes';
+import { journalWrite } from './journal';
+import { chatRecordById } from './records';
+import { ledgerCount as count, paidRouteOf, usageRowsOf } from './paidRoute';
+import {
+  recordAvoidedCall,
+  recordRunOutcome,
+  syncsToPlatform,
+  type GateLedgerContext,
+  type RecordAvoidedCallInput,
+  type RecordRunOutcomeInput,
+} from './gateLedger';
 
 /**
  * Where a call ran — its TRANSPORT: through the gateway, on this machine, or straight to
@@ -54,6 +58,9 @@ export interface RunUsageValue {
   /** The run's pipeline route and the router's score, when the run was routed. */
   pipelineRoute?: UsagePipelineRoute;
   routeScore?: number;
+  /** How the PreFetch gate left the run's turn (`metadata.gateRoute`) — the route
+   *  report's gate column. An ANSWERED turn is its `deterministic` row instead. */
+  gateRoute?: 'prefetch' | 'llm';
   /** The run (one user submit) the call belongs to — what the route report groups by.
    *  A chat's runs share its {@link runKey}, so the key alone cannot tell them apart. */
   runId?: string;
@@ -61,7 +68,11 @@ export interface RunUsageValue {
   completionTokens: number;
   cacheReadTokens: number;
   cacheCreationTokens: number;
-  savingsSource?: 'local_model';
+  /** `local_model`: a call on this machine. `deterministic`: a call AVOIDED — a PreFetch
+   *  ANSWER (`recordAvoided`); zero real tokens, a median turn saved. */
+  savingsSource?: 'local_model' | 'deterministic';
+  /** The PreFetch action that answered a `deterministic` row. */
+  answeredBy?: string;
   savedPrompt?: number;
   savedCompletion?: number;
   /** A local call's counterfactual at list, in millicents (stamped at write). */
@@ -70,10 +81,6 @@ export interface RunUsageValue {
   at: string;
 }
 
-/** The paid route a local call is valued against when the chat never used one: the
- *  platform's default coder (the current Sonnet), by its catalog id. */
-const DEFAULT_PAID_ROUTE = `anthropic/claude-sonnet-${ANTHROPIC_RELEASES.sonnet[0]}`;
-
 /** Which route served a call, from what the stream reported. */
 export function usageRouteOf(result: Pick<StreamChatResult, 'resolvedModel' | 'localFirst'>, requested?: string): UsageRoute {
   if (result.localFirst?.some((attempt) => attempt.outcome === 'served' && isLocalModelRef(attempt.target))) return 'local';
@@ -81,8 +88,6 @@ export function usageRouteOf(result: Pick<StreamChatResult, 'resolvedModel' | 'l
   if (isLocalModelRef(model)) return 'local';
   return directCatalogId(model) !== undefined ? 'byo-direct' : 'gateway';
 }
-
-const count = (n: number | undefined): number => (typeof n === 'number' && Number.isFinite(n) && n > 0 ? Math.round(n) : 0);
 
 export interface RecordRunUsageInput {
   /** The chat's local view key. */
@@ -95,6 +100,7 @@ export interface RecordRunUsageInput {
   role?: string;
   pipelineRoute?: UsagePipelineRoute;
   routeScore?: number;
+  gateRoute?: 'prefetch' | 'llm';
   runId?: string;
 }
 
@@ -107,70 +113,49 @@ export interface RunUsageLedgerOptions {
   newId?: () => string;
 }
 
-/** How a run ended — what the route report's misroute proxy reads (`runEndOutcome.ts`). */
-export type { RunEndOutcome };
-
-/** One run's end, as the ledger stores it (`run-outcome` record, local only). */
-export interface RunOutcomeValue {
-  /** The run id its usage rows carry ({@link RunUsageValue.runId}). */
-  runId: string;
-  clientChatId: string;
-  outcome: RunEndOutcome;
-  at: string;
-}
-
 export interface RunUsageLedger {
   /** Record one call. A call with no usage, or in a chat this store does not hold, is skipped. */
   record(input: RecordRunUsageInput): Promise<void>;
+  /**
+   * Record an AVOIDED call: a row with zero real tokens whose saving (`deterministic`,
+   * estimated) is the turn's tokens priced at `model`, else the chat's paid route. Kept on
+   * this device — never journaled, so a sync can never import it as a real call.
+   */
+  recordAvoided(input: RecordAvoidedCallInput): Promise<void>;
   /** Record how a run ended, once, by its run id. Never journaled: it is this device's
    *  own reading of its runs, not spend. A chat this store does not hold is skipped. */
-  recordOutcome(input: { chatId: number; runId: string; outcome: RunEndOutcome }): Promise<void>;
-}
-
-/** What the chat's paid route charges per token: its latest priced gateway call's model, else the default. */
-function paidRouteOf(rows: readonly RunUsageValue[], book: PriceBook): { prompt: number; completion: number } | undefined {
-  for (let i = rows.length - 1; i >= 0; i -= 1) {
-    const row = rows[i]!;
-    if (row.route === 'local') continue;
-    const price = listPriceOf(book, row.model);
-    if (price) return { prompt: price.input, completion: price.output };
-  }
-  const fallback = listPriceOf(book, DEFAULT_PAID_ROUTE);
-  return fallback ? { prompt: fallback.input, completion: fallback.output } : undefined;
-}
-
-/** A chat's usage rows, oldest first. */
-async function usageRowsOf(tx: LocalFirstTransaction, deviceId: string, clientChatId: string): Promise<RunUsageValue[]> {
-  return (await liveRecords<RunUsageValue>(tx, 'usage', deviceId))
-    .map((row) => row.payload)
-    .filter((row) => row.clientChatId === clientChatId)
-    .sort((a, b) => a.at.localeCompare(b.at));
+  recordOutcome(input: RecordRunOutcomeInput): Promise<void>;
 }
 
 /** The call's role, pipeline route, score and run id — only the fields that are set and valid. */
-function runAttribution(input: Pick<RecordRunUsageInput, 'role' | 'pipelineRoute' | 'routeScore' | 'runId'>): Pick<RunUsageValue, 'role' | 'pipelineRoute' | 'routeScore' | 'runId'> {
+function runAttribution(input: Pick<RecordRunUsageInput, 'role' | 'pipelineRoute' | 'routeScore' | 'gateRoute' | 'runId'>): Pick<RunUsageValue, 'role' | 'pipelineRoute' | 'routeScore' | 'gateRoute' | 'runId'> {
   return {
     ...(input.role ? { role: input.role } : {}),
     ...(input.pipelineRoute === 'full' || input.pipelineRoute === 'quick' ? { pipelineRoute: input.pipelineRoute } : {}),
+    ...(input.gateRoute === 'prefetch' || input.gateRoute === 'llm' ? { gateRoute: input.gateRoute } : {}),
     ...(typeof input.routeScore === 'number' && Number.isFinite(input.routeScore) ? { routeScore: input.routeScore } : {}),
     ...(input.runId ? { runId: input.runId } : {}),
   };
 }
 
 export function createRunUsageLedger(options: RunUsageLedgerOptions): RunUsageLedger {
-  const book = options.book ?? snapshotPriceBook;
-  const now = options.now ?? (() => new Date());
-  const newId = options.newId ?? (() => crypto.randomUUID());
+  const ctx: GateLedgerContext = {
+    store: options.store,
+    deviceId: options.deviceId,
+    book: options.book ?? snapshotPriceBook,
+    now: options.now ?? (() => new Date()),
+    newId: options.newId ?? (() => crypto.randomUUID()),
+  };
   return {
     async record(input) {
       const promptTokens = count(input.usage?.prompt);
       const completionTokens = count(input.usage?.completion);
       if (promptTokens + completionTokens === 0) return;
-      await options.store.transact(async (tx) => {
-        const chat = await chatRecordById(tx, options.deviceId, input.chatId);
+      await ctx.store.transact(async (tx) => {
+        const chat = await chatRecordById(tx, ctx.deviceId, input.chatId);
         if (!chat) return;
-        const id = newId();
-        const at = now().toISOString();
+        const id = ctx.newId();
+        const at = ctx.now().toISOString();
         let value: RunUsageValue = {
           clientEventId: id,
           clientChatId: chat.id,
@@ -186,7 +171,7 @@ export function createRunUsageLedger(options: RunUsageLedgerOptions): RunUsageLe
           at,
         };
         if (input.route === 'local') {
-          const pricing = paidRouteOf(await usageRowsOf(tx, options.deviceId, chat.id), book());
+          const pricing = paidRouteOf(await usageRowsOf(tx, ctx.deviceId, chat.id), ctx.book());
           value = {
             ...value,
             savingsSource: 'local_model',
@@ -199,34 +184,21 @@ export function createRunUsageLedger(options: RunUsageLedgerOptions): RunUsageLe
           id,
           entityType: 'usage',
           payload: value,
-          deviceId: options.deviceId,
+          deviceId: ctx.deviceId,
           destination: chat.destination,
           occurredAt: at,
         });
         await tx.put(record);
         // The gateway logged its own call; only the calls it never saw are synced.
-        if (input.route !== 'gateway') {
+        if (syncsToPlatform(value)) {
           await journalWrite(tx, record, 'create', { key: `usage:${id}`, dependsOn: [`chat:${chat.id}`], chatClientId: chat.id });
         }
       });
     },
 
-    async recordOutcome(input) {
-      if (!input.runId) return;
-      await options.store.transact(async (tx) => {
-        const chat = await chatRecordById(tx, options.deviceId, input.chatId);
-        if (!chat) return;
-        const at = now().toISOString();
-        await tx.put(newLocalRecord<RunOutcomeValue>({
-          id: input.runId,
-          entityType: 'run-outcome',
-          payload: { runId: input.runId, clientChatId: chat.id, outcome: input.outcome, at },
-          deviceId: options.deviceId,
-          destination: chat.destination,
-          occurredAt: at,
-        }));
-      });
-    },
+    recordAvoided: (input) => recordAvoidedCall(ctx, input),
+
+    recordOutcome: (input) => recordRunOutcome(ctx, input),
   };
 }
 
@@ -257,92 +229,9 @@ export function withRunUsage(
       ...(opts.role ? { role: opts.role } : {}),
       ...(opts.metadata?.pipelineRoute ? { pipelineRoute: opts.metadata.pipelineRoute } : {}),
       ...(opts.metadata?.routeScore !== undefined ? { routeScore: opts.metadata.routeScore } : {}),
+      ...(opts.metadata?.gateRoute ? { gateRoute: opts.metadata.gateRoute } : {}),
       ...(opts.metadata?.guestTurnId ? { runId: opts.metadata.guestTurnId } : {}),
     }).catch(onError);
     return result;
   };
-}
-
-/**
- * One ledger row as a fold slice, priced by the device's ONE call-cost rule
- * (`callCost.ts`, keyed by the row's route). A gateway call's cost is platform spend (an
- * estimate). A BYO call is the person's own money and IS counted — but as "your key":
- * the fold values `byo` slices at the same list price into `yourKeyUsd`, so the slice's
- * platform cost stays 0 and the call is never counted twice.
- */
-function sliceOf(row: RunUsageValue, book: PriceBook): UsageSlice {
-  const total = row.promptTokens + row.completionTokens;
-  const local = row.savingsSource === 'local_model';
-  const ownKey = isOwnKeySpend(row.route);
-  const costMc = local || ownKey ? 0 : callCostMillicents(row.model, {
-    prompt: row.promptTokens,
-    completion: row.completionTokens,
-    cacheRead: row.cacheReadTokens,
-    cacheCreation: row.cacheCreationTokens,
-  }, book, row.route);
-  return {
-    model: row.model,
-    byo: ownKey,
-    savingsSource: local ? 'local_model' : null,
-    savingsEstimated: local,
-    prompt: row.promptTokens,
-    completion: row.completionTokens,
-    cacheRead: row.cacheReadTokens,
-    cacheCreation: row.cacheCreationTokens,
-    total,
-    costMc,
-    calls: 1,
-    cacheCalls: row.cacheReadTokens > 0 ? 1 : 0,
-    savedPrompt: row.savedPrompt ?? 0,
-    savedCompletion: row.savedCompletion ?? 0,
-    recallPrompt: row.recallPrompt ?? 0,
-    savedCostMc: row.savedCostMc ?? 0,
-    trimCalls: 0,
-    recallCalls: 0,
-    rows: 1,
-  };
-}
-
-/**
- * A local chat's spend from its ledger rows (§3.2). `excludeGateway` = the platform's
- * figure for this chat is being added, so the rows it already accounts for are left
- * out and counted once, not twice: its gateway calls, and the calls a sync import
- * put on the platform (`imported`, by `clientEventId`). A figure that priced any
- * gateway call on the device is an estimate.
- */
-export function ledgerSpend(
-  rows: readonly RunUsageValue[],
-  opts: { excludeGateway: boolean; imported?: ReadonlySet<string>; book?: PriceBook },
-): SpendSavingsSummary | null {
-  const book = opts.book ?? snapshotPriceBook();
-  const kept = opts.excludeGateway
-    ? rows.filter((row) => row.route !== 'gateway' && !opts.imported?.has(row.clientEventId))
-    : rows;
-  if (kept.length === 0) return null;
-  const summary = foldSpendSavings(kept.map((row) => sliceOf(row, book)), book);
-  return kept.some((row) => row.route === 'gateway') ? { ...summary, spend: { ...summary.spend, estimated: true } } : summary;
-}
-
-/** Of a chat's ledger rows, the ones a sync receipt says the platform imported. */
-export async function importedUsageIds(
-  tx: LocalFirstTransaction,
-  rows: readonly RunUsageValue[],
-  destination: EntityDestination,
-): Promise<Set<string>> {
-  const ids = new Set<string>();
-  for (const row of rows) {
-    if (row.route !== 'gateway' && isImported(await tx.mapping('usage', row.clientEventId, destination))) ids.add(row.clientEventId);
-  }
-  return ids;
-}
-
-/** Every chat's ledger rows, by chat client id — one read for a whole chat list. */
-export async function usageRowsByChat(tx: LocalFirstTransaction, deviceId: string): Promise<Map<string, RunUsageValue[]>> {
-  const byChat = new Map<string, RunUsageValue[]>();
-  for (const row of await liveRecords<RunUsageValue>(tx, 'usage', deviceId)) {
-    const list = byChat.get(row.payload.clientChatId) ?? [];
-    list.push(row.payload);
-    byChat.set(row.payload.clientChatId, list);
-  }
-  return byChat;
 }

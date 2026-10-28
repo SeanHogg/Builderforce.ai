@@ -34,7 +34,9 @@ export const USAGE_SURFACE_HEADER = 'x-builderforce-surface';
 
 /** Where a saving came from. `recall_overhead` is the one COST (negative `usd`).
  *  `local_model` is a call a model on the person's own machine served: what the same
- *  tokens would have cost on the conversation's paid route. */
+ *  tokens would have cost on the conversation's paid route. `deterministic` is a turn a
+ *  deterministic action answered with no model (the PreFetch gate's ANSWER, the api's
+ *  deterministic step) — an avoided call, estimated at a median turn. */
 export type SavingsSourceKey =
   | 'prompt_cache'
   | 'memory_answer'
@@ -42,7 +44,8 @@ export type SavingsSourceKey =
   | 'response_cache'
   | 'context_trim'
   | 'recall_overhead'
-  | 'local_model';
+  | 'local_model'
+  | 'deterministic';
 
 export interface SpendBreakdown {
   /** What the platform billed (plan / overflow / premium). */
@@ -90,6 +93,7 @@ export interface SpendSavingsSummary {
 export {
   CACHE_CREATION_MULTIPLIER,
   CACHE_READ_MULTIPLIER,
+  MEDIAN_TURN_TOKENS,
   MILLICENTS_PER_USD,
   computeCostMillicents,
   millicentsToUsd,

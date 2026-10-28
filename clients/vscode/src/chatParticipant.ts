@@ -26,8 +26,10 @@ import { withWorkspaceStaleness } from "./memoryStaleness";
 import { runNativeBrain, type NativeApprovalRequest } from "./nativeBrainRun";
 import { referencesTurnBlock, workspaceReferenceReader } from "./chatReferences";
 import { hostIngressDeps, routeMentionBudget } from "./hostIngress";
-import { preSearchBlock, whereDefinedAnswer } from "./contextPack/preSearchSource";
-import { CONTEXT_PACK_DEADLINE_MS } from "./contextPack/buildContextPack";
+import { preSearchOnce, whereDefinedOnce } from "./contextPack/preSearchSource";
+import { editorPrefetchPort } from "./prefetch/editorPrefetchPort";
+import { editorKnowledgeRowsHost } from "./knowledge/knowledgeRows";
+import { CONTEXT_PACK_DEADLINE_MS } from "./contextPack/deadline";
 
 const PARTICIPANT_ID = "builderforce.agent";
 
@@ -111,11 +113,12 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     // The deterministic pre-search (identifiers → symbol index + ripgrep, no model call),
     // started now so its ~1.5 s deadline overlaps the setup below — the same hits block the
     // panel's runs carry in their context pack (`runSetupPorts.ts`).
-    const preSearch = root ? preSearchBlock(root, request.prompt, CONTEXT_PACK_DEADLINE_MS) : undefined;
-    // "Where is X defined?" answered from the symbol index — memoized, so the reference
-    // read below and the run ask it once between them.
-    let whereDefined: Promise<string | undefined> | undefined;
-    const answerWithoutModel = root ? () => (whereDefined ??= whereDefinedAnswer(root, request.prompt, CONTEXT_PACK_DEADLINE_MS)) : undefined;
+    const preSearch = root ? preSearchOnce(root, request.prompt, CONTEXT_PACK_DEADLINE_MS) : undefined;
+    // The PreFetch gate ("where is X defined?" from the symbol index, and every registry
+    // row after it) — the panel's port. Its executors and the reference read below ask the
+    // SAME memoized computations, so each runs once per request.
+    const prefetch = root ? editorPrefetchPort(() => root, ctx.globalState, { ownWords: request.prompt, knowledge: editorKnowledgeRowsHost(ctx.secrets) }) : undefined;
+    const deterministicAnswer = root ? () => whereDefinedOnce(root, request.prompt, CONTEXT_PACK_DEADLINE_MS) : undefined;
     // `#file` / `#selection` references, inlined into the turn under the route's mention
     // budget (long prose compressed first) — the panel's attachment ingress. Started now,
     // overlapping the setup below; never read for a turn answered without a model, and
@@ -124,7 +127,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
       reader: workspaceReferenceReader(),
       budget: () => routeMentionBudget(modelChoice),
       deps: hostIngressDeps(),
-      ...(answerWithoutModel ? { answerWithoutModel } : {}),
+      ...(deterministicAnswer ? { deterministicAnswer } : {}),
       cancelled: () => token.isCancellationRequested,
     }).catch(() => "");
     const cfg = vscode.workspace.getConfiguration("builderforce");
@@ -283,7 +286,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
         // answered from the symbol index with no model call — parity with the panel.
         ...(preSearch ? { turnContext: async () => (await preSearch) || undefined } : {}),
         // Asked of the person's own words, not the turn with its inlined references.
-        ...(answerWithoutModel ? { answerWithoutModel } : {}),
+        ...(prefetch ? { prefetch } : {}),
         tools,
         root: root ?? "",
         // The code-change backstops need a project. An unbound chat still gets its ticket
@@ -298,6 +301,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
         runSettings: await editorRunSettings(ctx.secrets),
         // How the run ended, beside its usage rows — the route report's misroute proxy.
         recordRunOutcome: (end) => local.usage.recordOutcome({ chatId: runChatId, ...end }),
+        recordAvoidedCall: ({ source: _source, ...call }) => local.usage.recordAvoided({ chatId: runChatId, runKey: runChatId, ...call }),
         permissionMode,
         ...(policyGates.length ? { policyGates } : {}),
         ...(directives ? { directives } : {}),

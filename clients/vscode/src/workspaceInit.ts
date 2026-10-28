@@ -25,7 +25,9 @@ import { canvasLabels, isLightTheme } from "./canvasHostActions";
 import { authLabels } from "./authLabels";
 import { subagentLabels } from "./subagentLabels";
 import { workStatusLabels } from "./workStatusLabels";
+import { prefetchLabels } from "./prefetch/prefetchLabels";
 import { connectionsLabels } from "./connectionsLabels";
+import { knowledgeViewLabels } from "./knowledge/knowledgeLabels";
 import { platformPolicy } from "./platformPolicy";
 import type { WorkspaceCanvasSession } from "./workspaceSession";
 
@@ -151,7 +153,7 @@ export async function buildWorkspaceInit(
     personalityBlock,
     // BOTH label sets: one surface renders the chat AND the board, so both have to
     // be present whichever surface it opens at.
-    labels: { ...authLabels(), ...brainChatLabels(), ...canvasLabels(), ...subagentLabels(), ...localModelLabels(), ...inferenceModeLabels(), ...chatTicketsLabels(), ...chatSurfaceLabels(), ...workStatusLabels(), ...connectionsLabels() },
+    labels: { ...authLabels(), ...brainChatLabels(), ...canvasLabels(), ...subagentLabels(), ...localModelLabels(), ...inferenceModeLabels(), ...chatTicketsLabels(), ...chatSurfaceLabels(), ...workStatusLabels(), ...connectionsLabels(), ...prefetchLabels(), ...knowledgeViewLabels() },
     // The editor's display language: how the shared components format numbers,
     // money and relative times (the strings themselves are already translated above).
     locale: vscode.env.language,

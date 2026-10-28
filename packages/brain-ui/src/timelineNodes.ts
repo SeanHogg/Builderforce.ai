@@ -26,6 +26,20 @@ import {
 } from '@seanhogg/builderforce-brain-embedded';
 import { modelMoveOf, type ModelMove } from './timelineModelMoves';
 
+/** A next-step chip under a PreFetch answer (`PrefetchResult.chips`). */
+export interface TimelineAnswerChip {
+  labelKey: string;
+  command: string;
+  args?: Record<string, unknown>;
+}
+
+/** The chips a PreFetch answer step carries, well-formed ones only. */
+function answerChipsOf(raw: unknown): TimelineAnswerChip[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((c): c is TimelineAnswerChip =>
+    !!c && typeof c === 'object' && typeof (c as TimelineAnswerChip).labelKey === 'string' && typeof (c as TimelineAnswerChip).command === 'string');
+}
+
 export interface TimelineImage {
   url: string;
   name?: string;
@@ -55,7 +69,9 @@ export type TimelineNode =
   // A memory-first ANSWER: the model was skipped and memory replied. Not a recall — it
   // grounded nothing and carries no memories, so it must not render as "Recalled 0
   // memories from Evermind v0". `version` is set only when Evermind generated it.
-  | { key: string; kind: 'memoryAnswer'; ts: number; order: number; source: 'qa-cache' | 'evermind' | 'symbol-index'; version: number | null }
+  // A PreFetch ANSWER from any other registry action is `source: 'prefetch'`, naming the
+  // action and carrying its next-step chips (e.g. Open in graph).
+  | { key: string; kind: 'memoryAnswer'; ts: number; order: number; source: 'qa-cache' | 'evermind' | 'symbol-index' | 'prefetch'; version: number | null; actionId?: string; chips?: TimelineAnswerChip[] }
   | { key: string; kind: 'learn'; ts: number; order: number; version: number; skipped?: BrainLearnSkipReason; targets?: EvermindLearnTarget[] }
   | { key: string; kind: 'reconcile'; ts: number; order: number; version: number; count: number }
   // The run moved models — its transcript re-packed for the next model's window, or a
@@ -157,13 +173,23 @@ export function stepNode(step: PersistedStep, ts: number, key: string): Timeline
     case 'error':
       return { key, kind: 'error', ts, order: ORDER.error, label: step.label, message: typeof step.result === 'string' ? step.result : JSON.stringify(step.result ?? '') };
     case 'recall': {
-      const r = (step.result ?? {}) as { count?: number; version?: number; items?: EvermindRecallItem[]; skippedLlm?: boolean; source?: string };
+      const r = (step.result ?? {}) as { count?: number; version?: number; items?: EvermindRecallItem[]; skippedLlm?: boolean; source?: string; route?: string; chips?: unknown };
       // The memory-first answer shares the `recall` category (it IS memory) but reports
       // an answer, not recalled items — see the run loop's `memory.answer` /
       // `evermind.answer` step.
       if (r.skippedLlm === true || step.label === 'memory.answer' || step.label === 'evermind.answer') {
-        const source = r.source === 'evermind' || step.label === 'evermind.answer' ? 'evermind' : r.source === 'symbol-index' ? 'symbol-index' : 'qa-cache';
-        return { key, kind: 'memoryAnswer', ts, order: ORDER.memoryAnswer, source, version: typeof r.version === 'number' && r.version > 0 ? r.version : null };
+        // A PreFetch ANSWER is labelled by its action id; the symbol lookup renders as the
+        // symbol-index answer it always was.
+        const source = r.source === 'evermind' || step.label === 'evermind.answer' ? 'evermind'
+          : r.source === 'symbol-index' || r.source === 'symbols.where-defined' ? 'symbol-index'
+            : r.route === 'answer' && step.label !== 'memory.answer' ? 'prefetch' : 'qa-cache';
+        const chips = answerChipsOf(r.chips);
+        return {
+          key, kind: 'memoryAnswer', ts, order: ORDER.memoryAnswer, source,
+          version: typeof r.version === 'number' && r.version > 0 ? r.version : null,
+          ...(source === 'prefetch' ? { actionId: step.label } : {}),
+          ...(chips.length ? { chips } : {}),
+        };
       }
       return { key, kind: 'recall', ts, order: ORDER.recall, version: typeof r.version === 'number' ? r.version : 0, count: typeof r.count === 'number' ? r.count : (Array.isArray(r.items) ? r.items.length : 0), items: Array.isArray(r.items) ? r.items : [] };
     }

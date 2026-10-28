@@ -71,6 +71,9 @@ export default defineConfig({
         test: {
           name: 'dom',
           // Overriding `exclude` replaces vitest's defaults, so they are restated.
+          // The knowledge-graph view's own tests run from its package
+          // (`packages/knowledge-graph-view/vitest.config.ts`, peers resolved from here);
+          // this suite only compiles its source, through the components that mount it.
           include: ['src/**/*.test.{ts,tsx}'],
           exclude: ['**/node_modules/**', '**/dist/**', 'src/lib/**'],
           environment: 'jsdom',
@@ -100,6 +103,12 @@ export default defineConfig({
     //    no installed node_modules in the frontend-only job, so they must resolve here.
     //  - @seanhogg/builderforce-brain-embedded: brain-ui/dist imports it bare; it lives
     //    in the frontend's node_modules (link: dep) but not in brain-ui's, so dedupe it.
-    dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react-markdown', 'remark-gfm', '@seanhogg/builderforce-brain-embedded'],
+    //  - three, @react-three/*, memory, testing-library: `@builderforce/knowledge-graph-view`
+    //    is source-only with these as PEERS and no node_modules of its own; resolving them
+    //    here is what lets its files import them at all, as ONE copy.
+    dedupe: [
+      'react', 'react-dom', 'react/jsx-runtime', 'react-markdown', 'remark-gfm', '@seanhogg/builderforce-brain-embedded',
+      'three', '@react-three/fiber', '@react-three/drei', '@seanhogg/builderforce-memory', '@testing-library/react',
+    ],
   },
 });

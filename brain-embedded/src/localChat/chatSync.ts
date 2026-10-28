@@ -16,6 +16,7 @@
 import type { EntityDestination, LocalFirstStore, LocalRecord } from '@builderforce/local-first';
 import { queueImport } from './journal';
 import { isOwnRecord, type ChatValue, type MessageValue } from './records';
+import { syncsToPlatform } from './gateLedger';
 import type { RunUsageValue } from './usageLedger';
 
 /** Move this device's unbound chat rows into `destination`. Returns how many chats moved. */
@@ -43,7 +44,7 @@ export async function bindChatHistoryForSync(store: LocalFirstStore, deviceId: s
     }
     for (const usage of unbound(await tx.list<RunUsageValue>('usage'))) {
       const moved = await rebind(usage);
-      if (usage.payload.route !== 'gateway') await queueImport(tx, moved, usage.payload.clientChatId);
+      if (syncsToPlatform(usage.payload)) await queueImport(tx, moved, usage.payload.clientChatId);
     }
     return chats.filter((chat) => !chat.deletedAt).length;
   });

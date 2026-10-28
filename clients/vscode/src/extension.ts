@@ -27,6 +27,7 @@ import { pickSynapseInstall, runSynapseInstall, synapseInstallRows, type Synapse
 import { resolveModelRoute, routeNeedsLocalModel, routeNeedsSpecificModel, routeRequiresSignIn } from "./modelRouting";
 import { registerInferenceModeCommands, showNoLocalModelPrompt } from "./noLocalModelPrompt";
 import { registerPipelineRouteReport } from "./pipelineRouteReport";
+import { watchToolManifests } from "./prefetch/detectTools";
 import { PERMISSION_MODE_SETTING } from "./permissionMode";
 import { InsightsController } from "./insights";
 import { EvermindViewProvider } from "./evermindView";
@@ -75,6 +76,7 @@ import { bootVsixHost } from "./bootVsixHost";
 // differs. Used by the Visualization panel.
 import { renderWebviewHtml } from "./webviewShared";
 import { VisualizationPanel } from "./visualizationPanel";
+import { registerKnowledgeCommands } from "./knowledge/knowledgeCommands";
 import { bindPlatformPolicy, platformPolicy, platformPolicyResolved, withPlatformAuthentication, outboxSendPermission as platformOutboxSendPermission } from "./platformPolicy";
 import { localBrainApplication } from "./localFirstStore";
 import { installChatSync } from "./chatSyncHost";
@@ -152,6 +154,8 @@ export function activate(context: vscode.ExtensionContext): void {
   registerInferenceModeCommands(context, () => refreshWorkspaceSurfaces());
   // `BuilderForce: Pipeline Route Report` — the router's last 30 days, from the local ledger.
   registerPipelineRouteReport(context);
+  // PreFetch: the workspace's detected tools are forgotten when a manifest or lockfile changes.
+  watchToolManifests(vscode.workspace, context.subscriptions);
   // G08: install the local audit-close path at activation. `AuditExecution.closeLocally`
   // now routes through `closeAuditLocally`, which recovers interrupted runs and refuses
   // the cloud launch, but the helper surface is only reachable once activation has
@@ -418,6 +422,8 @@ export function activate(context: vscode.ExtensionContext): void {
       return VisualizationPanel.open(context);
     }),
   );
+  // The knowledge graph: Review with BuilderForce, Open in graph, upload on link (PRD 38).
+  registerKnowledgeCommands(context);
 
   // Security & compliance Diagnostics — SOC 2, Architecture, Quality, and Privacy
   // & Data-Law audits run against the active project's repos, from the sidebar.

@@ -811,9 +811,58 @@ export const projectFacts = pgTable('project_facts', {
   embedding1024:      vector('embedding_1024', { dimensions: 1024 }),
   embedding1024Model: varchar('embedding_1024_model', { length: 64 }),
   embedded1024At:     timestamp('embedded_1024_at'),
+  /** Who asserted the fact (1278), so `DELETE …/facts/:key` admits its author (PRD 38
+   *  §8.3). Null for agent/host writes and every pre-1278 row. Set on insert only. */
+  createdBy:  varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  /** Knowledge-graph origin (1278): a `model` fact goes stale when its anchored source
+   *  changes. Null on older rows — read as `human` with a `createdBy`, else `agent`. */
+  origin:     varchar('origin', { length: 8 }).$type<'model' | 'human' | 'agent'>(),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 });
+
+// The knowledge graph's stored edges (migration 1278, PRD 38 §4.2): one relation between
+// two NodeRefs. `extracted` edges are perception and never stored, so `origin` is
+// model | human | agent. Single writer: application/knowledge/writeKnowledge.ts.
+export const projectFactRelations = pgTable('project_fact_relations', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:  integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  fromRef:    varchar('from_ref', { length: 512 }).notNull(),
+  toRef:      varchar('to_ref', { length: 512 }).notNull(),
+  kind:       varchar('kind', { length: 32 }).notNull(),
+  weight:     real('weight').notNull().default(1),
+  origin:     varchar('origin', { length: 8 }).$type<'model' | 'human' | 'agent'>().notNull(),
+  confidence: real('confidence'),
+  /** The content hash a model edge was judged from; null for human edges. */
+  sourceHash: varchar('source_hash', { length: 64 }),
+  /** Set when the judged source changed; the edge stays visible, marked stale. */
+  staleAt:    timestamp('stale_at'),
+  createdBy:  varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_fact_relation').on(t.tenantId, t.projectId, t.fromRef, t.toRef, t.kind),
+  index('idx_fact_relations_from').on(t.tenantId, t.projectId, t.fromRef),
+  index('idx_fact_relations_to').on(t.tenantId, t.projectId, t.toRef),
+]);
+
+// One row per reviewed knowledge root (migration 1278, PRD 38 §4.2). Membership is
+// derived from anchor paths / ref prefixes, never stored.
+export const knowledgeScopes = pgTable('knowledge_scopes', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  /** `${host}:${repoId or folder id}:${path}`. */
+  rootId:         varchar('root_id', { length: 512 }).notNull(),
+  title:          varchar('title', { length: 255 }),
+  packs:          varchar('packs', { length: 64 }).array().notNull(),
+  lastDigest:     varchar('last_digest', { length: 64 }),
+  /** The digest before `lastDigest` — Compare's stored baseline (migration 1279). */
+  previousDigest: varchar('previous_digest', { length: 64 }),
+  lastReviewedAt: timestamp('last_reviewed_at'),
+}, (t) => [
+  unique('uq_knowledge_scope').on(t.tenantId, t.projectId, t.rootId),
+]);
 
 
 export const roadmapItems = pgTable('roadmap_items', {

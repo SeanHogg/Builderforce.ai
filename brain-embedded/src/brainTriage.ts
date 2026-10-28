@@ -342,13 +342,19 @@ export function narratedUnadvertisedInTrace(events: BrainTraceEvent[]): string[]
 /** One turn the memory-first short-circuit answered — the LLM was never called. */
 export interface MemoryAnsweredTurn {
   /** `evermind` = the project's SSM GENERATED the reply; `qa-cache` = a stored answer was replayed;
-   *  `symbol-index` = the host answered "where is X defined?" from its definition index. */
-  source: 'evermind' | 'qa-cache' | 'symbol-index';
+   *  `symbol-index` = the host answered "where is X defined?" from its definition index;
+   *  `deterministic` = another PreFetch ANSWER action (named by {@link actionId}). */
+  source: 'evermind' | 'qa-cache' | 'symbol-index' | 'deterministic';
+  /** The PreFetch action that answered (`deterministic` source only). */
+  actionId?: string;
   /** Evermind head version that served it (evermind source only). */
   version?: number;
   /** WHICH project's Evermind served it — a project can target several heads. */
   projectId?: number;
 }
+
+/** The PreFetch action that answers "where is X defined?" from the symbol index. */
+const SYMBOL_ANSWER_ACTION = 'symbols.where-defined';
 
 /**
  * Turns the memory-first short-circuit answered, taken from the run loop's own
@@ -364,11 +370,15 @@ export function memoryAnswersInTrace(events: BrainTraceEvent[]): MemoryAnsweredT
   const out: MemoryAnsweredTurn[] = [];
   for (const ev of events) {
     if (ev.category !== 'recall') continue;
-    if (ev.label !== 'evermind.answer' && ev.label !== 'memory.answer' && ev.label !== 'symbols.answer') continue;
-    const r = ev.result as { source?: unknown; skippedLlm?: unknown; version?: unknown; evermindProjectId?: unknown } | undefined;
+    const r = ev.result as { source?: unknown; skippedLlm?: unknown; version?: unknown; evermindProjectId?: unknown; route?: unknown } | undefined;
+    // A PreFetch ANSWER (`prefetchGate.ts`) is labelled with its action id and carries `route`.
+    const prefetched = r?.route === 'answer';
+    if (!prefetched && ev.label !== 'evermind.answer' && ev.label !== 'memory.answer' && ev.label !== 'symbols.answer') continue;
     if (r?.skippedLlm !== true) continue;
+    const symbolIndex = r.source === 'symbol-index' || r.source === SYMBOL_ANSWER_ACTION;
     out.push({
-      source: r.source === 'evermind' ? 'evermind' : r.source === 'symbol-index' ? 'symbol-index' : 'qa-cache',
+      source: r.source === 'evermind' ? 'evermind' : symbolIndex ? 'symbol-index' : prefetched ? 'deterministic' : 'qa-cache',
+      ...(prefetched && !symbolIndex && typeof r.source === 'string' ? { actionId: r.source } : {}),
       ...(typeof r.version === 'number' ? { version: r.version } : {}),
       ...(typeof r.evermindProjectId === 'number' ? { projectId: r.evermindProjectId } : {}),
     });
@@ -1137,7 +1147,7 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
   const evermindAnswers = d.memoryAnswers?.filter((m) => m.source === 'evermind') ?? [];
   const verdict =
     d.likelyCause === 'memory-answered'
-      ? `ANSWERED FROM MEMORY — no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === 'evermind' ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ''}${m.version != null ? ` v${m.version}` : ''}` : m.source === 'symbol-index' ? 'the workspace symbol index' : 'the Q&A cache').join(', ')}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? 'The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work — if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head.' : (d.memoryAnswers ?? []).every((m) => m.source === 'symbol-index') ? 'The request was only "where is X defined?" and the symbol index resolved every name, so the definitions were listed without a model; ask for anything more to reach the model.' : 'The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model.'} Switching models changes nothing here.`
+      ? `ANSWERED FROM MEMORY — no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === 'evermind' ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ''}${m.version != null ? ` v${m.version}` : ''}` : m.source === 'symbol-index' ? 'the workspace symbol index' : m.source === 'deterministic' ? `the deterministic workspace action ${m.actionId ?? ''}`.trim() : 'the Q&A cache').join(', ')}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? 'The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work — if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head.' : (d.memoryAnswers ?? []).every((m) => m.source === 'symbol-index') ? 'The request was only "where is X defined?" and the symbol index resolved every name, so the definitions were listed without a model; ask for anything more to reach the model.' : (d.memoryAnswers ?? []).every((m) => m.source === 'symbol-index' || m.source === 'deterministic') ? 'A deterministic workspace action (the PreFetch gate) settled the request without a model; ask for anything more to reach the model.' : 'The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model.'} Switching models changes nothing here.`
     : d.likelyCause === 'no-tools-advertised'
       ? 'NO TOOLS ADVERTISED — at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.'
       : d.likelyCause === 'tool-not-advertised'
@@ -1253,7 +1263,7 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
       + d.memoryAnswers
         .map((m) => m.source === 'evermind'
           ? `Evermind SSM${m.projectId != null ? ` (project #${m.projectId}` : ''}${m.version != null ? `${m.projectId != null ? ', ' : ' ('}v${m.version}` : ''}${m.projectId != null || m.version != null ? ')' : ''}`
-          : m.source === 'symbol-index' ? 'symbol index' : 'Q&A cache')
+          : m.source === 'symbol-index' ? 'symbol index' : m.source === 'deterministic' ? `workspace action ${m.actionId ?? ''}`.trim() : 'Q&A cache')
         .join(', '),
     );
   }

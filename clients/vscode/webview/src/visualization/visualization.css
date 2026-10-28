@@ -104,6 +104,41 @@
   outline-offset: 1px;
 }
 
+/* ── The view switch: Knowledge · Canvas · Changes ──────────────────────────────────
+   One segmented group; the pressed view reads as the primary button. It wraps under
+   the meters on a narrow (360px) panel instead of overflowing. */
+.bf-viz__bar { flex-wrap: wrap; }
+
+.bf-viz__views {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.bf-viz__views .bf-viz__toggle { min-height: 28px; }
+
+.bf-viz__toggle[aria-pressed="true"] {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+}
+
+.bf-viz__toggle[aria-pressed="true"]:hover {
+  background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
+}
+
+/* ── The Knowledge slot (PRD 38) ──────────────────────────────────────────────────
+   The graph view sizes itself to its container; its `--kg-*` tokens fall back to the
+   `--bf-*` theme tokens the one stylesheet sets from the editor theme (light and dark). */
+.bf-viz__knowledge {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* ── The canvas slot (AC3) ───────────────────────────────────────────────────────
    `position: relative` is load-bearing: the canvas surface inside is absolutely
    positioned and would otherwise resolve against the viewport instead of this box. */

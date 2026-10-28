@@ -37,6 +37,8 @@
       "@builderforce/model-catalog": ["../packages/model-catalog/src/index.ts"],
       "@builderforce/local-inference": ["../packages/local-inference/src/index.ts"],
       "@builderforce/model-router": ["../packages/model-router/src/index.ts"],
+      "@builderforce/prefetch": ["../packages/prefetch/src/index.ts"],
+      "@builderforce/knowledge-client": ["../packages/knowledge-client/src/index.ts"],
       "@builderforce/run-policy": ["../packages/run-policy/src/index.ts"],
       "@builderforce/run-context": ["../packages/run-context/src/index.ts"],
       "@builderforce/run-guards": ["../packages/run-guards/src/index.ts"],

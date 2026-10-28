@@ -50,26 +50,6 @@ export default {
   'board_type_mappings = import_type_mappings':
     'two different PARENTS, and the mapping outlives one of them. `import_type_mappings.run_id` hangs off a migration run and dies with it; `board_type_mappings.connection_id` hangs off a live board connection and is consulted by SyncEngine on every inbound ticket, for as long as the board is connected. The board mapping is SEEDED from the import mapping and then diverges -- an operator retunes an ongoing sync without editing a finished import\'s record of what it did. Folding them together means one parent column pointing at two tables, which is a polymorphic foreign key (forbidden by `check-polymorphic-fk`) or a pair of nullable ones guarded by a CHECK: an enforced parent traded for one the database cannot enforce. Same argument as the collector-integrations cluster.',
 
-  'agent_memory = project_facts':
-    'the same governed-recall CONTRACT deliberately kept over two different PARENTS, which is why '
-      + 'the payload columns match: `content`, `importance`, `expires_at`, `origin_execution_id` and '
-      + 'the three 1134 embedding columns are the contract one service (`memoryService`) applies to '
-      + 'both, and duplicating that contract is the POINT — a half-embedded union ranks half its '
-      + 'results by meaning and half by keyword. What cannot merge is the scope. `project_facts.project_id` '
-      + 'is NOT NULL REFERENCES projects(id) ON DELETE CASCADE: a project fact is a CHILD of a project '
-      + 'and dies with it, and `(tenant_id, project_id, key)` is the upsert target every surface writes '
-      + 'through. `agent_memory` addresses its scope as `(scope_kind, scope_id)` — a discriminator plus '
-      + 'a plain integer with no foreign key, NOT NULL and defaulted to 0 precisely so '
-      + '`(tenant_id, scope_kind, scope_id, key)` stays a plain upsert target for a scope (`tenant`) that '
-      + 'has no owning row at all. Folding them means the project FK becomes nullable, or the project id '
-      + 'moves into `scope_id` and stops being a foreign key: either way an enforced parent and its '
-      + 'cascade are traded for a convention, and deleting a project silently orphans its facts forever '
-      + '— the same objection as the collector-integrations and type-mappings clusters. The two unique '
-      + 'constraints cannot be reconciled either: one table cannot be unique on (tenant, project, key) '
-      + 'and on (tenant, scope_kind, scope_id, key) at once without the project id appearing twice. The '
-      + 'behaviour that WOULD be duplication is not: recall, governance, retention and the embedding '
-      + 'backfill each have one implementation that takes the store as a parameter.',
-
   'calendar_connections = drive_connections = mailbox_connections':
     'three per-user OAuth grants to the same two providers, so the GRANT columns match: (user_id, provider, '
       + 'account_email, token_enc, token_iv, expires_at, scope). Each row is a different CONSENT, which is the '

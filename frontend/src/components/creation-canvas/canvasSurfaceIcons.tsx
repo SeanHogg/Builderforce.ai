@@ -43,6 +43,7 @@ const SURFACE_ICON: Partial<Record<CanvasSurfaceId, () => React.JSX.Element>> = 
   chat: ChatSurfaceIcon,
   graph: GraphSurfaceIcon,
   ideas: IdeasSurfaceIcon,
+  knowledge: KnowledgeSurfaceIcon,
   scene3d: ThreeDIcon,
   app: AppSurfaceIcon,
   operate: OperateSurfaceIcon,
@@ -68,6 +69,16 @@ export function IdeasSurfaceIcon() {
     <path d="M9.6 2.1v3h3" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
     <path d="M5.4 8.2h5.2M5.4 10.8h2.8" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
     <circle cx="11.2" cy="10.8" r="1" fill="currentColor" />
+  </svg>;
+}
+
+/** What a folder knows — three linked nodes on two planes: facts connected are knowledge. */
+export function KnowledgeSurfaceIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M4.2 4.4l7.2 1.4M4.2 4.4l3 7.4M11.4 5.8l-4.2 6" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    <circle cx="4.2" cy="4.4" r="2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <circle cx="11.4" cy="5.8" r="1.6" fill="currentColor" />
+    <circle cx="7.2" cy="11.8" r="1.8" fill="none" stroke="currentColor" strokeWidth="1.2" />
   </svg>;
 }
 

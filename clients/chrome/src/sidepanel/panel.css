@@ -130,6 +130,27 @@ body {
   display: none;
 }
 
+/* The Knowledge destination: the ONE graph view fills the view, which scrolls; the view
+ * reads the `--bf-*` tokens above through its own `--kg-*` fallbacks, so both themes hold.
+ * Under its compact width it opens focused, lenses scroll sideways, panels are sheets. */
+.rovr-knowledge {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+.rovr-knowledge > * {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.rovr-knowledge__gap {
+  flex: 0 0 auto;
+}
+
 .rovr-chat,
 .rovr-history {
   height: 100%;

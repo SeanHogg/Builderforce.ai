@@ -16,13 +16,13 @@ import type { MessageRating } from './timeline/MessageActions';
 import { useTranscriptScroll } from './timeline/useTranscriptScroll';
 import { TIMELINE_PAGE_SIZE, useRenderWindow } from './timeline/useRenderWindow';
 import { AssistantRow, UserRow } from './timeline/MessageRows';
-import { CompactedRow, LearnRow, MemoryAnswerRow, RecallRow, ReconcileRow } from './timeline/MemoryRows';
+import { CompactedRow, LearnRow, MemoryAnswerRow, RecallRow, ReconcileRow, type TimelinePrefetch } from './timeline/MemoryRows';
 import { ActivityRow, ErrorRow, StreamingRow, ThinkingRow, ToolRow } from './timeline/StepRows';
 
 // The public surface stays HERE: the labels and the rating type live beside the row
 // components that use them (`./timeline/*`), and are re-exported unchanged.
 export { DEFAULT_TIMELINE_LABELS };
-export type { BrainTimelineLabels, MessageRating };
+export type { BrainTimelineLabels, MessageRating, TimelinePrefetch };
 
 export { TIMELINE_PAGE_SIZE };
 
@@ -78,6 +78,12 @@ export interface BrainTimelineProps {
   /** Auto-scroll to the newest node while near the bottom (default true). */
   autoScroll?: boolean;
   /**
+   * A PreFetch answer's copy and chips (brain-ui `PrefetchAnswerChips`): the host's label
+   * lookup for action names, and the handler that runs a chip's command. Omitted ⇒ the
+   * answer row still names its action in English and offers no chips. Pass a stable object.
+   */
+  prefetch?: TimelinePrefetch;
+  /**
    * Scroll this transcript message into view and highlight it. The nonce lets a host
    * ask again for the same id (clicking the same speech bubble twice) without the
    * jump no-op'ing. Absent or null ⇒ no jump, no highlight.
@@ -122,6 +128,7 @@ function BrainTimelineInner({
   autoScroll = true,
   revealMessage = null,
   conversationKey,
+  prefetch,
 }: BrainTimelineProps) {
   // Stable across renders so the memoized <Markdown> children below keep their
   // identity and don't re-parse when only streaming text ticks over.
@@ -233,7 +240,7 @@ function BrainTimelineInner({
             case 'recall':
               return <RecallRow key={node.key} node={node} labels={labels} />;
             case 'memoryAnswer':
-              return <MemoryAnswerRow key={node.key} node={node} labels={labels} />;
+              return <MemoryAnswerRow key={node.key} node={node} labels={labels} {...(prefetch ? { prefetch } : {})} />;
             case 'learn':
               return <LearnRow key={node.key} node={node} labels={labels} />;
             case 'activity':

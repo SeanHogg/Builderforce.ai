@@ -56,6 +56,8 @@ export { BFI_DISCOVERY_ENV, BFI_DISCOVERY_RELATIVE_PATH, parseBfiDiscovery } fro
 export {
   DEFAULT_PROBE_TIMEOUT_MS,
   createLocalRuntimeProber,
+  ollamaLoadedModels,
+  ollamaResidentModel,
   probeLocalRuntimes,
   probedModels,
   type FetchLike,
@@ -63,6 +65,7 @@ export {
   type LocalProbeOptions,
   type LocalRuntimeProbe,
   type LocalRuntimeProber,
+  type OllamaLoadedModel,
 } from './probe.js';
 export { localCatalogView } from './catalogView.js';
 export { BFI_CPU_LIMITS } from './bfiLimits.generated.js';
@@ -114,3 +117,23 @@ export {
   type LocalFirstRunOptions,
   type LocalFirstRunResult,
 } from './failover.js';
+export {
+  LOGPROB_ENGINE_ORDER,
+  createLogprobPort,
+  httpLogprobEngine,
+  labelLogprobsRequest,
+  readLabelLogprobs,
+  residentModelTracker,
+  type LabelLogprobPort,
+  type LogprobEngine,
+} from './logprobs.js';
+export {
+  OLLAMA_EMBED_TIMEOUT_MS,
+  ollamaEmbed,
+  ollamaEmbedFingerprint,
+  ollamaEmbedder,
+  ollamaEmbedderSource,
+  ollamaResidentEmbedModel,
+  type LocalTextEmbedder,
+  type ResidentEmbedModel,
+} from './embed.js';

@@ -39,11 +39,11 @@ import {
   subscribeRunStore,
   type BrainRunOutcome,
   type BrainStreamFn,
-  type RunEndOutcome,
 } from "@seanhogg/builderforce-brain-embedded";
 import type { ToolDef } from "./fileTools";
 import { approvalRequestFor, createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs } from "./nativeBrainRun";
 import { withRunPreamble } from "./runPreamble";
+import { chatLedgerRequest } from "./runUsageLedgerPorts";
 import { replaceWorkspaceMap } from "./idePersona";
 import { RunKnowledgeRecorder, recordingOnly } from "@builderforce/agent-tools";
 import { createChildRuns } from "./childRuns";
@@ -302,7 +302,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         ...(ports.reportOutcome ? { reportOutcome: (o: BrainRunOutcome) => ports.reportOutcome!(o) } : {}),
         ...(p.child ? { lineage: p.child.lineage } : {}),
         ...runSettings,
-        ...(ports.recordRunOutcome ? { recordRunOutcome: (end: { runId: string; outcome: RunEndOutcome }) => ports.recordRunOutcome!({ chatId }, end) } : {}),
+        ...chatLedgerRequest(ports, chatId),
         ...(directives ? { onStop: directives.hooks.onStop } : {}),
       });
     } finally {

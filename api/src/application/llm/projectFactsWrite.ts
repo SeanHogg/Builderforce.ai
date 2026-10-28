@@ -56,6 +56,21 @@ export async function upsertProjectFact(
     kind?: FactImportance;
     /** Files the fact is about. `contentHash` is the file hash at write time. */
     fileAnchors?: FactFileAnchor[];
+    /** The person who asserted it (1278) — stamped on INSERT only, so a rewrite never
+     *  transfers authorship. Null/absent for agent and host writes. */
+    createdBy?: string | null;
+    /** Knowledge-graph origin (1278). Replaced on every write that states one. */
+    factOrigin?: 'model' | 'human' | 'agent';
+    /** Retire OTHER live facts whose first anchor is this write's (the single-subject
+     *  correction sweep below). Default true. A write that is not a single-subject
+     *  belief about its anchored file — a knowledge-graph claim or entity (many per
+     *  file), a run outcome that merely names what it touched — passes false, or every
+     *  such write would retire its siblings. */
+    retireByAnchor?: boolean;
+    /** Skip this call's version bump; the caller bumps ONCE for its whole batch
+     *  (`writeKnowledge`). KV allows one write per second per key, so 500 bumps of one
+     *  token in a burst would each wait out the rate limit. */
+    deferVersionBump?: boolean;
   },
 ): Promise<boolean> {
   const k = (key ?? '').trim().slice(0, 255);
@@ -142,7 +157,7 @@ export async function upsertProjectFact(
   // first anchor is just its first-listed file, so an ordinary fact about that file
   // retired a whole area's map. A map is retired by its own KEY only — the merge below
   // replaces it in place — and the anchor sweep never selects a map.
-  if (!codemap && opts?.fileAnchors?.length) {
+  if (!codemap && opts?.retireByAnchor !== false && opts?.fileAnchors?.length) {
     // One path identity (`pathKey`) on both sides: a `.\src\a.ts` anchor and a stored
     // `src/a.ts` are the same file, as they already are for code-map staleness.
     const anchors = opts.fileAnchors.map((a) => pathKey(a.path)).filter(Boolean);
@@ -169,7 +184,7 @@ export async function upsertProjectFact(
 
   await db
     .insert(projectFacts)
-    .values({ tenantId, projectId, key: k, content: c, source: source.slice(0, 64), expiresAt, originExecutionId, importance, contentHash, fileAnchors, ...originCost, ...embeddingFields })
+    .values({ tenantId, projectId, key: k, content: c, source: source.slice(0, 64), expiresAt, originExecutionId, importance, contentHash, fileAnchors, createdBy: opts?.createdBy ?? null, origin: opts?.factOrigin ?? null, ...originCost, ...embeddingFields })
     .onConflictDoUpdate({
       target: [projectFacts.tenantId, projectFacts.projectId, projectFacts.key],
       // A re-write REPLACES the governance metadata too: re-remembering a fact without
@@ -183,13 +198,14 @@ export async function upsertProjectFact(
       // assertion is exactly the evidence that it is live again.
       set: {
         content: c, source: source.slice(0, 64), expiresAt, importance, contentHash, fileAnchors, supersededBy: null, ...embeddingFields, updatedAt: now,
+        ...(opts?.factOrigin ? { origin: opts.factOrigin } : {}),
         // A rewrite that does not know its run must not wipe a stamp a previous write
         // recorded. Insert still writes null when nothing is known (values above).
         ...(originExecutionId != null ? { originExecutionId } : {}),
         ...(origin ? originCost : {}),
       },
     });
-  await bumpProjectFactsVersion(env, tenantId, projectId);
+  if (!opts?.deferVersionBump) await bumpProjectFactsVersion(env, tenantId, projectId);
   return true;
 }
 

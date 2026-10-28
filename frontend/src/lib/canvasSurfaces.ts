@@ -38,7 +38,7 @@
 
 import type { CanvasComposerIntentId } from './canvasComposerIntents';
 
-export type CanvasSurfaceId = 'chat' | 'graph' | 'ideas' | 'scene3d' | 'app' | 'operate' | 'insights' | 'sessions' | 'launch' | 'room' | 'calendar' | 'form' | 'page' | 'play' | 'site' | 'timeline' | 'world' | 'facilitate';
+export type CanvasSurfaceId = 'chat' | 'graph' | 'ideas' | 'knowledge' | 'scene3d' | 'app' | 'operate' | 'insights' | 'sessions' | 'launch' | 'room' | 'calendar' | 'form' | 'page' | 'play' | 'site' | 'timeline' | 'world' | 'facilitate';
 
 /**
  * What a surface is ABOUT.
@@ -148,6 +148,15 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // it. That pair is what retired `IdeaCaptureForm`: the verb moved into the one
   // composer, and the second text field on the screen went with it.
   { id: 'ideas', scope: 'board', order: 2, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true, composerIntents: ['captureIdea', 'ask'] },
+  // WHAT THE PROJECT'S FOLDERS KNOW (PRD 38) — the knowledge graph of a reviewed folder:
+  // code or documents, in 3D, through lenses, with findings that seed the ONE composer.
+  //
+  // Board-scoped like `insights`: knowledge is stored per PROJECT, so there is no card to
+  // enter it from. Offered from Idea on, because reading what you already have (the specs,
+  // the contracts, the research folder) is where an idea starts — and kept in every later
+  // phase, where the code pack's Structure, Partitions and Live judge what was built. It
+  // persists: a reviewed folder is a place somebody chose to keep reading.
+  { id: 'knowledge', scope: 'board', order: 2.5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true, composerIntents: ['ask'] },
   // THE ROOM — the people AND the work, in one space.
   //
   // It took the slot "3D space" used to hold, because it absorbed it. The 3D space

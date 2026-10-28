@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { fetchProjects } from '@/lib/api';
 import { creationSessionsApi } from '@/lib/builderforceApi';
 import { openedBoardHref } from '@/lib/openedBoardHref';
+import { KNOWLEDGE_INTENT_PARAMS } from '@/lib/knowledge/knowledgeChipRoute';
 
 /**
  * A Project opens as live context in the user's most recent Creation Session.
@@ -24,7 +25,14 @@ export function ProjectCanvasRedirect({ id }: { id: string }) {
       const project = projects.find((candidate) => String(candidate.id) === id || String(candidate.publicId ?? '') === id);
       if (!project) throw new Error('Project not found');
       return creationSessionsApi.openProject(project.id);
-    }).then((opened) => { if (active) router.replace(openedBoardHref(opened)); })
+    }).then((opened) => {
+      // A link may name the surface to land on (`?surface=knowledge` — an on-prem run's
+      // "show me the graph", a chat's knowledge chip — with what it opens on); the board
+      // validates it (`CreationSessionClient`).
+      const query = new URLSearchParams(window.location.search);
+      const intent = Object.fromEntries(KNOWLEDGE_INTENT_PARAMS.map((key) => [key, query.get(key)]));
+      if (active) router.replace(openedBoardHref(opened, { surface: query.get('surface'), ...intent }));
+    })
       .catch(() => { if (active) router.replace('/projects'); });
     return () => { active = false; };
   }, [id, router]);

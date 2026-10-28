@@ -18,12 +18,17 @@ export { createLocalBrainPersistence, type LocalBrainPersistenceOptions } from '
 // PRD 36 — a local chat's identity off the machine, its run usage ledger, and its sync.
 export { createLocalChatIdentity, type ChatBindingPort, type LocalChatIdentity } from './localChat/chatIdentity';
 export { createRunUsageLedger, withRunUsage, type RunUsageLedger } from './localChat/usageLedger';
+export type { RecordAvoidedCallInput, RunOutcomeValue } from './localChat/gateLedger';
 // The pipeline route report (WS-R): the device ledger's routed runs, priced with the one
 // device cost rule, and the pure report math they feed (`@builderforce/pipeline-route`).
-export { routeRunRecords, runOutcomesSince, usageRowsSince } from './localChat/routeLedger';
+export { gateAcceptedSince, routeRunRecords, runOutcomesSince, summarizeGateRuns, usageRowsSince, type GateReport, type GateRouteStats } from './localChat/routeLedger';
 export { callCostMillicents } from './localChat/callCost';
-export type { RunEndOutcome, RunOutcomeValue, RunUsageValue, UsagePipelineRoute } from './localChat/usageLedger';
+export type { RunUsageValue, UsagePipelineRoute } from './localChat/usageLedger';
+export type { RunEndOutcome } from './runStore/runTypes';
 export { DEFAULT_ROUTE_THRESHOLD, summarizeRouteRuns } from '@builderforce/pipeline-route';
+// A PreFetch WRITE action's confirm, as the run's pending confirm carries it — the
+// surfaces render it as the confirm chip (brain-ui `PrefetchConfirmChip`) through this.
+export { prefetchConfirmOf, type PrefetchConfirm, type PrefetchResult } from '@builderforce/prefetch';
 export type { RouteReport, RouteRunRecord, ScoreBin } from '@builderforce/pipeline-route';
 export { bindChatHistoryForSync } from './localChat/chatSync';
 
@@ -320,7 +325,7 @@ export {
   startEngineRun,
 } from './brainRunStore';
 export type { BrainRunRequest, BrainRunSnapshot, BrainRunPersistence, BrainStreamFn, BrainRunEngine, RunEngineControl, RunKey, RunTurn } from './brainRunStore';
-export type { RunPipelineSettings, RunStageModels } from './runStore/runTypes';
+export type { AvoidedRunCall, RunOutcomeReport, RunPipelineSettings, RunStageModels } from './runStore/runTypes';
 // PRD 35 E7: what a host's pre-turn BYO health check hands the run.
 export type { ModelPreflightResult } from './runStore/modelPreflight';
 export type { ServedRead } from './runStore/hostRunContext';

@@ -1,5 +1,6 @@
-import { memo } from 'react';
+import { memo, type ReactNode } from 'react';
 import type { TimelineNode } from '../timelineModel';
+import { PrefetchAnswerChips, prefetchAnsweredTitle, DEFAULT_PREFETCH_CHIP_LABELS, type PrefetchChipLabels, type PrefetchLabelOf, type PrefetchAnswerChip } from '../prefetch/PrefetchChips';
 import { dotIcon } from './dotIcon';
 import type { BrainTimelineLabels } from './labels';
 
@@ -9,7 +10,7 @@ import type { BrainTimelineLabels } from './labels';
  */
 
 /** The muted one-line memory row the memoryAnswer / learn / reconcile steps share. */
-function MemoryLine({ kind, title, hint }: { kind: TimelineNode['kind']; title: string; hint?: string }) {
+function MemoryLine({ kind, title, hint, children }: { kind: TimelineNode['kind']; title: ReactNode; hint?: string; children?: ReactNode }) {
   return (
     <li className="bf-tl__item bf-tl__item--memory">
       <span className="bf-tl__gutter">
@@ -17,9 +18,18 @@ function MemoryLine({ kind, title, hint }: { kind: TimelineNode['kind']; title: 
       </span>
       <div className="bf-tl__body">
         <span className="bf-tl__memory-line" title={hint}>{title}</span>
+        {children}
       </div>
     </li>
   );
+}
+
+/** What the transcript needs to show a PreFetch answer: its copy, action names and the chip handler. */
+export interface TimelinePrefetch {
+  labels?: Partial<PrefetchChipLabels>;
+  labelOf?: PrefetchLabelOf;
+  /** Run an answer chip's command. Absent ⇒ the chips are not offered (nothing could run them). */
+  onChip?: (chip: PrefetchAnswerChip) => void;
 }
 
 function RecallRowInner({ node, labels }: { node: Extract<TimelineNode, { kind: 'recall' }>; labels: BrainTimelineLabels }) {
@@ -53,7 +63,17 @@ function RecallRowInner({ node, labels }: { node: Extract<TimelineNode, { kind: 
   );
 }
 
-function MemoryAnswerRowInner({ node, labels }: { node: Extract<TimelineNode, { kind: 'memoryAnswer' }>; labels: BrainTimelineLabels }) {
+function MemoryAnswerRowInner({ node, labels, prefetch }: { node: Extract<TimelineNode, { kind: 'memoryAnswer' }>; labels: BrainTimelineLabels; prefetch?: TimelinePrefetch }) {
+  if (node.source === 'prefetch' && node.actionId) {
+    const hint = prefetch?.labels?.answeredHint ?? DEFAULT_PREFETCH_CHIP_LABELS.answeredHint;
+    return (
+      <MemoryLine kind="memoryAnswer" title={prefetchAnsweredTitle(prefetch?.labels, prefetch?.labelOf, node.actionId)} hint={hint}>
+        {prefetch?.onChip && node.chips?.length ? (
+          <PrefetchAnswerChips chips={node.chips} onChip={prefetch.onChip} {...(prefetch.labels ? { labels: prefetch.labels } : {})} {...(prefetch.labelOf ? { labelOf: prefetch.labelOf } : {})} />
+        ) : null}
+      </MemoryLine>
+    );
+  }
   if (node.source === 'symbol-index') {
     return <MemoryLine kind="memoryAnswer" title={labels.memoryAnswerSymbols} hint={labels.memoryAnswerSymbolsHint} />;
   }

@@ -10,7 +10,8 @@ import { combineSpendSavings, foldSpendSavings } from '@builderforce/spend-contr
 import { createLocalBrainPersistence } from '../localFirstPersistence';
 import { createLocalChatIdentity, type ChatBindingPort } from './chatIdentity';
 import { bindChatHistoryForSync } from './chatSync';
-import { createRunUsageLedger, ledgerSpend, usageRouteOf, type RunUsageValue } from './usageLedger';
+import { createRunUsageLedger, usageRouteOf, type RunUsageValue } from './usageLedger';
+import { ledgerSpend } from './ledgerSpend';
 
 const ACCOUNT: EntityDestination = { kind: 'bound', platformInstance: 'https://builderforce.ai', tenantId: '7' };
 const DEVICE = 'device-1';

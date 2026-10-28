@@ -23,6 +23,7 @@
 import type { ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
 import { buildMemoryCapability } from '../../memory/memoryService';
 import { reduceRunPolicy, type RunPolicyState } from '@builderforce/run-policy';
+import { extractFocusPaths } from '@builderforce/agent-tools';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { Env } from '../../../env';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
@@ -182,6 +183,10 @@ export interface RunMemoryCommitInput {
   verifyNote?: string;
   /** The files the run wrote, so the fact points at them. */
   writtenPaths?: readonly string[] | null;
+  /** Content hash of each written file at run end, when the caller knows it (path → hash).
+   *  Stamped on the facts' anchors so they go stale when the file changes; a path without
+   *  one is filled from the host directory index, or stays unhashed (never stale). */
+  writtenFileHashes?: Readonly<Record<string, string>> | null;
   /** An extra fact worth keeping (e.g. an in-run verify failure worth not repeating). */
   learning?: string;
   /**
@@ -195,6 +200,33 @@ export interface RunMemoryCommitInput {
 
 /** Facts below this length are noise; a "learning" of four words teaches nothing. */
 const MIN_COMMIT_BODY = 24;
+
+/** Files a run-end fact is anchored to. */
+const MAX_FACT_ANCHORS = 16;
+
+/**
+ * The files a run-end fact names (PRD 38 §4.10): what it wrote, then the paths its text
+ * mentions — read with the ONE path extractor the context pack uses — each with its
+ * content hash when known. Anchored facts join the knowledge graph and go stale.
+ */
+export function runFactAnchors(
+  writtenPaths: readonly string[],
+  text: string,
+  hashes?: Readonly<Record<string, string>> | null,
+): Array<{ path: string; contentHash?: string }> {
+  const seen = new Set<string>();
+  const out: Array<{ path: string; contentHash?: string }> = [];
+  for (const raw of [...writtenPaths, ...extractFocusPaths(text, MAX_FACT_ANCHORS)]) {
+    const path = raw.trim().replace(/\\/g, '/').replace(/^(\.\/)+/, '');
+    const id = path.toLowerCase();
+    if (!path || seen.has(id)) continue;
+    seen.add(id);
+    const contentHash = hashes?.[raw] ?? hashes?.[path];
+    out.push({ path, ...(contentHash ? { contentHash } : {}) });
+    if (out.length >= MAX_FACT_ANCHORS) break;
+  }
+  return out;
+}
 
 /** Stable, bounded memory key per run — a re-delivered completion upserts, not duplicates. */
 function runFactKey(input: RunMemoryCommitInput): string {
@@ -226,15 +258,24 @@ export async function commitRunMemory(input: RunMemoryCommitInput): Promise<bool
     const parts = [body];
     if (input.verifyNote) parts.push(input.verifyNote);
     if (paths.length > 0) parts.push(`changed: ${paths.join(', ')}`);
+    // Anchored where the scope stores anchors (project facts); a ticket-scoped outcome
+    // lives in agent_memory, which has none, and ignores them.
+    const anchors = runFactAnchors(paths, body, input.writtenFileHashes);
     await memory.remember(runFactKey(input), parts.join('\n'), {
       tags: ['run-outcome', ...(input.tags ?? [])],
       importance: 0.6,
+      ...(anchors.length ? { fileAnchors: anchors } : {}),
     });
     if (input.codeMap) {
       // PROJECT scope, explicitly: the default is the run's narrowest scope (its ticket),
       // and a ticket-scoped map is recalled only by runs on that ticket — the editor and
       // on-prem write theirs to the project's facts, and this one must meet them there.
-      await memory.remember(input.codeMap.key, input.codeMap.content, { tags: ['codemap'], importance: 0.6, scope: 'project' });
+      // Written files' known hashes ride along; the store keeps only files the map lists.
+      const mapAnchors = runFactAnchors(paths, '', input.writtenFileHashes).filter((a) => a.contentHash);
+      await memory.remember(input.codeMap.key, input.codeMap.content, {
+        tags: ['codemap'], importance: 0.6, scope: 'project',
+        ...(mapAnchors.length ? { fileAnchors: mapAnchors } : {}),
+      });
     }
     return true;
   } catch (error) {

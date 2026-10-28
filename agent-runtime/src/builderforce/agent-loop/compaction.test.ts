@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentMessage } from "../model/agent-types.js";
-import { defaultConvertToLlm } from "./agent-loop.js";
+import { defaultConvertToLlm } from "./convert-to-llm.js";
 import { estimateTokens, serializeConversation } from "./compaction.js";
 
 describe("native compaction helpers", () => {

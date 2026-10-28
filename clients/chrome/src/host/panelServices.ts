@@ -10,7 +10,7 @@ import { createOnlineSignal } from '@builderforce/write-outbox';
 import { createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, installIndexedDbStepDurability, type BrainConfig, type ModelFallbackChannel, type PageEngineSet } from '@seanhogg/builderforce-brain-embedded';
 import { createProviderConnectionsClient, type GatewayRequest } from '@builderforce/provider-connect';
 import type { ComposerConnections } from '@seanhogg/builderforce-brain-ui';
-import { createApiClient, type ApiClient } from '../api/apiClient';
+import { createApiClient, createAuthenticatedFetch, type ApiClient, type AuthenticatedFetch } from '../api/apiClient';
 import { portRequest } from '../api/requestPorts';
 import { createSession, type Session } from '../auth/session';
 import { BFI_WASM_FILE, BFI_WORKER_FILE, DEFAULT_BASE_URL, LOCAL_DB, STEP_OUTBOX_DB } from '../config';
@@ -37,6 +37,7 @@ import { createPlatformCatalog, withPlatformTools } from '../tools/platformTools
 import { browserNeedsConfirm, type SafetyContext } from '../tools/safety';
 import { createElementCache, createWorkingTab, type TabPort, type WorkingTab } from '../tools/tabPort';
 import { createRovrRunHost, type RovrRunHost } from './rovrRunHost';
+import { rovrKnowledgePrefetch } from './rovrKnowledgePrefetch';
 import { createRunOptions } from './runOptions';
 
 /** `chrome.storage.local` key of Hybrid's local-success predictor (brain-embedded). */
@@ -55,6 +56,9 @@ export interface PanelServices {
   /** The mode-derived platform policy — the `/` menu's Run models control reads and sets it. */
   policy: RovrPlatformPolicy;
   api: ApiClient;
+  /** The same authenticated call answering the raw `Response` — the `fetch` a shared client
+   *  that maps statuses itself takes (`@builderforce/knowledge-client`, the Knowledge view). */
+  apiFetch: AuthenticatedFetch;
   records: RovrRecords;
   ledger: ActionLedger;
   playbooks: PlaybookStore;
@@ -99,6 +103,7 @@ export async function createPanelServices(): Promise<PanelServices> {
   const sites = createSitePermissions();
   const records = createIdbRecords(self.indexedDB, LOCAL_DB);
   const api = createApiClient({ session, baseUrl, fetch: fetchImpl });
+  const apiFetch = createAuthenticatedFetch({ session, baseUrl, fetch: fetchImpl });
   const sendRuntime = (message: RovrRuntimeMessage) => chrome.runtime.sendMessage(message);
   const sink: SyncSink = runtimeSyncSink(sendRuntime);
   const persistence = createLocalFirstPersistence(records, sink);
@@ -268,6 +273,8 @@ export async function createPanelServices(): Promise<PanelServices> {
     // PRD 36: the platform chat the sync outbox created for this device chat, or none —
     // the device id (negative until then) never leaves the machine.
     serverChatId: async (chatId) => (await records.getChat(chatId))?.serverId ?? null,
+    // `/review`, `/graph` and knowledge questions about the project Rovr files tasks in.
+    prefetch: rovrKnowledgePrefetch({ signedIn: () => session.isSignedIn(), projectId: () => settings.taskProjectId(), fetch: apiFetch }),
     // The chat's `/` Work panel choices, read from its device record per run.
     runOptions: createRunOptions({
       getChat: (chatId) => records.getChat(chatId),
@@ -304,6 +311,7 @@ export async function createPanelServices(): Promise<PanelServices> {
     session,
     policy: rovrPolicy,
     api,
+    apiFetch,
     records,
     ledger,
     playbooks,

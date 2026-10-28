@@ -36,6 +36,18 @@
 
       "@builderforce/agent-skills": ["../packages/agent-skills/src/index.ts"],
       "@builderforce/agent-tools/symbols": ["../packages/agent-tools/src/symbols.ts"],
+      "@builderforce/agent-tools/knowledge": ["../packages/agent-tools/src/knowledge/index.ts"],
+      "@builderforce/knowledge-graph-view": ["../packages/knowledge-graph-view/src/index.ts"],
+      "@builderforce/knowledge-browser": ["../packages/knowledge-browser/src/index.ts"],
+      "@builderforce/agent-tools/knowledge-index": ["../packages/agent-tools/src/knowledge-index.ts"],
+      "@builderforce/agent-tools/prefetch": ["../packages/agent-tools/src/prefetch/index.ts"],
+      "@builderforce/prefetch": ["../packages/prefetch/src/index.ts"],
+      "react": ["./node_modules/@types/react"],
+      "three": ["./node_modules/@types/three"],
+      "@react-three/fiber": ["./node_modules/@react-three/fiber"],
+      "@react-three/drei": ["./node_modules/@react-three/drei"],
+      "@seanhogg/builderforce-memory/knowledge": ["./node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.d.ts"],
+      "@seanhogg/builderforce-memory/ingest": ["./node_modules/@seanhogg/builderforce-memory/dist/ingest/index.d.ts"],
       "@builderforce/write-outbox": ["../packages/write-outbox/src/index.ts"],
       "@builderforce/local-first": ["../packages/local-first/src/index.ts"],
       "@builderforce/local-first/indexed-db": ["../packages/local-first/src/indexedDb.ts"],
@@ -45,7 +57,8 @@
       "@builderforce/run-policy": ["../packages/run-policy/src/index.ts"],
       "@builderforce/agent-stall": ["../packages/agent-stall/src/index.ts"],
       "@builderforce/spend-contract": ["../packages/spend-contract/src/index.ts"],
-      "@builderforce/agent-tools": ["../packages/agent-tools/src/index.ts"]
+      "@builderforce/agent-tools": ["../packages/agent-tools/src/index.ts"],
+      "@builderforce/knowledge-client": ["../packages/knowledge-client/src/index.ts"]
     },
     "target": "ES2017"
   },

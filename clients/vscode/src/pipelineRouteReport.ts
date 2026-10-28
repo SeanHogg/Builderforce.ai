@@ -2,7 +2,9 @@
  * `BuilderForce: Pipeline Route Report` — what the pipeline router did on THIS machine
  * over the last {@link REPORT_DAYS} days, read from the run usage ledger: runs, cost and
  * mean score per route, the score histogram, the misroute proxy (quick runs re-run on
- * the full pipeline, or failed) and the threshold the evidence suggests. Opened as a
+ * the full pipeline, or failed), the threshold the evidence suggests, and the PreFetch
+ * GATE column — the answer / prefetch / llm split with each route's accuracy (the share
+ * of judged decisions the person accepted), from the same ledger rows. Opened as a
  * Markdown preview; nothing leaves the machine. How each run ended is its `run-outcome`
  * record, written at run end beside its usage rows.
  *
@@ -15,10 +17,13 @@
 import * as vscode from "vscode";
 import {
   DEFAULT_ROUTE_THRESHOLD,
+  gateAcceptedSince,
   routeRunRecords,
   runOutcomesSince,
+  summarizeGateRuns,
   summarizeRouteRuns,
   usageRowsSince,
+  type GateReport,
   type RouteReport,
 } from "@seanhogg/builderforce-brain-embedded";
 import { MIN_QUICK_RUNS_FOR_SUGGESTION } from "@builderforce/pipeline-route";
@@ -35,11 +40,12 @@ export type Translate = (message: string, ...args: Array<string | number>) => st
 const usd = (millicents: number): string => `$${(millicents / MILLICENTS_PER_USD).toFixed(2)}`;
 const score = (n: number | null): string => (n == null ? "—" : n.toFixed(2));
 
-/** The report as Markdown. */
-export function renderRouteReport(report: RouteReport, days: number, t: Translate): string {
+/** The report as Markdown. `gate` adds the PreFetch gate column. */
+export function renderRouteReport(report: RouteReport, days: number, t: Translate, gate?: GateReport): string {
   const lines: string[] = [`# ${t("Pipeline route report — last {0} days", days)}`, ""];
   if (report.runs === 0) {
     lines.push(t("No routed runs in this window. Runs are routed when builderforce.pipeline.routing is auto or always."));
+    if (gate) lines.push("", ...renderGateColumn(gate, t));
     return `${lines.join("\n")}\n`;
   }
   lines.push(t("{0} routed runs. Threshold: {1} (builderforce.pipeline.routeThreshold).", report.runs, report.threshold.toFixed(2)), "");
@@ -72,7 +78,35 @@ export function renderRouteReport(report: RouteReport, days: number, t: Translat
     "",
     suggestionLine(report, t),
   );
+  if (gate) lines.push("", ...renderGateColumn(gate, t));
   return `${lines.join("\n")}\n`;
+}
+
+const pct = (n: number, of: number): string => (of > 0 ? `${Math.round((n / of) * 100)}%` : "—");
+
+/** The PreFetch gate column: how many requests each route took, and how often its call was right. */
+export function renderGateColumn(gate: GateReport, t: Translate): string[] {
+  const lines = [`## ${t("PreFetch gate")}`, ""];
+  if (gate.runs === 0) {
+    lines.push(t("No requests went through the PreFetch gate in this window."));
+    return lines;
+  }
+  const accuracy = (s: { judged: number; accepted: number }): string =>
+    (s.judged > 0 ? t("{0} ({1} of {2})", pct(s.accepted, s.judged), s.accepted, s.judged) : "—");
+  lines.push(
+    t("{0} requests went through the gate. Accuracy is the share of its decisions the next request did not re-ask.", gate.runs),
+    "",
+    `| ${t("Gate route")} | ${t("Runs")} | ${t("Share")} | ${t("Accuracy")} |`,
+    "| --- | ---: | ---: | ---: |",
+    `| ${t("Answered without a model")} | ${gate.answer.runs} | ${pct(gate.answer.runs, gate.runs)} | ${accuracy(gate.answer)} |`,
+    `| ${t("Facts gathered before the model")} | ${gate.prefetch.runs} | ${pct(gate.prefetch.runs, gate.runs)} | ${accuracy(gate.prefetch)} |`,
+    `| ${t("Sent to the model")} | ${gate.llm.runs} | ${pct(gate.llm.runs, gate.runs)} | — |`,
+  );
+  if (gate.answeredBy.length > 0) {
+    const by = gate.answeredBy.map((a) => `\`${a.actionId}\` ×${a.runs}`).join(", ");
+    lines.push("", t("Answered by: {0}. Estimated saving: {1}.", by, usd(gate.savedCostMc)));
+  }
+  return lines;
 }
 
 function suggestionLine(report: RouteReport, t: Translate): string {
@@ -92,14 +126,15 @@ function suggestionLine(report: RouteReport, t: Translate): string {
 async function showRouteReport(ctx: vscode.ExtensionContext): Promise<void> {
   const local = localBrainApplication(ctx);
   const since = new Date(Date.now() - REPORT_DAYS * 86_400_000);
-  const [rows, outcomes] = await Promise.all([
+  const [rows, outcomes, gateAccepted] = await Promise.all([
     usageRowsSince(local.store, local.deviceId, since),
     runOutcomesSince(local.store, local.deviceId, since),
+    gateAcceptedSince(local.store, local.deviceId, since),
   ]);
   const threshold = vscode.workspace.getConfiguration("builderforce").get<number>("pipeline.routeThreshold") ?? DEFAULT_ROUTE_THRESHOLD;
   // A quick run recorded as failed counts as misrouted, as does one re-run on the full pipeline.
   const report = summarizeRouteRuns(routeRunRecords(rows, undefined, outcomes), { threshold });
-  const doc = await vscode.workspace.openTextDocument({ content: renderRouteReport(report, REPORT_DAYS, vscode.l10n.t), language: "markdown" });
+  const doc = await vscode.workspace.openTextDocument({ content: renderRouteReport(report, REPORT_DAYS, vscode.l10n.t, summarizeGateRuns(rows, gateAccepted)), language: "markdown" });
   await vscode.commands.executeCommand("markdown.showPreview", doc.uri);
 }
 

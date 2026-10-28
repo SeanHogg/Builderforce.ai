@@ -22,6 +22,7 @@ import {
   DEFAULT_SURFACE_HEADER_LABELS,
   bundleLookup,
   chatHistoryLabelsFrom,
+  prefetchChipLabelsFrom,
   promptOptionsLabelsFrom,
   stringsFrom,
   timelineLabelsFrom,
@@ -33,6 +34,8 @@ import {
   type QueuedTurnChipsLabels,
   type SurfaceHeaderLabels,
   type ToolConfirmBarLabels,
+  type PrefetchChipLabels,
+  type PrefetchLabelOf,
   type TimelineCatalogLookup,
   type ModelChoiceLabels,
   type PersonaModalityOption,
@@ -161,6 +164,16 @@ export function surfaceHeaderLabels(labels: LabelBundle): SurfaceHeaderLabels {
 /** The shared chat-history list and rows. */
 export function chatHistoryLabels(labels: LabelBundle): ChatHistoryLabels {
   return chatHistoryLabelsFrom(bundleLookup(labels, (k) => CHAT_HISTORY_KEY[k]));
+}
+
+/** The PreFetch chips' copy (`prefetch.chip.<field>`, `src/prefetch/prefetchLabels.ts`). */
+export function prefetchChipLabels(labels: LabelBundle): PrefetchChipLabels {
+  return prefetchChipLabelsFrom(bundleLookup(labels, (k) => `prefetch.chip.${k}`));
+}
+
+/** An action's or chip's name (`prefetch.action.<id>`, `prefetch.chip.<x>`) from the bundle. */
+export function prefetchLabelOf(labels: LabelBundle): PrefetchLabelOf {
+  return (key) => labels[key];
 }
 
 /** The shared run-confirm bar (the chat's own run and each sub-agent's). */

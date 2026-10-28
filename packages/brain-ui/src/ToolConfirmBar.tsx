@@ -1,5 +1,7 @@
 import { memo, useEffect, useRef, type ReactNode } from 'react';
+import { prefetchConfirmOf } from '@seanhogg/builderforce-brain-embedded';
 import { stringsFrom, type LabelLookup } from './labelCatalog';
+import { PrefetchConfirmChip, type PrefetchChipLabels, type PrefetchLabelOf } from './prefetch/PrefetchChips';
 
 /**
  * The human-in-the-loop approval — ONE bar for every surface that pauses a run on a
@@ -13,6 +15,10 @@ import { stringsFrom, type LabelLookup } from './labelCatalog';
  * - a `children` slot for a host's own WHY and WHAT (Rovr's safety reasons, the element
  *   it would act on, a masked sensitive value) — given ⇒ the raw-args preview stands down;
  * - focus on Approve when it appears (keyboard-first, as Rovr had it).
+ *
+ * A pending confirm raised by a PreFetch WRITE action (`prefetchConfirmOf`) renders as the
+ * PreFetch confirm CHIP instead — same pending confirm, same answer path, so every host
+ * that shows this bar shows the chip with no wiring of its own; it never offers "always".
  *
  * Presentational and theme-driven (`--bf-*`); a host passes handlers and copy, never a
  * `canX` flag.
@@ -57,6 +63,10 @@ export interface ToolConfirmBarProps {
   children?: ReactNode;
   labels?: Partial<ToolConfirmBarLabels>;
   className?: string;
+  /** Copy for the PreFetch confirm chip (a deterministic write action's confirm). */
+  prefetchLabels?: Partial<PrefetchChipLabels>;
+  /** The host's text for an action's `labelKey` (`prefetch.action.<id>`). */
+  prefetchLabelOf?: PrefetchLabelOf;
 }
 
 const PREVIEW_MAX = 240;
@@ -85,10 +95,25 @@ export const ToolConfirmBar = memo(function ToolConfirmBar({
   children,
   labels: labelOverrides,
   className,
+  prefetchLabels,
+  prefetchLabelOf,
 }: ToolConfirmBarProps) {
   const labels = { ...DEFAULT_TOOL_CONFIRM_LABELS, ...labelOverrides };
   const approveRef = useRef<HTMLButtonElement>(null);
   useEffect(() => approveRef.current?.focus(), [req]);
+  const prefetch = prefetchConfirmOf(req);
+  if (prefetch) {
+    return (
+      <PrefetchConfirmChip
+        confirm={prefetch}
+        onConfirm={onApprove}
+        onDismiss={onDeny}
+        {...(prefetchLabels ? { labels: prefetchLabels } : {})}
+        {...(prefetchLabelOf ? { labelOf: prefetchLabelOf } : {})}
+        {...(className ? { className } : {})}
+      />
+    );
+  }
   const { command, args } = toolConfirmPreview(req);
   const [before, after = ''] = labels.prompt.split('{name}');
 

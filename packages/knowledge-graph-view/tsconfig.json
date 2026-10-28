@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": [],
+    "declaration": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "typeRoots": ["../../frontend/node_modules/@types"],
+    "paths": {
+      // Source-only: the peers live in the HOST's install, as `vitest.config.ts` resolves
+      // them, so `tsc -p .` reads them from `frontend/node_modules` too (react and three
+      // through their `@types/*`). Named one by one: no catch-all `*` for a source package.
+      "@seanhogg/builderforce-memory/*": ["../../frontend/node_modules/@seanhogg/builderforce-memory/dist/*/index.d.ts"],
+      "react": ["../../frontend/node_modules/@types/react"],
+      "react/*": ["../../frontend/node_modules/@types/react/*"],
+      "three": ["../../frontend/node_modules/@types/three"],
+      "@react-three/fiber": ["../../frontend/node_modules/@react-three/fiber"],
+      "@react-three/drei": ["../../frontend/node_modules/@react-three/drei"],
+      "@testing-library/react": ["../../frontend/node_modules/@testing-library/react"],
+      "vitest": ["../../frontend/node_modules/vitest"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules", "dist"]
+}

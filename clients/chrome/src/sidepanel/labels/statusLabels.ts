@@ -84,6 +84,7 @@ export const SPEND_KEY: Readonly<Record<string, MessageKey>> = {
   'sources.context_trim': 'spSourceContextTrim',
   'sources.recall_overhead': 'spSourceRecallOverhead',
   'sources.local_model': 'spSourceLocalModel',
+  'sources.deterministic': 'spSourceDeterministic',
   'sourceHints.prompt_cache': 'spHintPromptCache',
   'sourceHints.memory_answer': 'spHintMemoryAnswer',
   'sourceHints.evermind_answer': 'spHintEvermindAnswer',
@@ -91,6 +92,7 @@ export const SPEND_KEY: Readonly<Record<string, MessageKey>> = {
   'sourceHints.context_trim': 'spHintContextTrim',
   'sourceHints.recall_overhead': 'spHintRecallOverhead',
   'sourceHints.local_model': 'spHintLocalModel',
+  'sourceHints.deterministic': 'spHintDeterministic',
 };
 
 export function rovrStatusLabels(): WorkStatusLabels {

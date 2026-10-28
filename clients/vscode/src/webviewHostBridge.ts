@@ -158,6 +158,11 @@ export function apiFailureLine(m: ApiFailureMessage): string {
   return `[webview api] ${m.method ?? "GET"} ${m.path ?? "?"} → ${m.status ?? "?"}${ref}${said}`;
 }
 
+/** A PreFetch answer chip may run only the extension's own commands. */
+export function isPrefetchChipCommand(command: unknown): command is string {
+  return typeof command === "string" && /^builderforce\.[\w.-]+$/.test(command);
+}
+
 /**
  * Handle the cases the HOST owns on every surface. Returns true when the message
  * was handled, so a caller's own switch runs only for its own messages.
@@ -212,6 +217,13 @@ export async function handleSharedHostMessage(
     case "api.failure":
       logLine(apiFailureLine(msg as ApiFailureMessage));
       return true;
+    // A chip under a PreFetch answer (e.g. Open in graph): runs ITS command — only one of
+    // ours, since the webview names it.
+    case "prefetch.chip": {
+      const chip = msg as WebviewInbound & { command?: unknown; args?: unknown };
+      if (isPrefetchChipCommand(chip.command)) void vscode.commands.executeCommand(chip.command, chip.args);
+      return true;
+    }
     default:
       return false;
   }

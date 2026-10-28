@@ -57,7 +57,7 @@ import { authedFetch } from '../authedFetch';
 import { getToken, post, refreshToken, type InitData } from '../vscodeBridge';
 import { setHostRunContext } from '../hostRunDriver';
 import { autoApprovePersistence } from '../autoApprove';
-import { askUserLabels, makeT, promptMenuLabels, timelineLabels, toolConfirmLabels } from './chatLabels';
+import { askUserLabels, makeT, prefetchChipLabels, prefetchLabelOf, promptMenuLabels, timelineLabels, toolConfirmLabels } from './chatLabels';
 import { EditorEmptyState } from './editorStarters';
 import { SubagentStrip } from './SubagentStrip';
 import { useChatAudience } from './useChatAudience';
@@ -113,6 +113,13 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // and defeat its React.memo (every message's markdown re-parsing per character).
   const tlLabels = useMemo(() => timelineLabels(init.labels), [init.labels]);
   const confirmLabels = useMemo(() => toolConfirmLabels(init.labels), [init.labels]);
+  // The PreFetch chips: a write action's confirm chip (in the confirm slot) and the
+  // next-step chips under a tool's answer, whose command the HOST runs.
+  const prefetchChips = useMemo(() => ({
+    labels: prefetchChipLabels(init.labels),
+    labelOf: prefetchLabelOf(init.labels),
+    onChip: (chip: { command: string; args?: Record<string, unknown> }) => post('prefetch.chip', { command: chip.command, args: chip.args ?? {} }),
+  }), [init.labels]);
   // Composer run-shaping toggles (Effort / Thinking / Browse the web) — REAL request params.
   const shaping = useRunShaping();
   const { effort, thinking, webBrowsing } = shaping;
@@ -298,6 +305,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           ratings={conv.ratings}
           revealMessage={reveal}
           conversationKey={chatId}
+          prefetch={prefetchChips}
         />
       )}
       notices={<VsCodeChatNotices conv={conv} chatsError={vsChats.error} onDismissChatsError={vsChats.clearError} bundle={init.labels} init={init} composerId={composerId} />}
@@ -313,6 +321,8 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
               // "Always" turns on auto-approve and lets this one through.
               onApproveAll={() => { setAutoApproveMode(true); conv.resolveConfirm(true); }}
               labels={confirmLabels}
+              prefetchLabels={prefetchChips.labels}
+              prefetchLabelOf={prefetchChips.labelOf}
             />
           )}
           question={pendingQuestion && (

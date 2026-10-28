@@ -1,0 +1,26 @@
+{
+  "name": "@builderforce/knowledge-graph-view",
+  "version": "2026.10.0",
+  "private": true,
+  "type": "module",
+  "description": "The ONE knowledge-graph view (PRD 38 §4.6, docs/specs/38-prd-knowledge-graph.md): a source-only React package — lens registry, deterministic 3D layout, instanced r3f scene, trace lanes, partition matrix, findings with Fix with agent, node panel, review progress and the list fallback. Pack-agnostic and host-agnostic: hosts supply a KnowledgeGraphSource and KnowledgeGraphLabels; the graph itself comes from @seanhogg/builderforce-memory/knowledge. Peers resolve from the host (the frontend's node_modules); this package installs nothing of its own.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "node ../../frontend/node_modules/vitest/vitest.mjs run --config vitest.config.ts"
+  },
+  "peerDependencies": {
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
+    "@seanhogg/builderforce-memory": "^2026.10.31",
+    "react": "~19.3.1",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.2",
+    "vitest": "^4.0.18"
+  }
+}

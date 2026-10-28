@@ -16,13 +16,22 @@
  *
  * One embedding pass is bounded by {@link EMBED_BUDGET_MS}; what it did not reach is
  * embedded by the next search, and the vectors written so far are kept.
+ *
+ * SEARCH is not here. The definitions with a vector are indexed by the ONE cloud vector
+ * engine, {@link KnowledgeIndexPort} (memory's deterministic knowledge index: int8 graph
+ * traversal, float rerank, one total order), as the repository root's documents. The
+ * stored vectors above are that index's embedding cache, so building it costs no Workers
+ * AI call; only the query is embedded.
  */
 
 import type { MapSymbol, RepoGraph } from '@builderforce/repo-map';
+import { sha256Hex, type IndexDoc } from '@seanhogg/builderforce-memory/knowledge';
 import type { Env } from '../../env';
 import { fnv1a32 } from '../../domain/shared/strings';
-import { MEMORY_VECTOR_SPACES, embedMemoryText, embedMemoryTexts, type EmbeddingEnv } from '../memory/memoryEmbedding';
+import { MEMORY_VECTOR_SPACES, embedMemoryTexts, type EmbeddingEnv } from '../memory/memoryEmbedding';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { bgeM3Embedder } from '../knowledge/knowledgeEmbedder';
+import { r2KnowledgeIndexPort } from '../knowledge/knowledgeIndexPort';
 import { repoVectorsObjectKey, type RepoMapKeyParts } from './repoMapStore';
 
 const SOURCE = 'application/repos/repoSymbolVectors.ts';
@@ -48,6 +57,11 @@ interface StoredVectors {
   model: string;
   dims: number;
   entries: Record<string, string>;
+}
+
+/** A definition's document id in the repository index — the same identity `fuseDefinitionHits` uses. */
+export function definitionId(s: MapSymbol): string {
+  return `${s.path}:${s.line}:${s.name}`;
 }
 
 /** The text a definition is embedded as — the path carries meaning the signature assumes. */
@@ -82,13 +96,6 @@ function fromBase64(text: string): Int8Array {
   const out = new Int8Array(s.length);
   for (let i = 0; i < s.length; i++) out[i] = (s.charCodeAt(i) << 24) >> 24;
   return out;
-}
-
-/** Cosine of two quantised vectors. */
-function cosineInt8(a: Int8Array, b: Int8Array): number {
-  let dot = 0;
-  for (let i = 0; i < a.length; i++) dot += a[i]! * b[i]!;
-  return dot / (127 * 127);
 }
 
 /** The definitions the dense arm covers: top-level before nested, then by file rank. */
@@ -219,22 +226,52 @@ async function buildIndex(deps: RepoSymbolIndexDeps, key: string): Promise<RepoS
   }
   const vectors = l1.get(key)!;
   const rows = candidates
-    .map((symbol, i) => ({ symbol, vector: vectors.get(hashes[i]!) }))
-    .filter((r): r is { symbol: MapSymbol; vector: Int8Array } => r.vector !== undefined);
+    .map((symbol, i) => ({ symbol, hash: hashes[i]!, vector: vectors.get(hashes[i]!) }))
+    .filter((r): r is { symbol: MapSymbol; hash: string; vector: Int8Array } => r.vector !== undefined);
   if (rows.length === 0) return null;
+
+  // The repository root's documents: one per embedded definition, its text the embedded text.
+  const bySymbolId = new Map<string, MapSymbol>();
+  const docs: IndexDoc[] = [];
+  for (const r of rows) {
+    const id = definitionId(r.symbol);
+    if (bySymbolId.has(id)) continue;
+    bySymbolId.set(id, r.symbol);
+    docs.push({ id, text: definitionText(r.symbol), hash: r.hash });
+  }
+  // The stored vectors answer every definition text; only a query reaches Workers AI.
+  const embedder = bgeM3Embedder(deps.env, (text) => {
+    const v = vectors.get(definitionHash(text));
+    return v ? Float32Array.from(v, (x) => x / 127) : undefined;
+  });
+  const digest = sha256Hex(docs.map((d) => `${d.id}\t${d.hash}`).sort().join('\n'));
+  const index = await r2KnowledgeIndexPort(deps.env, embedder).load(
+    { namespace: `repo/${key.split('/').slice(2, 6).join('/')}`, rootId: 'definitions', digest },
+    async () => docs,
+  );
+  if (!index) return null;
   return {
     embedded: rows.length,
     covered: candidates.length,
     async search(query, opts) {
-      const q = await embedMemoryText(deps.env, query, SPACE);
-      if (!q) return [];
-      const qv = quantize(q);
       const scope = (opts.scope ?? '').replace(/^\.\//, '').replace(/\\/g, '/').replace(/\/+$/, '');
-      return rows
-        .filter((r) => !scope || r.symbol.path === scope || r.symbol.path.startsWith(`${scope}/`))
-        .map((r) => ({ symbol: r.symbol, score: cosineInt8(qv, r.vector) }))
-        .sort((a, b) => b.score - a.score)
-        .slice(0, Math.max(1, opts.limit));
+      const inScope = (s: MapSymbol) => !scope || s.path === scope || s.path.startsWith(`${scope}/`);
+      const limit = Math.max(1, opts.limit);
+      let hits: Awaited<ReturnType<typeof index.search>>;
+      try {
+        // A scoped search ranks the whole set first, then keeps the scope — the order is the
+        // index's total order either way.
+        hits = await index.search(query, { k: scope ? index.size() : limit, tiers: ['dense'] });
+      } catch (error) {
+        // The query could not be embedded (vendor down): the dense arm is empty, the
+        // keyword arm still answers.
+        reportCaughtError(error, { source: SOURCE, operation: 'search', level: 'warning', context: { key } });
+        return [];
+      }
+      return hits
+        .map((h) => ({ symbol: bySymbolId.get(h.id), score: h.score }))
+        .filter((h): h is { symbol: MapSymbol; score: number } => h.symbol !== undefined && inScope(h.symbol))
+        .slice(0, limit);
     },
   };
 }

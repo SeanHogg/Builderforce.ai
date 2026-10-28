@@ -63,6 +63,11 @@ export interface PendingChangeRepo {
   root: string;
   /** Folder name of the repository root — what the user calls it. */
   name: string;
+  /**
+   * The repository's knowledge-graph root id (`rootIdFor`, PRD 38 §4.2 — the host's
+   * `knowledgeRootId`), so a changed file's `NodeRef` is its knowledge node's. Set by the host.
+   */
+  rootId?: string;
   branch?: string;
   changes: PendingChange[];
 }

@@ -1,5 +1,20 @@
 [
   {
+    "slug": "point-it-at-a-folder-and-see-what-it-knows",
+    "title": "Point it at a folder and see what it knows",
+    "date": "2026-10-28",
+    "description": "Agents now write more files than anyone reads. Point BuilderForce at any folder, code or docs, and see its shape as a 3D knowledge graph: broken layers, duplicated code, contradicting claims and broken links, each with a one-click fix. Questions about the folder are then answered from memory, often without a model call.",
+    "tags": [
+      "knowledge-graph",
+      "code-quality",
+      "documentation",
+      "memory",
+      "agents",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "bring-your-skills-with-you",
     "title": "Bring your skills with you — one skill folder, every agent",
     "date": "2026-10-23",

@@ -42,6 +42,34 @@ export default defineConfig({
         find: "@builderforce/agent-tools/node-research.js",
         replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-research.ts"),
       },
+      {
+        // The checkout's git remote (the knowledge root-id rule), same NodeNext `.js` form.
+        find: "@builderforce/agent-tools/node-git-remote.js",
+        replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-git-remote.ts"),
+      },
+      {
+        // PreFetch tool detection's Node probe, same NodeNext `.js` form.
+        find: "@builderforce/agent-tools/node-prefetch.js",
+        replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-prefetch.ts"),
+      },
+      {
+        // The knowledge review composition (`agents/knowledge/onPremKnowledge.ts`), spelled
+        // as its NodeNext entry file because the subpath is a directory.
+        find: "@builderforce/agent-tools/knowledge/index.js",
+        replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "knowledge", "index.ts"),
+      },
+      {
+        // The shared PreFetch rows and executors (`onprem-prefetch-port.ts`), spelled as
+        // their NodeNext entry file because the subpath is a directory.
+        find: "@builderforce/agent-tools/prefetch/index.js",
+        replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "prefetch", "index.ts"),
+      },
+      {
+        // The local host knowledge index (`agents/knowledge/index/onPremKnowledgeIndex.ts`),
+        // same NodeNext `.js` form.
+        find: "@builderforce/agent-tools/knowledge-index.js",
+        replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "knowledge-index.ts"),
+      },
       // Every source-only package under `packages/`, derived from their manifests.
       // These were six hand-written entries and had already fallen behind the
       // registry: `canvas-widget-protocol`, `creation-canvas-contract`,

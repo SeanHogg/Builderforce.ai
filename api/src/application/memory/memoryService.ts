@@ -52,7 +52,7 @@ import {
 import { agentMemory, projectFacts } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { QA_CACHE_SOURCE, projectFactsVersion } from '../llm/projectFactsStore';
+import { QA_CACHE_SOURCE, projectFactsVersion, type FactFileAnchor } from '../llm/projectFactsStore';
 import { recallProjectFacts } from '../llm/projectFactsRecall';
 import { deleteProjectFact, upsertProjectFact } from '../llm/projectFactsWrite';
 import type { Db } from '../../infrastructure/database/connection';
@@ -162,6 +162,10 @@ export interface RememberInput {
   importance?: number;
   scope?: MemoryScopeKind;
   ttlDays?: number;
+  /** Files the fact names. Anchored on a PROJECT-scope write only (`project_facts` holds
+   *  anchors; `agent_memory` does not). Never runs the single-subject anchor sweep: a
+   *  governed write naming a file is not a correction of every other fact about it. */
+  fileAnchors?: FactFileAnchor[];
 }
 
 /**
@@ -183,6 +187,7 @@ export async function remember(env: Env, db: Db, ctx: MemoryWriteContext, input:
       const ok = await upsertProjectFact(env, db, ctx.tenantId, scope.id, key, content, ctx.origin, {
         expiresAt,
         originExecutionId: ctx.executionId ?? null,
+        ...(input.fileAnchors?.length ? { fileAnchors: input.fileAnchors, retireByAnchor: false } : {}),
       });
       if (!ok) return { ok: false, error: 'project-scoped write rejected (invalid project or empty value)' };
       await bumpCacheVersion(env, versionKey(ctx.tenantId));
@@ -589,6 +594,7 @@ export function buildMemoryCapability(args: {
         importance: opts?.importance,
         scope: opts?.scope,
         ttlDays: opts?.ttlDays,
+        ...(opts?.fileAnchors?.length ? { fileAnchors: opts.fileAnchors } : {}),
       }),
     recall: (query, limit) => recall(args.env, args.db, ctx, query, limit),
     forget: (key) => forget(args.env, args.db, ctx, key),

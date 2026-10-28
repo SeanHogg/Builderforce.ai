@@ -34,7 +34,8 @@ import {
 } from "./renderContextPack";
 
 /** The whole fan-out's budget. A pack that is late is a pack without that part. */
-export const CONTEXT_PACK_DEADLINE_MS = 1_500;
+import { CONTEXT_PACK_DEADLINE_MS } from "./deadline";
+export { CONTEXT_PACK_DEADLINE_MS };
 /** A file larger than this is not read at all — its outline would not be worth the read. */
 const MAX_FOCUS_BYTES = 2_000_000;
 

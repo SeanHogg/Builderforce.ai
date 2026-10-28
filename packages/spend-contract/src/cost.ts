@@ -11,6 +11,13 @@
 /** 1 US dollar = 100,000 millicents. */
 export const MILLICENTS_PER_USD = 100_000;
 
+/**
+ * A median agent turn's tokens — what an AVOIDED call (a deterministic answer, which
+ * produced nothing a model would have read or written) is estimated at. An estimate,
+ * recorded as one (`savingsEstimated`), never a measured figure.
+ */
+export const MEDIAN_TURN_TOKENS = Object.freeze({ prompt: 6_000, completion: 400 });
+
 /** Convert a millicents amount to USD. Nullish → 0. */
 export function millicentsToUsd(millicents: number | null | undefined): number {
   return Number(millicents ?? 0) / MILLICENTS_PER_USD;

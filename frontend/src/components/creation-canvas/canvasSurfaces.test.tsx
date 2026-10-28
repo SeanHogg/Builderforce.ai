@@ -93,7 +93,7 @@ describe('canvas surface registry', () => {
     // founder writes into before there is anything to meet about, run or measure.
     // `operate` (Run) and `launch` (Reach) are PRD 32's two compositions: each stands in
     // its phase's slot of the arc, so the switcher reads left to right as the method does.
-    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'ideas', 'room', 'app', 'operate', 'insights', 'sessions', 'launch']);
+    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'ideas', 'knowledge', 'room', 'app', 'operate', 'insights', 'sessions', 'launch']);
   });
 
   /**
@@ -364,8 +364,9 @@ describe('the chat surface on the canvas', () => {
     // neither Insights nor — since PRD 32 — App: there is nothing to build before an idea.
     // Room IS offered from Idea — unlike Insights it is legible with one person in it,
     // and gating a meeting by which stage a board says it is in would be the wrong rule.
+    // Knowledge (PRD 38) is offered from Idea too: reviewing a folder is how an idea is read.
     const offered = within(switcher()).getAllByRole('button').map((button) => button.textContent);
-    expect(offered).toEqual(['Chat', 'Board', 'Ideas', 'Room']);
+    expect(offered).toEqual(['Chat', 'Board', 'Ideas', 'Knowledge', 'Room']);
   });
 
   /**

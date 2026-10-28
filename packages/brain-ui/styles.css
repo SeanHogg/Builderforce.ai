@@ -2327,6 +2327,71 @@
 .bf-confirm__btn:focus-visible { outline: 2px solid var(--bf-accent); outline-offset: 2px; }
 
 /* ---------------------------------------------------------------------------
+ * The PreFetch chips — a deterministic write action's confirm chip (in the footer's
+ * confirm slot) and the next-step chips under a tool's answer (in the transcript).
+ * Compact and wrapping: one line on a wide surface, stacked at 360px.
+ * ------------------------------------------------------------------------- */
+.bf-prefetch-confirm {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0 10px 8px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  border-radius: 10px;
+  background: var(--bf-surface-2);
+  border: 1px solid var(--bf-warning, var(--bf-accent));
+  color: var(--bf-text);
+  min-width: 0;
+}
+.bf-prefetch-confirm__prompt { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+.bf-prefetch-confirm__request {
+  flex: 1 1 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--bf-text-muted);
+}
+.bf-prefetch-confirm__detail {
+  flex: 1 1 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--bf-text);
+}
+.bf-prefetch-confirm__actions { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.bf-surface__footer > .bf-prefetch-confirm { margin: 0; }
+.bf-prefetch-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.bf-chip-btn {
+  min-height: 28px;
+  max-width: 100%;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  border: 1px solid var(--bf-border-strong, var(--bf-border));
+  background: var(--bf-surface);
+  color: var(--bf-text);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bf-chip-btn:hover { border-color: var(--bf-accent); }
+.bf-chip-btn--primary { background: var(--bf-accent); border-color: var(--bf-accent); color: var(--bf-on-accent, #fff); }
+.bf-chip-btn:focus-visible { outline: 2px solid var(--bf-accent); outline-offset: 2px; }
+@media (max-width: 400px) {
+  .bf-prefetch-confirm__actions { margin-left: 0; width: 100%; }
+  .bf-prefetch-confirm__actions .bf-chip-btn { flex: 1 1 0; }
+}
+
+/* ---------------------------------------------------------------------------
  * <BrainMark> — the one Brain glyph and its working pulse.
  * ------------------------------------------------------------------------- */
 .bf-mark { position: relative; display: inline-grid; place-items: center; line-height: 1; color: inherit; }

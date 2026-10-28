@@ -39,8 +39,11 @@
  * wants to read next, so `run.settled` / `run.failed` only clear liveness.
  */
 
-/** Which of the panel's two views is on screen. */
-export type VisualizationView = 'canvas' | 'changes';
+/**
+ * Which of the panel's three views is on screen. `knowledge` (PRD 38: the workspace's
+ * knowledge graph) is the default while no run has written anything.
+ */
+export type VisualizationView = 'knowledge' | 'canvas' | 'changes';
 
 export interface VisualizationViewState {
   /** What the panel is showing. */
@@ -72,17 +75,19 @@ export type VisualizationAction =
   | { type: 'run.settled'; chatId: number; error?: string }
   /** AC5 — the user asked for the canvas. Pins until they ask for something else. */
   | { type: 'showCanvas' }
+  /** The user (or Open in graph) asked for the knowledge graph. Pins like the canvas. */
+  | { type: 'showKnowledge' }
   /** AC5 — the user asked for the change tree; also releases the pin. */
   | { type: 'showChanges' };
 
 export const INITIAL_VIEW_STATE: VisualizationViewState = {
-  view: 'canvas',
+  view: 'knowledge',
   runningChats: [],
   mutations: 0,
   pinned: false,
 };
 
-/** Is any run live? The canvas is the right answer whenever this is false. */
+/** Is any run live? The resting view is the right answer whenever this is false. */
 export function isRunActive(state: VisualizationViewState): boolean {
   return state.runningChats.length > 0;
 }
@@ -130,6 +135,9 @@ export function visualizationViewReducer(
 
     case 'showCanvas':
       return { ...state, view: 'canvas', pinned: true };
+
+    case 'showKnowledge':
+      return { ...state, view: 'knowledge', pinned: true };
 
     case 'showChanges':
       return { ...state, view: 'changes', pinned: false };

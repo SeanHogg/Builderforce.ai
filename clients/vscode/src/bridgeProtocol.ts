@@ -45,6 +45,9 @@ export const SHARED_HOST_MESSAGES = [
   'setInferenceMode',
   /** Open the model picker's on-device list (the `no_local_model` banner's remedy). */
   'downloadLocalModel',
+  /** Run a PreFetch answer chip's command (`command`, `args`; e.g. Open in graph) — one of
+   *  the extension's own commands only. Fire-and-forget. */
+  'prefetch.chip',
 ] as const;
 
 /**
@@ -173,6 +176,9 @@ export const CANVAS_HOST_MESSAGES = [
   'project.select',
 ] as const;
 
+/** The Visualization panel's Knowledge view (`knowledge/knowledgeProtocol.ts`): one typed call. */
+export const KNOWLEDGE_HOST_MESSAGES = ['knowledge.call'] as const;
+
 /** Every message the webview may send to a host. */
 export const HOST_MESSAGES = [
   ...SHARED_HOST_MESSAGES,
@@ -183,6 +189,7 @@ export const HOST_MESSAGES = [
   ...EVERMIND_HOST_MESSAGES,
   ...AUDIT_HOST_MESSAGES,
   ...CANVAS_HOST_MESSAGES,
+  ...KNOWLEDGE_HOST_MESSAGES,
 ] as const;
 
 export type SharedHostMessage = (typeof SHARED_HOST_MESSAGES)[number];

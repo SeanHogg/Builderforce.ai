@@ -7,11 +7,12 @@
  */
 
 import * as vscode from "vscode";
-import { getGlobalRunState, getRunSnapshot, isRunning, withRunUsage, type BrainStreamFn, type ModelFallbackEvent } from "@seanhogg/builderforce-brain-embedded";
+import { getGlobalRunState, getRunSnapshot, isRunning, type BrainStreamFn, type ModelFallbackEvent } from "@seanhogg/builderforce-brain-embedded";
 import { getApiKey, postRunOutcome } from "./gateway";
 import { fetchRunContextSection, projectEvermindHooks } from "./bfApi";
 import { localBrainApplication } from "./localFirstStore";
 import { editorRunSettings } from "./editorRunSettings";
+import { deviceLedgerPorts } from "./runUsageLedgerPorts";
 import { auditToolCatalog } from "./auditToolCatalog";
 import { brainToolCatalog } from "./brainToolCatalog";
 import { localWindowProbes, resolveModelRoute, routeStream } from "./modelRouting";
@@ -308,11 +309,10 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
       ]);
       return { serverChatId: serverChatId ?? null, ...(clientChatId ? { clientChatId } : {}) };
     },
-    recordUsage: (stream, run) =>
-      withRunUsage(stream, local.usage, run, (error) => hostLog(`[usage ledger] write failed: ${String(error)}`)),
     // Stage models, pipeline routing and the USD cap — read per run (`editorRunSettings.ts`).
     runSettings: () => editorRunSettings(secrets),
-    recordRunOutcome: (run, end) => local.usage.recordOutcome({ chatId: run.chatId, ...end }),
+    // The chat's usage ledger on this device: every call, the outcome, an avoided call.
+    ...deviceLedgerPorts(local.usage, hostLog),
     // How a code-changing run's coder did — so the next run's coder is picked on evidence.
     reportOutcome: (outcome) => postRunOutcome(outcome),
     evermind: (projectId, serverChatId) => withWorkspaceStaleness(projectEvermindHooks(secrets, projectId, serverChatId), workspaceRoot() || undefined),
@@ -355,7 +355,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     grounding: () => stableGroundingWithin(workspaceRoot() || undefined, RUN_GROUNDING_BUDGET_MS, { late: "nothing" }),
     // PRD 35 E2 / E3 / E7: default checkout, context pack, BYO preflight; and a settled
     // run's background jobs die with it.
-    ...editorRunSetupPorts(secrets, workspaceRoot),
+    ...editorRunSetupPorts(secrets, workspaceRoot, ctx.globalState),
   });
   // G22: the run journal. Start, step checkpoints and the TERMINAL status come from the
   // host's own run events (a sink on the host), so a finished run is never rewritten to

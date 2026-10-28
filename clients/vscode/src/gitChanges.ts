@@ -34,6 +34,7 @@ import {
 import { getGitApi, runGit, runGitRaw, watchGitRepositories, type GitApiRepository } from "./gitApi";
 import { boundDiff, pendingDiffCommands } from "./pendingDiffModel";
 import { ttlCache } from "./ttlCache";
+import { knowledgeRootId } from "./knowledge/knowledgeRoots";
 
 export type {
   PendingChange,
@@ -76,6 +77,7 @@ function fromExtension(repos: GitApiRepository[], folders: string[]): PendingCha
       .map((repo) => ({
         root: repo.rootUri.fsPath,
         name: repoName(repo.rootUri.fsPath),
+        rootId: knowledgeRootId(repo.rootUri.fsPath),
         branch: repo.state.HEAD?.name,
         changes: collectRepoChanges(repo),
       }))
@@ -93,6 +95,7 @@ async function fromCli(folder: string): Promise<PendingChangeRepo | undefined> {
   return {
     root,
     name: repoName(root),
+    rootId: knowledgeRootId(root),
     branch: branch && branch !== "HEAD" ? branch : undefined,
     changes: status ? parsePorcelain(status, root) : [],
   };

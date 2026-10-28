@@ -505,6 +505,10 @@ export interface MemoryWriteOpts {
   scope?: MemoryScopeKind;
   /** Forget automatically after this many days. Omit for a durable fact. */
   ttlDays?: number;
+  /** Files the fact names (`contentHash` = the file's hash at write time, when known), so
+   *  it joins the knowledge graph and goes stale when they change. Stored where the
+   *  backing store anchors facts (project scope); ignored elsewhere. */
+  fileAnchors?: Array<{ path: string; line?: number; contentHash?: string }>;
 }
 
 /** One recalled memory entry. `key`/`content` are the model-facing pair; the rest is

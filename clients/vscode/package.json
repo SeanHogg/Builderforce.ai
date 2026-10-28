@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.10.108",
+  "version": "2026.10.110",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -155,6 +155,18 @@
         "title": "%command.openVisualization%",
         "category": "BuilderForce",
         "icon": "$(type-hierarchy-sub)"
+      },
+      {
+        "command": "builderforce.reviewFolder",
+        "title": "%command.reviewFolder%",
+        "category": "BuilderForce",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "builderforce.openKnowledgeGraph",
+        "title": "%command.openKnowledgeGraph%",
+        "category": "BuilderForce",
+        "icon": "$(type-hierarchy)"
       },
       {
         "command": "builderforce.scheduleMeeting",
@@ -491,6 +503,13 @@
       }
     ],
     "menus": {
+      "explorer/context": [
+        {
+          "command": "builderforce.reviewFolder",
+          "when": "explorerResourceIsFolder",
+          "group": "builderforce@1"
+        }
+      ],
       "editor/title": [
         {
           "command": "builderforce.editorChat",
@@ -1108,9 +1127,9 @@
     "@seanhogg/bfi-web": "link:../../packages/bfi-web",
     "@seanhogg/builderforce-brain-embedded": "link:../../brain-embedded",
     "@seanhogg/builderforce-brain-ui": "link:../../packages/brain-ui",
-    "@seanhogg/builderforce-memory": "^2026.10.28",
+    "@seanhogg/builderforce-memory": "^2026.10.31",
     "@seanhogg/builderforce-memory-engine": "^2026.10.28",
-    "@seanhogg/builderforce-memory-mcp": "^2026.10.23",
+    "@seanhogg/builderforce-memory-mcp": "^2026.10.31",
     "@seanhogg/builderforce-studio": "link:../../studio",
     "@seanhogg/builderforce-voice": "link:../../voice",
     "@types/mocha": "^10.0.10",

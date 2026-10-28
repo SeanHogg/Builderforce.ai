@@ -21,6 +21,7 @@ import {
   localCatalogModel,
   formatLocalModelRef,
   type LocalDeviceSupport,
+  type LogprobEngine,
 } from '@builderforce/local-inference';
 import { catalogProbe } from './catalogProbe';
 import { reportPageEngineFailure } from './engineFailure';
@@ -79,6 +80,9 @@ export interface WebLlmModelCache {
 
 export interface WebLlmPageEngine extends PageEngine {
   models: WebLlmModelCache;
+  /** The PreFetch gate's tier-3 engine (`@builderforce/local-inference`
+   *  `createLogprobPort`): warm only while a model is resident; never loads one. */
+  logprobEngine: LogprobEngine;
 }
 
 export interface WebLlmEngineOptions {
@@ -223,7 +227,20 @@ export function createWebLlmEngine(options: WebLlmEngineOptions = {}): WebLlmPag
     },
   };
 
-  return { runtime: 'webllm', baseUrl: WEBLLM_ENGINE_BASE_URL, ...prober, chatCompletions, models };
+  // Tier 3 reads the RESIDENT model only: a non-streaming call with `logprobs` (WebLLM
+  // returns at most five alternatives per token). No resident model ⇒ not warm.
+  const logprobEngine: LogprobEngine = {
+    runtime: 'webllm',
+    warm: () => resident.resident !== undefined && resident.engine !== undefined,
+    maxTopLogprobs: 5,
+    async complete(body) {
+      const engine = resident.engine;
+      if (resident.resident === undefined || !engine) return undefined;
+      return (await engine.chat.completions.create({ ...body, stream: false })) as unknown;
+    },
+  };
+
+  return { runtime: 'webllm', baseUrl: WEBLLM_ENGINE_BASE_URL, ...prober, chatCompletions, models, logprobEngine };
 }
 
 /** WebLLM has no request signal: an abort interrupts the generation instead, and the

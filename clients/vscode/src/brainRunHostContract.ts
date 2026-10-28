@@ -5,7 +5,9 @@
  * Types, plus the owner's display name.
  */
 
+import type { PrefetchPort } from "@builderforce/prefetch";
 import type {
+  AvoidedRunCall,
   BrainRunOutcome,
   BrainRunPersistence,
   BrainStreamFn,
@@ -25,7 +27,7 @@ import type { RunSink, WebviewRunStart } from "./brainRunHostProtocol";
 import type { ChildControls, ChildOwner } from "./childRunSpawner";
 import type { ChildApprover } from "./childApprovalRelay";
 import type { EditorRunSettings } from "./stageModels";
-import type { RunEndOutcome } from "@seanhogg/builderforce-brain-embedded";
+import type { RunOutcomeReport } from "@seanhogg/builderforce-brain-embedded";
 
 /** The top-level owner's name, as the chat shows it (a brand, not translated). */
 export const OWNER_NAME = "BuilderForce";
@@ -79,8 +81,9 @@ export interface BrainRunHostPorts {
    *  (`editorRunSettings.ts`). Read once per run; omitted ⇒ none apply. */
   runSettings?(): Promise<EditorRunSettings>;
   /** PRD 36 / WS-R: how a run ended, under the id its usage rows carry — beside the
-   *  chat's usage ledger, for the pipeline route report. */
-  recordRunOutcome?(run: { chatId: number }, end: { runId: string; outcome: RunEndOutcome }): Promise<void>;
+   *  chat's usage ledger, for the pipeline route report — and, later, whether the run's
+   *  PreFetch decision was accepted (the report's gate accuracy). */
+  recordRunOutcome?(run: { chatId: number }, end: RunOutcomeReport): Promise<void>;
   /** Project-Evermind hooks for a project (recall, memory-first answer, cache), tiered on
    *  the conversation when it has a server chat (`null` = none). */
   evermind(projectId: number, serverChatId: number | null): EvermindRunHooks | undefined;
@@ -135,11 +138,14 @@ export interface BrainRunHostPorts {
    */
   contextPack?(input: { projectId?: number; serverChatId: number | null; request: string; memory: boolean }): Promise<RunContextPack | undefined>;
   /**
-   * The answer the run adopts INSTEAD of calling a model, when the request is one the
-   * workspace answers deterministically — "where is X defined?" with every name resolved
-   * by the symbol index (`contextPack/preSearchSource.ts`). Undefined ⇒ the run proceeds.
+   * The deterministic-first PreFetch port (`prefetch/vscodePrefetchPort.ts`): the run's
+   * gate ANSWERS a request the workspace settles without a model ("where is X defined?"
+   * from the symbol index) and PREFETCHES facts into the volatile turn context. Omitted ⇒
+   * every request goes to the model as before.
    */
-  answerWithoutModel?(request: string): Promise<string | undefined>;
+  prefetch?: PrefetchPort;
+  /** Record a model call a PreFetch ANSWER avoided, beside the chat's usage ledger. Omitted ⇒ none. */
+  recordAvoidedCall?(run: { chatId: number }, call: AvoidedRunCall): Promise<void>;
   /**
    * PRD 35 E7: the BYO health check before turn 1 — unresolved accounts in the gateway
    * header's `provider:reason` form, shown on the run's banner before any work.

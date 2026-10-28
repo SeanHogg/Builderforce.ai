@@ -18,6 +18,7 @@ import type { RunWindowSources } from '../windowFit/modelWindow';
 import type { RunKnowledgeLog } from '@builderforce/agent-tools';
 import type { ModelPreflightResult } from './modelPreflight';
 import type { ServedRead } from './hostRunContext';
+import type { PrefetchPort } from '@builderforce/prefetch';
 
 /**
  * What a run cell is keyed by. A CHAT's run is keyed by its chat id (a number — the
@@ -166,13 +167,20 @@ export interface BrainRunRequest {
    */
   servedReads?: () => Promise<readonly ServedRead[] | undefined>;
   /**
-   * The host's DETERMINISTIC answer to the request, adopted instead of a model call — e.g.
-   * "where is X defined?" resolved entirely by its symbol index. Asked once before the
-   * first turn, ahead of the memory-first answer and outside its replay gate (the answer
-   * is computed from the workspace now, not replayed). Undefined / a throw ⇒ the run
-   * proceeds as before.
+   * The host's deterministic-first PREFETCH port (`@builderforce/prefetch`): its action
+   * registry, one executor per action and the gate's ports. Consulted once before the
+   * first turn (`prefetchGate.ts`), ahead of the memory-first answer and outside its
+   * replay gate: an ANSWER action settles the run with no model call ("where is X
+   * defined?" from the symbol index); PREFETCH actions add their output to the volatile
+   * per-turn block. Absent ⇒ the run proceeds as before.
    */
-  answerWithoutModel?: (request: string) => Promise<string | undefined>;
+  prefetch?: PrefetchPort;
+  /**
+   * Record a model call the run AVOIDED — a PreFetch ANSWER — beside the host's usage
+   * ledger (the device ledger's `deterministic` saving, priced at `model` for a median
+   * turn). Omit and nothing is recorded. Best-effort.
+   */
+  recordAvoidedCall?: (call: AvoidedRunCall) => Promise<unknown> | void;
   /**
    * The host's MODEL PREFLIGHT (PRD 35 E7): its BYO health check, awaited once before
    * the first turn. Unresolved accounts are seeded into the run's BYO banner state and
@@ -255,9 +263,33 @@ export interface BrainRunRequest {
   /**
    * Told once, at run end, how the run ended and under which run id its calls were
    * recorded (`runEndOutcome.ts`) — the host stores it beside its usage ledger for the
-   * pipeline route report. Omit and nothing is reported. Best-effort.
+   * pipeline route report. Also told, on the chat's NEXT request, whether a PreFetch
+   * decision made in the run was accepted (`gateAccepted`, the report's gate accuracy).
+   * Omit and nothing is reported. Best-effort.
    */
-  recordRunOutcome?: (end: { runId: string; outcome: RunEndOutcome }) => Promise<unknown> | void;
+  recordRunOutcome?: (end: RunOutcomeReport) => Promise<unknown> | void;
+}
+
+/** One report about a run's end (`outcome`) or its PreFetch decision (`gateAccepted`). */
+export interface RunOutcomeReport {
+  runId: string;
+  outcome?: RunEndOutcome;
+  /** The PreFetch decision this run made was accepted (the next request did not re-ask). */
+  gateAccepted?: boolean;
+}
+
+/** A model call a PreFetch ANSWER stood in for (`recordAvoidedCall`). */
+export interface AvoidedRunCall {
+  source: 'deterministic';
+  /** The registry action that answered. */
+  actionId: string;
+  /** The run id (`metadata.guestTurnId`) — what the usage ledger groups a run's rows by. */
+  runId?: string;
+  /** The model the turn would have run on, when known. */
+  model?: string;
+  /** The median turn's tokens the avoided call is estimated at (`MEDIAN_TURN_TOKENS`). */
+  promptTokens: number;
+  completionTokens: number;
 }
 
 /** How a run ended. */

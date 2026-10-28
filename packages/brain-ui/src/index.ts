@@ -8,7 +8,7 @@
  */
 
 export { BrainTimeline, DEFAULT_TIMELINE_LABELS } from './BrainTimeline';
-export type { BrainTimelineProps, BrainTimelineLabels, MessageRating } from './BrainTimeline';
+export type { BrainTimelineProps, BrainTimelineLabels, MessageRating, TimelinePrefetch } from './BrainTimeline';
 // The ONE catalog → label table every host reads its transcript copy through.
 export { timelineCatalogLookup, timelineLabelsFrom, liveActivityLabelsFrom, chatActivityLabelsFrom } from './timelineCatalog';
 export type { TimelineCatalogLookup } from './timelineCatalog';
@@ -62,6 +62,23 @@ export type { ModelFallbackNoticeProps, ModelFallbackNoticeLabels } from './Mode
 // The ONE human-in-the-loop approval bar (a run paused on `pendingConfirm`) — web panel,
 // VS Code chat + sub-agent strip and Rovr all render this, each with its own copy/slots.
 export { ToolConfirmBar, DEFAULT_TOOL_CONFIRM_LABELS, toolConfirmPreview } from './ToolConfirmBar';
+// The PreFetch chips (deterministic-first PreFetch): a write action's confirm chip — which
+// ToolConfirmBar renders itself for such a pending confirm — and the next-step chips under
+// an answer a tool gave without a model (Open in graph). One family, every surface.
+export {
+  PrefetchConfirmChip,
+  PrefetchAnswerChips,
+  DEFAULT_PREFETCH_CHIP_LABELS,
+  prefetchChipLabelsFrom,
+  prefetchLabelText,
+} from './prefetch/PrefetchChips';
+export type {
+  PrefetchChipLabels,
+  PrefetchConfirmChipProps,
+  PrefetchAnswerChipsProps,
+  PrefetchAnswerChip,
+  PrefetchLabelOf,
+} from './prefetch/PrefetchChips';
 // THE surface chrome every AI host wears: the Brain mark (with its working pulse) and the
 // one-row header (mark · name · context · presence · actions · history · new · expand · close).
 export { BrainMark } from './surface/BrainMark';
