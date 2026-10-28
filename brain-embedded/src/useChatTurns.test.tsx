@@ -205,3 +205,22 @@ describe('useChatTurns', () => {
     expect(send).not.toHaveBeenCalled();
   });
 });
+
+describe('useChatTurns — a typed stop', () => {
+  beforeEach(() => stopRun.mockClear());
+
+  it('stops the run mid-run, and is kept once the run is down', async () => {
+    const send = vi.fn();
+    const { result, rerender } = renderHook((props: ChatTurnsOptions<string>) => useChatTurns(props), {
+      initialProps: { running: true, runKey: 4, send },
+    });
+    await act(async () => { await result.current.submit('next step'); });
+    await act(async () => { await result.current.submit('Stop the run'); });
+    expect(stopRun).toHaveBeenCalledWith(4);
+    // The held turn behind it is dropped with the run; the stop itself is held.
+    expect(result.current.queued.count).toBe(1);
+    rerender({ running: false, runKey: 4, send });
+    expect(send).toHaveBeenCalledWith('Stop the run');
+    expect(send).not.toHaveBeenCalledWith('next step');
+  });
+});

@@ -24,19 +24,20 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { isMidTurnMetadata } from '@builderforce/agent-loop';
 import { useBrainConfig } from './config';
 import { useRunSnapshot } from './useRunSnapshot';
-import { isStepMessage, type BrainMessage, type BrainModality, type ChatInputAttachment } from './types';
+import { type BrainMessage, type BrainModality, type ChatInputAttachment } from './types';
 import { transcriptSeedOf } from './transcriptSeed';
 import { useChatTranscript } from './useChatTranscript';
+import { useAutoReplyTrailingTurn } from './useAutoReplyTrailingTurn';
+import { startsRun, unansweredTurnIndex } from './userTurnRuns';
 import type { BrainToolSpec, ContentPart } from './streamChatCompletion';
 import type { EvermindRunHooks } from './evermindMemory';
 import type { ReasoningIntent } from './effort';
 import type { RunWindowSources } from './windowFit/modelWindow';
 import { attachmentLink, prepareAttachment } from './attachmentContent';
 import { attachmentTurn, userTurnContentOf } from './attachmentTranscript';
-import { isConsolidationMarker, scopeToConsolidation } from '@seanhogg/builderforce-memory/working';
+import { scopeToConsolidation } from '@seanhogg/builderforce-memory/working';
 import { contextUsageOf, type ContextUsage } from './contextUsage';
 import { priorResearchDigest } from './priorResearch';
 import { withDirectedMetadata, isDirectedToParticipant, directedAgentRecipients, type DirectedRecipient, type DirectedGroup } from './directedMessage';
@@ -272,20 +273,7 @@ export interface UseBrainConversation {
   buildTriageReport(agentLabel?: string, surface?: string): string;
 }
 
-/**
- * The index of the trailing user turn nothing answered — the last message that is not a
- * step row is a USER message — or -1. Step rows (the durable LLM/tool/error diagnostics)
- * after it are what a failed run leaves; any assistant reply means it was answered.
- */
-export function unansweredTurnIndex(messages: readonly BrainMessage[]): number {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message = messages[i]!;
-    // A step, or a compaction note a failed run persisted mid-run, is not an answer.
-    if (isStepMessage(message) || isConsolidationMarker(message)) continue;
-    return message.role === 'user' && !isMidTurnMetadata(message.metadata) ? i : -1;
-  }
-  return -1;
-}
+export { unansweredTurnIndex } from './userTurnRuns';
 
 export function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation {
   const { persistence, resolveSystemPrompt, stream, imagePrep } = useBrainConfig();
@@ -529,7 +517,8 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
           }
           return true;
         }
-        await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id));
+        // A stop with nothing running is kept as the person's answer and starts nothing.
+        if (startsRun(trimmed)) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id));
         return true;
       } catch (e) {
         // Persisting the user turn failed (commonly an expired token) — the turn
@@ -547,27 +536,11 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages],
   );
 
-  // Auto-reply when a chat loads with a trailing unanswered user message
-  // (e.g. a chat seeded elsewhere and deep-linked into the Brain). Skipped when
-  // a run for this chat is already in flight (the store is single-flight, so
-  // this only guards against starting redundant work / a self re-answer).
-  useEffect(() => {
-    if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
-    if (isRunning(chatId)) return;
-    const last = messages[messages.length - 1];
-    if (last.role !== 'user') return;
-    // A trailing message addressed to a participant is NOT a directive for the
-    // BRAIN — leave it unanswered (the participant owns the reply).
-    if (isDirectedToParticipant(last)) return;
-    // A MID-TURN user row was already delivered — steered into the run that was live
-    // when it was sent (`run.steer`), which hears it before its next turn. It is not
-    // an unanswered request, and replaying it would start a second run on it.
-    if (isMidTurnMetadata(last.metadata)) return;
-    if (autoRepliedChatIdRef.current === chatId) return;
-    autoRepliedChatIdRef.current = chatId;
+  const replyToTrailingTurn = useCallback((id: number, last: BrainMessage) => {
     setLocalError('');
-    void launch(chatId, buildRequest(messages.slice(0, -1), messages, userTurnContentOf(last), last.id));
-  }, [chatId, loadingMessages, localSending, messages, buildRequest, launch]);
+    void launch(id, buildRequest(messages.slice(0, -1), messages, userTurnContentOf(last), last.id));
+  }, [messages, buildRequest, launch]);
+  useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending, messages, repliedRef: autoRepliedChatIdRef, reply: replyToTrailingTurn });
 
   const retryLastTurn = useCallback((): boolean => {
     if (chatId == null || sendingRef.current.has(chatId) || isRunning(chatId)) return false;

@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.106] — "Stop the run" stops it
+
+- **Answering "Stop the run" no longer starts the work again.** When a run keeps saying it is ready and doesn't act, it stops and asks you to continue with guidance or stop the run. Asking ends the run, so choosing "Stop the run" was sent as a new message, and that message started a fresh run that kept working. A stop sent when nothing is running is now kept as your answer and starts nothing, and reopening the chat on it doesn't restart the work either.
+- **A stop typed while a run is going stops it everywhere.** In the editor it already did. On the other surfaces that share the chat (the web app, Rovr, the Creation Canvas), "stop", "Stop the run" or "cancel the task" used to wait behind the run as its next turn. It now stops the run at once.
+
 ## [2026.10.105] — Typing and streaming keep up in a long chat
 
 - **The prompt box no longer lags in a long chat.** Every keystroke re-rendered every visible message in the transcript (about 150 rows) and re-parsed each one's details. A keystroke now leaves the transcript alone.

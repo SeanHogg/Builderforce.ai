@@ -1,3 +1,15 @@
+## ✅ RESOLVED 2026-10-27 — "Stop the run" stops the run (brain-embedded 2026.10.66 · VSIX 2026.10.106)
+
+- **Symptom.** In VS Code chat #6 the WS8p pause asked "Continue with guidance / Stop the run". The person chose Stop, and the run kept going.
+- **Cause.** An `ask_user` question ends the run, and the question becomes its reply. The answer then reached an idle chat as an ordinary send, and `useBrainConversation.send` launched a run on it. The editor's `runSteer.ts` already treats a stop as the Stop button, but only while a run is live. Two other paths would have started a run on the same trailing "stop": reopening the chat (the auto-reply on load) and Retry.
+- **Fix.** One rule, `brain-embedded/src/userTurnRuns.ts`:
+  - `startsRun(text)` = `!stopIntent(text)`, from `@builderforce/run-guards`, the same matcher `runSteer.ts` uses.
+  - `send` keeps a stop turn as the answer and launches nothing.
+  - The auto-reply skips a trailing stop. It was lifted into `useAutoReplyTrailingTurn.ts`, so `useBrainConversation.ts` shrank from 691 to about 665 lines.
+  - `unansweredTurnIndex` (moved here, re-exported) treats a trailing stop as answered, so Retry never relaunches it.
+- **The shared turn door** (`useChatTurns`): a stop typed mid-run now stops the run on every surface that shares it, instead of waiting in the queue as the next turn. The words are kept once the run is down.
+- **Tests.** `userTurnRuns.test.ts` is new. Cases were appended to `useBrainConversation.test.tsx` and `useChatTurns.test.tsx`, and their existing cases run unchanged.
+
 ## ✅ RESOLVED 2026-10-27 — The chat panel keeps up with typing and streaming in a long chat (VSIX 2026.10.105)
 
 - **Symptom.** In VS Code chat #6 (1,572 messages, a 500-event live trace), typing in the composer lagged, and a streaming reply appeared slowly.

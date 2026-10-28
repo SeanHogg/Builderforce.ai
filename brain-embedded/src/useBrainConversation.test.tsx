@@ -759,3 +759,29 @@ describe('unansweredTurnIndex', () => {
     expect(unansweredTurnIndex([])).toBe(-1);
   });
 });
+
+describe('a stop sent to an idle chat (the pause question answered "Stop the run")', () => {
+  it('is kept as the answer and starts no run', async () => {
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 31, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+    await act(async () => { await hook.current.send('Stop the run'); });
+    expect(rowsOfRole('user').map((m) => m.content)).toEqual(['Stop the run']);
+    expect(mockStream).not.toHaveBeenCalled();
+    expect(hook.current.sending).toBe(false);
+  });
+
+  it('is not answered when the chat is reopened on it', async () => {
+    vi.mocked(persistence.getMessages).mockResolvedValue([
+      { id: 1, chatId: 32, role: 'user', content: 'Stop the run', metadata: null, seq: 1, createdAt: '' },
+    ] as never);
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 32, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+    await waitFor(() => expect(hook.current.messages).toHaveLength(1));
+    expect(mockStream).not.toHaveBeenCalled();
+    expect(hook.current.retryLastTurn()).toBe(false);
+  });
+});

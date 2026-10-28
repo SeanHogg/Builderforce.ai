@@ -7115,6 +7115,7 @@ interface UseBrainConversation {
      */
     buildTriageReport(agentLabel?: string, surface?: string): string;
 }
+
 declare function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation;
 
 /**
@@ -10142,6 +10143,9 @@ declare function useQueuedTurns<T = string>({ running, send, resetKey, textOf }:
  *  2. the queue — while `running`, the turn is HELD and sent on the run's falling edge
  *     (`useQueuedTurns`: FIFO, one per completed run, discarded on a `runKey` switch);
  *  3. otherwise `send` now.
+ *
+ * A stop ("Stop the run") is the Stop: mid-run it stops the run and is kept for the
+ * record once the run is down; idle it is kept and starts nothing (`userTurnRuns.ts`).
  *
  * Stop drops everything queued (the person stopped the conversation, not one sentence)
  * and stops the run: the `stop` port when given, else `stopRun(runKey)` on the store.

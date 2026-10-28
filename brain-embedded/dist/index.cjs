@@ -55,8 +55,8 @@ __export(src_exports, {
   CHAT_MODE_ICON: () => CHAT_MODE_ICON,
   CODE_CHANGE_TOOLS: () => CODE_CHANGE_TOOLS,
   CONNECT_RETRY_DELAYS_MS: () => CONNECT_RETRY_DELAYS_MS,
-  CONSOLIDATION_MARKER_PREFIX: () => import_working17.CONSOLIDATION_MARKER_PREFIX,
-  CONSOLIDATION_META: () => import_working17.CONSOLIDATION_META,
+  CONSOLIDATION_MARKER_PREFIX: () => import_working18.CONSOLIDATION_MARKER_PREFIX,
+  CONSOLIDATION_META: () => import_working18.CONSOLIDATION_META,
   DEFAULT_AGENT_MODEL_SENTINEL: () => DEFAULT_AGENT_MODEL_SENTINEL,
   DEFAULT_CHAT_ACTIVITY_LABELS: () => DEFAULT_CHAT_ACTIVITY_LABELS,
   DEFAULT_CHAT_TITLE: () => DEFAULT_CHAT_TITLE,
@@ -77,7 +77,7 @@ __export(src_exports, {
   FailureTally: () => FailureTally,
   HAND_OFF_TOOL: () => HAND_OFF_TOOL,
   HAND_OFF_TOOL_SPEC: () => HAND_OFF_TOOL_SPEC,
-  HISTORY_TOKEN_BUDGET: () => import_working16.HISTORY_TOKEN_BUDGET,
+  HISTORY_TOKEN_BUDGET: () => import_working17.HISTORY_TOKEN_BUDGET,
   INFERENCE_MODES: () => INFERENCE_MODES,
   LOCAL_ENGINE_FAILURE_CODES: () => LOCAL_ENGINE_FAILURE_CODES,
   LOCAL_PICKER_GROUPS: () => LOCAL_PICKER_GROUPS,
@@ -190,9 +190,9 @@ __export(src_exports, {
   composeEvermindHooks: () => composeEvermindHooks,
   computeBrainDiagnostics: () => computeBrainDiagnostics,
   computeRunProgress: () => computeRunProgress,
-  consolidationMarkerContent: () => import_working17.consolidationMarkerContent,
-  consolidationMarkerOf: () => import_working17.consolidationMarkerOf,
-  consolidationMetadata: () => import_working17.consolidationMetadata,
+  consolidationMarkerContent: () => import_working18.consolidationMarkerContent,
+  consolidationMarkerOf: () => import_working18.consolidationMarkerOf,
+  consolidationMetadata: () => import_working18.consolidationMetadata,
   contextUsageOf: () => contextUsageOf,
   contextWindowOf: () => contextWindowOf,
   countReconciledMemories: () => import_evermind3.countReconciledMemories,
@@ -280,7 +280,7 @@ __export(src_exports, {
   isCoderReask: () => isCoderReask,
   isConnectFailure: () => isConnectFailure,
   isConnectedAccountUnused: () => isConnectedAccountUnused,
-  isConsolidationMarker: () => import_working17.isConsolidationMarker,
+  isConsolidationMarker: () => import_working18.isConsolidationMarker,
   isDirectedToParticipant: () => isDirectedToParticipant,
   isDispatchTool: () => isDispatchTool,
   isEffort: () => isEffort,
@@ -308,7 +308,7 @@ __export(src_exports, {
   isUsageSurface: () => isUsageSurface,
   isUserConfiguredModelRef: () => isUserConfiguredModelRef,
   isWasmTrap: () => isWasmTrap,
-  lastConsolidationIndex: () => import_working17.lastConsolidationIndex,
+  lastConsolidationIndex: () => import_working18.lastConsolidationIndex,
   lastServedModel: () => lastServedModel,
   leftChangeUnreviewed: () => leftChangeUnreviewed,
   leftChangeUnshipped: () => leftChangeUnshipped,
@@ -411,7 +411,7 @@ __export(src_exports, {
   runOutcomesSince: () => runOutcomesSince,
   runProgressVerdict: () => runProgressVerdict,
   savePendingPrompt: () => savePendingPrompt,
-  scopeToConsolidation: () => import_working17.scopeToConsolidation,
+  scopeToConsolidation: () => import_working18.scopeToConsolidation,
   selectPendingAskUser: () => selectPendingAskUser,
   selectToolsForTurn: () => selectToolsForTurn,
   selfReviewShipDirective: () => selfReviewShipDirective,
@@ -14332,7 +14332,7 @@ function useArmedNewChat(chats) {
 }
 
 // src/useBrainConversation.ts
-var import_react10 = require("react");
+var import_react11 = require("react");
 
 // src/useRunSnapshot.ts
 var import_react8 = require("react");
@@ -17084,6 +17084,55 @@ function progressPauseQuestion(signal, trip) {
 
 // ../packages/run-guards/src/streak.ts
 var BACK_TO_BACK_AT = 3;
+
+// ../packages/run-guards/src/stopIntent.ts
+function normalizeStopText(text) {
+  return text.trim().toLowerCase();
+}
+var BARE_VERBS = /* @__PURE__ */ new Set(["stop", "halt", "abort", "esc", "/stop"]);
+var OBJECT_VERBS = /* @__PURE__ */ new Set(["cancel"]);
+var LEADS = /* @__PURE__ */ new Set(["please", "ok", "okay", "hey", "now"]);
+var TAIL = /* @__PURE__ */ new Set([
+  "now",
+  "right",
+  "immediately",
+  "asap",
+  "please",
+  "it",
+  "this",
+  "that",
+  "everything",
+  "all",
+  "the",
+  "run",
+  "task",
+  "job",
+  "work",
+  "working",
+  "executing",
+  "execution",
+  "running",
+  "agent",
+  "current",
+  "stop",
+  "halt",
+  "abort",
+  "here"
+]);
+var CANCEL_OBJECTS = /* @__PURE__ */ new Set(["run", "task", "job", "execution", "it", "this", "that", "everything", "all", "work"]);
+var MAX_WORDS = 6;
+function stopIntent(text) {
+  if (!text) return false;
+  const words3 = normalizeStopText(text).replace(/[.!…]+$/u, "").split(/[\s,]+/).map((w) => w.replace(/^[!.]+|[!.]+$/g, "")).filter(Boolean);
+  if (words3.length === 0 || words3.length > MAX_WORDS) return false;
+  let i = 0;
+  while (i < words3.length - 1 && LEADS.has(words3[i])) i++;
+  const verb = words3[i];
+  const tail = words3.slice(i + 1);
+  if (!tail.every((w) => TAIL.has(w))) return false;
+  if (BARE_VERBS.has(verb)) return true;
+  return OBJECT_VERBS.has(verb) && tail.some((w) => CANCEL_OBJECTS.has(w));
+}
 
 // ../packages/run-guards/src/readsWithoutSpawn.ts
 var READS_BEFORE_DELEGATION_NUDGE = 6;
@@ -22342,8 +22391,41 @@ function useChatTranscript(persistence, chatId, snapshot, callbacks) {
   return { messages, updateMessages, loadingMessages, reloadMessages };
 }
 
-// src/useBrainConversation.ts
+// src/useAutoReplyTrailingTurn.ts
+var import_react10 = require("react");
+
+// src/userTurnRuns.ts
 var import_working15 = require("@seanhogg/builderforce-memory/working");
+function startsRun(text) {
+  return !stopIntent(text);
+}
+function unansweredTurnIndex(messages) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message2 = messages[i];
+    if (isStepMessage(message2) || (0, import_working15.isConsolidationMarker)(message2)) continue;
+    return message2.role === "user" && !isMidTurnMetadata(message2.metadata) && startsRun(message2.content) ? i : -1;
+  }
+  return -1;
+}
+
+// src/useAutoReplyTrailingTurn.ts
+function useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending, messages, repliedRef, reply }) {
+  (0, import_react10.useEffect)(() => {
+    if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
+    if (isRunning(chatId)) return;
+    const last = messages[messages.length - 1];
+    if (last.role !== "user") return;
+    if (isDirectedToParticipant(last)) return;
+    if (isMidTurnMetadata(last.metadata)) return;
+    if (!startsRun(last.content)) return;
+    if (repliedRef.current === chatId) return;
+    repliedRef.current = chatId;
+    reply(chatId, last);
+  }, [chatId, loadingMessages, localSending, messages, repliedRef, reply]);
+}
+
+// src/useBrainConversation.ts
+var import_working16 = require("@seanhogg/builderforce-memory/working");
 
 // src/contextUsage.ts
 var LLM_COMPLETE = "llm.complete";
@@ -22464,14 +22546,6 @@ function withRating(ratings, messageId, rating) {
 }
 
 // src/useBrainConversation.ts
-function unansweredTurnIndex(messages) {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message2 = messages[i];
-    if (isStepMessage(message2) || (0, import_working15.isConsolidationMarker)(message2)) continue;
-    return message2.role === "user" && !isMidTurnMetadata(message2.metadata) ? i : -1;
-  }
-  return -1;
-}
 function useBrainConversation(options) {
   const { persistence, resolveSystemPrompt, stream, imagePrep } = useBrainConfig();
   const {
@@ -22499,9 +22573,9 @@ function useBrainConversation(options) {
     chatRoster,
     prepareRun
   } = options;
-  const sendingRef = (0, import_react10.useRef)(/* @__PURE__ */ new Set());
-  const [sendingChats, setSendingChats] = (0, import_react10.useState)(sendingRef.current);
-  const markSending = (0, import_react10.useCallback)((key, on) => {
+  const sendingRef = (0, import_react11.useRef)(/* @__PURE__ */ new Set());
+  const [sendingChats, setSendingChats] = (0, import_react11.useState)(sendingRef.current);
+  const markSending = (0, import_react11.useCallback)((key, on) => {
     const next = new Set(sendingRef.current);
     if (on) next.add(key);
     else next.delete(key);
@@ -22509,21 +22583,21 @@ function useBrainConversation(options) {
     setSendingChats(next);
   }, []);
   const localSending = sendingChats.has(chatId);
-  const chatIdRef = (0, import_react10.useRef)(chatId);
+  const chatIdRef = (0, import_react11.useRef)(chatId);
   chatIdRef.current = chatId;
-  const [localError, setLocalError] = (0, import_react10.useState)("");
-  const [ratings, setRatings] = (0, import_react10.useState)({});
-  const [pendingAttachments, setPendingAttachments] = (0, import_react10.useState)([]);
-  const [uploading, setUploading] = (0, import_react10.useState)(false);
-  const autoRepliedChatIdRef = (0, import_react10.useRef)(null);
+  const [localError, setLocalError] = (0, import_react11.useState)("");
+  const [ratings, setRatings] = (0, import_react11.useState)({});
+  const [pendingAttachments, setPendingAttachments] = (0, import_react11.useState)([]);
+  const [uploading, setUploading] = (0, import_react11.useState)(false);
+  const autoRepliedChatIdRef = (0, import_react11.useRef)(null);
   const snapshot = useRunSnapshot(chatId);
   const { messages, updateMessages, loadingMessages, reloadMessages } = useChatTranscript(persistence, chatId, snapshot, {
     onLoadStart: () => setLocalError(""),
     onLoadError: setLocalError
   });
-  const messagesRef = (0, import_react10.useRef)(messages);
+  const messagesRef = (0, import_react11.useRef)(messages);
   messagesRef.current = messages;
-  (0, import_react10.useEffect)(() => {
+  (0, import_react11.useEffect)(() => {
     const map = {};
     for (const msg of messages) {
       if (!msg.metadata) continue;
@@ -22539,7 +22613,7 @@ function useBrainConversation(options) {
   const resolvedSystemPrompt = systemPrompt ?? resolveSystemPrompt(modality);
   const fullSystemPrompt = extraSystem ? `${resolvedSystemPrompt}
 ${extraSystem}` : resolvedSystemPrompt;
-  const buildRequest = (0, import_react10.useCallback)(
+  const buildRequest = (0, import_react11.useCallback)(
     (history, researchFrom, userTurn, userTurnMessageId) => {
       const seed = transcriptSeedOf(history);
       return {
@@ -22561,7 +22635,7 @@ ${extraSystem}` : resolvedSystemPrompt;
         augmentSystemPrompt,
         seed: seed.messages,
         seedIds: seed.ids,
-        priorResearch: priorResearchDigest((0, import_working15.scopeToConsolidation)(researchFrom)),
+        priorResearch: priorResearchDigest((0, import_working16.scopeToConsolidation)(researchFrom)),
         userTurn,
         ...userTurnMessageId != null ? { userTurnMessageId } : {},
         projectId,
@@ -22571,7 +22645,7 @@ ${extraSystem}` : resolvedSystemPrompt;
     },
     [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
   );
-  const launch = (0, import_react10.useCallback)(async (id, request) => {
+  const launch = (0, import_react11.useCallback)(async (id, request) => {
     let extra = null;
     if (prepareRun) {
       try {
@@ -22583,7 +22657,7 @@ ${extraSystem}` : resolvedSystemPrompt;
     }
     await startRun(id, extra ? { ...request, ...extra } : request);
   }, [prepareRun]);
-  const send = (0, import_react10.useCallback)(
+  const send = (0, import_react11.useCallback)(
     async (text, opts) => {
       const trimmed = text.trim();
       if (!trimmed || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
@@ -22647,7 +22721,7 @@ ${refs}`;
           }
           return true;
         }
-        await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id));
+        if (startsRun(trimmed)) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id));
         return true;
       } catch (e) {
         if (stillOpen()) {
@@ -22661,19 +22735,12 @@ ${refs}`;
     },
     [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages]
   );
-  (0, import_react10.useEffect)(() => {
-    if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
-    if (isRunning(chatId)) return;
-    const last = messages[messages.length - 1];
-    if (last.role !== "user") return;
-    if (isDirectedToParticipant(last)) return;
-    if (isMidTurnMetadata(last.metadata)) return;
-    if (autoRepliedChatIdRef.current === chatId) return;
-    autoRepliedChatIdRef.current = chatId;
+  const replyToTrailingTurn = (0, import_react11.useCallback)((id, last) => {
     setLocalError("");
-    void launch(chatId, buildRequest(messages.slice(0, -1), messages, userTurnContentOf(last), last.id));
-  }, [chatId, loadingMessages, localSending, messages, buildRequest, launch]);
-  const retryLastTurn = (0, import_react10.useCallback)(() => {
+    void launch(id, buildRequest(messages.slice(0, -1), messages, userTurnContentOf(last), last.id));
+  }, [messages, buildRequest, launch]);
+  useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending, messages, repliedRef: autoRepliedChatIdRef, reply: replyToTrailingTurn });
+  const retryLastTurn = (0, import_react11.useCallback)(() => {
     if (chatId == null || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
     const index = unansweredTurnIndex(messages);
     if (index < 0) return false;
@@ -22685,7 +22752,7 @@ ${refs}`;
     void launch(chatId, buildRequest(messages.slice(0, index), messages, userTurnContentOf(turn), turn.id));
     return true;
   }, [chatId, messages, buildRequest, launch]);
-  const rateMessage = (0, import_react10.useCallback)(async (msg, rating) => {
+  const rateMessage = (0, import_react11.useCallback)(async (msg, rating) => {
     setRatings((prev) => withRating(prev, msg.id, rating));
     const context = ratedTurnContext(messagesRef.current, msg.id);
     const localVerdict = localRatingVerdict(messagesRef.current, msg.id, rating, chatId);
@@ -22699,7 +22766,7 @@ ${refs}`;
     } catch {
     }
   }, [persistence, chatId]);
-  const attach2 = (0, import_react10.useCallback)(async (file) => {
+  const attach2 = (0, import_react11.useCallback)(async (file) => {
     setUploading(true);
     try {
       const attachment = await prepareAttachment(file, persistence, imagePrep);
@@ -22710,20 +22777,20 @@ ${refs}`;
       setUploading(false);
     }
   }, [persistence, imagePrep]);
-  const removeAttachment = (0, import_react10.useCallback)((key) => {
+  const removeAttachment = (0, import_react11.useCallback)((key) => {
     setPendingAttachments((prev) => prev.filter((a) => a.key !== key));
   }, []);
-  const resolveConfirm = (0, import_react10.useCallback)((ok) => {
+  const resolveConfirm = (0, import_react11.useCallback)((ok) => {
     if (chatId != null) resolveRunConfirm(chatId, ok);
   }, [chatId]);
-  const clearError = (0, import_react10.useCallback)(() => {
+  const clearError = (0, import_react11.useCallback)(() => {
     setLocalError("");
     clearRunError(chatId);
   }, [chatId]);
-  const stop = (0, import_react10.useCallback)(() => {
+  const stop = (0, import_react11.useCallback)(() => {
     if (chatId != null) stopRun(chatId);
   }, [chatId]);
-  const buildTriageReport = (0, import_react10.useCallback)(
+  const buildTriageReport = (0, import_react11.useCallback)(
     (agentLabel, surface) => buildBrainTriageReport({
       capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
       events: getRunTrace(chatId),
@@ -22736,7 +22803,7 @@ ${refs}`;
     }),
     [chatId, messages, localError, snapshot.error, model]
   );
-  const contextUsage = (0, import_react10.useMemo)(() => contextUsageOf(messages, snapshot.trace), [messages, snapshot.trace]);
+  const contextUsage = (0, import_react11.useMemo)(() => contextUsageOf(messages, snapshot.trace), [messages, snapshot.trace]);
   return {
     messages,
     loadingMessages,
@@ -23024,7 +23091,7 @@ function ordinalWord(n2) {
 }
 
 // src/index.ts
-var import_working16 = require("@seanhogg/builderforce-memory/working");
+var import_working17 = require("@seanhogg/builderforce-memory/working");
 
 // src/apiVersion.ts
 var API_VERSION_TTL_MS = 6e4;
@@ -23093,7 +23160,7 @@ function takePendingPrompt() {
 }
 
 // src/index.ts
-var import_working17 = require("@seanhogg/builderforce-memory/working");
+var import_working18 = require("@seanhogg/builderforce-memory/working");
 
 // src/agentPool.ts
 var DEFAULT_AGENT_MODEL_SENTINEL = "builderforce-default";
@@ -24126,7 +24193,7 @@ function isManagerRole(role) {
 }
 
 // src/ui/PromptInput.tsx
-var import_react11 = require("react");
+var import_react12 = require("react");
 var import_jsx_runtime4 = require("react/jsx-runtime");
 var boxStyle = (active) => ({
   display: "flex",
@@ -24191,7 +24258,7 @@ function PromptInput({
   className,
   submitOnEnter = true
 }) {
-  const [focused, setFocused] = (0, import_react11.useState)(false);
+  const [focused, setFocused] = (0, import_react12.useState)(false);
   const empty = value.trim().length === 0;
   const canSubmit = !empty && !disabled && !busy;
   const showStop = busy && empty && !!onStop && !!stopLabel;
@@ -24237,19 +24304,19 @@ function withUsageSurface(fetchImpl, surface) {
 }
 
 // src/useChatTurns.ts
-var import_react13 = require("react");
+var import_react14 = require("react");
 
 // src/useQueuedTurns.ts
-var import_react12 = require("react");
+var import_react13 = require("react");
 function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2 }) {
-  const [queued, setQueued] = (0, import_react12.useState)([]);
-  const nextId = (0, import_react12.useRef)(0);
-  const sendRef = (0, import_react12.useRef)(send);
+  const [queued, setQueued] = (0, import_react13.useState)([]);
+  const nextId = (0, import_react13.useRef)(0);
+  const sendRef = (0, import_react13.useRef)(send);
   sendRef.current = send;
-  const textOfRef = (0, import_react12.useRef)(textOf2);
+  const textOfRef = (0, import_react13.useRef)(textOf2);
   textOfRef.current = textOf2;
-  const runningRef = (0, import_react12.useRef)(running);
-  const submit = (0, import_react12.useCallback)((value) => {
+  const runningRef = (0, import_react13.useRef)(running);
+  const submit = (0, import_react13.useCallback)((value) => {
     const text = typeof value === "string" ? value.trim() : (textOfRef.current?.(value) ?? "").trim();
     if (!text) return false;
     if (!runningRef.current) return false;
@@ -24258,10 +24325,10 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2 }) {
     return true;
   }, []);
   runningRef.current = running;
-  const remove = (0, import_react12.useCallback)((id) => setQueued((current) => current.filter((item) => item.id !== id)), []);
-  const clear = (0, import_react12.useCallback)(() => setQueued((current) => current.length ? [] : current), []);
-  const prev = (0, import_react12.useRef)({ key: resetKey, running });
-  (0, import_react12.useEffect)(() => {
+  const remove = (0, import_react13.useCallback)((id) => setQueued((current) => current.filter((item) => item.id !== id)), []);
+  const clear = (0, import_react13.useCallback)(() => setQueued((current) => current.length ? [] : current), []);
+  const prev = (0, import_react13.useRef)({ key: resetKey, running });
+  (0, import_react13.useEffect)(() => {
     const was = prev.current;
     prev.current = { key: resetKey, running };
     if (was.key !== resetKey || !was.running || running || queued.length === 0) return;
@@ -24269,7 +24336,7 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2 }) {
     setQueued(rest);
     if (next) sendRef.current(next.value);
   }, [running, queued, resetKey]);
-  (0, import_react12.useEffect)(() => {
+  (0, import_react13.useEffect)(() => {
     setQueued([]);
   }, [resetKey]);
   return { items: queued, count: queued.length, submit, remove, clear };
@@ -24277,8 +24344,8 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2 }) {
 
 // src/useChatTurns.ts
 function useChatTurns({ running, runKey, send, steer, stop, textOf: textOf2 }) {
-  const ports = (0, import_react13.useRef)({ send, steer, stop, textOf: textOf2, runKey });
-  ports.current = { send, steer, stop, textOf: textOf2, runKey };
+  const ports = (0, import_react14.useRef)({ send, steer, stop, textOf: textOf2, runKey, running });
+  ports.current = { send, steer, stop, textOf: textOf2, runKey, running };
   const queued = useQueuedTurns({
     running,
     send: (turn) => {
@@ -24288,30 +24355,31 @@ function useChatTurns({ running, runKey, send, steer, stop, textOf: textOf2 }) {
     textOf: textOf2
   });
   const { submit: hold, clear } = queued;
-  const submit = (0, import_react13.useCallback)(async (turn) => {
-    const { send: deliver, steer: route, textOf: text } = ports.current;
-    const body = typeof turn === "string" ? turn.trim() : (text?.(turn) ?? "").trim();
-    if (!body) return false;
-    if (route?.(turn)) return true;
-    if (hold(turn)) return true;
-    return await deliver(turn) !== false;
-  }, [hold]);
-  const stopTurns = (0, import_react13.useCallback)(() => {
+  const stopTurns = (0, import_react14.useCallback)(() => {
     clear();
     const { stop: halt, runKey: key } = ports.current;
     if (halt) halt();
     else if (key != null) stopRun(key);
   }, [clear]);
+  const submit = (0, import_react14.useCallback)(async (turn) => {
+    const { send: deliver, steer: route, textOf: text } = ports.current;
+    const body = typeof turn === "string" ? turn.trim() : (text?.(turn) ?? "").trim();
+    if (!body) return false;
+    if (route?.(turn)) return true;
+    if (ports.current.running && !startsRun(body)) stopTurns();
+    if (hold(turn)) return true;
+    return await deliver(turn) !== false;
+  }, [hold, stopTurns]);
   return { queued, submit, stop: stopTurns };
 }
 
 // src/useRunRefreshTick.ts
-var import_react14 = require("react");
+var import_react15 = require("react");
 var RUN_REFRESH_MS = 3e4;
 function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
-  const [tick, setTick] = (0, import_react14.useState)(0);
-  const wasRunning = (0, import_react14.useRef)(running);
-  (0, import_react14.useEffect)(() => {
+  const [tick, setTick] = (0, import_react15.useState)(0);
+  const wasRunning = (0, import_react15.useRef)(running);
+  (0, import_react15.useEffect)(() => {
     if (wasRunning.current && !running) setTick((n2) => n2 + 1);
     wasRunning.current = running;
     if (!running) return;
@@ -24322,21 +24390,21 @@ function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
 }
 
 // src/useChatCreation.ts
-var import_react15 = require("react");
+var import_react16 = require("react");
 function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }) {
-  const chatIdRef = (0, import_react15.useRef)(chatId);
+  const chatIdRef = (0, import_react16.useRef)(chatId);
   chatIdRef.current = chatId;
-  const createRef = (0, import_react15.useRef)(create);
+  const createRef = (0, import_react16.useRef)(create);
   createRef.current = create;
-  const autoTitleRef = (0, import_react15.useRef)(autoTitle);
+  const autoTitleRef = (0, import_react16.useRef)(autoTitle);
   autoTitleRef.current = autoTitle;
-  const captureRef = (0, import_react15.useRef)(onCaptureOriginalRequest);
+  const captureRef = (0, import_react16.useRef)(onCaptureOriginalRequest);
   captureRef.current = onCaptureOriginalRequest;
-  const creating = (0, import_react15.useRef)(null);
-  (0, import_react15.useEffect)(() => {
+  const creating = (0, import_react16.useRef)(null);
+  (0, import_react16.useEffect)(() => {
     if (chatId != null) creating.current = null;
   }, [chatId]);
-  const ensureChatId = (0, import_react15.useCallback)(() => {
+  const ensureChatId = (0, import_react16.useCallback)(() => {
     const open = chatIdRef.current;
     if (open != null) return Promise.resolve(open);
     creating.current ??= createRef.current().then(
@@ -24351,7 +24419,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
     );
     return creating.current;
   }, []);
-  const onFirstUserTurn = (0, import_react15.useCallback)(async (id, firstUserText) => {
+  const onFirstUserTurn = (0, import_react16.useCallback)(async (id, firstUserText) => {
     void captureRef.current?.(id, firstUserText);
     await autoTitleRef.current?.(id, firstUserText);
   }, []);
