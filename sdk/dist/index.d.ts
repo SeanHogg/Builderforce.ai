@@ -340,7 +340,20 @@ interface ModelsListResponse {
     data?: ModelInfo[];
     /** Bare model-id pool (present on the `configured: false` branch). */
     models?: string[];
+    /**
+     * Each vendor's CURRENT flagship model ids, read from the gateway's vendor catalogs
+     * (`{ anthropic: { agentic: 'claude-opus-…', chat: 'claude-sonnet-…' }, … }`). Pin a
+     * ROLE through {@link ModelsApi.flagship} instead of hard-coding a version string —
+     * the gateway moves these on every model release, so a consumer never goes stale.
+     */
+    flagships?: Record<string, ModelFlagships>;
     [key: string]: unknown;
+}
+/** A vendor's flagship ids by turn shape — `agentic` leads tool-driven work, `chat`
+ *  plain turns. Ids are routed exactly as returned (send them as `model`). */
+interface ModelFlagships {
+    agentic: string;
+    chat: string;
 }
 interface UsageByModel {
     llmProduct: string;
@@ -420,7 +433,8 @@ interface EmbeddingsResponse {
 interface ImageGenerationCreateParams extends PerCallOptions {
     /**
      * Model hint — gateway-owned routing. Bare ids resolve via catalog lookup;
-     * vendor-prefixed ids (`together/<id>`, `fluxapi/flux-kontext-pro`) pin to a
+     * vendor-prefixed ids (`cloudflare/@cf/black-forest-labs/flux-1-schnell`,
+     * `together/<id>`, `googleai/gemini-2.5-flash-image`, `fluxapi/flux-kontext-pro`) pin to a
      * specific vendor. When unset, the gateway picks from the tenant-plan image
      * pool starting with the free tier.
      */
@@ -428,13 +442,15 @@ interface ImageGenerationCreateParams extends PerCallOptions {
     /** Required text prompt. */
     prompt: string;
     /** OpenAI-compatible size string: "1024x1024", "1792x1024", "1024x1792", etc.
-     *  Mapped to each vendor's native dimension format (FluxAPI receives an
-     *  `aspectRatio`; Together receives `width`/`height`). */
+     *  Mapped to each vendor's native dimension format (FluxAPI and Gemini receive
+     *  an aspect ratio; the others receive `width`/`height`). */
     size?: string;
     /** Number of images to generate (default 1). Vendors that don't support
      *  batching silently clamp to 1 — read `data.length` to confirm. */
     n?: number;
-    /** "url" (default) returns hosted URLs; "b64_json" returns base64-encoded image bytes. */
+    /** "url" (default) returns hosted URLs — images a vendor returns as bytes are
+     *  stored in the tenant's asset store and served from `/api/assets/…`;
+     *  "b64_json" returns base64-encoded image bytes. */
     response_format?: 'url' | 'b64_json';
     /** Opaque telemetry slug — same semantics as chat. Persisted to `llm_usage_log.use_case`. */
     useCase?: string;
@@ -461,7 +477,8 @@ interface ImageGenerationResponse {
         traceId?: string;
         /** The model the gateway dispatched against. */
         resolvedModel?: string;
-        /** Vendor that owns the resolved model — `'together' | 'fluxapi'`. */
+        /** Vendor that owns the resolved model — `'cloudflare' | 'together' |
+         *  'huggingface' | 'pollinations' | 'googleai' | 'fluxapi'`. */
         resolvedVendor?: string;
         /** How many vendor retries happened before the resolved vendor succeeded. */
         retries?: number;
@@ -595,8 +612,9 @@ declare class EmbeddingsApi {
 
 /**
  * `client.images.generate({ prompt, ... })` — OpenAI-compatible image generation
- * routed through the Builderforce gateway. The gateway cascades free Together
- * vendors → premium FluxAPI fallback so callers always see a successful
+ * routed through the Builderforce gateway. The gateway cascades its free vendors
+ * (Cloudflare Workers AI, Together, Hugging Face, Pollinations) → paid Gemini /
+ * FluxAPI → premium FluxAPI fallback so callers always see a successful
  * response unless every upstream is saturated. Read
  * `_builderforce.resolvedModel` / `resolvedVendor` to detect which vendor
  * served the request.
@@ -617,6 +635,13 @@ declare class ModelsApi {
     constructor(http: HttpClient);
     /** Raw `/llm/v1/models` response — pool status, capabilities, plan, cooldowns. */
     list(): Promise<ModelsListResponse>;
+    /**
+     * The gateway's CURRENT flagship model id for `vendor` and turn shape — e.g.
+     * `flagship('anthropic', 'agentic')` → today's Claude Opus. Use this instead of a
+     * hard-coded version string: the gateway updates it on every model release. Returns
+     * `null` when the vendor declares no flagship.
+     */
+    flagship(vendor: string, shape?: keyof ModelFlagships): Promise<string | null>;
     /**
      * Models in the tenant's plan pool, as structured entries. Empty when the
      * gateway is unconfigured for this tenant (no `data` branch — nothing servable).
@@ -815,4 +840,4 @@ declare function canUseStrictSchema(schema: unknown, opts?: DeriveResponseFormat
  */
 declare function deriveResponseFormat(schema: Record<string, unknown>, opts?: DeriveResponseFormatOptions): ResponseFormat;
 
-export { type AiCapability, BuilderforceApiError, BuilderforceClient, type BuilderforceClientOptions, type ChatCompletionChunk, type ChatCompletionCreateParams, type ChatCompletionResponse, ChatCompletionStream, type ChatMessage, type ChatRole, type ContentPart, DEFAULT_SCHEMA_COMPLEXITY_CEILING, type DeriveResponseFormatOptions, type EmbeddingObject, EmbeddingsApi, type EmbeddingsCreateParams, type EmbeddingsResponse, type ErrorClassification, type ErrorKind, type FailoverEvent, type FailoverKind, type FunctionDefinition, type ImageGenerationCreateParams, type ImageGenerationDataEntry, type ImageGenerationResponse, type ImageUrlContentPart, ImagesApi, type JsonSchemaSpec, type ModelInfo, ModelsApi, type ModelsListResponse, type PerCallOptions, type ResponseFormat, type SchemaComplexity, type TextContentPart, type ToolCall, type ToolCallDelta, type ToolCallFunction, type ToolChoice, type ToolSpec, type UsageByDay, type UsageByModel, type UsageByUser, type UsageGetParams, type UsageResponse, canUseStrictSchema, classifyError, deriveResponseFormat, estimateSchemaComplexity };
+export { type AiCapability, BuilderforceApiError, BuilderforceClient, type BuilderforceClientOptions, type ChatCompletionChunk, type ChatCompletionCreateParams, type ChatCompletionResponse, ChatCompletionStream, type ChatMessage, type ChatRole, type ContentPart, DEFAULT_SCHEMA_COMPLEXITY_CEILING, type DeriveResponseFormatOptions, type EmbeddingObject, EmbeddingsApi, type EmbeddingsCreateParams, type EmbeddingsResponse, type ErrorClassification, type ErrorKind, type FailoverEvent, type FailoverKind, type FunctionDefinition, type ImageGenerationCreateParams, type ImageGenerationDataEntry, type ImageGenerationResponse, type ImageUrlContentPart, ImagesApi, type JsonSchemaSpec, type ModelFlagships, type ModelInfo, ModelsApi, type ModelsListResponse, type PerCallOptions, type ResponseFormat, type SchemaComplexity, type TextContentPart, type ToolCall, type ToolCallDelta, type ToolCallFunction, type ToolChoice, type ToolSpec, type UsageByDay, type UsageByModel, type UsageByUser, type UsageGetParams, type UsageResponse, canUseStrictSchema, classifyError, deriveResponseFormat, estimateSchemaComplexity };
