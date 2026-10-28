@@ -1,6 +1,6 @@
 {
   "name": "@builderforce/run-guards",
-  "version": "2026.10.1",
+  "version": "2026.10.2",
   "private": true,
   "type": "module",
   "description": "THE in-run loop-breakers every agent loop shares: the exact-repeat / circling / covered-window read guard, the repeated-failure and repeated-write tallies, edit-revert detection and the no-progress window — composed into one progress detector whose state is plain JSON, so a host that runs one step per invocation (the cloud durable loop) persists it between steps. Pure: no clock, no I/O.",

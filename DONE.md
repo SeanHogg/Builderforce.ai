@@ -1,3 +1,33 @@
+## ✅ RESOLVED 2026-10-27 — A run that says it is ready now acts (PRD 35 WS8p · VSIX 2026.10.104 · run-guards 2026.10.2 · brain-embedded 2026.10.65 · agent-run 2026.10.82 · api 2026.10.89)
+
+- **Symptom.** VS Code chat #6 said "Now I have everything I need" and read one more file, turn after turn (run #562: 105 turns, `⚠ SPUN`). Nothing tripped:
+  - VS Code bound no A3 progress detector.
+  - A3's `no_progress` window counts any new file as progress, so it would not have tripped even where it was bound.
+  - `cacheServedStreak` sees only cache-answered repeats, switches off after the first edit, and fires at most twice a run.
+- **A fifth A3 signal, `unkept_ready`** (`packages/run-guards/src/readinessClaim.ts`). `claimsReady(text)` matches the model's own readiness claim. It ignores code, quotes, questions, "make sure" and conditional claims ("when / once / if I have…"), and only the words up to the claim can negate it. A claim turn with only read-only calls is unkept; any other call clears the count. The second unkept claim trips, and new files do not reset it. `ProgressDetector.noteTurnText` feeds it, its state is plain JSON, and `progressAdvice` is split out of `progressSteerNote`. The pause question no longer claims a stronger model.
+- **VS Code binds A3** (`brain-embedded/src/runStore/progressGuard.ts`). It covers every run: parent and sub-agent, before and after edits. Turn text enters at `beforeToolCalls`, every call (cache-answered too) is observed at `afterDispatch`, and the turn folds at `afterToolCalls`. The ladder:
+  - **steer:** a note opens the next turn;
+  - **escalate:** a forced turn (`hand_off` while planning, the change tools once coding); a question run, or a turn with no change tool, is steered instead;
+  - **pause:** `ask_user` alone with "Continue with guidance" / "Stop the run"; a run that cannot ask is steered.
+  - A trip that a budget's forced turn pre-empts stays due until a later turn takes it. The lever is `a3_progress_detector`, read through the new `deviceLevers.ts`, which `runPreamble`'s B1 read now shares.
+  - Traces: `loop.progress_check`, `loop.progress_forced`.
+- **One forced-progress turn.** `forcedProgressTurn` in `progressBudget.ts` serves both `cacheServedStreak` (migrated, behaviour unchanged) and the A3 escalation.
+- **The cloud and agent-run get the signal too.**
+  - `costLoop/loopGuards.ts` reads the turn text in `afterTurn`.
+  - agent-run's `afterToolCalls` now drives `GuardsHook.endTurn`. Nothing called it before, so A3 and D1 never folded a turn there.
+  - agent-run's `vitest.config.ts` finds the sibling builderforce-memory `working` dist by walking up. Its fixed four-level path only worked from the ws2 worktree, so 7 test files could not load from the main checkout.
+- **`runAgent.ts` split** from 649 to 264 lines, with no logic change. The new modules:
+  - `runContext.ts`: input, view, policy context, emit;
+  - `runState.ts`: fresh, resume and transcript state;
+  - `turnContext.ts`: system prompt and the volatile block;
+  - `runTurn.ts`: the model turn and dispatch;
+  - `runSettle.ts`: the outcome.
+- **Proven by:**
+  - `readinessClaim.test.ts` (48 with progressDetector);
+  - `progressGuard.test.ts` (10, end to end through `startRun`): the pre-WS8p guards stay quiet; steer → forced → ask; no trip on a 30-file review; a write or spawn keeps a claim; a sub-agent follows the same rule; the due survives a pre-empting budget; the lever turns it off;
+  - a new `loopGuards.test.ts` case (cloud).
+  - Existing suites pass unchanged: brain-embedded (14 files, 166 tests), agent-run (23 files), api costLoop (23).
+
 ## ✅ RESOLVED 2026-10-27 — The VSIX chat panel loads again: init never waits on a cold symbol index (VSIX 2026.10.103)
 
 - **Symptom.** After installing VSIX 2026.10.102 the chat panel stayed on "Connecting…". The extension host activated cleanly, and the webview booted and posted `ready` (headless probe of the installed bundle, 101 vs 102: identical, no page errors). The BuilderForce output channel stayed empty because the webview never received `init`, so it never made an API call.

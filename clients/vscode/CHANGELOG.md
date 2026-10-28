@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.104] — A run that says it is ready now acts
+
+- **"Now I have everything I need" no longer leads to another read.** A run that kept saying it was ready (or about to write) and then read one more file never tripped anything, because each new file looked like progress. The second time a run says it is ready and then only reads, it is told to act. The next time, it is given only the tools that make the change (or hand the work off). If it still doesn't act, it stops and asks you what to do. This applies to every run, sub-agents included, before and after it has edited anything. A long review that reads many files without claiming to be done is not affected.
+- **The same progress checks the cloud runs now run in the editor.** A run that keeps re-reading one file, undoes its own edit or repeats a failing call is warned, then made to act, then asks you.
+
 ## [2026.10.103] — The chat panel opens straight away again
 
 - **The panel no longer sits on "Connecting…" after an update.** 2026.10.102 changed how the symbol index reads code, so the first time a workspace opened, the whole index had to be rebuilt. The panel waited for that rebuild before it showed anything, which took minutes in a large workspace. It now opens at once and picks up the index when the rebuild finishes. The first run in a fresh workspace and the `@builderforce` chat participant no longer wait for it either.

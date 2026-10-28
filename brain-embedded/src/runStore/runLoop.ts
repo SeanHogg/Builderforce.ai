@@ -40,6 +40,7 @@ import { beforeDispatchHook } from './beforeDispatch';
 import { afterDispatchHook, beforeToolCallsHook } from './toolCallHooks';
 import { skipOnSteer } from './steerInterrupt';
 import { finalAnswerHook } from './finalAnswerHook';
+import { progressAfterToolCalls } from './progressGuard';
 import { runSpendBudget } from './runSpendBudget';
 import { noteRunId } from './runEndOutcome';
 import type { BrainRunRequest } from './runTypes';
@@ -70,6 +71,7 @@ export async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, 
       // The person's message skips the rest of the turn it interrupted (PRD 35 E10).
       afterDispatch: skipOnSteer(run.runKey, afterDispatchHook(run)),
       onNoToolCalls: finalAnswerHook(run),
+      afterToolCalls: progressAfterToolCalls(run),
     },
     signal: c.abort?.signal,
     // No step cap. The kernel's consecutive-tool-failure breaker is the run's only

@@ -8,6 +8,7 @@
  * resolution — the same alias registry brain-embedded and the other consumers use.
  */
 
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
@@ -17,15 +18,22 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(root, "..", "..");
 // `@builderforce/agent-tools` (source-aliased above) re-exports its knowledge modules,
 // which import `@seanhogg/builderforce-memory/working`. That package is built
-// (`exports` → `dist/`), not source-only, so it is not in `sourcePackageAliases` — but
-// the ws2 worktree has no node_modules for it, and its `working/` dist is pure
-// (no `node:*`). Alias the subpath to the built entry so the alias-only gate resolves it.
+// (`exports` → `dist/`), not source-only, so it is not in `sourcePackageAliases`, and a
+// checkout without its node_modules cannot resolve it. Its `working/` dist is pure (no
+// `node:*`), so alias the subpath to the sibling memory repo's built entry. That repo
+// sits beside Builderforce.ai, at a depth that depends on the checkout (the main tree,
+// or a worktree under `.builderforce/worktrees/`), so it is found walking up.
+const WORKING_ENTRY = path.join("builderforce-memory", "packages", "memory", "dist", "working", "index.js");
+function siblingWorkingEntry(from: string): string {
+  for (let dir = from; ; dir = path.dirname(dir)) {
+    const candidate = path.join(dir, WORKING_ENTRY);
+    if (existsSync(candidate)) return candidate;
+    if (path.dirname(dir) === dir) return path.join(from, "..", WORKING_ENTRY);
+  }
+}
 const workingAlias = {
   find: /^@seanhogg\/builderforce-memory\/working$/,
-  // `repoRoot` below is the ws2 dir itself (it holds `packages/` directly); the sibling
-  // memory repo at the workspace root is FOUR levels up (ws2 → worktrees → .builderforce
-  // → Builderforce.ai → agentic), then into builderforce-memory.
-  replacement: path.resolve(repoRoot, "..", "..", "..", "..", "builderforce-memory", "packages", "memory", "dist", "working", "index.js"),
+  replacement: siblingWorkingEntry(repoRoot),
 };
 
 export default defineConfig({

@@ -18,12 +18,10 @@
  * re-reads the author's files by design. At most {@link MAX_NO_PROGRESS_TURNS} per run.
  */
 
-import { offersHandOff } from '@builderforce/run-policy';
-import { HAND_OFF_TOOL_SPEC } from '../planHandoff';
 import type { BrainToolSpec } from '../streamChatCompletion';
 import { nowIso, pushTrace } from './runCells';
-import { reportToPolicy, type RunLoopContext } from './runLoopContext';
-import { budgeted, changeBrief, changeToolsOf, handOffBrief, progressed, type ForcedTurn } from './progressBudget';
+import type { RunLoopContext } from './runLoopContext';
+import { budgeted, forcedProgressTurn, progressed, type ForcedTurn } from './progressBudget';
 
 /** Consecutive cache-answered repeats that mark a run as circling. */
 export const CACHE_SERVED_STREAK = 6;
@@ -76,21 +74,12 @@ const circling = (n: number): string =>
 export function noProgressTurn(run: RunLoopContext, step: number, selected: readonly BrainToolSpec[]): ForcedTurn | null {
   if (!budgeted(run) || progressed(run) || run.policy.phase === 'verify' || !run.cacheStreak.due()) return null;
   const n = run.cacheStreak.count;
-  if (offersHandOff(run.policy) && run.canAskUser && !run.policy.handOffForced) {
-    run.cacheStreak.consume();
-    reportToPolicy(run, { type: 'hand_off_forced' });
-    trace(run, step, n, 'hand_off');
-    return { tools: [HAND_OFF_TOOL_SPEC], toolChoice: 'required', brief: { role: 'user', content: handOffBrief(circling(n)) } };
-  }
-  // No change tool on this turn's menu: nothing to force yet; the streak waits for one.
-  const tools = changeToolsOf(run, selected.filter((t) => t.function.name !== HAND_OFF_TOOL_SPEC.function.name));
-  if (!tools) return null;
+  // No change tool on this turn's menu: the streak waits for one.
+  const out = forcedProgressTurn(run, selected, circling(n));
+  if (!out) return null;
   run.cacheStreak.consume();
-  // Planning whose forced hand-off already came and went ends here, as the budget's does.
-  if (offersHandOff(run.policy)) reportToPolicy(run, { type: 'plan_budget_spent' });
-  reportToPolicy(run, { type: 'change_forced' });
-  trace(run, step, n, 'change');
-  return { tools, toolChoice: 'required', brief: { role: 'user', content: changeBrief(circling(n), run.canAskUser) } };
+  trace(run, step, n, out.forced);
+  return out.turn;
 }
 
 function trace(run: RunLoopContext, step: number, streak: number, forced: 'hand_off' | 'change'): void {

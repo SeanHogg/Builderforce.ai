@@ -1,0 +1,91 @@
+/**
+ * The run's shared shapes: what a caller hands the agent, what one turn sees, the
+ * context every policy hook reads, and the trace emit. Split out of `runAgent.ts` so the
+ * driver holds only the composition (PRD 35 §5 rule 4).
+ */
+
+import type { ToolSchema } from "@builderforce/agent-tools";
+import type { ParsedToolCall } from "@builderforce/agent-loop";
+import type { EventSink, ModelUsage, RunEvent, RunMessage, RunPolicy, RunPorts, RunState, RunTask } from "./contract.js";
+import type { PolicyContext, PolicyModules, PolicyToolCall } from "./policy/index.js";
+
+/** What a caller hands the agent. */
+export interface RunAgentInput {
+  task: RunTask;
+  policy: RunPolicy;
+  ports: RunPorts;
+  /** The state a prior invocation saved, to resume from. */
+  resume?: RunState;
+  /** Steps this invocation may take before yielding. `1` on a cloud tick; unbounded when omitted. */
+  maxSteps?: number;
+  /** The cancellation signal. A fired signal settles the run `failed` with reason `cancelled`. */
+  signal?: AbortSignal;
+  /**
+   * Replace a policy module WHOLE. A test drives one module this way; a surface never
+   * does — an adapter supplies ports, not policy.
+   */
+  modules?: Partial<PolicyModules>;
+}
+
+/** What one turn of the run sees. Rebuilt per turn, because the hooks may have changed it. */
+export interface TurnView {
+  messages: RunMessage[];
+  tools: ToolSchema[];
+  model?: string;
+  maxTokens?: number;
+}
+
+/** The context every hook sees, for one moment of the run. */
+export function policyContext(input: RunAgentInput, state: RunState, view: TurnView, step: number, turn: number): PolicyContext {
+  return {
+    task: input.task,
+    policy: input.policy,
+    state,
+    ports: input.ports,
+    step,
+    turn,
+    messages: view.messages,
+    tools: view.tools,
+    signal: input.signal,
+  };
+}
+
+/** Apply a hook's compaction, recording what it dropped. */
+export function applyCompaction(state: RunState, view: TurnView, result: { messages: RunMessage[]; dropped: number; reserveTokens?: number }, step: number): void {
+  view.messages = result.messages;
+  state.messages = result.messages;
+  state.compaction = {
+    compactions: state.compaction.compactions + 1,
+    lastCompactedStep: step,
+    ...(result.reserveTokens !== undefined ? { reserveTokens: result.reserveTokens } : {}),
+    droppedMessages: result.dropped,
+  };
+}
+
+/** The tally a turn adds to the outcome row. */
+export interface TurnTally {
+  toolCalls: number;
+  toolErrors: number;
+  model?: string;
+  usage?: ModelUsage;
+}
+
+/** The view a hook reads: the transcript and the tools as they stand. */
+export function currentView(transcript: RunMessage[], offered: ToolSchema[]): TurnView {
+  return { messages: transcript, tools: offered };
+}
+
+/** A tool call as the policy hooks see it. */
+export function toPolicyCall(call: ParsedToolCall): PolicyToolCall {
+  return { id: call.id, name: call.name, args: call.args };
+}
+
+/** Emit one trace event. A sink that throws must not sink the run. */
+export async function emit(events: EventSink, event: RunEvent): Promise<void> {
+  try {
+    await events.emit(event);
+  } catch {
+    // Telemetry is best-effort. A broken sink records nothing; it does not fail the run.
+  }
+}
+

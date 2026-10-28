@@ -35,215 +35,17 @@
  * and Node.
  */
 
-import { buildCoreToolRegistry, type ToolSchema } from "@builderforce/agent-tools";
-import { initialRunPolicy, type RunPolicyState } from "@builderforce/run-policy";
-import {
-  openAiChatCodec,
-  readOpenAiToolCalls,
-  runAgentLoop,
-  toOpenAiToolCall,
-  type LoopDispatchResult,
-  type LoopHooks,
-  type LoopResult,
-  type LoopTurn,
-  type ParsedToolCall,
-  type TurnContext,
-} from "@builderforce/agent-loop";
+import { readOpenAiToolCalls, runAgentLoop, type LoopHooks, type LoopResult } from "@builderforce/agent-loop";
 
-import type {
-  ContextPack,
-  EventSink,
-  ModelCompletion,
-  ModelRequest,
-  ModelUsage,
-  ReadCoverageState,
-  RunEvent,
-  RunMessage,
-  RunOutcome,
-  RunOutcomeRow,
-  RunPolicy,
-  RunPorts,
-  RunState,
-  RunTask,
-} from "./contract.js";
-import { composePolicyHooks, type PolicyContext, type PolicyHooks, type PolicyModules, type PolicyToolCall } from "./policy/index.js";
+import type { ContextPack, ModelUsage, RunMessage, RunOutcome } from "./contract.js";
+import { composePolicyHooks } from "./policy/index.js";
+import { applyCompaction, currentView, emit, policyContext, toPolicyCall, type RunAgentInput, type TurnTally } from "./runContext.js";
+import { asMessages, freshState, newApprovalId, rememberWrite, resumeState } from "./runState.js";
+import { completeTurn, dispatchCall, offeredSchemas } from "./runTurn.js";
+import { settle } from "./runSettle.js";
+import { extractVolatile, replaceVolatile, systemPrompt, turnContextBlock } from "./turnContext.js";
 
-/** What a caller hands the agent. */
-export interface RunAgentInput {
-  task: RunTask;
-  policy: RunPolicy;
-  ports: RunPorts;
-  /** The state a prior invocation saved, to resume from. */
-  resume?: RunState;
-  /** Steps this invocation may take before yielding. `1` on a cloud tick; unbounded when omitted. */
-  maxSteps?: number;
-  /** The cancellation signal. A fired signal settles the run `failed` with reason `cancelled`. */
-  signal?: AbortSignal;
-  /**
-   * Replace a policy module WHOLE. A test drives one module this way; a surface never
-   * does — an adapter supplies ports, not policy.
-   */
-  modules?: Partial<PolicyModules>;
-}
-
-/** The registry the agent dispatches through. Built once: the catalog does not change per run. */
-const REGISTRY = buildCoreToolRegistry();
-
-/** The schemas the model is offered, before the tools policy narrows them. */
-function offeredSchemas(ports: RunPorts): ToolSchema[] {
-  return REGISTRY.schemasFor(ports.capabilities);
-}
-
-/** A fresh run's state. Every slice starts empty; a hook fills its own. */
-function freshState(policy: RunPolicy): RunState {
-  return {
-    messages: [],
-    step: 0,
-    guards: {},
-    finish: {
-      noDeliverableBlocked: false,
-      reviewVerdictRecorded: false,
-      placeholderBlocks: 0,
-      ciPendingBlocks: 0,
-      ciFailureBlocks: 0,
-      ciVerified: false,
-      finishBlockedOnce: false,
-    },
-    model: initialModelState(policy),
-    memory: { memory: { created: [], edited: [], deleted: [], read: [], searched: [] }, tools: [] },
-    compaction: { compactions: 0 },
-    writtenPaths: [],
-    askedGates: [],
-    reads: freshReads(),
-  };
-}
-
-/**
- * The model policy's starting state. WS2g owns how a pin, a role and the inference
- * mode become a model; until it lands, a pinned model is asked for as-is and an
- * unpinned run lets the transport choose.
- */
-function initialModelState(policy: RunPolicy): RunPolicyState {
-  return initialRunPolicy({ pinnedModel: policy.pinnedModel });
-}
-
-function freshReads(): ReadCoverageState {
-  return { served: {}, readsWithoutSpawn: { reads: 0, spawned: false, nudged: false } };
-}
-
-/** The state a resume hands back, with every slice present even if an older writer omitted one. */
-function resumeState(saved: RunState, policy: RunPolicy): RunState {
-  const fresh = freshState(policy);
-  return {
-    ...fresh,
-    ...saved,
-    guards: saved.guards ?? fresh.guards,
-    finish: saved.finish ?? fresh.finish,
-    model: saved.model ?? fresh.model,
-    memory: saved.memory ?? fresh.memory,
-    compaction: saved.compaction ?? fresh.compaction,
-    writtenPaths: saved.writtenPaths ?? [],
-    askedGates: saved.askedGates ?? [],
-    reads: saved.reads ?? fresh.reads,
-    messages: Array.isArray(saved.messages) ? saved.messages : [],
-  };
-}
-
-/** A transcript row, read back out of the state it was saved as. */
-function asMessages(raw: readonly unknown[]): RunMessage[] {
-  const out: RunMessage[] = [];
-  for (const row of raw) {
-    if (!row || typeof row !== "object") continue;
-    const r = row as Partial<RunMessage>;
-    if (r.role !== "system" && r.role !== "user" && r.role !== "assistant" && r.role !== "tool") continue;
-    out.push({
-      role: r.role,
-      content: typeof r.content === "string" ? r.content : "",
-      ...(Array.isArray(r.toolCalls) ? { toolCalls: r.toolCalls } : {}),
-      ...(typeof r.toolCallId === "string" ? { toolCallId: r.toolCallId } : {}),
-    });
-  }
-  return out;
-}
-
-/** The system prompt: the persona, then the task. The context pack is NOT here — it is volatile. */
-function systemPrompt(task: RunTask): string {
-  const parts: string[] = [];
-  if (task.persona && task.persona.trim()) parts.push(task.persona.trim());
-  parts.push(task.prompt);
-  return parts.join("\n\n");
-}
-
-/**
- * The volatile turn-context block. It is rebuilt every turn from the pack and the
- * memory brief, and it is NEVER part of the cached prefix — that is why it is its
- * own message rather than folded into the system prompt.
- */
-function turnContextBlock(pack: ContextPack, brief: string | null): string | null {
-  const lines: string[] = [];
-  for (const file of pack.focus) {
-    if (file.content !== undefined) {
-      lines.push(`## ${file.path}`, file.content);
-    } else if (file.outline && file.outline.length > 0) {
-      lines.push(`## ${file.path} (outline)`);
-      for (const entry of file.outline) lines.push(`- ${entry.heading} (line ${entry.line})`);
-    }
-  }
-  if (pack.chat) {
-    lines.push(`## chat`, `${pack.chat.tickets.length} linked tickets, ${pack.chat.runs.length} runs`);
-  }
-  for (const repo of pack.repos ?? []) {
-    lines.push(`## repo ${repo.repo}`, `branch ${repo.branch}`, repo.dirty.length > 0 ? `dirty: ${repo.dirty.join(", ")}` : "clean");
-  }
-  for (const fact of pack.facts) lines.push(`## ${fact.key}`, fact.content);
-  for (const line of pack.recall) lines.push(line);
-  if (brief && brief.trim()) lines.push("## brief", brief.trim());
-  if (lines.length === 0) return null;
-  return lines.join("\n");
-}
-
-/** What one turn of the run sees. Rebuilt per turn, because the hooks may have changed it. */
-interface TurnView {
-  messages: RunMessage[];
-  tools: ToolSchema[];
-  model?: string;
-  maxTokens?: number;
-}
-
-/** The context every hook sees, for one moment of the run. */
-function policyContext(input: RunAgentInput, state: RunState, view: TurnView, step: number, turn: number): PolicyContext {
-  return {
-    task: input.task,
-    policy: input.policy,
-    state,
-    ports: input.ports,
-    step,
-    turn,
-    messages: view.messages,
-    tools: view.tools,
-    signal: input.signal,
-  };
-}
-
-/** Apply a hook's compaction, recording what it dropped. */
-function applyCompaction(state: RunState, view: TurnView, result: { messages: RunMessage[]; dropped: number; reserveTokens?: number }, step: number): void {
-  view.messages = result.messages;
-  state.messages = result.messages;
-  state.compaction = {
-    compactions: state.compaction.compactions + 1,
-    lastCompactedStep: step,
-    ...(result.reserveTokens !== undefined ? { reserveTokens: result.reserveTokens } : {}),
-    droppedMessages: result.dropped,
-  };
-}
-
-/** The tally a turn adds to the outcome row. */
-interface TurnTally {
-  toolCalls: number;
-  toolErrors: number;
-  model?: string;
-  usage?: ModelUsage;
-}
+export type { RunAgentInput } from "./runContext.js";
 
 /**
  * Drive one run to an outcome.
@@ -260,6 +62,8 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   const resumed = Boolean(input.resume);
 
   const tally: TurnTally = { toolCalls: 0, toolErrors: 0 };
+  /** The current turn's text, for the guards' turn fold (A3's readiness claims). */
+  let turnContent = "";
   const offered = offeredSchemas(ports);
   const transcript = asMessages(state.messages);
 
@@ -322,6 +126,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
     },
 
     afterTurn: async (ctx, turn) => {
+      turnContent = turn.content ?? "";
       tally.model = turn.meta && typeof turn.meta === "object" ? (turn.meta as { model?: string }).model : tally.model;
       const usage = turn.meta && typeof turn.meta === "object" ? (turn.meta as { usage?: ModelUsage }).usage : undefined;
       if (usage) tally.usage = usage;
@@ -384,6 +189,9 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
     },
 
     afterToolCalls: async (ctx) => {
+      // The guards fold the turn: D1's cascade and A3's trips, readiness claims included.
+      const pctx = policyContext(input, state, currentView(transcript, offered), ctx.step, ctx.stepInCall);
+      await hooks.guards.endTurn?.(pctx, turnContent);
       await emit(ports.events, { kind: "turn.finished", step: ctx.step });
       return undefined;
     },
@@ -444,193 +252,6 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
     return settle(input, state, transcript, "failed", { reason: loopResult.output || "the run stopped" }, tally);
   }
   return settle(input, state, transcript, "finished", { output: loopResult.output }, tally);
-}
-
-/** The view a hook reads: the transcript and the tools as they stand. */
-function currentView(transcript: RunMessage[], offered: ToolSchema[]): TurnView {
-  return { messages: transcript, tools: offered };
-}
-
-/** One model turn: the policy picks the model, the transport answers. */
-async function completeTurn(
-  input: RunAgentInput,
-  state: RunState,
-  hooks: PolicyHooks,
-  ctx: TurnContext<RunMessage>,
-  offered: ToolSchema[],
-  transcript: RunMessage[],
-): Promise<LoopTurn | { failed: string }> {
-  const view = currentView(transcript, offered);
-  const pctx = policyContext(input, state, view, ctx.step, ctx.stepInCall);
-  const selected = await hooks.tools.select(pctx, offered);
-  // An empty selection is a decision, not an absence: a module that returns `[]` has
-  // chosen that this run may call nothing. Only `undefined` means "not my concern",
-  // which is what the no-op returns until WS2f lands.
-  const tools = selected ? [...selected] : offered;
-  const decision = await hooks.model.resolve(pctx);
-  const model = decision?.model ?? state.model.model ?? input.policy.pinnedModel;
-
-  const request: ModelRequest = {
-    messages: transcript,
-    ...(model ? { model } : {}),
-    ...(tools.length > 0 ? { tools } : {}),
-    ...(decision?.maxTokens !== undefined ? { maxTokens: decision.maxTokens } : {}),
-  };
-
-  let completion: ModelCompletion;
-  try {
-    completion = await input.ports.model.complete(request, input.signal);
-  } catch (err) {
-    if (input.signal?.aborted) throw err;
-    const reason = err instanceof Error ? err.message : String(err);
-    return { failed: reason };
-  }
-
-  if (completion.model) state.model = { ...state.model, model: completion.model };
-  return {
-    content: completion.content ?? "",
-    toolCalls: (completion.toolCalls ?? []).map((call) => ({ id: call.id, name: call.name, arguments: call.arguments })),
-    meta: { model: completion.model, usage: completion.usage },
-  };
-}
-
-/**
- * Dispatch one tool call through the registry, so the capability gate holds at call
- * time and not only at advertisement. The registry owns the alias remap and the
- * "available tools" list in the unknown-tool error; calling `execute` directly would
- * skip both, and a model that hallucinates `list_dir` would be told the tool does
- * not exist instead of having it run.
- */
-async function dispatchCall(ports: RunPorts, call: ParsedToolCall, signal: AbortSignal | undefined): Promise<LoopDispatchResult> {
-  try {
-    const result = await REGISTRY.dispatch(call.name, call.args, { caps: ports.capabilities, ...(signal ? { signal } : {}) });
-    return { data: result.data, ...(result.control ? { control: result.control } : {}), ...(result.data && (result.data as { ok?: unknown }).ok === false ? { isError: true } : {}) };
-  } catch (err) {
-    if (signal?.aborted) throw err;
-    const reason = err instanceof Error ? err.message : String(err);
-    return { data: { ok: false, error: reason }, isError: true };
-  }
-}
-
-/** A tool call as the policy hooks see it. */
-function toPolicyCall(call: ParsedToolCall): PolicyToolCall {
-  return { id: call.id, name: call.name, args: call.args };
-}
-
-/** Record a write the run made, so the finish gates can see what was delivered. */
-function rememberWrite(state: RunState, call: ParsedToolCall, ok: boolean): void {
-  if (!ok) return;
-  if (call.name !== "write_file" && call.name !== "edit_file") return;
-  const path = typeof call.args.path === "string" ? call.args.path : undefined;
-  if (path && !state.writtenPaths.includes(path)) state.writtenPaths = [...state.writtenPaths, path];
-}
-
-/** The volatile block's marker, so a later turn replaces it rather than stacking another. */
-const VOLATILE_PREFIX = "<turn-context>";
-const VOLATILE_SUFFIX = "</turn-context>";
-
-/** Replace the previous volatile block with this turn's, or append one. */
-function replaceVolatile(transcript: RunMessage[], block: string | null): void {
-  const index = transcript.findIndex((row) => row.role === "user" && row.content.startsWith(VOLATILE_PREFIX));
-  if (!block) {
-    if (index >= 0) transcript.splice(index, 1);
-    return;
-  }
-  const row: RunMessage = { role: "user", content: `${VOLATILE_PREFIX}\n${block}\n${VOLATILE_SUFFIX}` };
-  if (index >= 0) transcript[index] = row;
-  else transcript.push(row);
-}
-
-/**
- * The volatile block's inner content, as saved in a resumed transcript, or null when
- * none is present. A resumed run replays the pack it saved (not a rebuilt one), so the
- * volatile block the last turn wrote is reconstructed instead of being dropped.
- */
-function extractVolatile(transcript: RunMessage[]): ContextPack | null {
-  const row = transcript.find((r) => r.role === "user" && r.content.startsWith(VOLATILE_PREFIX) && r.content.endsWith(VOLATILE_SUFFIX));
-  if (!row) return null;
-  const inner = row.content.slice(VOLATILE_PREFIX.length, row.content.length - VOLATILE_SUFFIX.length).trim();
-  // The block's exact pack is not recoverable field-for-field; what matters for trace
-  // fidelity is that a non-empty block is re-rendered (a non-empty focus/facts pack),
-  // which keeps the resumed run's volatile row from vanishing.
-  return inner ? { focus: [{ path: "<resumed>" }], facts: [], recall: [] } : null;
-}
-
-/** An approval id for a pause that named none, stable for the rest of the run. */
-function newApprovalId(state: RunState): string {
-  return `approval-${state.askedGates.length + 1}`;
-}
-
-/** Emit one trace event. A sink that throws must not sink the run. */
-async function emit(events: EventSink, event: RunEvent): Promise<void> {
-  try {
-    await events.emit(event);
-  } catch {
-    // Telemetry is best-effort. A broken sink records nothing; it does not fail the run.
-  }
-}
-
-/** What a terminal outcome carries beyond the state. */
-interface SettleExtra {
-  output?: string;
-  question?: string;
-  approvalId?: string;
-  reason?: string;
-}
-
-/**
- * Save the state, write the outcome row, emit the closing event and return the
- * outcome. Every path out of the run comes through here, so a resumed tick and a
- * continuous run record the same row.
- */
-async function settle(
-  input: RunAgentInput,
-  state: RunState,
-  transcript: RunMessage[],
-  kind: RunOutcome["kind"],
-  extra: SettleExtra,
-  tally: TurnTally,
-): Promise<RunOutcome> {
-  state.messages = transcript;
-
-  if (kind === "finished") {
-    const consolidated = await composePolicyHooks(input.modules).memory.consolidate(policyContext(input, state, currentView(transcript, []), state.step, 0));
-    if (consolidated !== undefined) {
-      try {
-        await input.ports.store.commitMemory?.(consolidated);
-      } catch {
-        // A failed write-back is recorded by its absence, not by failing a finished run.
-      }
-    }
-  }
-
-  try {
-    await input.ports.store.save(state);
-  } catch {
-    // A store that cannot save still returns the state to the caller, who holds it.
-  }
-
-  const row: RunOutcomeRow = {
-    entryPoint: input.policy.entryPoint,
-    steps: state.step,
-    toolCalls: tally.toolCalls,
-    toolErrors: tally.toolErrors,
-    terminalStatus: kind,
-    ...(tally.model ? { model: tally.model } : {}),
-  };
-  try {
-    await input.ports.events.outcome?.(row);
-  } catch {
-    // As with the trace: a broken sink records nothing.
-  }
-  // A yielded tick has not finished: the next tick resumes and the trace is one run.
-  // Emitting `run.finished` here would close a run that is still open.
-  if (kind !== "yielded") await emit(input.ports.events, { kind: "run.finished", step: state.step, outcome: kind });
-
-  if (kind === "finished") return { kind, output: extra.output ?? "", state };
-  if (kind === "paused") return { kind, question: extra.question ?? "", approvalId: extra.approvalId ?? newApprovalId(state), state };
-  if (kind === "failed") return { kind, reason: extra.reason ?? "failed", state };
-  return { kind, state };
 }
 
 /**

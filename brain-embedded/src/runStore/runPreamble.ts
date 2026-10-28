@@ -7,7 +7,7 @@
 
 import { ASK_USER_TOOL, ASK_USER_TOOL_SPEC } from '@builderforce/agent-loop';
 import { initialRunPolicy } from '@builderforce/run-policy';
-import { isCostLeverOn } from '@builderforce/cost-levers';
+import { deviceLeverOn } from './deviceLevers';
 import { toolNamesMentionedIn, memoryReplayable } from '@builderforce/agent-stall';
 import type { CompletionMetadata } from '../streamChatCompletion';
 import { HAND_OFF_TOOL_SPEC } from '../planHandoff';
@@ -20,6 +20,7 @@ import { previewReviewDirective } from '../previewReview';
 import { previousReplyText } from '../restatedReply';
 import { ReadCoverage } from '../readCoverage';
 import { CacheServedStreak } from './cacheServedStreak';
+import { RunProgressGuard } from './progressGuard';
 import { readRequest } from './requestReading';
 import { RunKnowledgeRecorder, type RunKnowledgeLog } from '@builderforce/agent-tools';
 import { FailureTally, WriteLedger } from '@builderforce/run-guards';
@@ -38,14 +39,10 @@ import { attachTurnContext, restoreTurnContext, turnContextBlock, turnContextCar
 import { resolveServerChatId } from './serverChat';
 import { decideRunPipeline, pipelineMetadata, pipelinePolicyOptions } from './pipelineRoute';
 
-/**
- * B1 (`b1_stable_prefix`): per-turn blocks ride AFTER the history instead of in the
- * system prompt. On-device there is no tenant to bucket by, so this reads the manifest
- * default plus any env a Node host exposes (`COST_LEVER_B1_STABLE_PREFIX=off`).
- */
+/** B1 (`b1_stable_prefix`): per-turn blocks ride AFTER the history instead of in the
+ *  system prompt (`COST_LEVER_B1_STABLE_PREFIX=off` turns it off). */
 function stablePrefixOn(): boolean {
-  const env = (globalThis as { process?: { env?: unknown } }).process?.env;
-  return isCostLeverOn(env, 'b1_stable_prefix', null);
+  return deviceLeverOn('b1_stable_prefix');
 }
 
 /** The run's record — the host's when it lends one — named for the request it serves. */
@@ -304,6 +301,10 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
     // How many calls in a row that cache has answered — a run circling its own reads
     // is forced to hand off or change (`cacheServedStreak.ts`).
     cacheStreak: new CacheServedStreak(),
+    // The A3 progress detector — a run that says it is ready and keeps reading, circles,
+    // undoes its own edit or repeats a failure is steered, then forced, then asked
+    // about (`progressGuard.ts`, PRD 35 WS8p).
+    progress: new RunProgressGuard(),
     // What the run did and read, restated in front of every turn (its `brief()`) —
     // the host's recorder when it keeps one, so the ledger and its code map agree.
     knowledge: recorderFor(userRequest, req.knowledge),

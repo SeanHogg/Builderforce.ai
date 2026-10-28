@@ -24,6 +24,8 @@ export function beforeToolCallsHook(run: RunLoopContext): NonNullable<Hooks['bef
   const { runTool, persistence, onActivity } = run.req;
   return async (ctx, turn, calls) => {
     const { result, requested } = metaOf(turn);
+    // What the turn SAID it would do, judged against what its calls do (`progressGuard.ts`).
+    run.progress.noteTurnText(result.text);
     // `ask_user` is TERMINAL: the agent is blocked on the user's decision, so the run
     // settles here and the reply carries any lead-in prose plus the canonical
     // ```ask-user block the transcript renders as a clickable card. Without this the
@@ -80,7 +82,9 @@ export function beforeToolCallsHook(run: RunLoopContext): NonNullable<Hooks['bef
  *  it, and the tool pinned for later turns. */
 export function afterDispatchHook(run: RunLoopContext): NonNullable<Hooks['afterDispatch']> {
   const { c, readCoverage, usedTools } = run;
-  return (call, _result, row) => {
+  return (call, result, row) => {
+    // Every call the model made, cache-answered or run — the progress detector judges both.
+    run.progress.observe(call.name, call.args, result);
     if (run.pendingReplay) {
       // Keep the replayed read anchored to the message that now carries it.
       const replay = run.pendingReplay;

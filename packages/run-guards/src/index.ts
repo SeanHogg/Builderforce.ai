@@ -47,6 +47,7 @@ export {
 } from "./noProgress.js";
 export {
   ProgressDetector,
+  progressAdvice,
   progressPauseQuestion,
   progressSteerNote,
   type ObservedResult,
@@ -56,6 +57,8 @@ export {
   type ProgressSignal,
   type ProgressSignalKind,
 } from "./progressDetector.js";
+// "Now I have everything I need", then another read (PRD 35 WS8p).
+export { UNKEPT_READY_AT, UnkeptClaimTracker, claimsReady, type UnkeptClaimState } from "./readinessClaim.js";
 export { BACK_TO_BACK_AT } from "./streak.js";
 // "STOP executing" typed mid-run means the Stop button (PRD 35 E10).
 export { ABORT_TRIGGERS, isAbortTrigger, stopIntent } from "./stopIntent.js";

@@ -14,6 +14,7 @@ import { nowIso, pushTrace } from './runCells';
 import { userTextOf } from './convoText';
 import { changeBudgetTurn, planBudgetTurn, type ForcedTurn } from './progressBudget';
 import { noProgressTurn } from './cacheServedStreak';
+import { progressGuardTurn } from './progressGuard';
 import type { RunLoopContext } from './runLoopContext';
 
 export interface TurnMenu {
@@ -67,7 +68,11 @@ export function turnMenu(run: RunLoopContext, step: number): TurnMenu {
   // Coding that has spent its budget without changing anything is made to change
   // something on THIS turn — the change tools alone — and a run circling its own read
   // cache is made to hand off or change now, whatever its budget says.
-  const forced = handOffTurn ?? changeBudgetTurn(run, step, selected) ?? noProgressTurn(run, step, selected);
+  // A3's escalation or pause (`progressGuard.ts`) comes last: a budget that fires first
+  // already forces the same turn, and the trip stays due for the next one.
+  const forced = handOffTurn ?? changeBudgetTurn(run, step, selected) ?? noProgressTurn(run, step, selected) ?? progressGuardTurn(run, step, selected);
+  // A3's steer (or an escalation it could not force here) opens the turn.
+  const steer = run.progress.steerNote();
   // A forced turn keeps its OWN, narrower list (and so misses the cached tools prefix for
   // that one turn — at most a few times a run) rather than the full list restricted
   // through `tool_choice`: the vendor path cannot express the restriction. A multi-tool
@@ -99,6 +104,6 @@ export function turnMenu(run: RunLoopContext, step: number): TurnMenu {
     advertisedNames: new Set(advertised.map((t) => t.function.name)),
     // Every retry of the same turn sends it again, or a forced turn would retry with no
     // instruction. It rides the turn's tagged volatile tail, never as a message of its own.
-    opening: forced ? [userTextOf(forced.brief)] : [],
+    opening: [...(forced ? [userTextOf(forced.brief)] : []), ...(steer ? [steer] : [])],
   };
 }

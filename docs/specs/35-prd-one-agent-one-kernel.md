@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Approved design, in progress. **WS0 landed** (clean tree, `main` = `origin/main` at `6b1a1469e`, 2026-10-25). **WS8a–h shipped 2026-10-25 in VSIX 2026.10.76** (DONE.md); its leftovers are in ROADMAP. **WS8i–o shipped 2026-10-25** (api 2026.10.81, brain-embedded 2026.10.52, agent-tools 2026.10.14, model-router 2026.10.18, tool-output-policy 2026.10.2; DONE.md), after the overnight WS1 run (VS Code chat #6) delivered 5 files in 6.5 hours. **WS1 merged** (#878: contract, package skeleton, conformance harness, report-mode guards). **WS2a–g merged** (#880: all twelve policy modules under `packages/agent-run/src/policy/`). No entry point imports `@builderforce/agent-run` yet, so the old homes still run every execution. **WS8p is open** (added 2026-10-27: a run that says it is ready and keeps reading trips no guard, and A3 itself counts new files as progress). It ships on today's VS Code home ahead of WS4. **Next: WS6** (telemetry; `src/telemetry/` does not exist yet), then WS3/WS4/WS5, then WS7. Status checked 2026-10-27. Board: epic 5979, one ticket per workstream. Revised 2026-10-25: adds run efficiency (§2.1, WS8, §6.10, §8.4). Evidence: one VS Code run took 79 turns to update this PRD and never updated it. |
+| Status | Approved design, in progress. **WS0 landed** (clean tree, `main` = `origin/main` at `6b1a1469e`, 2026-10-25). **WS8a–h shipped 2026-10-25 in VSIX 2026.10.76** (DONE.md); its leftovers are in ROADMAP. **WS8i–o shipped 2026-10-25** (api 2026.10.81, brain-embedded 2026.10.52, agent-tools 2026.10.14, model-router 2026.10.18, tool-output-policy 2026.10.2; DONE.md), after the overnight WS1 run (VS Code chat #6) delivered 5 files in 6.5 hours. **WS1 merged** (#878: contract, package skeleton, conformance harness, report-mode guards). **WS2a–g merged** (#880: all twelve policy modules under `packages/agent-run/src/policy/`). No entry point imports `@builderforce/agent-run` yet, so the old homes still run every execution. **WS8p shipped 2026-10-27** in VSIX 2026.10.104 (DONE.md). A3 gains `unkept_ready` in every binding, VS Code binds A3, and agent-run now folds its turns. **Next: WS6** (telemetry; `src/telemetry/` does not exist yet), then WS3/WS4/WS5, then WS7. Status checked 2026-10-27. Board: epic 5979, one ticket per workstream. Revised 2026-10-25: adds run efficiency (§2.1, WS8, §6.10, §8.4). Evidence: one VS Code run took 79 turns to update this PRD and never updated it. |
 | Owner | Agents program (planning: the session model; implementation: Opus agents; verify: Sonnet agents) |
 | Entry points | VS Code · Rovr / Web / canvas · On-prem agent · Cloud / container |
 | Design reference | [`docs/design/one-agent-one-kernel.html`](../design/one-agent-one-kernel.html), the picture: end state, both matrices, retention ledger, telemetry. Live copy: https://claude.ai/artifact/Ggc3G5y2ZLkJsVe1jDHag8 |
@@ -344,9 +344,16 @@ by one more read.
 **8p accept.**
 - **Characterization test first, on today's code.** A fake model's turns each say "Now I have everything I need" and read one new file. Today no guard fires in 20 turns. This test flips when the fix lands, and it is the planning model's sanctioned behaviour change for 8p.
 - **New tests:**
-  - The second unkept claim trips. The turn after the trip offers only the change tools, or `hand_off` while planning.
+  - Trips follow A3's ladder, and each trip starts the count over:
+    - the second unkept claim **steers**: the note opens the next turn;
+    - the fourth **forces**: that turn offers only the change tools, or `hand_off` while planning;
+    - the sixth **asks**: `ask_user` alone, with "Continue with guidance" / "Stop the run".
+  - A question run is steered and never forced to change anything. A sub-agent, which cannot ask, is steered instead of asked.
+  - A trip that a budget's forced turn pre-empts stays due until a later turn takes it.
+  - Lever `a3_progress_detector` turns it off on the device.
   - A review run that reads 30 new files and makes no readiness claim does not trip.
   - A claim followed by a write, a spawn or a hand-off clears the count.
+  - `claimsReady` ignores a question ("Do I have everything I need?"), "make sure", and a claim made conditional ("when / if / once I have…"). A negation after the claim does not cancel it.
   - A sub-agent follows the same rule.
   - `claimsReady` cases: the matches above; a quoted or fenced phrase, a negated claim and the user's own words do not match.
 - **Unchanged:** the existing `progressDetector`, `noProgress`, `cacheServedStreak`, `loopGuards` and agent-run `guards` tests pass unchanged.

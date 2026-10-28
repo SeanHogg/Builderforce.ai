@@ -2,10 +2,11 @@
  * THE progress detector (cost PRD A3): the guards above, composed into one per-run
  * judgement — is this run still converging, and if not, what happens next?
  *
- * It watches four shapes of a stuck run, strongest first:
+ * It watches five shapes of a stuck run, strongest first:
  *  - `edit_revert` — a change that puts a file back the way it was ({@link EditRevertTracker});
  *  - `repeated_failure` — the identical call failing {@link FAILURE_HARD_AT} times ({@link FailureTally});
  *  - `circling_read` — one target read {@link REVISIT_HARD_AT} times with nothing changing it ({@link VisitTally});
+ *  - `unkept_ready` — {@link UNKEPT_READY_AT} turns that said the run had what it needed, then only read ({@link UnkeptClaimTracker});
  *  - `no_progress` — {@link NO_PROGRESS_TURNS} turns with no new file and no test change ({@link NoProgressTracker}).
  *
  * A turn that showed any of them is a TRIP, and trips escalate: the first is a steer
@@ -22,15 +23,17 @@ import { EditRevertTracker, changesContent, type EditRevertState } from "./editR
 import { NO_PROGRESS_TURNS, NoProgressTracker, type NoProgressPorts, type NoProgressState } from "./noProgress.js";
 import { REVISIT_HARD_AT, VisitTally, type VisitTallyState } from "./visitTally.js";
 import { pathArgOf } from "./fingerprint.js";
+import { UNKEPT_READY_AT, UnkeptClaimTracker, type UnkeptClaimState } from "./readinessClaim.js";
 
-export type ProgressSignalKind = "edit_revert" | "repeated_failure" | "circling_read" | "no_progress";
+export type ProgressSignalKind = "edit_revert" | "repeated_failure" | "circling_read" | "unkept_ready" | "no_progress";
 
 /** Strongest first — a turn reports only its strongest signal. */
 const SIGNAL_RANK: Readonly<Record<ProgressSignalKind, number>> = {
   edit_revert: 0,
   repeated_failure: 1,
   circling_read: 2,
-  no_progress: 3,
+  unkept_ready: 3,
+  no_progress: 4,
 };
 
 export interface ProgressSignal {
@@ -52,6 +55,7 @@ export interface ProgressDetectorState {
   failures?: FailureTallyState;
   edits?: EditRevertState;
   progress?: NoProgressState;
+  claims?: UnkeptClaimState;
   /** Trips so far this run. */
   trips?: number;
   /** The steer the NEXT turn shows the model, until that turn ends. */
@@ -94,6 +98,7 @@ export class ProgressDetector {
   private readonly failures: FailureTally;
   private readonly edits: EditRevertTracker;
   private readonly progress: NoProgressTracker;
+  private readonly claims: UnkeptClaimTracker;
   private trips: number;
   private steer: string | undefined;
   private turnSignal: ProgressSignal | null = null;
@@ -103,6 +108,7 @@ export class ProgressDetector {
     this.failures = new FailureTally(state.failures);
     this.edits = new EditRevertTracker(state.edits);
     this.progress = new NoProgressTracker(state.progress, ports);
+    this.claims = new UnkeptClaimTracker(state.claims);
     this.trips = state.trips ?? 0;
     this.steer = state.steer;
   }
@@ -111,8 +117,16 @@ export class ProgressDetector {
     if (!this.turnSignal || SIGNAL_RANK[signal.kind] < SIGNAL_RANK[this.turnSignal.kind]) this.turnSignal = signal;
   }
 
+  /** The current turn's own text — what it said before its calls (a readiness claim?). */
+  noteTurnText(text: string): void {
+    this.claims.noteText(text);
+  }
+
   /** One call of the current turn ran. */
   observe(tool: string, args: unknown, result: ObservedResult): void {
+    // Kept or not is about what the model CHOSE to do: a failed edit still acted.
+    // Without an `isReadOnly` port nothing is judged read-only, so no claim goes unkept.
+    this.claims.observe(this.ports.isReadOnly?.(tool, args) === true);
     const ok = succeeded(result);
     const wrote = ok && changesContent(args);
     const unscoped = (this.ports.isUnscopedMutation ?? ((t) => t === "run_command"))(tool, args);
@@ -157,6 +171,9 @@ export class ProgressDetector {
     // The previous trip's steer has now been shown for one turn.
     this.steer = undefined;
     const idle = this.progress.endTurn();
+    // New files do not excuse it: the run said it had what it needed.
+    const unkept = this.claims.endTurn();
+    if (unkept >= UNKEPT_READY_AT) this.raise({ kind: "unkept_ready", count: unkept });
     if (!this.turnSignal && idle >= NO_PROGRESS_TURNS) this.raise({ kind: "no_progress", count: idle });
     const signal = this.turnSignal;
     this.turnSignal = null;
@@ -164,6 +181,7 @@ export class ProgressDetector {
     this.trips += 1;
     // One stuck stretch is one trip: start every window over.
     this.progress.reset();
+    this.claims.reset();
     this.visits.forget(() => true);
     this.failures.reset();
     const note = progressSteerNote(signal, this.trips);
@@ -198,6 +216,7 @@ export class ProgressDetector {
       failures: this.failures.snapshot(),
       edits: this.edits.snapshot(),
       progress: this.progress.snapshot(),
+      ...(this.claims.snapshot().unkept ? { claims: this.claims.snapshot() } : {}),
       ...(this.trips ? { trips: this.trips } : {}),
       ...(this.steer ? { steer: this.steer } : {}),
     };
@@ -207,15 +226,23 @@ export class ProgressDetector {
 /** What the run is told on a trip: the diagnosis, the evidence, the moves that remain. */
 export function progressSteerNote(signal: ProgressSignal, trip: number): string {
   const head = `Progress check (${trip === 1 ? "first warning" : "second warning — the run has been moved to a stronger model"}): `;
+  return `${head}${progressAdvice(signal)}`;
+}
+
+/** A trip's diagnosis and the moves that remain, without the warning's heading — for a
+ *  host whose second step is not a stronger model (the editor forces a change turn). */
+export function progressAdvice(signal: ProgressSignal): string {
   switch (signal.kind) {
     case "edit_revert":
-      return `${head}your last change to ${signal.target} put the file back the way it was earlier in this run. You are oscillating between two versions instead of converging. Decide which version is right from the requirement and the evidence you already have, make that change once, and move on.`;
+      return `your last change to ${signal.target} put the file back the way it was earlier in this run. You are oscillating between two versions instead of converging. Decide which version is right from the requirement and the evidence you already have, make that change once, and move on.`;
     case "repeated_failure":
-      return `${head}\`${signal.tool}\` has failed ${signal.count} times with identical arguments${signal.reason ? ` ("${signal.reason}")` : ""}. Change the argument the error names, use a different tool, or finish and state what is blocking you.`;
+      return `\`${signal.tool}\` has failed ${signal.count} times with identical arguments${signal.reason ? ` ("${signal.reason}")` : ""}. Change the argument the error names, use a different tool, or finish and state what is blocking you.`;
     case "circling_read":
-      return `${head}you have read ${signal.target} ${signal.count} times and nothing changed it in between. Everything you read is still above you. Act on it — make the edit — or page forward to lines you have not seen.`;
+      return `you have read ${signal.target} ${signal.count} times and nothing changed it in between. Everything you read is still above you. Act on it — make the edit — or page forward to lines you have not seen.`;
+    case "unkept_ready":
+      return `you have said ${signal.count} times that you have what you need — or that you are about to write — and then only read. Act on it now: make the change, spawn or hand off the work, or ask about what genuinely blocks you. Reading more is not the next step.`;
     case "no_progress":
-      return `${head}the last ${signal.count} turns touched no new file and changed nothing about the tests. Re-read the task, pick the next concrete step that changes code or runs a check, and do it now — or finish and explain what is blocking you.`;
+      return `the last ${signal.count} turns touched no new file and changed nothing about the tests. Re-read the task, pick the next concrete step that changes code or runs a check, and do it now — or finish and explain what is blocking you.`;
   }
 }
 
@@ -225,7 +252,8 @@ export function progressPauseQuestion(signal: ProgressSignal, trip: number): str
     edit_revert: `keeps undoing its own change to ${signal.target ?? "a file"}`,
     repeated_failure: `keeps repeating a failing \`${signal.tool ?? "tool"}\` call`,
     circling_read: `keeps re-reading ${signal.target ?? "the same file"} without acting`,
+    unkept_ready: "keeps saying it has everything it needs, then reads more instead of acting",
     no_progress: "has stopped making progress (no new files, no test changes)",
   };
-  return `This run ${what[signal.kind]} — progress check ${trip}, after a warning and a stronger model. How should it proceed? Reply with guidance to continue, or stop the run.`;
+  return `This run ${what[signal.kind]} — progress check ${trip}, after earlier warnings. How should it proceed? Reply with guidance to continue, or stop the run.`;
 }

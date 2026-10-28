@@ -22,7 +22,7 @@
 
 import { ASK_USER_TOOL } from '@builderforce/agent-loop';
 import { asksForChange, isContinuationDirective } from '@builderforce/agent-stall';
-import { PLAN_TURN_BUDGET, QUICK_CHANGE_TURN_BUDGET, changeDue, handOffDue } from '@builderforce/run-policy';
+import { PLAN_TURN_BUDGET, QUICK_CHANGE_TURN_BUDGET, changeDue, handOffDue, offersHandOff } from '@builderforce/run-policy';
 import { isCodeChangeTool } from '../localWorkspaceTools';
 import { HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC } from '../planHandoff';
 import type { BrainToolSpec, ChatCompletionMessage } from '../streamChatCompletion';
@@ -108,6 +108,31 @@ export function planBudgetTurn(run: RunLoopContext, step: number): ForcedTurn | 
 export function changeToolsOf(run: RunLoopContext, selected: readonly BrainToolSpec[]): BrainToolSpec[] | null {
   const tools = selected.filter((t) => isCodeChangeTool(t.function.name) || (run.canAskUser && t.function.name === ASK_USER_TOOL));
   return tools.some((t) => isCodeChangeTool(t.function.name)) ? tools : null;
+}
+
+/**
+ * The forced turn a progress rule decides once it has fired — the circling breaker
+ * (`cacheServedStreak.ts`) and A3's escalation (`progressGuard.ts`): while planning,
+ * `hand_off` alone (when it can be offered and has not been forced yet); otherwise the
+ * change tools alone, which ends a planning run that could not hand off. Reports the
+ * policy event. Null when this turn offers no change tool to force.
+ */
+export function forcedProgressTurn(
+  run: RunLoopContext,
+  selected: readonly BrainToolSpec[],
+  reason: string,
+): { turn: ForcedTurn; forced: 'hand_off' | 'change' } | null {
+  if (offersHandOff(run.policy) && run.canAskUser && !run.policy.handOffForced) {
+    reportToPolicy(run, { type: 'hand_off_forced' });
+    return { forced: 'hand_off', turn: { tools: [HAND_OFF_TOOL_SPEC], toolChoice: 'required', brief: { role: 'user', content: handOffBrief(reason) } } };
+  }
+  // No change tool on this turn's menu: nothing to force yet.
+  const tools = changeToolsOf(run, selected.filter((t) => t.function.name !== HAND_OFF_TOOL));
+  if (!tools) return null;
+  // Planning whose forced hand-off already came and went ends here, as the budget's does.
+  if (offersHandOff(run.policy)) reportToPolicy(run, { type: 'plan_budget_spent' });
+  reportToPolicy(run, { type: 'change_forced' });
+  return { forced: 'change', turn: { tools, toolChoice: 'required', brief: { role: 'user', content: changeBrief(reason, run.canAskUser) } } };
 }
 
 /**

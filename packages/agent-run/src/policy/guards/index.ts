@@ -264,6 +264,11 @@ export class RunGuards {
     }));
   }
 
+  /** A3: what the turn said, judged against what its calls did (WS8p). */
+  noteTurnText(text: string): void {
+    this.progress?.noteTurnText(text);
+  }
+
   /** A3: every dispatched call is observed by the progress detector (when on). */
   observe(call: PolicyToolCall, result: unknown): void {
     if (!result || typeof result !== "object" || (result as { control?: unknown }).control) return;
@@ -307,6 +312,12 @@ export const guardsHook: GuardsHook = {
     const g = sessionOf(ctx);
     await g.checkEdit(call, result, portsOf(ctx));
     g.observe(call, result);
+    ctx.state.guards = g.snapshot();
+  },
+  async endTurn(ctx: PolicyContext, content: string) {
+    const g = sessionOf(ctx);
+    g.noteTurnText(content);
+    await g.endTurn(ctx.step, portsOf(ctx));
     ctx.state.guards = g.snapshot();
   },
 };

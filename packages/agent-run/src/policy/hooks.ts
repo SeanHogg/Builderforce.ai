@@ -120,6 +120,8 @@ export interface GuardsHook {
   beforeDispatch(ctx: PolicyContext, call: PolicyToolCall): Promise<GuardDecision | void> | GuardDecision | void;
   /** After a call returned. */
   observe(ctx: PolicyContext, call: PolicyToolCall, result: unknown): Promise<void> | void;
+  /** The turn's calls all ran; `content` is what the turn said (A3's readiness claims, WS8p). */
+  endTurn?(ctx: PolicyContext, content: string): Promise<void> | void;
 }
 
 /** What a guard decided about a call. */

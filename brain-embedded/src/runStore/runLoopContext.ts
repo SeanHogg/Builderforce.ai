@@ -25,6 +25,7 @@ import { canonicalTurnText, provenanceMetadata } from './turnPersistence';
 import type { BrainRunRequest } from './runTypes';
 import type { RunPipeline } from './pipelineRoute';
 import type { CacheServedStreak } from './cacheServedStreak';
+import type { RunProgressGuard } from './progressGuard';
 
 /** Read-only, idempotent LOCAL file/search tools whose exact-repeat call within a run is
  *  suppressed (the result is already in context). Read-only PLATFORM (`builtin_*`) tools
@@ -93,6 +94,8 @@ export interface RunLoopContext {
   readCoverage: ReadCoverage;
   /** Consecutive calls the read cache answered — the no-progress breaker (`cacheServedStreak.ts`). */
   cacheStreak: CacheServedStreak;
+  /** The A3 progress detector, bound to this run (`progressGuard.ts`). */
+  progress: RunProgressGuard;
   /** The run's ONE record of what it did and read — the source of each turn's ledger. */
   knowledge: RunKnowledgeLog;
   failures: FailureTally;

@@ -1987,12 +1987,12 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-haiku-latest": [1e-7, 5e-7],
   "~anthropic/claude-opus-latest": [4e-6, 2e-5],
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
-  "~deepseek/deepseek-flash-latest": [182e-10, 18e-7],
-  "~deepseek/deepseek-pro-latest": [2565e-10, 8e-6],
+  "~deepseek/deepseek-flash-latest": [151e-10, 18e-7],
+  "~deepseek/deepseek-pro-latest": [2542e-10, 8e-6],
   "~deepseek/deepseek-v4-flash-latest": [475e-10, 1568e-10],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [1605e-10, 894e-8],
+  "~moonshotai/kimi-latest": [1605e-10, 105634e-10],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -2000,7 +2000,7 @@ var PRICE_SNAPSHOT = {
   "~openai/gpt-terra-latest": [1e-6, 5e-6],
   "~unbiased/pareto-latest": [8e-7, 32e-7],
   "~x-ai/grok-latest": [2e-6, 6e-6],
-  "~z-ai/glm-flash-latest": [345e-10, 823e-10],
+  "~z-ai/glm-flash-latest": [416e-10, 798e-10],
   "~z-ai/glm-latest": [699e-10, 14e-7],
   "aion-labs/aion-2.0": [8e-7, 16e-7],
   "aion-labs/aion-3.0": [3e-6, 6e-6],
@@ -2069,9 +2069,9 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v4-flash-0731": [119e-9, 238e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [2156e-10, 6468e-10],
   "deepseek/deepseek-v4-pro": [875394e-12, 1750788e-12],
-  "deepseek/deepseek-v4-pro-0813": [66e-8, 198e-8],
+  "deepseek/deepseek-v4-pro-0813": [132e-8, 396e-8],
   "deepseek/deepseek-v4.1-flash": [14e-8, 42e-8],
-  "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
+  "deepseek/deepseek-v4.1-flash-1017": [3e-7, 12e-7],
   "deepseek/deepseek-v4.1-flash:batch": [5e-8, 15e-8],
   "dots-studio/dots-3-note-preview:free": [0, 0],
   "elorian/glimpse": [6e-7, 3e-6],
@@ -2187,7 +2187,7 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2.5": [5e-7, 25e-7],
   "moonshotai/kimi-k2.6": [65e-8, 341e-8],
   "moonshotai/kimi-k2.7-code": [56e-8, 31e-7],
-  "moonshotai/kimi-k3": [169e-9, 115e-7],
+  "moonshotai/kimi-k3": [189e-9, 115e-7],
   "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
   "moonshotai/kimi-k3.1-pro": [2e-6, 1e-5],
   "morph/morph-v3-fast": [8e-7, 12e-7],
@@ -2439,7 +2439,7 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5": [1e-6, 32e-7],
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
   "z-ai/glm-5.1": [14e-7, 44e-7],
-  "z-ai/glm-5.2": [341e-10, 7e-6],
+  "z-ai/glm-5.2": [298e-10, 7e-6],
   "z-ai/glm-5.3": [699e-10, 14e-7],
   "z-ai/glm-5.3-flash": [15e-8, 5e-7],
   "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
@@ -14029,9 +14029,9 @@ function codeRunOutcome(args) {
   if (!model) return null;
   return { ...base, model, terminalStatus: "failed", merged: false };
 }
-function busiestModel(trace2) {
+function busiestModel(trace3) {
   let best = null;
-  for (const s of modelScorecard([...trace2])) if (!best || s.turns > best.turns) best = s;
+  for (const s of modelScorecard([...trace3])) if (!best || s.turns > best.turns) best = s;
   return best && best.turns > 0 ? best.model : null;
 }
 
@@ -14181,9 +14181,9 @@ function parseStepMessage(metadata) {
     return null;
   }
 }
-function traceWithPersistedSteps(messages, trace2) {
+function traceWithPersistedSteps(messages, trace3) {
   const seen = /* @__PURE__ */ new Set();
-  for (const ev of trace2) seen.add(stepSig(ev.category, ev.label, ev.ts));
+  for (const ev of trace3) seen.add(stepSig(ev.category, ev.label, ev.ts));
   const fromMessages = [];
   for (const message of messages) {
     if (!isStepMessage(message)) continue;
@@ -14210,8 +14210,8 @@ function traceWithPersistedSteps(messages, trace2) {
       ...s.textChars != null ? { textChars: s.textChars } : {}
     });
   }
-  if (fromMessages.length === 0) return trace2;
-  return [...trace2, ...fromMessages].sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
+  if (fromMessages.length === 0) return trace3;
+  return [...trace3, ...fromMessages].sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
 }
 
 // src/localWorkspaceTools.ts
@@ -14377,6 +14377,14 @@ function callFingerprint(tool, args) {
     text = String(args ?? "");
   }
   return `${tool}:${text}`;
+}
+function contentHash(text) {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return `${text.length.toString(36)}.${h.toString(36)}`;
 }
 function pathArgOf(args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) return null;
@@ -14873,6 +14881,379 @@ var WriteLedger = class {
 };
 function repeatedWriteNote(tool, path2) {
   return `Not re-run: this exact \`${tool}\` of "${path2}" already succeeded earlier in this run and nothing has changed the file since, so it already holds this content \u2014 writing it again cannot change anything. If something still looks broken, the cause is not that the write failed: re-read the error (it may predate your write), look elsewhere for the cause, or tell the user what you see.`;
+}
+
+// ../packages/run-guards/src/editRevert.ts
+var MAX_HISTORY_PER_PATH = 16;
+var MAX_PATHS2 = 200;
+function stringArg(args, ...keys) {
+  for (const key of keys) {
+    const v = args[key];
+    if (typeof v === "string") return v;
+  }
+  return void 0;
+}
+function changeOf(args) {
+  const path2 = pathArgOf(args);
+  if (!path2) return null;
+  const a = args;
+  const content = stringArg(a, "content");
+  if (content !== void 0) return { path: path2, sig: `w:${contentHash(content)}` };
+  const from = stringArg(a, "old_string", "oldString", "find");
+  const to = stringArg(a, "new_string", "newString", "replace");
+  if (from === void 0 || to === void 0 || from === to) return null;
+  const f = contentHash(from);
+  const t = contentHash(to);
+  return { path: path2, sig: `e:${f}>${t}`, inverse: `e:${t}>${f}` };
+}
+function changesContent(args) {
+  return changeOf(args) !== null;
+}
+var EditRevertTracker = class {
+  history;
+  constructor(state) {
+    this.history = new Map((state ?? []).map(([p, h]) => [p, [...h]]));
+  }
+  /**
+   * Record a call that ran. A successful content change is appended to its path's
+   * history and returned as a revert when it restores earlier content; a failed one, or
+   * a deletion (`deleted: true`), forgets the path — its content is unknown.
+   */
+  record(tool, args, outcome) {
+    if (outcome.deleted) {
+      const path2 = pathArgOf(args);
+      if (path2) this.history.delete(path2);
+      return null;
+    }
+    const change = changeOf(args);
+    if (!change) return null;
+    if (!outcome.ok) {
+      this.history.delete(change.path);
+      return null;
+    }
+    const past = this.history.get(change.path) ?? [];
+    let revert = null;
+    if (change.sig.startsWith("w:")) {
+      const earlier = past.lastIndexOf(change.sig);
+      if (earlier >= 0 && earlier < past.length - 1) revert = { path: change.path, tool, restores: "write" };
+    } else if (change.inverse) {
+      const lastWrite = past.map((s) => s.startsWith("w:")).lastIndexOf(true);
+      if (past.slice(lastWrite + 1).includes(change.inverse)) revert = { path: change.path, tool, restores: "inverse_edit" };
+    }
+    const next = [...past, change.sig].slice(-MAX_HISTORY_PER_PATH);
+    this.history.delete(change.path);
+    this.history.set(change.path, next);
+    if (this.history.size > MAX_PATHS2) this.history.delete(this.history.keys().next().value);
+    return revert;
+  }
+  /** An unscoped mutation (shell, checkout) ran: no path's content is known any more. */
+  reset() {
+    this.history.clear();
+  }
+  snapshot() {
+    return [...this.history.entries()].map(([p, h]) => [p, [...h]]);
+  }
+};
+
+// ../packages/run-guards/src/noProgress.ts
+var NO_PROGRESS_TURNS = 4;
+var MAX_SEEN = 500;
+var TEST_PATH = /(^|\/)(__tests__|tests?|spec)\/|\.(test|spec)\.[a-z0-9]+$|_test\.(go|py)$/i;
+var TEST_COMMAND = /\b(test|tests|vitest|jest|pytest|mocha|tsc|tsgo|typecheck|lint|eslint|cargo\s+test|go\s+test)\b/i;
+function isCheckCallDefault(tool, args) {
+  if (tool === "run_checks" || tool === "run_tests") return true;
+  if (tool !== "run_command" || !args || typeof args !== "object") return false;
+  const command = args.command;
+  return typeof command === "string" && TEST_COMMAND.test(command);
+}
+function isTestPath(path2) {
+  return TEST_PATH.test(path2.split("\\").join("/"));
+}
+function resultDigest(result) {
+  let text;
+  try {
+    text = JSON.stringify(result ?? null) ?? "";
+  } catch {
+    text = String(result);
+  }
+  return contentHash(text.slice(0, 8e3));
+}
+var NoProgressTracker = class {
+  seen;
+  idleTurns;
+  lastCheck;
+  progressedThisTurn = false;
+  targetOf;
+  isCheckCall;
+  constructor(state, ports = {}) {
+    this.seen = new Set(state?.seen ?? []);
+    this.idleTurns = state?.idleTurns ?? 0;
+    this.lastCheck = state?.lastCheck;
+    this.targetOf = ports.targetOf ?? ((_tool, args) => pathArgOf(args));
+    this.isCheckCall = ports.isCheckCall ?? isCheckCallDefault;
+  }
+  /**
+   * One call of the current turn ran. `wrote` = it changed file content. Returns
+   * whether the call was a check whose result CHANGED — a failing check that answers
+   * differently each time is the run fixing things, not repeating a failure.
+   */
+  observe(tool, args, outcome) {
+    const path2 = this.targetOf(tool, args);
+    if (path2 && !this.seen.has(path2)) {
+      this.seen.add(path2);
+      if (this.seen.size > MAX_SEEN) this.seen.delete(this.seen.values().next().value);
+      this.progressedThisTurn = true;
+    }
+    if (outcome.ok && outcome.wrote && path2 && isTestPath(path2)) this.progressedThisTurn = true;
+    if (!this.isCheckCall(tool, args)) return { checkChanged: false };
+    const digest = resultDigest(outcome.result);
+    if (digest === this.lastCheck) return { checkChanged: false };
+    this.progressedThisTurn = true;
+    this.lastCheck = digest;
+    return { checkChanged: true };
+  }
+  /** The turn's calls all ran. Returns the idle-turn streak after it. */
+  endTurn() {
+    this.idleTurns = this.progressedThisTurn ? 0 : this.idleTurns + 1;
+    this.progressedThisTurn = false;
+    return this.idleTurns;
+  }
+  /** Start the window over (the run was steered, escalated or resumed by a human). */
+  reset() {
+    this.idleTurns = 0;
+    this.progressedThisTurn = false;
+  }
+  snapshot() {
+    return { seen: [...this.seen], idleTurns: this.idleTurns, ...this.lastCheck ? { lastCheck: this.lastCheck } : {} };
+  }
+};
+
+// ../packages/run-guards/src/readinessClaim.ts
+var UNKEPT_READY_AT = 2;
+var READY_PATTERNS = [
+  // "Now I have everything I need", "I've got all the context", "we now have enough"
+  /\b(?:i|we)(?:'ve| have)?\s+(?:now\s+)?(?:have|got)\s+(?:got\s+)?(?:everything|all\s+(?:the\s+)?(?:context|information|info|details|i\s+need|we\s+need)|enough)\b/,
+  // "Now I have the full picture", "I have a complete understanding", "we now have a clear overview"
+  /\b(?:now\s+)?(?:i|we)(?:'ve|\s+have)?\s+(?:now\s+)?(?:have\s+|got\s+)?(?:a|the)\s+(?:clear|complete|full|good|solid|whole)\s+(?:picture|understanding|view|overview|grasp)\b/,
+  // "one final check, then I write", "one more file before I implement"
+  /\bone\s+(?:last|final|more)\s+(?:check|look|read|thing|file)\b[^.!?\n]*\b(?:then|before)\b[^.!?\n]*\b(?:write|implement|edit|make|apply|update|change|fix|code)\b/,
+  // "now I'll write", "let me now implement", "time to make the change" — never "make sure"
+  /\b(?:now\s+(?:i'll|i\s+will|let\s+me|let's)|(?:i'll|i\s+will|let\s+me|let's)\s+now|time\s+to)\s+(?:write|implement|make(?!\s+(?:sure|certain))|apply|edit|update(?!\s+(?:my|our)\s+(?:understanding|notes|picture))|create|fix|start\s+(?:writing|implementing|coding|the\s+(?:edit|change|implementation)))\b/,
+  /\blet\s+me\s+(?:write|make|apply)\s+the\s+(?:update|change|changes|edit|edits|fix|implementation)\s+now\b/
+];
+var NEGATION = /\b(?:don't|do\s+not|doesn't|haven't|have\s+not|not\s+yet|still\s+need|need\s+(?:more|to\s+(?:read|check|look|see|find|understand))|before\s+(?:i|we)\s+have|until\s+(?:i|we)\s+have|once\s+(?:i|we)\s+have|when\s+(?:i|we)\s+have|if\s+(?:i|we)\s+(?:have|had))\b/;
+function ownWords(text) {
+  return text.replace(/```[\s\S]*?(?:```|$)/g, " ").replace(/`[^`\n]*`/g, " ").replace(/^\s*>.*$/gm, " ").replace(/"[^"\n]*"|“[^”\n]*”/g, " ").replace(/[’‘]/g, "'");
+}
+function sentenceClaims(sentence) {
+  if (sentence.trimEnd().endsWith("?")) return false;
+  return READY_PATTERNS.some((p) => {
+    const m = p.exec(sentence);
+    return !!m && !NEGATION.test(sentence.slice(0, m.index + m[0].length));
+  });
+}
+function claimsReady(text) {
+  if (!text) return false;
+  return ownWords(text).toLowerCase().split(/(?<=[.!?])\s+|\n+/).some(sentenceClaims);
+}
+var UnkeptClaimTracker = class {
+  unkept;
+  claimed = false;
+  acted = false;
+  called = false;
+  constructor(state) {
+    this.unkept = state?.unkept ?? 0;
+  }
+  /** The current turn's own text. */
+  noteText(text) {
+    if (claimsReady(text)) this.claimed = true;
+  }
+  /** One call of the current turn. `readOnly` = it only read. */
+  observe(readOnly) {
+    this.called = true;
+    if (!readOnly) this.acted = true;
+  }
+  /** The turn's calls all ran. Returns the unkept-claim count after it. A turn with no
+   *  calls is a final answer (or a narrated call, which the stall recovery owns). */
+  endTurn() {
+    if (this.acted) this.unkept = 0;
+    else if (this.claimed && this.called) this.unkept += 1;
+    this.claimed = false;
+    this.acted = false;
+    this.called = false;
+    return this.unkept;
+  }
+  /** Start over (a trip, a steer, a human). */
+  reset() {
+    this.unkept = 0;
+  }
+  snapshot() {
+    return { unkept: this.unkept };
+  }
+};
+
+// ../packages/run-guards/src/progressDetector.ts
+var SIGNAL_RANK = {
+  edit_revert: 0,
+  repeated_failure: 1,
+  circling_read: 2,
+  unkept_ready: 3,
+  no_progress: 4
+};
+function succeeded2(result) {
+  if (result.isError) return false;
+  const d = result.data;
+  return !(d && typeof d === "object" && d.ok === false);
+}
+function visitTargetOf(args) {
+  const path2 = pathArgOf(args);
+  if (!args || typeof args !== "object") return path2;
+  const a = args;
+  const question = [a.query, a.pattern, a.symbol, a.name].find((v) => typeof v === "string" && v.trim() !== "");
+  if (path2 && question) return `${path2} \u220B ${question.trim()}`;
+  return path2 ?? question?.trim() ?? null;
+}
+var ProgressDetector = class {
+  constructor(state = {}, ports = {}) {
+    this.ports = ports;
+    this.visits = new VisitTally(state.visits);
+    this.failures = new FailureTally(state.failures);
+    this.edits = new EditRevertTracker(state.edits);
+    this.progress = new NoProgressTracker(state.progress, ports);
+    this.claims = new UnkeptClaimTracker(state.claims);
+    this.trips = state.trips ?? 0;
+    this.steer = state.steer;
+  }
+  ports;
+  visits;
+  failures;
+  edits;
+  progress;
+  claims;
+  trips;
+  steer;
+  turnSignal = null;
+  raise(signal) {
+    if (!this.turnSignal || SIGNAL_RANK[signal.kind] < SIGNAL_RANK[this.turnSignal.kind]) this.turnSignal = signal;
+  }
+  /** The current turn's own text — what it said before its calls (a readiness claim?). */
+  noteTurnText(text) {
+    this.claims.noteText(text);
+  }
+  /** One call of the current turn ran. */
+  observe(tool, args, result) {
+    this.claims.observe(this.ports.isReadOnly?.(tool, args) === true);
+    const ok = succeeded2(result);
+    const wrote = ok && changesContent(args);
+    const unscoped = (this.ports.isUnscopedMutation ?? ((t) => t === "run_command"))(tool, args);
+    if (unscoped) {
+      this.visits.markAllMayHaveChanged();
+      this.edits.reset();
+    } else if ((this.ports.isDelete ?? ((t) => t === "delete_file"))(tool)) {
+      this.edits.record(tool, args, { ok, deleted: ok });
+      this.forgetVisitsOf(pathArgOf(args));
+    } else if (changesContent(args)) {
+      const revert = this.edits.record(tool, args, { ok });
+      if (revert) this.raise({ kind: "edit_revert", tool, target: revert.path });
+      if (ok) this.forgetVisitsOf(pathArgOf(args));
+    } else if (ok && this.ports.isReadOnly?.(tool, args)) {
+      const target = visitTargetOf(args);
+      if (target) {
+        const visit = this.visits.record(`${tool}:${target}`, args);
+        if (visit.count >= REVISIT_HARD_AT && !visit.mayHaveChanged) this.raise({ kind: "circling_read", tool, target, count: visit.count });
+      }
+    }
+    const { checkChanged } = this.progress.observe(tool, args, { ok, wrote, result: result.data });
+    if (ok || checkChanged) this.failures.clear(tool, args);
+    else {
+      const attempts = this.failures.record(tool, args);
+      const reason = failureReason(result.data);
+      if (attempts >= FAILURE_HARD_AT) this.raise({ kind: "repeated_failure", tool, count: attempts, ...reason ? { reason } : {} });
+    }
+  }
+  forgetVisitsOf(path2) {
+    if (!path2) return;
+    this.visits.forget((key) => {
+      const target = key.slice(key.indexOf(":") + 1);
+      return target === path2 || target.startsWith(`${path2} \u220B `);
+    });
+  }
+  /** Every call of the turn ran. The trip this turn caused, if any. */
+  endTurn() {
+    this.steer = void 0;
+    const idle = this.progress.endTurn();
+    const unkept = this.claims.endTurn();
+    if (unkept >= UNKEPT_READY_AT) this.raise({ kind: "unkept_ready", count: unkept });
+    if (!this.turnSignal && idle >= NO_PROGRESS_TURNS) this.raise({ kind: "no_progress", count: idle });
+    const signal = this.turnSignal;
+    this.turnSignal = null;
+    if (!signal) return null;
+    this.trips += 1;
+    this.progress.reset();
+    this.claims.reset();
+    this.visits.forget(() => true);
+    this.failures.reset();
+    const note = progressSteerNote(signal, this.trips);
+    if (this.trips === 1) {
+      this.steer = note;
+      return { kind: "steer", trip: this.trips, signal, note };
+    }
+    if (this.trips === 2) {
+      this.steer = note;
+      return { kind: "escalate", trip: this.trips, signal, note };
+    }
+    return { kind: "pause", trip: this.trips, signal, question: progressPauseQuestion(signal, this.trips) };
+  }
+  /** A host that could not escalate shows the steer instead (or after pausing, clears it). */
+  setSteer(note) {
+    this.steer = note;
+  }
+  /** The note the current turn's request carries ("" when none). */
+  steerNote() {
+    return this.steer ?? "";
+  }
+  get tripCount() {
+    return this.trips;
+  }
+  snapshot() {
+    return {
+      visits: this.visits.snapshot(),
+      failures: this.failures.snapshot(),
+      edits: this.edits.snapshot(),
+      progress: this.progress.snapshot(),
+      ...this.claims.snapshot().unkept ? { claims: this.claims.snapshot() } : {},
+      ...this.trips ? { trips: this.trips } : {},
+      ...this.steer ? { steer: this.steer } : {}
+    };
+  }
+};
+function progressSteerNote(signal, trip) {
+  const head = `Progress check (${trip === 1 ? "first warning" : "second warning \u2014 the run has been moved to a stronger model"}): `;
+  return `${head}${progressAdvice(signal)}`;
+}
+function progressAdvice(signal) {
+  switch (signal.kind) {
+    case "edit_revert":
+      return `your last change to ${signal.target} put the file back the way it was earlier in this run. You are oscillating between two versions instead of converging. Decide which version is right from the requirement and the evidence you already have, make that change once, and move on.`;
+    case "repeated_failure":
+      return `\`${signal.tool}\` has failed ${signal.count} times with identical arguments${signal.reason ? ` ("${signal.reason}")` : ""}. Change the argument the error names, use a different tool, or finish and state what is blocking you.`;
+    case "circling_read":
+      return `you have read ${signal.target} ${signal.count} times and nothing changed it in between. Everything you read is still above you. Act on it \u2014 make the edit \u2014 or page forward to lines you have not seen.`;
+    case "unkept_ready":
+      return `you have said ${signal.count} times that you have what you need \u2014 or that you are about to write \u2014 and then only read. Act on it now: make the change, spawn or hand off the work, or ask about what genuinely blocks you. Reading more is not the next step.`;
+    case "no_progress":
+      return `the last ${signal.count} turns touched no new file and changed nothing about the tests. Re-read the task, pick the next concrete step that changes code or runs a check, and do it now \u2014 or finish and explain what is blocking you.`;
+  }
+}
+function progressPauseQuestion(signal, trip) {
+  const what = {
+    edit_revert: `keeps undoing its own change to ${signal.target ?? "a file"}`,
+    repeated_failure: `keeps repeating a failing \`${signal.tool ?? "tool"}\` call`,
+    circling_read: `keeps re-reading ${signal.target ?? "the same file"} without acting`,
+    unkept_ready: "keeps saying it has everything it needs, then reads more instead of acting",
+    no_progress: "has stopped making progress (no new files, no test changes)"
+  };
+  return `This run ${what[signal.kind]} \u2014 progress check ${trip}, after earlier warnings. How should it proceed? Reply with guidance to continue, or stop the run.`;
 }
 
 // ../packages/run-guards/src/streak.ts
@@ -16345,7 +16726,7 @@ function outputOf(ev) {
   }
   return "";
 }
-function succeeded2(ev) {
+function succeeded3(ev) {
   return !ev.isError && !isFailedToolResult(ev.result);
 }
 function isPush(ev) {
@@ -16373,13 +16754,13 @@ function shippedToBaseBranch(events, opts) {
   const steps = events.filter((e) => e.category === "tool");
   let pushedAt = -1;
   for (let i = 0; i < steps.length; i += 1) {
-    if (succeeded2(steps[i]) && isPush(steps[i])) pushedAt = i;
+    if (succeeded3(steps[i]) && isPush(steps[i])) pushedAt = i;
   }
   if (pushedAt < 0) return false;
   const touched = opts?.touchedFiles ?? [];
   for (let i = pushedAt; i < steps.length; i += 1) {
     const ev = steps[i];
-    if (!succeeded2(ev)) continue;
+    if (!succeeded3(ev)) continue;
     const isStatus = i === pushedAt || ev.label === "git_status" || GIT_STATUS_CMD.test(commandOf(ev));
     if (!isStatus) continue;
     const output = outputOf(ev);
@@ -16736,10 +17117,10 @@ var MAX_ANSWER_ANCHORS = 16;
 function normalizePath(p) {
   return p.trim().split("\\").join("/").replace(/^\.\/+/, "");
 }
-function readFileAnchors(trace2) {
+function readFileAnchors(trace3) {
   const seen = /* @__PURE__ */ new Set();
   const out = [];
-  for (const ev of trace2) {
+  for (const ev of trace3) {
     if (ev.category !== "tool" || ev.isError || !FILE_READ_TOOLS.has(ev.label)) continue;
     const args = ev.args ?? {};
     const paths = Array.isArray(args.paths) ? args.paths : PATH_KEYS.map((k) => args[k]);
@@ -16930,6 +17311,12 @@ function emitEvermindLearnReconcile(run, assistantMsg, finalText) {
       });
     }
   }
+}
+
+// src/runStore/deviceLevers.ts
+function deviceLeverOn(id) {
+  const env = globalThis.process?.env;
+  return isCostLeverOn(env, id, null);
 }
 
 // src/planHandoff.ts
@@ -17423,6 +17810,17 @@ function changeToolsOf(run, selected) {
   const tools = selected.filter((t) => isCodeChangeTool(t.function.name) || run.canAskUser && t.function.name === ASK_USER_TOOL);
   return tools.some((t) => isCodeChangeTool(t.function.name)) ? tools : null;
 }
+function forcedProgressTurn(run, selected, reason) {
+  if (offersHandOff(run.policy) && run.canAskUser && !run.policy.handOffForced) {
+    reportToPolicy(run, { type: "hand_off_forced" });
+    return { forced: "hand_off", turn: { tools: [HAND_OFF_TOOL_SPEC], toolChoice: "required", brief: { role: "user", content: handOffBrief(reason) } } };
+  }
+  const tools = changeToolsOf(run, selected.filter((t) => t.function.name !== HAND_OFF_TOOL));
+  if (!tools) return null;
+  if (offersHandOff(run.policy)) reportToPolicy(run, { type: "plan_budget_spent" });
+  reportToPolicy(run, { type: "change_forced" });
+  return { forced: "change", turn: { tools, toolChoice: "required", brief: { role: "user", content: changeBrief(reason, run.canAskUser) } } };
+}
 function changeBudgetTurn(run, step, selected) {
   const budget = skipsVerifyStage(run.pipeline) ? QUICK_CHANGE_TURN_BUDGET : PLAN_TURN_BUDGET;
   if (!changeDue(run.policy, progressed(run), budget) || !budgeted(run)) return null;
@@ -17474,19 +17872,11 @@ var circling = (n2) => `YOU ARE CIRCLING. Your last ${n2} calls were all answere
 function noProgressTurn(run, step, selected) {
   if (!budgeted(run) || progressed(run) || run.policy.phase === "verify" || !run.cacheStreak.due()) return null;
   const n2 = run.cacheStreak.count;
-  if (offersHandOff(run.policy) && run.canAskUser && !run.policy.handOffForced) {
-    run.cacheStreak.consume();
-    reportToPolicy(run, { type: "hand_off_forced" });
-    trace(run, step, n2, "hand_off");
-    return { tools: [HAND_OFF_TOOL_SPEC], toolChoice: "required", brief: { role: "user", content: handOffBrief(circling(n2)) } };
-  }
-  const tools = changeToolsOf(run, selected.filter((t) => t.function.name !== HAND_OFF_TOOL_SPEC.function.name));
-  if (!tools) return null;
+  const out = forcedProgressTurn(run, selected, circling(n2));
+  if (!out) return null;
   run.cacheStreak.consume();
-  if (offersHandOff(run.policy)) reportToPolicy(run, { type: "plan_budget_spent" });
-  reportToPolicy(run, { type: "change_forced" });
-  trace(run, step, n2, "change");
-  return { tools, toolChoice: "required", brief: { role: "user", content: changeBrief(circling(n2), run.canAskUser) } };
+  trace(run, step, n2, out.forced);
+  return out.turn;
 }
 function trace(run, step, streak, forced) {
   pushTrace(run.c, {
@@ -17495,6 +17885,210 @@ function trace(run, step, streak, forced) {
     label: "loop.no_progress",
     args: { step, streak, forced },
     result: `${streak} consecutive call(s) answered from the read cache \u2014 this turn offers ${forced === "hand_off" ? "hand_off alone" : "the change tools alone"} and requires a call.`
+  });
+}
+
+// src/toolRouter.ts
+var TOOL_ROUTER_FIND = "builtin_tools_find";
+var TOOL_ROUTER_DESCRIBE = "builtin_tools_describe";
+var TOOL_ROUTER_INVOKE = "builtin_tools_invoke";
+function isRouterTool(name) {
+  return name === TOOL_ROUTER_FIND || name === TOOL_ROUTER_DESCRIBE || name === TOOL_ROUTER_INVOKE;
+}
+var FIND_LIMIT = 25;
+function routerToolSpecs(catalogSize) {
+  const preamble = `This conversation has ${catalogSize} platform tools available in total, but only the most relevant ones are listed directly on each turn.`;
+  return [
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_FIND,
+        description: `${preamble} Search ALL of them by keyword and get back their names and descriptions. Use this FIRST whenever the tool you want is not in your visible list \u2014 do NOT assume a capability is missing, and never write a tool call as plain text.`,
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: 'Keywords, e.g. "tickets backlog status" or "pull request".' }
+          },
+          required: ["query"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_DESCRIBE,
+        description: `${preamble} Get the exact parameter schema for one tool by name, so you can build its arguments before calling it with ${TOOL_ROUTER_INVOKE}.`,
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: `Exact tool name, e.g. "builtin_chats_list_tickets".` }
+          },
+          required: ["name"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_INVOKE,
+        description: `${preamble} Call ANY of them by name, including ones not listed on this turn. This is a real call and it really executes \u2014 use it instead of describing what you would call.`,
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Exact tool name to call." },
+            args: { type: "object", description: "Arguments object for that tool." }
+          },
+          required: ["name"]
+        }
+      }
+    }
+  ];
+}
+function words2(text) {
+  return text.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
+}
+function findTools(catalog, query, limit = FIND_LIMIT) {
+  const terms = words2(query);
+  if (terms.length === 0) return [];
+  const scored = [];
+  catalog.forEach((tool, index) => {
+    const name = tool.function?.name ?? "";
+    if (!name) return;
+    const description = tool.function?.description ?? "";
+    const haystackName = name.toLowerCase();
+    const haystackDesc = description.toLowerCase();
+    let score2 = 0;
+    for (const t of terms) {
+      if (haystackName.includes(t)) score2 += 10;
+      else if (haystackDesc.includes(t)) score2 += 1;
+    }
+    if (score2 > 0) scored.push({ m: { name, description }, score: score2, index });
+  });
+  return scored.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, limit).map((e) => e.m);
+}
+function describeTool(catalog, name) {
+  return catalog.find((t) => t.function?.name === name) ?? null;
+}
+function handleRouterCall(catalog, name, args) {
+  const a = args ?? {};
+  if (name === TOOL_ROUTER_FIND) {
+    const query = typeof a.query === "string" ? a.query : "";
+    const matches = findTools(catalog, query);
+    return {
+      result: matches.length ? { matches, note: `Call one with ${TOOL_ROUTER_INVOKE}, or ${TOOL_ROUTER_DESCRIBE} first for its arguments.` } : { matches: [], note: `No tool matches "${query}". Try broader keywords; ${catalog.length} tools exist.` }
+    };
+  }
+  if (name === TOOL_ROUTER_DESCRIBE) {
+    const target2 = typeof a.name === "string" ? a.name : "";
+    const spec = describeTool(catalog, target2);
+    return {
+      result: spec ? { name: target2, description: spec.function?.description ?? "", parameters: spec.function?.parameters ?? {} } : { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
+    };
+  }
+  const target = typeof a.name === "string" ? a.name : "";
+  if (!target) return { result: { error: `${TOOL_ROUTER_INVOKE} requires a "name".` } };
+  if (isRouterTool(target)) {
+    return { result: { error: `${target} cannot be invoked through the router.` } };
+  }
+  if (!describeTool(catalog, target)) {
+    return { result: { error: `Unknown tool "${target}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
+  }
+  return { dispatch: { name: target, args: asToolArgs(a.args) ?? {} } };
+}
+
+// src/runStore/progressGuard.ts
+function isReadOnlyCall(tool, args) {
+  return isDedupableRead(tool) || isReadOnlyShellCall(tool, args) || isRouterTool(tool);
+}
+var RunProgressGuard = class {
+  /** Null when the lever is off: every method is then a no-op. */
+  detector;
+  /** An escalate / pause a later turn's menu acts on — kept until one takes it, so a
+   *  budget that forces the next turn first never drops it. */
+  due = null;
+  /** The note the next turn opens with, when the host shows it in place of an escalation. */
+  steer;
+  constructor(on = deviceLeverOn("a3_progress_detector")) {
+    this.detector = on ? new ProgressDetector({}, { isReadOnly: isReadOnlyCall, isUnscopedMutation }) : null;
+  }
+  /** What the turn said before its calls. */
+  noteTurnText(text) {
+    this.detector?.noteTurnText(text);
+  }
+  /** One of the turn's calls ran (or was answered from the read cache). */
+  observe(tool, args, result) {
+    this.detector?.observe(tool, args, result);
+  }
+  /** The turn's calls all ran. The trip it caused, if any. */
+  endTurn() {
+    this.steer = void 0;
+    const action = this.detector?.endTurn() ?? null;
+    if (action?.kind === "escalate") this.detector?.setSteer(void 0);
+    if (action && action.kind !== "steer") this.due = action;
+    return action;
+  }
+  /** The note the next turn opens with ("" when none). */
+  steerNote() {
+    return this.steer ?? this.detector?.steerNote() ?? "";
+  }
+  /** The escalation or pause waiting for this turn, taken once. */
+  takeDue() {
+    const due = this.due;
+    this.due = null;
+    return due;
+  }
+  /** The escalation could not be forced here: show its note on this turn instead. */
+  steerInstead(note) {
+    this.steer = note;
+  }
+};
+function progressAfterToolCalls(run) {
+  return (ctx) => {
+    const action = run.progress.endTurn();
+    if (!action) return;
+    pushTrace(run.c, {
+      ts: nowIso(),
+      category: "message",
+      label: "loop.progress_check",
+      args: { step: ctx.step, trip: action.trip, signal: action.signal.kind, action: action.kind },
+      result: `progress check ${action.trip}: ${action.signal.kind} \u2192 ${action.kind}`
+    });
+  };
+}
+function progressGuardTurn(run, step, selected) {
+  const due = run.progress.takeDue();
+  if (!due) return null;
+  const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
+  if (due.kind === "pause") {
+    if (!run.canAskUser) {
+      run.progress.steerInstead(advice);
+      return null;
+    }
+    trace2(run, step, due, "ask_user");
+    return {
+      tools: [ASK_USER_TOOL_SPEC],
+      toolChoice: "required",
+      brief: {
+        role: "user",
+        content: `${advice} Call ${ASK_USER_TOOL} now. question: "${due.question}" options: [{ "label": "Continue with guidance" }, { "label": "Stop the run" }]`
+      }
+    };
+  }
+  const out = budgeted(run) ? forcedProgressTurn(run, selected, advice) : null;
+  if (!out) {
+    run.progress.steerInstead(advice);
+    return null;
+  }
+  trace2(run, step, due, out.forced);
+  return out.turn;
+}
+function trace2(run, step, due, forced) {
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "loop.progress_forced",
+    args: { step, trip: due.trip, signal: due.signal.kind, forced },
+    result: `progress check ${due.trip} (${due.signal.kind}) \u2014 this turn offers ${forced === "ask_user" ? "ask_user alone" : forced === "hand_off" ? "hand_off alone" : "the change tools alone"} and requires a call.`
   });
 }
 
@@ -18019,8 +18613,7 @@ ${block}` : [...original.content, { type: "text", text: block }];
 
 // src/runStore/runPreamble.ts
 function stablePrefixOn() {
-  const env = globalThis.process?.env;
-  return isCostLeverOn(env, "b1_stable_prefix", null);
+  return deviceLeverOn("b1_stable_prefix");
 }
 function recorderFor(userRequest, lent) {
   const r = lent ?? new RunKnowledgeRecorder();
@@ -18176,6 +18769,10 @@ ${turnContext}` : systemPrompt),
     // How many calls in a row that cache has answered — a run circling its own reads
     // is forced to hand off or change (`cacheServedStreak.ts`).
     cacheStreak: new CacheServedStreak(),
+    // The A3 progress detector — a run that says it is ready and keeps reading, circles,
+    // undoes its own edit or repeats a failure is steered, then forced, then asked
+    // about (`progressGuard.ts`, PRD 35 WS8p).
+    progress: new RunProgressGuard(),
     // What the run did and read, restated in front of every turn (its `brief()`) —
     // the host's recorder when it keeps one, so the ledger and its code map agree.
     knowledge: recorderFor(userRequest, req.knowledge),
@@ -18581,114 +19178,6 @@ function selectToolsForTurn(tools, options) {
   return { tools: chosen, trimmed: true, available };
 }
 
-// src/toolRouter.ts
-var TOOL_ROUTER_FIND = "builtin_tools_find";
-var TOOL_ROUTER_DESCRIBE = "builtin_tools_describe";
-var TOOL_ROUTER_INVOKE = "builtin_tools_invoke";
-function isRouterTool(name) {
-  return name === TOOL_ROUTER_FIND || name === TOOL_ROUTER_DESCRIBE || name === TOOL_ROUTER_INVOKE;
-}
-var FIND_LIMIT = 25;
-function routerToolSpecs(catalogSize) {
-  const preamble = `This conversation has ${catalogSize} platform tools available in total, but only the most relevant ones are listed directly on each turn.`;
-  return [
-    {
-      type: "function",
-      function: {
-        name: TOOL_ROUTER_FIND,
-        description: `${preamble} Search ALL of them by keyword and get back their names and descriptions. Use this FIRST whenever the tool you want is not in your visible list \u2014 do NOT assume a capability is missing, and never write a tool call as plain text.`,
-        parameters: {
-          type: "object",
-          properties: {
-            query: { type: "string", description: 'Keywords, e.g. "tickets backlog status" or "pull request".' }
-          },
-          required: ["query"]
-        }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: TOOL_ROUTER_DESCRIBE,
-        description: `${preamble} Get the exact parameter schema for one tool by name, so you can build its arguments before calling it with ${TOOL_ROUTER_INVOKE}.`,
-        parameters: {
-          type: "object",
-          properties: {
-            name: { type: "string", description: `Exact tool name, e.g. "builtin_chats_list_tickets".` }
-          },
-          required: ["name"]
-        }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: TOOL_ROUTER_INVOKE,
-        description: `${preamble} Call ANY of them by name, including ones not listed on this turn. This is a real call and it really executes \u2014 use it instead of describing what you would call.`,
-        parameters: {
-          type: "object",
-          properties: {
-            name: { type: "string", description: "Exact tool name to call." },
-            args: { type: "object", description: "Arguments object for that tool." }
-          },
-          required: ["name"]
-        }
-      }
-    }
-  ];
-}
-function words2(text) {
-  return text.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
-}
-function findTools(catalog, query, limit = FIND_LIMIT) {
-  const terms = words2(query);
-  if (terms.length === 0) return [];
-  const scored = [];
-  catalog.forEach((tool, index) => {
-    const name = tool.function?.name ?? "";
-    if (!name) return;
-    const description = tool.function?.description ?? "";
-    const haystackName = name.toLowerCase();
-    const haystackDesc = description.toLowerCase();
-    let score2 = 0;
-    for (const t of terms) {
-      if (haystackName.includes(t)) score2 += 10;
-      else if (haystackDesc.includes(t)) score2 += 1;
-    }
-    if (score2 > 0) scored.push({ m: { name, description }, score: score2, index });
-  });
-  return scored.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, limit).map((e) => e.m);
-}
-function describeTool(catalog, name) {
-  return catalog.find((t) => t.function?.name === name) ?? null;
-}
-function handleRouterCall(catalog, name, args) {
-  const a = args ?? {};
-  if (name === TOOL_ROUTER_FIND) {
-    const query = typeof a.query === "string" ? a.query : "";
-    const matches = findTools(catalog, query);
-    return {
-      result: matches.length ? { matches, note: `Call one with ${TOOL_ROUTER_INVOKE}, or ${TOOL_ROUTER_DESCRIBE} first for its arguments.` } : { matches: [], note: `No tool matches "${query}". Try broader keywords; ${catalog.length} tools exist.` }
-    };
-  }
-  if (name === TOOL_ROUTER_DESCRIBE) {
-    const target2 = typeof a.name === "string" ? a.name : "";
-    const spec = describeTool(catalog, target2);
-    return {
-      result: spec ? { name: target2, description: spec.function?.description ?? "", parameters: spec.function?.parameters ?? {} } : { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
-    };
-  }
-  const target = typeof a.name === "string" ? a.name : "";
-  if (!target) return { result: { error: `${TOOL_ROUTER_INVOKE} requires a "name".` } };
-  if (isRouterTool(target)) {
-    return { result: { error: `${target} cannot be invoked through the router.` } };
-  }
-  if (!describeTool(catalog, target)) {
-    return { result: { error: `Unknown tool "${target}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
-  }
-  return { dispatch: { name: target, args: asToolArgs(a.args) ?? {} } };
-}
-
 // src/runStore/turnMenu.ts
 function turnMenu(run, step) {
   const { c, allTools, requestQuery, usedTools, canAskUser, alwaysAdvertised } = run;
@@ -18715,7 +19204,8 @@ function turnMenu(run, step) {
     required: offersHandOff(run.policy) && canAskUser ? [...alwaysAdvertised, HAND_OFF_TOOL] : alwaysAdvertised
   });
   const selected = offersHandOff(run.policy) ? selection.tools : selection.tools.filter((t) => t.function.name !== HAND_OFF_TOOL);
-  const forced = handOffTurn ?? changeBudgetTurn(run, step, selected) ?? noProgressTurn(run, step, selected);
+  const forced = handOffTurn ?? changeBudgetTurn(run, step, selected) ?? noProgressTurn(run, step, selected) ?? progressGuardTurn(run, step, selected);
+  const steer = run.progress.steerNote();
   const advertised = forced ? forced.tools : selection.trimmed ? [...selected, ...routerToolSpecs(allTools?.length ?? 0)] : selected;
   if (selection.trimmed && !forced) {
     pushTrace(c, {
@@ -18733,7 +19223,7 @@ function turnMenu(run, step) {
     advertisedNames: new Set(advertised.map((t) => t.function.name)),
     // Every retry of the same turn sends it again, or a forced turn would retry with no
     // instruction. It rides the turn's tagged volatile tail, never as a message of its own.
-    opening: forced ? [userTextOf(forced.brief)] : []
+    opening: [...forced ? [userTextOf(forced.brief)] : [], ...steer ? [steer] : []]
   };
 }
 
@@ -19325,6 +19815,7 @@ function beforeToolCallsHook(run) {
   const { runTool, persistence, onActivity } = run.req;
   return async (ctx, turn, calls) => {
     const { result, requested } = metaOf2(turn);
+    run.progress.noteTurnText(result.text);
     const askCall = calls.find((tc) => tc.name === ASK_USER_TOOL);
     if (askCall && runTool && !run.delegationRecoveryUsed && runLeftDelegationUndone(run)) {
       run.delegationRecoveryUsed = true;
@@ -19363,7 +19854,8 @@ ${block}` : block : lead;
 }
 function afterDispatchHook(run) {
   const { c, readCoverage, usedTools } = run;
-  return (call2, _result, row) => {
+  return (call2, result, row) => {
+    run.progress.observe(call2.name, call2.args, result);
     if (run.pendingReplay) {
       const replay = run.pendingReplay;
       readCoverage.cacheResult(replay.name, replay.args, { result: replay.result, ...replay.served !== void 0 ? { served: replay.served } : {}, anchor: row });
@@ -19711,7 +20203,8 @@ async function runLoop(chatId, c, req, runKey) {
       beforeDispatch: beforeDispatchHook(run),
       // The person's message skips the rest of the turn it interrupted (PRD 35 E10).
       afterDispatch: skipOnSteer(run.runKey, afterDispatchHook(run)),
-      onNoToolCalls: finalAnswerHook(run)
+      onNoToolCalls: finalAnswerHook(run),
+      afterToolCalls: progressAfterToolCalls(run)
     },
     signal: c.abort?.signal,
     // No step cap. The kernel's consecutive-tool-failure breaker is the run's only
@@ -19884,9 +20377,9 @@ async function startRun(runKey, request) {
       ).catch(() => {
       });
     }
-    const trace2 = runTrace(c);
+    const trace3 = runTrace(c);
     const wakeTurn = delegatingCells.has(c);
-    if (attemptedDelegation(trace2)) delegatingCells.add(c);
+    if (attemptedDelegation(trace3)) delegatingCells.add(c);
     const outcome = req.reportOutcome && codeRunOutcome({
       runId: c.runId,
       codeModel: c.codeModel,
@@ -19894,7 +20387,7 @@ async function startRun(runKey, request) {
       aborted,
       failed: c.error !== "",
       shipped,
-      trace: trace2,
+      trace: trace3,
       projectId: req.projectId,
       askedForChange: !wakeTurn && asksForChange(req.userTurn === void 0 ? void 0 : contentText(req.userTurn))
     });
@@ -20052,9 +20545,9 @@ function usageOfRow(m) {
   rowUsage.set(m, found);
   return found;
 }
-function contextUsageOf(messages, trace2) {
-  for (let i = trace2.length - 1; i >= 0; i--) {
-    const ev = trace2[i];
+function contextUsageOf(messages, trace3) {
+  for (let i = trace3.length - 1; i >= 0; i--) {
+    const ev = trace3[i];
     if (ev.category !== "llm" || ev.label !== LLM_COMPLETE) continue;
     const found = usageFrom(ev.args, ev.usage);
     if (found) return found;

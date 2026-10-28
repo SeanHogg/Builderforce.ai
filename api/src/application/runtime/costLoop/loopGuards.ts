@@ -80,6 +80,8 @@ export class LoopGuards {
   private turnEdits: VerifyResult[] = [];
   /** D7: the sandbox checks' failures from the last turn, for the next turn's tail. */
   private checksNote = '';
+  /** What the current turn said — A3 judges a readiness claim against its calls (PRD 35 WS8p). */
+  private turnText = '';
 
   constructor(env: unknown, tenantId: number, resume?: LoopGuardState, db?: unknown) {
     this.cascade = new CascadeSession(env, tenantId, resume?.cascade, db);
@@ -149,6 +151,10 @@ export class LoopGuards {
           if (!result.control) this.progress?.observe(call.name, call.args, result);
           return decision;
         },
+        afterTurn: async (ctx, turn) => {
+          this.turnText = turn.content ?? '';
+          return hooks.afterTurn?.(ctx, turn);
+        },
         afterToolCalls: async (ctx, finished) => {
           const decision = await hooks.afterToolCalls?.(ctx, finished);
           await this.endTurn(ctx.step, deps);
@@ -171,6 +177,8 @@ export class LoopGuards {
 
   private async endTurn(step: number, deps: LoopGuardDeps): Promise<void> {
     this.checksNote = '';
+    this.progress?.noteTurnText(this.turnText);
+    this.turnText = '';
     if (this.turnEdits.length > 0) {
       const errors = this.turnEdits.flatMap((v) => v.errors);
       this.turnEdits = [];

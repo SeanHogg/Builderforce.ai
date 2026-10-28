@@ -196,3 +196,23 @@ describe('LoopGuards — the sandbox\'s own checks (D1 verifier, D7 steer)', () 
     expect(checks).not.toHaveBeenCalled();
   });
 });
+
+// PRD 35 WS8p: a turn that says the run has what it needs, then only reads, is an unkept
+// claim — the cloud binding hands A3 the turn's text, so the second one trips here too.
+describe('LoopGuards — A3 readiness claims', () => {
+  async function claimTurn(wrapped: ReturnType<typeof harness>['wrapped'], step: number) {
+    await wrapped.hooks.afterTurn!(ctx(step), { content: 'Now I have everything I need.', toolCalls: [] });
+    const read = call(`r${step}`, 'read_file', { path: `docs/file-${step}.md` });
+    const result = await wrapped.ports.dispatch(read, ctx(step));
+    await wrapped.hooks.afterDispatch!(read, result, {}, ctx(step));
+    await wrapped.hooks.afterToolCalls!(ctx(step), false);
+  }
+
+  it('steers on the second claim that only read, though each read was a new file', async () => {
+    const { guards, wrapped } = harness({ COST_LEVER_A3_PROGRESS_DETECTOR: 'on', COST_LEVER_D1_VERIFIER_CASCADE: 'off' });
+    await claimTurn(wrapped, 1);
+    expect(guards.tailSections().join('\n')).not.toContain('you have said');
+    await claimTurn(wrapped, 2);
+    expect(guards.tailSections().join('\n')).toContain('you have said 2 times that you have what you need');
+  });
+});
