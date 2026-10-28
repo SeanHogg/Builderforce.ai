@@ -1,12 +1,12 @@
 /**
- * The editor chat's header — THE shared `SurfaceHeader`, bound to this surface: the
- * chat's project names it, the open chat's title is its context, and its own actions
+ * The editor chat's header — THE shared `SurfaceHeader`, bound to this surface. It
+ * carries no title (the chat's name lives in the history list), and its own actions
  * are the triage pair (copy diagnostics, run connection diagnostics). The chat picker
  * is the standard History lever, which swaps the body to the shared history list.
  */
 
 import { useMemo } from 'react';
-import { HeaderIcon, InlineChatTitle, SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
+import { HeaderIcon, SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
 import { post, type LabelBundle } from '../vscodeBridge';
 import { makeT, surfaceHeaderLabels } from './chatLabels';
 import type { CopyState } from './useCopyDiagnostics';
@@ -18,12 +18,6 @@ const COPY_ICON: Record<CopyState, string> = {
 };
 
 export interface VsCodeChatHeaderProps {
-  /** The open chat's title (or "New chat"). */
-  chatTitle: string;
-  /** The open chat's id — null while there is no chat yet, so nothing offers to rename. */
-  chatId: number | null;
-  /** Persist an inline edit of the title (the shared `useBrainChats.rename`). */
-  onRename: (id: number, title: string) => Promise<unknown> | void;
   running: boolean;
   copy: { state: CopyState; enabled: boolean; onCopy: () => void };
   history: { open: boolean; onToggle: () => void; controls: string };
@@ -36,7 +30,7 @@ export interface VsCodeChatHeaderProps {
   onVisualize?: () => void;
 }
 
-export function VsCodeChatHeader({ chatTitle, chatId, onRename, running, copy, history, onNewChat, bundle, version, onVisualize }: VsCodeChatHeaderProps) {
+export function VsCodeChatHeader({ running, copy, history, onNewChat, bundle, version, onVisualize }: VsCodeChatHeaderProps) {
   const t = makeT(bundle);
   const headerLabels = useMemo(() => surfaceHeaderLabels(bundle), [bundle]);
   const copyLabel = copy.state === 'error'
@@ -49,21 +43,6 @@ export function VsCodeChatHeader({ chatTitle, chatId, onRename, running, copy, h
     <SurfaceHeader
       title={null}
       running={running}
-      context={(
-        // The CHAT's own name, editable in place — not the brand row above it.
-        <InlineChatTitle
-          title={chatTitle}
-          chatId={chatId}
-          onRename={onRename}
-          titleClassName="bf-chat-context"
-          labels={{
-            edit: t('app.editTitle', 'Edit chat title'),
-            label: t('app.titleLabel', 'Chat title'),
-            save: t('app.saveTitle', 'Save chat title'),
-            cancel: t('app.cancelTitle', 'Cancel'),
-          }}
-        />
-      )}
       actions={(
         <>
           {version && (

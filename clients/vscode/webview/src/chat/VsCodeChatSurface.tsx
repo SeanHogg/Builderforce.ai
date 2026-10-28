@@ -230,9 +230,6 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
       label={t('app.conversation', 'Conversation')}
       header={(
         <VsCodeChatHeader
-          chatTitle={activeChat ? titleOf(activeChat) : t('app.newChat', 'New chat')}
-          chatId={activeChat ? activeChat.id : null}
-          onRename={vsChats.rename}
           running={conv.sending}
           copy={{ state: copyState, enabled: canCopy, onCopy: () => void copyTranscript() }}
           history={{ open: historyOpen, onToggle: toggleHistory, controls: HISTORY_ID }}
