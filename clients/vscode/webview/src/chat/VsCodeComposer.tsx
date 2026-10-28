@@ -11,7 +11,7 @@
  * workspace file as context, and linking a `#`-tagged ticket to the chat.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { webviewInferenceMode } from './inferenceModeOption';
 import {
   DEFAULT_PERSONA,
@@ -36,7 +36,6 @@ import {
 import type { AuthedFetch } from '../authedFetch';
 import { openUpgrade } from '../accountPlan';
 import { editorConnections } from '../providerConnections';
-import type { createChatTicketsAdapter } from '../chatTicketsAdapter';
 import { webviewLocalModelStore } from '../pageEngines';
 import { post, request, type InitData } from '../vscodeBridge';
 import { makeT, personaModalityOptions, personaPickerLabels, queuedTurnLabels, recipientPickerLabels } from './chatLabels';
@@ -45,8 +44,8 @@ import { editorStarters } from './editorStarters';
 import { steerRun } from './chatChildren';
 import type { useComposerModels } from './useComposerModels';
 import type { useRunShaping } from './useRunShaping';
+import type { TypeaheadTicket } from './useTicketRail';
 
-type ChatTicket = { id: number; title: string; status?: string; key?: string };
 
 /** What a held VS Code turn carries — its text, who it is addressed to, and any
  *  attachments it was sent with. The steer path clears the composer's `pendingAttachments`
@@ -79,9 +78,10 @@ export interface VsCodeComposerProps {
   /** The chat's project (chat-first, else the sidebar's) — the Status tab's Evermind and the Memory row. */
   projectId: number | null;
   ensureChatId: () => Promise<number>;
-  ticketAdapter: ReturnType<typeof createChatTicketsAdapter>;
-  ticketRefresh: number;
-  onTicketLinked: () => void;
+  /** `useTicketRail().typeaheadTickets` — the chat's linked tickets, for the `#` typeahead. */
+  chatTickets: TypeaheadTicket[];
+  /** `useTicketRail().linkTicket` — binds the LOCAL chat first, then links. */
+  linkTicket: (localChatId: number, ticket: { kind: string; ref: string }) => Promise<void>;
   /** The chat's participants (the "To" picker) and everyone addressable with `@` (incl. live sub-agents). */
   participants: DirectedRecipient[];
   mentionable: DirectedRecipient[];
@@ -109,7 +109,7 @@ export interface VsCodeComposerProps {
 export function VsCodeComposer(props: VsCodeComposerProps) {
   const {
     composerId, init, apiReq, conv, value, onChange, onSubmit, onQueue, onStop, onPickStarter, focusToken, chatId, projectId, ensureChatId,
-    ticketAdapter, ticketRefresh, onTicketLinked, participants, mentionable, hasLiveChildren,
+    chatTickets, linkTicket, participants, mentionable, hasLiveChildren,
     recipient, chooseRecipient, persona, onPersona, personaAgents, queue, onRemoveQueued,
     mode, memory, shaping, models, servedModel, autoMode, session, suggest = true,
   } = props;
@@ -125,33 +125,14 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
   const recipientLabels = useMemo(() => recipientPickerLabels(init.labels), [init.labels]);
   const queuedLabels = useMemo(() => queuedTurnLabels(init.labels), [init.labels]);
 
-  // #-ticket typeahead: the chat's linked tickets. A chat that does not exist yet has
-  // none — asking for `/chats/null/tickets` was a failing request on every new chat.
-  const [chatTickets, setChatTickets] = useState<ChatTicket[]>([]);
-  useEffect(() => {
-    if (chatId == null) { setChatTickets([]); return; }
-    let live = true;
-    ticketAdapter.listTickets(chatId).then((tickets) => {
-      if (!live) return;
-      setChatTickets(tickets.map((tk) => ({
-        id: parseInt(tk.ref) || tk.linkId,
-        title: tk.label || tk.ref,
-        status: tk.status,
-        key: tk.ref,
-      })));
-    }).catch(() => { if (live) setChatTickets([]); });
-    return () => { live = false; };
-  }, [chatId, ticketAdapter, ticketRefresh]);
-
-  // A ticket tagged in the box is linked to the chat — creating the chat first, the
-  // same guard every other write on this surface goes through.
-  const tagTicket = useCallback(async (ticket: ChatTicket) => {
+  // A ticket tagged in the box is linked to the chat — creating the chat first, then
+  // binding it, the same path as the ticket a chat was opened for. (`ensureChatId` can
+  // fail; `linkTicket` swallows its own errors.)
+  const tagTicket = useCallback(async (ticket: TypeaheadTicket) => {
     try {
-      const id = await ensureChatId();
-      await ticketAdapter.linkTicket(id, { kind: 'task', ref: ticket.key ?? String(ticket.id), linkType: 'linked' });
-      onTicketLinked();
+      await linkTicket(await ensureChatId(), { kind: 'task', ref: ticket.key ?? String(ticket.id) });
     } catch { /* linking is best-effort — a failed link never blocks the chat */ }
-  }, [ensureChatId, ticketAdapter, onTicketLinked]);
+  }, [ensureChatId, linkTicket]);
 
   const attachFiles = useCallback((files: File[]) => {
     for (const f of files) void conv.attach(f);

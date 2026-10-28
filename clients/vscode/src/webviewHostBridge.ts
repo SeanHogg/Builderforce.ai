@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { getTenantJwt } from "./bfApi";
+import { refreshTenantJwt } from "./bfApi";
 import { logLine } from "./errorReporter";
 import { getBaseUrl, getWebBaseUrl } from "./gateway";
 import { localBrainApplication } from "./localFirstStore";
@@ -188,8 +188,10 @@ export async function handleSharedHostMessage(
     }
   }
   switch (msg.type) {
+    // Sent on a 401 (or with no token yet): a FRESH mint, never the cached token the
+    // gateway just refused.
     case "token.refresh": {
-      const token = (await getTenantJwt(ctx.secrets)) ?? null;
+      const token = (await refreshTenantJwt(ctx.secrets)) ?? null;
       respondToWebview(webview, msg.id, true, { token });
       return true;
     }

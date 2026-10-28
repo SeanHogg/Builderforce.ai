@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useMemo, useRef } from 'react';
-import { type BrainChat, type BrainPersistenceAdapter } from '@seanhogg/builderforce-brain-embedded';
+import { serverChatIdOf, type BrainChat, type BrainPersistenceAdapter } from '@seanhogg/builderforce-brain-embedded';
 import { useChatMemorySwitch } from '@seanhogg/builderforce-brain-ui';
 import { authedFetch } from '../authedFetch';
 import { adoptChatProject } from '../adoptChatProject';
@@ -54,12 +54,15 @@ export function useChatMemory({ init, chatId, activeChat, projectId, persistence
   // use. This chat runs in the Chromium webview, so the on-device tier is real here
   // (null without WebGPU, partitioned by project). The extension-host run is a different
   // path and stays server-only: Node has no WebGPU, and a loader there would always be
-  // null. `chatId` makes recall CHAT-TIERED: this conversation's own memories first.
+  // null. The chat id makes recall CHAT-TIERED: this conversation's own memories first —
+  // its bound SERVER id (PRD 36); the local view key names no server chat, and an
+  // unbound chat recalls project-wide.
+  const serverChatId = serverChatIdOf(activeChat);
   const evermind = useMemo(() => {
     if (projectId == null) return undefined;
-    const req = authedFetch(init.baseUrl, getToken, () => void refreshToken());
-    return vsixWebviewMemoryHooks(projectId, req, chatId);
-  }, [projectId, init.baseUrl, chatId]);
+    const req = authedFetch(init.baseUrl, getToken, refreshToken);
+    return vsixWebviewMemoryHooks(projectId, req, serverChatId);
+  }, [projectId, init.baseUrl, serverChatId]);
 
   // Per-chat memory switch: a property of the CONVERSATION (`brain_chats.memory_enabled`)
   // — the same chat reads the same switch on the web — and the host's run reads it too:

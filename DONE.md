@@ -1,3 +1,23 @@
+## ✅ RESOLVED 2026-10-28 — VS Code chat stops sending local chat ids to the platform and re-sending refused tokens (VSIX 2026.10.112)
+
+**Symptom.** The BuilderForce output channel filled with `GET /api/brain/chats/6/tickets → 404 — Chat not found` on every rail refresh, and with bursts of `401 — Invalid or expired token` across the rail's files, members, agents, tickets and approvals reads. The local store showed local chat 6 bound to server chat 172.
+
+**The local view key leaked into server calls.**
+- The composer's `#`-ticket typeahead read `listTickets(chatId)` with the local id. It now reads by `serverChatId`, from the rail (`clients/vscode/webview/src/chat/useTicketRail.ts` `typeaheadTickets`). The composer makes no ticket call of its own.
+- Tagging a ticket called `ticketAdapter.linkTicket(localId)`, which linked it to whichever server chat happened to be #6. It now goes through the rail's one `linkTicket`, which binds the local chat first. The opened-ticket auto-link uses the same function (`useHostIntents`).
+- The webview's memory hooks (`useChatMemory.ts`) passed the local id into Evermind recall, answer lookup and answer pricing. They now pass `serverChatIdOf(activeChat)`. This path was dormant while the host drives runs.
+- `serverAddressedChatIds.test.ts` pins all three.
+
+**The 401 "re-mint" did not re-mint.**
+- The webview's `token.refresh` called `getTenantJwt`. That returned the cached token, which is unexpired by the client's clock and was the one the gateway had just refused.
+- `token.refresh` now calls `refreshTenantJwt`, a forced exchange.
+- Exchanges are single-flight per mode in `bfApi.ts`, so a burst shares one mint.
+- `clearJwt` bumps an epoch, so a mint still in flight at sign-out does not write the old identity's token.
+- The webview's `refreshToken` is single-flight.
+- The rail adapter, `apiReq` and the memory hooks now pass the promise-returning refresher, so a read that hit a 401 is retried once instead of staying empty.
+
+Still open: the bound chat's rail has no local copy offline (G21, Consolidated Gap Register).
+
 ## ✅ RESOLVED 2026-10-28 — The knowledge graph, deterministic prefetch and the deterministic knowledge index (builderforce-memory 2026.10.29–31 · api 2026.10.90 · frontend 2026.10.95 · brain-embedded 2026.10.69 · brain-ui 2026.10.29 · agent-runtime 2026.10.21 · Rovr 2026.10.32 · VSIX 2026.10.111)
 
 Specs: [PRD 38 rev 3](docs/specs/38-prd-knowledge-graph.md), [deterministic-prefetch.md](docs/design/deterministic-prefetch.md) and [deterministic-knowledge-index.md](docs/design/deterministic-knowledge-index.md). The operator decided the surface name `knowledge`, a review budget of 200, fact delete for the author or an admin, and keeping unlinked folders local until they are linked.

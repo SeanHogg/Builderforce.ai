@@ -16,6 +16,9 @@ import { usePendingChangesExtension } from '../usePendingChangesExtension';
 import { getToken, refreshToken, type InitData } from '../vscodeBridge';
 import { spendLabelsFrom } from './composerLabels';
 
+/** A linked ticket as the composer's `#` typeahead lists it. */
+export type TypeaheadTicket = { id: number; title: string; status?: string; key?: string };
+
 /**
  * Every call the rail makes is SERVER-addressed (`/api/brain/chats/{id}/…`), so it names
  * the chat's bound server id (PRD 36) — never the local view key, which named whichever
@@ -33,7 +36,9 @@ export function useTicketRail({ init, apiReq, serverChatId, chats, persistence, 
 }) {
   // Same gateway endpoints as the web app's panel, over the webview's bearer fetch.
   const ticketAdapter = useMemo(
-    () => createChatTicketsAdapter(init.baseUrl, getToken, () => void refreshToken()),
+    // A 401 re-mints (one shared exchange per burst) and retries the read once — a
+    // fire-and-forget refresh left the rail empty until something else refreshed it.
+    () => createChatTicketsAdapter(init.baseUrl, getToken, refreshToken),
     [init.baseUrl],
   );
   // The rail's copy — the host's `ct.*` l10n keys (`src/chatTicketsLabels.ts`).
@@ -59,15 +64,29 @@ export function useTicketRail({ init, apiReq, serverChatId, chats, persistence, 
     return () => window.removeEventListener('bf:mcp-write', bumpTicketRefresh);
   }, [bumpTicketRefresh]);
 
+  // The composer's #-ticket typeahead: the chat's linked tickets. Read here, by the
+  // SERVER id, beside every other rail read — the composer read them by the local view
+  // key (`/chats/6/tickets` for a chat bound to 172, a 404 on every refresh). An unbound
+  // chat has none and makes no request.
+  const [typeaheadTickets, setTypeaheadTickets] = useState<TypeaheadTicket[]>([]);
+  useEffect(() => {
+    if (serverChatId == null) { setTypeaheadTickets([]); return; }
+    let live = true;
+    ticketAdapter.listTickets(serverChatId).then((tickets) => {
+      if (live) setTypeaheadTickets(tickets.map((tk) => ({ id: parseInt(tk.ref) || tk.linkId, title: tk.label || tk.ref, status: tk.status, key: tk.ref })));
+    }).catch(() => { if (live) setTypeaheadTickets([]); });
+    return () => { live = false; };
+  }, [serverChatId, ticketAdapter, ticketRefresh]);
+
   // "The agent changed code and nothing said so" — the chat's own signal, as a pill.
   const chatFiles = useChatChangedFiles(apiReq, serverChatId, ticketRefresh);
   const pendingChangesExtension = usePendingChangesExtension(init.labels, chatFiles);
 
-  // Auto-link the work item that opened this chat (a task/epic/gap from the tree or
-  // board, a roadmap/spec row from a project page) so the chat is tied to it and the
-  // rail shows it. The chat was just created on this machine, so it is bound first —
-  // a signed-out editor has no platform chat to link to, and links nothing.
-  const linkOpenedTicket = useCallback(
+  // Link a work item to a LOCAL chat — the work item that opened it (a task/epic/gap from
+  // the tree or board, a roadmap/spec row from a project page) or one `#`-tagged in the
+  // composer. A local chat's id names no server chat, so it is bound first; a signed-out
+  // editor has no platform chat to link to, and links nothing.
+  const linkTicket = useCallback(
     async (localChatId: number, ticket: { kind: string; ref: string }) => {
       try {
         const linkChatId = await persistence.bindChat?.(localChatId);
@@ -82,6 +101,6 @@ export function useTicketRail({ init, apiReq, serverChatId, chats, persistence, 
 
   return {
     ticketAdapter, ticketLabels, spendLabels, ticketChatList, onTicketsChanged,
-    ticketRefresh, bumpTicketRefresh, pendingChangesExtension, linkOpenedTicket,
+    ticketRefresh, pendingChangesExtension, linkTicket, typeaheadTickets,
   };
 }

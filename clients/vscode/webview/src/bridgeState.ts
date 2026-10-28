@@ -85,15 +85,23 @@ export function onTokenChange(cb: () => void): () => void {
   return subscribe(tokenWaiters, cb);
 }
 
+/** The re-mint in flight — a panel's parallel reads that all 401 share one. */
+let refreshing: Promise<void> | null = null;
+
 /** Ask the host to re-exchange the tenant token (on a 401). */
-export async function refreshToken(): Promise<void> {
-  try {
-    const r = await request<{ token: string | null }>('token.refresh');
-    token = r?.token ?? token;
-    for (const w of tokenWaiters) w();
-  } catch {
-    /* host offline / not signed in — leave the stale token */
-  }
+export function refreshToken(): Promise<void> {
+  refreshing ??= (async () => {
+    try {
+      const r = await request<{ token: string | null }>('token.refresh');
+      token = r?.token ?? token;
+      for (const w of tokenWaiters) w();
+    } catch {
+      /* host offline / not signed in — leave the stale token */
+    } finally {
+      refreshing = null;
+    }
+  })();
+  return refreshing;
 }
 
 handleFrame('init', (m) => {

@@ -6,7 +6,8 @@ const policyState = vi.hoisted(() => ({
 }));
 
 vi.mock("vscode", () => ({ commands: { executeCommand: vi.fn() } }));
-vi.mock("./bfApi", () => ({ getTenantJwt: async () => null }));
+const jwt = vi.hoisted(() => ({ refreshTenantJwt: vi.fn(async () => "fresh"), getTenantJwt: vi.fn(async () => "cached") }));
+vi.mock("./bfApi", () => jwt);
 vi.mock("./errorReporter", () => ({ logLine: vi.fn() }));
 vi.mock("./gateway", () => ({ getBaseUrl: () => "https://api.example", getWebBaseUrl: () => "https://web.example" }));
 vi.mock("./localFirstStore", () => ({ localBrainApplication: () => ({ persistence: {} }) }));
@@ -87,6 +88,19 @@ describe("webview host bridge policy push", () => {
     expect(watchedWebviewCount()).toBe(before);
     changePolicy({ gatewayInference: true });
     expect(policyFrames(view.posted)).toHaveLength(1);
+  });
+});
+
+describe("token.refresh", () => {
+  // The webview sends it on a 401. The cached token is unexpired by the client's clock,
+  // so answering with it re-sent the token the gateway had just refused on every read.
+  it("answers with a FRESH mint, never the cached token", async () => {
+    const view = surface();
+    await handleSharedHostMessage(ctx, view.webview, { type: "token.refresh", id: "t1" }, view.owner);
+    expect(jwt.refreshTenantJwt).toHaveBeenCalledTimes(1);
+    expect(jwt.getTenantJwt).not.toHaveBeenCalled();
+    expect(view.posted).toContainEqual({ type: "response", id: "t1", ok: true, result: { token: "fresh" } });
+    view.dispose();
   });
 });
 

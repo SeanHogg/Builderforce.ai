@@ -9,14 +9,14 @@ import { useEffect } from 'react';
 import type { BrainPersistenceAdapter } from '@seanhogg/builderforce-brain-embedded';
 import { onIntent, type BrainIntent } from '../vscodeBridge';
 
-export function useHostIntents({ persistence, projectId, setChatId, setInput, reloadChats, linkOpenedTicket, t }: {
+export function useHostIntents({ persistence, projectId, setChatId, setInput, reloadChats, linkTicket, t }: {
   persistence: BrainPersistenceAdapter;
   /** The sidebar's project — a seeded chat lands there when its item names none. */
   projectId: number | null;
   setChatId: (id: number | null) => void;
   setInput: (text: string) => void;
   reloadChats: () => void;
-  linkOpenedTicket: (chatId: number, ticket: { kind: string; ref: string }) => Promise<void>;
+  linkTicket: (chatId: number, ticket: { kind: string; ref: string }) => Promise<void>;
   t: (key: string, fallback: string) => string;
 }) {
   useEffect(() => {
@@ -36,7 +36,7 @@ export function useHostIntents({ persistence, projectId, setChatId, setInput, re
               setChatId(chat.id);
               setInput(intent.text ?? '');
               reloadChats();
-              void linkOpenedTicket(chat.id, ticket);
+              void linkTicket(chat.id, ticket);
             })
             .catch(() => {});
         } else {
@@ -64,12 +64,12 @@ export function useHostIntents({ persistence, projectId, setChatId, setInput, re
             // else derive the kind from the task's own type).
             const ticket = intent.ticket
               ?? { kind: task.taskType === 'epic' ? 'epic' : task.taskType === 'gap' ? 'gap' : 'task', ref: String(task.id) };
-            void linkOpenedTicket(chat.id, ticket);
+            void linkTicket(chat.id, ticket);
           })
           .catch(() => {});
       }
     });
     // Same keys as before the lift: `setChatId` / `setInput` are stable setters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [persistence, reloadChats, t, linkOpenedTicket, projectId]);
+  }, [persistence, reloadChats, t, linkTicket, projectId]);
 }

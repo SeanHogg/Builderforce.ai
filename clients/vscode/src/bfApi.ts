@@ -216,9 +216,12 @@ async function exchangeBaseJwt(
   force: boolean,
 ): Promise<{ token: string; tenantId: number } | undefined> {
   if (!force && baseJwt && Date.now() < baseJwt.exp - 60_000) return baseJwt;
+  const epoch = jwtEpoch;
   const key = await getApiKey(secrets);
   if (!key) return undefined;
   const result = await requestBaseJwt(key);
+  // Signed out or re-keyed meanwhile: this token belongs to the identity that left.
+  if (epoch !== jwtEpoch) return undefined;
   if (!result.ok) {
     if (result.rejected) editorKeyRejected.fire(key);
     return undefined;
@@ -247,7 +250,24 @@ export async function probeEditorKey(
   return result.rejected ? "rejected" : "unreachable";
 }
 
-async function exchangeJwt(secrets: vscode.SecretStorage, force = false): Promise<string | undefined> {
+/**
+ * The exchange in flight, per mode: a burst of reads on a cold cache, or of 401s (a
+ * panel's parallel reads), shares one mint instead of one each.
+ */
+const exchanges: { cached?: Promise<string | undefined>; forced?: Promise<string | undefined> } = {};
+/** Bumped by {@link clearJwt}: an exchange that started before it does not write its token. */
+let jwtEpoch = 0;
+
+function exchangeJwt(secrets: vscode.SecretStorage, force = false): Promise<string | undefined> {
+  const mode = force ? "forced" : "cached";
+  const running = exchanges[mode];
+  if (running) return running;
+  const next = mintJwt(secrets, force).finally(() => { if (exchanges[mode] === next) delete exchanges[mode]; });
+  exchanges[mode] = next;
+  return next;
+}
+
+async function mintJwt(secrets: vscode.SecretStorage, force: boolean): Promise<string | undefined> {
   const base = await exchangeBaseJwt(secrets, force);
   if (!base) return undefined;
   const target = selectedTenantId ?? base.tenantId;
@@ -291,6 +311,9 @@ async function exchangeJwt(secrets: vscode.SecretStorage, force = false): Promis
 }
 
 export function clearJwt(): void {
+  jwtEpoch++;
+  delete exchanges.cached;
+  delete exchanges.forced;
   baseJwt = undefined;
   scopedJwt = undefined;
   rescopeUnsupported = false;
@@ -360,6 +383,15 @@ export async function getCurrentWorkspace(
 /** The tenant JWT for embedding web pages (handed to the iframe via postMessage). */
 export function getTenantJwt(secrets: vscode.SecretStorage): Promise<string | undefined> {
   return exchangeJwt(secrets);
+}
+
+/**
+ * A FRESH tenant JWT, for a caller the gateway just answered 401. The cached token is
+ * still unexpired by the client's clock, so {@link getTenantJwt} would hand back the very
+ * token the server rejected — a webview "re-mint" that re-sent it on every read.
+ */
+export function refreshTenantJwt(secrets: vscode.SecretStorage): Promise<string | undefined> {
+  return exchangeJwt(secrets, true);
 }
 
 /**

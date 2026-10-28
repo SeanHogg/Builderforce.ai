@@ -124,7 +124,8 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   const shaping = useRunShaping();
   const { effort, thinking, webBrowsing } = shaping;
   // The webview reaches /api/brain directly (CORS allows the webview origin).
-  const apiReq = useMemo(() => authedFetch(init.baseUrl, getToken, () => void refreshToken()), [init.baseUrl]);
+  // A 401 re-mints (one shared exchange per burst) and retries the read once.
+  const apiReq = useMemo(() => authedFetch(init.baseUrl, getToken, refreshToken), [init.baseUrl]);
 
   const { chatVisibility, setChatVisibility, chatIsOwner } = useChatVisibility(chatId, persistence);
   const { associatedProjectId, associatedProject } = useAssociatedProject(init, activeChat);
@@ -191,9 +192,9 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // invited, the diagnostics — names its bound server id, or is not made.
   const serverChatId = serverChatIdOf(activeChat);
   const rail = useTicketRail({ init, apiReq, serverChatId, chats, persistence, reloadChats, reloadMessages: conv.reloadMessages });
-  const { ticketAdapter, ticketRefresh, linkOpenedTicket } = rail;
+  const { ticketAdapter, ticketRefresh, linkTicket } = rail;
   // A host intent switches chat the way a row does: History closes onto it.
-  useHostIntents({ persistence, projectId: init.project?.id ?? null, setChatId: openChat, setInput, reloadChats, linkOpenedTicket, t });
+  useHostIntents({ persistence, projectId: init.project?.id ?? null, setChatId: openChat, setInput, reloadChats, linkTicket, t });
 
   // Multi-party chat: who a message goes to (the BRAIN executes; an invited agent/human is
   // talked to), and the live sub-agents a message can steer.
@@ -350,9 +351,8 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
               chatId={chatId}
               projectId={associatedProjectId}
               ensureChatId={ensureChatId}
-              ticketAdapter={ticketAdapter}
-              ticketRefresh={ticketRefresh}
-              onTicketLinked={rail.bumpTicketRefresh}
+              chatTickets={rail.typeaheadTickets}
+              linkTicket={linkTicket}
               participants={participants}
               mentionable={mentionable}
               hasLiveChildren={liveChildren.length > 0}

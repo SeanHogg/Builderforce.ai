@@ -18,7 +18,7 @@ import { authedFetch } from './authedFetch';
 export function createChatTicketsAdapter(
   baseUrl: string,
   getToken: () => string | null,
-  onUnauthorized: () => void,
+  onUnauthorized: () => void | Promise<void>,
 ): ChatTicketsAdapter {
   // No `canRun`: the webview has no tenant-role context to answer with, so the
   // affordance stays enabled and the server refuses on its own authority — the
