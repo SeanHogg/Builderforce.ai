@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.108] — A stop right after you send is never lost
+
+- **Stop works while the run is still getting ready.** Before a run starts, the editor records where your files stand so it can show what the run changed. A Stop pressed (or "stop" typed) in that moment was dropped, and the run started anyway. It is now held and stops the run before it begins.
+- **Stop works on a brand-new chat's first message too,** while the chat itself is still being created.
+- **A run stopped before it started says so.** Its row reads "Stopped by you before the run started — nothing was done." instead of the caption for a cut-off reply. It no longer counts as the model's answer, so Retry, copy and rating skip it. The stop is also kept in the chat's diagnostics after you reopen it.
+
 ## [2026.10.107] — Stop is the Stop, wherever you say it
 
 - **Nothing gets stuck behind a stop.** A message typed after "stop", while the stopped run was still winding down, could sit in the queue and not send until some later run ended. A stop is now acted on at once and never queued, so the next message goes out as soon as the run is down.

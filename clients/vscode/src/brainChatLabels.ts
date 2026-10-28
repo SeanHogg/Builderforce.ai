@@ -32,6 +32,7 @@ export function brainChatLabels(): Record<string, string> {
     "tl.thought": t("Thought"),
     "tl.replyFromThought": t("Recovered from the model's reasoning — the turn ended without a separate reply."),
     "tl.stoppedReply": t("Stopped by you — this is what the model had written when you pressed Stop."),
+    "tl.stoppedBeforeStart": t("Stopped by you before the run started — nothing was done."),
     "tl.you": t("You"),
     "tl.assistant": "BuilderForce",
     "tl.input": t("Input"),

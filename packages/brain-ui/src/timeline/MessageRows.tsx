@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import type React from 'react';
 import {
+  isStoppedBeforeStart,
   isStoppedTurn,
   parseDirectedRecipients,
   parseMessageAuthor,
@@ -130,6 +131,8 @@ function AssistantRowInner({
   // A reply the user STOPPED is never folded into a "Thought" line: what the model
   // was writing when Stop was pressed is exactly what the reader stopped it for.
   const stopped = isStoppedTurn(node.message);
+  // Stopped before the run started: no model wrote anything — the caption is the whole row.
+  const neverStarted = isStoppedBeforeStart(node.message);
   if (!answer && bodyText && !card && !rescued && !stopped) {
     return (
       <li id={brainMessageAnchorId(node.message.id)} className={`bf-tl__item bf-tl__item--thought${focusClass}`}>
@@ -154,8 +157,8 @@ function AssistantRowInner({
           <OriginTag message={node.message} owner={!author && hasSubagents} labels={labels} />
         </div>
         {rescued && <div className="bf-tl__rescued">{labels.replyFromThought}</div>}
-        {stopped && <div className="bf-tl__rescued">{labels.stoppedReply}</div>}
-        {bodyText && <div className="bf-tl__bubble">{renderMsg(node.message, 'assistant', rescued || bodyText)}</div>}
+        {stopped && <div className="bf-tl__rescued">{neverStarted ? labels.stoppedBeforeStart : labels.stoppedReply}</div>}
+        {bodyText && !neverStarted && <div className="bf-tl__bubble">{renderMsg(node.message, 'assistant', rescued || bodyText)}</div>}
         {card && onAnswerQuestion && (
           <QuestionCard
             payload={card}

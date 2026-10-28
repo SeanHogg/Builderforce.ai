@@ -502,6 +502,7 @@
   "The run moved to another model, so the conversation was fitted to that model’s context window.": "运行切换到了另一个模型，因此对话已适配该模型的上下文窗口。",
   "Recovered from the model's reasoning — the turn ended without a separate reply.": "已从模型的思考过程中恢复 — 本轮没有单独的回复。",
   "Stopped by you — this is what the model had written when you pressed Stop.": "已由你停止 — 这是你按下停止时模型已写出的内容。",
+  "Stopped by you before the run started — nothing was done.": "已由你在运行开始前停止 — 未执行任何操作。",
   "Thought for {duration}": "思考了 {duration}",
   "Throw away anything queued but not yet learned, and clear cached answers so repeat questions are answered fresh. Learned knowledge is untouched.": "丢弃所有已排队但尚未学习的内容，并清空缓存的回答，让重复的问题重新作答。已学到的知识不受影响。",
   "Timer": "计时器",

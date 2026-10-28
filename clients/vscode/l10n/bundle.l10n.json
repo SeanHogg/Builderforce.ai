@@ -502,6 +502,7 @@
   "The run moved to another model, so the conversation was fitted to that model’s context window.": "The run moved to another model, so the conversation was fitted to that model’s context window.",
   "Recovered from the model's reasoning — the turn ended without a separate reply.": "Recovered from the model's reasoning — the turn ended without a separate reply.",
   "Stopped by you — this is what the model had written when you pressed Stop.": "Stopped by you — this is what the model had written when you pressed Stop.",
+  "Stopped by you before the run started — nothing was done.": "Stopped by you before the run started — nothing was done.",
   "Thought for {duration}": "Thought for {duration}",
   "Throw away anything queued but not yet learned, and clear cached answers so repeat questions are answered fresh. Learned knowledge is untouched.": "Throw away anything queued but not yet learned, and clear cached answers so repeat questions are answered fresh. Learned knowledge is untouched.",
   "Timer": "Timer",

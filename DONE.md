@@ -1,3 +1,13 @@
+## ✅ RESOLVED 2026-10-28 — Stop before start: the last windows (brain-embedded 2026.10.68 · brain-ui 2026.10.28 · VSIX 2026.10.108)
+
+Round-4 review of the "Stop the run" fix (below) found six gaps; all closed:
+- **Stop during the change-set baseline was dropped.** The editor start captures a git baseline before the host claims the chat, and `runSteer.stop` ignores an unclaimed key. `clients/vscode/src/hostStartGate.ts` (`gateStarts`) holds a Stop (or a typed stop) asked in that window and hands it to the host as soon as `host.start` has claimed the key; `brainRunHostPorts.ts` routes its start through it. Test: `hostStartGate.test.ts`.
+- **Wrong caption.** A before-start row carries `stoppedBeforeStart` metadata (`isStoppedBeforeStart`); `MessageRows` shows the new `stoppedBeforeStart` label in place of the body (labels.ts, brainChatLabels.ts, 5 l10n bundles, 5 frontend catalogs).
+- **Not mirrored on the host path.** `stopBeforeStart` now `recordAppended`s the row, so `run.sync` carries it.
+- **Counted as a model reply.** `isModelReply` excludes it (Retry, newest-reply actions, triage claim detectors).
+- **No durable stop step.** `stopBeforeStart` persists the `agent.stopped` step row ahead of the answer row, so reopened-chat diagnostics count it.
+- **Draft chat's first send.** `useBrainConversation.stop` marks the draft (`null`) and `send` moves the mark to the chat id `ensureChatId` returns.
+
 ## ✅ RESOLVED 2026-10-27 — "Stop the run" stops the run (brain-embedded 2026.10.66 · VSIX 2026.10.106)
 
 - **Symptom.** In VS Code chat #6 the WS8p pause asked "Continue with guidance / Stop the run". The person chose Stop, and the run kept going.

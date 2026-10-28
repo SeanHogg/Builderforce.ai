@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-10-28T03:49:19.596Z";
+export const PRICE_SNAPSHOT_AT = "2026-10-28T04:06:41.025Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
@@ -17,7 +17,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "~deepseek/deepseek-v4-flash-latest": [4.75e-8, 1.568e-7],
   "~google/gemini-flash-latest": [7.5e-7, 0.00000375],
   "~google/gemini-pro-latest": [0.000002, 0.00001],
-  "~moonshotai/kimi-latest": [1.69e-7, 0.00002],
+  "~moonshotai/kimi-latest": [1.605e-7, 0.00000894],
   "~openai/gpt-astra-latest": [0.00001, 0.00005],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [7.5e-7, 0.0000045],
@@ -94,9 +94,9 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "deepseek/deepseek-v4-flash-0731": [1.19e-7, 2.38e-7],
   "deepseek/deepseek-v4-flash-vision-exp": [2.156e-7, 6.468e-7],
   "deepseek/deepseek-v4-pro": [9.5526e-7, 0.00000191052],
-  "deepseek/deepseek-v4-pro-0813": [0.00000132, 0.00000396],
+  "deepseek/deepseek-v4-pro-0813": [6.6e-7, 0.00000198],
   "deepseek/deepseek-v4.1-flash": [1.4e-7, 4.2e-7],
-  "deepseek/deepseek-v4.1-flash-1017": [3e-7, 0.0000012],
+  "deepseek/deepseek-v4.1-flash-1017": [1.5e-7, 6e-7],
   "deepseek/deepseek-v4.1-flash:batch": [5e-8, 1.5e-7],
   "dots-studio/dots-3-note-preview:free": [0, 0],
   "elorian/glimpse": [6e-7, 0.000003],
@@ -212,7 +212,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "moonshotai/kimi-k2.5": [5e-7, 0.0000025],
   "moonshotai/kimi-k2.6": [6.5e-7, 0.00000341],
   "moonshotai/kimi-k2.7-code": [5.6e-7, 0.0000031],
-  "moonshotai/kimi-k3": [1.69e-7, 0.00002],
+  "moonshotai/kimi-k3": [1.89e-7, 0.00002],
   "moonshotai/kimi-k3:batch": [0.00000228, 0.0000114],
   "moonshotai/kimi-k3.1-pro": [0.000002, 0.00001],
   "morph/morph-v3-fast": [8e-7, 0.0000012],

@@ -1992,7 +1992,7 @@ var PRICE_SNAPSHOT = {
   "~deepseek/deepseek-v4-flash-latest": [475e-10, 1568e-10],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [169e-9, 2e-5],
+  "~moonshotai/kimi-latest": [1605e-10, 894e-8],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -2069,9 +2069,9 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v4-flash-0731": [119e-9, 238e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [2156e-10, 6468e-10],
   "deepseek/deepseek-v4-pro": [95526e-11, 191052e-11],
-  "deepseek/deepseek-v4-pro-0813": [132e-8, 396e-8],
+  "deepseek/deepseek-v4-pro-0813": [66e-8, 198e-8],
   "deepseek/deepseek-v4.1-flash": [14e-8, 42e-8],
-  "deepseek/deepseek-v4.1-flash-1017": [3e-7, 12e-7],
+  "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
   "deepseek/deepseek-v4.1-flash:batch": [5e-8, 15e-8],
   "dots-studio/dots-3-note-preview:free": [0, 0],
   "elorian/glimpse": [6e-7, 3e-6],
@@ -2187,7 +2187,7 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2.5": [5e-7, 25e-7],
   "moonshotai/kimi-k2.6": [65e-8, 341e-8],
   "moonshotai/kimi-k2.7-code": [56e-8, 31e-7],
-  "moonshotai/kimi-k3": [169e-9, 2e-5],
+  "moonshotai/kimi-k3": [189e-9, 2e-5],
   "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
   "moonshotai/kimi-k3.1-pro": [2e-6, 1e-5],
   "morph/morph-v3-fast": [8e-7, 12e-7],
@@ -4752,16 +4752,23 @@ function stoppedTurnMetadata(source) {
   const provenance = source.model ? { model: source.model, ...account ? { account } : {} } : null;
   return withProvenanceMetadata(provenance, { [STOPPED_TURN_META_KEY]: true }) ?? "{}";
 }
-function isStoppedTurn(msg) {
+var STOPPED_BEFORE_START_META_KEY = "stoppedBeforeStart";
+var flagged = (msg, key) => {
   if (!msg.metadata) return false;
   try {
-    return JSON.parse(msg.metadata)?.[STOPPED_TURN_META_KEY] === true;
+    return JSON.parse(msg.metadata)?.[key] === true;
   } catch {
     return false;
   }
+};
+function isStoppedTurn(msg) {
+  return flagged(msg, STOPPED_TURN_META_KEY);
+}
+function isStoppedBeforeStart(msg) {
+  return flagged(msg, STOPPED_BEFORE_START_META_KEY);
 }
 function stoppedBeforeStartRow() {
-  return { role: "assistant", content: "Stopped before it started.", metadata: stoppedTurnMetadata({}) };
+  return { role: "assistant", content: "Stopped before it started.", metadata: JSON.stringify({ [STOPPED_TURN_META_KEY]: true, [STOPPED_BEFORE_START_META_KEY]: true }) };
 }
 
 // src/types.ts
@@ -12916,9 +12923,16 @@ function getRunTrace(chatId) {
   return cells.get(chatId)?.trace ?? [];
 }
 async function stopBeforeStart(runKey, chatId, persistence) {
-  pushTrace(getCell(runKey), { ts: nowIso(), category: "message", label: STOPPED_TURN_STEP, result: "Stopped by user before the run started." });
+  const c = getCell(runKey);
+  const step = { ts: nowIso(), category: "message", label: STOPPED_TURN_STEP, result: "Stopped by user before the run started." };
+  pushTrace(c, step);
   try {
-    const [row] = await persistence.sendMessages(chatId, [stoppedBeforeStartRow()]);
+    const rows = await persistence.sendMessages(chatId, [stepRow(step), stoppedBeforeStartRow()]);
+    const row = rows[rows.length - 1];
+    if (row) {
+      recordAppended(c, row);
+      emit(c);
+    }
     return row;
   } catch {
     return void 0;
@@ -14160,7 +14174,7 @@ function chatActivityText(activity, labels) {
 
 // src/modelReply.ts
 function isModelReply(m) {
-  return m.role === "assistant" && !isStepMessage(m) && !isConsolidationMarker(m) && !isActivityMessage(m);
+  return m.role === "assistant" && !isStepMessage(m) && !isConsolidationMarker(m) && !isActivityMessage(m) && !isStoppedBeforeStart(m);
 }
 
 // src/persistedSteps.ts
@@ -20874,11 +20888,13 @@ ${extraSystem}` : resolvedSystemPrompt;
         } catch {
           id = null;
         }
+        const cancelled = cancelledLaunchRef.current.delete(origin);
         if (id == null) {
           markSending(origin, false);
           setLocalError("Could not start a chat.");
           return false;
         }
+        if (cancelled) cancelledLaunchRef.current.add(id);
         markSending(id, true);
         markSending(origin, false);
       }
@@ -20993,7 +21009,10 @@ ${refs}`;
     clearRunError(chatId);
   }, [chatId]);
   const stop = useCallback8(() => {
-    if (chatId == null) return;
+    if (chatId == null) {
+      if (sendingRef.current.has(null)) cancelledLaunchRef.current.add(null);
+      return;
+    }
     if ((sendingRef.current.has(chatId) || launchingRef.current.has(chatId)) && !isRunning(chatId)) cancelledLaunchRef.current.add(chatId);
     stopRun(chatId);
   }, [chatId]);
@@ -22919,6 +22938,7 @@ export {
   isRouterTool,
   isRunning,
   isStepMessage,
+  isStoppedBeforeStart,
   isStoppedTurn,
   isTicketRecordingTool,
   isTicketWriteTool,

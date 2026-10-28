@@ -502,6 +502,7 @@
   "The run moved to another model, so the conversation was fitted to that model’s context window.": "Der Lauf ist zu einem anderen Modell gewechselt, daher wurde die Unterhaltung an dessen Kontextfenster angepasst.",
   "Recovered from the model's reasoning — the turn ended without a separate reply.": "Aus dem Gedankengang des Modells wiederhergestellt – dieser Zug endete ohne eigene Antwort.",
   "Stopped by you — this is what the model had written when you pressed Stop.": "Von dir gestoppt – das hatte das Modell geschrieben, als du auf Stopp gedrückt hast.",
+  "Stopped by you before the run started — nothing was done.": "Von dir gestoppt, bevor der Lauf begann – es wurde nichts ausgeführt.",
   "Thought for {duration}": "Nachgedacht für {duration}",
   "Throw away anything queued but not yet learned, and clear cached answers so repeat questions are answered fresh. Learned knowledge is untouched.": "Verwirf alles, was eingereiht, aber noch nicht gelernt ist, und leere zwischengespeicherte Antworten, damit wiederholte Fragen neu beantwortet werden. Gelerntes Wissen bleibt unangetastet.",
   "Timer": "Timer",

@@ -5,6 +5,7 @@
  * Starting a run is `startRun.ts`; the loop itself is `runLoop.ts`.
  */
 
+import { stepRow } from '@builderforce/agent-loop';
 import type { BrainMessage } from '../types';
 import type { BrainTraceEvent } from '../brainTriage';
 import { getRunDriver } from '../runDriver';
@@ -144,9 +145,19 @@ export function getRunTrace(chatId: RunKey | null): BrainTraceEvent[] {
  * Best-effort: the run did not start either way. Resolves to the saved row, if any.
  */
 export async function stopBeforeStart(runKey: RunKey, chatId: number, persistence: Pick<BrainRunPersistence, 'sendMessages'>): Promise<BrainMessage | undefined> {
-  pushTrace(getCell(runKey), { ts: nowIso(), category: 'message', label: STOPPED_TURN_STEP, result: 'Stopped by user before the run started.' });
+  const c = getCell(runKey);
+  const step: BrainTraceEvent = { ts: nowIso(), category: 'message', label: STOPPED_TURN_STEP, result: 'Stopped by user before the run started.' };
+  pushTrace(c, step);
   try {
-    const [row] = await persistence.sendMessages(chatId, [stoppedBeforeStartRow()]);
+    // The step is durable too (no run is persisting steps yet), so a reopened chat's
+    // diagnostics count the stop; the answer row comes last, after the person's turn.
+    const rows = await persistence.sendMessages(chatId, [stepRow(step), stoppedBeforeStartRow()]);
+    const row = rows[rows.length - 1];
+    // Mirrored like every row a run persists, so a host-run panel sees it on `run.sync`.
+    if (row) {
+      recordAppended(c, row);
+      emit(c);
+    }
     return row;
   } catch {
     return undefined;

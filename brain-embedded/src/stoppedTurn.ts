@@ -36,21 +36,35 @@ export function stoppedTurnMetadata(source: StoppedTurnSource): string {
   return withProvenanceMetadata(provenance, { [STOPPED_TURN_META_KEY]: true }) ?? '{}';
 }
 
-/** Whether a persisted message is a reply the user stopped mid-stream. */
-export function isStoppedTurn(msg: { metadata?: string | null }): boolean {
+/** The metadata key that marks a stopped turn whose run never started (no model wrote it). */
+export const STOPPED_BEFORE_START_META_KEY = 'stoppedBeforeStart';
+
+const flagged = (msg: { metadata?: string | null }, key: string): boolean => {
   if (!msg.metadata) return false;
   try {
-    return (JSON.parse(msg.metadata) as Record<string, unknown> | null)?.[STOPPED_TURN_META_KEY] === true;
+    return (JSON.parse(msg.metadata) as Record<string, unknown> | null)?.[key] === true;
   } catch {
     return false;
   }
+};
+
+/** Whether a persisted message is a reply the user stopped mid-stream (or before it began). */
+export function isStoppedTurn(msg: { metadata?: string | null }): boolean {
+  return flagged(msg, STOPPED_TURN_META_KEY);
+}
+
+/** Whether a stopped turn is the marker of a run stopped before it started — not a reply. */
+export function isStoppedBeforeStart(msg: { metadata?: string | null }): boolean {
+  return flagged(msg, STOPPED_BEFORE_START_META_KEY);
 }
 
 /**
  * The row a run stopped BEFORE it started leaves behind: the person's turn is saved, the
  * Stop came while the run was still getting ready, and without an answer after it a
- * reopened chat (the auto-reply on load, Retry) would start that work after all.
+ * reopened chat (the auto-reply on load, Retry) would start that work after all. It is no
+ * model's reply: the transcript shows its localized caption (`stoppedBeforeStart`) in place
+ * of the body, which is only the stored record (a message's content is never empty).
  */
 export function stoppedBeforeStartRow(): { role: 'assistant'; content: string; metadata: string } {
-  return { role: 'assistant', content: 'Stopped before it started.', metadata: stoppedTurnMetadata({}) };
+  return { role: 'assistant', content: 'Stopped before it started.', metadata: JSON.stringify({ [STOPPED_TURN_META_KEY]: true, [STOPPED_BEFORE_START_META_KEY]: true }) };
 }
