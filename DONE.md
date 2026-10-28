@@ -1,4 +1,4 @@
-## ✅ RESOLVED 2026-10-28 — The knowledge graph, deterministic prefetch and the deterministic knowledge index (builderforce-memory 2026.10.29–31 · api 2026.10.90 · frontend 2026.10.95 · brain-embedded 2026.10.69 · brain-ui 2026.10.29 · agent-runtime 2026.10.21 · Rovr 2026.10.32 · VSIX 2026.10.110)
+## ✅ RESOLVED 2026-10-28 — The knowledge graph, deterministic prefetch and the deterministic knowledge index (builderforce-memory 2026.10.29–31 · api 2026.10.90 · frontend 2026.10.95 · brain-embedded 2026.10.69 · brain-ui 2026.10.29 · agent-runtime 2026.10.21 · Rovr 2026.10.32 · VSIX 2026.10.111)
 
 Specs: [PRD 38 rev 3](docs/specs/38-prd-knowledge-graph.md), [deterministic-prefetch.md](docs/design/deterministic-prefetch.md) and [deterministic-knowledge-index.md](docs/design/deterministic-knowledge-index.md). The operator decided the surface name `knowledge`, a review budget of 200, fact delete for the author or an admin, and keeping unlinked folders local until they are linked.
 

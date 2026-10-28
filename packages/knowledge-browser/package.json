@@ -6,7 +6,8 @@
   "description": "The ONE browser host of the knowledge review (PRD 38 §4.7, docs/specs/38-prd-knowledge-graph.md), shared by the web app and Rovr: the KnowledgeGraphSource over the knowledge API client, the Web Worker review runner that answers its port calls on the page, the IndexedDB review manifest, the folder-upload and File System Access directory sources, the Live overlay, the catalog → KnowledgeGraphLabels mapper, and the ONE browser PrefetchPort (the shared knowledge rows — `/review`, `/graph`, `knowledge.ask` — on the `web` surface, its chips routed by the host). Host-agnostic: each host injects its client (with its own authenticated fetch), its directory providers, its worker and its degraded-path reporter. Source-only; peers resolve from the host.",
   "exports": {
     ".": "./src/index.ts",
-    "./worker": "./src/knowledgeReview.worker.ts"
+    "./worker": "./src/knowledgeReview.worker.ts",
+    "./worker-factory": "./src/workerFactory.ts"
   },
   "types": "./src/index.ts",
   "scripts": {

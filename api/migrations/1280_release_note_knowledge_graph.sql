@@ -23,7 +23,7 @@ INSERT INTO release_notes (
 ) VALUES
   (
     'a1b2c301-0009-4000-8000-000000001280',
-    '2026.10.110',
+    '2026.10.111',
     'Point it at a folder and see what it knows',
     'Agents now write more files than anyone reads, so you need to see the shape of what is there. Point BuilderForce at any folder, code or docs, from VS Code, Rovr or the web canvas, and it builds a 3D knowledge graph of it that stays in memory. You see the layers and where they are broken, duplicated code and near-duplicate sections, claims in one document that contradict another, and broken links. Pick any file to trace how it reaches the rest, layer by layer. Every finding has Fix with agent, which hands a ready-made request to the composer. Before the review starts you see how many files it will read and roughly what the judgement pass will cost, and a second review only re-reads what changed. Questions about the folder are answered from memory, often with no model call at all: type /review, /graph or /dup, or ask where something is handled.',
     'new',

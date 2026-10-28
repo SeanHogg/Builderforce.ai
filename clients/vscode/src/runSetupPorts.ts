@@ -22,6 +22,7 @@ import { listProjectRepositories } from "./projectRepositories";
 import { buildContextPack, CONTEXT_PACK_DEADLINE_MS } from "./contextPack/buildContextPack";
 import { preSearchOnce, withPreSearch } from "./contextPack/preSearchSource";
 import type { CalibrationMemento } from "./prefetch/vscodePrefetchPort";
+import type { LocalModelsConfig } from "./localModels";
 import { editorPrefetchPort } from "./prefetch/editorPrefetchPort";
 import { editorKnowledgeRowsHost } from "./knowledge/knowledgeRows";
 import { requestSymbolLookup } from "./contextPack/requestSymbols";
@@ -34,6 +35,7 @@ export function editorRunSetupPorts(
   secrets: vscode.SecretStorage,
   workspaceRoot: () => string,
   globalState: CalibrationMemento,
+  localModels?: () => LocalModelsConfig,
 ): Required<Pick<BrainRunHostPorts, "defaultRepo" | "contextPack" | "prefetch" | "modelPreflight" | "settleRun">> {
   return {
     defaultRepo: (input) => resolveRunDefaultRepo({
@@ -53,7 +55,10 @@ export function editorRunSetupPorts(
         preSearchOnce(root, input.request, CONTEXT_PACK_DEADLINE_MS, symbols ? { symbols } : {}),
       );
     },
-    prefetch: editorPrefetchPort(workspaceRoot, globalState, { knowledge: editorKnowledgeRowsHost(secrets) }),
+    prefetch: editorPrefetchPort(workspaceRoot, globalState, {
+      knowledge: editorKnowledgeRowsHost(secrets),
+      ...(localModels ? { localModels } : {}),
+    }),
     modelPreflight: () => byoPreflight(secrets),
     settleRun: (runKey) => {
       void killRunJobs(runKey).catch((e: unknown) => logLine(`[run ${runKey}] background jobs not all stopped: ${e instanceof Error ? e.message : String(e)}`));

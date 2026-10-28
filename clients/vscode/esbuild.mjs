@@ -44,6 +44,12 @@ const repoRoot = path.resolve(here, "../..");
 // the longest alias key, so both resolve correctly.
 const sharedPackageAliases = sourcePackageAliasMap(repoRoot);
 
+/** Source-only packages with PEERS and no install of their own (`@builderforce/knowledge-client`:
+ *  `@seanhogg/builderforce-memory`) resolve those bare imports from THIS package's install,
+ *  as `tsconfig.json` maps them for tsc — a fallback only, after node's own walk (the same
+ *  shape as `clients/chrome/build.mjs`). */
+const peerNodePaths = [path.join(here, "node_modules")];
+
 /** Source-consumed shared packages whose NodeNext `./x.js` imports must be rewritten to
  *  `./x.ts`. The resolver plugin below reads these roots rather than hard-coding one
  *  (which is how `run-context` would otherwise have failed to bundle the moment it
@@ -126,6 +132,7 @@ const options = integration
       // reachable — anything that reaches for it belongs on the extension side.
       external: ["vscode", "react", "react-dom"],
       alias: sharedPackageAliases,
+      nodePaths: peerNodePaths,
       plugins: [agentToolsTsResolve],
       ...importMetaUrlShim,
       define: { ...importMetaUrlShim.define, ...buildIdentity.define },
@@ -141,6 +148,7 @@ const options = integration
       target: "node20",
       external: ["vscode"],
       alias: sharedPackageAliases,
+      nodePaths: peerNodePaths,
       plugins: [agentToolsTsResolve],
       ...importMetaUrlShim,
       define: { ...importMetaUrlShim.define, ...buildIdentity.define },

@@ -39,6 +39,10 @@
       "@builderforce/model-router": ["../packages/model-router/src/index.ts"],
       "@builderforce/prefetch": ["../packages/prefetch/src/index.ts"],
       "@builderforce/knowledge-client": ["../packages/knowledge-client/src/index.ts"],
+      // `@builderforce/knowledge-client` is source-only with memory as a PEER and no install
+      // of its own (as in frontend/ and clients/*/tsconfig.json): the memory subpath it
+      // reaches resolves from THIS package's install.
+      "@seanhogg/builderforce-memory/knowledge": ["./node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.d.ts"],
       "@builderforce/run-policy": ["../packages/run-policy/src/index.ts"],
       "@builderforce/run-context": ["../packages/run-context/src/index.ts"],
       "@builderforce/run-guards": ["../packages/run-guards/src/index.ts"],

@@ -341,7 +341,7 @@ export function activate(context: vscode.ExtensionContext): void {
     projectContext?.refresh();
   };
   void installRunRecovery(context);
-  const runHost = createVsCodeRunHost(context, { onChatsChanged, onPlatformWrite });
+  const runHost = createVsCodeRunHost(context, { onChatsChanged, onPlatformWrite, localModels: getLocalModelsConfig });
   context.subscriptions.push({ dispose: () => runHost.dispose() });
   configureWorkspaceSurfaces({
     runHost,

@@ -3,7 +3,7 @@ import { recordEditorRunEnd } from "./editorRunEnd";
 import { editorRunSettings } from "./editorRunSettings";
 import * as vscode from "vscode";
 import { runAbortSignal, withRunUsage, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
-import { ChatMessage, SECRET_KEY } from "./gateway";
+import { ChatMessage, SECRET_KEY, getLocalModelsConfig } from "./gateway";
 import { turnLimbicBlock } from "./personalityLimbic";
 import { resolveModelRoute, routeNeedsLocalModel, routeNeedsSpecificModel, routeRequiresSignIn, routeStream } from "./modelRouting";
 import { streamNoLocalModel } from "./noLocalModelPrompt";
@@ -117,7 +117,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     // The PreFetch gate ("where is X defined?" from the symbol index, and every registry
     // row after it) — the panel's port. Its executors and the reference read below ask the
     // SAME memoized computations, so each runs once per request.
-    const prefetch = root ? editorPrefetchPort(() => root, ctx.globalState, { ownWords: request.prompt, knowledge: editorKnowledgeRowsHost(ctx.secrets) }) : undefined;
+    const prefetch = root ? editorPrefetchPort(() => root, ctx.globalState, { ownWords: request.prompt, knowledge: editorKnowledgeRowsHost(ctx.secrets), localModels: getLocalModelsConfig }) : undefined;
     const deterministicAnswer = root ? () => whereDefinedOnce(root, request.prompt, CONTEXT_PACK_DEADLINE_MS) : undefined;
     // `#file` / `#selection` references, inlined into the turn under the route's mention
     // budget (long prose compressed first) — the panel's attachment ingress. Started now,

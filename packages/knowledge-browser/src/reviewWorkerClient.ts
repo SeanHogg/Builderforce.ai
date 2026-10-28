@@ -3,8 +3,9 @@
  * from the real ports, relays progress and abort. Without a Worker (SSR, a test, a
  * runtime that cannot spawn one) the same job runs in-thread — one implementation.
  *
- * The default worker is the web's: the `new URL(…, import.meta.url)` form webpack,
- * Turbopack and Vite emit as a worker chunk. A host whose bundler has no such asset step
+ * The default worker is the web's `createReviewWorker` (`workerFactory.ts`, the only
+ * module that names the worker by URL, so a server build can alias it to its stub —
+ * see that file). A host whose bundler has no such asset step
  * (Rovr's esbuild) bundles `@builderforce/knowledge-browser/worker` as an entry of its own
  * and passes `createWorker`.
  */
@@ -12,6 +13,7 @@
 import type { ReviewPlan, ReviewProgress, ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
 import { runReviewJob, type ReviewJob, type ReviewPorts } from './reviewJob';
 import { LIST_ALL, type FromReviewWorker, type ReviewPortName, type ToReviewWorker } from './reviewProtocol';
+import { createReviewWorker } from './workerFactory';
 
 export type WorkerFactory = () => Worker | null;
 
@@ -19,7 +21,7 @@ function defaultWorker(): Worker | null {
   // The window guard keeps server layers from reaching it.
   if (typeof window === 'undefined' || typeof Worker === 'undefined') return null;
   try {
-    return new Worker(new URL('./knowledgeReview.worker.ts', import.meta.url), { type: 'module', name: 'knowledge-review' });
+    return createReviewWorker();
   } catch {
     return null;
   }

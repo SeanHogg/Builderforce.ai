@@ -1,5 +1,6 @@
 {
   "//allowJs": "`src/sourcePackages.test.ts` imports the source-package registry (`scripts/sourcePackages.mjs`), which is JSDoc-typed JS. allowJs lets tsc read its inferred types instead of demanding a hand-written .d.mts twin of them.",
+  "//memoryPeers": "`@builderforce/knowledge-client` is source-only with `@seanhogg/builderforce-memory` as a PEER and no install of its own (as in frontend/tsconfig.json and clients/chrome/tsconfig.json), so the memory subpaths it reaches are mapped onto THIS package's install. The extension bundle resolves them the same way (`nodePaths` in esbuild.mjs).",
   "compilerOptions": {
     "module": "esnext",
     "moduleResolution": "bundler",
@@ -13,6 +14,7 @@
       "@builderforce/agent-skills": ["../../packages/agent-skills/src/index.ts"],
       "@builderforce/agent-tools": ["../../packages/agent-tools/src/index.ts"],
       "@builderforce/knowledge-client": ["../../packages/knowledge-client/src/index.ts"],
+      "@seanhogg/builderforce-memory/knowledge": ["./node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.d.ts"],
       "@builderforce/agent-tools/*": ["../../packages/agent-tools/src/*"],
       "@builderforce/cost-levers": ["../../packages/cost-levers/src/index.ts"],
       "@builderforce/learned-routing": ["../../packages/learned-routing/src/index.ts"],

@@ -68,6 +68,21 @@ const nodeSafeFromHtmlIsomorphic = require.resolve(
 const nodeSafeFromHtmlIsomorphicRelative =
   './' + path.relative(__dirname, nodeSafeFromHtmlIsomorphic).split(path.sep).join('/');
 
+/**
+ * Server/edge alias of the knowledge review worker factory to its stub (see the
+ * webpack alias below for why). Webpack only — Turbopack's `resolveAlias` matches
+ * request strings, not the resolved path of the package's relative import, and its
+ * aliases are global rather than per-runtime; dev runs Turbopack and never collects
+ * page data, so production (webpack) is the build this protects.
+ */
+const knowledgeBrowserSrc = path.join(__dirname, '../packages/knowledge-browser/src');
+const knowledgeWorkerFactoryStub = path.join(knowledgeBrowserSrc, 'workerFactory.stub.ts');
+const knowledgeWorkerFactoryServerAlias = {
+  [`${path.join(knowledgeBrowserSrc, 'workerFactory')}$`]: knowledgeWorkerFactoryStub,
+  [`${path.join(knowledgeBrowserSrc, 'workerFactory.ts')}$`]: knowledgeWorkerFactoryStub,
+  '@builderforce/knowledge-browser/worker-factory$': knowledgeWorkerFactoryStub,
+};
+
 // next-intl: points the plugin at the per-request locale/message resolver.
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 /**
@@ -212,6 +227,19 @@ const nextConfig = {
       // deliberately left alone — the browser build exists to keep that bundle
       // small, and the browser is the one place it is correct.
       ...(isServer ? { 'hast-util-from-html-isomorphic$': nodeSafeFromHtmlIsomorphic } : {}),
+      // Server AND edge only: the knowledge review worker factory becomes its stub.
+      // `new Worker(new URL(…, import.meta.url))` makes webpack emit a worker chunk
+      // LOADER (`document.baseURI`) statically, whatever guard wraps the call, and the
+      // module is reachable from edge routes (/dashboard, /insights/*, /projects/[id] …
+      // through lib/knowledge and CanvasKnowledgeSurface). That loader landed in the
+      // shared edge runtime and `next build` died collecting page data with
+      // `ReferenceError: document is not defined`. The factory is the ONLY module that
+      // names the worker by URL (guarded by the package's workerFactory.test.ts); the
+      // stub throws and the review runs in-thread. The client keeps the real factory.
+      // Keys are absolute (the package imports it relatively, so webpack matches the
+      // joined path; the extensionless form is what `./workerFactory` produces) plus
+      // the bare subpath export.
+      ...(isServer ? knowledgeWorkerFactoryServerAlias : {}),
       // Server AND edge only: the in-browser inference runtimes become empty modules.
       // Each names its binary with `new URL('<x>.wasm', import.meta.url)` — onnxruntime-web
       // (~46 MB across its jsep + asyncify builds, reached through transformers.js, the

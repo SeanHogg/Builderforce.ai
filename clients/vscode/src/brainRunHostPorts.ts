@@ -32,6 +32,7 @@ import { classifyLocalDomainTool, type LocalDomainToolName } from "./localDomain
 import { platformPolicy } from "./platformPolicy";
 import type { ToolDef } from "./fileTools";
 import type { LocalFirstStore } from "@builderforce/local-first";
+import type { LocalModelsConfig } from "./localModels";
 import { resolveRunPolicyGates } from "./policyGates";
 import { editorRunDirectives } from "./hooks/editorDirectives";
 import { withWorkspaceStaleness } from "./memoryStaleness";
@@ -47,6 +48,12 @@ export interface VsCodeRunHostHooks {
   onChatsChanged(): void;
   /** A platform (catalog) write happened — refresh Project & Tasks. */
   onPlatformWrite(toolName: string): void;
+  /**
+   * The local-model settings (PreFetch tier 3), supplied by the composition root
+   * (`extension.ts` passes `gateway.getLocalModelsConfig`) so this module's import graph
+   * never reaches `gateway` for them. Absent, tier 3 is skipped.
+   */
+  localModels?: () => LocalModelsConfig;
 }
 
 /**
@@ -355,7 +362,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     grounding: () => stableGroundingWithin(workspaceRoot() || undefined, RUN_GROUNDING_BUDGET_MS, { late: "nothing" }),
     // PRD 35 E2 / E3 / E7: default checkout, context pack, BYO preflight; and a settled
     // run's background jobs die with it.
-    ...editorRunSetupPorts(secrets, workspaceRoot, ctx.globalState),
+    ...editorRunSetupPorts(secrets, workspaceRoot, ctx.globalState, hooks.localModels),
   });
   // G22: the run journal. Start, step checkpoints and the TERMINAL status come from the
   // host's own run events (a sink on the host), so a finished run is never rewritten to

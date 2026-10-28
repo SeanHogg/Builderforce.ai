@@ -2,7 +2,7 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
-## [2026.10.110] — Point it at a folder and see what it knows
+## [2026.10.111] — Point it at a folder and see what it knows
 
 - **Review any folder.** Right-click a folder in the explorer and choose **Review with BuilderForce**, or type `/review <folder>` in chat. A chip shows how many files will be read, how many are unchanged since the last review, and roughly how many model calls the review needs. Nothing runs until you confirm.
   - Code and docs both work.

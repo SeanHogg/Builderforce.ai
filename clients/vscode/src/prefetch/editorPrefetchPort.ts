@@ -4,10 +4,15 @@
  * `chatParticipant.ts`): the open workspace files as the focus, the language servers'
  * diagnostics for `diag.typecheck`, the local-model settings for tier 3, and the starter
  * scaffolds (`@builderforce/ide-templates`) for `scaffold.template`.
+ *
+ * The local-model settings are INJECTED (`opts.localModels`), never read from `gateway`
+ * here: this module sits in the run host's import graph (`runSetupPorts.ts`), and the
+ * composition root (`extension.ts` → `createVsCodeRunHost`, the chat participant's
+ * handler) owns where those settings come from. Absent, tier 3 is skipped.
  */
 
 import { TEMPLATES } from "@builderforce/ide-templates";
-import { getLocalModelsConfig } from "../gateway";
+import type { LocalModelsConfig } from "../localModels";
 import { lspDiagnostics, openWorkspaceFiles } from "./lspDiagnostics";
 import { createVscodePrefetchPort, type CalibrationMemento } from "./vscodePrefetchPort";
 import { defineRegistry, type PrefetchPort } from "@builderforce/prefetch";
@@ -16,12 +21,12 @@ import { withKnowledgeRows, type KnowledgeRowsHost } from "@builderforce/agent-t
 export function editorPrefetchPort(
   root: () => string,
   state: CalibrationMemento,
-  opts: { ownWords?: string; knowledge?: KnowledgeRowsHost } = {},
+  opts: { ownWords?: string; knowledge?: KnowledgeRowsHost; localModels?: () => LocalModelsConfig } = {},
 ): PrefetchPort {
   const port = createVscodePrefetchPort({
     root,
     state,
-    localModels: getLocalModelsConfig,
+    ...(opts.localModels ? { localModels: opts.localModels } : {}),
     focusFiles: () => openWorkspaceFiles(root()),
     diagnostics: lspDiagnostics,
     templates: TEMPLATES,
