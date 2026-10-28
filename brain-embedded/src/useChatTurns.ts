@@ -21,8 +21,9 @@ import { startsRun } from './userTurnRuns';
  *     (`useQueuedTurns`: FIFO, one per completed run, discarded on a `runKey` switch);
  *  3. otherwise `send` now.
  *
- * A stop ("Stop the run") is the Stop: mid-run it stops the run and is kept for the
- * record once the run is down; idle it is kept and starts nothing (`userTurnRuns.ts`).
+ * A stop ("Stop the run") is the Stop: mid-run it stops the run and drops what is held
+ * (nothing waits behind it); idle it is sent, kept as the answer, and starts nothing
+ * (`userTurnRuns.ts`). A stop addressed to a participant is a message, never the Stop.
  *
  * Stop drops everything queued (the person stopped the conversation, not one sentence)
  * and stops the run: the `stop` port when given, else `stopRun(runKey)` on the store.
@@ -47,6 +48,8 @@ export interface ChatTurnsOptions<T> {
   stop?: () => void;
   /** The text a non-string turn carries (blank check). Omit for string turns. */
   textOf?: (turn: T) => string;
+  /** Optional: the turn is addressed to a participant, not the run — never the Stop. */
+  isDirected?: (turn: T) => boolean;
 }
 
 export interface ChatTurns<T> {
@@ -62,12 +65,12 @@ export interface ChatTurns<T> {
   stop: () => void;
 }
 
-export function useChatTurns<T = string>({ running, runKey, send, steer, stop, textOf }: ChatTurnsOptions<T>): ChatTurns<T> {
+export function useChatTurns<T = string>({ running, runKey, send, steer, stop, textOf, isDirected }: ChatTurnsOptions<T>): ChatTurns<T> {
   // Newest ports, read at call time — `submit`/`stop` keep their identity across renders
   // (hosts hand them to memoized composers and to callbacks captured at run start).
-  const ports = useRef({ send, steer, stop, textOf, runKey, running });
+  const ports = useRef({ send, steer, stop, textOf, isDirected, runKey, running });
   // eslint-disable-next-line react-hooks/refs
-  ports.current = { send, steer, stop, textOf, runKey, running };
+  ports.current = { send, steer, stop, textOf, isDirected, runKey, running };
 
   const queued = useQueuedTurns<T>({
     running,
@@ -85,12 +88,20 @@ export function useChatTurns<T = string>({ running, runKey, send, steer, stop, t
   }, [clear]);
 
   const submit = useCallback(async (turn: T): Promise<boolean> => {
-    const { send: deliver, steer: route, textOf: text } = ports.current;
+    const { send: deliver, steer: route, textOf: text, isDirected: directed, running: live } = ports.current;
     const body = typeof turn === 'string' ? turn.trim() : (text?.(turn) ?? '').trim();
     if (!body) return false;
-    if (route?.(turn)) return true;
-    // Mid-run, a stop IS the Stop; the words are held and kept once the run is down.
-    if (ports.current.running && !startsRun(body)) stopTurns();
+    const stopping = !startsRun(body) && !directed?.(turn);
+    // A host that routed it (the editor's run hears it as its Stop) still drops what is held.
+    if (route?.(turn)) {
+      if (stopping) stopTurns();
+      return true;
+    }
+    // Mid-run, a stop IS the Stop — nothing is held behind it to strand.
+    if (stopping && live) {
+      stopTurns();
+      return true;
+    }
     if (hold(turn)) return true;
     return (await deliver(turn)) !== false;
   }, [hold, stopTurns]);

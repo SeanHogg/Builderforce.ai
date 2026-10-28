@@ -430,10 +430,13 @@ __export(src_exports, {
   stallUnrecoveredInTrace: () => stallUnrecoveredInTrace,
   startEngineRun: () => startEngineRun,
   startRun: () => startRun,
+  startsRun: () => startsRun,
   steerModelContent: () => steerModelContent,
   stepRow: () => stepRow,
   stepSig: () => stepSig,
+  stopBeforeStart: () => stopBeforeStart,
   stopRun: () => stopRun,
+  stoppedBeforeStartRow: () => stoppedBeforeStartRow,
   stoppedTurnMetadata: () => stoppedTurnMetadata,
   streamChatCompletion: () => streamChatCompletion,
   streamSummaryCompletion: () => streamSummaryCompletion,
@@ -2530,7 +2533,7 @@ var PRICE_SNAPSHOT = {
   "~deepseek/deepseek-v4-flash-latest": [475e-10, 1568e-10],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [15e-8, 115e-7],
+  "~moonshotai/kimi-latest": [169e-9, 2e-5],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -2538,7 +2541,7 @@ var PRICE_SNAPSHOT = {
   "~openai/gpt-terra-latest": [1e-6, 5e-6],
   "~unbiased/pareto-latest": [8e-7, 32e-7],
   "~x-ai/grok-latest": [2e-6, 6e-6],
-  "~z-ai/glm-flash-latest": [453e-10, 745e-10],
+  "~z-ai/glm-flash-latest": [464e-10, 737e-10],
   "~z-ai/glm-latest": [699e-10, 14e-7],
   "aion-labs/aion-2.0": [8e-7, 16e-7],
   "aion-labs/aion-3.0": [3e-6, 6e-6],
@@ -2725,7 +2728,7 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2.5": [5e-7, 25e-7],
   "moonshotai/kimi-k2.6": [65e-8, 341e-8],
   "moonshotai/kimi-k2.7-code": [56e-8, 31e-7],
-  "moonshotai/kimi-k3": [15e-8, 115e-7],
+  "moonshotai/kimi-k3": [169e-9, 2e-5],
   "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
   "moonshotai/kimi-k3.1-pro": [2e-6, 1e-5],
   "morph/morph-v3-fast": [8e-7, 12e-7],
@@ -2979,7 +2982,7 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5.1": [14e-7, 44e-7],
   "z-ai/glm-5.2": [341e-10, 7e-6],
   "z-ai/glm-5.3": [699e-10, 14e-7],
-  "z-ai/glm-5.3-flash": [453e-10, 745e-10],
+  "z-ai/glm-5.3-flash": [464e-10, 737e-10],
   "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
   "z-ai/glm-5.3-prime": [28e-7, 88e-7],
@@ -5297,6 +5300,9 @@ function isStoppedTurn(msg) {
   } catch {
     return false;
   }
+}
+function stoppedBeforeStartRow() {
+  return { role: "assistant", content: "Stopped before it started.", metadata: stoppedTurnMetadata({}) };
 }
 
 // src/types.ts
@@ -14738,6 +14744,15 @@ function getRunTrace(chatId) {
   if (chatId == null) return [];
   return cells.get(chatId)?.trace ?? [];
 }
+async function stopBeforeStart(runKey, chatId, persistence) {
+  pushTrace(getCell(runKey), { ts: nowIso(), category: "message", label: STOPPED_TURN_STEP, result: "Stopped by user before the run started." });
+  try {
+    const [row] = await persistence.sendMessages(chatId, [stoppedBeforeStartRow()]);
+    return row;
+  } catch {
+    return void 0;
+  }
+}
 function stopRun(chatId) {
   const driver = driverFor(chatId);
   if (driver) return driver.stop(chatId);
@@ -22575,6 +22590,8 @@ function useBrainConversation(options) {
   } = options;
   const sendingRef = (0, import_react11.useRef)(/* @__PURE__ */ new Set());
   const [sendingChats, setSendingChats] = (0, import_react11.useState)(sendingRef.current);
+  const cancelledLaunchRef = (0, import_react11.useRef)(/* @__PURE__ */ new Set());
+  const launchingRef = (0, import_react11.useRef)(/* @__PURE__ */ new Set());
   const markSending = (0, import_react11.useCallback)((key, on) => {
     const next = new Set(sendingRef.current);
     if (on) next.add(key);
@@ -22646,17 +22663,28 @@ ${extraSystem}` : resolvedSystemPrompt;
     [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
   );
   const launch = (0, import_react11.useCallback)(async (id, request) => {
-    let extra = null;
-    if (prepareRun) {
-      try {
-        extra = await prepareRun(id);
-      } catch (e) {
-        if (chatIdRef.current === id) setLocalError(e instanceof Error ? e.message : "Could not start the run.");
+    launchingRef.current.add(id);
+    try {
+      let extra = null;
+      if (prepareRun) {
+        try {
+          extra = await prepareRun(id);
+        } catch (e) {
+          if (chatIdRef.current === id) setLocalError(e instanceof Error ? e.message : "Could not start the run.");
+          return;
+        }
+      }
+      if (cancelledLaunchRef.current.delete(id)) {
+        const row = await stopBeforeStart(id, id, persistence);
+        if (row) updateMessages(id, (prev) => [...prev, row]);
         return;
       }
+      await startRun(id, extra ? { ...request, ...extra } : request);
+    } finally {
+      launchingRef.current.delete(id);
+      cancelledLaunchRef.current.delete(id);
     }
-    await startRun(id, extra ? { ...request, ...extra } : request);
-  }, [prepareRun]);
+  }, [prepareRun, persistence, updateMessages]);
   const send = (0, import_react11.useCallback)(
     async (text, opts) => {
       const trimmed = text.trim();
@@ -22721,7 +22749,8 @@ ${refs}`;
           }
           return true;
         }
-        if (startsRun(trimmed)) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id));
+        const runs = attachments.length > 0 || startsRun(trimmed);
+        if (runs) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id));
         return true;
       } catch (e) {
         if (stillOpen()) {
@@ -22730,6 +22759,7 @@ ${refs}`;
         }
         return false;
       } finally {
+        cancelledLaunchRef.current.delete(runChatId);
         markSending(runChatId, false);
       }
     },
@@ -22788,7 +22818,9 @@ ${refs}`;
     clearRunError(chatId);
   }, [chatId]);
   const stop = (0, import_react11.useCallback)(() => {
-    if (chatId != null) stopRun(chatId);
+    if (chatId == null) return;
+    if ((sendingRef.current.has(chatId) || launchingRef.current.has(chatId)) && !isRunning(chatId)) cancelledLaunchRef.current.add(chatId);
+    stopRun(chatId);
   }, [chatId]);
   const buildTriageReport = (0, import_react11.useCallback)(
     (agentLabel, surface) => buildBrainTriageReport({
@@ -24343,9 +24375,9 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2 }) {
 }
 
 // src/useChatTurns.ts
-function useChatTurns({ running, runKey, send, steer, stop, textOf: textOf2 }) {
-  const ports = (0, import_react14.useRef)({ send, steer, stop, textOf: textOf2, runKey, running });
-  ports.current = { send, steer, stop, textOf: textOf2, runKey, running };
+function useChatTurns({ running, runKey, send, steer, stop, textOf: textOf2, isDirected }) {
+  const ports = (0, import_react14.useRef)({ send, steer, stop, textOf: textOf2, isDirected, runKey, running });
+  ports.current = { send, steer, stop, textOf: textOf2, isDirected, runKey, running };
   const queued = useQueuedTurns({
     running,
     send: (turn) => {
@@ -24362,11 +24394,18 @@ function useChatTurns({ running, runKey, send, steer, stop, textOf: textOf2 }) {
     else if (key != null) stopRun(key);
   }, [clear]);
   const submit = (0, import_react14.useCallback)(async (turn) => {
-    const { send: deliver, steer: route, textOf: text } = ports.current;
+    const { send: deliver, steer: route, textOf: text, isDirected: directed, running: live2 } = ports.current;
     const body = typeof turn === "string" ? turn.trim() : (text?.(turn) ?? "").trim();
     if (!body) return false;
-    if (route?.(turn)) return true;
-    if (ports.current.running && !startsRun(body)) stopTurns();
+    const stopping = !startsRun(body) && !directed?.(turn);
+    if (route?.(turn)) {
+      if (stopping) stopTurns();
+      return true;
+    }
+    if (stopping && live2) {
+      stopTurns();
+      return true;
+    }
     if (hold(turn)) return true;
     return await deliver(turn) !== false;
   }, [hold, stopTurns]);
@@ -24827,10 +24866,13 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   stallUnrecoveredInTrace,
   startEngineRun,
   startRun,
+  startsRun,
   steerModelContent,
   stepRow,
   stepSig,
+  stopBeforeStart,
   stopRun,
+  stoppedBeforeStartRow,
   stoppedTurnMetadata,
   streamChatCompletion,
   streamSummaryCompletion,

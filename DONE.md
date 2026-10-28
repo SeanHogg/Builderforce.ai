@@ -7,7 +7,23 @@
   - `send` keeps a stop turn as the answer and launches nothing.
   - The auto-reply skips a trailing stop. It was lifted into `useAutoReplyTrailingTurn.ts`, so `useBrainConversation.ts` shrank from 691 to about 665 lines.
   - `unansweredTurnIndex` (moved here, re-exported) treats a trailing stop as answered, so Retry never relaunches it.
-- **The shared turn door** (`useChatTurns`): a stop typed mid-run now stops the run on every surface that shares it, instead of waiting in the queue as the next turn. The words are kept once the run is down.
+- **The shared turn door** (`useChatTurns`): a stop typed mid-run now stops the run on every surface that shares it, instead of waiting in the queue as the next turn. On the web it is the Stop button and is not saved as a message; in the editor the host shows it in the chat.
+- **Review follow-ups (brain-embedded 2026.10.67 · VSIX 2026.10.107).**
+  - A mid-run stop is the Stop and is never held, so nothing is stranded behind it (`useQueuedTurns` flushes one turn per run edge).
+  - A new `isDirected` port means a stop addressed to a participant is never the Stop. The editor and the web panel pass it.
+  - A stop the host routes (the editor's run) still clears the panel's queue.
+  - `conv.stop` drops a launch whose send was still getting ready (`cancelledLaunchRef`), and the editor and the web panel now stop through it.
+  - A stop carrying an attachment runs, so send and reload agree.
+  - The Creation Canvas's `startCanvasTurn` applies `startsRun` too.
+  - A Stop is honoured in every window before a run starts:
+    - while a send is persisting;
+    - after `prepareRun`: `launch` re-checks, and a `launchingRef` covers the auto-reply and Retry too;
+    - during the host's setup: `runSteer.stopped(key)` is checked inside `runTurn`'s `try`, so its cleanup still runs;
+    - during the editor's limbic fetch: `useChatSend`'s `preparing` clears only in the same commit as `conv.sending`, so the queue never flushes into the gap. A send dropped there goes back to the composer.
+  - One `stopBeforeStart` (`runControl.ts`) settles a run stopped before it starts, for both the conversation and the host:
+    - an `agent.stopped` step, so the run journal reads cancelled, not completed;
+    - a durable "Stopped before it started." answer row, so a reopened chat does not start the work.
+  - `runSteer.stop` with nothing claimed leaves no mark. That mark used to swallow the next run's waiting words. `runSteer.test.ts` is new, plus a setup-stop case in `brainRunHost.steer.test.ts`.
 - **Tests.** `userTurnRuns.test.ts` is new. Cases were appended to `useBrainConversation.test.tsx` and `useChatTurns.test.tsx`, and their existing cases run unchanged.
 
 ## ✅ RESOLVED 2026-10-27 — The chat panel keeps up with typing and streaming in a long chat (VSIX 2026.10.105)

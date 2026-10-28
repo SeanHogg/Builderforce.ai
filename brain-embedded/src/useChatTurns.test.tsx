@@ -208,19 +208,50 @@ describe('useChatTurns', () => {
 
 describe('useChatTurns — a typed stop', () => {
   beforeEach(() => stopRun.mockClear());
+  type Turn = { text: string; to: string | null };
+  const mountTurns = (initial: ChatTurnsOptions<Turn>) =>
+    renderHook((props: ChatTurnsOptions<Turn>) => useChatTurns(props), { initialProps: initial });
+  const base = (send: (t: Turn) => void, extra: Partial<ChatTurnsOptions<Turn>> = {}): ChatTurnsOptions<Turn> => ({
+    running: true, runKey: 4, send, textOf: (t) => t.text, isDirected: (t) => t.to != null, ...extra,
+  });
 
-  it('stops the run mid-run, and is kept once the run is down', async () => {
+  it('mid-run, is the Stop: the run stops, what was held is dropped, and nothing waits behind it', async () => {
     const send = vi.fn();
-    const { result, rerender } = renderHook((props: ChatTurnsOptions<string>) => useChatTurns(props), {
-      initialProps: { running: true, runKey: 4, send },
-    });
-    await act(async () => { await result.current.submit('next step'); });
-    await act(async () => { await result.current.submit('Stop the run'); });
+    const { result, rerender } = mountTurns(base(send));
+    await act(async () => { await result.current.submit({ text: 'next step', to: null }); });
+    await act(async () => { await result.current.submit({ text: 'Stop the run', to: null }); });
     expect(stopRun).toHaveBeenCalledWith(4);
-    // The held turn behind it is dropped with the run; the stop itself is held.
+    expect(result.current.queued.count).toBe(0);
+    // Typed while the stopped run unwinds: held, and sent on its falling edge.
+    await act(async () => { await result.current.submit({ text: 'do Y instead', to: null }); });
+    rerender(base(send, { running: false }));
+    expect(send).toHaveBeenCalledWith({ text: 'do Y instead', to: null });
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('addressed to a participant, is a message — the run is not stopped', async () => {
+    const send = vi.fn();
+    const { result } = mountTurns(base(send));
+    await act(async () => { await result.current.submit({ text: 'stop', to: 'agent:ada' }); });
+    expect(stopRun).not.toHaveBeenCalled();
     expect(result.current.queued.count).toBe(1);
-    rerender({ running: false, runKey: 4, send });
-    expect(send).toHaveBeenCalledWith('Stop the run');
-    expect(send).not.toHaveBeenCalledWith('next step');
+  });
+
+  it("routed by the host (the editor's run hears it), still drops what is held", async () => {
+    const send = vi.fn();
+    const steer = vi.fn((t: Turn) => t.text === 'Stop the run');
+    const { result } = mountTurns(base(send, { steer }));
+    await act(async () => { await result.current.submit({ text: 'queued for after', to: null }); });
+    await act(async () => { await result.current.submit({ text: 'Stop the run', to: null }); });
+    expect(steer).toHaveBeenCalledWith({ text: 'Stop the run', to: null });
+    expect(result.current.queued.count).toBe(0);
+  });
+
+  it('idle, is sent (kept as the answer) — the conversation starts no run for it', async () => {
+    const send = vi.fn();
+    const { result } = mountTurns(base(send, { running: false }));
+    await act(async () => { await result.current.submit({ text: 'Stop the run', to: null }); });
+    expect(send).toHaveBeenCalledWith({ text: 'Stop the run', to: null });
+    expect(stopRun).not.toHaveBeenCalled();
   });
 });

@@ -45,3 +45,12 @@ export function isStoppedTurn(msg: { metadata?: string | null }): boolean {
     return false;
   }
 }
+
+/**
+ * The row a run stopped BEFORE it started leaves behind: the person's turn is saved, the
+ * Stop came while the run was still getting ready, and without an answer after it a
+ * reopened chat (the auto-reply on load, Retry) would start that work after all.
+ */
+export function stoppedBeforeStartRow(): { role: 'assistant'; content: string; metadata: string } {
+  return { role: 'assistant', content: 'Stopped before it started.', metadata: stoppedTurnMetadata({}) };
+}

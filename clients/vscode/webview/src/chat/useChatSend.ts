@@ -56,7 +56,11 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
     // turn: a participant is talked to (no BRAIN run); null (default) runs the BRAIN.
     // A held turn carries its OWN attachment snapshot (the composer was cleared when the
     // turn queued), passed explicitly so the images survive the wait.
-    void conv.send(queued.text, { addressedTo: queued.recipient, ...(queued.attachments ? { attachments: queued.attachments } : {}) }).then((ok) => {
+    const sending = conv.send(queued.text, { addressedTo: queued.recipient, ...(queued.attachments ? { attachments: queued.attachments } : {}) });
+    // Cleared only now, in the same commit as `conv.sending`, so the turn door never sees
+    // a gap between staging and sending (its queue would flush a held turn into it).
+    setPreparing(false);
+    void sending.then((ok) => {
       if (!ok) setInput((cur) => cur || queued.text);
     });
     // Keyed only on the nonce: `conv` is read fresh from this render's closure, which
@@ -68,22 +72,42 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
   // Shared by the direct composer submit AND the queue drain below. Attachments ride
   // in `pendingSendRef` (already detached from the composer), so `conv.send`'s own
   // snapshot+clear of `pendingAttachments` never sees them twice.
+  // The fetch takes up to 4 s before `conv.send` even starts, so the turn counts as in
+  // flight meanwhile: a Stop (button or typed) in that window drops the send.
+  const [preparing, setPreparing] = useState(false);
+  const stopPreparingRef = useRef(false);
   const dispatchSend = useCallback(async (text: string, to: DirectedRecipient | null, attachments?: ChatInputAttachment[]) => {
+    stopPreparingRef.current = false;
+    setPreparing(true);
     const block = await requestLimbic(text);
+    if (stopPreparingRef.current) {
+      // Stopped while it got ready: nothing was sent — the words go back to the composer.
+      setPreparing(false);
+      setInput((cur) => cur || text);
+      return;
+    }
     setTurnLimbic(block);
     pendingSendRef.current = { text, recipient: to, attachments };
     setSendNonce((n) => n + 1);
-  }, [setTurnLimbic]);
+  }, [setInput, setTurnLimbic]);
 
   // THE ONE turn door (shared): steer → queue while a run is in flight → send. Calling
   // `conv.send` directly is what lost answers — it refuses while the chat is running and
   // says nothing (chat #133). The queue is FIFO, one per completed run (each stays a
   // distinct steerable turn), never flushed across a chat switch, and cleared with it.
   const turns = useChatTurns<QueuedTurn>({
-    running: conv.sending,
+    running: conv.sending || preparing,
     runKey: chatId,
     send: (m) => dispatchSend(m.text, m.recipient, m.attachments),
     textOf: (m) => m.text,
+    // A turn for a participant is a message to them — never the Brain's Stop.
+    isDirected: (m) => m.recipient != null,
+    // The conversation's Stop: it also drops a launch still getting ready — and a send
+    // still fetching its limbic block.
+    stop: () => {
+      stopPreparingRef.current = true;
+      conv.stop();
+    },
     // The editor's steer: a live sub-agent takes its message straight into its run, and
     // the chat's own RUNNING run is spoken to now (PRD 35 E10) — the message interrupts
     // the step in flight and reaches the next model call, instead of waiting behind a run

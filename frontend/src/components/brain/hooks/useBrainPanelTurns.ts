@@ -41,6 +41,10 @@ export function useBrainPanelTurns({ conv, chats, recipient, input, setInput, sh
     runKey: chats.activeChatId,
     send: ({ text, addressedTo }) => conv.send(text, { addressedTo }),
     textOf: turnText,
+    // A turn for a participant is a message to them — never the Brain's Stop.
+    isDirected: (turn) => turn.addressedTo != null,
+    // The conversation's Stop: it also drops a launch still getting ready.
+    stop: conv.stop,
   });
   const { submit: submitTurn, queued } = turns;
 

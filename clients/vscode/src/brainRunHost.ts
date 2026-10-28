@@ -35,6 +35,7 @@ import {
   resolveRunConfirm,
   runAbortSignal,
   startRun,
+  stopBeforeStart,
   subscribeRunStore,
   type BrainRunOutcome,
   type BrainStreamFn,
@@ -252,6 +253,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // takes only the cap — its model is `modelForChildRun`'s and it is never routed.
     const runSettings = runRequestFields(await ports.runSettings?.(), { child: !!p.child });
     try {
+      // Stopped during the setup above: the loop never starts (`settled` drops what waits).
+      if (steering.stopped(key)) return void (await stopBeforeStart(key, chatId, ports.persistence));
       // Gates render as binding directives ahead of the host prompt, then the workspace's
       // rules — the one preamble the native participant shares.
       await startRun(key, {

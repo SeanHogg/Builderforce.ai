@@ -50,6 +50,7 @@ import type { ChatMode, ChatRosterAgent } from './chatMode';
 import {
   startRun,
   stopRun,
+  stopBeforeStart,
   isRunning,
   getRunTrace,
   resolveRunConfirm,
@@ -312,6 +313,10 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   // server row `ensureChatId` is still creating.
   const sendingRef = useRef<ReadonlySet<number | null>>(new Set());
   const [sendingChats, setSendingChats] = useState<ReadonlySet<number | null>>(sendingRef.current);
+  /** Chats whose Stop came while a send was getting ready — its launch is dropped. */
+  const cancelledLaunchRef = useRef(new Set<number>());
+  /** Chats with a launch (send, auto-reply or Retry) not yet started — a Stop drops it. */
+  const launchingRef = useRef(new Set<number>());
   const markSending = useCallback((key: number | null, on: boolean) => {
     const next = new Set(sendingRef.current);
     if (on) next.add(key);
@@ -404,17 +409,30 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
    * `prepareRun` refuses (its message becomes the conversation's error).
    */
   const launch = useCallback(async (id: number, request: BrainRunRequest): Promise<void> => {
-    let extra: Partial<BrainRunRequest> | null = null;
-    if (prepareRun) {
-      try {
-        extra = await prepareRun(id);
-      } catch (e) {
-        if (chatIdRef.current === id) setLocalError(e instanceof Error ? e.message : 'Could not start the run.');
+    launchingRef.current.add(id);
+    try {
+      let extra: Partial<BrainRunRequest> | null = null;
+      if (prepareRun) {
+        try {
+          extra = await prepareRun(id);
+        } catch (e) {
+          if (chatIdRef.current === id) setLocalError(e instanceof Error ? e.message : 'Could not start the run.');
+          return;
+        }
+      }
+      // A Stop while this run got ready (its send persisting, the host preparing): it never
+      // starts, and an answer row says so — or a reopened chat would start it after all.
+      if (cancelledLaunchRef.current.delete(id)) {
+        const row = await stopBeforeStart(id, id, persistence);
+        if (row) updateMessages(id, (prev) => [...prev, row]);
         return;
       }
+      await startRun(id, extra ? { ...request, ...extra } : request);
+    } finally {
+      launchingRef.current.delete(id);
+      cancelledLaunchRef.current.delete(id);
     }
-    await startRun(id, extra ? { ...request, ...extra } : request);
-  }, [prepareRun]);
+  }, [prepareRun, persistence, updateMessages]);
 
   const send = useCallback(
     async (text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null; attachments?: ChatInputAttachment[] }): Promise<boolean> => {
@@ -517,8 +535,11 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
           }
           return true;
         }
-        // A stop with nothing running is kept as the person's answer and starts nothing.
-        if (startsRun(trimmed)) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id));
+        // A stop with nothing running is kept as the person's answer and starts nothing (an
+        // attachment is work: the reload reads the text with its links, so it runs too); a
+        // Stop pressed while this send got ready drops the launch.
+        const runs = attachments.length > 0 || startsRun(trimmed);
+        if (runs) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id));
         return true;
       } catch (e) {
         // Persisting the user turn failed (commonly an expired token) — the turn
@@ -530,6 +551,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         }
         return false;
       } finally {
+        cancelledLaunchRef.current.delete(runChatId);
         markSending(runChatId, false);
       }
     },
@@ -606,7 +628,10 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   }, [chatId]);
 
   const stop = useCallback(() => {
-    if (chatId != null) stopRun(chatId);
+    if (chatId == null) return;
+    // A send still getting ready has no run to stop yet: its launch is dropped instead.
+    if ((sendingRef.current.has(chatId) || launchingRef.current.has(chatId)) && !isRunning(chatId)) cancelledLaunchRef.current.add(chatId);
+    stopRun(chatId);
   }, [chatId]);
 
   const buildTriageReport = useCallback(

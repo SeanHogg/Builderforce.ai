@@ -2,6 +2,14 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.107] — Stop is the Stop, wherever you say it
+
+- **Nothing gets stuck behind a stop.** A message typed after "stop", while the stopped run was still winding down, could sit in the queue and not send until some later run ended. A stop is now acted on at once and never queued, so the next message goes out as soon as the run is down.
+- **A stop sent to an invited agent or person is a message to them.** It no longer stops BuilderForce's own run.
+- **Stop works the moment you send.** Pressing Stop, or typing "stop", while a message is still being prepared or the run is still starting up used to let the run start and do all its work anyway. That run is now never started.
+- **The Creation Canvas answers "Stop the run" the same way.** It stops the canvas's run, and with nothing running it starts nothing.
+- **A message that only says "stop" but carries an attachment is treated as work,** both when you send it and when the chat is reopened.
+
 ## [2026.10.106] — "Stop the run" stops it
 
 - **Answering "Stop the run" no longer starts the work again.** When a run keeps saying it is ready and doesn't act, it stops and asks you to continue with guidance or stop the run. Asking ends the run, so choosing "Stop the run" was sent as a new message, and that message started a fresh run that kept working. A stop sent when nothing is running is now kept as your answer and starts nothing, and reopening the chat on it doesn't restart the work either.
