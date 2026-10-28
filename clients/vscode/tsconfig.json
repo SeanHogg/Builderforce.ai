@@ -9,6 +9,7 @@
     "types": ["node", "vscode"],
     "paths": {
       "@builderforce/agent-loop": ["../../packages/agent-loop/src/index.ts"],
+      "@builderforce/agent-run": ["../../packages/agent-run/src/index.ts"],
 
       "@builderforce/agent-skills": ["../../packages/agent-skills/src/index.ts"],
       "@builderforce/agent-tools": ["../../packages/agent-tools/src/index.ts"],
