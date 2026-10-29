@@ -9,7 +9,6 @@ import type { PrefetchPort } from "@builderforce/prefetch";
 import type {
   AvoidedRunCall,
   BrainRunOutcome,
-  ContextPack,
   BrainRunPersistence,
   BrainStreamFn,
   ChatInputAttachment,
@@ -181,8 +180,6 @@ export interface RunContextPack {
   recallHint: string;
   /** The focus files the block inlined WHOLE — recorded as the run's reads. */
   servedReads?: readonly ServedRead[];
-  /** The pack's parts in the one agent's `ContextPack` shape — what the agent's `ContextSource` hands it. */
-  structured?: ContextPack;
 }
 
 export interface BrainRunHost {
