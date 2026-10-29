@@ -52,10 +52,11 @@ export interface ChatTurnsOptions<T> {
   /** True while a turn is in flight on this conversation: what a typed message is HELD behind. */
   running: boolean;
   /**
-   * Optional: true while the chat's own run is live and can be spoken to now. Default `running`.
-   * A host whose "in flight" begins before the run does (the editor fetches a per-turn limbic block
-   * first, up to 4 s) passes the run's own state here: in that window a message is held, not steered
-   * into a run that has not started - it would start ahead of the turn it was typed behind.
+   * Optional: true while the chat's own run is live (executing, or being made - the run store's
+   * `isLive`) and can be spoken to now. Default `running`. A host's "in flight" can begin before any
+   * run exists (a send saving its row, the editor fetching a limbic block): in that window a message
+   * is HELD in order, never steered into an inbox no run reads. Hosts take both flags from the one
+   * store state with `chatDoorLiveness`.
    */
   steerable?: boolean;
   /** The run being driven (chat id, `canvasRunKey(sessionId)`, …); null for a draft. Also the queue's reset key. */
@@ -68,6 +69,12 @@ export interface ChatTurnsOptions<T> {
    * reads - and never recomputes it.
    */
   steer?: (turn: T) => boolean;
+  /**
+   * Optional: put a turn back in the COMPOSER (text, files, addressee). A turn addressed to a
+   * participant whose send was not kept after the chat changed goes here - never into the queue now
+   * showing (another chat's) and never into a run. A host that addresses turns must supply it.
+   */
+  restore?: (turn: T) => void;
   /** Optional: how this host stops its run. Default `stopRun(runKey)`. */
   stop?: () => void;
   /** The text a non-string turn carries (blank check). Omit for string turns. */
@@ -111,18 +118,29 @@ export function steersByDefault(turn: { directed: boolean; held: number; attachm
   return !turn.directed && turn.held === 0 && (turn.attachments ?? []).every((a) => !!a.imageUrl);
 }
 
-export function useChatTurns<T = string>({ running, steerable = running, runKey, send, steer, stop, textOf, isDirected, attachmentsOf }: ChatTurnsOptions<T>): ChatTurns<T> {
+/**
+ * What a host tells the door about the chat's run, from ONE source - the run store's state for that
+ * chat (`useBrainConversation`): `running` is everything in flight (a send still saving its row
+ * included - typed messages are HELD behind it), `steerable` is the run being live (`runLive`:
+ * executing or being made - messages STEER it). `extraInFlight` is a host's own pre-send work (the
+ * editor's limbic fetch). Web, Rovr and the editor all pass this, so none computes its own.
+ */
+export function chatDoorLiveness(conv: { sending: boolean; runLive: boolean }, extraInFlight = false): { running: boolean; steerable: boolean } {
+  return { running: conv.sending || extraInFlight, steerable: conv.runLive };
+}
+
+export function useChatTurns<T = string>({ running, steerable = running, runKey, send, steer, stop, restore, textOf, isDirected, attachmentsOf }: ChatTurnsOptions<T>): ChatTurns<T> {
   // Newest ports, read at call time — `submit`/`stop` keep their identity across renders
   // (hosts hand them to memoized composers and to callbacks captured at run start).
-  const ports = useRef({ send, steer, stop, textOf, isDirected, attachmentsOf, runKey, running, steerable });
+  const ports = useRef({ send, steer, stop, restore, textOf, isDirected, attachmentsOf, runKey, running, steerable });
   // eslint-disable-next-line react-hooks/refs
-  ports.current = { send, steer, stop, textOf, isDirected, attachmentsOf, runKey, running, steerable };
+  ports.current = { send, steer, stop, restore, textOf, isDirected, attachmentsOf, runKey, running, steerable };
   // A stopped run is unwinding: a message typed meanwhile cannot steer it (the model gets no
-  // further turn), so it is held for after - until the run's falling edge clears the mark. State
-  // as well as a ref: the composer words its Send button from it.
+  // further turn), so it is held for after - until the run's falling edge clears the mark. The ref is
+  // what is read; the state exists only to repaint, because the composer words its Send button from it.
   const stoppingRef = useRef(false);
-  const [, setStopping] = useState(false);
-  const markStopping = useCallback((on: boolean) => { stoppingRef.current = on; setStopping(on); }, []);
+  const [, repaint] = useState(false);
+  const markStopping = useCallback((on: boolean) => { stoppingRef.current = on; repaint(on); }, []);
   useEffect(() => { if (!running && stoppingRef.current) markStopping(false); }, [running, markStopping]);
   // Counts Stops: a send in flight when one lands must not put its turn back afterwards.
   const stopEpoch = useRef(0);
@@ -137,7 +155,7 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
   // (`wakeChat`: that chat's next turn; failing that, its inbox), never into the one now showing.
   // And a Stop since the send began ended the conversation's work: nothing is put back.
   // A turn addressed to a participant is NEVER handed to a chat's run (it would become a Brain turn):
-  // it goes back to its own queue with the addressee intact.
+  // after a chat switch it goes back to the composer (`restore`), addressee intact.
   const requeueRef = useRef<(turn: T) => void>(() => undefined);
   const takeFrontRef = useRef<() => T | undefined>(() => undefined);
   // Turns being sent from the queue right now. ONE path sends them: the falling edge starts it
@@ -151,7 +169,8 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
         const key = ports.current.runKey;
         const epoch = stopEpoch.current;
         const sent: T = turn;
-        const kept = await Promise.resolve(ports.current.send(sent)).then((ok) => ok !== false, () => false);
+        // A host's send may throw synchronously: that is a send not kept, never a lost turn.
+        const kept = await new Promise<unknown>((resolve) => { resolve(ports.current.send(sent)); }).then((ok) => ok !== false, () => false);
         if (stopEpoch.current !== epoch) return;
         const { textOf: text, attachmentsOf: attached, isDirected: directed } = ports.current;
         if (kept) {
@@ -162,8 +181,12 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
           continue;
         }
         turn = undefined;
-        if (ports.current.runKey === key || directed?.(sent)) {
+        if (ports.current.runKey === key) {
           requeueRef.current(sent);
+        } else if (directed?.(sent)) {
+          // Another chat is showing: this turn is for a participant, so it goes back to the composer
+          // (addressee intact) - never to the queue now showing, never to a chat's run.
+          (ports.current.restore ?? requeueRef.current)(sent);
         } else if (typeof key === 'number') {
           const body = turnBody(sent, text);
           const files = attached?.(sent);
@@ -270,7 +293,6 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     if (hold(turn)) return true;
     return (await deliver(turn)) !== false;
   }, [hold]);
-
 
   return { queued, submit, queueAfter, stop: stopTurns, steers };
 }

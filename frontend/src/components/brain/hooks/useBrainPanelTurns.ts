@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
-import { useChatTurns, type ChatInputAttachment, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, useChatTurns, type ChatInputAttachment, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import type { useBrainChats, useBrainConversation } from '@/lib/brain';
 import { useDockedComposer } from '@/lib/brain/dockedBrain';
 import { trackActivity } from '@/lib/activity/tracker';
@@ -27,11 +27,13 @@ const turnText = (turn: BrainPanelTurn) => turn.text;
  * held. Also the panel's two ways in that are not typed — a neighbouring surface handing
  * text over (`useDockedComposer`) — and the exam gate every path into a send answers to.
  */
-export function useBrainPanelTurns({ conv, chats, recipient, input, setInput, showChatTab, acceptsHandover }: {
+export function useBrainPanelTurns({ conv, chats, recipient, chooseRecipient, input, setInput, showChatTab, acceptsHandover }: {
   conv: ReturnType<typeof useBrainConversation>;
   chats: ReturnType<typeof useBrainChats>;
   /** Who the composer is pointed at right now (`useRecipientChoice`). */
   recipient: DirectedRecipient | null;
+  /** Point the composer at a participant again (`useRecipientChoice().choose`). */
+  chooseRecipient: (to: DirectedRecipient | null) => void;
   input: string;
   setInput: Dispatch<SetStateAction<string>>;
   showChatTab: () => void;
@@ -39,7 +41,8 @@ export function useBrainPanelTurns({ conv, chats, recipient, input, setInput, sh
   acceptsHandover: boolean;
 }) {
   const turns = useChatTurns<BrainPanelTurn>({
-    running: conv.sending,
+    // In flight while a send is saving (held in order); steerable only while the run store says the run is live.
+    ...chatDoorLiveness(conv),
     runKey: chats.activeChatId,
     // ALWAYS given its attachments (none included): a turn that carries its own files neither
     // takes nor clears what the composer holds now - a held turn flushed while a new file is
@@ -51,6 +54,12 @@ export function useBrainPanelTurns({ conv, chats, recipient, input, setInput, sh
     attachmentsOf: (turn) => turn.attachments,
     // A turn for a participant is a message to them — never the Brain's Stop.
     isDirected: (turn) => turn.addressedTo != null,
+    // ...and one whose send was not kept after the chat changed returns to the box, addressee intact.
+    restore: (turn) => {
+      setInput((cur) => cur || turn.text);
+      conv.restoreAttachments(turn.attachments ?? []);
+      chooseRecipient(turn.addressedTo);
+    },
     // The conversation's Stop: it also drops a launch still getting ready.
     stop: conv.stop,
   });

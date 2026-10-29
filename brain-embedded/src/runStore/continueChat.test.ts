@@ -1,59 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { StreamChatResult } from '../streamChatCompletion';
-import { queueRunSteering, drainRunSteering, hasRunInterrupt, resetRunSteering } from '../runSteering';
+import { queueRunSteering, drainRunSteering, resetRunSteering } from '../runSteering';
 import type { ChatInputAttachment } from '../types';
 import { continueOnSettle, MAX_CONTINUATIONS, releaseContinuation, type AttachmentPorts, type ContinueBinding } from './continueChat';
-import { resetBrainRunStore, isRunning, stopRun } from './runControl';
+import { resetBrainRunStore, isLive, isRunning, stopRun } from './runControl';
 import { getCell } from './runCells';
 import { startRun } from './startRun';
 import { wakeChat } from './wakeChat';
 import type { BrainRunRequest } from './runTypes';
-
-const answer = (text: string): StreamChatResult => ({ text, toolCalls: [], finishReason: 'stop', resolvedModel: 'fake-model' });
-const ports: AttachmentPorts = { uploadUrl: (key) => `/uploads/${key}` };
-const binding: ContinueBinding = { ports: () => ports };
-
-type Saved = { chatId: number; role: string; content: string };
-
-/** A chat whose persistence records every row, and whose model replays `texts`. */
-function chat(texts: string[], onAssistantRow?: () => void) {
-  const saved: Saved[] = [];
-  const asked: Array<Parameters<BrainRunRequest['stream']>[0]['messages']> = [];
-  const gate = { failUserRows: false, holdUserRows: null as Promise<void> | null };
-  let n = 0;
-  let id = 0;
-  const stream: BrainRunRequest['stream'] = async (opts) => {
-    asked.push(JSON.parse(JSON.stringify(opts.messages)));
-    const text = texts[n];
-    n += 1;
-    if (text === undefined) throw new Error('script exhausted');
-    return answer(text);
-  };
-  const persistence: BrainRunRequest['persistence'] = {
-    sendMessages: async (chatId, rows) => {
-      if (rows.some((r) => r.role === 'user')) {
-        if (gate.holdUserRows) await gate.holdUserRows;
-        if (gate.failUserRows) throw new Error('token expired');
-      }
-      for (const row of rows) {
-        saved.push({ chatId, role: row.role, content: row.content });
-        if (row.role === 'assistant') onAssistantRow?.();
-      }
-      return rows.map((row) => ({ id: (id += 1), chatId, createdAt: '', metadata: row.metadata ?? null, seq: id, ...row })) as never;
-    },
-  };
-  return { saved, asked, stream, persistence, gate };
-}
-
-/** Runs `fn` the first `count` calls only (a person steers once, not after every answer). */
-const times = (count: number, fn: () => void) => { let left = count; return () => { if (left > 0) { left -= 1; fn(); } }; };
-
-async function until(check: () => boolean, ms = 3_000): Promise<void> {
-  const end = Date.now() + ms;
-  while (!check() && Date.now() < end) await new Promise((r) => setTimeout(r, 10));
-}
-
-const userRows = (c: { saved: Saved[] }) => c.saved.filter((m) => m.role === 'user').map((m) => m.content);
+import { binding, chat, ports, times, until, userRows } from '../test/continueHarness';
 
 beforeEach(() => {
   resetBrainRunStore();
@@ -133,7 +87,11 @@ describe('direction a run never read (PRD 35 E10)', () => {
     const c = chat(['Done.', 'Done again.']);
     continueOnSettle(9313, binding);
     await startRun(9313, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
-    releaseContinuation(9313);
+    const other: ContinueBinding = { ports: () => ports };
+    releaseContinuation(9313, other); // another conversation's binding: not this one's to release
+    expect(wakeChat(9313, 'still bound', undefined)).toBe(true);
+    await until(() => !isLive(9313));
+    releaseContinuation(9313, binding);
     expect(wakeChat(9313, 'nobody composes this', undefined)).toBe(false);
 
     // A binding made before a store reset is gone after it: a chat that runs again unbound cannot be woken.
@@ -171,8 +129,18 @@ describe('a turn that cannot be made the chat\'s next turn (M2)', () => {
 });
 
 describe('words whose row is already saved are never saved twice (MUST-FIX 2)', () => {
-  it('leftover direction queued WITHOUT persist (said, saved) starts the next turn but adds no user row', async () => {
-    const c = chat(['First.', 'Second.'], times(1, () => queueRunSteering(9314, 'said already', { fromPerson: true })));
+  it('an editor-style steer ({ fromPerson } alone) is NOT assumed saved: it gets its row', async () => {
+    const c = chat(['First.', 'Second.'], times(1, () => queueRunSteering(9325, 'not saved yet', { fromPerson: true })));
+    continueOnSettle(9325, binding);
+
+    await startRun(9325, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    await until(() => c.asked.length >= 2 && !isRunning(9325));
+
+    expect(userRows(c)).toEqual(['not saved yet']);
+  });
+
+  it('direction marked `saved` starts the next turn but adds no user row', async () => {
+    const c = chat(['First.', 'Second.'], times(1, () => queueRunSteering(9314, 'said already', { fromPerson: true, saved: true })));
     continueOnSettle(9314, binding);
 
     await startRun(9314, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
@@ -184,7 +152,7 @@ describe('words whose row is already saved are never saved twice (MUST-FIX 2)', 
 
   it('a mix saves only the words that have no row yet, and the run reads all of them', async () => {
     const c = chat(['First.', 'Second.'], times(1, () => {
-      queueRunSteering(9315, 'had a row', { fromPerson: true });
+      queueRunSteering(9315, 'had a row', { fromPerson: true, saved: true });
       queueRunSteering(9315, 'needs a row', { fromPerson: true, persist: true });
     }));
     continueOnSettle(9315, binding);
@@ -195,42 +163,6 @@ describe('words whose row is already saved are never saved twice (MUST-FIX 2)', 
     expect(userRows(c)).toEqual(['needs a row']);
     expect(JSON.stringify(c.asked[1])).toContain('had a row');
     expect(JSON.stringify(c.asked[1])).toContain('needs a row');
-  });
-});
-
-describe('a run that starts while the words are being saved (M3)', () => {
-  it('the words join THAT run\'s inbox as what the model reads, interrupting, and are not saved again', async () => {
-    const c = chat(['Done.']);
-    const notes: ChatInputAttachment = { key: 'n1', name: 'notes.txt', type: 'text/plain' };
-    continueOnSettle(9308, { ports: () => ({ uploadUrl: (key) => `/uploads/${key}`, inlineAttachments: async () => ({ text: 'FILE BODY', keys: ['n1'] }) }) });
-    await startRun(9308, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
-
-    let releaseSave!: () => void;
-    c.gate.holdUserRows = new Promise<void>((resolve) => { releaseSave = resolve; });
-    let releaseRun!: () => void;
-    const hold = new Promise<void>((resolve) => { releaseRun = resolve; });
-    const other = chat(['Second run.']);
-    const stream: BrainRunRequest['stream'] = async (opts, handlers) => { await hold; return other.stream(opts, handlers); };
-
-    expect(wakeChat(9308, 'said just now', [notes])).toBe(true);
-    const second = startRun(9308, { resolvedSystemPrompt: 'sys', stream, persistence: c.persistence, userTurn: 'typed meanwhile' });
-    await until(() => isRunning(9308));
-    releaseSave();
-    await until(() => c.saved.some((m) => m.content.startsWith('said just now')));
-    await new Promise((r) => setTimeout(r, 20));
-
-    // Saved once; the running run's inbox holds the COMPOSED content (the inlined file, not just the raw
-    // text), interrupting, and not persisted again - and no extra run was started.
-    expect(userRows(c)).toHaveLength(1);
-    expect(hasRunInterrupt(9308)).toBe(true);
-    const [steer] = drainRunSteering(9308);
-    expect(steer?.text).toContain('said just now');
-    expect(steer?.text).toContain('FILE BODY');
-    expect(steer).toMatchObject({ fromPerson: true });
-    expect(steer?.persist).toBeFalsy();
-    expect(steer?.attachments ?? []).toEqual([]);
-    releaseRun();
-    await second;
   });
 });
 
@@ -287,6 +219,7 @@ describe('the continuation prepares its run again (stale run-time parts)', () =>
     const [kept] = drainRunSteering(9319);
     expect(kept?.text).toContain('try anyway');
     expect(kept?.persist).toBeFalsy();
+    expect(kept?.saved).toBe(true);
     expect(getCell(9319).trace.some((e) => e.label === 'steer.prepare_failed')).toBe(true);
   });
 });

@@ -116,6 +116,12 @@ export function isRunning(chatId: RunKey | null): boolean {
   return chatId != null && (cells.get(chatId)?.running ?? false);
 }
 
+/** Running, or about to be (a continuation holds the claim): the chat is not free to launch another run. */
+export function isLive(chatId: RunKey | null): boolean {
+  const c = chatId == null ? undefined : cells.get(chatId);
+  return !!c && (c.running || c.claim !== null);
+}
+
 /** The accumulated execution trace for a chat (for the capture/triage report). */
 export function getRunTrace(chatId: RunKey | null): BrainTraceEvent[] {
   if (chatId == null) return [];

@@ -1,7 +1,10 @@
 /**
  * The editor chat's wiring of THE turn door (`useChatTurns`): what it counts as "in flight" (a send
- * fetching its limbic block already is) versus "live" (a run exists and can be spoken to), and the
- * steer port, which asks the door's own predicate - the one the Send label reads.
+ * saving its row, or fetching its limbic block, already is) versus "live" (the run store says a run is
+ * executing or being made), and the steer port, which asks the door's own predicate - the one the Send
+ * label reads. Rendered through the real hook on the server renderer (the package has no DOM): state
+ * starts at its initial value, so the pre-send window itself is covered by the door's own tests
+ * (`brain-embedded/src/useChatTurns.test.tsx`); here the conversation's two flags are what vary.
  */
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -24,39 +27,33 @@ vi.mock('@seanhogg/builderforce-brain-embedded', async (importOriginal) => {
   };
 });
 
-import { chatRunLiveness, useChatSend } from './useChatSend';
+import { useChatSend } from './useChatSend';
 
-type Steer = (turn: { text: string; recipient: null; attachments: unknown[] }) => boolean;
+type Turn = { text: string; recipient: unknown; attachments?: unknown[] };
+type Steer = (turn: Turn) => boolean;
 
-/** Renders the hook once (server render: state starts at its initial value) and returns what it gives the composer. */
-function mount(sending: boolean, chatId: number | null = 5) {
-  const conv = { sending, pendingAttachments: [], removeAttachment: vi.fn(), restoreAttachments: vi.fn(), send: vi.fn(async () => true), stop: vi.fn() };
+/** Renders the hook once and returns what it gives the composer, with the pieces a test pokes at. */
+function mount(flags: { sending: boolean; runLive: boolean }, chatId: number | null = 5) {
+  const conv = { ...flags, pendingAttachments: [], removeAttachment: vi.fn(), restoreAttachments: vi.fn(), send: vi.fn(async () => true), stop: vi.fn() };
+  const setInput = vi.fn();
+  const chooseRecipient = vi.fn();
   let sendSteers: boolean | undefined;
   const Probe = () => {
     sendSteers = useChatSend({
-      conv: conv as never, chatId, input: '', setInput: vi.fn(), recipient: null,
+      conv: conv as never, chatId, input: '', setInput, recipient: null, chooseRecipient,
       liveChildren: [] as never, setTurnLimbic: vi.fn(), reloadChats: vi.fn(),
     }).sendSteers;
     return null;
   };
   renderToStaticMarkup(createElement(Probe));
-  return { sendSteers: sendSteers as boolean, steer: door.options!.steer as Steer, options: door.options! };
+  return { conv, setInput, chooseRecipient, sendSteers: sendSteers as boolean, steer: door.options!.steer as Steer, options: door.options! };
 }
 
 beforeEach(() => steerRun.mockClear());
 
-describe('chatRunLiveness', () => {
-  it('holds behind the limbic fetch but steers only once the run is live', () => {
-    expect(chatRunLiveness(false, false)).toEqual({ running: false, steerable: false });
-    // The preparing window: a send is in flight, no run exists yet - a second turn is HELD, never steered.
-    expect(chatRunLiveness(false, true)).toEqual({ running: true, steerable: false });
-    expect(chatRunLiveness(true, false)).toEqual({ running: true, steerable: true });
-  });
-});
-
-describe('the editor chat\'s steer port', () => {
-  it('steers the chat\'s own live run, and the Send label says so (one predicate)', () => {
-    const { sendSteers, steer, options } = mount(true);
+describe('the editor chat\'s turn door is told the run store\'s state', () => {
+  it('a live run: held-behind AND steerable, and the Send label says so', () => {
+    const { sendSteers, steer, options } = mount({ sending: true, runLive: true });
 
     expect(options).toMatchObject({ running: true, steerable: true });
     expect(sendSteers).toBe(true);
@@ -64,18 +61,42 @@ describe('the editor chat\'s steer port', () => {
     expect(steerRun).toHaveBeenCalledWith(5, 'do it now', []);
   });
 
-  it('declines when there is no live run to speak to - the turn is held, and the label says Queue', () => {
-    const { sendSteers, steer, options } = mount(false);
+  it('a send still saving (in flight, no run yet): turns are HELD in order - never steered into an inbox nothing reads', () => {
+    const { sendSteers, steer, options } = mount({ sending: true, runLive: false });
+
+    expect(options).toMatchObject({ running: true, steerable: false });
+    expect(sendSteers).toBe(false);
+    expect(steer({ text: 'second turn', recipient: null, attachments: [] })).toBe(false);
+    expect(steerRun).not.toHaveBeenCalled();
+  });
+
+  it('nothing in flight: the turn is sent, and the label is not a steer', () => {
+    const { sendSteers, steer, options } = mount({ sending: false, runLive: false });
 
     expect(options).toMatchObject({ running: false, steerable: false });
     expect(sendSteers).toBe(false);
     expect(steer({ text: 'not yet', recipient: null, attachments: [] })).toBe(false);
-    expect(steerRun).not.toHaveBeenCalled();
   });
 
   it('declines for a chat that has no id yet', () => {
-    const { steer } = mount(true, null);
+    const { steer } = mount({ sending: true, runLive: true }, null);
     expect(steer({ text: 'no chat', recipient: null, attachments: [] })).toBe(false);
     expect(steerRun).not.toHaveBeenCalled();
+  });
+});
+
+describe('an addressed turn the door could not keep', () => {
+  it('returns to the composer with its text, files and addressee', () => {
+    const { options, conv, setInput, chooseRecipient } = mount({ sending: false, runLive: false });
+    const dev = { kind: 'agent', ref: 'dev', label: 'dev' };
+    const file = { key: 'k', name: 'a.txt', type: 'text/plain' };
+
+    (options.restore as (m: Turn) => void)({ text: '@dev look', recipient: dev, attachments: [file] });
+
+    const put = setInput.mock.calls[0]![0] as (cur: string) => string;
+    expect(put('')).toBe('@dev look');
+    expect(put('already typing')).toBe('already typing');
+    expect(conv.restoreAttachments).toHaveBeenCalledWith([file]);
+    expect(chooseRecipient).toHaveBeenCalledWith(dev);
   });
 });

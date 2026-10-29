@@ -46,6 +46,7 @@ export {
   appendRunMessage,
   getRunSnapshot,
   isRunning,
+  isLive,
   getRunTrace,
   stopRun,
   stopBeforeStart,

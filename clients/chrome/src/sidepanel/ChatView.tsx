@@ -36,7 +36,7 @@ import {
   useModelFallback,
 } from '@seanhogg/builderforce-brain-ui';
 import catalogs from 'virtual:rovr-timeline-catalogs';
-import { deriveChatTitle, useBrainConversation, useChatCreation, useChatTurns } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, deriveChatTitle, useBrainConversation, useChatCreation, useChatTurns } from '@seanhogg/builderforce-brain-embedded';
 import { PRICING_URL } from '../config';
 import { t, uiCatalogLocale, type MessageKey } from '../i18n/t';
 import type { LocalChat } from '../store/records';
@@ -156,7 +156,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   // call; what the run never drained is sent as the next turn. The explicit "Queue for
   // after" holds one for the run's falling edge. Stop drops what is held, then stops the run.
   const turns = useChatTurns<string>({
-    running: conv.sending,
+    ...chatDoorLiveness(conv),
     runKey: chatId,
     send: async (text) => {
       try {
@@ -184,7 +184,10 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
     const text = draft.trim();
     if (text) offer(text, turns.queueAfter);
   };
-  const answer = useCallback((text: string) => void turns.submit(text), [turns.submit]);
+  // An answered ask_user card is a turn like a typed one: a failed send gives the answer back to the box.
+  const answer = useCallback((text: string) => {
+    void turns.submit(text).then((kept) => { if (!kept) setDraft((cur) => cur || text); });
+  }, [turns.submit]);
 
   // The question this chat is blocked on, restated above the composer — the same
   // predicate the transcript's card uses, so banner and card never disagree.

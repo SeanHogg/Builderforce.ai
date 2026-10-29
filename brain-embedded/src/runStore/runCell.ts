@@ -13,6 +13,7 @@ import type { CompactMemo } from '@seanhogg/builderforce-memory/working';
 import { emptyRunUsage, type RunUsageTally } from '../memorySavings';
 import type { BrainRunRequest, BrainRunSnapshot, RunTurn } from './runTypes';
 import type { PendingGateOutcome } from './prefetchGate';
+import type { RunClaim } from './runClaim';
 
 /** The completion streaming right now — and, once the gateway names it, the model serving it. */
 export interface LiveTurn {
@@ -161,6 +162,12 @@ export interface RunCell {
    * Stop pressed in between must not be outrun by a run that starts after it.
    */
   stopEpoch: number;
+  /**
+   * The claim on this chat's NEXT run (`runClaim.ts`): a continuation is being made - words saved, the
+   * host's run-time parts prepared - and no other launch may take the chat meanwhile. The cell counts
+   * as live while it is held, so a person's message steers into the claimed run instead of racing it.
+   */
+  claim: RunClaim | null;
   /** What the last Stop cut off, until the unwinding run persists it ({@link keepStoppedTurn}). */
   stoppedTurn: StoppedTurn | null;
   /** Cached immutable snapshot; identity changes only when something changed. */
@@ -221,6 +228,7 @@ export function makeCell(): RunCell {
     liveTurn: null,
     lastRequest: null,
     stopEpoch: 0,
+    claim: null,
     stoppedTurn: null,
     snapshot: EMPTY_SNAPSHOT,
   };

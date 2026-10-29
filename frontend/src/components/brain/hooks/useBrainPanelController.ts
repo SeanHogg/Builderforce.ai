@@ -269,7 +269,7 @@ export function useBrainPanelController({
   // THE ONE turn door (shared with every composer host), the exam gate, and text a
   // neighbouring surface hands the page's chat (docked, no close).
   const { queued, submitTurn, stopTurn, handleSend, handleQueueAfter, sendSteers } = useBrainPanelTurns({
-    conv, chats, recipient, input, setInput, showChatTab, acceptsHandover: !isPage && !onClose,
+    conv, chats, recipient, chooseRecipient, input, setInput, showChatTab, acceptsHandover: !isPage && !onClose,
   });
   // After the door: an answered question or a replay is a turn like a typed one, and
   // queues behind a running turn the same way.

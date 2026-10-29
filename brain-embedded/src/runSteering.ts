@@ -39,12 +39,13 @@ export interface RunSteerMessage extends Omit<QueuedSteerMessage, 'attachments'>
  * Queue one message for a run's next turn. Blank text is ignored. `interrupt` also
  * aborts the run's interruptible step now (a foreground command) and skips the rest of
  * its turn's calls. Attachments ride along so mid-run messages keep their images;
- * `persist` asks the run to save and show the message when it drains it.
+ * `persist` asks the run to save and show the message when it drains it; `saved` says a row for
+ * it already exists (so nothing saves it again).
  */
 export function queueRunSteering(
   runKey: number,
   text: string,
-  opts?: { interrupt?: boolean; attachments?: ChatInputAttachment[]; fromPerson?: boolean; persist?: boolean },
+  opts?: { interrupt?: boolean; attachments?: ChatInputAttachment[]; fromPerson?: boolean; persist?: boolean; saved?: boolean },
 ): void {
   queueMessage(runKey, text, opts);
 }

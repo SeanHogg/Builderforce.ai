@@ -37,7 +37,6 @@ import type { ReasoningIntent } from './effort';
 import type { RunWindowSources } from './windowFit/modelWindow';
 import { useComposerAttachments } from './useComposerAttachments';
 import { useContinuation } from './useContinuation';
-import { continueStranded } from './runStore/wakeChat';
 import { composeUserTurn, userTurnContentOf } from './attachmentTranscript';
 import { scopeToConsolidation } from '@seanhogg/builderforce-memory/working';
 import { contextUsageOf, type ContextUsage } from './contextUsage';
@@ -54,6 +53,7 @@ import {
   stopRun,
   stopBeforeStart,
   isRunning,
+  isLive,
   getRunTrace,
   resolveRunConfirm,
   clearRunError,
@@ -175,6 +175,8 @@ export interface UseBrainConversation {
   /** Force a transcript refetch without changing the chat id (e.g. after a merge). */
   reloadMessages: () => void;
   sending: boolean;
+  /** A run is executing or being made for this chat: what a typed message can STEER (`sending` also covers a send still saving). */
+  runLive: boolean;
   error: string;
   /**
    * What the user can DO about {@link error}: reconnect an expired session, upgrade
@@ -452,7 +454,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     async (text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null; attachments?: ChatInputAttachment[] }): Promise<boolean> => {
       const trimmed = text.trim();
       // Busy only for THIS chat: a run in flight elsewhere never blocks this one.
-      if (!trimmed || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
+      if (!trimmed || sendingRef.current.has(chatId) || isLive(chatId)) return false;
       // A message addressed to a participant (an invited agent/human) is a chat
       // turn for THEM, not a directive for the BRAIN — persist it, but don't run
       // the agent loop. `null`/omitted means the BRAIN (existing behavior).
@@ -559,13 +561,9 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         if (runs) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id));
         return true;
       } catch (e) {
-        // Persisting the user turn failed (commonly an expired token) — the turn
-        // was NOT saved. Restore the attachments too so the whole message can be
-        // resent, and signal failure so the composer keeps the typed text.
-        // The files go back to the composer that is SHOWING, switched away or not - the same place the
-        // host puts the typed text back (the false return) - so a message is never half-restored.
+        // Persisting the user turn failed (commonly an expired token) — the turn was NOT saved. The files go
+        // back to the composer that is SHOWING (where the host puts the typed text on the false return).
         if (!given) composer.restore(attachments);
-        continueStranded(id); // steers typed while this send was saving: the chat's next turn, never stranded
         if (stillOpen()) setLocalError(e instanceof Error ? e.message : 'Send failed');
         return false;
       } finally {
@@ -583,7 +581,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending, messages, repliedRef: autoRepliedChatIdRef, reply: replyToTrailingTurn });
 
   const retryLastTurn = useCallback((): boolean => {
-    if (chatId == null || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
+    if (chatId == null || sendingRef.current.has(chatId) || isLive(chatId)) return false;
     const index = unansweredTurnIndex(messages);
     if (index < 0) return false;
     const turn = messages[index];
@@ -659,7 +657,8 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     messages,
     loadingMessages,
     reloadMessages,
-    sending: localSending || snapshot.running,
+    sending: localSending || isLive(chatId),
+    runLive: isLive(chatId),
     error: localError || snapshot.error,
     /** What the user can DO about `error` (reconnect / upgrade / add a card), when
      *  the failure was actionable. Only meaningful for a RUN error — a local error

@@ -7,7 +7,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const isRunning = vi.hoisted(() => vi.fn(() => false));
+const isRunning = vi.hoisted(() => vi.fn((_chatId?: unknown) => false));
 const createChat = vi.hoisted(() => vi.fn(async () => ({ id: 77 })));
 const reachedTools = new Error("reached the tool catalog");
 

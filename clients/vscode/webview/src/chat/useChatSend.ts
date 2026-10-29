@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { useChatTurns, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, useChatTurns, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { request } from '../vscodeBridge';
 import { childTarget, steerRun, type useChatChildren } from './chatChildren';
 import type { QueuedTurn } from './VsCodeComposer';
@@ -29,22 +29,14 @@ async function requestLimbic(text: string): Promise<string> {
   }
 }
 
-/**
- * What the turn door is told about the chat's run. A send is IN FLIGHT from the moment it starts
- * fetching its per-turn limbic block (`preparing`, up to 4 s) - turns typed then are held behind it -
- * but the run is LIVE, and can be steered, only once `conv.sending`: in the fetch window there is no
- * run to speak to, and a steer there would start the later turn ahead of the one still getting ready.
- */
-export function chatRunLiveness(sending: boolean, preparing: boolean): { running: boolean; steerable: boolean } {
-  return { running: sending || preparing, steerable: sending };
-}
-
-export function useChatSend({ conv, chatId, input, setInput, recipient, liveChildren, setTurnLimbic, reloadChats }: {
+export function useChatSend({ conv, chatId, input, setInput, recipient, chooseRecipient, liveChildren, setTurnLimbic, reloadChats }: {
   conv: UseBrainConversation;
   chatId: number | null;
   input: string;
   setInput: Dispatch<SetStateAction<string>>;
   recipient: DirectedRecipient | null;
+  /** Point the composer at a participant again (`useRecipientChoice().choose`) - a restored addressed turn keeps its addressee. */
+  chooseRecipient: (to: DirectedRecipient | null) => void;
   liveChildren: ReturnType<typeof useChatChildren>;
   setTurnLimbic: (block: string) => void;
   reloadChats: () => void;
@@ -111,7 +103,15 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
   // says nothing (chat #133). The queue is FIFO, one per completed run (each stays a
   // distinct steerable turn), never flushed across a chat switch, and cleared with it.
   const turns: ChatTurns<QueuedTurn> = useChatTurns<QueuedTurn>({
-    ...chatRunLiveness(conv.sending, preparing),
+    // In flight from the start of the limbic fetch (a turn typed then is HELD behind it); steerable only
+    // while the run store says the run is live - one source, the same one the Send label reads.
+    ...chatDoorLiveness(conv, preparing),
+    // An addressed turn whose send was not kept after the chat changed returns to the box with its addressee.
+    restore: (m) => {
+      setInput((cur) => cur || m.text);
+      restoreAttachments(m.attachments ?? []);
+      chooseRecipient(m.recipient);
+    },
     runKey: chatId,
     send: (m) => dispatchSend(m.text, m.recipient, m.attachments),
     textOf: (m) => m.text,

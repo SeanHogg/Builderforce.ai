@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
-import { useChatTurns, type ChatTurns, type ChatTurnsOptions } from './useChatTurns';
+import { chatDoorLiveness, useChatTurns, type ChatTurns, type ChatTurnsOptions } from './useChatTurns';
 import { useChatCreation } from './useChatCreation';
 import { drainRunSteering, hasRunInterrupt, resetRunSteering } from './runSteering';
 
@@ -259,6 +259,19 @@ describe('useChatTurns — a typed stop', () => {
   });
 });
 
+describe('chatDoorLiveness', () => {
+  it('takes both flags from the one store state: a saving send HOLDS, only a live run is STEERED', () => {
+    // Nothing in flight.
+    expect(chatDoorLiveness({ sending: false, runLive: false })).toEqual({ running: false, steerable: false });
+    // A send saving its row (no run yet): turns typed now are held in order.
+    expect(chatDoorLiveness({ sending: true, runLive: false })).toEqual({ running: true, steerable: false });
+    // A run executing, or being made for a continuation (the claim): steered.
+    expect(chatDoorLiveness({ sending: true, runLive: true })).toEqual({ running: true, steerable: true });
+    // The editor's own pre-send work counts as in flight but never as a live run.
+    expect(chatDoorLiveness({ sending: false, runLive: false }, true)).toEqual({ running: true, steerable: false });
+  });
+});
+
 describe('useChatTurns — a mid-run message steers by default (PRD 35 E10)', () => {
   beforeEach(() => { stopRun.mockClear(); resetRunSteering(); });
 
@@ -350,12 +363,13 @@ describe('useChatTurns — a mid-run message steers by default (PRD 35 E10)', ()
     expect(send).toHaveBeenCalledWith('second turn');
   });
 
-  it('a turn addressed to a participant never goes to a chat\'s run or inbox: it stays its own, addressee intact', async () => {
+  it('a turn addressed to a participant, not kept after a chat switch, goes back to the COMPOSER - never to a queue or a run (BLOCKER C)', async () => {
     type Turn = { text: string; to: string | null };
     let settle!: (kept: boolean) => void;
     const send = vi.fn(() => new Promise<boolean>((resolve) => { settle = resolve; }));
+    const restore = vi.fn();
     const props = (running: boolean, runKey: number): ChatTurnsOptions<Turn> =>
-      ({ running, runKey, send, textOf: (t) => t.text, isDirected: (t) => t.to != null });
+      ({ running, runKey, send, restore, textOf: (t) => t.text, isDirected: (t) => t.to != null });
     const { result, rerender } = renderHook((p: ChatTurnsOptions<Turn>) => useChatTurns<Turn>(p), { initialProps: props(true, 19) });
     await act(async () => { await result.current.queueAfter({ text: '@dev look', to: 'dev' }); });
     await act(async () => { rerender(props(false, 19)); });
@@ -364,8 +378,22 @@ describe('useChatTurns — a mid-run message steers by default (PRD 35 E10)', ()
     await act(async () => { rerender(props(false, 20)); });
     await act(async () => { settle(false); });
 
+    expect(restore).toHaveBeenCalledWith({ text: '@dev look', to: 'dev' });
     expect(drainRunSteering(19)).toEqual([]);
-    expect(result.current.queued.items.map((i) => i.value)).toEqual([{ text: '@dev look', to: 'dev' }]);
+    expect(drainRunSteering(20)).toEqual([]);
+    // Chat 20's queue is untouched: nothing of chat 19's was posted into it.
+    expect(result.current.queued.items).toEqual([]);
+  });
+
+  it('a send that throws synchronously is a send not kept: the turn is put back, never lost', async () => {
+    const send = vi.fn(() => { throw new Error('bridge closed'); });
+    const { result, rerender } = mount({ running: true, runKey: 59, send });
+    await act(async () => { await result.current.queueAfter('keep me'); });
+
+    await act(async () => { rerender({ running: false, runKey: 59, send }); });
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(result.current.queued.items.map((i) => i.value)).toEqual(['keep me']);
   });
 
   it('does not jump ahead of turns already held: it waits behind them', async () => {

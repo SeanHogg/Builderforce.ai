@@ -12,6 +12,7 @@ import type { RunKey } from './runTypes';
 
 export function beginRun(c: RunCell, outcomeKey?: RunKey): void {
   c.running = true;
+  c.claim = null; // a run that started under a claim consumes it
   c.error = '';
   c.errorAction = null;
   c.streamingText = '';

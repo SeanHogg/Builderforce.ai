@@ -12,6 +12,7 @@ const door = vi.hoisted(() => ({
 }));
 
 vi.mock('@seanhogg/builderforce-brain-embedded', () => ({
+  chatDoorLiveness: (conv: { sending: boolean; runLive: boolean }) => ({ running: conv.sending, steerable: conv.runLive }),
   useChatTurns: (options: Record<string, unknown>) => {
     door.options = options;
     return { queued: { items: [], count: 0, remove: vi.fn() }, submit: door.submit, queueAfter: door.queueAfter, stop: door.stop, steers: () => true };
@@ -30,17 +31,18 @@ function conversation(pending = [notes]) {
   const send = vi.fn(async () => true);
   const removeAttachment = vi.fn();
   const restoreAttachments = vi.fn();
-  const conv = { sending: false, stop: vi.fn(), send, pendingAttachments: pending, removeAttachment, restoreAttachments } as unknown as Conv;
+  const conv = { sending: false, runLive: false, stop: vi.fn(), send, pendingAttachments: pending, removeAttachment, restoreAttachments } as unknown as Conv;
   return { conv, send, removeAttachment, restoreAttachments };
 }
 
 function mount(conv: Conv, input = 'fix the build') {
   const setInput = vi.fn();
+  const chooseRecipient = vi.fn();
   const chats = { activeChatId: 7 } as unknown as Chats;
   const hook = renderHook((props: { conv: Conv }) => useBrainPanelTurns({
-    conv: props.conv, chats, recipient: null, input, setInput, showChatTab: vi.fn(), acceptsHandover: false,
+    conv: props.conv, chats, recipient: null, chooseRecipient, input, setInput, showChatTab: vi.fn(), acceptsHandover: false,
   }), { initialProps: { conv } });
-  return { hook, setInput };
+  return { hook, setInput, chooseRecipient };
 }
 
 beforeEach(() => {
@@ -97,6 +99,28 @@ describe('the web panel\'s turn door and the composer\'s attachments', () => {
     await sendTurn({ text: 'a held turn', addressedTo: null });
 
     expect(send).toHaveBeenCalledWith('a held turn', { addressedTo: null, attachments: [] });
+  });
+
+  it('gives the door the run store\'s liveness: sending HOLDS, only a live run is STEERED', () => {
+    const { conv } = conversation();
+    (conv as unknown as { sending: boolean; runLive: boolean }).sending = true;
+    mount(conv);
+
+    expect(door.options).toMatchObject({ running: true, steerable: false });
+  });
+
+  it('puts an addressed turn whose send was not kept after a chat switch back in the box: text, files, addressee', () => {
+    const { conv, restoreAttachments } = conversation();
+    const { setInput, chooseRecipient } = mount(conv);
+    const restore = door.options?.restore as (turn: BrainPanelTurn) => void;
+    const dev = { kind: 'agent', ref: 'dev', label: 'dev' } as never;
+
+    restore({ text: '@dev look', addressedTo: dev, attachments: [notes] });
+
+    const put = setInput.mock.calls.map((c) => c[0]).find((v) => typeof v === 'function') as (cur: string) => string;
+    expect(put('')).toBe('@dev look');
+    expect(restoreAttachments).toHaveBeenCalledWith([notes]);
+    expect(chooseRecipient).toHaveBeenCalledWith(dev);
   });
 
   it('hands the door the files a steer would carry', () => {

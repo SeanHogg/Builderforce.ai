@@ -28,6 +28,13 @@ export interface RunSteerMessage {
    * that shows the person's words itself as it queues them (the editor's `say`) leaves it unset.
    */
   persist?: boolean;
+  /**
+   * A row for these words already exists in the chat (they were said while a run was starting and
+   * saved with the send). Explicit, never inferred from the other flags: a host that queues
+   * `{ fromPerson: true }` alone (the editor's `say`) means NOT saved by this surface. A continuation
+   * (`brain-embedded/src/runStore/continueChat.ts`) saves only the words that are not `saved`.
+   */
+  saved?: boolean;
 }
 
 const inboxes = new Map<number, RunSteerMessage[]>();
@@ -39,11 +46,11 @@ const interruptListeners = new Map<number, Set<() => void>>();
  * Queue one message for a run's next turn. Blank text is ignored. `interrupt` also
  * aborts the run's interruptible step now and skips the rest of its turn's calls.
  */
-export function queueRunSteering(runKey: number, text: string, opts?: { interrupt?: boolean; attachments?: unknown; fromPerson?: boolean; persist?: boolean }): void {
+export function queueRunSteering(runKey: number, text: string, opts?: { interrupt?: boolean; attachments?: unknown; fromPerson?: boolean; persist?: boolean; saved?: boolean }): void {
   const trimmed = text.trim();
   if (!trimmed) return;
   const queue = inboxes.get(runKey) ?? [];
-  queue.push({ text: trimmed, attachments: opts?.attachments, ...(opts?.fromPerson ? { fromPerson: true } : {}), ...(opts?.persist ? { persist: true } : {}) });
+  queue.push({ text: trimmed, attachments: opts?.attachments, ...(opts?.fromPerson ? { fromPerson: true } : {}), ...(opts?.persist ? { persist: true } : {}), ...(opts?.saved ? { saved: true } : {}) });
   inboxes.set(runKey, queue);
   if (!opts?.interrupt) return;
   interrupting.add(runKey);

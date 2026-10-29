@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { BrainPersistenceAdapter } from './config';
 import { getRunDriver } from './runDriver';
-import { continueOnSettle, releaseContinuation } from './runStore/continueChat';
+import { continueOnSettle, releaseContinuation, type ContinueBinding } from './runStore/continueChat';
 import type { BrainRunRequest } from './runStore/runTypes';
 
 /**
@@ -12,9 +12,9 @@ import type { BrainRunRequest } from './runStore/runTypes';
  *
  * Returns `bind(chatId)`, called at each launch. The binding reads the conversation's NEWEST
  * persistence and `prepareRun` at the time it is used (a ref, not a capture), and is released when
- * the conversation unmounts - nothing is left to compose words for a view that is gone.
- * Only where the run executes HERE: a host-driven run (the editor's webview) settles elsewhere,
- * and its host wakes its own.
+ * the conversation unmounts - only the bindings THIS conversation made, so a newer conversation over
+ * the same chat keeps its own. Only where the run executes HERE: a host-driven run (the editor's
+ * webview) settles elsewhere, and its host wakes its own.
  */
 export function useContinuation(
   persistence: BrainPersistenceAdapter,
@@ -23,20 +23,21 @@ export function useContinuation(
   const latest = useRef({ persistence, prepareRun });
   // eslint-disable-next-line react-hooks/refs
   latest.current = { persistence, prepareRun };
-  const bound = useRef(new Set<number>());
+  const bound = useRef(new Map<number, ContinueBinding>());
   useEffect(() => {
-    const ids = bound.current;
+    const mine = bound.current;
     return () => {
-      for (const id of ids) releaseContinuation(id);
-      ids.clear();
+      for (const [chatId, binding] of mine) releaseContinuation(chatId, binding);
+      mine.clear();
     };
   }, []);
   return useCallback((chatId: number) => {
     if (getRunDriver()) return;
-    bound.current.add(chatId);
-    continueOnSettle(chatId, {
+    const binding: ContinueBinding = {
       ports: () => latest.current.persistence,
       prepareRun: (id) => (latest.current.prepareRun ? latest.current.prepareRun(id) : Promise.resolve({})),
-    });
+    };
+    bound.current.set(chatId, binding);
+    continueOnSettle(chatId, binding);
   }, []);
 }
