@@ -49,6 +49,24 @@ describe("the run's wiring", () => {
     expect(events[1]).toEqual({ kind: "model.preflight", step: 0, status: "ok", notices: [] });
   });
 
+  it("asks for the run's pin on turn 1 — the RunPolicy.pinnedModel reaches the transport, strictly when the policy says so", async () => {
+    const seen: ModelRequest[] = [];
+    const answers = [(request: ModelRequest) => { seen.push(request); return { content: "Done." }; }];
+    await runAgent({
+      task: TEST_TASK,
+      policy: { ...TEST_POLICY, pinnedModel: "vendor/pinned", modelOptions: { strictPin: true, excludeModels: ["vendor/avoid"] } },
+      ports: ports(9, answers, [], { n: 0 }),
+    });
+    expect(seen[0]).toMatchObject({ model: "vendor/pinned", strict: true, excludeModels: ["vendor/avoid"] });
+  });
+
+  it("asks for no model when the policy holds no pin", async () => {
+    const seen: ModelRequest[] = [];
+    const answers = [(request: ModelRequest) => { seen.push(request); return { content: "Done." }; }];
+    await runAgent({ task: TEST_TASK, policy: TEST_POLICY, ports: ports(10, answers, [], { n: 0 }) });
+    expect(seen[0]?.model).toBeUndefined();
+  });
+
   it("acknowledges a steered message with steer.applied before the turn it reaches", async () => {
     const events: RunEvent[] = [];
     const seen: string[] = [];

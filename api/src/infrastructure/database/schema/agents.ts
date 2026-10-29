@@ -1524,8 +1524,8 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
    *  migration 0283: client/IDE/on-prem runs have no cloud execution and instead
    *  key on `clientRunId`. */
   executionId:      integer('execution_id').unique(),
-  /** Where the outcome came from: 'cloud' (default) | 'onprem' | 'ide' | 'external'
-   *  (migration 0283). Lets analytics split learned-routing quality by surface. */
+  /** Where the outcome came from: 'cloud' (default) | 'onprem' | 'ide' | 'external' | 'canvas'
+   *  (migration 0283; no CHECK, so 'canvas' needed no migration). Lets analytics split learned-routing quality by surface. */
   source:           varchar('source', { length: 16 }).notNull().default('cloud'),
   /** The client's own idempotency key for a NON-cloud run (no execution id).
    *  Partial-unique so client runs upsert on it while cloud rows (NULL) don't

@@ -31,7 +31,7 @@ export function canvasOutcomeRequest(
     ...wireCost(row),
     clientRunId: run.clientRunId,
     model,
-    source: 'external',
+    source: 'canvas',
     terminalStatus: canvasTerminalStatus(row, run.stopped),
     steps: row.steps,
     ...(run.projectId != null ? { projectId: run.projectId } : {}),

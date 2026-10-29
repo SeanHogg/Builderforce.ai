@@ -65,6 +65,39 @@ describe("compaction summarizer", () => {
   });
 });
 
+describe("compaction summary rides the run's routing", () => {
+  it("carries the pin, its strictness and the models the run routes around", async () => {
+    const { calls, summary } = recorder();
+    const model: RunPorts["model"] = {
+      complete: async (request) => { calls.push({ via: "complete", request }); return summary; },
+      summarize: async (request) => { calls.push({ via: "summarize", request }); return summary; },
+    };
+    const ctx = policyCtx({
+      policy: { budgets: { tokens: 1_200 }, pinnedModel: "vendor/pinned", modelOptions: { strictPin: true, excludeModels: ["vendor/disabled"] } },
+      messages: TRANSCRIPT,
+      ports: portsWith(model),
+    });
+
+    await compactionHook.compact(ctx);
+
+    expect(calls[0]?.request).toMatchObject({ model: "vendor/pinned", strict: true, excludeModels: ["vendor/disabled"] });
+  });
+
+  it("asks for no model when the run holds none, and for no exclusions when it routes around none", async () => {
+    const { calls, summary } = recorder();
+    const model: RunPorts["model"] = {
+      complete: async (request) => { calls.push({ via: "complete", request }); return summary; },
+      summarize: async (request) => { calls.push({ via: "summarize", request }); return summary; },
+    };
+    const ctx = policyCtx({ policy: { budgets: { tokens: 1_200 } }, messages: TRANSCRIPT, ports: portsWith(model) });
+
+    await compactionHook.compact(ctx);
+
+    expect(calls[0]?.request.model).toBeUndefined();
+    expect(calls[0]?.request.excludeModels).toBeUndefined();
+  });
+});
+
 describe("compaction pins the marked task row", () => {
   it("keeps the current request, still marked, when the transcript opens with an older user message", async () => {
     const model: RunPorts["model"] = {

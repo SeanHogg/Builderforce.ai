@@ -52,7 +52,7 @@ describe('POST /v1/run-outcome — the uniform outcome row', () => {
   it('round-trips a canvas row: the request the client builds is the outcome the use case records', async () => {
     // The body the canvas host sends: the row's own field names beside the routing fields.
     const request = {
-      clientRunId: 'canvas:run-1', model: 'minimaxai/minimax-m3', source: 'external', terminalStatus: 'completed', steps: 4,
+      clientRunId: 'canvas:run-1', model: 'minimaxai/minimax-m3', source: 'canvas', terminalStatus: 'completed', steps: 4,
       projectId: 12, routingSignal: false,
       entryPoint: 'canvas', toolCalls: 3, toolErrors: 1, compactions: 0, stallRecoveries: 2, escalations: 0, verify: 'not-run',
       firstSpawnTurn: null, coveredReadStubs: 0, modelPreflight: 'ok', progressTrips: { circling_read: 1 },
@@ -65,7 +65,7 @@ describe('POST /v1/run-outcome — the uniform outcome row', () => {
     const [, , tenantId, outcome] = mocks.recordClientRunOutcome.mock.calls[0] as unknown as [unknown, unknown, number, Record<string, unknown>];
     expect(tenantId).toBe(7);
     expect(outcome).toMatchObject({
-      clientRunId: 'canvas:run-1', model: 'minimaxai/minimax-m3', source: 'external', terminalStatus: 'completed', steps: 4,
+      clientRunId: 'canvas:run-1', model: 'minimaxai/minimax-m3', source: 'canvas', terminalStatus: 'completed', steps: 4,
       entryPoint: 'canvas', projectId: 12, routingSignal: false, toolCalls: 3, toolErrors: 1, compactions: 0, stallRecoveries: 2, escalations: 0,
       verify: 'not-run', coveredReadStubs: 0, modelPreflight: 'ok', progressTrips: { circling_read: 1 },
     });

@@ -34,7 +34,7 @@ vi.mock('../../infrastructure/cache/readThroughCache', async (importOriginal) =>
 
 const { recordClientRunOutcome } = await import('./scoreRunOutcome');
 
-const base: NormalizedRunOutcome = { clientRunId: 'canvas:1', source: 'external', model: 'm', terminalStatus: 'completed', steps: 3, entryPoint: 'canvas' };
+const base: NormalizedRunOutcome = { clientRunId: 'canvas:1', source: 'canvas', model: 'm', terminalStatus: 'completed', steps: 3, entryPoint: 'canvas' };
 const record = (outcome: NormalizedRunOutcome) => recordClientRunOutcome({} as never, {} as never, 7, outcome);
 
 beforeEach(() => {
@@ -49,6 +49,16 @@ describe('recordClientRunOutcome — routingSignal', () => {
 
     expect(mocks.inserted).toHaveLength(1);
     expect(mocks.inserted[0]).toMatchObject({ tenantId: 7, clientRunId: 'canvas:1', entryPoint: 'canvas', routingSignal: false });
+    expect(mocks.applyOutcomeToRoutingTable).not.toHaveBeenCalled();
+    expect(mocks.bumpOutcomesVersion).not.toHaveBeenCalled();
+  });
+
+  it('does not take a canvas report's word that it teaches: the server decides, by entry point or by source', async () => {
+    await record({ ...base, routingSignal: true });
+    await record({ ...base, clientRunId: 'canvas:2', source: 'external', entryPoint: 'canvas', routingSignal: undefined });
+    await record({ ...base, clientRunId: 'canvas:3', source: 'canvas', entryPoint: undefined, routingSignal: true });
+
+    expect(mocks.inserted.map((row) => row.routingSignal)).toEqual([false, false, false]);
     expect(mocks.applyOutcomeToRoutingTable).not.toHaveBeenCalled();
     expect(mocks.bumpOutcomesVersion).not.toHaveBeenCalled();
   });

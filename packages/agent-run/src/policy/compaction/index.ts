@@ -49,6 +49,7 @@ import {
   type CompactionSummarizer,
 } from "./compact.js";
 import { priceTierBoundary } from "@builderforce/model-catalog";
+import { nextTurn } from "@builderforce/run-policy";
 import { compactionReserve } from "./reserve.js";
 import type { PackMessage } from "./pack.js";
 
@@ -93,7 +94,16 @@ function transportSummarizer(ctx: PolicyContext): CompactionSummarizer {
     try {
       // A surface that shows its turns to a person answers a summary on its own path.
       const model = ctx.ports.model;
-      const asked = { messages: request.messages, maxTokens: request.max_tokens };
+      // The summary rides the model the run is on and the routing it asked for — its pin and
+      // how strictly, the models it routes around — never a fresh Auto pick that could land on
+      // a model the run avoids. The policy's own ask (`nextTurn`), so a pin it released stays released.
+      const ask = ctx.state.model ? nextTurn(ctx.state.model, { hasTools: false }) : undefined;
+      const asked = {
+        messages: request.messages,
+        maxTokens: request.max_tokens,
+        ...(ask?.model ? { model: ask.model, strict: ask.strict } : {}),
+        ...(ask && ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {}),
+      };
       const completion = model.summarize ? await model.summarize(asked, ctx.signal) : await model.complete(asked, ctx.signal);
       const text = completion.content?.trim();
       return text ? text : null;

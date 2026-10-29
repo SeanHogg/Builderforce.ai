@@ -25,7 +25,7 @@ import { parseRunOutcomeTelemetry, type RunOutcomeTelemetry } from './runOutcome
 export type TerminalStatus = 'completed' | 'failed' | 'cancelled';
 
 /** Where the run executed. Anything non-'cloud' has no `executions` row. */
-export type OutcomeSource = 'cloud' | 'onprem' | 'ide' | 'external';
+export type OutcomeSource = 'cloud' | 'onprem' | 'ide' | 'external' | 'canvas';
 
 /** Path of the write-back door, relative to the gateway base. */
 export const RUN_OUTCOME_PATH = '/llm/v1/run-outcome';
@@ -90,6 +90,16 @@ export interface NormalizedRunOutcome extends RunOutcomeTelemetry {
   routingSignal?: boolean;
 }
 
+/**
+ * Whether an outcome teaches the routing table — decided by the SERVER, never taken on the
+ * client's word. A Creation Canvas turn (by the row's entry point or by its source) is not
+ * evidence about CODING models, whatever `routingSignal` the body claimed; any other run
+ * teaches unless it said it should not.
+ */
+export function carriesRoutingSignal(o: Pick<NormalizedRunOutcome, 'routingSignal' | 'entryPoint' | 'source'>): boolean {
+  return o.entryPoint !== 'canvas' && o.source !== 'canvas' && o.routingSignal !== false;
+}
+
 function str(v: unknown): string {
   return typeof v === 'string' ? v.trim() : '';
 }
@@ -127,7 +137,7 @@ export function parseRunOutcomeRequest(
   // 'cloud' is deliberately NOT accepted off the wire: a cloud run has an executions
   // row and is scored server-side, so a client claiming to be one would double-count.
   const source: OutcomeSource =
-    b.source === 'onprem' || b.source === 'ide' || b.source === 'external' ? b.source : 'external';
+    b.source === 'onprem' || b.source === 'ide' || b.source === 'external' || b.source === 'canvas' ? b.source : 'external';
 
   const projectId = num(b.projectId);
   const taskId = num(b.taskId);

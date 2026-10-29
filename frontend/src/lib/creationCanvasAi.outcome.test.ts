@@ -73,7 +73,7 @@ describe('a canvas run’s uniform outcome row', () => {
       { clientRunId: 'canvas:t:1', stopped: false, projectId: 12 },
     );
 
-    expect(request).toMatchObject({ entryPoint: 'canvas', terminalStatus: 'completed', routingSignal: false, projectId: 12, source: 'external' });
+    expect(request).toMatchObject({ entryPoint: 'canvas', terminalStatus: 'completed', routingSignal: false, projectId: 12, source: 'canvas' });
   });
 
   it('carries the run’s tokens and cost to the door, once', () => {

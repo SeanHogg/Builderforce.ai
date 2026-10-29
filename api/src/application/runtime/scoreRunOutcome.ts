@@ -20,6 +20,7 @@ import type { Env } from '../../env';
 import { approvals, executions, llmUsageLog, pullRequests, tasks, toolAuditEvents, runModelOutcomes } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
+  carriesRoutingSignal,
   normalizeActionType,
   type NormalizedRunOutcome,
   type OutcomeSource,
@@ -202,6 +203,8 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
       costMc,
       approved: !!o.approved,
     });
+    // The server's call: a canvas turn never teaches coding routing, whatever the body said.
+    const routingSignal = carriesRoutingSignal(o);
     const plan = await resolveTenantPlan(env, tenantId).then((p) => p.effectivePlan).catch(() => 'free' as const);
 
     const inserted = await runTelemetryDatabase(db)
@@ -228,7 +231,7 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
         // The PRD 35 §8.2 uniform outcome row the client's run built (entry point,
         // tool counts, tokens, the efficiency fields) — validated by the shared contract.
         ...runOutcomeTelemetryColumns(o),
-        routingSignal: o.routingSignal !== false,
+        routingSignal,
       })
       .onConflictDoNothing({ target: runModelOutcomes.clientRunId, where: isNotNull(runModelOutcomes.clientRunId) })
       .returning({ id: runModelOutcomes.id });
@@ -238,7 +241,7 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
     // client run, but completion + efficiency still carry real reliability signal.
     // A report that is not a routing signal (a Creation Canvas turn is not evidence about
     // coding models) is recorded and goes no further: not into the blob, not into the datasets.
-    if (inserted.length > 0 && o.routingSignal !== false) {
+    if (inserted.length > 0 && routingSignal) {
       await applyOutcomeToRoutingTable(env, db, {
         tenantId,
         projectId: o.projectId ?? null,
