@@ -8,7 +8,8 @@ import { projectFacts } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { QA_CACHE_SOURCE } from './projectFactsStore';
+import type { Env } from '../../env';
+import { QA_CACHE_SOURCE, bumpProjectFactsVersion } from './projectFactsStore';
 
 /** A fact never returned by recall within this window is expired by the sweep. */
 export const UNRECALLED_DECAY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
@@ -50,6 +51,7 @@ export function decayUnrecalled<T extends { lastRecalledAt?: string | null }>(
  * is not touched: a sweep is not a rewrite.
  */
 export async function sweepUnrecalledFactDecay(
+  env: Env,
   db: Db,
   tenantId: number,
   projectId: number,
@@ -95,6 +97,8 @@ export async function sweepUnrecalledFactDecay(
       reportCaughtError(err, { source: 'project-facts', operation: 'sweep-unrecalled-fact-decay', level: 'error', context: { tenantId, projectId } });
       return [] as Array<{ key: string }>;
     });
+  // An expired fact stops being recalled and drawn: invalidate this project's cached reads and graphs.
+  if (expired.length > 0) await bumpProjectFactsVersion(env, tenantId, projectId);
   return expired.length;
 }
 
@@ -116,13 +120,14 @@ export async function listProjectFactScopes(db: Db): Promise<Array<{ tenantId: n
 
 /** Decay across every project scope, for the scheduled sweep. */
 export async function sweepAllUnrecalledFactDecay(
+  env: Env,
   db: Db,
   opts?: { now?: Date; windowMs?: number },
 ): Promise<number> {
   const scopes = await listProjectFactScopes(db);
   let expired = 0;
   for (const scope of scopes) {
-    expired += await sweepUnrecalledFactDecay(db, scope.tenantId, scope.projectId, opts).catch((err: unknown) => {
+    expired += await sweepUnrecalledFactDecay(env, db, scope.tenantId, scope.projectId, opts).catch((err: unknown) => {
       // The per-scope sweep already reports its own failure; this catch exists so one
       // broken tenant cannot abort the loop and leave every LATER scope undecayed.
       // Reporting keeps the reason visible instead of folding it into the total.

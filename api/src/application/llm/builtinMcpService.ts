@@ -123,7 +123,7 @@ import { deleteSpec, getSpec, importSpec, listSpecs } from '../prd/specStore';
 import { SecurityTicketAccessService } from '../security/SecurityTicketAccessService';
 import { hostDirectoryHashReader, parseFactFileAnchors, type FactOriginCost } from './projectFactsStore';
 import { recallProjectFacts } from './projectFactsRecall';
-import { upsertProjectFact } from './projectFactsWrite';
+import { writeProjectFact } from '../knowledge/writeProjectFact';
 import type { Task } from '../../domain/task/Task';
 import {
   amendActiveLegalDoc,
@@ -897,7 +897,10 @@ const CATALOG: BuiltinTool[] = [
       // the existing origin-cost triple — there is no standalone origin-model column,
       // and a half-known cost is stored as none (see originCostColumns).
       const fileAnchors = parseFactFileAnchors(a.fileAnchors);
-      const ok = await upsertProjectFact(ctx.env, ctx.db, ctx.tenantId, num(a.projectId), str(a.key), str(a.content), 'brain', {
+      const ok = await writeProjectFact({ env: ctx.env, db: ctx.db, tenantId: ctx.tenantId, projectId: num(a.projectId) }, {
+        key: str(a.key), content: str(a.content), source: 'brain',
+        // A fact the caller anchors is a belief about those files: it corrects an older one (single-subject sweep).
+        retireByAnchor: true,
         ...(ctx.executionId != null ? { originExecutionId: ctx.executionId } : {}),
         ...(ctx.origin ? { origin: ctx.origin } : {}),
         ...(fileAnchors ? { fileAnchors } : {}),

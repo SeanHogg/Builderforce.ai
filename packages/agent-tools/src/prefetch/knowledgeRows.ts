@@ -17,7 +17,7 @@
  * `knowledge.ask` is the knowledge index's row and lives with it.
  */
 
-import { srcRef, type ReviewPlan, type ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
+import { srcRef, type PlanDetail, type ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
 import { extractFocusPaths } from '../focusPaths.js';
 import { planDetailLine, reviewReportText } from '../knowledge/reviewText.js';
 import { OPEN_IN_GRAPH_LABEL_KEY, OPEN_KNOWLEDGE_GRAPH_COMMAND } from './codePackExecutors.js';
@@ -40,6 +40,17 @@ export const OPEN_KNOWLEDGE_REVIEW_COMMAND = 'builderforce.openKnowledgeReview';
 /** "Choose a folder to review" — the in-view review chip's label. */
 export const CHOOSE_FOLDER_LABEL_KEY = 'prefetch.chip.chooseFolderToReview';
 
+/**
+ * "Show me the graph" in the ways people say it — deterministic, never a model call. A
+ * view word (graph, layers, duplicates, cycles, clones, dependencies) after show/open/see,
+ * or a graph the request names ("the knowledge graph of X", "the dependency graph").
+ */
+const GRAPH_PATTERNS: RegExp[] = [
+    /\b(show|open|see|display|view)( me)?( the| a)? (knowledge[- ]|dependency[- ]|import[- ]|code[- ])?graph\b/i,
+    /\b(show|open|see|display|view)( me)?( the)? (layers|layering|duplicates|clones|cycles|dead code|unused code|dependencies)( in| on| of)? (the )?(knowledge[- ]?)?(graph|map)\b/i,
+    /\b(show|open|see|display|view)( me)? the (code )?(layers|layering|duplicates|clones)\b/i,
+];
+
 export const KNOWLEDGE_PREFETCH_ROWS: readonly PrefetchRow[] = [
     {
         id: KNOWLEDGE_REVIEW_DIR, kind: 'answer', sideEffect: 'write', surfaces: WHERE, slash: '/review',
@@ -54,7 +65,7 @@ export const KNOWLEDGE_PREFETCH_ROWS: readonly PrefetchRow[] = [
     {
         id: KNOWLEDGE_GRAPH, kind: 'answer', sideEffect: 'read', surfaces: WHERE, slash: '/graph',
         patterns: [/\b(show|open)( me)? the (knowledge[- ])?graph\b/i],
-        examples: ['show me the graph', 'open the knowledge graph', 'show me the layers', 'show the duplicates in the graph'],
+        examples: ['show me the graph', 'open the knowledge graph', 'show me the layers', 'show the duplicates in the graph', 'show me the dependency graph', 'show me the knowledge graph of src/'],
         budgetMs: GRAPH_BUDGET_MS, labelKey: `prefetch.action.${KNOWLEDGE_GRAPH}`,
     },
 ];
@@ -80,8 +91,9 @@ export function graphFocusOf(request: string, rootId: string): string[] {
 export interface KnowledgeReviewSession {
     rootId: string;
     title: string;
-    plan(signal: AbortSignal): Promise<ReviewPlan>;
-    review(plan: ReviewPlan, signal: AbortSignal): Promise<ReviewReport>;
+    /** The walk and its numbers; handed back to {@link review} so the confirmed run does not re-walk (§4.3). */
+    plan(signal: AbortSignal): Promise<PlanDetail>;
+    review(plan: PlanDetail, signal: AbortSignal): Promise<ReviewReport>;
 }
 
 export interface KnowledgeRowsHost {
@@ -98,9 +110,14 @@ export function openInGraphChip(command: string, args: Record<string, unknown>):
     return { labelKey: OPEN_IN_GRAPH_LABEL_KEY, command, args };
 }
 
+/** What a host's `showGraph` answers: its text and the ONE Open-in-graph chip, carrying the root and the focus refs. */
+export function graphShown(text: string, rootId: string, focus: string[]): { text: string; chip: PrefetchChip } {
+    return { text, chip: openInGraphChip(OPEN_KNOWLEDGE_GRAPH_COMMAND, { rootId, focus }) };
+}
+
 export function knowledgePrefetchExecutors(host: KnowledgeRowsHost, now: () => number = Date.now): Record<string, PrefetchRunner> {
     /** The preview's plan, kept for the confirmed run of the SAME request (the plan is reused, §4.3). */
-    const planned = new Map<string, { at: number; session: KnowledgeReviewSession; plan: ReviewPlan }>();
+    const planned = new Map<string, { at: number; session: KnowledgeReviewSession; plan: PlanDetail }>();
     const fresh = (request: string) => {
         const hit = planned.get(request);
         return hit && now() - hit.at < PLAN_REUSE_MS ? hit : undefined;
@@ -118,7 +135,7 @@ export function knowledgePrefetchExecutors(host: KnowledgeRowsHost, now: () => n
     const review: PrefetchRunner = {
         async preview(request, signal) {
             const p = await plan(request, signal);
-            return p ? planDetailLine(p.plan, p.session.title) : undefined;
+            return p ? planDetailLine(p.plan.plan, p.session.title) : undefined;
         },
         async run(request, signal): Promise<PrefetchOutput | undefined> {
             const p = await plan(request, signal);
@@ -131,10 +148,10 @@ export function knowledgePrefetchExecutors(host: KnowledgeRowsHost, now: () => n
             const shown = await host.showGraph(p.session.rootId, []);
             return {
                 actionId: KNOWLEDGE_REVIEW_DIR,
-                text: reviewReportText(report, p.plan, p.session.title),
+                text: reviewReportText(report, p.plan.plan, p.session.title),
                 ...(shown.chip ? { chips: [shown.chip] } : {}),
                 data: {
-                    rootId: report.rootId, files: p.plan.files, unchanged: p.plan.unchanged, judged: report.judged,
+                    rootId: report.rootId, files: p.plan.plan.files, unchanged: p.plan.plan.unchanged, judged: report.judged,
                     unjudged: report.unjudged, factsWritten: report.factsWritten, aborted: report.aborted,
                 },
             };

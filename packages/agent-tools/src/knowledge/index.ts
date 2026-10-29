@@ -23,7 +23,7 @@ export {
 } from './dependencyCruiserRules.js';
 export {
     KNOWLEDGE_REVIEW_MODEL_CALLS, analysisManifestKey, analysisSha, buildStoredGraph, forcedManifest, indexedSymbolSource,
-    planKnowledgeReview, reviewPacks, runKnowledgeReview, workspaceCodeAnalyzers,
+    planKnowledgeReview, planKnowledgeReviewDetail, reviewPacks, runKnowledgeReview, workspaceCodeAnalyzers,
     type KnowledgeReviewOptions, type KnowledgeReviewPorts, type StoredGraphArgs, type WorkspaceAnalyzersDeps,
 } from './reviewRunner.js';
 export { planDetailLine, reviewReportText } from './reviewText.js';
@@ -42,3 +42,13 @@ export {
     canDeleteFact, factRightsCache,
     type FactAuthor, type FactRightsCache, type FactViewer, type FactsListing,
 } from './factRights.js';
+export { createShaCache, type ShaCache, type ShaCacheOptions } from './shaCache.js';
+export { fingerprintSha, workspaceFingerprint, type WorkspaceFingerprint } from './workspaceFingerprint.js';
+export {
+    analyseWorkspace, forgetWorkspaceAnalyses, readRepoGraph, workspaceAnalysisKey,
+    type RepoGraphPort, type WorkspaceAnalysis, type WorkspaceAnalysisDeps,
+} from './workspaceAnalysis.js';
+export {
+    currentFileHashes, editedManifestKey, markFileEdited, watchFileEdits,
+    type FileEditPorts, type FileEditResult, type WatchFileEditsArgs,
+} from './fileEdits.js';

@@ -71,8 +71,15 @@ export function buildOutcomeRow(input: OutcomeRowInput): RunOutcomeRow {
     contextPackTokens: contextPackTokens(state),
     ...(preflight ? { modelPreflight: preflight } : {}),
     unkeptReadyClaims: progress?.unkeptTurns ?? 0,
-    progressTrips: { ...(progress?.tripsBySignal ?? {}) },
+    progressTrips: tripsBySignal(progress?.tripsBySignal),
   };
+}
+
+/** The A3 trips by signal, as a plain `{ signal: count }` map (empty when none tripped). */
+function tripsBySignal(bySignal: Partial<Record<string, number>> | undefined): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [signal, n] of Object.entries(bySignal ?? {})) if (n) out[signal] = n;
+  return out;
 }
 
 /** The tokens the context pack adds to every request: its turn-context block, estimated

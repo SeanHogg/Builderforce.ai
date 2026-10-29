@@ -25,5 +25,17 @@ export function findingItems(f: Finding, index: ReadonlyMap<string, KNode>): str
 export function findingRequest(f: Finding, labels: KnowledgeGraphLabels, index: ReadonlyMap<string, KNode>): string {
     const key = camelKind(f.requestKey ?? f.kind);
     const template = labels.fix[key] ?? labels.fix.generic ?? '{items}';
-    return fillTemplate(template, { count: f.nodes.length, ...f.params, items: findingItems(f, index) });
+    // A contradiction names its two sides; one memory did not name falls back to its first two nodes.
+    const sides = { fileA: f.nodes[0] ? labelFor(index, f.nodes[0]) : undefined, fileB: f.nodes[1] ? labelFor(index, f.nodes[1]) : undefined };
+    return fillTemplate(template, { count: f.nodes.length, ...sides, ...f.params, items: findingItems(f, index) });
+}
+
+/**
+ * The sentence a finding's row shows beside its title, when the finding says more than
+ * its nodes do. A contradiction reads as WHICH sections disagree; nothing else has one.
+ */
+export function findingDetail(f: Finding, labels: KnowledgeGraphLabels, index: ReadonlyMap<string, KNode>): string | undefined {
+    if (f.kind !== 'contradiction') return undefined;
+    const named = (v: unknown) => typeof v === 'string' && v.trim() !== '';
+    return named(f.params.fileA) && named(f.params.fileB) ? findingRequest(f, labels, index) : undefined;
 }

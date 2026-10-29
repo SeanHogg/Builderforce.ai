@@ -16,7 +16,12 @@ describe("the on-prem knowledge host", () => {
     expect(knowledgeSurfaceUrl(42)).toMatch(/\/projects\/42\?surface=knowledge$/);
     const shown = await host.showGraph(await host.rootId(), ["src:x::a.ts"]);
     expect(shown.text).toContain(knowledgeSurfaceUrl(42));
-    expect(shown.chip).toBeUndefined();
+    // The chip carries the root and the named files' focus refs — the same shape every host answers with.
+    expect(shown.chip).toEqual({
+      labelKey: "prefetch.chip.openInGraph",
+      command: "builderforce.openKnowledgeGraph",
+      args: { rootId: await host.rootId(), focus: ["src:x::a.ts"] },
+    });
   });
 
   it("opens only folders inside the workspace", async () => {

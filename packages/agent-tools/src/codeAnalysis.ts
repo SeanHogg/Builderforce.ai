@@ -5,7 +5,7 @@ export interface CodeAnalysisSnapshot {
   version: 1;
   id: string;
   capturedAt: string;
-  source: { commit: string | null; branch: string | null; dirty: boolean | null; repository?: string; scope?: string };
+  source: { commit: string | null; branch: string | null; dirty: boolean | null; dirtyHash?: string; repository?: string; scope?: string };
   tools: Array<{ name: string; version: string; status: 'complete' | 'failed'; error?: string }>;
   nodes: string[];
   edges: Array<{ from: string; to: string; circular: boolean }>;

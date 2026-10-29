@@ -21,6 +21,8 @@ export interface KnowledgeGraphState {
     /** The root's stored "before" (Compare), from the host; null when it keeps none. */
     baseline: KnowledgeBaseline | null;
     lens: LensDef;
+    /** The lens the person asked for (or the host opened on); differs from `lens` when it does not apply. */
+    requested: LensDef;
     lenses: LensDef[];
     selected: string | null;
     focus: string[];
@@ -102,7 +104,8 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
     useEffect(() => {
         if (held || !rootId || !source.subscribeLive) return undefined;
         return source.subscribeLive(rootId, (g) => setGraph(g));
-    }, [source, held, rootId]);
+        // `generation`: a finished review may have opened (and so made watchable) this very root.
+    }, [source, held, rootId, generation]);
 
     // A finished review is a new "after", and its previous review the host's new "before".
     const onReviewDone = useCallback((doneRoot: string) => {
@@ -128,11 +131,17 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
         if (!q.trim() || !shown) { setHits(null); return; }
         const found = source.search ? await source.search(shown.scope.rootId, q).catch(() => localSearch(shown, q)) : localSearch(shown, q);
         setHits(found);
-        if (found.length > 0) {
-            setFocus(found.map((h) => h.ref));
-            setSelected(found[0]!.ref);
+        if (found.length === 0) return;
+        const refs = found.map((h) => h.ref);
+        setFocus(refs);
+        // The API searches everything; the loaded graph is only the top of a large one. A hit
+        // outside it is brought in by reloading with those refs as the focus.
+        if (!held && refs.some((r) => !shown.nodes.some((n) => n.ref === r))) {
+            const reloaded = await source.load(shown.scope.rootId, { focus: refs }).catch(() => null);
+            if (reloaded) setGraph(reloaded);
         }
-    }, [shown, source]);
+        setSelected(refs[0]!);
+    }, [shown, source, held]);
 
     const selectRoot = useCallback((id: string) => {
         setRootId(id);
@@ -146,13 +155,13 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
         return {
             status: 'ready',
             scopes: [{ rootId: heldRoot, title: held.title ?? heldRoot, packs: held.graph.scope.packs }],
-            rootId: heldRoot, graph: held.graph, baseline: held.baseline ?? null, lens, lenses, selected, focus, query, hits, review,
+            rootId: heldRoot, graph: held.graph, baseline: held.baseline ?? null, lens, requested: LENSES[lensId], lenses, selected, focus, query, hits, review,
             selectRoot: () => undefined, setLens: setLensId, select: setSelected, setFocus, search,
             reload: () => setGeneration((n) => n + 1),
         };
     }
     return {
-        status, scopes, rootId, graph, baseline, lens, lenses, selected, focus, query, hits, review,
+        status, scopes, rootId, graph, baseline, lens, requested: LENSES[lensId], lenses, selected, focus, query, hits, review,
         selectRoot, setLens: setLensId, select: setSelected, setFocus, search,
         reload: () => setGeneration((n) => n + 1),
     };

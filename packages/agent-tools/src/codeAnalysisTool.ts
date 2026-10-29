@@ -3,6 +3,7 @@ import { defineTool, type ToolDefinition } from './tool.js';
 import { shellRunWithStop } from './git-repo-scope.js';
 import { normalizeAnalysis, type CodeAnalysisSnapshot } from './codeAnalysis.js';
 import { toDependencyCruiserRules } from './knowledge/dependencyCruiserRules.js';
+import { workspaceFingerprint } from './knowledge/workspaceFingerprint.js';
 
 export const ANALYZERS = [
   { name: 'dependency-cruiser', version: '16.10.4', command: 'npm exec --yes --package=dependency-cruiser@16.10.4 --package=typescript@5.6.3 --call="depcruise --config=.builderforce/code-analysis/dependencies.json --output-type=json ."' },
@@ -89,17 +90,14 @@ export function createAnalyzeCodebaseTool(options: AnalyzeCodebaseOptions = {}):
           outputs.push(null); tools.push({ name: analyzer.name, version: analyzer.version, status: 'failed', error: String(error).slice(0, 1000) });
         }
       }
+      const { commit, branch, dirty, dirtyHash } = await workspaceFingerprint(ctx);
       const git = async (command: string) => {
         try { const r = await shellRunWithStop(ctx, command); return r.exitCode === 0 ? (r.stdout ?? '').trim() : null; } catch { return null; }
       };
-      const commit = await git('git rev-parse HEAD');
-      const branch = await git('git branch --show-current');
-      const dirty = await git('git status --porcelain --untracked-files=all');
-      const sourceChanges = dirty?.split('\n').filter((line) => line.trim() && !line.slice(3).replace(/^"|"$/g, '').startsWith('.builderforce/code-analysis/'));
       const remote = (await git('git remote get-url origin'))?.replace(/^git@github.com:/, 'https://github.com/').replace(/\.git$/, '');
       const repository = remote && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/.test(remote) ? remote : undefined;
       const snapshot: CodeAnalysisSnapshot = { version: 1, id, capturedAt: new Date().toISOString(),
-        source: { commit, branch, scope, dirty: dirty === null ? null : !!sourceChanges?.length, ...(repository ? { repository } : {}) }, tools,
+        source: { commit, branch, scope, dirty, ...(dirtyHash ? { dirtyHash } : {}), ...(repository ? { repository } : {}) }, tools,
         ...normalizeAnalysis(outputs[0], outputs[1], outputs[2], scope),
       };
       return { data: { snapshot } };

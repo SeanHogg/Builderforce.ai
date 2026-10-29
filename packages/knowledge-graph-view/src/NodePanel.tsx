@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels } from './labels';
 import { knowledgeAbout, nodeIndex } from './graphModel';
+import { packLabel } from './names';
 import { cssVar } from './scene/themeColors';
 import { button, input, list, muted, primaryButton, quietButton } from './styles';
 import type { FactActions, KnowledgeConfirm, KnowledgeGraphSource } from './types';
@@ -58,6 +59,9 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
     const about = useMemo(() => knowledgeAbout(graph, nodeRef), [graph, nodeRef]);
     const [draft, setDraft] = useState('');
     const [saved, setSaved] = useState(false);
+    /** The last write that failed, shown until the person edits or tries again. */
+    const [failure, setFailure] = useState<'save' | 'delete' | null>(null);
+    const [busy, setBusy] = useState(false);
     const [actions, setActions] = useState<FactActions | undefined>(undefined);
     const [arming, setArming] = useState(false);
     const isFact = node !== undefined && node.origin !== 'extracted' && node.ref.startsWith('fact:');
@@ -66,6 +70,7 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
         let live = true;
         setActions(undefined);
         setArming(false);
+        setFailure(null);
         if (isFact && source.factActions) {
             source.factActions(nodeRef).then((a) => { if (live) setActions(a); }).catch(() => undefined);
         }
@@ -75,8 +80,18 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
     if (!node) return null;
 
     const save = async () => {
-        if (!source.rememberFact || !draft.trim()) return;
-        await source.rememberFact({ content: draft.trim(), ref: nodeRef, rootId: graph.scope.rootId });
+        if (!source.rememberFact || !draft.trim() || busy) return;
+        setBusy(true);
+        setFailure(null);
+        try {
+            await source.rememberFact({ content: draft.trim(), ref: nodeRef, rootId: graph.scope.rootId });
+        } catch {
+            // The draft stays: the person's words are never lost to a failed write.
+            setFailure('save');
+            setBusy(false);
+            return;
+        }
+        setBusy(false);
         setDraft('');
         setSaved(true);
         onChanged();
@@ -90,7 +105,14 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
             setArming(true);
             return;
         }
-        await actions.delete();
+        setFailure(null);
+        try {
+            await actions.delete();
+        } catch {
+            setArming(false);
+            setFailure('delete');
+            return;
+        }
         onChanged();
     };
 
@@ -100,7 +122,7 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
             {node.stale && <p role="status" style={{ margin: 0, fontSize: 12, color: cssVar('violation') }}>{labels.staleMark}</p>}
             <dl style={{ margin: 0, display: 'grid', gap: 4 }}>
                 <Row name={labels.nodeKind} value={labels.legend[node.kind] ?? node.kind} />
-                <Row name={labels.nodePack} value={node.pack} />
+                <Row name={labels.nodePack} value={packLabel(labels, node.pack)} />
                 <Row name={labels.nodePartition} value={node.partition ?? labels.partitionNone} />
                 <Row name={labels.nodeOrigin} value={labels.origins[node.origin]} />
             </dl>
@@ -113,6 +135,7 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
                 )}
                 {arming && <button type="button" style={quietButton} onClick={() => setArming(false)}>{labels.cancel}</button>}
             </div>
+            {failure === 'delete' && <p role="alert" style={{ margin: 0, fontSize: 12, color: cssVar('errorText') }}>{labels.factDeleteFailed}</p>}
             <KnowledgeList title={labels.factsTitle} nodes={about.facts} labels={labels} onSelect={onSelect} />
             <KnowledgeList title={labels.claimsTitle} nodes={about.claims} labels={labels} onSelect={onSelect} />
             {about.facts.length === 0 && about.claims.length === 0 && <p style={{ ...muted, margin: 0 }}>{labels.noFacts}</p>}
@@ -123,13 +146,14 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
                         id={`kg-fact-${nodeRef}`}
                         value={draft}
                         placeholder={labels.addFactPlaceholder}
-                        onChange={(e) => { setDraft(e.target.value); setSaved(false); }}
+                        onChange={(e) => { setDraft(e.target.value); setSaved(false); setFailure(null); }}
                         rows={3}
                         style={{ ...input, padding: 10, resize: 'vertical' }}
                     />
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <button type="submit" style={primaryButton} disabled={!draft.trim()}>{labels.saveFact}</button>
+                        <button type="submit" style={primaryButton} disabled={!draft.trim() || busy}>{labels.saveFact}</button>
                         {saved && <span role="status" style={muted}>{labels.factSaved}</span>}
+                        {failure === 'save' && <span role="alert" style={{ fontSize: 12, color: cssVar('errorText') }}>{labels.factSaveFailed}</span>}
                     </div>
                 </form>
             )}

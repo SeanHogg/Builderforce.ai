@@ -16,7 +16,7 @@ import { readTimelineTail } from '../../domain/shared/timelineTail';
 // cannot reach a row we consolidate.
 import { answerTextOf as displayAnswerTextOf, stripReasoningScratchpad } from '@builderforce/agent-loop';
 import { readProxyChoice } from '../llm/LlmProxyService';
-import { upsertProjectFact } from '../llm/projectFactsWrite';
+import { writeProjectFact } from '../knowledge/writeProjectFact';
 import { currentRequestScope } from '../shared/requestScope';
 import { canAccessChat, verifyChatOwnership, verifyProjectInTenant } from './brainChatGuards';
 import { bumpChatStructure, bumpTeamChats } from './chatCacheVersions';
@@ -153,15 +153,9 @@ export async function archiveChatMemory(
   if (projectId == null || !Number.isInteger(projectId) || projectId <= 0) return;
   const env = args.env ?? (currentRequestScope()?.env as Env | undefined);
   if (!env) return;
-  await upsertProjectFact(
-    env,
-    db,
-    args.tenantId,
-    projectId,
-    `chat-summary:${args.chatId}`,
-    summary,
-    'chat-archive',
-  );
+  await writeProjectFact({ env, db, tenantId: args.tenantId, projectId }, {
+    key: `chat-summary:${args.chatId}`, content: summary, source: 'chat-archive',
+  });
 }
 
 /**

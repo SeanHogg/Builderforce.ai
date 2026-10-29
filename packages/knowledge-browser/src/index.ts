@@ -11,6 +11,8 @@ export { runReviewJob, type ReviewJob, type ReviewPorts } from './reviewJob';
 export { LIST_ALL, type FromReviewWorker, type ReviewPortName, type ReviewStart, type ToReviewWorker } from './reviewProtocol';
 export { openManifest } from './manifestStore';
 export { applyLiveOverlay, LIVE_PAIR_FILES } from './liveOverlay';
+export { watchDirectory, LIVE_DEBOUNCE_MS, type LiveWatchPorts } from './liveWatch';
+export { estimateReview, type CallPricePort } from './reviewEstimate';
 export {
   hostRootId, rootKindOf, normalizePath, isSkippedPath, hashesByContent, contentHash, subtleContentHash,
   metadataHash, textDocument, byteLength, byPath, type KnowledgeDegradedReporter,

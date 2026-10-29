@@ -11,6 +11,7 @@
 import type { ReactNode } from 'react';
 import type { KnowledgeGraphLabels } from './labels';
 import { fillTemplate } from './labels';
+import { packLabel } from './names';
 import type { ReviewRun } from './useReviewRun';
 import { cssVar } from './scene/themeColors';
 import { button, card, heading, muted, primaryButton, quietButton } from './styles';
@@ -44,7 +45,7 @@ export function ReviewProgress({ run, labels, titleOf, onContinue }: ReviewProgr
                 <h3 style={heading}>{fillTemplate(labels.reviewPlanTitle, { title: titleOf(plan.rootId) })}</h3>
                 <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 13, display: 'grid', gap: 2 }}>
                     {Object.entries(plan.byPack).map(([pack, count]) => (
-                        <li key={pack}>{fillTemplate(labels.reviewPlanByPack, { pack, count })}</li>
+                        <li key={pack}>{fillTemplate(labels.reviewPlanByPack, { pack: packLabel(labels, pack), count })}</li>
                     ))}
                     <li>{fillTemplate(labels.reviewPlanUnchanged, { count: plan.unchanged })}</li>
                     {plan.skipped.length > 0 && <li>{fillTemplate(labels.reviewPlanSkipped, { count: plan.skipped.length })}</li>}
@@ -52,6 +53,7 @@ export function ReviewProgress({ run, labels, titleOf, onContinue }: ReviewProgr
                         {fillTemplate(labels.reviewPlanModelCalls, { count: calls })}
                         {estimate?.costUsd !== undefined && ` · ${fillTemplate(labels.reviewPlanCost, { cost: formatCost(estimate.costUsd) })}`}
                     </li>
+                    {estimate?.costUsd === undefined && <li style={muted}>{labels.reviewPlanCostPending}</li>}
                 </ul>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button type="button" style={primaryButton} onClick={() => run.answer(true)}>{labels.reviewConfirm}</button>

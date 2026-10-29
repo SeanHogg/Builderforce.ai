@@ -9,7 +9,10 @@
  *   review  → memory's planReview/reviewDirectory in a Web Worker, with `client.store` as
  *             the KnowledgeStore, `client.judgement` as the JudgementPort, the shared pack
  *             list and an IndexedDB manifest per root (`reviewWorkerClient.ts`)
- *   live    → the directory's `watch` (the web's webcontainer VFS), as a Live overlay
+ *   live    → the directory's `watch` (the web's webcontainer VFS), as a Live overlay — the
+ *             directory is the one a review opened this session, or re-opened by a provider's
+ *             `reopen` (no picker), so Live runs on a root reviewed in an earlier session
+ *   estimate → the plan's model calls × the host's `callPriceUsd` port (none ⇒ calls only)
  *
  * The host supplies the client (built on ITS authenticated fetch), where it can review
  * from (`directorySources`), its worker when its bundler needs one, and its reporter.
@@ -17,14 +20,15 @@
  * this yields the plan, awaits `ctl.confirm`, and only then reviews.
  */
 
-import { factKeyOf, type DirectorySource, type KnowledgeGraph, type NodeRef, type ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
+import { factKeyOf, type DirectorySource, type NodeRef, type ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
 import { KNOWLEDGE_REVIEW_MODEL_CALLS, factRightsCache, humanFactBatch } from '@builderforce/agent-tools/knowledge';
 import type { KnowledgeClient, KnowledgeScopeRecord } from '@builderforce/knowledge-client';
 import type { KnowledgeGraphSource, KnowledgeReviewEvent, ReviewControl, ReviewRequest, ReviewTarget } from '@builderforce/knowledge-graph-view';
 import { openManifest } from './manifestStore';
 import { runReview, type WorkerFactory } from './reviewWorkerClient';
 import type { ReviewPorts } from './reviewJob';
-import { applyLiveOverlay } from './liveOverlay';
+import { watchDirectory } from './liveWatch';
+import { estimateReview, type CallPricePort } from './reviewEstimate';
 import { rootKindOf, type KnowledgeDegradedReporter } from './directorySourceKit';
 
 /** One way a host can get a directory: its workspace, a folder upload or picker, a drive. */
@@ -43,11 +47,11 @@ export interface KnowledgeSourceOptions {
   client: KnowledgeClient;
   directorySources: () => Promise<DirectoryProvider[]>;
   createWorker?: WorkerFactory;
+  /** ≈ USD of one judgement call, for the confirm chip's cost. Absent ⇒ the chip shows calls only. */
+  callPriceUsd?: CallPricePort;
   /** Where a degraded path (no targets, no manifest, a missed live refresh) is reported. */
   onDegraded: KnowledgeDegradedReporter;
 }
-
-const LIVE_DEBOUNCE_MS = 800;
 
 export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGraphSource {
   const { client, onDegraded } = opts;
@@ -70,7 +74,7 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
     }
     return providers;
   };
-  void loadProviders();
+  let providersReady: Promise<DirectoryProvider[]> = loadProviders();
 
   /** Synchronous up to the provider's `open` — the gesture must still be live there. */
   const openFor = (req: ReviewRequest): Promise<DirectorySource | null> => {
@@ -83,17 +87,19 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
       const kind = rootKindOf(req.rootId);
       const repick = providers.find((p) => p.kind === kind && !p.reopen);
       if (repick) return repick.open();
-      const rootId = req.rootId;
-      return (async () => {
-        for (const p of providers) {
-          const dir = p.reopen ? await p.reopen(rootId).catch((error: unknown) => { onDegraded('reopen root', error, { rootId }); return null; }) : null;
-          if (dir) return dir;
-        }
-        return null;
-      })();
+      return reopenRoot(req.rootId);
     }
     const fallback = providers.find((p) => p.kind === 'folder') ?? providers.find((p) => p.kind === 'upload') ?? providers[0];
     return fallback?.open() ?? Promise.resolve(null);
+  };
+
+  /** A root a provider can re-read without a picker (the workspace VFS, a drive), or null. */
+  const reopenRoot = async (rootId: string): Promise<DirectorySource | null> => {
+    for (const p of providers) {
+      const dir = p.reopen ? await p.reopen(rootId).catch((error: unknown) => { onDegraded('reopen root', error, { rootId }); return null; }) : null;
+      if (dir) return dir;
+    }
+    return null;
   };
 
   async function* run(opening: Promise<DirectorySource | null>, req: ReviewRequest, ctl: ReviewControl): AsyncGenerator<KnowledgeReviewEvent> {
@@ -104,8 +110,9 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
     const base = { force: !!req.force, modelCalls: KNOWLEDGE_REVIEW_MODEL_CALLS };
     const workerOpts = opts.createWorker ? { createWorker: opts.createWorker } : {};
     const plan = await runReview({ ...base, mode: 'plan' }, ports, workerOpts);
-    yield { type: 'plan', plan };
-    if (!(await ctl.confirm(plan))) { yield { type: 'cancelled' }; return; }
+    const estimate = await estimateReview(plan, opts.callPriceUsd, onDegraded);
+    yield { type: 'plan', plan, estimate };
+    if (!(await ctl.confirm(plan, estimate))) { yield { type: 'cancelled' }; return; }
 
     const queue: Array<KnowledgeReviewEvent | { type: 'failed'; error: unknown }> = [];
     let wake: (() => void) | null = null;
@@ -148,7 +155,8 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
       return graph ? { graph } : null;
     },
     async targets() {
-      const list = await loadProviders();
+      providersReady = loadProviders();
+      const list = await providersReady;
       return list.map((p) => ({ id: p.id, kind: p.kind, ...(p.title ? { title: p.title } : {}) }));
     },
     review(req, ctl) {
@@ -159,19 +167,21 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
       return hits.map((h) => ({ ref: h.id, score: h.score, tier: h.tier }));
     },
     subscribeLive(rootId, cb) {
-      const dir = opened.get(rootId);
-      if (!dir?.watch) return () => undefined;
-      const changed = new Set<string>();
-      let timer: ReturnType<typeof setTimeout> | null = null;
-      const stop = dir.watch((paths) => {
-        for (const p of paths) changed.add(p);
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(() => {
-          void client.graph(rootId).then((g: KnowledgeGraph | null) => { if (g) cb(applyLiveOverlay(g, changed)); })
-            .catch((error: unknown) => onDegraded('live refresh', error, { rootId }));
-        }, LIVE_DEBOUNCE_MS);
-      });
-      return () => { if (timer) clearTimeout(timer); stop(); };
+      // A root reviewed in an EARLIER session is not in `opened`: its provider re-opens it
+      // (the workspace VFS, a drive) without a picker. A picked folder cannot be, and has no Live.
+      let cancelled = false;
+      let stop: () => void = () => undefined;
+      void (async () => {
+        await providersReady;
+        let dir = opened.get(rootId) ?? null;
+        if (!dir) {
+          dir = await reopenRoot(rootId);
+          if (dir) opened.set(rootId, dir);
+        }
+        if (cancelled || !dir?.watch) return;
+        stop = watchDirectory(dir, rootId, cb, { graph: (id) => client.graph(id), onDegraded });
+      })().catch((error: unknown) => onDegraded('live subscribe', error, { rootId }));
+      return () => { cancelled = true; stop(); };
     },
     async rememberFact({ content, ref, rootId }) {
       const scope = scopeRecords.get(rootId) ?? { rootId, title: rootId, packs: [] };

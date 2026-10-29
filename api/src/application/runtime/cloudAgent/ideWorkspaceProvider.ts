@@ -19,6 +19,7 @@ import { guardRepoWrite } from '../../coordination/coordinationCapability';
 import type { LeaseHolder } from '../../coordination/leaseService';
 import { coordinationScopeKey } from '../../../domain/coordination/resourceKey';
 import { recordCloudToolEvent } from '../cloudToolEvents';
+import { recordWrittenHash, type WrittenFileHashes } from './writtenFileHashes';
 import { notifyExecutionSubscribers } from '../executionEvents';
 import {
   deleteIdeWorkspaceFile, editIdeWorkspaceFile, listIdeWorkspaceFiles, readIdeWorkspaceFile, searchIdeWorkspace,
@@ -33,6 +34,8 @@ export interface IdeWorkspaceRunRef {
   cloudAgentRef?: string;
   /** The run's live set of written paths (the verify / finalize tail reads it). */
   writtenPaths: Set<string>;
+  /** Content hash per written file; set for a full write (an edit's resulting text isn't returned, so it falls back). */
+  writtenHashes?: WrittenFileHashes;
 }
 
 /** `provider` with its repo read/write backed by the IDE workspace. */
@@ -45,7 +48,7 @@ export function withIdeWorkspace(
   const { db } = deps;
   const who = { tenantId: run.tenantId, taskId: run.taskId, executionId: run.executionId, agent: run.agentLabel };
   const changed = (path: string, change: 'created' | 'modified' | 'deleted') => {
-    if (change === 'deleted') run.writtenPaths.delete(path); else run.writtenPaths.add(path);
+    if (change === 'deleted') { run.writtenPaths.delete(path); run.writtenHashes?.delete(path); } else run.writtenPaths.add(path);
     notifyExecutionSubscribers(run.executionId, { type: 'file_change', executionId: run.executionId, path, change, ts: new Date().toISOString() });
   };
   const holder: LeaseHolder = {
@@ -62,12 +65,19 @@ export function withIdeWorkspace(
     repoWrite: guardRepoWrite({
       async writeFile(path, content) {
         const r = await writeIdeWorkspaceFile(db, ide, { ...who, path, content });
-        if (r.ok) changed(path, r.change ?? 'modified');
+        if (r.ok) {
+          changed(path, r.change ?? 'modified');
+          if (run.writtenHashes) await recordWrittenHash(run.writtenHashes, path, content);
+        } 
         return r;
       },
       async editFile(path, oldString, newString, replaceAll) {
         const r = await editIdeWorkspaceFile(db, ide, { ...who, path, oldString, newString, ...(replaceAll !== undefined ? { replaceAll } : {}) });
-        if (r.ok) changed(path, 'modified');
+        if (r.ok) {
+          changed(path, 'modified');
+          // The edited text isn't returned: drop any earlier hash rather than keep a stale one.
+          run.writtenHashes?.delete(path);
+        }
         return r;
       },
       async deleteFile(path) {

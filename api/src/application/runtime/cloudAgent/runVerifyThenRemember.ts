@@ -38,6 +38,8 @@ export async function runVerifyThenRemember(args: {
   agentLabel: string;
   cloudAgentRef?: string;
   writtenPaths: Set<string>;
+  /** Content hash per written file (see `writtenFileHashes.ts`); anchors the run's facts to what it wrote. */
+  writtenHashes?: ReadonlyMap<string, string>;
   runKnowledge: RunKnowledgeRecorder;
   finalOutput: string;
   ciVerified: boolean;
@@ -79,6 +81,7 @@ export async function runVerifyThenRemember(args: {
       summary: finalOutput?.trim() || `${agentLabel} finished ${taskRow.title}`,
       verifyNote: describeVerifyOutcome(outcome),
       writtenPaths: [...writtenPaths],
+      ...(args.writtenHashes?.size ? { writtenFileHashes: Object.fromEntries(args.writtenHashes) } : {}),
       codeMap: args.runKnowledge.consolidate(),
     });
   } catch (error) {

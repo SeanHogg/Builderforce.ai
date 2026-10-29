@@ -37,8 +37,8 @@ export interface KnowledgeStorePort {
   upsertScope(scope: ScopeRecord): Promise<void>;
   /** Model relations judged from `sourceRef` (or its sections) at another hash get `stale_at`. */
   markRelationsStale(sourceRef: NodeRef, currentHash: string): Promise<number>;
-  /** Removes every relation with `ref` at either end. */
-  deleteRelationsOf(ref: NodeRef): Promise<number>;
+  /** Removes every relation with any of `refs` at either end. */
+  deleteRelationsOf(refs: NodeRef | readonly NodeRef[]): Promise<number>;
   /** The fact's author, or `undefined` when no such fact exists (null = no recorded author). */
   factAuthor(key: string): Promise<string | null | undefined>;
 }

@@ -61,10 +61,10 @@ export const SHARED_PREFETCH_ROWS: readonly PrefetchRow[] = [
         budgetMs: CODE_PACK_BUDGET_MS, requires: { tool: 'knip' },
     }),
     row({
-        id: 'arch.boundaries', kind: 'prefetch', sideEffect: 'read', slash: '/boundaries',
+        id: 'arch.boundaries', kind: 'answer', sideEffect: 'read', slash: '/boundaries',
         patterns: [/\b(layer|layering|architecture|boundary|boundaries) (violations?|rules?|breaches?)\b/i],
         examples: ['does this respect the layers', 'check the architecture boundaries', 'is the domain importing infrastructure'],
-        budgetMs: PREFETCH_BUDGET_MS, requires: { tool: 'dependency-cruiser' },
+        budgetMs: CODE_PACK_BUDGET_MS, requires: { tool: 'dependency-cruiser' },
     }),
     row({
         id: 'deps.audit', kind: 'answer', sideEffect: 'read', slash: '/audit',

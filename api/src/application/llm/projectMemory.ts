@@ -261,6 +261,8 @@ export async function cacheProjectAnswer(
   // Nothing resolveMemoryAnswer would refuse to serve (a work order, a status question,
   // a bare continuation) is worth writing — it would only ever be a row that is never read.
   if (!memoryReplayable(q)) return;
+  // Deliberately NOT `writeProjectFact`: the Q&A replay cache is excluded from the knowledge
+  // graph (QA_CACHE_SOURCE), has no author or origin, and writes on every answered question.
   await upsertProjectFact(env, db, tenantId, projectId, qaCacheKey(q, { tenantId, projectId, principal: principal ?? null }), a, QA_CACHE_SOURCE, {
     origin: origin ?? null,
     ...(originExecutionId != null ? { originExecutionId } : {}),

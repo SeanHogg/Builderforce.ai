@@ -38,6 +38,7 @@
       "@builderforce/local-inference": ["../packages/local-inference/src/index.ts"],
       "@builderforce/model-router": ["../packages/model-router/src/index.ts"],
       "@builderforce/prefetch": ["../packages/prefetch/src/index.ts"],
+      "@builderforce/repo-map": ["../packages/repo-map/src/index.ts"],
       "@builderforce/knowledge-client": ["../packages/knowledge-client/src/index.ts"],
       // `@builderforce/knowledge-client` is source-only with memory as a PEER and no install
       // of its own (as in frontend/ and clients/*/tsconfig.json): the memory subpath it

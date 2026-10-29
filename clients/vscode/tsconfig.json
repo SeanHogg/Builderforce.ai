@@ -32,6 +32,7 @@
       "@builderforce/model-catalog": ["../../packages/model-catalog/src/index.ts"],
       "@builderforce/pipeline-route": ["../../packages/pipeline-route/src/index.ts"],
       "@builderforce/prefetch": ["../../packages/prefetch/src/index.ts"],
+      "@builderforce/repo-map": ["../../packages/repo-map/src/index.ts"],
       "@builderforce/prefetch/testing": ["../../packages/prefetch/src/testing.ts"],
       "@builderforce/provider-connect": ["../../packages/provider-connect/src/index.ts"],
       "@builderforce/provider-connect/accounts": ["../../packages/provider-connect/src/connectedAccounts.ts"],

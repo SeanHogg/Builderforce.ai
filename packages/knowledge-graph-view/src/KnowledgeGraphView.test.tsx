@@ -100,9 +100,11 @@ describe('KnowledgeGraphView', () => {
         render(<KnowledgeGraphView source={source} />);
         fireEvent.click(await screen.findByRole('button', { name: L.reviewFolder }));
         expect(source.requests).toEqual([{ pick: true }]);
-        expect(await screen.findByText('docs: 3 files')).toBeTruthy();
+        expect(await screen.findByText('Documents: 3 files')).toBeTruthy();
         expect(screen.getByText('1 unchanged since the last review')).toBeTruthy();
         expect(screen.getByText('≈ 4 model calls')).toBeTruthy();
+        // This source prices nothing: the chip says the cost comes after routing.
+        expect(screen.getByText(L.reviewPlanCostPending)).toBeTruthy();
         expect(source.confirmed).toEqual([]);
         fireEvent.click(screen.getByRole('button', { name: L.reviewConfirm }));
         expect(await screen.findByText(L.reviewDoneTitle)).toBeTruthy();

@@ -431,7 +431,7 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     cadence: 'daily',
     description: 'Expire project facts recall has not returned, so a belief nothing reads stops being served (ticket 5301).',
     run: async ({ env, db }) => {
-      const expired = await sweepAllUnrecalledFactDecay(db);
+      const expired = await sweepAllUnrecalledFactDecay(env, db);
       return expired > 0 ? `expired=${expired}` : null;
     },
   },

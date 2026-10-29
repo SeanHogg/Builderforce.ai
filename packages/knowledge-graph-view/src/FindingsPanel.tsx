@@ -9,7 +9,7 @@ import { useMemo } from 'react';
 import type { Finding, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels } from './labels';
 import { nodeIndex } from './graphModel';
-import { findingItems, findingRequest, findingTitle } from './findingText';
+import { findingDetail, findingItems, findingRequest, findingTitle } from './findingText';
 import { EvidenceList } from './EvidenceList';
 import type { FindingEvidence, SourceLocation } from './types';
 import { cssVar } from './scene/themeColors';
@@ -45,7 +45,7 @@ export function FindingsPanel({ graph, findings, labels, onShow, onCompose, evid
                                 </span>
                                 <strong style={{ fontSize: 13 }}>{findingTitle(f, labels)}</strong>
                             </div>
-                            <p style={{ ...muted, margin: 0, overflowWrap: 'anywhere' }}>{findingItems(f, index)}</p>
+                            <p style={{ ...muted, margin: 0, overflowWrap: 'anywhere' }}>{findingDetail(f, labels, index) ?? findingItems(f, index)}</p>
                             {evidence && <EvidenceList items={evidence(f)} onOpenSource={onOpenSource} />}
                             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                 <button type="button" style={button} onClick={() => onShow([...f.nodes])}>{labels.showFinding}</button>

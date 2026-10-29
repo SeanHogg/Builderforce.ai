@@ -251,6 +251,8 @@ describe('archiveChat', () => {
       'chat-summary:5',
       'We agreed to ship Friday.',
       'chat-archive',
+      // Via the ONE writer: origin stamped server-side, no author.
+      expect.objectContaining({ factOrigin: 'agent', createdBy: null }),
     );
   });
 
@@ -302,6 +304,8 @@ describe('summarizeChat', () => {
       'chat-summary:5',
       'Agreed; the branch stays.',
       'chat-archive',
+      // Via the ONE writer: origin stamped server-side, no author.
+      expect.objectContaining({ factOrigin: 'agent', createdBy: null }),
     );
   });
 });

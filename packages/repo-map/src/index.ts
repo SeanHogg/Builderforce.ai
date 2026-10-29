@@ -19,3 +19,4 @@ export {
 } from './repoGraph.js';
 export { CHARS_PER_TOKEN, MAX_SYMBOLS_PER_FILE, personalization, rankedFiles, renderRepoMap, type RepoMapOptions } from './render.js';
 export { searchRepoSymbols, type RepoSymbolHit } from './search.js';
+export { repoMapPort } from './workspacePort.js';

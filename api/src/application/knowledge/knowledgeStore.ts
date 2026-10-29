@@ -12,7 +12,7 @@
  * `src:` refs or one of those facts.
  */
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
-import { eq, gt, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
+import { eq, gt, inArray, isNotNull, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import { type NodeRef, type StoredFact, type StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
 import { knowledgeScopes, projectFactRelations, projectFacts } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -153,7 +153,9 @@ export function drizzleKnowledgeStore(db: Db, tenantId: number, projectId: numbe
         .values(rows.map((r) => ({
           tenantId, projectId, fromRef: r.from, toRef: r.to, kind: r.kind, weight: r.weight, origin: r.origin,
           confidence: r.confidence ?? null, sourceHash: r.sourceHash ?? null,
-          staleAt: r.staleAt ? new Date(r.staleAt) : null, createdBy,
+          staleAt: r.staleAt ? new Date(r.staleAt) : null,
+          // Authorship is a person's: only a human edge records its writer.
+          createdBy: r.origin === 'human' ? createdBy : null,
         })))
         .onConflictDoUpdate({
           target: [projectFactRelations.tenantId, projectFactRelations.projectId, projectFactRelations.fromRef, projectFactRelations.toRef, projectFactRelations.kind],
@@ -169,7 +171,7 @@ export function drizzleKnowledgeStore(db: Db, tenantId: number, projectId: numbe
 
     async upsertScope(scope) {
       const values = {
-        tenantId, projectId, rootId: scope.rootId, title: scope.title?.slice(0, 255) || null, packs: [...scope.packs],
+        tenantId, projectId, rootId: scope.rootId, title: scope.title?.slice(0, 255) || scope.rootId.slice(0, 255), packs: [...scope.packs],
         lastDigest: scope.lastDigest ?? null,
         lastReviewedAt: scope.lastReviewedAt ? new Date(scope.lastReviewedAt) : null,
       };
@@ -196,18 +198,27 @@ export function drizzleKnowledgeStore(db: Db, tenantId: number, projectId: numbe
           projectFactRelations, tenantId,
           eq(projectFactRelations.origin, 'model'),
           isNull(projectFactRelations.staleAt),
-          or(isNull(projectFactRelations.sourceHash), ne(projectFactRelations.sourceHash, currentHash)),
+          // Only an edge judged from a KNOWN, different hash goes stale; one with no hash has no
+          // baseline to differ from.
+          isNotNull(projectFactRelations.sourceHash),
+          ne(projectFactRelations.sourceHash, currentHash),
           or(onSource(projectFactRelations.fromRef, sourceRef), onSource(projectFactRelations.toRef, sourceRef)),
         ))
         .returning({ id: projectFactRelations.id });
       return rows.length;
     },
 
-    async deleteRelationsOf(ref) {
-      const rows = await db.delete(projectFactRelations)
-        .where(scoped(projectFactRelations, tenantId, or(eq(projectFactRelations.fromRef, ref), eq(projectFactRelations.toRef, ref))))
-        .returning({ id: projectFactRelations.id });
-      return rows.length;
+    async deleteRelationsOf(refs) {
+      const all = typeof refs === 'string' ? [refs] : [...refs];
+      let removed = 0;
+      for (let i = 0; i < all.length; i += IN_CHUNK) {
+        const chunk = all.slice(i, i + IN_CHUNK);
+        const rows = await db.delete(projectFactRelations)
+          .where(scoped(projectFactRelations, tenantId, or(inArray(projectFactRelations.fromRef, chunk), inArray(projectFactRelations.toRef, chunk))))
+          .returning({ id: projectFactRelations.id });
+        removed += rows.length;
+      }
+      return removed;
     },
 
     async factAuthor(key) {

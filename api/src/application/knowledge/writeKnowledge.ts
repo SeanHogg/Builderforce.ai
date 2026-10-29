@@ -36,6 +36,7 @@ import { upsertProjectFact } from '../llm/projectFactsWrite';
 import type { FactOriginCost } from '../llm/projectFactsStore';
 import type { ExtractedCachePort, KnowledgeStorePort } from './knowledgePorts';
 import { bumpKnowledgeVersion } from './knowledgeVersion';
+import { clampQuoteLines } from './knowledgePrivacy';
 
 /** Rows (facts + relations + stale marks) one call may carry. */
 export const MAX_KNOWLEDGE_WRITE_ROWS = 500;
@@ -52,6 +53,8 @@ export class KnowledgeWriteError extends Error {
 export type KnowledgeFactInput = Omit<StoredFact, 'importance' | 'origin' | 'createdBy' | 'updatedAt'> & {
   importance?: number;
   origin?: StoredFact['origin'];
+  /** When the fact lapses (governed memory's TTL). Absent = durable. */
+  expiresAt?: Date | null;
 };
 
 export interface KnowledgeStaleMark {
@@ -81,7 +84,7 @@ export interface WriteKnowledgeDeps {
    * chat/execution, and the single-subject anchor sweep (a fact about one file corrects an
    * older one about the same file). Absent for knowledge writes.
    */
-  legacyFact?: { originExecutionId?: number | null; origin?: FactOriginCost | null; retireByAnchor: true };
+  legacyFact?: { originExecutionId?: number | null; origin?: FactOriginCost | null; retireByAnchor: boolean };
 }
 
 export interface KnowledgeWriteResult {
@@ -126,7 +129,10 @@ export async function writeKnowledge(deps: WriteKnowledgeDeps, input: KnowledgeW
   try {
     for (const f of input.facts ?? []) {
       const origin = f.origin ?? defaultOrigin;
-      const ok = await upsertProjectFact(env, db, tenantId, projectId, f.key, f.content, f.source || 'knowledge', {
+      const ok = await upsertProjectFact(env, db, tenantId, projectId, f.key,
+        // A model's claim quotes at most MAX_QUOTE_LINES lines — never a file body (§5.2).
+        origin === 'model' ? clampQuoteLines(f.content) : f.content, f.source || 'knowledge', {
+        ...(f.expiresAt !== undefined ? { expiresAt: f.expiresAt } : {}),
         ...(f.importance != null ? { importance: f.importance } : {}),
         ...(f.fileAnchors?.length ? { fileAnchors: f.fileAnchors } : {}),
         factOrigin: origin,

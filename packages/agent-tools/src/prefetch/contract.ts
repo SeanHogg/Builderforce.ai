@@ -14,6 +14,7 @@
  */
 
 import type { CapabilityProvider } from '../capabilities.js';
+import type { RepoGraphPort } from '../knowledge/workspaceAnalysis.js';
 
 /** A registry row (`PrefetchAction`). */
 export interface PrefetchRow {
@@ -80,6 +81,8 @@ export interface PrefetchExecHost {
     rootId: string;
     /** Root-relative files the person is working in (open or touched) — scopes lint, typecheck and related tests. */
     focusFiles?(): readonly string[];
+    /** The repo map (`@builderforce/repo-map`'s `repoMapPort`): its `references` edges ride the code-pack analysis. Absent ⇒ none. */
+    repoGraph?: RepoGraphPort;
     /** Starter scaffolds; absent ⇒ `scaffold.template` is not offered. */
     templates?: ScaffoldTemplates;
 }

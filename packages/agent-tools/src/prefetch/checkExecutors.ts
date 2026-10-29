@@ -1,7 +1,6 @@
 /**
  * The shared READ executors that run one analyzer and report what it found: lint,
- * typecheck (the `tsc --noEmit` fallback — the editor asks its LSP first), layer
- * boundaries (dependency-cruiser with the code pack's layers), dependency audit
+ * typecheck (the `tsc --noEmit` fallback — the editor asks its LSP first), dependency audit
  * (osv-scanner or the lockfile's `npm audit`), secrets (gitleaks, redacted) and the
  * tests related to the focus files (vitest, the file list only).
  *
@@ -9,8 +8,6 @@
  * caps what it returns. Pure: everything goes through the host's shell and repo.
  */
 
-import { dependencyCruiserConfig } from '../codeAnalysisTool.js';
-import { readPartitions } from './codePackExecutors.js';
 import type { PrefetchExecHost, PrefetchOutput, PrefetchRunner } from './contract.js';
 import { PREFETCH_LIST_CAP, PREFETCH_SCRATCH_DIR, capOutput, fenced, focusArgs, jsonIn, runTool, toolOf } from './exec.js';
 
@@ -75,39 +72,6 @@ export function typecheckWithTsc(host: PrefetchExecHost): PrefetchRunner {
             return out('diag.typecheck', fenced(`TypeScript: ${errors.length} error(s)${shown.length && focus.length ? `, ${shown.length} in the files you are working in` : ''}`, lines.join('\n')), { source: 'tsc', errors: errors.length });
         },
     };
-}
-
-/** dependency-cruiser with the code pack's layer rules (`.builderforce/partitions.json` or `CODE_LAYERS`). */
-export function archBoundaries(host: PrefetchExecHost): PrefetchRunner {
-    return {
-        async run(_request, signal) {
-            const tool = toolOf(host, 'dependency-cruiser');
-            const write = host.caps.repoWrite;
-            if (!tool || !write) return undefined;
-            const partitions = await readPartitions(host);
-            const configPath = `${PREFETCH_SCRATCH_DIR}/boundaries.json`;
-            await write.writeFile(configPath, JSON.stringify(dependencyCruiserConfig(partitions), null, 2), 'PreFetch: layer rules for dependency-cruiser');
-            const files = focusArgs(host, (p) => JS_TS.test(p));
-            const r = await runTool(host, tool, `--config ${configPath} --output-type json ${files.length ? files.join(' ') : '.'}`, signal);
-            if (!r) return undefined;
-            const report = jsonIn(r.out) as { summary?: { violations?: Array<{ from?: string; to?: string; rule?: { name?: string; severity?: string } }> } } | undefined;
-            const violations = report?.summary?.violations;
-            if (!Array.isArray(violations)) return undefined;
-            const layered = violations.filter((v) => v.rule?.name?.startsWith('kg-layer'));
-            if (layered.length === 0) return out('arch.boundaries', `Layer boundaries: no violations${files.length ? ` among the ${files.length} file(s) you are working in` : ''}.`, { violations: 0 });
-            const lines = layered.slice(0, PREFETCH_LIST_CAP * 2).map((v) => `${v.rule?.severity ?? 'warn'} ${v.from} → ${v.to} (${v.rule?.name})`);
-            return out('arch.boundaries', fenced(`Layer boundaries: ${layered.length} violation(s)`, lines.join('\n')), { violations: layered.length });
-        },
-    };
-}
-
-interface AuditCounts { critical: number; high: number; moderate: number; low: number; total: number }
-
-function npmAuditCounts(report: unknown): AuditCounts | undefined {
-    const v = (report as { metadata?: { vulnerabilities?: Partial<AuditCounts> & { info?: number } } } | undefined)?.metadata?.vulnerabilities;
-    if (!v) return undefined;
-    const n = (k: keyof AuditCounts) => Number(v[k] ?? 0) || 0;
-    return { critical: n('critical'), high: n('high'), moderate: n('moderate'), low: n('low'), total: n('total') || n('critical') + n('high') + n('moderate') + n('low') };
 }
 
 /** osv-scanner's JSON: one line per vulnerable package with its advisory ids. */

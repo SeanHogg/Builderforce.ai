@@ -105,6 +105,38 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ### Cloud and IDE agent runs `[agents]`
 
+- **PRD 38 knowledge graph: audit gaps (in flight 2026-10-29).** A spec-vs-code audit ([38](./docs/specs/38-prd-knowledge-graph.md)) found:
+  - **The VS Code Knowledge tab rendered raw keys.** The webview trimmer never shipped `knowledgeGraph`, and the labels adapter took a bare-key fallback as a translation.
+  - **memory:**
+    - an abort during judgement lost claims;
+    - stale relations and facts on deleted files showed as current;
+    - there was no contradiction finding;
+    - Continue re-walked the directory;
+    - nested `.gitignore` files, pdf/office routing, wiki-by-name and reference links, out-of-root links and the pre-heading section were missing.
+  - **api:**
+    - run-end memory and the MCP fact writers bypassed `writeKnowledge`;
+    - deletes left relations behind and skipped the author/admin rule;
+    - decay and purge did not bump `knowledgeVersion`;
+    - run-end anchors had no hashes;
+    - the server never marked stale itself;
+    - quote spans were not capped.
+  - **view/web/Rovr:**
+    - Live never subscribed;
+    - the review cost was missing from the confirm chip;
+    - legends were not drawn;
+    - search did not reach beyond the loaded graph;
+    - no `--kg-*` tokens were defined;
+    - raw ids were shown on screen;
+    - Add fact had no error path.
+  - **code pack/VS Code:**
+    - hosts dropped the confirmed plan;
+    - there were no repo-map references in-process;
+    - analyzers were not cached per sha;
+    - `arch.boundaries` had no findings or chip;
+    - on-prem `/graph` had no focus;
+    - editing a doc never marked its claims stale.
+
+  *Acceptance:* every item is fixed, with the tests the spec lists.
 
 
 

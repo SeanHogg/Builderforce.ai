@@ -28,6 +28,7 @@ import {
   type PrefetchExecHost,
   type ScaffoldTemplates,
 } from "@builderforce/agent-tools/prefetch";
+import { repoMapPort } from "@builderforce/repo-map";
 import { defineRegistry, type PrefetchAction, type PrefetchExecutors } from "@builderforce/prefetch";
 import { CONTEXT_PACK_DEADLINE_MS } from "../contextPack/deadline";
 import { preSearchOnce, whereDefinedOnce } from "../contextPack/preSearchSource";
@@ -114,6 +115,7 @@ function execHost(options: EditorExecutorOptions): PrefetchExecHost {
       return capsFor(options.root());
     },
     tools: options.tools,
+    repoGraph: repoMapPort,
     get rootId() {
       return knowledgeRootId(options.root());
     },

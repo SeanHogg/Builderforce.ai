@@ -9,7 +9,7 @@
  * Pure: every tool runs through the host's `CapabilityProvider` (its shell and repo).
  */
 
-import { typecheckWithTsc, archBoundaries, depsAudit, lintCheck, secretsScan, testsRelated } from './checkExecutors.js';
+import { typecheckWithTsc, depsAudit, lintCheck, secretsScan, testsRelated } from './checkExecutors.js';
 import { codePackExecutors } from './codePackExecutors.js';
 import type { PrefetchExecHost, PrefetchRunner } from './contract.js';
 import { DIAG_TYPECHECK } from './rows.js';
@@ -25,7 +25,7 @@ export {
 export { parseCodemod } from './writeExecutors.js';
 export {
     CHOOSE_FOLDER_LABEL_KEY, KNOWLEDGE_GRAPH, KNOWLEDGE_PREFETCH_ROWS, KNOWLEDGE_REVIEW_DIR, OPEN_KNOWLEDGE_REVIEW_COMMAND,
-    graphFocusOf, knowledgeChipIntent, knowledgePrefetchExecutors, openInGraphChip, reviewInViewExecutor, reviewTargetOf,
+    graphFocusOf, graphShown, knowledgeChipIntent, knowledgePrefetchExecutors, openInGraphChip, reviewInViewExecutor, reviewTargetOf,
     withKnowledgeRows,
     type KnowledgeChipIntent, type KnowledgeReviewSession, type KnowledgeRowsHost, type PortWithRows,
 } from './knowledgeRows.js';
@@ -36,7 +36,6 @@ export function sharedPrefetchExecutors(host: PrefetchExecHost): Record<string, 
     return {
         [DIAG_TYPECHECK]: typecheckWithTsc(host),
         'lint.check': lintCheck(host),
-        'arch.boundaries': archBoundaries(host),
         'deps.audit': depsAudit(host),
         'secrets.scan': secretsScan(host),
         'tests.related': testsRelated(host),

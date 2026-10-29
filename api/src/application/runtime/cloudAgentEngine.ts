@@ -83,6 +83,7 @@ import { assertCloudRunByo, type CloudByoFailure } from '../llm/cloudByoPolicy';
 import { cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool, callBuiltinTool } from '../llm/builtinMcpService';
 import { durableRepoSemantic, durableRunCaps, prepSurfaceCaps } from './cloudAgent/runSurfaceCaps';
 import { composeRunProvider } from './cloudAgent/runProvider';
+import { recordWrittenHash, type WrittenFileHashes } from './cloudAgent/writtenFileHashes';
 import { runVerifyThenRemember } from './cloudAgent/runVerifyThenRemember';
 import { ANALYZE_CODEBASE_TOOL, withSavedAnalysis } from './cloudAgent/auditAnalysis';
 import type { RunSandbox } from './sandbox/runSandbox';
@@ -376,6 +377,8 @@ function buildCloudProvider(args: {
   repoMiss: string;
   /** Live set of paths written this run (mutated by write/delete). */
   writtenPaths: Set<string>;
+  /** Content hash of each written file as the run left it (mutated alongside `writtenPaths`). */
+  writtenHashes?: WrittenFileHashes;
   /** The run's capability set — `CLOUD_SURFACE_CAPS` plus whatever the TENANT
    *  unlocked (`durableRunCaps`: C5's `repo.semantic`). Must be the set the tool schemas
    *  were derived from. */
@@ -387,7 +390,7 @@ function buildCloudProvider(args: {
   /** The project's detected blueprint (services, databases, env vars). */
   blueprint: Awaited<ReturnType<typeof getLatestBlueprint>>;
 }): CapabilityProvider {
-  const { env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths, blueprint } = args;
+  const { env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths, writtenHashes, blueprint } = args;
   // Read/list against the ticket branch only once it exists (created on the first
   // commit). Before any write, the branch ref 404s — read from `base` instead, so
   // the agent sees the real codebase rather than mistaking the missing branch for
@@ -532,6 +535,7 @@ function buildCloudProvider(args: {
         const commit = await commitAgentFile(target, path, content, agentCommitMessage(firstWriteThisRun ? 'Add' : 'Update', path, taskRow.id, agentLabel));
         if (!commit.ok) return { ok: false, error: commit.reason };
         writtenPaths.add(path);
+        if (writtenHashes) await recordWrittenHash(writtenHashes, path, content);
         // The run just changed this path: any memoized read of it is now stale, and
         // leaving it would hand the model bytes from before its own edit.
         forgetReads(path);
@@ -568,6 +572,7 @@ function buildCloudProvider(args: {
         const commit = await commitAgentFile(target, path, updated, agentCommitMessage(firstWriteThisRun ? 'Edit' : 'Update', path, taskRow.id, agentLabel));
         if (!commit.ok) return { ok: false, error: commit.reason };
         writtenPaths.add(path);
+        if (writtenHashes) await recordWrittenHash(writtenHashes, path, updated);
         // Same invalidation as `writeFile` — this run just changed the path. The
         // read above went straight to `readRepoFile` precisely because an edit must
         // always see the CURRENT bytes, memo or no memo.
@@ -585,6 +590,7 @@ function buildCloudProvider(args: {
         const del = await deleteAgentFile(target, path, agentCommitMessage('Remove', path, taskRow.id, agentLabel, suffix));
         if (del.ok) {
           writtenPaths.delete(path);
+          writtenHashes?.delete(path);
           // The path is gone from the branch: a memoized read of it would hand back
           // content that no longer exists.
           forgetReads(path);
@@ -748,6 +754,7 @@ async function runCloudToolLoop(
     repoMiss = repoResolved.ok ? '' : repoResolved.reason;
   }
   const writtenPaths = new Set<string>(opts?.resume?.writtenPaths ?? []);
+  const writtenHashes: WrittenFileHashes = new Map();
   // What this run read and changed — the SAME recorder the editor and on-prem keep — so
   // its code map lands in project memory for the next run on that area. Carried in the
   // resume state: a durable tick runs one step, so a fresh recorder per tick would never
@@ -1027,7 +1034,7 @@ async function runCloudToolLoop(
   // The provider closes over the LIVE `writtenPaths` set + `repoCtx`, so write/delete
   // bookkeeping and the base→branch read switch stay correct as the run progresses.
   const builtProvider = buildCloudProvider({
-    env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths,
+    env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths, writtenHashes,
     capabilities: surfaceCaps,
     principalId: runIdentity.principalId,
     ...(repositoryDelegationId ? { repositoryDelegationId } : {}),
@@ -1038,7 +1045,7 @@ async function runCloudToolLoop(
   // (CloudLoopOpts.decorateProvider; a live run passes none): `cloudAgent/runProvider.ts`.
   const composed = await composeRunProvider({
     env, db, built: builtProvider, repoCtx,
-    run: { tenantId, taskId: taskRow.id, executionId, agentLabel, ...(cloudAgentRef ? { cloudAgentRef } : {}), writtenPaths },
+    run: { tenantId, taskId: taskRow.id, executionId, agentLabel, ...(cloudAgentRef ? { cloudAgentRef } : {}), writtenPaths, writtenHashes },
     ...(opts?.sandbox ? { sandbox: opts.sandbox } : {}),
     signal: abortController.signal,
     heartbeat: () => heartbeatExecution(db, executionId),
@@ -1507,7 +1514,7 @@ async function runCloudToolLoop(
   // already ran in `onFinish`), then commits what the run learned. Both steps are
   // best-effort — neither may delay or undo the finalize below, which IS this run's
   // result.
-  await runVerifyThenRemember({ env, db, tenantId, projectId, executionId, taskRow, agentLabel, ...(cloudAgentRef ? { cloudAgentRef } : {}), writtenPaths, runKnowledge, finalOutput, ciVerified: gates.ciVerified, modelState, ...(composed.verify ? { sandbox: composed.verify } : {}) });
+  await runVerifyThenRemember({ env, db, tenantId, projectId, executionId, taskRow, agentLabel, ...(cloudAgentRef ? { cloudAgentRef } : {}), writtenPaths, writtenHashes, runKnowledge, finalOutput, ciVerified: gates.ciVerified, modelState, ...(composed.verify ? { sandbox: composed.verify } : {}) });
 
   const fin = await finalizeCloudRun(env, db, {
     tenantId, cloudAgentRef, executionId, taskRow, agentLabel,

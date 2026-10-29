@@ -14,7 +14,7 @@
 
 import * as vscode from "vscode";
 import {
-  OPEN_KNOWLEDGE_GRAPH_COMMAND, openInGraphChip, type KnowledgeRowsHost,
+  OPEN_KNOWLEDGE_GRAPH_COMMAND, graphShown, type KnowledgeRowsHost,
 } from "@builderforce/agent-tools/prefetch";
 import { knowledgeRootId, rootForRelative } from "./knowledgeRoots";
 import { reviewRoot, workspaceFolders } from "./knowledgeService";
@@ -38,7 +38,7 @@ export function editorKnowledgeRowsHost(secrets: vscode.SecretStorage): Knowledg
         rootId: root.rootId,
         title: root.title,
         plan: () => review.plan(),
-        review: (_plan, signal) => review.run({ signal }),
+        review: (plan, signal) => review.run({ signal, plan }),
       };
     },
     rootId() {
@@ -51,7 +51,7 @@ export function editorKnowledgeRowsHost(secrets: vscode.SecretStorage): Knowledg
       const text = focus.length > 0
         ? `Opened the knowledge graph of **${rootId}**, focused on ${focus.length} file(s).`
         : `Opened the knowledge graph of **${rootId}**.`;
-      return { text, chip: openInGraphChip(OPEN_KNOWLEDGE_GRAPH_COMMAND, args) };
+      return graphShown(text, rootId, focus);
     },
   };
 }

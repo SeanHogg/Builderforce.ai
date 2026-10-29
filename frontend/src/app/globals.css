@@ -5968,3 +5968,61 @@ select.input option {
   border-radius: var(--radius-sm);
   padding: 0 2px;
 }
+
+/* ── Knowledge graph view (@builderforce/knowledge-graph-view) ──────────────────────
+   Every `--kg-*` token `packages/knowledge-graph-view/src/scene/themeColors.ts` reads.
+   The neutrals alias the shared `--bf-*` bridge so a host that maps `--bf-*` (the VS Code
+   webview, Rovr) restyles them for free; the node/edge/finding tones are DISTINCT hues so
+   a file, a section, a claim, a duplicate and a violation never collapse onto one colour.
+   Dark is the default; the light set is the darker twin of each hue (contrast on paper). */
+:root {
+  --kg-bg: var(--bf-surface);
+  --kg-panel: var(--bf-surface-2);
+  --kg-text: var(--bf-text);
+  --kg-muted: var(--bf-text-muted);
+  --kg-border: var(--bf-border);
+  --kg-accent: var(--bf-accent);
+  --kg-accent-soft: var(--bf-accent-soft);
+  --kg-on-accent: var(--bf-on-accent);
+  --kg-node-file: #4d9eff;
+  --kg-node-section: #22d3ee;
+  --kg-node-symbol: #a78bfa;
+  --kg-node-entity: #34d399;
+  --kg-node-claim: #a3e635;
+  --kg-node-fact: #f472b6;
+  --kg-node-missing: #d4a373;
+  --kg-edge: #64748b;
+  --kg-violation: #f87171;
+  --kg-cycle: #fb923c;
+  --kg-duplicate: #facc15;
+  --kg-contradicts: #fb7185;
+  --kg-agrees: #22c55e;
+  --kg-stale: #a8a29e;
+  --kg-unused: #78716c;
+  --kg-changed: #38bdf8;
+  --kg-plane: rgba(148, 163, 184, 0.12);
+  --kg-warn-bg: rgba(251, 146, 60, 0.16);
+  --kg-error: #fca5a5;
+}
+
+html[data-theme='light'] {
+  --kg-node-file: #2d60ff;
+  --kg-node-section: #0e7490;
+  --kg-node-symbol: #6d28d9;
+  --kg-node-entity: #047857;
+  --kg-node-claim: #4d7c0f;
+  --kg-node-fact: #be185d;
+  --kg-node-missing: #92400e;
+  --kg-edge: #94a3b8;
+  --kg-violation: #b91c1c;
+  --kg-cycle: #c2410c;
+  --kg-duplicate: #a16207;
+  --kg-contradicts: #be123c;
+  --kg-agrees: #15803d;
+  --kg-stale: #78716c;
+  --kg-unused: #a8a29e;
+  --kg-changed: #0369a1;
+  --kg-plane: rgba(100, 116, 139, 0.1);
+  --kg-warn-bg: rgba(194, 65, 12, 0.12);
+  --kg-error: #991b1b;
+}

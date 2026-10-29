@@ -10,7 +10,7 @@
 import { lazy, Suspense, useMemo, useRef, useState, type ReactNode } from 'react';
 import { resolveLabels, fillTemplate, type KnowledgeGraphLabels } from './labels';
 import { useKnowledgeGraph } from './useKnowledgeGraph';
-import { lensFindings, hasJudgement } from './lenses';
+import { lensFindings, hasJudgement, lensApplies } from './lenses';
 import { COMPACT_WIDTH, PHONE_FOCUS_NODES, focusGraph, lensGraph, nodeIndex, labelFor } from './graphModel';
 import { useCan3D, useContainerWidth } from './environment';
 import { Toolbar, type LensControl, type Revision } from './Toolbar';
@@ -19,6 +19,7 @@ import { ReviewProgress } from './ReviewProgress';
 import { ListFallback } from './ListFallback';
 import { FindingsPanel } from './FindingsPanel';
 import { PartitionMatrix } from './PartitionMatrix';
+import { LensLegend } from './LensLegend';
 import { ComparePanel } from './ComparePanel';
 import { NodePanel } from './NodePanel';
 import { TracePanel } from './TracePanel';
@@ -35,6 +36,7 @@ const MAX_DRAWN_NODES = 2000;
 
 export interface KnowledgeGraphViewProps {
     source: KnowledgeGraphSource;
+    /** Host words over the English defaults: `resolveLabels` merges every map key by key, so a host may pass a subset. */
     labels?: Partial<KnowledgeGraphLabels>;
     /** Puts a Fix-with-agent request in the host's ONE composer. Absent ⇒ no Fix button. */
     onCompose?(text: string): void;
@@ -133,6 +135,7 @@ export function KnowledgeGraphView({
     const lensPanel = (
         <div style={{ display: 'grid', gap: 12 }}>
             <p style={{ ...muted, margin: 0 }}>{labels.lensHints[lens.id]}</p>
+            <LensLegend lens={lens} labels={labels} applicable={lensApplies(kg.requested, graph) && lensApplies(lens, graph)} />
             {lens.needsJudgement && !hasJudgement(graph) && <p role="note" style={{ ...muted, margin: 0 }}>{labels.lensNeedsJudgement}</p>}
             {lens.panel === 'matrix' && <PartitionMatrix graph={graph} labels={labels} />}
             {lens.panel === 'compare' && kg.graph && (

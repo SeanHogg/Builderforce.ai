@@ -11,6 +11,7 @@ import { useMemo, useState } from 'react';
 import { toMermaid, traceGraph, UNPARTITIONED_LANE, type KnowledgeGraph, type NodeRef, type Trace } from '@seanhogg/builderforce-memory/knowledge';
 import { fillTemplate, type KnowledgeGraphLabels } from './labels';
 import { labelFor, nodeIndex } from './graphModel';
+import { edgeKindLabel } from './names';
 import { cssVar } from './scene/themeColors';
 import { button, muted } from './styles';
 
@@ -87,7 +88,7 @@ export function TracePanel({ graph, from, labels }: TracePanelProps) {
                         const tone = stepTone(s);
                         const notes = [s.back ? labels.traceBack : '', s.verdict === 'upward' ? labels.traceUpward : '',
                             s.verdict === 'skips' ? labels.traceSkips : '', s.cycle ? labels.traceCycle : ''].filter(Boolean).join(', ');
-                        const text = fillTemplate(labels.traceStep, { from: label(s.from), kind: s.kind, to: label(s.to) });
+                        const text = fillTemplate(labels.traceStep, { from: label(s.from), kind: edgeKindLabel(labels, s.kind), to: label(s.to) });
                         return (
                             <g key={`${s.from}-${s.to}-${i}`} style={{ color: tone }}>
                                 <title>{notes ? `${text} (${notes})` : text}</title>
@@ -95,7 +96,7 @@ export function TracePanel({ graph, from, labels }: TracePanelProps) {
                                     ? <path d={`M${x1} ${y - 8} h24 v16 h-20`} fill="none" stroke={tone} markerEnd="url(#kg-arrow)" />
                                     : <line x1={x1} x2={x2 + (x2 > x1 ? -4 : 4)} y1={y} y2={y} stroke={tone} strokeWidth={1.5} strokeDasharray={s.back ? '5 4' : undefined} markerEnd="url(#kg-arrow)" />}
                                 <text x={(x1 + x2) / 2 + (x1 === x2 ? 30 : 0)} y={y - 4} textAnchor={x1 === x2 ? 'start' : 'middle'} fontSize={10} fill={cssVar('muted')}>
-                                    {s.kind}{notes ? ` · ${notes}` : ''}
+                                    {edgeKindLabel(labels, s.kind)}{notes ? ` · ${notes}` : ''}
                                 </text>
                             </g>
                         );

@@ -1,21 +1,22 @@
 /**
- * `dup.check`, `deps.cycles` and `deadcode.check` — answered through the CODE PACK, so the
+ * `dup.check`, `deps.cycles`, `deadcode.check` and `arch.boundaries` — answered through the CODE PACK, so the
  * summary counts exactly the findings the knowledge-graph view shows (PRD 38 §4.5):
  *
  *   the existing runner (`runCodeAnalysis`: dependency-cruiser, jscpd, knip, with the
  *   workspace's layers) → the code pack's analyzers (`codeAnalyzers`) → memory's
  *   `buildGraph(...).findings` over `knowledgePacks()`.
  *
- * One analysis serves all three for a short while (they are often asked back to back),
- * and a finding list ends with an **Open in graph** chip focused on its files. A run whose
+ * One analysis serves every action while the tree is unchanged (cached per sha, see
+ * `workspaceAnalysis.ts`), and a finding list ends with an **Open in graph** chip focused on its files. A run whose
  * relevant analyzer FAILED answers nothing — missing output is never reported as clean.
  */
 
 import { buildGraph, MAX_NODES_CAP, pathOfRef, type Finding, type PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
 import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
 import { CODE_PARTITIONS_FILE, loadCodePartitions } from '../knowledge/codePack.js';
-import { codeAnalyzers, runCodeAnalysis } from '../knowledge/codeAnalyzers.js';
+import { codeAnalyzers } from '../knowledge/codeAnalyzers.js';
 import { knowledgePacks } from '../knowledge/knowledgePacks.js';
+import { analyseWorkspace, forgetWorkspaceAnalyses } from '../knowledge/workspaceAnalysis.js';
 import type { PrefetchChip, PrefetchExecHost, PrefetchRunner } from './contract.js';
 import { PREFETCH_LIST_CAP } from './exec.js';
 
@@ -23,8 +24,6 @@ import { PREFETCH_LIST_CAP } from './exec.js';
 export const OPEN_KNOWLEDGE_GRAPH_COMMAND = 'builderforce.openKnowledgeGraph';
 /** The chip's label key in every host catalog. */
 export const OPEN_IN_GRAPH_LABEL_KEY = 'prefetch.chip.openInGraph';
-/** How long one analysis answers the next code-pack question. */
-const ANALYSIS_REUSE_MS = 60_000;
 /** The most refs a chip focuses. */
 const CHIP_FOCUS_MAX = 50;
 
@@ -39,32 +38,31 @@ export async function readPartitions(host: Pick<PrefetchExecHost, 'caps'>): Prom
 }
 
 interface Analysis { snapshot: CodeAnalysisSnapshot; findings: Finding[] }
-const recent = new Map<string, { at: number; work: Promise<Analysis | null> }>();
 
 async function analyse(host: PrefetchExecHost, signal: AbortSignal): Promise<Analysis | null> {
     const partitions = await readPartitions(host);
-    const snapshot = await runCodeAnalysis({ caps: host.caps, signal }, { partitions });
+    const { snapshot, repoGraph } = await analyseWorkspace(
+        { caps: host.caps, partitions, ...(host.repoGraph ? { repoGraph: host.repoGraph } : {}) },
+        signal,
+    );
     if (!snapshot || signal.aborted) return null;
-    const packs = knowledgePacks({ analyzers: codeAnalyzers({ run: async () => ({ analysis: snapshot }) }), partitions });
+    const packs = knowledgePacks({ analyzers: codeAnalyzers({ run: async () => ({ analysis: snapshot, repoGraph }) }), partitions });
     const extracted = await packs[0]!.analyzers!.analyse(host.rootId, signal);
     const graph = buildGraph({ rootId: host.rootId, extracted, facts: [], relations: [], packs }, { maxNodes: MAX_NODES_CAP });
     return { snapshot, findings: graph.findings };
 }
 
-/** The code pack's findings for this workspace, shared by the three actions for {@link ANALYSIS_REUSE_MS}. */
-export function codePackFindings(host: PrefetchExecHost, signal: AbortSignal, now = Date.now()): Promise<Analysis | null> {
-    const hit = recent.get(host.rootId);
-    if (hit && now - hit.at < ANALYSIS_REUSE_MS) return hit.work;
-    const work = analyse(host, signal).catch(() => null);
-    recent.set(host.rootId, { at: now, work });
-    // A failed or stopped analysis is not reused.
-    void work.then((a) => { if (!a && recent.get(host.rootId)?.work === work) recent.delete(host.rootId); });
-    return work;
+/**
+ * The code pack's findings for this workspace, shared by the code actions. The analyzers
+ * run once per tree (`analyseWorkspace` caches per sha); a failed or stopped run is null.
+ */
+export function codePackFindings(host: PrefetchExecHost, signal: AbortSignal): Promise<Analysis | null> {
+    return analyse(host, signal).catch(() => null);
 }
 
-/** Forget cached analyses (tests; a host that knows the tree changed). */
+/** Forget cached analyses (tests; a host that knows the tree changed under the same sha). */
 export function forgetCodePackFindings(): void {
-    recent.clear();
+    forgetWorkspaceAnalyses();
 }
 
 interface CodeAction {
@@ -79,6 +77,7 @@ interface CodeAction {
 const CODE_ACTIONS: readonly CodeAction[] = [
     { id: 'dup.check', analyzer: 'jscpd', kinds: ['clone-group', 'near-duplicate'], title: (n) => `${n} duplicate-code group(s)`, none: 'No duplicate code found (jscpd).' },
     { id: 'deps.cycles', analyzer: 'dependency-cruiser', kinds: ['cycle'], title: (n) => `${n} import cycle(s)`, none: 'No import cycles found (dependency-cruiser).' },
+    { id: 'arch.boundaries', analyzer: 'dependency-cruiser', kinds: ['partition-violation'], title: (n) => `${n} layer-boundary violation(s)`, none: 'No layer-boundary violations found (dependency-cruiser, the workspace layers).' },
     { id: 'deadcode.check', analyzer: 'knip', kinds: ['unused-file', 'unused-export', 'unused-dependency'], title: (n) => `${n} unused-code finding(s)`, none: 'No unused files, exports or dependencies found (knip).' },
 ];
 
@@ -115,7 +114,7 @@ function codeActionRunner(host: PrefetchExecHost, action: CodeAction): PrefetchR
     };
 }
 
-/** The three code-pack executors, by action id. */
+/** The code-pack executors, by action id. */
 export function codePackExecutors(host: PrefetchExecHost): Record<string, PrefetchRunner> {
     return Object.fromEntries(CODE_ACTIONS.map((a) => [a.id, codeActionRunner(host, a)]));
 }

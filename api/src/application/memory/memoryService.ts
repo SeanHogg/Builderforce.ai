@@ -30,7 +30,7 @@
  * SQL, so a lapsed fact stops being recalled when it lapses, not when a sweep runs.
  */
 
-import { and, desc, eq, gt, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gt, ilike, inArray, isNull, or, type SQL } from 'drizzle-orm';
 import type {
   MemoryCapability,
   MemoryEntry,
@@ -54,10 +54,13 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { QA_CACHE_SOURCE, projectFactsVersion, type FactFileAnchor } from '../llm/projectFactsStore';
 import { recallProjectFacts } from '../llm/projectFactsRecall';
-import { deleteProjectFact, upsertProjectFact } from '../llm/projectFactsWrite';
+import { writeProjectFact } from '../knowledge/writeProjectFact';
+import { deleteKnowledgeFact, type FactDeleteActor } from '../knowledge/deleteKnowledgeFact';
+import { knowledgeWritePortsFor } from '../knowledge/knowledgeWritePorts';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { fuseHybridArms } from '@seanhogg/builderforce-memory/retrieval';
+import { memoryVersionKey } from './memoryCacheVersion';
 import { memoryEmbeddingText } from './memoryEmbedding';
 import { memoryEmbeddingFieldsFor, memoryQueryVectors, type MemoryQueryVector } from './memoryEmbeddingPolicy';
 import { annRecallProject, annRecallScoped, type RecalledRow } from './memorySemanticRecall';
@@ -74,7 +77,7 @@ const RECALL_L1_TTL_MS = 30_000;
 const CANDIDATE_MULTIPLIER = 4;
 
 const errMessage = (e: unknown): string => (e instanceof Error ? e.message : String(e));
-const versionKey = (tenantId: number): string => `mem:ver:${tenantId}`;
+const versionKey = memoryVersionKey;
 
 /**
  * Fuse the semantic and lexical arms of a recall into one ordering.
@@ -184,10 +187,11 @@ export async function remember(env: Env, db: Db, ctx: MemoryWriteContext, input:
 
   try {
     if (scope.kind === 'project') {
-      const ok = await upsertProjectFact(env, db, ctx.tenantId, scope.id, key, content, ctx.origin, {
-        expiresAt,
+      // The ONE knowledge writer: origin stamped `agent` server-side, row-bounded, version-bumped.
+      const ok = await writeProjectFact({ env, db, tenantId: ctx.tenantId, projectId: scope.id }, {
+        key, content, source: ctx.origin, expiresAt,
         originExecutionId: ctx.executionId ?? null,
-        ...(input.fileAnchors?.length ? { fileAnchors: input.fileAnchors, retireByAnchor: false } : {}),
+        ...(input.fileAnchors?.length ? { fileAnchors: input.fileAnchors } : {}),
       });
       if (!ok) return { ok: false, error: 'project-scoped write rejected (invalid project or empty value)' };
       await bumpCacheVersion(env, versionKey(ctx.tenantId));
@@ -371,13 +375,24 @@ export async function recall(
  * only safe direction: forgetting a ticket-local override must not silently expose the
  * workspace-wide fact it was shadowing without the caller asking for that.
  */
-export async function forget(env: Env, db: Db, ctx: MemoryScopeContext, key: string): Promise<MemoryForgetResult> {
+export async function forget(
+  env: Env,
+  db: Db,
+  ctx: MemoryScopeContext,
+  key: string,
+  /** Who is forgetting. Absent = a machine/agent: it may not delete a person's fact (§8.3). */
+  actor: FactDeleteActor = { userId: null, role: null },
+): Promise<MemoryForgetResult> {
   const k = (key ?? '').trim().slice(0, 255);
   if (!k) return { ok: false, error: 'key is required' };
   try {
     for (const scope of visibleScopeChain(ctx)) {
       if (scope.kind === 'project') {
-        if (await deleteProjectFact(env, db, ctx.tenantId, scope.id, k)) {
+        // Relations go with the fact, and the author/admin rule applies (§8.3).
+        const { store } = knowledgeWritePortsFor(env, db, ctx.tenantId, scope.id);
+        const res = await deleteKnowledgeFact({ env, db, tenantId: ctx.tenantId, projectId: scope.id, store }, actor, k);
+        if (!res.ok) return { ok: false, error: res.error };
+        if (res.removed) {
           await bumpCacheVersion(env, versionKey(ctx.tenantId));
           return { ok: true, key: k, deleted: true };
         }
@@ -405,47 +420,7 @@ export async function forget(env: Env, db: Db, ctx: MemoryScopeContext, key: str
   }
 }
 
-/**
- * Delete every lapsed fact from BOTH stores. Housekeeping only — recall already
- * excludes expired rows in SQL, so this reclaims space and keeps the governance view
- * honest; correctness never depends on it having run. Wired into the retention sweep.
- */
-export async function purgeExpiredMemories(env: Env, db: Db, tenantId?: number): Promise<{ agentMemory: number; projectFacts: number }> {
-  const now = new Date();
-  try {
-    // The tenant predicate is written INLINE in each statement (rather than hoisted
-    // into a variable) so the tenant-scope guard can see it, and so the two modes are
-    // visibly distinct: an operator sweep is one tenant, the nightly cron is global.
-    const [am, pf] = await Promise.all([
-      db
-        .delete(agentMemory)
-        .where(
-          and(
-            sql`${agentMemory.expiresAt} IS NOT NULL`,
-            sql`${agentMemory.expiresAt} <= ${now}`,
-            tenantId != null ? eq(agentMemory.tenantId, tenantId) : undefined,
-          ),
-        )
-        .returning({ id: agentMemory.id })
-        .catch(() => [] as Array<{ id: string }>),
-      db
-        .delete(projectFacts)
-        .where(
-          and(
-            sql`${projectFacts.expiresAt} IS NOT NULL`,
-            sql`${projectFacts.expiresAt} <= ${now}`,
-            tenantId != null ? eq(projectFacts.tenantId, tenantId) : undefined,
-          ),
-        )
-        .returning({ id: projectFacts.id })
-        .catch(() => [] as Array<{ id: string }>),
-    ]);
-    if (tenantId != null && am.length + pf.length > 0) await bumpCacheVersion(env, versionKey(tenantId));
-    return { agentMemory: am.length, projectFacts: pf.length };
-  } catch {
-    return { agentMemory: 0, projectFacts: 0 };
-  }
-}
+export { purgeExpiredMemories } from './purgeExpiredMemories';
 
 /** One row as the governance UI renders it — the fact PLUS why it is trusted. */
 export interface GovernedMemoryRow {

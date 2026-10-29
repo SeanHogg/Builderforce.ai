@@ -388,7 +388,7 @@ describe('QA cache expiry (5301 req 5)', () => {
 
   it('leaves the decay sweep alone for qa-cache rows (their TTL is their own)', async () => {
     const { db, calls } = makeDb();
-    await sweepUnrecalledFactDecay(db as never, 7, 42);
+    await sweepUnrecalledFactDecay({} as never, db as never, 7, 42);
     expect(calls.updates.some((u) => u.where.includes('qa-cache'))).toBe(true);
   });
 });
@@ -443,7 +443,7 @@ describe('decay (5301 req 6)', () => {
 
   it('the sweep expires only unrecalled, live, unexpired rows', async () => {
     const { db, calls } = makeDb();
-    const n = await sweepUnrecalledFactDecay(db as never, 7, 42);
+    const n = await sweepUnrecalledFactDecay({} as never, db as never, 7, 42);
     expect(calls.updates).toHaveLength(1);
     const sweep = calls.updates[0];
     if (!sweep) throw new Error('no sweep UPDATE was emitted');
@@ -462,15 +462,15 @@ describe('decay (5301 req 6)', () => {
 
   it('is a no-op for an invalid project or a non-positive window', async () => {
     const { db, calls } = makeDb();
-    expect(await sweepUnrecalledFactDecay(db as never, 7, 0)).toBe(0);
-    expect(await sweepUnrecalledFactDecay(db as never, 7, 42, { windowMs: 0 })).toBe(0);
+    expect(await sweepUnrecalledFactDecay({} as never, db as never, 7, 0)).toBe(0);
+    expect(await sweepUnrecalledFactDecay({} as never, db as never, 7, 42, { windowMs: 0 })).toBe(0);
     expect(calls.updates).toHaveLength(0);
   });
 
   it('runs across every project scope, not just a caller-supplied one', async () => {
     const { db } = makeDb({ distinctRows: [{ tenantId: 7, projectId: 42 }, { tenantId: 8, projectId: 99 }] });
     // Two scopes in, two expiry statements out.
-    const total = await sweepAllUnrecalledFactDecay(db as never);
+    const total = await sweepAllUnrecalledFactDecay({} as never, db as never);
     expect(typeof total).toBe('number');
   });
 });

@@ -10,7 +10,12 @@ import type { Db } from '../../infrastructure/database/connection';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { listTeamMemoryEntries, parseTeamMemoryKey, teamMemoryKey } from './teamMemoryFeed';
 
-vi.mock('../llm/projectFactsStore', () => ({ projectFactsVersion: async () => '0', QA_CACHE_SOURCE: 'qa' }));
+// Partial: memoryService now reaches the knowledge writer, whose modules read more of this store.
+vi.mock('../llm/projectFactsStore', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../llm/projectFactsStore')>()),
+  projectFactsVersion: async () => '0',
+  QA_CACHE_SOURCE: 'qa',
+}));
 vi.mock('../llm/projectFactsRecall', () => ({ recallProjectFacts: vi.fn() }));
 vi.mock('../llm/projectFactsWrite', () => ({ deleteProjectFact: vi.fn(), upsertProjectFact: vi.fn() }));
 

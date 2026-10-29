@@ -47,6 +47,10 @@ export interface KnowledgeGraphLabels {
     viewList: string;
     listFallbackNote: string;
     partitionNone: string;
+    /** An edge kind in a trace step (`references` → "references"), keyed by the camelCased kind. Unknown kinds show raw. */
+    edgeKinds: Record<string, string>;
+    /** A pack's name (`code`, `docs`). Unknown packs show raw. */
+    packs: Record<string, string>;
     // Findings
     findingsTitle: string;
     findingsEmpty: string;
@@ -71,6 +75,8 @@ export interface KnowledgeGraphLabels {
     addFactPlaceholder: string;
     saveFact: string;
     factSaved: string;
+    factSaveFailed: string;
+    factDeleteFailed: string;
     deleteFact: string;
     deleteFactConfirm: string;
     confirmDelete: string;
@@ -114,6 +120,8 @@ export interface KnowledgeGraphLabels {
     reviewPlanUnchanged: string;
     reviewPlanModelCalls: string;
     reviewPlanCost: string;
+    /** Shown in the confirm chip while the host cannot price the judgement pass. */
+    reviewPlanCostPending: string;
     reviewPlanSkipped: string;
     reviewConfirm: string;
     reviewCancel: string;
@@ -179,6 +187,12 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
     viewList: 'List',
     listFallbackNote: 'Showing the list view.',
     partitionNone: 'No partition',
+    edgeKinds: {
+        references: 'references', contains: 'contains', links: 'links to', about: 'is about', mentions: 'mentions',
+        supersedes: 'supersedes', contradicts: 'contradicts', agrees: 'agrees with', duplicate: 'duplicates',
+        nearDuplicate: 'nearly duplicates', coChanged: 'changes with', imports: 'imports', calls: 'calls',
+    },
+    packs: { code: 'Code', docs: 'Documents' },
     findingsTitle: 'Findings',
     findingsEmpty: 'Nothing to act on in this lens.',
     findingKinds: {
@@ -192,7 +206,7 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
     showFinding: 'Show',
     fixWithAgent: 'Fix with agent',
     fix: {
-        cloneGroup: 'Consolidate the duplicated code in clone group {group}: {items}. Extract one shared implementation and point every copy at it.',
+        cloneGroup: 'Consolidate the duplicated code[[ in clone group {group}]]: {items}. Extract one shared implementation and point every copy at it.',
         violation: 'Fix the layer violation: {items}. Move the dependency behind a port so {from} no longer uses {to} directly.',
         partitionViolation: 'Fix the layer violation: {items}. Move the dependency behind a port so {from} no longer uses {to} directly.',
         cycle: 'Break the dependency cycle between {items}.',
@@ -202,7 +216,7 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
         unusedDependency: 'Remove the unused dependencies listed in {items}.',
         brokenLink: 'Repair the broken links in {file}: {items}.',
         orphan: 'Link these orphan documents from the documents that should reference them, or archive them: {items}.',
-        contradiction: 'Reconcile the contradiction between {items}.',
+        contradiction: 'Reconcile [[§{sectionA} of ]]{fileA} with [[§{sectionB} of ]]{fileB}.',
         nearDuplicate: 'Merge or differentiate these near-duplicate sections: {items}.',
         possibleSame: 'Check whether these are the same thing, and merge them if they are: {items}.',
         stale: 'Re-check the stale knowledge about {items} against the current source.',
@@ -224,6 +238,8 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
     addFactPlaceholder: 'What should every agent know about this?',
     saveFact: 'Save fact',
     factSaved: 'Fact saved.',
+    factSaveFailed: 'The fact could not be saved. Your text is still here; try again.',
+    factDeleteFailed: 'The fact could not be deleted. Try again.',
     deleteFact: 'Delete fact',
     deleteFactConfirm: 'Delete this fact and its relations? Every host and agent will stop seeing it.',
     confirmDelete: 'Confirm delete',
@@ -262,6 +278,7 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
     reviewPlanUnchanged: '{count} unchanged since the last review',
     reviewPlanModelCalls: '≈ {count} model calls',
     reviewPlanCost: '≈ {cost}',
+    reviewPlanCostPending: 'Cost is shown after routing.',
     reviewPlanSkipped: '{count} skipped',
     reviewConfirm: 'Review',
     reviewCancel: 'Cancel',
@@ -291,6 +308,8 @@ export function resolveLabels(partial?: Partial<KnowledgeGraphLabels>): Knowledg
         lenses: { ...d.lenses, ...partial.lenses },
         lensHints: { ...d.lensHints, ...partial.lensHints },
         legend: { ...d.legend, ...partial.legend },
+        edgeKinds: { ...d.edgeKinds, ...partial.edgeKinds },
+        packs: { ...d.packs, ...partial.packs },
         findingKinds: { ...d.findingKinds, ...partial.findingKinds },
         severity: { ...d.severity, ...partial.severity },
         fix: { ...d.fix, ...partial.fix },

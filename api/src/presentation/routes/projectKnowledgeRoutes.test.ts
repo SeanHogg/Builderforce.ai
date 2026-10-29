@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   facts: vi.fn(),
   superadmin: vi.fn(async () => false),
   upsertFact: vi.fn(async () => true),
+  version: { n: 0 },
+  bump: vi.fn(async () => { mocks.version.n += 1; }),
 }));
 
 vi.mock('../middleware/authMiddleware', () => ({
@@ -23,7 +25,7 @@ vi.mock('../middleware/authMiddleware', () => ({
 }));
 vi.mock('../../application/project/projectOwnership', () => ({ projectInTenantCached: mocks.owned }));
 vi.mock('../../application/knowledge/knowledgeComposition', () => ({ knowledgePortsFor: mocks.ports }));
-vi.mock('../../application/knowledge/knowledgeVersion', () => ({ bumpKnowledgeVersion: vi.fn(async () => undefined), knowledgeVersion: vi.fn() }));
+vi.mock('../../application/knowledge/knowledgeVersion', () => ({ bumpKnowledgeVersion: mocks.bump, knowledgeVersion: vi.fn() }));
 vi.mock('../../application/knowledge/knowledgePerception', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../application/knowledge/knowledgePerception')>()),
   putAnalysisSnapshot: mocks.putAnalysis,
@@ -211,6 +213,53 @@ describe('project knowledge routes', () => {
       expect((mocks.upsertFact.mock.calls[0] as unknown[])[7]).toMatchObject({ factOrigin: 'agent', createdBy: null });
       expect((await hostRoutes().request('/42/knowledge/write', post({ facts: [fact('model')] }), {})).status).toBe(200);
       expect((mocks.upsertFact.mock.calls[1] as unknown[])[7]).toMatchObject({ factOrigin: 'model', createdBy: null });
+    });
+  });
+
+  describe('graph cache (§4.8): a hit, then a miss after a write', () => {
+    it('serves the second GET from the cache and rebuilds after a POST write bumps the version', async () => {
+      const real = await vi.importActual<typeof import('../../application/knowledge/getKnowledgeGraph')>('../../application/knowledge/getKnowledgeGraph');
+      mocks.graph.mockImplementation(real.getKnowledgeGraph);
+      mocks.version.n = 0;
+      const facts = vi.fn(async () => []);
+      const store = {
+        scope: vi.fn(async () => ({ rootId: 'cache-root', title: 'Cache', packs: ['docs'], lastDigest: 'dg-cache' })),
+        scopes: vi.fn(async () => []), facts, relations: vi.fn(async () => []),
+        upsertRelations: mocks.upsertRelations,
+      };
+      mocks.ports.mockImplementation((_e: unknown, _d: unknown, tenantId: number, projectId: number) => ({
+        env: {}, db, tenantId, projectId, store,
+        extracted: { setSource: vi.fn(), snapshotReview: vi.fn(), rootExtracted: vi.fn(async () => []) },
+        graph: {
+          cacheEnv: undefined, tenantId, projectId, store,
+          extracted: { rootExtracted: vi.fn(async () => []) },
+          analysis: { latest: vi.fn(async () => null) },
+          repo: { linked: async () => null },
+          version: async () => `cache-v${mocks.version.n}`,
+        },
+        index: {},
+      }));
+      const get = () => routes().request('/4242/knowledge-graph?root=cache-root', {}, {});
+
+      expect((await get()).status).toBe(200);
+      expect((await get()).status).toBe(200);
+      expect(facts).toHaveBeenCalledTimes(1); // second read is a cache hit
+
+      const w = await routes().request('/4242/knowledge/write', post({ relations: [relation(1)] }), {});
+      expect(w.status).toBe(200);
+      expect(mocks.bump).toHaveBeenCalledTimes(1);
+
+      expect((await get()).status).toBe(200);
+      expect(facts).toHaveBeenCalledTimes(2); // new version token = miss
+    });
+  });
+
+  describe('model-claim privacy (§5.2)', () => {
+    it('clamps a model claim to 3 lines before it reaches the fact upsert', async () => {
+      const content = ['l1', 'l2', 'l3', 'l4', 'l5'].join('\n');
+      const res = await routes().request('/42/knowledge/write', post({ facts: [{ key: 'claim:big', content, fileAnchors: [], origin: 'model' }] }), {});
+      expect(res.status).toBe(200);
+      expect((mocks.upsertFact.mock.calls[0] as unknown[])[5]).toBe('l1\nl2\nl3');
     });
   });
 });

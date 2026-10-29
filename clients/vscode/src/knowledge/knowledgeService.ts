@@ -18,14 +18,15 @@
 
 import * as vscode from "vscode";
 import {
-  buildStoredGraph, indexedSymbolSource, migratingRootFiles, planKnowledgeReview, reviewPacks, runKnowledgeReview, workspaceCodeAnalyzers,
+  buildStoredGraph, indexedSymbolSource, migratingRootFiles, planKnowledgeReviewDetail, reviewPacks, runKnowledgeReview, workspaceCodeAnalyzers,
   type KnowledgeReviewOptions, type KnowledgeReviewPorts,
 } from "@builderforce/agent-tools/knowledge";
 import { readPartitions } from "@builderforce/agent-tools/prefetch";
 import { createKnowledgeClient, type AnalysisSnapshotPayload, type KnowledgeClient } from "@builderforce/knowledge-client";
-import type { DirectorySource, KnowledgeGraph, KnowledgeStore, ReviewPlan, ReviewReport } from "@seanhogg/builderforce-memory/knowledge";
+import type { DirectorySource, KnowledgeGraph, KnowledgeStore, PlanDetail, ReviewReport } from "@seanhogg/builderforce-memory/knowledge";
 import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import { NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
+import { repoMapPort } from "@builderforce/repo-map";
 import { fetchAuthed, type AuthedInit } from "../bfApi";
 import { getSelectedProject } from "../projectState";
 import { buildLocalCapabilityProvider } from "../localCapabilities";
@@ -119,6 +120,7 @@ async function reviewPorts(secrets: vscode.SecretStorage, open: OpenRoot): Promi
     analyzers: workspaceCodeAnalyzers({
       caps,
       partitions,
+      repoGraph: repoMapPort,
       ...(root.rel ? { path: root.rel } : {}),
       ...(client ? { upload: (sha: string, snapshot: unknown) => client.putAnalysis(sha, snapshot as AnalysisSnapshotPayload) } : {}),
       onUploadError: (error) => log("analysis upload", error),
@@ -128,11 +130,11 @@ async function reviewPorts(secrets: vscode.SecretStorage, open: OpenRoot): Promi
   };
 }
 
-/** A review of one root: plan first (no writes), then the review on that plan once confirmed. */
+/** A review of one root: plan first (no writes), then the review on that plan once confirmed (no re-walk). */
 export interface RootReview {
   open: OpenRoot;
-  plan(force?: boolean): Promise<ReviewPlan>;
-  run(opts: Omit<KnowledgeReviewOptions, "force"> & { force?: boolean }): Promise<ReviewReport>;
+  plan(force?: boolean): Promise<PlanDetail>;
+  run(opts: KnowledgeReviewOptions): Promise<ReviewReport>;
 }
 
 /** Listeners told when a root's knowledge changed (a review finished): the live graph re-reads. */
@@ -149,7 +151,7 @@ export function reviewRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot): 
   return {
     open,
     async plan(force) {
-      return planKnowledgeReview(await portsOnce(), { force: !!force });
+      return planKnowledgeReviewDetail(await portsOnce(), { force: !!force });
     },
     async run(opts) {
       const p = await portsOnce();

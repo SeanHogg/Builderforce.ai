@@ -26,6 +26,7 @@ import {
 import { nodeToolProbe } from "@builderforce/agent-tools/node-prefetch.js";
 import { KNOWLEDGE_ASK, KNOWLEDGE_ASK_ROW, knowledgeAskExecutor } from "@builderforce/agent-tools/knowledge-index.js";
 import { defineRegistry, type PrefetchAction, type PrefetchPort } from "@builderforce/prefetch";
+import { repoMapPort } from "@builderforce/repo-map";
 import { resolve } from "node:path";
 import { requestHumanInput } from "../../infra/approval-gate.js";
 import { withOnPremKnowledgeRows } from "../../agents/knowledge/onPremKnowledge.js";
@@ -97,7 +98,7 @@ export function onPremPrefetchPort(workspaceRoot: string): PrefetchPort {
   const port: PrefetchPort = {
     registry: ONPREM_PREFETCH_REGISTRY,
     executors: {
-      ...sharedPrefetchExecutors({ caps, tools: () => ready.get(root), rootId: onPremRootId(root) }),
+      ...sharedPrefetchExecutors({ caps, tools: () => ready.get(root), rootId: onPremRootId(root), repoGraph: repoMapPort }),
       [KNOWLEDGE_ASK]: knowledgeAskExecutor({ index: async () => onPremWorkspaceKnowledgeIndex(root) }),
     },
     ports: {

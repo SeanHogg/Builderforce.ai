@@ -19,12 +19,13 @@ import { basename, resolve, relative, sep } from "node:path";
 import { stat } from "node:fs/promises";
 import type { CapabilityProvider } from "@builderforce/agent-tools";
 import {
-  buildStoredGraph, fileManifest, indexedSymbolSource, manifestFileName, migratingRootFiles, planKnowledgeReview, reviewPacks,
-  runKnowledgeReview, workspaceCodeAnalyzers, createFsDirectorySource, type KnowledgeReviewPorts,
+  buildStoredGraph, fileManifest, indexedSymbolSource, manifestFileName, migratingRootFiles, planKnowledgeReviewDetail, reviewPacks,
+  runKnowledgeReview, watchFileEdits, workspaceCodeAnalyzers, createFsDirectorySource, type KnowledgeReviewPorts,
 } from "@builderforce/agent-tools/knowledge/index.js";
-import { readPartitions, withKnowledgeRows, type KnowledgeRowsHost } from "@builderforce/agent-tools/prefetch/index.js";
+import { graphShown, readPartitions, withKnowledgeRows, type KnowledgeRowsHost } from "@builderforce/agent-tools/prefetch/index.js";
 import { createKnowledgeClient, type AnalysisSnapshotPayload, type KnowledgeClient } from "@builderforce/knowledge-client";
 import { defineRegistry, type PrefetchPort } from "@builderforce/prefetch";
+import { repoMapPort } from "@builderforce/repo-map";
 import { readSharedEnvVar } from "../../infra/env-file.js";
 import { logDebug } from "../../logger.js";
 import { getKnowledgeLoopService } from "../../infra/knowledge-loop.js";
@@ -89,6 +90,25 @@ async function isFolder(path: string): Promise<boolean> {
   return stat(path).then((s) => s.isDirectory(), () => false);
 }
 
+/** Reviewed roots whose files are watched, so an edit marks what was judged from it stale (§5.2). */
+const watchedRoots = new Map<string, () => void>();
+
+/** After a review: watch the root once, applying the shared stale-marking to every file the watcher reports. */
+function keepFresh(deps: OnPremKnowledgeDeps, rootId: string, rel: string, ports: KnowledgeReviewPorts): void {
+  if (watchedRoots.has(rootId)) return;
+  const stop = watchFileEdits({
+    rootId,
+    rootPath: rel ? resolve(deps.workspaceRoot, rel) : resolve(deps.workspaceRoot),
+    fs: containerKnowledgeFs,
+    source: ports.source,
+    store: ports.store,
+    manifest: ports.manifest,
+    packs: reviewPacks(ports),
+    onError: loggedFallback("stale marking", undefined),
+  });
+  if (stop) watchedRoots.set(rootId, stop);
+}
+
 export interface OnPremKnowledgeDeps {
   workspaceRoot: string;
   caps: CapabilityProvider;
@@ -116,6 +136,7 @@ async function reviewPorts(deps: OnPremKnowledgeDeps, rel: string, rootId: strin
     analyzers: workspaceCodeAnalyzers({
       caps,
       partitions,
+      repoGraph: repoMapPort,
       ...(rel ? { path: rel } : {}),
       upload: (sha, snapshot) => linked.client.putAnalysis(sha, snapshot as unknown as AnalysisSnapshotPayload),
       onUploadError: (error) => logDebug(`[knowledge] analysis upload failed: ${String(error)}`),
@@ -140,10 +161,11 @@ export function onPremKnowledgeRowsHost(deps: OnPremKnowledgeDeps): KnowledgeRow
       return {
         rootId,
         title,
-        plan: async () => planKnowledgeReview(await portsOnce()),
-        async review(_plan, signal) {
+        plan: async () => planKnowledgeReviewDetail(await portsOnce()),
+        async review(plan, signal) {
           const p = await portsOnce();
-          const report = await runKnowledgeReview(p, { signal });
+          const report = await runKnowledgeReview(p, { signal, plan });
+          keepFresh(deps, rootId, rel, p);
           // The review's graph feeds the knowledge index (§4.3, last step).
           const graph = await deps.linked.client.graph(rootId).catch(loggedFallback("platform graph", null))
             ?? await buildStoredGraph({ rootId, store: p.store, manifest: p.manifest, packs: reviewPacks(p) });
@@ -155,8 +177,8 @@ export function onPremKnowledgeRowsHost(deps: OnPremKnowledgeDeps): KnowledgeRow
     rootId: () => base,
     async showGraph(rootId, focus) {
       const url = knowledgeSurfaceUrl(deps.linked.projectId);
-      const named = focus.length > 0 ? ` It opens on the project's board; search for the ${focus.length} file(s) named here.` : "";
-      return { text: `The knowledge graph of **${rootId}** is on the project's canvas: [Open the knowledge graph](${url}).${named}` };
+      const named = focus.length > 0 ? ` It opens on the project's board, focused on the ${focus.length} file(s) named here.` : "";
+      return graphShown(`The knowledge graph of **${rootId}** is on the project's canvas: [Open the knowledge graph](${url}).${named}`, rootId, focus);
     },
   };
 }

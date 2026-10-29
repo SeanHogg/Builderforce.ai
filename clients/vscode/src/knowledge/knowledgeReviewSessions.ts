@@ -11,14 +11,14 @@
  */
 
 import * as vscode from "vscode";
-import type { ReviewPlan } from "@seanhogg/builderforce-memory/knowledge";
+import type { PlanDetail } from "@seanhogg/builderforce-memory/knowledge";
 import type { KnowledgeEvent, KnowledgePlanReply, KnowledgeReviewRequest } from "./knowledgeProtocol";
 import { rootById, rootForPath, type KnowledgeRoot } from "./knowledgeRoots";
 import { reviewRoot, workspaceFolders, type RootReview } from "./knowledgeService";
 
 interface Session {
   review: RootReview;
-  plan: ReviewPlan;
+  plan: PlanDetail;
   force: boolean;
   abort?: AbortController;
 }
@@ -61,7 +61,7 @@ export class KnowledgeReviewSessions implements vscode.Disposable {
     const plan = await review.plan(force);
     const reviewId = `review-${++nextReview}`;
     this.sessions.set(reviewId, { review, plan, force });
-    return { reviewId, rootId: root.rootId, plan };
+    return { reviewId, rootId: root.rootId, plan: plan.plan };
   }
 
   /** Starts a planned review; false when the id is unknown (already run or discarded). */
@@ -74,6 +74,7 @@ export class KnowledgeReviewSessions implements vscode.Disposable {
     void session.review
       .run({
         force: session.force,
+        plan: session.plan,
         signal: abort.signal,
         onProgress: (progress) => this.post({ stream: reviewId, type: "progress", progress }),
       })

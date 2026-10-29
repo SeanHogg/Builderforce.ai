@@ -13,6 +13,7 @@ import type { CapabilityProvider } from '@builderforce/agent-tools';
 import type { Env } from '../../../env';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { TicketRepoContext } from '../../repos/commitFileAsPendingChange';
+import type { WrittenFileHashes } from './writtenFileHashes';
 import { withIdeWorkspace } from './ideWorkspaceProvider';
 import { resolveIdeWorkspaceForRun } from './ideWorkspaceCoding';
 import { sandboxShell, withSandbox } from '../sandbox/sandboxProvider';
@@ -24,7 +25,7 @@ export interface RunProviderArgs {
   db: Db;
   built: CapabilityProvider;
   repoCtx: TicketRepoContext | null;
-  run: { tenantId: number; taskId: number; executionId: number; agentLabel: string; cloudAgentRef?: string; writtenPaths: Set<string> };
+  run: { tenantId: number; taskId: number; executionId: number; agentLabel: string; cloudAgentRef?: string; writtenPaths: Set<string>; writtenHashes?: WrittenFileHashes };
   sandbox?: RunSandbox;
   /** The run's cancel signal (kills a running sandbox command). */
   signal: AbortSignal;
@@ -46,6 +47,7 @@ export async function composeRunProvider(a: RunProviderArgs): Promise<RunProvide
     ? withIdeWorkspace(built, ideWorkspace, {
       tenantId: run.tenantId, taskId: run.taskId, executionId: run.executionId, agentLabel: run.agentLabel,
       ...(run.cloudAgentRef ? { cloudAgentRef: run.cloudAgentRef } : {}), writtenPaths: run.writtenPaths,
+      ...(run.writtenHashes ? { writtenHashes: run.writtenHashes } : {}),
     }, { env, db })
     : built;
   if (!a.sandbox) return { provider: a.decorate ? a.decorate(backed) : backed };

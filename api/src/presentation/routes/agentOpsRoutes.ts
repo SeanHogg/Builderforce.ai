@@ -126,7 +126,7 @@ export function createAgentOpsRoutes(db: DbHandle) {
       tenantId,
       projectId: numQuery(c.req.query('projectId')),
       ticketId: numQuery(c.req.query('taskId')),
-    }, key);
+    }, key, { userId: c.get('userId') ?? null, role: (c.get('role') as string | undefined) ?? null });
     return json(result, result.ok ? 200 : 400);
   });
 

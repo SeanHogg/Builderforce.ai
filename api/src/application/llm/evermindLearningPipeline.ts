@@ -20,7 +20,7 @@ import type { Env } from '../../env';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { getProjectEvermindHead } from './projectEvermind';
 import { QA_CACHE_SOURCE } from './projectFactsStore';
-import { upsertProjectFact } from './projectFactsWrite';
+import { writeProjectFact } from '../knowledge/writeProjectFact';
 import {
   extractCandidate,
   pipelineMetrics,
@@ -223,7 +223,7 @@ export async function transferLearningCandidate(
   const release = () => db.update(evermindLearningCandidates).set({ transferredAt: null }).where(candidateRow(false));
   let wrote: boolean;
   try {
-    wrote = !!await upsertProjectFact(env, db, tenantId, projectId, row.factKey, row.statement, 'evermind-pipeline');
+    wrote = await writeProjectFact({ env, db, tenantId, projectId }, { key: row.factKey, content: row.statement, source: 'evermind-pipeline' });
   } catch (error) {
     await release();
     throw error;
