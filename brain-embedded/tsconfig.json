@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-    "ignoreDeprecations": "6.0",
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
@@ -21,7 +20,7 @@
     "types": ["@types/node"],
     // The source-only packages, resolved by `paths` rather than the `link:` symlinks:
     // a linked package that imports another (`run-policy` -> `agent-stall`) is resolved
-    // from its REAL path under `packages/`, which has no install, and tsgo cannot find
+    // from its REAL path under `packages/`, which has no install, and the native compiler cannot find
     // the edge. No `rootDir` and no `outDir`: these files live outside `src`, and either
     // option makes tsc hold every compiled file to one root (TS6059) even under
     // `--noEmit`. This program never emits — `type-check` is `--noEmit` and the build

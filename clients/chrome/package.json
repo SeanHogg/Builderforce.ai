@@ -11,7 +11,7 @@
     "postinstall": "node ../../scripts/ensure-linked-deps.mjs",
     "build": "node build.mjs",
     "build:production": "node build.mjs --production",
-    "type-check": "tsgo -p ./ && tsc -p ./",
+    "type-check": "tsc -p ./",
     "typecheck": "pnpm run type-check",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -30,7 +30,6 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.185.4",
-    "@typescript/native-preview": "7.0.0-dev.20260627.2",
     "esbuild": "^0.24.0",
     "fflate": "^0.8.2",
     "jsdom": "^28.1.0",
@@ -39,7 +38,7 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "three": "^0.185.1",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.0.3"
   }
 }

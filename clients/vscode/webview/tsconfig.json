@@ -11,7 +11,6 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "ignoreDeprecations": "6.0",
     "types": ["react", "react-dom", "node"],
     // The source-only shared packages this project imports. Their `exports` point
     // straight at TypeScript in `src/`, so plain node resolution finds nothing and

@@ -73,11 +73,16 @@ updates:
       types:
         patterns: ['@types/*']
     ignore:
-      # TypeScript is pinned across every package at ^6.0.3 with tsgo; a
-      # Dependabot bump in ONE directory desynchronises the compiler across the
-      # monorepo and breaks tsup DTS builds ("ignoreDeprecations": "6.0").
-      # Upgrade it deliberately, everywhere at once, by hand.
+      # TypeScript is pinned across every package: `tsc` is the native TypeScript 7
+      # compiler everywhere (`typescript` itself, or the `typescript-7` alias in the
+      # packages whose tools need the JS compiler API, where `typescript` is aliased to
+      # `@typescript/typescript6`). A Dependabot bump in ONE directory desynchronises
+      # the compiler across the monorepo, and a bump of the `typescript` alias to 7.x
+      # would remove the JS API those tools load. Upgrade it deliberately, everywhere
+      # at once, by hand.
       - dependency-name: typescript
+      - dependency-name: typescript-7
+      - dependency-name: '@typescript/typescript6'
       # Node type defs must track the engines field, not the newest major.
       - dependency-name: '@types/node'
         update-types: [version-update:semver-major]

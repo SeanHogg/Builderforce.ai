@@ -46,11 +46,10 @@
   },
   "scripts": {
     "build": "tsup --config tsup.config.ts",
-    "type-check": "tsgo --noEmit && tsc --noEmit",
+    "type-check": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "prepare": "npm run build",
-    "prepublishOnly": "npm run build",
-    "typecheck:native": "tsgo --noEmit"
+    "prepublishOnly": "npm run build"
   },
   "engines": {
     "node": ">=18"
@@ -77,9 +76,9 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "tsup": "^8.5.0",
-    "typescript": "^6.0.3",
-    "vitest": "^4.0.3",
-    "@typescript/native-preview": "7.0.0-dev.20260627.2"
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "typescript-7": "npm:typescript@^7.0.2",
+    "vitest": "^4.0.3"
   },
   "pnpm": {
     "overrides": {

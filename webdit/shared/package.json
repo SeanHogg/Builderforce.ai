@@ -15,12 +15,10 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck:native": "tsgo --noEmit"
+    "test:watch": "vitest"
   },
   "devDependencies": {
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.11",
-    "@typescript/native-preview": "7.0.0-dev.20260627.2"
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
   }
 }

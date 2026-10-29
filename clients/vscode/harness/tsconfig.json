@@ -12,7 +12,6 @@
     "allowJs": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "ignoreDeprecations": "6.0",
     "types": ["react", "react-dom", "node"],
     "paths": {
       "@builderforce/agent-loop": ["../../../packages/agent-loop/src/index.ts"],

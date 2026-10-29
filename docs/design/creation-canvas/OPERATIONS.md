@@ -3,7 +3,7 @@
 ## Deploy
 
 1. Back up the production database and record the current API/frontend/VSIX versions.
-2. From `api`, run `npm run check:migrations`, `npm run check:schema`, `npm run check:tenant-scope`, and `npm run typecheck:native`.
+2. From `api`, run `npm run check:migrations`, `npm run check:schema`, `npm run check:tenant-scope`, and `npm run type-check`.
 3. Run `npm run db:migrate` before deploying the API. This applies `0388` through `0393` in order, fixes older environments that lack collaboration columns, adds completion/search/limit state, creates hashed expiring invitations, and installs the Session-owned conversation timeline.
 4. Deploy the API, then the frontend, then package/publish the VSIX. The older clients remain compatible with the additive schema.
 5. Smoke-test anonymous homepage prompt → local canvas → sign-in claim, server autosave, invitation/presence, history restore, project expansion, Agent delivery, and the native VSIX editor against one disposable session.

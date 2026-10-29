@@ -18,6 +18,24 @@ function moduleExtension({ format }) {
 }
 
 /**
+ * The declaration build's TypeScript options, applied at THIS one seam.
+ *
+ * tsup's rollup dts step injects `baseUrl: compilerOptions.baseUrl || "."` into the
+ * program it hands to the TS 6 JS API (`@typescript/typescript6`, which is what
+ * `typescript` resolves to in these packages). TS 6 rejects `baseUrl` as deprecated
+ * (TS5101) unless `ignoreDeprecations: "6.0"` is set. The tsconfigs deliberately do
+ * NOT carry it: the native TS 7 `tsc` reads them, so they stay TS 7-clean.
+ *
+ * @param {import('tsup').Options['dts']} dts
+ * @returns {import('tsup').Options['dts']}
+ */
+export function withDtsCompilerOptions(dts) {
+  if (!dts) return dts;
+  const given = dts === true ? {} : dts;
+  return { ...given, compilerOptions: { ...given.compilerOptions, ignoreDeprecations: '6.0' } };
+}
+
+/**
  * A library build: esm + cjs with rolled-up declarations.
  *
  * @param {object} options
@@ -31,7 +49,7 @@ export function libraryConfig({ entry, external = [], dts = true, extra = {} }) 
   return {
     entry,
     format: ['esm', 'cjs'],
-    dts,
+    dts: withDtsCompilerOptions(dts),
     sourcemap: true,
     clean: true,
     outDir: 'dist',

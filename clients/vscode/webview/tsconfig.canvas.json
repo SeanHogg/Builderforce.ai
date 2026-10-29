@@ -25,7 +25,6 @@
     "resolveJsonModule": true,
     "allowJs": true,
     "noEmit": true,
-    "ignoreDeprecations": "6.0",
     // React types resolve to ONE copy: this package's own `@types/react` and
     // `@types/react-dom`. Ordinary node resolution would not do it — a frontend source
     // (and every library under frontend/node_modules) finds frontend/node_modules'

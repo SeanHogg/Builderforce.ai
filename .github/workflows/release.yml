@@ -310,8 +310,10 @@ jobs:
       - name: Build and package the VSIX
         working-directory: clients/vscode
         env:
-          # `vscode:prepublish` runs tsc and the webview's vite build; same ceiling as
-          # the verify legs, which this step used to share a heap setting with.
+          # `vscode:prepublish` runs the webview's vite build and ensure-linked-builds.mjs,
+          # whose tsup dts builds run on the TypeScript 6 JS API; both inherit this. The
+          # native `tsc` ignores it. Same ceiling as the verify legs, which this step
+          # used to share a heap setting with.
           NODE_OPTIONS: --max-old-space-size=6144
         run: |
           pnpm install --frozen-lockfile || pnpm install
@@ -646,9 +648,12 @@ jobs:
       - name: ${{ matrix.name }}
         working-directory: api
         env:
-          # tsc's default ~4 GiB heap is no longer enough for api's type graph
-          # (drizzle-orm, zod 4, pdf-lib, pptxgenjs, yjs, …); it OOM'd mid mark-compact.
-          # run-checks.mjs spawns tsc/tsgo as child node processes, which inherit this.
+          # `tsc` is the native TypeScript 7 compiler and runs outside V8, so the type-check
+          # leg does not read this. It stays for the node legs of this matrix: the guards
+          # (run-checks.mjs spawns each as a child node process, which inherits it; several
+          # parse the whole tree with the TypeScript 6 JS API) and the vitest shards, whose
+          # forks inherit it too. api's graph (drizzle-orm, zod 4, pdf-lib, pptxgenjs, yjs, …)
+          # is what outgrew Node's default ~4 GiB heap.
           NODE_OPTIONS: --max-old-space-size=6144
         run: |
           pnpm install --frozen-lockfile

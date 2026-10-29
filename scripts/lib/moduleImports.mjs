@@ -39,36 +39,52 @@ const BUILTINS = new Set([...builtinModules, ...builtinModules.map((m) => `node:
 const READ_CONCURRENCY = 48;
 
 /**
- * The packages that carry a `typescript` install. The repository is a set of
- * separately installed packages with no root `node_modules`, so a script at the
- * repo root cannot `import ts from 'typescript'` — it has to borrow the compiler
- * from a package that declares it. Ordered by how likely each is to be installed
- * in a checkout that is running guards at all.
+ * The packages whose `typescript` is the JS compiler API (the TypeScript 6 line,
+ * `@typescript/typescript6`). The repository is a set of separately installed packages
+ * with no root `node_modules`, so a script at the repo root cannot
+ * `import ts from 'typescript'` — it has to borrow the compiler from a package that
+ * declares it. Ordered by how likely each is to be installed in a checkout that is
+ * running guards at all.
+ *
+ * Packages with no API consumer (worker, clients/chrome) install the
+ * native TypeScript 7 as `typescript`, which ships no `createProgram` /
+ * `createSourceFile` — they must never be listed here.
  */
-const TYPESCRIPT_HOSTS = ['frontend', 'api', 'clients/vscode', 'agent-runtime', 'worker'];
+const TYPESCRIPT_HOSTS = ['frontend', 'api', 'clients/vscode', 'agent-runtime'];
 
 /**
  * Load the TypeScript compiler from whichever package in the repo has one.
  *
  * @param {string} repoRoot
  * @returns {import('typescript')}
- * @throws when no package in the repo has typescript installed — a guard that
- *   cannot read imports has not passed, so this is never a soft failure.
+ * @throws when no package in the repo has a usable TypeScript compiler API — either
+ *   nothing is installed, or a host's `typescript` is TypeScript 7 (no JS API; the
+ *   error names those hosts). A guard that cannot read imports has not passed, so
+ *   this is never a soft failure.
  */
 export function loadTypeScript(repoRoot) {
   const tried = [];
+  const withoutApi = [];
   for (const host of TYPESCRIPT_HOSTS) {
     const manifest = join(repoRoot, ...host.split('/'), 'package.json');
     if (!existsSync(manifest)) continue;
     tried.push(host);
     try {
-      return createRequire(pathToFileURL(manifest))('typescript');
+      const ts = createRequire(pathToFileURL(manifest))('typescript');
+      // TypeScript 7's `typescript` entry loads fine but carries no compiler API;
+      // returning it would fail later, far from the cause.
+      if (typeof ts.createSourceFile === 'function') return ts;
+      withoutApi.push(host);
     } catch {
       /* try the next host */
     }
   }
+  const hint = withoutApi.length
+    ? `'typescript' in ${withoutApi.join(', ')} is TypeScript 7 (no JS API) — alias it to @typescript/typescript6. `
+    : '';
   throw new Error(
     `could not load the TypeScript compiler from any of ${tried.join(', ') || '(no candidate package found)'} — ` +
+      hint +
       'run `pnpm install` in one of them first.',
   );
 }

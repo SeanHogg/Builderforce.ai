@@ -23,8 +23,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "convert": "tsx src/cli.ts",
-    "typecheck:native": "tsgo --noEmit"
+    "convert": "tsx src/cli.ts"
   },
   "dependencies": {
     "@webdit/shared": "file:../shared"
@@ -32,8 +31,7 @@
   "devDependencies": {
     "@types/node": "^20.12.0",
     "tsx": "^4.7.0",
-    "typescript": "^6.0.3",
-    "vitest": "^4.0.18",
-    "@typescript/native-preview": "7.0.0-dev.20260627.2"
+    "typescript": "^7.0.2",
+    "vitest": "^4.0.18"
   }
 }

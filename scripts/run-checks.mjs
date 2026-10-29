@@ -46,13 +46,13 @@ const LIMIT = Math.max(2, Math.min(8, availableParallelism() - 1));
 /**
  * Heap ceiling for each guard, in MB.
  *
- * `tsc --noEmit` over the api tree dies on the default heap — "FATAL ERROR: Ineffective
- * mark-compacts near heap limit … JavaScript heap out of memory", ~144s in, on a machine
- * with memory to spare. That failure is indistinguishable from a real type error at the
- * exit code, so `pnpm --filter builderforce-api type-check` reported RED for a tree that
- * typechecks clean (the same run's `tsgo` passed in 29s, and `tsc` with a raised heap
- * exits 0). A guard that cannot finish is worse than a slow one: it trains everyone to
- * ignore it.
+ * Several guards parse the whole source tree with the TypeScript compiler API (the
+ * JS compiler, `@typescript/typescript6`), which is memory-hungry over the api tree.
+ * This ceiling is headroom for them, not a response to an observed failure of theirs
+ * (the OOM that motivated it was the JS `tsc`, since replaced by the native TypeScript 7
+ * compiler, which runs outside V8's heap and is not run through this runner). A guard
+ * that dies on the heap is indistinguishable from a real finding at the exit code, and a
+ * guard that cannot finish trains everyone to ignore it.
  *
  * This is a CEILING, not a reservation — V8 grows into it only as needed, so raising it
  * costs nothing on the guards that never approach it. Scaled to the machine so a smaller

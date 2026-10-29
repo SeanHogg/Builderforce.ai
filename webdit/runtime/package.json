@@ -16,8 +16,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck:native": "tsgo --noEmit"
+    "test:watch": "vitest"
   },
   "peerDependencies": {
     "@mlc-ai/web-llm": "^0.2.0"
@@ -31,9 +30,8 @@
   "devDependencies": {
     "@mlc-ai/web-llm": "^0.2.0",
     "@webdit/convert": "file:../converter",
-    "typescript": "^6.0.3",
-    "vitest": "^2.1.0",
-    "@typescript/native-preview": "7.0.0-dev.20260627.2"
+    "typescript": "^7.0.2",
+    "vitest": "^2.1.0"
   },
   "pnpm": {
     "overrides": {

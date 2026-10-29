@@ -7,10 +7,9 @@
     "migrate": "tsx scripts/migrate.ts",
     "predeploy": "npm run migrate",
     "deploy": "npx wrangler deploy",
-    "type-check": "tsgo --noEmit && tsc --noEmit",
+    "type-check": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck:native": "tsgo --noEmit"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
@@ -18,10 +17,9 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240718.0",
-    "@typescript/native-preview": "7.0.0-dev.20260627.2",
     "dotenv": "^17.3.1",
     "tsx": "^4.21.0",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.0.18",
     "wrangler": "^4.120.1"
   },

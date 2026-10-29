@@ -192,7 +192,7 @@ if (staleAllowlist.length > 0) {
 //
 // Nothing caught it before it shipped: `check-schema-drift.mjs` deliberately checks
 // only that a column EXISTS ("this script flags missing columns, not type
-// mismatches"), tsgo happily typechecks a Drizzle `integer()` pointed at a
+// mismatches"), the typechecker happily accepts a Drizzle `integer()` pointed at a
 // `varchar()` primary key, and no test touches real DDL. So the first signal was a
 // red deploy (0372_rehearsal.sql: `created_by INTEGER REFERENCES users(id)` against
 // `users.id VARCHAR(36)`).
@@ -468,7 +468,7 @@ if (fkUnresolvedTargets.length > 0) {
 // other half of the same hole: a migration's DML naming a column that was never
 // declared. `0467_developer_portal.sql` backfilled a publisher name from
 // `TRIM(u.name)` — but `users` has `display_name`, and has never had `name`.
-// tsgo does not read SQL, no test executes a migration, and `check-schema-drift`
+// tsc does not read SQL, no test executes a migration, and `check-schema-drift`
 // only asks whether a Drizzle column exists in the DDL — never the reverse. So
 // the first and only signal was `NeonDbError: column u.name does not exist`,
 // mid-file, at deploy.
