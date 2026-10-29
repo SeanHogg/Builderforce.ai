@@ -6193,6 +6193,8 @@
     "pipelineApprove": "通过",
     "pipelineReject": "拒绝",
     "pipelineTransfer": "迁移",
+    "pipelineFactOwned": "事实“{key}”是由人撰写的，因此这条学习不会覆盖它。请编辑或停用该事实，或拒绝这条学习。",
+    "pipelineOpenFact": "打开该事实",
     "pipelineContradicts": "与基线矛盾",
     "pipelineUnavailable": "学习审核仅管理员可用。",
     "learningsAll": "全部区域",

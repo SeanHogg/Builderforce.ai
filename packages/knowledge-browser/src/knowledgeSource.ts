@@ -11,8 +11,9 @@
  *             list and an IndexedDB manifest per root (`reviewWorkerClient.ts`)
  *   live    → the directory's `watch` (the web's webcontainer VFS), as a Live overlay — the
  *             directory is the one a review opened this session, or re-opened by a provider's
- *             `reopen` (no picker), so Live runs on a root reviewed in an earlier session
- *   estimate → the plan's model calls × the host's `callPriceUsd` port (none ⇒ calls only)
+ *             `reopen` (no picker), so Live runs on a root reviewed in an earlier session.
+ *             The reload is `load` itself, with the query the view last loaded the root by
+ *   estimate → the plan's model calls × the host's `callPrice` port (none ⇒ calls only)
  *
  * The host supplies the client (built on ITS authenticated fetch), where it can review
  * from (`directorySources`), its worker when its bundler needs one, and its reporter.
@@ -47,15 +48,21 @@ export interface KnowledgeSourceOptions {
   client: KnowledgeClient;
   directorySources: () => Promise<DirectoryProvider[]>;
   createWorker?: WorkerFactory;
-  /** ≈ USD of one judgement call, for the confirm chip's cost. Absent ⇒ the chip shows calls only. */
-  callPriceUsd?: CallPricePort;
+  /** The price of one judgement call, for the confirm chip's cost (the web and Rovr pass the
+   *  server's `client.judgeEstimate`). Absent ⇒ the chip shows calls only. */
+  callPrice?: CallPricePort;
   /** Where a degraded path (no targets, no manifest, a missed live refresh) is reported. */
   onDegraded: KnowledgeDegradedReporter;
 }
 
 export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGraphSource {
   const { client, onDegraded } = opts;
+  /** Every directory a review opened this session: a re-review (Continue) reuses its handle, and Live watches those that can. */
   const opened = new Map<string, DirectorySource>();
+  /** Per root, the paths changed since its last review (Live's badges), kept across re-subscribes. */
+  const pendingChanges = new Map<string, Set<string>>();
+  /** Per root, how the view last loaded it: the query Live's reload repeats. */
+  const loadedBy = new Map<string, Parameters<KnowledgeGraphSource['load']>[1]>();
   const scopeRecords = new Map<string, KnowledgeScopeRecord>();
   const rights = factRightsCache((rootId) => client.facts(rootId));
   let providers: DirectoryProvider[] = [];
@@ -76,21 +83,41 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
   };
   let providersReady: Promise<DirectoryProvider[]> = loadProviders();
 
+  /** The provider that PICKED this root's kind of folder (an upload, a File System Access folder): it cannot re-read it, only ask again. */
+  const pickerFor = (rootId: string): DirectoryProvider | undefined => {
+    const kind = rootKindOf(rootId);
+    return providers.find((p) => p.kind === kind && !p.reopen);
+  };
+
   /** Synchronous up to the provider's `open` — the gesture must still be live there. */
   const openFor = (req: ReviewRequest): Promise<DirectorySource | null> => {
     if (req.target) return providers.find((p) => p.id === req.target)?.open() ?? Promise.resolve(null);
     if (req.rootId) {
       const known = opened.get(req.rootId);
       if (known) return Promise.resolve(known);
-      // A picked folder (an upload, a File System Access folder) cannot be re-read
-      // without the person picking it again: its provider has no `reopen`.
-      const kind = rootKindOf(req.rootId);
-      const repick = providers.find((p) => p.kind === kind && !p.reopen);
+      // Not opened this session: a picked folder (an upload, a File System Access folder)
+      // cannot be re-read without the person picking it again — its provider has no `reopen`.
+      const repick = pickerFor(req.rootId);
       if (repick) return repick.open();
       return reopenRoot(req.rootId);
     }
     const fallback = providers.find((p) => p.kind === 'folder') ?? providers.find((p) => p.kind === 'upload') ?? providers[0];
     return fallback?.open() ?? Promise.resolve(null);
+  };
+
+  const changedFor = (rootId: string): Set<string> => {
+    let changed = pendingChanges.get(rootId);
+    if (!changed) { changed = new Set(); pendingChanges.set(rootId, changed); }
+    return changed;
+  };
+
+  /** THE read of a root's graph: the view's `load`, and Live's reload of the same root. */
+  const load: KnowledgeGraphSource['load'] = async (rootId, q) => {
+    lastRoot = rootId;
+    loadedBy.set(rootId, q);
+    const graph = await client.graph(rootId, { ...(q?.focus ? { focus: q.focus } : {}), ...(q?.maxNodes ? { maxNodes: q.maxNodes } : {}) });
+    rights.loaded(rootId, graph?.scope.digest);
+    return graph;
   };
 
   /** A root a provider can re-read without a picker (the workspace VFS, a drive), or null. */
@@ -110,7 +137,7 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
     const base = { force: !!req.force, modelCalls: KNOWLEDGE_REVIEW_MODEL_CALLS };
     const workerOpts = opts.createWorker ? { createWorker: opts.createWorker } : {};
     const plan = await runReview({ ...base, mode: 'plan' }, ports, workerOpts);
-    const estimate = await estimateReview(plan, opts.callPriceUsd, onDegraded);
+    const estimate = await estimateReview(plan, opts.callPrice, onDegraded);
     yield { type: 'plan', plan, estimate };
     if (!(await ctl.confirm(plan, estimate))) { yield { type: 'cancelled' }; return; }
 
@@ -118,7 +145,11 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
     let wake: (() => void) | null = null;
     const push = (e: (typeof queue)[number]) => { queue.push(e); wake?.(); };
     void runReview({ ...base, mode: 'review' }, ports, { ...workerOpts, signal: ctl.signal, onProgress: (progress) => push({ type: 'progress', progress }) })
-      .then((report: ReviewReport) => push({ type: 'done', rootId: dir.rootId, report }), (error: unknown) => push({ type: 'failed', error }));
+      .then((report: ReviewReport) => {
+        // The new review IS the files' current state: nothing is pending against it.
+        pendingChanges.get(dir.rootId)?.clear();
+        push({ type: 'done', rootId: dir.rootId, report });
+      }, (error: unknown) => push({ type: 'failed', error }));
     for (;;) {
       while (queue.length > 0) {
         const ev = queue.shift()!;
@@ -139,12 +170,7 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
       for (const r of records) scopeRecords.set(r.rootId, r);
       return records.map((r) => ({ rootId: r.rootId, title: r.title, packs: r.packs, ...(r.lastReviewedAt ? { lastReviewedAt: r.lastReviewedAt } : {}) }));
     },
-    async load(rootId, q) {
-      lastRoot = rootId;
-      const graph = await client.graph(rootId, { ...(q?.focus ? { focus: q.focus } : {}), ...(q?.maxNodes ? { maxNodes: q.maxNodes } : {}) });
-      rights.loaded(rootId, graph?.scope.digest);
-      return graph;
-    },
+    load,
     async baseline(rootId) {
       // The view lists scopes before it loads a root (again after a review, which moves the
       // digests): wait for that listing so "before" is the review before the newest one.
@@ -168,7 +194,8 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
     },
     subscribeLive(rootId, cb) {
       // A root reviewed in an EARLIER session is not in `opened`: its provider re-opens it
-      // (the workspace VFS, a drive) without a picker. A picked folder cannot be, and has no Live.
+      // (the workspace VFS, a drive) without a picker. A directory without `watch` (a picked
+      // folder, even one a review opened this session) is never subscribed.
       let cancelled = false;
       let stop: () => void = () => undefined;
       void (async () => {
@@ -176,10 +203,19 @@ export function createKnowledgeSource(opts: KnowledgeSourceOptions): KnowledgeGr
         let dir = opened.get(rootId) ?? null;
         if (!dir) {
           dir = await reopenRoot(rootId);
+          // The host may have lost the handle along with its providers: list them again ONCE and
+          // retry — but only for a root some provider could re-open (not a picked folder).
+          if (!dir && !cancelled && !pickerFor(rootId) && providers.some((p) => p.reopen)) {
+            providersReady = loadProviders();
+            await providersReady;
+            if (!cancelled) dir = await reopenRoot(rootId);
+          }
           if (dir) opened.set(rootId, dir);
         }
+        // Still nothing, or a directory that cannot watch (a picked folder): stop here, quietly.
+        // No loop, no watcher.
         if (cancelled || !dir?.watch) return;
-        stop = watchDirectory(dir, rootId, cb, { graph: (id) => client.graph(id), onDegraded });
+        stop = watchDirectory(dir, rootId, cb, { graph: (id) => load(id, loadedBy.get(id)), changed: changedFor(rootId), onDegraded });
       })().catch((error: unknown) => onDegraded('live subscribe', error, { rootId }));
       return () => { cancelled = true; stop(); };
     },

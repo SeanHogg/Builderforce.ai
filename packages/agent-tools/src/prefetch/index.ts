@@ -24,6 +24,11 @@ export {
 } from './codePackExecutors.js';
 export { parseCodemod } from './writeExecutors.js';
 export {
+    KNOWLEDGE_FOCUS_PARAM, KNOWLEDGE_INTENT_PARAMS, KNOWLEDGE_REVIEW_PARAM, MAX_URL_FOCUS, knowledgeIntentFromQuery, knowledgeSurfaceQuery,
+    type KnowledgeSurfaceIntent,
+} from './knowledgeSurfaceLink.js';
+export { CHIP_FOCUS_MAX } from './graphChip.js';
+export {
     CHOOSE_FOLDER_LABEL_KEY, KNOWLEDGE_GRAPH, KNOWLEDGE_PREFETCH_ROWS, KNOWLEDGE_REVIEW_DIR, OPEN_KNOWLEDGE_REVIEW_COMMAND,
     graphFocusOf, graphShown, knowledgeChipIntent, knowledgePrefetchExecutors, openInGraphChip, reviewInViewExecutor, reviewTargetOf,
     withKnowledgeRows,

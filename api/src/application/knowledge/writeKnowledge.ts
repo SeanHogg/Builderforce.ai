@@ -38,7 +38,7 @@
  * A `model` relation touching a source (`src:`) must name the `sourceHash` it was judged
  * from (400 `missing_source_hash`): without it nothing could ever mark the edge stale.
  */
-import type { NodeRef, ScopeRecord, StoredFact, StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
+import { clampClaim, type NodeRef, type ScopeRecord, type StoredFact, type StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { upsertProjectFact } from '../llm/projectFactsWrite';
@@ -46,7 +46,6 @@ import type { FactOriginCost } from '../llm/projectFactsStore';
 import type { ExtractedCachePort, KnowledgeStorePort } from './knowledgePorts';
 import { bumpKnowledgeVersion } from './knowledgeVersion';
 import { KnowledgeWriteError } from './knowledgeWriteError';
-import { clampClaim } from './knowledgePrivacy';
 import { isCodemapKey } from '../llm/projectFactsCodemap';
 
 /** Rows (facts + relations + stale marks) one call may carry. */

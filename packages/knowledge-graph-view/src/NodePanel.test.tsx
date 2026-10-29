@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { NodePanel } from './NodePanel';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
+import { packLabel } from './names';
 import { docsFixture, fixtureSource } from './testing';
 import type { FactActions, KnowledgeConfirm, KnowledgeGraphSource } from './types';
 
@@ -29,7 +30,7 @@ const save = () => fireEvent.click(screen.getByRole('button', { name: L.saveFact
 describe('NodePanel: what the node is', () => {
   it('names the pack in words, not by its id', () => {
     setup();
-    expect(screen.getByText(L.packs.docs)).toBeTruthy();
+    expect(screen.getByText(packLabel(L, 'docs'))).toBeTruthy();
     expect(screen.queryByText('docs')).toBeNull();
   });
 });
@@ -111,6 +112,35 @@ describe('NodePanel: delete fact', () => {
     fireEvent.click(screen.getByRole('button', { name: L.deleteFact }));
     await waitFor(() => expect(remove).toHaveBeenCalledTimes(1));
     expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores a second click while the first delete is in flight, and shows the button busy', async () => {
+    let finish: () => void = () => undefined;
+    const remove = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const { onChanged } = setup(actionsOf(remove), { nodeRef: FACT, confirm: async () => true });
+    const button = await screen.findByRole('button', { name: L.deleteFact }) as HTMLButtonElement;
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await waitFor(() => expect(button.disabled).toBe(true));
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    fireEvent.click(button);
+    await waitFor(() => expect(remove).toHaveBeenCalledTimes(1));
+
+    finish();
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    expect(remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a confirmation that throws as a "no": nothing is deleted and no delete failure is shown', async () => {
+    const remove = vi.fn(async () => undefined);
+    const confirm = vi.fn(async (): Promise<boolean> => { throw new Error('dialog closed'); });
+    const { onChanged } = setup(actionsOf(remove), { nodeRef: FACT, confirm });
+    fireEvent.click(await screen.findByRole('button', { name: L.deleteFact }));
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect((screen.getByRole('button', { name: L.deleteFact }) as HTMLButtonElement).disabled).toBe(false));
+    expect(remove).not.toHaveBeenCalled();
+    expect(onChanged).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('asks twice inline when the host has no confirmation, and Cancel disarms', async () => {

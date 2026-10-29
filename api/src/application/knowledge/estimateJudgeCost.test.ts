@@ -21,6 +21,7 @@ import {
   JUDGE_TYPICAL_OUTPUT_TOKENS, estimateJudgeCost, sampleExtractRequest, sampleInputTokens, type JudgeCostPorts,
 } from './estimateJudgeCost';
 import { judgeCostCacheKey, judgeCostFor } from './judgeCostEstimate';
+import { vendorRunsOnDevice } from '../llm/vendors';
 
 const PRICE = { input: perMillionToPerToken(1), output: perMillionToPerToken(5) };
 
@@ -83,22 +84,43 @@ describe('judgeCostFor (cached composition)', () => {
 
   it('routes through the tenant’s proxy once, then serves the cached estimate', async () => {
     const env = {} as never;
-    const first = await judgeCostFor(env, 9001, 1);
-    const second = await judgeCostFor(env, 9001, 1);
+    const first = await judgeCostFor(env, 9001);
+    const second = await judgeCostFor(env, 9001);
     expect(second).toEqual(first);
     expect(first.perCallUsd).toBeGreaterThan(0);
     expect(mocks.previewRoute).toHaveBeenCalledTimes(1);
   });
 
-  it('a changed routing version, tenant or project is a new key (recomputed)', async () => {
+  it('a changed routing version or tenant is a new key (recomputed); routing is per tenant, so the project is not in it', async () => {
     const env = {} as never;
-    await judgeCostFor(env, 9002, 1);
+    await judgeCostFor(env, 9002);
     mocks.version.mockResolvedValue('v2');
-    await judgeCostFor(env, 9002, 1);
-    await judgeCostFor(env, 9003, 1);
-    await judgeCostFor(env, 9002, 2);
-    expect(mocks.previewRoute).toHaveBeenCalledTimes(4);
-    expect(judgeCostCacheKey(9002, 1, 'v1')).not.toBe(judgeCostCacheKey(9002, 1, 'v2'));
-    expect(judgeCostCacheKey(9002, 1, 'v1')).not.toBe(judgeCostCacheKey(9003, 1, 'v1'));
+    await judgeCostFor(env, 9002);
+    await judgeCostFor(env, 9003);
+    expect(mocks.previewRoute).toHaveBeenCalledTimes(3);
+    expect(judgeCostCacheKey(9002, 'v1')).not.toBe(judgeCostCacheKey(9002, 'v2'));
+    expect(judgeCostCacheKey(9002, 'v1')).not.toBe(judgeCostCacheKey(9003, 'v1'));
+  });
+
+  it('a Kimi head (cloud, merely local-EGRESS) is priced and NOT local; an ollama-local head is local and free', async () => {
+    const env = {} as never;
+    mocks.previewRoute.mockResolvedValue(['direct/kimi-code/k3']);
+    const kimi = await judgeCostFor(env, 9010);
+    expect(kimi).toMatchObject({ model: 'direct/kimi-code/k3', local: false });
+    expect(kimi.perCallUsd).toBeGreaterThan(0);
+
+    // A BYO subscription can be $0 — still not "on your machine".
+    mocks.priceBook.mockResolvedValue({ priceOf: () => ({ input: 0, output: 0 }), listPriceOf: () => ({ input: 0, output: 0 }) });
+    expect(await judgeCostFor(env, 9011)).toEqual({ perCallUsd: 0, model: 'direct/kimi-code/k3', local: false });
+
+    mocks.previewRoute.mockResolvedValue(['direct/ollama-local/default']);
+    expect(await judgeCostFor(env, 9012)).toEqual({ perCallUsd: 0, model: 'direct/ollama-local/default', local: true });
+  });
+
+  it('only self-hosted engines declare runsOnDevice', () => {
+    expect(vendorRunsOnDevice('ollama-local')).toBe(true);
+    expect(vendorRunsOnDevice('freetoken')).toBe(true);
+    expect(vendorRunsOnDevice('kimi-code')).toBe(false);
+    expect(vendorRunsOnDevice('ollama')).toBe(false);
   });
 });

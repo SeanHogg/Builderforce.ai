@@ -11,7 +11,7 @@
  */
 
 import type * as vscode from "vscode";
-import { reviewPacks, watchFileEdits } from "@builderforce/agent-tools/knowledge";
+import { knownKeysCache, reviewPacks, watchFileEdits, type KnownKeysCache } from "@builderforce/agent-tools/knowledge";
 import { readPartitions } from "@builderforce/agent-tools/prefetch";
 import type { KnowledgeGraph } from "@seanhogg/builderforce-memory/knowledge";
 import { detectPendingChanges, watchPendingChanges } from "../gitChanges";
@@ -19,7 +19,7 @@ import { buildLocalCapabilityProvider } from "../localCapabilities";
 import { createDirectorySource } from "./vscodeDirectorySource";
 import { vscodeKnowledgeFs } from "./knowledgeFs";
 import { rootById, type KnowledgeRoot } from "./knowledgeRoots";
-import { loadGraph, log, onKnowledgeChanged, openRoot, workspaceFolders } from "./knowledgeService";
+import { loadGraph, log, onKnowledgeChanged, openRoot, workspaceFolders, type GraphQuery } from "./knowledgeService";
 
 /** Changes settle this long before the graph is re-read. */
 const LIVE_DEBOUNCE_MS = 800;
@@ -37,10 +37,15 @@ async function pendingUnder(root: KnowledgeRoot): Promise<string[]> {
     .map((p) => p.slice(prefix.length));
 }
 
+/**
+ * `queryOf(rootId)` is how the view last loaded the root (the bridge's `load`): the refresh
+ * re-reads the graph by the SAME query, so a view focused on search hits keeps its focus.
+ */
 export function subscribeLiveGraph(
   secrets: vscode.SecretStorage,
   rootId: string,
   onGraph: (graph: KnowledgeGraph, changed: string[]) => void,
+  queryOf?: (rootId: string) => GraphQuery | undefined,
 ): () => void {
   const root = rootById(rootId, workspaceFolders());
   if (!root) return () => undefined;
@@ -52,7 +57,7 @@ export function subscribeLiveGraph(
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       void (async () => {
-        const graph = await loadGraph(secrets, rootId);
+        const graph = await loadGraph(secrets, rootId, queryOf?.(rootId));
         if (!graph || !live) return;
         const changed = [...new Set([...(await pendingUnder(root)), ...watched])].sort();
         onGraph(graph, changed);
@@ -62,22 +67,37 @@ export function subscribeLiveGraph(
 
   const source = createDirectorySource({ fs: vscodeKnowledgeFs(), rootPath: root.rootPath, rootId, title: root.title });
   let stopWatch: (() => void) | undefined;
+  let entityKeys: KnownKeysCache | undefined;
   void (async () => {
-    const open = openRoot(secrets, root);
-    const partitions = await readPartitions({ caps: buildLocalCapabilityProvider(root.folderPath) });
-    if (!live) return;
-    stopWatch = watchFileEdits({
-      rootId, rootPath: root.rootPath, fs: vscodeKnowledgeFs(), source, store: open.store, manifest: open.manifest,
-      packs: reviewPacks({ partitions }),
-      onEdited: (paths) => {
-        for (const p of paths) watched.add(p);
-        refresh();
-      },
-      onError: (error) => log("stale marking", error),
-    });
-  })().catch((error: unknown) => log("live watch", error));
+    try {
+      const open = openRoot(secrets, root);
+      const partitions = await readPartitions({ caps: buildLocalCapabilityProvider(root.folderPath) }).catch((error: unknown) => { log("live partitions", error); return undefined; });
+      if (!live) return;
+      entityKeys = knownKeysCache(open.store, rootId);
+      stopWatch = watchFileEdits({
+        rootId, rootPath: root.rootPath, fs: vscodeKnowledgeFs(), source, store: open.store, manifest: open.manifest,
+        knownKeys: entityKeys,
+        // The folder's watcher (`knowledgeFs`) already settles a burst: no second wait here.
+        debounceMs: 0,
+        // No warm symbol index: an edited file is read from its NEW content.
+        packs: reviewPacks(partitions ? { partitions } : {}),
+        onEdited: (paths) => {
+          for (const p of paths) watched.add(p);
+          refresh();
+        },
+        onError: (error) => log("stale marking", error),
+      });
+    } catch (error) {
+      // No stale marking without the root's ports — the overlay (pending changes, the refresh after a review) goes on.
+      log("live watch", error);
+    }
+  })();
   const pending = watchPendingChanges(refresh);
-  const stopReviewed = onKnowledgeChanged((changedRoot) => { if (changedRoot === rootId) refresh(); });
+  const stopReviewed = onKnowledgeChanged((changedRoot) => {
+    if (changedRoot !== rootId) return;
+    entityKeys?.invalidate(); // A review may have written entities: read them again at the next save.
+    refresh();
+  });
 
   return () => {
     live = false;

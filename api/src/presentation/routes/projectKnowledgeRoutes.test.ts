@@ -313,6 +313,6 @@ describe('GET /knowledge/judge/estimate (the confirm chip’s ≈ cost)', () => 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ perCallUsd: 0.0021, model: 'anthropic/claude-haiku-5-5', local: false });
     }
-    expect(mocks.judgeCost).toHaveBeenCalledWith(expect.anything(), TENANT, 42);
+    expect(mocks.judgeCost).toHaveBeenCalledWith(expect.anything(), TENANT);
   });
 });

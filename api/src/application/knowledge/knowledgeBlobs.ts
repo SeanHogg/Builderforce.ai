@@ -16,7 +16,8 @@
  *                                                    roll-up of the sources' blobs, so a graph
  *                                                    build is one list + one read, not a read
  *                                                    per file (Workers cap subrequests)
- *   knowledge/{t}/{p}/code-analysis/{sha}.json       the analyzer snapshot of one commit
+ *   knowledge/{t}/{p}/{root}/code-analysis/{sha}.json the analyzer snapshot of one commit, as one root
+ *                                                    names its files (older ones: {p}/code-analysis/{sha}.json)
  *   knowledge/{t}/{p}/{root}/analysis.json           { sha } — the latest for the root
  *
  * One object per source means two reviewers of the same root never overwrite each other's
@@ -67,7 +68,10 @@ export function knowledgeBlobKeys(tenantId: number, projectId: number) {
     source: (rootId: string, id: string) => `${sources(rootId)}${sha256Hex(id)}.json`,
     bundle: (rootId: string) => `${base}/${seg(rootId)}/bundle.json`,
     review: (rootId: string, digest: string) => `${base}/${seg(rootId)}/reviews/${seg(digest)}.json`,
-    analysis: (sha: string) => `${base}/code-analysis/${seg(sha)}.json`,
+    /** A root's snapshot at `sha`: two roots of one project at one commit hold different paths, so the root is in the key. */
+    analysis: (rootId: string, sha: string) => `${base}/${seg(rootId)}/code-analysis/${seg(sha)}.json`,
+    /** Snapshots written before the key named its root (one per sha, shared by every root). Read-only. */
+    legacyAnalysis: (sha: string) => `${base}/code-analysis/${seg(sha)}.json`,
     latestAnalysis: (rootId: string) => `${base}/${seg(rootId)}/analysis.json`,
   };
 }
@@ -229,14 +233,16 @@ export function r2AnalysisSnapshots(env: Pick<Env, 'UPLOADS'>, tenantId: number,
   return {
     async put(sha, rootId, snapshot) {
       if (!env.UPLOADS) throw new Error('knowledge storage (R2) is not configured');
-      await writeJson(env.UPLOADS, keys.analysis(sha), snapshot);
+      await writeJson(env.UPLOADS, keys.analysis(rootId, sha), snapshot);
       await writeJson(env.UPLOADS, keys.latestAnalysis(rootId), { sha });
     },
     async latest(rootId) {
       if (!env.UPLOADS) return null;
       const pointer = await readJson<{ sha?: unknown }>(env.UPLOADS, keys.latestAnalysis(rootId));
       if (typeof pointer?.sha !== 'string') return null;
-      const snapshot = await readJson<unknown>(env.UPLOADS, keys.analysis(pointer.sha));
+      const snapshot = (await readJson<unknown>(env.UPLOADS, keys.analysis(rootId, pointer.sha)))
+        // Pointers written before the key named its root point at the shared blob. Remove this fallback (and `legacyAnalysis`) once those pointers have aged out.
+        ?? (await readJson<unknown>(env.UPLOADS, keys.legacyAnalysis(pointer.sha)));
       return snapshot === undefined ? null : { sha: pointer.sha, snapshot };
     },
   };

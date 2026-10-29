@@ -14,13 +14,18 @@ export const LIVE_DEBOUNCE_MS = 800;
 export interface LiveWatchPorts {
   /** The root's current server graph (the same read `load` makes). */
   graph(rootId: string): Promise<KnowledgeGraph | null>;
+  /**
+   * The paths changed since the root's last review. The SOURCE owns it per root, so stopping
+   * one watcher and starting another (Live re-subscribes after a review) keeps what is pending.
+   */
+  changed: Set<string>;
   onDegraded: KnowledgeDegradedReporter;
 }
 
 /** Starts watching `dir`; returns the stop function. A directory that cannot watch returns a no-op. */
 export function watchDirectory(dir: DirectorySource, rootId: string, cb: (g: KnowledgeGraph) => void, ports: LiveWatchPorts): () => void {
   if (!dir.watch) return () => undefined;
-  const changed = new Set<string>();
+  const { changed } = ports;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
   const stop = dir.watch((paths) => {

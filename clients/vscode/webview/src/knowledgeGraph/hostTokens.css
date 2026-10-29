@@ -1,0 +1,56 @@
+/*
+ * The knowledge graph view's tones (`--kg-*`) are the package's own (`tokens.css`, pulled in
+ * by `main.tsx` ahead of this file, with this one after it: one bundle, one stylesheet).
+ * Its neutrals already alias the `--bf-*` mapping in `index.css`; only the HUES are re-pointed
+ * here onto the editor's own theme colours, so the graph follows whatever light OR dark theme
+ * is active. The hex is only the fallback when a theme omits the token. The package's palette
+ * has zero specificity, so this plain `:root` wins wherever the files sit in the cascade.
+ *
+ * Graphics need 3:1 against the widget background. Every hue below holds it on the default
+ * dark themes; on the light ones the editor's own hue is too pale for four of them (Light+
+ * on #F3F3F3: ansiGreen 2.3, charts.yellow 2.8, charts.orange 2.7, the active indent guide
+ * 2.8), so `body.vscode-light` darkens exactly those, still from the theme's colour, to
+ * 4.4 (entity), 4.7 (duplicate), 4.9 (cycle) and 3.7 (edge). The text tones that fall short of
+ * 4.5 (muted, stale, violation) are darkened the same way.
+ *
+ * Meanings that share a family stay apart in every default theme: claim is a bright green in
+ * the dark themes and a yellow-olive blend in the light ones (never `charts.green`, which is
+ * "agrees"), and "missing" is the warning gold desaturated toward the foreground (a khaki),
+ * where "duplicate" is the saturated gold itself.
+ */
+:root {
+  --kg-node-file: var(--vscode-charts-blue, #4d9eff);
+  --kg-node-section: var(--vscode-terminal-ansiCyan, #22d3ee);
+  --kg-node-symbol: var(--vscode-charts-purple, #a78bfa);
+  --kg-node-entity: var(--vscode-terminal-ansiGreen, #34d399);
+  --kg-node-claim: var(--vscode-terminal-ansiBrightGreen, #a3e635);
+  --kg-node-fact: var(--vscode-terminal-ansiMagenta, #f472b6);
+  --kg-node-missing: color-mix(in srgb, var(--vscode-editorWarning-foreground, #d4a373) 50%, var(--vscode-foreground, #cccccc));
+  --kg-edge: var(--vscode-editorIndentGuide-activeBackground1, var(--vscode-panel-border, #64748b));
+  --kg-violation: var(--vscode-charts-red, #f87171);
+  --kg-cycle: var(--vscode-charts-orange, #fb923c);
+  --kg-duplicate: var(--vscode-charts-yellow, #facc15);
+  --kg-contradicts: var(--vscode-terminal-ansiBrightRed, #fb7185);
+  --kg-agrees: var(--vscode-charts-green, #22c55e);
+  /* Stale is TEXT too (the "stale" mark): the editor's description ink, not its disabled ink. */
+  --kg-stale: var(--vscode-descriptionForeground, #a8a29e);
+  --kg-unused: var(--vscode-editorLineNumber-foreground, #78716c);
+  --kg-changed: var(--vscode-gitDecoration-modifiedResourceForeground, #38bdf8);
+  --kg-plane: var(--vscode-textBlockQuote-background, rgba(128, 128, 128, 0.12));
+  --kg-warn-bg: var(--bf-warning-bg);
+  --kg-error: var(--vscode-errorForeground, #fca5a5);
+}
+
+body.vscode-light,
+body.vscode-high-contrast-light {
+  --kg-node-entity: color-mix(in srgb, var(--vscode-terminal-ansiGreen, #00bc00) 70%, black);
+  /* The bright green is below 3:1 here: an olive between the added-file green and the terminal yellow. */
+  --kg-node-claim: color-mix(in srgb, var(--vscode-gitDecoration-addedResourceForeground, #587c0c) 60%, var(--vscode-terminal-ansiYellow, #949800));
+  --kg-edge: color-mix(in srgb, var(--vscode-editorIndentGuide-activeBackground1, var(--vscode-panel-border, #939393)) 85%, black);
+  --kg-cycle: color-mix(in srgb, var(--vscode-charts-orange, #d18616) 70%, black);
+  --kg-duplicate: color-mix(in srgb, var(--vscode-charts-yellow, #bf8803) 75%, black);
+  /* TEXT tones need 4.5:1: muted and stale are the description ink (4.40 on Light+'s #F3F3F3), violation is the red of the stale mark and Delete. */
+  --kg-muted: color-mix(in srgb, var(--vscode-descriptionForeground, #717171) 92%, black);
+  --kg-stale: color-mix(in srgb, var(--vscode-descriptionForeground, #717171) 92%, black);
+  --kg-violation: color-mix(in srgb, var(--vscode-charts-red, #e51400) 90%, black);
+}

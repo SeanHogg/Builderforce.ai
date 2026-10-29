@@ -38,6 +38,7 @@
       "@builderforce/agent-tools/symbols": ["../packages/agent-tools/src/symbols.ts"],
       "@builderforce/agent-tools/knowledge": ["../packages/agent-tools/src/knowledge/index.ts"],
       "@builderforce/knowledge-graph-view": ["../packages/knowledge-graph-view/src/index.ts"],
+      "@builderforce/knowledge-graph-view/tokens.css": ["../packages/knowledge-graph-view/src/tokens.css"],
       "@builderforce/knowledge-browser": ["../packages/knowledge-browser/src/index.ts"],
       "@builderforce/agent-tools/knowledge-index": ["../packages/agent-tools/src/knowledge-index.ts"],
       "@builderforce/agent-tools/prefetch": ["../packages/agent-tools/src/prefetch/index.ts"],

@@ -11,21 +11,17 @@
  * relevant analyzer FAILED answers nothing — missing output is never reported as clean.
  */
 
-import { buildGraph, MAX_NODES_CAP, pathOfRef, type Finding, type PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
+import { buildGraph, MAX_NODES_CAP, partitionOf, pathOfRef, verdictOf, type Finding, type PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
 import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
 import { CODE_PARTITIONS_FILE, loadCodePartitions } from '../knowledge/codePack.js';
 import { codeAnalyzers } from '../knowledge/codeAnalyzers.js';
 import { knowledgePacks } from '../knowledge/knowledgePacks.js';
 import { analyseWorkspace, forgetWorkspaceAnalyses } from '../knowledge/workspaceAnalysis.js';
-import type { PrefetchChip, PrefetchExecHost, PrefetchRunner } from './contract.js';
+import type { PrefetchExecHost, PrefetchRunner } from './contract.js';
 import { PREFETCH_LIST_CAP } from './exec.js';
+import { CHIP_FOCUS_MAX, OPEN_IN_GRAPH_LABEL_KEY, OPEN_KNOWLEDGE_GRAPH_COMMAND, openInGraphChip } from './graphChip.js';
 
-/** The command that opens the knowledge-graph view (registered by the editor's graph view). */
-export const OPEN_KNOWLEDGE_GRAPH_COMMAND = 'builderforce.openKnowledgeGraph';
-/** The chip's label key in every host catalog. */
-export const OPEN_IN_GRAPH_LABEL_KEY = 'prefetch.chip.openInGraph';
-/** The most refs a chip focuses. */
-const CHIP_FOCUS_MAX = 50;
+export { OPEN_IN_GRAPH_LABEL_KEY, OPEN_KNOWLEDGE_GRAPH_COMMAND };
 
 /** The workspace's layers: `.builderforce/partitions.json` when valid, else `CODE_LAYERS`. */
 export async function readPartitions(host: Pick<PrefetchExecHost, 'caps'>): Promise<PartitionRegistry> {
@@ -37,19 +33,19 @@ export async function readPartitions(host: Pick<PrefetchExecHost, 'caps'>): Prom
     }
 }
 
-interface Analysis { snapshot: CodeAnalysisSnapshot; findings: Finding[] }
+interface Analysis { snapshot: CodeAnalysisSnapshot; findings: Finding[]; partitions: PartitionRegistry }
 
 async function analyse(host: PrefetchExecHost, signal: AbortSignal): Promise<Analysis | null> {
     const partitions = await readPartitions(host);
     const { snapshot, repoGraph } = await analyseWorkspace(
-        { caps: host.caps, partitions, ...(host.repoGraph ? { repoGraph: host.repoGraph } : {}) },
+        { caps: host.caps, rootId: host.rootId, partitions, ...(host.repoGraph ? { repoGraph: host.repoGraph } : {}) },
         signal,
     );
     if (!snapshot || signal.aborted) return null;
     const packs = knowledgePacks({ analyzers: codeAnalyzers({ run: async () => ({ analysis: snapshot, repoGraph }) }), partitions });
     const extracted = await packs[0]!.analyzers!.analyse(host.rootId, signal);
     const graph = buildGraph({ rootId: host.rootId, extracted, facts: [], relations: [], packs }, { maxNodes: MAX_NODES_CAP });
-    return { snapshot, findings: graph.findings };
+    return { snapshot, findings: graph.findings, partitions };
 }
 
 /**
@@ -72,12 +68,38 @@ interface CodeAction {
     kinds: readonly string[];
     title: (n: number) => string;
     none: string;
+    /** The findings this action counts, from the code pack's of its kinds. Default: all of them. */
+    select?(findings: Finding[], snapshot: CodeAnalysisSnapshot, partitions: PartitionRegistry): Finding[];
+    /** The action answers for the focus files when the person is working in some. */
+    focusScoped?: boolean;
+}
+
+/**
+ * A layer violation is an IMPORT that crosses layers the wrong way: an edge dependency-cruiser
+ * drew (`snapshot.edges`, the real from → to) whose layers the registry does not allow
+ * (`upward` or `skips`). The graph's partition verdict is also given to the repo map's
+ * `references` and to clone pairs, and a finding's `nodes` are sorted (not in import
+ * direction) with one finding per pair — so a finding is only a candidate: it counts when an
+ * import between its two files is itself a violation, judged here in the import's own direction.
+ */
+function importViolations(findings: Finding[], snapshot: CodeAnalysisSnapshot, partitions: PartitionRegistry): Finding[] {
+    const pairKey = (a: string, b: string): string => (a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`);
+    const violating = new Set<string>();
+    for (const e of snapshot.edges) {
+        if (e.from === e.to) continue;
+        const verdict = verdictOf(partitionOf(e.from, partitions), partitionOf(e.to, partitions), partitions);
+        if (verdict === 'upward' || verdict === 'skips') violating.add(pairKey(e.from, e.to));
+    }
+    return findings.filter((f) => {
+        const [a, b] = f.nodes.map((ref) => pathOfRef(ref));
+        return a !== undefined && b !== undefined && violating.has(pairKey(a, b));
+    });
 }
 
 const CODE_ACTIONS: readonly CodeAction[] = [
     { id: 'dup.check', analyzer: 'jscpd', kinds: ['clone-group', 'near-duplicate'], title: (n) => `${n} duplicate-code group(s)`, none: 'No duplicate code found (jscpd).' },
     { id: 'deps.cycles', analyzer: 'dependency-cruiser', kinds: ['cycle'], title: (n) => `${n} import cycle(s)`, none: 'No import cycles found (dependency-cruiser).' },
-    { id: 'arch.boundaries', analyzer: 'dependency-cruiser', kinds: ['partition-violation'], title: (n) => `${n} layer-boundary violation(s)`, none: 'No layer-boundary violations found (dependency-cruiser, the workspace layers).' },
+    { id: 'arch.boundaries', analyzer: 'dependency-cruiser', kinds: ['partition-violation'], select: importViolations, focusScoped: true, title: (n) => `${n} layer-boundary violation(s)`, none: 'No layer-boundary violations found (dependency-cruiser, the workspace layers).' },
     { id: 'deadcode.check', analyzer: 'knip', kinds: ['unused-file', 'unused-export', 'unused-dependency'], title: (n) => `${n} unused-code finding(s)`, none: 'No unused files, exports or dependencies found (knip).' },
 ];
 
@@ -90,6 +112,13 @@ function findingLine(f: Finding): string {
     return `- **${f.kind}** (${f.severity}) ${shown}${more}${params ? ` — ${params}` : ''}`;
 }
 
+/** The root-relative files the person is working in, as the findings' paths spell them. */
+function focusSet(host: PrefetchExecHost, analysed: readonly string[]): Set<string> {
+    const known = new Set(analysed);
+    // Only files the analysis saw can scope an answer: none of them ⇒ the whole workspace.
+    return new Set((host.focusFiles?.() ?? []).map((p) => p.split('\\').join('/').replace(/^\.\//, '')).filter((p) => known.has(p)));
+}
+
 function codeActionRunner(host: PrefetchExecHost, action: CodeAction): PrefetchRunner {
     return {
         async run(_request, signal) {
@@ -97,17 +126,20 @@ function codeActionRunner(host: PrefetchExecHost, action: CodeAction): PrefetchR
             if (!analysis || signal.aborted) return undefined;
             const tool = analysis.snapshot.tools.find((t) => t.name === action.analyzer);
             if (!tool || tool.status !== 'complete') return undefined;
-            const findings = analysis.findings.filter((f) => action.kinds.includes(f.kind));
+            const ofKind = analysis.findings.filter((f) => action.kinds.includes(f.kind));
+            let findings = action.select ? action.select(ofKind, analysis.snapshot, analysis.partitions) : ofKind;
+            const focus = action.focusScoped ? focusSet(host, analysis.snapshot.nodes) : new Set<string>();
+            if (focus.size > 0) findings = findings.filter((f) => f.nodes.some((ref) => focus.has(pathOfRef(ref) ?? '')));
+            const scope = focus.size > 0 ? ` among the ${focus.size} file(s) you are working in` : '';
             const data = { findings: findings.length, files: analysis.snapshot.nodes.length, snapshotId: analysis.snapshot.id };
-            if (findings.length === 0) return { actionId: action.id, text: action.none, data };
+            if (findings.length === 0) return { actionId: action.id, text: `${action.none.replace(/\.$/, '')}${scope}.`, data };
             const refs = [...new Set(findings.flatMap((f) => f.nodes))].slice(0, CHIP_FOCUS_MAX);
-            const chip: PrefetchChip = { labelKey: OPEN_IN_GRAPH_LABEL_KEY, command: OPEN_KNOWLEDGE_GRAPH_COMMAND, args: { focus: refs } };
             const lines = findings.slice(0, PREFETCH_LIST_CAP).map(findingLine);
             const rest = findings.length > PREFETCH_LIST_CAP ? `\n\n…and ${findings.length - PREFETCH_LIST_CAP} more in the knowledge graph.` : '';
             return {
                 actionId: action.id,
-                text: `**${action.title(findings.length)}** across ${analysis.snapshot.nodes.length} analysed file(s):\n\n${lines.join('\n')}${rest}`,
-                chips: [chip],
+                text: `**${action.title(findings.length)}**${scope || ` across ${analysis.snapshot.nodes.length} analysed file(s)`}:\n\n${lines.join('\n')}${rest}`,
+                chips: [openInGraphChip({ rootId: host.rootId, focus: refs })],
                 data,
             };
         },

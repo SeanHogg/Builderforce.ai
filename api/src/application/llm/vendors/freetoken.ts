@@ -97,4 +97,6 @@ export const freetokenModule: VendorModule = {
     return executeChatCompletionStream(callOptions(params));
   },
   requiresLocalEgress: true,
+  // A tenant's OWN FreeToken engine (their agent host or LAN), exactly like `ollama-local`.
+  runsOnDevice: true,
 };

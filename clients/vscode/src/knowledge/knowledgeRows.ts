@@ -16,6 +16,7 @@ import * as vscode from "vscode";
 import {
   OPEN_KNOWLEDGE_GRAPH_COMMAND, graphShown, type KnowledgeRowsHost,
 } from "@builderforce/agent-tools/prefetch";
+import { editorCallPrice } from "./knowledgeCallPrice";
 import { knowledgeRootId, rootForRelative } from "./knowledgeRoots";
 import { reviewRoot, workspaceFolders } from "./knowledgeService";
 
@@ -41,6 +42,7 @@ export function editorKnowledgeRowsHost(secrets: vscode.SecretStorage): Knowledg
         review: (plan, signal) => review.run({ signal, plan }),
       };
     },
+    callPrice: editorCallPrice(secrets),
     rootId() {
       const first = workspaceFolders()[0];
       return first ? knowledgeRootId(first.path) : "workspace";

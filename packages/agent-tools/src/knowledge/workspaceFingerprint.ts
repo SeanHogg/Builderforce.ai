@@ -65,7 +65,7 @@ const OBJECT_ID = /^[0-9a-f]{40,64}$/;
  */
 const WORKING_TREE_SCRIPT = [
     'set -e',
-    'cd "$(git rev-parse --show-toplevel)"',
+    `cd "$(${GIT} rev-parse --show-toplevel)"`,
     'idx="$(mktemp -u)"',
     'trap \'rm -f "$idx"\' EXIT',
     `cp "$(${GIT} rev-parse --git-path index)" "$idx" 2>/dev/null || true`,
@@ -110,10 +110,8 @@ export async function workspaceFingerprint(ctx: GitCtx): Promise<WorkspaceFinger
     if (!shell) return { commit: null, branch: null, dirty: null };
     let memo = memos.get(shell);
     if (!memo) memos.set(shell, (memo = createShaCache<WorkspaceFingerprint>({ ttlMs: FINGERPRINT_TTL_MS, max: 1 })));
-    const fp = await memo.getOrRun('fingerprint', () => readFingerprint(ctx), ctx.signal);
-    // What a stopped read saw is nothing: the next asker reads again.
-    if (ctx.signal?.aborted) memo.clear();
-    return fp;
+    // The read rides the SHARED run's signal: it stops only when every asker has stopped.
+    return memo.getOrRun('fingerprint', (shared) => readFingerprint({ caps: ctx.caps, ...(shared ? { signal: shared } : {}) }), ctx.signal);
 }
 
 /**

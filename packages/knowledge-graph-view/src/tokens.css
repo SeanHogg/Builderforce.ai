@@ -1,0 +1,76 @@
+/*
+ * The knowledge graph view's colours: every `--kg-*` token `scene/themeColors.ts` reads,
+ * defined ONCE for every host (the web, the VS Code webview, Rovr). A host imports it from its
+ * entry (`import '@builderforce/knowledge-graph-view/tokens.css'` — the bundler folds it into
+ * the host's one stylesheet) and keeps only its mapping, if any:
+ *
+ *   web      nothing: `--bf-*` is the app's theme bridge, and `html[data-theme]` flips the palette.
+ *   Rovr     nothing: its `--bf-*` follow the browser's colour scheme, and `main.tsx` mirrors that
+ *            onto `html[data-theme]` so this palette flips with them.
+ *   VS Code  the node/edge/finding hues, re-pointed at the editor's own theme colours.
+ *
+ * Every rule here has ZERO specificity (`:where`), so a host's plain `:root { --kg-x: … }`
+ * wins wherever it sits in the cascade. The neutrals alias the shared `--bf-*` bridge.
+ *
+ * The hues are DISTINCT per meaning (a file, a section, a claim, a duplicate and a violation
+ * never collapse onto one colour). Dark is the default; the light set is the darker twin of
+ * each hue. Contrast, computed (WCAG 2.x relative luminance):
+ *   dark  (on #111827)             hues 3.7:1 – 11.8:1 (unused 3.70 and edge 3.73 are the lowest);
+ *                                  muted (--bf-text-secondary #8892B0) 5.7:1, stale 7.0:1, error 9.4:1
+ *   light (on #F1F5F9, the page;   hues 3.7:1 – 6.5:1 (unused 3.70, edge 3.98 are the lowest) —
+ *          #FFFFFF is higher)      graphics need 3:1; muted (--bf-text-secondary #475569) 6.8:1, stale 5.3:1, error 7.6:1 — text needs 4.5:1
+ */
+
+:where(:root) {
+  --kg-bg: var(--bf-surface);
+  --kg-panel: var(--bf-surface-2);
+  --kg-text: var(--bf-text);
+  /* Secondary, not muted, in BOTH themes: muted is 3.0:1 on the web's dark surface and 4.3:1 on its light panel; secondary is 5.7:1 and 6.8:1. */
+  --kg-muted: var(--bf-text-secondary);
+  --kg-border: var(--bf-border);
+  --kg-accent: var(--bf-accent);
+  --kg-accent-soft: var(--bf-accent-soft);
+  --kg-on-accent: var(--bf-on-accent);
+  --kg-node-file: #4d9eff;
+  --kg-node-section: #22d3ee;
+  --kg-node-symbol: #a78bfa;
+  --kg-node-entity: #34d399;
+  --kg-node-claim: #a3e635;
+  --kg-node-fact: #f472b6;
+  --kg-node-missing: #d4a373;
+  --kg-edge: #64748b;
+  --kg-violation: #f87171;
+  --kg-cycle: #fb923c;
+  --kg-duplicate: #facc15;
+  --kg-contradicts: #fb7185;
+  --kg-agrees: #22c55e;
+  --kg-stale: #a8a29e;
+  --kg-unused: #78716c;
+  --kg-changed: #38bdf8;
+  --kg-plane: rgba(148, 163, 184, 0.12);
+  --kg-warn-bg: rgba(251, 146, 60, 0.16);
+  --kg-error: #fca5a5;
+}
+
+/* Light: a host opts in with `html[data-theme='light']` (the web and the VS Code canvas do; Rovr mirrors its OS scheme onto it). */
+:where(html[data-theme='light']) {
+  --kg-node-file: #2d60ff;
+  --kg-node-section: #0e7490;
+  --kg-node-symbol: #6d28d9;
+  --kg-node-entity: #047857;
+  --kg-node-claim: #4d7c0f;
+  --kg-node-fact: #be185d;
+  --kg-node-missing: #92400e;
+  --kg-edge: #6b7a90;
+  --kg-violation: #b91c1c;
+  --kg-cycle: #c2410c;
+  --kg-duplicate: #a16207;
+  --kg-contradicts: #be123c;
+  --kg-agrees: #15803d;
+  --kg-stale: #6a645e;
+  --kg-unused: #857d75;
+  --kg-changed: #0369a1;
+  --kg-plane: rgba(100, 116, 139, 0.1);
+  --kg-warn-bg: rgba(194, 65, 12, 0.12);
+  --kg-error: #991b1b;
+}

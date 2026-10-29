@@ -26,8 +26,9 @@ import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
 import { extractSymbols, type CodeSymbol } from '../symbols.js';
 import { codeAnalyzers } from './codeAnalyzers.js';
 import type { SymbolSource } from './codePack.js';
-import { currentFileHashes } from './fileEdits.js';
+import { currentFileHashes, pruneEditedFiles } from './fileEdits.js';
 import { knowledgePacks } from './knowledgePacks.js';
+import { repoGraphUnder, snapshotUnder } from './rootRelative.js';
 import { analyseWorkspace, type RepoGraphPort } from './workspaceAnalysis.js';
 import { fingerprintSha } from './workspaceFingerprint.js';
 
@@ -37,23 +38,34 @@ export const KNOWLEDGE_REVIEW_MODEL_CALLS = DEFAULT_REVIEW_MODEL_CALLS;
 /** Manifest entry naming the root-level analyzer outputs of a root's last review. */
 export const analysisManifestKey = (rootId: string): string => `knowledge:${rootId}:analysis`;
 
+/** What of the host's knowledge index a review feeds (`HostKnowledgeIndex.upsertFromGraph`). */
+export interface ReviewIndexPort {
+    upsertFromGraph(graph: KnowledgeGraph): Promise<void>;
+}
+
 export interface KnowledgeReviewPorts {
     source: DirectorySource;
     store: KnowledgeStore;
     manifest: IngestManifest;
     judgement?: JudgementPort;
     /** Near-duplicate pairs from the knowledge index (claims to compare). */
-    similar?(ids: string[]): Promise<SimilarPair[]>;
+    similar?(ids: string[], texts?: ReadonlyMap<string, string>): Promise<SimilarPair[]>;
     /** Definitions per file from the host's warm symbol index. */
     symbolsOf?: SymbolSource;
     /** The code pack's analyzer run (see {@link workspaceCodeAnalyzers}). */
     analyzers?: AnalyzerPort;
     /** The code layers (`.builderforce/partitions.json` or the default). */
     partitions?: PartitionRegistry;
+    /** The host's knowledge index: fed the root's graph once the review is done (§4.3, last step), reported as the `index` phase. */
+    index?: ReviewIndexPort;
+    /** A linked host's platform graph of the root; null or a failure ⇒ the graph is built from the store. */
+    platformGraph?(rootId: string): Promise<KnowledgeGraph | null>;
+    /** A failed index update is reported, never a failed review. */
+    onIndexError?(error: unknown): void;
 }
 
 export interface KnowledgeReviewOptions {
-    /** *Re-review all*: the manifest is ignored, so every file is planned as changed. */
+    /** *Re-review all*: every file is planned as changed whatever the manifest holds (memory's `force`); judged sections whose text is unchanged are not judged again. */
     force?: boolean;
     /** The plan the person confirmed ({@link planKnowledgeReviewDetail}): reused without a re-walk (*Continue*, §4.3). */
     plan?: PlanDetail;
@@ -61,15 +73,6 @@ export interface KnowledgeReviewOptions {
     modelCalls?: number;
     signal?: AbortSignal;
     onProgress?(p: ReviewProgress): void;
-}
-
-/** *Re-review all*: reads see nothing (every file is changed), writes still persist. */
-export function forcedManifest(inner: IngestManifest): IngestManifest {
-    return {
-        async get() { return undefined; },
-        set: (sourceId, fingerprints) => inner.set(sourceId, fingerprints),
-        delete: (sourceId) => inner.delete(sourceId),
-    };
 }
 
 /** The analyzers, recording which root-level outputs the last run produced (for {@link buildStoredGraph}). */
@@ -93,12 +96,18 @@ export function reviewPacks(ports: Pick<KnowledgeReviewPorts, 'symbolsOf' | 'ana
     });
 }
 
-const manifestFor = (ports: KnowledgeReviewPorts, force?: boolean): IngestManifest =>
-    (force ? forcedManifest(ports.manifest) : ports.manifest);
+/**
+ * Whether a run on these ports compares near-duplicate claims — memory's rule: it needs both a
+ * judgement port and `similar`. The plan counts compare calls only then, so the confirm chip
+ * never states calls the run will not spend (a host without `similar`, like the browser's, plans none).
+ */
+function willCompare(ports: Pick<KnowledgeReviewPorts, 'judgement' | 'similar'>): boolean {
+    return !!ports.judgement && !!ports.similar;
+}
 
 /** The confirm chip's numbers AND the walk behind them: hand it back as `plan` to run the review without re-walking. */
 export function planKnowledgeReviewDetail(ports: KnowledgeReviewPorts, opts: Pick<KnowledgeReviewOptions, 'force'> = {}): Promise<PlanDetail> {
-    return planDetail(ports.source, manifestFor(ports, opts.force), reviewPacks(ports));
+    return planDetail(ports.source, ports.manifest, reviewPacks(ports), { ...(opts.force ? { force: true } : {}), compare: willCompare(ports) });
 }
 
 /** The confirm chip's numbers: a walk plus a manifest diff, no reads of unchanged files. */
@@ -107,20 +116,50 @@ export async function planKnowledgeReview(ports: KnowledgeReviewPorts, opts: Pic
 }
 
 /** The review itself — only after the person confirmed the plan. */
-export function runKnowledgeReview(ports: KnowledgeReviewPorts, opts: KnowledgeReviewOptions = {}): Promise<ReviewReport> {
-    const manifest = manifestFor(ports, opts.force);
-    return reviewDirectory({
+export async function runKnowledgeReview(ports: KnowledgeReviewPorts, opts: KnowledgeReviewOptions = {}): Promise<ReviewReport> {
+    // With an index to feed, `done` is memory's last word but not the run's: it waits for the `index` phase.
+    const held: { done?: ReviewProgress } = {};
+    const progress: KnowledgeReviewOptions['onProgress'] = ports.index && opts.onProgress
+        ? (p) => { if (p.phase === 'done') held.done = p; else opts.onProgress!(p); }
+        : opts.onProgress;
+    const report = await reviewDirectory({
         source: ports.source,
         store: ports.store,
-        packs: reviewPacks(ports, manifest),
-        manifest,
+        packs: reviewPacks(ports, ports.manifest),
+        manifest: ports.manifest,
         ...(ports.judgement ? { judgement: ports.judgement } : {}),
         ...(ports.similar ? { similar: ports.similar } : {}),
         ...(opts.plan ? { plan: opts.plan } : {}),
+        ...(opts.force ? { force: true } : {}),
         budget: { modelCalls: opts.modelCalls ?? KNOWLEDGE_REVIEW_MODEL_CALLS, ms: Number.POSITIVE_INFINITY },
         ...(opts.signal ? { signal: opts.signal } : {}),
-        ...(opts.onProgress ? { onProgress: opts.onProgress } : {}),
+        ...(progress ? { onProgress: progress } : {}),
     });
+    // What was edited since the last review is superseded by the files this one judged (or dropped).
+    await pruneEditedFiles(ports.manifest, report.rootId);
+    await indexReviewed(ports, report.rootId, opts.onProgress);
+    if (held.done) opts.onProgress?.(held.done);
+    return report;
+}
+
+/**
+ * After a review: the root's graph feeds the host's knowledge index. THE one place a host's
+ * index is updated from a review, reported as the `index` phase between `write` and `done`
+ * (`total` = the graph's nodes) so the view can say it is indexing.
+ */
+async function indexReviewed(ports: KnowledgeReviewPorts, rootId: string, onProgress: KnowledgeReviewOptions['onProgress']): Promise<void> {
+    if (!ports.index) return;
+    try {
+        const graph = (await ports.platformGraph?.(rootId).catch(() => null))
+            ?? await buildStoredGraph({ rootId, store: ports.store, manifest: ports.manifest, packs: reviewPacks(ports) });
+        if (!graph) return;
+        const total = graph.nodes.length;
+        onProgress?.({ phase: 'index', done: 0, total });
+        await ports.index.upsertFromGraph(graph);
+        onProgress?.({ phase: 'index', done: total, total });
+    } catch (error) {
+        ports.onIndexError?.(error);
+    }
 }
 
 export interface StoredGraphArgs {
@@ -151,6 +190,8 @@ export async function buildStoredGraph(args: StoredGraphArgs): Promise<Knowledge
         ...roots.map((r) => ({ ref: r.id, hash: r.hash })),
     ];
     for (const w of wanted) {
+        // A deleted file has no content hash: there is nothing of it to fetch.
+        if (!w.hash) continue;
         const hit = (await store.getExtracted?.(w.hash))?.find((e) => e.sourceRef === w.ref);
         if (hit) extracted.push(hit);
     }
@@ -200,25 +241,35 @@ export interface WorkspaceAnalyzersDeps {
     upload?(sha: string, snapshot: CodeAnalysisSnapshot): Promise<void>;
     /** A failed upload is reported, never a failed review. */
     onUploadError?(error: unknown): void;
+    /** Told when the perception is partial (a truncated file listing). */
+    onWarn?(message: string): void;
 }
 
 /** The code pack's analyzers over this host's shell and repo map (cached per sha), uploading the snapshot when asked. */
 export function workspaceCodeAnalyzers(deps: WorkspaceAnalyzersDeps): AnalyzerPort {
     return codeAnalyzers({
-        async run(_rootId, signal) {
+        async run(rootId, signal) {
             const { snapshot, repoGraph } = await analyseWorkspace(
                 {
                     caps: deps.caps,
+                    rootId,
+                    ...(deps.onWarn ? { onWarn: deps.onWarn } : {}),
                     ...(deps.path ? { path: deps.path } : {}),
                     ...(deps.partitions ? { partitions: deps.partitions } : {}),
                     ...(deps.repoGraph ? { repoGraph: deps.repoGraph } : {}),
                 },
                 signal,
             );
-            if (snapshot && deps.upload) {
-                await deps.upload(analysisSha(snapshot), snapshot).catch((error: unknown) => deps.onUploadError?.(error));
+            // The analyzers name files relative to the workspace; this root's files (its manifest,
+            // its refs, the platform's graph of it) are relative to the root itself — the upload too.
+            const scoped = snapshot && deps.path ? snapshotUnder(snapshot, deps.path) : snapshot;
+            if (scoped && deps.upload) {
+                await deps.upload(analysisSha(scoped), scoped).catch((error: unknown) => deps.onUploadError?.(error));
             }
-            return { analysis: snapshot, repoGraph };
+            return {
+                analysis: scoped,
+                repoGraph: repoGraph && deps.path ? repoGraphUnder(repoGraph, deps.path) : repoGraph,
+            };
         },
     });
 }

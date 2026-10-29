@@ -3,6 +3,8 @@ import { Suspense } from 'react';
 import localFont from 'next/font/local';
 import { LocaleProvider } from './LocaleProvider';
 import './globals.css';
+// The knowledge graph view's `--kg-*` palette (aliases `--bf-*`, flips with `html[data-theme]`).
+import '@builderforce/knowledge-graph-view/tokens.css';
 // KaTeX's own stylesheet. Loaded once, at the root, because mathematics can
 // appear in any markdown on the platform (see lib/markdownPipeline.ts) and an
 // un-styled `.katex` tree renders as a column of stacked fragments rather than

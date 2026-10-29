@@ -18,8 +18,12 @@ import type { EmbedderPort, IndexHit, IndexTier, KnowledgeGraph, SimilarPair } f
 /** The pinned surface (clients/vscode/src/knowledge/index/hostKnowledgeIndex.ts re-exports it). */
 export interface HostKnowledgeIndex {
     search(q: string, k?: number): Promise<IndexHit[]>;
-    /** Near-duplicate pairs among `ids` (claims/entities), deterministic. */
-    similar(ids: string[]): Promise<SimilarPair[]>;
+    /**
+     * Near-duplicate pairs touching `ids` (claims/entities): with what the index holds and
+     * among themselves, deterministic. `texts` gives the text of ids not indexed yet (a
+     * review's new claims), so they need not be indexed first.
+     */
+    similar(ids: string[], texts?: ReadonlyMap<string, string>): Promise<SimilarPair[]>;
     /** `src:` pairs, for `buildGraph`'s `input.nearDuplicates`. */
     nearDuplicates(): SimilarPair[];
     /** `toCards(g)` → upsert → compact when churn > 10% (on idle). */

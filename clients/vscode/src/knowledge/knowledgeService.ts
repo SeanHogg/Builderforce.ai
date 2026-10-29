@@ -18,7 +18,8 @@
 
 import * as vscode from "vscode";
 import {
-  buildStoredGraph, indexedSymbolSource, migratingRootFiles, planKnowledgeReviewDetail, reviewPacks, runKnowledgeReview, workspaceCodeAnalyzers,
+  buildStoredGraph, claimSimilarity, indexedSymbolSource, migratingRootFiles, planKnowledgeReviewDetail, reviewPacks, rootPorts, runKnowledgeReview,
+  workspaceCodeAnalyzers,
   type KnowledgeReviewOptions, type KnowledgeReviewPorts,
 } from "@builderforce/agent-tools/knowledge";
 import { readPartitions } from "@builderforce/agent-tools/prefetch";
@@ -88,15 +89,25 @@ export function rootKnowledgeFiles(root: KnowledgeRoot): KnowledgeFiles {
   return migratingRootFiles(workspaceKnowledgeFiles(root.folderPath), root.rootId, legacyRootIdOf(root));
 }
 
+/**
+ * A root, opened. Its manifest is the root's ONE record in this process, and its store the
+ * ONE store for the project it is linked to (`rootPorts`): the review, the live watcher and
+ * the graph reads all go through them, so a watcher can never write back a snapshot older
+ * than a review's — linked or not, they share the manifest file's single handle.
+ */
 export function openRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot): OpenRoot {
   const files = rootKnowledgeFiles(root);
-  const choice = selectKnowledgeStore({ rootId: root.rootId, files, ...withClient(linkedKnowledgeClient(secrets)) });
+  const client = linkedKnowledgeClient(secrets);
+  const ports = rootPorts(root.rootId, {
+    store: () => selectKnowledgeStore({ rootId: root.rootId, files, ...withClient(client) }).store,
+    manifest: () => fileManifest(files, manifestFileName(root.rootId)),
+  }, { variant: String(getSelectedProject()?.id ?? "local"), location: root.folderPath });
   return {
     root,
     source: createDirectorySource({ fs: vscodeKnowledgeFs(), rootPath: root.rootPath, rootId: root.rootId, title: root.title, hashCache }),
-    store: choice.store,
-    ...(choice.client ? { client: choice.client } : {}),
-    manifest: fileManifest(files, manifestFileName(root.rootId)),
+    store: ports.store,
+    ...(client ? { client } : {}),
+    manifest: ports.manifest,
     files,
   };
 }
@@ -124,9 +135,14 @@ async function reviewPorts(secrets: vscode.SecretStorage, open: OpenRoot): Promi
       ...(root.rel ? { path: root.rel } : {}),
       ...(client ? { upload: (sha: string, snapshot: unknown) => client.putAnalysis(sha, snapshot as AnalysisSnapshotPayload) } : {}),
       onUploadError: (error) => log("analysis upload", error),
+      onWarn: (message) => log("analysis", message),
     }),
     ...(judgement ? { judgement } : {}),
-    ...(index ? { similar: (ids: string[]) => index.similar(ids) } : {}),
+    ...(index ? { similar: claimSimilarity(index, open.store, root.rootId) } : {}),
+    // After the review the root's graph feeds the knowledge index (the shared runner does it and reports the phase).
+    index: { upsertFromGraph: async (graph) => (await getHostKnowledgeIndex(root.rootId)).upsertFromGraph(graph) },
+    ...(client ? { platformGraph: (rootId: string) => client.graph(rootId) } : {}),
+    onIndexError: (error) => log("index upsert", error),
   };
 }
 
@@ -156,27 +172,22 @@ export function reviewRoot(secrets: vscode.SecretStorage, root: KnowledgeRoot): 
     async run(opts) {
       const p = await portsOnce();
       if (reviewedRootsMemento) await rememberRoot(reviewedRootsMemento, root.rootId);
+      // The shared runner feeds the knowledge index (reported as the `index` phase).
       const report = await runKnowledgeReview(p, opts);
-      await indexReviewed(open, p).catch((error: unknown) => log("index upsert", error));
       for (const cb of changedListeners) cb(root.rootId);
       return report;
     },
   };
 }
 
-/** After a review: the root's graph feeds the knowledge index (§4.3, last step). */
-async function indexReviewed(open: OpenRoot, ports: KnowledgeReviewPorts): Promise<void> {
-  const graph = open.client
-    ? await open.client.graph(open.root.rootId)
-    : await buildStoredGraph({ rootId: open.root.rootId, store: open.store, manifest: open.manifest, packs: reviewPacks(ports) });
-  if (graph) await (await getHostKnowledgeIndex(open.root.rootId)).upsertFromGraph(graph);
-}
+/** How the view reads a root's graph: the refs to load around, and the node cap. */
+export interface GraphQuery { focus?: string[]; maxNodes?: number }
 
 /** A root's graph: the platform's when linked, else built here from the local store. */
 export async function loadGraph(
   secrets: vscode.SecretStorage,
   rootId: string,
-  q: { focus?: string[]; maxNodes?: number } = {},
+  q: GraphQuery = {},
 ): Promise<KnowledgeGraph | null> {
   const client = linkedKnowledgeClient(secrets);
   if (client) return client.graph(rootId, { ...(q.focus ? { focus: q.focus } : {}), ...(q.maxNodes ? { maxNodes: q.maxNodes } : {}) });

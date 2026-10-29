@@ -6,11 +6,11 @@
  * is confirmed through the host's destructive confirmation, or an inline two-step.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels } from './labels';
 import { knowledgeAbout, nodeIndex } from './graphModel';
-import { packLabel } from './names';
+import { kindLabel, packLabel } from './names';
 import { cssVar } from './scene/themeColors';
 import { button, input, list, muted, primaryButton, quietButton } from './styles';
 import type { FactActions, KnowledgeConfirm, KnowledgeGraphSource } from './types';
@@ -62,6 +62,9 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
     /** The last write that failed, shown until the person edits or tries again. */
     const [failure, setFailure] = useState<'save' | 'delete' | null>(null);
     const [busy, setBusy] = useState(false);
+    /** A delete in flight (the host's confirmation included): a second click is ignored, and the button says so. */
+    const [deleting, setDeleting] = useState(false);
+    const deleteInFlight = useRef(false);
     const [actions, setActions] = useState<FactActions | undefined>(undefined);
     const [arming, setArming] = useState(false);
     const isFact = node !== undefined && node.origin !== 'extracted' && node.ref.startsWith('fact:');
@@ -98,22 +101,32 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
     };
 
     const remove = async () => {
-        if (!actions?.delete) return;
-        if (confirm) {
-            if (!(await confirm(labels.deleteFactConfirm))) return;
-        } else if (!arming) {
+        if (!actions?.delete || deleteInFlight.current) return;
+        if (!confirm && !arming) {
             setArming(true);
             return;
         }
-        setFailure(null);
+        deleteInFlight.current = true;
+        setDeleting(true);
+        let deleted = false;
         try {
-            await actions.delete();
-        } catch {
-            setArming(false);
-            setFailure('delete');
-            return;
+            // A confirmation that cannot be asked (it threw) is a "no": nothing is deleted, and it is not a failed delete.
+            const approved = confirm ? await Promise.resolve().then(() => confirm(labels.deleteFactConfirm)).catch(() => false) : true;
+            if (approved) {
+                setFailure(null);
+                try {
+                    await actions.delete();
+                    deleted = true;
+                } catch {
+                    setArming(false);
+                    setFailure('delete');
+                }
+            }
+        } finally {
+            deleteInFlight.current = false;
+            setDeleting(false);
         }
-        onChanged();
+        if (deleted) onChanged();
     };
 
     return (
@@ -121,7 +134,7 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
             <strong style={{ fontSize: 14, overflowWrap: 'anywhere' }}>{node.label}</strong>
             {node.stale && <p role="status" style={{ margin: 0, fontSize: 12, color: cssVar('violation') }}>{labels.staleMark}</p>}
             <dl style={{ margin: 0, display: 'grid', gap: 4 }}>
-                <Row name={labels.nodeKind} value={labels.legend[node.kind] ?? node.kind} />
+                <Row name={labels.nodeKind} value={kindLabel(labels, node.kind)} />
                 <Row name={labels.nodePack} value={packLabel(labels, node.pack)} />
                 <Row name={labels.nodePartition} value={node.partition ?? labels.partitionNone} />
                 <Row name={labels.nodeOrigin} value={labels.origins[node.origin]} />
@@ -129,7 +142,7 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button type="button" style={button} onClick={onTrace}>{labels.trace}</button>
                 {actions?.delete && (
-                    <button type="button" style={{ ...button, color: cssVar('violation') }} onClick={() => void remove()}>
+                    <button type="button" style={{ ...button, color: cssVar('violation') }} disabled={deleting} aria-busy={deleting} onClick={() => void remove()}>
                         {arming ? labels.confirmDelete : labels.deleteFact}
                     </button>
                 )}

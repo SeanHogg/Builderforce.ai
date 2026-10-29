@@ -9,7 +9,7 @@
 
 import { createKnowledgeClient } from '@builderforce/knowledge-client';
 import {
-  canPickDirectory, clientCallPrice, createKnowledgeSource, fsAccessDirectoryProvider, uploadDirectoryProvider, type DirectoryProvider,
+  canPickDirectory, createKnowledgeSource, fsAccessDirectoryProvider, uploadDirectoryProvider, type DirectoryProvider,
 } from '@builderforce/knowledge-browser';
 import type { KnowledgeGraphSource } from '@builderforce/knowledge-graph-view';
 import type { AuthenticatedFetch } from '../../api/apiClient';
@@ -44,7 +44,7 @@ export function createRovrKnowledgeSource({ projectId, fetch, reportError }: Rov
   return createKnowledgeSource({
     projectId,
     client,
-    callPriceUsd: clientCallPrice(client),
+    callPrice: () => client.judgeEstimate(),
     directorySources: async () => rovrDirectoryProviders(),
     createWorker: rovrReviewWorker,
     onDegraded: (what, error) => reportError(error, `knowledge.${what.replace(/\s+/g, '-')}`),

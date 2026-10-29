@@ -8,11 +8,11 @@ import { useTranslations } from 'next-intl';
 import { KnowledgeGraphView, type KnowledgePanelRenderProps } from '@builderforce/knowledge-graph-view';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { useConfirm } from '@/components/ConfirmProvider';
-import { clientCallPrice, createKnowledgeSource } from '@builderforce/knowledge-browser';
+import { createKnowledgeSource } from '@builderforce/knowledge-browser';
 import { createWebKnowledgeClient } from '@/lib/knowledge/webKnowledgeClient';
 import { webDirectoryProviders } from '@/lib/knowledge/webDirectoryProviders';
 import { reportKnowledgeDegraded } from '@/lib/knowledge/webHost';
-import { knowledgeIntentFromSearch } from '@/lib/knowledge/knowledgeChipRoute';
+import { knowledgeIntentFromQuery } from '@builderforce/agent-tools/prefetch';
 import { useKnowledgeGraphLabels } from '@/lib/knowledge/labels';
 import styles from './styles/surfaces.module.css';
 
@@ -43,7 +43,7 @@ export function CanvasKnowledgeSurface({ projectId, onExit, composeDraft }: Canv
   const workspaceTitle = t('workspaceTitle');
   // What a chat's knowledge chip opened the board on (focused refs, or the review
   // launcher) — read once: the view takes it as its initial state.
-  const [intent] = useState(() => knowledgeIntentFromSearch(typeof window === 'undefined' ? '' : window.location.search));
+  const [intent] = useState(() => knowledgeIntentFromQuery(typeof window === 'undefined' ? '' : window.location.search));
 
   const source = useMemo(() => {
     if (projectId === null) return null;
@@ -51,7 +51,7 @@ export function CanvasKnowledgeSurface({ projectId, onExit, composeDraft }: Canv
     return createKnowledgeSource({
       projectId,
       client,
-      callPriceUsd: clientCallPrice(client),
+      callPrice: () => client.judgeEstimate(),
       directorySources: () => webDirectoryProviders({ projectId, workspaceTitle }),
       onDegraded: reportKnowledgeDegraded,
     });

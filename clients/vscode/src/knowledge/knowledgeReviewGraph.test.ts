@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  buildStoredGraph, planKnowledgeReviewDetail, reviewPacks, runKnowledgeReview, watchFileEdits, type KnowledgeReviewPorts,
+  EDIT_DEBOUNCE_MS, buildStoredGraph, planKnowledgeReviewDetail, reviewPacks, runKnowledgeReview, watchFileEdits, type KnowledgeReviewPorts,
 } from "@builderforce/agent-tools/knowledge";
 import type { JudgementPort } from "@seanhogg/builderforce-memory/knowledge";
 import { createDirectorySource, type KnowledgeFs } from "./vscodeDirectorySource";
@@ -99,25 +99,59 @@ describe("a reviewed fixture folder in the editor's host", () => {
     expect(g.nodes.some((n) => n.stale)).toBe(false);
   });
 
+  afterEach(() => vi.useRealTimers());
+
   it("marks a document's claims stale when it is edited, on the editor's file watcher", async () => {
     const { ports, fs, disk, emit, source, graph } = await review();
+    vi.useFakeTimers();
     const told: string[][] = [];
+    let done!: () => void;
+    const edited = new Promise<void>((resolve) => { done = resolve; });
+    // As the editor runs it (`knowledgeLive`): the folder's watcher (`knowledgeFs`) has already settled
+    // the burst the source reports, so `watchFileEdits` applies it without a second wait.
     const stop = watchFileEdits({
       rootId: ROOT_ID, rootPath: ROOT, fs, source, store: ports.store, manifest: ports.manifest, packs: reviewPacks({}),
-      onEdited: (paths) => told.push(paths),
+      debounceMs: 0,
+      onEdited: (paths) => { told.push(paths); done(); },
     });
     expect(stop).toBeTypeOf("function");
 
     disk[`${ROOT}/lease.md`] = `${FILES[`${ROOT}/lease.md`]}\nThe lease now ends on 1 July.\n`;
     emit([`${ROOT}/lease.md`]);
-    await new Promise((r) => setTimeout(r, 25));
+    expect(told).toEqual([]);
+    await vi.advanceTimersByTimeAsync(0);
+    await edited; // the batch itself is promise work, no timers
     // The source reports root-relative paths of listed files.
     expect(told).toEqual([["lease.md"]]);
 
+    vi.useRealTimers();
     const g = (await graph())!;
     const stale = g.nodes.filter((n) => n.stale);
     expect(stale.length).toBeGreaterThan(0);
     expect(stale.every((n) => n.kind === "claim")).toBe(true);
+    stop!();
+  });
+
+  it("without a settled source, watchFileEdits itself settles a burst for its debounce, then applies it once", async () => {
+    const { ports, fs, disk, emit, source } = await review();
+    vi.useFakeTimers();
+    const told: string[][] = [];
+    let done!: () => void;
+    const edited = new Promise<void>((resolve) => { done = resolve; });
+    const stop = watchFileEdits({
+      rootId: ROOT_ID, rootPath: ROOT, fs, source, store: ports.store, manifest: ports.manifest, packs: reviewPacks({}),
+      onEdited: (paths) => { told.push(paths); done(); },
+    });
+    disk[`${ROOT}/lease.md`] = `${FILES[`${ROOT}/lease.md`]}\nedited\n`;
+    emit([`${ROOT}/lease.md`]);
+    await vi.advanceTimersByTimeAsync(EDIT_DEBOUNCE_MS - 1);
+    expect(told).toEqual([]);
+    emit([`${ROOT}/lease.md`]); // another change inside the window restarts it
+    await vi.advanceTimersByTimeAsync(EDIT_DEBOUNCE_MS - 1);
+    expect(told).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    await edited;
+    expect(told).toEqual([["lease.md"]]);
     stop!();
   });
 });

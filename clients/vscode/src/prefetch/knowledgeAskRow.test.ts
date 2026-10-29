@@ -68,16 +68,8 @@ describe("knowledge.ask in the editor's gate", () => {
 
 describe("knowledge.ask over a REVIEWED root (the index filled by its review, not only symbol files)", () => {
   const DOCS: Record<string, string> = {
-    "lease.md": "# Lease
-
-## Termination
-
-Either party may terminate the lease with 30 days notice.
-",
-    "policy.md": "# Policy
-
-Rent is paid monthly.
-",
+    "lease.md": ["# Lease", "", "## Termination", "", "Either party may terminate the lease with 30 days notice.", ""].join("\n"),
+    "policy.md": ["# Policy", "", "Rent is paid monthly.", ""].join("\n"),
   };
   const source = (): DirectorySource => ({
     rootId: knowledgeRootId(ROOT),

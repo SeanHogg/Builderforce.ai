@@ -518,6 +518,16 @@ export interface VendorModule {
    */
   requiresLocalEgress?: boolean;
   /**
+   * Whether this vendor's model runs on the tenant's OWN hardware (their agent host or LAN):
+   * a self-hosted engine, no provider cloud, no per-token price. Default `false`.
+   *
+   * NOT the same as {@link requiresLocalEgress}, which only says the upstream refuses the
+   * Worker's egress: Kimi requires local egress yet runs on kimi.ai's cloud, and its call is
+   * priced (a BYO subscription may be $0, but it is not "on your machine"). The review's
+   * cost estimate reads this flag, and only this one, to say "runs on your local model".
+   */
+  runsOnDevice?: boolean;
+  /**
    * The model ids THIS credential can call, read live from the vendor's OpenAI-style
    * `GET /models`. Optional: only a vendor that declares it is asked (see
    * `providerModelCatalog`), because a provider without the route answers 404 and its

@@ -821,7 +821,7 @@ export function createProjectEvermindRoutes(db: Db, door: FrontDoor = tenantDoor
       c.env as Env, db, t(c), projectId, candidateId,
       { before: body?.benchBefore, after: body?.benchAfter, reviewerId: c.get('userId') as string | undefined },
     );
-    if (!transferred.ok) return c.json({ error: transferred.error }, transferred.status as 404 | 409 | 503);
+    if (!transferred.ok) return c.json({ error: transferred.error, ...(transferred.code ? { code: transferred.code } : {}) }, transferred.status as 404 | 409 | 503);
     return c.json(transferred);
   });
 

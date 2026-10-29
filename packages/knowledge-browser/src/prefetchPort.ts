@@ -28,7 +28,7 @@ import {
   type CalibrationState, type PrefetchPort,
 } from '@builderforce/prefetch';
 import {
-  KNOWLEDGE_PREFETCH_ROWS, KNOWLEDGE_REVIEW_DIR, OPEN_KNOWLEDGE_GRAPH_COMMAND, knowledgePrefetchExecutors, openInGraphChip,
+  KNOWLEDGE_PREFETCH_ROWS, KNOWLEDGE_REVIEW_DIR, knowledgePrefetchExecutors, openInGraphChip,
   reviewInViewExecutor, type KnowledgeRowsHost,
 } from '@builderforce/agent-tools/prefetch';
 import { KNOWLEDGE_ASK, KNOWLEDGE_ASK_ROW, knowledgeAskExecutor, searchRecall } from '@builderforce/agent-tools/knowledge-index';
@@ -91,14 +91,13 @@ export function createBrowserKnowledgePrefetchPort(opts: BrowserKnowledgePrefetc
     rootId: async () => (await newest())?.rootId ?? '',
     async showGraph(rootId, focus) {
       // No reviewed root: the chip opens the view (on its review launcher's empty state).
-      const args = rootId ? { rootId, focus } : { focus: [] };
       const title = rootId ? (await newest())?.title ?? rootId : undefined;
       const text = !rootId
         ? 'No folder of this project has been reviewed yet. Open the knowledge graph to review one.'
         : focus.length > 0
           ? `The knowledge graph of **${title}**, focused on ${focus.length} file(s).`
           : `The knowledge graph of **${title}**.`;
-      return { text, chip: openInGraphChip(OPEN_KNOWLEDGE_GRAPH_COMMAND, args) };
+      return { text, chip: openInGraphChip(rootId ? { rootId, focus } : { focus: [] }) };
     },
   };
 

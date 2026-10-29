@@ -6193,6 +6193,8 @@
     "pipelineApprove": "Approuver",
     "pipelineReject": "Rejeter",
     "pipelineTransfer": "Transférer",
+    "pipelineFactOwned": "Le fait « {key} » a été rédigé par une personne : cet apprentissage ne l’écrase pas. Modifiez ou retirez ce fait, ou rejetez l’apprentissage.",
+    "pipelineOpenFact": "Ouvrir le fait",
     "pipelineContradicts": "Contredit la base",
     "pipelineUnavailable": "La revue des apprentissages est réservée aux managers.",
     "learningsAll": "Toutes les régions",

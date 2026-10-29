@@ -7,7 +7,7 @@
  * See [[evermind-learning-architecture]].
  */
 import type { EvermindRequest } from '@seanhogg/builderforce-brain-ui';
-import { apiRequest } from './apiClient';
+import { ApiRequestError, apiRequest } from './apiClient';
 import type {
   ProjectEvermindMode,
   ProjectEvermindHead,
@@ -109,15 +109,39 @@ export async function reviewLearningCandidate(
   });
 }
 
+/** The code the API answers a transfer with (409) when a PERSON authored the fact's key. */
+export const FACT_OWNED_BY_PERSON = 'fact_owned_by_person';
+
+/**
+ * A transfer the writer refused because a person owns the fact key: not an outage, a
+ * conflict a manager resolves (edit or retire that fact, or reject the learning).
+ */
+export class FactOwnedByPersonError extends Error {
+  readonly code = FACT_OWNED_BY_PERSON;
+  constructor(message: string) {
+    super(message);
+    this.name = 'FactOwnedByPersonError';
+  }
+}
+
 export async function transferLearningCandidate(
   projectId: number,
   candidateId: number,
 ): Promise<{ ok: boolean; id: number }> {
-  return apiRequest(`/api/projects/${projectId}/evermind/learning/candidates/${candidateId}/transfer`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({}),
-  });
+  try {
+    return await apiRequest(`/api/projects/${projectId}/evermind/learning/candidates/${candidateId}/transfer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+      // The 409s are answers this surface renders itself, not faults to toast.
+      expectedErrors: [409],
+    });
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 409 && error.code === FACT_OWNED_BY_PERSON) {
+      throw new FactOwnedByPersonError(error.message);
+    }
+    throw error;
+  }
 }
 
 /**

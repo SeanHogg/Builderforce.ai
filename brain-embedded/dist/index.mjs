@@ -650,8 +650,9 @@ async function runAgentLoop(args) {
           if (result.control.summary) ctx.output = result.control.summary;
         }
       } else if (result.control?.kind === "ask_human") {
-        await hooks.onAskHuman?.(ctx, result.control, call2);
-        awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call2.id };
+        const answered2 = await hooks.onAskHuman?.(ctx, result.control, call2);
+        if (answered2) result = answered2;
+        else awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call2.id };
       }
       if (!result.control) ctx.failureStreak = result.isError ? ctx.failureStreak + 1 : 0;
       const row = codec.tool(call2, result);
@@ -8818,6 +8819,124 @@ function toDependencyCruiserRules(reg) {
   return rules;
 }
 
+// ../packages/agent-tools/src/knowledge/workspaceFingerprint.ts
+import { hashText } from "@seanhogg/builderforce-memory/ingest";
+
+// ../packages/agent-tools/src/knowledge/fsDirectorySource.ts
+import { mediaTypeOfPath, sha256Hex } from "@seanhogg/builderforce-memory/knowledge";
+var BUILDERFORCE_INPUTS = /* @__PURE__ */ new Set([".builderforce/ignore", ".builderforce/partitions.json"]);
+function isBuilderforceState(rel) {
+  const path2 = rel.replace(/\\/g, "/");
+  return path2.split("/").includes(".builderforce") && !BUILDERFORCE_INPUTS.has(path2);
+}
+
+// ../packages/agent-tools/src/knowledge/shaCache.ts
+function createShaCache(opts = {}) {
+  const max = opts.max ?? 8;
+  const now = opts.now ?? Date.now;
+  const entries = /* @__PURE__ */ new Map();
+  const join = (key, entry, signal) => {
+    entry.waiting += 1;
+    if (!signal) return;
+    const stop = () => {
+      entry.stopped += 1;
+      if (entry.settled || entry.stopped < entry.waiting) return;
+      entry.controller.abort();
+      if (entries.get(key) === entry) entries.delete(key);
+    };
+    if (signal.aborted) stop();
+    else signal.addEventListener("abort", stop, { once: true });
+  };
+  return {
+    getOrRun(key, work, signal) {
+      if (key === null) return work(signal);
+      const hit = entries.get(key);
+      if (hit && (hit.expires === void 0 || hit.expires > now())) {
+        join(key, hit, signal);
+        return hit.run;
+      }
+      if (hit) entries.delete(key);
+      const controller = new AbortController();
+      const entry = { run: void 0, waiting: 0, stopped: 0, controller, settled: false };
+      entries.set(key, entry);
+      while (entries.size > max) entries.delete(entries.keys().next().value);
+      join(key, entry, signal);
+      entry.run = work(controller.signal);
+      const drop = () => {
+        if (entries.get(key) === entry) entries.delete(key);
+      };
+      entry.run.then((value) => {
+        entry.settled = true;
+        const verdict = opts.keep ? opts.keep(value) : true;
+        if (verdict === false) return drop();
+        const lifetime = typeof verdict === "number" ? verdict : opts.ttlMs;
+        if (lifetime !== void 0) entry.expires = now() + lifetime;
+      }, () => {
+        entry.settled = true;
+        drop();
+      });
+      return entry.run;
+    },
+    clear: () => entries.clear(),
+    get size() {
+      return entries.size;
+    }
+  };
+}
+
+// ../packages/agent-tools/src/knowledge/workspaceFingerprint.ts
+var GIT = "git --no-optional-locks";
+var FINGERPRINT_TTL_MS = 2e3;
+var REVIEW_INPUT_FILES = [".builderforce/ignore", ".builderforce/partitions.json"];
+async function gitText(ctx, command) {
+  try {
+    const r = await shellRunWithStop(ctx, command);
+    return r.exitCode === 0 ? (r.stdout ?? "").trimEnd() : null;
+  } catch {
+    return null;
+  }
+}
+var pathOfStatusLine = (line2) => line2.slice(3).replace(/^"|"$/g, "");
+var OBJECT_ID = /^[0-9a-f]{40,64}$/;
+var WORKING_TREE_SCRIPT = [
+  "set -e",
+  `cd "$(${GIT} rev-parse --show-toplevel)"`,
+  'idx="$(mktemp -u)"',
+  `trap 'rm -f "$idx"' EXIT`,
+  `cp "$(${GIT} rev-parse --git-path index)" "$idx" 2>/dev/null || true`,
+  'export GIT_INDEX_FILE="$idx"',
+  `${GIT} add -A -- . ':(exclude,glob)**/.builderforce/**'`,
+  ...REVIEW_INPUT_FILES.map((f) => `if [ -f "${f}" ]; then ${GIT} add -f -- "${f}"; fi`),
+  `${GIT} write-tree`
+].join("\n");
+async function workingTreeId(ctx) {
+  const out = await gitText(ctx, WORKING_TREE_SCRIPT);
+  const id = out?.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).pop();
+  return id && OBJECT_ID.test(id) ? id : null;
+}
+async function readFingerprint(ctx) {
+  const head = await gitText(ctx, `${GIT} rev-parse --show-toplevel --show-prefix HEAD`);
+  const lines = head?.split(/\r?\n/) ?? [];
+  const commit = lines.at(-1)?.trim();
+  if (!commit || /\s/.test(commit)) return { commit: null, branch: null, dirty: null };
+  const prefix = lines.length >= 3 ? (lines[1] ?? "").trim().replace(/\/+$/, "") : "";
+  const branch = (await gitText(ctx, `${GIT} branch --show-current`))?.trim() ?? null;
+  const status2 = await gitText(ctx, `${GIT} status --porcelain --untracked-files=all`);
+  if (status2 === null) return { commit, branch, dirty: null, prefix };
+  const changes = status2.split("\n").filter((line2) => line2.trim() && !isBuilderforceState(pathOfStatusLine(line2)));
+  if (changes.length === 0) return { commit, branch, dirty: false, prefix };
+  const tree = await workingTreeId(ctx);
+  return { commit, branch, dirty: true, prefix, ...tree ? { dirtyHash: hashText(tree).slice(0, 16) } : {} };
+}
+var memos = /* @__PURE__ */ new WeakMap();
+async function workspaceFingerprint(ctx) {
+  const shell = ctx.caps.shell;
+  if (!shell) return { commit: null, branch: null, dirty: null };
+  let memo = memos.get(shell);
+  if (!memo) memos.set(shell, memo = createShaCache({ ttlMs: FINGERPRINT_TTL_MS, max: 1 }));
+  return memo.getOrRun("fingerprint", (shared) => readFingerprint({ caps: ctx.caps, ...shared ? { signal: shared } : {} }), ctx.signal);
+}
+
 // ../packages/agent-tools/src/codeAnalysisTool.ts
 var ANALYZERS = [
   { name: "dependency-cruiser", version: "16.10.4", command: 'npm exec --yes --package=dependency-cruiser@16.10.4 --package=typescript@5.6.3 --call="depcruise --config=.builderforce/code-analysis/dependencies.json --output-type=json ."' },
@@ -8893,25 +9012,14 @@ function createAnalyzeCodebaseTool(options = {}) {
           tools.push({ name: analyzer.name, version: analyzer.version, status: "failed", error: String(error).slice(0, 1e3) });
         }
       }
-      const git = async (command) => {
-        try {
-          const r = await shellRunWithStop(ctx, command);
-          return r.exitCode === 0 ? (r.stdout ?? "").trim() : null;
-        } catch {
-          return null;
-        }
-      };
-      const commit = await git("git rev-parse HEAD");
-      const branch = await git("git branch --show-current");
-      const dirty = await git("git status --porcelain --untracked-files=all");
-      const sourceChanges = dirty?.split("\n").filter((line2) => line2.trim() && !line2.slice(3).replace(/^"|"$/g, "").startsWith(".builderforce/code-analysis/"));
-      const remote = (await git("git remote get-url origin"))?.replace(/^git@github.com:/, "https://github.com/").replace(/\.git$/, "");
+      const { commit, branch, dirty, dirtyHash } = await workspaceFingerprint(ctx);
+      const remote = (await gitText(ctx, `${GIT} remote get-url origin`))?.trim().replace(/^git@github.com:/, "https://github.com/").replace(/\.git$/, "");
       const repository = remote && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/.test(remote) ? remote : void 0;
       const snapshot = {
         version: 1,
         id,
         capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
-        source: { commit, branch, scope, dirty: dirty === null ? null : !!sourceChanges?.length, ...repository ? { repository } : {} },
+        source: { commit, branch, scope, dirty, ...dirtyHash ? { dirtyHash } : {}, ...repository ? { repository } : {} },
         tools,
         ...normalizeAnalysis(outputs[0], outputs[1], outputs[2], scope)
       };
@@ -9960,7 +10068,7 @@ import {
   loadPartitions,
   normalizeKey
 } from "@seanhogg/builderforce-memory/knowledge";
-import { CONTENT_HASH_FIELD, hashText as hashText2 } from "@seanhogg/builderforce-memory/ingest";
+import { CONTENT_HASH_FIELD, hashText as hashText3 } from "@seanhogg/builderforce-memory/ingest";
 
 // ../packages/agent-tools/src/knowledge/codeFindings.ts
 import {
@@ -9973,7 +10081,7 @@ import {
 // ../packages/agent-tools/src/knowledge/codeNodes.ts
 import { canonicalJson, srcRef } from "@seanhogg/builderforce-memory/knowledge";
 import { areaOfPath } from "@seanhogg/builderforce-memory/working";
-import { hashText } from "@seanhogg/builderforce-memory/ingest";
+import { hashText as hashText2 } from "@seanhogg/builderforce-memory/ingest";
 
 // ../packages/agent-tools/src/knowledge/knowledgePacks.ts
 import { DOCS_PACK } from "@seanhogg/builderforce-memory/knowledge";
@@ -9985,11 +10093,29 @@ import { CLONE_GROUP_BADGE, compareStr as compareStr3, srcRef as srcRef2 } from 
 import {
   buildGraph,
   DEFAULT_REVIEW_MODEL_CALLS,
-  filesManifestKey,
-  planReview,
+  planDetail,
   reviewDirectory,
+  srcRef as srcRef4
+} from "@seanhogg/builderforce-memory/knowledge";
+
+// ../packages/agent-tools/src/knowledge/fileEdits.ts
+import {
+  composePacks,
+  extractFile,
+  filesManifestKey,
+  isBinaryText,
+  knownKeysOfEntities,
+  sha256Hex as sha256Hex2,
   srcRef as srcRef3
 } from "@seanhogg/builderforce-memory/knowledge";
+
+// ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
+import { hashText as hashText4 } from "@seanhogg/builderforce-memory/ingest";
+var MAX_GRAPH_FILE_BYTES = 256 * 1024;
+var FAILED_RETAIN_MS = 2 * 6e4;
+var cache = createShaCache({
+  keep: (held) => held.retainMs === 0 ? false : held.retainMs ?? true
+});
 
 // ../packages/agent-tools/src/knowledge/judgement.ts
 import {
@@ -10012,17 +10138,17 @@ var KNOWLEDGE_COMPARE_SYSTEM = [
 import {
   factRef,
   pathOfRef,
-  sha256Hex
+  sha256Hex as sha256Hex3
 } from "@seanhogg/builderforce-memory/knowledge";
 
-// ../packages/agent-tools/src/knowledge/fsDirectorySource.ts
-import { mediaTypeOfPath, sha256Hex as sha256Hex2 } from "@seanhogg/builderforce-memory/knowledge";
-
 // ../packages/agent-tools/src/knowledge/index/persistence.ts
-import { loadKnowledgeIndex, sha256Hex as sha256Hex3 } from "@seanhogg/builderforce-memory/knowledge";
+import { loadKnowledgeIndex, sha256Hex as sha256Hex4 } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/rootId.ts
-import { sha256Hex as sha256Hex4 } from "@seanhogg/builderforce-memory/knowledge";
+import { sha256Hex as sha256Hex5 } from "@seanhogg/builderforce-memory/knowledge";
+
+// ../packages/agent-tools/src/knowledge/claimSimilarity.ts
+import { factKeyOf } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/toolSearch.ts
 var STOP_WORDS = /* @__PURE__ */ new Set([
@@ -12237,10 +12363,10 @@ function onDeviceMemoryHooks(load) {
   };
   return {
     answer: async (query) => {
-      const cache2 = await store();
-      if (!cache2) return null;
+      const cache3 = await store();
+      if (!cache3) return null;
       try {
-        const hit = await cache2.lookup(query);
+        const hit = await cache3.lookup(query);
         if (!hit || hit.score < ON_DEVICE_ANSWER_THRESHOLD || !hit.response.trim()) return null;
         return { text: hit.response, source: "qa-cache" };
       } catch {
@@ -12248,10 +12374,10 @@ function onDeviceMemoryHooks(load) {
       }
     },
     cacheAnswer: async (query, answer2) => {
-      const cache2 = await store();
-      if (!cache2) return;
+      const cache3 = await store();
+      if (!cache3) return;
       try {
-        await cache2.store(query, answer2);
+        await cache3.store(query, answer2);
       } catch {
       }
     }
@@ -15758,6 +15884,8 @@ var ProgressDetector = class {
     this.progress = new NoProgressTracker(state.progress, ports);
     this.claims = new UnkeptClaimTracker(state.claims);
     this.trips = state.trips ?? 0;
+    this.tripsBySignal = { ...state.tripsBySignal ?? {} };
+    this.unkeptTurns = state.unkeptTurns ?? 0;
     this.steer = state.steer;
   }
   ports;
@@ -15767,6 +15895,8 @@ var ProgressDetector = class {
   progress;
   claims;
   trips;
+  tripsBySignal;
+  unkeptTurns;
   steer;
   turnSignal = null;
   raise(signal) {
@@ -15818,13 +15948,16 @@ var ProgressDetector = class {
   endTurn() {
     this.steer = void 0;
     const idle = this.progress.endTurn();
+    const unkeptBefore = this.claims.snapshot().unkept;
     const unkept = this.claims.endTurn();
+    if (unkept > unkeptBefore) this.unkeptTurns += 1;
     if (unkept >= UNKEPT_READY_AT) this.raise({ kind: "unkept_ready", count: unkept });
     if (!this.turnSignal && idle >= NO_PROGRESS_TURNS) this.raise({ kind: "no_progress", count: idle });
     const signal = this.turnSignal;
     this.turnSignal = null;
     if (!signal) return null;
     this.trips += 1;
+    this.tripsBySignal[signal.kind] = (this.tripsBySignal[signal.kind] ?? 0) + 1;
     this.progress.reset();
     this.claims.reset();
     this.visits.forget(() => true);
@@ -15859,6 +15992,8 @@ var ProgressDetector = class {
       progress: this.progress.snapshot(),
       ...this.claims.snapshot().unkept ? { claims: this.claims.snapshot() } : {},
       ...this.trips ? { trips: this.trips } : {},
+      ...this.trips ? { tripsBySignal: { ...this.tripsBySignal } } : {},
+      ...this.unkeptTurns ? { unkeptTurns: this.unkeptTurns } : {},
       ...this.steer ? { steer: this.steer } : {}
     };
   }
@@ -23075,17 +23210,17 @@ var EMPTY_GATEWAY_MODEL_OPTIONS = {
   options: { byo: [], free: [], plan: [], paid: [] },
   identity: { product: "free", canChoose: false }
 };
-var cache;
+var cache2;
 function invalidateGatewayModelOptions() {
-  cache = void 0;
+  cache2 = void 0;
 }
 function loadGatewayModelOptions(request, cacheKey, labels) {
-  if (cache?.key === cacheKey) return cache.value;
+  if (cache2?.key === cacheKey) return cache2.value;
   const value = fetchGatewayModelOptions(request, labels).catch(() => {
-    cache = void 0;
+    cache2 = void 0;
     return EMPTY_GATEWAY_MODEL_OPTIONS;
   });
-  cache = { key: cacheKey, value };
+  cache2 = { key: cacheKey, value };
   return value;
 }
 async function fetchGatewayModelOptions(request, labels) {

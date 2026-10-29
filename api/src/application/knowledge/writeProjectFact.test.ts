@@ -16,7 +16,7 @@ vi.mock('./knowledgeWritePorts', () => ({
 }));
 vi.mock('./knowledgeVersion', () => ({ bumpKnowledgeVersion: mocks.bump, knowledgeVersion: vi.fn() }));
 
-import { writeProjectFact } from './writeProjectFact';
+import { writeProjectFact, writeProjectFactResult } from './writeProjectFact';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -50,6 +50,12 @@ describe('writeProjectFact', () => {
     const ok = await writeProjectFact({ env: {} as never, db: {} as never, tenantId: 1, projectId: 2 }, { key: 'decision:retries', content: 'agent view', source: 'cloud-run' });
     expect(ok).toBe(false);
     expect(mocks.upsert).not.toHaveBeenCalled();
+  });
+
+  it('names the skipped key when a person owns it, so a caller can tell that from a refused write', async () => {
+    mocks.factAuthor.mockResolvedValue('u7');
+    const out = await writeProjectFactResult({ env: {} as never, db: {} as never, tenantId: 1, projectId: 2 }, { key: 'decision:retries', content: 'agent view', source: 'evermind-pipeline' });
+    expect(out).toMatchObject({ factsWritten: 0, factsSkipped: ['decision:retries'] });
   });
 
   it('merges a code map into a person’s fact without taking its origin', async () => {

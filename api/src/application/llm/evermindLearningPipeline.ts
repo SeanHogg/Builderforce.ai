@@ -20,7 +20,8 @@ import type { Env } from '../../env';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { getProjectEvermindHead } from './projectEvermind';
 import { QA_CACHE_SOURCE } from './projectFactsStore';
-import { writeProjectFact } from '../knowledge/writeProjectFact';
+import { writeProjectFactResult } from '../knowledge/writeProjectFact';
+import type { KnowledgeWriteResult } from '../knowledge/writeKnowledge';
 import {
   extractCandidate,
   pipelineMetrics,
@@ -189,7 +190,7 @@ export async function transferLearningCandidate(
   projectId: number,
   candidateId: number,
   bench: { before?: number; after?: number; reviewerId?: string },
-): Promise<{ ok: true; id: number } | { ok: false; error: string; status: number }> {
+): Promise<{ ok: true; id: number } | { ok: false; error: string; status: number; code?: string }> {
   const [row] = await db.select().from(evermindLearningCandidates).where(and(
     eq(evermindLearningCandidates.id, candidateId),
     eq(evermindLearningCandidates.tenantId, tenantId),
@@ -221,15 +222,23 @@ export async function transferLearningCandidate(
   if (!claimed) return { ok: false, error: 'only an approved learning can be transferred', status: 409 };
 
   const release = () => db.update(evermindLearningCandidates).set({ transferredAt: null }).where(candidateRow(false));
-  let wrote: boolean;
+  let written: KnowledgeWriteResult;
   try {
-    wrote = await writeProjectFact({ env, db, tenantId, projectId }, { key: row.factKey, content: row.statement, source: 'evermind-pipeline' });
+    written = await writeProjectFactResult({ env, db, tenantId, projectId }, { key: row.factKey, content: row.statement, source: 'evermind-pipeline' });
   } catch (error) {
     await release();
     throw error;
   }
-  if (!wrote) {
+  if (written.factsWritten === 0) {
     await release();
+    // The writer never overwrites a fact a PERSON authored: that is a conflict the manager
+    // resolves (edit or retire the fact, or reject the learning), not a store outage.
+    if (written.factsSkipped?.includes(row.factKey)) {
+      return {
+        ok: false, status: 409, code: 'fact_owned_by_person',
+        error: `the fact '${row.factKey}' was written by a person and is not overwritten by a learning; edit or retire that fact, or reject this learning`,
+      };
+    }
     return { ok: false, error: 'project facts store refused the learning', status: 503 };
   }
   return { ok: true, id: row.id };

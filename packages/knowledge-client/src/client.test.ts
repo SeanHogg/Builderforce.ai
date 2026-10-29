@@ -154,7 +154,7 @@ describe('createKnowledgeClient', () => {
   });
 
   it('normalises a malformed estimate to "unknown, not local" and maps an error status', async () => {
-    const bad = await createKnowledgeClient({ ...fakeFetch(() => json({ perCallUsd: -1, local: 'yes' })), projectId: 1 }).judgeEstimate();
+    const bad = await createKnowledgeClient({ ...fakeFetch(() => json({ perCallUsd: 'free', local: 'yes' })), projectId: 1 }).judgeEstimate();
     expect(bad).toEqual({ perCallUsd: null, model: null, local: false });
     const failing = createKnowledgeClient({ ...fakeFetch(() => json({ error: 'nope', code: 'x' }, 500)), projectId: 1 });
     await expect(failing.judgeEstimate()).rejects.toBeInstanceOf(KnowledgeApiError);

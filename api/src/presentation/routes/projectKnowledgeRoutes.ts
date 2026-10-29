@@ -12,7 +12,8 @@
  *   POST /:projectId/knowledge/write                        the single writer (≤ 500 rows)
  *   GET  /:projectId/knowledge/extracted/:hash              extracted output by content hash
  *   PUT  /:projectId/knowledge/extracted/:hash              … upload (≤ 1 MB)
- *   PUT  /:projectId/code-analysis/:sha?root=               code-pack analyzer snapshot (≤ 2 MB)
+ *   PUT  /:projectId/code-analysis/:sha?root=               code-pack analyzer snapshot (≤ 2 MB), stored per root
+ *                                                           and sha (a root's paths are its own)
  *   POST /:projectId/knowledge/judge                        routed, metered model call
  *   GET  /:projectId/knowledge/judge/estimate               ≈ USD of one judged section (cached; no model call)
  *   GET  /:projectId/knowledge/search?root=&q=&k=           knowledge index search
@@ -250,7 +251,7 @@ export function createProjectKnowledgeRoutes(db: Db, door: FrontDoor = tenantDoo
     return json(result);
   }));
 
-  router.get('/:projectId/knowledge/judge/estimate', (c) => withPorts(c, async (p) => json(await judgeCostFor(p.env, p.tenantId, p.projectId))));
+  router.get('/:projectId/knowledge/judge/estimate', (c) => withPorts(c, async (p) => json(await judgeCostFor(p.env, p.tenantId))));
 
   router.get('/:projectId/knowledge/search', (c) => withPorts(c, async (p) => {
     const rootId = c.req.query('root')?.trim();

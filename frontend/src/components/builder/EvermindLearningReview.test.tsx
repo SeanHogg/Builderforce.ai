@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
 // REAL catalog copy, not the key passthrough in `setup.ts`: this file asserts on the
 // sentences a manager actually reads ("Baseline v4 · 210 facts", "Approve"), so a
@@ -25,7 +25,7 @@ vi.mock('@/lib/projectEvermindApi', async (importOriginal) => ({
 }));
 
 import { EvermindLearningReview } from './EvermindLearningReview';
-import type { LearningPipelineReport } from '@/lib/projectEvermindApi';
+import { FactOwnedByPersonError, type LearningPipelineReport } from '@/lib/projectEvermindApi';
 
 const CANDIDATE = {
   id: 7,
@@ -166,6 +166,28 @@ describe('reviewing a candidate', () => {
 
     await waitFor(() => expect(api.transferLearningCandidate).toHaveBeenCalledWith(11, 7));
     expect(api.reviewLearningCandidate).not.toHaveBeenCalled();
+  });
+
+  it('a transfer refused because a person owns the fact is a decision card, not an error banner', async () => {
+    api.transferLearningCandidate.mockRejectedValue(new FactOwnedByPersonError('the fact was written by a person'));
+    render(<EvermindLearningReview projectId={11} />);
+    await screen.findByText(CANDIDATE.statement);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Transfer$/i }));
+
+    const note = await screen.findByRole('alert');
+    expect(note.textContent).toContain('“retries.backoff” was written by a person');
+    // The way out is named: open the person's fact, or reject the learning.
+    const open = screen.getByRole('link', { name: /Open the fact/i });
+    expect(decodeURIComponent(open.getAttribute('href') ?? '')).toContain('/projects/11?');
+    expect(decodeURIComponent(open.getAttribute('href') ?? '')).toContain('fact:retries.backoff');
+    // The list stays, and no raw server sentence is shown as a failure.
+    expect(screen.getByText(CANDIDATE.statement)).toBeTruthy();
+    expect(screen.queryByText('the fact was written by a person')).toBeNull();
+
+    fireEvent.click(within(note).getByRole('button', { name: /^Reject$/i }));
+    await waitFor(() => expect(api.reviewLearningCandidate).toHaveBeenCalledWith(11, 7, 'rejected'));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
   });
 
   it('shows a failed review instead of swallowing it', async () => {

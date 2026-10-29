@@ -140,7 +140,7 @@ export async function runGitRaw(
   limits: { timeoutMs?: number; maxBuffer?: number } = {},
 ): Promise<string | undefined> {
   try {
-    const { stdout } = await execAsync(`git -c core.quotepath=false ${args}`, {
+    const { stdout } = await execAsync(`git --no-optional-locks -c core.quotepath=false ${args}`, {
       cwd,
       timeout: limits.timeoutMs ?? 5_000,
       windowsHide: true,

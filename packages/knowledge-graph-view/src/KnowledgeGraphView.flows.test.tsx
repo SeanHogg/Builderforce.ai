@@ -5,6 +5,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import type { KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { KnowledgeGraphView } from './KnowledgeGraphView';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
+import { packLabel } from './names';
 import { PHONE_FOCUS_NODES } from './graphModel';
 import { codeFixture, docsFixture, fixtureSource } from './testing';
 import type { KnowledgeGraphSource, KnowledgeSearchHit } from './types';
@@ -30,7 +31,7 @@ describe('search beyond the loaded graph', () => {
     return { load, searchApi, src: { ...fixtureSource([loaded]), load, search: searchApi } as KnowledgeGraphSource };
   }
 
-  it('reloads with the hit as focus when it is not in the loaded graph, then selects it', async () => {
+  it('loads around the hit when it is not in the loaded graph, then selects it', async () => {
     const { load, searchApi, src } = source([{ ref: hidden.ref, score: 1, tier: 'bm25' }]);
     render(<div style={{ height: 600 }}><KnowledgeGraphView source={src} /></div>);
     await screen.findByTestId('kg-list');
@@ -55,6 +56,56 @@ describe('search beyond the loaded graph', () => {
     expect(load).toHaveBeenCalledTimes(1);
   });
 
+  it('drops a slow earlier search that resolves after a newer one', async () => {
+    const inGraph = loaded.nodes.find((n) => n.label === 'lease.md')!;
+    const other = loaded.nodes.find((n) => n.label !== 'lease.md' && n.kind === 'file')!;
+    let releaseSlow: (hits: KnowledgeSearchHit[]) => void = () => undefined;
+    const searchApi = vi.fn((_root: string, q: string) => (q === 'slow'
+      ? new Promise<KnowledgeSearchHit[]>((resolve) => { releaseSlow = resolve; })
+      : Promise.resolve([{ ref: other.ref, score: 1, tier: 'exact' }])));
+    const src = { ...fixtureSource([loaded]), search: searchApi } as KnowledgeGraphSource;
+    render(<div style={{ height: 600 }}><KnowledgeGraphView source={src} /></div>);
+    await screen.findByTestId('kg-list');
+
+    search('slow');
+    search('fast');
+    const panel = await screen.findByRole('dialog');
+    expect(within(panel).getByRole('heading', { name: other.label })).toBeTruthy();
+    releaseSlow([{ ref: inGraph.ref, score: 1, tier: 'exact' }]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(searchApi).toHaveBeenCalledTimes(2);
+    // The late 'slow' answer must not take the selection from the newer 'fast' one: the panel is still about `other`.
+    const after = screen.getByRole('dialog');
+    expect(within(after).getByRole('heading', { name: other.label })).toBeTruthy();
+    expect(within(after).queryByRole('heading', { name: inGraph.label })).toBeNull();
+  });
+
+  it('goes back to the initial focus when a review finishes, and drops a search still in flight', async () => {
+    let releaseSlow: (hits: KnowledgeSearchHit[]) => void = () => undefined;
+    const load = vi.fn(async (_root: string, q?: { focus?: string[] }) => (q?.focus ? full : loaded));
+    const searchApi = vi.fn((_root: string, q: string) => (q === 'slow'
+      ? new Promise<KnowledgeSearchHit[]>((resolve) => { releaseSlow = resolve; })
+      : Promise.resolve([{ ref: hidden.ref, score: 1, tier: 'bm25' }])));
+    const src = { ...fixtureSource([loaded]), load, search: searchApi } as KnowledgeGraphSource;
+    render(<div style={{ height: 600 }}><KnowledgeGraphView source={src} /></div>);
+    await screen.findByTestId('kg-list');
+
+    search('hidden');
+    await screen.findByRole('dialog');
+    expect(load).toHaveBeenLastCalledWith('docs', { focus: [hidden.ref] });
+
+    search('slow');
+    fireEvent.click(screen.getByRole('button', { name: L.reviewFolder }));
+    fireEvent.click(await screen.findByRole('button', { name: L.reviewConfirm }));
+    await screen.findByText(L.reviewDoneTitle);
+    await waitFor(() => expect(load).toHaveBeenLastCalledWith('docs', undefined));
+
+    const loads = load.mock.calls.length;
+    releaseSlow([{ ref: hidden.ref, score: 1, tier: 'bm25' }]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(load).toHaveBeenCalledTimes(loads);
+  });
+
   it('keeps the loaded graph and still focuses the hit when the reload fails', async () => {
     const { load, src } = source([{ ref: hidden.ref, score: 1, tier: 'bm25' }]);
     render(<div style={{ height: 600 }}><KnowledgeGraphView source={src} /></div>);
@@ -65,6 +116,20 @@ describe('search beyond the loaded graph', () => {
     await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
     expect(screen.getByTestId('kg-list')).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('a recreated source (another project)', () => {
+  it('fetches its own baseline even when it has a root with the same id as the one before', async () => {
+    const mk = () => Object.assign(fixtureSource([docsFixture()]), { baseline: vi.fn(async () => null) });
+    const first = mk();
+    const second = mk();
+    const { rerender } = render(<div style={{ height: 600 }}><KnowledgeGraphView source={first} /></div>);
+    await screen.findByTestId('kg-list');
+    await waitFor(() => expect(first.baseline).toHaveBeenCalledTimes(1));
+
+    rerender(<div style={{ height: 600 }}><KnowledgeGraphView source={second} /></div>);
+    await waitFor(() => expect(second.baseline).toHaveBeenCalledTimes(1));
   });
 });
 
@@ -120,7 +185,7 @@ describe('Trace from the node panel', () => {
     expect(trace.textContent).toContain('verweist auf');
     expect(trace.textContent).not.toContain('references');
     // Code lanes are partitions; the pack is worded, not an id.
-    expect(within(panel).getByText(L.packs.code)).toBeTruthy();
+    expect(within(panel).getByText(packLabel(L, 'code'))).toBeTruthy();
 
     fireEvent.click(within(panel).getByRole('button', { name: L.trace }));
     expect(within(panel).queryByRole('img', { name: L.traceTitle })).toBeNull();

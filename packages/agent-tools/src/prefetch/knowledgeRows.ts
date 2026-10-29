@@ -20,8 +20,11 @@
 import { srcRef, type PlanDetail, type ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
 import { extractFocusPaths } from '../focusPaths.js';
 import { planDetailLine, reviewReportText } from '../knowledge/reviewText.js';
-import { OPEN_IN_GRAPH_LABEL_KEY, OPEN_KNOWLEDGE_GRAPH_COMMAND } from './codePackExecutors.js';
+import { reviewCostSuffix, type ReviewCallPricePort } from '../knowledge/reviewCost.js';
+import { OPEN_KNOWLEDGE_GRAPH_COMMAND, graphShown, openInGraphChip } from './graphChip.js';
 import type { PrefetchChip, PrefetchOutput, PrefetchRow, PrefetchRunner } from './contract.js';
+
+export { graphShown, openInGraphChip };
 
 export const KNOWLEDGE_REVIEW_DIR = 'knowledge.review-dir';
 export const KNOWLEDGE_GRAPH = 'knowledge.graph';
@@ -31,7 +34,7 @@ const REVIEW_BUDGET_MS = 30 * 60_000;
 /** Opening the view is a command or a link. */
 const GRAPH_BUDGET_MS = 5_000;
 /** How long a previewed plan answers the confirmed run of the same request. */
-const PLAN_REUSE_MS = 10 * 60_000;
+const PLAN_REUSE_MS = 2 * 60_000;
 
 const WHERE: PrefetchRow['surfaces'] = ['vscode', 'onprem', 'web'];
 
@@ -41,14 +44,28 @@ export const OPEN_KNOWLEDGE_REVIEW_COMMAND = 'builderforce.openKnowledgeReview';
 export const CHOOSE_FOLDER_LABEL_KEY = 'prefetch.chip.chooseFolderToReview';
 
 /**
- * "Show me the graph" in the ways people say it — deterministic, never a model call. A
- * view word (graph, layers, duplicates, cycles, clones, dependencies) after show/open/see,
- * or a graph the request names ("the knowledge graph of X", "the dependency graph").
+ * "Show me the graph" in the ways people say it — deterministic, never a model call. It
+ * names the graph this system draws (the graph, the knowledge / dependency / import / code
+ * / layer graph) or its layers, after a view verb. A graph of someone's DATA ("show me a
+ * graph of revenue") is not one, and the bare "the graph" must stand alone or name a path.
+ * Duplicates, clones and cycles are `dup.check` / `deps.cycles` — they answer with their own
+ * Open in graph chip.
  */
+const VIEW = '(?:show|open|see|display|view)(?: me)?';
+/** A path: has a separator, or a dot followed by an extension character ("Q3." and "revenue." are sentences). */
+const PATH_LIKE = '\\S*(?:[/\\\\]|\\.\\w)\\S*';
+/** What a code graph shows: files and the structure around them. */
+const CODE_NOUNS = '(?:files?|modules?|layers?|partitions?|packages?|folders?|directories|imports|dependencies)';
+const ENDING = '\\s*(?:please|now)?[.!?]*\\s*$';
 const GRAPH_PATTERNS: RegExp[] = [
-    /\b(show|open|see|display|view)( me)?( the| a)? (knowledge[- ]|dependency[- ]|import[- ]|code[- ])?graph\b/i,
-    /\b(show|open|see|display|view)( me)?( the)? (layers|layering|duplicates|clones|cycles|dead code|unused code|dependencies)( in| on| of)? (the )?(knowledge[- ]?)?(graph|map)\b/i,
-    /\b(show|open|see|display|view)( me)? the (code )?(layers|layering|duplicates|clones)\b/i,
+    // A graph named by what it is: "open the knowledge graph", "show me the dependency graph of src/".
+    new RegExp(`\\b${VIEW} (?:the |our |this )?(?:knowledge|dependency|import|code|layer)[- ](?:graph|map)\\b`, 'i'),
+    // The bare "graph": on its own, or of a path — never "the graph of revenue".
+    new RegExp(`\\b${VIEW} the graph(?:\\s+(?:of|for)\\s+${PATH_LIKE})?${ENDING}`, 'i'),
+    // "the layers": "show me the layers", "show the code layers".
+    new RegExp(`\\b${VIEW} the (?:code )?(?:layers|layering)(?:\\s+(?:in|of)\\s+(?:the )?(?:code|codebase|repo|project|workspace|${PATH_LIKE}))?${ENDING}`, 'i'),
+    // Code shown in the graph: "show me the unpartitioned files in the graph" (not the findings other rows own, nor a metric "in the graph").
+    new RegExp(`^(?!.*\\b(?:duplicat\\w*|clones?|cycles?|dead code|unused)\\b).*\\b${VIEW} (?:the |all |my )?(?:[\\w-]+ ){0,3}?${CODE_NOUNS}\\b.{0,30}? in the (?:knowledge |dependency |code )?graph\\b`, 'i'),
 ];
 
 export const KNOWLEDGE_PREFETCH_ROWS: readonly PrefetchRow[] = [
@@ -64,8 +81,8 @@ export const KNOWLEDGE_PREFETCH_ROWS: readonly PrefetchRow[] = [
     },
     {
         id: KNOWLEDGE_GRAPH, kind: 'answer', sideEffect: 'read', surfaces: WHERE, slash: '/graph',
-        patterns: [/\b(show|open)( me)? the (knowledge[- ])?graph\b/i],
-        examples: ['show me the graph', 'open the knowledge graph', 'show me the layers', 'show the duplicates in the graph', 'show me the dependency graph', 'show me the knowledge graph of src/'],
+        patterns: GRAPH_PATTERNS,
+        examples: ['show me the graph', 'open the knowledge graph', 'show me the layers', 'show me the dependency graph', 'show me the knowledge graph of src/'],
         budgetMs: GRAPH_BUDGET_MS, labelKey: `prefetch.action.${KNOWLEDGE_GRAPH}`,
     },
 ];
@@ -103,16 +120,8 @@ export interface KnowledgeRowsHost {
     rootId(): string | Promise<string>;
     /** How this host shows a graph: VS Code opens its panel; on-prem links to the web canvas. */
     showGraph(rootId: string, focus: string[]): Promise<{ text: string; chip?: PrefetchChip }>;
-}
-
-/** The chip that opens the graph, wherever the host shows it. */
-export function openInGraphChip(command: string, args: Record<string, unknown>): PrefetchChip {
-    return { labelKey: OPEN_IN_GRAPH_LABEL_KEY, command, args };
-}
-
-/** What a host's `showGraph` answers: its text and the ONE Open-in-graph chip, carrying the root and the focus refs. */
-export function graphShown(text: string, rootId: string, focus: string[]): { text: string; chip: PrefetchChip } {
-    return { text, chip: openInGraphChip(OPEN_KNOWLEDGE_GRAPH_COMMAND, { rootId, focus }) };
+    /** ≈ price of one judged section, for the confirm chip's cost; absent ⇒ the chip states calls only. */
+    callPrice?: ReviewCallPricePort;
 }
 
 export function knowledgePrefetchExecutors(host: KnowledgeRowsHost, now: () => number = Date.now): Record<string, PrefetchRunner> {
@@ -135,7 +144,7 @@ export function knowledgePrefetchExecutors(host: KnowledgeRowsHost, now: () => n
     const review: PrefetchRunner = {
         async preview(request, signal) {
             const p = await plan(request, signal);
-            return p ? planDetailLine(p.plan.plan, p.session.title) : undefined;
+            return p ? planDetailLine(p.plan.plan, p.session.title) + await reviewCostSuffix(p.plan.plan.estimatedModelCalls, host.callPrice) : undefined;
         },
         async run(request, signal): Promise<PrefetchOutput | undefined> {
             const p = await plan(request, signal);

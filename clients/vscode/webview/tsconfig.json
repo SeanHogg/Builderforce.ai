@@ -51,7 +51,8 @@
       "@builderforce/agent-tools/prefetch": ["../../../packages/agent-tools/src/prefetch/index.ts"],
       "@builderforce/prefetch": ["../../../packages/prefetch/src/index.ts"],
       "@builderforce/knowledge-graph-view": ["../../../packages/knowledge-graph-view/src/index.ts"],
-      "@builderforce/knowledge-graph-view/testing": ["../../../packages/knowledge-graph-view/src/testing.ts"]
+      "@builderforce/knowledge-graph-view/testing": ["../../../packages/knowledge-graph-view/src/testing.ts"],
+      "@builderforce/knowledge-graph-view/tokens.css": ["../../../packages/knowledge-graph-view/src/tokens.css"]
     }
   },
   // The editor's OWN code, checked strictly. Everything that compiles FRONTEND

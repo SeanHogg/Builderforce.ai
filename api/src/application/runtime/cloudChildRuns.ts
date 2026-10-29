@@ -25,11 +25,13 @@ import { TERMINAL_EXECUTION_STATUSES } from '../../domain/execution/Execution';
 import type { ExecutionStatus } from '../../domain/shared/types';
 import { EXECUTION_NON_TERMINAL_STATUSES } from '../../domain/shared/terminalStatus';
 import { parseJsonObject } from '../../domain/shared/json';
-import { listBranchDiff } from '../repos/readRepoContents';
+import { listBranchDiff, readRepoFile } from '../repos/readRepoContents';
+import type { RepoFileReader } from '../repos/repoReadMemo';
 import type { TicketRepoContext } from '../repos/commitFileAsPendingChange';
 import { enqueueExecutionMessage, releasePendingSteers } from './executionSteering';
 import { parseCloudAgentRef, parseOriginatingChatId } from './cloudDispatch';
 import { postSubagentChatReport } from './subagentChatReport';
+import { rehashPaths, type WrittenFileHashes } from './cloudAgent/writtenFileHashes';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { RuntimeService } from './RuntimeService';
 
@@ -143,9 +145,15 @@ export async function absorbChildWrites(
   repoCtx: TicketRepoContext | null,
   writtenPaths: Set<string>,
   /** The parent's own per-file hashes. The branch diff cannot say WHICH of its paths a child
-   *  rewrote, so every path on it drops its entry: an unhashed anchor is merely never stale,
-   *  where a hash of text a child replaced would mark the fact stale on the first recall. */
-  writtenHashes?: Map<string, string>,
+   *  rewrote, so every path on it is re-hashed from its final content on the branch (read
+   *  through `readRepoFile`, as the write/edit tools do); one that cannot be read drops its
+   *  entry — an unhashed anchor is merely never stale, where a hash of text a child replaced
+   *  would mark the fact stale on the first recall. */
+  writtenHashes?: WrittenFileHashes,
+  /** How the branch's files are read for the re-hash; defaults to `readRepoFile` on the run's
+   *  branch. The finish gates pass the memo they share with `verifyWrittenFiles`, so a path
+   *  is read once per finish attempt, not once per consumer. */
+  read?: RepoFileReader,
 ): Promise<void> {
   if (!repoCtx) return;
   const [anyChild] = await db
@@ -156,10 +164,13 @@ export async function absorbChildWrites(
   if (!anyChild) return;
   const diff = await listBranchDiff({ ...repoCtx, ref: repoCtx.branch }, repoCtx.base, repoCtx.branch);
   if (!diff.ok) return;
-  for (const f of diff.files) {
-    writtenPaths.add(f.path);
-    writtenHashes?.delete(f.path);
-  }
+  for (const f of diff.files) writtenPaths.add(f.path);
+  if (!writtenHashes) return;
+  const readFile: RepoFileReader = read ?? ((path) => readRepoFile({ ...repoCtx, ref: repoCtx.branch }, path));
+  await rehashPaths(writtenHashes, diff.files, async (path) => {
+    const file = await readFile(path);
+    return file.ok && !file.truncated ? file.content : null;
+  });
 }
 
 const childStateOf = (row: ChildRow): ChildReportLike['state'] =>

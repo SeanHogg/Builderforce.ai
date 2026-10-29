@@ -26,6 +26,8 @@ export const COMPACT_CHURN = 0.1;
 export const NEAR_DUPLICATE_MIN = 0.92;
 /** Most pairs one similar-pairs pass returns. */
 export const NEAR_DUPLICATE_MAX_PAIRS = 2_000;
+/** Most pairs `similar` keeps for any one claim it was asked about (best first). */
+export const SIMILAR_PAIRS_PER_ID = 20;
 
 export interface HostIndexOptions {
     rootId: string;
@@ -56,6 +58,12 @@ class HostIndex implements HostKnowledgeIndexCore {
     private readonly meta = new Map<string, HitMeta>();
     private readonly adjacency = new Map<string, Edge[]>();
     private nearDup: { digest: string; pairs: SimilarPair[] } | undefined;
+    /**
+     * Cards `similar` added for a review's new claims before the graph (and so a node) backs
+     * them. They answer no search, and the next graph upsert drops the ones it does not hold
+     * — so a review that stopped before writing leaves nothing behind.
+     */
+    private readonly provisional = new Set<string>();
 
     constructor(private readonly o: HostIndexOptions) {}
 
@@ -104,14 +112,14 @@ class HostIndex implements HostKnowledgeIndexCore {
     async search(q: string, k = 10): Promise<IndexHit[]> {
         const index = await this.ready();
         void this.noticeEmbedder();
-        return index.search(q, { k });
+        return (await index.search(q, { k })).filter((h) => !this.provisional.has(h.id));
     }
 
     async recall(q: string, opts: { k?: number; hops?: 1 | 2 } = {}): Promise<Recall> {
         const k = opts.k ?? 8;
         const index = await this.ready();
         void this.noticeEmbedder();
-        const hits = await index.search(q, { k });
+        const hits = (await index.search(q, { k })).filter((h) => !this.provisional.has(h.id));
         const own = new Set(hits.map((h) => h.id));
         const expanded = index.expand(hits, this.neighbours, { hops: opts.hops ?? 1 }).slice(0, k * 2);
         const out: RecalledHit[] = expanded.map((h) => {
@@ -129,15 +137,43 @@ class HostIndex implements HostKnowledgeIndexCore {
         },
     };
 
-    async similar(ids: string[]): Promise<SimilarPair[]> {
-        const index = await this.ready();
+    /**
+     * Near-duplicate pairs touching `ids`: between them and everything already in the index,
+     * and among them. A claim a review has just written is not in the index yet (hosts index
+     * the graph after the review), so `texts` carries the text of those: they are added to the
+     * index under their own ids (the graph's next upsert replaces them) and the index is
+     * compacted once, so the pairs come from the index's own embeddings and scoring.
+     */
+    async similar(ids: string[], texts: ReadonlyMap<string, string> = new Map()): Promise<SimilarPair[]> {
+        await this.ready();
         const wanted = new Set(ids);
+        const fresh: IndexDoc[] = ids.filter((id) => texts.has(id)).map((id) => ({ id, text: texts.get(id)! }));
         const out: SimilarPair[] = [];
-        for (const idPrefix of [...new Set(ids.map(prefixOf))].sort()) {
-            for (const p of index.similarPairs({ minSimilarity: NEAR_DUPLICATE_MIN, maxPairs: NEAR_DUPLICATE_MAX_PAIRS, ...(idPrefix ? { idPrefix } : {}) })) {
-                if (wanted.has(p.a) && wanted.has(p.b)) out.push(p);
+        await this.exclusive(async () => {
+            // The idle pass may have swapped the index since `ready()`.
+            const index = this.index!;
+            if (fresh.length > 0) {
+                const before = index.digest();
+                await index.upsert(fresh);
+                for (const doc of fresh) this.provisional.add(doc.id);
+                if (index.digest() !== before && this.bound) {
+                    await index.compact();
+                    this.churn = 0;
+                    this.scheduleIdle();
+                }
             }
-        }
+            // The index caps a pass at its best pairs overall, which could be none of ours: take
+            // them all, keep the ones that touch the ids asked about, and cap per asked id.
+            const perId = new Map<string, number>();
+            for (const idPrefix of [...new Set(ids.map(prefixOf))].sort()) {
+                for (const p of index.similarPairs({ minSimilarity: NEAR_DUPLICATE_MIN, maxPairs: Number.MAX_SAFE_INTEGER, ...(idPrefix ? { idPrefix } : {}) })) {
+                    const mine = [p.a, p.b].filter((id) => wanted.has(id));
+                    if (mine.length === 0 || mine.every((id) => (perId.get(id) ?? 0) >= SIMILAR_PAIRS_PER_ID)) continue;
+                    for (const id of mine) perId.set(id, (perId.get(id) ?? 0) + 1);
+                    out.push(p);
+                }
+            }
+        });
         return out.sort((x, y) => (x.a < y.a ? -1 : x.a > y.a ? 1 : x.b < y.b ? -1 : x.b > y.b ? 1 : 0));
     }
 
@@ -161,6 +197,14 @@ class HostIndex implements HostKnowledgeIndexCore {
     async upsertGraph(g: KnowledgeGraph, extraKeys?: ReadonlyMap<string, readonly string[]>): Promise<void> {
         await this.ready();
         await this.exclusive(async () => {
+            // The graph is the truth: provisional claim cards it does not hold were never written.
+            const held = new Set(g.nodes.map((n) => n.ref));
+            const phantoms = [...this.provisional].filter((id) => !held.has(id));
+            this.provisional.clear();
+            if (phantoms.length > 0) {
+                this.index!.remove(phantoms);
+                this.churn += phantoms.length;
+            }
             const cards: IndexDoc[] = toCards(g).map((c) => {
                 const extra = extraKeys?.get(c.id);
                 return extra?.length ? { ...c, keys: [...new Set([...(c.keys ?? []), ...extra])] } : c;

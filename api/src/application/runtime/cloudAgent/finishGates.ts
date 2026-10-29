@@ -23,6 +23,7 @@
 import type { Db } from '../../../infrastructure/database/connection';
 import type { TicketRepoContext } from '../../repos/commitFileAsPendingChange';
 import { verifyWrittenFiles } from '../../repos/verifyWrittenFiles';
+import { createRepoReadMemo } from '../../repos/repoReadMemo';
 import { pollBranchCi, ciFinishDecision } from '../../ci/pollCommitCiStatus';
 import { scanWrittenForPlaceholders } from '../../repos/scanForPlaceholders';
 import { recordCodeCompletionClaim } from '../../provenance/finishClaimService';
@@ -130,14 +131,17 @@ const blocked = async (a: FinishGateArgs, reason: FinishBlockReason, block: stri
 export async function evaluateFinishGates(a: FinishGateArgs): Promise<FinishGateVerdict> {
   const { db, evt, repoCtx, writtenPaths, requiredSignoff, summary, gates } = a;
   const { tenantId, executionId } = evt;
+  // One read per path for THIS attempt, shared by the child-write re-hash and the static
+  // validation below (a later attempt builds its own: the model edits between attempts).
+  const branchRead = repoCtx ? createRepoReadMemo({ ...repoCtx, ref: repoCtx.branch }) : undefined;
   if (a.delegated) {
     const childBlock = await liveChildrenFinishBlock(db, tenantId, executionId);
     if (childBlock) return { block: childBlock, reason: 'children_running' };
     // The children committed from their own runs; the pull request is the whole tree's.
-    await absorbChildWrites(db, tenantId, executionId, repoCtx, writtenPaths, a.writtenHashes);
+    await absorbChildWrites(db, tenantId, executionId, repoCtx, writtenPaths, a.writtenHashes, branchRead);
   }
   const wrote = !!repoCtx && writtenPaths.size > 0;
-  const verification = repoCtx && wrote ? await verifyWrittenFiles({ ...repoCtx, ref: repoCtx.branch }, writtenPaths) : null;
+  const verification = repoCtx && wrote ? await verifyWrittenFiles({ ...repoCtx, ref: repoCtx.branch }, writtenPaths, branchRead) : null;
   // Branch CI is polled once static validation is clean; its decision is applied in
   // order below so a green/none result still falls through to honesty + anti-stub.
   let ci: ReturnType<typeof ciFinishDecision> | null = null;

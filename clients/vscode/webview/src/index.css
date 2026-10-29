@@ -47,43 +47,6 @@
   --bf-field: var(--vscode-input-background, var(--bf-surface));
 }
 
-/*
- * The knowledge graph view's tones (`--kg-*`, defined for the web in the frontend's
- * globals.css). Here each maps onto the editor's own theme colours, so the graph follows
- * whatever light OR dark theme is active; the hex is only the fallback when a theme omits
- * the token. Every meaning keeps its own hue. The neutrals (bg, text, border, accent…)
- * alias the `--bf-*` mapping above.
- */
-:root {
-  --kg-bg: var(--bf-surface);
-  --kg-panel: var(--bf-surface-2);
-  --kg-text: var(--bf-text);
-  --kg-muted: var(--bf-text-muted);
-  --kg-border: var(--bf-border);
-  --kg-accent: var(--bf-accent);
-  --kg-accent-soft: var(--bf-accent-soft);
-  --kg-on-accent: var(--bf-on-accent);
-  --kg-node-file: var(--vscode-charts-blue, #4d9eff);
-  --kg-node-section: var(--vscode-terminal-ansiCyan, #22d3ee);
-  --kg-node-symbol: var(--vscode-charts-purple, #a78bfa);
-  --kg-node-entity: var(--vscode-terminal-ansiGreen, #34d399);
-  --kg-node-claim: var(--vscode-terminal-ansiBrightGreen, #a3e635);
-  --kg-node-fact: var(--vscode-terminal-ansiMagenta, #f472b6);
-  --kg-node-missing: var(--vscode-editorWarning-foreground, #d4a373);
-  --kg-edge: var(--vscode-editorIndentGuide-activeBackground1, var(--vscode-panel-border, #64748b));
-  --kg-violation: var(--vscode-charts-red, #f87171);
-  --kg-cycle: var(--vscode-charts-orange, #fb923c);
-  --kg-duplicate: var(--vscode-charts-yellow, #facc15);
-  --kg-contradicts: var(--vscode-terminal-ansiBrightRed, #fb7185);
-  --kg-agrees: var(--vscode-charts-green, #22c55e);
-  --kg-stale: var(--vscode-disabledForeground, #a8a29e);
-  --kg-unused: var(--vscode-editorLineNumber-foreground, #78716c);
-  --kg-changed: var(--vscode-gitDecoration-modifiedResourceForeground, #38bdf8);
-  --kg-plane: var(--vscode-textBlockQuote-background, rgba(128, 128, 128, 0.12));
-  --kg-warn-bg: var(--bf-warning-bg);
-  --kg-error: var(--vscode-errorForeground, #fca5a5);
-}
-
 html,
 body,
 #root {

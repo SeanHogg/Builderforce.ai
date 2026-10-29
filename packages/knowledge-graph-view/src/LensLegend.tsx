@@ -7,6 +7,7 @@
 
 import type { KnowledgeGraphLabels } from './labels';
 import type { LensDef } from './lenses';
+import { kindLabel } from './names';
 import { cssVar } from './scene/themeColors';
 import { list, muted, swatch } from './styles';
 
@@ -27,7 +28,7 @@ export function LensLegend({ lens, labels, applicable }: LensLegendProps) {
                         {lens.legend.map((row) => (
                             <li key={`${row.tone}:${row.key}`} data-legend={row.key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, minHeight: 20 }}>
                                 <span style={swatch(cssVar(row.tone))} aria-hidden="true" />
-                                <span>{labels.legend[row.key] ?? row.key}</span>
+                                <span>{kindLabel(labels, row.key)}</span>
                             </li>
                         ))}
                     </ul>

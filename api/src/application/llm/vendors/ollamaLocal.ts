@@ -73,4 +73,6 @@ export const ollamaLocalModule: VendorModule = {
   },
   // No callStream — same native-NDJSON reason as `ollama` (cloud).
   requiresLocalEgress: true,
+  // The tenant's own Ollama instance (their host or LAN): no provider cloud, no per-token price.
+  runsOnDevice: true,
 };

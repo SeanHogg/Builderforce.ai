@@ -49,7 +49,12 @@ describe('evaluateFinishGates', () => {
     const writtenHashes = new Map([['src/a.ts', 'h']]);
     const a = args({ delegated: true, writtenHashes });
     await evaluateFinishGates(a);
-    expect(absorb).toHaveBeenCalledWith(a.db, 1, 9, repoCtx, a.writtenPaths, writtenHashes);
+    // The trailing argument is the per-attempt read memo it shares with verification.
+    expect(absorb).toHaveBeenCalledWith(a.db, 1, 9, repoCtx, a.writtenPaths, writtenHashes, expect.any(Function));
+    // ...the SAME reader instance, so each path is fetched once per attempt, not once per consumer.
+    const absorbReader = (absorb.mock.calls.at(-1) as unknown as unknown[])[6];
+    const verifyReader = (h.verify.mock.calls.at(-1) as unknown as unknown[])[2];
+    expect(verifyReader).toBe(absorbReader);
   });
 
   it('absorbs nothing for a run with no children', async () => {

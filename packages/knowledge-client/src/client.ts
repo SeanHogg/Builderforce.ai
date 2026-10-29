@@ -163,7 +163,8 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
   const judgeEstimate = async (): Promise<JudgeEstimate> => {
     const out = await jsonCall<Partial<JudgeEstimate>>('/knowledge/judge/estimate');
     return {
-      perCallUsd: typeof out.perCallUsd === 'number' && Number.isFinite(out.perCallUsd) && out.perCallUsd >= 0 ? out.perCallUsd : null,
+      // Shape only: whether a number is a usable price is `reviewCostOf`'s rule, in ONE place.
+      perCallUsd: typeof out.perCallUsd === 'number' ? out.perCallUsd : null,
       model: typeof out.model === 'string' ? out.model : null,
       local: out.local === true,
     };

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createKnowledgeIndex, srcRef } from '@seanhogg/builderforce-memory/knowledge';
 import { resolveWarmEmbedder } from './embedderChain.js';
-import { createHostKnowledgeIndex } from './hostIndex.js';
+import { createHostKnowledgeIndex, SIMILAR_PAIRS_PER_ID } from './hostIndex.js';
 import { indexFileName, knowledgeIndexPath, writeIndexAtomic } from './persistence.js';
 import { createKnowledgeIndexRegistry } from './registry.js';
 import { chunkByArea, extractFromSymbols, seedCodeCards } from './seedCode.js';
@@ -150,13 +150,86 @@ describe('host knowledge index — search and recall', () => {
         expect(await index.search('retryPolicy')).toEqual([]);
     });
 
-    it('similar() keeps only pairs among the ids asked about', async () => {
+    it('similar() keeps only pairs that touch the ids asked about', async () => {
         const embedder = bucketEmbedder();
         const { index } = host({ embedder: async () => embedder });
         await seedCodeCards(index, WORKSPACE_FILES);
         await index.flush();
         const ids = [srcRef(ROOT, 'src/billing/invoice.ts'), srcRef(ROOT, 'src/auth/session.ts')];
-        for (const p of await index.similar(ids)) expect(ids).toEqual(expect.arrayContaining([p.a, p.b]));
+        for (const p of await index.similar(ids)) expect(ids.some((id) => id === p.a || id === p.b)).toBe(true);
+    });
+
+    describe('the new claims of a review', () => {
+        const graphOf = (claims: Array<[string, string]>) => ({
+            scope: { rootId: ROOT, packs: ['docs'], digest: 'd' },
+            nodes: claims.map(([ref, label]) => ({ ref, kind: 'claim', label, pack: 'docs', importance: 0.5, origin: 'judged' })),
+            edges: [], findings: [], stats: { sources: 0, nodes: claims.length, stale: 0, truncated: false },
+        } as never);
+        const OLD = 'fact:claim:old';
+        const NEW = 'fact:claim:new';
+        const OTHER = 'fact:claim:other';
+
+        async function indexedWithOld() {
+            const embedder = bucketEmbedder();
+            const h = host({ embedder: async () => embedder });
+            await h.index.upsertFromGraph(graphOf([[OLD, 'The lease ends on 1 June.']]));
+            await h.index.flush();
+            return h;
+        }
+
+        it('pairs a claim that is not indexed yet with one that already is', async () => {
+            const { index } = await indexedWithOld();
+            expect(await index.size()).toBe(1);
+            const pairs = await index.similar([NEW], new Map([[NEW, 'The lease ends on 1 July.']]));
+            expect(pairs.map((p) => [p.a, p.b].sort())).toEqual([[NEW, OLD].sort()]);
+            expect(pairs[0]!.similarity).toBeGreaterThanOrEqual(0.92);
+        });
+
+        it('pairs new claims among themselves, and leaves an unrelated one out', async () => {
+            const { index } = await indexedWithOld();
+            const texts = new Map([[NEW, 'The tenant pays rent monthly.'], [OTHER, 'The tenant pays rent monthly!'], ['fact:claim:odd', 'zzzz qqqq xxxx 9999']]);
+            const pairs = await index.similar([...texts.keys()], texts);
+            expect(pairs.some((p) => [p.a, p.b].includes(NEW) && [p.a, p.b].includes(OTHER))).toBe(true);
+            expect(pairs.some((p) => [p.a, p.b].includes('fact:claim:odd'))).toBe(false);
+        });
+
+        it('keeps the best pairs for each asked claim, however many pairs the rest of the index has', async () => {
+            const embedder = bucketEmbedder();
+            const h = host({ embedder: async () => embedder });
+            await h.index.upsertFromGraph(graphOf(Array.from({ length: 30 }, (_, i): [string, string] => [`fact:claim:o${i}`, `The lease ends on 1 June ${i}.`])));
+            await h.index.flush();
+            const pairs = await h.index.similar([NEW], new Map([[NEW, 'The lease ends on 1 June.']]));
+            expect(pairs.length).toBeGreaterThan(0);
+            expect(pairs.length).toBeLessThanOrEqual(SIMILAR_PAIRS_PER_ID);
+            // Every pair is the asked claim's — the 30 indexed claims' pairs among themselves are not returned.
+            for (const p of pairs) expect([p.a, p.b]).toContain(NEW);
+        });
+
+        it('leaves nothing behind when the review stops before writing the claim: no phantom hit, and the next graph drops the card', async () => {
+            const { index } = await indexedWithOld();
+            await index.similar([NEW], new Map([[NEW, 'Termination requires ninety days written notice.']]));
+            // Added only so it could be compared: it answers no search…
+            expect((await index.search('ninety days written notice')).map((h) => h.id)).not.toContain(NEW);
+            expect((await index.recall('ninety days written notice')).hits.map((h) => h.id)).not.toContain(NEW);
+            expect(await index.size()).toBe(2);
+            // …and the next graph, which does not hold it (the review never wrote it), removes it.
+            await index.upsertFromGraph(graphOf([[OLD, 'The lease ends on 1 June.']]));
+            expect(await index.size()).toBe(1);
+        });
+
+        it('keeps the card once the graph holds the claim, and it is found', async () => {
+            const { index } = await indexedWithOld();
+            await index.similar([NEW], new Map([[NEW, 'Termination requires ninety days written notice.']]));
+            await index.upsertFromGraph(graphOf([[OLD, 'The lease ends on 1 June.'], [NEW, 'Termination requires ninety days written notice.']]));
+            expect(await index.size()).toBe(2);
+            expect((await index.search('ninety days written notice')).map((h) => h.id)).toContain(NEW);
+        });
+
+        it('without a warm embedder there is nothing to pair, and nothing is dropped as compared by a throw', async () => {
+            const { index } = host();
+            await index.upsertFromGraph(graphOf([[OLD, 'The lease ends on 1 June.']]));
+            expect(await index.similar([NEW], new Map([[NEW, 'The lease ends on 1 July.']]))).toEqual([]);
+        });
     });
 });
 

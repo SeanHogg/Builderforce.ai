@@ -975,6 +975,22 @@ describe('transferLearningCandidate', () => {
     expect(fake.matchesRow(rejectedMeanwhile, claim.predicate)).toBe(false);
   });
 
+  it('answers 409 fact_owned_by_person (not 503) when a person authored the fact key, and keeps the learning transferable', async () => {
+    const fake = fakeDb();
+    const candidate = seedCandidate(fake, { status: 'approved', reviewedBy: 'manager-1', reviewedAt: new Date('2026-03-01T09:00:00.000Z') });
+    seedFact(fake, { content: 'Auth is handled by a bespoke token service (written by Dana).', createdBy: 'user-dana' });
+
+    const result = await transferLearningCandidate(env, fake.db, TENANT, PROJECT, candidate.id as number, { before: 0.4, after: 0.6 });
+
+    expect(result).toMatchObject({ ok: false, status: 409, code: 'fact_owned_by_person' });
+    expect((result as { error: string }).error).toContain('auth-flow');
+    // The person's words stand, and the claim is released so the manager can retry after resolving it.
+    expect(fake.rows(projectFacts)).toHaveLength(1);
+    expect(fake.rows(projectFacts)[0]!.content).toBe('Auth is handled by a bespoke token service (written by Dana).');
+    expect(fake.rows(evermindLearningCandidates)[0]!.transferredAt).toBeNull();
+    expect(fake.rows(evermindLearningCandidates)[0]!.status).toBe('approved');
+  });
+
   // NOTE ON A BRANCH NOT COVERED HERE: `transferLearningCandidate` also maps a
   // falsy `upsertProjectFact` return to a 503 "project facts store refused the
   // learning". That branch is unreachable through the real collaborator without

@@ -6193,6 +6193,8 @@
     "pipelineApprove": "Freigeben",
     "pipelineReject": "Ablehnen",
     "pipelineTransfer": "Übertragen",
+    "pipelineFactOwned": "Der Fakt „{key}“ wurde von einer Person verfasst und wird von dieser Erkenntnis nicht überschrieben. Bearbeiten oder entfernen Sie den Fakt, oder lehnen Sie die Erkenntnis ab.",
+    "pipelineOpenFact": "Fakt öffnen",
     "pipelineContradicts": "Widerspricht der Basislinie",
     "pipelineUnavailable": "Die Lernprüfung ist nur für Manager.",
     "learningsAll": "Alle Regionen",

@@ -221,6 +221,15 @@ export function vendorRequiresLocalEgress(vendor: VendorId): boolean {
   return MODULES_BY_ID[vendor]?.requiresLocalEgress === true;
 }
 
+/**
+ * Whether this vendor's model runs on the tenant's own hardware — the ONE declaration
+ * ({@link VendorModule.runsOnDevice}). Not {@link vendorRequiresLocalEgress}: a cloud
+ * upstream that merely refuses the Worker's egress (Kimi) is priced, not "local".
+ */
+export function vendorRunsOnDevice(vendor: VendorId): boolean {
+  return MODULES_BY_ID[vendor]?.runsOnDevice === true;
+}
+
 export function tierForModel(modelId: string): AiModelTier {
   const prefixed = parseVendorPrefix(modelId);
   const mod = MODULES_BY_ID[prefixed?.vendor ?? vendorForModel(modelId)];

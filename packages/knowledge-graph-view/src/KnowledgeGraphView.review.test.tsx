@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /** The review chip end to end (PRD 38 §4.3): estimate, running, Stop, Done → Continue, and Live after it. */
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { KnowledgeGraphView } from './KnowledgeGraphView';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
 import { FIXTURE_PLAN, FIXTURE_REPORT, docsFixture, fixtureSource } from './testing';
@@ -46,14 +46,14 @@ async function startReview(source: ReturnType<typeof scripted>['source']) {
 }
 
 describe('review confirm chip', () => {
-  it('shows ≈ calls and ≈ cost when the host priced the pass, and no pending note', async () => {
+  it('shows ≈ calls and ≈ cost, and no pending note, when the host priced the pass', async () => {
     const { source } = scripted({ estimate: { modelCalls: 4, costUsd: 0.08 } });
     await startReview(source);
     expect(await screen.findByText(/^≈ 4 model calls · ≈ .*0[.,]08/)).toBeTruthy();
     expect(screen.queryByText(L.reviewPlanCostPending)).toBeNull();
   });
 
-  it('shows ≈ calls and the localized "cost shown after routing" note when it did not', async () => {
+  it('shows ≈ calls and the localized "cost shown after routing" note when the host did not price the pass', async () => {
     const { source } = scripted({ estimate: { modelCalls: 4 } });
     await startReview(source);
     expect(await screen.findByText('≈ 4 model calls')).toBeTruthy();
@@ -77,14 +77,15 @@ describe('review confirm chip', () => {
 });
 
 describe('review run', () => {
-  it('shows phase, n of m, a bar and the file while running, and Stop aborts it', async () => {
+  it('shows phase, n of m, a bar and the file while running, and Stop aborts the run', async () => {
     const { source, run } = scripted();
     await startReview(source);
     fireEvent.click(await screen.findByRole('button', { name: L.reviewConfirm }));
 
     expect(await screen.findByText('Judging · 2 of 5')).toBeTruthy();
     expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('40');
-    expect(screen.getByText('policy/termination.md')).toBeTruthy();
+    // The file also lists as a node in the graph behind the chip, so look inside the chip's own region.
+    expect(within(screen.getByRole('region', { name: L.reviewFolder })).getByText('policy/termination.md')).toBeTruthy();
     expect(run.signal!.aborted).toBe(false);
 
     fireEvent.click(screen.getByRole('button', { name: L.reviewStop }));
@@ -118,7 +119,22 @@ describe('review run', () => {
 });
 
 describe('Live after a review', () => {
-  it('subscribes to the open root, and again once a review of it finishes (its directory is now watchable)', async () => {
+  it('keeps the same subscription when only a fact changed (a reload is not a finished review)', async () => {
+    const { source, subscribeLive } = scripted();
+    const rememberFact = vi.fn(async () => undefined);
+    render(<div style={{ height: 600 }}><KnowledgeGraphView source={{ ...source, rememberFact }} /></div>);
+    const list = await screen.findByTestId('kg-list');
+    await waitFor(() => expect(subscribeLive).toHaveBeenCalledTimes(1));
+    fireEvent.click(within(list).getAllByRole('button', { pressed: false })[0]!);
+    fireEvent.change(await screen.findByRole('textbox'), { target: { value: 'Legal owns this' } });
+    fireEvent.click(screen.getByRole('button', { name: L.saveFact }));
+    await waitFor(() => expect(rememberFact).toHaveBeenCalledTimes(1));
+    await screen.findByText(L.factSaved);
+    expect(subscribeLive).toHaveBeenCalledTimes(1);
+  });
+
+
+  it('subscribes Live to the open root, and subscribes again once a review of it finishes (its directory is now watchable)', async () => {
     const { source, run, subscribeLive, unsubscribe } = scripted();
     await startReview(source);
     await waitFor(() => expect(subscribeLive).toHaveBeenCalledTimes(1));

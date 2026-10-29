@@ -58,6 +58,12 @@ function fakeHost(opts: {
 
 const signal = () => new AbortController().signal;
 
+/** A readable head label as the 40-hex object id git prints (distinct labels, distinct ids). */
+const hexHead = (label: string): string => Buffer.from(label).toString('hex').padEnd(40, '0').slice(0, 40);
+
+/** The first line of a code-pack answer: the bold headline count, then its scope. */
+const headline = (text = ''): string => text.split('\n')[0] ?? '';
+
 afterEach(() => forgetCodePackFindings());
 
 describe('detectTools', () => {
@@ -138,15 +144,18 @@ describe('shared executors', () => {
 
 describe('code-pack actions', () => {
   /** The analyzers' outputs as the runner reads them: depcruise and knip on stdout, jscpd as its report file. */
-  const analyzers = (opts: { jscpdFails?: boolean; dependency?: unknown; head?: string; status?: string } = {}) => fakeHost({
+  const analyzers = (opts: { jscpdFails?: boolean; dependency?: unknown; head?: string; status?: string; noGit?: boolean } = {}) => fakeHost({
     tools: { jscpd: npm('jscpd'), knip: npm('knip'), 'dependency-cruiser': npm('dependency-cruiser', 'depcruise') },
     shell: (command) => {
       if (command.includes('depcruise')) return { ok: true, exitCode: 0, stdout: JSON.stringify(opts.dependency ?? dependency) };
       if (command.includes('knip')) return { ok: true, exitCode: 0, stdout: JSON.stringify(unused) };
       // A repository at one commit: the analyses are keyed by it (and by what is uncommitted).
-      if (command === 'git rev-parse HEAD') return { ok: true, exitCode: 0, stdout: opts.head ?? 'abc123' };
-      if (command.startsWith('git status')) return { ok: true, exitCode: 0, stdout: opts.status ?? '' };
-      if (command.startsWith('git ')) return { ok: true, exitCode: 0, stdout: '' };
+      if (opts.noGit && /^git /.test(command)) return { ok: false, exitCode: 128, stdout: '' };
+      if (command.includes('rev-parse --show-toplevel --show-prefix HEAD')) return { ok: true, exitCode: 0, stdout: ['/repo', '', hexHead(opts.head ?? 'abc123')].join('\n') };
+      if (command.includes('status --porcelain')) return { ok: true, exitCode: 0, stdout: opts.status ?? '' };
+      // The working tree's id: a function of what is uncommitted.
+      if (command.includes('write-tree')) return { ok: true, exitCode: 0, stdout: Buffer.from(opts.status ?? '').toString('hex').padEnd(40, '0').slice(0, 40) };
+      if (/^git /.test(command)) return { ok: true, exitCode: 0, stdout: '' };
       return undefined;
     },
     files: (p) => (p.endsWith('jscpd-report.json') && !opts.jscpdFails ? JSON.stringify(duplicates) : undefined),
@@ -156,7 +165,7 @@ describe('code-pack actions', () => {
     const { host } = analyzers();
     const out = await sharedPrefetchExecutors(host)['dup.check']!.run('/dup', signal());
     expect(out?.text).toContain('1 duplicate-code group(s)');
-    expect(out?.chips).toEqual([{ labelKey: 'prefetch.chip.openInGraph', command: OPEN_KNOWLEDGE_GRAPH_COMMAND, args: { focus: ['src:r::src/a.ts', 'src:r::src/b.ts'] } }]);
+    expect(out?.chips).toEqual([{ labelKey: 'prefetch.chip.openInGraph', command: OPEN_KNOWLEDGE_GRAPH_COMMAND, args: { rootId: 'r', focus: ['src:r::src/a.ts', 'src:r::src/b.ts'] } }]);
     expect(out?.data).toMatchObject({ findings: 1 });
   });
 
@@ -164,7 +173,7 @@ describe('code-pack actions', () => {
     const { host, commands } = analyzers();
     const ex = sharedPrefetchExecutors(host);
     await ex['dup.check']!.run('/dup', signal());
-    const analyzerRuns = () => commands.filter((c) => !c.startsWith('git ')).length;
+    const analyzerRuns = () => commands.filter((c) => !/^(git |set -e)/.test(c)).length;
     const ran = analyzerRuns();
     expect((await ex['deps.cycles']!.run('/cycles', signal()))?.text).toContain('1 import cycle(s)');
     expect((await ex['deadcode.check']!.run('/deadcode', signal()))?.text).toContain('unused-code finding(s)');
@@ -192,7 +201,119 @@ describe('code-pack actions', () => {
     expect(runs(dirtyB.commands)).toBe(1);
   });
 
-  it('/boundaries counts the code pack's partition-violation findings and offers Open in graph', async () => {
+  it('one shared analysis costs a fixed number of git commands, however many actions read it', async () => {
+    forgetCodePackFindings();
+    const { host, commands } = analyzers({ head: 'cafe01' });
+    const ex = sharedPrefetchExecutors(host);
+    await ex['dup.check']!.run('/dup', signal());
+    await ex['deps.cycles']!.run('/cycles', signal());
+    await ex['deadcode.check']!.run('/deadcode', signal());
+    const git = commands.filter((c) => c.startsWith('git '));
+    // HEAD + top level, branch, status — read once and shared — and the remote the snapshot names.
+    expect(git.filter((c) => c.includes('--show-prefix'))).toHaveLength(1);
+    expect(git).toHaveLength(4);
+    for (const c of git) expect(c.startsWith('git --no-optional-locks ')).toBe(true);
+  });
+
+  it('a tree without git still shares one analysis between actions, per root', async () => {
+    forgetCodePackFindings();
+    const runs = (commands: string[]) => commands.filter((c) => c.includes('depcruise')).length;
+    const { host, commands } = analyzers({ noGit: true });
+    await sharedPrefetchExecutors(host)['dup.check']!.run('/dup', signal());
+    await sharedPrefetchExecutors(host)['deps.cycles']!.run('/cycles', signal());
+    expect(runs(commands)).toBe(1);
+    // Another root is another entry.
+    const other = analyzers({ noGit: true });
+    await sharedPrefetchExecutors({ ...other.host, rootId: 'other' })['dup.check']!.run('/dup', signal());
+    expect(runs(other.commands)).toBe(1);
+  });
+
+  it('a failing analyzer is not re-run by every action that follows', async () => {
+    forgetCodePackFindings();
+    const { host, commands } = analyzers({ jscpdFails: true, head: 'f00d01' });
+    const ex = sharedPrefetchExecutors(host);
+    expect(await ex['dup.check']!.run('/dup', signal())).toBeUndefined();
+    expect(await ex['dup.check']!.run('/dup', signal())).toBeUndefined();
+    await ex['deps.cycles']!.run('/cycles', signal());
+    expect(commands.filter((c) => c.includes('depcruise'))).toHaveLength(1);
+  });
+
+  it('/boundaries counts imports only, and only among the files the person is working in when there are some', async () => {
+    forgetCodePackFindings();
+    const layered = { modules: [
+      { source: 'src/routes/orders.ts', dependencies: [{ resolved: 'src/infrastructure/db.ts', circular: false }] },
+      { source: 'src/routes/users.ts', dependencies: [{ resolved: 'src/infrastructure/db.ts', circular: false }] },
+      { source: 'src/infrastructure/db.ts', dependencies: [] },
+    ] };
+    const all = analyzers({ dependency: layered, head: 'b0b001' });
+    expect((await sharedPrefetchExecutors(all.host)['arch.boundaries']!.run('/boundaries', signal()))?.text).toContain('2 layer-boundary violation(s)');
+
+    forgetCodePackFindings();
+    const scoped = fakeHost({ ...{ tools: { 'dependency-cruiser': npm('dependency-cruiser', 'depcruise') } }, focus: ['src/routes/users.ts'],
+      shell: (command) => (command.includes('depcruise') ? { ok: true, exitCode: 0, stdout: JSON.stringify(layered) } : command.includes('knip') ? { ok: true, exitCode: 0, stdout: JSON.stringify(unused) } : undefined),
+      files: (p) => (p.endsWith('jscpd-report.json') ? JSON.stringify(duplicates) : undefined) });
+    const out = await sharedPrefetchExecutors(scoped.host)['arch.boundaries']!.run('/boundaries', signal());
+    // Like every code-pack answer: the headline count in bold, then the scope, then the list.
+    expect(headline(out?.text)).toBe('**1 layer-boundary violation(s)** among the 1 file(s) you are working in:');
+    expect(out?.text).toContain('src/routes/users.ts');
+    expect(out?.text).not.toContain('src/routes/orders.ts');
+  });
+
+  it('/boundaries finds a violating import whichever of the two files sorts first, and ignores a repo-map reference with no import', async () => {
+    forgetCodePackFindings();
+    const layered = { modules: [
+      // The importer sorts BEFORE the imported file…
+      { source: 'src/app/screen.ts', dependencies: [{ resolved: 'src/infrastructure/db.ts', circular: false }] },
+      // …and AFTER it.
+      { source: 'src/routes/orders.ts', dependencies: [{ resolved: 'src/infrastructure/db.ts', circular: false }] },
+      { source: 'src/infrastructure/db.ts', dependencies: [] },
+      { source: 'src/routes/other.ts', dependencies: [] },
+    ] };
+    const { host } = analyzers({ dependency: layered, head: 'a11ce1' });
+    // The repo map says other.ts mentions db.ts — a reference across layers, but no import.
+    const repoGraph = {
+      accepts: () => true,
+      create: () => ({ addFile: () => true, build: () => ({ graph: { paths: ['src/routes/other.ts', 'src/infrastructure/db.ts'], out: [[[1, 0.5] as const], []] } }) }),
+    };
+    const out = await sharedPrefetchExecutors({ ...host, repoGraph })['arch.boundaries']!.run('/boundaries', signal());
+    expect(headline(out?.text)).toMatch(/^\*\*2 layer-boundary violation\(s\)\*\* across \d+ analysed file\(s\):$/);
+    expect(out?.text).toContain('src/app/screen.ts');
+    expect(out?.text).toContain('src/routes/orders.ts');
+    expect(out?.text).not.toContain('src/routes/other.ts');
+  });
+
+  it('/boundaries does not count an ALLOWED import because a clone or reference between the same files runs the other way', async () => {
+    forgetCodePackFindings();
+    // presentation → application is allowed…
+    const allowed = { modules: [
+      { source: 'src/routes/orders.ts', dependencies: [{ resolved: 'src/application/place.ts', circular: false }] },
+      { source: 'src/application/place.ts', dependencies: [] },
+    ] };
+    // …but jscpd pairs the two files, and the clone edge runs application → routes (sorted by path): an "upward" verdict.
+    const clone = { duplicates: [{ fragment: 'return order;', firstFile: { name: 'src/application/place.ts', start: 1, end: 9 }, secondFile: { name: 'src/routes/orders.ts', start: 4, end: 12 } }] };
+    const cloned = fakeHost({
+      tools: { 'dependency-cruiser': npm('dependency-cruiser', 'depcruise') },
+      shell: (command) => (command.includes('depcruise') ? { ok: true, exitCode: 0, stdout: JSON.stringify(allowed) } : command.includes('knip') ? { ok: true, exitCode: 0, stdout: JSON.stringify(unused) } : undefined),
+      files: (p) => (p.endsWith('jscpd-report.json') ? JSON.stringify(clone) : undefined),
+    });
+    const out = await sharedPrefetchExecutors(cloned.host)['arch.boundaries']!.run('/boundaries', signal());
+    expect(out?.text).toContain('No layer-boundary violations');
+    expect(out?.data).toMatchObject({ findings: 0 });
+  });
+
+  it('/boundaries answers for the whole workspace when none of the focus files was analysed', async () => {
+    forgetCodePackFindings();
+    const layered = { modules: [
+      { source: 'src/routes/orders.ts', dependencies: [{ resolved: 'src/infrastructure/db.ts', circular: false }] },
+      { source: 'src/infrastructure/db.ts', dependencies: [] },
+    ] };
+    const { host } = analyzers({ dependency: layered, head: 'a11ce2' });
+    const out = await sharedPrefetchExecutors({ ...host, focusFiles: () => ['docs/readme.md'] })['arch.boundaries']!.run('/boundaries', signal());
+    expect(headline(out?.text)).toBe('**1 layer-boundary violation(s)** across 2 analysed file(s):');
+    expect(out?.text).not.toContain('you are working in');
+  });
+
+  it('/boundaries counts the code pack\'s partition-violation findings and offers Open in graph', async () => {
     const layered = { modules: [
       { source: 'src/routes/orders.ts', dependencies: [{ resolved: 'src/infrastructure/db.ts', circular: false }] },
       { source: 'src/infrastructure/db.ts', dependencies: [] },
@@ -201,7 +322,7 @@ describe('code-pack actions', () => {
     const out = await sharedPrefetchExecutors(host)['arch.boundaries']!.run('/boundaries', signal());
     expect(out?.text).toContain('1 layer-boundary violation(s)');
     expect(out?.text).toContain('partition-violation');
-    expect(out?.chips).toEqual([{ labelKey: 'prefetch.chip.openInGraph', command: OPEN_KNOWLEDGE_GRAPH_COMMAND, args: { focus: ['src:r::src/infrastructure/db.ts', 'src:r::src/routes/orders.ts'] } }]);
+    expect(out?.chips).toEqual([{ labelKey: 'prefetch.chip.openInGraph', command: OPEN_KNOWLEDGE_GRAPH_COMMAND, args: { rootId: 'r', focus: ['src:r::src/infrastructure/db.ts', 'src:r::src/routes/orders.ts'] } }]);
     expect(out?.data).toMatchObject({ findings: 1 });
   });
 
@@ -216,7 +337,7 @@ describe('code-pack actions', () => {
     expect(await sharedPrefetchExecutors(failing.host)['arch.boundaries']!.run('/boundaries', signal())).toBeUndefined();
   });
 
-  it('feeds the repo map's references into the analysis when the host hands the map in', async () => {
+  it('feeds the repo map\'s references into the analysis when the host hands the map in', async () => {
     const { host } = analyzers();
     const added: string[] = [];
     const repoGraph = {

@@ -40,7 +40,7 @@ describe('knowledge.ask — the executor', () => {
         const out = await knowledgeAskExecutor({ index: async () => index }).run('which file owns the retryPolicy?', signal());
         expect(out?.confidence).toBe(1);
         expect(out?.text).toContain('`src/net/retryPolicy.ts`');
-        expect(out?.chips).toEqual([{ labelKey: OPEN_IN_GRAPH_LABEL_KEY, command: OPEN_KNOWLEDGE_GRAPH_COMMAND, args: { focus: expect.arrayContaining([srcRef(ROOT, 'src/net/retryPolicy.ts')]) } }]);
+        expect(out?.chips).toEqual([{ labelKey: OPEN_IN_GRAPH_LABEL_KEY, command: OPEN_KNOWLEDGE_GRAPH_COMMAND, args: { rootId: ROOT, focus: expect.arrayContaining([srcRef(ROOT, 'src/net/retryPolicy.ts')]) } }]);
         expect(out?.data).toMatchObject({ top: 'exact', tiers: ['exact', 'lexical'] });
         expect(typeof out?.data?.digest).toBe('string');
     });

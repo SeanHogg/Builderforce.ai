@@ -44,6 +44,8 @@ interface Entry<T> {
     waiting: number;
     stopped: number;
     controller: AbortController;
+    /** The run finished: a late Stop no longer concerns it. */
+    settled: boolean;
 }
 
 export function createShaCache<T>(opts: ShaCacheOptions<T> = {}): ShaCache<T> {
@@ -51,13 +53,15 @@ export function createShaCache<T>(opts: ShaCacheOptions<T> = {}): ShaCache<T> {
     const now = opts.now ?? Date.now;
     const entries = new Map<string, Entry<T>>();
 
-    /** Registers one asker with the shared run; aborts the run once every asker has stopped. */
-    const join = (entry: Entry<T>, signal: AbortSignal | undefined): void => {
+    /** Registers one asker with the shared run; aborts it (and forgets it, so a new asker starts afresh) once every asker has stopped. */
+    const join = (key: string, entry: Entry<T>, signal: AbortSignal | undefined): void => {
         entry.waiting += 1;
         if (!signal) return; // Never stops: it keeps the run alive.
         const stop = (): void => {
             entry.stopped += 1;
-            if (entry.stopped >= entry.waiting) entry.controller.abort();
+            if (entry.settled || entry.stopped < entry.waiting) return;
+            entry.controller.abort();
+            if (entries.get(key) === entry) entries.delete(key);
         };
         if (signal.aborted) stop();
         else signal.addEventListener('abort', stop, { once: true });
@@ -68,24 +72,25 @@ export function createShaCache<T>(opts: ShaCacheOptions<T> = {}): ShaCache<T> {
             if (key === null) return work(signal);
             const hit = entries.get(key);
             if (hit && (hit.expires === undefined || hit.expires > now())) {
-                join(hit, signal);
+                join(key, hit, signal);
                 return hit.run;
             }
             if (hit) entries.delete(key);
 
             const controller = new AbortController();
-            const entry: Entry<T> = { run: undefined as unknown as Promise<T>, waiting: 0, stopped: 0, controller };
-            join(entry, signal);
-            entry.run = work(controller.signal);
+            const entry: Entry<T> = { run: undefined as unknown as Promise<T>, waiting: 0, stopped: 0, controller, settled: false };
             entries.set(key, entry);
             while (entries.size > max) entries.delete(entries.keys().next().value as string);
+            join(key, entry, signal);
+            entry.run = work(controller.signal);
             const drop = (): void => { if (entries.get(key) === entry) entries.delete(key); };
             entry.run.then((value) => {
+                entry.settled = true;
                 const verdict = opts.keep ? opts.keep(value) : true;
                 if (verdict === false) return drop();
                 const lifetime = typeof verdict === 'number' ? verdict : opts.ttlMs;
                 if (lifetime !== undefined) entry.expires = now() + lifetime;
-            }, drop);
+            }, () => { entry.settled = true; drop(); });
             return entry.run;
         },
         clear: () => entries.clear(),

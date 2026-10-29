@@ -12,7 +12,7 @@
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { FactFileAnchor, FactOriginCost } from '../llm/projectFactsStore';
-import { writeKnowledge } from './writeKnowledge';
+import { writeKnowledge, type KnowledgeWriteResult } from './writeKnowledge';
 import { knowledgeWritePortsFor } from './knowledgeWritePorts';
 
 export interface ProjectFactWrite {
@@ -30,13 +30,18 @@ export interface ProjectFactWrite {
   retireByAnchor?: boolean;
 }
 
-/** Whether the fact was written (false = invalid project, empty key or empty content). */
-export async function writeProjectFact(
-  deps: { env: Env; db: Db; tenantId: number; projectId: number },
-  fact: ProjectFactWrite,
-): Promise<boolean> {
+type ProjectFactDeps = { env: Env; db: Db; tenantId: number; projectId: number };
+
+/** Whether the fact was written (false = invalid project, empty key or empty content, or a
+ *  key a person authored). A caller that must tell those apart reads {@link writeProjectFactResult}. */
+export async function writeProjectFact(deps: ProjectFactDeps, fact: ProjectFactWrite): Promise<boolean> {
+  return (await writeProjectFactResult(deps, fact)).factsWritten > 0;
+}
+
+/** The writer's whole answer: `factsWritten`, and `factsSkipped` when a person owns the key. */
+export async function writeProjectFactResult(deps: ProjectFactDeps, fact: ProjectFactWrite): Promise<KnowledgeWriteResult> {
   const { store, extracted } = knowledgeWritePortsFor(deps.env, deps.db, deps.tenantId, deps.projectId);
-  const result = await writeKnowledge(
+  return writeKnowledge(
     {
       ...deps, store, blobs: extracted, userId: null,
       legacyFact: {
@@ -54,5 +59,4 @@ export async function writeProjectFact(
       }],
     },
   );
-  return result.factsWritten > 0;
 }

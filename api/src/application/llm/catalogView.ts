@@ -5,9 +5,12 @@
  *   • vendor + tier  — the vendor registry (`vendors/`), the routing source of truth;
  *                      tier goes through the shared rule (`resolveModelTier`): each
  *                      vendor declares one for every id it routes, so it always wins.
- *   • residency      — `local` for a vendor that can only be reached through the
- *                      tenant's own runtime ({@link vendorRequiresLocalEgress}), the ONE
- *                      declaration of "runs on the tenant's machine".
+ *   • residency      — `local` for a vendor whose model runs on the tenant's OWN hardware
+ *                      ({@link vendorRunsOnDevice}), the ONE declaration of "runs on the
+ *                      tenant's machine" (the router costs `local` at zero). NOT a vendor
+ *                      that merely refuses the Worker's egress ({@link vendorRequiresLocalEgress}):
+ *                      Kimi is called through the tenant's runtime but runs, and is priced,
+ *                      in the cloud.
  *   • price          — the live provider catalog (`modelCatalog.ts`, read-through
  *                      cached), the same prices the usage ledger records cost from.
  *
@@ -30,7 +33,7 @@ import { isModelRole } from '@builderforce/agent-tools';
 import { isArcStage } from '@builderforce/workload';
 import type { Env } from '../../env';
 import { getCatalogCached, type CatalogModel } from './modelCatalog';
-import { tierForModel, vendorForModel, vendorRequiresLocalEgress } from './vendors';
+import { tierForModel, vendorForModel, vendorRunsOnDevice } from './vendors';
 
 // The book and its id rules are the shared port (`@builderforce/model-catalog`
 // `priceBook.ts`): the VS Code device prices its offline spend through the same one.
@@ -89,7 +92,7 @@ export function registryCatalogView(prices: PriceBook = EMPTY_PRICE_BOOK): Catal
     vendorOf: vendorForModel,
     tierOf: (model) => resolveModelTier({ catalogTier: tierForModel(model), price: prices.priceOf(model) }),
     priceOf: tieredPriceOf,
-    residencyOf: (model) => (vendorRequiresLocalEgress(vendorForModel(model)) ? 'local' : 'cloud'),
+    residencyOf: (model) => (vendorRunsOnDevice(vendorForModel(model)) ? 'local' : 'cloud'),
   };
 }
 

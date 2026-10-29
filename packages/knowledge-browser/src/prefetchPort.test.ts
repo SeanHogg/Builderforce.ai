@@ -49,6 +49,13 @@ describe('the browser knowledge PrefetchPort', () => {
     expect(out?.text).toContain('contracts');
   });
 
+  it('with no reviewed root, /graph still opens the view (on its empty state)', async () => {
+    const port = createBrowserKnowledgePrefetchPort({ client: fakeClient({ scopes: vi.fn(async () => []) }) });
+    const out = await port.executors[KNOWLEDGE_GRAPH]!.run('/graph docs/lease.md', signal);
+    expect(out?.chips).toEqual([{ labelKey: 'prefetch.chip.openInGraph', command: OPEN_KNOWLEDGE_GRAPH_COMMAND, args: { focus: [] } }]);
+    expect(out?.text).toContain('No folder of this project has been reviewed yet');
+  });
+
   it('answers /review with the view launcher chip, and lets it through without a second confirm', async () => {
     const port = createBrowserKnowledgePrefetchPort({ client: fakeClient() });
     const out = await port.executors[KNOWLEDGE_REVIEW_DIR]!.run('/review ./contracts', signal);

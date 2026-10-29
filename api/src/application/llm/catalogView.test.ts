@@ -15,6 +15,26 @@ function model(id: string, prompt: number, completion: number): CatalogModel {
 
 const env = {} as never;
 
+describe('registry catalog view residency', () => {
+  it('is local only for a model that runs on the tenant’s own hardware, not for a cloud vendor that merely needs the tenant’s egress', () => {
+    const view = registryCatalogView();
+    expect(view.residencyOf?.('direct/ollama-local/default')).toBe('local');
+    expect(view.residencyOf?.('direct/freetoken/default')).toBe('local');
+    // Kimi is reached through the tenant's runtime (requiresLocalEgress) but runs in the cloud.
+    expect(view.residencyOf?.('direct/kimi-code/k3')).toBe('cloud');
+    expect(view.residencyOf?.('anthropic/claude-haiku-5-5')).toBe('cloud');
+  });
+
+  it('therefore costs a Kimi model by its price (or unknown), never as free local', async () => {
+    const { expectedCostUsd } = await import('@builderforce/model-router');
+    const work = { inputTokens: 1000, outputTokens: 100 };
+    const priced = registryCatalogView(priceBookFrom([model('direct/kimi-code/k3', 1e-6, 2e-6)]));
+    expect(expectedCostUsd('direct/kimi-code/k3', work, priced)).toBeCloseTo(1000 * 1e-6 + 100 * 2e-6, 12);
+    expect(expectedCostUsd('direct/kimi-code/k3', work, registryCatalogView())).toBeUndefined();
+    expect(expectedCostUsd('direct/ollama-local/default', work, registryCatalogView())).toBe(0);
+  });
+});
+
 describe('price book', () => {
   it('prices a registered OpenRouter connection ref under its bare catalog id', () => {
     expect(catalogPriceId('openrouter/openai/gpt-4.1')).toBe('openai/gpt-4.1');

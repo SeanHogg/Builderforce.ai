@@ -13,7 +13,8 @@
  */
 
 import { pathOfRef } from '@seanhogg/builderforce-memory/knowledge';
-import { OPEN_IN_GRAPH_LABEL_KEY, OPEN_KNOWLEDGE_GRAPH_COMMAND } from '../../prefetch/codePackExecutors.js';
+import { CHIP_FOCUS_MAX, openInGraphChip } from '../../prefetch/graphChip.js';
+import { rootIdOfSourceRef } from '../rootId.js';
 import type { PrefetchOutput, PrefetchRow, PrefetchRunner } from '../../prefetch/contract.js';
 import type { HostKnowledgeIndexCore } from './contract.js';
 import { hitConfidence, renderKnowledgeAnswer, renderKnowledgeContext, shownHits } from './renderHits.js';
@@ -21,8 +22,6 @@ import { hitConfidence, renderKnowledgeAnswer, renderKnowledgeContext, shownHits
 export const KNOWLEDGE_ASK = 'knowledge.ask';
 /** The pre-turn budget every read-only answer row shares (the context pack's deadline). */
 export const KNOWLEDGE_ASK_BUDGET_MS = 1_500;
-/** The most refs the Open-in-graph chip focuses. */
-const CHIP_FOCUS_MAX = 50;
 
 /** The question shapes — each captures what is asked about (and, for a document, which one). */
 const SUBJECT_PATTERNS: ReadonlyArray<{ re: RegExp; subject: (m: RegExpMatchArray) => string }> = [
@@ -98,7 +97,7 @@ export function knowledgeAskExecutor(host: KnowledgeAskHost): PrefetchRunner {
                 text: renderKnowledgeAnswer(query, recall.hits, opts),
                 context: renderKnowledgeContext(query, recall.hits, recall.tiers, opts),
                 confidence,
-                ...(focus.length ? { chips: [{ labelKey: OPEN_IN_GRAPH_LABEL_KEY, command: OPEN_KNOWLEDGE_GRAPH_COMMAND, args: { focus } }] } : {}),
+                ...(focus.length ? { chips: [openInGraphChip({ rootId: focus.map(rootIdOfSourceRef).find((r) => r !== undefined), focus })] } : {}),
                 data: { digest: recall.digest, tiers: recall.tiers, hits: own.length, top: own[0]?.tier ?? null, confidence },
             };
         },

@@ -14,6 +14,7 @@
  */
 import { parse as parseYaml } from 'yaml';
 import { readRepoFile, type RepoReadContext } from './readRepoContents';
+import type { RepoFileReader } from './repoReadMemo';
 import { inspectAgentSource } from './sourceQualityPolicy';
 
 export type VerifyError = { path: string; message: string; line?: number; ruleId?: string };
@@ -77,11 +78,14 @@ export function foldVerifyOutcomes(
 export async function verifyWrittenFiles(
   ctx: RepoReadContext,
   paths: Iterable<string>,
+  /** How a file is read; defaults to the repo at `ctx`. A caller that reads the same files for
+   *  another purpose passes a shared memo (`createRepoReadMemo`) so each is fetched once. */
+  read: RepoFileReader = (path) => readRepoFile(ctx, path),
 ): Promise<VerifyResult> {
   const list = [...paths];
   const outcomes = await Promise.all(list.map(async (path) => {
     if (!isVerifiablePath(path)) return { path, kind: 'skipped' as const };
-    const rf = await readRepoFile(ctx, path);
+    const rf = await read(path);
     // Can't read (transient) or content was truncated for size → don't false-fail.
     if (!rf.ok || rf.truncated) return { path, kind: 'skipped' as const };
     return { path, ...checkFileContent(path, rf.content) };

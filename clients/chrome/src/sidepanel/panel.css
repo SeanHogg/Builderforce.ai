@@ -3,6 +3,10 @@
  * dark mode — the panel follows the browser's colour scheme, and the shared parts
  * (surface, timeline, composer, history) read the same tokens the panel's own rules do.
  * Works from ~320px wide: everything wraps, nothing scrolls sideways.
+ *
+ * The Knowledge view's `--kg-*` colours are the package's own (`tokens.css`, imported by
+ * `main.tsx`); they alias the `--bf-*` tokens below and flip with `html[data-theme]`, which
+ * `main.tsx` mirrors from the browser's colour scheme, live.
  */
 :root {
   --bf-bg: #ffffff;
@@ -34,35 +38,6 @@
   --bf-link: var(--bf-accent);
   --bf-error-text: var(--bf-error);
   --bf-danger: var(--bf-error);
-  /* The knowledge graph view's tones (`--kg-*`): neutrals alias the tokens above, every
-     meaning keeps its own hue. Dark set below. */
-  --kg-bg: var(--bf-surface);
-  --kg-panel: var(--bf-surface-2);
-  --kg-text: var(--bf-text);
-  --kg-muted: var(--bf-text-muted);
-  --kg-border: var(--bf-border);
-  --kg-accent: var(--bf-accent);
-  --kg-accent-soft: var(--bf-accent-soft);
-  --kg-on-accent: var(--bf-on-accent);
-  --kg-node-file: #2d60ff;
-  --kg-node-section: #0e7490;
-  --kg-node-symbol: #6d28d9;
-  --kg-node-entity: #047857;
-  --kg-node-claim: #4d7c0f;
-  --kg-node-fact: #be185d;
-  --kg-node-missing: #92400e;
-  --kg-edge: #94a3b8;
-  --kg-violation: #b91c1c;
-  --kg-cycle: #c2410c;
-  --kg-duplicate: #a16207;
-  --kg-contradicts: #be123c;
-  --kg-agrees: #15803d;
-  --kg-stale: #78716c;
-  --kg-unused: #a8a29e;
-  --kg-changed: #0369a1;
-  --kg-plane: rgba(100, 116, 139, 0.1);
-  --kg-warn-bg: rgba(194, 65, 12, 0.12);
-  --kg-error: #991b1b;
   color-scheme: light;
 }
 
@@ -85,25 +60,6 @@
     --bf-error: #ff8a7a;
     --bf-error-bg: rgba(255, 138, 122, 0.12);
     --bf-focus: #7aa2ff;
-    --kg-node-file: #4d9eff;
-    --kg-node-section: #22d3ee;
-    --kg-node-symbol: #a78bfa;
-    --kg-node-entity: #34d399;
-    --kg-node-claim: #a3e635;
-    --kg-node-fact: #f472b6;
-    --kg-node-missing: #d4a373;
-    --kg-edge: #64748b;
-    --kg-violation: #f87171;
-    --kg-cycle: #fb923c;
-    --kg-duplicate: #facc15;
-    --kg-contradicts: #fb7185;
-    --kg-agrees: #22c55e;
-    --kg-stale: #a8a29e;
-    --kg-unused: #78716c;
-    --kg-changed: #38bdf8;
-    --kg-plane: rgba(148, 163, 184, 0.12);
-    --kg-warn-bg: rgba(251, 146, 60, 0.16);
-    --kg-error: #fca5a5;
     color-scheme: dark;
   }
 }
@@ -179,7 +135,8 @@ body {
 }
 
 /* The Knowledge destination: the ONE graph view fills the view, which scrolls; the view
- * reads its own `--kg-*` tokens defined above (light and dark), so both themes hold.
+ * reads its own `--kg-*` tokens (the package's `tokens.css`, flipped by `html[data-theme]`
+ * from `main.tsx`), so both themes hold.
  * Under its compact width it opens focused, lenses scroll sideways, panels are sheets. */
 .rovr-knowledge {
   display: flex;

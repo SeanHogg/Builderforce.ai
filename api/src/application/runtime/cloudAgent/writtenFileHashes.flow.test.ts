@@ -1,8 +1,9 @@
 /**
  * The whole path of a run's file hashes (PRD 38 §4.10): the write/edit tools record what the
  * run left → a durable run carries them across ticks → files its children committed lose
- * them → the run-end facts anchor to what is left. Each hop is the real code; only the
- * workspace storage, the branch diff and the final fact write are stubbed.
+ * them (re-hashed from their final content) → the run-end facts anchor to what is left. Each
+ * hop is the real code; only the workspace storage, the branch diff and read, and the final
+ * fact write are stubbed.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CapabilityProvider, RepoWriteCapability } from '@builderforce/agent-tools';
@@ -10,6 +11,7 @@ import type { CapabilityProvider, RepoWriteCapability } from '@builderforce/agen
 const h = vi.hoisted(() => ({
   files: new Map<string, string>(),
   diff: vi.fn(),
+  branchFiles: new Map<string, string>(),
   write: vi.fn(),
   knowledge: vi.fn(async () => ({ factsWritten: 1, relationsWritten: 0, staleMarked: 0 })),
 }));
@@ -31,7 +33,11 @@ vi.mock('./ideWorkspaceCoding', () => ({
 vi.mock('../executionEvents', () => ({ notifyExecutionSubscribers: vi.fn() }));
 vi.mock('../cloudToolEvents', () => ({ recordCloudToolEvent: vi.fn(async () => undefined) }));
 vi.mock('../../coordination/coordinationCapability', () => ({ guardRepoWrite: (inner: RepoWriteCapability) => inner }));
-vi.mock('../../repos/readRepoContents', () => ({ listBranchDiff: h.diff }));
+vi.mock('../../repos/readRepoContents', () => ({
+  listBranchDiff: h.diff,
+  readRepoFile: vi.fn(async (_ctx: unknown, path: string) =>
+    h.branchFiles.has(path) ? { ok: true, path, content: h.branchFiles.get(path), truncated: false } : { ok: false, reason: 'not found' }),
+}));
 vi.mock('../../knowledge/writeKnowledge', () => ({ writeKnowledge: h.knowledge }));
 
 import { withIdeWorkspace } from './ideWorkspaceProvider';
@@ -55,6 +61,7 @@ const persist = (t: ReturnType<typeof tick>) =>
 
 beforeEach(() => {
   h.files.clear();
+  h.branchFiles.clear();
   h.diff.mockReset();
   h.knowledge.mockClear();
 });
@@ -74,7 +81,10 @@ describe('a run’s written-file hashes, tool to run-end fact', () => {
     await t2.p.repoWrite!.writeFile('src/c.ts', 'three');
 
     // A child rewrote src/b.ts and added src/d.ts on the shared branch; finish absorbs them.
-    h.diff.mockResolvedValue({ ok: true, files: [{ path: 'src/b.ts' }, { path: 'src/d.ts' }], truncated: false });
+    h.diff.mockResolvedValue({ ok: true, files: [{ path: 'src/b.ts', status: 'modified' }, { path: 'src/d.ts', status: 'added' }, { path: 'src/e.ts', status: 'added' }], truncated: false });
+    h.branchFiles.set('src/b.ts', 'two, rewritten by the child');
+    h.branchFiles.set('src/d.ts', 'the child file');
+    // src/e.ts is on the diff but cannot be read back: it gets no hash, nothing is guessed.
     const db = { select: () => ({ from: () => ({ where: () => ({ limit: async () => [{ id: 78 }] }) }) }) } as never;
     await absorbChildWrites(db, 1, 77, { branch: 'bf/task-5', base: 'main' } as never, t2.writtenPaths, t2.writtenHashes);
 
@@ -91,8 +101,9 @@ describe('a run’s written-file hashes, tool to run-end fact', () => {
     expect(anchors).toEqual({
       'src/a.ts': await sha256Hex('one'),     // written on tick 1, carried across the resume
       'src/c.ts': await sha256Hex('three'),   // written on tick 2
-      'src/b.ts': undefined,                  // a child rewrote it: unhashed, never falsely stale
-      'src/d.ts': undefined,                  // a child's file: not the run's text
+      'src/b.ts': await sha256Hex('two, rewritten by the child'), // a child rewrote it: re-hashed from its final content
+      'src/d.ts': await sha256Hex('the child file'),              // a child's file, hashed as it stands on the branch
+      'src/e.ts': undefined,                                      // unreadable: unhashed, never falsely stale
     });
   });
 });

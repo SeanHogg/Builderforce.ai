@@ -4,7 +4,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import type { Extracted } from '@seanhogg/builderforce-memory/knowledge';
-import { knowledgeBlobKeys, r2ExtractedCache } from './knowledgeBlobs';
+import { knowledgeBlobKeys, r2AnalysisSnapshots, r2ExtractedCache } from './knowledgeBlobs';
 
 vi.mock('../observability/caughtErrorReporter', () => ({ reportCaughtError: vi.fn() }));
 
@@ -73,5 +73,32 @@ describe('review snapshots', () => {
     expect((await cache.reviewExtracted(ROOT, 'd1'))?.map((e) => e.sourceHash)).toEqual(['ha']);
     expect((await cache.rootExtracted(ROOT)).map((e) => e.sourceHash)).toEqual(['ha2']);
     expect(await cache.reviewExtracted(ROOT, 'unknown')).toBeNull();
+  });
+});
+
+describe('code-analysis snapshots', () => {
+  const snapshotOf = (...nodes: string[]) => ({ version: 1, nodes });
+
+  it('keeps one snapshot per root even when two roots put the same sha', async () => {
+    const { bucket } = fakeBucket();
+    const port = r2AnalysisSnapshots({ UPLOADS: bucket }, 4, 9);
+    await port.put('abc', 'repo', snapshotOf('pkg/src/a.ts'));
+    await port.put('abc', 'repo:pkg', snapshotOf('src/a.ts'));
+    expect(await port.latest('repo')).toEqual({ sha: 'abc', snapshot: snapshotOf('pkg/src/a.ts') });
+    expect(await port.latest('repo:pkg')).toEqual({ sha: 'abc', snapshot: snapshotOf('src/a.ts') });
+    expect(await port.latest('never-reviewed')).toBeNull();
+  });
+
+  it('still reads a snapshot and pointer written before the key named its root', async () => {
+    const { bucket, objects } = fakeBucket();
+    const keys = knowledgeBlobKeys(4, 9);
+    objects.set(keys.legacyAnalysis('old'), { body: JSON.stringify(snapshotOf('src/legacy.ts')) });
+    objects.set(keys.latestAnalysis('repo'), { body: JSON.stringify({ sha: 'old' }) });
+    const port = r2AnalysisSnapshots({ UPLOADS: bucket }, 4, 9);
+    expect(await port.latest('repo')).toEqual({ sha: 'old', snapshot: snapshotOf('src/legacy.ts') });
+    // A new put for the root takes over from the legacy blob.
+    await port.put('new', 'repo', snapshotOf('src/new.ts'));
+    expect(await port.latest('repo')).toEqual({ sha: 'new', snapshot: snapshotOf('src/new.ts') });
+    expect(keys.analysis('repo', 'new')).not.toBe(keys.legacyAnalysis('new'));
   });
 });

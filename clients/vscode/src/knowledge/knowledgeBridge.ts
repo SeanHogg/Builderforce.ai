@@ -19,7 +19,7 @@ import {
 import { reviewedRoots, rootById, rootForPath } from "./knowledgeRoots";
 import { KnowledgeReviewSessions } from "./knowledgeReviewSessions";
 import { subscribeLiveGraph } from "./knowledgeLive";
-import { linkedKnowledgeClient, loadGraph, openRoot, workspaceFolders } from "./knowledgeService";
+import { linkedKnowledgeClient, loadGraph, openRoot, workspaceFolders, type GraphQuery } from "./knowledgeService";
 
 /** Search hits the view shows at most. */
 const SEARCH_HITS = 20;
@@ -41,6 +41,8 @@ export class KnowledgeBridge implements vscode.Disposable {
   private readonly live = new Map<string, () => void>();
   /** The root the view last loaded — whose facts a fact action is about. */
   private lastRoot: string | undefined;
+  /** How the view last loaded each root; Live's refresh repeats it. */
+  private readonly loadedBy = new Map<string, GraphQuery>();
   /** Delete rights per root, read once per graph version (the facts endpoint's viewer + authors). */
   private readonly rights: FactRightsCache = factRightsCache(async (rootId) => (await linkedKnowledgeClient(this.secrets)?.facts(rootId)) ?? null);
 
@@ -63,7 +65,9 @@ export class KnowledgeBridge implements vscode.Disposable {
       case "scopes": return this.scopes();
       case "load": {
         this.lastRoot = call.rootId;
-        const graph = await loadGraph(this.secrets, call.rootId, { ...(call.focus ? { focus: call.focus } : {}), ...(call.maxNodes ? { maxNodes: call.maxNodes } : {}) });
+        const query: GraphQuery = { ...(call.focus ? { focus: call.focus } : {}), ...(call.maxNodes ? { maxNodes: call.maxNodes } : {}) };
+        this.loadedBy.set(call.rootId, query);
+        const graph = await loadGraph(this.secrets, call.rootId, query);
         this.rights.loaded(call.rootId, graph?.scope.digest);
         return graph;
       }
@@ -78,7 +82,7 @@ export class KnowledgeBridge implements vscode.Disposable {
       }
       case "live": {
         this.live.get(call.stream)?.();
-        this.live.set(call.stream, subscribeLiveGraph(this.secrets, call.rootId, (graph, changed) => this.event({ stream: call.stream, type: "graph", graph, changed })));
+        this.live.set(call.stream, subscribeLiveGraph(this.secrets, call.rootId, (graph, changed) => this.event({ stream: call.stream, type: "graph", graph, changed }), (id) => this.loadedBy.get(id)));
         return null;
       }
       case "unlive": this.live.get(call.stream)?.(); this.live.delete(call.stream); return null;

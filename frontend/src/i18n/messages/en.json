@@ -6193,6 +6193,8 @@
     "pipelineApprove": "Approve",
     "pipelineReject": "Reject",
     "pipelineTransfer": "Transfer",
+    "pipelineFactOwned": "The fact “{key}” was written by a person, so this learning does not overwrite it. Edit or retire that fact, or reject the learning.",
+    "pipelineOpenFact": "Open the fact",
     "pipelineContradicts": "Contradicts baseline",
     "pipelineUnavailable": "Learning review is manager-only.",
     "learningsAll": "All regions",

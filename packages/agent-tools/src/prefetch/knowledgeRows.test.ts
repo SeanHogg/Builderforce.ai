@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PlanDetail, ReviewPlan, ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
+import { planDetailOf } from '../knowledge/codeFixtures.test-util.js';
 import {
     KNOWLEDGE_GRAPH, KNOWLEDGE_PREFETCH_ROWS, KNOWLEDGE_REVIEW_DIR, graphFocusOf, graphShown, knowledgePrefetchExecutors, reviewTargetOf,
     type KnowledgeRowsHost,
@@ -9,10 +10,10 @@ const PLAN: ReviewPlan = {
     rootId: 'repo/contracts', files: 12, byPack: { code: 8, docs: 4 }, unchanged: 5, changed: [], removed: [], skipped: [], estimatedModelCalls: 37,
 };
 /** The walk behind the plan — what the confirmed run must be handed back. */
-const DETAIL: PlanDetail = { plan: PLAN, files: [], prior: new Map() };
+const DETAIL: PlanDetail = planDetailOf(PLAN);
 const REPORT: ReviewReport = {
     rootId: 'repo/contracts', digest: 'd', extracted: 7, judged: 30, unjudged: 0, invalidJudgements: 0, factsWritten: 9,
-    relationsWritten: 4, staleMarked: 7, aborted: false, durationMs: 5,
+    relationsWritten: 4, staleMarked: 7, aborted: false, readErrors: 0, durationMs: 5,
 };
 
 function host(): KnowledgeRowsHost & { opened: string[]; plans: number; reviewedWith: PlanDetail[]; shown: Array<[string, string[]]> } {
@@ -98,10 +99,19 @@ describe('the knowledge PreFetch rows', () => {
         const review = KNOWLEDGE_PREFETCH_ROWS.find((r) => r.id === KNOWLEDGE_REVIEW_DIR)!;
         const hits = (row: typeof graph, text: string) => (row.patterns ?? []).some((p) => p.test(text));
         for (const text of [
-            'show me the graph', 'open the knowledge graph', 'show me the layers', 'show me the duplicates', 'show the duplicates in the graph',
+            'show me the graph', 'open the knowledge graph', 'show me the layers',
             'show me the dependency graph', 'show me the knowledge graph of src/', 'display the layers in the graph', 'view the knowledge graph',
+            'show me the code graph', 'show the layer graph', 'open the graph please', 'show me the graph of src/a.ts', 'see the layers in the graph', 'show me the unpartitioned files in the graph', 'Show me the graph.', 'show me the graph of docs/specs',
         ]) expect(hits(graph, text), text).toBe(true);
-        for (const text of ['build a knowledge graph of docs/', 'review ./contracts', 'what is a graph database']) expect(hits(graph, text), text).toBe(false);
+        for (const text of [
+            'build a knowledge graph of docs/', 'review ./contracts', 'what is a graph database',
+            // A graph of someone's DATA is not this system's graph.
+            'show me a graph of revenue', 'show me the graph of revenue by month', 'display a graph of sales', 'plot the graph of x squared',
+            'show me the sales graph', 'view the graph of the stock price',
+            'Show me the graph of revenue.', 'Show me the graph for Q3.', 'show me the revenue spike in the graph', 'show me the p95 latency in the graph',
+            // Duplicates and clones are dup.check's, which answers with its own Open in graph chip.
+            'show me the duplicates', 'show the duplicates in the graph', 'show me the clones in the graph', 'show the cycles in the graph',
+        ]) expect(hits(graph, text), text).toBe(false);
         expect(hits(review, 'build a knowledge graph of docs/')).toBe(true);
     });
 
@@ -116,5 +126,24 @@ describe('the knowledge PreFetch rows', () => {
     it('builds the Open-in-graph chip from the root and the focus refs', () => {
         const shown = graphShown('opened', 'repo', ['src:repo::a.ts']);
         expect(shown.chip).toEqual({ labelKey: 'prefetch.chip.openInGraph', command: 'builderforce.openKnowledgeGraph', args: { rootId: 'repo', focus: ['src:repo::a.ts'] } });
+    });
+
+    it('every example of the graph row matches one of its patterns', () => {
+        const graph = KNOWLEDGE_PREFETCH_ROWS.find((r) => r.id === KNOWLEDGE_GRAPH)!;
+        expect(graph.patterns).toHaveLength(4);
+        for (const example of graph.examples ?? []) expect((graph.patterns ?? []).some((p) => p.test(example)), example).toBe(true);
+    });
+
+    it('reuses a previewed plan only for two minutes', async () => {
+        const h = host();
+        let now = 0;
+        const ex = knowledgePrefetchExecutors(h, () => now)[KNOWLEDGE_REVIEW_DIR]!;
+        await ex.preview!('/review docs', signal);
+        now = 119_000;
+        await ex.preview!('/review docs', signal);
+        expect(h.plans).toBe(1);
+        now = 121_000 + 119_000;
+        await ex.preview!('/review docs', signal);
+        expect(h.plans).toBe(2);
     });
 });

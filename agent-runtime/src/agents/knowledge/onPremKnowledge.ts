@@ -15,14 +15,17 @@
  * host half and merges them into the on-prem PreFetch port.
  */
 
-import { basename, resolve, relative, sep } from "node:path";
-import { stat } from "node:fs/promises";
+import path from "node:path";
+import { basename, resolve } from "node:path";
+import { realpath, stat } from "node:fs/promises";
 import type { CapabilityProvider } from "@builderforce/agent-tools";
 import {
-  buildStoredGraph, fileManifest, indexedSymbolSource, manifestFileName, migratingRootFiles, planKnowledgeReviewDetail, reviewPacks,
-  runKnowledgeReview, watchFileEdits, workspaceCodeAnalyzers, createFsDirectorySource, type KnowledgeReviewPorts,
+  claimSimilarity, fileManifest, indexedSymbolSource, manifestFileName, migratingRootFiles, planKnowledgeReviewDetail,
+  reviewPacks, rootManifest, runKnowledgeReview, watchFileEdits, workspaceCodeAnalyzers, createFsDirectorySource, type KnowledgeReviewPorts,
 } from "@builderforce/agent-tools/knowledge/index.js";
-import { graphShown, readPartitions, withKnowledgeRows, type KnowledgeRowsHost } from "@builderforce/agent-tools/prefetch/index.js";
+import {
+  graphShown, knowledgeSurfaceQuery, readPartitions, withKnowledgeRows, type KnowledgeRowsHost,
+} from "@builderforce/agent-tools/prefetch/index.js";
 import { createKnowledgeClient, type AnalysisSnapshotPayload, type KnowledgeClient } from "@builderforce/knowledge-client";
 import { defineRegistry, type PrefetchPort } from "@builderforce/prefetch";
 import { repoMapPort } from "@builderforce/repo-map";
@@ -70,9 +73,9 @@ function webBaseUrl(): string {
   return (process.env.BUILDERFORCE_WEB_URL?.trim() || readSharedEnvVar("BUILDERFORCE_WEB_URL")?.trim() || DEFAULT_WEB_URL).replace(/\/+$/, "");
 }
 
-/** The web canvas's `knowledge` surface for the project (the project route opens its board there). */
-export function knowledgeSurfaceUrl(projectId: number): string {
-  return `${webBaseUrl()}/projects/${projectId}?surface=knowledge`;
+/** The web canvas's `knowledge` surface for the project (the project route opens its board there), focused on `focus` as the surface reads it. */
+export function knowledgeSurfaceUrl(projectId: number, focus: readonly string[] = []): string {
+  return `${webBaseUrl()}/projects/${projectId}?${knowledgeSurfaceQuery(focus)}`;
 }
 
 /**
@@ -86,16 +89,45 @@ function loggedFallback<T>(step: string, fallback: T): (error: unknown) => T {
   };
 }
 
+/** The workspace-relative form of `target`, or undefined when it lies outside the workspace (another drive included). */
+export function insideWorkspace(root: string, target: string, p: Pick<typeof path, "relative" | "isAbsolute" | "sep"> = path): string | undefined {
+  const rel = p.relative(root, target);
+  if (p.isAbsolute(rel) || rel === ".." || rel.startsWith(`..${p.sep}`)) return undefined;
+  return rel.split(p.sep).join("/");
+}
+
+/** Whether `target` is inside the workspace once symlinks are resolved on both: reject folders outside the workspace. */
+export async function withinRealWorkspace(root: string, target: string): Promise<boolean> {
+  try {
+    const [realRoot, realTarget] = await Promise.all([realpath(root), realpath(target)]);
+    return insideWorkspace(realRoot, realTarget) !== undefined;
+  } catch {
+    return false;
+  }
+}
+
 async function isFolder(path: string): Promise<boolean> {
   return stat(path).then((s) => s.isDirectory(), () => false);
 }
 
 /** Reviewed roots whose files are watched, so an edit marks what was judged from it stale (§5.2). */
 const watchedRoots = new Map<string, () => void>();
+let stopAtExit = false;
 
-/** After a review: watch the root once, applying the shared stale-marking to every file the watcher reports. */
+/** Stops every folder watch (shutdown; tests). */
+export function stopKnowledgeWatchers(): void {
+  for (const stop of watchedRoots.values()) stop();
+  watchedRoots.clear();
+}
+
+/**
+ * After a review: watch the root, applying the shared stale-marking to every file the
+ * watcher reports. A root reviewed again gets a fresh watch (the old one is stopped), and
+ * all of them stop when the process does.
+ */
 function keepFresh(deps: OnPremKnowledgeDeps, rootId: string, rel: string, ports: KnowledgeReviewPorts): void {
-  if (watchedRoots.has(rootId)) return;
+  watchedRoots.get(rootId)?.();
+  watchedRoots.delete(rootId);
   const stop = watchFileEdits({
     rootId,
     rootPath: rel ? resolve(deps.workspaceRoot, rel) : resolve(deps.workspaceRoot),
@@ -103,10 +135,16 @@ function keepFresh(deps: OnPremKnowledgeDeps, rootId: string, rel: string, ports
     source: ports.source,
     store: ports.store,
     manifest: ports.manifest,
-    packs: reviewPacks(ports),
+    // No symbol index: an edited file is read from its NEW content, not from definitions known before the edit.
+    packs: reviewPacks(ports.partitions ? { partitions: ports.partitions } : {}),
     onError: loggedFallback("stale marking", undefined),
   });
-  if (stop) watchedRoots.set(rootId, stop);
+  if (!stop) return;
+  watchedRoots.set(rootId, stop);
+  if (!stopAtExit) {
+    stopAtExit = true;
+    process.once("exit", stopKnowledgeWatchers);
+  }
 }
 
 export interface OnPremKnowledgeDeps {
@@ -121,16 +159,22 @@ async function reviewPorts(deps: OnPremKnowledgeDeps, rel: string, rootId: strin
   const partitions = await readPartitions({ caps });
   const symbols = await onPremSymbolIndex(workspaceRoot).filesUnder(rel || undefined).catch(loggedFallback("symbol index", []));
   const index = await getHostKnowledgeIndex(rootId).catch(loggedFallback("knowledge index", undefined));
+  // The root's ONE manifest (the review and the folder watch share it). The store is the
+  // linked client's, taken fresh each time so a rotated API key is picked up. A root reviewed
+  // under its old, name-based id keeps its manifest: migrated on first read.
+  const shared = {
+    store: linked.client.store,
+    manifest: rootManifest(rootId, () => fileManifest(
+      migratingRootFiles(containerKnowledgeFiles(workspaceRoot), rootId, onPremLegacyRootId(workspaceRoot, rel)),
+      manifestFileName(rootId),
+    ), workspaceRoot),
+  };
   return {
     source: createFsDirectorySource({
       fs: containerKnowledgeFs, rootPath: rel ? resolve(workspaceRoot, rel) : workspaceRoot, rootId, title,
     }),
-    store: linked.client.store,
-    // A root reviewed under its old, name-based id keeps its manifest: migrated on first read.
-    manifest: fileManifest(
-      migratingRootFiles(containerKnowledgeFiles(workspaceRoot), rootId, onPremLegacyRootId(workspaceRoot, rel)),
-      manifestFileName(rootId),
-    ),
+    store: shared.store,
+    manifest: shared.manifest,
     partitions,
     symbolsOf: indexedSymbolSource(symbols, rel),
     analyzers: workspaceCodeAnalyzers({
@@ -140,9 +184,14 @@ async function reviewPorts(deps: OnPremKnowledgeDeps, rel: string, rootId: strin
       ...(rel ? { path: rel } : {}),
       upload: (sha, snapshot) => linked.client.putAnalysis(sha, snapshot as unknown as AnalysisSnapshotPayload),
       onUploadError: (error) => logDebug(`[knowledge] analysis upload failed: ${String(error)}`),
+      onWarn: (message) => logDebug(`[knowledge] analysis: ${message}`),
     }),
     judgement: linked.client.judgement,
-    ...(index ? { similar: (ids: string[]) => index.similar(ids) } : {}),
+    // After the review the root's graph feeds the knowledge index (the shared runner does it).
+    index: { upsertFromGraph: async (graph) => (await getHostKnowledgeIndex(rootId)).upsertFromGraph(graph) },
+    platformGraph: (id) => linked.client.graph(id),
+    onIndexError: loggedFallback("knowledge index update", undefined),
+    ...(index ? { similar: claimSimilarity(index, shared.store, rootId) } : {}),
   };
 }
 
@@ -152,8 +201,8 @@ export function onPremKnowledgeRowsHost(deps: OnPremKnowledgeDeps): KnowledgeRow
   return {
     async openReview(dir) {
       const target = resolve(root, dir || ".");
-      const rel = relative(root, target).split(sep).join("/");
-      if (rel.startsWith("..") || !(await isFolder(target))) return null;
+      const rel = insideWorkspace(root, target);
+      if (rel === undefined || !(await isFolder(target)) || !(await withinRealWorkspace(root, target))) return null;
       const rootId = onPremRootId(root, rel);
       const title = rel ? rel.slice(rel.lastIndexOf("/") + 1) : basename(root) || "workspace";
       let ports: Promise<KnowledgeReviewPorts> | undefined;
@@ -166,17 +215,15 @@ export function onPremKnowledgeRowsHost(deps: OnPremKnowledgeDeps): KnowledgeRow
           const p = await portsOnce();
           const report = await runKnowledgeReview(p, { signal, plan });
           keepFresh(deps, rootId, rel, p);
-          // The review's graph feeds the knowledge index (§4.3, last step).
-          const graph = await deps.linked.client.graph(rootId).catch(loggedFallback("platform graph", null))
-            ?? await buildStoredGraph({ rootId, store: p.store, manifest: p.manifest, packs: reviewPacks(p) });
-          if (graph) await (await getHostKnowledgeIndex(rootId)).upsertFromGraph(graph).catch(loggedFallback("knowledge index update", undefined));
           return report;
         },
       };
     },
+    // Unlinked hosts offer no review, so the platform's routed judgement is always the call being priced.
+    callPrice: () => deps.linked.client.judgeEstimate(),
     rootId: () => base,
     async showGraph(rootId, focus) {
-      const url = knowledgeSurfaceUrl(deps.linked.projectId);
+      const url = knowledgeSurfaceUrl(deps.linked.projectId, focus);
       const named = focus.length > 0 ? ` It opens on the project's board, focused on the ${focus.length} file(s) named here.` : "";
       return graphShown(`The knowledge graph of **${rootId}** is on the project's canvas: [Open the knowledge graph](${url}).${named}`, rootId, focus);
     },

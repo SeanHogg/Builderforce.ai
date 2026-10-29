@@ -1,9 +1,15 @@
 /**
- * Shared fixtures for the code-pack tests: analyzer reports as dependency-cruiser, jscpd and
- * knip emit them, normalized by the ONE `normalizeAnalysis`.
+ * Shared fixtures for the code-pack and review tests: analyzer reports as dependency-cruiser, jscpd and
+ * knip emit them, normalized by the ONE `normalizeAnalysis`; and a review plan's walk.
  */
 
+import { EXTRACTOR_VERSION, type PlanDetail, type ReviewPlan } from '@seanhogg/builderforce-memory/knowledge';
 import { normalizeAnalysis, type CodeAnalysisSnapshot } from '../codeAnalysis.js';
+
+/** The walk behind a review plan, as memory's `planDetail` returns it: nothing owed, nothing carried. */
+export function planDetailOf(plan: ReviewPlan, files: PlanDetail['files'] = []): PlanDetail {
+  return { plan, files, prior: new Map(), extractor: { version: EXTRACTOR_VERSION, owed: new Map() }, carried: [] };
+}
 
 export const dependency = {
   modules: [

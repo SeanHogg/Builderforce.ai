@@ -49,12 +49,12 @@ beforeEach(() => {
 afterEach(() => window.history.replaceState(null, '', '/'));
 
 describe('CanvasKnowledgeSurface', () => {
-  it('prices the confirm chip from the SERVER's estimate through the same client', async () => {
+  it("prices the confirm chip from the SERVER's estimate through the same client", async () => {
     stubSource([GRAPH]);
     render(<CanvasKnowledgeSurface projectId={7} onExit={vi.fn()} />);
     await screen.findByTestId('kg-list');
-    const options = mocks.createKnowledgeSource.mock.calls[0]![0] as { callPriceUsd(): Promise<unknown> };
-    expect(await options.callPriceUsd()).toBe(0.01);
+    const options = mocks.createKnowledgeSource.mock.calls[0]![0] as { callPrice(): Promise<unknown> };
+    expect(await options.callPrice()).toEqual({ perCallUsd: 0.01, model: 'm', local: false });
     expect(mocks.judgeEstimate).toHaveBeenCalledTimes(1);
   });
 

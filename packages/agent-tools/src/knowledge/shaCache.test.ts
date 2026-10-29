@@ -56,12 +56,13 @@ describe('the per-sha cache', () => {
         await cache.getOrRun('k', work);
         expect(work).toHaveBeenCalledTimes(2);
 
+        // The verdict's own lifetime (10 ms from when the run finished, t = 101) beats the cache's 100.
         const short = vi.fn(async () => 2);
         await cache.getOrRun('s', short);
-        t = 120;
+        t = 110;
         await cache.getOrRun('s', short);
         expect(short).toHaveBeenCalledTimes(1);
-        t = 135;
+        t = 112;
         await cache.getOrRun('s', short);
         expect(short).toHaveBeenCalledTimes(2);
     });

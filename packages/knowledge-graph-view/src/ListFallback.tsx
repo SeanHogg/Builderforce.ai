@@ -8,6 +8,7 @@ import type { Finding, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memo
 import type { KnowledgeGraphLabels } from './labels';
 import type { LensDef } from './lenses';
 import { byPartition } from './graphModel';
+import { kindLabel } from './names';
 import { FindingsPanel } from './FindingsPanel';
 import type { FindingEvidence, SourceLocation } from './types';
 import { cssVar } from './scene/themeColors';
@@ -58,7 +59,7 @@ export function ListFallback({ graph, nodes, lens, labels, selected, onSelect, o
                                         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: style.emphasis === 'strong' ? 700 : 400 }}>
                                             {n.label}
                                         </span>
-                                        <span style={muted}>{labels.legend[n.kind] ?? n.kind}</span>
+                                        <span style={muted}>{kindLabel(labels, n.kind)}</span>
                                         {n.stale && <span style={{ fontSize: 11, color: cssVar('stale') }}>{labels.legend.stale}</span>}
                                     </button>
                                 </li>

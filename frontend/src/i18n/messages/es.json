@@ -6193,6 +6193,8 @@
     "pipelineApprove": "Aprobar",
     "pipelineReject": "Rechazar",
     "pipelineTransfer": "Transferir",
+    "pipelineFactOwned": "El hecho «{key}» lo escribió una persona, por lo que este aprendizaje no lo sobrescribe. Edita o retira ese hecho, o rechaza el aprendizaje.",
+    "pipelineOpenFact": "Abrir el hecho",
     "pipelineContradicts": "Contradice la línea base",
     "pipelineUnavailable": "La revisión de aprendizajes es solo para gestores.",
     "learningsAll": "Todas las regiones",

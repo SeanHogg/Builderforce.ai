@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl';
 import { fetchProjects } from '@/lib/api';
 import { creationSessionsApi } from '@/lib/builderforceApi';
 import { openedBoardHref } from '@/lib/openedBoardHref';
-import { KNOWLEDGE_INTENT_PARAMS } from '@/lib/knowledge/knowledgeChipRoute';
+import { KNOWLEDGE_INTENT_PARAMS } from '@builderforce/agent-tools/prefetch';
 
 /**
  * A Project opens as live context in the user's most recent Creation Session.

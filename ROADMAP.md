@@ -135,6 +135,20 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
     - `arch.boundaries` had no findings or chip;
     - on-prem `/graph` had no focus;
     - editing a doc never marked its claims stale.
+  - **Found during review (2026-10-29):**
+    - The cost estimate called Kimi "local — no cost". `isLocal` used the local-egress flag, which Kimi carries even though it runs on kimi.ai.
+    - Code-analysis snapshots were stored under the commit sha alone (`knowledgeBlobs.ts`), so two sub-folder roots reviewed at one commit overwrote each other.
+    - The evermind 409 `fact_owned_by_person` was never handled in the manager UI.
+    - VS Code Live reloaded without the view's query.
+    - The VS Code light theme and the web light theme's muted text failed contrast.
+    - An extractor upgrade cut short left sections unjudged until the file changed (memory owed-files). Memory 2026.10.32, published from another session, carries this bug; the fix ships in 2026.10.33.
+    - `/boundaries` read import direction from sorted finding nodes, so it dropped most layer violations.
+    - VS Code and on-prem `rootPorts` gave one root two manifest handles on the same file. A watcher write could revert a review's manifest.
+    - The fingerprint single-flight ran on the first asker's signal, so one abort blanked the fingerprint for every asker.
+    - `/graph` still matched "graph of revenue."-style requests.
+    - The router still treated Kimi as local and free (`catalogView.residencyOf`).
+    - The VS Code claim colour matched "agrees" in dark and high-contrast themes.
+    - Memory 2026.10.33's `clampClaim` bounds claim text by length only, so a model claim of more than 3 lines passes. That breaks §4.8 "fact text … no more than 3 lines". The 3-line bound comes back in 2026.10.34.
 
   *Acceptance:* every item is fixed, with the tests the spec lists.
 
