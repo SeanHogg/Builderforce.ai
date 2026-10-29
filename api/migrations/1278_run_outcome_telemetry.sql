@@ -1,0 +1,23 @@
+-- 1278 · The uniform outcome row + telemetry label (PRD 35 §8.2, WS6) — COORDINATING
+-- HEADER ONLY. This file intentionally contains NO DDL.
+--
+-- run_model_outcomes and the write-side llm_usage_log live on the OPERATIONAL
+-- endpoint (NEON_TRANSACTIONAL_DATABASE_URL), not on this (primary/core) track:
+--   - run_model_outcomes was MOVED to the operational endpoint by
+--     transactional-migrations/0013_run_telemetry.sql; the core copy that
+--     migrations/0197 created is a drained legacy replica (retention sweep only).
+--   - llm_usage_log carries its own operational copy (transactional-migrations/0001)
+--     and the agent-run telemetry writes land there.
+-- So ALL of this workstream's DDL — the run_model_outcomes ALTERs and the
+-- llm_usage_log ALTERs — lives ONLY in the transactional sibling:
+--
+--     api/transactional-migrations/0025_llm_usage_outcome_telemetry.sql
+--
+-- (llm_usage_log.turn_index / tool_schema_tokens were already mirrored onto both
+-- tracks earlier by migrations/1253 + transactional-migrations/0019.)
+--
+-- The schema.ts declarations for the new run_model_outcomes columns therefore
+-- have no primary-track migration by design; they are grandfathered in
+-- scripts/.schema-drift-allowlist.txt. Expand now, contract in a later push:
+-- every column is additive + nullable (or defaulted) so rows written before
+-- the change stay valid.
