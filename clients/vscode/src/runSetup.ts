@@ -45,13 +45,16 @@ export interface RunContextInput {
   child: boolean;
 }
 
+/** The ports the run's context reads — a run host's, or the native participant's subset. */
+type SetupPorts = Pick<BrainRunHostPorts, "contextPack" | "modelPreflight" | "prefetch" | "runContext" | "recentActivity">;
+
 type RunContextFields = Pick<BrainRunRequest, "augmentSystemPrompt" | "turnContext" | "recallHint" | "servedReads" | "modelPreflight" | "prefetch">;
 
 /**
  * The system-prompt augmentation (the same seam the limbic block uses): the project's
  * platform context + memory, and the workspace's run notes as they are now.
  */
-function augmentFor(ports: BrainRunHostPorts, projectId: number | undefined, serverChatId: number | null): Pick<RunContextFields, "augmentSystemPrompt"> {
+function augmentFor(ports: SetupPorts, projectId: number | undefined, serverChatId: number | null): Pick<RunContextFields, "augmentSystemPrompt"> {
   const platform = projectId != null && ports.runContext ? ports.runContext : undefined;
   const recent = ports.recentActivity;
   if (!platform && !recent) return {};
@@ -67,7 +70,7 @@ function augmentFor(ports: BrainRunHostPorts, projectId: number | undefined, ser
 }
 
 /** The request's per-run context fields. Starts the context pack now; the loop awaits it before turn 1. */
-export function runContextFields(ports: BrainRunHostPorts, input: RunContextInput): RunContextFields {
+export function runContextFields(ports: SetupPorts, input: RunContextInput): RunContextFields {
   const { projectId, serverChatId } = input;
   // Settled once, so a pack that fails is never an unhandled rejection; the failure is
   // re-thrown to the loop ONCE (by `turnContext`), which keeps it on the run's trace.

@@ -23,6 +23,11 @@ export interface RunSteerMessage {
   attachments?: unknown;
   /** The person typed it — not a child's report or an owner's direction to a sub-agent. */
   fromPerson?: boolean;
+  /**
+   * No surface has shown or saved this message yet — the run must, when it drains it. A host
+   * that shows the person's words itself as it queues them (the editor's `say`) leaves it unset.
+   */
+  persist?: boolean;
 }
 
 const inboxes = new Map<number, RunSteerMessage[]>();
@@ -34,11 +39,11 @@ const interruptListeners = new Map<number, Set<() => void>>();
  * Queue one message for a run's next turn. Blank text is ignored. `interrupt` also
  * aborts the run's interruptible step now and skips the rest of its turn's calls.
  */
-export function queueRunSteering(runKey: number, text: string, opts?: { interrupt?: boolean; attachments?: unknown; fromPerson?: boolean }): void {
+export function queueRunSteering(runKey: number, text: string, opts?: { interrupt?: boolean; attachments?: unknown; fromPerson?: boolean; persist?: boolean }): void {
   const trimmed = text.trim();
   if (!trimmed) return;
   const queue = inboxes.get(runKey) ?? [];
-  queue.push({ text: trimmed, attachments: opts?.attachments, ...(opts?.fromPerson ? { fromPerson: true } : {}) });
+  queue.push({ text: trimmed, attachments: opts?.attachments, ...(opts?.fromPerson ? { fromPerson: true } : {}), ...(opts?.persist ? { persist: true } : {}) });
   inboxes.set(runKey, queue);
   if (!opts?.interrupt) return;
   interrupting.add(runKey);

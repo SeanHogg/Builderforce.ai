@@ -36,6 +36,7 @@ import {
   runAbortSignal,
   startRun,
   stopBeforeStart,
+  subscribeRun,
   subscribeRunStore,
   type BrainRunOutcome,
   type BrainStreamFn,
@@ -56,32 +57,13 @@ import { OWNER_NAME, type BrainRunHost, type BrainRunHostPorts, type RunNoteOpti
 import { runContextFields, startRunRepo } from "./runSetup";
 import { runRequestFields } from "./stageModels";
 import { createRunSteer } from "./runSteer";
+import { createTurnQueue } from "./runTurnQueue";
+import { argsRecord, askedText } from "./runAsked";
 
 export { syncMessageFor } from "./brainRunHostProtocol";
 export type { RunHostMessage, RunSink, RunSyncMessage, RunToolMessage, SinkEntry, WebviewRunStart } from "./brainRunHostProtocol";
 export { OWNER_NAME } from "./brainRunHostContract";
 export type { BrainRunHost, BrainRunHostPorts, RunContextPack, RunNoteOptions, ToolRunInfo } from "./brainRunHostContract";
-
-/** The user's ask, whether the panel sent a string or multimodal parts. */
-function askedText(turn: RunSpec["userTurn"]): string | undefined {
-  if (typeof turn === "string") {
-    const asked = turn.replace(/\s+/g, " ").trim();
-    return asked || undefined;
-  }
-  if (!Array.isArray(turn)) return undefined;
-  const parts: string[] = [];
-  for (const part of turn) {
-    if (part && typeof part === "object" && part.type === "text" && typeof part.text === "string") {
-      parts.push(part.text);
-    }
-  }
-  const asked = parts.join(" ").replace(/\s+/g, " ").trim();
-  return asked || undefined;
-}
-
-function argsRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-}
 
 export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
   const relay = createRunRelay();
@@ -139,6 +121,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
   const active = new Set<number>();
   /** The claimed keys whose loop has not ENDED yet — before it starts, a steer is heard at turn 1. */
   const settingUp = new Set<number>();
+  /** A turn for a key whose run is live waits here, never dropped (`runTurnQueue.ts`). */
+  const turnQueue = createTurnQueue<RunSpec>({ isRunning, subscribe: subscribeRun, run: (spec) => run(spec) });
 
   /**
    * ONE run entry for every run: a chat's turn, a sub-agent (its key is its own, its
@@ -147,10 +131,13 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
   const run = async (p: RunSpec): Promise<void> => {
     const key = p.chatId;
     watches.watch(key);
-    // Already running (a second tab, a double submit): the live run owns this key.
-    // Returning before the setup keeps a no-op start from deleting the live run's Auto
-    // flag on the way out.
-    if (active.has(key) || isRunning(key)) return;
+    // A run is live on this key (a second tab, a double submit, a steer turn re-submitted as
+    // the run that woke for it ends): parking before the setup keeps the live run's Auto flag.
+    if (active.has(key)) return turnQueue.park(key, p);
+    if (isRunning(key)) {
+      await turnQueue.whenIdle(key);
+      return run(p);
+    }
     active.add(key);
     settingUp.add(key);
     // What a child derives from and a wake restarts with; the turn's own seed, research and
@@ -168,8 +155,11 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       ports.settleRun?.(key);
       // A child's report that arrived as this run was ending is heard now…
       childHost.afterRun(key);
-      // …and so is what the person typed as it ended (unless they stopped it).
+      // …and so is what the person typed as it ended (unless they stopped it), then the turn
+      // submitted while it ran.
+      const wasStopped = steering.stopped(key);
       steering.settled(key);
+      turnQueue.settled(key, wasStopped);
     }
   };
 

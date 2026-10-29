@@ -36,11 +36,9 @@ import {
   type BrainAction,
   type BrainRunPersistence,
   type BrainRunRequest,
-  type BrainRunSnapshot,
   type BrainStreamFn,
   type BrainToolSpec,
   type BrainTransport,
-  type BrainTraceEvent,
   type ChatCompletionMessage,
   type ChatErrorAction,
   type ChatMode,
@@ -52,6 +50,11 @@ import { evaluatePolicyGate, toolCallPaths, type PolicyGate } from "./policy";
 import { withRunPreamble } from "./runPreamble";
 import { runRequestFields, type EditorRunSettings } from "./stageModels";
 import type { RunDirectives, RunHooks } from "./hooks/runHooks";
+import { createStreamRelay, exhaustedToolBudget, transientRunPersistence } from "./nativeRunStream";
+
+// The stream relay, the exhausted-budget test and the transient persistence live in
+// `nativeRunStream.ts`; they are re-exported so importers of this module are unchanged.
+export { createStreamRelay, exhaustedToolBudget, transientRunPersistence };
 
 /**
  * The native surface renders MARKDOWN, not the webview's `<BrainTimeline>`, so the
@@ -153,6 +156,18 @@ export interface NativeBrainRunOptions {
   /** The run's volatile turn context, awaited before turn 1 — the participant hands the
    *  deterministic pre-search hits here, as the panel's run host does in its context pack. */
   turnContext?: BrainRunRequest["turnContext"];
+  /**
+   * The task context pack's fields (PRD 35 E2 / E7) — the SAME fields the panel's run host
+   * builds (`runSetup.ts` `runContextFields`): the pack's block as the turn context, the recall
+   * hint, the files it served whole, and the BYO preflight. Spread under {@link turnContext}.
+   */
+  runContext?: Pick<BrainRunRequest, "turnContext" | "recallHint" | "servedReads" | "modelPreflight">;
+  /** The run's default checkout, read per call, and the wait for it to resolve (PRD 35 E3). */
+  defaultRepo?: () => string | undefined;
+  repoReady?: Promise<void>;
+  /** The run SETTLED — finished, failed or stopped: release what it held outside the loop
+   *  (its background shell jobs, `localShellJobs.ts`). Called once, whatever the outcome. */
+  settleRun?: (runKey: number) => void;
   /** The deterministic-first PreFetch port ("where is X defined?" answered with no model
    *  call, and every registry row after it) — the same port the panel's run host passes. */
   prefetch?: BrainRunRequest["prefetch"];
@@ -365,92 +380,6 @@ export function createNativeRunTool(opts: {
 }
 
 /**
- * Turn the run store's observable state into the linear markdown stream the native
- * chat renders.
- *
- * Two sources have to be reconciled without ever printing the same sentence twice.
- * `streamingText` is the live buffer the user watches fill; `appended` is what the loop
- * durably committed. Normally the second is the settled form of the first, so a
- * committed message whose text was already streamed is skipped — but a MEMORY-FIRST
- * answer never streams at all (that is the whole point: no model call), so it arrives
- * only as an appended message and must be printed. Tracking both is what makes the two
- * cases one code path.
- */
-export function createStreamRelay(events: Pick<NativeRunEvents, "onText">): (snapshot: BrainRunSnapshot) => void {
-  let lastStreaming = "";
-  const seenIds = new Set<number>();
-  const alreadyShown = new Set<string>();
-  return (snapshot) => {
-    const text = snapshot.streamingText;
-    if (text !== lastStreaming) {
-      if (text.startsWith(lastStreaming)) {
-        const delta = text.slice(lastStreaming.length);
-        if (delta) events.onText(delta);
-      } else {
-        // The turn ended (buffer cleared) or restarted with different content. Whatever
-        // was on screen is now settled — remember it so its committed twin is not
-        // reprinted below.
-        if (lastStreaming.trim()) alreadyShown.add(lastStreaming.trim());
-        if (text) events.onText(text);
-      }
-      lastStreaming = text;
-    }
-    for (const message of snapshot.appended) {
-      if (!message || seenIds.has(message.id)) continue;
-      seenIds.add(message.id);
-      const content = typeof message.content === "string" ? message.content.trim() : "";
-      if (!content) continue;
-      // Committed while still on screen, or already settled — the user has read it.
-      if (content === lastStreaming.trim() || alreadyShown.has(content)) {
-        alreadyShown.add(content);
-        continue;
-      }
-      alreadyShown.add(content);
-      events.onText(`\n\n${content}\n`);
-    }
-  };
-}
-
-/**
- * Did the loop stop the run itself? A run has no step ceiling; the only limit is the
- * consecutive-tool-failure breaker, after which the loop forces a final answer with
- * tools withdrawn (or, if that too is empty, records a loop error). True on either. The
- * native surface appends a dispatch hint on that outcome — the failures are named in
- * the turn, and a cloud agent can carry the work on in its own runtime.
- */
-export function exhaustedToolBudget(events: readonly BrainTraceEvent[]): boolean {
-  return events.some(
-    (e) =>
-      (e.label === "llm.complete" && (e.args as { forcedFinish?: unknown } | undefined)?.forcedFinish === true) ||
-      (e.category === "error" && e.label === "agent.loop"),
-  );
-}
-
-/**
- * The loop persists every intermediate turn through this port. The native participant
- * writes the WHOLE exchange ONCE after the run (that single write is also what triggers
- * the server-side Evermind learn gate), so the in-run writes must not reach the server
- * or the conversation would be stored twice. Ids are negative: nothing downstream can
- * mistake one for a real `brain_messages` row.
- */
-export function transientRunPersistence(): BrainRunPersistence {
-  let nextId = -1;
-  return {
-    async sendMessages(_chatId, messages) {
-      const at = new Date().toISOString();
-      return messages.map((m) => ({
-        id: nextId--,
-        role: m.role,
-        content: m.content,
-        metadata: m.metadata ?? null,
-        seq: 0,
-        createdAt: at,
-      }));
-    },
-  };
-}
-
-/**
  * Run one native chat turn on the shared loop.
  *
  * Resolves when the loop has settled — including its post-run backstops, which run
@@ -470,14 +399,25 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<void>
     signal,
   } = opts;
 
-  const runTool = createNativeRunTool({
+  const native = createNativeRunTool({
     defs: tools,
     root,
     ...(policyGates ? { gates: policyGates } : {}),
     ...(directives ? { hooks: directives.hooks } : {}),
     events,
     labels,
+    // The run's default checkout and its key: git and shell default to the checkout, and the
+    // background jobs the run starts are owned by its key — so they die with it.
+    ...(opts.defaultRepo ? { defaultRepo: opts.defaultRepo } : {}),
+    runKey: chatId,
   });
+  const repoReady = opts.repoReady;
+  const runTool: typeof native = repoReady
+    ? async (name, args, signal) => {
+        await repoReady;
+        return native(name, args, signal);
+      }
+    : native;
   // Governance rides in TWO places, both of them here: the gates are rendered as binding
   // system-prompt lines so the model is bound by the same policy on every surface, and
   // they are HARD-enforced at the tool seam above. Rendering it here (rather than in the
@@ -527,6 +467,7 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<void>
       ...(opts.clientChatId ? { clientChatId: opts.clientChatId } : {}),
       ...(opts.projectId != null ? { projectId: opts.projectId } : {}),
       ...(opts.evermind ? { evermind: opts.evermind } : {}),
+      ...opts.runContext,
       ...(opts.turnContext ? { turnContext: opts.turnContext } : {}),
       ...(opts.prefetch ? { prefetch: opts.prefetch } : {}),
       ...(opts.knowledge ? { knowledge: opts.knowledge } : {}),
@@ -548,6 +489,8 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<void>
     signal.removeEventListener("abort", onAbort);
     // The workspace's runEnd hooks — after the turn, never holding it.
     void directives?.hooks.onRunEnd();
+    // What the run held outside the loop (its background jobs) dies with it.
+    opts.settleRun?.(chatId);
   }
 
   if (signal.aborted) return;

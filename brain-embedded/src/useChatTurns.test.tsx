@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { useChatTurns, type ChatTurnsOptions } from './useChatTurns';
 import { useChatCreation } from './useChatCreation';
+import { drainRunSteering, hasRunInterrupt, resetRunSteering } from './runSteering';
 
 const stopRun = vi.hoisted(() => vi.fn());
 vi.mock('./brainRunStore', () => ({ stopRun }));
@@ -151,11 +152,13 @@ describe('useChatTurns', () => {
     expect(send).toHaveBeenNthCalledWith(2, 'again');
   });
 
-  it('queues while a run is in flight and flushes on its falling edge', async () => {
+  // PRD 35 E10 (the one sanctioned flip): a mid-run message used to be HELD by default; it now
+  // steers the run, and holding it for after is the explicit `queueAfter`.
+  it('queues (explicitly) while a run is in flight and flushes on its falling edge', async () => {
     const send = vi.fn();
     const { result, rerender } = mount({ running: true, runKey: 1, send });
 
-    await act(async () => { await result.current.submit('next step'); });
+    await act(async () => { await result.current.queueAfter('next step'); });
     expect(send).not.toHaveBeenCalled();
     expect(result.current.queued.count).toBe(1);
 
@@ -253,5 +256,52 @@ describe('useChatTurns — a typed stop', () => {
     await act(async () => { await result.current.submit({ text: 'Stop the run', to: null }); });
     expect(send).toHaveBeenCalledWith({ text: 'Stop the run', to: null });
     expect(stopRun).not.toHaveBeenCalled();
+  });
+});
+
+describe('useChatTurns — a mid-run message steers by default (PRD 35 E10)', () => {
+  beforeEach(() => { stopRun.mockClear(); resetRunSteering(); });
+
+  function mount(initial: ChatTurnsOptions<string>) {
+    return renderHook((props: ChatTurnsOptions<string>) => useChatTurns(props), { initialProps: initial });
+  }
+
+  it('posts the message to the run, interrupting the step in flight — nothing is held, nothing is sent', async () => {
+    const send = vi.fn();
+    const { result } = mount({ running: true, runKey: 12, send });
+
+    await act(async () => { await expect(result.current.submit('write the update now')).resolves.toBe(true); });
+
+    expect(send).not.toHaveBeenCalled();
+    expect(result.current.queued.count).toBe(0);
+    expect(hasRunInterrupt(12)).toBe(true);
+    const [steer] = drainRunSteering(12);
+    expect(steer).toMatchObject({ text: 'write the update now', fromPerson: true, persist: true });
+  });
+
+  it('carries a non-string turn's attachments so a mid-run image is not dropped', async () => {
+    type Turn = { text: string; attachments: Array<{ key: string; name: string; type: string; imageUrl: string }> };
+    const send = vi.fn();
+    const { result } = renderHook(() => useChatTurns<Turn>({
+      running: true, runKey: 13, send, textOf: (t) => t.text, attachmentsOf: (t) => t.attachments,
+    }));
+    const attachments = [{ key: 'a', name: 'shot.png', type: 'image/png', imageUrl: 'data:image/png;base64,AAA' }];
+
+    await act(async () => { await result.current.submit({ text: 'what is in this?', attachments }); });
+
+    expect(drainRunSteering(13)[0]?.attachments?.[0]?.imageUrl).toBe('data:image/png;base64,AAA');
+  });
+
+  it('holds instead for a run that cannot be steered here (a canvas key), or one being stopped', async () => {
+    const send = vi.fn();
+    const canvas = mount({ running: true, runKey: 'canvas:3', send });
+    await act(async () => { await canvas.result.current.submit('later'); });
+    expect(canvas.result.current.queued.count).toBe(1);
+
+    const stopped = mount({ running: true, runKey: 14, send });
+    act(() => stopped.result.current.stop());
+    await act(async () => { await stopped.result.current.submit('after the stop'); });
+    expect(stopped.result.current.queued.count).toBe(1);
+    expect(hasRunInterrupt(14)).toBe(false);
   });
 });

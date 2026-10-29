@@ -340,6 +340,13 @@ export { parseSubagentOrigin, SUBAGENT_OF_META_KEY } from './runLineage';
 export type { RunLineage, SubagentOrigin } from './runLineage';
 export { queueRunSteering, drainRunSteering, steerModelContent } from './runSteering';
 export type { RunSteerMessage } from './runSteering';
+// PRD 35 WS4: the Brain's surfaces adapted to the ONE agent — the ports over the run store
+// and the policy data. An adapter (here, or the editor's `run/vscodeAdapter.ts`) builds ports
+// and nothing else; the contract types come with them so a host names one import.
+export { buildBrainRunPorts, brainRunPolicy, brainRunTask } from './run/webAdapter';
+export type { BrainEntryPoint, BrainRunBinding } from './run/webAdapter';
+export { runViaAgent } from './run/runViaAgent';
+export type { ContextPack, RunPolicy, RunPorts, RunTask } from '@builderforce/agent-run';
 export type { BrainRunOutcome } from './runOutcomeReport';
 export { isCoderReask } from '@builderforce/run-policy';
 // Planning ends in tasks: the `hand_off` tool, its executor, and the per-child chat report.

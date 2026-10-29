@@ -20,6 +20,7 @@ import { createComposingActivity, toolCallArgBytes } from '../composingActivity'
 import { hasCallMarkup } from '../xmlToolCalls';
 import { turnInterruption } from '../finishReason.js';
 import { takeRunSteering } from './steerInterrupt';
+import { persistSteer } from './steerPersistence';
 import { steerModelContent } from '../runSteering';
 import { buildWorkingTranscript } from '@seanhogg/builderforce-memory/working';
 import { summarizeMiddle } from '../transcriptSummarizer';
@@ -50,6 +51,8 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     for (const steer of takeRunSteering(c, runKey, iter)) {
       const msg: ChatCompletionMessage = { role: 'user', content: steerModelContent(steer) };
       convo.push(steer.fromPerson ? markPersonTurn(msg) : msg);
+      // A steer no surface has shown yet (the web composer's) is saved as the run reads it.
+      persistSteer(c, chatId, req.persistence, steer);
     }
     // Auto-compact BEFORE the turn: summarize the older middle into a memory note
     // when the transcript exceeds the token budget (instead of silently dropping it

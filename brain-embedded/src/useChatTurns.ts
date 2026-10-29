@@ -1,8 +1,10 @@
 'use client';
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { stopRun } from './brainRunStore';
 import type { RunKey } from './brainRunStore';
+import { queueRunSteering } from './runSteering';
+import type { ChatInputAttachment } from './types';
 import { useQueuedTurns, type QueuedTurns } from './useQueuedTurns';
 import { startsRun } from './userTurnRuns';
 
@@ -17,9 +19,14 @@ import { startsRun } from './userTurnRuns';
  *  1. `steer` (optional port) — a turn the host routes INTO a live run (the editor's
  *     live sub-agent, or a run waiting on its sub-agents) is delivered there, never
  *     queued behind the chat's own run;
- *  2. the queue — while `running`, the turn is HELD and sent on the run's falling edge
- *     (`useQueuedTurns`: FIFO, one per completed run, discarded on a `runKey` switch);
- *  3. otherwise `send` now.
+ *  2. mid-run, a host with no `steer` port STEERS the chat's own run by default (PRD 35 E10):
+ *     the message is posted to the run's inbox, interrupts the step in flight and reaches the
+ *     next model call — it does not wait behind a run that may hold for minutes. Holding it
+ *     for after the run is the explicit alternative: `queueAfter`;
+ *  3. the queue — a turn that cannot steer (addressed to a participant, a canvas key, a run
+ *     being stopped) is HELD and sent on the run's falling edge (`useQueuedTurns`: FIFO, one
+ *     per completed run, discarded on a `runKey` switch);
+ *  4. otherwise `send` now.
  *
  * A stop ("Stop the run") is the Stop: mid-run it stops the run and drops what is held
  * (nothing waits behind it); idle it is sent, kept as the answer, and starts nothing
@@ -50,6 +57,8 @@ export interface ChatTurnsOptions<T> {
   textOf?: (turn: T) => string;
   /** Optional: the turn is addressed to a participant, not the run — never the Stop. */
   isDirected?: (turn: T) => boolean;
+  /** Optional: the attachments a non-string turn carries — they ride a steer so a mid-run image is not dropped. */
+  attachmentsOf?: (turn: T) => ChatInputAttachment[] | undefined;
 }
 
 export interface ChatTurns<T> {
@@ -61,16 +70,22 @@ export interface ChatTurns<T> {
    * Stable identity.
    */
   submit: (turn: T) => Promise<boolean>;
+  /** The explicit alternative to steering: hold the turn for after the run (sent on its falling edge). Stable identity. */
+  queueAfter: (turn: T) => Promise<boolean>;
   /** Clear the queue and stop the run. Stable identity. */
   stop: () => void;
 }
 
-export function useChatTurns<T = string>({ running, runKey, send, steer, stop, textOf, isDirected }: ChatTurnsOptions<T>): ChatTurns<T> {
+export function useChatTurns<T = string>({ running, runKey, send, steer, stop, textOf, isDirected, attachmentsOf }: ChatTurnsOptions<T>): ChatTurns<T> {
   // Newest ports, read at call time — `submit`/`stop` keep their identity across renders
   // (hosts hand them to memoized composers and to callbacks captured at run start).
-  const ports = useRef({ send, steer, stop, textOf, isDirected, runKey, running });
+  const ports = useRef({ send, steer, stop, textOf, isDirected, attachmentsOf, runKey, running });
   // eslint-disable-next-line react-hooks/refs
-  ports.current = { send, steer, stop, textOf, isDirected, runKey, running };
+  ports.current = { send, steer, stop, textOf, isDirected, attachmentsOf, runKey, running };
+  // A stopped run is unwinding: a message typed meanwhile cannot steer it (the model gets no
+  // further turn), so it is held for after — until the run's falling edge clears the mark.
+  const stopping = useRef(false);
+  useEffect(() => { if (!running) stopping.current = false; }, [running]);
 
   const queued = useQueuedTurns<T>({
     running,
@@ -82,29 +97,42 @@ export function useChatTurns<T = string>({ running, runKey, send, steer, stop, t
 
   const stopTurns = useCallback(() => {
     clear();
+    if (ports.current.running) stopping.current = true;
     const { stop: halt, runKey: key } = ports.current;
     if (halt) halt();
     else if (key != null) stopRun(key);
   }, [clear]);
 
   const submit = useCallback(async (turn: T): Promise<boolean> => {
-    const { send: deliver, steer: route, textOf: text, isDirected: directed, running: live } = ports.current;
+    const { send: deliver, steer: route, textOf: text, isDirected: directed, attachmentsOf: attached, runKey: key, running: live } = ports.current;
     const body = typeof turn === 'string' ? turn.trim() : (text?.(turn) ?? '').trim();
     if (!body) return false;
-    const stopping = !startsRun(body) && !directed?.(turn);
+    const isStop = !startsRun(body) && !directed?.(turn);
     // A host that routed it (the editor's run hears it as its Stop) still drops what is held.
     if (route?.(turn)) {
-      if (stopping) stopTurns();
+      if (isStop) stopTurns();
       return true;
     }
     // Mid-run, a stop IS the Stop — nothing is held behind it to strand.
-    if (stopping && live) {
+    if (isStop && live) {
       stopTurns();
+      return true;
+    }
+    // Mid-run, the chat's own run is spoken to NOW: the message interrupts the step in flight
+    // and is in front of the next model call. `persist` has the run save and show it as it
+    // reads it. A host that supplied `steer` routed (or declined) it above and owns the rest.
+    if (live && !route && typeof key === 'number' && !directed?.(turn) && !stopping.current) {
+      queueRunSteering(key, body, { interrupt: true, fromPerson: true, persist: true, attachments: attached?.(turn) });
       return true;
     }
     if (hold(turn)) return true;
     return (await deliver(turn)) !== false;
   }, [hold, stopTurns]);
 
-  return { queued, submit, stop: stopTurns };
+  const queueAfter = useCallback(async (turn: T): Promise<boolean> => {
+    if (hold(turn)) return true;
+    return (await ports.current.send(turn)) !== false;
+  }, [hold]);
+
+  return { queued, submit, queueAfter, stop: stopTurns };
 }

@@ -30,6 +30,8 @@ import { preSearchOnce, whereDefinedOnce } from "./contextPack/preSearchSource";
 import { editorPrefetchPort } from "./prefetch/editorPrefetchPort";
 import { editorKnowledgeRowsHost } from "./knowledge/knowledgeRows";
 import { CONTEXT_PACK_DEADLINE_MS } from "./contextPack/deadline";
+import { editorRunSetupPorts } from "./runSetupPorts";
+import { runContextFields, startRunRepo } from "./runSetup";
 
 const PARTICIPANT_ID = "builderforce.agent";
 
@@ -112,8 +114,9 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     // The deterministic pre-search (identifiers → symbol index + ripgrep, no model call),
     // started now so its ~1.5 s deadline overlaps the setup below — the same hits block the
-    // panel's runs carry in their context pack (`runSetupPorts.ts`).
-    const preSearch = root ? preSearchOnce(root, request.prompt, CONTEXT_PACK_DEADLINE_MS) : undefined;
+    // panel's runs carry in their context pack (`runSetupPorts.ts`), which asks this same
+    // memoized computation.
+    if (root) void preSearchOnce(root, request.prompt, CONTEXT_PACK_DEADLINE_MS);
     // The PreFetch gate ("where is X defined?" from the symbol index, and every registry
     // row after it) — the panel's port. Its executors and the reference read below ask the
     // SAME memoized computations, so each runs once per request.
@@ -214,6 +217,21 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     const abort = new AbortController();
     token.onCancellationRequested(() => abort.abort());
 
+    // The run's SETUP, from the same ports and functions the panel's run host uses
+    // (`runSetupPorts.ts` / `runSetup.ts`): the task context pack (PRD 35 E2) with the
+    // pre-search hits in it, the BYO preflight (E7) and the run's default checkout (E3) —
+    // resolved now, in parallel with the setup below. Keyed on the turn's run key, so the
+    // background jobs the turn starts die with it.
+    const setup = editorRunSetupPorts(ctx.secrets, () => root ?? "", ctx.globalState, getLocalModelsConfig);
+    const repo = startRunRepo(setup, { ...(activeProject ? { projectId: activeProject.id } : {}), request: request.prompt });
+    const { turnContext, recallHint, servedReads, modelPreflight } = runContextFields(setup, {
+      ...(activeProject ? { projectId: activeProject.id } : {}),
+      serverChatId: serverChatId ?? null,
+      request: request.prompt,
+      memory: !!activeProject,
+      child: false,
+    });
+
     // Accumulate the assistant's reply so, after the run, we can feed this
     // exchange back to the project's Evermind (the same learning loop cloud/on-prem
     // runs — best-effort, gated by `builderforce.evermindLearning`).
@@ -282,9 +300,18 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
         systemPrompt,
         seed,
         userTurn: referenced ? `${request.prompt}\n\n${referenced}` : request.prompt,
-        // The pre-search hits as the run's volatile turn context, and "where is X defined?"
-        // answered from the symbol index with no model call — parity with the panel.
-        ...(preSearch ? { turnContext: async () => (await preSearch) || undefined } : {}),
+        // The task context pack (the pre-search hits included) as the run's volatile turn
+        // context, and "where is X defined?" answered from the symbol index with no model
+        // call — parity with the panel.
+        runContext: {
+          ...(turnContext ? { turnContext } : {}),
+          ...(recallHint ? { recallHint } : {}),
+          ...(servedReads ? { servedReads } : {}),
+          ...(modelPreflight ? { modelPreflight } : {}),
+        },
+        defaultRepo: repo.current,
+        repoReady: repo.ready,
+        settleRun: setup.settleRun,
         // Asked of the person's own words, not the turn with its inlined references.
         ...(prefetch ? { prefetch } : {}),
         tools,
