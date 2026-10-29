@@ -9,6 +9,7 @@ import { getRunDriver } from '../runDriver';
 import { chatErrorAction } from '../chatError';
 import { linkedTicketsToAdvance, linkedTicketsToComplete, linkedTicketsReviewedComplete } from '../chatWorkLinking';
 import { asksForChange } from '@builderforce/agent-stall';
+import { isChildReportText } from '@builderforce/agent-tools';
 import { contentText } from '../localSuccess/turnFeatures';
 import { codeRunOutcome } from '../runOutcomeReport';
 import { attemptedDelegation } from '../delegationRequest';
@@ -32,7 +33,8 @@ import type { RunCell } from './runCell';
  * Cells whose conversation has handed work to sub-agents. A wake turn — the owner started
  * again on its children's reports — runs in the same cell with a fresh trace, so its own
  * trace shows no spawn and its children's edits are not its `codeChanged`; this is what
- * keeps such a turn from being graded as a change request it failed.
+ * keeps such a turn from being graded as a change request it failed. Only the reports
+ * turn is a wake: the person's next request in the same chat is graded as one.
  */
 const delegatingCells = new WeakSet<RunCell>();
 
@@ -165,12 +167,13 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
     // A wake turn is not a request: it is the owner reading its children's reports, and
     // the work it asked for was handed to them.
     const trace = runTrace(c);
-    const wakeTurn = delegatingCells.has(c);
+    const requestText = req.userTurn === undefined ? undefined : contentText(req.userTurn);
+    const wakeTurn = delegatingCells.has(c) && isChildReportText(requestText);
     if (attemptedDelegation(trace)) delegatingCells.add(c);
     const outcome = req.reportOutcome && codeRunOutcome({
       runId: c.runId, codeModel: c.codeModel, codeChanged: c.codeChanged, aborted,
       failed: c.error !== '', shipped, trace, projectId: req.projectId,
-      askedForChange: !wakeTurn && asksForChange(req.userTurn === undefined ? undefined : contentText(req.userTurn)),
+      askedForChange: !wakeTurn && asksForChange(requestText),
     });
     if (outcome) void req.reportOutcome!(outcome).catch(() => undefined);
     // How the run ended, under the id its calls carry — the route report's other half.

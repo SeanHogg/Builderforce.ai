@@ -21,8 +21,10 @@ export interface RunAgentInput {
   /** The cancellation signal. A fired signal settles the run `failed` with reason `cancelled`. */
   signal?: AbortSignal;
   /**
-   * Replace a policy module WHOLE. A test drives one module this way; a surface never
-   * does — an adapter supplies ports, not policy.
+   * Replace a policy module WHOLE. A test drives one module this way, and an adapter
+   * binds a module's ENGINE ports this way (`createFinishHook(ports)`,
+   * `createGuardsHook(ports)`, `createVerifyHook(ports)`) — the module stays the
+   * policy's; the adapter only hands it the couplings its surface has.
    */
   modules?: Partial<PolicyModules>;
 }
@@ -50,10 +52,14 @@ export function policyContext(input: RunAgentInput, state: RunState, view: TurnV
   };
 }
 
-/** Apply a hook's compaction, recording what it dropped. */
+/**
+ * Apply a hook's compaction, recording what it dropped. The transcript is rewritten IN
+ * PLACE: it is the array the kernel holds (`view.messages` is that same array), so
+ * assigning a new one would leave the kernel sending the uncompacted rows.
+ */
 export function applyCompaction(state: RunState, view: TurnView, result: { messages: RunMessage[]; dropped: number; reserveTokens?: number }, step: number): void {
-  view.messages = result.messages;
-  state.messages = result.messages;
+  view.messages.splice(0, view.messages.length, ...result.messages);
+  state.messages = view.messages;
   state.compaction = {
     compactions: state.compaction.compactions + 1,
     lastCompactedStep: step,

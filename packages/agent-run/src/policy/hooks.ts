@@ -17,7 +17,7 @@
  */
 
 import type { ToolSchema } from "@builderforce/agent-tools";
-import type { HumanAnswer, RunMessage, RunPolicy, RunPorts, RunState, RunTask } from "../contract.js";
+import type { HumanAnswer, RunEvent, RunMessage, RunPolicy, RunPorts, RunState, RunTask } from "../contract.js";
 
 /** What every policy hook sees: the run, its policy, its state and its ports. */
 export interface PolicyContext {
@@ -73,10 +73,20 @@ export interface CompactionResult {
   reserveTokens?: number;
 }
 
-/** WS2b — stall recovery: narration, repetition, forced synthesis. */
+/** WS2b — stall recovery: narration, repetition, forced synthesis, prose ask-lift. */
 export interface StallHook {
-  /** Judge a turn that looks stalled. Returns what to do about it, or nothing. */
+  /** Judge a turn that ended without a tool call. Returns what to do about it, or nothing to accept it. */
   recover(ctx: PolicyContext): Promise<StallDecision | void> | StallDecision | void;
+  /** Shape the answer `recover` accepted (repetition trim, prose ask-lift). Absent ⇒ the text as-is. */
+  settle?(ctx: PolicyContext, text: string): string;
+  /** A turn called a tool — it was not a stall, so the re-prompt budget starts full again. */
+  acted?(ctx: PolicyContext): void;
+  /**
+   * The prompt for ONE forced no-tools turn when the run ended without an answer (a
+   * budget ran out, a breaker tripped, every turn only called tools). Absent or empty ⇒
+   * no synthesis.
+   */
+  synthesis?(ctx: PolicyContext): string | null | void;
 }
 
 /** What to do about a stalled turn. */
@@ -101,8 +111,17 @@ export interface AskHook {
 
 /** WS2c — sub-agents. A child is the SAME agent, with its own ports. */
 export interface SubagentsHook {
-  /** The sub-agents this run may start, by tool name. */
-  select(ctx: PolicyContext): Promise<readonly string[] | void> | readonly string[] | void;
+  /**
+   * The end-of-run backstop: a run about to settle (or ask a human) without starting the
+   * sub-agents it was asked for gets this note instead. Null when settling is right.
+   */
+  backstop(ctx: PolicyContext): string | null;
+  /**
+   * The EARLY nudge (WS8c): after a dispatched call, the replacement result that carries
+   * "stop reading and delegate" on the read that reached `readsBeforeNudge`. Nothing ⇒
+   * the result stands.
+   */
+  nudge(ctx: PolicyContext, call: PolicyToolCall, result: unknown): { data: unknown } | void;
 }
 
 /** WS2d — the finish gates: placeholder, no-deliverable, CI, review verdict, sign-off. */
@@ -112,22 +131,42 @@ export interface FinishHook {
    * and keeps going) or null to accept it.
    */
   gate(ctx: PolicyContext): Promise<string | null> | string | null;
+  /**
+   * Judge a PROSE answer (a turn that settled without the `finish` tool). Only the gates
+   * that hold every settle apply — the sign-off a reviewer owes; a prose reply is not
+   * held to a deliverable. Returns the block reason, or null to let it settle.
+   */
+  settleBlock(ctx: PolicyContext): string | null;
 }
 
 /** WS2d — the in-run guards: progress (A3), cascade (D1), post-edit check (D7), parallel reads (D8). */
 export interface GuardsHook {
   /** Before a call dispatches. A hook may skip it. */
   beforeDispatch(ctx: PolicyContext, call: PolicyToolCall): Promise<GuardDecision | void> | GuardDecision | void;
-  /** After a call returned. */
-  observe(ctx: PolicyContext, call: PolicyToolCall, result: unknown): Promise<void> | void;
+  /**
+   * After a call returned. Returns the replacement result when a guard has something the
+   * model must read on it (D7's post-edit note), or nothing to let the result stand.
+   */
+  observe(ctx: PolicyContext, call: PolicyToolCall, result: unknown): Promise<{ data: unknown } | void> | { data: unknown } | void;
   /** The turn's calls all ran; `content` is what the turn said (A3's readiness claims, WS8p). */
   endTurn?(ctx: PolicyContext, content: string): Promise<void> | void;
+  /** D8: whether a call only reads, so a run of them may dispatch together. Absent ⇒ sequential. */
+  isReadOnly?(ctx: PolicyContext, name: string): boolean;
+}
+
+/** A control signal a skipped call carries — `ask_human` parks the run on a person. */
+export interface GuardControl {
+  kind: "ask_human";
+  approvalId?: string;
+  question: string;
+  /** The answers the person is offered. */
+  options?: readonly string[];
 }
 
 /** What a guard decided about a call. */
 export interface GuardDecision {
-  /** Skip the call and push this result instead. */
-  skip?: { data: unknown; isError?: boolean };
+  /** Skip the call and push this result instead; a `control` parks the run (A3's pause). */
+  skip?: { data: unknown; isError?: boolean; control?: GuardControl };
 }
 
 /** WS2d — the run-end verify: the declared checks, or the branch's CI. */
@@ -146,26 +185,43 @@ export interface VerifyResult {
 export interface MemoryHook {
   /** The brief for this turn, or null when there is nothing worth saying. */
   brief(ctx: PolicyContext): Promise<string | null> | string | null;
+  /** Record one dispatched call into the run's memory (the brief and the map are built from it). */
+  observe?(ctx: PolicyContext, call: PolicyToolCall, result: unknown, isError?: boolean): Promise<void> | void;
   /** The consolidated memory the run produced, written back through `store.commitMemory`. */
   consolidate(ctx: PolicyContext): Promise<unknown> | unknown;
 }
 
-/** WS2e — the context pack's recall query. */
+/** WS2e — the context pack's recall. */
 export interface ContextHook {
-  /** The recall lines the run should carry, queried with the prompt and the focus terms. */
+  /**
+   * The recall lines the run should carry, queried with the prompt and the focus terms.
+   * Runs once, before turn 1; `ctx.ports.context.pack` answers the pack already built.
+   */
   recall(ctx: PolicyContext): Promise<readonly string[] | void> | readonly string[] | void;
 }
 
-/** WS2f — the tool catalog: one strategy, a capability gate, pinning and scope. */
+/** WS2f — the tool catalog: one strategy, a capability gate, pinning, scope and read coverage. */
 export interface ToolsHook {
   /** Narrow the schemas the surface can run to the ones this run may call. */
   select(ctx: PolicyContext, tools: readonly ToolSchema[]): Promise<readonly ToolSchema[] | void> | readonly ToolSchema[] | void;
+  /** Before a call dispatches: a read whose lines were already SERVED is answered without the disk. */
+  beforeDispatch?(ctx: PolicyContext, call: PolicyToolCall): { data: unknown } | void;
+  /** After a call returned: record what the model was served (or what a write invalidated). */
+  observe?(ctx: PolicyContext, call: PolicyToolCall, result: unknown, isError: boolean): void;
 }
 
 /** WS2g — the model policy: the role ladder, the cascade, the learned routing, the pins. */
 export interface ModelHook {
   /** The model this turn asks for, and the cap on its answer. */
   resolve(ctx: PolicyContext): Promise<ModelDecision | void> | ModelDecision | void;
+  /** Before turn 1: the BYO preflight, as the `model.preflight` event the run emits. */
+  preflight?(ctx: PolicyContext): Promise<Extract<RunEvent, { kind: "model.preflight" }>> | Extract<RunEvent, { kind: "model.preflight" }>;
+  /**
+   * After a turn: an `llm.model_downgrade` event when the turn was answered by another
+   * model than the run expected (a pin failed over, or an auto-routed turn landed on a
+   * degraded model). Nothing when the answer is the expected one.
+   */
+  downgrade?(ctx: PolicyContext, requested: string | undefined, served: string | undefined): Extract<RunEvent, { kind: "llm.model_downgrade" }> | void;
 }
 
 /** What the model policy decided. */

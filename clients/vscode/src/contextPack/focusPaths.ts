@@ -26,6 +26,12 @@ export function resolveUnderRoot(root: string, candidate: string): string | unde
   return abs;
 }
 
+/** True for a path written relative — an absolute path in a document is somebody else's
+ *  machine, so it names no area of this workspace. */
+export function isRelativePath(p: string): boolean {
+  return !/^[A-Za-z]:|^[\\/]/.test(p);
+}
+
 /** The workspace-relative, forward-slash form a pack and a code map speak. */
 export function workspaceRelative(root: string, abs: string): string {
   return path.relative(path.resolve(root), abs).split(path.sep).join("/");

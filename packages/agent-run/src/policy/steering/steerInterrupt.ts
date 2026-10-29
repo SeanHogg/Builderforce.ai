@@ -1,11 +1,12 @@
 /**
  * The steer that INTERRUPTS the step in flight (PRD 35 E10, §6.3).
  *
- * Ported from `brain-embedded/src/runStore/steerInterrupt.ts` (WS2c, PRD 35 §4 row 2c),
- * with the run-keyed registry (`runSteering.ts`) inlined as the {@link SteerRegistry}
- * the composition owns per run. The interrupt source is a PORT (`RunPorts.steering`)
- * whose drain carries `interrupt: true` — this module turns that into a step signal
- * that aborts the foreground command or wait, plus the results the model reads.
+ * Ported from `brain-embedded/src/runStore/steerInterrupt.ts` (WS2c, PRD 35 §4 row 2c)
+ * with the source's signatures: {@link runToolInterruptibly} and {@link skipOnSteer} are
+ * keyed by run over the run-keyed queue (`runSteering.ts`). The agent's own dispatch
+ * watches its `SteeringSource` port instead, through the SAME rule
+ * ({@link runToolWithWatch} / {@link steerSkip} over an {@link InterruptWatch}) — one
+ * implementation, two sources of "an interrupting message arrived".
  *
  * A message typed mid-run used to wait for the running step to end — and a 5–10 minute
  * `run_command` kept "write the update now" away from the model that long. Now:
@@ -23,7 +24,9 @@
  * and Node.
  */
 
-import type { PolicyContext } from "../hooks.js";
+import type { AfterDispatchDecision, LoopHooks } from "@builderforce/agent-loop";
+import type { RunMessage } from "../../contract.js";
+import { hasRunInterrupt, onRunInterrupt } from "./runSteering.js";
 
 /** One steered message: the text the user typed, plus the attachments it carried. */
 export interface SteerMessage {
@@ -34,18 +37,20 @@ export interface SteerMessage {
   interrupt?: boolean;
 }
 
-/**
- * The run's steer registry — the per-run queue the composition owns and drains
- * between steps. The port's `drain()` returns these; {@link runToolInterruptibly}
- * watches {@link SteerRegistry.onInterrupt} for an interrupting steer and
- * {@link hasInterrupt} short-circuits a call that would start after one arrived.
- */
-export interface SteerRegistry {
+/** Where "an interrupting message arrived" is watched: the run-keyed queue, or a port. */
+export interface InterruptWatch {
   /** True when an interrupting steer is waiting for this run. */
   hasInterrupt(): boolean;
   /** Watch for an interrupting steer; returns the unsubscribe. */
-  onInterrupt(runKey: number, listener: () => void): () => void;
+  onInterrupt(listener: () => void): () => void;
 }
+
+/** The run-keyed queue's watch (`runSteering.ts`). */
+export function runInterruptWatch(runKey: number): InterruptWatch {
+  return { hasInterrupt: () => hasRunInterrupt(runKey), onInterrupt: (listener) => onRunInterrupt(runKey, listener) };
+}
+
+type RunTool = (name: string, args: unknown, signal?: AbortSignal) => Promise<unknown>;
 
 /** What the model reads on the command a steer interrupted. */
 export const INTERRUPTED_BY_STEER =
@@ -100,24 +105,23 @@ function cameBackAborted(out: unknown): boolean {
  * Run one call; a foreground command gets a step signal that the run's Stop and an
  * interrupting steer both abort. Any other call is made exactly as before.
  */
-export async function runToolInterruptibly(
-  runTool: (name: string, args: unknown, signal?: AbortSignal) => Promise<unknown>,
-  registry: SteerRegistry,
-  runKey: number,
+export async function runToolWithWatch(
+  runTool: RunTool,
+  watch: InterruptWatch,
   runSignal: AbortSignal | undefined,
   name: string,
   args: unknown,
 ): Promise<unknown> {
   if (!isInterruptibleCall(name, args)) return runTool(name, args);
   // The person's message is already waiting: the command it would interrupt never starts.
-  if (registry.hasInterrupt()) return interruptedResult(undefined);
+  if (watch.hasInterrupt()) return interruptedResult(undefined);
   const wait = isWaitCall(name, argsOf(args));
   const step = new AbortController();
   let interrupted = false;
   const onStop = (): void => step.abort();
   if (runSignal?.aborted) step.abort();
   runSignal?.addEventListener("abort", onStop, { once: true });
-  const off = registry.onInterrupt(runKey, () => {
+  const off = watch.onInterrupt(() => {
     interrupted = true;
     step.abort();
   });
@@ -134,16 +138,28 @@ export async function runToolInterruptibly(
   }
 }
 
-/**
- * Once an interrupting message is waiting, the turn's remaining calls are not run —
- * each gets a "skipped" row — and the next model call hears it.
- */
-export function skipRemainingOnSteer(
-  registry: SteerRegistry,
-  runKey: number,
-): { data: { ok: false; skipped: true; error: string }; isError: false } | undefined {
-  if (!registry.hasInterrupt()) return undefined;
-  return { data: { ok: false, skipped: true, error: SKIPPED_BY_STEER }, isError: false };
+/** {@link runToolWithWatch} over the run-keyed queue — the source's signature. */
+export function runToolInterruptibly(runTool: RunTool, runKey: number, runSignal: AbortSignal | undefined, name: string, args: unknown): Promise<unknown> {
+  return runToolWithWatch(runTool, runInterruptWatch(runKey), runSignal, name, args);
+}
+
+/** The skip a waiting interrupt puts on the turn's remaining calls, or nothing. */
+export function steerSkip(watch: InterruptWatch): AfterDispatchDecision | undefined {
+  if (!watch.hasInterrupt()) return undefined;
+  return { skipRemaining: { data: { ok: false, skipped: true, error: SKIPPED_BY_STEER }, isError: false } };
+}
+
+type AfterDispatch<M> = NonNullable<LoopHooks<M>["afterDispatch"]>;
+
+/** Wrap `afterDispatch`: once an interrupting message is waiting, the turn's remaining
+ *  calls are not run (each gets a "skipped" row) and the next model call hears it. */
+export function skipOnSteer<M = RunMessage>(runKey: number, inner: AfterDispatch<M>): AfterDispatch<M> {
+  return async (call, result, row, ctx) => {
+    const post = (await inner(call, result, row, ctx)) as AfterDispatchDecision | undefined;
+    if (post?.skipRemaining) return post;
+    const skip = steerSkip(runInterruptWatch(runKey));
+    return skip ? { ...(post ?? {}), ...skip } : post;
+  };
 }
 
 /** The acknowledgement the trace records for a drained steer. */

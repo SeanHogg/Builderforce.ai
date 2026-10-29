@@ -16,12 +16,17 @@
  *   • `toolScope: 'chat-reply'` data (`toolset.ts` — `cloudAgentToolset.ts` `CHAT_SCOPED_AGENT_TOOLS`);
  *   • the on-prem policy-gate evaluation (`gates.ts` — `policy-gate-seam.ts` + the SDK
  *     `allowedToolsAfterGates` allowlist shape);
- *   • the window-sized result cap (`truncation.ts` — on-prem `tool-result-truncation.ts`,
- *     reusing `@builderforce/tool-output-policy` for the budget and the cut).
+ *   • the window-sized result cap (`caps.ts` `resultCapFor` / `capToolResult` —
+ *     `tool-output-policy`'s `windowedCap` sized by `ModelTransport.window()`, applied to
+ *     every dispatched result; `truncation.ts` — on-prem `tool-result-truncation.ts`,
+ *     reusing the same package for the budget and the cut);
+ *   • read coverage (`readCoverage.ts` — `@builderforce/run-guards`' `ReadCoverage`,
+ *     WS8a, bound to the agent's vocabulary over `RunState.reads.served`): the hook's
+ *     `beforeDispatch` answers a read already served, `observe` records what was served.
  *
- * Deferred (named in the WS2f report, not ported now):
- *   • read coverage binding — after WS8a;
- *   • default repo — after WS8b;
+ * Not in this module:
+ *   • default repo — resolved by the adapter with agent-tools' `resolveDefaultRepo` (WS8b)
+ *     into `RunTask.workspace.defaultRepo`; git tools and the shell read it there;
  *   • the on-prem `bash-tools.exec-runtime.ts` background exec + `process` poll (node-only,
  *     belongs to the on-prem adapter WS5, not this worker-safe module);
  *   • the canvas tool port (no standalone canvas source exists to port verbatim today).
@@ -37,7 +42,7 @@ import type { PolicyContext, ToolsHook } from "../hooks.js";
 import { selectCatalog } from "./catalog.js";
 import { selectToolsForTurn } from "./selectTools.js";
 import { isChatReplyScope, CHAT_REPLY_SCOPED_TOOLS } from "./toolset.js";
-import { windowedCap, toolOutputCap } from "./caps.js";
+import { coveredReadAnswer, recordServedRead } from "./readCoverage.js";
 
 /** The tools hook, as ported. `select` narrows the surface's schemas to what this run may call. */
 export const toolsHook: ToolsHook = {
@@ -57,32 +62,35 @@ export const toolsHook: ToolsHook = {
     // The ONE catalog strategy: role core set + tool_search + find_symbol, with the
     // pinned, required and prompt-named tools kept. The lexical selector then trims an
     // oversized catalog to the turn's fixed set (stable advertised bytes).
-    const catalog = selectCatalog(tools, policy.role, ctx.state.reads ? catalogCaps(ctx) : new Set(), {
-      pinned: pinnedNames(ctx),
+    const pinned = pinnedNames(ctx);
+    const catalog = selectCatalog(tools, policy.role, catalogCaps(ctx), {
+      pinned,
       prompt: task.prompt,
     });
     const selected = selectToolsForTurn(catalog, {
       query: task.prompt,
-      pinned: pinnedNames(ctx),
+      pinned,
     });
     return selected.tools;
   },
+  beforeDispatch: coveredReadAnswer,
+  observe: recordServedRead,
 };
 
-// The capability set is the surface's to report; the tools policy only reasons about what
-// the catalog already gated. Until the surface threads capabilities through the context,
-// the catalog strategy treats the full catalog as capability-backed (find_symbol is added
-// by the caller when it knows `repo.symbols` exists). This indirection exists so WS3 can
-// supply `repo.symbols` without touching this module.
-function catalogCaps(_ctx: PolicyContext): ReadonlySet<Capability> {
-  return new Set<Capability>();
+// The capability set is the surface's to report (`CapabilityProvider.capabilities`): the
+// catalog adds `find_symbol` wherever `repo.symbols` backs it, cloud included.
+function catalogCaps(ctx: PolicyContext): ReadonlySet<Capability> {
+  return ctx.ports.capabilities?.capabilities ?? new Set<Capability>();
 }
 
-// Pinned tools are the ones the run already called — the read-coverage state records
-// served windows, not calls, so the caller (runAgent composition) passes the pinned set
-// through `ctx.state.reads` extensions when WS8a lands. Today: nothing pinned yet.
-function pinnedNames(_ctx: PolicyContext): readonly string[] {
-  return [];
+// Pinned tools are the ones the run already called: a tool the model used stays
+// advertised, so the turn's set never drops what the run is mid-way through using.
+function pinnedNames(ctx: PolicyContext): readonly string[] {
+  const names = new Set<string>();
+  for (const message of ctx.messages) {
+    for (const call of message.toolCalls ?? []) if (call.name) names.add(call.name);
+  }
+  return [...names];
 }
 
 /** Re-exports so the module's tests (brought along from the sources) import one home. */
@@ -95,7 +103,8 @@ export {
 export { selectToolsForTurn, PINNED_OVERFLOW, DEFAULT_TOOL_LIMIT } from "./selectTools.js";
 export { runToolSearch, TOOL_SEARCH_MAX, promptNamedTools } from "./searchHelpers.js";
 export { CHAT_REPLY_SCOPED_TOOLS, isChatReplyScope, CHAT_REPLY_TOOL_SCOPE } from "./toolset.js";
-export { windowedCap, toolOutputCap } from "./caps.js";
+export { windowedCap, toolOutputCap, resultCapFor, capToolResult } from "./caps.js";
+export { AGENT_READ_TRAITS, coveredReadAnswer, recordServedRead } from "./readCoverage.js";
 export { evaluatePolicyGateSeam, canUseToolDecision, policyRefusalMessage } from "./gates.js";
 export {
   truncateToolResultText,

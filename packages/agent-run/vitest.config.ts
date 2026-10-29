@@ -16,25 +16,28 @@ import { sourcePackageAliases } from "../../scripts/sourcePackages.mjs";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(root, "..", "..");
-// `@builderforce/agent-tools` (source-aliased above) re-exports its knowledge modules,
-// which import `@seanhogg/builderforce-memory/working`. That package is built
-// (`exports` → `dist/`), not source-only, so it is not in `sourcePackageAliases`, and a
-// checkout without its node_modules cannot resolve it. Its `working/` dist is pure (no
-// `node:*`), so alias the subpath to the sibling memory repo's built entry. That repo
-// sits beside Builderforce.ai, at a depth that depends on the checkout (the main tree,
-// or a worktree under `.builderforce/worktrees/`), so it is found walking up.
-const WORKING_ENTRY = path.join("builderforce-memory", "packages", "memory", "dist", "working", "index.js");
-function siblingWorkingEntry(from: string): string {
+// `@seanhogg/builderforce-memory` is a BUILT package (`exports` → `dist/`), not
+// source-only, so it is not in `sourcePackageAliases`. This package imports its pure
+// `/handoff` subpath (the packer the compaction policy binds), and `@builderforce/
+// agent-tools` (source-aliased above) imports its `/working` subpath. A checkout without
+// those packages' node_modules cannot resolve either, and both subpaths are pure (no
+// `node:*`), so each is aliased to the sibling memory repo's built entry when that repo
+// is present. It sits beside Builderforce.ai, at a depth that depends on the checkout
+// (the main tree, or a worktree under `.builderforce/worktrees/`), so it is found
+// walking up. No sibling ⇒ no alias, and the installed dependency resolves it.
+const MEMORY_SUBPATHS = ["working", "handoff"] as const;
+function siblingMemoryEntry(from: string, subpath: string): string | null {
+  const entry = path.join("builderforce-memory", "packages", "memory", "dist", subpath, "index.js");
   for (let dir = from; ; dir = path.dirname(dir)) {
-    const candidate = path.join(dir, WORKING_ENTRY);
+    const candidate = path.join(dir, entry);
     if (existsSync(candidate)) return candidate;
-    if (path.dirname(dir) === dir) return path.join(from, "..", WORKING_ENTRY);
+    if (path.dirname(dir) === dir) return null;
   }
 }
-const workingAlias = {
-  find: /^@seanhogg\/builderforce-memory\/working$/,
-  replacement: siblingWorkingEntry(repoRoot),
-};
+const memoryAliases = MEMORY_SUBPATHS.flatMap((subpath) => {
+  const replacement = siblingMemoryEntry(repoRoot, subpath);
+  return replacement ? [{ find: new RegExp(`^@seanhogg/builderforce-memory/${subpath}$`), replacement }] : [];
+});
 
 export default defineConfig({
   test: {
@@ -42,6 +45,6 @@ export default defineConfig({
     testTimeout: 10_000,
   },
   resolve: {
-    alias: [...sourcePackageAliases(repoRoot), workingAlias],
+    alias: [...sourcePackageAliases(repoRoot), ...memoryAliases],
   },
 });

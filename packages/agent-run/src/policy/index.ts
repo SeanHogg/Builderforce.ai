@@ -24,6 +24,10 @@
  * As of the WS2 workstream (all twelve landed), each hook is a real module, not a
  * no-op. The doc above is kept because it records the ownership contract WS2 ran
  * under — future workstreams keep replacing ONE folder and never this file.
+ *
+ * Every hook method a module owns is implemented IN that module — the finish module's
+ * prose `settleBlock`, the sub-agents module's `backstop` and `nudge` — so this file
+ * composes and never supplies a rule of its own.
  */
 
 import type {

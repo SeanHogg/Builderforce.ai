@@ -48,6 +48,7 @@ import {
   type TurnRequest,
 } from "@builderforce/run-policy";
 
+import { isModelRole } from "@builderforce/agent-tools";
 import type { ModelHook } from "../hooks.js";
 
 export type { RunPolicyEvent, RunPolicyState, StallStep, TurnRequest };
@@ -84,21 +85,7 @@ export interface PolicyTurnRequest extends TurnRequest {
 
 const RUN_PHASES: ReadonlySet<string> = new Set<RunPhase>(["plan", "code", "verify"]);
 
-/**
- * The model-role vocabulary (`agent-tools`' `ModelRole`), narrowed to what the phase
- * rule needs. Defined locally — NOT imported from the `@builderforce/agent-tools`
- * barrel — because that barrel transitively pulls `@seanhogg/builderforce-memory`,
- * which does not resolve inside this package's test runtime. The closed set and the
- * fallback are identical to `agent-tools`' `isModelRole` / `delegationRole`, so the
- * behaviour is a faithful port, not a divergence.
- */
-const MODEL_ROLES: ReadonlySet<string> = new Set(["plan", "code", "verify", "explore", "chat", "utility"]);
-
 type ModelRole = TurnRequest["role"];
-
-function isModelRole(value: string): value is ModelRole {
-  return MODEL_ROLES.has(value);
-}
 
 /**
  * The phase rule: where a run starts, and whether its delegated role pins every turn.
@@ -110,7 +97,7 @@ function isModelRole(value: string): value is ModelRole {
 export function policyRole(delegatedRole: string | null | undefined): Pick<RunPolicyOptions, "startPhase" | "fixedRole"> {
   const role = typeof delegatedRole === "string" ? delegatedRole.trim() : "";
   if (RUN_PHASES.has(role)) return { startPhase: role as RunPhase };
-  if (isModelRole(role)) return { startPhase: "code", fixedRole: role };
+  if (isModelRole(role)) return { startPhase: "code", fixedRole: role as ModelRole };
   return { startPhase: "code" };
 }
 
@@ -307,100 +294,24 @@ export function stallStep(
   return { state: { ...state, policy }, step };
 }
 
-// ── The inference-mode rules (modelRouting.ts policy half) ──────────────────
+// ── The inference-mode rules and the BYO preflight (preflight.ts) ───────────
 
-/**
- * The inference mode (`RunPolicy.inference`), promised by every entry point:
- *   • `local-only` — the run never reaches the gateway, never owes an account; a turn
- *     nothing on this machine can serve fails, it does not fall back to the cloud.
- *   • `hybrid` — a turn this machine cannot serve alone is completed on the gateway
- *     after the connected accounts this surface calls itself; the fallback is never
- *     silent (the surface hears it and says so).
- *   • `specific` — the run asks for exactly the pinned model and nothing else; with
- *     nothing pinned it fails rather than quietly running whatever is to hand.
- *
- * `pick` is what the surface resolved the pin / default to (empty ⇒ auto-select);
- * `localServable` is whether the model port can serve this turn on the machine.
- */
-export function inferenceDecision(input: {
-  mode: "local-only" | "hybrid" | "specific";
-  pick?: string;
-  localServable?: boolean;
-}): { decision: "local" | "gateway" | "specific" | "no_local_model" | "no_specific_model" } {
-  const pick = input.pick?.trim() ?? "";
-  if (input.mode === "local-only") {
-    return input.localServable ? { decision: "local" } : { decision: "no_local_model" };
-  }
-  if (input.mode === "specific") {
-    return pick ? { decision: "specific" } : { decision: "no_specific_model" };
-  }
-  // Hybrid: the machine first when it can serve the pick, else the gateway. A pick this
-  // machine cannot serve is a gateway turn, not a refusal — the fallback is announced,
-  // never silent.
-  return input.localServable ? { decision: "local" } : { decision: "gateway" };
-}
-
-/** Local only refuses to dispatch to a runtime that leaves the machine (registry data). */
-export function localOnlyServable(onDevice: boolean): boolean {
-  return onDevice;
-}
-
-// ── The BYO preflight (tenantProviderKeyService.unresolvedReasons) ──────────
-
-/**
- * Why a configured BYO credential could not be used — the `unresolvedReasons` values
- * the key service reports. `expired` earns one refresh attempt; anything else is
- * owner-actionable and the run should say so BEFORE any work starts.
- */
-export type ByoUnresolvedReason =
-  | "expired"
-  | "revoked"
-  | "undecryptable"
-  | "unsupported-auth"
-  | "wrong-workspace"
-  | "not_connected";
-
-/** The unresolved reasons for the vendors the role ladder would use. */
-export type UnresolvedReasons = Readonly<Partial<Record<string, ByoUnresolvedReason>>>;
-
-/**
- * The preflight check the PRD names: an `expired` token gets one refresh attempt, and a
- * still-unresolved credential — or a plan phase landing on a Flash-class
- * (non-`agentic`) model — is a `model.preflight` notice the HumanChannel shows before
- * any work starts. `agentic` is whether the model the plan phase would land on is
- * agentic-tier. `byoModelSelected` says a BYO pool model is pinned (so an unresolved
- * BYO credential matters).
- */
-export function classifyPreflight(input: {
-  byoSelected: boolean;
-  unresolvedReasons: UnresolvedReasons;
-  /** Whether the model the plan phase would land on is agentic-tier (not Flash-class). */
-  planModelAgentic?: boolean;
-  /** The unresolved reason AFTER one refresh attempt on an `expired` credential. */
-  unresolvedAfterRefresh?: ByoUnresolvedReason | null;
-}): { notices: string[]; refreshExpired: boolean } {
-  const notices: string[] = [];
-  let refreshExpired = false;
-  if (input.byoSelected) {
-    for (const [provider, reason] of Object.entries(input.unresolvedReasons)) {
-      if (!reason) continue;
-      if (reason === "expired") {
-        // One refresh attempt; only a STILL-unresolved credential is a notice.
-        if (input.unresolvedAfterRefresh) {
-          notices.push(`${provider}: credential ${input.unresolvedAfterRefresh} — reconnect it in Settings ▸ Integrations.`);
-        } else {
-          refreshExpired = true;
-        }
-      } else {
-        notices.push(`${provider}: credential ${reason} — reconnect it in Settings ▸ Integrations.`);
-      }
-    }
-  }
-  if (input.planModelAgentic === false) {
-    notices.push("plan phase would land on a Flash-class model — routing around it for the run's quality.");
-  }
-  return { notices, refreshExpired };
-}
+export {
+  classifyPreflight,
+  inferenceDecision,
+  localOnlyServable,
+  modelDowngrade,
+  modelPreflightEvent,
+  planModelWarning,
+  preflightVerdict,
+  runModelPreflight,
+  type ByoUnresolvedReason,
+  type ModelDowngradeEvent,
+  type ModelPreflightEvent,
+  type PlanModelWarning,
+  type UnresolvedReasons,
+} from "./preflight.js";
+import { modelDowngrade, runModelPreflight } from "./preflight.js";
 
 // ── The hook (what runAgent drives) ─────────────────────────────────────────
 
@@ -419,6 +330,8 @@ export const modelHook: ModelHook = {
     if (!model && maxTokens === undefined) return undefined;
     return { ...(model ? { model } : {}), ...(maxTokens !== undefined ? { maxTokens } : {}) };
   },
+  preflight: runModelPreflight,
+  downgrade: modelDowngrade,
 };
 
 export default modelHook;

@@ -14,7 +14,7 @@ vi.mock("../bfApi", () => api);
 vi.mock("../errorReporter", () => ({ logLine: vi.fn() }));
 
 import { byoPreflight } from "./byoPreflight";
-import { preflightFallback } from "./byoPreflightVerdict";
+import { preflightFallback, unresolvedByoEntries } from "./byoPreflightVerdict";
 
 const secrets = {} as never;
 let nextWorkspace = 500;
@@ -51,5 +51,15 @@ describe("preflightFallback", () => {
   it("is the first ready account, or unknown when none is", () => {
     expect(preflightFallback([{ provider: "anthropic", status: "expired" }, { provider: "openai", status: "ready" }])).toBe("your connected openai account");
     expect(preflightFallback([{ provider: "anthropic", status: "expired" }])).toBeUndefined();
+  });
+});
+
+describe("unresolvedByoEntries", () => {
+  it("announces a configured credential the server could not resolve without a reason", () => {
+    expect(unresolvedByoEntries([{ provider: "anthropic", status: "unavailable" }, { provider: "openai", status: "ready" }])).toEqual(["anthropic:unavailable"]);
+  });
+
+  it("does not announce capacity, needs_attention or a missing account", () => {
+    expect(unresolvedByoEntries([{ provider: "a", status: "capacity" }, { provider: "b", status: "needs_attention" }, { provider: "c", status: "not_connected" }])).toEqual([]);
   });
 });

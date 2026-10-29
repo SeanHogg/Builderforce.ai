@@ -92,7 +92,8 @@ describe('read coverage records what the model was SERVED (PRD 35 E1)', () => {
       persistence,
       userTurn: 'update the PRD',
     });
-    // Lines 20–49 were printed by the shell: covered, not read again. 101+ were not.    expect(executed.filter((n) => n === 'read_file' || n === 'run_command')).toEqual(['run_command', 'read_file']);
+    // Lines 20–49 were printed by the shell: covered, not read again. 101+ were not.
+    expect(executed.filter((n) => n === 'read_file' || n === 'run_command')).toEqual(['run_command', 'read_file']);
   });
 
   it('replays a covered read at the REQUESTED offset once compaction dropped the covering read', async () => {

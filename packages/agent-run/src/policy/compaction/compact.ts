@@ -10,22 +10,26 @@
  * results are truncated in place only when packing alone cannot fit.
  *
  * What is intentionally NOT carried over, because it is the cloud service's wiring,
- * not the policy: the Worker `env` + tenant cost-lever reads (C9 `priceTierBoundary`
- * / C2 gating), the gateway summarizer (`buildGatewaySummarizer`, which is a port
- * consumer passes as `summarize`), the specialist eval-case capture, and the
- * `@builderforce/model-catalog` / `@builderforce/cost-levers` lookups. The budget
- * boundary itself IS carried over — `compactionTokenBudget` is the same
- * smallest-of(cost cap, window − reserve, tier boundary) rule the sources use.
+ * not the policy: the gateway summarizer (`buildGatewaySummarizer`, which a consumer
+ * passes as `summarize` — the hook binds the run's own `ModelTransport`), the
+ * specialist eval-case capture, and the API vendor registry's catalog window (the
+ * window here is `ModelTransport.window()`, passed as `contextWindow`). The budget rule
+ * IS carried — {@link compactionBudget} is the source's, C9 included: the long-context
+ * price-tier boundary (`@builderforce/model-catalog`) caps it while the lever is on
+ * (`@builderforce/cost-levers`), exactly as the source decides it.
  *
- * The packer is `packHandoff` from `./pack.js` (the pure
- * `@seanhogg/builderforce-memory/handoff` packer, ported so this module adds no
- * runtime dependency).
+ * The packer is `packHandoff` (`@seanhogg/builderforce-memory/handoff`, bound in
+ * `./pack.js`) and the budget is `handoffTokenBudget` (`@builderforce/run-policy`) —
+ * the same two pure functions the source imports, never a second copy of either.
  *
  * No `node:*` imports, no DOM: this file is compiled into the Worker, the browser
  * and Node.
  */
 
-import { packHandoff, tokensOf, type PackMessage } from './pack.js';
+import { DEFAULT_HANDOFF_RESERVE_TOKENS, handoffTokenBudget } from '@builderforce/run-policy';
+import { priceTierBoundary } from '@builderforce/model-catalog';
+import { isCostLeverOn } from '@builderforce/cost-levers';
+import { defaultEstimateTokens, packHandoff, tokensOf, type PackMessage } from './pack.js';
 
 /** One transcript row, in the OpenAI-style shape the packer speaks. */
 type Msg = Record<string, unknown>;
@@ -34,16 +38,23 @@ type Msg = Record<string, unknown>;
  * Compress a chunk of conversation text into a concise memory. Returns null to
  * signal "couldn't summarize" so the caller falls back to recall / elision.
  */
-export type CompactionSummarizer = (conversationText: string) => Promise<string | null>;
+export type CompactionSummarizer = (conversationText: string, ctx?: { tenantId?: string | number | null }) => Promise<string | null>;
 
 export interface CompactOptions {
   /** Compact only when the messages estimate exceeds this token budget — the cost cap. */
   maxTokens: number;
-  /** The model about to serve, when the caller knows it: its context window (less
-   *  `reserveOutputTokens`) caps the budget when smaller than `maxTokens`. */
+  /** The model about to serve, when the caller knows it: its long-context price tier
+   *  caps the budget while cost lever C9 is on for `env` / `tenantId`. */
+  targetModel?: string;
+  /** The serving model's context window (`ModelTransport.window()`): less
+   *  `reserveOutputTokens`, it caps the budget when smaller than `maxTokens`. */
   contextWindow?: number;
-  /** The serving model's lowest long-context price-tier boundary, passed ONLY when the
-   *  caller's cost lever C9 is on. Absent = no tier cap. */
+  /** The lever environment C9 is read from. Absent = the caller did not opt in: no tier cap. */
+  env?: unknown;
+  /** The tenant the run bills to — buckets a partial C9 rollout. */
+  tenantId?: string | number | null;
+  /** A price-tier boundary the caller already resolved (its C9 lever on). Used when
+   *  `targetModel` + `env` do not decide one. Absent = no tier cap. */
   priceTierBoundary?: number;
   /** Tokens held back for the reply when sizing to the window. */
   reserveOutputTokens?: number;
@@ -68,7 +79,7 @@ export interface CompactOptions {
  *  leaving enough recent context to keep working. */
 export const CLOUD_COMPACT_DEFAULTS: CompactOptions = {
   maxTokens: 40_000,
-  reserveOutputTokens: 4096,
+  reserveOutputTokens: DEFAULT_HANDOFF_RESERVE_TOKENS,
   timeoutMs: 30_000,
 };
 
@@ -85,8 +96,8 @@ export interface CompactResult {
   maskedObservations?: number;
 }
 
-/** THE estimator — gate, packer and reporting all count with it. */
-const estimateTokens = (text: string): number => Math.ceil(text.length / 4);
+/** THE estimator — gate, packer and reporting all count with it (the packer's own). */
+const estimateTokens = defaultEstimateTokens;
 
 /** Tokens the advertised tool schemas cost. */
 export function toolsTokensOf(tools: unknown): number {
@@ -201,22 +212,24 @@ function renderForSummary(middle: readonly Msg[]): string {
 
 /**
  * The token budget: the smallest of the cost cap, the serving model's window (less the
- * reply reserve) and — when the caller passes it (cost PRD C9) — its long-context
- * price-tier boundary. Never below 1. This is the shared hand-off rule every source
- * (`@builderforce/run-policy` `handoffTokenBudget`) implements.
+ * reply reserve) and — while cost lever C9 is on — its long-context price-tier
+ * boundary. The bound arithmetic is the shared hand-off rule (`@builderforce/run-policy`
+ * `handoffTokenBudget`); nothing to bound by ⇒ the cost cap. The source's
+ * `compactionBudget`, with the window taken from the run's transport.
  */
-export function compactionTokenBudget(opts: CompactOptions): number {
-  const reserve = Math.max(0, opts.reserveOutputTokens ?? 0);
-  const bounds: number[] = [];
-  if (opts.maxTokens && opts.maxTokens > 0) bounds.push(opts.maxTokens);
-  if (opts.contextWindow && opts.contextWindow > 0) bounds.push(opts.contextWindow - reserve);
-  if (opts.priceTierBoundary && opts.priceTierBoundary > 0) bounds.push(opts.priceTierBoundary);
-  if (bounds.length === 0) return 1;
-  return Math.max(1, Math.min(...bounds));
+export function compactionBudget(opts: CompactOptions): number {
+  const tierCap = opts.targetModel && opts.env !== undefined && isCostLeverOn(opts.env, 'c9_price_tier_budget', opts.tenantId);
+  const boundary = tierCap && opts.targetModel ? priceTierBoundary(opts.targetModel) : opts.priceTierBoundary;
+  return handoffTokenBudget({
+    costCapTokens: opts.maxTokens,
+    contextWindow: opts.contextWindow,
+    reserveOutputTokens: opts.reserveOutputTokens,
+    ...(boundary !== undefined ? { priceTierBoundary: boundary } : {}),
+  }) ?? opts.maxTokens;
 }
 
 /**
- * Compact `messages` to fit the budget ({@link compactionTokenBudget}), preserving the
+ * Compact `messages` to fit the budget ({@link compactionBudget}), preserving the
  * system prompt, the latest directive, the recent tail and tool-call pairing. Returns
  * the input unchanged (compacted: false) when already within budget.
  */
@@ -227,7 +240,7 @@ export async function compactMessages(
 ): Promise<CompactResult> {
   const toolsTokens = toolsTokensOf(opts.tools);
   const beforeTokens = messagesTokens(messages) + toolsTokens;
-  const budget = compactionTokenBudget(opts);
+  const budget = compactionBudget(opts);
   const untouched = (): CompactResult =>
     ({ messages: [...messages], compacted: false, summarized: false, beforeTokens, afterTokens: beforeTokens, droppedMessages: 0 });
   // C2: mask stale observations first; packing (and its LLM summary) is the fallback
@@ -257,7 +270,7 @@ export async function compactMessages(
     ...(summarize
       ? {
           summarize: async (dropped: readonly PackMessage[]) => {
-            const summary = await summarize(renderForSummary(dropped as unknown as Msg[])).catch(() => null);
+            const summary = await summarize(renderForSummary(dropped as unknown as Msg[]), { tenantId: opts.tenantId }).catch(() => null);
             return summary && summary.trim()
               ? `[Compressed memory of ${dropped.length} earlier step(s) — the task and recent steps are retained verbatim]\n${summary.trim()}`
               : '';

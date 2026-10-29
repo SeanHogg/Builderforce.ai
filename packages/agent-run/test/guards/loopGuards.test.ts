@@ -190,3 +190,22 @@ describe("RunGuards — the sandbox's own checks (D1 verifier, D7 steer)", () =>
     expect(checks).not.toHaveBeenCalled();
   });
 });
+
+// PRD 35 WS8p: a turn that says the run has what it needs, then only reads, is an unkept
+// claim — the turn's text reaches A3 (`noteTurnText`), so the second one trips here too.
+describe("RunGuards — A3 readiness claims", () => {
+  async function claimTurn(guards: RunGuards, ports: GuardPorts, step: number) {
+    guards.noteTurnText("Now I have everything I need.");
+    const read = call(`r${step}`, "read_file", { path: `docs/file-${step}.md` });
+    guards.observe(read, ok("read_file"));
+    await guards.endTurn(step, ports);
+  }
+
+  it("steers on the second claim that only read, though each read was a new file", async () => {
+    const { guards, ports } = harness({ a3_progress_detector: true, d1_verifier_cascade: false });
+    await claimTurn(guards, ports, 1);
+    expect(guards.tailSections().join("\n")).not.toContain("you have said");
+    await claimTurn(guards, ports, 2);
+    expect(guards.tailSections().join("\n")).toContain("you have said 2 times that you have what you need");
+  });
+});

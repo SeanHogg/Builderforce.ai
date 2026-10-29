@@ -25,6 +25,7 @@ import {
   runInRepoScope,
   safeGitArg,
   safeRepoArg,
+  shellRunWithStop,
   type GitShellCtx,
 } from "./git-repo-scope.js";
 
@@ -165,7 +166,7 @@ async function runGitTool(action: GitAction, opts: { path?: string; baseBranch?:
   // the path names, then the run's default — and if none is a repository, NAME the
   // candidates (never send the model to `list_files` for a list we can produce here).
   const ran = await runInRepoScope(ctx, opts, (repo, path) =>
-    ctx.caps.shell!.run(buildGitCommand(action, { ...opts, repo, path, ...(trackedBranch ? { trackedBranch } : {}) })));
+    shellRunWithStop(ctx, buildGitCommand(action, { ...opts, repo, path, ...(trackedBranch ? { trackedBranch } : {}) })));
   if (!ran) return notARepoWithCandidates(action, ctx);
   const result = gitToolResult(action, ran.r);
   // Say WHERE it ran whenever that was not the obvious place, so a later command in
@@ -470,7 +471,7 @@ async function runPublishTool(
 ): Promise<ToolResult> {
   // A builder, when the script's own text depends on the repo (commit's path candidates).
   const build = (scope: string | undefined): string => (typeof command === "string" ? command : command(scope));
-  const ran = await runInRepoScope(ctx, repo ? { repo } : {}, (scope) => ctx.caps.shell!.run(repoScopedScript(build(scope), scope)));
+  const ran = await runInRepoScope(ctx, repo ? { repo } : {}, (scope) => shellRunWithStop(ctx, repoScopedScript(build(scope), scope)));
   if (!ran) return notARepoWithCandidates(action, ctx);
   const result = publishToolResult(action, ran.r);
   if (ran.repo && (result.data as { ok?: boolean }).ok) (result.data as Record<string, unknown>).repo = ran.repo;

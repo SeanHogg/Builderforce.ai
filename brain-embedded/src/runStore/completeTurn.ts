@@ -271,9 +271,10 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // let this chat's tool call answer with the model that served a different one.
     setLastResolvedModel(chatId, result.resolvedModel);
     // A pinned model answered by another, or an auto-routed turn the tenant's own
-    // account could not serve (PRD 35 E7) — see `modelDowngrade.ts`.
+    // account could not serve, or an auto-routed PLAN turn on a Flash-class model
+    // (PRD 35 E7) — see `modelDowngrade.ts`.
     const downgrade = modelDowngradeEvent({
-      requested, resolved, step: iter, ts: nowIso(), events: runTrace(c),
+      requested, resolved, step: iter, ts: nowIso(), events: runTrace(c), planPhase: !c.codeChanged,
       ...(result.byoUnresolved ? { byoUnresolved: result.byoUnresolved } : {}),
     });
     if (downgrade) pushTrace(c, downgrade);

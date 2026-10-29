@@ -116,7 +116,25 @@ export function notARepoResult(action: string, candidates: string[] = []): ToolR
   };
 }
 
-export type GitShellCtx = { caps: { shell?: { run(c: string): Promise<{ ok: boolean; stdout?: string; exitCode?: number; error?: string }>; trackedBranch?: string; defaultRepo?: string } } };
+export type GitShellCtx = {
+  caps: { shell?: { run(c: string, opts?: { signal?: AbortSignal }): Promise<{ ok: boolean; stdout?: string; exitCode?: number; error?: string }>; trackedBranch?: string; defaultRepo?: string } };
+  /** The call's Stop (`ToolContext.signal`): a git command in flight is killed with the run. */
+  signal?: AbortSignal;
+};
+
+/**
+ * Run one command through the call's shell WITH the call's Stop (`ToolContext.signal`,
+ * PRD 35 E10): a hung `git push`, an analyzer or a build dies with the run instead of
+ * holding it to the shell's timeout. No signal ⇒ the shell is called exactly as before.
+ * The one way a tool runs a shell command.
+ */
+export function shellRunWithStop<R>(
+  ctx: { caps: { shell?: { run(c: string, opts?: { signal?: AbortSignal }): Promise<R> } }; signal?: AbortSignal },
+  command: string,
+): Promise<R> {
+  const shell = ctx.caps.shell!;
+  return ctx.signal ? shell.run(command, { signal: ctx.signal }) : shell.run(command);
+}
 
 /** The run's resolved default checkout (`ShellCapability.defaultRepo`), validated — the
  *  retry a not-a-repo result takes before it falls back to naming the candidates. */
@@ -132,7 +150,7 @@ function pathInRepo(path: string | undefined, repo: string): string | undefined 
 }
 
 export async function notARepoWithCandidates(action: string, ctx: GitShellCtx): Promise<ToolResult> {
-  const listed = await ctx.caps.shell!.run(buildListCheckoutsCommand());
+  const listed = await shellRunWithStop(ctx, buildListCheckoutsCommand());
   return notARepoResult(action, parseCheckoutList(listed.stdout));
 }
 

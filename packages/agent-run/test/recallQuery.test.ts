@@ -16,9 +16,7 @@ describe("recallQuery", () => {
   });
 
   it("appends the hint, whitespace collapsed", () => {
-    expect(recallQuery("review the PRD ", "docs/specs/35.md\n  1 The rule  2 Why")).toBe(
-      "review the PRD\n\ndocs/specs/35.md 1 The rule 2 Why",
-    );
+    expect(recallQuery("review the PRD ", "docs/specs/35.md\n  1 The rule  2 Why")).toBe("review the PRD\n\ndocs/specs/35.md 1 The rule 2 Why");
   });
 
   it("caps the hint and never builds a query from the hint alone", () => {

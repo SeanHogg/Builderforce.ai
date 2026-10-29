@@ -1,5 +1,6 @@
 import type { PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
 import { defineTool, type ToolDefinition } from './tool.js';
+import { shellRunWithStop } from './git-repo-scope.js';
 import { normalizeAnalysis, type CodeAnalysisSnapshot } from './codeAnalysis.js';
 import { toDependencyCruiserRules } from './knowledge/dependencyCruiserRules.js';
 
@@ -63,18 +64,18 @@ export function createAnalyzeCodebaseTool(options: AnalyzeCodebaseOptions = {}):
       for (const analyzer of ANALYZERS) {
         try {
           if (analyzer.name === 'dependency-cruiser') {
-            const config = await ctx.caps.shell!.run(`node -e "const f=require('fs');f.mkdirSync('${outputDir}',{recursive:true});f.writeFileSync('${outputDir}/dependencies.json',Buffer.from('${configBase64}','base64'))"`);
+            const config = await shellRunWithStop(ctx, `node -e "const f=require('fs');f.mkdirSync('${outputDir}',{recursive:true});f.writeFileSync('${outputDir}/dependencies.json',Buffer.from('${configBase64}','base64'))"`);
             if (!config.ok) throw new Error('Could not create dependency analysis configuration');
           }
           // Unique output directories prevent stale artifacts and cross-run interference.
           if (analyzer.name === 'jscpd') {
-            const cleanup = await ctx.caps.shell!.run(`node -e "require('fs').mkdirSync('${outputDir}',{recursive:true})"`);
+            const cleanup = await shellRunWithStop(ctx, `node -e "require('fs').mkdirSync('${outputDir}',{recursive:true})"`);
             if (!cleanup.ok) throw new Error('Could not clear the previous duplication artifact');
           }
           const command = analyzer.name === 'knip'
             ? (scope === '.' ? analyzer.command : analyzer.command.replace('knip --reporter', `cd ${scope} && knip --reporter`))
             : analyzer.command.replace(/ \."$/, ` ${scope}"`);
-          const result = await ctx.caps.shell!.run(command.replaceAll('.builderforce/code-analysis', outputDir));
+          const result = await shellRunWithStop(ctx, command.replaceAll('.builderforce/code-analysis', outputDir));
           const artifact = analyzer.name === 'jscpd' ? await ctx.caps.repoRead!.readFile(`${outputDir}/jscpd-report.json`) : undefined;
           const text = artifact ? artifact.content : result.stdout;
           if (!text || artifact?.truncated) throw new Error('Analyzer output is empty or truncated; scan a smaller project');
@@ -89,7 +90,7 @@ export function createAnalyzeCodebaseTool(options: AnalyzeCodebaseOptions = {}):
         }
       }
       const git = async (command: string) => {
-        try { const r = await ctx.caps.shell!.run(command); return r.exitCode === 0 ? (r.stdout ?? '').trim() : null; } catch { return null; }
+        try { const r = await shellRunWithStop(ctx, command); return r.exitCode === 0 ? (r.stdout ?? '').trim() : null; } catch { return null; }
       };
       const commit = await git('git rev-parse HEAD');
       const branch = await git('git branch --show-current');

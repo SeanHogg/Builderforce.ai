@@ -13,7 +13,7 @@
  */
 
 import { CONSOLIDATED_KEY_PREFIX, MAX_RECALLED_MAPS, areaOfPath, consolidatedFactsFor } from "@seanhogg/builderforce-memory/working";
-import { extractFocusPaths } from "./focusPaths";
+import { extractFocusPaths, isRelativePath } from "./focusPaths";
 
 export const CODEMAP_PREFIX = CONSOLIDATED_KEY_PREFIX;
 /** Facts a pack carries. */
@@ -29,7 +29,7 @@ const MAX_AREAS = 24;
 export function areasNamed(focusPaths: readonly string[], focusContents: readonly string[]): string[] {
   const out: string[] = [];
   const add = (p: string): void => {
-    if (/^[A-Za-z]:|^[\\/]/.test(p)) return;
+    if (!isRelativePath(p)) return;
     const d = areaOfPath(p);
     if (d && !out.includes(d) && out.length < MAX_AREAS) out.push(d);
   };

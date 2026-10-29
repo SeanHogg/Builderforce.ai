@@ -3,10 +3,10 @@
  * focus files' terms, never the bare sentence.
  *
  * Owned by WS2e. This module is the context policy the composition in `policy/index.ts`
- * already calls. It supplies the recall LINES the run should carry — the prompt plus
- * the focus-file terms, as the query the surface's memory recall runs on. The
- * `ContextPack` itself is built by the adapter's `ContextSource.port` (§6.10); this
- * hook names WHAT to recall, the port runs the search and owns the pack.
+ * already calls. It supplies the recall LINES the run should carry — the entries the
+ * surface's memory capability returns for the prompt plus the focus-file terms. The
+ * `ContextPack` itself is built by the adapter's `ContextSource` (§6.10); this hook
+ * builds the QUERY, the memory capability runs the search.
  *
  * It ports `brain-embedded/src/runStore/runMemory.ts` `recallQuery` (PRD 35 E2) —
  * today's recall searched with the raw user sentence alone, so a run grounding on
@@ -21,21 +21,34 @@
 import type { ContextHook, PolicyContext } from "../hooks.js";
 import { focusHint, recallQuery } from "./recall.js";
 
+/** The most recalled entries one run carries into its turn-context block. */
+export const RECALL_LIMIT = 8;
+
 /** The context hook, as it stands. */
 export const contextHook: ContextHook = {
   /**
-   * The recall lines the run should carry, queried with the prompt and the focus terms.
-   * Returns the query the surface's memory recall runs on, or nothing when there is no
-   * request to ground the recall on (a hint alone is not a question).
+   * The recall lines the run should carry: the entries the surface's memory
+   * (`CapabilityProvider.memory.recall`) returns for the prompt plus the focus terms, as
+   * `key: content` lines. Nothing when the surface has no memory, the recall fails, or
+   * there is no request to ground it on (a hint alone is not a question) — recall is
+   * best-effort and never fails a run.
    */
   async recall(ctx: PolicyContext) {
-    let pack;
+    const memory = ctx.ports.capabilities?.memory;
+    if (!memory || !ctx.task.prompt.trim()) return undefined;
+    let hint = "";
     try {
-      pack = await ctx.ports.context.pack(ctx.task);
+      hint = focusHint(await ctx.ports.context.pack(ctx.task));
     } catch {
-      return undefined; // best-effort: a pack that cannot build carries no recall
+      hint = ""; // a pack that cannot build still recalls on the request alone
     }
-    const query = recallQuery(ctx.task.prompt, focusHint(pack));
-    return query ? [query] : undefined;
+    const query = recallQuery(ctx.task.prompt, hint);
+    try {
+      const recalled = await memory.recall(query, RECALL_LIMIT);
+      const lines = (recalled.ok ? recalled.entries ?? [] : []).map((entry) => `${entry.key}: ${entry.content}`);
+      return lines.length > 0 ? lines : undefined;
+    } catch {
+      return undefined;
+    }
   },
 };

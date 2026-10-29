@@ -5,13 +5,15 @@ import {
   leftDelegationUndone,
   undelegatedRequestNudge,
 } from "../../src/policy/subagents/index.js";
+import type { DelegationTraceEvent as BrainTraceEvent } from "../../src/policy/subagents/index.js";
 
 /**
- * Ported from `brain-embedded/src/delegationRequest.test.ts`, retargeting the trace
- * event to the policy's own minimal shape (a label + a category).
+ * Ported from `brain-embedded/src/delegationRequest.test.ts`, imports retargeted only:
+ * the trace event is the policy's own `DelegationTraceEvent` (a label, a category and
+ * the optional timestamp the Brain's event carries).
  */
 
-const tool = (label: string) => ({ category: "tool", label });
+const tool = (label: string): BrainTraceEvent => ({ ts: '2026-10-11T00:00:00.000Z', category: 'tool', label });
 const EDITOR = ["read_file", "spawn_agent", "spawn_agents"];
 
 describe("asksForSubagents", () => {

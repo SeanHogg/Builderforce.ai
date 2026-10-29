@@ -15,12 +15,11 @@
  * (`@builderforce/run-policy`), `RunKnowledgeState` and `PolicyGate`
  * (`@builderforce/agent-tools`), `CostLeverId` (`@builderforce/cost-levers`).
  *
- * The two API-owned state shapes the PRD names — the guard state and the finish-gate
- * counters — are mirrored here field for field. `api/` is a project, not a package
- * under `packages/`, so importing it would drag Worker- and Node-only code into a
- * package that has to stay Worker-, browser- and Node-safe. WS2d ports the API modules
- * into `policy/guards` and `policy/finish` and deletes the API copies, at which point
- * these mirrors ARE the API's types rather than a copy of them.
+ * The finish-gate counters are owned by `policy/finish` (WS2d's port of
+ * `cloudAgent/finishGates.ts`) and re-exported here, never restated. The guard state
+ * is named here — WS2d's `policy/guards` snapshots into it — because it gathers several
+ * owners' shapes (`@builderforce/run-guards`, `@builderforce/run-policy`) into the one
+ * slice a step boundary carries.
  */
 
 import type {
@@ -36,11 +35,13 @@ import type {
   ProgressDetectorState,
   ReadsWithoutSpawnState,
 } from "@builderforce/run-guards";
+import type { FinishGateState } from "./policy/finish/gates.js";
 
 // The reused types, re-exported so one import gives a consumer the whole contract.
 export type { CapabilityProvider, PolicyGate, RunKnowledgeState } from "@builderforce/agent-tools";
 export type { CostLeverId } from "@builderforce/cost-levers";
 export type { RunPolicyState } from "@builderforce/run-policy";
+export type { FinishGateState } from "./policy/finish/gates.js";
 
 // ── The task ──────────────────────────────────────────────────────────────────
 
@@ -137,6 +138,22 @@ export interface ModelTransport {
    * its result cap from it (§6.10); `undefined` ⇒ the fixed caps of today.
    */
   window?(model: string): number | undefined;
+  /**
+   * The BYO preflight (§6.10): before turn 1, which connected accounts the run's model
+   * would need cannot be used. The transport refreshes an `expired` token once itself and
+   * reports only what is STILL unresolved. Absent ⇒ the preflight reads `ok`.
+   */
+  preflight?(model: string | undefined): Promise<ModelPreflightResult | undefined> | ModelPreflightResult | undefined;
+}
+
+/** What a transport's preflight found. Empty `byoUnresolved` ⇒ every connected account resolves. */
+export interface ModelPreflightResult {
+  /** `provider:reason` entries, exactly as the gateway's `x-builderforce-byo-unresolved` header spells them. */
+  byoUnresolved: readonly string[];
+  /** Providers whose `expired` token the transport refreshed successfully. */
+  refreshed?: readonly string[];
+  /** The model the run falls back to, when the transport knows it. */
+  fallback?: string;
 }
 
 /** Where the run's state lives. */
@@ -155,6 +172,9 @@ export type RunEvent =
   | { kind: 'turn.started'; step: number }
   | { kind: 'model.completed'; step: number; model?: string; usage?: ModelUsage }
   | { kind: 'tool.dispatched'; step: number; tool: string; ok: boolean }
+  | { kind: 'steer.applied'; step: number }          // one per steered message, before the turn it reaches (§6.3)
+  | { kind: 'model.preflight'; step: number; status: 'ok' | 'refreshed' | 'degraded'; notices: string[] }  // once, before turn 1 (§6.10)
+  | { kind: 'llm.model_downgrade'; step: number; requestedModel: string; model: string; reason: string }  // a turn answered by another model than expected (E7)
   | { kind: 'turn.finished'; step: number }
   | { kind: 'run.finished'; step: number; outcome: RunOutcomeKind };
 
@@ -188,10 +208,23 @@ export interface HumanChannel {
   approve?(gate: PolicyGate): Promise<HumanAnswer>;
 }
 
+/** One steered message, as a port that knows more than its text hands it over. */
+export interface SteerInput {
+  text: string;
+  /** The person's own words — it interrupts the step in flight (§6.3, E10). */
+  interrupt?: boolean;
+  /** Attachments the message carried, as data. */
+  attachments?: unknown;
+}
+
 /** What the user steered in since the last step. */
 export interface SteeringSource {
   /** The messages since the last drain. Empty when nothing was steered. */
-  drain(): string[];
+  drain(): Array<string | SteerInput>;
+  /** True while an interrupting message waits. Absent ⇒ steers only land between steps. */
+  hasInterrupt?(): boolean;
+  /** Be told the moment an interrupting message arrives; returns the unsubscribe. */
+  onInterrupt?(listener: () => void): () => void;
 }
 
 /** The context pack, built once before turn 1 with NO model call (§6.10). */
@@ -268,22 +301,6 @@ export interface CascadeSessionState {
 }
 
 /**
- * The gate counters a run carries — `api/src/application/runtime/cloudAgent/finishGates.ts`.
- *
- * Mirrored field for field; WS2d ports that module into `policy/finish` and deletes the
- * API copy.
- */
-export interface FinishGateState {
-  noDeliverableBlocked: boolean;
-  reviewVerdictRecorded: boolean;
-  placeholderBlocks: number;
-  ciPendingBlocks: number;
-  ciFailureBlocks: number;
-  ciVerified: boolean;
-  finishBlockedOnce: boolean;
-}
-
-/**
  * What compaction carried out. WS1 names the type (there is no home for it today);
  * WS2a owns its behaviour in `policy/compaction`.
  */
@@ -312,6 +329,18 @@ export interface ReadCoverageState {
   readsWithoutSpawn: ReadsWithoutSpawnState;
 }
 
+/**
+ * The stall policy's re-prompt budget — the count the cloud loop kept on its durable
+ * model state (`CloudRunModelState.stallRecoveries`), keyed by the model it was spent
+ * against so a model change starts the new one with a full budget. WS2b owns it.
+ */
+export interface StallState {
+  /** The model the re-prompts below were spent against. */
+  model?: string;
+  /** Re-prompts already spent against `model`. */
+  recoveriesUsed: number;
+}
+
 /** Plain JSON. Everything any policy needs across a step boundary. */
 export interface RunState {
   messages: unknown[]; step: number;
@@ -323,4 +352,8 @@ export interface RunState {
   writtenPaths: string[];
   askedGates: string[];
   reads: ReadCoverageState;        // the windows the model was SERVED (post-trim), plus the read-without-spawn count
+  context?: ContextPack;           // the pack built once before turn 1 (§6.10); a resumed tick renders the same turn-context tail from it
+  stall?: StallState;              // WS2b: the re-prompt budget, keyed by model
+  preflight?: string;              // WS2g: the model preflight's verdict — ok | refreshed | degraded:<reason> (§8.2 modelPreflight)
+  downgrades?: string[];           // WS2g: auto-routed models already reported by llm.model_downgrade (once per served model)
 }

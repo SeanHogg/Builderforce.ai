@@ -162,11 +162,15 @@ export function renderContextPack(parts: ContextPackParts, cap: number = CONTEXT
 
 /**
  * The recall hint the pack gives Evermind (`BrainRunRequest.recallHint`): the focus
- * files' paths and their top headings, so recall searches the code the request is about.
+ * files' paths and their top headings, then the code paths those files name (§6.10 — a
+ * PRD names the modules it changes), so recall searches the code the request is about.
  */
-export function contextPackRecallHint(parts: Pick<ContextPackParts, "focus">, headingsPerFile = 6): string {
-  return parts.focus
-    .map((f) => [f.path, ...(f.outline ?? []).slice(0, headingsPerFile).map((o) => o.heading)].join(" "))
+export function contextPackRecallHint(parts: Pick<ContextPackParts, "focus">, headingsPerFile = 6, named: readonly string[] = []): string {
+  const focus = new Set(parts.focus.map((f) => f.path));
+  return [
+    ...parts.focus.map((f) => [f.path, ...(f.outline ?? []).slice(0, headingsPerFile).map((o) => o.heading)].join(" ")),
+    ...[...new Set(named)].filter((p) => !focus.has(p)),
+  ]
     .join(" ")
     .trim();
 }

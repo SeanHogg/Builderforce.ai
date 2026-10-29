@@ -5,14 +5,13 @@
  * Owned by WS2d. Ports `api/src/application/runtime/costLoop/loopGuards.ts` behind the
  * `GuardsHook` contract `policy/hooks.ts` names. Each lever the source switched on
  * (`a3_progress_detector`, `d7_deterministic_handlers`, `d1_verifier_cascade`,
- * `d8_parallel_tool_calls`) is a constructor input here — the host resolves which are on
- * for its tenant/install through `@builderforce/cost-levers`, never by branching on
- * `RunPolicy.entryPoint`. Lever off ⇒ that part is inert and the hook is the engine's
- * own, unchanged.
+ * `d8_parallel_tool_calls`) is a constructor input here, read from `RunPolicy.levers` —
+ * the host resolves which are on through `@builderforce/cost-levers`, never by branching
+ * on `RunPolicy.entryPoint`. Lever off ⇒ that part is inert.
  *
  * The engine's model-hand-off, difficulty-router, DB-telemetry and sandbox couplings
- * arrive as optional PORTS a surface supplies through `PolicyContext`; absent, that part
- * is inert. The guard STATE a run carries across a step boundary is the contract's
+ * arrive as optional PORTS a surface binds with {@link createGuardsHook}; absent, that
+ * part is inert. The guard STATE a run carries across a step boundary is the contract's
  * `LoopGuardState`, mirrored field-for-field from the source.
  *
  * No `node:*` imports, no DOM: this file is compiled into the Worker, the browser and
@@ -23,7 +22,7 @@ import { ProgressDetector, progressPauseQuestion, type ProgressAction } from "@b
 import type { DifficultyFeatures } from "@builderforce/difficulty-router";
 import type { TierLadder } from "@builderforce/run-policy";
 import type { LoopGuardState, RunState } from "../../contract.js";
-import type { GuardsHook, PolicyContext, PolicyToolCall } from "../hooks.js";
+import type { GuardControl, GuardsHook, PolicyContext, PolicyToolCall } from "../hooks.js";
 import { CascadeSession } from "./cascade.js";
 import { verifyAfterEdit, withPostEditNote } from "./postEdit.js";
 import type { VerifyResult } from "./sourcePolicy.js";
@@ -81,12 +80,15 @@ export interface GuardPorts {
   }) => Promise<void> | void;
 }
 
-function portsOf(ctx: PolicyContext): GuardPorts {
-  return (ctx as { guardPorts?: GuardPorts }).guardPorts ?? {};
-}
-
-function leversOf(ctx: PolicyContext): GuardLevers {
-  return (ctx as { guardLevers?: GuardLevers }).guardLevers ?? {};
+/** The guard levers this run's policy switched on (`RunPolicy.levers`, `@builderforce/cost-levers` ids). */
+export function guardLeversOf(levers: readonly string[]): GuardLevers {
+  const on = new Set(levers);
+  return {
+    a3_progress_detector: on.has("a3_progress_detector"),
+    d7_deterministic_handlers: on.has("d7_deterministic_handlers"),
+    d1_verifier_cascade: on.has("d1_verifier_cascade"),
+    d8_parallel_tool_calls: on.has("d8_parallel_tool_calls"),
+  };
 }
 
 /** A guards session for one run: the levers' state plus the turn's D7 edit verdicts. */
@@ -251,17 +253,20 @@ export class RunGuards {
   }
 
   /**
-   * A pause A3 parked the run on: the skip the model reads, with the ask_human control
+   * A pause A3 parked the run on: the skip the model reads, with the `ask_human` control
    * so the kernel parks on the human answer (the same park the governance gate uses).
+   * The engine's park port names the approval when the surface has one; without it the
+   * run's HumanChannel is asked through the ask hook, with the two answers A3 offers.
    * `undefined` when the run is not parked — the kernel dispatches the call normally.
    */
-  beforeDispatchPause(ports: GuardPorts): Promise<{ data: unknown; control: { kind: "ask_human"; approvalId: string; question: string } } | undefined> {
+  async beforeDispatchPause(ports: GuardPorts): Promise<{ data: unknown; control: GuardControl } | undefined> {
     const pending = this.consumePendingPause();
-    if (pending === undefined || !ports.pause) return Promise.resolve(undefined);
-    return Promise.resolve(ports.pause(pending)).then(({ approvalId }) => ({
+    if (pending === undefined) return undefined;
+    const parked = ports.pause ? await ports.pause(pending) : undefined;
+    return {
       data: { ok: false, error: `Paused for a human: ${pending}` },
-      control: { kind: "ask_human" as const, approvalId, question: pending },
-    }));
+      control: { kind: "ask_human", ...(parked ? { approvalId: parked.approvalId } : {}), question: pending, options: PAUSE_OPTIONS },
+    };
   }
 
   /** A3: what the turn said, judged against what its calls did (WS8p). */
@@ -280,13 +285,16 @@ export class RunGuards {
 
 // ── The composition's hook ───────────────────────────────────────────────────
 
+/** A3's pause offers the person these two answers (PRD 35 WS8p). */
+const PAUSE_OPTIONS: readonly string[] = ["Continue with guidance", "Stop the run"];
+
 /** Per-run guard sessions, keyed by the run the `PolicyContext` names. */
 const sessions = new WeakMap<object, RunGuards>();
 
-function sessionOf(ctx: PolicyContext): RunGuards {
+function sessionOf(ctx: PolicyContext, ports: GuardPorts): RunGuards {
   let s = sessions.get(ctx.state);
   if (!s) {
-    s = new RunGuards(leversOf(ctx), ctx.state.guards, portsOf(ctx));
+    s = new RunGuards(guardLeversOf(ctx.policy.levers), ctx.state.guards, ports);
     sessions.set(ctx.state, s);
     ctx.state.guards = s.snapshot();
   }
@@ -294,32 +302,58 @@ function sessionOf(ctx: PolicyContext): RunGuards {
 }
 
 /**
- * The guards hook the composition calls. `beforeDispatch` skips the call when A3 has
- * parked the run on a human question (the skip the model reads, with the ask_human
- * control so the kernel parks on the answer); `observe` runs the D7 post-edit check on
- * the result and feeds the D1 cascade + A3 progress detector. `RunGuards` also exposes
- * `isReadOnly` (the D8 port) and `endTurn` for the composition to drive the turn fold.
+ * The A3 / D1 / D7 notes the next turn opens with (the volatile tail, never the cached
+ * prefix): the progress detector's steer, the cascade's note and the sandbox checks'
+ * failures. Empty when the run has no guard session or nothing to say. The memory
+ * policy composes it into the turn's brief, as `costLoop/volatileTail.ts` did.
  */
-export const guardsHook: GuardsHook = {
-  async beforeDispatch(ctx: PolicyContext, call: PolicyToolCall) {
-    const g = sessionOf(ctx);
-    const paused = await g.beforeDispatchPause(portsOf(ctx));
-    if (paused) return { skip: { data: paused.data, isError: true } };
-    void call;
-    return undefined;
-  },
-  async observe(ctx: PolicyContext, call: PolicyToolCall, result: unknown) {
-    const g = sessionOf(ctx);
-    await g.checkEdit(call, result, portsOf(ctx));
-    g.observe(call, result);
-    ctx.state.guards = g.snapshot();
-  },
-  async endTurn(ctx: PolicyContext, content: string) {
-    const g = sessionOf(ctx);
-    g.noteTurnText(content);
-    await g.endTurn(ctx.step, portsOf(ctx));
-    ctx.state.guards = g.snapshot();
-  },
-};
+export function guardsTurnNote(state: RunState): string {
+  const s = sessions.get(state);
+  return s ? s.tailSections().filter((part) => part.trim().length > 0).join("\n\n") : "";
+}
+
+/**
+ * The guards hook for a surface's engine couplings. `beforeDispatch` skips the call when
+ * A3 has parked the run on a human question (the skip the model reads, with the
+ * ask_human control so the kernel parks on the answer); `observe` runs the D7 post-edit
+ * check on the result and feeds the D1 cascade + A3 progress detector; `endTurn` folds
+ * the turn — the turn's text first, so an unkept readiness claim counts (WS8p);
+ * `isReadOnly` is D8's port, which the composition hands the kernel.
+ *
+ * The levers come from `RunPolicy.levers`, never from the entry point. The ports are the
+ * surface's: an adapter binds them with `composePolicyHooks({ guards: createGuardsHook(ports) })`.
+ * `RunGuards` also exposes `isReadOnly` (the D8 port) for the composition.
+ */
+export function createGuardsHook(ports: GuardPorts = {}): GuardsHook {
+  return {
+    async beforeDispatch(ctx: PolicyContext, _call: PolicyToolCall) {
+      const g = sessionOf(ctx, ports);
+      const paused = await g.beforeDispatchPause(ports);
+      if (!paused) return undefined;
+      ctx.state.guards = g.snapshot();
+      return { skip: { data: paused.data, isError: true, control: paused.control } };
+    },
+    async observe(ctx: PolicyContext, call: PolicyToolCall, result: unknown) {
+      const g = sessionOf(ctx, ports);
+      const noted = await g.checkEdit(call, result, ports);
+      g.observe(call, result);
+      ctx.state.guards = g.snapshot();
+      // D7: a failed post-edit check reaches the model on that call's own result.
+      return noted !== result ? { data: noted } : undefined;
+    },
+    async endTurn(ctx: PolicyContext, content: string) {
+      const g = sessionOf(ctx, ports);
+      g.noteTurnText(content);
+      await g.endTurn(ctx.step, ports);
+      ctx.state.guards = g.snapshot();
+    },
+    isReadOnly(ctx: PolicyContext, name: string) {
+      return sessionOf(ctx, ports).isReadOnly(name);
+    },
+  };
+}
+
+/** The guards hook with no engine couplings: A3's steer and its readiness claims still work. */
+export const guardsHook: GuardsHook = createGuardsHook();
 
 export { RunGuards as GuardsSession };
