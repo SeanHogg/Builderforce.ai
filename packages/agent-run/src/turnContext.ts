@@ -48,16 +48,22 @@ export async function buildContextPack(input: RunAgentInput, hooks: PolicyHooks,
 }
 
 /**
- * The system prompt: the governance gates the run is bound by, then the persona, then the
- * task. The context pack is NOT here — it is volatile.
+ * The rows that open a run: a `system` row holding the governance gates the run is bound
+ * by and the persona (omitted when there are neither), then the TASK as the first `user`
+ * row. Every provider expects at least one user turn, and a task in the system row reads
+ * as an instruction to the model rather than as the request it was given. The context
+ * pack is NOT here — it is volatile. This is the ONE renderer of the governance
+ * directives.
  */
-export function systemPrompt(task: RunTask, gates?: RunPolicy["approvalGates"]): string {
-  const parts: string[] = [];
+export function openingRows(task: RunTask, gates?: RunPolicy["approvalGates"]): RunMessage[] {
+  const system: string[] = [];
   const governance = renderPolicyDirectives(gates);
-  if (governance) parts.push(governance);
-  if (task.persona && task.persona.trim()) parts.push(task.persona.trim());
-  parts.push(task.prompt);
-  return parts.join("\n\n");
+  if (governance) system.push(governance);
+  if (task.persona && task.persona.trim()) system.push(task.persona.trim());
+  return [
+    ...(system.length > 0 ? [{ role: "system" as const, content: system.join("\n\n") }] : []),
+    { role: "user" as const, content: task.prompt },
+  ];
 }
 
 /**

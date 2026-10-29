@@ -188,7 +188,7 @@ export interface MemoryHook {
   /** Record one dispatched call into the run's memory (the brief and the map are built from it). */
   observe?(ctx: PolicyContext, call: PolicyToolCall, result: unknown, isError?: boolean): Promise<void> | void;
   /** The consolidated memory the run produced, written back through `store.commitMemory`. */
-  consolidate(ctx: PolicyContext): Promise<unknown> | unknown;
+  consolidate(ctx: PolicyContext, opts?: { learn?: boolean }): Promise<unknown> | unknown;
 }
 
 /** WS2e — the context pack's recall. */
@@ -205,10 +205,13 @@ export interface ToolsHook {
   /** Narrow the schemas the surface can run to the ones this run may call. */
   select(ctx: PolicyContext, tools: readonly ToolSchema[]): Promise<readonly ToolSchema[] | void> | readonly ToolSchema[] | void;
   /**
-   * Before a call dispatches: a governance gate (`RunPolicy.approvalGates`) that blocks it
-   * answers with its refusal — the tool never runs, and the model reads which gate stopped it.
+   * Before a call dispatches: a governance gate (`RunPolicy.approvalGates`) that stops it
+   * answers in its place — the tool never runs. A `block` answers with its refusal; a
+   * `require-approval` asks the human channel once per call and either lets the call
+   * through (approved), parks the run on the person (`control`), or — when the surface has
+   * no approver — refuses.
    */
-  refuse?(ctx: PolicyContext, call: PolicyToolCall): { data: unknown } | void;
+  refuse?(ctx: PolicyContext, call: PolicyToolCall): Promise<{ data: unknown; control?: GuardControl } | void> | { data: unknown; control?: GuardControl } | void;
   /** Before a call dispatches: a read whose lines were already SERVED is answered without the disk. */
   beforeDispatch?(ctx: PolicyContext, call: PolicyToolCall): { data: unknown } | void;
   /** After a call returned: record what the model was served (or what a write invalidated). */

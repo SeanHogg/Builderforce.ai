@@ -30,6 +30,12 @@ export interface OnPremRunSinks {
   onSteerApplied?(text: string): void;
   /** The run's uniform outcome row (§8.2), written once at its end. */
   onOutcome?(row: RunOutcomeRow): void;
+  /**
+   * The observer of one SUB-AGENT of this run, tagged with the child's label. A child's
+   * turns and calls go here and nowhere else — never to this run's chat. Absent ⇒ a child
+   * reports nothing live.
+   */
+  forChild?(label: string): OnPremRunSinks;
 }
 
 /** The arguments of a call as the host shows them: parsed when they are JSON. */
@@ -68,7 +74,7 @@ export function observedModel(inner: ModelTransport, sinks: OnPremRunSinks): Mod
  * acknowledgement the host renders carries the text the user sent.
  */
 export function acknowledgedSteering(
-  queue: { drain(): string[] },
+  queue: { drain(): string[]; pending(): number; onPush(listener: () => void): () => void },
 ): { source: SteeringSource; takeApplied: () => string } {
   const handed: string[] = [];
   return {
@@ -78,6 +84,10 @@ export function acknowledgedSteering(
         handed.push(...taken);
         return taken;
       },
+      // A portal steer cuts the rest of the turn it lands in (the V1 loop's rule): the run
+      // skips the calls it has not made yet and takes the steer before its next model call.
+      hasInterrupt: () => queue.pending() > 0,
+      onInterrupt: (listener) => queue.onPush(listener),
     },
     takeApplied: () => handed.shift() ?? "",
   };

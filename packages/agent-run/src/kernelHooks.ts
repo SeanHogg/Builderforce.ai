@@ -100,6 +100,27 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
     return "applied";
   };
 
+  /**
+   * What the user steered in while a `finish` call was in flight, as the note the finish is
+   * answered with; null when nothing was steered (the finish stands). A stop command lets
+   * the finish stand and settles the run cancelled, as it does anywhere else.
+   */
+  const lateSteerNote = async (ctx: { step: number }): Promise<string | null> => {
+    const steered = (ports.steering?.drain() ?? []).map(steerInput);
+    if (steered.length === 0) return null;
+    const texts = steered.map((s) => s.text);
+    if (isStopSteer(texts)) {
+      run.stopped = true;
+      return null;
+    }
+    for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
+    const many = texts.length > 1;
+    return (
+      `The user sent ${many ? "messages" : "a message"} while you were finishing, so do not finish yet:\n` +
+      `${texts.map((t) => `- ${t}`).join("\n")}\nAddress ${many ? "them" : "it"}, then finish.`
+    );
+  };
+
   return {
     beforeTurn: async (ctx) => {
       // Steering is drained BEFORE the model is asked, so a message typed mid-run reaches
@@ -157,8 +178,10 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       const pctx = contextAt(ctx.step, ctx.stepInCall);
       const pcall = toPolicyCall(call);
       // Governance first: a gate that blocks the call refuses it, and nothing else sees it.
-      const refused = hooks.tools.refuse?.(pctx, pcall);
-      if (refused) return { result: { data: refused.data, isError: true } };
+      const refused = await hooks.tools.refuse?.(pctx, pcall);
+      if (refused) {
+        return { result: { data: refused.data, isError: true, ...(refused.control ? { control: asLoopControl(refused.control) } : {}) } };
+      }
       // A3's pause parks the run on a person (the control); any other skip just answers.
       const decision = await hooks.guards.beforeDispatch(pctx, pcall);
       if (decision?.skip) {
@@ -191,7 +214,11 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         state.finish = { ...state.finish, finishBlockedOnce: true };
         return block;
       }
-      return null;
+      // A message steered in while this finish was in flight is never lost (§6.3): the call
+      // is answered with it instead, so the run takes one more turn for it. (The steer is NOT
+      // spliced into the transcript here — the finish call's own result row must follow the
+      // assistant row that made it.)
+      return lateSteerNote(ctx);
     },
 
     onAskHuman: async (ctx, control, call) => {

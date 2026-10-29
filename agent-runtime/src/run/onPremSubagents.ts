@@ -1,87 +1,64 @@
 /**
  * `childRunner` — how an on-prem run delegates: a sub-agent is the SAME agent (PRD 35 §6),
  * run through `runAgent` with its own transcript, the parent's model and the parent's
- * tools. It sees none of the parent's conversation; its brief is its whole task.
+ * tools. It sees none of the parent's conversation; its brief is its whole task. This is
+ * the backing of the shared `spawn_agent` tool (`OrchestrationCapability`) and the
+ * replacement for the SDK's `Task` tool: the call BLOCKS until the child's report is in,
+ * as `Task` did.
  *
- * This is the on-prem backing of the shared `spawn_agent` tool (`OrchestrationCapability`),
- * and the replacement for the SDK's `Task` tool. Recursion is impossible by construction:
- * the child's capability set does not include `orchestrate`, so it is never offered the tool.
+ * Ports and nothing else. WHAT a child is — its policy, the capabilities it holds, how its
+ * outcome reads to the owner — is the agent's (`childPolicy`, `childProvider`,
+ * `childResult`); recursion is impossible by construction (a child holds no `orchestrate`).
  *
- * It supplies ports and nothing else: no loop, no policy. What a delegation means for the
- * run (the nudge, the backstop) is `policy/subagents`'.
+ * A child is observed on its OWN: its model turns and tool calls go to the host's
+ * `forChild` sinks (tagged with its label), never to the owner's chat; and its outcome row
+ * names the owner (`parentRunId`) so it is one more row of the owner's tree, not a second
+ * run of it.
  */
 
-import { runAgent } from "@builderforce/agent-run";
-import type { EventSink, HumanChannel, ModelTransport, RunPolicy } from "@builderforce/agent-run";
-import {
-  clipChildOutput,
-  type Capability,
-  type CapabilityProvider,
-  type SubagentRequest,
-  type SubagentResult,
-} from "@builderforce/agent-tools";
+import { childPolicy, childProvider, childResult, runAgent } from "@builderforce/agent-run";
+import type { HumanChannel, ModelTransport, RunPolicy } from "@builderforce/agent-run";
+import type { CapabilityProvider, SubagentRequest, SubagentResult } from "@builderforce/agent-tools";
+import { observedModel, relayEventSink, type OnPremRunSinks } from "./onPremEvents.js";
 
 /** What a child inherits from the run that spawns it. */
 export interface ChildRunContext {
+  /** The owner's UNobserved model: the owner's observer would put the child in the owner's chat. */
   model: ModelTransport;
-  /** The parent's capabilities; the child gets the same set minus `orchestrate*`. */
-  capabilities: CapabilityProvider;
-  human: HumanChannel;
+  /** The owner's capabilities; resolved at spawn time (the provider is built after the ports). */
+  readonly capabilities: CapabilityProvider;
   policy: RunPolicy;
-  /** The parent's sink: a child writes its OWN outcome row, never the parent's trace. */
-  events: EventSink;
-  /** Stopping the parent stops the child. */
+  /** The owner's sinks: only `forChild` and `onOutcome` are used, never the owner's chat frames. */
+  sinks: OnPremRunSinks;
+  /** Stopping the owner stops the child. */
   signal?: AbortSignal;
-  /** The parent's execution id, so the child's dispatch names its owner. */
-  parentRunId?: string;
+  /** The owner's run id: stamped on the child's dispatch and outcome row. */
+  parentRunId: string;
 }
 
-/** The child's capabilities: the parent's, without the ability to delegate further. */
-function withoutDelegation(parent: CapabilityProvider): CapabilityProvider {
-  const caps = new Set<Capability>(
-    [...parent.capabilities].filter((c) => c !== "orchestrate" && !c.startsWith("orchestrate.")),
-  );
-  const { orchestration: _delegated, ...rest } = parent;
-  return { ...rest, capabilities: caps };
-}
+/** A child that cannot ask: it is told so by the channel, as the cloud's children are. */
+const CHILD_HUMAN: HumanChannel = { ask: async () => ({ kind: "paused" }) };
 
-/** The `OrchestrationCapability.spawn` for one parent run. */
-export function childRunner(parent: ChildRunContext): (request: SubagentRequest) => Promise<SubagentResult> {
+/** The `OrchestrationCapability.spawn` for one owner run. */
+export function childRunner(owner: ChildRunContext): (request: SubagentRequest) => Promise<SubagentResult> {
   return async (request) => {
-    const policy: RunPolicy = {
-      ...parent.policy,
-      toolScope: "subagent",
-      role: request.role ?? parent.policy.role,
-      delegation: { requested: false, readsBeforeNudge: parent.policy.delegation.readsBeforeNudge },
-    };
+    const own = owner.sinks.forChild?.(request.label);
+    // A child with no observer of its own reports nothing live — it never borrows the owner's.
+    const sinks: OnPremRunSinks = own ?? { onAssistantText: () => undefined, onToolUse: () => undefined, onResult: () => undefined };
     const outcome = await runAgent({
-      task: {
-        prompt: request.task,
-        dispatch: { source: "subagent", ...(parent.parentRunId ? { parentRunId: parent.parentRunId } : {}) },
-      },
-      policy,
+      task: { prompt: request.task, dispatch: { source: "subagent", parentRunId: owner.parentRunId } },
+      policy: childPolicy(owner.policy, request),
       ports: {
-        model: parent.model,
-        capabilities: withoutDelegation(parent.capabilities),
+        model: observedModel(owner.model, sinks),
+        capabilities: childProvider(owner.capabilities),
         // A child is one invocation: nothing resumes it, so nothing is kept.
         store: { load: () => undefined, save: () => undefined },
-        events: { emit: () => undefined, ...(parent.events.outcome ? { outcome: parent.events.outcome } : {}) },
-        human: parent.human,
+        events: relayEventSink(sinks, () => ""),
+        human: CHILD_HUMAN,
         context: { pack: () => ({ focus: [], facts: [], recall: [] }) },
       },
-      ...(parent.signal ? { signal: parent.signal } : {}),
+      ...(owner.signal ? { signal: owner.signal } : {}),
     });
-    // A fan-out shares one result between its children, so it names its own cap.
-    const clip = (text: string): string => (request.outputChars ? text.slice(0, request.outputChars) : clipChildOutput(text));
-    switch (outcome.kind) {
-      case "finished":
-        return { ok: true, output: clip(outcome.output), steps: outcome.state.step, ...(request.ticket ? { ticket: request.ticket } : {}) };
-      case "paused":
-        return { ok: false, error: `the sub-agent stopped to ask a person: ${outcome.question}` };
-      case "yielded":
-        return { ok: true, output: "", truncated: true, steps: outcome.state.step };
-      case "failed":
-        return { ok: false, error: outcome.reason };
-    }
+    return childResult(outcome, request);
   };
 }

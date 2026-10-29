@@ -186,6 +186,8 @@ export type RunEvent =
 export interface RunOutcomeRow {
   entryPoint: string;
   runId?: string;
+  /** Set on a SUB-AGENT's row: the run that spawned it (`RunTask.dispatch.parentRunId`), so a child is never counted as a second run of its owner. */
+  parentRunId?: string;
   steps: number;
   toolCalls: number;
   toolErrors: number;
@@ -287,6 +289,9 @@ export interface ContextPack {
 }
 
 // ── The outcome ───────────────────────────────────────────────────────────────
+
+/** The `failed` reason of a run that was stopped (Stop, an abort, or a steered stop command). */
+export const RUN_CANCELLED_REASON = "cancelled";
 
 export type RunOutcomeKind = 'finished' | 'paused' | 'yielded' | 'failed';
 

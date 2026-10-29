@@ -41,6 +41,8 @@ import { asksForSubagents, attemptedDelegation, canSpawnHere, earlyDelegationNud
 export { parseSubagentReport, subagentSystemPrompt, asksForSubagents, attemptedDelegation, canSpawnHere, earlyDelegationNudge, leftDelegationUndone, undelegatedRequestNudge };
 // A child's report is clipped ONCE, by agent-tools' rule (WS8j) — never a second cap here.
 export { SUBAGENT_REPORT_CHARS, clipChildOutput };
+// What a child is, derived from its owner's run (policy, capabilities, result).
+export { childPolicy, childProvider, childResult } from "./child.js";
 export type { DelegationTraceEvent, SubagentLiveOwner, SubagentPersona };
 
 /** The tool names the surface can run — what `canSpawnHere` and the nudges name. */

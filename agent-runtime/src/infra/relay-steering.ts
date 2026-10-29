@@ -1,20 +1,20 @@
 /**
- * Mid-run steering channel for an in-flight V2 (Claude Agent SDK) execution.
+ * Mid-run steering channel for an in-flight ticket run.
  *
- * When a user sends a follow-up direction to a running execution from the
- * portal, the API relays an `execution.message` frame to this agent host. The
- * SDK only accepts additional user turns in STREAMING-INPUT mode (`query({
- * prompt: AsyncIterable<SDKUserMessage> })`), so a run opens one of these
- * channels, hands it to `query()` as the prompt iterable, and the relay pushes
- * steers into it while the run is live. The first message the channel yields is
- * the task prompt; every later one is a steer, applied as the next turn.
+ * When a user sends a follow-up direction to a running execution from the portal, the API
+ * relays an `execution.message` frame to this agent host. The run opens one of these
+ * channels; the relay pushes steers into it while the run is live, and the run drains it
+ * (it is the agent's `SteeringSource` port, `onPremEvents.acknowledgedSteering`) before each
+ * model call, so a steer reaches the next call.
  *
- * Kept pure (no gateway/socket deps) so the wire-shape and the queue semantics
- * are unit-testable. Dedupe of a re-sent steer happens cloud-side
- * (`execution_messages.consumed_at`), so there is no idempotency key here.
+ * Once the run has settled the channel is closed and refuses pushes; what was queued but
+ * never drained is handed back through {@link SteeringChannel.takeAll} so it can continue
+ * as a follow-up run (`relay-late-steers.ts`) instead of being dropped.
+ *
+ * Kept pure (no gateway/socket deps) so the queue semantics are unit-testable. Dedupe of a
+ * re-sent steer happens cloud-side (`execution_messages.consumed_at`), so there is no
+ * idempotency key here — only the API's `messageId`, carried through for a late steer.
  */
-
-import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 
 /** Normalise steering text from the wire: trimmed string or null when unusable. */
 export function normalizeSteeringText(text: unknown): string | null {
@@ -22,79 +22,62 @@ export function normalizeSteeringText(text: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
-/** The SDK user turn a steer becomes. Pure so the exact shape is testable. */
-export function buildSteeringMessage(text: string): SDKUserMessage {
-  return {
-    type: "user",
-    message: { role: "user", content: text },
-    parent_tool_use_id: null,
-  };
+/** A steer that has been accepted but not yet drained. */
+export interface QueuedSteer {
+  text: string;
+  /** The API's row id for the message, when the frame carried one (a follow-up's idempotency key). */
+  messageId?: number;
 }
 
 export interface SteeringChannel {
   /** Queue a steer for the live run. Returns false once the channel is closed. */
-  push(text: unknown): boolean;
-  /** Steers queued but not yet handed to the SDK. */
+  push(text: unknown, messageId?: number): boolean;
+  /** Steers queued but not yet drained. */
   pending(): number;
-  /**
-   * Take every queued steer, oldest first — the agent's `SteeringSource` port. The run
-   * drains it before each model call, so a steer typed mid-run reaches the next call.
-   */
+  /** Take every queued steer's text, oldest first — the agent's `SteeringSource` port. */
   drain(): string[];
+  /** Take every queued steer with its message id, oldest first — what a settled run hands back. */
+  takeAll(): QueuedSteer[];
+  /** Be told the moment a steer is queued; returns the unsubscribe. */
+  onPush(listener: () => void): () => void;
   /** True after {@link close}; pushes are refused from then on. */
   closed(): boolean;
-  /** End the input stream so the SDK run can finish. Idempotent. */
+  /** Refuse further pushes (the run has settled). Idempotent; what is queued stays takeable. */
   close(): void;
-  /**
-   * The prompt iterable for `query()`: yields `initial` first, then every steer
-   * in push order, and completes when {@link close} is called and the queue is
-   * drained. `onApplied` fires as each steer is actually handed to the SDK.
-   */
-  messages(initial: string, onApplied?: (text: string) => void): AsyncIterable<SDKUserMessage>;
 }
 
 /** Create a steering channel. One per run; closed by the run's terminal handling. */
 export function createSteeringChannel(): SteeringChannel {
-  const queue: string[] = [];
+  let queue: QueuedSteer[] = [];
+  const listeners = new Set<() => void>();
   let isClosed = false;
-  let wake: (() => void) | null = null;
 
-  const notify = () => {
-    const w = wake;
-    wake = null;
-    w?.();
+  const takeAll = (): QueuedSteer[] => {
+    const taken = queue;
+    queue = [];
+    return taken;
   };
 
   return {
-    push(text) {
+    push(text, messageId) {
       const normalized = normalizeSteeringText(text);
       if (!normalized || isClosed) return false;
-      queue.push(normalized);
-      notify();
+      queue.push(messageId !== undefined ? { text: normalized, messageId } : { text: normalized });
+      for (const listener of [...listeners]) listener();
       return true;
     },
     pending: () => queue.length,
-    drain: () => queue.splice(0, queue.length),
+    drain: () => takeAll().map((steer) => steer.text),
+    takeAll,
+    onPush(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
     closed: () => isClosed,
     close() {
-      if (isClosed) return;
       isClosed = true;
-      notify();
-    },
-    async *messages(initial, onApplied) {
-      yield buildSteeringMessage(initial);
-      for (;;) {
-        if (queue.length) {
-          const text = queue.shift()!;
-          onApplied?.(text);
-          yield buildSteeringMessage(text);
-          continue;
-        }
-        if (isClosed) return;
-        await new Promise<void>((resolve) => {
-          wake = resolve;
-        });
-      }
     },
   };
 }

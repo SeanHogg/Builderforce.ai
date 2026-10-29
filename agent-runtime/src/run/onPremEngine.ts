@@ -17,7 +17,7 @@
 
 import type { AgentEngine, AgentRunInput, AgentRunResult } from "@builderforce/agent-tools";
 import { CURRENT_ENGINE_ID } from "@builderforce/agent-tools";
-import type { SteeringChannel } from "../infra/relay-steering.js";
+import type { QueuedSteer, SteeringChannel } from "../infra/relay-steering.js";
 import { runOnPremAgent, type OnPremRunSinks } from "./onPremAdapter.js";
 
 /** Runtime collaborators an on-prem run needs, supplied once at construction. */
@@ -42,8 +42,10 @@ export interface OnPremEngineDeps {
   steering?: SteeringChannel;
   /** Where the run's consolidated memory (its `codemap:` write-back) is committed at the end. */
   commitMemory?: (consolidated: unknown) => Promise<void> | void;
-  /** The session file the run's state lives in; omitted ⇒ kept in memory for the run. */
-  sessionFile?: string;
+  /** Steers accepted but never reached by the run: handed back so they continue as a follow-up run. */
+  onLateSteers?: (steers: QueuedSteer[]) => void;
+  /** The context window of a model id, when the host knows it (sizes compaction and result caps). */
+  window?: (model: string) => number | undefined;
 }
 
 /** The on-prem agent, behind the shared {@link AgentEngine} seam. */
@@ -71,18 +73,20 @@ export class OnPremAgentEngine implements AgentEngine {
         abortController: this.deps.abortController,
         ...(this.deps.steering ? { steering: this.deps.steering } : {}),
         ...(this.deps.commitMemory ? { commitMemory: this.deps.commitMemory } : {}),
-        ...(this.deps.sessionFile ? { sessionFile: this.deps.sessionFile } : {}),
+        ...(this.deps.onLateSteers ? { onLateSteers: this.deps.onLateSteers } : {}),
+        ...(this.deps.window ? { window: this.deps.window } : {}),
       },
       this.deps.sinks,
     );
-    // The run is one invocation (no durable tick), so a returned run is always terminal.
-    // `cancelled` reflects an abort that raced the run; the orchestration layer reconciles
-    // terminal state from that.
+    // `cancelled` is a Stop that raced the run OR a stop command steered in; the
+    // orchestration layer reconciles terminal state from it. A run that parked or ran out of
+    // its step budget is not terminal, and says so.
     return {
       ok: r.ok,
       output: r.text,
-      cancelled: this.deps.abortController.signal.aborted,
-      finished: true,
+      cancelled: this.deps.abortController.signal.aborted || r.cancelled === true,
+      finished: r.yielded !== true && r.awaitingInput === undefined,
+      ...(r.awaitingInput ? { awaitingInput: r.awaitingInput } : {}),
     };
   }
 }

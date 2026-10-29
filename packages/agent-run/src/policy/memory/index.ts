@@ -81,15 +81,19 @@ export const memoryHook: MemoryHook & {
    * learned-facts step runs behind the injected `learnedFacts` port when the run
    * changed files. A read-only investigation still maps (PRD 35 E8): `consolidate`
    * maps ≥3 files READ as readily as ≥3 changed, so the next run asked about this area
-   * starts warm.
+   * starts warm. The map is written on EVERY terminal outcome (a failed or cancelled run
+   * still read and changed what it did); the model-extracted learned facts are a judgement
+   * of a completed run, so a caller that is settling a failure passes `learn: false`.
    */
-  async consolidate(ctx: PolicyContext) {
+  async consolidate(ctx: PolicyContext, opts?: { learn?: boolean }) {
     const recorder = recorderForState(ctx.state);
     ctx.state.memory = knowledgeState(recorder);
     const map = recorder.consolidate({ root: ctx.task.workspace?.defaultRepo });
-    const facts = await extractAndWriteLearnedFacts({
-      activity: recorder.activity,
-    });
+    const facts = opts?.learn === false
+      ? null
+      : await extractAndWriteLearnedFacts({
+          activity: recorder.activity,
+        });
     // `undefined` (no map) leaves the store's commitMemory alone; a map is always
     // committed even when no learned fact landed — the map is the deterministic half.
     // The write carries the chat it came from (WS8d); the anchors are derived server-side.

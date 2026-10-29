@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowedToolsAfterGates } from "@builderforce/agent-run";
+import { allowedToolsAfterGates } from "../../test/helpers/gatedTools.js";
 import { buildGatewayHeaders } from "../run/gatewayModelTransport.js";
 
 /**

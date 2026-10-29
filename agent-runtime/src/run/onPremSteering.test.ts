@@ -55,13 +55,13 @@ beforeEach(() => {
 });
 
 describe("runOnPremAgent steering", () => {
-  it("hands the model the task prompt as the first turn and ends after one result when nothing is queued", async () => {
+  it("delivers the task prompt as the first user message and ends after one result when nothing is queued", async () => {
     turnResults = [{ result: "done" }];
     const s = sinks();
     const out = await runOnPremAgent({ ...baseParams, appendSystemPrompt: "persona" }, s);
 
     expect(out).toEqual({ ok: true, text: "done" });
-    expect(requests[0].messages[0]).toEqual({ role: "system", content: "persona\n\nbuild it" });
+    expect(requests[0].messages.find((m) => m.role === "user")?.content).toBe("build it");
     expect(s.onAssistantText).toHaveBeenCalledTimes(1);
     expect(s.onResult).toHaveBeenCalledTimes(1);
     expect(s.onSteerApplied).not.toHaveBeenCalled();

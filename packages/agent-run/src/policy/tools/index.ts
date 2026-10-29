@@ -14,8 +14,8 @@
  *     it (`catalog.ts` — `deferredTools.ts`; `selectTools.ts` — `selectTools.ts` lexical
  *     rank + synonyms + pinning; `searchHelpers.ts` — the `tool_search` meta tool);
  *   • `toolScope: 'chat-reply'` data (`toolset.ts` — `cloudAgentToolset.ts` `CHAT_SCOPED_AGENT_TOOLS`);
- *   • the on-prem policy-gate evaluation (`gates.ts` — the former `policy-gate-seam.ts` + the SDK
- *     `allowedToolsAfterGates` allowlist shape);
+ *   • the policy-gate evaluation (`gates.ts` — the former on-prem `policy-gate-seam.ts`: blocks
+ *     refuse at dispatch, an unscoped block withholds the tool, `require-approval` asks once per call);
  *   • the window-sized result cap (`caps.ts` `resultCapFor` / `capToolResult` —
  *     `tool-output-policy`'s `windowedCap` sized by `ModelTransport.window()`, applied to
  *     every dispatched result; `truncation.ts` — on-prem `tool-result-truncation.ts`,
@@ -38,12 +38,36 @@
  */
 
 import type { Capability, ToolSchema } from "@builderforce/agent-tools";
-import type { PolicyContext, ToolsHook } from "../hooks.js";
+import type { PolicyContext, PolicyToolCall, ToolsHook } from "../hooks.js";
 import { selectCatalog } from "./catalog.js";
 import { selectToolsForTurn } from "./selectTools.js";
 import { isChatReplyScope, CHAT_REPLY_SCOPED_TOOLS } from "./toolset.js";
 import { coveredReadAnswer, recordServedRead } from "./readCoverage.js";
-import { gateRefusal, isToolWithheld } from "./gates.js";
+import { approvalRefusal, gateVerdict, isToolWithheld } from "./gates.js";
+
+/**
+ * What a governance gate does to one call at dispatch. A `block` (path-scoped ones land
+ * here too) answers with its refusal. A `require-approval` is asked ONCE per call
+ * (`RunState.askedGates` holds the call key, as the cloud's `policyAskedGates` did): the
+ * channel's answer lets the call through; a parked answer ends the turn on the person and
+ * the identical call proceeds when the run resumes. A surface with no approver refuses.
+ */
+async function gateDispatch(ctx: PolicyContext, call: PolicyToolCall) {
+  const verdict = gateVerdict(ctx.policy.approvalGates, call.name, call.args);
+  if (verdict.kind === "allow") return undefined;
+  if (verdict.kind === "block") return { data: verdict.data };
+  if (ctx.state.askedGates.includes(verdict.key)) return undefined;
+  const human = ctx.ports.human;
+  if (!human?.approve) return approvalRefusal(verdict);
+  const answer = await human.approve(verdict.gate);
+  ctx.state.askedGates = [...ctx.state.askedGates, verdict.key];
+  if (answer.kind === "answered") return undefined;
+  const question = `Approve the agent's use of "${call.name}"? ${verdict.reason}`;
+  return {
+    data: { ok: false, error: `Paused for human approval of "${call.name}" (governance gate ${verdict.gate.id}).` },
+    control: { kind: "ask_human" as const, question },
+  };
+}
 
 /** The tools hook, as ported. `select` narrows the surface's schemas to what this run may call. */
 export const toolsHook: ToolsHook = {
@@ -76,8 +100,7 @@ export const toolsHook: ToolsHook = {
     });
     return selected.tools;
   },
-  // A gate that blocks the call refuses it at dispatch; a path-scoped block lands here too.
-  refuse: (ctx, call) => gateRefusal(ctx.policy.approvalGates, call.name, call.args),
+  refuse: gateDispatch,
   beforeDispatch: coveredReadAnswer,
   observe: recordServedRead,
 };
@@ -110,15 +133,7 @@ export { runToolSearch, TOOL_SEARCH_MAX, promptNamedTools } from "./searchHelper
 export { CHAT_REPLY_SCOPED_TOOLS, isChatReplyScope, CHAT_REPLY_TOOL_SCOPE } from "./toolset.js";
 export { windowedCap, toolOutputCap, resultCapFor, capToolResult } from "./caps.js";
 export { AGENT_READ_TRAITS, coveredReadAnswer, recordServedRead } from "./readCoverage.js";
-export {
-  evaluatePolicyGateSeam,
-  canUseToolDecision,
-  policyRefusalMessage,
-  allowedToolsAfterGates,
-  gateRefusal,
-  isToolWithheld,
-  GATED_TOOL_VOCABULARY,
-} from "./gates.js";
+export { evaluatePolicyGateSeam, policyRefusalMessage, isToolWithheld, gateVerdict } from "./gates.js";
 export {
   truncateToolResultText,
   truncateToolResultMessage,

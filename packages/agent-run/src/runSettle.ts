@@ -37,8 +37,15 @@ export async function settle(
 ): Promise<RunOutcome> {
   state.messages = transcript;
 
-  if (kind === "finished") {
-    const consolidated = await hooks.memory.consolidate(policyContext(input, state, currentView(transcript, []), state.step, 0));
+  // The run-end write-back happens on every TERMINAL outcome — finished, failed, cancelled
+  // — because what a run read and changed is worth keeping whatever became of it. What a
+  // run LEARNED is a judgement of a completed one, so that half is finished-only. A run that
+  // parked or yielded is not over.
+  if (kind === "finished" || kind === "failed") {
+    const consolidated = await hooks.memory.consolidate(
+      policyContext(input, state, currentView(transcript, []), state.step, 0),
+      { learn: kind === "finished" },
+    );
     if (consolidated !== undefined) {
       try {
         await input.ports.store.commitMemory?.(consolidated);
@@ -56,7 +63,7 @@ export async function settle(
 
   // The uniform §8.2 outcome row, built from the run state the whole run carried.
   if (kind === "finished" || kind === "failed") {
-    const row = buildOutcomeRow({ entryPoint: input.policy.entryPoint, runId: input.task.runId, kind, state });
+    const row = buildOutcomeRow({ entryPoint: input.policy.entryPoint, runId: input.task.runId, parentRunId: input.task.dispatch.parentRunId, kind, state });
     try {
       await input.ports.events.outcome?.(row);
     } catch {

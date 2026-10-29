@@ -80,6 +80,7 @@ import {
 import { getKnowledgeLoop } from "./memory-bridge.js";
 import { createGitRepoSync } from "./repo-sync.js";
 import { OnPremAgentEngine } from "../run/onPremEngine.js";
+import { configuredModelWindow } from "../run/onPremModelWindow.js";
 import {
   taskWorkspaceDir,
   buildTaskCloneUrl,
@@ -468,6 +469,29 @@ export class BuilderforceRelayService implements IRelayService {
           args: row,
         });
       },
+      // A sub-agent is observed on its own: its calls and its outcome row (which names its
+      // owner) go to the audit trail tagged with its label — never to the owner's chat.
+      forChild: (label) => ({
+        onAssistantText: () => undefined,
+        onToolUse: (toolName, toolCallId, args) => {
+          this.toolAudit.emit({
+            executionId: payload.executionId,
+            toolName,
+            toolCallId,
+            category: "v2-child",
+            args: { child: label, args },
+          });
+        },
+        onResult: () => undefined,
+        onOutcome: (row) => {
+          this.toolAudit.emit({
+            executionId: payload.executionId,
+            toolName: "run.outcome",
+            category: "run",
+            args: { ...row, child: label },
+          });
+        },
+      }),
     };
 
     // One shared ephemeral workspace per ticket — every agent on the task works
@@ -509,17 +533,13 @@ export class BuilderforceRelayService implements IRelayService {
       // The run's code map, into the same shared facts store every runtime writes to
       // (paths are relative to the ticket workspace). Fire-and-forget.
       commitMemory: (consolidated) => getKnowledgeLoop()?.commitConsolidated?.(consolidated),
-      // The run's state lives in a session file beside the ticket workspaces.
-      ...(payload.executionId != null
-        ? {
-            sessionFile: path.join(
-              this.opts.workspaceDir ?? process.cwd(),
-              ".builderforce",
-              "runs",
-              `${payload.executionId}.json`,
-            ),
-          }
-        : {}),
+      // A steer the run never reached goes back as a late steer (a follow-up run), not nowhere.
+      onLateSteers: (late) => {
+        if (payload.executionId == null) return;
+        for (const steer of late) this.lateSteers.hold(payload.executionId, steer);
+      },
+      // The context window of the model, from the host's own models config (none ⇒ unknown).
+      window: configuredModelWindow(),
     });
     // The terminal state this run ended in, or null when it completed normally (the
     // ticket stays open and KEEPS its workspace — it is the shared ticket context).
@@ -541,7 +561,9 @@ export class BuilderforceRelayService implements IRelayService {
           signal: abortController.signal,
           ...(payload.policyGates?.length ? { policy: { gates: payload.policyGates } } : {}),
         });
-        result = { ok: run.ok, text: run.output };
+        // A stop command steered in ends the run without the portal knowing (no cancel frame),
+        // so it reports like any other run that did not complete.
+        result = { ok: run.ok, text: run.cancelled && !abortController.signal.aborted ? "Stopped by a stop command from the user." : run.output };
       } finally {
         steering.close();
         if (payload.executionId != null) {
@@ -1352,7 +1374,8 @@ export class BuilderforceRelayService implements IRelayService {
             ? msg.executionId
             : undefined;
         const channel = executionId != null ? this.v2Steering.get(executionId) : undefined;
-        const accepted = channel ? channel.push(msg.text) : false;
+        const steer = lateSteerFromFrame(msg);
+        const accepted = channel ? channel.push(msg.text, steer?.messageId) : false;
         if (accepted) break;
         // Not delivered — the run's last turn had already returned (its input stream is
         // closed), or this host holds no live run for the execution. Operator decision
@@ -1360,7 +1383,6 @@ export class BuilderforceRelayService implements IRelayService {
         // follow-up run on the same branch (relay-late-steers.ts). A finishing run's steer
         // is HELD until that run has reported its terminal state; with no run here it
         // goes back at once (if the run is live elsewhere, the API re-queues it there).
-        const steer = lateSteerFromFrame(msg);
         if (executionId == null || !steer) break;
         if (this.lateSteers.hold(executionId, steer)) {
           logWarn(

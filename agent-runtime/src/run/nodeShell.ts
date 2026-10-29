@@ -30,9 +30,15 @@ export interface NodeShellOptions {
   timeoutMs?: number;
 }
 
+/** The ceiling as the model reads it: whole minutes, or seconds for a short test ceiling. */
+function ceilingLabel(ms: number): string {
+  return ms >= 60_000 ? `${Math.round(ms / 60_000)} minutes` : `${Math.max(1, Math.round(ms / 1000))} seconds`;
+}
+
 /** Run one command to completion (or abort, or the ceiling). Never throws. */
 function runForeground(command: string, options: NodeShellOptions, runOpts?: ShellRunOptions): Promise<ShellResult> {
   const signal = runOpts?.signal;
+  const ceiling = options.timeoutMs ?? SHELL_FOREGROUND_TIMEOUT_MS;
   if (signal?.aborted) return Promise.resolve({ ok: false, aborted: true, error: "aborted before it started" });
 
   return new Promise<ShellResult>((resolve) => {
@@ -76,8 +82,8 @@ function runForeground(command: string, options: NodeShellOptions, runOpts?: She
     };
     const timer = setTimeout(() => {
       kill();
-      finish({ ok: false, error: `the command did not finish within ${Math.round((options.timeoutMs ?? SHELL_FOREGROUND_TIMEOUT_MS) / 60_000)} minutes and was killed` });
-    }, options.timeoutMs ?? SHELL_FOREGROUND_TIMEOUT_MS);
+      finish({ ok: false, error: `the command did not finish within ${ceilingLabel(ceiling)} and was killed` });
+    }, ceiling);
 
     signal?.addEventListener("abort", onAbort, { once: true });
     child.on("error", (err) => finish({ ok: false, error: err.message }));

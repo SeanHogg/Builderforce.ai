@@ -36,6 +36,8 @@ export interface OutcomeRowInput {
   entryPoint: string;
   /** The adapter's id for the run, when it named one. */
   runId?: string;
+  /** The run that spawned this one, for a sub-agent's row. */
+  parentRunId?: string;
   /** The terminal outcome kind the run settled on. */
   kind: RunOutcomeKind;
   /** The run's terminal state. */
@@ -52,6 +54,7 @@ export function buildOutcomeRow(input: OutcomeRowInput): RunOutcomeRow {
   return {
     entryPoint: input.entryPoint,
     ...(input.runId ? { runId: input.runId } : {}),
+    ...(input.parentRunId ? { parentRunId: input.parentRunId } : {}),
     steps: state.step,
     toolCalls: tally.toolCalls,
     toolErrors: tally.toolErrors,
