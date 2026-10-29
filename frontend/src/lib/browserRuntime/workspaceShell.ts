@@ -205,6 +205,16 @@ async function saveBack(
   };
 }
 
+/**
+ * A command run in a workspace-relative directory. The in-browser runtime's `bfsh -c` takes only
+ * a command line (no working directory), and `bfsh` is a POSIX-style shell, so the `cd` lives
+ * HERE, behind this adapter: the shared tools hand the directory over as `ShellRunOptions.cwd`.
+ */
+export function inWorkspaceDir(command: string, cwd: string | undefined): string {
+  if (!cwd || cwd === '.') return command;
+  return /\r?\n/.test(command.trim()) ? `cd "${cwd}" || exit 1\n${command}` : `cd "${cwd}" && ${command}`;
+}
+
 /** Run one command line to completion (or the timeout) and report it. */
 async function runInRuntime(
   runtime: PreviewRuntime,
@@ -242,7 +252,7 @@ export function createWorkspaceShell(store: WorkspaceFileStore, deps: WorkspaceS
   const boot = deps.boot ?? bootSharedPreviewRuntime;
   const timeoutMs = deps.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
 
-  const run = async (command: string): Promise<WorkspaceShellResult> => {
+  const run = async (command: string, cwd?: string): Promise<WorkspaceShellResult> => {
     let runtime: PreviewRuntime;
     try {
       runtime = await boot();
@@ -270,7 +280,7 @@ export function createWorkspaceShell(store: WorkspaceFileStore, deps: WorkspaceS
 
     let ran: Awaited<ReturnType<typeof runInRuntime>>;
     try {
-      ran = await runInRuntime(runtime, command, timeoutMs);
+      ran = await runInRuntime(runtime, inWorkspaceDir(command, cwd), timeoutMs);
     } catch (error) {
       return { ok: false, error: `The command could not be started: ${toolErrorMessage(error, 'spawn failed')}` };
     }
@@ -302,5 +312,5 @@ export function createWorkspaceShell(store: WorkspaceFileStore, deps: WorkspaceS
     };
   };
 
-  return { run: (command) => serialized(() => run(command)) };
+  return { run: (command, opts) => serialized(() => run(command, opts?.cwd)) };
 }

@@ -36,6 +36,17 @@ export interface SandboxProviderOptions {
 }
 
 /**
+ * A command run in a workspace-relative directory, for a sandbox whose exec API takes only a
+ * command line (`RunSandbox.run(command, signal, timeoutMs)` — a remote POSIX `sh`, never the
+ * host's shell). The `cd` lives HERE, behind this adapter: the shared tools hand the directory
+ * over as `ShellRunOptions.cwd` and never write it into a command.
+ */
+export function inSandboxDir(command: string, cwd: string | undefined): string {
+  if (!cwd || cwd === '.') return command;
+  return /\r?\n/.test(command.trim()) ? `cd "${cwd}" || exit 1\n${command}` : `cd "${cwd}" && ${command}`;
+}
+
+/**
  * The sandbox's shell as the run sees it: a long command beats the heartbeat, the run's
  * cancel kills it, and `timeoutMs` bounds it. Shared by the tools (`withSandbox`) and the
  * run-end verify, so neither can run a command the reaper takes for a silent run.
@@ -50,7 +61,7 @@ export function sandboxShell(sandbox: RunSandbox, opts: SandboxProviderOptions):
     }
   };
   return {
-    run: (command) => runFor(command),
+    run: (command, runOpts) => runFor(inSandboxDir(command, runOpts?.cwd)),
     runFor,
     ...(opts.trackedBranch ? { trackedBranch: opts.trackedBranch } : {}),
   };

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { realpathSync } from "node:fs";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -23,6 +24,8 @@ beforeEach(async () => {
   // Scripts, not `node -e "…"`: nested quotes are the one thing the platform shells disagree on.
   await writeFile(path.join(dir, "hello.js"), `console.log("hi");`);
   await writeFile(path.join(dir, "exit3.js"), `process.exit(3);`);
+  await writeFile(path.join(dir, "where.js"), `console.log(process.cwd());`);
+  await mkdir(path.join(dir, "sub"));
 });
 
 afterEach(async () => {
@@ -55,6 +58,24 @@ async function expectGone(pid: number): Promise<void> {
   for (let i = 0; i < 40 && alive(pid); i += 1) await new Promise((resolve) => setTimeout(resolve, 50));
   expect(alive(pid)).toBe(false);
 }
+
+describe("buildNodeShell — the working directory is the shell's, not the command's", () => {
+  const where = (cwd?: string) => buildNodeShell({ cwd: dir }).run(`node "${path.join(dir, "where.js")}"`, cwd ? { cwd } : undefined);
+  const real = (p: string) => realpathSync(p);
+
+  it("runs in the workspace root by default and in the named directory when given one", async () => {
+    expect(real((await where()).stdout?.trim() ?? "")).toBe(real(dir));
+    expect(real((await where("sub")).stdout?.trim() ?? "")).toBe(real(path.join(dir, "sub")));
+    expect(real((await where(".")).stdout?.trim() ?? "")).toBe(real(dir));
+  });
+
+  it("refuses a directory outside the workspace or one that is not there, without running anything", async () => {
+    for (const cwd of ["..", path.join("sub", "..", "..")]) {
+      expect(await where(cwd)).toMatchObject({ ok: false, error: expect.stringContaining("outside the workspace") });
+    }
+    expect(await where("missing")).toMatchObject({ ok: false, error: expect.stringContaining("does not exist") });
+  });
+});
 
 describe("shellInvocation", () => {
   it("hands the shell the command without argv quoting, and keeps the command's own exit code", () => {

@@ -6,6 +6,7 @@
  * timeout and output bound, the same result shape.
  */
 
+import { existsSync } from "fs";
 import * as path from "path";
 import type { ChildProcess } from "child_process";
 import type { ShellJobStart, ShellJobStatus, ShellResult } from "@builderforce/agent-tools";
@@ -57,6 +58,13 @@ function collect(child: ChildProcess, onOverflow: () => void): Promise<Exited> {
 }
 
 export interface LocalShellOptions {
+  /**
+   * The directory this command runs in: a workspace-relative path (already validated by the
+   * tool: no `..`, not absolute). The command is spawned WITH that working directory — it is
+   * never prefixed with a `cd`, which `cmd.exe` and Windows PowerShell 5.1 do not share a
+   * grammar for. Omitted ⇒ the shell's root.
+   */
+  cwd?: string;
   /** Wall-clock bound for this command; defaults to {@link RUN_TIMEOUT_MS}. */
   timeoutMs?: number;
   /** Extra environment for this command, layered over the editor's own. */
@@ -97,8 +105,18 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
   const cwd = path.resolve(root);
   const owner = opts.jobOwner;
 
+  /** The working directory for a command: `relative` under the root, refused when it leaves it or is not there. */
+  function dirOf(relative: string | undefined): { dir: string } | { error: string } {
+    if (!relative || relative === ".") return { dir: cwd };
+    const dir = path.resolve(cwd, relative);
+    const within = path.relative(cwd, dir);
+    if (within.startsWith("..") || path.isAbsolute(within)) return { error: `'${relative}' is outside the workspace, so no command was run there` };
+    if (!existsSync(dir)) return { error: `the directory '${relative}' does not exist in the workspace` };
+    return { dir };
+  }
+
   /** Execute once, in a named interpreter. `bash` null ⇒ the platform default shell. */
-  async function execOnce(command: string, bash: string | null, options: LocalShellOptions): Promise<ShellResult> {
+  async function execOnce(command: string, bash: string | null, options: LocalShellOptions, dir: string): Promise<ShellResult> {
     const timeout = options.timeoutMs ?? RUN_TIMEOUT_MS;
     const signal = options.signal;
     if (signal?.aborted) return aborted("");
@@ -108,7 +126,7 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
     // `spawnCommand` puts it in its own process group, so Stop can kill the group.
     let child: ChildProcess;
     try {
-      child = spawnCommand(command, bash, { cwd, ...(options.env ? { env: { ...process.env, ...options.env } } : {}) });
+      child = spawnCommand(command, bash, { cwd: dir, ...(options.env ? { env: { ...process.env, ...options.env } } : {}) });
     } catch (e) {
       return { ok: false, exitCode: 1, stdout: e instanceof Error ? e.message : String(e) };
     }
@@ -154,8 +172,10 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
       if (needsPosixShell(command) && !findBash()) {
         return { ok: false, error: NO_POSIX_SHELL };
       }
+      const where = dirOf(options.cwd);
+      if ("error" in where) return { ok: false, error: where.error };
       const bash = posixShellOption(command).shell ?? null;
-      const first = await execOnce(command, bash, options);
+      const first = await execOnce(command, bash, options, where.dir);
       // A stopped command is never started again under another interpreter.
       if (first.ok || bash || first.aborted) return first;
       // cmd.exe could not even ATTEMPT the command — an unlisted unix utility, a
@@ -167,12 +187,14 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
       // legitimately failed is run twice.
       const retryBash = findBash();
       if (!retryBash || !cmdCannotRun(first.stdout ?? "") || options.signal?.aborted) return first;
-      return execOnce(command, retryBash, options);
+      return execOnce(command, retryBash, options, where.dir);
     },
     async start(command: string, options: LocalShellOptions = {}): Promise<ShellJobStart> {
       if (needsPosixShell(command) && !findBash()) return { ok: false, error: NO_POSIX_SHELL };
+      const where = dirOf(options.cwd);
+      if ("error" in where) return { ok: false, error: where.error };
       return startJob(command, {
-        cwd,
+        cwd: where.dir,
         bash: posixShellOption(command).shell ?? null,
         maxOutput: RUN_MAX_OUTPUT,
         ...(owner !== undefined ? { owner } : {}),

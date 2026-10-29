@@ -51,19 +51,6 @@ export function inferRepoFromPath(path?: string): string | null {
 }
 
 /**
- * Scope a multi-line script into a repository subdirectory.
- *
- * A multi-line script cannot take the `cd X && Y` prefix — that would scope only its
- * FIRST line — so the `cd` becomes a guarded leading statement instead. Every script
- * that goes through here already requires a POSIX shell (they use `$(…)` and `[ … ]`),
- * which is what makes a bare `cd` line safe here and not for the one-liners.
- */
-export function repoScopedScript(script: string, repo: unknown): string {
-  const dir = safeRepoArg(repo);
-  return dir ? `cd "${dir}" || exit 1\n${script}` : script;
-}
-
-/**
  * POSIX one-liner that prints top-level checkout directory names, one per line.
  *
  * `$d` from a directory glob (`foo/`) so `$d.git` is `foo/.git` (a directory, or a file
@@ -117,7 +104,7 @@ export function notARepoResult(action: string, candidates: string[] = []): ToolR
 }
 
 export type GitShellCtx = {
-  caps: { shell?: { run(c: string, opts?: { signal?: AbortSignal }): Promise<{ ok: boolean; stdout?: string; exitCode?: number; error?: string }>; trackedBranch?: string; defaultRepo?: string } };
+  caps: { shell?: { run(c: string, opts?: { signal?: AbortSignal; cwd?: string }): Promise<{ ok: boolean; stdout?: string; exitCode?: number; error?: string }>; trackedBranch?: string; defaultRepo?: string } };
   /** The call's Stop (`ToolContext.signal`): a git command in flight is killed with the run. */
   signal?: AbortSignal;
 };
@@ -125,15 +112,19 @@ export type GitShellCtx = {
 /**
  * Run one command through the call's shell WITH the call's Stop (`ToolContext.signal`,
  * PRD 35 E10): a hung `git push`, an analyzer or a build dies with the run instead of
- * holding it to the shell's timeout. No signal ⇒ the shell is called exactly as before.
+ * holding it to the shell's timeout. `cwd` is the (validated, workspace-relative) directory the
+ * command runs in — handed to the shell as an option, never prefixed to the command. Neither a
+ * signal nor a cwd ⇒ the shell is called exactly as before.
  * The one way a tool runs a shell command.
  */
 export function shellRunWithStop<R>(
-  ctx: { caps: { shell?: { run(c: string, opts?: { signal?: AbortSignal }): Promise<R> } }; signal?: AbortSignal },
+  ctx: { caps: { shell?: { run(c: string, opts?: { signal?: AbortSignal; cwd?: string }): Promise<R> } }; signal?: AbortSignal },
   command: string,
+  cwd?: string,
 ): Promise<R> {
   const shell = ctx.caps.shell!;
-  return ctx.signal ? shell.run(command, { signal: ctx.signal }) : shell.run(command);
+  const opts = { ...(ctx.signal ? { signal: ctx.signal } : {}), ...(cwd ? { cwd } : {}) };
+  return Object.keys(opts).length > 0 ? shell.run(command, opts) : shell.run(command);
 }
 
 /** The run's resolved default checkout (`ShellCapability.defaultRepo`), validated — the

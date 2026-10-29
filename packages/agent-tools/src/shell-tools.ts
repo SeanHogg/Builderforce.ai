@@ -36,13 +36,6 @@ export function cwdArg(v: unknown): string | null | undefined {
   return safeRepoArg(dir);
 }
 
-/** Scope a command into `dir`: `cd X && cmd` for a one-liner (sh, cmd and PowerShell
- *  all read it), a guarded leading `cd` line for a multi-line script. */
-export function scopeCommand(command: string, dir: string | undefined): string {
-  if (!dir || dir === ".") return command;
-  return /\r?\n/.test(command.trim()) ? `cd "${dir}" || exit 1\n${command}` : `cd "${dir}" && ${command}`;
-}
-
 /** Where a command runs: the explicit `cwd`, else the default checkout — unless the
  *  command already enters a directory itself (`cd X && …`), which the model chose. */
 function commandDir(command: string, cwd: string | undefined, defaultRepo: string | undefined): string | undefined {
@@ -73,8 +66,9 @@ export async function runShellCommand(args: Record<string, unknown>, ctx: ToolCo
     return { data: { ok: false, error: "`cwd` must be a directory inside the workspace, relative to its root (no `..`, no absolute path)." } };
   }
   const shell = ctx.caps.shell!;
+  // The directory is handed to the shell as its working directory, never written into the
+  // command: `cd X && cmd` is not one language (Windows PowerShell 5.1 cannot parse `&&`).
   const dir = commandDir(command, cwd, shell.defaultRepo);
-  const scoped = scopeCommand(command, dir);
   const where = dir ? { cwd: dir } : {};
   const background = args.background === true;
   const yieldMs = waitArg(args.yieldMs);
@@ -85,7 +79,7 @@ export async function runShellCommand(args: Record<string, unknown>, ctx: ToolCo
       if (ctx.signal?.aborted) return { data: { ok: false, aborted: true, error: "stopped before the command started", ...where } };
       // The job is the RUN's (the surface kills it when the run settles), so the call's
       // signal is NOT its lifetime: it only bounds the yieldMs wait below.
-      const started = await shell.start(scoped);
+      const started = await (dir ? shell.start(command, { cwd: dir }) : shell.start(command));
       if (!started.ok || !started.id) return { data: { ok: false, error: started.error ?? "the background job did not start", ...where } };
       const id = started.id;
       if (background) return { data: { ok: true, background: true, id, status: "running", note: jobNote(id), ...where } };
@@ -100,7 +94,7 @@ export async function runShellCommand(args: Record<string, unknown>, ctx: ToolCo
     note = "This surface has no background shell, so the command ran in the foreground.";
   }
 
-  const r = await compressShellResult(await shellRunWithStop(ctx, scoped), ctx);
+  const r = await compressShellResult(await shellRunWithStop(ctx, command, dir), ctx);
   return { data: { ...(r as unknown as Record<string, unknown>), ...where, ...(note ? { note } : {}) } };
 }
 

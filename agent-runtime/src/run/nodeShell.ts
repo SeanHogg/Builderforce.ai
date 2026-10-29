@@ -13,6 +13,8 @@
  */
 
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import type { ShellCapability, ShellResult, ShellRunOptions } from "@builderforce/agent-tools";
 import { getShellConfig, killProcessTree } from "../agents/shell-utils.js";
 
@@ -28,6 +30,23 @@ export interface NodeShellOptions {
   defaultRepo?: string;
   /** Test seam: the foreground ceiling. */
   timeoutMs?: number;
+}
+
+/**
+ * The directory a command runs in: `relative` (the tool's workspace-relative `cwd`, already
+ * validated) under `root`, or `root` itself when none is named. A path that resolves OUTSIDE
+ * the root, or to a directory that is not there, is refused with the reason — the working
+ * directory is the host's to honour, so the host is also the one to keep it inside the workspace.
+ */
+export function resolveShellCwd(root: string, relative?: string): { ok: true; dir: string } | { ok: false; error: string } {
+  if (!relative || relative === ".") return { ok: true, dir: root };
+  const dir = path.resolve(root, relative);
+  const within = path.relative(root, dir);
+  if (within.startsWith("..") || path.isAbsolute(within)) {
+    return { ok: false, error: `'${relative}' is outside the workspace, so no command was run there` };
+  }
+  if (!existsSync(dir)) return { ok: false, error: `the directory '${relative}' does not exist in the workspace` };
+  return { ok: true, dir };
 }
 
 /** The ceiling as the model reads it: whole minutes, or seconds for a short test ceiling. */
@@ -55,11 +74,13 @@ function runForeground(command: string, options: NodeShellOptions, runOpts?: She
   const signal = runOpts?.signal;
   const ceiling = options.timeoutMs ?? SHELL_FOREGROUND_TIMEOUT_MS;
   if (signal?.aborted) return Promise.resolve({ ok: false, aborted: true, error: "aborted before it started" });
+  const where = resolveShellCwd(options.cwd, runOpts?.cwd);
+  if (!where.ok) return Promise.resolve({ ok: false, error: where.error });
 
   return new Promise<ShellResult>((resolve) => {
     const { shell, args } = shellInvocation(command);
     const child = spawn(shell, args, {
-      cwd: options.cwd,
+      cwd: where.dir,
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,

@@ -32,6 +32,7 @@ import { requestHumanInput } from "../../infra/approval-gate.js";
 import { withOnPremKnowledgeRows } from "../../agents/knowledge/onPremKnowledge.js";
 import { buildNodeCapabilityProvider } from "../../agents/node-capability-provider.js";
 import { runExecProcess } from "../../agents/bash-tools.exec-runtime.js";
+import { resolveShellCwd } from "../../run/nodeShell.js";
 import { onPremRootId, onPremWorkspaceKnowledgeIndex } from "../../agents/knowledge/index/onPremKnowledgeIndex.js";
 
 /** `knowledge.ask` (the workspace's knowledge index), then the shared rows — validated once. */
@@ -46,10 +47,12 @@ const COMMAND_OUTPUT_CHARS = 200_000;
 export function onPremShell(root: string): ShellCapability {
   return {
     async run(command, opts) {
+      const where = resolveShellCwd(root, opts?.cwd);
+      if (!where.ok) return { ok: false, error: where.error };
       const env = Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => typeof e[1] === "string"));
       const handle = await runExecProcess({
         command,
-        workdir: root,
+        workdir: where.dir,
         env,
         usePty: false,
         warnings: [],

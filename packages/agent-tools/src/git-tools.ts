@@ -21,7 +21,6 @@ import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
 import {
   commitPathCandidates,
   notARepoWithCandidates,
-  repoScopedScript,
   runInRepoScope,
   safeGitArg,
   safeRepoArg,
@@ -71,30 +70,16 @@ const IDENTITY_NAME = 'git config user.name  >/dev/null 2>&1 || git config user.
  * mirrors a surface-owned branch names it (`ShellCapability.trackedBranch`), and the
  * script then absorbs that branch first and publishes to it after.
  */
-export function buildGitCommand(action: GitAction, opts?: { path?: string; baseBranch?: string; limit?: number; repo?: string; trackedBranch?: string }): string {
+export function buildGitCommand(action: GitAction, opts?: { path?: string; baseBranch?: string; limit?: number; trackedBranch?: string }): string {
   const path = safeGitArg(opts?.path);
   const pathArg = path ? ` -- "${path}"` : "";
-  // A workspace root is not always the repository root: a monorepo checkout, or simply
-  // a folder holding several projects, has its `.git` one level down. `repo` scopes the
-  // command into that subdirectory. `cd X && Y` is the one chaining form that behaves
-  // identically under sh, cmd and PowerShell, so this stays portable across every
-  // surface that runs these strings. Omitted ⇒ byte-for-byte the previous command, so
-  // the Container image's execTool and its tests are unaffected.
-  //
-  // `repo` is held to a stricter rule than the other args: it becomes the target of a
-  // `cd`, so a `..` segment would walk OUT of the workspace rather than merely widening
-  // a diff. `safeGitArg` permits dots (a directory really can be named `Builderforce.ai`),
-  // so traversal is rejected separately here — the one place it would actually escape.
-  const repo = safeRepoArg(opts?.repo);
-  const scoped = (cmd: string): string => (repo ? `cd "${repo}" && ${cmd}` : cmd);
-  // The multi-line actions cannot take the `cd X && Y` prefix — it would scope only the
-  // first line — so they get the `cd` as their own leading statement instead. These
-  // scripts already require a POSIX shell (they use `$(…)` and `[ … ]`), so a bare `cd`
-  // line is safe here in a way it would not be for the one-liners above. Without this,
-  // `sync_latest`/`undo`/`redo` could ONLY ever run at the workspace root: in a folder
-  // that CONTAINS checkouts rather than being one, they were unusable and said nothing
-  // about why, while `git_status` — which does take `repo` — worked one call earlier.
-  const scopedScript = (lines: string[]): string => repoScopedScript(lines.join("\n"), opts?.repo);
+  // A workspace root is not always the repository root: a monorepo checkout, or simply a
+  // folder holding several projects, has its `.git` one level down. Where the command runs is
+  // NOT part of its text: the tool hands `repo` to the shell as the working directory
+  // (`ShellRunOptions.cwd`, validated by `safeRepoArg` — a `..` segment would walk OUT of the
+  // workspace), so the same command text runs under sh, cmd and PowerShell alike.
+  const scoped = (cmd: string): string => cmd;
+  const scopedScript = (lines: string[]): string => lines.join("\n");
   // A clone that mirrors a surface-owned branch (`ShellCapability.trackedBranch`): absorb
   // that branch before moving history (the surface may have committed since) and
   // publish the result, or the pull request never sees the sync / rewind.
@@ -166,7 +151,7 @@ async function runGitTool(action: GitAction, opts: { path?: string; baseBranch?:
   // the path names, then the run's default — and if none is a repository, NAME the
   // candidates (never send the model to `list_files` for a list we can produce here).
   const ran = await runInRepoScope(ctx, opts, (repo, path) =>
-    shellRunWithStop(ctx, buildGitCommand(action, { ...opts, repo, path, ...(trackedBranch ? { trackedBranch } : {}) })));
+    shellRunWithStop(ctx, buildGitCommand(action, { baseBranch: opts.baseBranch, limit: opts.limit, path, ...(trackedBranch ? { trackedBranch } : {}) }), safeRepoArg(repo) ?? undefined));
   if (!ran) return notARepoWithCandidates(action, ctx);
   const result = gitToolResult(action, ran.r);
   // Say WHERE it ran whenever that was not the obvious place, so a later command in
@@ -471,7 +456,7 @@ async function runPublishTool(
 ): Promise<ToolResult> {
   // A builder, when the script's own text depends on the repo (commit's path candidates).
   const build = (scope: string | undefined): string => (typeof command === "string" ? command : command(scope));
-  const ran = await runInRepoScope(ctx, repo ? { repo } : {}, (scope) => shellRunWithStop(ctx, repoScopedScript(build(scope), scope)));
+  const ran = await runInRepoScope(ctx, repo ? { repo } : {}, (scope) => shellRunWithStop(ctx, build(scope), safeRepoArg(scope) ?? undefined));
   if (!ran) return notARepoWithCandidates(action, ctx);
   const result = publishToolResult(action, ran.r);
   if (ran.repo && (result.data as { ok?: boolean }).ok) (result.data as Record<string, unknown>).repo = ran.repo;
