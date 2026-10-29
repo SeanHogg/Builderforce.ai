@@ -7,10 +7,12 @@
  * → `providerKeyHealth.ts`). Only a verdict that means "the credential does not resolve"
  * counts — `capacity`, `needs_attention`, `local_egress_required` are not a missing
  * account, and `lookup_failed` is our own transient read failure, not the tenant's.
+ * `unavailable` is the server's verdict for a configured credential that did not resolve
+ * without a stated reason (`deriveProviderKeyHealth`) — still unresolved, so announced.
  */
 
-/** The `ByoUnresolvedReason`s a run can be told about (api `tenantProviderKeyService.ts`). */
-const UNRESOLVED: ReadonlySet<string> = new Set(["revoked", "expired", "undecryptable", "unsupported-auth", "other-workspace"]);
+/** The `ByoUnresolvedReason`s a run can be told about (api `tenantProviderKeyService.ts`), plus `unavailable`. */
+const UNRESOLVED: ReadonlySet<string> = new Set(["revoked", "expired", "undecryptable", "unsupported-auth", "other-workspace", "unavailable"]);
 
 export interface ProviderHealth {
   provider: string;

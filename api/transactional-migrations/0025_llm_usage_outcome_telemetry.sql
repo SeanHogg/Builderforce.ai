@@ -3,7 +3,7 @@
 -- write-side llm_usage_log live on THIS (operational / NEON_TRANSACTIONAL_DATABASE_URL)
 -- track: run_model_outcomes was created here by 0013_run_telemetry.sql and the
 -- agent-run usage writes land here. The primary track's coordinating header is
--- migrations/1278_run_outcome_telemetry.sql (no DDL there by design).
+-- migrations/1281_run_outcome_telemetry.sql (no DDL there by design).
 --
 -- Expand now, contract in a later push: every column is additive + nullable (or
 -- defaulted) so rows written before 0025 stay valid. No backfill beyond the two

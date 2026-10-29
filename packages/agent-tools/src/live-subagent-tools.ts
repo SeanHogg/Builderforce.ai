@@ -77,9 +77,17 @@ export function clipChildOutput(output: string): string {
     : output;
 }
 
+const CHILD_REPORT_HEAD = "[Sub-agent ";
+
+/** Is this owner turn its children's reports ({@link childReportText}) — a wake, not a
+ *  person's request? */
+export function isChildReportText(text: string | null | undefined): boolean {
+  return !!text && text.trimStart().startsWith(CHILD_REPORT_HEAD);
+}
+
 /** A child's report as its owner reads it in its inbox. */
 export function childReportText(report: ChildReportLike): string {
-  const head = `[Sub-agent ${report.handle} · ${report.name} — ${report.state}] ${report.label}${report.ticket ? ` (ticket ${report.ticket})` : ""}`;
+  const head = `${CHILD_REPORT_HEAD}${report.handle} · ${report.name} — ${report.state}] ${report.label}${report.ticket ? ` (ticket ${report.ticket})` : ""}`;
   const files = report.changedFiles?.length ? `Changed: ${report.changedFiles.join(", ")}` : "";
   const issues = report.openIssues?.length
     ? `${OPEN_ISSUES_HEAD}\n${report.openIssues.map((i) => `- ${i}`).join("\n")}`

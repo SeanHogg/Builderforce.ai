@@ -1,4 +1,4 @@
--- 1278 · The uniform outcome row + telemetry label (PRD 35 §8.2, WS6) — COORDINATING
+-- 1281 · The uniform outcome row + telemetry label (PRD 35 §8.2, WS6) — COORDINATING
 -- HEADER ONLY. This file intentionally contains NO DDL.
 --
 -- run_model_outcomes and the write-side llm_usage_log live on the OPERATIONAL

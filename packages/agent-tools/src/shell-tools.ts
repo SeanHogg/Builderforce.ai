@@ -12,7 +12,7 @@
  */
 
 import { defineTool, type ToolContext, type ToolDefinition, type ToolResult } from "./tool.js";
-import { safeRepoArg } from "./git-repo-scope.js";
+import { safeRepoArg, shellRunWithStop } from "./git-repo-scope.js";
 import { compressShellResult } from "./compress.js";
 import type { ShellJobStatus, ShellResult } from "./capabilities.js";
 
@@ -76,7 +76,6 @@ export async function runShellCommand(args: Record<string, unknown>, ctx: ToolCo
   const dir = commandDir(command, cwd, shell.defaultRepo);
   const scoped = scopeCommand(command, dir);
   const where = dir ? { cwd: dir } : {};
-  const opts = ctx.signal ? { signal: ctx.signal } : undefined;
   const background = args.background === true;
   const yieldMs = waitArg(args.yieldMs);
   let note: string | undefined;
@@ -101,7 +100,7 @@ export async function runShellCommand(args: Record<string, unknown>, ctx: ToolCo
     note = "This surface has no background shell, so the command ran in the foreground.";
   }
 
-  const r = await compressShellResult(opts ? await shell.run(scoped, opts) : await shell.run(scoped), ctx);
+  const r = await compressShellResult(await shellRunWithStop(ctx, scoped), ctx);
   return { data: { ...(r as unknown as Record<string, unknown>), ...where, ...(note ? { note } : {}) } };
 }
 

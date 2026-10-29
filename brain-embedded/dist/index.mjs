@@ -1988,12 +1988,12 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-haiku-latest": [1e-7, 5e-7],
   "~anthropic/claude-opus-latest": [4e-6, 2e-5],
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
-  "~deepseek/deepseek-flash-latest": [126e-10, 18e-7],
-  "~deepseek/deepseek-pro-latest": [2542e-10, 8e-6],
+  "~deepseek/deepseek-flash-latest": [166e-10, 18e-7],
+  "~deepseek/deepseek-pro-latest": [1035e-10, 8e-6],
   "~deepseek/deepseek-v4-flash-latest": [475e-10, 1568e-10],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [15e-8, 2e-5],
+  "~moonshotai/kimi-latest": [1824e-10, 93388e-10],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -2001,7 +2001,7 @@ var PRICE_SNAPSHOT = {
   "~openai/gpt-terra-latest": [1e-6, 5e-6],
   "~unbiased/pareto-latest": [8e-7, 32e-7],
   "~x-ai/grok-latest": [2e-6, 6e-6],
-  "~z-ai/glm-flash-latest": [197e-10, 1238e-10],
+  "~z-ai/glm-flash-latest": [416e-10, 771e-10],
   "~z-ai/glm-latest": [699e-10, 14e-7],
   "aion-labs/aion-2.0": [8e-7, 16e-7],
   "aion-labs/aion-3.0": [3e-6, 6e-6],
@@ -2070,9 +2070,9 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v4-flash-0731": [119e-9, 238e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [2156e-10, 6468e-10],
   "deepseek/deepseek-v4-pro": [95526e-11, 191052e-11],
-  "deepseek/deepseek-v4-pro-0813": [66e-8, 198e-8],
-  "deepseek/deepseek-v4.1-flash": [14e-8, 42e-8],
-  "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
+  "deepseek/deepseek-v4-pro-0813": [132e-8, 396e-8],
+  "deepseek/deepseek-v4.1-flash": [45e-9, 5e-7],
+  "deepseek/deepseek-v4.1-flash-1017": [3e-7, 12e-7],
   "deepseek/deepseek-v4.1-flash:batch": [5e-8, 15e-8],
   "dots-studio/dots-3-note-preview:free": [0, 0],
   "elorian/glimpse": [6e-7, 3e-6],
@@ -2112,14 +2112,14 @@ var PRICE_SNAPSHOT = {
   "google/gemma-3-12b-it": [5e-8, 15e-8],
   "google/gemma-3-27b-it": [8e-8, 35e-8],
   "google/gemma-3-4b-it": [5e-8, 1e-7],
-  "google/gemma-4-26b-a4b-it": [9e-8, 3e-7],
+  "google/gemma-4-26b-a4b-it": [765e-10, 255e-9],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
   "google/lyria-3-clip-preview": [0, 0],
   "google/lyria-3-pro-preview": [0, 0],
   "gryphe/mythomax-l2-13b": [8e-8, 11e-8],
-  "ibm-granite/granite-4.2-8b": [6e-8, 25e-8],
+  "ibm-granite/granite-4.2-8b": [6e-8, 15e-8],
   "inception/mercury-2": [25e-8, 75e-8],
   "inception/mercury-2.5": [4e-8, 15e-8],
   "inception/mercury-3": [1e-7, 35e-8],
@@ -2134,7 +2134,7 @@ var PRICE_SNAPSHOT = {
   "mancer/weaver": [4e-7, 75e-8],
   "meituan/longcat-2.0": [3e-7, 12e-7],
   "meta-llama/llama-3.1-70b-instruct": [4e-7, 4e-7],
-  "meta-llama/llama-3.1-8b-instruct": [2e-8, 4e-8],
+  "meta-llama/llama-3.1-8b-instruct": [5e-8, 8e-8],
   "meta-llama/llama-3.2-1b-instruct": [27e-9, 201e-9],
   "meta-llama/llama-3.2-3b-instruct": [5e-8, 33e-8],
   "meta-llama/llama-3.3-70b-instruct": [1e-7, 32e-8],
@@ -2187,8 +2187,8 @@ var PRICE_SNAPSHOT = {
   "moonshotai/kimi-k2-thinking": [6e-7, 25e-7],
   "moonshotai/kimi-k2.5": [5e-7, 25e-7],
   "moonshotai/kimi-k2.6": [65e-8, 341e-8],
-  "moonshotai/kimi-k2.7-code": [6725e-10, 31e-7],
-  "moonshotai/kimi-k3": [15e-8, 2e-5],
+  "moonshotai/kimi-k2.7-code": [56e-8, 31e-7],
+  "moonshotai/kimi-k3": [192e-9, 2e-5],
   "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
   "moonshotai/kimi-k3.1-pro": [2e-6, 1e-5],
   "morph/morph-v3-fast": [8e-7, 12e-7],
@@ -2213,7 +2213,6 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-3.5-turbo-0613": [1e-6, 2e-6],
   "openai/gpt-3.5-turbo-16k": [3e-6, 4e-6],
   "openai/gpt-4": [3e-5, 6e-5],
-  "openai/gpt-4-turbo": [1e-5, 3e-5],
   "openai/gpt-4-turbo:batch": [5e-6, 15e-6],
   "openai/gpt-4.1": [2e-6, 8e-6],
   "openai/gpt-4.1-mini": [4e-7, 16e-7],
@@ -2304,16 +2303,10 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-oss-20b": [18e-9, 9e-8],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
   "openai/gpt-oss-safeguard-20b": [75e-9, 3e-7],
-  "openai/o1": [15e-6, 6e-5],
-  "openai/o1-pro": [15e-5, 6e-4],
   "openai/o3": [2e-6, 8e-6],
-  "openai/o3-mini": [11e-7, 44e-7],
-  "openai/o3-mini-high": [11e-7, 44e-7],
   "openai/o3-mini:batch": [55e-8, 22e-7],
   "openai/o3-pro": [2e-5, 8e-5],
   "openai/o3:batch": [1e-6, 4e-6],
-  "openai/o4-mini": [11e-7, 44e-7],
-  "openai/o4-mini-high": [11e-7, 44e-7],
   "openai/o4-mini:batch": [55e-8, 22e-7],
   "openrouter/auto": [0, 0],
   "openrouter/auto-beta": [0, 0],
@@ -2321,6 +2314,7 @@ var PRICE_SNAPSHOT = {
   "openrouter/free": [0, 0],
   "openrouter/fusion": [0, 0],
   "openrouter/pareto-code": [0, 0],
+  "particle-ai/particle-1": [25e-8, 1e-6],
   "perceptron/perceptron-mk1": [15e-8, 15e-7],
   "perceptron/perceptron-mk1.5": [15e-8, 15e-7],
   "perplexity/sonar": [1e-6, 1e-6],
@@ -2350,7 +2344,6 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3-coder-flash": [195e-9, 975e-9],
   "qwen/qwen3-coder-next": [12e-8, 8e-7],
   "qwen/qwen3-next-80b-a3b-instruct": [9e-8, 11e-7],
-  "qwen/qwen3-next-80b-a3b-thinking": [15e-8, 12e-7],
   "qwen/qwen3-vl-235b-a22b-instruct": [21e-8, 19e-7],
   "qwen/qwen3-vl-30b-a3b-instruct": [15e-8, 6e-7],
   "qwen/qwen3-vl-30b-a3b-thinking": [29e-8, 1e-6],
@@ -2433,16 +2426,16 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-4.5": [6e-7, 22e-7],
   "z-ai/glm-4.5-air": [13e-8, 85e-8],
   "z-ai/glm-4.5v": [6e-7, 18e-7],
-  "z-ai/glm-4.6": [55e-8, 22e-7],
+  "z-ai/glm-4.6": [5e-7, 2e-6],
   "z-ai/glm-4.6v": [3e-7, 9e-7],
   "z-ai/glm-4.7": [54e-8, 198e-8],
   "z-ai/glm-4.7-flash": [605e-10, 4e-7],
   "z-ai/glm-5": [1e-6, 32e-7],
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
   "z-ai/glm-5.1": [14e-7, 44e-7],
-  "z-ai/glm-5.2": [14e-9, 7e-6],
+  "z-ai/glm-5.2": [6e-9, 7e-6],
   "z-ai/glm-5.3": [699e-10, 14e-7],
-  "z-ai/glm-5.3-flash": [15e-8, 5e-7],
+  "z-ai/glm-5.3-flash": [416e-10, 771e-10],
   "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
   "z-ai/glm-5.3-prime": [28e-7, 88e-7],
@@ -7736,6 +7729,10 @@ function notARepoResult(action, candidates = []) {
     }
   };
 }
+function shellRunWithStop(ctx, command) {
+  const shell = ctx.caps.shell;
+  return ctx.signal ? shell.run(command, { signal: ctx.signal }) : shell.run(command);
+}
 function defaultRepoOf(ctx) {
   return safeRepoArg(ctx.caps.shell?.defaultRepo);
 }
@@ -7745,7 +7742,7 @@ function pathInRepo(path2, repo) {
   return inner.length > 0 ? inner[inner.length - 1] : void 0;
 }
 async function notARepoWithCandidates(action, ctx) {
-  const listed = await ctx.caps.shell.run(buildListCheckoutsCommand());
+  const listed = await shellRunWithStop(ctx, buildListCheckoutsCommand());
   return notARepoResult(action, parseCheckoutList(listed.stdout));
 }
 var NOT_A_REPO = /not a git repository/i;
@@ -7826,7 +7823,6 @@ async function runShellCommand(args, ctx) {
   const dir = commandDir(command, cwd, shell.defaultRepo);
   const scoped = scopeCommand(command, dir);
   const where = dir ? { cwd: dir } : {};
-  const opts = ctx.signal ? { signal: ctx.signal } : void 0;
   const background = args.background === true;
   const yieldMs = waitArg(args.yieldMs);
   let note;
@@ -7847,7 +7843,7 @@ async function runShellCommand(args, ctx) {
     }
     note = "This surface has no background shell, so the command ran in the foreground.";
   }
-  const r = await compressShellResult(opts ? await shell.run(scoped, opts) : await shell.run(scoped), ctx);
+  const r = await compressShellResult(await shellRunWithStop(ctx, scoped), ctx);
   return { data: { ...r, ...where, ...note ? { note } : {} } };
 }
 function jobId(args) {
@@ -7960,7 +7956,7 @@ function gitToolResult(action, r) {
 }
 async function runGitTool(action, opts, ctx) {
   const trackedBranch = ctx.caps.shell?.trackedBranch;
-  const ran = await runInRepoScope(ctx, opts, (repo, path2) => ctx.caps.shell.run(buildGitCommand(action, { ...opts, repo, path: path2, ...trackedBranch ? { trackedBranch } : {} })));
+  const ran = await runInRepoScope(ctx, opts, (repo, path2) => shellRunWithStop(ctx, buildGitCommand(action, { ...opts, repo, path: path2, ...trackedBranch ? { trackedBranch } : {} })));
   if (!ran) return notARepoWithCandidates(action, ctx);
   const result = gitToolResult(action, ran.r);
   if (ran.repo && result.data.ok) {
@@ -8164,7 +8160,7 @@ function publishToolResult(action, r) {
 }
 async function runPublishTool(action, command, repo, ctx) {
   const build = (scope) => typeof command === "string" ? command : command(scope);
-  const ran = await runInRepoScope(ctx, repo ? { repo } : {}, (scope) => ctx.caps.shell.run(repoScopedScript(build(scope), scope)));
+  const ran = await runInRepoScope(ctx, repo ? { repo } : {}, (scope) => shellRunWithStop(ctx, repoScopedScript(build(scope), scope)));
   if (!ran) return notARepoWithCandidates(action, ctx);
   const result = publishToolResult(action, ran.r);
   if (ran.repo && result.data.ok) result.data.repo = ran.repo;
@@ -8873,15 +8869,15 @@ function createAnalyzeCodebaseTool(options = {}) {
       for (const analyzer of ANALYZERS) {
         try {
           if (analyzer.name === "dependency-cruiser") {
-            const config = await ctx.caps.shell.run(`node -e "const f=require('fs');f.mkdirSync('${outputDir}',{recursive:true});f.writeFileSync('${outputDir}/dependencies.json',Buffer.from('${configBase64}','base64'))"`);
+            const config = await shellRunWithStop(ctx, `node -e "const f=require('fs');f.mkdirSync('${outputDir}',{recursive:true});f.writeFileSync('${outputDir}/dependencies.json',Buffer.from('${configBase64}','base64'))"`);
             if (!config.ok) throw new Error("Could not create dependency analysis configuration");
           }
           if (analyzer.name === "jscpd") {
-            const cleanup = await ctx.caps.shell.run(`node -e "require('fs').mkdirSync('${outputDir}',{recursive:true})"`);
+            const cleanup = await shellRunWithStop(ctx, `node -e "require('fs').mkdirSync('${outputDir}',{recursive:true})"`);
             if (!cleanup.ok) throw new Error("Could not clear the previous duplication artifact");
           }
           const command = analyzer.name === "knip" ? scope === "." ? analyzer.command : analyzer.command.replace("knip --reporter", `cd ${scope} && knip --reporter`) : analyzer.command.replace(/ \."$/, ` ${scope}"`);
-          const result = await ctx.caps.shell.run(command.replaceAll(".builderforce/code-analysis", outputDir));
+          const result = await shellRunWithStop(ctx, command.replaceAll(".builderforce/code-analysis", outputDir));
           const artifact = analyzer.name === "jscpd" ? await ctx.caps.repoRead.readFile(`${outputDir}/jscpd-report.json`) : void 0;
           const text = artifact ? artifact.content : result.stdout;
           if (!text || artifact?.truncated) throw new Error("Analyzer output is empty or truncated; scan a smaller project");
@@ -8899,7 +8895,7 @@ function createAnalyzeCodebaseTool(options = {}) {
       }
       const git = async (command) => {
         try {
-          const r = await ctx.caps.shell.run(command);
+          const r = await shellRunWithStop(ctx, command);
           return r.exitCode === 0 ? (r.stdout ?? "").trim() : null;
         } catch {
           return null;
@@ -9738,6 +9734,10 @@ var OPEN_ISSUES_HEAD = `Open issues \u2014 yours before you finish (${RESOLVE_OP
 var SUBAGENT_CONTROL_TOOL_NAMES = { wait: "wait_agents", message: "message_agent", stop: "stop_agent" };
 var MAX_WAIT_SECONDS = 600;
 var DEFAULT_WAIT_SECONDS = 300;
+var CHILD_REPORT_HEAD = "[Sub-agent ";
+function isChildReportText(text) {
+  return !!text && text.trimStart().startsWith(CHILD_REPORT_HEAD);
+}
 var handlesOf = (v) => Array.isArray(v) ? v.filter((h) => typeof h === "string" && h.trim() !== "").map((h) => h.trim()) : [];
 var live = (ctx) => ctx.caps.orchestration?.live ?? null;
 var unavailable = () => ({ data: { ok: false, error: "this surface runs no background sub-agents" } });
@@ -19850,13 +19850,23 @@ function modelDowngradeEvent(input) {
     };
   }
   const unresolved = (input.byoUnresolved ?? "").trim();
-  if (!unresolved) return null;
+  const flash = !unresolved && input.planPhase ? planModelWarning(resolved, input.book) : null;
+  if (!unresolved && !flash) return null;
   const said = input.events.some((e) => {
     if (e.label !== MODEL_DOWNGRADE_LABEL) return false;
     const args = e.args;
     return args?.requestedModel === "default" && args.model === resolved;
   });
   if (said) return null;
+  if (flash) {
+    return {
+      ts,
+      category: "message",
+      label: MODEL_DOWNGRADE_LABEL,
+      args: { requestedModel: "default", model: resolved, step, planTier: flash.tier },
+      result: `Auto-routing planned this run on ${resolved}, a ${flash.tier}-tier (Flash-class) model \u2014 weak at planning a multi-step change; pick a stronger model for planning if the result matters.`
+    };
+  }
   return {
     ts,
     category: "message",
@@ -20179,6 +20189,7 @@ function completeTurnPort(run) {
       step: iter,
       ts: nowIso(),
       events: runTrace(c),
+      planPhase: !c.codeChanged,
       ...result.byoUnresolved ? { byoUnresolved: result.byoUnresolved } : {}
     });
     if (downgrade) pushTrace(c, downgrade);
@@ -21172,7 +21183,8 @@ async function startRun(runKey, request) {
       });
     }
     const trace3 = runTrace(c);
-    const wakeTurn = delegatingCells.has(c);
+    const requestText = req.userTurn === void 0 ? void 0 : contentText(req.userTurn);
+    const wakeTurn = delegatingCells.has(c) && isChildReportText(requestText);
     if (attemptedDelegation(trace3)) delegatingCells.add(c);
     const outcome = req.reportOutcome && codeRunOutcome({
       runId: c.runId,
@@ -21183,7 +21195,7 @@ async function startRun(runKey, request) {
       shipped,
       trace: trace3,
       projectId: req.projectId,
-      askedForChange: !wakeTurn && asksForChange(req.userTurn === void 0 ? void 0 : contentText(req.userTurn))
+      askedForChange: !wakeTurn && asksForChange(requestText)
     });
     if (outcome) void req.reportOutcome(outcome).catch(() => void 0);
     reportRunEnd(c, req, { aborted, failed: c.error !== "" });

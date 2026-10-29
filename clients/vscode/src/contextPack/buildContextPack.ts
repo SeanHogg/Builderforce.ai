@@ -22,7 +22,7 @@ import { readCheckoutState } from "./checkoutState";
 import { workspaceSymbolIndex } from "../workspaceSymbols";
 import { codemapFactsForRequest } from "./requestAreas";
 import { withinMs } from "./withinMs";
-import { extractFocusPaths, resolveUnderRoot, workspaceRelative } from "./focusPaths";
+import { extractFocusPaths, isRelativePath, resolveUnderRoot, workspaceRelative } from "./focusPaths";
 import {
   FOCUS_INLINE_CHARS,
   contextPackRecallHint,
@@ -38,6 +38,8 @@ import { CONTEXT_PACK_DEADLINE_MS } from "./deadline";
 export { CONTEXT_PACK_DEADLINE_MS };
 /** A file larger than this is not read at all — its outline would not be worth the read. */
 const MAX_FOCUS_BYTES = 2_000_000;
+/** Code paths the focus files name, at most, in the recall hint — a query, not a listing. */
+const MAX_HINT_NAMED_PATHS = 12;
 
 export interface ContextPackInput {
   root: string;
@@ -125,5 +127,7 @@ export async function buildContextPack(
   const rendered = renderContextPack(parts);
   const servedReads = parts.focus.flatMap((f) =>
     f.content !== undefined && rendered.inlined.includes(f.path) ? [{ path: f.path, content: f.content, totalLines: f.totalLines }] : []);
-  return { block: rendered.block, recallHint: contextPackRecallHint(parts), dropped: rendered.dropped, servedReads };
+  // The relative code paths the focus files name (§6.10 recall query).
+  const named = loaded.flatMap((f) => extractFocusPaths(f.text, MAX_HINT_NAMED_PATHS)).filter(isRelativePath).slice(0, MAX_HINT_NAMED_PATHS);
+  return { block: rendered.block, recallHint: contextPackRecallHint(parts, undefined, named), dropped: rendered.dropped, servedReads };
 }
