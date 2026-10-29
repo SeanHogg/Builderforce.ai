@@ -11,7 +11,9 @@ const h = vi.hoisted(() => ({
   release: vi.fn(async () => undefined),
   commit: vi.fn(async () => true),
   workerCancel: vi.fn(async () => undefined),
+  sender: vi.fn(async (..._a: unknown[]) => null as string | null),
 }));
+vi.mock('./executionSteering', () => ({ lastPersonSteerSender: h.sender }));
 vi.mock('../../buildRuntimeService', () => ({ buildRuntimeService: () => ({ cancel: h.workerCancel }) }));
 vi.mock('./cloudFinalize', () => ({ finalizeCloudRun: h.finalize }));
 vi.mock('../coordination/leaseService', () => ({ releaseAllForExecution: h.release }));
@@ -57,6 +59,17 @@ describe('settleCloudRun', () => {
     expect(runtime.cancel).toHaveBeenCalledWith(9, expect.any(String));
     expect(h.finalize).toHaveBeenCalledWith({}, {}, expect.objectContaining({ cancelled: true }));
     expect(result.cancelled).toBe(true);
+  });
+
+  it('attributes the steered stop to the person who sent it, else to the execution itself', async () => {
+    const runtime = { cancel: vi.fn(async () => undefined) };
+    h.sender.mockResolvedValueOnce('user-42');
+    await settleCloudRun(host({ runtime }), { kind: 'failed', reason: 'cancelled', state }, stash, model());
+    expect(h.sender).toHaveBeenCalledWith({}, 1, 9);
+    expect(runtime.cancel).toHaveBeenLastCalledWith(9, 'user-42');
+    h.sender.mockResolvedValueOnce(null);
+    await settleCloudRun(host({ runtime }), { kind: 'failed', reason: 'cancelled', state }, stash, model());
+    expect(runtime.cancel).toHaveBeenLastCalledWith(9, 'execution:9');
   });
 
   it('on a surface with no delegation runtime (the Worker fallback) the same cancel use case transitions the row', async () => {

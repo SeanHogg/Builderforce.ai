@@ -16,7 +16,7 @@
  * Every function is best-effort on write/read failure (telemetry-grade) so it can
  * never break a run, mirroring the recordCloud* helpers.
  */
-import { asc, eq, isNotNull, isNull } from 'drizzle-orm';
+import { asc, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { executionMessages } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -115,6 +115,27 @@ export async function hasPendingPersonSteer(db: Db, tenantId: number, executionI
   } catch {
     return false;
   }
+}
+
+/**
+ * The person who sent the latest steer on this run (`sentBy`), or null when no person did — a sub-agent's report has
+ * no sender. A stop that arrives as a steer is attributed to them on the cancel's audit row. Throws on a read
+ * failure: the caller decides whether attribution is worth failing for (a cancel is not).
+ */
+export async function lastPersonSteerSender(db: Db, tenantId: number, executionId: number): Promise<string | null> {
+  const [row] = await db
+    .select({ sentBy: executionMessages.sentBy })
+    .from(executionMessages)
+    .where(scopedToTenant(
+      executionMessages,
+      tenantId,
+      eq(executionMessages.executionId, executionId),
+      eq(executionMessages.role, 'user'),
+      isNotNull(executionMessages.sentBy),
+    ))
+    .orderBy(desc(executionMessages.createdAt))
+    .limit(1);
+  return row?.sentBy ?? null;
 }
 
 /**

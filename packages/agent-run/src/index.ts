@@ -102,7 +102,7 @@ export {
   type TaskState,
 } from "./policy/tools/taskState.js";
 export { openingRows, systemPrompt } from "./turnContext.js";
-export { CLOUD_RUN_CANCELLED_REASON } from "./policy/steering/index.js";
+export { RUN_CANCELLED_NOTICE } from "./policy/steering/index.js";
 export { createCompactionHook, type CompactionHookOptions } from "./policy/compaction/index.js";
 // The compaction primitives a surface sizes its own budgets with (the cost-loop session, the gateway summarizer).
 export {

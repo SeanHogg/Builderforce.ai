@@ -24,6 +24,7 @@ import { missingReviewVerdictMessage } from './cloudAgent/finishGates';
 import { commitRunMemory, describeVerifyOutcome, recordRunVerifyEvents, runVerifyPhase } from './cloudAgent/runEndMemory';
 import { runSandboxVerify } from './sandbox/sandboxVerify';
 import { snapshotWrittenHashes } from './cloudAgent/writtenFileHashes';
+import { lastPersonSteerSender } from './executionSteering';
 import { finalizeCloudRun } from './cloudFinalize';
 import type { CloudModelPort } from './cloudAdapterModel';
 import type { CloudRunHost } from './cloudRunHost';
@@ -128,8 +129,11 @@ async function cancelOnSteeredStop(host: CloudRunHost): Promise<void> {
   // The same application use case the cancel API runs (`RuntimeService.cancel`): the row flips to CANCELLED, the runner is told,
   // the audit and the lifecycle narration are written. A Worker surface has no delegation runtime, so it builds the canonical one.
   const runtime = host.opts.delegation?.runtime ?? buildRuntimeService(host.env, host.db);
-  await runtime.cancel(host.refs.executionId, 'agent:stop-steer')
-    .catch(reportedFallback(undefined, { source: 'application/runtime/cloudRunTail.ts', operation: 'cancelOnSteeredStop', context: { executionId: host.refs.executionId } }));
+  const { tenantId, executionId } = host.refs;
+  const where = { source: 'application/runtime/cloudRunTail.ts', operation: 'cancelOnSteeredStop', context: { executionId } };
+  // The audit row names the PERSON whose steer stopped the run; with none on record the execution itself is the actor.
+  const sender = await lastPersonSteerSender(host.db, tenantId, executionId).catch(reportedFallback<string | null>(null, { ...where, operation: 'stopSenderLookup' }));
+  await runtime.cancel(executionId, sender ?? `execution:${executionId}`).catch(reportedFallback(undefined, where));
 }
 
 /** Land a run that is over: leases, the sign-off check, verify + memory, then the pull request / teardown. */

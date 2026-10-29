@@ -15,7 +15,7 @@ import { recordPullRequestRow, markPullRequestMergedById } from '../repos/record
 import { publishAgentRunVerdict } from '../checks/publishTaskVerdict';
 import { postRepoPrComment } from '../repos/postPrComment';
 import { openClaimedPullRequest, openTaskRepoSetPullRequests } from '../repos/openTaskPullRequest';
-import { CLOUD_RUN_CANCELLED_REASON } from '@builderforce/agent-run';
+import { RUN_CANCELLED_NOTICE } from '@builderforce/agent-run';
 import { contributeTextToProjectEverminds } from '../llm/projectEvermind';
 import { finalizeLearnWeight, runProducedOutput } from './scoreRunOutcome';
 import { recordCloudToolEvent } from './cloudToolEvents';
@@ -247,7 +247,7 @@ ${ciVerified
     finalOutput ||
     (writtenPaths.size > 0
       ? `Committed ${writtenPaths.size} file(s)${repoCtx?.branch ? ` to \`${repoCtx.branch}\`` : ''}${prOpened ? ', opened a PR' : ''}${mergeNote}${noPrNote}.${spanningNote}`
-      : cancelled ? CLOUD_RUN_CANCELLED_REASON : '(no output produced)');
+      : cancelled ? RUN_CANCELLED_NOTICE : '(no output produced)');
   // Only a FAILED auto-merge breaks the "ship it" contract. Approval-gated runs end
   // with the PR open by design, so an unmerged PR there is success, not failure.
   const autoMergeFailed = prOpened && cloudAutoMergeEnabled(env) && !merged;
