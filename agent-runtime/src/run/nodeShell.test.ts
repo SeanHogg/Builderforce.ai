@@ -29,8 +29,30 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(dir, { recursive: true, force: true });
+  // The idler's cwd is `dir`; on Windows a directory with a live process in it cannot be removed
+  // (EBUSY), and under parallel load the tree can still be dying when the test body returns. So the
+  // process is confirmed dead FIRST (killed here if the test did not already), then the removal retries.
+  await ensureDead(recordedPid());
+  await rm(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
 });
+
+/** The pid the idler wrote, or undefined when it never started. */
+function recordedPid(): number | undefined {
+  if (!existsSync(pidFile)) return undefined;
+  const pid = Number(readFileSync(pidFile, "utf8"));
+  return Number.isFinite(pid) && pid > 0 ? pid : undefined;
+}
+
+/** Kill a left-over process and wait until it has actually exited. */
+async function ensureDead(pid: number | undefined): Promise<void> {
+  if (pid === undefined || !alive(pid)) return;
+  try {
+    process.kill(pid);
+  } catch {
+    // Already gone between the check and the kill: that is the outcome wanted.
+  }
+  await untilGone(pid);
+}
 
 const idleCommand = () => `node "${idler}" "${pidFile}"`;
 
@@ -54,8 +76,13 @@ function alive(pid: number): boolean {
   }
 }
 
+/** Poll until the process has exited (the exit is awaited, never raced), up to a generous bound for a loaded machine. */
+async function untilGone(pid: number): Promise<void> {
+  for (let i = 0; i < 200 && alive(pid); i += 1) await new Promise((resolve) => setTimeout(resolve, 50));
+}
+
 async function expectGone(pid: number): Promise<void> {
-  for (let i = 0; i < 40 && alive(pid); i += 1) await new Promise((resolve) => setTimeout(resolve, 50));
+  await untilGone(pid);
   expect(alive(pid)).toBe(false);
 }
 

@@ -115,10 +115,17 @@ describe("git_cleanup_merged", () => {
     expect(scoped.cwds).toEqual(["Builderforce.ai"]);
     expect(scoped.scripts[0]?.startsWith("cd ")).toBe(false);
 
+    // DELIBERATE BEHAVIOUR CHANGE (was: the repo was dropped and the cleanup ran at the workspace
+    // root). An explicit repo that leaves the workspace is REFUSED and nothing runs.
     const escape = recordingShell();
-    await gitCleanupMergedTool.execute({ branch: "x", repo: "../elsewhere" }, escape as never);
-    expect(escape.cwds).toEqual([undefined]);
-    expect(escape.scripts[0]?.startsWith("cd ")).toBe(false);
+    const refused = await gitCleanupMergedTool.execute({ branch: "x", repo: "../elsewhere" }, escape as never);
+    expect(data(refused)).toEqual({
+      ok: false,
+      action: "cleanup",
+      error: "repo '../elsewhere' must be a directory inside the workspace (no '..', not absolute), so nothing was run",
+    });
+    expect(escape.scripts).toEqual([]);
+    expect(escape.cwds).toEqual([]);
   });
 });
 
