@@ -11,7 +11,7 @@
  * relevant analyzer FAILED answers nothing — missing output is never reported as clean.
  */
 
-import { buildGraph, MAX_NODES_CAP, partitionOf, pathOfRef, verdictOf, type Finding, type PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
+import { buildGraph, compareStr, MAX_NODES_CAP, partitionOf, partitionSeverity, pathOfRef, verdictOf, type Finding, type PartitionRegistry } from '@seanhogg/builderforce-memory/knowledge';
 import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
 import { CODE_PARTITIONS_FILE, loadCodePartitions } from '../knowledge/codePack.js';
 import { codeAnalyzers } from '../knowledge/codeAnalyzers.js';
@@ -79,22 +79,36 @@ interface CodeAction {
  * drew (`snapshot.edges`, the real from → to) whose layers the registry does not allow
  * (`upward` or `skips`). The graph's partition verdict is also given to the repo map's
  * `references` and to clone pairs, and a finding's `nodes` are sorted (not in import
- * direction) with one finding per pair — so a finding is only a candidate: it counts when an
- * import between its two files is itself a violation, judged here in the import's own direction.
+ * direction) with one finding per pair — memory keeps ONE of them, whichever edge it saw
+ * first, so its figures may be the other edge's. So a finding is only a candidate: it counts
+ * when an import between its two files is itself a violation, judged here in the import's own
+ * direction, and it is reported with that import's verdict, severity and layers.
  */
 function importViolations(findings: Finding[], snapshot: CodeAnalysisSnapshot, partitions: PartitionRegistry): Finding[] {
     const pairKey = (a: string, b: string): string => (a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`);
-    const violating = new Set<string>();
+    const violating = new Map<string, { verdict: 'upward' | 'skips'; from: string; to: string }>();
     for (const e of snapshot.edges) {
         if (e.from === e.to) continue;
-        const verdict = verdictOf(partitionOf(e.from, partitions), partitionOf(e.to, partitions), partitions);
-        if (verdict === 'upward' || verdict === 'skips') violating.add(pairKey(e.from, e.to));
+        const from = partitionOf(e.from, partitions);
+        const to = partitionOf(e.to, partitions);
+        const verdict = verdictOf(from, to, partitions);
+        if (verdict !== 'upward' && verdict !== 'skips') continue;
+        // Imports both ways on one pair: the upward one (an error) wins over a skip (a warning), whichever edge comes first.
+        const key = pairKey(e.from, e.to);
+        if (violating.get(key)?.verdict === 'upward') continue;
+        violating.set(key, { verdict, from: from ?? '', to: to ?? '' });
     }
-    return findings.filter((f) => {
+    const rejudged = findings.flatMap((f): Finding[] => {
         const [a, b] = f.nodes.map((ref) => pathOfRef(ref));
-        return a !== undefined && b !== undefined && violating.has(pairKey(a, b));
+        const own = a !== undefined && b !== undefined ? violating.get(pairKey(a, b)) : undefined;
+        if (!own) return [];
+        return [{ ...f, severity: partitionSeverity(own.verdict), params: { ...f.params, verdict: own.verdict, from: own.from, to: own.to, kind: 'references' } }];
     });
+    // Memory lists findings error → warn → info, then by id; a re-judged severity must not leave an error below the list cap.
+    return rejudged.sort((x, y) => SEVERITY_RANK[x.severity] - SEVERITY_RANK[y.severity] || compareStr(x.id, y.id));
 }
+
+const SEVERITY_RANK: Record<Finding['severity'], number> = { error: 0, warn: 1, info: 2 };
 
 const CODE_ACTIONS: readonly CodeAction[] = [
     { id: 'dup.check', analyzer: 'jscpd', kinds: ['clone-group', 'near-duplicate'], title: (n) => `${n} duplicate-code group(s)`, none: 'No duplicate code found (jscpd).' },

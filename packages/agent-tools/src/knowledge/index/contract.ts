@@ -28,6 +28,8 @@ export interface HostKnowledgeIndex {
     nearDuplicates(): SimilarPair[];
     /** `toCards(g)` → upsert → compact when churn > 10% (on idle). */
     upsertFromGraph(g: KnowledgeGraph): Promise<void>;
+    /** Drop the cards `similar` added for a review's unwritten claims (a review that stopped before its graph upsert). */
+    discardProvisional(): Promise<void>;
 }
 
 /** What a hit is, for rendering: from the graph node it was carded from. */
@@ -59,7 +61,7 @@ export interface HostKnowledgeIndexCore extends HostKnowledgeIndex {
     readonly rootId: string;
     /** `search` plus one hop of graph neighbours (the knowledge graph's edges). */
     recall(q: string, opts?: { k?: number; hops?: 1 | 2 }): Promise<Recall>;
-    /** Upsert a graph's cards with extra exact keys per card (the code pack's exported symbols). */
+    /** Upsert a graph's cards with extra exact keys per card (the code pack's exported symbols). Unlike `upsertFromGraph`, it never settles a running review's provisional cards. */
     upsertGraph(g: KnowledgeGraph, extraKeys?: ReadonlyMap<string, readonly string[]>): Promise<void>;
     /** Forget cards (a deleted file). */
     remove(ids: string[]): void;

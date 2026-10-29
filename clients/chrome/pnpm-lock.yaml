@@ -21,8 +21,8 @@ importers:
         specifier: link:../../packages/brain-ui
         version: link:../../packages/brain-ui
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.10.34
-        version: 2026.10.34(@seanhogg/builderforce-memory-engine@2026.10.31)
+        specifier: ^2026.10.35
+        version: 2026.10.35(@seanhogg/builderforce-memory-engine@2026.10.31)
       '@testing-library/dom':
         specifier: ^10.4.1
         version: 10.4.2
@@ -461,11 +461,11 @@ packages:
     resolution: {integrity: sha512-8eDCYU9x6GlhFBhWWC8CYZt5jmr9pa48XG+qu/wCW8NRacB3MJkRNe4T4jTy6a5kDyBtmsgeOef10uCrBKCo3Q==}
     engines: {node: '>=18.0.0'}
 
-  '@seanhogg/builderforce-memory@2026.10.34':
-    resolution: {integrity: sha512-brpdF3AkhOoW6h7dID1rVs5g9S91of9mfR2Ac6V6OUMlxAVuBjGtH7s+OJYcvsE5DKnq/IyDd7SgEO+kQp2kVw==}
+  '@seanhogg/builderforce-memory@2026.10.35':
+    resolution: {integrity: sha512-gfFZbRCuyvpLS7ja0Iqq9j0+cOEgSYA2nmdgx4feL3R8477jG4nhv/k/Rp4m87vw+ptrC63deZpdPX+1tNv05A==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@seanhogg/builderforce-memory-engine': ^2026.10.34
+      '@seanhogg/builderforce-memory-engine': ^2026.10.35
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -1900,7 +1900,7 @@ snapshots:
 
   '@seanhogg/builderforce-memory-engine@2026.10.31': {}
 
-  '@seanhogg/builderforce-memory@2026.10.34(@seanhogg/builderforce-memory-engine@2026.10.31)':
+  '@seanhogg/builderforce-memory@2026.10.35(@seanhogg/builderforce-memory-engine@2026.10.31)':
     dependencies:
       '@seanhogg/builderforce-memory-engine': 2026.10.31
 

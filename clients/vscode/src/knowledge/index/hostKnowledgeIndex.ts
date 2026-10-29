@@ -3,7 +3,7 @@
  * "Where it runs"; PRD 38 §4.7) — the PINNED seam the knowledge host (review runner,
  * graph panel, stores) imports:
  *
- *   getHostKnowledgeIndex(rootId) → { search, similar, nearDuplicates, upsertFromGraph }
+ *   getHostKnowledgeIndex(rootId) → { search, similar, nearDuplicates, upsertFromGraph, discardProvisional }
  *
  * One index per root id, loaded lazily from `<workspace>/.builderforce/knowledge/<rootId>.idx`
  * through the workspace fs (handed in at activation, `activateKnowledgeIndex.ts`) and

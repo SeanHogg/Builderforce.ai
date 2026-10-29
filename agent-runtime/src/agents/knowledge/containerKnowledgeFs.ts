@@ -9,6 +9,7 @@ import { join, relative } from "node:path";
 import chokidar from "chokidar";
 import { isBuilderforceState, isSkippedPath, type KnowledgeFiles, type KnowledgeFs } from "@builderforce/agent-tools/knowledge/index.js";
 import { logDebug } from "../../logger.js";
+import { loggedFallback } from "./loggedFallback.js";
 
 /** The slice of a chokidar watcher this uses (a test hands in its own). */
 export interface FolderWatcher {
@@ -44,7 +45,8 @@ export function watchFolder(
   const close = (): void => {
     if (closed) return;
     closed = true;
-    try { void Promise.resolve(watcher?.close()).catch(() => undefined); } catch { /* already closed */ }
+    // Through a promise so a synchronous throw from `close()` is reported by the same chain as a rejection.
+    void Promise.resolve().then(() => watcher?.close()).catch(loggedFallback("folder watch close", undefined));
   };
   try {
     watcher = open(base, (path) => ignoredByKnowledgeWatch(base, path));

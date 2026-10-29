@@ -22,7 +22,7 @@
     "@react-three/fiber": "^9.7.0",
     "@seanhogg/builderforce-brain-embedded": "link:../../brain-embedded",
     "@seanhogg/builderforce-brain-ui": "link:../../packages/brain-ui",
-    "@seanhogg/builderforce-memory": "^2026.10.34",
+    "@seanhogg/builderforce-memory": "^2026.10.35",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
     "@types/chrome": "^0.1.4",

@@ -60,8 +60,10 @@ class HostIndex implements HostKnowledgeIndexCore {
     private nearDup: { digest: string; pairs: SimilarPair[] } | undefined;
     /**
      * Cards `similar` added for a review's new claims before the graph (and so a node) backs
-     * them. They answer no search, and the next graph upsert drops the ones it does not hold
-     * — so a review that stopped before writing leaves nothing behind.
+     * them. They answer no search and are never persisted; the next graph upsert (or
+     * {@link discardProvisional}) drops the ones it does not hold — so a review that stopped
+     * before writing leaves nothing behind. Only cards `similar` ADDED are tracked here: a
+     * claim an earlier run already indexed is an ordinary card.
      */
     private readonly provisional = new Set<string>();
 
@@ -152,10 +154,12 @@ class HostIndex implements HostKnowledgeIndexCore {
         await this.exclusive(async () => {
             // The idle pass may have swapped the index since `ready()`.
             const index = this.index!;
-            if (fresh.length > 0) {
+            // A claim an earlier run already indexed keeps its card (label + sections, entity keys): upsert replaces by id, and the raw claim text is the poorer card.
+            const unseen = fresh.filter((d) => !index.has(d.id));
+            if (unseen.length > 0) {
                 const before = index.digest();
-                await index.upsert(fresh);
-                for (const doc of fresh) this.provisional.add(doc.id);
+                await index.upsert(unseen);
+                for (const doc of unseen) this.provisional.add(doc.id);
                 if (index.digest() !== before && this.bound) {
                     await index.compact();
                     this.churn = 0;
@@ -190,21 +194,21 @@ class HostIndex implements HostKnowledgeIndexCore {
         return this.nearDup.pairs;
     }
 
+    /** The review's graph upsert: the only one that settles provisional cards (the graph is the truth about what was written). */
     upsertFromGraph(g: KnowledgeGraph): Promise<void> {
-        return this.upsertGraph(g);
+        return this.upsert(g, undefined, true);
     }
 
-    async upsertGraph(g: KnowledgeGraph, extraKeys?: ReadonlyMap<string, readonly string[]>): Promise<void> {
+    /** A seed's upsert (the code pack's cards): leaves a running review's provisional cards alone. */
+    upsertGraph(g: KnowledgeGraph, extraKeys?: ReadonlyMap<string, readonly string[]>): Promise<void> {
+        return this.upsert(g, extraKeys, false);
+    }
+
+    private async upsert(g: KnowledgeGraph, extraKeys: ReadonlyMap<string, readonly string[]> | undefined, settleProvisional: boolean): Promise<void> {
         await this.ready();
         await this.exclusive(async () => {
-            // The graph is the truth: provisional claim cards it does not hold were never written.
-            const held = new Set(g.nodes.map((n) => n.ref));
-            const phantoms = [...this.provisional].filter((id) => !held.has(id));
-            this.provisional.clear();
-            if (phantoms.length > 0) {
-                this.index!.remove(phantoms);
-                this.churn += phantoms.length;
-            }
+            // The review's graph is the truth: provisional claim cards it does not hold were never written.
+            if (settleProvisional) this.dropProvisional(new Set(g.nodes.map((n) => n.ref)));
             const cards: IndexDoc[] = toCards(g).map((c) => {
                 const extra = extraKeys?.get(c.id);
                 return extra?.length ? { ...c, keys: [...new Set([...(c.keys ?? []), ...extra])] } : c;
@@ -232,6 +236,23 @@ class HostIndex implements HostKnowledgeIndexCore {
             }
             this.churn += changed;
         });
+        this.scheduleIdle();
+    }
+
+    /** Forget every provisional card not in `keep`, and clear the set. Call inside `exclusive`. */
+    private dropProvisional(keep: ReadonlySet<string> = new Set()): void {
+        const phantoms = [...this.provisional].filter((id) => !keep.has(id));
+        this.provisional.clear();
+        if (phantoms.length > 0) {
+            this.index!.remove(phantoms);
+            this.churn += phantoms.length;
+        }
+    }
+
+    async discardProvisional(): Promise<void> {
+        if (this.provisional.size === 0) return;
+        await this.ready();
+        await this.exclusive(async () => this.dropProvisional());
         this.scheduleIdle();
     }
 
@@ -281,6 +302,8 @@ class HostIndex implements HostKnowledgeIndexCore {
             await index.compact();
             this.churn = 0;
         }
+        // Claims a review is still comparing are not knowledge yet: nothing is saved until they are written or dropped.
+        if (this.provisional.size > 0) return;
         const digest = index.digest();
         if (digest === this.persisted || !this.o.path || !this.o.files) return;
         await writeIndexAtomic(this.o.files, this.o.path, index.serialize(), digest);

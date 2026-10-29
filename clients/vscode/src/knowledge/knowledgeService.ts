@@ -18,7 +18,7 @@
 
 import * as vscode from "vscode";
 import {
-  buildStoredGraph, claimSimilarity, indexedSymbolSource, migratingRootFiles, planKnowledgeReviewDetail, reviewPacks, rootPorts, runKnowledgeReview,
+  buildStoredGraph, claimSimilarity, indexedSymbolSource, migratingRootFiles, planKnowledgeReviewDetail, reviewIndexPort, reviewPacks, rootPorts, runKnowledgeReview,
   workspaceCodeAnalyzers,
   type KnowledgeReviewOptions, type KnowledgeReviewPorts,
 } from "@builderforce/agent-tools/knowledge";
@@ -140,7 +140,7 @@ async function reviewPorts(secrets: vscode.SecretStorage, open: OpenRoot): Promi
     ...(judgement ? { judgement } : {}),
     ...(index ? { similar: claimSimilarity(index, open.store, root.rootId) } : {}),
     // After the review the root's graph feeds the knowledge index (the shared runner does it and reports the phase).
-    index: { upsertFromGraph: async (graph) => (await getHostKnowledgeIndex(root.rootId)).upsertFromGraph(graph) },
+    index: reviewIndexPort(() => getHostKnowledgeIndex(root.rootId)),
     ...(client ? { platformGraph: (rootId: string) => client.graph(rootId) } : {}),
     onIndexError: (error) => log("index upsert", error),
   };

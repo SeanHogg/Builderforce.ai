@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createKnowledgeIndex, srcRef } from '@seanhogg/builderforce-memory/knowledge';
+import { createKnowledgeIndex, loadKnowledgeIndex, srcRef } from '@seanhogg/builderforce-memory/knowledge';
 import { resolveWarmEmbedder } from './embedderChain.js';
 import { createHostKnowledgeIndex, SIMILAR_PAIRS_PER_ID } from './hostIndex.js';
 import { indexFileName, knowledgeIndexPath, writeIndexAtomic } from './persistence.js';
@@ -223,6 +223,95 @@ describe('host knowledge index — search and recall', () => {
             await index.upsertFromGraph(graphOf([[OLD, 'The lease ends on 1 June.'], [NEW, 'Termination requires ninety days written notice.']]));
             expect(await index.size()).toBe(2);
             expect((await index.search('ninety days written notice')).map((h) => h.id)).toContain(NEW);
+        });
+
+        it('never saves a provisional card: the idle pass after similar() leaves the stored file as it was, and the written claim is saved once the graph holds it', async () => {
+            const { index, idle, files } = await indexedWithOld();
+            await index.similar([NEW], new Map([[NEW, 'Termination requires ninety days written notice.']]));
+            expect(idle.pending()).toBe(true);
+            await idle.run();
+            expect(loadKnowledgeIndex(files.store.get(PATH)!).size()).toBe(1);
+
+            await index.upsertFromGraph(graphOf([[OLD, 'The lease ends on 1 June.'], [NEW, 'Termination requires ninety days written notice.']]));
+            await idle.run();
+            expect(loadKnowledgeIndex(files.store.get(PATH)!).size()).toBe(2);
+        });
+
+        it('discardProvisional() drops the unwritten claim cards, so a review that threw leaves nothing behind', async () => {
+            const { index, idle, files } = await indexedWithOld();
+            await index.similar([NEW], new Map([[NEW, 'Termination requires ninety days written notice.']]));
+            expect(await index.size()).toBe(2);
+            await index.discardProvisional();
+            expect(await index.size()).toBe(1);
+            await idle.run();
+            expect(loadKnowledgeIndex(files.store.get(PATH)!).size()).toBe(1);
+            // Nothing provisional: a second call is a no-op.
+            await index.discardProvisional();
+            expect(await index.size()).toBe(1);
+        });
+
+        it('a code-root reseed during a review leaves the provisional cards in place and hidden; the review\'s own graph upsert still settles them', async () => {
+            const { index } = await indexedWithOld();
+            const text = 'Termination requires ninety days written notice.';
+            await index.similar([NEW], new Map([[NEW, text]]));
+            expect(await index.size()).toBe(2);
+            // The seed (the code pack's cards) lands while the review is still comparing.
+            const seeded = await seedCodeCards(index, WORKSPACE_FILES);
+            expect(seeded.size).toBeGreaterThan(0);
+            expect(await index.size()).toBe(2 + seeded.size);
+            // Still provisional: hidden from search and recall…
+            expect((await index.search('ninety days written notice')).map((h) => h.id)).not.toContain(NEW);
+            expect((await index.recall('ninety days written notice')).hits.map((h) => h.id)).not.toContain(NEW);
+            // …until the review's final upsert holds the claim, which settles it.
+            await index.upsertFromGraph(graphOf([[OLD, 'The lease ends on 1 June.'], [NEW, text]]));
+            expect(await index.size()).toBe(2 + seeded.size);
+            expect((await index.search('ninety days written notice')).map((h) => h.id)).toContain(NEW);
+        });
+
+        it('a reseed during a review does not stop the review\'s cleanup: discardProvisional() and the final graph upsert still drop the unwritten card', async () => {
+            const { index } = await indexedWithOld();
+            await index.similar([NEW], new Map([[NEW, 'Termination requires ninety days written notice.']]));
+            const seeded = await seedCodeCards(index, WORKSPACE_FILES);
+            await index.discardProvisional();
+            expect(await index.size()).toBe(1 + seeded.size);
+
+            await index.similar([NEW], new Map([[NEW, 'Termination requires ninety days written notice.']]));
+            await seedCodeCards(index, WORKSPACE_FILES);
+            await index.upsertFromGraph(graphOf([[OLD, 'The lease ends on 1 June.']]));
+            expect(await index.size()).toBe(1 + seeded.size);
+        });
+
+        it('leaves the card of an already-indexed claim alone: similar() neither overwrites its text and keys nor marks it provisional, so a later graph that omits it does not remove it', async () => {
+            const embedder = bucketEmbedder();
+            const h = host({ embedder: async () => embedder });
+            const { index } = h;
+            // A backlog claim written and indexed by an earlier run: its card is the label plus its section, keyed by the entity it mentions.
+            const claim = { ref: OLD, kind: 'claim', label: 'The lease ends on 1 June.', pack: 'docs', importance: 0.5, origin: 'judged' };
+            await index.upsertFromGraph({
+                scope: { rootId: ROOT, packs: ['docs'], digest: 'd' },
+                nodes: [claim],
+                edges: [
+                    { from: OLD, to: 'sec:renewal-clause', kind: 'about', weight: 1, origin: 'judged' },
+                    { from: OLD, to: 'ent:docs:landlord', kind: 'mentions', weight: 1, origin: 'judged' },
+                ],
+                findings: [], stats: { sources: 0, nodes: 1, stale: 0, truncated: false },
+            } as never);
+            await index.flush();
+            const before = await index.digest();
+            expect((await index.search('landlord'))[0]).toMatchObject({ id: OLD, tier: 'exact' });
+            expect((await index.search('renewal clause')).map((x) => x.id)).toContain(OLD);
+
+            // The review passes the claim again with its raw text, which is poorer than the card.
+            await index.similar([OLD], new Map([[OLD, 'The lease ends on 1 June.']]));
+            expect(await index.digest()).toBe(before);
+            expect((await index.search('landlord'))[0]).toMatchObject({ id: OLD, tier: 'exact' });
+            expect((await index.search('renewal clause')).map((x) => x.id)).toContain(OLD);
+
+            // Not provisional: a later graph that omits it does not remove it.
+            await index.upsertFromGraph(graphOf([[OTHER, 'The tenant pays rent monthly.']]));
+            expect(await index.size()).toBe(2);
+            expect((await index.search('landlord'))[0]).toMatchObject({ id: OLD, tier: 'exact' });
+            expect((await index.search('renewal clause')).map((x) => x.id)).toContain(OLD);
         });
 
         it('without a warm embedder there is nothing to pair, and nothing is dropped as compared by a throw', async () => {

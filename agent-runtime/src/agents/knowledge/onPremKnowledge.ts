@@ -21,7 +21,7 @@ import { realpath, stat } from "node:fs/promises";
 import type { CapabilityProvider } from "@builderforce/agent-tools";
 import {
   claimSimilarity, fileManifest, indexedSymbolSource, manifestFileName, migratingRootFiles, planKnowledgeReviewDetail,
-  reviewPacks, rootManifest, runKnowledgeReview, watchFileEdits, workspaceCodeAnalyzers, createFsDirectorySource, type KnowledgeReviewPorts,
+  reviewIndexPort, reviewPacks, rootManifest, runKnowledgeReview, watchFileEdits, workspaceCodeAnalyzers, createFsDirectorySource, type KnowledgeReviewPorts,
 } from "@builderforce/agent-tools/knowledge/index.js";
 import {
   graphShown, knowledgeSurfaceQuery, readPartitions, withKnowledgeRows, type KnowledgeRowsHost,
@@ -36,6 +36,7 @@ import { authHeaders, type ProjectEvermindSyncConfig } from "../../infra/project
 import { normalizeBaseUrl } from "../../utils/normalize-base-url.js";
 import { onPremSymbolIndex } from "../on-prem-symbol-index.js";
 import { containerKnowledgeFiles, containerKnowledgeFs } from "./containerKnowledgeFs.js";
+import { loggedFallback } from "./loggedFallback.js";
 import { getHostKnowledgeIndex, onPremLegacyRootId, onPremRootId } from "./index/onPremKnowledgeIndex.js";
 
 const DEFAULT_WEB_URL = "https://builderforce.ai";
@@ -78,17 +79,6 @@ export function knowledgeSurfaceUrl(projectId: number, focus: readonly string[] 
   return `${webBaseUrl()}/projects/${projectId}?${knowledgeSurfaceQuery(focus)}`;
 }
 
-/**
- * A best-effort step's rejection, recorded with its reason and replaced by `fallback` — the
- * review still runs without the symbol index, the knowledge index or the platform's graph.
- */
-function loggedFallback<T>(step: string, fallback: T): (error: unknown) => T {
-  return (error) => {
-    logDebug(`[knowledge] ${step} failed: ${String(error)}`);
-    return fallback;
-  };
-}
-
 /** The workspace-relative form of `target`, or undefined when it lies outside the workspace (another drive included). */
 export function insideWorkspace(root: string, target: string, p: Pick<typeof path, "relative" | "isAbsolute" | "sep"> = path): string | undefined {
   const rel = p.relative(root, target);
@@ -96,18 +86,24 @@ export function insideWorkspace(root: string, target: string, p: Pick<typeof pat
   return rel.split(p.sep).join("/");
 }
 
-/** Whether `target` is inside the workspace once symlinks are resolved on both: reject folders outside the workspace. */
-export async function withinRealWorkspace(root: string, target: string): Promise<boolean> {
+/** `target`'s real path when it is inside the workspace once symlinks are resolved on both; undefined otherwise (a missing target included). */
+export async function realPathWithin(root: string, target: string): Promise<string | undefined> {
   try {
     const [realRoot, realTarget] = await Promise.all([realpath(root), realpath(target)]);
-    return insideWorkspace(realRoot, realTarget) !== undefined;
+    return insideWorkspace(realRoot, realTarget) !== undefined ? realTarget : undefined;
   } catch {
-    return false;
+    return undefined;
   }
 }
 
 async function isFolder(path: string): Promise<boolean> {
   return stat(path).then((s) => s.isDirectory(), () => false);
+}
+
+/** The real path of `target` when it is a folder inside the workspace once symlinks are resolved on both; undefined otherwise (outside it, missing, or no longer a folder). */
+async function reviewableFolder(root: string, target: string): Promise<string | undefined> {
+  const real = await realPathWithin(root, target);
+  return real !== undefined && (await isFolder(real)) ? real : undefined;
 }
 
 /** Reviewed roots whose files are watched, so an edit marks what was judged from it stale (§5.2). */
@@ -125,12 +121,12 @@ export function stopKnowledgeWatchers(): void {
  * watcher reports. A root reviewed again gets a fresh watch (the old one is stopped), and
  * all of them stop when the process does.
  */
-function keepFresh(deps: OnPremKnowledgeDeps, rootId: string, rel: string, ports: KnowledgeReviewPorts): void {
+function keepFresh(rootId: string, rootPath: string, ports: KnowledgeReviewPorts): void {
   watchedRoots.get(rootId)?.();
   watchedRoots.delete(rootId);
   const stop = watchFileEdits({
     rootId,
-    rootPath: rel ? resolve(deps.workspaceRoot, rel) : resolve(deps.workspaceRoot),
+    rootPath,
     fs: containerKnowledgeFs,
     source: ports.source,
     store: ports.store,
@@ -153,8 +149,8 @@ export interface OnPremKnowledgeDeps {
   linked: { client: KnowledgeClient; projectId: number };
 }
 
-/** The review ports for one folder of the workspace. */
-async function reviewPorts(deps: OnPremKnowledgeDeps, rel: string, rootId: string, title: string): Promise<KnowledgeReviewPorts> {
+/** The review ports for one folder of the workspace, walked from `rootPath` (its absolute path). */
+async function reviewPorts(deps: OnPremKnowledgeDeps, rel: string, rootId: string, title: string, rootPath: string): Promise<KnowledgeReviewPorts> {
   const { workspaceRoot, caps, linked } = deps;
   const partitions = await readPartitions({ caps });
   const symbols = await onPremSymbolIndex(workspaceRoot).filesUnder(rel || undefined).catch(loggedFallback("symbol index", []));
@@ -171,7 +167,7 @@ async function reviewPorts(deps: OnPremKnowledgeDeps, rel: string, rootId: strin
   };
   return {
     source: createFsDirectorySource({
-      fs: containerKnowledgeFs, rootPath: rel ? resolve(workspaceRoot, rel) : workspaceRoot, rootId, title,
+      fs: containerKnowledgeFs, rootPath, rootId, title,
     }),
     store: shared.store,
     manifest: shared.manifest,
@@ -183,12 +179,12 @@ async function reviewPorts(deps: OnPremKnowledgeDeps, rel: string, rootId: strin
       repoGraph: repoMapPort,
       ...(rel ? { path: rel } : {}),
       upload: (sha, snapshot) => linked.client.putAnalysis(sha, snapshot as unknown as AnalysisSnapshotPayload),
-      onUploadError: (error) => logDebug(`[knowledge] analysis upload failed: ${String(error)}`),
+      onUploadError: loggedFallback("analysis upload", undefined),
       onWarn: (message) => logDebug(`[knowledge] analysis: ${message}`),
     }),
     judgement: linked.client.judgement,
     // After the review the root's graph feeds the knowledge index (the shared runner does it).
-    index: { upsertFromGraph: async (graph) => (await getHostKnowledgeIndex(rootId)).upsertFromGraph(graph) },
+    index: reviewIndexPort(() => getHostKnowledgeIndex(rootId)),
     platformGraph: (id) => linked.client.graph(id),
     onIndexError: loggedFallback("knowledge index update", undefined),
     ...(index ? { similar: claimSimilarity(index, shared.store, rootId) } : {}),
@@ -202,19 +198,24 @@ export function onPremKnowledgeRowsHost(deps: OnPremKnowledgeDeps): KnowledgeRow
     async openReview(dir) {
       const target = resolve(root, dir || ".");
       const rel = insideWorkspace(root, target);
-      if (rel === undefined || !(await isFolder(target)) || !(await withinRealWorkspace(root, target))) return null;
+      if (rel === undefined || (await reviewableFolder(root, target)) === undefined) return null;
       const rootId = onPremRootId(root, rel);
       const title = rel ? rel.slice(rel.lastIndexOf("/") + 1) : basename(root) || "workspace";
-      let ports: Promise<KnowledgeReviewPorts> | undefined;
-      const portsOnce = () => (ports ??= reviewPorts(deps, rel, rootId, title));
+      // The person confirms after the preview, so both steps check again and walk the resolved folder, not the path a link may have been swapped under.
+      const resolveRoot = async (): Promise<string> => {
+        const real = await reviewableFolder(root, target);
+        if (real === undefined) throw new Error(`There is no folder \`${rel || "."}\` in this workspace to review.`);
+        return real;
+      };
       return {
         rootId,
         title,
-        plan: async () => planKnowledgeReviewDetail(await portsOnce()),
+        plan: async () => planKnowledgeReviewDetail(await reviewPorts(deps, rel, rootId, title, await resolveRoot())),
         async review(plan, signal) {
-          const p = await portsOnce();
+          const real = await resolveRoot();
+          const p = await reviewPorts(deps, rel, rootId, title, real);
           const report = await runKnowledgeReview(p, { signal, plan });
-          keepFresh(deps, rootId, rel, p);
+          keepFresh(rootId, real, p);
           return report;
         },
       };

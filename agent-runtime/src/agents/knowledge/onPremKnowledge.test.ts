@@ -1,11 +1,11 @@
-import { mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CapabilityProvider } from "@builderforce/agent-tools";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
 import path from "node:path";
-import { insideWorkspace, knowledgeSurfaceUrl, onPremKnowledgeClient, onPremKnowledgeRowsHost, withinRealWorkspace } from "./onPremKnowledge.js";
+import { insideWorkspace, knowledgeSurfaceUrl, onPremKnowledgeClient, onPremKnowledgeRowsHost, realPathWithin } from "./onPremKnowledge.js";
 
 const linked = { client: { graph: vi.fn(async () => null) } as unknown as KnowledgeClient, projectId: 42 };
 const caps = {} as CapabilityProvider;
@@ -80,10 +80,44 @@ describe("the on-prem knowledge host", () => {
     }
     const host = onPremKnowledgeRowsHost({ workspaceRoot: root, caps, linked });
     expect(await host.openReview("link")).toBeNull();
-    expect(await withinRealWorkspace(root, join(root, "link"))).toBe(false);
+    expect(await realPathWithin(root, join(root, "link"))).toBeUndefined();
     // A real folder of the workspace is unaffected.
     expect((await host.openReview("docs"))?.title).toBe("docs");
-    expect(await withinRealWorkspace(root, join(root, "docs"))).toBe(true);
+    expect(await realPathWithin(root, join(root, "docs"))).toBe(await realpath(join(root, "docs")));
+  });
+
+  it("refuses to review a folder that became a link outside the workspace after it was opened", async (ctx) => {
+    const base = await mkdtemp(join(tmpdir(), "kg-swap-"));
+    const root = join(base, "ws");
+    const outside = join(base, "elsewhere");
+    await mkdir(join(root, "docs"), { recursive: true });
+    await mkdir(outside);
+    await writeFile(join(outside, "secret.md"), "# Elsewhere\n");
+    const host = onPremKnowledgeRowsHost({ workspaceRoot: root, caps, linked });
+    const session = await host.openReview("docs");
+    expect(session?.title).toBe("docs");
+    await rm(join(root, "docs"), { recursive: true });
+    try {
+      await symlink(outside, join(root, "docs"), "junction");
+    } catch {
+      ctx.skip(); // This platform will not create the link here.
+      return;
+    }
+    // Refused before any port is built or file read, so the plan argument is never consulted.
+    await expect(session!.review({} as never, new AbortController().signal)).rejects.toThrow(/no folder `docs`/);
+  });
+
+  it("refuses to review a folder that was replaced by a file after it was opened", async () => {
+    const root = await mkdtemp(join(tmpdir(), "kg-file-"));
+    await mkdir(join(root, "docs"));
+    const host = onPremKnowledgeRowsHost({ workspaceRoot: root, caps, linked });
+    const session = await host.openReview("docs");
+    expect(session?.title).toBe("docs");
+    await rm(join(root, "docs"), { recursive: true });
+    await writeFile(join(root, "docs"), "not a folder\n");
+    // Refused before any port is built, so the plan argument is never consulted — and so for the preview.
+    await expect(session!.review({} as never, new AbortController().signal)).rejects.toThrow(/no folder `docs`/);
+    await expect(session!.plan(new AbortController().signal)).rejects.toThrow(/no folder `docs`/);
   });
 
   afterEach(() => vi.unstubAllGlobals());

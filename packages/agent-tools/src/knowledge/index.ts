@@ -23,8 +23,8 @@ export {
 } from './dependencyCruiserRules.js';
 export {
     KNOWLEDGE_REVIEW_MODEL_CALLS, analysisManifestKey, analysisSha, buildStoredGraph, indexedSymbolSource,
-    planKnowledgeReview, planKnowledgeReviewDetail, reviewPacks, runKnowledgeReview, workspaceCodeAnalyzers,
-    type KnowledgeReviewOptions, type KnowledgeReviewPorts, type StoredGraphArgs, type WorkspaceAnalyzersDeps,
+    planKnowledgeReview, planKnowledgeReviewDetail, reviewIndexPort, reviewPacks, runKnowledgeReview, workspaceCodeAnalyzers,
+    type KnowledgeReviewOptions, type KnowledgeReviewPorts, type ReviewIndexPort, type StoredGraphArgs, type WorkspaceAnalyzersDeps,
 } from './reviewRunner.js';
 export { planDetailLine, reviewReportText } from './reviewText.js';
 export {

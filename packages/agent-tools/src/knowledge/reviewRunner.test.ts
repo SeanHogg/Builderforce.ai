@@ -1,63 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import {
-    filesManifestKey, localSnapshotStore, type DirectorySource, type JudgementPort, type ReviewProgress,
-} from '@seanhogg/builderforce-memory/knowledge';
-import { InMemoryIngestManifest } from '@seanhogg/builderforce-memory/ingest';
+import { filesManifestKey, type JudgementPort, type ReviewProgress } from '@seanhogg/builderforce-memory/knowledge';
 import {
     analysisSha, buildStoredGraph, planKnowledgeReview, planKnowledgeReviewDetail, reviewPacks, runKnowledgeReview,
-    workspaceCodeAnalyzers, type KnowledgeReviewPorts,
+    workspaceCodeAnalyzers,
 } from './reviewRunner.js';
+import { countingJudgement, ports } from './reviewRunner.fixtures.test-util.js';
 import type { CapabilityProvider } from '../capabilities.js';
 import type { CodeAnalysisSnapshot } from '../codeAnalysis.js';
 import { dependency, duplicates, fixtureSnapshot, unused } from './codeFixtures.test-util.js';
 import { forgetWorkspaceAnalyses, readRepoGraph } from './workspaceAnalysis.js';
 import { completionJudgement, fallbackJudgement, replyJson } from './judgement.js';
 
-const DOCS: Record<string, string> = {
-    'lease.md': '# Lease\n\nThe lease ends on 1 June.\n\n## Termination\n\nEither party may terminate with 30 days notice.\n',
-    'policy.md': '# Policy\n\nRent is paid monthly.\n\n## Deposits\n\nDeposits are returned within 14 days.\n',
-};
-
-function memorySource(files: Record<string, string>): DirectorySource {
-    return {
-        rootId: 'docs',
-        title: 'docs',
-        async *list() {
-            for (const [path, text] of Object.entries(files)) yield { path, hash: `h:${path}:${text.length}`, size: text.length };
-        },
-        async read(path) {
-            return { id: path, tenantId: 'docs', title: path, content: { kind: 'text', text: files[path] ?? '', mediaType: 'text/markdown' } };
-        },
-    };
-}
-
-/** A judgement port that answers every section with one claim, counting its calls. */
-function countingJudgement(): JudgementPort & { calls: number } {
-    const port = {
-        calls: 0,
-        async judge(req: Parameters<JudgementPort['judge']>[0]) {
-            port.calls += 1;
-            return {
-                extract: req.items.map((i) => ({ ref: i.ref, claims: [{ subject: 'lease', predicate: 'says', object: 'something', quote: i.text.slice(0, 20) }], entities: [] })),
-                invalid: 0,
-            };
-        },
-    };
-    return port;
-}
-
 /** A readable head label as the 40-hex object id git prints (distinct labels, distinct ids). */
 const hexHead = (label: string): string => Buffer.from(label).toString('hex').padEnd(40, '0').slice(0, 40);
-
-function ports(judgement?: JudgementPort): KnowledgeReviewPorts {
-    let snapshot: string | undefined;
-    return {
-        source: memorySource(DOCS),
-        store: localSnapshotStore({ read: async () => snapshot, write: async (s) => { snapshot = s; } }),
-        manifest: new InMemoryIngestManifest(),
-        ...(judgement ? { judgement } : {}),
-    };
-}
 
 describe('the shared review runner', () => {
     it('plans without writing, then reviews and reports progress through every phase', async () => {
@@ -107,7 +62,7 @@ describe('the shared review runner', () => {
     it('feeds the host index after the review and reports an index phase between write and done', async () => {
         const p = ports(countingJudgement());
         const upserts: number[] = [];
-        p.index = { upsertFromGraph: async (graph) => { upserts.push(graph.nodes.length); } };
+        p.index = { upsertFromGraph: async (graph) => { upserts.push(graph.nodes.length); }, discardProvisional: async () => undefined };
         const events: Array<[string, number, number]> = [];
         await runKnowledgeReview(p, { onProgress: (e) => events.push([e.phase, e.done, e.total]) });
 
@@ -125,7 +80,7 @@ describe('the shared review runner', () => {
     it('a failed index update is reported, never a failed review; without an index there is no index phase', async () => {
         const p = ports(countingJudgement());
         const errors: unknown[] = [];
-        p.index = { upsertFromGraph: async () => { throw new Error('index down'); } };
+        p.index = { upsertFromGraph: async () => { throw new Error('index down'); }, discardProvisional: async () => undefined };
         p.onIndexError = (e) => errors.push(e);
         const phases: string[] = [];
         const report = await runKnowledgeReview(p, { onProgress: (e) => phases.push(e.phase) });
@@ -142,7 +97,7 @@ describe('the shared review runner', () => {
     it('prefers the platform graph when the host has one, and falls back to the store when it fails', async () => {
         const seen: string[] = [];
         const p = ports();
-        p.index = { upsertFromGraph: async (graph) => { seen.push(graph.scope.rootId); } };
+        p.index = { upsertFromGraph: async (graph) => { seen.push(graph.scope.rootId); }, discardProvisional: async () => undefined };
         p.platformGraph = async () => ({ scope: { rootId: 'from-platform', packs: [], digest: 'd' }, nodes: [], edges: [], findings: [], stats: { sources: 0, nodes: 0, stale: 0, truncated: false } } as never);
         await runKnowledgeReview(p);
         p.platformGraph = async () => { throw new Error('offline'); };

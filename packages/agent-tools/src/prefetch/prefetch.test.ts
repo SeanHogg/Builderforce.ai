@@ -301,6 +301,74 @@ describe('code-pack actions', () => {
     expect(out?.data).toMatchObject({ findings: 0 });
   });
 
+  it('/boundaries reports the IMPORT\'s verdict when a clone edge joins the same two files the other way', async () => {
+    forgetCodePackFindings();
+    // presentation → infrastructure skips the layers between: a warning…
+    const violating = { modules: [
+      { source: 'src/routes/orders.ts', dependencies: [{ resolved: 'src/infrastructure/db.ts', circular: false }] },
+      { source: 'src/infrastructure/db.ts', dependencies: [] },
+    ] };
+    // …and the clone edge between them runs infrastructure → presentation (sorted by path): "upward", an error.
+    const clone = { duplicates: [{ fragment: 'return rows;', firstFile: { name: 'src/infrastructure/db.ts', start: 1, end: 9 }, secondFile: { name: 'src/routes/orders.ts', start: 4, end: 12 } }] };
+    const cloned = fakeHost({
+      tools: { 'dependency-cruiser': npm('dependency-cruiser', 'depcruise') },
+      shell: (command) => (command.includes('depcruise') ? { ok: true, exitCode: 0, stdout: JSON.stringify(violating) } : command.includes('knip') ? { ok: true, exitCode: 0, stdout: JSON.stringify(unused) } : undefined),
+      files: (p) => (p.endsWith('jscpd-report.json') ? JSON.stringify(clone) : undefined),
+    });
+    const out = await sharedPrefetchExecutors(cloned.host)['arch.boundaries']!.run('/boundaries', signal());
+    expect(out?.data).toMatchObject({ findings: 1 });
+    const line = out?.text.split('\n').find((l) => l.startsWith('- **partition-violation**'));
+    expect(line).toContain('(warn)');
+    expect(line).toContain('verdict skips, from presentation, to infrastructure');
+    expect(line).not.toContain('upward');
+  });
+
+  it.each([['skips edge first', false], ['upward edge first', true]])('/boundaries reports an error when the same two files import each other both ways (%s)', async (_label, upwardFirst) => {
+    forgetCodePackFindings();
+    // routes → infrastructure skips the layers between (a warning); infrastructure → routes is upward (an error): upward wins either way.
+    const skips = { source: 'src/routes/orders.ts', dependencies: [{ resolved: 'src/infrastructure/db.ts', circular: false }] };
+    const upward = { source: 'src/infrastructure/db.ts', dependencies: [{ resolved: 'src/routes/orders.ts', circular: false }] };
+    const mutual = { modules: upwardFirst ? [upward, skips] : [skips, upward] };
+    const clone = { duplicates: [{ fragment: 'return rows;', firstFile: { name: 'src/infrastructure/db.ts', start: 1, end: 9 }, secondFile: { name: 'src/routes/orders.ts', start: 4, end: 12 } }] };
+    const both = fakeHost({
+      tools: { 'dependency-cruiser': npm('dependency-cruiser', 'depcruise') },
+      shell: (command) => (command.includes('depcruise') ? { ok: true, exitCode: 0, stdout: JSON.stringify(mutual) } : command.includes('knip') ? { ok: true, exitCode: 0, stdout: JSON.stringify(unused) } : undefined),
+      files: (p) => (p.endsWith('jscpd-report.json') ? JSON.stringify(clone) : undefined),
+    });
+    const out = await sharedPrefetchExecutors(both.host)['arch.boundaries']!.run('/boundaries', signal());
+    expect(out?.data).toMatchObject({ findings: 1 });
+    const line = out?.text.split('\n').find((l) => l.startsWith('- **partition-violation**'));
+    expect(line).toContain('(error)');
+    expect(line).toContain('verdict upward, from infrastructure, to presentation');
+  });
+
+  it('/boundaries lists an import promoted to an error before the warnings, whatever order the code pack found them in', async () => {
+    forgetCodePackFindings();
+    const modules = { modules: [
+      // A warning that sorts first: presentation → infrastructure skips the layers between.
+      { source: 'src/app/a.ts', dependencies: [{ resolved: 'src/infrastructure/db.ts', circular: false }] },
+      { source: 'src/infrastructure/db.ts', dependencies: [] },
+      // An error that sorts last: infrastructure → presentation is upward…
+      { source: 'src/infrastructure/z.ts', dependencies: [{ resolved: 'src/app/b.ts', circular: false }] },
+      { source: 'src/app/b.ts', dependencies: [] },
+    ] };
+    // …while a clone edge between the same two files runs the other way (sorted by path: presentation → infrastructure, a warning), so the code pack may hold the pair as a warning.
+    const clone = { duplicates: [{ fragment: 'return rows;', firstFile: { name: 'src/app/b.ts', start: 1, end: 9 }, secondFile: { name: 'src/infrastructure/z.ts', start: 4, end: 12 } }] };
+    const mixed = fakeHost({
+      tools: { 'dependency-cruiser': npm('dependency-cruiser', 'depcruise') },
+      shell: (command) => (command.includes('depcruise') ? { ok: true, exitCode: 0, stdout: JSON.stringify(modules) } : command.includes('knip') ? { ok: true, exitCode: 0, stdout: JSON.stringify(unused) } : undefined),
+      files: (p) => (p.endsWith('jscpd-report.json') ? JSON.stringify(clone) : undefined),
+    });
+    const out = await sharedPrefetchExecutors(mixed.host)['arch.boundaries']!.run('/boundaries', signal());
+    expect(out?.data).toMatchObject({ findings: 2 });
+    const lines = out?.text.split('\n').filter((l) => l.startsWith('- **partition-violation**')) ?? [];
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain('(error)');
+    expect(lines[0]).toContain('src/app/b.ts');
+    expect(lines[1]).toContain('(warn)');
+    expect(lines[1]).toContain('src/app/a.ts');
+  });
+
   it('/boundaries answers for the whole workspace when none of the focus files was analysed', async () => {
     forgetCodePackFindings();
     const layered = { modules: [

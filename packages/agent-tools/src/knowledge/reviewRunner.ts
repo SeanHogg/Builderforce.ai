@@ -27,8 +27,10 @@ import { extractSymbols, type CodeSymbol } from '../symbols.js';
 import { codeAnalyzers } from './codeAnalyzers.js';
 import type { SymbolSource } from './codePack.js';
 import { currentFileHashes, pruneEditedFiles } from './fileEdits.js';
+import type { HostKnowledgeIndex } from './index/contract.js';
 import { knowledgePacks } from './knowledgePacks.js';
 import { repoGraphUnder, snapshotUnder } from './rootRelative.js';
+import { serialisedByKey } from './serialisedByKey.js';
 import { analyseWorkspace, type RepoGraphPort } from './workspaceAnalysis.js';
 import { fingerprintSha } from './workspaceFingerprint.js';
 
@@ -38,9 +40,19 @@ export const KNOWLEDGE_REVIEW_MODEL_CALLS = DEFAULT_REVIEW_MODEL_CALLS;
 /** Manifest entry naming the root-level analyzer outputs of a root's last review. */
 export const analysisManifestKey = (rootId: string): string => `knowledge:${rootId}:analysis`;
 
-/** What of the host's knowledge index a review feeds (`HostKnowledgeIndex.upsertFromGraph`). */
+/** What of the host's knowledge index a review feeds (`HostKnowledgeIndex.upsertFromGraph` / `discardProvisional`). */
 export interface ReviewIndexPort {
     upsertFromGraph(graph: KnowledgeGraph): Promise<void>;
+    /** Drops the claim cards `similar` added that no graph upsert backed (a run that stopped early). Required: omitting it leaves them behind and blocks idle saves. */
+    discardProvisional(): Promise<void>;
+}
+
+/** The review's index port over a host's (lazily opened) knowledge index — ONE adapter for every host. */
+export function reviewIndexPort(index: () => Promise<Pick<HostKnowledgeIndex, 'upsertFromGraph' | 'discardProvisional'>>): ReviewIndexPort {
+    return {
+        upsertFromGraph: async (graph) => (await index()).upsertFromGraph(graph),
+        discardProvisional: async () => (await index()).discardProvisional(),
+    };
 }
 
 export interface KnowledgeReviewPorts {
@@ -60,7 +72,7 @@ export interface KnowledgeReviewPorts {
     index?: ReviewIndexPort;
     /** A linked host's platform graph of the root; null or a failure ⇒ the graph is built from the store. */
     platformGraph?(rootId: string): Promise<KnowledgeGraph | null>;
-    /** A failed index update is reported, never a failed review. */
+    /** A failed index update is reported, never a failed review. Must not throw (the runner calls it from its cleanup). */
     onIndexError?(error: unknown): void;
 }
 
@@ -115,13 +127,49 @@ export async function planKnowledgeReview(ports: KnowledgeReviewPorts, opts: Pic
     return (await planKnowledgeReviewDetail(ports, opts)).plan;
 }
 
-/** The review itself — only after the person confirmed the plan. */
-export async function runKnowledgeReview(ports: KnowledgeReviewPorts, opts: KnowledgeReviewOptions = {}): Promise<ReviewReport> {
+/**
+ * The review itself — only after the person confirmed the plan. Reviews of one root run one
+ * at a time (a later run waits for the earlier one): a run's provisional-card cleanup and graph
+ * upsert would otherwise drop the cards of another run still in flight on the same root's index.
+ * A run queued behind another for the same root sees its abort signal only once it starts.
+ */
+export function runKnowledgeReview(ports: KnowledgeReviewPorts, opts: KnowledgeReviewOptions = {}): Promise<ReviewReport> {
+    return serialisedByKey(ports.source.rootId, () => reviewOnce(ports, opts));
+}
+
+async function reviewOnce(ports: KnowledgeReviewPorts, opts: KnowledgeReviewOptions): Promise<ReviewReport> {
     // With an index to feed, `done` is memory's last word but not the run's: it waits for the `index` phase.
     const held: { done?: ReviewProgress } = {};
     const progress: KnowledgeReviewOptions['onProgress'] = ports.index && opts.onProgress
         ? (p) => { if (p.phase === 'done') held.done = p; else opts.onProgress!(p); }
         : opts.onProgress;
+    // The listener's failure on a phase the runner emits itself (`index`, the held `done`) must not change what the run does: it waits for the end.
+    const listener: { failure?: { error: unknown } } = {};
+    const tell = (p: ReviewProgress): void => {
+        try {
+            opts.onProgress?.(p);
+        } catch (error) {
+            listener.failure ??= { error };
+        }
+    };
+    const outcome: { report: ReviewReport } | { failure: { error: unknown } } = await reviewAndIndex(ports, opts, progress, tell).then(
+        (report) => ({ report }),
+        (error: unknown) => ({ failure: { error } }),
+    );
+    // However the run ended: no unwritten claim stays in the index, and the held `done` is forwarded once, last.
+    // `Promise.resolve().then` also catches a port that throws before it returns its promise.
+    await Promise.resolve().then(() => ports.index?.discardProvisional()).catch((error: unknown) => ports.onIndexError?.(error));
+    if (held.done) tell(held.done);
+    // The review's own error wins over the listener's; a listener that throws after a clean run is the caller's to see.
+    if ('failure' in outcome) throw outcome.failure.error;
+    if (listener.failure) throw listener.failure.error;
+    return outcome.report;
+}
+
+async function reviewAndIndex(
+    ports: KnowledgeReviewPorts, opts: KnowledgeReviewOptions, progress: KnowledgeReviewOptions['onProgress'],
+    tell: (p: ReviewProgress) => void,
+): Promise<ReviewReport> {
     const report = await reviewDirectory({
         source: ports.source,
         store: ports.store,
@@ -137,29 +185,37 @@ export async function runKnowledgeReview(ports: KnowledgeReviewPorts, opts: Know
     });
     // What was edited since the last review is superseded by the files this one judged (or dropped).
     await pruneEditedFiles(ports.manifest, report.rootId);
-    await indexReviewed(ports, report.rootId, opts.onProgress);
-    if (held.done) opts.onProgress?.(held.done);
+    await indexReviewed(ports, report.rootId, tell);
     return report;
 }
 
 /**
  * After a review: the root's graph feeds the host's knowledge index. THE one place a host's
  * index is updated from a review, reported as the `index` phase between `write` and `done`
- * (`total` = the graph's nodes) so the view can say it is indexing.
+ * (`total` = the graph's nodes) so the view can say it is indexing. Only the graph build and the
+ * upsert are index work (a failure there is `onIndexError`); `tell` is the progress emitter and never throws.
  */
-async function indexReviewed(ports: KnowledgeReviewPorts, rootId: string, onProgress: KnowledgeReviewOptions['onProgress']): Promise<void> {
-    if (!ports.index) return;
+async function indexReviewed(ports: KnowledgeReviewPorts, rootId: string, tell: (p: ReviewProgress) => void): Promise<void> {
+    const index = ports.index;
+    if (!index) return;
+    let graph: KnowledgeGraph | null;
     try {
-        const graph = (await ports.platformGraph?.(rootId).catch(() => null))
+        graph = (await ports.platformGraph?.(rootId).catch(() => null))
             ?? await buildStoredGraph({ rootId, store: ports.store, manifest: ports.manifest, packs: reviewPacks(ports) });
-        if (!graph) return;
-        const total = graph.nodes.length;
-        onProgress?.({ phase: 'index', done: 0, total });
-        await ports.index.upsertFromGraph(graph);
-        onProgress?.({ phase: 'index', done: total, total });
     } catch (error) {
         ports.onIndexError?.(error);
+        return;
     }
+    if (!graph) return;
+    const total = graph.nodes.length;
+    tell({ phase: 'index', done: 0, total });
+    try {
+        await index.upsertFromGraph(graph);
+    } catch (error) {
+        ports.onIndexError?.(error);
+        return;
+    }
+    tell({ phase: 'index', done: total, total });
 }
 
 export interface StoredGraphArgs {
