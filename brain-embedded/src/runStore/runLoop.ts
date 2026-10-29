@@ -44,6 +44,7 @@ import { progressAfterToolCalls } from './progressGuard';
 import { runSpendBudget } from './runSpendBudget';
 import { noteRunId } from './runEndOutcome';
 import type { BrainRunRequest } from './runTypes';
+import { servedLocally } from '../servedLocally';
 
 /** The tool row's content: a STRING payload was already budgeted by `trimToolResult` in
  *  dispatch (advisory attached after the cut); anything else is a small stub or error
@@ -135,7 +136,7 @@ export async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, 
         label: 'llm.complete',
         durationMs: nowMs() - closeStart,
         ttftMs: closeFirstTokenAt !== undefined ? closeFirstTokenAt - closeStart : undefined,
-        args: { model: closing.resolvedModel ?? closeAsk.model ?? 'default', requestedModel: closeAsk.model ?? 'default', step: loop.step, toolCalls: 0, forcedFinish: true, failureStreak: streak, account: closing.account, byoUnresolved: closing.byoUnresolved, ...(contextWindow ? { contextWindow } : {}) },
+        args: { model: closing.resolvedModel ?? closeAsk.model ?? 'default', requestedModel: closeAsk.model ?? 'default', ...(servedLocally(closing, closeAsk.model) ? { costMc: 0 } : {}), step: loop.step, toolCalls: 0, forcedFinish: true, failureStreak: streak, account: closing.account, byoUnresolved: closing.byoUnresolved, ...(contextWindow ? { contextWindow } : {}) },
         usage: closing.usage,
         finishReason: closing.finishReason,
         textChars: closing.text.length,

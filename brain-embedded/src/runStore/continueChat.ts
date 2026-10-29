@@ -23,11 +23,13 @@ import { composeUserTurn, recordedModelText, type ComposedUserTurn } from '../at
 import type { BrainPersistenceAdapter } from '../config';
 import { withDirectedMetadata } from '../directedMessage';
 import { drainRunSteering, queueRunSteering, type RunSteerMessage } from '../runSteering';
+import { chatErrorAction } from '../chatError';
 import type { ContentPart } from '../streamChatCompletion';
 import type { BrainMessage, ChatInputAttachment } from '../types';
 import type { RunCell } from './runCell';
 import { emit, getCell, nowIso, pushTrace, recordAppended } from './runCells';
 import { claimRun, claimStopped, releaseClaim, type RunClaim } from './runClaim';
+import { bounded, continuationLimits } from './deadline';
 import type { BrainRunRequest, RunKey } from './runTypes';
 
 /** What a user turn's files need to be linked and made model-readable - the conversation's adapter. */
@@ -88,7 +90,7 @@ export function takeContinueOnSettle(runKey: RunKey): boolean {
 }
 
 /** Start a run - injected, so this module stays below `startRun` in the import graph. */
-type StartRun = (runKey: number, request: BrainRunRequest, claim?: RunClaim) => Promise<void>;
+type StartRun = (runKey: number, request: BrainRunRequest, claim?: RunClaim) => Promise<unknown>;
 
 type Composed = ComposedUserTurn & { text: string; attachments: ChatInputAttachment[] };
 
@@ -99,15 +101,22 @@ async function compose(steers: readonly RunSteerMessage[], ports: AttachmentPort
   return { ...(await composeUserTurn(text, attachments, ports)), text, attachments };
 }
 
-/** Two model contents as one: text joined, pictures kept. */
+/** Two model contents as one: text joined (`recordedModelText` - the one text extractor), pictures kept. */
 function joinContent(a: string | ContentPart[], b: string | ContentPart[]): string | ContentPart[] {
-  if (typeof a === 'string' && typeof b === 'string') return `${a}\n\n${b}`;
-  const parts = (c: string | ContentPart[]): ContentPart[] => (typeof c === 'string' ? [{ type: 'text', text: c }] : c);
-  const pieces = [...parts(a), ...parts(b)];
-  return [
-    { type: 'text', text: pieces.flatMap((p) => (p.type === 'text' ? [p.text] : [])).join('\n\n') },
-    ...pieces.filter((p) => p.type !== 'text'),
-  ];
+  const text = `${recordedModelText(a)}\n\n${recordedModelText(b)}`;
+  const pictures = [a, b].flatMap((c) => (typeof c === 'string' ? [] : c.filter((p) => p.type !== 'text')));
+  return pictures.length > 0 ? [{ type: 'text', text }, ...pictures] : text;
+}
+
+/**
+ * A continuation that ends WITHOUT a run (the row could not be saved, the host could not prepare one, the
+ * start was rejected) says so where the person looks - the chat's error - with the failure's own message,
+ * so words steered meanwhile do not sit unseen.
+ */
+function surface(c: RunCell, e: unknown): void {
+  c.error = e instanceof Error ? e.message : String(e);
+  c.errorAction = chatErrorAction(e);
+  emit(c);
 }
 
 /**
@@ -146,9 +155,11 @@ export async function continueChat(runKey: number, c: RunCell, steers: readonly 
   // order of the chat is the order it was said in, and a reload finds it. Each set is composed once.
   const fresh = steers.filter((m) => !m.saved);
   const said = steers.filter((m) => m.saved);
-  const freshTurn = fresh.length > 0 ? await compose(fresh, ports) : null;
-  const saidTurn = said.length > 0 ? await compose(said, ports) : null;
-  if (claimStopped(c, claim)) return true;
+  const reading = continuationLimits.prepareMs;
+  const freshTurn = fresh.length > 0 ? await bounded(reading, compose(fresh, ports), 'Reading the attachments') : null;
+  const saidTurn = said.length > 0 ? await bounded(reading, compose(said, ports), 'Reading the attachments') : null;
+  // No Stop check before the save: words already in hand are the person's message - a Stop keeps them as
+  // a row (the record of what was said) and starts nothing, below.
   let row: BrainMessage | undefined;
   if (freshTurn) {
     // A plain user row (no mid-turn mark): the reply to it is an ordinary answer.
@@ -164,8 +175,9 @@ export async function continueChat(runKey: number, c: RunCell, steers: readonly 
   // The host's run-time parts, fresh. A host that refuses leaves the (saved) words waiting in the inbox.
   let fresher: Partial<BrainRunRequest> | undefined;
   try {
-    fresher = await binding.prepareRun?.(runKey);
+    fresher = await bounded(continuationLimits.prepareMs, binding.prepareRun?.(runKey), 'Preparing the run');
   } catch (e) {
+    surface(c, e);
     trace(c, 'steer.prepare_failed', { error: e instanceof Error ? e.message : String(e) },
       'The host could not prepare a run for direction the last run never read; it waits for the chat\'s next run.');
     keepAsSaid(runKey, recordedModelText(content), [...(freshTurn?.attachments ?? []), ...(saidTurn?.attachments ?? [])]);
@@ -184,6 +196,7 @@ export async function continueChat(runKey: number, c: RunCell, steers: readonly 
     ...(row ? { userTurnMessageId: row.id } : {}),
   }, claim).catch((e: unknown) => {
     continuing.delete(runKey);
+    surface(c, e);
     trace(c, 'steer.continue_failed', { error: e instanceof Error ? e.message : String(e) }, 'The continuation could not start.');
   });
   return true;
@@ -200,6 +213,7 @@ async function continueOrKeep(runKey: number, c: RunCell, steers: readonly RunSt
   try {
     if (await continueChat(runKey, c, steers, start, claim)) return true;
   } catch (e) {
+    surface(c, e);
     trace(c, 'steer.continue_failed', { error: e instanceof Error ? e.message : String(e) },
       'Direction the run never read could not be made the next turn; it waits for the chat\'s next run.');
   } finally {

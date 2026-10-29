@@ -3,6 +3,7 @@ import { act, renderHook } from '@testing-library/react';
 import { chatDoorLiveness, useChatTurns, type ChatTurns, type ChatTurnsOptions } from './useChatTurns';
 import { useChatCreation } from './useChatCreation';
 import { drainRunSteering, hasRunInterrupt, resetRunSteering } from './runSteering';
+import { installRunDriver, type BrainRunDriver } from './runDriver';
 
 const stopRun = vi.hoisted(() => vi.fn());
 vi.mock('./brainRunStore', () => ({ stopRun }));
@@ -629,5 +630,45 @@ describe('useChatTurns - a flush that is not kept, a Stop, and the line of waiti
 
     act(() => result.current.stop());
     expect(result.current.steers({ directed: false })).toBe(false);
+  });
+});
+
+describe('useChatTurns - where a turn goes when it is not kept after a chat switch (round 8)', () => {
+  beforeEach(() => { stopRun.mockClear(); resetRunSteering(); });
+
+  it('with the run executing elsewhere (a run driver), ANY such turn returns to the composer - never the webview\'s inbox', async () => {
+    installRunDriver({} as BrainRunDriver);
+    try {
+      let settle!: (kept: boolean) => void;
+      const send = vi.fn(() => new Promise<boolean>((resolve) => { settle = resolve; }));
+      const restore = vi.fn();
+      const props = (running: boolean, runKey: number): ChatTurnsOptions<string> => ({ running, runKey, send, isDirected: () => false, restore });
+      const { result, rerender } = renderHook((p: ChatTurnsOptions<string>) => useChatTurns<string>(p), { initialProps: props(true, 70) });
+      await act(async () => { await result.current.queueAfter('plain turn'); });
+      await act(async () => { rerender(props(false, 70)); });
+      await act(async () => { rerender(props(false, 71)); });
+      await act(async () => { settle(false); });
+
+      expect(restore).toHaveBeenCalledWith('plain turn');
+      expect(drainRunSteering(70)).toEqual([]);
+      expect(result.current.queued.items).toEqual([]);
+    } finally {
+      installRunDriver(null);
+    }
+  });
+
+  it('turns held before the run went LIVE are carried: they do not stop later messages steering it', async () => {
+    const send = vi.fn();
+    const props = (steerable: boolean): ChatTurnsOptions<string> => ({ running: true, steerable, runKey: 72, send });
+    const { result, rerender } = renderHook((p: ChatTurnsOptions<string>) => useChatTurns<string>(p), { initialProps: props(false) });
+    await act(async () => { await result.current.submit('typed in the fetch window'); });
+    expect(result.current.queued.count).toBe(1);
+
+    rerender(props(true)); // the run goes live
+    expect(result.current.steers({ directed: false })).toBe(true);
+    await act(async () => { await result.current.submit('mid-run'); });
+
+    expect(hasRunInterrupt(72)).toBe(true);
+    expect(result.current.queued.count).toBe(1); // the earlier turn still waits for the falling edge
   });
 });

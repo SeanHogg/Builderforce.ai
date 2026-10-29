@@ -17,7 +17,7 @@ import { shippedToBaseBranch } from '../shipVerification';
 import { ticketsReviewedInPreview } from '../previewReview';
 import { lineagePersistence } from '../runLineage';
 import { emptyRunUsage } from '../memorySavings';
-import { emit, getCell, recordRunFailure, runTrace } from './runCells';
+import { emit, getCell, nowIso, pushTrace, recordRunFailure, runTrace } from './runCells';
 import { appendRunMessage } from './runControl';
 import { keepStoppedTurn, persistStep } from './turnPersistence';
 import { recordCodeChangeTicket, updateLinkedTickets } from './runBackstops';
@@ -27,6 +27,8 @@ import { reportRunEnd } from './runEndOutcome';
 import { beginRun } from './beginRun';
 import { continueLeftovers, takeContinueOnSettle } from './continueChat';
 import { holdClaim, releaseClaim, type RunClaim } from './runClaim';
+import { continuationLimits, within } from './deadline';
+import { handTurnToLiveRun, type StartOutcome } from './refusedStart';
 import { markPersonTurn } from './chatAsks';
 import type { BrainRunRequest } from './runTypes';
 import type { RunCell } from './runCell';
@@ -45,17 +47,25 @@ const delegatingCells = new WeakSet<RunCell>();
  * run is already in flight the call returns immediately, so a second mounted
  * Brain instance can never spawn a duplicate loop. The claim is synchronous
  * (set before any await), so two callers in the same tick can't both pass it. A start
- * made under a `RunClaim` consumes it (`beginRun`).
+ * made under a `RunClaim` consumes it (`beginRun`). A start that is REFUSED (a run is going, or a
+ * continuation holds the chat) hands its turn to that run's inbox and resolves `'joined'` - the
+ * caller's words are read once, never dropped (`refusedStart.ts`).
  */
-export async function startRun(runKey: number, request: BrainRunRequest, claim?: RunClaim): Promise<void> {
+export async function startRun(runKey: number, request: BrainRunRequest, claim?: RunClaim): Promise<StartOutcome> {
   // A host whose UI process cannot be trusted to outlive the run (see `runDriver.ts`)
   // executes it elsewhere; this store then only MIRRORS that run via applyRemoteRun.
   const driver = getRunDriver();
-  if (driver) return driver.start(runKey, request);
+  if (driver) {
+    await driver.start(runKey, request);
+    return 'ran';
+  }
   const c = getCell(runKey);
-  if (c.running) return; // already running elsewhere — never double-fire
-  // A continuation is being made for this chat (`runClaim.ts`): only it may start the run.
-  if (c.claim && c.claim !== claim) return;
+  // Already running elsewhere - never double-fire - or a continuation is being made for this chat
+  // (`runClaim.ts`) and only it may start the run: the turn joins that run instead of being lost.
+  if (c.running || (c.claim && c.claim !== claim)) {
+    handTurnToLiveRun(runKey, request);
+    return 'joined';
+  }
   // The CELL is the run's own (`runKey`); the CHAT is where it lives on the server. They
   // are the same number for a top-level run. A sub-agent has its own cell and lives in
   // its owner's chat, so from here on `chatId` is the server chat, and every message it
@@ -117,7 +127,8 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
     c.running = false;
     // The chat goes from running STRAIGHT to claimed by its continuation: never idle in between, so a
     // message typed while the run unwinds steers (the claim counts as live) instead of racing it.
-    const settleClaim = continues && !aborted ? holdClaim(c) : null;
+    // EVERY unwind holds it (a Stop's too): a new run cannot start under the old run's finally.
+    const settleClaim = holdClaim(c);
     try {
       c.streamingText = '';
       c.abort = null;
@@ -135,47 +146,59 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
         c.activity = { phase: 'finishing', startedAt: Date.now(), step: 0 };
         emit(c);
       }
-      // The ticket itself was already opened on the run's first edit (see the tool loop),
-      // so this pass ATTACHES whatever was touched afterwards to that same ticket — and
-      // still mints one in the case the opening call failed. It is skipped on a Stop, but
-      // a stopped run is no longer the case where nothing gets recorded.
-      if (!aborted && c.codeChanged && req.projectId != null && req.runTool && (!c.ticketRecorded || c.deltaTicketId != null)) {
-        await recordCodeChangeTicket(serverChatId, c, req, 'settle').catch(() => { /* never fail the run on the backstop */ });
-      }
-      // Keep the board honest about STATUS: if this run CHANGED code, advance any
-      // task/epic/gap linked to this chat that is still sitting in a not-started lane
-      // (backlog/todo/ready) to in_progress — so "started work on a ticket but never
-      // moved it off backlog" can't happen silently. Independent of the from_delta
-      // backstop above (that MINTS a ticket; this ADVANCES existing linked ones), and
-      // runs after it so a freshly-minted review-status ticket is never touched.
-      // Gated on a project (like the from_delta backstop) — an IDE code-change run always
-      // has one; a project-less chat has no board to reconcile.
-      if (!aborted && c.codeChanged && req.projectId != null && req.runTool) {
-        await updateLinkedTickets(serverChatId, c, req, linkedTicketsToAdvance, 'in_progress', 'worked-ticket-off-backlog').catch(() => { /* never fail the run on the backstop */ });
-      }
-      // And if the run MERGED its change to the base branch, the review lane is moot —
-      // the code is live. Runs last, after the mint above, so a ticket this run created
-      // and then shipped is completed rather than left at 50% forever. Gated on real
-      // evidence of a push that landed, not on the run merely having touched files — and
-      // on THIS run's trace only, with this run's files no longer dirty (an earlier run's
-      // push, or a push that left this change uncommitted, is not this change shipping).
-      // Evaluated once: it gates ticket completion AND is the reported outcome's `merged`.
-      const shipped = !aborted && c.codeChanged && shippedToBaseBranch(runTrace(c), { touchedFiles: c.touchedFiles });
-      if (shipped && req.projectId != null && req.runTool) {
-        await updateLinkedTickets(serverChatId, c, req, linkedTicketsToComplete, 'done', 'shipped-to-base-branch').catch(() => { /* never fail the run on the backstop */ });
-      }
-      // The Studio's equivalent of a verified push: a "complete" review recorded after a
-      // passing preview inspection of THIS run's last change. Closes exactly the tickets
-      // that were reviewed — the review names its ticket, so nothing else is swept along.
-      const reviewedInPreview = !aborted && c.codeChanged ? ticketsReviewedInPreview(runTrace(c)) : [];
-      if (reviewedInPreview.length && req.projectId != null && req.runTool) {
-        await updateLinkedTickets(
-          serverChatId, c, req,
-          (listed) => linkedTicketsReviewedComplete(listed, reviewedInPreview),
-          'done',
-          'reviewed-in-preview',
-        ).catch(() => { /* never fail the run on the backstop */ });
-      }
+      // The backstops hold the chat (the claim) - so they wait at most `settleMs`: a hung ticket call must not
+      // leave the chat live forever. Late work finishes in the background; the run's outcome is reported
+      // without it.
+      let shipped = false;
+      await within(continuationLimits.settleMs, async () => {
+        // The ticket itself was already opened on the run's first edit (see the tool loop),
+        // so this pass ATTACHES whatever was touched afterwards to that same ticket — and
+        // still mints one in the case the opening call failed. It is skipped on a Stop, but
+        // a stopped run is no longer the case where nothing gets recorded.
+        if (!aborted && c.codeChanged && req.projectId != null && req.runTool && (!c.ticketRecorded || c.deltaTicketId != null)) {
+          await recordCodeChangeTicket(serverChatId, c, req, 'settle').catch(() => { /* never fail the run on the backstop */ });
+        }
+        // Keep the board honest about STATUS: if this run CHANGED code, advance any
+        // task/epic/gap linked to this chat that is still sitting in a not-started lane
+        // (backlog/todo/ready) to in_progress — so "started work on a ticket but never
+        // moved it off backlog" can't happen silently. Independent of the from_delta
+        // backstop above (that MINTS a ticket; this ADVANCES existing linked ones), and
+        // runs after it so a freshly-minted review-status ticket is never touched.
+        // Gated on a project (like the from_delta backstop) — an IDE code-change run always
+        // has one; a project-less chat has no board to reconcile.
+        if (!aborted && c.codeChanged && req.projectId != null && req.runTool) {
+          await updateLinkedTickets(serverChatId, c, req, linkedTicketsToAdvance, 'in_progress', 'worked-ticket-off-backlog').catch(() => { /* never fail the run on the backstop */ });
+        }
+        // And if the run MERGED its change to the base branch, the review lane is moot —
+        // the code is live. Runs last, after the mint above, so a ticket this run created
+        // and then shipped is completed rather than left at 50% forever. Gated on real
+        // evidence of a push that landed, not on the run merely having touched files — and
+        // on THIS run's trace only, with this run's files no longer dirty (an earlier run's
+        // push, or a push that left this change uncommitted, is not this change shipping).
+        // Evaluated once: it gates ticket completion AND is the reported outcome's `merged`.
+        shipped = !aborted && c.codeChanged && shippedToBaseBranch(runTrace(c), { touchedFiles: c.touchedFiles });
+        if (shipped && req.projectId != null && req.runTool) {
+          await updateLinkedTickets(serverChatId, c, req, linkedTicketsToComplete, 'done', 'shipped-to-base-branch').catch(() => { /* never fail the run on the backstop */ });
+        }
+        // The Studio's equivalent of a verified push: a "complete" review recorded after a
+        // passing preview inspection of THIS run's last change. Closes exactly the tickets
+        // that were reviewed — the review names its ticket, so nothing else is swept along.
+        const reviewedInPreview = !aborted && c.codeChanged ? ticketsReviewedInPreview(runTrace(c)) : [];
+        if (reviewedInPreview.length && req.projectId != null && req.runTool) {
+          await updateLinkedTickets(
+            serverChatId, c, req,
+            (listed) => linkedTicketsReviewedComplete(listed, reviewedInPreview),
+            'done',
+            'reviewed-in-preview',
+          ).catch(() => { /* never fail the run on the backstop */ });
+        }
+      }, () => pushTrace(c, {
+        ts: nowIso(),
+        category: 'message',
+        label: 'run.backstop_timeout',
+        args: { waitedMs: continuationLimits.settleMs },
+        result: 'The run\'s ticket bookkeeping did not finish in time; the run is settled without waiting for it.',
+      }));
       // Teach learned routing how this run's CODER did. Not awaited — a report must
       // never hold the run open or fail it.
       // Every run — top-level or sub-agent — is graded by the same rule, on its own request.
@@ -208,9 +231,10 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       await steps.flush();
       // Direction nobody read becomes THIS chat's next turn, whichever chat is on screen. A Stop
       // ends the conversation's work, waiting words included.
-      if (settleClaim) await continueLeftovers(runKey, c, startRun, settleClaim);
+      if (continues && !aborted) await continueLeftovers(runKey, c, startRun, settleClaim);
     } finally {
-      if (settleClaim) releaseClaim(c, settleClaim);
+      releaseClaim(c, settleClaim);
     }
   }
+  return 'ran';
 }

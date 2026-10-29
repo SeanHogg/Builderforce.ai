@@ -5,6 +5,8 @@ import { resetBrainRunStore, isLive, isRunning, stopRun, subscribeRun } from './
 import { getCell } from './runCells';
 import { startRun } from './startRun';
 import { wakeChat } from './wakeChat';
+import { continuationLimits } from './deadline';
+import type { BrainRunRequest } from './runTypes';
 import { binding, chat, ports, times, until, userRows } from '../test/continueHarness';
 
 beforeEach(() => {
@@ -29,15 +31,47 @@ describe('a continuation holds the chat while it is made (the claim)', () => {
     expect(wakeChat(9308, 'wake', undefined)).toBe(true);
     expect(isRunning(9308)).toBe(false);
     expect(isLive(9308)).toBe(true);
-    // A person's own launch (a send that saved its row) is refused while the claim is held.
-    await startRun(9308, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'racing launch' });
+    // A person's own launch (a send that already saved its row) is refused while the claim is held - and its
+    // words are NOT dropped: they join the run being made, which reads them once.
+    const outcome = await startRun(9308, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'racing launch', userTurnMessageId: 4242 });
+    expect(outcome).toBe('joined');
     expect(isRunning(9308)).toBe(false);
     expect(c.asked).toHaveLength(1);
+    expect(hasRunInterrupt(9308)).toBe(true);
 
     release();
     await until(() => c.asked.length >= 2 && !isLive(9308));
     expect(c.asked).toHaveLength(2);
     expect(isLive(9308)).toBe(false);
+    expect(JSON.stringify(c.asked[1]).split('racing launch')).toHaveLength(2); // read exactly once
+    expect(userRows(c)).toEqual(['wake']); // its row was saved by the caller: nothing saved it twice
+  });
+
+  it('a refused launch whose row was NOT saved is saved once, by the run that reads it', async () => {
+    const { c, release } = await waiting(9326, ['Done.', 'Continued.']);
+
+    expect(wakeChat(9326, 'wake', undefined)).toBe(true);
+    expect(await startRun(9326, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'unsaved launch' })).toBe('joined');
+    release();
+    await until(() => c.asked.length >= 2 && !isLive(9326));
+
+    expect(JSON.stringify(c.asked[1])).toContain('unsaved launch');
+    expect(userRows(c).sort()).toEqual(['unsaved launch', 'wake']);
+  });
+
+  it('a launch refused because a run is going joins THAT run\'s inbox, interrupting - never dropped', async () => {
+    const c = chat(['Only.']);
+    let hold!: () => void;
+    const gate = new Promise<void>((resolve) => { hold = resolve; });
+    const stream: BrainRunRequest['stream'] = async (opts, handlers) => { await gate; return c.stream(opts, handlers); };
+    const first = startRun(9327, { resolvedSystemPrompt: 'sys', stream, persistence: c.persistence, userTurn: 'first' });
+    await until(() => isRunning(9327));
+
+    expect(await startRun(9327, { resolvedSystemPrompt: 'sys', stream, persistence: c.persistence, userTurn: 'second', userTurnMessageId: 9 })).toBe('joined');
+    expect(hasRunInterrupt(9327)).toBe(true);
+    expect(drainRunSteering(9327)).toMatchObject([{ text: 'second', fromPerson: true, saved: true }]);
+    hold();
+    await first;
   });
 
   it('a person typing meanwhile reaches the continuation run\'s inbox ONCE, interrupting - and the run reads it', async () => {
@@ -56,12 +90,14 @@ describe('a continuation holds the chat while it is made (the claim)', () => {
     expect(drainRunSteering(9320)).toEqual([]);
   });
 
-  it('a Stop during prepareRun starts nothing: the saved row stays, the claim is released', async () => {
+  it('a Stop during prepareRun frees the chat AT ONCE and starts nothing: the saved row stays', async () => {
     const { c, release } = await waiting(9321, ['Done.', 'must never run']);
 
     expect(wakeChat(9321, 'said, then stopped', undefined)).toBe(true);
     await until(() => userRows(c).length === 1); // the row is saved; prepareRun is now waiting
     stopRun(9321);
+    // Not when the stalled host call finally returns: a Stop frees the chat now.
+    expect(isLive(9321)).toBe(false);
     release();
     await new Promise((r) => setTimeout(r, 60));
 
@@ -113,5 +149,58 @@ describe('a continuation holds the chat while it is made (the claim)', () => {
 
     expect(isLive(9324)).toBe(false);
     expect(drainRunSteering(9324)).toMatchObject([{ text: 'lost row', fromPerson: true, persist: true }]);
+  });
+});
+
+describe('a claim cannot hold a chat forever', () => {
+  it('prepareRun that never answers: bounded, said as an error, the saved words wait in the inbox, the chat is free', async () => {
+    const saved = { ...continuationLimits };
+    continuationLimits.prepareMs = 40;
+    try {
+      const c = chat(['Done.', 'must never run']);
+      continueOnSettle(9328, { ports: () => ports, prepareRun: () => new Promise<never>(() => {}) });
+      await startRun(9328, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+
+      expect(wakeChat(9328, 'host is stuck', undefined)).toBe(true);
+      await until(() => !isLive(9328), 1_000);
+
+      expect(isLive(9328)).toBe(false);
+      expect(c.asked).toHaveLength(1);
+      expect(userRows(c)).toEqual(['host is stuck']);
+      expect(drainRunSteering(9328)).toMatchObject([{ fromPerson: true, saved: true }]);
+      expect(getCell(9328).error).toContain('timed out');
+      expect(getCell(9328).trace.some((e) => e.label === 'steer.prepare_failed')).toBe(true);
+    } finally {
+      Object.assign(continuationLimits, saved);
+    }
+  });
+
+  it('a row that cannot be saved is said as the chat\'s error, with the failure\'s own message', async () => {
+    const c = chat(['Done.']);
+    continueOnSettle(9329, binding);
+    await startRun(9329, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+    c.gate.failUserRows = true;
+
+    expect(wakeChat(9329, 'no session', undefined)).toBe(true);
+    await until(() => !isLive(9329));
+
+    expect(getCell(9329).error).toBe('token expired');
+  });
+
+  it('an unwinding run holds the chat until it has unwound, and frees it after - a Stop\'s included', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const c = chat(['never']);
+    const stream: BrainRunRequest['stream'] = async (opts, handlers) => { await gate; return c.stream(opts, handlers); };
+    continueOnSettle(9330, binding);
+    const run = startRun(9330, { resolvedSystemPrompt: 'sys', stream, persistence: c.persistence, userTurn: 'ask' });
+    await until(() => isRunning(9330));
+
+    stopRun(9330);
+    release();
+    await run;
+
+    expect(isLive(9330)).toBe(false);
+    expect(getCell(9330).claim).toBeNull();
   });
 });

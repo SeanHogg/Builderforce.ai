@@ -6,6 +6,7 @@ import type { RunKey } from './brainRunStore';
 import { drainRunSteering, queueRunSteering } from './runSteering';
 import type { ChatInputAttachment } from './types';
 import { wakeChat } from './runStore/wakeChat';
+import { getRunDriver } from './runDriver';
 import { turnBody, useQueuedTurns, type QueuedTurns } from './useQueuedTurns';
 import { startsRun } from './userTurnRuns';
 
@@ -48,7 +49,7 @@ import { startsRun } from './userTurnRuns';
  * `running`), and call `ensureChatId` from inside `send` when the host has no
  * conversation hook to do it.
  */
-export interface ChatTurnsOptions<T> {
+export interface ChatTurnsBase<T> {
   /** True while a turn is in flight on this conversation: what a typed message is HELD behind. */
   running: boolean;
   /**
@@ -69,21 +70,25 @@ export interface ChatTurnsOptions<T> {
    * reads - and never recomputes it.
    */
   steer?: (turn: T) => boolean;
-  /**
-   * Optional: put a turn back in the COMPOSER (text, files, addressee). A turn addressed to a
-   * participant whose send was not kept after the chat changed goes here - never into the queue now
-   * showing (another chat's) and never into a run. A host that addresses turns must supply it.
-   */
-  restore?: (turn: T) => void;
   /** Optional: how this host stops its run. Default `stopRun(runKey)`. */
   stop?: () => void;
   /** The text a non-string turn carries (blank check). Omit for string turns. */
   textOf?: (turn: T) => string;
-  /** Optional: the turn is addressed to a participant, not the run — never the Stop. */
-  isDirected?: (turn: T) => boolean;
   /** Optional: the attachments a non-string turn carries — they ride a steer so a mid-run image is not dropped. */
   attachmentsOf?: (turn: T) => ChatInputAttachment[] | undefined;
 }
+
+/**
+ * A host that ADDRESSES turns (to a participant, not the run) must also say where one goes back to when
+ * its send is not kept after the chat changed: the COMPOSER - text, files, addressee - never the queue now
+ * showing (another chat's) and never a run. The two come as a pair; neither alone is accepted. The same
+ * port takes ANY turn not kept after a chat switch when the run executes elsewhere (`installRunDriver`):
+ * the webview's in-process inbox is not where that run reads.
+ */
+export type ChatTurnsOptions<T> = ChatTurnsBase<T> & (
+  | { isDirected?: undefined; restore?: undefined }
+  | { isDirected: (turn: T) => boolean; restore: (turn: T) => void }
+);
 
 export interface ChatTurns<T> {
   /** The held turns (render them; let the user remove one). `queued.submit` is the raw hold-or-not primitive. */
@@ -183,10 +188,11 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
         turn = undefined;
         if (ports.current.runKey === key) {
           requeueRef.current(sent);
-        } else if (directed?.(sent)) {
-          // Another chat is showing: this turn is for a participant, so it goes back to the composer
-          // (addressee intact) - never to the queue now showing, never to a chat's run.
-          (ports.current.restore ?? requeueRef.current)(sent);
+        } else if (directed?.(sent) || getRunDriver()) {
+          // Another chat is showing. A turn for a participant is not the run's to read; and where the run
+          // executes elsewhere (the editor's host) the in-process inbox is read by nobody. Back to the
+          // composer, addressee intact - never the queue now showing, never an inbox.
+          ports.current.restore?.(sent);
         } else if (typeof key === 'number') {
           const body = turnBody(sent, text);
           const files = attached?.(sent);
@@ -222,10 +228,14 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
   itemsRef.current = queued.items;
   const carriedIds = useRef<ReadonlySet<number>>(new Set());
   const wasRunning = useRef(false);
+  const wasSteerable = useRef(false);
   // eslint-disable-next-line react-hooks/refs
-  if (running !== wasRunning.current) {
-    if (running) carriedIds.current = new Set(queued.items.map((item) => item.id));
+  if (running !== wasRunning.current || steerable !== wasSteerable.current) {
+    // Whatever waits when the send starts, AND when the run goes live, is carried: a turn held in the
+    // window before the run existed (the editor's limbic fetch) must not stop later messages steering it.
+    if ((running && !wasRunning.current) || (steerable && !wasSteerable.current)) carriedIds.current = new Set(queued.items.map((item) => item.id));
     wasRunning.current = running;
+    wasSteerable.current = steerable;
   }
   const heldThisRun = useCallback((): number => itemsRef.current.filter((item) => !carriedIds.current.has(item.id)).length, []);
 

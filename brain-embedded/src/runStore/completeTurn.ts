@@ -31,6 +31,7 @@ import { accrueByoUnresolved, accrueProviderCap, emit, emitStreaming, nowIso, no
 import { modelDowngradeEvent } from './modelDowngrade';
 import { gatewayRoutingArgs } from './gatewayRoutingTrace';
 import { turnMenu } from './turnMenu';
+import { servedLocally } from '../servedLocally';
 import { markPersonTurn } from './chatAsks';
 import { asLiveTurn, connectRetryStep, liveTurnModel } from './turnPersistence';
 import { reportToPolicy, type RunLoopContext, type TurnMeta } from './runLoopContext';
@@ -333,6 +334,9 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
         // could NOT resolve — so triage tells "ran on the shared pool despite a
         // connected Claude account (expired?)" apart from "nothing connected".
         account: result.account,
+        // A turn answered on this machine cost nothing: reported as 0 explicitly. Any other turn carries NO cost
+        // (unknown, never free) - the run's total is decided over all of them (`codeRunOutcome`).
+        ...(servedLocally(result, requested) ? { costMc: 0 } : {}),
         byoUnresolved: result.byoUnresolved,
         // How the gateway ROUTED the turn: the candidates it walked and every model it
         // tried and left (`model:status kind`). The only record of why a coding turn
