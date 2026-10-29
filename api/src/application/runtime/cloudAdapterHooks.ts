@@ -42,6 +42,8 @@ export interface CloudHookDeps {
   delegated: boolean;
   /** The run's per-file content hashes (the provider records them; the finish gates re-hash a child's rewrites). */
   writtenHashes?: WrittenFileHashes;
+  /** The run's live written set — the footprint the containment limits measure. */
+  writtenPaths?: Set<string>;
   /** The run's sandbox, when it has one (the project's own fast checks judge a turn's edits). */
   sandbox?: RunSandbox;
   ladder: TierLadder;
@@ -126,6 +128,6 @@ export function cloudPolicyModules(d: CloudHookDeps): Partial<PolicyModules> {
     compaction: createCompactionHook({ summarize: (text) => buildGatewaySummarizer(env)(text, { tenantId: run.tenantId }) }),
     guards: bindLiveState(createGuardsHook(guardPorts), (state) => { live = state; d.onState?.(state); }),
     // The same couplings the cloud's `evaluateFinishGates` entry binds (one definition: `cloudAgent/finishGates`).
-    finish: createFinishHook(cloudFinishPorts({ db, evt: run, repoCtx, delegated: d.delegated, ...(d.writtenHashes ? { writtenHashes: d.writtenHashes } : {}) })),
+    finish: createFinishHook(cloudFinishPorts({ db, evt: run, repoCtx, delegated: d.delegated, ...(d.writtenHashes ? { writtenHashes: d.writtenHashes } : {}), ...(d.writtenPaths ? { writtenPaths: d.writtenPaths } : {}) })),
   };
 }

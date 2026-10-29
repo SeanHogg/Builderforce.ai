@@ -44,11 +44,12 @@ import { selectToolsForTurn } from "./selectTools.js";
 import { TOOL_SEARCH_TOOL, runToolSearch } from "./searchHelpers.js";
 import { UPDATE_TASK_STATE_SCHEMA, UPDATE_TASK_STATE_TOOL, applyTaskStateUpdate } from "./taskState.js";
 
-/** The tool that records a reviewer's verdict — required of a run whose policy owes a sign-off. */
-const SIGNOFF_TOOL = "builtin_kanban_signoff";
 import { isChatReplyScope, CHAT_REPLY_SCOPED_TOOLS } from "./toolset.js";
 import { coveredReadAnswer, recordServedRead } from "./readCoverage.js";
 import { gateCall, isToolWithheld } from "./gates.js";
+
+/** The tool that records a reviewer's verdict — required of a run whose policy owes a sign-off. */
+const SIGNOFF_TOOL = "builtin_kanban_signoff";
 
 /** The schemas this run may call this turn — the ONE catalog strategy (see {@link toolsHook}). */
 function selectedTools(ctx: PolicyContext, offered: readonly ToolSchema[]): ToolSchema[] {
@@ -102,10 +103,27 @@ function toolSearchAnswer(ctx: PolicyContext, call: PolicyToolCall): { data: unk
   return { data: found.data };
 }
 
+/**
+ * A deferred tool the model calls anyway is LOADED: it stays advertised for the rest of the run. Kept in the run state
+ * (`loadedTools`), not derived from the transcript, so compaction dropping the call never withdraws the tool again.
+ * Dispatch itself stays with the capability gate.
+ */
+function loadCalledDeferredTool(ctx: PolicyContext, call: PolicyToolCall): void {
+  if (call.name === TOOL_SEARCH_TOOL || call.name === UPDATE_TASK_STATE_TOOL) return;
+  if ((ctx.state.loadedTools ?? []).includes(call.name)) return;
+  if (!ctx.tools.some((t) => t.function?.name === call.name)) return;
+  if (selectedTools(ctx, ctx.tools).some((t) => t.function?.name === call.name)) return;
+  ctx.state.loadedTools = [...(ctx.state.loadedTools ?? []), call.name];
+}
+
 /** The tools hook, as ported. `select` narrows the surface's schemas to what this run may call. */
 export const toolsHook: ToolsHook = {
   select: selectedTools,
-  beforeDispatch: (ctx, call) => toolSearchAnswer(ctx, call) ?? coveredReadAnswer(ctx, call),
+  beforeDispatch: (ctx, call) => {
+    loadCalledDeferredTool(ctx, call);
+    return coveredReadAnswer(ctx, call);
+  },
+  meta: toolSearchAnswer,
   observe: recordServedRead,
   gate: gateCall,
 };

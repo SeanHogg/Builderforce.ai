@@ -101,6 +101,16 @@ async function bridgeRoleSignoff(
   }
 }
 
+/**
+ * What the paused run reads when a governance gate's approval is decided. It names WHAT was decided and carries the approval's
+ * id, so no two decisions in one run read alike: a canned "Approved." was deduped against the transcript, and the second
+ * approval of a run was dropped before the run ever saw it.
+ */
+export function governanceGateDecisionText(existing: Pick<ApprovalRow, 'description'>, id: string, status: 'approved' | 'rejected', reviewNote: string | null | undefined): string {
+  const subject = existing.description?.split('\n')[0]?.trim().slice(0, 160) || 'the gated call';
+  return `${status === 'approved' ? 'Approved' : 'Rejected'}: ${subject} (approval ${id}).${status === 'rejected' && reviewNote ? ` ${reviewNote}` : ''}`;
+}
+
 export async function decideApproval(db: Db, env: ApprovalEnv, input: DecideApprovalInput): Promise<DecideApprovalResult> {
   const { tenantId, approvalId: id, actor } = input;
   const userId = actor.userId;
@@ -164,7 +174,7 @@ export async function decideApproval(db: Db, env: ApprovalEnv, input: DecideAppr
     await resumePausedExecution(env, db, {
       executionId: existing.executionId,
       tenantId,
-      answer: responseText ?? (status === 'approved' ? 'Approved.' : `Rejected.${input.reviewNote ? ` ${input.reviewNote}` : ''}`),
+      answer: responseText ?? governanceGateDecisionText(existing, id, status, input.reviewNote),
       approvalId: id,
     });
   }

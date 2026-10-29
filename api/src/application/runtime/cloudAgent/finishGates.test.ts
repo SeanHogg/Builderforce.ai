@@ -56,6 +56,15 @@ describe('cloudFinishPorts', () => {
     expect((h.verify.mock.calls.at(-1) as unknown as unknown[])[2]).not.toBe(absorbReader);
   });
 
+  it('paths the children committed reach the run\'s LIVE written set at once, for the containment footprint', async () => {
+    const live = new Set(['src/own.ts']);
+    const ports = cloudFinishPorts({ db, evt, repoCtx, delegated: true, writtenPaths: live });
+    ports.beginAttempt!();
+    h.absorb.mockImplementationOnce(async (...a: unknown[]) => { (a[4] as Set<string>).add('src/from-child.ts'); });
+    await ports.absorbChildWrites!(new Set(['src/own.ts']));
+    expect([...live].sort()).toEqual(['src/from-child.ts', 'src/own.ts']);
+  });
+
   it('an unbound run has no repository couplings and is not held to the deliverable gates', () => {
     const ports = cloudFinishPorts({ db, evt, repoCtx: null, delegated: false });
     expect(ports.bound).toBe(false);

@@ -5,11 +5,9 @@
  * never told the run policy it had entered verification, and it never wrote down
  * anything it had learned. Both are fixed here so no loop re-invents them:
  *
- *   1. {@link runVerifyPhase} walks a run through the `verify` phase declared by
- *      `@builderforce/run-policy` — the `verify_started` event in that package's
- *      `RunPolicyEvent` union, which until now NO loop ever emitted, so the policy
- *      that is meant to gate runs on a verify step never saw one. A loop observes the
- *      phase only by feeding the returned event back through `reduceRunPolicy`.
+ *   1. The verify PHASE (`runVerifyPhase`, `describeVerifyOutcome`, `applyVerifyPhase`) is the one agent's
+ *      (`@builderforce/agent-run` `policy/verify`) — one definition for every surface. What stays here is its DB-bound
+ *      half: {@link recordRunVerifyEvents} writes the verdict onto the run's timeline.
  *
  *   2. {@link commitRunMemory} writes the run's outcome into the EXISTING governed
  *      memory (`buildMemoryCapability(...).remember` — the same capability the cloud
@@ -22,87 +20,12 @@
 
 import type { ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
 import { buildMemoryCapability } from '../../memory/memoryService';
-import { reduceRunPolicy, type RunPolicyState } from '@builderforce/run-policy';
 import { extractFocusPaths } from '@builderforce/agent-tools';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { Env } from '../../../env';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { recordCloudToolEvent } from '../cloudToolEvents';
-import { inRunVerifyOutcome, type InRunVerifyOutcome } from './inRunVerify';
-
-/** Which run loop called in. `brain-reply` has no shell and no branch, exactly like
- *  `durable`, so it shares that surface's "run nothing, record what actually ran"
- *  semantics; it is kept as its own name so the recorded verdict still says which
- *  loop ran it. */
-export type RunVerifySurface = 'durable' | 'sandbox' | 'on-prem' | 'brain-reply';
-
-/** Surfaces with a real shell — the ones that may RUN a check rather than only
- *  record one. A chat reply and a DO worker have none, and must never fake one. */
-type ShellSurface = Exclude<RunVerifySurface, 'durable' | 'brain-reply'>;
-const SHELL_SURFACES: ReadonlySet<RunVerifySurface> = new Set<ShellSurface>(['sandbox', 'on-prem']);
-const hasShell = (surface: RunVerifySurface): surface is ShellSurface => SHELL_SURFACES.has(surface);
-
-export interface RunVerifyInput {
-  /** WHICH runtime ran it — the surface is part of the recorded verdict. */
-  surface: RunVerifySurface;
-  /** The files this run actually wrote. Nothing written ⇒ nothing to verify, and the
-   *  outcome says `nothing_written` rather than inventing a check. */
-  writtenPaths?: ReadonlySet<string> | readonly string[] | null;
-  /** `package.json` scripts, when the caller already read them. */
-  packageScripts?: Record<string, string> | null;
-  /** Runs one declared script and returns its exit code. */
-  runner?: Parameters<typeof inRunVerifyOutcome>[0]['runner'];
-  /** A check already run by the caller (the durable static/branch check, the
-   *  container's own shell); supplied instead of `runner` so nothing runs twice. */
-  results?: Parameters<typeof inRunVerifyOutcome>[0]['results'];
-}
-
-/**
- * The verification action a loop performs before it may finish: the project's own
- * checks over what the run wrote, decided by the unit-tested
- * {@link inRunVerifyOutcome} so every surface draws the SAME line about what counts
- * as verified. It performs nothing itself — it selects the commands from what the
- * caller ran, which is what keeps the durable (shell-less) surface honest.
- */
-export function runVerifyPhase(input: RunVerifyInput): InRunVerifyOutcome {
-  // A shell-less surface can only RECORD checks its caller already ran; handing it a
-  // runner would let a chat reply claim a test run that never happened.
-  if (!hasShell(input.surface)) {
-    return inRunVerifyOutcome({
-      surface: 'durable',
-      writtenPaths: input.writtenPaths ?? [],
-      results: input.results ?? null,
-    });
-  }
-  return inRunVerifyOutcome({
-    surface: input.surface === 'on-prem' ? 'durable' : input.surface,
-    writtenPaths: input.writtenPaths ?? [],
-    packageScripts: input.packageScripts ?? null,
-    runner: input.runner,
-    results: input.results ?? null,
-  });
-}
-
-/** One-line human summary of a verify outcome, for the timeline and the fact body. */
-export function describeVerifyOutcome(outcome: InRunVerifyOutcome): string {
-  if (outcome.kind === 'skipped') return `verify skipped (${outcome.reason})`;
-  if (outcome.commands.length === 0) return `verify ${outcome.kind}, no commands`;
-  const failed = outcome.failedCommands.length;
-  return `verify ${outcome.kind}: ${outcome.commands.join('; ')}${failed > 0 ? ` — ${failed} failed` : ''}`;
-}
-
-/**
- * Apply the `verify_started` event through the run policy's reducer and return the
- * new state — the one call that actually moves a run into its `verify` phase.
- *
- * This is the half of finding 11 that `policy.ts` cannot fix by itself: the event was
- * DECLARED there and its reducer HANDLED it, but no loop ever emitted it, so the
- * policy meant to gate runs on a verify step never saw one. Every loop applies this
- * instead of inventing its own phase transition (or its own event name).
- */
-export function applyVerifyPhase(state: RunPolicyState): RunPolicyState {
-  return reduceRunPolicy(state, { type: 'verify_started' });
-}
+import type { InRunVerifyOutcome } from '@builderforce/agent-run';
 
 /** Where a run's verify verdict is recorded. */
 export interface RunVerifyAudit {

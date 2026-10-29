@@ -25,7 +25,9 @@ function args(env: Record<string, string>, over: Partial<CostLoopSessionArgs> = 
   };
 }
 
-describe('cost loop session — levers off', () => {
+// New (not one of the original cases): the original levers-off case asserted the retired catalog / tail / compaction plumbing
+// (`tools()`, `turnMessages()`, `compactOptions()`, `dispatch()`); this pins what the session still does with every lever off.
+describe('cost loop session — containment, levers off', () => {
   const off = { COST_LEVERS_ALL: 'off' };
 
   it('keeps the caller max_tokens, contains nothing and persists nothing', async () => {

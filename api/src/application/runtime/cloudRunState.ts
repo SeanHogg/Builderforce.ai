@@ -108,6 +108,8 @@ export function toRunState(saved: CloudLoopState | undefined): RunState | undefi
     compaction: { compactions: 0 },
     writtenPaths: saved.writtenPaths ?? [],
     askedGates: [],
+    // TRANSITIONAL: the old engine recorded the gate keys a person had answered (`policyAskedGates`); only an approval was ever
+    // answered into that list, so a cursor written before the cutover resumes them as APPROVED calls. Drop with the legacy shape.
     approvedCalls: saved.policyAskedGates ?? [],
     ...(saved.modelPolicy?.forceToolChoice ? { forceToolChoice: saved.modelPolicy.forceToolChoice } : {}),
     ...(saved.taskState ? { taskState: saved.taskState } : {}),

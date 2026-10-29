@@ -96,8 +96,8 @@ function rowFor(event: RunEvent, meta: { durationMs?: number } | undefined, serv
   }
 }
 
-/** The run timeline + the uniform outcome row. A sink that cannot write records nothing; it never fails the run. */
-export function timelineSink(db: Db, run: CloudRunRefs, served: () => string | null = () => null): EventSink {
+/** The run timeline; the outcome row is handed to `onOutcome`. A sink that cannot write records nothing; it never fails the run. */
+export function timelineSink(db: Db, run: CloudRunRefs, served: () => string | null = () => null, onOutcome?: (row: RunOutcomeRow) => void): EventSink {
   const write = (row: Row): Promise<void> =>
     recordCloudToolEvent(db, { ...base(run), ...row }).catch((error) =>
       reportCaughtError(error, { source: 'application/runtime/cloudAdapterPorts.ts', operation: 'timelineSink', context: { logMessage: '[cloud-run] timeline write failed', details: { executionId: run.executionId, error } } }),
@@ -113,8 +113,10 @@ export function timelineSink(db: Db, run: CloudRunRefs, served: () => string | n
           .catch((error) => reportCaughtError(error, { source: 'application/runtime/cloudAdapterPorts.ts', operation: 'typedClaim', context: { executionId: run.executionId, error } }));
       }
     },
+    // The agent's row is NOT written here: the cloud decides what the run LANDED as, so the tail writes the one row after the
+    // landing (`cloudOutcomeRow`). The sink only hands it over.
     outcome(outcome: RunOutcomeRow) {
-      return write({ toolName: 'run.outcome', category: 'run', detail: { ...outcome }, result: `${outcome.terminalStatus} after ${outcome.steps} step(s)` });
+      onOutcome?.(outcome);
     },
   };
 }
@@ -149,15 +151,12 @@ export function durableHuman(env: Env, db: Db, run: CloudRunRefs): HumanChannel 
 }
 
 /**
- * The execution's pending steers, drained at each step boundary. `stepOf` names the step for the timeline row;
- * `userTurns` are the user rows the transcript already holds — a steer the run already adopted is not injected twice.
+ * The execution's pending steers, drained at each step boundary. `stepOf` names the step for the timeline row. A steer is
+ * delivered exactly once because DRAINING it stamps it consumed (`pullPendingSteering`) — that, not a comparison against the
+ * transcript, is the dedupe: two identical steers (a second "Approved.") are two steers, and both reach the run.
  */
-export function pendingSteering(db: Db, run: CloudRunRefs, stepOf: () => number, userTurns: () => ReadonlySet<string>): SteeringSource {
+export function pendingSteering(db: Db, run: CloudRunRefs, stepOf: () => number): SteeringSource {
   return {
-    drain: async () => {
-      const present = userTurns();
-      const steers = await applyPendingSteering(db, { ...base(run), messages: [], step: stepOf() });
-      return steers.filter((steer) => !present.has(steer));
-    },
+    drain: () => applyPendingSteering(db, { ...base(run), messages: [], step: stepOf() }),
   };
 }

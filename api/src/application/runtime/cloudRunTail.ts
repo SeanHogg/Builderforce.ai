@@ -15,14 +15,19 @@
  *   • an exception that is not a model-transport failure is RE-THROWN, so the Durable Object's
  *     eviction handling re-arms the run instead of failing it.
  */
-import { ModelTransportError, RUN_CANCELLED_REASON, type RunOutcome, type RunState } from '@builderforce/agent-run';
+import {
+  ModelTransportError, RUN_CANCELLED_REASON, buildOutcomeRow, describeVerifyOutcome, runSandboxVerify, runVerifyPhase,
+  type RunOutcome, type RunOutcomeRow, type RunState, type VerifySandbox,
+} from '@builderforce/agent-run';
+import type { RunSandbox } from './sandbox/runSandbox';
+import { landedStatus, writeCloudOutcomeRow } from './cloudOutcomeRow';
+import { cloudRunId } from '../../domain/execution/cloudRunId';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { releaseAllForExecution } from '../coordination/leaseService';
 import { coordinationScopeKey } from '../../domain/coordination/resourceKey';
 import { reportCaughtError, reportedFallback } from '../observability/caughtErrorReporter';
 import { missingReviewVerdictMessage } from './cloudAgent/finishGates';
-import { commitRunMemory, describeVerifyOutcome, recordRunVerifyEvents, runVerifyPhase } from './cloudAgent/runEndMemory';
-import { runSandboxVerify } from './sandbox/sandboxVerify';
+import { commitRunMemory, recordRunVerifyEvents } from './cloudAgent/runEndMemory';
 import { snapshotWrittenHashes } from './cloudAgent/writtenFileHashes';
 import { lastPersonSteerSender } from './executionSteering';
 import { finalizeCloudRun } from './cloudFinalize';
@@ -35,6 +40,8 @@ import type { CloudLoopState } from './cloudRunState';
 export interface RunStash {
   /** The memory the agent consolidated at run end (`store.commitMemory`). */
   consolidated?: unknown;
+  /** The outcome row the agent built when it settled; the tail writes it once the run has LANDED (see `cloudOutcomeRow`). */
+  row?: RunOutcomeRow;
 }
 
 /** Hand every path this run held back to its peers immediately rather than making them wait out the lease TTL. */
@@ -78,35 +85,43 @@ function lastSaid(state: RunState): string {
  * green CI is verified, never a local typecheck that did not happen. Then what the run learned is committed.
  * Neither step may delay or undo the finalize, which IS this run's result.
  */
+/** The run's sandbox as the agent's verify executor reads it: `package.json` for the declared scripts, and a basename listing for the lockfile probe. */
+export function verifySandboxOf(sandbox: RunSandbox): VerifySandbox {
+  return {
+    read: async (path) => {
+      const r = await sandbox.fs({ op: 'read', path });
+      return r.ok && typeof r.content === 'string' ? r.content : null;
+    },
+    list: async (glob) => (await sandbox.fs({ op: 'list', glob })).paths ?? [],
+  };
+}
+
 async function verifyThenRemember(host: CloudRunHost, state: RunState, output: string, stash: RunStash): Promise<void> {
   const { env, db, refs, taskRow } = host;
-  try {
-    const sandboxed = host.verify && host.writtenPaths.size > 0 ? await runSandboxVerify(host.verify.sandbox, host.verify.shell) : null;
-    const outcome = sandboxed
-      ? runVerifyPhase({ surface: 'sandbox', writtenPaths: host.writtenPaths, packageScripts: sandboxed.packageScripts, runner: sandboxed.runner, results: sandboxed.results })
-      : runVerifyPhase({ surface: 'durable', writtenPaths: host.writtenPaths, results: state.finish.ciVerified ? [{ command: 'branch-ci', exitCode: 0 }] : null });
-    recordRunVerifyEvents({ db, tenantId: refs.tenantId, executionId: refs.executionId, ...(refs.cloudAgentRef ? { cloudAgentRef: refs.cloudAgentRef } : {}) }, outcome);
-    const consolidated = stash.consolidated as { key?: unknown; content?: unknown } | undefined;
-    const codeMap = typeof consolidated?.key === 'string' && typeof consolidated.content === 'string'
-      ? { key: consolidated.key, content: consolidated.content }
-      : undefined;
-    await commitRunMemory({
-      db, env, tenantId: refs.tenantId, projectId: refs.projectId, ticketId: taskRow.id, executionId: refs.executionId,
-      ...(refs.cloudAgentRef ? { cloudAgentRef: refs.cloudAgentRef } : {}),
-      summary: output.trim() || `${refs.agentLabel} finished ${taskRow.title}`,
-      verifyNote: describeVerifyOutcome(outcome),
-      writtenPaths: [...host.writtenPaths],
-      // Anchors the run's facts to what it wrote: recall can tell a fact has gone stale once the file changes.
-      ...(host.writtenHashes.size ? { writtenFileHashes: snapshotWrittenHashes(host.writtenHashes) } : {}),
-      ...(codeMap ? { codeMap } : {}),
-    });
-  } catch (error) {
-    // Belt-and-braces: `commitRunMemory` swallows its own failures, but a defect in the tail must never cost this run its result.
-    reportCaughtError(error, {
-      source: 'application/runtime/cloudRunTail.ts', operation: 'verifyThenRemember',
-      context: { logMessage: '[cloud-run] verify/remember tail failed; finishing without it', details: { tenantId: refs.tenantId, executionId: refs.executionId, error } },
-    });
-  }
+  const where = { source: 'application/runtime/cloudRunTail.ts', context: { tenantId: refs.tenantId, executionId: refs.executionId } };
+  // Only the I/O is best-effort (a sandbox that cannot run, a memory write that fails). The bookkeeping around it is not: a
+  // programming error here (an unseeded host, a bad shape) must surface rather than silently skip the memory write.
+  const sandboxed = host.verify && host.writtenPaths.size > 0
+    ? await runSandboxVerify(verifySandboxOf(host.verify.sandbox), host.verify.shell).catch(reportedFallback(null, { ...where, operation: 'sandboxVerify' }))
+    : null;
+  const outcome = sandboxed
+    ? runVerifyPhase({ surface: 'sandbox', writtenPaths: host.writtenPaths, packageScripts: sandboxed.packageScripts, runner: sandboxed.runner, results: sandboxed.results })
+    : runVerifyPhase({ surface: 'durable', writtenPaths: host.writtenPaths, results: state.finish.ciVerified ? [{ command: 'branch-ci', exitCode: 0 }] : null });
+  recordRunVerifyEvents({ db, tenantId: refs.tenantId, executionId: refs.executionId, ...(refs.cloudAgentRef ? { cloudAgentRef: refs.cloudAgentRef } : {}) }, outcome);
+  const consolidated = stash.consolidated as { key?: unknown; content?: unknown } | undefined;
+  const codeMap = typeof consolidated?.key === 'string' && typeof consolidated.content === 'string'
+    ? { key: consolidated.key, content: consolidated.content }
+    : undefined;
+  await commitRunMemory({
+    db, env, tenantId: refs.tenantId, projectId: refs.projectId, ticketId: taskRow.id, executionId: refs.executionId,
+    ...(refs.cloudAgentRef ? { cloudAgentRef: refs.cloudAgentRef } : {}),
+    summary: output.trim() || `${refs.agentLabel} finished ${taskRow.title}`,
+    verifyNote: describeVerifyOutcome(outcome),
+    writtenPaths: [...host.writtenPaths],
+    // Anchors the run's facts to what it wrote: recall can tell a fact has gone stale once the file changes.
+    ...(host.writtenHashes.size ? { writtenFileHashes: snapshotWrittenHashes(host.writtenHashes) } : {}),
+    ...(codeMap ? { codeMap } : {}),
+  }).catch(reportedFallback(undefined, { ...where, operation: 'commitRunMemory' }));
 }
 
 /** The code map alone, with a short note of why the run stopped — for the hard stops that do not finalize. Best-effort. */
@@ -160,8 +175,22 @@ async function land(host: CloudRunHost, state: RunState, output: string, cancell
   return { ok: fin.ok, output: fin.output, cancelled, finished: true };
 }
 
-/** Map the agent's outcome to the cloud's result and, on a terminal one, land the run. */
+/**
+ * Map the agent's outcome to the cloud's result and, on a terminal one, land the run — then write the run's ONE outcome
+ * row with the status it LANDED as (a missing sign-off, a breaker that lands COMPLETED, a steered stop and a rehearsal that
+ * spent its step budget all differ from what the agent settled on). A run that goes on (paused, a durable tick that
+ * yielded) writes none; an exception the Durable Object re-arms throws before it gets here.
+ */
 export async function settleCloudRun(host: CloudRunHost, outcome: RunOutcome, stash: RunStash, model: CloudModelPort): Promise<CloudLoopResult> {
+  const result = await mapOutcome(host, outcome, stash, model);
+  if (!result.finished) return result;
+  const row = stash.row ?? buildOutcomeRow({ entryPoint: 'cloud', runId: cloudRunId(host.refs.executionId), kind: result.ok ? 'finished' : 'failed', state: outcome.state });
+  await writeCloudOutcomeRow(host.db, host.refs, row, landedStatus(result), result.ok ? undefined : result.output)
+    .catch(reportedFallback(undefined, { source: 'application/runtime/cloudRunTail.ts', operation: 'writeOutcomeRow', context: { executionId: host.refs.executionId } }));
+  return result;
+}
+
+async function mapOutcome(host: CloudRunHost, outcome: RunOutcome, stash: RunStash, model: CloudModelPort): Promise<CloudLoopResult> {
   switch (outcome.kind) {
     case 'failed': {
       // Not a model-transport failure: a platform eviction (or any thrown port) is not the run's failure. Re-thrown so

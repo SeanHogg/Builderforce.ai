@@ -42,7 +42,7 @@ import { composePolicyHooks } from "./policy/index.js";
 import { portInterruptWatch } from "./policy/steering/index.js";
 import { currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
 import { asMessages, freshState, newApprovalId, resumeState } from "./runState.js";
-import { causeOf, completeTurn, dispatchCall, offeredSchemas, synthesizeFinal } from "./runTurn.js";
+import { causeOf, completeTurn, dispatchCall, isResumable, offeredSchemas, synthesizeFinal } from "./runTurn.js";
 import { settle } from "./runSettle.js";
 import { kernelHooks, readOnlyPort, type KernelRun } from "./kernelHooks.js";
 import { EMPTY_PACK, buildContextPack, openingRows } from "./turnContext.js";
@@ -136,7 +136,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
     });
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    return settle(input, hooks, state, transcript, "failed", { reason, ...(signal?.aborted ? {} : { cause: err }) });
+    return settle(input, hooks, state, transcript, "failed", { reason, ...(signal?.aborted || !isResumable(input, err) ? {} : { cause: err }) });
   }
 
   state.step = loopResult.step;

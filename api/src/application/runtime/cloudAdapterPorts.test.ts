@@ -53,12 +53,19 @@ describe('timelineSink', () => {
     expect(rowOf('model.cascade')).toMatchObject({ detail: { step: 4, from: 'opus', reason: '413' } });
   });
 
-  it('writes the uniform outcome row, and a sink that cannot write never fails the run', async () => {
+  it('a sink that cannot write never fails the run', async () => {
     h.record.mockRejectedValueOnce(new Error('db down'));
     const sink = timelineSink({} as never, run);
     await expect(sink.emit({ kind: 'run.started', step: 0 })).resolves.toBeUndefined();
-    await sink.outcome?.({ entryPoint: 'cloud', steps: 3, toolCalls: 2, toolErrors: 0, compactions: 0, stallRecoveries: 0, escalations: 0, verify: 'not-run', terminalStatus: 'finished' });
-    expect(rowOf('run.outcome')).toMatchObject({ category: 'run', result: 'finished after 3 step(s)' });
+  });
+
+  it('hands the outcome row to the tail instead of writing it: the cloud writes the ONE row after the run has landed', async () => {
+    const taken: unknown[] = [];
+    const sink = timelineSink({} as never, run, () => null, (row) => { taken.push(row); });
+    const row = { entryPoint: 'cloud', steps: 3, toolCalls: 2, toolErrors: 0, compactions: 0, stallRecoveries: 0, escalations: 0, verify: 'not-run', terminalStatus: 'finished' } as const;
+    await sink.outcome?.(row);
+    expect(taken).toEqual([row]);
+    expect(h.record).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ toolName: 'run.outcome' }));
   });
 });
 
@@ -79,10 +86,10 @@ describe('durableHuman', () => {
 });
 
 describe('pendingSteering', () => {
-  it('drains the execution\'s steers at the current step, and never injects a steer the transcript already holds', async () => {
-    h.steers.mockResolvedValueOnce(['go left', 'already here']);
-    const drained = await pendingSteering({} as never, run, () => 7, () => new Set(['already here'])).drain();
-    expect(drained).toEqual(['go left']);
+  it('drains the execution\'s steers at the current step, each exactly once (consumption is the dedupe), two identical ones included', async () => {
+    h.steers.mockResolvedValueOnce(['go left', 'go left']);
+    const drained = await pendingSteering({} as never, run, () => 7).drain();
+    expect(drained).toEqual(['go left', 'go left']);
     expect(h.steers.mock.calls[0]?.[1]).toMatchObject({ executionId: 4, step: 7 });
   });
 });

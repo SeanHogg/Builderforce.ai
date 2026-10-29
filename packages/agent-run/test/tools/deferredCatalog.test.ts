@@ -49,7 +49,7 @@ describe("the one catalog — role core set + tool_search", () => {
 
   it("C1: tool_search loads matches for the rest of the run, and they persist in the state a later tick resumes from", async () => {
     const ctx = ctxFor();
-    const r = toolsHook.beforeDispatch?.(ctx, { id: "s", name: "tool_search", args: { query: "open an incident" } });
+    const r = toolsHook.meta?.(ctx, { id: "s", name: "tool_search", args: { query: "open an incident" } });
     expect((r?.data as { matches: Array<{ name: string }> }).matches.map((m) => m.name)).toContain("builtin_incidents_open");
     expect(names(await toolsHook.select(ctx, ctx.tools))).toContain("builtin_incidents_open");
     const next = ctxFor({ loaded: ctx.state.loadedTools });
@@ -60,8 +60,9 @@ describe("the one catalog — role core set + tool_search", () => {
     const ctx = ctxFor();
     // Dispatch stays with the guard: the tools hook answers nothing for a deferred tool.
     expect(toolsHook.beforeDispatch?.(ctx, { id: "k", name: "builtin_key_results_update", args: {} })).toBeUndefined();
-    const called = { ...ctx, messages: [{ role: "assistant" as const, content: "", toolCalls: [{ id: "k", name: "builtin_key_results_update", arguments: "{}" }] }] };
-    expect(names(await toolsHook.select(called, called.tools))).toContain("builtin_key_results_update");
+    // ...and it is loaded for the rest of the run: in the run STATE, so the transcript (which compaction may rewrite) is not what keeps it.
+    expect(ctx.state.loadedTools).toContain("builtin_key_results_update");
+    expect(names(await toolsHook.select(ctx, ctx.tools))).toContain("builtin_key_results_update");
   });
 
   it("C1: records the advertised set and its schema cost when it changes", async () => {
@@ -85,7 +86,7 @@ describe("the one catalog — role core set + tool_search", () => {
 describe("C3 — the structured task state", () => {
   it("is stored, rendered in the trailing block, and persisted", async () => {
     const ctx = ctxFor();
-    const stored = toolsHook.beforeDispatch?.(ctx, { id: "u", name: UPDATE_TASK_STATE_TOOL, args: { goal: "Ship the filter", nextStep: "edit avatar.ts" } });
+    const stored = toolsHook.meta?.(ctx, { id: "u", name: UPDATE_TASK_STATE_TOOL, args: { goal: "Ship the filter", nextStep: "edit avatar.ts" } });
     expect(stored?.data).toMatchObject({ ok: true });
     const brief = await memoryHook.brief(ctx);
     const out = withVolatileTail([{ role: "user", content: "U" }], { focus: [], facts: [], recall: [] }, brief, ["AFFECT"]);
@@ -96,7 +97,7 @@ describe("C3 — the structured task state", () => {
     expect(String(tail.content)).toContain("Goal: Ship the filter");
     expect(ctx.state.taskState).toEqual({ goal: "Ship the filter", nextStep: "edit avatar.ts" });
     const withMask = ctxFor({ levers: ["c3_task_state", "c2_observation_masking"] });
-    expect(compactionOptions({ ...withMask, ports: { model: {} } as unknown as RunPorts })).toMatchObject({ maskObservationsAfterTurns: 6, pinTaskBrief: true });
+    expect(compactionOptions({ ...withMask, ports: { model: {}, capabilities: { capabilities: new Set() } } as unknown as RunPorts })).toMatchObject({ maskObservationsAfterTurns: 6, pinTaskBrief: true });
   });
 
   it("refuses a task state over ~600 tokens", () => {

@@ -105,8 +105,7 @@ function transportSummarizer(ctx: PolicyContext): CompactionSummarizer {
 
 /** The recall note for the latest directive, from the run's `memory` capability. */
 function capabilityRecall(ctx: PolicyContext): ((query: string, budgetChars: number) => Promise<string>) | undefined {
-  // A context assembled without a capability set (a partial host, a unit harness) has no recall, not a crash.
-  const memory = ctx.ports.capabilities?.memory;
+  const memory = ctx.ports.capabilities.memory;
   if (!memory) return undefined;
   return async (query, budgetChars) => {
     const result = await memory.recall(query, RECALL_LIMIT);

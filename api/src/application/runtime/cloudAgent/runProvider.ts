@@ -18,7 +18,7 @@ import { withIdeWorkspace } from './ideWorkspaceProvider';
 import { resolveIdeWorkspaceForRun } from './ideWorkspaceCoding';
 import { sandboxShell, withSandbox } from '../sandbox/sandboxProvider';
 import type { RunSandbox } from '../sandbox/runSandbox';
-import type { VerifyShell } from '../sandbox/sandboxVerify';
+import type { VerifyShell } from '@builderforce/agent-run';
 
 export interface RunProviderArgs {
   env: Env;

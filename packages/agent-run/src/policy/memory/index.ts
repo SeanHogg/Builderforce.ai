@@ -93,17 +93,15 @@ export const memoryHook: MemoryHook & {
   },
 
   async consolidate(ctx: PolicyContext) {
-    const recorder = recorderForState(ctx.state);
-    ctx.state.memory = knowledgeState(recorder);
-    const map = recorder.consolidate({ root: ctx.task.workspace?.defaultRepo });
+    // The deterministic half — the code map, already carrying the chat it came from (WS8d) — is `codeMap`'s.
+    const map = memoryHook.codeMap(ctx);
     const facts = await extractAndWriteLearnedFacts({
-      activity: recorder.activity,
+      activity: recorderForState(ctx.state).activity,
     });
     // `undefined` (no map) leaves the store's commitMemory alone; a map is always
-    // committed even when no learned fact landed — the map is the deterministic half.
-    // The write carries the chat it came from (WS8d); the anchors are derived server-side.
+    // committed even when no learned fact landed. The anchors are derived server-side.
+    if (map) return map;
     const chat = ctx.task.chatId !== undefined ? { chatId: ctx.task.chatId } : {};
-    if (map) return { ...map, ...chat };
     return facts !== null && facts.length > 0 ? { facts, ...chat } : undefined;
   },
 };

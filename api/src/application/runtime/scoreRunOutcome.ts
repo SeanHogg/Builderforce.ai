@@ -17,7 +17,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { approvals, executions, llmUsageLog, pullRequests, tasks, toolAuditEvents, runModelOutcomes } from '../../infrastructure/database/schema';
+import { approvals, executions, pullRequests, tasks, toolAuditEvents, runModelOutcomes } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   normalizeActionType,
@@ -42,10 +42,12 @@ const CLOUD_RUN_ROLE: ModelRole = 'code';
 import { bumpOutcomesVersion } from '../../infrastructure/cache/readThroughCache';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { lexicalEval } from '../eval/semanticEval';
-import { resolveUsageDatabase, usageDatabaseOf, usageRequestCount } from '../llm/usageLedger';
+import { resolveUsageDatabase } from '../llm/usageLedger';
+import { resolveRunModel } from './runUsageCost';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { EXECUTION_TERMINAL_SET } from '../../domain/shared/terminalStatus';
 import { runOutcomeTelemetryColumns } from './runOutcomeTelemetryColumns';
+import { cloudRunId } from '../../domain/execution/cloudRunId';
 
 // ── D3 score weights + efficiency normalization (named so they're tunable without a
 //    schema change — see the Gap Register note on score calibration). ────────────
@@ -258,29 +260,6 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
   }
 }
 
-/** Most-frequent llm_usage_log.model for an execution — the model the run actually
- *  locked onto (the truth of what ran). Empty when the run produced no LLM calls. */
-async function resolveRunModel(db: Db, executionId: number): Promise<{ model: string; steps: number; costMc: number }> {
-  try {
-    const rows = await usageDatabaseOf(db)
-      .select({
-        model: llmUsageLog.model,
-        n: usageRequestCount(),
-        cost: sql<number>`coalesce(sum(${llmUsageLog.costUsdMillicents}), 0)::int`,
-      })
-      .from(llmUsageLog)
-      .where(eq(llmUsageLog.executionId, executionId))
-      .groupBy(llmUsageLog.model)
-      .orderBy(desc(usageRequestCount()));
-    if (rows.length === 0) return { model: '', steps: 0, costMc: 0 };
-    const steps = rows.reduce((a, r) => a + (Number(r.n) || 0), 0);
-    const costMc = rows.reduce((a, r) => a + (Number(r.cost) || 0), 0);
-    return { model: rows[0]?.model ?? '', steps, costMc };
-  } catch {
-    return { model: '', steps: 0, costMc: 0 };
-  }
-}
-
 /** The latest PR row for a task → (merged, ciGreen, closedUnmerged). merged also covers
  *  a merged-by status without an explicit mergedAt timestamp; closedUnmerged is a human
  *  closing the PR without merging (a literal rejection of the deliverable). */
@@ -415,7 +394,8 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       ciGreen: pr.ciGreen,
       degraded,
       steps,
-      costMc,
+      // An unknown cost scores the cost term neutrally (halfway) — neither free nor expensive.
+      costMc: costMc ?? EFFICIENCY_COST_NORM_MC / 2,
       approved,
     });
 
@@ -434,8 +414,8 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       taskId: exec.taskId,
       executionId: args.executionId,
       cloudAgentRef: exec.cloudAgentRef ?? null,
-      // The uniform outcome row's telemetry label (PRD 35 §8.2): a cloud execution is scored by the cloud adapter's host.
-      entryPoint: 'cloud',
+      // The run's id in the shared run-id space, so a child run's `parent_run_id` can point at its owner's row.
+      clientRunId: cloudRunId(args.executionId),
       actionType,
       role: CLOUD_RUN_ROLE,
       resolvedModel,
@@ -474,6 +454,7 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
         .update(runModelOutcomes)
         .set({
           score, merged: pr.merged, ciGreen: pr.ciGreen, degraded, steps, costUsdMillicents: costMc, resolvedModel, plan, rateLimited,
+          clientRunId: cloudRunId(args.executionId),
           // Refresh the literal signals on re-score too (a late PR-close / approval lands here).
           toolCalls: toolCounts.toolCalls, toolErrors: toolCounts.toolErrors, humanRejected,
           // Re-evaluate on re-score too (the deliverable text may have settled).

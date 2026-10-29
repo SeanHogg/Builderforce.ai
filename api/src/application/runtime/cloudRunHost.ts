@@ -58,7 +58,7 @@ import { openCostLoopSession, type CostLoopSession } from './costLoop/costLoopSe
 import { cloudRoutingExploration } from './costLoop/runLevers';
 import { cloudTierLadder } from './costLoop/cloudTierLadder';
 import type { RunSandbox } from './sandbox/runSandbox';
-import type { VerifyShell } from './sandbox/sandboxVerify';
+import type { VerifyShell } from '@builderforce/agent-run';
 import type { CloudEngineContext } from './cloudAgentEngine';
 import type { CloudLoopOpts, CloudLoopResult } from './cloudRunOpts';
 import type { CloudLoopState } from './cloudRunState';

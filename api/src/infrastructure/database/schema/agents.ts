@@ -1548,7 +1548,8 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
   /** A coding_model_degraded event fired during the run (floored onto a non-coder). */
   degraded:         boolean('degraded').notNull().default(false),
   steps:            integer('steps').notNull().default(0),
-  costUsdMillicents: integer('cost_usd_millicents').notNull().default(0),
+  /** NULL = the cost was not measured (no usage rows, or the lookup failed) — never "free". A genuine 0 stays 0. */
+  costUsdMillicents: integer('cost_usd_millicents').default(0),
   terminalStatus:   varchar('terminal_status', { length: 16 }).notNull(), // completed|failed|cancelled
   /** The run died on a PROVIDER RATE LIMIT (migration 0485) — `classifyRunFailure`
    *  returned `rate_limited`. An AVAILABILITY fact, never a quality one: the learned

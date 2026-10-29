@@ -229,6 +229,11 @@ export interface ToolsHook {
   /** Before a call dispatches: a read whose lines were already SERVED is answered without the disk. */
   beforeDispatch?(ctx: PolicyContext, call: PolicyToolCall): { data: unknown } | void;
   /**
+   * A META tool (`tool_search`, `update_task_state`) the policy answers itself — the surface has no such tool. Unlike a
+   * covered read it IS a call: the kernel tallies it, traces it and lets memory observe it; only the dispatch is skipped.
+   */
+  meta?(ctx: PolicyContext, call: PolicyToolCall): { data: unknown } | void;
+  /**
    * The governance gates (`RunPolicy.approvalGates`) against one call: a `block` refuses it
    * (the model reads the refusal), a `require-approval` asks the human channel — answered in
    * run it proceeds, parked it returns the control that parks the run. Nothing ⇒ the call is allowed.

@@ -80,6 +80,9 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
   // The results a covered read was answered with: no tool ran, so none of them is a
   // served read, a write, a counted call or a fact for memory — only a stub the model reads.
   const stubs = new WeakSet<LoopDispatchResult>();
+  // The results of a call the run PARKED on a person (a governance gate, A3's pause): the call never ran, so it is no counted
+  // call and no error; the retry after the answer is the call that counts.
+  const held = new WeakSet<LoopDispatchResult>();
   /** When each call started, so a call's duration is MEASURED, not inferred from the events around it. */
   const starts = new Map<string, number>();
 
@@ -182,12 +185,18 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       // Governance gates (`RunPolicy.approvalGates`): a block refuses the call, an approval
       // asks the human channel and parks the run on the approver.
       const gated = await hooks.tools.gate?.(pctx, pcall);
-      if (gated) return { result: { data: gated.data, isError: true, ...(gated.control ? { control: asLoopControl(gated.control) } : {}) } };
+      if (gated) {
+        const refused: LoopDispatchResult = { data: gated.data, isError: true, ...(gated.control ? { control: asLoopControl(gated.control) } : {}) };
+        if (gated.control) held.add(refused);
+        return { result: refused };
+      }
       // A3's pause parks the run on a person (the control); any other skip just answers.
       const decision = await hooks.guards.beforeDispatch(pctx, pcall);
       if (decision?.skip) {
         const { data, isError, control } = decision.skip;
-        return { result: { data, isError: isError ?? true, ...(control ? { control: asLoopControl(control) } : {}) } };
+        const skipped: LoopDispatchResult = { data, isError: isError ?? true, ...(control ? { control: asLoopControl(control) } : {}) };
+        if (control) held.add(skipped);
+        return { result: skipped };
       }
       // A run about to ASK while the sub-agents it was asked for are undone is told to
       // start them instead — the question it would ask is the one the user answered.
@@ -195,6 +204,9 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         const note = hooks.subagents.backstop(pctx);
         if (note) return { result: { data: { ok: false, error: note }, isError: true } };
       }
+      // A meta tool (tool_search, update_task_state) is the policy's own answer — still a CALL: tallied, traced, observed.
+      const meta = hooks.tools.meta?.(pctx, pcall);
+      if (meta) return { result: { data: meta.data } };
       // Read coverage: a read whose lines were already served is answered without the disk.
       const covered = hooks.tools.beforeDispatch?.(pctx, pcall);
       if (covered) {
@@ -235,7 +247,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
     },
 
     afterDispatch: async (call, result, message, ctx) => {
-      const stub = stubs.has(result);
+      const stub = stubs.has(result) || held.has(result);
       const ok = !result.isError && !(result.data && typeof result.data === "object" && (result.data as { ok?: unknown }).ok === false);
       if (!stub) {
         // The trace and the tally fold the same verdict, so the outcome row and the
@@ -259,6 +271,11 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         hooks.tools.observe?.(pctx, pcall, data, result.isError === true);
         await hooks.memory.observe?.(pctx, pcall, result.data, result.isError);
         rememberWrite(state, call, ok);
+      }
+      // A call the run parked on an approver ends the turn's dispatching: nothing after it may run while the run waits on a
+      // person (the retry after the answer re-asks for them).
+      if (held.has(result) && (result.control as { parked?: true } | undefined)?.parked) {
+        return { skipRemaining: { data: { ok: false, skipped: true, error: "Not run: the run is parked on an approval." }, isError: false } };
       }
       // An interrupting steer skips the rest of this turn's calls (§6.3).
       return steerSkip(run.watch);

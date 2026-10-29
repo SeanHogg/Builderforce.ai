@@ -75,7 +75,7 @@ function ports(store: { saved?: RunState }, requests: unknown[]): RunPorts {
     store: { load: () => store.saved, save: (s) => { store.saved = JSON.parse(JSON.stringify(s)) as RunState; } },
     events: timelineSink({} as never, REFS),
     human: durableHuman({} as never, {} as never, REFS),
-    steering: pendingSteering({} as never, REFS, model.currentStep, () => new Set()),
+    steering: pendingSteering({} as never, REFS, model.currentStep),
     context: { pack: () => ({ focus: [], facts: [], recall: [] }), turnSections: () => ['## affect\ncalm'] },
     extensions: platformTools({ env: {} as never, db: {} as never, tenantId: 1, projectId: 2, meterExecutionId: 4, executionId: 4 }),
   };

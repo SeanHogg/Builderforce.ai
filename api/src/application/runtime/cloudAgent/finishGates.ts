@@ -39,6 +39,8 @@ export function cloudFinishPorts(a: {
   db: Db; evt: CloudRunEvt; repoCtx: TicketRepoContext | null; delegated: boolean;
   /** The run's per-file content hashes; a path a child rewrote is re-hashed from the branch. */
   writtenHashes?: WrittenFileHashes;
+  /** The run's LIVE written set (shared with the provider and the containment footprint): paths a child committed join it as soon as they are absorbed. */
+  writtenPaths?: Set<string>;
 }): FinishGatePorts & { delegated: boolean } {
   const { db, evt, repoCtx } = a;
   const branch = repoCtx ? { ...repoCtx, ref: repoCtx.branch } : null;
@@ -55,7 +57,12 @@ export function cloudFinishPorts(a: {
       scanPlaceholders: (paths: readonly string[]) => scanWrittenForPlaceholders(branch, new Set(paths)),
     } : {}),
     liveChildren: () => liveChildrenFinishBlock(db, evt.tenantId, evt.executionId),
-    absorbChildWrites: (paths: Set<string>) => absorbChildWrites(db, evt.tenantId, evt.executionId, repoCtx, paths, a.writtenHashes, branchRead),
+    absorbChildWrites: async (paths: Set<string>) => {
+      await absorbChildWrites(db, evt.tenantId, evt.executionId, repoCtx, paths, a.writtenHashes, branchRead);
+      // The run's live written set learns what its children committed AT ONCE, so the footprint the containment limits
+      // (`maxFiles`) measure is not short of it until the run ends.
+      if (a.writtenPaths) for (const path of paths) a.writtenPaths.add(path);
+    },
     recordClaim: (statement: string) => recordCodeCompletionClaim(db, { tenantId: evt.tenantId, executionId: evt.executionId, statement }),
     onBlocked: async (reason, _block, detail, result) => {
       await recordCloudToolEvent(db, { ...evt, toolName: 'finish.blocked', category: 'tool', detail: { reason, ...detail }, result });

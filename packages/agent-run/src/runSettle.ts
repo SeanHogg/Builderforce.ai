@@ -77,8 +77,10 @@ export async function settle(
     } catch {
       // As with the trace: a broken sink records nothing.
     }
+    // Only a TERMINAL settle closes the trace. A paused run resumes into the same run (the person's answer), so a
+    // `run.finished(paused)` here would be followed by a second `run.finished` when it ends.
+    await emit(input.ports.events, { kind: "run.finished", step: state.step, outcome: kind });
   }
-  await emit(input.ports.events, { kind: "run.finished", step: state.step, outcome: kind });
 
   if (kind === "finished") return { kind, output: extra.output ?? "", state };
   if (kind === "paused") return { kind, question: extra.question ?? "", approvalId: extra.approvalId ?? newApprovalId(state), state };

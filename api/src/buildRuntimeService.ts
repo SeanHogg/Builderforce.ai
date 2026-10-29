@@ -23,6 +23,9 @@ import { RuntimeService } from './application/runtime/RuntimeService';
 import { recordRunFailureEvent } from './application/runtime/recordRunFailureEvent';
 import { loadCloudRunForSelfHeal, selfHealCloudRun } from './application/runtime/cloudSelfHeal';
 import { signalCloudRunnerConcluded } from './application/runtime/cloudRunnerStub';
+import { writePausedRunEndRow } from './application/runtime/cloudOutcomeRow';
+import { PAUSED_ORPHAN_REASON } from './application/runtime/orphanReasons';
+import { ExecutionStatus } from './domain/shared/types';
 import { wireExecutionEventSinks } from './application/runtime/wireExecutionEventSinks';
 import { syncExecutionTaskLifecycle } from './application/task/taskLifecycle';
 import { maybeAutoRunOnLaneEntry } from './application/swimlane/laneEntryTrigger';
@@ -51,7 +54,11 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
     tasks: new TaskRepository(db),
     agents: new AgentRepository(db),
     audit: new AuditRepository(db, env),
-    onTerminalFailure: (e) => recordRunFailureEvent(db, e),
+    onTerminalFailure: async (e) => {
+      await recordRunFailureEvent(db, e);
+      // A cloud run reaped while PAUSED never settled through the agent: its one outcome row is written here.
+      if (e.agentHostId == null && e.errorMessage === PAUSED_ORPHAN_REASON) await writePausedRunEndRow(db, e, 'failed', PAUSED_ORPHAN_REASON);
+    },
     onTaskStatusSync: (info) => syncExecutionTaskLifecycle(env, db, info),
     onCloudOrphan: async (e) => {
       // Read-path self-heal: re-queue a stale cloud run once on the durable executor
@@ -62,7 +69,12 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
     },
     // A cancelled cloud run's durable runner caches "still running" between row reads;
     // tell it now so it stops mid-step. Host runs are cancelled over the host relay.
-    onCancelled: (e) => (e.agentHostId == null ? signalCloudRunnerConcluded(env, Number(e.id)) : Promise.resolve()),
+    onCancelled: async (e, priorStatus) => {
+      if (e.agentHostId != null) return;
+      await signalCloudRunnerConcluded(env, Number(e.id));
+      // A cloud run cancelled while PAUSED on a question never settled through the agent: its one outcome row is written here.
+      if (priorStatus === ExecutionStatus.PAUSED) await writePausedRunEndRow(db, e, 'cancelled');
+    },
     // Autonomous chaining: when an agent advances its ticket into the next lane,
     // start that lane's configured agent via the SAME trigger a human board-drag
     // uses — so a multi-stage board (BA → Dev → QA …) flows without a human nudging

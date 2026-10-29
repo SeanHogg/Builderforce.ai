@@ -10,10 +10,13 @@ const h = vi.hoisted(() => ({
   turn: 0,
   requests: [] as Array<Record<string, unknown>>,
   callTool: vi.fn(async (..._a: unknown[]) => ({ tasks: [] })),
+  fail: undefined as Error | undefined,
+  report: vi.fn(),
 }));
 vi.mock('./brainLlmCall', () => ({
   completeTraced: async (_db: unknown, _service: unknown, body: Record<string, unknown>) => {
     h.requests.push(body);
+    if (h.fail) throw h.fail;
     return { resolvedModel: 'reply-model', resolvedVendor: 'v', byoFunded: false, response: { status: 200 }, script: h.script[Math.min(h.turn++, h.script.length - 1)] };
   },
 }));
@@ -23,13 +26,14 @@ vi.mock('../llm/LlmProxyService', () => ({
     toolCalls: (r.script.toolCalls ?? []).map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.args) } })),
   }),
 }));
+vi.mock('../observability/caughtErrorReporter', () => ({ reportCaughtError: h.report }));
 vi.mock('../llm/builtinMcpService', () => ({ callBuiltinTool: h.callTool }));
 vi.mock('../llm/codingFallbackSurface', () => ({ codingFallbackSurface: () => null }));
 vi.mock('../llm/gatewaySummarizer', () => ({ buildGatewaySummarizer: () => async () => null }));
 vi.mock('../runtime/cloudAgent/routing', () => ({ requestedModelForRole: () => undefined }));
 vi.mock('../runtime/cloudAgent/runEndMemory', () => ({
-  applyVerifyPhase: (p: unknown) => p, commitRunMemory: vi.fn(async () => true), describeVerifyOutcome: () => 'note',
-  recordRunVerifyEvents: vi.fn(), runVerifyPhase: () => ({ kind: 'skipped', surface: 'brain-reply', commands: [], failedCommands: [], mayFinish: true }),
+  commitRunMemory: vi.fn(async () => true),
+  recordRunVerifyEvents: vi.fn(),
 }));
 
 import { runAgentReply, type AgentReplyRunInput } from './agentReplyRun';
@@ -47,7 +51,7 @@ const input = (): AgentReplyRunInput => ({
   plan: { effectivePlan: 'free', premiumOverride: false }, call: {} as never,
 });
 
-beforeEach(() => { vi.clearAllMocks(); h.turn = 0; h.requests.length = 0; });
+beforeEach(() => { vi.clearAllMocks(); h.turn = 0; h.requests.length = 0; h.fail = undefined; });
 
 describe('runAgentReply', () => {
   it('runs a platform tool as the user, then replies; the trace names the catalog id and the model turns', async () => {
@@ -57,7 +61,7 @@ describe('runAgentReply', () => {
     expect(h.callTool.mock.calls[0]?.[1]).toMatchObject({ tenantId: 1, tool: 'tasks.list', arguments: { limit: 3 }, userId: 'u1', agentRef: 'ref-7' });
     expect(s.toolCallCount).toBe(1);
     expect(s.lastModel).toBe('reply-model');
-    expect(s.trace.map((r) => r.category)).toEqual(['llm', 'tool', 'llm']);
+    expect(s.trace.map((r) => r.category)).toEqual(['llm', 'tool', 'llm', 'run_outcome']);
     expect(s.trace[1]).toMatchObject({ label: 'tasks.list', args: { limit: 3 }, isError: false });
     // The persona is the system row, the conversation the first user row; the tail follows.
     const first = h.requests[0]?.messages as Array<{ role: string; content: string }>;
@@ -82,5 +86,11 @@ describe('runAgentReply', () => {
   it('a malformed ask_user that came with prose settles on the prose', async () => {
     h.script = [{ content: 'Which board did you mean?', toolCalls: [{ id: 'a1', name: ASK_USER_TOOL, args: { question: 'x' } }] }];
     expect((await runAgentReply(input())).text).toBe('Which board did you mean?');
+  });
+
+  it('a defect in a port is re-thrown to the caller (as the old loop did), and reported, rather than swallowed as "no reply"', async () => {
+    h.fail = new TypeError('cannot read properties of undefined');
+    await expect(runAgentReply(input())).rejects.toBe(h.fail);
+    expect(h.report).toHaveBeenCalledWith(h.fail, expect.objectContaining({ operation: 'agentReply' }));
   });
 });

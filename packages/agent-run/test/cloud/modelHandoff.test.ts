@@ -73,8 +73,11 @@ describe("completeUnderRunPolicy — through the run", () => {
   it("cascades a project Evermind decline (400) but fails a 400 from anything else fast", async () => {
     const declined = build([answer(400), answer(200, "sonnet")]);
     const done = await runAgent({ task: TASK, policy: policyFor("evermind/p7", true), ports: declined.ports });
-    expect(done.kind).not.toBe("failed");
-    expect(declined.asked.length).toBeGreaterThanOrEqual(2);
+    // The source asserted the cascade answered 200: the run took that answer (served by sonnet) after one more ask on the cascade.
+    expect(done.kind).toBe("finished");
+    expect(done.state.model.model).toBe("sonnet");
+    expect(declined.asked[0]!.model).toBe("evermind/p7");
+    expect(declined.asked[1]!.model).toBeUndefined();
 
     const refused = build([answer(400)]);
     const failed = await runAgent({ task: TASK, policy: policyFor("opus", true), ports: refused.ports });

@@ -17,6 +17,7 @@ import type { ITaskRepository } from '../../domain/task/ITaskRepository';
 import type { IAgentRepository } from '../../domain/agent/IAgentRepository';
 import type { IAuditRepository } from '../../domain/audit/IAuditRepository';
 import type { Execution } from '../../domain/execution/Execution';
+import type { ExecutionStatus } from '../../domain/shared/types';
 import type { RunMilestonePhase } from '../brain/ChatTicketService';
 
 /** A ticket lane move (or terminal stamp) driven by an execution. */
@@ -117,7 +118,7 @@ export interface RuntimePorts {
    * (`CloudRunnerDO` `/concluded`), which caches "still running" between DB reads
    * and would otherwise notice the cancel only on its next re-read. Best-effort.
    */
-  onCancelled?: (e: Execution) => Promise<void>;
+  onCancelled?: (e: Execution, priorStatus?: ExecutionStatus) => Promise<void>;
   /**
    * Autonomous-trigger sink invoked when an execution ADVANCES its ticket into a
    * new non-terminal lane. Wired to the SAME lane auto-run trigger a human

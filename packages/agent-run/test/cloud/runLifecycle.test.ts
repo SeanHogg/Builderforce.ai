@@ -10,7 +10,7 @@ import { TEST_POLICY } from "../support/policyContext.js";
 
 const TASK = { prompt: "Do the work.", dispatch: { source: "chat" as const } };
 
-function build(turns: Array<ModelCompletion | Error>, over: { commit?: () => void } = {}) {
+function build(turns: Array<ModelCompletion | Error>, over: { commit?: () => void; resumable?: (err: unknown) => boolean } = {}) {
   const events: RunEvent[] = [];
   const rows: RunOutcomeRow[] = [];
   let saved: RunState | undefined;
@@ -28,6 +28,7 @@ function build(turns: Array<ModelCompletion | Error>, over: { commit?: () => voi
       load: () => saved,
       save: (s) => { saved = JSON.parse(JSON.stringify(s)) as RunState; },
       commitMemory: () => over.commit?.(),
+      ...(over.resumable ? { isResumable: over.resumable } : {}),
     },
     events: { emit: (e) => { events.push(e); }, outcome: (r) => { rows.push(r); } },
     human: { ask: async () => ({ kind: "paused" }) },
@@ -59,9 +60,10 @@ describe("one outcome row and one run.finished per RUN", () => {
 
   describe("the row counts the WHOLE run, not the tick that ended it (§8.2)", () => {
     const turns = (): ModelCompletion[] => [
-      { content: "", toolCalls: [{ id: "a", name: "tool_search", arguments: '{"query":"zzzz"}' }] },
-      { content: "", toolCalls: [{ id: "b", name: "tool_search", arguments: '{"query":"qqqq"}' }] },
-      { content: "", toolCalls: [{ id: "c", name: "tool_search", arguments: '{"query":"wwww"}' }] },
+      // A dispatched tool (counted), not `tool_search` (answered by the tools policy, never dispatched). It errors for want of a capability: still a counted call.
+      { content: "", toolCalls: [{ id: "a", name: "list_files", arguments: '{"path":"a"}' }] },
+      { content: "", toolCalls: [{ id: "b", name: "list_files", arguments: '{"path":"b"}' }] },
+      { content: "", toolCalls: [{ id: "c", name: "list_files", arguments: '{"path":"c"}' }] },
       { content: "ok" },
     ];
 
@@ -92,12 +94,12 @@ describe("one outcome row and one run.finished per RUN", () => {
       const outcome = await stepped(run, (tick) => {
         // After the first tick, the saved state holds that tick's one call.
         if (tick === 1) expect(run.saved()?.telemetry?.toolCalls).toBe(1);
-        // A legacy cursor never carried a tally: the resumed run counts from here.
+        // A legacy cursor never carried a tally: the resumed run counts from here (only the third call is left to count).
         if (tick === 2) delete run.saved()!.telemetry;
       });
       expect(outcome.kind).toBe("finished");
       expect(run.rows).toHaveLength(1);
-      expect(run.rows[0]!.toolCalls).toBe(2);
+      expect(run.rows[0]!.toolCalls).toBe(1);
     });
   });
 
@@ -115,16 +117,35 @@ describe("one outcome row and one run.finished per RUN", () => {
   });
 });
 
-describe("an exception the surface will re-throw is not the run's end", () => {
-  it("fails with the exception as its cause, and writes no outcome row, no run.finished and no memory", async () => {
-    const eviction = new Error("Durable Object reset because its code was updated.");
+describe("the surface decides which exception is a resumable interruption", () => {
+  const eviction = new Error("Durable Object reset because its code was updated.");
+  const evicted = (err: unknown) => err instanceof Error && err.message.startsWith("Durable Object reset");
+
+  it("a resumable one fails with the exception as its cause, and writes no outcome row, no run.finished and no memory", async () => {
     const commit = vi.fn();
-    const run = build([eviction], { commit });
+    const run = build([eviction], { commit, resumable: evicted });
     const outcome = await runAgent({ task: TASK, policy: TEST_POLICY, ports: run.ports });
     expect(outcome).toMatchObject({ kind: "failed", cause: eviction });
     expect(run.rows).toHaveLength(0);
     expect(kinds(run.events)).not.toContain("run.finished");
     expect(commit).not.toHaveBeenCalled();
+  });
+
+  it("any other exception settles terminal: one row, run.finished once, and no cause to re-throw", async () => {
+    const run = build([new Error("script exhausted")], { resumable: evicted });
+    const outcome = await runAgent({ task: TASK, policy: TEST_POLICY, ports: run.ports });
+    expect(outcome.kind).toBe("failed");
+    expect(outcome).not.toHaveProperty("cause");
+    expect(run.rows).toHaveLength(1);
+    expect(run.rows[0]?.terminalStatus).toBe("failed");
+    expect(kinds(run.events).filter((k) => k === "run.finished")).toHaveLength(1);
+  });
+
+  it("with no predicate every exception is terminal", async () => {
+    const run = build([eviction]);
+    const outcome = await runAgent({ task: TASK, policy: TEST_POLICY, ports: run.ports });
+    expect(outcome.kind).toBe("failed");
+    expect(run.rows).toHaveLength(1);
   });
 });
 

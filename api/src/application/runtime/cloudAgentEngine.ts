@@ -37,23 +37,19 @@ import type { CloudLoopState } from './cloudRunState';
 // The engine's identity and model-routing slices live in their own modules (cloudAgent/agent.ts, routing.ts);
 // re-exported because existing importers reference them through this module.
 export {
-  AGENT_DEFAULT_MODEL_SENTINEL, DEFAULT_CLOUD_REF, agentAllowsHostExecution,
-  loadAgentPsychometric, resolveCloudAgent,
+  DEFAULT_CLOUD_REF, agentAllowsHostExecution,
+  resolveCloudAgent,
 } from './cloudAgent/agent';
 export type { ResolvedCloudAgent } from './cloudAgent/agent';
 export {
   emitCodingModelDegraded, emitModelSelection, isCodingModelDegraded,
-  refuseCloudRunWithoutByo, resolveLearnedRoutingInputs,
-  cloudRunRoleForModelPin, requestedModelForRole,
 } from './cloudAgent/routing';
 export type { CloudRouting, LearnedRoutingInputs } from './cloudAgent/routing';
 export { matchesRequiredReviewSignoff, missingReviewVerdictMessage, type RequiredReviewSignoff } from './cloudAgent/finishGates';
-export { ensureTaskPrd, recordPrdDirective } from './cloudAgent/prd';
+export { recordPrdDirective } from './cloudAgent/prd';
 export { recordCloudToolEvent } from './cloudToolEvents';
 export { parseLlmChoice, recordCloudUsage } from './cloudAgent/cloudLlmTurn';
-export { finalizeCloudRun } from './cloudFinalize';
 export { prepareCloudRun, markCloudExecutionRunning } from './cloudPrepare';
-export { stampExecutionSourceRef } from './cloudRunHost';
 export { initialCloudLimbicState, evolveCloudLimbicState, recordLimbicState } from './cloudLimbic';
 export type { CloudLoopState } from './cloudRunState';
 export type { CloudLoopOpts, CloudLoopResult } from './cloudRunOpts';

@@ -27,7 +27,8 @@ import { codingFallbackSurface } from '../llm/codingFallbackSurface';
 import { readProxyChoice, type LlmProxyService } from '../llm/LlmProxyService';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { requestedModelForRole } from '../runtime/cloudAgent/routing';
-import { applyVerifyPhase, commitRunMemory, describeVerifyOutcome, recordRunVerifyEvents, runVerifyPhase } from '../runtime/cloudAgent/runEndMemory';
+import { applyVerifyPhase, describeVerifyOutcome, runVerifyPhase } from '@builderforce/agent-run';
+import { commitRunMemory, recordRunVerifyEvents } from '../runtime/cloudAgent/runEndMemory';
 import { toGatewayMessage } from '../runtime/cloudAdapterModel';
 import { completeTraced, type BrainCallContext } from './brainLlmCall';
 import type { AgentReplyToolset } from './agentReplyPrompt';
@@ -170,8 +171,14 @@ export async function runAgentReply(input: AgentReplyRunInput): Promise<ReplyTur
     ports: {
       model,
       capabilities: { capabilities: new Set() },
-      store: { load: () => undefined, save: () => undefined },
+      // A reply has no cursor to resume from: any non-transport exception (a defect in a port) goes to the reply's caller, as the
+      // old loop let it, rather than being swallowed as "no reply".
+      store: { load: () => undefined, save: () => undefined, isResumable: () => true },
       events: {
+        // The reply's one outcome row rides its trace, the way its other rows do.
+        outcome(row) {
+          record({ category: 'run_outcome', label: 'run.outcome', result: row });
+        },
         emit(event: RunEvent, meta?: { durationMs?: number }) {
           if (event.kind === 'tool.dispatched' && event.tool !== ASK_USER_TOOL) {
             s.toolCallCount += 1;
@@ -199,6 +206,15 @@ export async function runAgentReply(input: AgentReplyRunInput): Promise<ReplyTur
   convo.splice(0, convo.length, ...outcome.state.messages.map((m) => toGatewayMessage(m as never)));
   // A reply that SETTLED — final prose, an `ask_user` question, an exhausted-stall notice — is the text.
   s.text = outcome.kind === 'finished' ? outcome.output : '';
+  if (outcome.kind === 'failed') {
+    // Said, never swallowed into a generic "no reply": a cause (an exception a port threw) is re-thrown to the caller as the
+    // old loop did; a failure the policy named (a spent budget, a transport the cascade could not route around) is reported.
+    reportCaughtError(outcome.cause ?? new Error(outcome.reason), {
+      source: 'application/brain/agentReplyRun.ts', operation: 'agentReply', level: 'warning',
+      context: { tenantId, chatId: input.chatId, reason: outcome.reason, exhausted: outcome.exhausted === true },
+    });
+    if (outcome.cause !== undefined) throw outcome.cause;
+  }
 
   // ── VERIFY, then REMEMBER ── best-effort: a chat reply is already written, and nothing here may turn a failure into a lost answer.
   try {

@@ -88,7 +88,7 @@ describe("gateCall — governance gates", () => {
 describe("tool_search — the meta tool the catalog advertises", () => {
   it("loads the matches for the rest of the run, and they stay advertised", async () => {
     const ctx = { ...policyCtx({ tools: ["read_file", "deploy_site"] }) };
-    const answer = toolsHook.beforeDispatch?.(ctx, { id: "s", name: "tool_search", args: { query: "deploy site" } });
+    const answer = toolsHook.meta?.(ctx, { id: "s", name: "tool_search", args: { query: "deploy site" } });
     expect((answer?.data as { ok: boolean }).ok).toBe(true);
     expect(ctx.state.loadedTools).toContain("deploy_site");
     const selected = await toolsHook.select(ctx, schemas(["read_file", "deploy_site", "zzz_unrelated"]));
@@ -160,7 +160,7 @@ describe("createCompactionHook", () => {
     const big = Array.from({ length: 40 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", content: `turn ${i} ${"x".repeat(400)}` }));
     const ctx = policyCtx({
       messages: [{ role: "system", content: "sys" }, ...big] as never,
-      ports: { model: { complete: async () => ({ content: "" }) } },
+      ports: { model: { complete: async () => ({ content: "" }) }, capabilities: { capabilities: new Set() } },
     });
     const result = await hook.compact(ctx);
     expect(summarize).toHaveBeenCalled();

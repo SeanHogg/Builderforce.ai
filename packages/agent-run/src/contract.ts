@@ -221,6 +221,12 @@ export interface RunStore {
   save(state: RunState): Promise<void> | void;
   /** The run-end write-back: the consolidated memory the run produced. */
   commitMemory?(consolidated: unknown): Promise<void> | void;
+  /**
+   * Whether an exception a port threw is a RESUMABLE interruption (a platform eviction the host re-arms the run after)
+   * rather than the run's failure. Absent ⇒ never: the run fails terminal with its row, `run.finished` and code map. A
+   * resumable one writes nothing terminal and the failed outcome carries it as `cause` for the host to re-throw.
+   */
+  isResumable?(err: unknown): boolean;
 }
 
 /**

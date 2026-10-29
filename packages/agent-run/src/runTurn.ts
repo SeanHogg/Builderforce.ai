@@ -39,6 +39,11 @@ function registryOf(ports: RunPorts): ToolRegistry {
 
 /** Non-transport exceptions that failed a turn, per run: the surface decides whether they are a failure or an eviction. */
 const causes = new WeakMap<object, unknown>();
+
+/** Whether the SURFACE says an exception a port threw is a resumable interruption (it re-arms the run) rather than the run's failure. A transport failure is never one. */
+export function isResumable(input: RunAgentInput, err: unknown): boolean {
+  return !(err instanceof ModelTransportError) && input.ports.store.isResumable?.(err) === true;
+}
 export function causeOf(state: object): unknown {
   return causes.get(state);
 }
@@ -124,7 +129,7 @@ export async function completeTurn(
   } catch (err) {
     if (input.signal?.aborted) throw err;
     const reason = err instanceof Error ? err.message : String(err);
-    if (!(err instanceof ModelTransportError)) causes.set(state, err);
+    if (isResumable(input, err)) causes.set(state, err);
     const routed = err instanceof ModelTransportError && err.routable ? routeAround(state, err.status) : null;
     if (!routed) return { failed: reason };
     await emit(input.ports.events, { kind: "model.cascade", step: ctx.step, from: routed.from, status: err instanceof ModelTransportError ? err.status ?? null : null, released: routed.released });
@@ -133,7 +138,7 @@ export async function completeTurn(
       completion = await input.ports.model.complete(requestFor(routed.retry.model, routed.retry), input.signal);
     } catch (retryErr) {
       if (input.signal?.aborted) throw retryErr;
-      if (!(retryErr instanceof ModelTransportError)) causes.set(state, retryErr);
+      if (isResumable(input, retryErr)) causes.set(state, retryErr);
       return { failed: retryErr instanceof Error ? retryErr.message : String(retryErr) };
     }
   }
@@ -250,7 +255,8 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
     const failed = box.failed || Boolean(capped && (capped as { ok?: unknown }).ok === false);
     return { data: capped, ...(box.control ? { control: box.control } : {}), ...(failed ? { isError: true } : {}) };
   } catch (err) {
-    if (signal?.aborted) throw err;
+    // A resumable interruption (a platform eviction) is not the tool's failure to hand the model: it ends this tick and the host re-arms.
+    if (signal?.aborted || isResumable(input, err)) throw err;
     const reason = err instanceof Error ? err.message : String(err);
     return { data: { ok: false, error: reason }, isError: true };
   }

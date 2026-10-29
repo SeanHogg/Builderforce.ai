@@ -23,6 +23,7 @@
 
 import { evaluatePolicyGate, policyGateCallKey, toolCallPaths, type PolicyDecision, type PolicyGate } from "@builderforce/agent-tools";
 import type { GuardControl, PolicyContext, PolicyToolCall } from "../hooks.js";
+import { emit } from "../../runContext.js";
 
 export { policyGateCallKey };
 
@@ -151,7 +152,7 @@ export async function gateCall(
   if (!gates || gates.length === 0) return undefined;
   const decision = evaluatePolicyGateSeam(gates, call.name, call.args);
   if (decision.action === "block") {
-    await ctx.ports.events.emit({ kind: "policy.blocked", step: ctx.step, tool: call.name, gateId: decision.gateId, reason: decision.reason });
+    await emit(ctx.ports.events, { kind: "policy.blocked", step: ctx.step, tool: call.name, gateId: decision.gateId, reason: decision.reason });
     return {
       data: { ok: false, error: `Blocked by governance policy: ${decision.reason}. Do not retry this tool — accomplish the task another way, or finish and explain why it cannot proceed.` },
       isError: true,

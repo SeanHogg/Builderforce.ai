@@ -24,7 +24,8 @@ import { loadPersonaSetpoints } from '../../application/artifact/capabilityConte
 import { heartbeatExecution } from '../../application/runtime/cloudAgent/runContext';
 import type { AgentExecParams } from '@builderforce/agent-tools';
 import type { LimbicState } from '@seanhogg/builderforce-memory-engine/limbic';
-import { parseRoutingBias, parseArcStage, parsePolicyGates, parseModel, parseReviewRole, parseLaneKey, parseOriginatingChatId, parseExecutor, withRunSandbox } from '../../application/runtime/cloudDispatch';
+import { parseModel, parseExecutor, withRunSandbox } from '../../application/runtime/cloudDispatch';
+import { parseCloudTickPayload } from '../../application/runtime/cloudTickPayload';
 import { ACTIONS_RUNNER_WAIT_MS, RunSandboxHost, type RunSandboxKind } from '../../application/runtime/sandbox/runSandboxHost';
 import { dispatchGithubActionsRun } from '../../application/runtime/githubActionsDispatch';
 import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
@@ -275,17 +276,10 @@ export class CloudRunnerDO implements DurableObject {
       // and hands over THIS tick's evolving affect. The engine hands the run to the cloud
       // adapter, which calls the one agent with `maxSteps: 1` and the cursor's `RunState`
       // (PRD 35 WS3); the directive and the resume/deferral wiring are the adapter's.
-      const reviewRole = parseReviewRole(cursor.payload);
-      const reviewLane = parseLaneKey(cursor.payload);
-      const requiredSignoff = reviewRole
-        ? { roleKey: reviewRole, ...(reviewLane ? { laneKey: reviewLane } : {}) }
-        : undefined;
-      const originatingChatId = parseOriginatingChatId(cursor.payload);
-      const routingBias = parseRoutingBias(cursor.payload);
-      const arcStage = parseArcStage(cursor.payload);
-      const policyGates = parsePolicyGates(cursor.payload);
+      // What the board compiled at dispatch (sign-off, chat, bias, arc stage, governance gates, a sub-agent's spec), re-read from
+      // the payload every tick on purpose — see `cloudTickPayload`.
+      const { requiredSignoff, originatingChatId, routingBias, arcStage, policyGates, child } = parseCloudTickPayload(cursor.payload);
       // Its place in a delegation tree: every run may spawn; a sub-agent also carries its spec.
-      const child = parseCloudChild(cursor.payload);
       const delegation: CloudRunDelegation = { parent: cursor, runtime: this.runtimeService, ...(child ? { spec: child } : {}) };
       const engine = resolveAgentEngine({
         env: this.env, db: this.db, executionId: cursor.executionId, tenantId: cursor.tenantId,

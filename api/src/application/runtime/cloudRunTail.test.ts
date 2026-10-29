@@ -12,20 +12,19 @@ const h = vi.hoisted(() => ({
   commit: vi.fn(async () => true),
   workerCancel: vi.fn(async () => undefined),
   sender: vi.fn(async (..._a: unknown[]) => null as string | null),
+  row: vi.fn(async (..._a: unknown[]) => undefined),
 }));
 vi.mock('./executionSteering', () => ({ lastPersonSteerSender: h.sender }));
+vi.mock('./cloudOutcomeRow', async (orig) => ({ ...(await orig<Record<string, unknown>>()), writeCloudOutcomeRow: h.row }));
 vi.mock('../../buildRuntimeService', () => ({ buildRuntimeService: () => ({ cancel: h.workerCancel }) }));
 vi.mock('./cloudFinalize', () => ({ finalizeCloudRun: h.finalize }));
 vi.mock('../coordination/leaseService', () => ({ releaseAllForExecution: h.release }));
 vi.mock('./cloudAgent/runEndMemory', () => ({
   commitRunMemory: h.commit,
-  describeVerifyOutcome: () => 'verify skipped',
   recordRunVerifyEvents: vi.fn(),
-  runVerifyPhase: () => ({ kind: 'skipped', surface: 'durable', commands: [], failedCommands: [], mayFinish: true }),
 }));
-vi.mock('./sandbox/sandboxVerify', () => ({ runSandboxVerify: vi.fn() }));
 
-import { settleCloudRun } from './cloudRunTail';
+import { settleCloudRun, verifySandboxOf } from './cloudRunTail';
 
 const state = { messages: [{ role: 'assistant', content: 'last words' }], step: 3, writtenPaths: ['src/a.ts'], finish: { ciVerified: true, reviewVerdictRecorded: true } } as unknown as RunState;
 
@@ -33,7 +32,7 @@ function host(over: { cancelled?: boolean; runtime?: { cancel: ReturnType<typeof
   return {
     env: {}, db: {}, taskRow: { id: 5, title: 'T', description: null },
     refs: { tenantId: 1, projectId: 2, taskId: 5, executionId: 9, agentLabel: 'Ada' },
-    repoCtx: null, repoMiss: '', routing: {}, writtenPaths: new Set<string>(),
+    repoCtx: null, repoMiss: '', routing: {}, writtenPaths: new Set<string>(), writtenHashes: new Map<string, string>(),
     cost: { snapshot: () => ({}) },
     cancel: { cancelled: () => over.cancelled === true },
     opts: { ...(over.runtime ? { delegation: { runtime: over.runtime } } : {}), ...(over.opts ?? {}) },
@@ -114,6 +113,58 @@ describe('settleCloudRun', () => {
     expect(durable).toMatchObject({ ok: true, finished: false, state: { run: state } });
     const rehearsal = await settleCloudRun(host({ opts: { suppressFinalize: true } }), yielded, stash, model());
     expect(rehearsal).toEqual({ ok: true, output: 'last words', cancelled: false, finished: true });
+  });
+
+  describe('the ONE outcome row of a run, written after the landing with the status it LANDED as', () => {
+    const rowOf = (): { terminalStatus: string; reason?: string } => (h.row.mock.calls.at(-1) as unknown as [unknown, unknown, unknown, string, string?]).slice(2, 5).reduce((acc: Record<string, unknown>, v, i) => (i === 0 ? { ...(v as object) } : i === 1 ? { ...acc, terminalStatus: v } : { ...acc, reason: v }), {}) as never;
+
+    it('a finished run lands finished; the agent\'s own row is the base', async () => {
+      const agentRow = { entryPoint: 'cloud', steps: 3, toolCalls: 4, toolErrors: 1, terminalStatus: 'finished' };
+      await settleCloudRun(host(), { kind: 'finished', output: 'done', state }, { row: agentRow as never }, model());
+      expect(h.row).toHaveBeenCalledTimes(1);
+      expect(h.row).toHaveBeenCalledWith({}, expect.objectContaining({ executionId: 9 }), agentRow, 'finished', undefined);
+    });
+
+    it('a rehearsal that spent its step budget (settled yielded, landed terminal) writes its row, built from its state', async () => {
+      await settleCloudRun(host({ opts: { suppressFinalize: true } }), { kind: 'yielded', state }, {}, model());
+      expect(h.row).toHaveBeenCalledWith({}, expect.objectContaining({ executionId: 9 }), expect.objectContaining({ entryPoint: 'cloud', runId: 'cloud:9', steps: 3 }), 'finished', undefined);
+    });
+
+    it('a reviewer run landing ok:false, and a steered stop, write what they landed as — not what the agent settled on', async () => {
+      const noVerdict = { ...state, finish: { ciVerified: false, reviewVerdictRecorded: false } } as unknown as RunState;
+      await settleCloudRun(host({ opts: { requiredSignoff: { roleKey: 'qa-tester' } } }), { kind: 'finished', output: 'ok', state: noVerdict }, {}, model());
+      expect(h.row).toHaveBeenLastCalledWith({}, expect.anything(), expect.objectContaining({ runId: 'cloud:9' }), 'failed', expect.stringContaining('qa-tester'));
+      await settleCloudRun(host(), { kind: 'failed', reason: 'cancelled', state }, {}, model());
+      expect(h.row).toHaveBeenLastCalledWith({}, expect.anything(), expect.anything(), 'cancelled', undefined);
+    });
+
+    it('a run that goes on (paused, a durable tick that yielded) writes no row', async () => {
+      await settleCloudRun(host(), { kind: 'paused', question: 'q?', approvalId: 'a1', state }, {}, model());
+      await settleCloudRun(host({ opts: { deferFinalize: true } }), { kind: 'yielded', state }, {}, model());
+      expect(h.row).not.toHaveBeenCalled();
+    });
+  });
+
+  it('a programming error in the verify/remember tail SURFACES instead of silently skipping the memory write', async () => {
+    const unseeded = { ...(host() as unknown as Record<string, unknown>), writtenHashes: undefined } as never;
+    await expect(settleCloudRun(unseeded, { kind: 'finished', output: 'done', state }, {}, model())).rejects.toBeInstanceOf(TypeError);
+    expect(h.commit).not.toHaveBeenCalled();
+  });
+
+  it('only the I/O is best-effort: a memory write that fails is reported and the run still lands', async () => {
+    h.commit.mockRejectedValueOnce(new Error('memory db down'));
+    const result = await settleCloudRun(host(), { kind: 'finished', output: 'done', state }, {}, model());
+    expect(result.finished).toBe(true);
+    expect(h.finalize).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads the run\'s sandbox for the agent\'s verify executor: package.json content, and a basename listing', async () => {
+    const fs = vi.fn(async (op: { op: string; path?: string; glob?: string }) => op.op === 'read' ? { ok: true, content: '{"scripts":{}}' } : { ok: true, paths: ['yarn.lock'] });
+    const adapted = verifySandboxOf({ fs } as never);
+    expect(await adapted.read('package.json')).toBe('{"scripts":{}}');
+    expect(await adapted.list('yarn.lock')).toEqual(['yarn.lock']);
+    fs.mockResolvedValueOnce({ ok: false } as never);
+    expect(await adapted.read('package.json')).toBeNull();
   });
 
   it('a reviewer run without its verdict does not land as accepted', async () => {

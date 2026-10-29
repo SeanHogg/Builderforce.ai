@@ -32,6 +32,7 @@ import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { ChatTicketService, ticketKindForTaskType } from '../brain/ChatTicketService';
 import { cloudOrphanReason, cloudSilenceCeilingMs, PAUSED_DEADLINE_MS, PAUSED_ORPHAN_REASON } from './orphanReasons';
+import { writePausedRunEndRow } from './cloudOutcomeRow';
 import { markReaperRequeued, parseExecutor } from './cloudDispatch';
 import { isSelfHealEligible, buildDurableStartBody, dispatchDurableStart } from './cloudSelfHeal';
 import { resolveParkAgeTimeoutMs, runParkAgeTimeoutSweep, type ParkAgeTimeoutResult } from '../maintenance/parkAgeTimeout';
@@ -234,6 +235,10 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
   // terminal the ticket can never auto-run again. Measured from `updated_at` so a
   // still-active back-and-forth on the question keeps the run alive.
   const paused: ReapedRow[] = probe.paused ? await failStaleBatch(db, stale.paused, PAUSED_ORPHAN_REASON) : [];
+  // A cloud run reaped while paused never settled through the agent: each gets its one outcome row here.
+  for (const row of paused) {
+    if (row.agent_host_id == null) await writePausedRunEndRow(db, { id: row.id, tenantId: row.tenant_id, cloudAgentRef: null }, 'failed', PAUSED_ORPHAN_REASON);
+  }
 
   // A full batch means a backlog remains: keep the next tick's gate open so it drains
   // promptly instead of waiting for the floor sweep.

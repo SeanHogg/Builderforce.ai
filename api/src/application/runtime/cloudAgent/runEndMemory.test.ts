@@ -13,8 +13,8 @@
  *   - and a failing memory write never changes the verdict the run finishes with.
  */
 import { describe, expect, it } from 'vitest';
-import { applyVerifyPhase, commitRunMemory, describeVerifyOutcome, recordRunVerifyEvents, runVerifyPhase } from './runEndMemory';
-import { inRunVerifyOutcome, planInRunVerify } from './inRunVerify';
+import { commitRunMemory, recordRunVerifyEvents } from './runEndMemory';
+import { applyVerifyPhase, describeVerifyOutcome, inRunVerifyOutcome, planInRunVerify, runVerifyPhase } from '@builderforce/agent-run';
 import { initialRunPolicy, reduceRunPolicy, type RunPolicyState } from '@builderforce/run-policy';
 
 describe('verify phase transition (finding 11)', () => {

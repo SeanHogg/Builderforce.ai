@@ -10,7 +10,7 @@
  * fetched rows so it is unit-testable without a DB; the route caches it.
  */
 
-import { and, eq, gte } from 'drizzle-orm';
+import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { runModelOutcomes } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
@@ -127,7 +127,8 @@ export async function computeEngineeringInsights(db: Db, tenantId: number, days:
       ciGreen: runModelOutcomes.ciGreen,
       degraded: runModelOutcomes.degraded,
       steps: runModelOutcomes.steps,
-      costUsdMillicents: runModelOutcomes.costUsdMillicents,
+      // An unknown cost (NULL) contributes nothing to a dashboard sum; it is never read as a price.
+      costUsdMillicents: sql<number>`coalesce(${runModelOutcomes.costUsdMillicents}, 0)`,
     })
     .from(runModelOutcomes)
     .where(and(

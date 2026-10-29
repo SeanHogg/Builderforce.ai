@@ -27,6 +27,10 @@ import type { CloudEngineContext } from './cloudAgentEngine';
 import { parseRunDispatch } from './runDispatch';
 import { cloudModelPort } from './cloudAdapterModel';
 import { cloudPolicyModules } from './cloudAdapterHooks';
+import { isInfrastructureEviction } from './orphanReasons';
+import { writeCloudOutcomeRow } from './cloudOutcomeRow';
+import { cloudRunId } from '../../domain/execution/cloudRunId';
+import { reportedFallback } from '../observability/caughtErrorReporter';
 import { durableHuman, pendingSteering, timelineSink } from './cloudAdapterPorts';
 import { containProvider, platformTools } from './cloudAdapterTools';
 import { releaseLeases, settleCloudRun, type RunStash } from './cloudRunTail';
@@ -45,11 +49,6 @@ const RUN_LEVERS: readonly CostLeverId[] = [
 /** Nothing to pack: the prep inlined the PRD, the ticket and the project's facts into the prompt the task carries. */
 const NO_PACK: ContextPack = { focus: [], facts: [], recall: [] };
 
-/** The user turns a resumed transcript already holds — a steer the run adopted is not injected twice. */
-function userTurnsOf(resume: RunState | undefined): ReadonlySet<string> {
-  return new Set((resume?.messages ?? []).filter((m): m is { role: 'user'; content: string } => (m as { role?: string }).role === 'user').map((m) => m.content));
-}
-
 /** The task: the ticket's prompt, who is asking, and the board's dispatch provenance (§6.9). */
 function taskOf(host: CloudRunHost, rc: CloudEngineContext): RunTask {
   const { opts } = host;
@@ -58,7 +57,7 @@ function taskOf(host: CloudRunHost, rc: CloudEngineContext): RunTask {
   const source = child ? 'subagent' : stamped.source ?? (opts.originatingChatId != null ? 'chat' : opts.requiredSignoff ? 'lane-entry' : 'manual');
   return {
     prompt: host.userContent,
-    runId: String(host.refs.executionId),
+    runId: cloudRunId(host.refs.executionId),
     persona: host.systemPrompt,
     ticketId: host.taskRow.id,
     projectId: host.refs.projectId,
@@ -66,7 +65,7 @@ function taskOf(host: CloudRunHost, rc: CloudEngineContext): RunTask {
     dispatch: {
       source,
       ...(stamped.approvalId ? { approvalId: stamped.approvalId } : {}),
-      ...(child && opts.delegation ? { parentRunId: String(opts.delegation.parent.executionId) } : {}),
+      ...(child && opts.delegation ? { parentRunId: cloudRunId(opts.delegation.parent.executionId) } : {}),
     },
   };
 }
@@ -112,7 +111,14 @@ export async function runCloudAgent(
   opts: CloudLoopOpts,
 ): Promise<CloudLoopResult> {
   const opened = await openCloudRunHost(rc, input, opts);
-  if ('stopped' in opened) return opened.stopped;
+  if ('stopped' in opened) {
+    // A run the platform halted or whose connected accounts none resolved never started, but it is a run that ended: its
+    // one outcome row names the refusal.
+    const { stopped } = opened;
+    await writeCloudOutcomeRow(rc.db, { tenantId: rc.tenantId, executionId: rc.executionId, cloudAgentRef: rc.cloudAgentRef }, undefined, stopped.cancelled ? 'cancelled' : 'failed', stopped.output)
+      .catch(reportedFallback(undefined, { source: 'application/runtime/cloudAdapter.ts', operation: 'stoppedRunOutcomeRow', context: { executionId: rc.executionId } }));
+    return stopped;
+  }
   const { host } = opened;
   const { env, db, refs, cancel } = host;
 
@@ -141,10 +147,12 @@ export async function runCloudAgent(
       load: () => resume,
       save: () => undefined, // the outcome carries the state; the tail hands it to the cursor
       commitMemory: (consolidated) => { stash.consolidated = consolidated; },
+      // A platform eviction is not the run's failure: the Durable Object re-arms it from its cursor.
+      isResumable: (err) => isInfrastructureEviction(err instanceof Error ? err.message : String(err)),
     },
-    events: timelineSink(db, refs, () => model.servedModel() ?? host.pick.model),
+    events: timelineSink(db, refs, () => model.servedModel() ?? host.pick.model, (row) => { stash.row = row; }),
     human: durableHuman(env, db, refs),
-    steering: pendingSteering(db, refs, model.currentStep, () => userTurnsOf(resume)),
+    steering: pendingSteering(db, refs, model.currentStep),
     context: { pack: () => NO_PACK, turnSections: () => [opts.dynamicSystem ?? '', host.cost.budgetNote(host.declaredLimits, host.writtenPaths.size, host.repoCtx ? 1 : 0)].filter(Boolean) },
     extensions: platformTools({
       env, db, tenantId: refs.tenantId, projectId: refs.projectId, meterExecutionId: host.meterExecutionId, executionId: refs.executionId,
@@ -161,7 +169,7 @@ export async function runCloudAgent(
       ...(opts.maxSteps !== undefined ? { maxSteps: opts.maxSteps } : {}),
       signal: cancel.controller.signal,
       modules: cloudPolicyModules({
-        env, db, run: refs, runRole: host.runRole, repoCtx: host.repoCtx, delegated: !!opts.delegation, writtenHashes: host.writtenHashes,
+        env, db, run: refs, runRole: host.runRole, repoCtx: host.repoCtx, delegated: !!opts.delegation, writtenHashes: host.writtenHashes, writtenPaths: host.writtenPaths,
         ...(host.verify ? { sandbox: host.verify.sandbox } : {}),
         ladder: host.ladder, features: host.features, resolvedModel: model.servedModel,
         ...(opts.execParams ? { execParams: opts.execParams } : {}),
