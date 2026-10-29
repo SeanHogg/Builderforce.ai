@@ -217,5 +217,5 @@ export {
   DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR,
 } from "./reserve.js";
 export { packHandoff, handoffBudget, defaultEstimateTokens } from "./pack.js";
-export type { CompactionSummarizer } from "./compact.js";
+export type { CompactionSummarizer, CompactOptions } from "./compact.js";
 export type { PackMessage, PackInput, PackResult, TokenEstimator } from "./pack.js";

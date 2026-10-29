@@ -12,6 +12,7 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "lib": ["ES2022", "DOM"],
+    "types": ["node"],
     "declaration": true,
     "skipLibCheck": true,
     "noEmit": true,
@@ -34,6 +35,16 @@
         "./node_modules/@seanhogg/builderforce-memory/dist/handoff/index.d.ts",
         "../../../builderforce-memory/packages/memory/dist/handoff/index.d.ts",
         "../../../../../../builderforce-memory/packages/memory/dist/handoff/index.d.ts"
+      ],
+      "@seanhogg/builderforce-memory/knowledge": [
+        "./node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.d.ts",
+        "../../../builderforce-memory/packages/memory/dist/knowledge/index.d.ts",
+        "../../../../../../builderforce-memory/packages/memory/dist/knowledge/index.d.ts"
+      ],
+      "@seanhogg/builderforce-memory/ingest": [
+        "./node_modules/@seanhogg/builderforce-memory/dist/ingest/index.d.ts",
+        "../../../builderforce-memory/packages/memory/dist/ingest/index.d.ts",
+        "../../../../../../builderforce-memory/packages/memory/dist/ingest/index.d.ts"
       ]
     }
   },

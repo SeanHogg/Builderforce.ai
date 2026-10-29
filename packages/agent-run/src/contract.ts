@@ -178,14 +178,52 @@ export type RunEvent =
   | { kind: 'turn.finished'; step: number }
   | { kind: 'run.finished'; step: number; outcome: RunOutcomeKind };
 
-/** The uniform outcome row (§8.2). WS6 owns the full row and the fields it adds. */
+/**
+ * The uniform outcome row (§8.2). WS6 owns the full row and the fields it adds.
+ *
+ * One row per run, every entry point. The base counts (steps, toolCalls,
+ * toolErrors, terminalStatus, model) come from the turn tally; the efficiency
+ * fields come from the run state the policy modules carry (compaction count,
+ * written paths, served read windows, the progress detector's unkept-claim /
+ * trip counters). `verify` is the run policy's declared verify phase outcome;
+ * `entryPoint` is the telemetry label the adapter stamps — never a behaviour
+ * branch (§5 rule 3).
+ */
 export interface RunOutcomeRow {
   entryPoint: string;
   steps: number;
   toolCalls: number;
   toolErrors: number;
+  /** How many times the transcript was compacted this run. */
+  compactions: number;
+  /** How many stall recoveries the run's model policy performed. */
+  stallRecoveries: number;
+  /** How many times the run escalated (a forced-progress / stronger-model step). */
+  escalations: number;
+  /** The declared verify phase's result. */
+  verify: 'passed' | 'failed' | 'not-run';
   terminalStatus: string;
   model?: string;
+  tokens?: number;
+  cacheReadTokens?: number;
+  cost?: number;
+  // ── §8.2 efficiency fields ────────────────────────────────────────────────
+  /** The turn the first spawn happened on; null when nothing was spawned. */
+  firstSpawnTurn?: number | null;
+  /** How many covered reads were stubbed (a window already served, re-served). */
+  coveredReadStubs?: number;
+  /** `cat`/`sed`/`head`/`tail` of a workspace file through the shell. */
+  shellFileReads?: number;
+  /** Calls that errored with "not a repo". */
+  repoErrors?: number;
+  /** Tokens the context pack contributed. */
+  contextPackTokens?: number;
+  /** The model preflight result: ok | refreshed | degraded:<reason>. */
+  modelPreflight?: string;
+  /** Turns that claimed readiness then only read (WS8p `unkept_ready`). */
+  unkeptReadyClaims?: number;
+  /** The A3 progress trips, by signal ({ signal: count }). */
+  progressTrips?: Record<string, number>;
 }
 
 /** Where the run's events go: the live trace, the timeline, the relay frames. */
@@ -327,6 +365,7 @@ export interface ReadCoverageState {
   served: Record<string, CoveredRead>;
   /** Read calls made while no spawn had been attempted — the delegation nudge's counter. */
   readsWithoutSpawn: ReadsWithoutSpawnState;
+  stubCount?: number;  // reads answered from coverage (a stub or a replay), never dispatched — §8.2 coveredReadStubs
 }
 
 /**
@@ -339,6 +378,7 @@ export interface StallState {
   model?: string;
   /** Re-prompts already spent against `model`. */
   recoveriesUsed: number;
+  recoveriesTotal?: number;  // every re-prompt this run spent, never reset — §8.2 stallRecoveries
 }
 
 /** Plain JSON. Everything any policy needs across a step boundary. */

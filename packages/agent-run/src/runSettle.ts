@@ -7,6 +7,7 @@ import type { RunMessage, RunOutcome, RunOutcomeRow, RunState } from "./contract
 import type { PolicyHooks } from "./policy/index.js";
 import { currentView, emit, policyContext, type RunAgentInput, type TurnTally } from "./runContext.js";
 import { newApprovalId } from "./runState.js";
+import { buildOutcomeRow } from "./telemetry/outcomeRow.js";
 
 /** What a terminal outcome carries beyond the state. */
 interface SettleExtra {
@@ -49,14 +50,17 @@ export async function settle(
     // A store that cannot save still returns the state to the caller, who holds it.
   }
 
-  const row: RunOutcomeRow = {
+  // The uniform §8.2 outcome row: base counts from the turn tally, efficiency
+  // fields from the run state. One row per run, every entry point (WS6).
+  const row: RunOutcomeRow = buildOutcomeRow({
     entryPoint: input.policy.entryPoint,
+    kind,
     steps: state.step,
     toolCalls: tally.toolCalls,
     toolErrors: tally.toolErrors,
-    terminalStatus: kind,
-    ...(tally.model ? { model: tally.model } : {}),
-  };
+    model: tally.model,
+    state,
+  });
   try {
     await input.ports.events.outcome?.(row);
   } catch {

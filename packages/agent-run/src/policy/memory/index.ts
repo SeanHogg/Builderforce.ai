@@ -70,7 +70,7 @@ export const memoryHook: MemoryHook & {
     if (!recorder.activity.prompt && ctx.task.prompt) recorder.setPrompt(ctx.task.prompt);
     // The recorder's record is written back, so a later turn (and a resume) sees it.
     ctx.state.memory = knowledgeState(recorder);
-    const sections = [recorder.brief() ?? "", guardsTurnNote(ctx.state)]
+    const sections = [recorder.brief() ?? "", guardsTurnNote(ctx)]
       .filter((part) => part.trim().length > 0);
     return sections.length > 0 ? sections.join(SECTION_BREAK) : null;
   },

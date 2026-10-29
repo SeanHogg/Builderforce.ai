@@ -49,6 +49,9 @@ export interface CompactOptions {
   /** The serving model's context window (`ModelTransport.window()`): less
    *  `reserveOutputTokens`, it caps the budget when smaller than `maxTokens`. */
   contextWindow?: number;
+  /** The run's `ModelTransport.window` port: with no `contextWindow`, the window of
+   *  `targetModel` is read through it (the source read the API's vendor catalog). */
+  window?: (model: string) => number | undefined;
   /** The lever environment C9 is read from. Absent = the caller did not opt in: no tier cap. */
   env?: unknown;
   /** The tenant the run bills to — buckets a partial C9 rollout. */
@@ -222,7 +225,7 @@ export function compactionBudget(opts: CompactOptions): number {
   const boundary = tierCap && opts.targetModel ? priceTierBoundary(opts.targetModel) : opts.priceTierBoundary;
   return handoffTokenBudget({
     costCapTokens: opts.maxTokens,
-    contextWindow: opts.contextWindow,
+    contextWindow: opts.contextWindow ?? (opts.targetModel ? opts.window?.(opts.targetModel) : undefined),
     reserveOutputTokens: opts.reserveOutputTokens,
     ...(boundary !== undefined ? { priceTierBoundary: boundary } : {}),
   }) ?? opts.maxTokens;

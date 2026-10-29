@@ -161,22 +161,3 @@ export function skipOnSteer<M = RunMessage>(runKey: number, inner: AfterDispatch
     return skip ? { ...(post ?? {}), ...skip } : post;
   };
 }
-
-/** The acknowledgement the trace records for a drained steer. */
-export interface SteerApplied {
-  category: "message";
-  label: "steer.applied";
-  args: { step: number; messages: number };
-  result: string;
-}
-
-/** The trace row for the steers drained this step. */
-export function steerAppliedTrace(steers: readonly SteerMessage[], step: number): SteerApplied | undefined {
-  if (steers.length === 0) return undefined;
-  return {
-    category: "message",
-    label: "steer.applied",
-    args: { step, messages: steers.length },
-    result: steers.map((m) => m.text.slice(0, 200)).join("\n"),
-  };
-}

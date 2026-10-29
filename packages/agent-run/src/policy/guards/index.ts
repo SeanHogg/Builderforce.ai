@@ -304,12 +304,15 @@ function sessionOf(ctx: PolicyContext, ports: GuardPorts): RunGuards {
 /**
  * The A3 / D1 / D7 notes the next turn opens with (the volatile tail, never the cached
  * prefix): the progress detector's steer, the cascade's note and the sandbox checks'
- * failures. Empty when the run has no guard session or nothing to say. The memory
- * policy composes it into the turn's brief, as `costLoop/volatileTail.ts` did.
+ * failures. Empty when the guards have nothing to say. The memory policy composes it
+ * into the turn's brief, as `costLoop/volatileTail.ts` did.
  */
-export function guardsTurnNote(state: RunState): string {
-  const s = sessions.get(state);
-  return s ? s.tailSections().filter((part) => part.trim().length > 0).join("\n\n") : "";
+export function guardsTurnNote(ctx: PolicyContext): string {
+  // A resumed tick asks for the brief before any guard hook ran on its state: read the
+  // notes from the saved `state.guards` (as `sessionOf` rebuilds them), without caching
+  // that portless session — the hooks build the run's own, with the surface's ports.
+  const s = sessions.get(ctx.state) ?? new RunGuards(guardLeversOf(ctx.policy.levers), ctx.state.guards);
+  return s.tailSections().filter((part) => part.trim().length > 0).join("\n\n");
 }
 
 /**

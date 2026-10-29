@@ -47,7 +47,9 @@ export async function completeTurn(
   // chosen that this run may call nothing. Only `undefined` means "not my concern".
   const tools = selected ? [...selected] : offered;
   const decision = await hooks.model.resolve(pctx);
-  const model = decision?.model ?? state.model.model ?? input.policy.pinnedModel;
+  // The model ASKED for: the policy's pick, else the pin — never the model a previous turn
+  // was served, which would read every later turn as a downgrade from it.
+  const model = decision?.model ?? input.policy.pinnedModel;
   const brief = await hooks.memory.brief(pctx);
 
   const request: ModelRequest = {
@@ -100,7 +102,9 @@ export async function synthesizeFinal(
   if (!prompt) return null;
 
   const decision = await hooks.model.resolve(pctx);
-  const model = decision?.model ?? state.model.model ?? input.policy.pinnedModel;
+  // The model ASKED for: the policy's pick, else the pin — never the model a previous turn
+  // was served, which would read every later turn as a downgrade from it.
+  const model = decision?.model ?? input.policy.pinnedModel;
   const ask: RunMessage = { role: "user", content: prompt };
   let completion: ModelCompletion;
   try {

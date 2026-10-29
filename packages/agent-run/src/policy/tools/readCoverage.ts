@@ -102,6 +102,12 @@ function stillServed(ctx: PolicyContext, anchor: unknown): boolean {
  */
 export function coveredReadAnswer(ctx: PolicyContext, call: PolicyToolCall): { data: unknown } | undefined {
   if (!DEDUPABLE_READS.has(call.name)) return undefined;
+  const answer = coveredAnswer(ctx, call);
+  if (answer) ctx.state.reads = { ...ctx.state.reads, stubCount: (ctx.state.reads.stubCount ?? 0) + 1 };
+  return answer;
+}
+
+function coveredAnswer(ctx: PolicyContext, call: PolicyToolCall): { data: unknown } | undefined {
   const coverage = coverageOf(ctx.state);
   if (coverage.isRepeat(call.name, call.args)) {
     const cached = coverage.cachedResult(call.name, call.args);

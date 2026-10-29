@@ -6,7 +6,7 @@
  * on `RunPolicy.entryPoint`.
  */
 
-import type { LoopControl, LoopHooks, ParsedToolCall } from "@builderforce/agent-loop";
+import type { LoopControl, LoopDispatchResult, LoopHooks, ParsedToolCall } from "@builderforce/agent-loop";
 
 import type { ModelUsage, RunMessage, RunState } from "./contract.js";
 import type { GuardControl, PolicyContext, PolicyHooks } from "./policy/index.js";
@@ -73,6 +73,10 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
     const verdict = await hooks.verify.verify(pctx);
     return verdict && !verdict.ok ? verdict.note ?? "Verification failed: fix it before finishing." : null;
   };
+
+  // The results a covered read was answered with: no tool ran, so none of them is a
+  // served read, a write, a counted call or a fact for memory — only a stub the model reads.
+  const stubs = new WeakSet<LoopDispatchResult>();
 
   return {
     beforeTurn: async (ctx) => {
@@ -150,7 +154,11 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       }
       // Read coverage: a read whose lines were already served is answered without the disk.
       const covered = hooks.tools.beforeDispatch?.(pctx, pcall);
-      if (covered) return { result: { data: covered.data } };
+      if (covered) {
+        const stub: LoopDispatchResult = { data: covered.data };
+        stubs.add(stub);
+        return { result: stub };
+      }
       return undefined;
     },
 
@@ -169,17 +177,23 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
 
     onAskHuman: async (ctx, control, call) => {
       const answer = await hooks.ask.answer(contextAt(ctx.step, ctx.stepInCall), control.question, optionsOf(control));
-      if (answer.kind === "answered") {
-        transcript.push({ role: "tool", toolCallId: call.id, content: JSON.stringify({ ok: true, answer: answer.answer }) });
-      }
+      // Answered in-run: the kernel puts the answer in the call's own row and does not park
+      // the run. Anything else returns nothing, and the run pauses on the person.
+      if (answer.kind === "answered") return { data: { ok: true, answer: answer.answer } };
+      return undefined;
     },
 
     afterDispatch: async (call, result, message, ctx) => {
-      tally.toolCalls += 1;
-      if (result.isError) tally.toolErrors += 1;
+      const stub = stubs.has(result);
       const ok = !result.isError && !(result.data && typeof result.data === "object" && (result.data as { ok?: unknown }).ok === false);
-      // `ctx.step` is the kernel's live step; `state.step` lags until the loop returns.
-      await emit(ports.events, { kind: "tool.dispatched", step: ctx.step, tool: call.name, ok });
+      if (!stub) {
+        // The trace and the tally fold the same verdict, so the outcome row and the
+        // event trace never disagree (telemetry/eventTally.ts).
+        tally.toolCalls += 1;
+        if (!ok) tally.toolErrors += 1;
+        // `ctx.step` is the kernel's live step; `state.step` lags until the loop returns.
+        await emit(ports.events, { kind: "tool.dispatched", step: ctx.step, tool: call.name, ok });
+      }
       const pctx = contextAt(ctx.step, ctx.stepInCall);
       const pcall = toPolicyCall(call);
       // What the model reads on this call: D7's post-edit note, then the early delegation
@@ -190,9 +204,11 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       const nudged = hooks.subagents.nudge(pctx, pcall, data);
       if (nudged) data = nudged.data;
       if (data !== result.data) rewriteRow(message, data);
-      hooks.tools.observe?.(pctx, pcall, data, result.isError === true);
-      await hooks.memory.observe?.(pctx, pcall, result.data, result.isError);
-      rememberWrite(state, call, ok);
+      if (!stub) {
+        hooks.tools.observe?.(pctx, pcall, data, result.isError === true);
+        await hooks.memory.observe?.(pctx, pcall, result.data, result.isError);
+        rememberWrite(state, call, ok);
+      }
       // An interrupting steer skips the rest of this turn's calls (§6.3).
       return steerSkip(run.watch);
     },

@@ -1,3 +1,45 @@
+## ✅ RESOLVED 2026-10-28 — PRD 35 review: completed items checked against the code, gaps closed (VSIX 2026.10.113 · api 2026.10.91 · agent-run 2026.10.83 · agent-loop 2026.10.14 · agent-tools 2026.10.17 · brain-embedded 2026.10.70)
+
+Every item PRD 35 marked done (WS0, WS1, WS2a–g, WS8a–p) was reviewed against the code. Gaps found and closed:
+
+**On the VS Code path (VSIX 2026.10.113, `5ecbdacd4`).**
+- Stop now reaches git, publish, the candidate listing and `analyze_codebase`. One `shellRunWithStop` in agent-tools passes `ToolContext.signal`, and `shell-tools` dropped its inline copy (E10).
+- `llm.model_downgrade` now fires when an auto-routed plan turn lands on a Flash-class model, using the preflight's tier rule (E7).
+- The preflight now announces a configured credential the server reports `unavailable`.
+- The recall hint carries the code paths the focus files name (§6.10). The absolute-path regex exists once, as `isRelativePath`.
+- A wake turn is only a turn whose text is the children's reports, matched by `isChildReportText`. Before, once a chat had delegated, the person's later requests in it were never graded (8l).
+- 8a's shell-print assertion sat on its comment line and asserted nothing. New accept tests: 8p ladder and readiness rank, the `editorRunEnd` sent fields, the recall hint, the signal and the wake turn.
+- `check:migrations` on main was red after WS6: `1278_run_outcome_telemetry.sql` (header only) was renumbered to 1281.
+
+**Cloud (api 2026.10.91, `51fd96558`).**
+- The Brain chat now gets a finished child's whole answer. Only the owner's inbox gets the 8K clip, whose marker points at the chat.
+- The container's cancel listens on `res.on('close')`. On Node 16+, `req` 'close' fires once the body is read, so a cancel never killed the command (WS0).
+
+**agent-run (not yet imported by any entry point).**
+- Wiring that never ran:
+  - The system prompt never reached the model.
+  - Compaction replaced an array the kernel did not read.
+  - The masking lever had the wrong id.
+  - The turn-context row was saved into the transcript, re-billing the cached prefix and vanishing on resume.
+  - Guard levers were read from a phantom field, so A3, D1, D7 and D8 were off.
+  - Sign-off was never recorded, so a sign-off run could never finish.
+  - The verify and sub-agent hooks were never called.
+  - Memory never observed a call.
+  - Recall returned the query string itself.
+- Now wired: stop-steer cancel, interrupt and `steer.applied`; `model.preflight` and the downgrade event; result caps that stay within the cap and keep `ok:false`; read coverage over `RunState.reads`; guard notes rebuilt on a `maxSteps: 1` resume; covered-read stubs no longer recorded as served reads.
+- An answered `ask_human` no longer pauses: the kernel's `onAskHuman` may return the result, a backward-compatible change in agent-loop.
+- The requested model no longer counts the served model, which removes false failover events.
+- Tool errors are counted from the same verdict the trace uses.
+- The WS6 outcome row is now fed `preflight`, `stubCount` and a cumulative `recoveriesTotal`.
+- Second copies replaced by imports: `stopIntent`, the `windowedCap` table, the 469-line `packHandoff` copy, budgets and reserve, and `isModelRole`. Dead steering exports were deleted.
+- Faithful ports:
+  - the on-prem reserve floor is 20,000 (from agent-settings);
+  - the brought-along tests were restored to source where a seam carries them (recallQuery, inRunVerify, delegationRequest, steering, stall, compactMessages' window case, `ensureCompactReserveTokens`). The cases that cannot yet run unchanged are logged in ROADMAP (PRD 35 agent-run).
+- Guards:
+  - `check:one-execution` now matches real imports, reports reach-ins into `policy/*` and any second `runAgentLoop` driver inside agent-run, and has `--enforce`;
+  - `check:tests-unchanged` also sees uncommitted and deleted tests, compares each brought-along test with its source, and counts cases.
+- Verified (Sonnet): agent-loop 211 tests; agent-run 310 tests; brain-embedded 140 + 75 targeted tests; clients/vscode 64; agent-tools 64; run-guards 92; api 31 targeted tests. Typechecks for api, brain-embedded, clients/vscode, agent-tools, run-guards and agent-runtime are clean, and all 42 api guards pass.
+
 ## ✅ RESOLVED 2026-10-28 — VS Code chat stops sending local chat ids to the platform and re-sending refused tokens (VSIX 2026.10.112)
 
 **Symptom.** The BuilderForce output channel filled with `GET /api/brain/chats/6/tickets → 404 — Chat not found` on every rail refresh, and with bursts of `401 — Invalid or expired token` across the rail's files, members, agents, tickets and approvals reads. The local store showed local chat 6 bound to server chat 172.

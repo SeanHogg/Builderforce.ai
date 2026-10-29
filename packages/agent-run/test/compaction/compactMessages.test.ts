@@ -3,16 +3,23 @@
  * `api/src/application/llm/compactMessages.test.ts` (WS2a) with the import retargeted
  * to the ported module and nothing else changed.
  *
- * One source case is NOT carried: "sizes the budget to the serving model only when its
- * window is smaller than the cap" reads the serving model's window out of the API's
- * vendor registry (`catalogEntry('@cf/zai-org/glm-4.7-flash').contextWindow`), data
- * this package does not hold — here the window comes from `ModelTransport.window()`
- * (`CompactOptions.contextWindow`), proven by the window case at the end of the file.
+ * The source read a serving model's window out of the API's vendor registry
+ * (`catalogEntry(targetModel).contextWindow`); the one agent reads it through the run's
+ * `ModelTransport.window` port (`CompactOptions.window`). `compactionBudget` is bound
+ * here to a stub of that port carrying the one catalog row the source cases name, so
+ * every source case runs with its own inputs and expected values.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { compactMessages, compactionBudget, elideToFit, maskOldObservations, toolsTokensOf, CLOUD_COMPACT_DEFAULTS, type CompactionSummarizer } from '../../src/policy/compaction/index.js';
+import { compactMessages, compactionBudget as budgetWithPorts, elideToFit, maskOldObservations, toolsTokensOf, CLOUD_COMPACT_DEFAULTS, type CompactOptions, type CompactionSummarizer } from '../../src/policy/compaction/index.js';
+import type { ModelTransport } from '../../src/contract.js';
 
 type Msg = Record<string, unknown>;
+
+/** The stub `ModelTransport.window` port: the catalog row the source cases name. */
+const transport: Required<Pick<ModelTransport, 'window'>> = {
+  window: (model) => (model === '@cf/zai-org/glm-4.7-flash' ? 131_072 : undefined),
+};
+const compactionBudget = (o: CompactOptions): number => budgetWithPorts({ window: transport.window, ...o });
 
 const SYS: Msg = { role: 'system', content: 'You are a coding agent. '.repeat(20) };
 const TASK: Msg = { role: 'user', content: 'Implement the avatar filter feature.' };
@@ -115,6 +122,14 @@ describe('compactMessages', () => {
     assertPairingValid(r.messages);
   });
 
+  it('sizes the budget to the serving model only when its window is smaller than the cap', () => {
+    expect(compactionBudget({ maxTokens: 40_000 })).toBe(40_000);
+    expect(compactionBudget({ maxTokens: 40_000, targetModel: 'no-such-model-in-the-catalog' })).toBe(40_000);
+    // A 131k catalog window leaves the 40k cost cap in charge.
+    expect(compactionBudget({ maxTokens: 40_000, targetModel: '@cf/zai-org/glm-4.7-flash', reserveOutputTokens: 4_096 })).toBe(40_000);
+    expect(compactionBudget({ maxTokens: 200_000, targetModel: '@cf/zai-org/glm-4.7-flash', reserveOutputTokens: 4_096 })).toBe(131_072 - 4_096);
+  });
+
   it('C9: caps the budget at the target model\'s long-context price-tier boundary while the lever is on', () => {
     // Gemini 2.5 Pro steps up above 200K input tokens; the family matches through any route prefix.
     const target = 'openrouter/google/gemini-2.5-pro';
@@ -213,7 +228,7 @@ describe('observation masking (C2) + task-brief pin', () => {
   });
 });
 
-describe('the window and tier bounds, from the run's own ports', () => {
+describe("the window and tier bounds, from the run's own ports", () => {
   it("sizes the budget to the serving model's window only when the window is smaller than the cap", () => {
     expect(compactionBudget({ maxTokens: 40_000 })).toBe(40_000);
     // A 40k cap against a 131k window leaves the cap in charge…

@@ -82,10 +82,18 @@ function budgetOf(ctx: PolicyContext): StallState {
   return model !== undefined ? { model, recoveriesUsed: 0 } : { recoveriesUsed: 0 };
 }
 
-/** Persist the budget back onto the run's state, keyed by the model it now belongs to. */
-function saveBudget(ctx: PolicyContext, budget: StallState): void {
+/**
+ * Persist the budget back onto the run's state, keyed by the model it now belongs to.
+ * `spent` adds to the run's cumulative recovery count, which no reset ever clears.
+ */
+function saveBudget(ctx: PolicyContext, budget: StallState, spent = 0): void {
   const model = currentModel(ctx);
-  ctx.state.stall = model !== undefined ? { model, recoveriesUsed: budget.recoveriesUsed } : { recoveriesUsed: budget.recoveriesUsed };
+  const total = (ctx.state.stall?.recoveriesTotal ?? 0) + spent;
+  ctx.state.stall = {
+    ...(model !== undefined ? { model } : {}),
+    recoveriesUsed: budget.recoveriesUsed,
+    ...(total > 0 ? { recoveriesTotal: total } : {}),
+  };
 }
 
 // ── The ported glue ──────────────────────────────────────────────────────────
@@ -140,14 +148,14 @@ export const stallHook = {
         return undefined;
       case "nudge": {
         budget.recoveriesUsed = step.recoveriesUsed;
-        saveBudget(ctx, budget);
+        saveBudget(ctx, budget, 1);
         // `step.nudge` already forces ONE structured call (it embeds the tool-choice
         // directive), so the re-prompt cannot be answered with another prose promise.
         return { action: "steer", note: step.nudge };
       }
       case "failover": {
         budget.recoveriesUsed = step.recoveriesUsed;
-        saveBudget(ctx, budget);
+        saveBudget(ctx, budget, 1);
         // The policy moved the run onto `step.to` — apply it so the kernel asks for
         // that model next turn, and carry the swap's user-facing notice with the
         // first-chance nudge the incoming model gets.
