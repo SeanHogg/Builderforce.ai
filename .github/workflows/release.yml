@@ -35,9 +35,10 @@ jobs:
             package: '@seanhogg/builderforce-sdk'
           - dir: studio
             package: '@seanhogg/builderforce-studio'
-          # `file:../studio` copies studio's BUILT dist at install time, which the serial
-          # loop only had because studio happened to be installed (its `prepare` builds
-          # it) earlier in the same step. On its own runner it has to be done first.
+          # studio-embedded links studio (`link:../studio`) and bundles against its BUILT
+          # dist, which the serial loop only had because studio happened to be installed
+          # (its `prepare` builds it) earlier in the same step. On its own runner it has
+          # to be built first.
           - dir: studio-embedded
             package: '@seanhogg/builderforce-studio-embedded'
             builds-first: studio

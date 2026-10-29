@@ -2,6 +2,15 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.114] — Knowledge you can rely on
+
+- **The Knowledge tab speaks plainly.** It shows its labels and empty states instead of raw keys, and the claim colour no longer looks like "agrees" in dark and high-contrast themes. Muted text in the light theme meets contrast.
+- **Live keeps your view.** A live refresh reloads the graph with the filters and focus you had.
+- **Reviews of one folder take turns.** Starting a second review of the same folder waits for the first instead of colliding with it.
+- **Search only finds what was saved.** A claim from a review that was cancelled or failed never shows up in search, and claims already in the index keep their full card.
+- **`/boundaries` reports the import's own direction.** A layer violation shows as an error or a warning by the import itself, errors come first, and files that import each other report the error.
+- **`/review` stays inside the workspace.** The folder is checked again when you confirm, not only when you preview.
+
 ## [2026.10.111] — Point it at a folder and see what it knows
 
 - **Review any folder.** Right-click a folder in the explorer and choose **Review with BuilderForce**, or type `/review <folder>` in chat. A chip shows how many files will be read, how many are unchanged since the last review, and roughly how many model calls the review needs. Nothing runs until you confirm.

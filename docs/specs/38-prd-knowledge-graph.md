@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Rev 3, approved 2026-10-28, in implementation.** |
+| Status | **Rev 3, approved 2026-10-28. Built 2026-10-29**: the audit gaps are closed (DONE.md, 2026-10-29). |
 | History | **Rev 1** (2026-10-25): a 2D code graph. <br>**Rev 2** (2026-10-28): 3D, layers, duplication. <br>**Rev 3** (2026-10-28, operator): <br>• **The knowledge graph is a structure of memory.** Facts on their own are recollections; facts connected by edges are knowledge. The engine moves into builderforce-memory, and there is no Builderforce `knowledge-graph` package. <br>• **A person can ask any host to review a directory**, code or not, and get a knowledge graph of it. <br>• **The first release ships two packs: code and docs.** Data (json/yaml/csv) is a later pack. |
 | Owner | Agents program. Planning is done by the session model, implementation by Sonnet agents, review by Opus agents, and compile, test and packaging by Haiku agents. |
 | Entry points | Web · Canvas/Studio · VS Code · Rovr · on-prem/cloud container |

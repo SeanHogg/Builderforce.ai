@@ -29,15 +29,18 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+// The 3D scene is a React.lazy chunk: under a loaded full run its first mount can outlast waitFor's 1 s default.
+const MOUNT_WAIT = { timeout: 10_000 };
+
 async function mount3D(graph: KnowledgeGraph, props: Partial<Parameters<typeof KnowledgeGraphView>[0]> = {}) {
   render(<div style={{ height: 600 }}><KnowledgeGraphView source={fixtureSource([graph])} {...props} /></div>);
-  await waitFor(() => expect(scene.props).not.toBeNull());
+  await waitFor(() => expect(scene.props).not.toBeNull(), MOUNT_WAIT);
 }
 
 const lensButton = (id: LensId) => within(screen.getByRole('navigation', { name: L.lensesLabel })).getByRole('button', { name: L.lenses[id] });
 async function pick(id: LensId) {
   fireEvent.click(lensButton(id));
-  await waitFor(() => expect(scene.props!.lens.id).toBe(id));
+  await waitFor(() => expect(scene.props!.lens.id).toBe(id), MOUNT_WAIT);
 }
 const labelled = (label: string) => scene.props!.nodes.find((n) => n.label === label)!;
 const style = (label: string) => scene.props!.lens.nodeStyle(labelled(label));
@@ -172,7 +175,7 @@ describe('list fallback parity', () => {
       const rows = [...screen.getByTestId('kg-list').querySelectorAll('button[aria-pressed]')];
       expect(rows.map((r) => r.querySelectorAll('span')[1]!.textContent).sort(), id).toEqual(drawn);
       fireEvent.click(screen.getByRole('button', { name: L.view3d }));
-      await waitFor(() => expect(screen.getByTestId('kg-scene')).toBeTruthy());
+      await waitFor(() => expect(screen.getByTestId('kg-scene')).toBeTruthy(), MOUNT_WAIT);
     }
   });
 

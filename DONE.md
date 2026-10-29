@@ -1,3 +1,57 @@
+## ✅ RESOLVED 2026-10-29 — PRD 38 (knowledge graph) audit: every gap closed (memory 2026.10.35 · api 2026.10.93 · frontend 2026.10.97 · VS Code 2026.10.114 · Rovr 2026.10.33 · agent-runtime 2026.10.22)
+
+A spec-vs-code audit of [PRD 38](./docs/specs/38-prd-knowledge-graph.md) found the gaps below; each is fixed with tests, and the README/spec/API docs describe the implementation. Reviewed by Opus over four rounds; verified by targeted typechecks and tests, the VS Code webview build (one stylesheet carrying the `--kg-*` palette) and green CI on `main` (`b3aa89a26`). Commits: `7d4bda90c`, `720c8d5dd`, `bba4b6190`, `b3aa89a26` and the close-out commit; memory `v2026.10.33`–`v2026.10.35`.
+
+- **The VS Code Knowledge tab rendered raw keys.** The webview trimmer never shipped `knowledgeGraph`, and the labels adapter took a bare-key fallback as a translation.
+- **memory:**
+  - an abort during judgement lost claims;
+  - stale relations and facts on deleted files showed as current;
+  - there was no contradiction finding;
+  - Continue re-walked the directory;
+  - nested `.gitignore` files, pdf/office routing, wiki-by-name and reference links, out-of-root links and the pre-heading section were missing.
+- **api:**
+  - run-end memory and the MCP fact writers bypassed `writeKnowledge`;
+  - deletes left relations behind and skipped the author/admin rule;
+  - decay and purge did not bump `knowledgeVersion`;
+  - run-end anchors had no hashes;
+  - the server never marked stale itself;
+  - quote spans were not capped.
+- **view/web/Rovr:**
+  - Live never subscribed;
+  - the review cost was missing from the confirm chip;
+  - legends were not drawn;
+  - search did not reach beyond the loaded graph;
+  - no `--kg-*` tokens were defined;
+  - raw ids were shown on screen;
+  - Add fact had no error path.
+- **code pack/VS Code:**
+  - hosts dropped the confirmed plan;
+  - there were no repo-map references in-process;
+  - analyzers were not cached per sha;
+  - `arch.boundaries` had no findings or chip;
+  - on-prem `/graph` had no focus;
+  - editing a doc never marked its claims stale.
+- **Found during review (2026-10-29):**
+  - The cost estimate called Kimi "local — no cost". `isLocal` used the local-egress flag, which Kimi carries even though it runs on kimi.ai.
+  - Code-analysis snapshots were stored under the commit sha alone (`knowledgeBlobs.ts`), so two sub-folder roots reviewed at one commit overwrote each other.
+  - The evermind 409 `fact_owned_by_person` was never handled in the manager UI.
+  - VS Code Live reloaded without the view's query.
+  - The VS Code light theme and the web light theme's muted text failed contrast.
+  - An extractor upgrade cut short left sections unjudged until the file changed (memory owed-files). Memory 2026.10.32, published from another session, carries this bug; the fix ships in 2026.10.33.
+  - `/boundaries` read import direction from sorted finding nodes, so it dropped most layer violations.
+  - VS Code and on-prem `rootPorts` gave one root two manifest handles on the same file. A watcher write could revert a review's manifest.
+  - The fingerprint single-flight ran on the first asker's signal, so one abort blanked the fingerprint for every asker.
+  - `/graph` still matched "graph of revenue."-style requests.
+  - The router still treated Kimi as local and free (`catalogView.residencyOf`).
+  - The VS Code claim colour matched "agrees" in dark and high-contrast themes.
+  - Memory 2026.10.33's `clampClaim` bounds claim text by length only, so a model claim of more than 3 lines passes. That breaks §4.8 "fact text … no more than 3 lines". The 3-line bound comes back in 2026.10.34.
+  - `7d4bda90c` pinned `^2026.10.34` in 12 package.json files but kept the lockfiles at `^2026.10.33`. Every `--frozen-lockfile` job failed (`ERR_PNPM_OUTDATED_LOCKFILE`) and main went red. Lockfiles refreshed in `720c8d5dd`.
+  - Opus review of `7d4bda90c` (FIX): (1) `hostIndex` idle save persists provisional claim cards, so a review that dies before `indexReviewed` leaves unwritten claims searchable forever; (2) `similar()` marks already-indexed backlog claims provisional, so `upsertGraph` can delete their cards when they fall outside the 400-node cut; (3) `reviewRunner` never forwards the held `done` if `pruneEditedFiles` throws; (4) `/boundaries` lines can carry a clone/reference edge's params instead of the import's. Fixed.
+  - The fixes for those are verified: the agent-tools, agent-runtime, VS Code and frontend typechecks are clean, 84 targeted tests pass and the silent-catch guard passes. They also fix the `repo-map` `@builderforce/agent-tools/symbols` resolve (agent-runtime tsconfig exact path) and the watcher-close silent catch (shared `loggedFallback`). A second Opus review returned FIX: `similar()` still overwrites already-indexed backlog claim cards with raw text and no keys, and that degraded card is now saved, and the change embeds one claim per call (fix: memory `KnowledgeIndex.has()`, 2026.10.35); `/boundaries` lets the last edge win when imports run both ways; `discardProvisional` is optional on the port and both hosts copy the adapter; an `onProgress` throw in the runner's `finally` masks the original error. Fixed with memory 2026.10.35 (`KnowledgeIndex.has`, `partitionSeverity`).
+  - Round 3 (Opus SHIP): the per-root concurrency test waits a fixed 25 ms (could flake on a loaded runner); a listener throwing on the `index` phase is still treated as an index failure; a synchronous throw from `discardProvisional` escapes cleanup; `/boundaries` keeps memory's severity order after promoting a warning to an error, so the list cap can drop it; `reviewRunner.test.ts` is 488 lines; `onPremKnowledge.test.ts:120` calls `plan()` with no argument (agent-runtime typecheck). Older, not from this diff: a code-root reseed (`seedCodeCards` → `upsertGraph`) drops a running review's provisional cards, so later batches can miss near-duplicate pairs. Fixed: only a review's final upsert settles provisional cards, and reviews of one root are serialised.
+  - `bba4b6190` CI: every job is green except `api/src/application/replay/replayFilteredReads.test.ts` > live ("expected 3 to be 1"). `ReplayReadService.live()` now runs three exact aggregate selects per cache fill (visitors, total, by-route); the test still counts one select across two calls. The test was stale, not the cache. Fixed: it now asserts the second call adds no selects.
+  - Close-out checks: (a) the local VS Code webview build (`build:webview`) fails with "Failed to resolve entry for package @seanhogg/builderforce-studio". `studio-embedded/package.json` takes studio as `file:../studio`, which pnpm COPIES at install time; the copy in `studio-embedded/node_modules` has only `.d.ts` files in `dist` (taken mid-build), and the webview resolves studio through studio-embedded. Every other consumer uses `link:`. CI is unaffected (fresh install). (b) `packages/knowledge-graph-view/src/KnowledgeGraphView.lenses.test.tsx:34` waits on the default 1 s `waitFor` for the mocked 3D scene and fails under full-run load (passes alone). Fixed: studio-embedded links studio (`link:../studio`, lockfile refreshed); the lens test waits up to 10 s for the lazy scene.
+
 ## ✅ RESOLVED 2026-10-29 — PRD 33 (Insights) audit: the gaps behind §0.1's "Built" are closed (api 2026.10.92 · frontend 2026.10.96)
 
 An audit compared every slice S0–S8 of [PRD 33](./docs/specs/33-prd-session-replay.md) with the code. Most of it was real, but these were not. All are fixed, and §0.3 of the spec records the design calls taken.

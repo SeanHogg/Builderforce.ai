@@ -23,8 +23,8 @@ importers:
         version: file:../webdit/torch
     devDependencies:
       '@seanhogg/builderforce-studio':
-        specifier: file:../studio
-        version: file:../studio(@huggingface/transformers@4.2.0(@types/node@24.13.2))(@mlc-ai/web-llm@0.2.84)(@seanhogg/builderforce-sdk@0.9.0)(@types/node@24.13.2)(onnxruntime-web@1.27.0)
+        specifier: link:../studio
+        version: link:../studio
       '@testing-library/dom':
         specifier: ^10.4.1
         version: 10.4.1
@@ -317,14 +317,8 @@ packages:
     resolution: {integrity: sha512-ZdElB7DPS7QQS8ZnFc5RPPtkg+eN11z8AmIZWAyes6pSbwXqiFB/POVevvm01begdSX1ho9Gxln/F6qlQMsuaA==}
     engines: {node: '>=18'}
 
-  '@huggingface/tokenizers@0.1.3':
-    resolution: {integrity: sha512-8rF/RRT10u+kn7YuUbUg0OF30K8rjTc78aHpxT+qJ1uWSqxT1MHi8+9ltwYfkFYJzT/oS+qw3JVfHtNMGAdqyA==}
-
   '@huggingface/transformers@3.8.1':
     resolution: {integrity: sha512-tsTk4zVjImqdqjS8/AOZg2yNLd1z9S5v+7oUPpXaasDRwEDhB+xnglK1k5cad26lL5/ZIaeREgWWy0bs9y9pPA==}
-
-  '@huggingface/transformers@4.2.0':
-    resolution: {integrity: sha512-8BRCoBMH0XsWaEIamuR0LrJGAfftgHAfb2Vrffy0VKlSAE/MnUJ5/h/zTfEP3fDIft+nk7TqB8xXEyABGitBjQ==}
 
   '@img/colour@1.1.0':
     resolution: {integrity: sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ==}
@@ -780,18 +774,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@seanhogg/builderforce-sdk@0.9.0':
-    resolution: {integrity: sha512-lQur6yVhYEd0S/usS+EeVTSeD1kDoBRV10i69xtkwt7Pl8E5wjl28N6lnqdBxBQnriivN/YlepZi+1FOBZKCNg==}
-    engines: {node: '>=18'}
-
-  '@seanhogg/builderforce-studio@file:../studio':
-    resolution: {directory: ../studio, type: directory}
-    engines: {node: '>=18'}
-    peerDependencies:
-      '@huggingface/transformers': '>=3.8.0'
-      '@seanhogg/builderforce-sdk': '>=0.8.0'
-      onnxruntime-web: '>=1.21.0'
-
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
@@ -826,9 +808,6 @@ packages:
   '@types/deep-eql@4.0.2':
     resolution: {integrity: sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw==}
 
-  '@types/dom-webcodecs@0.1.18':
-    resolution: {integrity: sha512-vAvE8C9DGWR+tkb19xyjk1TSUlJ7RUzzp4a9Anu7mwBT+fpyePWK1UxmH14tMO5zHmrnrRIMg5NutnnDztLxgg==}
-
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
 
@@ -842,9 +821,6 @@ packages:
 
   '@types/react@19.3.0':
     resolution: {integrity: sha512-N0rFCuH9YoxG9/m61l9MfpJKfmLOVU0em7ipIz6TRgSSkvReLB9vL85GB+yr8Bs5leqpvg96JSwF4ZS1s4viQg==}
-
-  '@types/wicg-file-system-access@2020.9.8':
-    resolution: {integrity: sha512-ggMz8nOygG7d/stpH40WVaNvBwuyYLnrg5Mbyf6bmsj/8+gb6Ei4ZZ9/4PNpcPNTT8th9Q8sM8wYmWGjMWLX/A==}
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     resolution: {integrity: sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ==}
@@ -1017,10 +993,6 @@ packages:
     resolution: {integrity: sha512-xRQbDb9BnwDafYNn6Vwl839DYVjqXYb1XVGtWAZ1kcDc6iwAL4hg3B1dZlRiuENFeO2H53gFG3in621AdERVAg==}
     engines: {node: '>=0.4.0'}
     hasBin: true
-
-  adm-zip@0.5.17:
-    resolution: {integrity: sha512-+Ut8d9LLqwEvHHJl1+PIHqoyDxFgVN847JTVM3Izi3xHDWPE4UtzzXysMZQs64DMcrJfBeS/uoEP4AD3HQHnQQ==}
-    engines: {node: '>=12.0'}
 
   agent-base@7.1.4:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
@@ -1363,10 +1335,6 @@ packages:
   mlly@1.8.2:
     resolution: {integrity: sha512-d+ObxMQFmbt10sretNDytwt85VrbkhhUA/JBGm1MPaWJ65Cl4wOgLaB1NYvJSZ0Ef03MMEU/0xpPMXUIQ29UfA==}
 
-  mp4-muxer@5.2.2:
-    resolution: {integrity: sha512-dhozjTywI0h2qFzeShagt8YYw811fh1XlwiDCE2f6Aeqf6xG2CyuShoSa5E0AZDO8pPF0JOZ3wOmWBNWIGdSpQ==}
-    deprecated: This library is superseded by Mediabunny. Please migrate to it.
-
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
@@ -1396,12 +1364,6 @@ packages:
   onnxruntime-common@1.22.0-dev.20250409-89f8206ba4:
     resolution: {integrity: sha512-vDJMkfCfb0b1A836rgHj+ORuZf4B4+cc2bASQtpeoJLueuFc5DuYwjIZUBrSvx/fO5IrLjLz+oTrB3pcGlhovQ==}
 
-  onnxruntime-common@1.24.0-dev.20251116-b39e144322:
-    resolution: {integrity: sha512-BOoomdHYmNRL5r4iQ4bMvsl2t0/hzVQ3OM3PHD0gxeXu1PmggqBv3puZicEUVOA3AtHHYmqZtjMj9FOfGrATTw==}
-
-  onnxruntime-common@1.24.3:
-    resolution: {integrity: sha512-GeuPZO6U/LBJXvwdaqHbuUmoXiEdeCjWi/EG7Y1HNnDwJYuk6WUbNXpF6luSUY8yASul3cmUlLGrCCL1ZgVXqA==}
-
   onnxruntime-common@1.27.0:
     resolution: {integrity: sha512-3KxL5wIVqa8Ex08jxSzncm9CMgw8CjOFyOQ7SxvG9o0cVLlhTNKXyIQuTbtX4tGPJEf73OER2xrjt4HJSBL4ow==}
 
@@ -1409,15 +1371,8 @@ packages:
     resolution: {integrity: sha512-NeaCX6WW2L8cRCSqy3bInlo5ojjQqu2fD3D+9W5qb5irwxhEyWKXeH2vZ8W9r6VxaMPUan+4/7NDwZMtouZxEw==}
     os: [win32, darwin, linux]
 
-  onnxruntime-node@1.24.3:
-    resolution: {integrity: sha512-JH7+czbc8ALA819vlTgcV+Q214/+VjGeBHDjX81+ZCD0PCVCIFGFNtT0V4sXG/1JXypKPgScQcB3ij/hk3YnTg==}
-    os: [win32, darwin, linux]
-
   onnxruntime-web@1.22.0-dev.20250409-89f8206ba4:
     resolution: {integrity: sha512-0uS76OPgH0hWCPrFKlL8kYVV7ckM7t/36HfbgoFw6Nd0CZVVbQC4PkrR8mBX8LtNUFZO25IQBqV2Hx2ho3FlbQ==}
-
-  onnxruntime-web@1.26.0-dev.20260416-b7804b056c:
-    resolution: {integrity: sha512-MD6Ss4GSpQBo6zqoJzyT9LRbKYs7x/JVN23FT24EcEvlqF4VuzPOeH6X38orZPKHQDbprn7K+SBpu0/mj2CQiw==}
 
   onnxruntime-web@1.27.0:
     resolution: {integrity: sha512-ogDLsqIozHZwifPuN37OproAo0byX6t43/bP8GzeZWBWD6MOGExswFAx3up4NS/vvWBOg2u2PXomDt3rMmdQSg==}
@@ -1951,23 +1906,11 @@ snapshots:
 
   '@huggingface/jinja@0.5.8': {}
 
-  '@huggingface/tokenizers@0.1.3': {}
-
   '@huggingface/transformers@3.8.1(@types/node@24.13.2)':
     dependencies:
       '@huggingface/jinja': 0.5.8
       onnxruntime-node: 1.21.0
       onnxruntime-web: 1.22.0-dev.20250409-89f8206ba4
-      sharp: 0.35.4(@types/node@24.13.2)
-    transitivePeerDependencies:
-      - '@types/node'
-
-  '@huggingface/transformers@4.2.0(@types/node@24.13.2)':
-    dependencies:
-      '@huggingface/jinja': 0.5.8
-      '@huggingface/tokenizers': 0.1.3
-      onnxruntime-node: 1.24.3
-      onnxruntime-web: 1.26.0-dev.20260416-b7804b056c
       sharp: 0.35.4(@types/node@24.13.2)
     transitivePeerDependencies:
       - '@types/node'
@@ -2255,21 +2198,6 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.62.2':
     optional: true
 
-  '@seanhogg/builderforce-sdk@0.9.0': {}
-
-  '@seanhogg/builderforce-studio@file:../studio(@huggingface/transformers@4.2.0(@types/node@24.13.2))(@mlc-ai/web-llm@0.2.84)(@seanhogg/builderforce-sdk@0.9.0)(@types/node@24.13.2)(onnxruntime-web@1.27.0)':
-    dependencies:
-      '@huggingface/transformers': 4.2.0(@types/node@24.13.2)
-      '@seanhogg/builderforce-sdk': 0.9.0
-      '@webdit/runtime': file:../webdit/runtime(@mlc-ai/web-llm@0.2.84)(@types/node@24.13.2)
-      '@webdit/shared': file:../webdit/shared
-      '@webdit/torch': file:../webdit/torch
-      mp4-muxer: 5.2.2
-      onnxruntime-web: 1.27.0
-    transitivePeerDependencies:
-      - '@mlc-ai/web-llm'
-      - '@types/node'
-
   '@standard-schema/spec@1.1.0': {}
 
   '@testing-library/dom@10.4.1':
@@ -2307,8 +2235,6 @@ snapshots:
 
   '@types/deep-eql@4.0.2': {}
 
-  '@types/dom-webcodecs@0.1.18': {}
-
   '@types/estree@1.0.9': {}
 
   '@types/node@24.13.2':
@@ -2322,8 +2248,6 @@ snapshots:
   '@types/react@19.3.0':
     dependencies:
       csstype: 3.2.3
-
-  '@types/wicg-file-system-access@2020.9.8': {}
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     optional: true
@@ -2447,8 +2371,6 @@ snapshots:
   '@webgpu/types@0.1.71': {}
 
   acorn@8.17.0: {}
-
-  adm-zip@0.5.17: {}
 
   agent-base@7.1.4: {}
 
@@ -2765,11 +2687,6 @@ snapshots:
       pkg-types: 1.3.1
       ufo: 1.6.4
 
-  mp4-muxer@5.2.2:
-    dependencies:
-      '@types/dom-webcodecs': 0.1.18
-      '@types/wicg-file-system-access': 2020.9.8
-
   ms@2.1.3: {}
 
   mz@2.7.0:
@@ -2790,10 +2707,6 @@ snapshots:
 
   onnxruntime-common@1.22.0-dev.20250409-89f8206ba4: {}
 
-  onnxruntime-common@1.24.0-dev.20251116-b39e144322: {}
-
-  onnxruntime-common@1.24.3: {}
-
   onnxruntime-common@1.27.0: {}
 
   onnxruntime-node@1.21.0:
@@ -2802,27 +2715,12 @@ snapshots:
       onnxruntime-common: 1.21.0
       tar: 7.5.22
 
-  onnxruntime-node@1.24.3:
-    dependencies:
-      adm-zip: 0.5.17
-      global-agent: 3.0.0
-      onnxruntime-common: 1.24.3
-
   onnxruntime-web@1.22.0-dev.20250409-89f8206ba4:
     dependencies:
       flatbuffers: 25.9.23
       guid-typescript: 1.0.9
       long: 5.3.2
       onnxruntime-common: 1.22.0-dev.20250409-89f8206ba4
-      platform: 1.3.6
-      protobufjs: 7.6.4
-
-  onnxruntime-web@1.26.0-dev.20260416-b7804b056c:
-    dependencies:
-      flatbuffers: 25.9.23
-      guid-typescript: 1.0.9
-      long: 5.3.2
-      onnxruntime-common: 1.24.0-dev.20251116-b39e144322
       platform: 1.3.6
       protobufjs: 7.6.4
 

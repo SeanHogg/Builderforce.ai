@@ -103,61 +103,11 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ## 🔨 Make — Build
 
+### Studio packages `[studio]`
+
+- **Published `@seanhogg/builderforce-studio` cannot be installed from npm (found 2026-10-29).** Its runtime `dependencies` are `@webdit/shared`, `@webdit/runtime` and `@webdit/torch` as `file:../webdit/...` (npm shows them on the published version), and `studio-embedded` declares the same. An npm consumer cannot resolve a `file:` path to a sibling folder. The `@webdit/*` packages are `private`. Acceptance: `npm install @seanhogg/builderforce-studio` in an empty folder succeeds and `import` works. **Blocker: a decision.** Either bundle `@webdit/*` into studio's `dist` (`noExternal` in `studio/tsup.config.ts`, move them to `devDependencies`), or publish them. The local `file:` copies also go stale the same way the studio copy in studio-embedded did; `webdit/shared` and `webdit/torch` have no `dist`.
+
 ### Cloud and IDE agent runs `[agents]`
-
-- **PRD 38 knowledge graph: audit gaps (in flight 2026-10-29).** A spec-vs-code audit ([38](./docs/specs/38-prd-knowledge-graph.md)) found:
-  - **The VS Code Knowledge tab rendered raw keys.** The webview trimmer never shipped `knowledgeGraph`, and the labels adapter took a bare-key fallback as a translation.
-  - **memory:**
-    - an abort during judgement lost claims;
-    - stale relations and facts on deleted files showed as current;
-    - there was no contradiction finding;
-    - Continue re-walked the directory;
-    - nested `.gitignore` files, pdf/office routing, wiki-by-name and reference links, out-of-root links and the pre-heading section were missing.
-  - **api:**
-    - run-end memory and the MCP fact writers bypassed `writeKnowledge`;
-    - deletes left relations behind and skipped the author/admin rule;
-    - decay and purge did not bump `knowledgeVersion`;
-    - run-end anchors had no hashes;
-    - the server never marked stale itself;
-    - quote spans were not capped.
-  - **view/web/Rovr:**
-    - Live never subscribed;
-    - the review cost was missing from the confirm chip;
-    - legends were not drawn;
-    - search did not reach beyond the loaded graph;
-    - no `--kg-*` tokens were defined;
-    - raw ids were shown on screen;
-    - Add fact had no error path.
-  - **code pack/VS Code:**
-    - hosts dropped the confirmed plan;
-    - there were no repo-map references in-process;
-    - analyzers were not cached per sha;
-    - `arch.boundaries` had no findings or chip;
-    - on-prem `/graph` had no focus;
-    - editing a doc never marked its claims stale.
-  - **Found during review (2026-10-29):**
-    - The cost estimate called Kimi "local — no cost". `isLocal` used the local-egress flag, which Kimi carries even though it runs on kimi.ai.
-    - Code-analysis snapshots were stored under the commit sha alone (`knowledgeBlobs.ts`), so two sub-folder roots reviewed at one commit overwrote each other.
-    - The evermind 409 `fact_owned_by_person` was never handled in the manager UI.
-    - VS Code Live reloaded without the view's query.
-    - The VS Code light theme and the web light theme's muted text failed contrast.
-    - An extractor upgrade cut short left sections unjudged until the file changed (memory owed-files). Memory 2026.10.32, published from another session, carries this bug; the fix ships in 2026.10.33.
-    - `/boundaries` read import direction from sorted finding nodes, so it dropped most layer violations.
-    - VS Code and on-prem `rootPorts` gave one root two manifest handles on the same file. A watcher write could revert a review's manifest.
-    - The fingerprint single-flight ran on the first asker's signal, so one abort blanked the fingerprint for every asker.
-    - `/graph` still matched "graph of revenue."-style requests.
-    - The router still treated Kimi as local and free (`catalogView.residencyOf`).
-    - The VS Code claim colour matched "agrees" in dark and high-contrast themes.
-    - Memory 2026.10.33's `clampClaim` bounds claim text by length only, so a model claim of more than 3 lines passes. That breaks §4.8 "fact text … no more than 3 lines". The 3-line bound comes back in 2026.10.34.
-    - `7d4bda90c` pinned `^2026.10.34` in 12 package.json files but kept the lockfiles at `^2026.10.33`. Every `--frozen-lockfile` job failed (`ERR_PNPM_OUTDATED_LOCKFILE`) and main went red. Lockfiles refreshed in `720c8d5dd`.
-    - Opus review of `7d4bda90c` (FIX): (1) `hostIndex` idle save persists provisional claim cards, so a review that dies before `indexReviewed` leaves unwritten claims searchable forever; (2) `similar()` marks already-indexed backlog claims provisional, so `upsertGraph` can delete their cards when they fall outside the 400-node cut; (3) `reviewRunner` never forwards the held `done` if `pruneEditedFiles` throws; (4) `/boundaries` lines can carry a clone/reference edge's params instead of the import's. Fixed.
-    - The fixes for those are verified: the agent-tools, agent-runtime, VS Code and frontend typechecks are clean, 84 targeted tests pass and the silent-catch guard passes. They also fix the `repo-map` `@builderforce/agent-tools/symbols` resolve (agent-runtime tsconfig exact path) and the watcher-close silent catch (shared `loggedFallback`). A second Opus review returned FIX: `similar()` still overwrites already-indexed backlog claim cards with raw text and no keys, and that degraded card is now saved, and the change embeds one claim per call (fix: memory `KnowledgeIndex.has()`, 2026.10.35); `/boundaries` lets the last edge win when imports run both ways; `discardProvisional` is optional on the port and both hosts copy the adapter; an `onProgress` throw in the runner's `finally` masks the original error. Fixed with memory 2026.10.35 (`KnowledgeIndex.has`, `partitionSeverity`).
-    - Round 3 (Opus SHIP): the per-root concurrency test waits a fixed 25 ms (could flake on a loaded runner); a listener throwing on the `index` phase is still treated as an index failure; a synchronous throw from `discardProvisional` escapes cleanup; `/boundaries` keeps memory's severity order after promoting a warning to an error, so the list cap can drop it; `reviewRunner.test.ts` is 488 lines; `onPremKnowledge.test.ts:120` calls `plan()` with no argument (agent-runtime typecheck). Older, not from this diff: a code-root reseed (`seedCodeCards` → `upsertGraph`) drops a running review's provisional cards, so later batches can miss near-duplicate pairs. Fixed: only a review's final upsert settles provisional cards, and reviews of one root are serialised.
-    - `bba4b6190` CI: every job is green except `api/src/application/replay/replayFilteredReads.test.ts` > live ("expected 3 to be 1"). `ReplayReadService.live()` now runs three exact aggregate selects per cache fill (visitors, total, by-route); the test still counts one select across two calls. The test was stale, not the cache. Fixed: it now asserts the second call adds no selects.
-
-  *Acceptance:* every item is fixed, with the tests the spec lists.
-
-
 
 - **Cloud agents only happy-path validated — 50-gap PRD ([09](./docs/specs/09-prd-cloud-agent-validation.md)).** P0: V2 runs `bypassPermissions` + Bash on shared infra with no documented sandbox (G1); Worker fallback ignores steering/cancel (S5/S6); errored runs leak the workspace (W2); a missing BYO key may fall to a platform key (B2).
 - **The run sandbox needs its image deployed.** Every cloud run on every plan now asks the Cloudflare Container for its shell and clone (`api/container/server.mjs` + `sandboxCore.mjs`, opened by `sandbox/runSandboxHost.ts`). Until `wrangler deploy` builds the new image, the sandbox cannot open, and each run says so on its timeline (`runtime.sandbox`) and edits over the git API without a shell. The Actions transport needs the same deploy, because the runner script is served by the Worker. Concurrency is bounded by `max_instances = 25` in wrangler.toml, shared with live previews. When it is full, a run gets no sandbox rather than waiting. Bounds: `sleepAfter` 20m, GitHub-only clones through the Worker's git proxy. *Blocker: image build + deploy.*
