@@ -149,6 +149,8 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
     - The router still treated Kimi as local and free (`catalogView.residencyOf`).
     - The VS Code claim colour matched "agrees" in dark and high-contrast themes.
     - Memory 2026.10.33's `clampClaim` bounds claim text by length only, so a model claim of more than 3 lines passes. That breaks §4.8 "fact text … no more than 3 lines". The 3-line bound comes back in 2026.10.34.
+    - `7d4bda90c` pinned `^2026.10.34` in 12 package.json files but kept the lockfiles at `^2026.10.33`. Every `--frozen-lockfile` job failed (`ERR_PNPM_OUTDATED_LOCKFILE`) and main went red. The lockfiles are being refreshed.
+    - Opus review of `7d4bda90c` (FIX): (1) `hostIndex` idle save persists provisional claim cards, so a review that dies before `indexReviewed` leaves unwritten claims searchable forever; (2) `similar()` marks already-indexed backlog claims provisional, so `upsertGraph` can delete their cards when they fall outside the 400-node cut; (3) `reviewRunner` never forwards the held `done` if `pruneEditedFiles` throws; (4) `/boundaries` lines can carry a clone/reference edge's params instead of the import's. Being fixed.
 
   *Acceptance:* every item is fixed, with the tests the spec lists.
 
