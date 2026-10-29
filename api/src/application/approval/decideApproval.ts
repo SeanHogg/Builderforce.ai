@@ -170,11 +170,14 @@ export async function decideApproval(db: Db, env: ApprovalEnv, input: DecideAppr
   // A governance gate's approval is decided approved / rejected with no text, and resumes the run all the same: the run reads
   // the STRUCTURED decision off the approval row when it retries the call; the steer only tells the model what was decided.
   const governanceGate = existing.actionType === GOVERNANCE_GATE_ACTION;
-  if (existing.executionId && (responseText || governanceGate)) {
+  // What the run is told: an answered question's text; a governance gate's approved / rejected decision (named, see
+  // governanceGateDecisionText); nothing for any other approval, which does not resume a run.
+  const resumeAnswer = status === 'answered' ? responseText : governanceGate ? governanceGateDecisionText(existing, id, status, input.reviewNote) : null;
+  if (existing.executionId && resumeAnswer) {
     await resumePausedExecution(env, db, {
       executionId: existing.executionId,
       tenantId,
-      answer: responseText ?? governanceGateDecisionText(existing, id, status, input.reviewNote),
+      answer: resumeAnswer,
       approvalId: id,
     });
   }

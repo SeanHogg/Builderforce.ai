@@ -478,8 +478,9 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
 
     // Fold into the routing table — but only for a run that actually ran a model.
     // A run that produced no LLM call ('unknown') carries no model attribution, so
-    // learning from it would pollute the ranking.
-    if (model) {
+    // learning from it would pollute the ranking. The routing table averages cost, and an UNKNOWN cost (null) is never free:
+    // such a run is not folded (the stored column keeps its NULL).
+    if (model && costMc !== null) {
       await applyOutcomeToRoutingTable(env, db, {
         tenantId: exec.tenantId,
         projectId,

@@ -59,6 +59,11 @@ describe('timelineSink', () => {
     await expect(sink.emit({ kind: 'run.started', step: 0 })).resolves.toBeUndefined();
   });
 
+  it('a sink with no outcome owner writes the uniform outcome row itself', async () => {
+    await timelineSink({} as never, run).outcome?.({ entryPoint: 'cloud', steps: 3, toolCalls: 2, toolErrors: 0, compactions: 0, stallRecoveries: 0, escalations: 0, verify: 'not-run', terminalStatus: 'finished' });
+    expect(rowOf('run.outcome')).toMatchObject({ category: 'run', result: 'finished after 3 step(s)' });
+  });
+
   it('hands the outcome row to the tail instead of writing it: the cloud writes the ONE row after the run has landed', async () => {
     const taken: unknown[] = [];
     const sink = timelineSink({} as never, run, () => null, (row) => { taken.push(row); });

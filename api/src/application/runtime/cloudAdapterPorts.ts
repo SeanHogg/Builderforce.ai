@@ -113,10 +113,11 @@ export function timelineSink(db: Db, run: CloudRunRefs, served: () => string | n
           .catch((error) => reportCaughtError(error, { source: 'application/runtime/cloudAdapterPorts.ts', operation: 'typedClaim', context: { executionId: run.executionId, error } }));
       }
     },
-    // The agent's row is NOT written here: the cloud decides what the run LANDED as, so the tail writes the one row after the
-    // landing (`cloudOutcomeRow`). The sink only hands it over.
+    // With an `onOutcome` owner (the cloud adapter's tail) the row is NOT written here: the cloud decides what the run LANDED as,
+    // so the tail writes the one row after the landing (`cloudOutcomeRow`). A sink with no owner records the agent's row itself.
     outcome(outcome: RunOutcomeRow) {
-      onOutcome?.(outcome);
+      if (onOutcome) { onOutcome(outcome); return; }
+      return write({ toolName: 'run.outcome', category: 'run', detail: { ...outcome }, result: `${outcome.terminalStatus} after ${outcome.steps} step(s)` });
     },
   };
 }

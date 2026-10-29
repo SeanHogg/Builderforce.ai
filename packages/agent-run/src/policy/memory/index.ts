@@ -42,6 +42,17 @@ function failed(result: unknown): boolean {
 }
 
 /**
+ * The deterministic half of the run-end write-back: the code map (the `codemap:` fields), carrying the chat it came from
+ * (WS8d), or nothing when the run read and changed too little to map. The ONE definition — `codeMap` and `consolidate` both call it.
+ */
+function codeMapOf(ctx: PolicyContext) {
+  const recorder = recorderForState(ctx.state);
+  ctx.state.memory = knowledgeState(recorder);
+  const map = recorder.consolidate({ root: ctx.task.workspace?.defaultRepo });
+  return map ? { ...map, ...(ctx.task.chatId !== undefined ? { chatId: ctx.task.chatId } : {}) } : undefined;
+}
+
+/**
  * The memory hook. Beyond the {@link MemoryHook} contract it carries `observe`, the
  * per-call record the brief and the map are built from (brain-embedded's
  * `toolCallHooks.ts` records each SUCCESSFUL call; the cloud engine does the same) — the
@@ -85,16 +96,11 @@ export const memoryHook: MemoryHook & {
    * maps ≥3 files READ as readily as ≥3 changed, so the next run asked about this area
    * starts warm.
    */
-  codeMap(ctx: PolicyContext) {
-    const recorder = recorderForState(ctx.state);
-    ctx.state.memory = knowledgeState(recorder);
-    const map = recorder.consolidate({ root: ctx.task.workspace?.defaultRepo });
-    return map ? { ...map, ...(ctx.task.chatId !== undefined ? { chatId: ctx.task.chatId } : {}) } : undefined;
-  },
+  codeMap: codeMapOf,
 
   async consolidate(ctx: PolicyContext) {
     // The deterministic half — the code map, already carrying the chat it came from (WS8d) — is `codeMap`'s.
-    const map = memoryHook.codeMap(ctx);
+    const map = codeMapOf(ctx);
     const facts = await extractAndWriteLearnedFacts({
       activity: recorderForState(ctx.state).activity,
     });
