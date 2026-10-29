@@ -27,7 +27,7 @@ const write = (text: string) => fireEvent.change(draftBox(), { target: { value: 
 const save = () => fireEvent.click(screen.getByRole('button', { name: L.saveFact }));
 
 describe('NodePanel: what the node is', () => {
-  it('names the pack in words, and shows an unknown pack raw', () => {
+  it('names the pack in words, not by its id', () => {
     setup();
     expect(screen.getByText(L.packs.docs)).toBeTruthy();
     expect(screen.queryByText('docs')).toBeNull();
@@ -47,7 +47,7 @@ describe('NodePanel: add fact', () => {
   });
 
   it('shows a localized error and KEEPS the draft when the write fails, then saves on retry', async () => {
-    const rememberFact = vi.fn<() => Promise<void>>()
+    const rememberFact = vi.fn(async (): Promise<void> => undefined)
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValueOnce(undefined);
     const { onChanged } = setup({ rememberFact });
@@ -74,7 +74,7 @@ describe('NodePanel: add fact', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('does not save an empty draft, and offers no form when the source cannot remember', () => {
+  it('does not save an empty draft', () => {
     const rememberFact = vi.fn(async () => undefined);
     setup({ rememberFact });
     expect((screen.getByRole('button', { name: L.saveFact }) as HTMLButtonElement).disabled).toBe(true);

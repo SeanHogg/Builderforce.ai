@@ -10,7 +10,7 @@
  * immutable and served with `Cache-Control: immutable` by the route instead.
  */
 
-import { and, desc, eq, gte } from 'drizzle-orm';
+import { and, count, desc, eq, gte } from 'drizzle-orm';
 import type {
   ReplayFilter,
   ReplayIssueDetailDto,
@@ -56,7 +56,10 @@ const ROLLUP_TTL = { kvTtlSeconds: 300, l1TtlMs: 30_000 };
 export const LIVE_ACTIVE_MS = 60_000;
 /** How long one isolate reuses a live answer. */
 const LIVE_TTL_MS = 5_000;
+/** Visitors listed (the dots on the page); the counts below are exact whatever this is. */
 const LIVE_VISITORS_MAX = 200;
+/** Routes listed in `byRoute`, busiest first — a presentation cap on the list, not on any count. */
+const LIVE_ROUTES_MAX = 50;
 const LABEL_MAX = 80;
 
 export class ReplayReadService {
@@ -251,21 +254,27 @@ export class ReplayReadService {
     const keys = await replayReadKeys(this.env, scope);
     return getOrSetCached(undefined, keys.live(), async () => {
       const now = this.clock();
-      const rows = await this.store
-        .select()
-        .from(replayLive)
-        .where(and(
-          eq(replayLive.tenantId, scope.tenantId),
-          eq(replayLive.siteId, scope.siteId),
-          gte(replayLive.lastSeenAt, new Date(now.getTime() - LIVE_ACTIVE_MS)),
-        ))
-        .orderBy(desc(replayLive.lastSeenAt))
-        .limit(LIVE_VISITORS_MAX);
-      const byRoute = new Map<string, number>();
-      for (const row of rows) byRoute.set(row.route, (byRoute.get(row.route) ?? 0) + 1);
+      const fresh = and(
+        eq(replayLive.tenantId, scope.tenantId),
+        eq(replayLive.siteId, scope.siteId),
+        gte(replayLive.lastSeenAt, new Date(now.getTime() - LIVE_ACTIVE_MS)),
+      );
+      // `active` and `byRoute` are exact aggregates over every fresh row; only the
+      // visitor list (the dots) is capped at LIVE_VISITORS_MAX.
+      const [rows, [total], routes] = await Promise.all([
+        this.store.select().from(replayLive).where(fresh).orderBy(desc(replayLive.lastSeenAt)).limit(LIVE_VISITORS_MAX),
+        this.store.select({ n: count() }).from(replayLive).where(fresh),
+        this.store
+          .select({ route: replayLive.route, n: count() })
+          .from(replayLive)
+          .where(fresh)
+          .groupBy(replayLive.route)
+          .orderBy(desc(count()), replayLive.route)
+          .limit(LIVE_ROUTES_MAX),
+      ]);
       return {
-        active: rows.length,
-        byRoute: [...byRoute].map(([route, n]) => ({ route, n })).sort((a, b) => b.n - a.n),
+        active: Number(total?.n ?? 0),
+        byRoute: routes.map((row) => ({ route: row.route, n: Number(row.n) })),
         visitors: rows.map((row) => ({
           visitId: row.visitId,
           route: row.route,

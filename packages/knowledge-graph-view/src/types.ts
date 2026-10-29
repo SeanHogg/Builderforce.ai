@@ -68,6 +68,8 @@ export interface ReviewEstimate {
     modelCalls: number;
     /** ≈ cost in USD, when the host can price the judgement pass. */
     costUsd?: number;
+    /** The judgement pass runs on the person's own local model: no cost to show, only a note. */
+    local?: boolean;
 }
 
 export type KnowledgeReviewEvent =

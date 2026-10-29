@@ -20,8 +20,9 @@
 import { useTranslations } from 'next-intl';
 import type { CompanyDetail, InvestorGrantSummary } from '@/lib/investorApi';
 import {
-  cardStyle, emptyStyle, gapChipStyle, listRowStyle, listStyle, mutedStyle, rowStyle, sectionStyle,
+  emptyStyle, gapChipStyle, listRowStyle, listStyle, mutedStyle, sectionStyle,
 } from './investorStyles';
+import { StatTile } from '@/components/admin/adminShared';
 
 export function RoundView({
   detail,
@@ -42,10 +43,10 @@ export function RoundView({
       <p style={mutedStyle}>{t('round.blurb')}</p>
 
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-        <Stat label={t('round.readiness')} value={`${detail.readiness}%`} hint={t('round.readinessHint')} />
-        <Stat label={t('round.openGaps')} value={String(detail.gaps.length)} hint={t('round.openGapsHint')} />
-        <Stat label={t('round.investors')} value={String(live.length)} hint={t('round.investorsHint', { signed: signed.length })} />
-        <Stat label={t('round.projects')} value={String(detail.projects.length)} hint={t('round.projectsHint')} />
+        <StatTile label={t('round.readiness')} value={`${detail.readiness}%`} hint={t('round.readinessHint')} />
+        <StatTile label={t('round.openGaps')} value={String(detail.gaps.length)} hint={t('round.openGapsHint')} />
+        <StatTile label={t('round.investors')} value={String(live.length)} hint={t('round.investorsHint', { signed: signed.length })} />
+        <StatTile label={t('round.projects')} value={String(detail.projects.length)} hint={t('round.projectsHint')} />
       </div>
 
       {detail.rounds.length === 0 ? (
@@ -82,16 +83,3 @@ export function RoundView({
   );
 }
 
-function Stat({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <div style={cardStyle}>
-      <div style={rowStyle}>
-        <span style={{ fontSize: 'var(--font-size-eyebrow)', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-secondary)' }}>
-          {label}
-        </span>
-      </div>
-      <div style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--text-primary)' }}>{value}</div>
-      <small style={mutedStyle}>{hint}</small>
-    </div>
-  );
-}

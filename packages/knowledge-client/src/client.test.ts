@@ -145,4 +145,18 @@ describe('createKnowledgeClient', () => {
     expect(await client.facts('nope')).toBeNull();
     expect(await client.store.facts({ rootId: 'nope' })).toEqual([]);
   });
+
+  it('reads the judge estimate from the project’s door, keeping a null price and a local flag', async () => {
+    const { fetch, seen } = fakeFetch(() => json({ perCallUsd: null, model: 'ollama/llama3', local: true }));
+    const out = await createKnowledgeClient({ fetch, projectId: 5, basePath: '/api/agent/projects' }).judgeEstimate();
+    expect(seen).toEqual([{ path: '/api/agent/projects/5/knowledge/judge/estimate', method: 'GET', body: undefined }]);
+    expect(out).toEqual({ perCallUsd: null, model: 'ollama/llama3', local: true });
+  });
+
+  it('normalises a malformed estimate to "unknown, not local" and maps an error status', async () => {
+    const bad = await createKnowledgeClient({ ...fakeFetch(() => json({ perCallUsd: -1, local: 'yes' })), projectId: 1 }).judgeEstimate();
+    expect(bad).toEqual({ perCallUsd: null, model: null, local: false });
+    const failing = createKnowledgeClient({ ...fakeFetch(() => json({ error: 'nope', code: 'x' }, 500)), projectId: 1 });
+    await expect(failing.judgeEstimate()).rejects.toBeInstanceOf(KnowledgeApiError);
+  });
 });

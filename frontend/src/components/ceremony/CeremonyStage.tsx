@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePolledResource } from '@/hooks/usePolledResource';
 import { useTranslations } from 'next-intl';
+import { stripReplayMomentTrailer } from '@builderforce/interaction-contract';
 import { Select } from '@/components/Select';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { useLiveSession } from '@/lib/live/LiveSessionContext';
@@ -747,7 +748,7 @@ function CeremonyStageInner({
               <span style={{ textTransform: 'capitalize' }}>{t('priority', { priority: drawerTask.priority })}</span>
               <span style={{ textTransform: 'capitalize' }}>· {t('status', { status: drawerTask.status })}</span>
             </div>
-            {drawerTask.description && <p style={{ color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{drawerTask.description}</p>}
+            {drawerTask.description && <p style={{ color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{stripReplayMomentTrailer(drawerTask.description)}</p>}
             <a
               href={`/projects?tab=tasks&project=${drawerTask.projectId}`}
               style={{ color: 'var(--coral-bright)', fontWeight: 600, textDecoration: 'none' }}

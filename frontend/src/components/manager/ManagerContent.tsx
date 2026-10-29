@@ -52,6 +52,7 @@ import {
   tdMutedStyle,
 } from '@/components/dataTableStyles';
 import { useFormat } from "@/i18n/useFormat";
+import { StatTile } from '@/components/admin/adminShared';
 import { faultMessage } from '@/lib/apiClient';
 import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 /**
@@ -558,21 +559,21 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       <div style={{ ...sectionTitleStyle, marginTop: 4 }}>{t('health.title')}</div>
       <div style={{ ...mutedStyle, marginTop: -8 }}>{t('health.caption')}</div>
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
-        <StatTile label={t('stat.total')} value={stats.total} />
-        <StatTile label={t('stat.unscored')} value={stats.unscored} tone={stats.unscored > 0 ? 'warn' : undefined} />
-        <StatTile label={t('stat.unranked')} value={stats.unranked} tone={stats.unranked > 0 ? 'warn' : undefined} />
-        <StatTile label={t('stat.undated')} value={stats.undated} tone={stats.undated > 0 ? 'warn' : undefined} />
-        <StatTile label={t('stat.unowned')} value={stats.unowned} tone={stats.unowned > 0 ? 'warn' : undefined} />
-        <StatTile label={t('stat.flagged')} value={stats.flagged} tone={stats.flagged > 0 ? 'warn' : undefined} />
-        <StatTile label={t('stat.openPullRequests')} value={stats.openPullRequests} />
+        <StatTile label={t('stat.total')} value={fmt.number(stats.total)} />
+        <StatTile label={t('stat.unscored')} value={fmt.number(stats.unscored)} tone={stats.unscored > 0 ? 'warning' : undefined} />
+        <StatTile label={t('stat.unranked')} value={fmt.number(stats.unranked)} tone={stats.unranked > 0 ? 'warning' : undefined} />
+        <StatTile label={t('stat.undated')} value={fmt.number(stats.undated)} tone={stats.undated > 0 ? 'warning' : undefined} />
+        <StatTile label={t('stat.unowned')} value={fmt.number(stats.unowned)} tone={stats.unowned > 0 ? 'warning' : undefined} />
+        <StatTile label={t('stat.flagged')} value={fmt.number(stats.flagged)} tone={stats.flagged > 0 ? 'warning' : undefined} />
+        <StatTile label={t('stat.openPullRequests')} value={fmt.number(stats.openPullRequests)} />
         {/* WHICH planner produced this project's Epics. Server-computed (the manager
             read path carries `stats.decomposition`) — the component renders the
             number, it does not derive one from a list it happens to have loaded. */}
         {stats.decomposition && (
           <StatTile
             label={tPlanning('stat.heuristicEpics')}
-            value={stats.decomposition.heuristic}
-            tone={stats.decomposition.degraded ? 'warn' : undefined}
+            value={fmt.number(stats.decomposition.heuristic)}
+            tone={stats.decomposition.degraded ? 'warning' : undefined}
           />
         )}
       </div>
@@ -1026,18 +1027,6 @@ function Notice({ title, body, muted, retryLabel, onRetry }: {
       {onRetry && retryLabel && (
         <button type="button" style={{ ...primaryBtn, marginTop: 16 }} onClick={onRetry}>{retryLabel}</button>
       )}
-    </div>
-  );
-}
-
-function StatTile({ label, value, tone }: { label: string; value: number; tone?: 'warn' }) {
-  const fmt = useFormat();
-  return (
-    <div style={{ ...panelStyle, padding: 14 }}>
-      <div style={{ fontSize: '1.6rem', fontWeight: 800, color: tone === 'warn' ? 'var(--warning-text)' : 'var(--text-primary)' }}>
-        {fmt.number(value)}
-      </div>
-      <div style={{ ...mutedStyle, marginTop: 2 }}>{label}</div>
     </div>
   );
 }

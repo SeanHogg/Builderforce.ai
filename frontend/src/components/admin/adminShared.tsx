@@ -327,6 +327,16 @@ export function composeMailto(email: string, subject: string, body: string): str
   return `mailto:${encodeURIComponent(email)}?${q.toString()}`;
 }
 
+/** Value colour of a {@link StatTile}. Theme tokens only; `accent` is the brand colour. */
+export type StatTileTone = 'success' | 'error' | 'warning' | 'accent';
+
+const STAT_TILE_TONE_COLOR: Record<StatTileTone, string> = {
+  success: 'var(--success)',
+  error: 'var(--error)',
+  warning: 'var(--warning)',
+  accent: 'var(--accent)',
+};
+
 /**
  * One headline number. Shared by every admin panel that answers with a row of
  * stats — the same tile at different scopes, so a funnel, a visitor drawer and
@@ -341,22 +351,18 @@ export function StatTile({
   hint,
   tone,
   footer,
+  badge,
 }: {
   label: string;
   value: string;
   hint?: string;
-  tone?: 'success' | 'error' | 'warning';
+  tone?: StatTileTone;
   /** Drawn under the hint — e.g. the Insights home's sparkline. */
   footer?: React.ReactNode;
+  /** Drawn inline beside the value — e.g. a regression chip. */
+  badge?: React.ReactNode;
 }): React.JSX.Element {
-  const toneColor =
-    tone === 'success'
-      ? 'var(--success)'
-      : tone === 'error'
-        ? 'var(--error)'
-        : tone === 'warning'
-          ? 'var(--warning)'
-          : 'var(--text-strong)';
+  const toneColor = tone ? STAT_TILE_TONE_COLOR[tone] : 'var(--text-strong)';
   return (
     <div
       style={{
@@ -375,7 +381,14 @@ export function StatTile({
         {label}
       </div>
       <div style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: toneColor, marginTop: 2 }}>
-        {value}
+        {badge == null ? (
+          value
+        ) : (
+          <span style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+            <span>{value}</span>
+            {badge}
+          </span>
+        )}
       </div>
       {hint && <div className="text-muted" style={{ fontSize: 'var(--font-size-eyebrow)', marginTop: 2 }}>{hint}</div>}
       {footer != null && <div style={{ marginTop: 4 }}>{footer}</div>}

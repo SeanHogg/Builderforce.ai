@@ -10,6 +10,7 @@ import type { CloudRunModelState } from './cloudRunModelPolicy';
 import { commitRunMemory, describeVerifyOutcome, recordRunVerifyEvents, runVerifyPhase } from './runEndMemory';
 import { runSandboxVerify, type VerifyShell } from '../sandbox/sandboxVerify';
 import type { RunSandbox } from '../sandbox/runSandbox';
+import { snapshotWrittenHashes } from './writtenFileHashes';
 
 /**
  * The shared verify-then-remember tail, run from this file so it can move the run's
@@ -81,7 +82,7 @@ export async function runVerifyThenRemember(args: {
       summary: finalOutput?.trim() || `${agentLabel} finished ${taskRow.title}`,
       verifyNote: describeVerifyOutcome(outcome),
       writtenPaths: [...writtenPaths],
-      ...(args.writtenHashes?.size ? { writtenFileHashes: Object.fromEntries(args.writtenHashes) } : {}),
+      ...(args.writtenHashes?.size ? { writtenFileHashes: snapshotWrittenHashes(args.writtenHashes) } : {}),
       codeMap: args.runKnowledge.consolidate(),
     });
   } catch (error) {

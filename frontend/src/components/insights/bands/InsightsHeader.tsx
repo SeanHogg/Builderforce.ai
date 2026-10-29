@@ -3,7 +3,8 @@
  * release to compare, and the way into Live.
  *
  * `HEADER_SLOTS` holds the query bar (`ReplayFilterSlot`: `ReplayFilterBar` +
- * saved segments, S4c); S4d adds the proof chip — a row, not an edit to this layout.
+ * saved segments, S4c) and the proof chip (S4d), which draws itself only while
+ * the site's project has a live proof — a row each, not an edit to this layout.
  */
 
 import type { ComponentType } from 'react';
@@ -11,11 +12,13 @@ import { useTranslations } from 'next-intl';
 import { replayApi, REPLAY_WINDOWS, type ReplayWindow } from '@/lib/replayApi';
 import { useAdminData } from '@/components/admin/adminShared';
 import { ReplayFilterSlot } from '@/components/replay/filter/ReplayFilterSlot';
+import { ProofChip } from './ProofChip';
 import { useInsightsScope } from '../insightsScope';
 import { usePanel } from '../usePanel';
 
 export const HEADER_SLOTS: ReadonlyArray<{ id: string; Component: ComponentType }> = [
   { id: 'filter', Component: ReplayFilterSlot },
+  { id: 'proof', Component: ProofChip },
 ];
 
 export function InsightsHeader() {

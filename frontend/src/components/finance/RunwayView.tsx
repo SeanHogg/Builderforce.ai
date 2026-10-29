@@ -26,6 +26,7 @@ import {
   cardStyle, emptyStyle, errorStyle, gapChipStyle, mutedStyle, primaryButtonStyle, rowStyle, sectionStyle,
   tableStyle, tableWrapStyle, tdStyle, thStyle,
 } from './financeStyles';
+import { StatTile } from '@/components/admin/adminShared';
 
 export function RunwayView({ report, onDeclared }: { report: RunwayReport; onDeclared: () => void }) {
   const t = useTranslations('financeHub.runway');
@@ -79,10 +80,10 @@ export function RunwayView({ report, onDeclared }: { report: RunwayReport; onDec
           ) : (
             <>
               <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))' }}>
-                <Stat label={t('cash')} value={money(observed.cash)} />
-                <Stat label={t('netBurn')} value={money(observed.monthlyBurn)} />
-                <Stat label={t('mrr')} value={money(observed.mrr)} />
-                <Stat label={t('runwayMonths')} value={observed.runwayMonths == null ? '—' : t('months', { count: Math.round(observed.runwayMonths) })} />
+                <StatTile label={t('cash')} value={money(observed.cash)} />
+                <StatTile label={t('netBurn')} value={money(observed.monthlyBurn)} />
+                <StatTile label={t('mrr')} value={money(observed.mrr)} />
+                <StatTile label={t('runwayMonths')} value={observed.runwayMonths == null ? '—' : t('months', { count: Math.round(observed.runwayMonths) })} />
               </div>
               {observedVerdict && <RunwayVerdictCard verdict={observedVerdict} provenance="observed" compact />}
             </>
@@ -148,11 +149,3 @@ export function RunwayView({ report, onDeclared }: { report: RunwayReport; onDec
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div style={{ fontSize: 'var(--font-size-eyebrow)', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-secondary)' }}>{label}</div>
-      <div style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 700, color: 'var(--text-primary)' }}>{value}</div>
-    </div>
-  );
-}

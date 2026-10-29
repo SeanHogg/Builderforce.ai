@@ -2,8 +2,9 @@
  * The ONE visitor panel for Admin ▸ Growth ▸ Visitors (builderforce.ai's
  * `activity_log` journey). Journey and lead are tabs of the same panel because
  * they are two readings of the same visitor; the tabs are `VISITOR_PANEL_TABS`
- * (data, with `requires`), and the panel shares the Insights panel's width
- * memory (`insights-panel`) so a reader sizes the side panel once.
+ * (`visitorPanelTabs.ts`: data, with `requires`, shared with the Insights
+ * `recording` kind), and the panel shares the Insights panel's width memory
+ * (`insights-panel`) so a reader sizes the side panel once.
  *
  * Copy and message stay on the header, reachable from either tab; erase lives
  * in the lead body beside the data it deletes, and closes the panel when done.
@@ -17,23 +18,12 @@ import { BroadcastComposer } from '@/components/admin/panels/BroadcastComposer';
 import { GuestSessionCopyButton } from '@/components/visitors/GuestSessionCopyButton';
 import { VisitorJourneyTimeline } from '@/components/visitors/VisitorJourneyTimeline';
 import { VisitorLeadDetail } from '@/components/visitors/VisitorLeadDetail';
-
-export type VisitorPanelTabId = 'journey' | 'lead';
+import { VISITOR_PANEL_TABS, offeredTabs, type VisitorPanelTabId, type VisitorTabFacts } from '@/components/visitors/visitorPanelTabs';
 
 export interface VisitorPanelTabProps {
   visitorId: string;
   session: AdminGuestSession | null;
   onErased: () => void;
-}
-
-export interface VisitorPanelTab {
-  id: VisitorPanelTabId;
-  /** Full keys (several admin namespaces share this panel). */
-  labelKey: string;
-  titleKey: string;
-  /** A fact the tab needs; a tab whose requirement is unmet is not offered. */
-  requires?: 'session';
-  Component: ComponentType<VisitorPanelTabProps>;
 }
 
 function JourneyTab({ visitorId }: VisitorPanelTabProps) {
@@ -44,24 +34,18 @@ function LeadTab({ visitorId, session, onErased }: VisitorPanelTabProps) {
   return <VisitorLeadDetail visitorId={visitorId} session={session} onErased={onErased} />;
 }
 
-export const VISITOR_PANEL_TABS: ReadonlyArray<VisitorPanelTab> = [
-  {
-    id: 'journey',
-    labelKey: 'admin.insights.tabJourney',
-    titleKey: 'admin.visitorFlow.journeyTitle',
-    Component: JourneyTab,
-  },
-  {
-    id: 'lead',
-    labelKey: 'admin.insights.tabLead',
-    titleKey: 'admin.sessions.drawerTitle',
-    Component: LeadTab,
-  },
-];
-
-const FACTS: Record<NonNullable<VisitorPanelTab['requires']>, (session: AdminGuestSession | null) => boolean> = {
-  session: (session) => session != null,
+/** This surface's body for each registry row. */
+const TAB_BODIES: Record<VisitorPanelTabId, ComponentType<VisitorPanelTabProps>> = {
+  journey: JourneyTab,
+  lead: LeadTab,
 };
+
+/**
+ * What this surface can state: its visitors are always known by id (the lead tab reads
+ * the `activity_log` by `visitorId`, with or without an enrolled session), so the
+ * lead tab is always offered here.
+ */
+const ADMIN_FACTS: VisitorTabFacts = { identified: true };
 
 export interface VisitorPanelProps {
   visitorId: string | null;
@@ -87,10 +71,10 @@ export function VisitorPanel({
 
   if (!visitorId) return null;
   const id = visitorId;
-  const tabs = VISITOR_PANEL_TABS.filter((row) => !row.requires || FACTS[row.requires](session));
+  const tabs = offeredTabs(VISITOR_PANEL_TABS, ADMIN_FACTS);
   const active = tabs.find((row) => row.id === tab) ?? tabs[0];
   if (!active) return null;
-  const Body = active.Component;
+  const Body = TAB_BODIES[active.id];
 
   const erased = () => {
     onErased?.();

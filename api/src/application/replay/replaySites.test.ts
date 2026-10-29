@@ -120,8 +120,8 @@ describe('getSiteForTenant', () => {
 
 describe('siteSettings', () => {
   it('fills defaults and bounds the numbers', () => {
-    expect(siteSettings({ keepRate: 4, retentionDays: 365, recorderChannel: '  ab12cd34 ' })).toMatchObject({
-      keepRate: 1, retentionDays: 90, recorderChannel: 'ab12cd34', maskAllText: false,
+    expect(siteSettings({ keepRate: 4, retentionDays: 365, recorderChannel: '  ab12cd34ef56 ' })).toMatchObject({
+      keepRate: 1, retentionDays: 90, recorderChannel: 'ab12cd34ef56', maskAllText: false,
     });
     expect(siteSettings(null).retentionDays).toBe(30);
   });

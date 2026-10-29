@@ -18,6 +18,7 @@
  */
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import type {
   ImprovementAudience,
@@ -37,7 +38,7 @@ import { composerTargets, useComposerBridge } from '@/components/insights/compos
 import { CodingAgentPicker } from './CodingAgentPicker';
 import { FollowUpPreview } from './FollowUpPreview';
 import { ApplyPageGate, actionResultNote, type ActionNote } from './PrescriptionActionGates';
-import { offeredActions, PRESCRIPTION_ACTION_UI } from './prescriptionActionUi';
+import { offeredLinkActions, offeredActions, PRESCRIPTION_ACTION_UI } from './prescriptionActionUi';
 import { useInsightsLevel } from './useInsightsLevel';
 import { PromptBox } from '../prompt/PromptBox';
 
@@ -76,7 +77,9 @@ export function PrescriptionActions({ siteId, prescription, onChanged, only, com
   const [projectId, setProjectId] = useState<number | null>(projectScope?.currentProjectId ?? null);
   const [agentRef, setAgentRef] = useState<string | null>(null);
   const offered = offeredActions(prescription.next, only, { composer: bridge !== null });
-  if (offered.length === 0) return null;
+  // Steps taken outside the API (Build the preview): the DTO says when they are open.
+  const links = only ? [] : offeredLinkActions(prescription);
+  if (offered.length === 0 && links.length === 0) return null;
   const needsProject = offered.some(({ ui }) => ui.project);
   const needsAgent = offered.some(({ ui }) => ui.agent);
   const projects = projectScope?.projects ?? [];
@@ -151,6 +154,17 @@ export function PrescriptionActions({ siteId, prescription, onChanged, only, com
             >
               <Icon name={ui.icon} size={14} /> {t(`actions.${ui.labelKey}`)}
             </button>
+          ))}
+          {links.map(({ row, href }) => (
+            <Link
+              key={row.id}
+              href={href}
+              data-action={row.id}
+              className={TONE_CLASS[row.tone]}
+              style={{ minHeight: 44, display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)' }}
+            >
+              <Icon name={row.icon} size={14} /> {t(`actions.${row.labelKey}`)}
+            </Link>
           ))}
           {needsProject && !compact && projects.length > 0 && (
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)', fontSize: 'var(--font-size-small)' }}>

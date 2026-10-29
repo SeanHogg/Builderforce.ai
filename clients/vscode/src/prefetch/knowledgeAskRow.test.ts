@@ -3,9 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("vscode", () => ({}));
 
+import { InMemoryIngestManifest } from "@seanhogg/builderforce-memory/ingest";
+import { localSnapshotStore, type DirectorySource, type JudgementPort } from "@seanhogg/builderforce-memory/knowledge";
+import { buildStoredGraph, reviewPacks, runKnowledgeReview } from "@builderforce/agent-tools/knowledge";
 import { defineRegistry, runGate, type PrefetchPort } from "@builderforce/prefetch";
 import { OPEN_IN_GRAPH_LABEL_KEY, OPEN_KNOWLEDGE_GRAPH_COMMAND } from "@builderforce/agent-tools/prefetch";
-import { configureHostKnowledgeIndex, workspaceKnowledgeIndex } from "../knowledge/index/hostKnowledgeIndex";
+import { configureHostKnowledgeIndex, getHostKnowledgeIndex, workspaceKnowledgeIndex } from "../knowledge/index/hostKnowledgeIndex";
 import { KNOWLEDGE_ASK_ROWS, knowledgeAskExecutors } from "./knowledgeAskRow";
 import { knowledgeRootId } from "../knowledge/knowledgeRoots";
 import { VSCODE_PREFETCH_REGISTRY } from "./executors";
@@ -60,5 +63,64 @@ describe("knowledge.ask in the editor's gate", () => {
     expect(pass?.settled).toBe("prefetch");
     expect(pass?.tail[0]).toContain("## Knowledge index");
     expect(pass?.tail[0]).toContain("src/billing/");
+  });
+});
+
+describe("knowledge.ask over a REVIEWED root (the index filled by its review, not only symbol files)", () => {
+  const DOCS: Record<string, string> = {
+    "lease.md": "# Lease
+
+## Termination
+
+Either party may terminate the lease with 30 days notice.
+",
+    "policy.md": "# Policy
+
+Rent is paid monthly.
+",
+  };
+  const source = (): DirectorySource => ({
+    rootId: knowledgeRootId(ROOT),
+    title: "docs",
+    async *list() {
+      for (const [p, text] of Object.entries(DOCS)) yield { path: p, hash: `h:${p}:${text.length}`, size: text.length };
+    },
+    async read(p) {
+      return { id: p, tenantId: "docs", title: p, content: { kind: "text", text: DOCS[p] ?? "", mediaType: "text/markdown" } };
+    },
+  });
+  const judgement: JudgementPort = {
+    async judge(req) {
+      return {
+        extract: req.items.map((i) => ({ ref: i.ref, claims: [{ subject: "lease", predicate: "requires", object: "30 days notice to terminate", quote: i.text.slice(0, 20) }], entities: [] })),
+        invalid: 0,
+      };
+    },
+  };
+
+  it("answers a question about a document from the index its review filled", async () => {
+    // No code at all: the only thing the index can know is what the review's graph gave it.
+    configureHostKnowledgeIndex({ workspaceRoots: () => [ROOT], idle: () => undefined, embedder: async () => undefined, symbolFiles: async () => [] });
+    const rootId = knowledgeRootId(ROOT);
+    let snapshot: string | undefined;
+    const ports = {
+      source: source(),
+      store: localSnapshotStore({ read: async () => snapshot, write: async (s) => { snapshot = s; } }),
+      manifest: new InMemoryIngestManifest(),
+      judgement,
+    };
+    await runKnowledgeReview(ports);
+    const graph = await buildStoredGraph({ rootId, store: ports.store, manifest: ports.manifest, packs: reviewPacks({}) });
+    expect(graph?.nodes.some((n) => n.kind === "claim")).toBe(true);
+
+    const before = await knowledgeAskExecutors(() => ROOT)["knowledge.ask"]!.run("what does the lease say about termination", new AbortController().signal);
+    expect(before).toBeUndefined();
+
+    await (await getHostKnowledgeIndex(rootId)).upsertFromGraph(graph!);
+    const out = await knowledgeAskExecutors(() => ROOT)["knowledge.ask"]!.run("what does the lease say about termination", new AbortController().signal);
+    expect(out?.text).toContain("lease.md");
+    expect((out?.data as { hits: number }).hits).toBeGreaterThan(0);
+    expect(out?.chips?.[0]).toMatchObject({ labelKey: OPEN_IN_GRAPH_LABEL_KEY, command: OPEN_KNOWLEDGE_GRAPH_COMMAND });
+    expect((out?.chips?.[0]?.args as { focus: string[] }).focus.some((f) => f.includes("lease.md"))).toBe(true);
   });
 });

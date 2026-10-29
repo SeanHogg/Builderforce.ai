@@ -59,12 +59,25 @@ export interface KnowledgeScopeRecord extends ScopeRecord {
 /** Code-pack analyzer snapshot, as produced by agent-tools `codeAnalysis.ts`. Opaque here. */
 export type AnalysisSnapshotPayload = Record<string, unknown>;
 
+/** GET …/knowledge/judge/estimate — what one judged section ≈ costs, where the SERVER routes it
+ *  (it alone knows the connected accounts and the routing). */
+export interface JudgeEstimate {
+  /** ≈ USD of one judged section; 0 when free or local; null when the price is unknown. */
+  perCallUsd: number | null;
+  /** The model the call routes to first; null when nothing is routable. */
+  model: string | null;
+  /** True when that model runs on the tenant's own machine — no cost. */
+  local: boolean;
+}
+
 export interface KnowledgeClient {
   /** KnowledgeStore over POST …/knowledge/write, GET …/knowledge/scopes, extracted cache routes. */
   store: KnowledgeStore;
   /** JudgementPort over POST …/knowledge/judge (a routed, usage-attributed model call). */
   judgement: JudgementPort;
   scopes(): Promise<KnowledgeScopeRecord[]>;
+  /** GET …/knowledge/judge/estimate — the confirm chip's per-call price (the project is the client's). */
+  judgeEstimate(): Promise<JudgeEstimate>;
   /** GET …/knowledge-graph?root=&focus=&maxNodes=&at= (server-built, cached). Null when the root
    *  (or, with `at`, that review's snapshot) is unknown. */
   graph(rootId: string, q?: GraphQuery): Promise<KnowledgeGraph | null>;

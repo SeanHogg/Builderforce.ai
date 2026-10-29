@@ -81,6 +81,15 @@ function osvLines(report: unknown): string[] {
         `${p.package?.name ?? '?'}@${p.package?.version ?? '?'}: ${(p.vulnerabilities ?? []).map((v) => v.id).filter(Boolean).join(', ')}`));
 }
 
+interface AuditCounts { critical: number; high: number; moderate: number; low: number; total: number }
+
+function npmAuditCounts(report: unknown): AuditCounts | undefined {
+    const v = (report as { metadata?: { vulnerabilities?: Partial<AuditCounts> & { info?: number } } } | undefined)?.metadata?.vulnerabilities;
+    if (!v) return undefined;
+    const n = (k: keyof AuditCounts) => Number(v[k] ?? 0) || 0;
+    return { critical: n('critical'), high: n('high'), moderate: n('moderate'), low: n('low'), total: n('total') || n('critical') + n('high') + n('moderate') + n('low') };
+}
+
 export function depsAudit(host: PrefetchExecHost): PrefetchRunner {
     return {
         async run(_request, signal) {

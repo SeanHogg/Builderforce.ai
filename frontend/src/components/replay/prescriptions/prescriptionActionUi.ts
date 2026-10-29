@@ -19,10 +19,17 @@
  *   • `requires: 'composer'` — drawn only where the host provides a composer bridge
  *     (the canvas's Measure ▸ Visitors); hidden everywhere else.
  *   • `tone` — primary for the action that makes the fix, the rest secondary/ghost.
+ *
+ * `PRESCRIPTION_LINK_ACTIONS` are the steps a person takes OUTSIDE the API: not a
+ * `next` entry but a link into the product, drawn when the DTO says the step is open.
+ * Today: "Build the preview" (`buildPreview`, set by the API while a hosted site's Fix it
+ * is applied with no preview release yet) — a person builds the edited workspace in the
+ * browser and publishes the build as a preview release (§5.1.4).
  */
 
-import type { ReplayPrescriptionRouteAction } from '@builderforce/interaction-contract';
+import type { ReplayPrescriptionDto, ReplayPrescriptionRouteAction } from '@builderforce/interaction-contract';
 import type { IconName } from '@/components/ui/Icon';
+import { studioFixPreviewHref } from '@/lib/studio/studioDeepLink';
 
 export type PrescriptionActionGate = 'none' | 'reason' | 'preview' | 'confirm' | 'promptTab' | 'audience' | 'composer';
 
@@ -70,4 +77,32 @@ export function offeredActions(
       if (ui.requires === 'composer' && !host.composer) return [];
       return [{ action, ui }];
     });
+}
+
+export interface PrescriptionLinkAction {
+  id: 'build-preview';
+  /** Under `replay.prescription.actions`. */
+  labelKey: string;
+  icon: IconName;
+  tone: PrescriptionActionUi['tone'];
+  /** The link for this fix, or null when the API does not offer the step (it decides; the UI never re-derives it). */
+  href: (prescription: ReplayPrescriptionDto) => string | null;
+}
+
+export const PRESCRIPTION_LINK_ACTIONS: ReadonlyArray<PrescriptionLinkAction> = [
+  {
+    id: 'build-preview',
+    labelKey: 'build-preview',
+    icon: 'code',
+    tone: 'primary',
+    href: (p) => (p.buildPreview ? studioFixPreviewHref(p.buildPreview.projectId, p.id) : null),
+  },
+];
+
+/** The link actions this fix offers right now, each with its address. */
+export function offeredLinkActions(prescription: ReplayPrescriptionDto): Array<{ row: PrescriptionLinkAction; href: string }> {
+  return PRESCRIPTION_LINK_ACTIONS.flatMap((row) => {
+    const href = row.href(prescription);
+    return href ? [{ row, href }] : [];
+  });
 }

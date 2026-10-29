@@ -20,6 +20,7 @@ import {
   buttonStyle, cardStyle, emptyStyle, gapChipStyle, mutedStyle, primaryButtonStyle, rowStyle, sectionStyle,
   tableStyle, tableWrapStyle, tdStyle, thStyle,
 } from './financeStyles';
+import { StatTile } from '@/components/admin/adminShared';
 
 type Source = 'observed' | 'declared';
 
@@ -60,10 +61,10 @@ export function CashflowView({ report }: { report: RunwayReport }) {
       ) : (
         <>
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(min(160px, 100%), 1fr))' }}>
-            <Stat label={t('inflows')} value={money(totals.inflows)} tone="var(--success-text)" />
-            <Stat label={t('outflows')} value={money(totals.outflows)} tone="var(--error-text)" />
-            <Stat label={t('net')} value={money(totals.net)} tone={totals.net >= 0 ? 'var(--success-text)' : 'var(--error-text)'} />
-            <Stat label={t('ending')} value={money(totals.ending)} />
+            <StatTile label={t('inflows')} value={money(totals.inflows)} tone="success" />
+            <StatTile label={t('outflows')} value={money(totals.outflows)} tone="error" />
+            <StatTile label={t('net')} value={money(totals.net)} tone={totals.net >= 0 ? 'success' : 'error'} />
+            <StatTile label={t('ending')} value={money(totals.ending)} />
           </div>
 
           <div style={{ ...cardStyle, display: 'grid', gap: 8 }}>
@@ -121,11 +122,3 @@ export function CashflowView({ report }: { report: RunwayReport }) {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
-  return (
-    <div style={cardStyle}>
-      <div style={{ fontSize: 'var(--font-size-eyebrow)', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-secondary)' }}>{label}</div>
-      <div style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 700, color: tone ?? 'var(--text-primary)' }}>{value}</div>
-    </div>
-  );
-}

@@ -47,7 +47,7 @@ function Meter({ percent, height = 8 }: { percent: number; height?: number }) {
  * percentage (see `swimlanes.is_parking`), so the meter is omitted rather than drawn
  * at zero, which would read as "no work done" on a ticket that may be nearly finished.
  */
-function Stat({ children, value, percent }: { children: ReactNode; value: string; percent: number | null }) {
+function ContextMeter({ children, value, percent }: { children: ReactNode; value: string; percent: number | null }) {
   return (
     <div style={card}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
@@ -165,21 +165,21 @@ export function TicketContextStrip({ taskId, onOpenEpic, onOpenTab, onChanged }:
         {/* PARKED beats a percentage. A blocked ticket used to read ~87% complete
             purely because `Blocked` sits late in the board's lane order — the most
             stuck ticket reporting as the most finished one. */}
-        <Stat
+        <ContextMeter
           value={completion.isParked ? t('parked') : `${completion.percent ?? 0}%`}
           percent={completion.isParked ? null : completion.percent}
         >
           {t('thisTicket')}
-        </Stat>
+        </ContextMeter>
         {rollup && (
-          <Stat value={`${rollup.percent}%`} percent={rollup.percent}>
+          <ContextMeter value={`${rollup.percent}%`} percent={rollup.percent}>
             {children ? t('thisEpic') : t('parentEpic')}
-          </Stat>
+          </ContextMeter>
         )}
         {signoff.required > 0 && (
-          <Stat value={`${signoff.completed}/${signoff.required}`} percent={signoff.percent}>
+          <ContextMeter value={`${signoff.completed}/${signoff.required}`} percent={signoff.percent}>
             {t('signoffs')}
-          </Stat>
+          </ContextMeter>
         )}
       </div>
 

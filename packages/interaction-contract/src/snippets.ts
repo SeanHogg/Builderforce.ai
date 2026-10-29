@@ -17,6 +17,15 @@ export const REPLAY_MANIFEST_PATH = '/replay/manifest.json';
 /** Unified embed rail path on the CDN (max-age 300). */
 export const REPLAY_EMBED_PATH = '/embed/v1.js';
 /**
+ * Hex characters of a recorder's content hash (`replay/r/recorder.<hash>.js`). The ONE
+ * source: `replay-sdk/scripts/emit-assets.mjs` (plain node, cannot import this file)
+ * writes that many, and the API accepts a site's `recorderChannel` as a pinned hash
+ * only at exactly this length. A replay-sdk test fails if the two drift.
+ */
+export const RECORDER_HASH_LENGTH = 12;
+/** A recorder content hash — what a site's `recorderChannel` holds to pin one build. */
+export const RECORDER_HASH_PATTERN = new RegExp(`^[0-9a-f]{${RECORDER_HASH_LENGTH}}$`);
+/**
  * The CDN manifest (`REPLAY_MANIFEST_PATH`). `latest` names the hashed
  * recorder the config answer hands the loader; `player` names the hashed
  * rrweb Replayer bundle (global `BuilderforceReplayPlayer`) and its
@@ -24,6 +33,10 @@ export const REPLAY_EMBED_PATH = '/embed/v1.js';
  */
 export interface ReplayManifest {
   latest: { version: string; url: string; hash: string; builtAt: string };
+  /** Platform pin (rollback, §3.5): wins over `latest` for sites on no channel. Carried across releases by `cdn-publish.sh`. */
+  pinned?: { version?: string; url: string; hash?: string };
+  /** Named channels (e.g. `stable`) a site's `recorderChannel` may select. Carried across releases by `cdn-publish.sh`. */
+  channels?: Record<string, { version?: string; url: string; hash?: string }>;
   player?: { url: string; cssUrl: string; rrweb: string };
   /** The page-review kit (`deriveSelector` + `applyVisualPatch`) the capture runner injects into the page under review. */
   pageKit?: { url: string };

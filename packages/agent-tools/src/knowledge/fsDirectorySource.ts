@@ -73,9 +73,18 @@ export interface FsDirectorySourceOptions {
 const norm = (p: string): string => p.replace(/\\/g, '/').replace(/\/+$/, '');
 const join = (a: string, b: string): string => (a ? `${a}/${b}` : b);
 
+/**
+ * Whether a root-relative path sits in the host's own `.builderforce/` state (at any depth)
+ * rather than being one of the review's two inputs — analysis output, snapshots, indexes.
+ */
+export function isBuilderforceState(rel: string): boolean {
+    const path = rel.replace(/\\/g, '/');
+    return path.split('/').includes('.builderforce') && !BUILDERFORCE_INPUTS.has(path);
+}
+
 /** Whether a root-relative file is listed (`.builderforce/` holds only two review inputs). */
 export function listsFile(rel: string): boolean {
-    return !rel.startsWith('.builderforce/') || BUILDERFORCE_INPUTS.has(rel);
+    return !isBuilderforceState(rel);
 }
 
 export function createFsDirectorySource(opts: FsDirectorySourceOptions): DirectorySource {

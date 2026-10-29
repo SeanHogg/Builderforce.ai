@@ -6,6 +6,7 @@ import { managerApi, type StallCensusResponse } from '@/lib/builderforceApi';
 import { ticketHref } from '@/lib/ticketHref';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { StatTile } from '@/components/admin/adminShared';
 /**
  * The AI Manager's STALL CENSUS and the systemic findings it raised from it.
  *
@@ -39,20 +40,6 @@ const sectionTitleStyle: CSSProperties = { fontWeight: 700, fontSize: '0.95rem',
 const mutedStyle: CSSProperties = { color: 'var(--text-muted)', fontSize: '0.8rem' };
 
 /** One headline number. Grid-placed by the caller so the row wraps on a narrow screen. */
-function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
-  return (
-    <div style={{
-      background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
-      borderRadius: 'var(--radius-lg)', padding: '10px 12px', minWidth: 0,
-    }}>
-      <div style={{ fontSize: '1.35rem', fontWeight: 700, color: tone ?? 'var(--text-primary)', lineHeight: 1.2 }}>
-        {value}
-      </div>
-      <div style={{ ...mutedStyle, marginTop: 2 }}>{label}</div>
-    </div>
-  );
-}
-
 export interface ManagerStallCensusProps {
   projectId: number;
 }
@@ -149,14 +136,14 @@ export function ManagerStallCensus({ projectId }: ManagerStallCensusProps) {
         marginTop: 12, display: 'grid', gap: 10,
         gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
       }}>
-        <Stat label={t('stat.managed')} value={String(data.managed)} />
-        <Stat
+        <StatTile label={t('stat.managed')} value={String(data.managed)} />
+        <StatTile
           label={t('stat.stalled')}
           value={String(data.stalled)}
-          tone={data.stalled > 0 ? 'var(--warning-text)' : undefined}
+          tone={data.stalled > 0 ? 'warning' : undefined}
         />
-        <Stat label={t('stat.moving')} value={String(data.moving)} />
-        <Stat label={t('stat.deepDiagnosed')} value={String(data.deepDiagnosed)} />
+        <StatTile label={t('stat.moving')} value={String(data.moving)} />
+        <StatTile label={t('stat.deepDiagnosed')} value={String(data.deepDiagnosed)} />
       </div>
 
       {underCovered && (

@@ -60,6 +60,28 @@ export function stripReplayMomentTrailer(description: string): string {
   return description.replace(TRAILER, '').replace(/\s+$/, '');
 }
 
+/**
+ * A ticket description as a person edits it: the text without the trailer, and a `save`
+ * that puts the SAME trailer back. An editor that persisted the stripped text would
+ * silently drop the moment (and with it the ticket's measured effect), so every
+ * surface that writes a description a person can see strips and re-attaches through
+ * this one pair. `save` returns null when nothing is left to store.
+ */
+export function replayMomentDescriptionEditor(raw: string | null | undefined): {
+  text: string;
+  save: (edited: string) => string | null;
+} {
+  const source = raw ?? '';
+  const trailer = TRAILER.exec(source)?.[0] ?? '';
+  return {
+    text: stripReplayMomentTrailer(source),
+    save: (edited) => {
+      if (!trailer) return edited || null;
+      return edited.trim() ? `${edited.replace(/\s+$/, '')}\n\n${trailer}` : trailer;
+    },
+  };
+}
+
 /** The moment a ticket description carries, or null. */
 export function replayMomentFromDescription(description: string | null | undefined): ReplayMoment | null {
   if (!description) return null;

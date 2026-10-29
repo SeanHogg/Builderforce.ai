@@ -48,4 +48,27 @@ describe('drizzleKnowledgeStore', () => {
     const { db } = fakeDb();
     expect(await drizzleKnowledgeStore(db, 1, 2).deleteRelationsOf(['fact:a', 'fact:b'])).toBe(2);
   });
+
+  it('deletes more than 500 refs in chunks of at most 500, summing what each removed', async () => {
+    // Each chunk binds its refs twice (from-ref and to-ref lists) on top of a fixed
+    // tenant/project predicate, so a statement's parameter count names its chunk size.
+    const wheres: unknown[] = [];
+    const db = { delete: () => ({ where: (w: unknown) => { wheres.push(w); return { returning: async () => [{ id: 'r' }] }; } }) } as never;
+    const paramsOf = (w: unknown): number => dialect.sqlToQuery(w as never).params.length;
+    const store = drizzleKnowledgeStore(db, 1, 2);
+
+    await store.deleteRelationsOf('fact:only');
+    const fixed = paramsOf(wheres[0]) - 2;
+    wheres.length = 0;
+
+    const refs = Array.from({ length: 1_200 }, (_, i) => `fact:k${i}` as never);
+    expect(await store.deleteRelationsOf(refs)).toBe(3);
+    expect(wheres.map((w) => (paramsOf(w) - fixed) / 2)).toEqual([500, 500, 200]);
+  });
+
+  it('makes no statement for an empty list', async () => {
+    const { db, seen } = fakeDb();
+    expect(await drizzleKnowledgeStore(db, 1, 2).deleteRelationsOf([])).toBe(0);
+    expect(seen.where).toBeUndefined();
+  });
 });

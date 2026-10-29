@@ -1,3 +1,4 @@
+import { stripReplayMomentTrailer } from '@builderforce/interaction-contract';
 import { MathAwareText } from '@/components/academic/MathAwareText';
 import type { CreationNodeData } from '../types';
 import styles from '../styles/marketing.module.css';
@@ -9,7 +10,8 @@ import styles from '../styles/marketing.module.css';
 
 export function authoredText(data: CreationNodeData): string | null {
   const value = [data.content, data.markdown, data.code, data.transcript, data.subtitle].find((candidate) => typeof candidate === 'string' && candidate.trim());
-  return typeof value === 'string' ? value : null;
+  // A ticket's description carries a hidden replay-moment trailer in `content`; a card shows only what a person wrote.
+  return typeof value === 'string' ? stripReplayMomentTrailer(value) : null;
 }
 
 export function asRecord(value: unknown, fallback: Record<string, unknown>): Record<string, unknown> {

@@ -1537,7 +1537,18 @@
       "preview": "preview",
       "fileCount": "{count, plural, one {# file} other {# files}}",
       "invalidSubdomain": "Enter a valid subdomain (letters, numbers and hyphens).",
-      "failed": "Publish failed"
+      "failed": "Publish failed",
+      "fixPreview": {
+        "title": "Preview for an Insights fix",
+        "description": "This workspace was opened for an Insights fix. Build it and publish the result as a preview: it sits beside the live site, which does not change. You review it through a private link, then publish from Insights.",
+        "action": "Publish as preview for this fix",
+        "done": "Preview published. The live site is unchanged.",
+        "openPreview": "Open the preview",
+        "linkNote": "A private link that works for 30 minutes.",
+        "noLink": "The private preview link could not be created. Open the fix in Insights to get a new one.",
+        "backToFix": "Back to the fix in Insights",
+        "failed": "The preview could not be published"
+      }
     },
     "deploy": {
       "title": "Deploy from GitHub",
@@ -3646,7 +3657,9 @@
       "stageEmpty": "Pick an issue to see its page here.",
       "lensesAria": "Page lenses",
       "doNextTitle": "Do next",
-      "doNextEmpty": "Ranked fixes appear here once enough sessions have arrived to measure them."
+      "doNextEmpty": "Ranked fixes appear here once enough sessions have arrived to measure them.",
+      "proofChip": "Proof",
+      "proofChipAria": "Open the proof scoreboard: {title}"
     },
     "goals": {
       "activation": "Activation",
@@ -3990,6 +4003,9 @@
         "empty": "No days in this window have data for this metric yet.",
         "chartLabel": "{metric} by day"
       }
+    },
+    "proof": {
+      "noMeasure": "This proof does not measure visitor behaviour, so there is no visitor scoreboard to show."
     }
   },
   "cloudAgentForm": {
@@ -35172,7 +35188,8 @@
         "dismiss": "Dismiss",
         "copy-prompt": "Copy prompt",
         "apply-page": "Apply to the page",
-        "apply-in-composer": "Apply in composer"
+        "apply-in-composer": "Apply in composer",
+        "build-preview": "Build the preview"
       },
       "confirm": {
         "start-test": {
@@ -35924,6 +35941,7 @@
     "reviewPlanModelCalls": "≈ {count} model calls",
     "reviewPlanCost": "≈ {cost}",
     "reviewPlanCostPending": "Cost is shown after routing.",
+    "reviewPlanCostLocal": "Runs on your local model — no cost.",
     "reviewPlanSkipped": "{count} skipped",
     "reviewConfirm": "Review",
     "reviewCancel": "Cancel",

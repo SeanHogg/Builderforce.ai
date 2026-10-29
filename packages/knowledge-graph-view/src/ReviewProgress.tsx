@@ -51,9 +51,11 @@ export function ReviewProgress({ run, labels, titleOf, onContinue }: ReviewProgr
                     {plan.skipped.length > 0 && <li>{fillTemplate(labels.reviewPlanSkipped, { count: plan.skipped.length })}</li>}
                     <li>
                         {fillTemplate(labels.reviewPlanModelCalls, { count: calls })}
-                        {estimate?.costUsd !== undefined && ` · ${fillTemplate(labels.reviewPlanCost, { cost: formatCost(estimate.costUsd) })}`}
+                        {estimate?.costUsd !== undefined && !estimate.local && ` · ${fillTemplate(labels.reviewPlanCost, { cost: formatCost(estimate.costUsd) })}`}
                     </li>
-                    {estimate?.costUsd === undefined && <li style={muted}>{labels.reviewPlanCostPending}</li>}
+                    {estimate?.local
+                        ? <li style={muted}>{labels.reviewPlanCostLocal}</li>
+                        : estimate?.costUsd === undefined && <li style={muted}>{labels.reviewPlanCostPending}</li>}
                 </ul>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button type="button" style={primaryButton} onClick={() => run.answer(true)}>{labels.reviewConfirm}</button>

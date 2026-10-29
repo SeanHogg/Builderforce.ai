@@ -23,6 +23,7 @@ import {
 } from '@/lib/growthApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultText } from '@/lib/apiClient';
+import { StatTile } from '@/components/admin/adminShared';
 // ---------------------------------------------------------------------------
 // Shared chrome
 // ---------------------------------------------------------------------------
@@ -242,6 +243,7 @@ export function SiteDomainPanel({ projectId }: { projectId: number }) {
 
 export function SiteTrafficPanel({ projectId }: { projectId: number }) {
   const t = useTranslations('site.traffic');
+  const fmt = useFormat();
   const [summary, setSummary] = useState<SiteTrafficSummary | null>(null);
   const [days, setDays] = useState<7 | 30 | 90>(30);
 
@@ -290,9 +292,9 @@ export function SiteTrafficPanel({ projectId }: { projectId: number }) {
         display: 'grid', gap: 10, marginTop: 12,
         gridTemplateColumns: 'repeat(auto-fit, minmax(7rem, 1fr))',
       }}>
-        <Stat label={t('views')} value={summary.totals.pageViews} />
-        <Stat label={t('visitors')} value={summary.totals.visitors} />
-        <Stat label={t('assets')} value={summary.totals.assetHits} />
+        <StatTile label={t('views')} value={fmt.number(summary.totals.pageViews)} />
+        <StatTile label={t('visitors')} value={fmt.number(summary.totals.visitors)} />
+        <StatTile label={t('assets')} value={fmt.number(summary.totals.assetHits)} />
       </div>
 
       {summary.days.length > 0 && (
@@ -324,17 +326,3 @@ export function SiteTrafficPanel({ projectId }: { projectId: number }) {
   );
 }
 
-function Stat({ label: name, value }: { label: string; value: number }) {
-  const fmt = useFormat();
-  return (
-    <div style={{
-      border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 10,
-      background: 'var(--surface-2)',
-    }}>
-      <div style={label}>{name}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary, var(--bg-elevated))' }}>
-        {fmt.number(value)}
-      </div>
-    </div>
-  );
-}

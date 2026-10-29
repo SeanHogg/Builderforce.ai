@@ -17,6 +17,7 @@
  *                     hash get `stale_at`, and the source's own object records its current hash
  *                     ('' = removed). Model FACTS are not marked: their staleness is derived
  *                     at graph build from the anchor hash vs the source's current hash.
+ *   judgeEstimate()   GET  …/knowledge/judge/estimate → ≈ USD of one judged section (+ local)
  *   getExtracted      GET  …/knowledge/extracted/:hash (404 → undefined)
  *   putExtracted      PUT  …/knowledge/extracted/:hash
  *
@@ -44,6 +45,7 @@ import {
   KnowledgeApiError,
   type AnalysisSnapshotPayload,
   type GraphQuery,
+  type JudgeEstimate,
   type KnowledgeFacts,
   type KnowledgeClient,
   type KnowledgeClientOptions,
@@ -158,6 +160,15 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
 
   const scopes = async (): Promise<KnowledgeScopeRecord[]> => (await jsonCall<{ scopes: KnowledgeScopeRecord[] }>('/knowledge/scopes')).scopes;
 
+  const judgeEstimate = async (): Promise<JudgeEstimate> => {
+    const out = await jsonCall<Partial<JudgeEstimate>>('/knowledge/judge/estimate');
+    return {
+      perCallUsd: typeof out.perCallUsd === 'number' && Number.isFinite(out.perCallUsd) && out.perCallUsd >= 0 ? out.perCallUsd : null,
+      model: typeof out.model === 'string' ? out.model : null,
+      local: out.local === true,
+    };
+  };
+
   const putExtracted = async (hash: string, extracted: Extracted[]): Promise<void> => {
     await call(`/knowledge/extracted/${encodeURIComponent(hash)}`, send('PUT', extracted));
   };
@@ -185,6 +196,7 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
         }),
     },
     scopes,
+    judgeEstimate,
     graph,
     facts,
     async search(rootId, q, k) {

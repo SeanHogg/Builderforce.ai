@@ -13,6 +13,7 @@
 
 import type { ComponentType } from 'react';
 import { replayApi } from '@/lib/replayApi';
+import { VISITOR_PANEL_TABS, type VisitorPanelTabId, type VisitorTabRequirement } from '@/components/visitors/visitorPanelTabs';
 import { SitesKind } from '@/components/insights/kinds/SitesKind';
 import { PlanKind } from '@/components/insights/kinds/PlanKind';
 import { IssueOverviewTab, IssueRecordingsTab } from './kinds/IssueKind';
@@ -27,6 +28,7 @@ import { FixChangeTab, FixMeasureTab, IssueFixTab, IssueHistoryTab } from './kin
 import { FixesKind } from './kinds/FixesKind';
 import { FixPromptTab } from './kinds/FixPromptTab';
 import { PagesKind } from './kinds/PagesKind';
+import { ProofKind } from './kinds/ProofKind';
 import { ReleaseKind } from './kinds/ReleaseKind';
 
 export type InsightPanelKind =
@@ -52,8 +54,8 @@ export type InsightPanelKindProps = {
   push: (level: InsightPanelLevel) => void;
 };
 
-/** A fact a tab needs before it is offered (tabs are filtered by data, not branches). */
-export type InsightTabRequirement = 'identified';
+/** A fact a tab needs before it is offered (tabs are filtered by data, not branches): the visitor panel's one vocabulary. */
+export type InsightTabRequirement = VisitorTabRequirement;
 
 export interface InsightPanelTab {
   id: string;
@@ -68,16 +70,25 @@ export interface InsightPanelKindDef {
   tabs: ReadonlyArray<InsightPanelTab>;
 }
 
+/** This surface's body for each row of the ONE visitor-panel registry. */
+const RECORDING_VISITOR_BODIES: Record<VisitorPanelTabId, ComponentType<InsightPanelKindProps>> = {
+  journey: RecordingJourneyTab,
+  lead: RecordingLeadTab,
+};
+
+/** The recording kind: Replay in front, then the visitor panel's tabs (`VISITOR_PANEL_TABS`: ids, order and `requires`). */
+const RECORDING_TABS: ReadonlyArray<InsightPanelTab> = [
+  { id: 'replay', labelKey: 'kinds.tabs.replay', Component: RecordingReplayTab },
+  ...VISITOR_PANEL_TABS.map((row): InsightPanelTab => ({
+    id: row.id,
+    labelKey: `kinds.tabs.${row.id}`,
+    Component: RECORDING_VISITOR_BODIES[row.id],
+    ...(row.requires ? { requires: row.requires } : {}),
+  })),
+];
+
 export const INSIGHT_PANEL_KINDS: ReadonlyArray<InsightPanelKindDef> = [
-  {
-    kind: 'recording',
-    labelKey: 'kinds.recording',
-    tabs: [
-      { id: 'replay', labelKey: 'kinds.tabs.replay', Component: RecordingReplayTab },
-      { id: 'journey', labelKey: 'kinds.tabs.journey', Component: RecordingJourneyTab },
-      { id: 'lead', labelKey: 'kinds.tabs.lead', Component: RecordingLeadTab, requires: 'identified' },
-    ],
-  },
+  { kind: 'recording', labelKey: 'kinds.recording', tabs: RECORDING_TABS },
   {
     kind: 'issue',
     labelKey: 'kinds.issue',
@@ -130,6 +141,8 @@ export const INSIGHT_PANEL_KINDS: ReadonlyArray<InsightPanelKindDef> = [
   // Creating / editing a funnel: a level over the funnel (D16 — never a second overlay).
   { kind: 'funnel_edit', labelKey: 'kinds.funnelEdit', tabs: [{ id: 'main', labelKey: 'kinds.funnelEdit', Component: FunnelEditKind }] },
   { kind: 'live', labelKey: 'kinds.live', tabs: [{ id: 'main', labelKey: 'kinds.live', Component: LiveKind }] },
+  // The live proof's measured state, from the header's proof chip (S4d). The level id is the realization id.
+  { kind: 'proof', labelKey: 'kinds.proof', tabs: [{ id: 'main', labelKey: 'kinds.proof', Component: ProofKind }] },
   { kind: 'sites', labelKey: 'kinds.sites', tabs: [{ id: 'main', labelKey: 'kinds.sites', Component: SitesKind }] },
   { kind: 'plan', labelKey: 'kinds.plan', tabs: [{ id: 'main', labelKey: 'kinds.plan', Component: PlanKind }] },
 ];
@@ -138,7 +151,7 @@ export function panelKindDef(kind: string): InsightPanelKindDef | undefined {
   return INSIGHT_PANEL_KINDS.find((row) => row.kind === kind);
 }
 
-/** How each requirement is checked for a level's id. */
+/** How the recording surface establishes each requirement for a level's id (the admin surface states its facts directly). */
 export const TAB_REQUIREMENTS: Readonly<Record<InsightTabRequirement, (siteId: string, id: string) => Promise<boolean>>> = {
   identified: async (siteId, id) => (await replayApi.getRecording(siteId, id)).identifiedId != null,
 };

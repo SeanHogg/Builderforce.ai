@@ -9,9 +9,12 @@
  * columns it returned, traces `replay.prescription.<action>` and bumps the site.
  *
  *   fix              a ticket with the brief; on a hosted app with a chosen coding
- *                    agent, `dispatchCloudRunForTask` with a `prescriptionFix` marker
- *                    that builds a PREVIEW release; a connected repo → the ticket asks
- *                    for a pull request. Never anything live.
+ *                    agent, `dispatchCloudRunForTask` runs the agent over the app's
+ *                    workspace only (it cannot build or publish); a PERSON then builds
+ *                    the preview from the IDE publish panel, which posts
+ *                    `preview=1&prescription=<id>` (`notePrescriptionPreview`). A
+ *                    connected repo → the ticket asks for a pull request. Never
+ *                    anything live.
  *   test             a DRAFT A/B test, live vs the fix's preview (`prescriptionReleases`)
  *   start-test       a person starts it
  *   follow-up        preview who/what first (optionally a drafted NEW sequence); `confirm`
@@ -57,7 +60,7 @@ import { humanDirected, stampExecutionAuthority } from '../runtime/executionAuth
 import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { resolveHumanActor, SYSTEM_ACTOR, type ActorIdentity } from '../activity/activityLog';
-import { loadPrescriptionRow, toPrescriptionDto, type PrescriptionRow } from './prescriptionReads';
+import { hostedContextOf, loadPrescriptionRow, toPrescriptionDto, type PrescriptionRow } from './prescriptionReads';
 import {
   createPrescriptionTest,
   hostedProjectOf,
@@ -199,7 +202,7 @@ const fix: PrescriptionActionDef = {
     let refusal: string | null = agentRef ? null : (hosted ? 'No coding agent was chosen, so the fix is a ticket.' : 'An external site is fixed through its ticket.');
     if (agentRef) {
       const payload = stampExecutionAuthority(
-        JSON.stringify({ cloudAgentRef: agentRef, prescriptionFix: { prescriptionId: ctx.row.id, siteId: ctx.site.id, preview: true } }),
+        JSON.stringify({ cloudAgentRef: agentRef }),
         humanDirected(ctx.actorId, `Insights fix ${ctx.row.id}`),
       );
       const deferred: Promise<unknown>[] = [];
@@ -307,7 +310,7 @@ export async function runPrescriptionAction(
   if (!def) throw new NotFoundError('Prescription action', action);
   const site = await getSiteForTenant(env, db, scope.tenantId, scope.siteId);
   const row = await loadPrescriptionRow(db, scope, prescriptionId);
-  const context = { hostedCanvas: site.kind === 'hosted' && site.projectId !== null };
+  const context = hostedContextOf(site);
   const dto = toPrescriptionDto(row, 0, context);
   if (!dto.next.includes(def.action)) throw new ConflictError(`"${def.action}" is not open for this fix now`);
   const now = opts.now ?? new Date();

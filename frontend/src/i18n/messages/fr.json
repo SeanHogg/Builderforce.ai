@@ -1537,7 +1537,18 @@
       "preview": "aperçu",
       "fileCount": "{count, plural, one {# fichier} other {# fichiers}}",
       "invalidSubdomain": "Saisissez un sous-domaine valide (lettres, chiffres et tirets).",
-      "failed": "Échec de la publication"
+      "failed": "Échec de la publication",
+      "fixPreview": {
+        "title": "Aperçu d’un correctif Insights",
+        "description": "Cet espace de travail a été ouvert pour un correctif Insights. Construisez-le et publiez le résultat comme aperçu : il se place à côté du site en ligne, qui ne change pas. Vous le relisez via un lien privé, puis vous publiez depuis Insights.",
+        "action": "Publier comme aperçu de ce correctif",
+        "done": "Aperçu publié. Le site en ligne n’a pas changé.",
+        "openPreview": "Ouvrir l’aperçu",
+        "linkNote": "Un lien privé valable 30 minutes.",
+        "noLink": "Le lien privé de l’aperçu n’a pas pu être créé. Ouvrez le correctif dans Insights pour en obtenir un nouveau.",
+        "backToFix": "Retour au correctif dans Insights",
+        "failed": "L’aperçu n’a pas pu être publié"
+      }
     },
     "deploy": {
       "title": "Déployer depuis GitHub",
@@ -3646,7 +3657,9 @@
       "stageEmpty": "Choisissez un problème pour voir sa page ici.",
       "lensesAria": "Vues de la page",
       "doNextTitle": "À faire ensuite",
-      "doNextEmpty": "Les correctifs classés apparaîtront ici dès que suffisamment de sessions permettront de les mesurer."
+      "doNextEmpty": "Les correctifs classés apparaîtront ici dès que suffisamment de sessions permettront de les mesurer.",
+      "proofChip": "Preuve",
+      "proofChipAria": "Ouvrir le tableau de bord de la preuve : {title}"
     },
     "goals": {
       "activation": "Activation",
@@ -3990,6 +4003,9 @@
         "empty": "Aucun jour de cette période n’a encore de données pour cette métrique.",
         "chartLabel": "{metric} par jour"
       }
+    },
+    "proof": {
+      "noMeasure": "Cette preuve ne mesure pas le comportement des visiteurs : il n’y a donc aucun tableau de bord des visiteurs à afficher."
     }
   },
   "cloudAgentForm": {
@@ -35172,7 +35188,8 @@
         "dismiss": "Écarter",
         "copy-prompt": "Copier le prompt",
         "apply-page": "Appliquer à la page",
-        "apply-in-composer": "Appliquer dans l’éditeur"
+        "apply-in-composer": "Appliquer dans l’éditeur",
+        "build-preview": "Construire l’aperçu"
       },
       "confirm": {
         "start-test": {
@@ -35924,6 +35941,7 @@
     "reviewPlanModelCalls": "≈ {count} appels au modèle",
     "reviewPlanCost": "≈ {cost}",
     "reviewPlanCostPending": "Le coût s’affiche après le routage.",
+    "reviewPlanCostLocal": "S’exécute sur votre modèle local — sans coût.",
     "reviewPlanSkipped": "{count} ignorés",
     "reviewConfirm": "Examiner",
     "reviewCancel": "Annuler",

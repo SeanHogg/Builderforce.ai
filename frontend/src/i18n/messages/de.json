@@ -1537,7 +1537,18 @@
       "preview": "Vorschau",
       "fileCount": "{count, plural, one {# Datei} other {# Dateien}}",
       "invalidSubdomain": "Gib eine gültige Subdomain ein (Buchstaben, Zahlen und Bindestriche).",
-      "failed": "Veröffentlichung fehlgeschlagen"
+      "failed": "Veröffentlichung fehlgeschlagen",
+      "fixPreview": {
+        "title": "Vorschau für eine Insights-Korrektur",
+        "description": "Dieser Arbeitsbereich wurde für eine Insights-Korrektur geöffnet. Erstelle ihn und veröffentliche das Ergebnis als Vorschau: Sie liegt neben der Live-Website, die sich nicht ändert. Du prüfst sie über einen privaten Link und veröffentlichst dann aus Insights.",
+        "action": "Als Vorschau für diese Korrektur veröffentlichen",
+        "done": "Vorschau veröffentlicht. Die Live-Website ist unverändert.",
+        "openPreview": "Vorschau öffnen",
+        "linkNote": "Ein privater Link, der 30 Minuten gültig ist.",
+        "noLink": "Der private Vorschau-Link konnte nicht erstellt werden. Öffne die Korrektur in Insights, um einen neuen zu erhalten.",
+        "backToFix": "Zurück zur Korrektur in Insights",
+        "failed": "Die Vorschau konnte nicht veröffentlicht werden"
+      }
     },
     "deploy": {
       "title": "Von GitHub bereitstellen",
@@ -3646,7 +3657,9 @@
       "stageEmpty": "Wähle ein Problem, um seine Seite hier zu sehen.",
       "lensesAria": "Seitenansichten",
       "doNextTitle": "Als Nächstes",
-      "doNextEmpty": "Priorisierte Korrekturen erscheinen hier, sobald genug Sitzungen eingegangen sind, um sie zu messen."
+      "doNextEmpty": "Priorisierte Korrekturen erscheinen hier, sobald genug Sitzungen eingegangen sind, um sie zu messen.",
+      "proofChip": "Nachweis",
+      "proofChipAria": "Nachweis-Anzeige öffnen: {title}"
     },
     "goals": {
       "activation": "Aktivierung",
@@ -3990,6 +4003,9 @@
         "empty": "Für diese Kennzahl liegen in diesem Zeitraum noch keine Tageswerte vor.",
         "chartLabel": "{metric} pro Tag"
       }
+    },
+    "proof": {
+      "noMeasure": "Dieser Nachweis misst kein Besucherverhalten, daher gibt es keine Besucher-Anzeige."
     }
   },
   "cloudAgentForm": {
@@ -35172,7 +35188,8 @@
         "dismiss": "Verwerfen",
         "copy-prompt": "Prompt kopieren",
         "apply-page": "Auf die Seite anwenden",
-        "apply-in-composer": "Im Editor anwenden"
+        "apply-in-composer": "Im Editor anwenden",
+        "build-preview": "Vorschau erstellen"
       },
       "confirm": {
         "start-test": {
@@ -35924,6 +35941,7 @@
     "reviewPlanModelCalls": "≈ {count} Modellaufrufe",
     "reviewPlanCost": "≈ {cost}",
     "reviewPlanCostPending": "Die Kosten werden nach dem Routing angezeigt.",
+    "reviewPlanCostLocal": "Läuft auf Ihrem lokalen Modell – keine Kosten.",
     "reviewPlanSkipped": "{count} übersprungen",
     "reviewConfirm": "Prüfen",
     "reviewCancel": "Abbrechen",

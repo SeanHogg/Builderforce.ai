@@ -142,17 +142,65 @@ describe('recordingStatus (live follow)', () => {
 });
 
 describe('live', () => {
+  const seen = new Date(NOW.getTime() - 10_000);
+  const row = (visitId: string, route: string) =>
+    ({ siteId: SITE, tenantId: 7, visitId, lastSeenAt: seen, route, deviceClass: 'phone', x: null, y: null, recordingId: null });
+
+  /** Answers the three live statements by their select shape: the capped list, the exact count, the route groups. */
+  function liveDb(answers: { rows: unknown[]; total: number; routes: Array<{ route: string; n: number }> }) {
+    const wheres: SQL[] = [];
+    const limits: number[] = [];
+    const groupBys: number[] = [];
+    const db = {
+      select: (shape?: Record<string, unknown>) => {
+        const kind = !shape ? 'rows' : 'route' in shape ? 'routes' : 'total';
+        const result = kind === 'rows' ? answers.rows : kind === 'routes' ? answers.routes : [{ n: String(answers.total) }];
+        const chain: Record<string, unknown> = {
+          from: () => chain,
+          where: (cond: SQL) => { wheres.push(cond); return chain; },
+          groupBy: () => { groupBys.push(1); return chain; },
+          orderBy: () => chain,
+          limit: async (n: number) => { limits.push(n); return result; },
+          then: (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve),
+        };
+        return chain;
+      },
+    };
+    return { db: db as never, wheres, limits, groupBys };
+  }
+
   it('counts visitors seen in the last minute, by route, inside the scope', async () => {
-    const seen = new Date(NOW.getTime() - 10_000);
-    const rows = [
-      { siteId: SITE, tenantId: 7, visitId: 'v1', lastSeenAt: seen, route: '/a', deviceClass: 'desktop', x: 1, y: 2, recordingId: null },
-      { siteId: SITE, tenantId: 7, visitId: 'v2', lastSeenAt: seen, route: '/a', deviceClass: 'phone', x: null, y: null, recordingId: 'r' },
-      { siteId: SITE, tenantId: 7, visitId: 'v3', lastSeenAt: seen, route: '/b', deviceClass: 'phone', x: null, y: null, recordingId: null },
-    ];
-    const { db, wheres } = fakeDb(rows);
+    const { db, wheres } = liveDb({
+      rows: [row('v1', '/a'), row('v2', '/a'), row('v3', '/b')],
+      total: 3,
+      routes: [{ route: '/a', n: 2 }, { route: '/b', n: 1 }],
+    });
     const live = await service(db).live(SCOPE);
     expect(live.active).toBe(3);
     expect(live.byRoute).toEqual([{ route: '/a', n: 2 }, { route: '/b', n: 1 }]);
-    expect(rendered(wheres[0]!).params).toEqual(expect.arrayContaining([7, SITE]));
+    expect(live.visitors).toHaveLength(3);
+    expect(wheres).toHaveLength(3);
+    for (const cond of wheres) expect(rendered(cond).params).toEqual(expect.arrayContaining([7, SITE]));
+  });
+
+  it('keeps active and byRoute exact past the visitor-list cap (a 5,000-visitor site)', async () => {
+    // The list is capped at 200 rows; the counts come from SQL aggregates, not from the rows.
+    const { db, limits, groupBys } = liveDb({
+      rows: Array.from({ length: 200 }, (_, i) => row(`v${i}`, '/a')),
+      total: 5_000,
+      routes: [{ route: '/a', n: 3_000 }, { route: '/b', n: 2_000 }],
+    });
+    const live = await service(db).live({ tenantId: 7, siteId: '22222222-2222-4333-8444-555555555555' });
+    expect(live.active).toBe(5_000);
+    expect(live.byRoute).toEqual([{ route: '/a', n: 3_000 }, { route: '/b', n: 2_000 }]);
+    expect(live.visitors).toHaveLength(200);
+    expect(groupBys).toHaveLength(1);
+    expect(limits).toContain(200);
+  });
+
+  it('is zero on an empty site', async () => {
+    const { db } = liveDb({ rows: [], total: 0, routes: [] });
+    expect(await service(db).live({ tenantId: 7, siteId: '33333333-2222-4333-8444-555555555555' }))
+      .toEqual({ active: 0, byRoute: [], visitors: [] });
   });
 });

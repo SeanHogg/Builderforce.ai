@@ -1,23 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { adminApi, type AdminEmailDeliveryFailurePage } from '@/lib/adminApi';
-import { AdminError, AdminLoading, errText } from '@/components/admin/adminShared';
-import { useAdminFormat } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, StatTile, errText, useAdminFormat } from '@/components/admin/adminShared';
 import { useFormat } from "@/i18n/useFormat";
 
 const PAGE_SIZE = 50;
 
-function Stat({ label, value }: { label: string; value: number }) {
-  const fmt = useFormat();
-  return (
-    <div style={{ flex: '1 1 150px', padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'var(--surface)' }}>
-      <div className="text-muted" style={{ fontSize: 12 }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 600, color: value ? 'var(--danger)' : 'var(--text-primary)' }}>{fmt.number(value)}</div>
-    </div>
-  );
-}
-
 export default function EmailDeliveriesPanel() {
   const { fmtDateTime } = useAdminFormat();
+  const fmt = useFormat();
   const [page, setPage] = useState<AdminEmailDeliveryFailurePage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -49,9 +39,9 @@ export default function EmailDeliveriesPanel() {
       </div>
       {summary && (
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-          <Stat label="All-time failures" value={summary.total} />
-          <Stat label="Last 24 hours" value={summary.last24Hours} />
-          <Stat label="Affected recipients" value={summary.affectedRecipients} />
+          <StatTile label="All-time failures" value={fmt.number(summary.total)} tone={summary.total ? 'error' : undefined} />
+          <StatTile label="Last 24 hours" value={fmt.number(summary.last24Hours)} tone={summary.last24Hours ? 'error' : undefined} />
+          <StatTile label="Affected recipients" value={fmt.number(summary.affectedRecipients)} tone={summary.affectedRecipients ? 'error' : undefined} />
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>

@@ -27,10 +27,13 @@
 
 import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { tenantDoor } from '../middleware/frontDoor';
+import { personOf } from '../middleware/personOf';
 import { TenantRole } from '../../domain/shared/types';
 import { forceReleaseLease } from '../../application/coordination/leaseService';
 import { getTicketCoordination } from '../../application/coordination/coordinationCapability';
-import { forget, listGovernedMemories, purgeExpiredMemories } from '../../application/memory/memoryService';
+import { forget, listGovernedMemories } from '../../application/memory/memoryService';
+import { purgeExpiredMemories } from '../../application/memory/purgeExpiredMemories';
 import {
   TRIAL_MAX_TICKETS,
   getRehearsal,
@@ -126,7 +129,7 @@ export function createAgentOpsRoutes(db: DbHandle) {
       tenantId,
       projectId: numQuery(c.req.query('projectId')),
       ticketId: numQuery(c.req.query('taskId')),
-    }, key, { userId: c.get('userId') ?? null, role: (c.get('role') as string | undefined) ?? null });
+    }, key, { userId: personOf(c, tenantDoor), role: (c.get('role') as string | undefined) ?? null });
     return json(result, result.ok ? 200 : 400);
   });
 

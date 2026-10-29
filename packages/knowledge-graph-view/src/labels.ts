@@ -122,6 +122,8 @@ export interface KnowledgeGraphLabels {
     reviewPlanCost: string;
     /** Shown in the confirm chip while the host cannot price the judgement pass. */
     reviewPlanCostPending: string;
+    /** Shown in the confirm chip when the judgement pass runs on the person's own local model. */
+    reviewPlanCostLocal: string;
     reviewPlanSkipped: string;
     reviewConfirm: string;
     reviewCancel: string;
@@ -279,6 +281,7 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
     reviewPlanModelCalls: '≈ {count} model calls',
     reviewPlanCost: '≈ {cost}',
     reviewPlanCostPending: 'Cost is shown after routing.',
+    reviewPlanCostLocal: 'Runs on your local model — no cost.',
     reviewPlanSkipped: '{count} skipped',
     reviewConfirm: 'Review',
     reviewCancel: 'Cancel',

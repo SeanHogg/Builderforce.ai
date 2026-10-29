@@ -126,7 +126,9 @@ function messagesFor(request: CompleteJsonRequest): ChatCompletionRequest['messa
   return request.system ? [{ role: 'system', content: request.system }, user] : [user];
 }
 
-function bodyFor(request: CompleteJsonRequest): ChatCompletionRequest {
+/** The chat-completion body a request is dispatched as — exported so a no-call route
+ *  preview reads the exact shape (tools / response_format) the real call routes on. */
+export function bodyFor(request: CompleteJsonRequest): ChatCompletionRequest {
   return {
     ...(request.model ? { model: request.model } : {}),
     messages: messagesFor(request),

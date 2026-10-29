@@ -1537,7 +1537,18 @@
       "preview": "vista previa",
       "fileCount": "{count, plural, one {# archivo} other {# archivos}}",
       "invalidSubdomain": "Introduce un subdominio válido (letras, números y guiones).",
-      "failed": "Error al publicar"
+      "failed": "Error al publicar",
+      "fixPreview": {
+        "title": "Vista previa de una corrección de Insights",
+        "description": "Este espacio de trabajo se abrió para una corrección de Insights. Compílalo y publica el resultado como vista previa: queda junto al sitio en vivo, que no cambia. La revisas con un enlace privado y luego publicas desde Insights.",
+        "action": "Publicar como vista previa de esta corrección",
+        "done": "Vista previa publicada. El sitio en vivo no ha cambiado.",
+        "openPreview": "Abrir la vista previa",
+        "linkNote": "Un enlace privado válido durante 30 minutos.",
+        "noLink": "No se pudo crear el enlace privado de la vista previa. Abre la corrección en Insights para obtener uno nuevo.",
+        "backToFix": "Volver a la corrección en Insights",
+        "failed": "No se pudo publicar la vista previa"
+      }
     },
     "deploy": {
       "title": "Desplegar desde GitHub",
@@ -3646,7 +3657,9 @@
       "stageEmpty": "Elige un problema para ver su página aquí.",
       "lensesAria": "Vistas de la página",
       "doNextTitle": "Qué hacer ahora",
-      "doNextEmpty": "Las correcciones priorizadas aparecerán aquí cuando lleguen suficientes sesiones para medirlas."
+      "doNextEmpty": "Las correcciones priorizadas aparecerán aquí cuando lleguen suficientes sesiones para medirlas.",
+      "proofChip": "Prueba",
+      "proofChipAria": "Abrir el marcador de la prueba: {title}"
     },
     "goals": {
       "activation": "Activación",
@@ -3990,6 +4003,9 @@
         "empty": "Aún no hay días con datos de esta métrica en este periodo.",
         "chartLabel": "{metric} por día"
       }
+    },
+    "proof": {
+      "noMeasure": "Esta prueba no mide el comportamiento de los visitantes, así que no hay marcador de visitantes que mostrar."
     }
   },
   "cloudAgentForm": {
@@ -35172,7 +35188,8 @@
         "dismiss": "Descartar",
         "copy-prompt": "Copiar prompt",
         "apply-page": "Aplicar a la página",
-        "apply-in-composer": "Aplicar en el editor"
+        "apply-in-composer": "Aplicar en el editor",
+        "build-preview": "Crear la vista previa"
       },
       "confirm": {
         "start-test": {
@@ -35924,6 +35941,7 @@
     "reviewPlanModelCalls": "≈ {count} llamadas al modelo",
     "reviewPlanCost": "≈ {cost}",
     "reviewPlanCostPending": "El coste se mostrará tras el enrutamiento.",
+    "reviewPlanCostLocal": "Se ejecuta en tu modelo local — sin coste.",
     "reviewPlanSkipped": "{count} omitidos",
     "reviewConfirm": "Revisar",
     "reviewCancel": "Cancelar",

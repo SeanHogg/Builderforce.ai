@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 import { LazyBuilderWorkspace } from '@/components/builder/LazyBuilderWorkspace';
@@ -12,18 +12,21 @@ import { StudioProjectActions } from './StudioProjectActions';
 import { OpenOnCanvasLink } from './OpenOnCanvasLink';
 import { WorkspacePicker } from '@/components/auth/WorkspacePicker';
 import { useWorkspaceSession } from '@/lib/auth/useWorkspaceSession';
+import { sendWorkspaceCommand } from '@/lib/workspace/workspaceCommands';
 
 /**
  * A Studio project: the full Builder workspace under Studio's bar. Signed out, it
  * asks for a sign-in in place (the pop-up), and opens the project the moment the
  * session and workspace are there. A link naming a project chat (`?chat=`, `?ticket=`)
- * opens that chat. A prompt sent from the Studio home does NOT come here any more: it
+ * opens that chat; `?panel=publish` opens the Publish panel. A prompt sent from the Studio home does NOT come here any more: it
  * opens a creation session on the Studio lens (`/studio/<sessionId>`, `lib/canvasLens.ts`).
  */
-export function StudioProject({ projectId, initialChatId = null, initialTicket = null }: {
+export function StudioProject({ projectId, initialChatId = null, initialTicket = null, openPublish = false }: {
   projectId: number;
   initialChatId?: number | null;
   initialTicket?: { kind: string; ref: string } | null;
+  /** The link asked for the Publish panel (`?panel=publish`, an Insights fix's "Build the preview"). */
+  openPublish?: boolean;
 }) {
   const t = useTranslations('studio.project');
   const { requestSignIn } = useSignInDialog();
@@ -34,6 +37,14 @@ export function StudioProject({ projectId, initialChatId = null, initialTicket =
   useEffect(() => {
     if (workspace.status === 'signedOut') requestSignIn();
   }, [workspace.status, requestSignIn]);
+
+  // A link into the Publish panel: addressed once, to the workspace that mounts for this project.
+  const publishRequested = useRef(false);
+  useEffect(() => {
+    if (!openPublish || publishRequested.current || !project) return;
+    publishRequested.current = true;
+    sendWorkspaceCommand(project.id, { type: 'openTab', tab: 'publish' }, { whenReady: true });
+  }, [openPublish, project]);
 
   return (
     // Its own stacking layer: the app's fixed starfield (z-index 0) otherwise paints

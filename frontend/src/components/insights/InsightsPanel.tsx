@@ -12,7 +12,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
-import { INSIGHT_PANEL_KINDS, TAB_REQUIREMENTS, panelKindDef, type InsightPanelLevel } from './panelKinds';
+import { offeredTabs } from '@/components/visitors/visitorPanelTabs';
+import { INSIGHT_PANEL_KINDS, TAB_REQUIREMENTS, panelKindDef, type InsightPanelLevel, type InsightTabRequirement } from './panelKinds';
 import { usePanel } from './usePanel';
 import { usePanelAddressSync } from './usePanelAddressSync';
 
@@ -59,7 +60,9 @@ export function InsightsPanel({ siteId, side = 'right' }: InsightsPanelProps) {
 
   if (!top || !def) return null;
 
-  const tabs = def.tabs.filter((tab) => !tab.requires || facts[factKey(tab.requires, top)] === true);
+  const levelFacts: Partial<Record<InsightTabRequirement, boolean>> = {};
+  for (const tab of def.tabs) if (tab.requires) levelFacts[tab.requires] = facts[factKey(tab.requires, top)] === true;
+  const tabs = offeredTabs(def.tabs, levelFacts);
   const active = tabs.find((tab) => tab.id === top.tab) ?? tabs[0];
   if (!active) return null;
   const Body = active.Component;

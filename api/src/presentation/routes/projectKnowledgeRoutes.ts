@@ -14,6 +14,7 @@
  *   PUT  /:projectId/knowledge/extracted/:hash              … upload (≤ 1 MB)
  *   PUT  /:projectId/code-analysis/:sha?root=               code-pack analyzer snapshot (≤ 2 MB)
  *   POST /:projectId/knowledge/judge                        routed, metered model call
+ *   GET  /:projectId/knowledge/judge/estimate               ≈ USD of one judged section (cached; no model call)
  *   GET  /:projectId/knowledge/search?root=&q=&k=           knowledge index search
  *
  * Tenancy: the door authenticates (JWT → `resolveMembership`, or the host key) and every
@@ -23,6 +24,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { tenantDoor, type FrontDoor } from '../middleware/frontDoor';
+import { personOf } from '../middleware/personOf';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { projectInTenantCached } from '../../application/project/projectOwnership';
@@ -31,11 +33,13 @@ import { getKnowledgeGraph } from '../../application/knowledge/getKnowledgeGraph
 import { listKnowledgeFacts, listKnowledgeScopes } from '../../application/knowledge/listKnowledge';
 import { factViewer } from '../../application/knowledge/deleteKnowledgeFact';
 import { searchKnowledge } from '../../application/knowledge/knowledgeIndexPort';
-import { KnowledgeWriteError, writeKnowledge } from '../../application/knowledge/writeKnowledge';
+import { writeKnowledge } from '../../application/knowledge/writeKnowledge';
+import { KnowledgeWriteError } from '../../application/knowledge/knowledgeWriteError';
 import {
   KNOWLEDGE_HASH_PATTERN, MAX_ANALYSIS_SNAPSHOT_BYTES, MAX_EXTRACTED_BYTES, putAnalysisSnapshot, putExtracted,
 } from '../../application/knowledge/knowledgePerception';
 import { MAX_JUDGE_ITEMS, judgeKnowledge } from '../../application/knowledge/judgeKnowledge';
+import { judgeCostFor } from '../../application/knowledge/judgeCostEstimate';
 import { parseBody, z } from './requestBody';
 
 const json = (body: unknown, status = 200): Response =>
@@ -131,6 +135,12 @@ function declaredTooLarge(c: Context, max: number): boolean {
   return Number.isFinite(declared) && declared > max;
 }
 
+/** The answer for a write or upload the caller got wrong; anything else is a server fault and rethrows. */
+function writeRefusal(error: unknown): Response {
+  if (error instanceof KnowledgeWriteError) return json({ error: error.message, code: error.code }, error.status);
+  throw error;
+}
+
 const tooLarge = (max: number) => json({ error: `request body exceeds ${max} bytes`, code: 'payload_too_large' }, 413);
 
 const byteLength = (value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).length;
@@ -143,8 +153,7 @@ export function createProjectKnowledgeRoutes(db: Db, door: FrontDoor = tenantDoo
   /** The person acting — null for a host key or another machine token. It decides the
    *  writer's provenance (`human` only from a person), a human fact's author, and the
    *  viewer the facts read reports. */
-  const person = (c: Context): string | null =>
-    door.agentHost || c.get('machineActor') ? null : ((c.get('userId') as string | undefined) ?? null);
+  const person = (c: Context): string | null => personOf(c, door);
 
   /** Composes the ports once the project is known to be the tenant's; else the 404. */
   const withPorts = async (c: Context, run: (ports: KnowledgePorts) => Promise<Response>): Promise<Response> => {
@@ -194,8 +203,7 @@ export function createProjectKnowledgeRoutes(db: Db, door: FrontDoor = tenantDoo
       );
       return json({ ok: true, ...result });
     } catch (error) {
-      if (error instanceof KnowledgeWriteError) return json({ error: error.message, code: error.code }, error.status);
-      throw error;
+      return writeRefusal(error);
     }
   }));
 
@@ -212,7 +220,11 @@ export function createProjectKnowledgeRoutes(db: Db, door: FrontDoor = tenantDoo
     if (declaredTooLarge(c, MAX_EXTRACTED_BYTES)) return tooLarge(MAX_EXTRACTED_BYTES);
     const extracted = await parseBody(c, ExtractedBody);
     if (byteLength(extracted) > MAX_EXTRACTED_BYTES) return tooLarge(MAX_EXTRACTED_BYTES);
-    await putExtracted(p, hash, extracted as unknown as Parameters<typeof putExtracted>[2]);
+    try {
+      await putExtracted(p, hash, extracted as unknown as Parameters<typeof putExtracted>[2]);
+    } catch (error) {
+      return writeRefusal(error);
+    }
     return json({ ok: true, hash });
   }));
 
@@ -237,6 +249,8 @@ export function createProjectKnowledgeRoutes(db: Db, door: FrontDoor = tenantDoo
     );
     return json(result);
   }));
+
+  router.get('/:projectId/knowledge/judge/estimate', (c) => withPorts(c, async (p) => json(await judgeCostFor(p.env, p.tenantId, p.projectId))));
 
   router.get('/:projectId/knowledge/search', (c) => withPorts(c, async (p) => {
     const rootId = c.req.query('root')?.trim();

@@ -108,6 +108,8 @@ export interface FinishGateArgs {
   evt: CloudRunRef;
   repoCtx: TicketRepoContext | null;
   writtenPaths: Set<string>;
+  /** The run's per-file content hashes; a path a child rewrote drops its entry. */
+  writtenHashes?: Map<string, string>;
   requiredSignoff: RequiredReviewSignoff | undefined;
   /** The run is a node of a delegation tree (has children to wait for / absorb). */
   delegated: boolean;
@@ -132,7 +134,7 @@ export async function evaluateFinishGates(a: FinishGateArgs): Promise<FinishGate
     const childBlock = await liveChildrenFinishBlock(db, tenantId, executionId);
     if (childBlock) return { block: childBlock, reason: 'children_running' };
     // The children committed from their own runs; the pull request is the whole tree's.
-    await absorbChildWrites(db, tenantId, executionId, repoCtx, writtenPaths);
+    await absorbChildWrites(db, tenantId, executionId, repoCtx, writtenPaths, a.writtenHashes);
   }
   const wrote = !!repoCtx && writtenPaths.size > 0;
   const verification = repoCtx && wrote ? await verifyWrittenFiles({ ...repoCtx, ref: repoCtx.branch }, writtenPaths) : null;

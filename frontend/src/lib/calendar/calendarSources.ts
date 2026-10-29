@@ -8,6 +8,7 @@ import {
   type CalendarEvent,
   type UndatedEntry,
 } from '@builderforce/creation-canvas-contract';
+import { stripReplayMomentTrailer } from '@builderforce/interaction-contract';
 import { calendarApi, meetingsApi, pmoApi, tasksApi } from '@/lib/builderforceApi';
 import { releasesApi } from '@/lib/releasesApi';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
@@ -308,7 +309,7 @@ const TASKS_SOURCE: CalendarSourceDefinition = {
         ...(task.dueDate ? { endISO: task.dueDate.slice(0, 10) } : {}),
         allDay: true,
         category: task.taskType,
-        ...(task.description ? { details: task.description } : {}),
+        ...(task.description ? { details: stripReplayMomentTrailer(task.description) } : {}),
       } satisfies CalendarEvent));
   },
   update: async (event, draft) => {

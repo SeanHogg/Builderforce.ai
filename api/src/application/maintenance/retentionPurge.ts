@@ -25,7 +25,7 @@ import { buildDatabase, buildTransactionalDatabase, type Db } from '../../infras
 import type { Env } from '../../env';
 import { SWEPT_TABLES, type SweptConnection } from './sweptTables';
 import { runPurgeBatch } from './boundedPurge';
-import { purgeExpiredMemories } from '../memory/memoryService';
+import { purgeExpiredMemories } from '../memory/purgeExpiredMemories';
 import { EXECUTION_PAYLOAD_RETENTION_DAYS, redactStaleExecutionPayloads } from '../runtime/executionPayloadRetention';
 import { COLUMN_RETENTION, runColumnRetention } from './columnRetention';
 import { DAY_MS } from '../../domain/shared/time';

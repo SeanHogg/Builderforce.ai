@@ -381,6 +381,24 @@ export async function fetchLivePreviewUrl(projectId: number | string): Promise<L
   }
 }
 
+type SiteAssets = Array<{ path: string; data: Uint8Array }>;
+
+/**
+ * POST a built site to the publish endpoint — the ONE multipart builder behind
+ * {@link publishSite} and {@link publishSitePreview}. One part per file, the part
+ * name being the dist-relative path, plus the endpoint's own `fields`.
+ * apiRequest leaves Content-Type unset for FormData so the multipart boundary
+ * survives — no header surgery needed.
+ */
+function postSiteAssets<T>(projectId: number | string, assets: SiteAssets, fields: Record<string, string>): Promise<T> {
+  const form = new FormData();
+  for (const [name, value] of Object.entries(fields)) form.append(name, value);
+  for (const { path, data } of assets) {
+    form.append(path, new Blob([data as BlobPart]), path);
+  }
+  return apiRequest<T>(`${IDE}/projects/${projectId}/publish`, { method: 'POST', body: form });
+}
+
 /**
  * Publish a built static site. `assets` are the files under the build's `dist/`
  * root (path is dist-relative). Sent as multipart/form-data — one part per file,
@@ -389,25 +407,42 @@ export async function fetchLivePreviewUrl(projectId: number | string): Promise<L
  */
 export async function publishSite(
   projectId: number | string,
-  assets: Array<{ path: string; data: Uint8Array }>,
+  assets: SiteAssets,
   subdomain?: string,
 ): Promise<SitePublishResult> {
-  const form = new FormData();
-  if (subdomain) form.append('subdomain', subdomain);
-  for (const { path, data } of assets) {
-    form.append(path, new Blob([data as BlobPart]), path);
-  }
-  // apiRequest leaves Content-Type unset for FormData so the multipart boundary
-  // survives — no header surgery needed.
-  const result = await apiRequest<SitePublishResult>(`${IDE}/projects/${projectId}/publish`, {
-    method: 'POST',
-    body: form,
-  });
+  const result = await postSiteAssets<SitePublishResult>(projectId, assets, subdomain ? { subdomain } : {});
   // Loaded on demand: `api.ts` sits in the root layout's static closure, and the
   // publish signal is only needed by the few surfaces that publish. The listeners
   // import the same module, so the import resolves to the instance they subscribed on.
   void import('./sitePublishEvents').then(({ notifySitePublished }) => notifySitePublished(Number(projectId), result));
   return result;
+}
+
+/** What a preview publish answers (`publishPreviewRelease`): a release beside the live one. */
+export interface SitePreviewResult {
+  /** The preview release's key — what `replayApi.previewUrl` turns into a short-lived link. */
+  versionToken: string;
+  /** The release still serving live. */
+  liveVersionToken: string;
+  assetCount: number;
+  totalBytes: number;
+  /** The site's LIVE address — the preview itself is only reachable through its signed link. */
+  url: string;
+  preview: true;
+}
+
+/**
+ * Publish a built site as a PREVIEW release for an Insights fix (PRD 33 §5.1.4): the
+ * release lands beside the live one and is recorded on the prescription; the live
+ * pointer does not move. It is not live, so — unlike {@link publishSite} — it does
+ * not announce a published site.
+ */
+export function publishSitePreview(
+  projectId: number | string,
+  assets: SiteAssets,
+  prescriptionId: string,
+): Promise<SitePreviewResult> {
+  return postSiteAssets<SitePreviewResult>(projectId, assets, { preview: '1', prescription: prescriptionId });
 }
 
 // ---------------------------------------------------------------------------

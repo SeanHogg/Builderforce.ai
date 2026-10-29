@@ -109,19 +109,45 @@ function acceptanceOf(raw: unknown): ReplayPrescriptionDto['acceptance'] {
 export interface PrescriptionDtoContext {
   /** The site is a Builderforce-hosted canvas app (`apply-in-composer`). */
   hostedCanvas?: boolean;
+  /** The hosted app's project (`buildPreview`); null for an external site. */
+  hostedProjectId?: number | null;
   /** Open fixes on the row's page (`apply-page`); defaults to the row itself. */
   pageAcceptedFixes?: number;
+  /** Tickets whose fix run is still going (`runningFixTaskIds`); a preview waits for them. */
+  runningFixTaskIds?: ReadonlySet<number>;
 }
 
 const PAGE_ACTION_KINDS: readonly ReplayPrescriptionActionKind[] = ['copy_prompt', 'apply_page', 'apply_in_composer'];
 const OPEN_STATUSES = new Set(['proposed', 'applied', 'measuring']);
 
+/** Whether the site is a hosted app, and which project. The ONE place `hostedCanvas` is decided. */
+export function hostedContextOf(site: { kind: string; projectId: number | null }): Pick<PrescriptionDtoContext, 'hostedCanvas' | 'hostedProjectId'> {
+  const hostedCanvas = site.kind === 'hosted' && site.projectId !== null;
+  return { hostedCanvas, hostedProjectId: hostedCanvas ? site.projectId : null };
+}
+
 /** The context of the rows of one site: hosted or not, and the open fixes per page. */
 export function dtoContextFor(site: { kind: string; projectId: number | null }, rows: readonly Pick<PrescriptionRow, 'pagePath' | 'status'>[]): (row: Pick<PrescriptionRow, 'pagePath'>) => PrescriptionDtoContext {
-  const hostedCanvas = site.kind === 'hosted' && site.projectId !== null;
+  const hosted = hostedContextOf(site);
   const open = new Map<string, number>();
   for (const r of rows) if (r.pagePath && OPEN_STATUSES.has(r.status)) open.set(r.pagePath, (open.get(r.pagePath) ?? 0) + 1);
-  return (row) => ({ hostedCanvas, ...(row.pagePath ? { pageAcceptedFixes: open.get(row.pagePath) ?? 0 } : {}) });
+  return (row) => ({ ...hosted, ...(row.pagePath ? { pageAcceptedFixes: open.get(row.pagePath) ?? 0 } : {}) });
+}
+
+/**
+ * Can a person build this fix's preview now? A hosted fix that was applied (the agent
+ * changed the app's workspace — it cannot build or publish) and has no preview yet. The
+ * browser builds it in the IDE and posts `preview=1&prescription=<id>` to the publish
+ * route; `notePrescriptionPreview` enforces the same rule on that write.
+ */
+function buildPreviewOf(
+  status: string,
+  actionKind: ReplayPrescriptionActionKind | null,
+  refs: { previewRelease: string | null },
+  ctx: PrescriptionDtoContext,
+): { projectId: number } | null {
+  if (status !== 'applied' || actionKind !== 'fix' || refs.previewRelease) return null;
+  return ctx.hostedProjectId == null ? null : { projectId: ctx.hostedProjectId };
 }
 
 /** One row as the contract DTO. `rank` is the row's place in its ranked list. */
@@ -130,6 +156,7 @@ export function toPrescriptionDto(row: PrescriptionRow, rank = 0, ctx: Prescript
   const refs = decodeActionRef(row.actionRef);
   const ruleActions = rule?.actions ?? [];
   const finding = findingOf(row.finding);
+  const actionKind = (ACTION_KINDS as readonly string[]).includes(row.actionKind ?? '') ? (row.actionKind as ReplayPrescriptionActionKind) : null;
   return {
     id: row.id,
     ruleId: row.ruleId,
@@ -154,9 +181,10 @@ export function toPrescriptionDto(row: PrescriptionRow, rank = 0, ctx: Prescript
       hostedCanvas: ctx.hostedCanvas,
       pageAcceptedFixes: ctx.pageAcceptedFixes,
     }),
-    actionKind: (ACTION_KINDS as readonly string[]).includes(row.actionKind ?? '') ? (row.actionKind as ReplayPrescriptionActionKind) : null,
+    actionKind,
     actionRef: row.actionRef,
     refs,
+    buildPreview: buildPreviewOf(row.status, actionKind, refs, ctx),
     acceptance: acceptanceOf(row.acceptance),
     measured: measuredOf(row.measured),
     dismissReason: row.dismissReason,
@@ -235,7 +263,7 @@ export async function getPrescription(env: Env, db: Db, scope: ReplayScope, pres
     toPrescriptionDto(
       await loadPrescriptionRow(db, scope, prescriptionId),
       0,
-      { hostedCanvas: await getSiteForTenant(env, db, scope.tenantId, scope.siteId).then((s) => s.kind === 'hosted' && s.projectId !== null) },
+      hostedContextOf(await getSiteForTenant(env, db, scope.tenantId, scope.siteId)),
     ), TTL);
 }
 

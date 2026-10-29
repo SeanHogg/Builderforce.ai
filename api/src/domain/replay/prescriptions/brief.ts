@@ -3,8 +3,10 @@
  * §5.1.4) — pure. One builder for Fix it and Ticket, so the agent and the person
  * read the same finding, prescription, change and acceptance.
  *
- *   preview  a hosted app with a coding agent: build it and publish a PREVIEW
- *            release — never live; a person publishes it from Insights (D13).
+ *   preview  a hosted app with a coding agent: change and verify the app's
+ *            WORKSPACE only. The agent cannot build or publish (building happens in
+ *            the browser); a person builds the PREVIEW release from Insights'
+ *            publish panel and publishes it after review — never live (D13).
  *   pr       a repo is connected: open a pull request, do not merge.
  *   ticket   a person does it.
  *
@@ -38,8 +40,8 @@ function changeLine(change: unknown): string | null {
 }
 
 const MODE_STEPS: Readonly<Record<BriefMode, string>> = {
-  preview: 'Make the change in this app, build it, and publish it as a PREVIEW release (publish with `preview` set and '
-    + '`prescription` = the id below). Do NOT publish it live: a person reviews the preview and publishes it from Insights.',
+  preview: "Make and verify the change in this app's workspace. Do NOT build or publish anything: a person builds the "
+    + 'PREVIEW release from Insights and publishes it after review.',
   pr: 'Make the change on a branch of the connected repository and open a pull request. Do not merge it: a person reviews it.',
   ticket: 'Make the change, then ship it in the next release; Insights measures it on that release.',
 };

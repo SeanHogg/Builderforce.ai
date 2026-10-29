@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatReplayMomentTrailer, parseReplayMoment, replayMomentFromDescription, stripReplayMomentTrailer, type ReplayMoment } from './replayMoment';
+import { formatReplayMomentTrailer, parseReplayMoment, replayMomentDescriptionEditor, replayMomentFromDescription, stripReplayMomentTrailer, type ReplayMoment } from './replayMoment';
 
 const MOMENT: ReplayMoment = {
   siteId: '11111111-1111-4111-8111-111111111111',
@@ -39,5 +39,22 @@ describe('replay moment trailer', () => {
     expect(stripReplayMomentTrailer(`Rage click on Buy.
 
 ${formatReplayMomentTrailer(MOMENT)}`)).toBe('Rage click on Buy.');
+  });
+
+  it('edits as visible text and re-attaches the same trailer on save', () => {
+    const trailer = formatReplayMomentTrailer(MOMENT);
+    const editor = replayMomentDescriptionEditor(`Rage click on Buy.\n\n${trailer}`);
+    expect(editor.text).toBe('Rage click on Buy.');
+    expect(editor.save('Rage click on Buy, fixed copy.')).toBe(`Rage click on Buy, fixed copy.\n\n${trailer}`);
+    expect(replayMomentFromDescription(editor.save('anything'))).toEqual(MOMENT);
+    expect(editor.save('')).toBe(trailer);
+  });
+
+  it('passes a plain description through untouched', () => {
+    const editor = replayMomentDescriptionEditor('Just a ticket');
+    expect(editor.text).toBe('Just a ticket');
+    expect(editor.save('Edited')).toBe('Edited');
+    expect(editor.save('')).toBeNull();
+    expect(replayMomentDescriptionEditor(null).text).toBe('');
   });
 });

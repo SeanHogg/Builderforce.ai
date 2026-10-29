@@ -68,15 +68,20 @@ export function withIdeWorkspace(
         if (r.ok) {
           changed(path, r.change ?? 'modified');
           if (run.writtenHashes) await recordWrittenHash(run.writtenHashes, path, content);
-        } 
+        }
         return r;
       },
       async editFile(path, oldString, newString, replaceAll) {
         const r = await editIdeWorkspaceFile(db, ide, { ...who, path, oldString, newString, ...(replaceAll !== undefined ? { replaceAll } : {}) });
         if (r.ok) {
           changed(path, 'modified');
-          // The edited text isn't returned: drop any earlier hash rather than keep a stale one.
-          run.writtenHashes?.delete(path);
+          // The edited text isn't returned, so read the file back: its hash is the text the run left.
+          if (run.writtenHashes) {
+            const left = await readIdeWorkspaceFile(ide.bucket, ide.projectId, path);
+            if (left.ok && typeof left.content === 'string') await recordWrittenHash(run.writtenHashes, path, left.content);
+            // Unreadable: drop any earlier hash rather than keep a stale one.
+            else run.writtenHashes.delete(path);
+          }
         }
         return r;
       },

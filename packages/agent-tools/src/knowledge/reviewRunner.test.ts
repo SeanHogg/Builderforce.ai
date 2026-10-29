@@ -3,7 +3,13 @@ import {
     localSnapshotStore, type DirectorySource, type JudgementPort, type ReviewProgress,
 } from '@seanhogg/builderforce-memory/knowledge';
 import { InMemoryIngestManifest } from '@seanhogg/builderforce-memory/ingest';
-import { buildStoredGraph, forcedManifest, planKnowledgeReview, reviewPacks, runKnowledgeReview, type KnowledgeReviewPorts } from './reviewRunner.js';
+import {
+    analysisSha, buildStoredGraph, forcedManifest, planKnowledgeReview, planKnowledgeReviewDetail, reviewPacks, runKnowledgeReview,
+    workspaceCodeAnalyzers, type KnowledgeReviewPorts,
+} from './reviewRunner.js';
+import type { CapabilityProvider } from '../capabilities.js';
+import { dependency, duplicates, fixtureSnapshot, unused } from './codeFixtures.test-util.js';
+import { forgetWorkspaceAnalyses } from './workspaceAnalysis.js';
 import { completionJudgement, fallbackJudgement, replyJson } from './judgement.js';
 
 const DOCS: Record<string, string> = {
@@ -118,5 +124,88 @@ describe('the completion judgement port', () => {
         const ok: JudgementPort = { judge: async () => ({ extract: [], invalid: 0 }) };
         await expect(fallbackJudgement([failing, ok]).judge({ kind: 'extract', items: [] })).resolves.toEqual({ extract: [], invalid: 0 });
         await expect(fallbackJudgement([failing]).judge({ kind: 'extract', items: [] })).rejects.toThrow('no engine');
+    });
+});
+
+describe('the confirmed plan is reused (§4.3 Continue)', () => {
+    it('runs the review on the plan the person confirmed, without walking the folder again', async () => {
+        const p = ports(countingJudgement());
+        let walks = 0;
+        const list = p.source.list.bind(p.source);
+        p.source.list = () => { walks += 1; return list(); };
+
+        const detail = await planKnowledgeReviewDetail(p);
+        expect(detail.plan.files).toBe(2);
+        expect(detail.files.map((f) => f.path)).toEqual(['lease.md', 'policy.md']);
+        expect(walks).toBe(1);
+
+        const report = await runKnowledgeReview(p, { plan: detail });
+        expect(report.extracted).toBe(2);
+        // The review did not re-list the folder — it re-read `changed` from the manifest.
+        expect(walks).toBe(1);
+    });
+
+    it('planKnowledgeReview is the same plan, numbers only', async () => {
+        const p = ports();
+        expect(await planKnowledgeReview(p)).toEqual((await planKnowledgeReviewDetail(p)).plan);
+    });
+});
+
+describe('the code pack's analyzers over a workspace', () => {
+    const shell = (head: string, status = '') => ({
+        run: async (command: string) => {
+            if (command.includes('depcruise')) return { ok: true, exitCode: 0, stdout: JSON.stringify(dependency) };
+            if (command.includes('knip')) return { ok: true, exitCode: 0, stdout: JSON.stringify(unused) };
+            if (command === 'git rev-parse HEAD') return { ok: true, exitCode: 0, stdout: head };
+            if (command.startsWith('git status')) return { ok: true, exitCode: 0, stdout: status };
+            return { ok: true, exitCode: 0, stdout: '' };
+        },
+    });
+    const caps = (head: string, status = '') => ({
+        capabilities: new Set(),
+        shell: shell(head, status),
+        repoRead: {
+            listFiles: async () => ({ ok: true, paths: ['src/a.ts', 'src/b.ts'] }),
+            readFile: async (path: string) => ({ ok: true, path, content: path.endsWith('jscpd-report.json') ? JSON.stringify(duplicates) : 'export const x = 1;' }),
+            searchCode: async () => ({ ok: true, query: '', matches: [] }),
+        },
+    }) as unknown as CapabilityProvider;
+    const repoGraph = {
+        accepts: () => true,
+        create: () => ({ addFile: () => true, build: () => ({ graph: { paths: ['src/a.ts', 'src/b.ts'], out: [[[1, 0.75] as const], []] } }) }),
+    };
+
+    it('feeds the repo map's references in alongside the analyzers, and uploads under the sha', async () => {
+        forgetWorkspaceAnalyses();
+        const uploads: string[] = [];
+        const out = await workspaceCodeAnalyzers({
+            caps: caps('abc'), repoGraph, upload: async (sha) => { uploads.push(sha); },
+        }).analyse('root');
+        const refs = out.filter((e) => e.edges.some((edge) => edge.kind === 'references' && edge.weight === 0.75));
+        expect(refs.map((e) => e.sourceRef)).toEqual(['src:root::src/a.ts']);
+        expect(uploads).toEqual(['abc']);
+    });
+
+    it('runs the analyzers once per sha across reviews', async () => {
+        forgetWorkspaceAnalyses();
+        let depcruiseRuns = 0;
+        const c = caps('same-sha');
+        const run = c.shell!.run.bind(c.shell);
+        (c.shell as { run: unknown }).run = async (command: string, opts?: unknown) => { if (command.includes('depcruise')) depcruiseRuns += 1; return run(command, opts as never); };
+        await workspaceCodeAnalyzers({ caps: c }).analyse('root');
+        await workspaceCodeAnalyzers({ caps: c }).analyse('root');
+        expect(depcruiseRuns).toBe(1);
+    });
+
+    it('stores dirty snapshots of one commit under different ids', () => {
+        const clean = { ...fixtureSnapshot(), source: { commit: 'abc', branch: 'main', dirty: false } };
+        const dirtyA = { ...fixtureSnapshot(), id: 'a', source: { commit: 'abc', branch: 'main', dirty: true, dirtyHash: '1111' } };
+        const dirtyB = { ...fixtureSnapshot(), id: 'b', source: { commit: 'abc', branch: 'main', dirty: true, dirtyHash: '2222' } };
+        expect(analysisSha(clean)).toBe('abc');
+        expect(analysisSha(dirtyA)).toBe('abc+1111');
+        expect(analysisSha(dirtyB)).toBe('abc+2222');
+        // Without a commit (or an unidentifiable dirty tree) the snapshot's own id is used.
+        expect(analysisSha({ ...clean, id: 'own', source: { commit: null, branch: null, dirty: null } })).toBe('own');
+        expect(analysisSha({ ...dirtyA, source: { commit: 'abc', branch: 'main', dirty: true } })).toBe('a');
     });
 });

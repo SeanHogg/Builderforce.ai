@@ -16,7 +16,8 @@ vi.mock('./knowledgeVersion', () => ({ bumpKnowledgeVersion: mocks.bump, knowled
 vi.mock('../../infrastructure/auth/superadminFlag', () => ({ resolveIsSuperadmin: mocks.superadmin }));
 
 import { clampMaxNodes, getKnowledgeGraph, knowledgeGraphCacheKey, type KnowledgeGraphDeps } from './getKnowledgeGraph';
-import { KnowledgeWriteError, MAX_KNOWLEDGE_WRITE_ROWS, writeKnowledge } from './writeKnowledge';
+import { MAX_KNOWLEDGE_WRITE_ROWS, writeKnowledge } from './writeKnowledge';
+import { KnowledgeWriteError } from './knowledgeWriteError';
 import { deleteKnowledgeFact, factViewer } from './deleteKnowledgeFact';
 import { listKnowledgeFacts, listKnowledgeScopes } from './listKnowledge';
 import type { ExtractedCachePort, KnowledgeStorePort } from './knowledgePorts';
@@ -133,7 +134,7 @@ describe('getKnowledgeGraph', () => {
 
 describe('writeKnowledge', () => {
   const base = () => ({ env: {} as never, db: {} as never, tenantId: 4, projectId: 9, store: fakeStore(), blobs: fakeBlobs(), userId: 'u1' });
-  const rel = (i: number): StoredRelation => ({ from: `fact:claim:${i}`, to: `src:${ROOT}::docs/a.md`, kind: 'about', weight: 1, origin: 'model' });
+  const rel = (i: number): StoredRelation => ({ from: `fact:claim:${i}`, to: `src:${ROOT}::docs/a.md`, kind: 'about', weight: 1, origin: 'model', sourceHash: 'h1' });
 
   it(`refuses more than ${MAX_KNOWLEDGE_WRITE_ROWS} rows with 413, writing nothing`, async () => {
     const d = base();

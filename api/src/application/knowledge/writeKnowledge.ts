@@ -28,6 +28,15 @@
  * Absent, a fact's origin is the writer's kind (person → `human`, machine → `agent`). A row
  * claiming an origin its writer cannot hold is refused with 400 `origin_mismatch`. The knowledge version is bumped
  * ONCE per call, which is what invalidates every cached graph of the project.
+ *
+ * A machine never overwrites what a PERSON wrote: a machine fact whose key a person authored
+ * is skipped (reported in `factsSkipped`, the rest of the batch still lands) — otherwise the
+ * write would replace the person's words and flip the fact to `agent` while it still names
+ * them as author. The one exception is a `codemap:` key, which a machine may merge into but
+ * which keeps its origin and author.
+ *
+ * A `model` relation touching a source (`src:`) must name the `sourceHash` it was judged
+ * from (400 `missing_source_hash`): without it nothing could ever mark the edge stale.
  */
 import type { NodeRef, ScopeRecord, StoredFact, StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
 import type { Db } from '../../infrastructure/database/connection';
@@ -36,17 +45,12 @@ import { upsertProjectFact } from '../llm/projectFactsWrite';
 import type { FactOriginCost } from '../llm/projectFactsStore';
 import type { ExtractedCachePort, KnowledgeStorePort } from './knowledgePorts';
 import { bumpKnowledgeVersion } from './knowledgeVersion';
-import { clampQuoteLines } from './knowledgePrivacy';
+import { KnowledgeWriteError } from './knowledgeWriteError';
+import { clampClaim } from './knowledgePrivacy';
+import { isCodemapKey } from '../llm/projectFactsCodemap';
 
 /** Rows (facts + relations + stale marks) one call may carry. */
 export const MAX_KNOWLEDGE_WRITE_ROWS = 500;
-
-export class KnowledgeWriteError extends Error {
-  constructor(readonly status: 400 | 413, readonly code: string, message: string) {
-    super(message);
-    this.name = 'KnowledgeWriteError';
-  }
-}
 
 /** A fact to write. `importance` is scored from the content and `origin` defaults to the
  *  writer's kind when absent (a person → `human`, a machine → `agent`). */
@@ -89,6 +93,8 @@ export interface WriteKnowledgeDeps {
 
 export interface KnowledgeWriteResult {
   factsWritten: number;
+  /** Keys of machine facts skipped because a person authored the fact already (absent when none). */
+  factsSkipped?: string[];
   relationsWritten: number;
   staleMarked: number;
 }
@@ -111,6 +117,10 @@ function assertWritable(input: KnowledgeWriteInput, userId: string | null): void
   if (extracted) {
     throw new KnowledgeWriteError(400, 'extracted_not_stored', "origin 'extracted' is perception: it is recomputed from sources and never stored");
   }
+  const unhashed = (input.relations ?? []).find((r) => r.origin === 'model' && !r.sourceHash && (r.from.startsWith('src:') || r.to.startsWith('src:')));
+  if (unhashed) {
+    throw new KnowledgeWriteError(400, 'missing_source_hash', `a model relation on a source (${unhashed.from} → ${unhashed.to}) must name the sourceHash it was judged from`);
+  }
   const claimed = [...(input.facts ?? []), ...(input.relations ?? [])]
     .map((x) => x.origin)
     .find((origin): origin is WrittenOrigin => origin != null && !originAllowed(origin, userId));
@@ -129,13 +139,23 @@ export async function writeKnowledge(deps: WriteKnowledgeDeps, input: KnowledgeW
   try {
     for (const f of input.facts ?? []) {
       const origin = f.origin ?? defaultOrigin;
+      // A machine writes over a person's fact only to merge a code map, and then as a guest:
+      // the fact keeps its origin and author.
+      let keepsPersonsFact = false;
+      if (!userId && (await store.factAuthor(f.key)) != null) {
+        if (!isCodemapKey(f.key.trim())) {
+          (result.factsSkipped ??= []).push(f.key);
+          continue;
+        }
+        keepsPersonsFact = true;
+      }
       const ok = await upsertProjectFact(env, db, tenantId, projectId, f.key,
-        // A model's claim quotes at most MAX_QUOTE_LINES lines — never a file body (§5.2).
-        origin === 'model' ? clampQuoteLines(f.content) : f.content, f.source || 'knowledge', {
+        // A model's claim quotes a bounded number of lines and characters — never a file body (§5.2).
+        origin === 'model' ? clampClaim(f.content) : f.content, f.source || 'knowledge', {
         ...(f.expiresAt !== undefined ? { expiresAt: f.expiresAt } : {}),
         ...(f.importance != null ? { importance: f.importance } : {}),
         ...(f.fileAnchors?.length ? { fileAnchors: f.fileAnchors } : {}),
-        factOrigin: origin,
+        ...(keepsPersonsFact ? {} : { factOrigin: origin }),
         createdBy: origin === 'human' ? userId : null,
         retireByAnchor: deps.legacyFact?.retireByAnchor ?? false,
         deferVersionBump: true,

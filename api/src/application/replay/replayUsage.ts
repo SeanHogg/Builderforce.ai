@@ -34,7 +34,7 @@ import {
   type ReplayWalletSnapshot,
 } from '../commerce/replayWallet';
 import { recordReplayTrace, REPLAY_TRACE_VERBS } from './replayTrace';
-import { allowanceOverrideKey, exhaustedTraceKey } from './replayCacheKeys';
+import { allowanceOverrideKey, exhaustedTraceKey, paidUsedKey } from './replayCacheKeys';
 
 const OVERRIDE_TTL_SECONDS = 5 * 60;
 const PAID_USED_TTL_SECONDS = 30;
@@ -84,7 +84,7 @@ function periodBounds(period: string): { start: Date; end: Date } {
 
 /** Paid units spent this period (spends on the tenant account; refunds are not use). */
 async function paidUsedInPeriod(env: Env | undefined, db: Db, tenantId: number, period: string): Promise<number> {
-  return getOrSetCached(env, `replay:paid-used:t${tenantId}:${period}`, async () => {
+  return getOrSetCached(env, paidUsedKey(tenantId, period), async () => {
     const { start, end } = periodBounds(period);
     const [row] = await db
       .select({ total: sql<string>`coalesce(sum(${ledgerEntries.amount}), 0)` })
@@ -102,7 +102,11 @@ async function paidUsedInPeriod(env: Env | undefined, db: Db, tenantId: number, 
   }, { kvTtlSeconds: PAID_USED_TTL_SECONDS });
 }
 
-/** The usage the meter and the Insights plan chip show. */
+/**
+ * The usage the meter and the Insights plan chip show. `credits` is the REMAINING
+ * balance (spends already left it), so the limit adds back this period's paid spend:
+ * `limit - used` is then exactly what ingest will still allow (free remaining + credits).
+ */
 export async function usageSnapshot(env: Env | undefined, db: Db, tenantId: number, now: Date = new Date()): Promise<ReplayUsageDto> {
   const w = await wallet(env, db, tenantId, now);
   const paidUsed = await paidUsedInPeriod(env, db, tenantId, w.period);
@@ -112,7 +116,7 @@ export async function usageSnapshot(env: Env | undefined, db: Db, tenantId: numb
     freeUsed: w.freeUsed,
     credits: w.credits,
     used: w.freeUsed + paidUsed,
-    limit: w.freeAllowance + w.credits,
+    limit: w.freeAllowance + paidUsed + w.credits,
   };
 }
 

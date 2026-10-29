@@ -17,7 +17,8 @@ import { adminApi, type AdminGuestSession, type AdminGuestSessionsPage } from '@
 import { AdminPanelHeader, useAdminData } from '@/components/admin/adminShared';
 import { FlowView } from '@/components/admin/visitors/FlowView';
 import { LeadsView } from '@/components/admin/visitors/LeadsView';
-import { VisitorPanel, type VisitorPanelTabId } from '@/components/visitors/VisitorPanel';
+import { VisitorPanel } from '@/components/visitors/VisitorPanel';
+import type { VisitorPanelTabId } from '@/components/visitors/visitorPanelTabs';
 
 const WINDOWS = [7, 30, 90] as const;
 

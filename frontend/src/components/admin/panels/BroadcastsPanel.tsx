@@ -17,8 +17,7 @@ import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi, type AdminBroadcast, type AdminBroadcastPage } from '@/lib/adminApi';
 import { useConfirm } from '@/components/ConfirmProvider';
-import { AdminError, AdminLoading, AdminPanelHeader, errText, useAdminData } from '@/components/admin/adminShared';
-import { useAdminFormat } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, AdminPanelHeader, StatTile, errText, useAdminData, useAdminFormat } from '@/components/admin/adminShared';
 import { BroadcastComposer } from './BroadcastComposer';
 import { Badge } from '@/components/ui';
 import { statusTone, type StatusToneMap } from '@/lib/statusTone';
@@ -28,25 +27,6 @@ const STATUS_TONE: StatusToneMap<AdminBroadcast['status']> = {
   draft: 'neutral',
   archived: 'neutral',
 };
-
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div
-      style={{
-        flex: '1 1 150px',
-        minWidth: 130,
-        padding: '12px 14px',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-lg)',
-        background: 'var(--surface-card)',
-      }}
-    >
-      <div className="text-muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-strong)', marginTop: 2 }}>{value}</div>
-      {hint && <div className="text-muted" style={{ fontSize: 11, marginTop: 2 }}>{hint}</div>}
-    </div>
-  );
-}
 
 export default function BroadcastsPanel() {
   const { fmtDateTime, fmtNum } = useAdminFormat();
@@ -122,10 +102,10 @@ export default function BroadcastsPanel() {
       <AdminError message={error ?? actionError} />
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
-        <Stat label={t('statLive')} value={fmtNum(totals.live)} />
-        <Stat label={t('statReach')} value={fmtNum(totals.reach)} hint={t('statReachHint')} />
-        <Stat label={t('statClicks')} value={fmtNum(totals.clicks)} />
-        <Stat label={t('statCtr')} value={`${totals.ctr}%`} hint={t('statCtrHint')} />
+        <StatTile label={t('statLive')} value={fmtNum(totals.live)} />
+        <StatTile label={t('statReach')} value={fmtNum(totals.reach)} hint={t('statReachHint')} />
+        <StatTile label={t('statClicks')} value={fmtNum(totals.clicks)} />
+        <StatTile label={t('statCtr')} value={`${totals.ctr}%`} hint={t('statCtrHint')} />
       </div>
 
       {broadcasts.length === 0 ? (

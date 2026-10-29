@@ -14,6 +14,7 @@ import { GitHubDeployPanel } from './builder/GitHubDeployPanel';
 import { SiteDomainPanel, SiteTrafficPanel } from './site/SiteGrowthPanels';
 import { ProjectAppPanel } from './apps/ProjectAppPanel';
 import { SiteReleasePanel } from './site/SiteReleasePanel';
+import { PrescriptionPreviewPublish } from './site/PrescriptionPreviewPublish';
 import { faultText } from '@/lib/apiClient';
 interface SitePublishPanelProps {
   projectId: number;
@@ -135,6 +136,9 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
       {error && (
         <div style={{ color: 'var(--error-text)', fontSize: 12.5, whiteSpace: 'pre-wrap' }}>{error}</div>
       )}
+
+      {/* Opened for an Insights fix: a preview release beside the live one. Renders nothing otherwise. */}
+      <PrescriptionPreviewPublish projectId={projectId} onBuild={onBuild} />
 
       {site && phase !== 'building' && phase !== 'uploading' && (
         <div style={{ borderTop: '1px solid var(--bf-border)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>

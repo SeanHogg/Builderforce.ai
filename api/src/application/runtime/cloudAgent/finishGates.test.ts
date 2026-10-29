@@ -12,7 +12,8 @@ vi.mock('../../ci/pollCommitCiStatus', async (orig) => ({ ...(await orig<Record<
 vi.mock('../../repos/scanForPlaceholders', () => ({ scanWrittenForPlaceholders: h.scan }));
 vi.mock('../../provenance/finishClaimService', () => ({ recordCodeCompletionClaim: h.claim }));
 vi.mock('../cloudToolEvents', () => ({ recordCloudToolEvent: h.record }));
-vi.mock('../cloudChildRuns', () => ({ liveChildrenFinishBlock: vi.fn(async () => null), absorbChildWrites: vi.fn(async () => undefined) }));
+const absorb = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock('../cloudChildRuns', () => ({ liveChildrenFinishBlock: vi.fn(async () => null), absorbChildWrites: absorb }));
 
 import { evaluateFinishGates, finishGateSnapshot, initialFinishGateState, isInconclusiveFinishBlock, type FinishGateArgs } from './finishGates';
 
@@ -44,6 +45,19 @@ beforeEach(() => {
 });
 
 describe('evaluateFinishGates', () => {
+  it('hands a delegated run’s written set AND its file hashes to the child-write absorption', async () => {
+    const writtenHashes = new Map([['src/a.ts', 'h']]);
+    const a = args({ delegated: true, writtenHashes });
+    await evaluateFinishGates(a);
+    expect(absorb).toHaveBeenCalledWith(a.db, 1, 9, repoCtx, a.writtenPaths, writtenHashes);
+  });
+
+  it('absorbs nothing for a run with no children', async () => {
+    absorb.mockClear();
+    await evaluateFinishGates(args());
+    expect(absorb).not.toHaveBeenCalled();
+  });
+
   it('ships a verified finish, enters verify and marks CI green', async () => {
     const a = args();
     expect(await evaluateFinishGates(a)).toEqual({ block: null });

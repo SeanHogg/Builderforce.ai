@@ -136,7 +136,17 @@ export async function liveChildrenFinishBlock(db: Db, tenantId: number, parentEx
  * set — they committed from their own runs, so it never saw the writes. Read from the
  * branch itself, so it is exactly what the pull request will hold (grandchildren too).
  */
-export async function absorbChildWrites(db: Db, tenantId: number, parentExecutionId: number, repoCtx: TicketRepoContext | null, writtenPaths: Set<string>): Promise<void> {
+export async function absorbChildWrites(
+  db: Db,
+  tenantId: number,
+  parentExecutionId: number,
+  repoCtx: TicketRepoContext | null,
+  writtenPaths: Set<string>,
+  /** The parent's own per-file hashes. The branch diff cannot say WHICH of its paths a child
+   *  rewrote, so every path on it drops its entry: an unhashed anchor is merely never stale,
+   *  where a hash of text a child replaced would mark the fact stale on the first recall. */
+  writtenHashes?: Map<string, string>,
+): Promise<void> {
   if (!repoCtx) return;
   const [anyChild] = await db
     .select({ id: executions.id })
@@ -145,7 +155,11 @@ export async function absorbChildWrites(db: Db, tenantId: number, parentExecutio
     .limit(1);
   if (!anyChild) return;
   const diff = await listBranchDiff({ ...repoCtx, ref: repoCtx.branch }, repoCtx.base, repoCtx.branch);
-  if (diff.ok) for (const f of diff.files) writtenPaths.add(f.path);
+  if (!diff.ok) return;
+  for (const f of diff.files) {
+    writtenPaths.add(f.path);
+    writtenHashes?.delete(f.path);
+  }
 }
 
 const childStateOf = (row: ChildRow): ChildReportLike['state'] =>

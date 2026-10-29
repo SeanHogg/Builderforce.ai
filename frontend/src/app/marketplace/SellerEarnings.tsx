@@ -37,6 +37,7 @@ import {
   type SellerEarnings as Earnings,
 } from '@/lib/creationListings';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { StatTile } from '@/components/admin/adminShared';
 export function SellerEarnings() {
   const errorMessage = useErrorMessage();
   const t = useTranslations('marketplaceCreations');
@@ -124,12 +125,12 @@ export function SellerEarnings() {
           display: 'grid', gap: 12,
           gridTemplateColumns: 'repeat(auto-fit, minmax(min(140px, 100%), 1fr))',
         }}>
-          <Stat label={t('earned')} value={formatListingPrice(earnings.earnedCents)} />
-          <Stat label={t('paidOut')} value={formatListingPrice(earnings.paidCents)} />
-          <Stat label={t('available')} value={formatListingPrice(earnings.availableCents)} />
-          <Stat label={t('sales')} value={String(earnings.salesCount)} />
+          <StatTile label={t('earned')} value={formatListingPrice(earnings.earnedCents)} />
+          <StatTile label={t('paidOut')} value={formatListingPrice(earnings.paidCents)} />
+          <StatTile label={t('available')} value={formatListingPrice(earnings.availableCents)} />
+          <StatTile label={t('sales')} value={String(earnings.salesCount)} />
           {earnings.maintenanceCostCents > 0 && (
-            <Stat label={t('maintenanceCost')} value={formatListingPrice(earnings.maintenanceCostCents)} />
+            <StatTile label={t('maintenanceCost')} value={formatListingPrice(earnings.maintenanceCostCents)} />
           )}
         </div>
       )}
@@ -230,17 +231,3 @@ function bpsToRate(bps: number): string {
   return (bps / 100).toFixed(bps % 100 === 0 ? 0 : 2);
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ display: 'grid', gap: 2, minWidth: 0 }}>
-      <span style={{
-        fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-secondary)',
-        textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 600,
-      }}>{label}</span>
-      <strong style={{
-        fontSize: 'var(--font-size-card-title)', color: 'var(--text-primary)',
-        fontFamily: 'var(--font-display)',
-      }}>{value}</strong>
-    </div>
-  );
-}

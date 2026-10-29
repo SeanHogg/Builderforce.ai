@@ -15,6 +15,7 @@ import { useFormat } from "@/i18n/useFormat";
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { statusColor, type StatusToneMap } from '@/lib/statusTone';
+import { StatTile } from '@/components/admin/adminShared';
 
 /**
  * RfpDetailClient — the response workspace for one RFP request. Generates a proposal
@@ -535,10 +536,10 @@ function RegisterRollupSection({ rollup, t }: { rollup: RfpRegisterRollup; t: T 
     <div style={card}>
       <h2 style={h2}>{t('sec.registerRollup')}</h2>
       <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginBottom: rollup.recurring.length ? 12 : 0 }}>
-        <Stat label={t('rollup.openHigh')} value={rollup.openHighRisks} tone={rollup.openHighRisks > 0 ? 'var(--error)' : 'var(--success)'} />
-        <Stat label={t('rollup.risks')} value={rollup.totalRisks} tone="var(--text-primary)" />
-        <Stat label={t('rollup.dependencies')} value={rollup.totalDependencies} tone="var(--text-primary)" />
-        <Stat label={t('rollup.mitigated')} value={rollup.byStatus.mitigated + rollup.byStatus.closed} tone="var(--success)" />
+        <StatTile label={t('rollup.openHigh')} value={String(rollup.openHighRisks)} tone={rollup.openHighRisks > 0 ? 'error' : 'success'} />
+        <StatTile label={t('rollup.risks')} value={String(rollup.totalRisks)} />
+        <StatTile label={t('rollup.dependencies')} value={String(rollup.totalDependencies)} />
+        <StatTile label={t('rollup.mitigated')} value={String(rollup.byStatus.mitigated + rollup.byStatus.closed)} tone="success" />
       </div>
       {rollup.recurring.length > 0 && (
         <>
@@ -552,15 +553,6 @@ function RegisterRollupSection({ rollup, t }: { rollup: RfpRegisterRollup; t: T 
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
-  return (
-    <div>
-      <div style={{ fontSize: 22, fontWeight: 800, color: tone, lineHeight: 1.1 }}>{value}</div>
-      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)' }}>{label}</div>
     </div>
   );
 }

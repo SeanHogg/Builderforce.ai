@@ -83,7 +83,7 @@ import { assertCloudRunByo, type CloudByoFailure } from '../llm/cloudByoPolicy';
 import { cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool, callBuiltinTool } from '../llm/builtinMcpService';
 import { durableRepoSemantic, durableRunCaps, prepSurfaceCaps } from './cloudAgent/runSurfaceCaps';
 import { composeRunProvider } from './cloudAgent/runProvider';
-import { recordWrittenHash, type WrittenFileHashes } from './cloudAgent/writtenFileHashes';
+import { recordWrittenHash, seedWrittenHashes, snapshotWrittenHashes, type WrittenFileHashes } from './cloudAgent/writtenFileHashes';
 import { runVerifyThenRemember } from './cloudAgent/runVerifyThenRemember';
 import { ANALYZE_CODEBASE_TOOL, withSavedAnalysis } from './cloudAgent/auditAnalysis';
 import type { RunSandbox } from './sandbox/runSandbox';
@@ -198,6 +198,9 @@ import { strictWhenConnected } from '../llm/fundingOrder';
 export interface CloudLoopState extends CostLoopState {
   messages: Array<Record<string, unknown>>;
   writtenPaths: string[];
+  /** Content hash of each written file as the run left it (path → hash). Persisted so a
+   *  durable run's run-end facts stay anchored to files written on EARLIER ticks. */
+  writtenHashes?: Record<string, string>;
   /** Next absolute step index to run. */
   step: number;
   /** What the run has read, searched and changed so far — its per-turn brief and the
@@ -754,7 +757,7 @@ async function runCloudToolLoop(
     repoMiss = repoResolved.ok ? '' : repoResolved.reason;
   }
   const writtenPaths = new Set<string>(opts?.resume?.writtenPaths ?? []);
-  const writtenHashes: WrittenFileHashes = new Map();
+  const writtenHashes: WrittenFileHashes = seedWrittenHashes(opts?.resume?.writtenHashes);
   // What this run read and changed — the SAME recorder the editor and on-prem keep — so
   // its code map lands in project memory for the next run on that area. Carried in the
   // resume state: a durable tick runs one step, so a fresh recorder per tick would never
@@ -1248,7 +1251,7 @@ async function runCloudToolLoop(
     // their named verdict. The run enters `verify` HERE, where it verifies — a phase
     // applied in the end-of-run tail reduced the state into a value nobody read.
     onFinish: async (ctx, summary) => cost.guards.finish(await evaluateFinishGates({
-      db, evt, repoCtx, writtenPaths, requiredSignoff, delegated: !!opts?.delegation, summary, output: ctx.output, gates,
+      db, evt, repoCtx, writtenPaths, writtenHashes, requiredSignoff, delegated: !!opts?.delegation, summary, output: ctx.output, gates,
       enterVerify: () => { modelState = { ...modelState, policy: applyVerifyPhase(modelState.policy) }; },
     }), ctx.step, guardDeps),
 
@@ -1442,6 +1445,7 @@ async function runCloudToolLoop(
   const resumeState = (): CloudLoopState => ({
     messages,
     writtenPaths: [...writtenPaths],
+    writtenHashes: snapshotWrittenHashes(writtenHashes),
     step,
     runKnowledge: runKnowledge.snapshot(),
     modelPolicy: modelState,

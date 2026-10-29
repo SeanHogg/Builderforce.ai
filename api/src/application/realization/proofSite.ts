@@ -53,6 +53,9 @@ export async function isProofSite(env: Env, db: Db, site: ReplaySiteRecord): Pro
 /**
  * After a proof is published: make sure its project has a hosted Insights site, and
  * drop the cached "is this a proof site" answer so the next config request sees it.
+ * The loader injection (`enabledHostedReplaySiteId`) caches under the tenant's sites
+ * version, which `createHostedSite` bumps on a new or re-enabled site — so a new
+ * proof's loader is injected on the next request, with nothing more to drop here.
  * Never throws — recording is a measurement, and it must not fail a build.
  */
 export async function ensureProofReplaySite(

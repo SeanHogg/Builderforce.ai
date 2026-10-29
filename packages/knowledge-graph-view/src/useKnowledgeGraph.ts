@@ -136,7 +136,8 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
         setFocus(refs);
         // The API searches everything; the loaded graph is only the top of a large one. A hit
         // outside it is brought in by reloading with those refs as the focus.
-        if (!held && refs.some((r) => !shown.nodes.some((n) => n.ref === r))) {
+        const loadedRefs = new Set<string>(shown.nodes.map((n) => n.ref));
+        if (!held && refs.some((r) => !loadedRefs.has(r))) {
             const reloaded = await source.load(shown.scope.rootId, { focus: refs }).catch(() => null);
             if (reloaded) setGraph(reloaded);
         }

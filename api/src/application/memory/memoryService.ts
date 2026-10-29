@@ -420,8 +420,6 @@ export async function forget(
   }
 }
 
-export { purgeExpiredMemories } from './purgeExpiredMemories';
-
 /** One row as the governance UI renders it — the fact PLUS why it is trusted. */
 export interface GovernedMemoryRow {
   key: string;

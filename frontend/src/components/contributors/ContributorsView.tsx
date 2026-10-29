@@ -12,6 +12,7 @@ import { TenantActivityPanel } from './TenantActivityPanel';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { StatTile } from '@/components/admin/adminShared';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -209,10 +210,10 @@ export function ContributorsView() {
         <>
           {/* Summary stats */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
-            <Stat label={t('stat.contributions')} value={fmt.number(totalContributions)} />
-            <Stat label={t('stat.teamMembers')} value={String(data.contributors.length)} />
-            <Stat label={t('stat.humans')} value={String(humans.length)} accent="var(--emerald-bright)" />
-            <Stat label={t('stat.agents')} value={String(agents.length)} accent="var(--violet-bright)" />
+            <StatTile label={t('stat.contributions')} value={fmt.number(totalContributions)} />
+            <StatTile label={t('stat.teamMembers')} value={String(data.contributors.length)} />
+            <StatTile label={t('stat.humans')} value={String(humans.length)} tone="success" />
+            <StatTile label={t('stat.agents')} value={String(agents.length)} tone="accent" />
           </div>
 
           {/* Team / selected calendar */}
@@ -299,15 +300,6 @@ export function ContributorsView() {
         </>
       )}
     </>
-  );
-}
-
-function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {
-  return (
-    <div style={cardStyle}>
-      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, color: accent ?? 'inherit' }}>{value}</div>
-    </div>
   );
 }
 

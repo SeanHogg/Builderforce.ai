@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl';
 import type { ReplayMark } from '@builderforce/interaction-contract';
 import { Icon } from '@/components/ui/Icon';
 import { TIMELINE_MARK_KINDS, fmtClock, markStyle } from './replayMarks';
+import styles from './replayTimeline.module.css';
 
 export interface ReplayTimelineProps {
   currentMs: number;
@@ -23,7 +24,7 @@ export function ReplayTimeline({ currentMs, totalMs, marks, onSeek }: ReplayTime
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', minWidth: 0 }}>
-      <div style={{ position: 'relative', height: 22 }} aria-label={t('markersAria')} role="group">
+      <div className={styles.row} aria-label={t('markersAria')} role="group">
         {shown.map((mark, index) => {
           const style = markStyle(mark.kind);
           const label = mark.label ?? t(style.labelKey);
@@ -34,25 +35,12 @@ export function ReplayTimeline({ currentMs, totalMs, marks, onSeek }: ReplayTime
               aria-label={t('markerAria', { time: fmtClock(mark.atMs), label })}
               title={`${fmtClock(mark.atMs)} · ${label}`}
               onClick={() => onSeek(mark.atMs)}
-              style={{
-                position: 'absolute',
-                left: `${(mark.atMs / span) * 100}%`,
-                transform: 'translateX(-50%)',
-                top: 0,
-                width: 22,
-                height: 22,
-                padding: 0,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: 'none',
-                borderRadius: 'var(--radius-full)',
-                background: 'var(--surface-card)',
-                color: style.tone,
-                cursor: 'pointer',
-              }}
+              className={styles.marker}
+              style={{ left: `${(mark.atMs / span) * 100}%`, color: style.tone }}
             >
-              <Icon name={style.icon} size={14} />
+              <span className={styles.dot}>
+                <Icon name={style.icon} size={14} />
+              </span>
             </button>
           );
         })}

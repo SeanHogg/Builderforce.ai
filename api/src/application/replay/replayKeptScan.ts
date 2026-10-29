@@ -4,7 +4,7 @@
  * kept recordings weighted by `sample_weight` and are shown as ≈").
  *
  * Batches of {@link SCAN_BATCH} by keyset on (started_at desc, id desc) — never
- * OFFSET — up to a hard ceiling of {@link SCAN_CEILING} rows; `truncated` says the
+ * OFFSET — up to a hard ceiling of {@link FUNNEL_MAX_RECORDINGS} rows; `truncated` says the
  * ceiling was hit so the view can say the answer covers the most recent slice. Only
  * the columns the folds read are selected. Every statement carries BOTH halves of
  * the scope.
@@ -14,10 +14,10 @@ import { and, desc, eq, gte, type SQL } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { replayRecordings } from '../../infrastructure/database/schema';
 import type { ReplayScope } from '../../domain/replay/replayScope';
+import { FUNNEL_MAX_RECORDINGS } from '../../domain/replay/funnelFold';
 import { afterRecordingCursor } from './replayReadModel';
 
 export const SCAN_BATCH = 500;
-export const SCAN_CEILING = 20_000;
 
 export const KEPT_SCAN_COLUMNS = {
   id: replayRecordings.id,
@@ -60,14 +60,14 @@ export interface KeptScan {
 
 /**
  * Every kept recording of the scope started since `since` that passes `where`,
- * newest first, at most `ceiling` (default {@link SCAN_CEILING}).
+ * newest first, at most `ceiling` (default {@link FUNNEL_MAX_RECORDINGS}).
  */
 export async function scanKeptRecordings(
   store: Db,
   scope: ReplayScope,
   input: { since: Date; where?: SQL; ceiling?: number },
 ): Promise<KeptScan> {
-  const ceiling = Math.max(1, Math.min(SCAN_CEILING, input.ceiling ?? SCAN_CEILING));
+  const ceiling = Math.max(1, Math.min(FUNNEL_MAX_RECORDINGS, input.ceiling ?? FUNNEL_MAX_RECORDINGS));
   const rows: KeptScanRow[] = [];
   let cursor: { at: Date; id: string } | null = null;
   for (;;) {

@@ -60,6 +60,18 @@ describe('Rovr Knowledge destination', () => {
     }
   });
 
+  it('words edge kinds, packs and the cost note in every panel locale, from the web catalogs', () => {
+    expect(rovrKnowledgeLabels('en').edgeKinds.references).toBe('references');
+    expect(rovrKnowledgeLabels('de').edgeKinds.references).toBe('verweist auf');
+    expect(rovrKnowledgeLabels('es').packs.docs).toBe('Documentos');
+    expect(rovrKnowledgeLabels('fr').factSaveFailed).toContain('enregistré');
+    expect(rovrKnowledgeLabels('zh').reviewPlanCostPending).toContain('费用');
+    for (const locale of ['de', 'es', 'fr', 'zh'] as const) {
+      expect(rovrKnowledgeLabels(locale).fix.contradiction, locale).toContain('{fileA}');
+      expect(rovrKnowledgeLabels(locale).fix.contradiction, locale).toContain('{sectionB}');
+    }
+  });
+
   it.each([
     ['signedOut', 'knowledgeSignedOutTitle', 'knowledgeSignedOutBody'],
     ['noProject', 'knowledgeNoProjectTitle', 'knowledgeNoProjectBody'],

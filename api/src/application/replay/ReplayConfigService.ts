@@ -11,7 +11,7 @@
  * events of every session still count, only NEW recordings stop (D4).
  */
 
-import type { ReplayClientConfig } from '@builderforce/interaction-contract';
+import { RECORDER_HASH_PATTERN, type ReplayClientConfig } from '@builderforce/interaction-contract';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { getOrSetCached, peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
@@ -49,7 +49,7 @@ function usable(entry: ManifestEntry | undefined): { url: string; version: strin
 
 /**
  * Which recorder to inject. A channel naming a manifest channel wins; a channel that
- * is an 8-hex recorder hash pins that exact immutable build; else the platform pin;
+ * is a recorder content hash (`RECORDER_HASH_LENGTH` hex) pins that exact immutable build; else the platform pin;
  * else the latest.
  */
 export function pickRecorder(
@@ -60,7 +60,7 @@ export function pickRecorder(
   if (channel) {
     const named = usable(manifest?.channels?.[channel]);
     if (named) return named;
-    if (/^[0-9a-f]{8}$/.test(channel)) {
+    if (RECORDER_HASH_PATTERN.test(channel)) {
       return { url: `${cdnOrigin.replace(/\/+$/, '')}/replay/r/recorder.${channel}.js`, version: channel };
     }
   }

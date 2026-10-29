@@ -10,7 +10,7 @@
  * nothing there and the player's copy-link stays the way to share a moment.
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   formatReplayMomentTrailer,
@@ -22,9 +22,9 @@ import {
 import { Icon } from '@/components/ui/Icon';
 import { useToast } from '@/components/ToastProvider';
 import { tasksApi } from '@/lib/builderforceApi';
-import { replaySitesApi } from '@/lib/replaySitesApi';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { fmtClock } from './replayMarks';
+import { useHostedSiteProject } from './useHostedSiteProject';
 
 /** How close before the playhead a signal mark has to be to name the moment. */
 const MOMENT_LOOKBACK_MS = 5_000;
@@ -59,16 +59,8 @@ export function TicketFromMoment({ siteId, recording, currentMs }: TicketFromMom
   const t = useTranslations('replay.ticket');
   const toast = useToast();
   const errorMessage = useErrorMessage();
-  const [projectId, setProjectId] = useState<number | null>(null);
+  const projectId = useHostedSiteProject(siteId);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    let live = true;
-    replaySitesApi.get(siteId)
-      .then((site) => { if (live) setProjectId(site?.kind === 'hosted' ? site.projectId : null); })
-      .catch(() => { if (live) setProjectId(null); });
-    return () => { live = false; };
-  }, [siteId]);
 
   if (projectId === null || !recording) return null;
 

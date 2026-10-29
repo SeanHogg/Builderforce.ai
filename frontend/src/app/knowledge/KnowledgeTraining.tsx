@@ -5,6 +5,7 @@ import { RoleGate } from '@/components/RoleGate';
 import { knowledgeApi, type TrainingItem, type TenantCompliance } from '@/lib/knowledgeApi';
 import { badge } from './knowledgeStyles';
 import { useFormat } from "@/i18n/useFormat";
+import { StatTile } from '@/components/admin/adminShared';
 
 function stateColor(state: string): React.CSSProperties {
   if (state === 'completed' || state === 'acknowledged')
@@ -105,10 +106,10 @@ function ComplianceAudit() {
       {loaded && data && (
         <>
           <div style={{ display: 'flex', gap: 24, marginBottom: 16, flexWrap: 'wrap' }}>
-            <Stat label={t('overallCompliance')} value={`${data.totals.percent}%`} />
-            <Stat label={t('required')} value={String(data.totals.required)} />
-            <Stat label={t('acknowledged')} value={String(data.totals.acknowledged)} />
-            <Stat label={t('overdue')} value={String(data.totals.overdue)} danger={data.totals.overdue > 0} />
+            <StatTile label={t('overallCompliance')} value={`${data.totals.percent}%`} />
+            <StatTile label={t('required')} value={String(data.totals.required)} />
+            <StatTile label={t('acknowledged')} value={String(data.totals.acknowledged)} />
+            <StatTile label={t('overdue')} value={String(data.totals.overdue)} tone={data.totals.overdue > 0 ? 'error' : undefined} />
           </div>
           {data.documents.length === 0 ? (
             <div style={{ color: 'var(--text-muted)' }}>{t('noComplianceDocs')}</div>
@@ -159,23 +160,6 @@ function ComplianceAudit() {
         </>
       )}
     </section>
-  );
-}
-
-export function Stat({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
-  return (
-    <div
-      style={{
-        padding: '12px 18px',
-        borderRadius: 'var(--radius-lg)',
-        border: '1px solid var(--border)',
-        background: 'var(--surface)',
-        minWidth: 110,
-      }}
-    >
-      <div style={{ fontSize: 22, fontWeight: 700, color: danger ? 'var(--error-text, var(--error))' : undefined }}>{value}</div>
-      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{label}</div>
-    </div>
   );
 }
 

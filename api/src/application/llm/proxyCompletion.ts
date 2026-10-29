@@ -14,14 +14,13 @@
 
 import type { ActionModelRankStat } from '@builderforce/learned-routing';
 import { isCostLeverOn } from '@builderforce/cost-levers';
-import { canonicalModelId, isPaidOverflowModel, resolveStrictPin } from './modelPool';
+import { isPaidOverflowModel, resolveStrictPin } from './modelPool';
 import type { PriceBook } from './catalogView';
 import { downgradeResponseFormat, newTraceId } from './proxyFailover';
 import { readResponseCacheHit, responseCacheKeyFor, storeInResponseCache } from './proxyResponseCache';
 import { dispatchStrict } from './proxyStrictPin';
-import { buildCandidateChain, composeCompletionSeed, loadSeedCooldowns } from './proxySeed';
+import { callerModelOf, planRoute } from './proxyRoutePlan';
 import { resolveEmptyChain } from './proxyAllCooled';
-import { applyExcludedModels } from './requestFit';
 import { lookupSemanticChat, planSemanticChat, storeSemanticChat, type ResponseCacheGrant, type SemanticChatDeps } from './semanticChatCache';
 import { coalesceCompletion } from './proxySingleFlight';
 import { tryDeterministicCompletion } from './deterministic/deterministicCompletion';
@@ -119,17 +118,7 @@ async function dispatchUncached(
   storeOnPrimarySuccess: (primary: ProxyResult) => Promise<void>,
 ): Promise<ProxyResult> {
   const { cfg, funding, dispatcher, finalize } = rt;
-  // Rewrite a superseded pin to its live successor BEFORE anything reads it. This is
-  // the gateway-side seam of {@link canonicalModelId}: `body.model` is whatever the
-  // caller had stored (an agent base_model, a lane default, an SDK pin), and that can
-  // be months old. Rewriting here covers the strict-pin branch and the chained branch
-  // together, so a retired id can never reach `dispatch` — and can never be filtered
-  // out of the BYO seed as "not dispatchable", which is what turned a stale Opus pin
-  // into a bare `byo_unavailable` with four providers connected.
-  const rawCallerModel = (body as { model?: unknown }).model;
-  const callerModel = typeof rawCallerModel === 'string' && rawCallerModel.trim()
-    ? canonicalModelId(rawCallerModel)
-    : rawCallerModel;
+  const callerModel = callerModelOf(body);
   // `modelStrict` OR the public `strict` alias → single-model hard pin. Both
   // funnel through `resolveStrictPin` (which also enforces the "model present"
   // precondition) so the service can't disagree with the route's gate.
@@ -145,26 +134,8 @@ async function dispatchUncached(
     );
   }
 
-  // Seed composition (pool reorders, context fit, caller hint, connected accounts)
-  // and the bounded cooldown prefetch — see `proxySeed`.
-  const { seed, seedHead } = await composeCompletionSeed(rt, body, callerModel, opts);
-  const [cooledSet, cooledVendors] = await loadSeedCooldowns(rt, seed);
-  // Pinned hint bypasses vendor-level cooldown so a caller-explicit paid model
-  // (`anthropic/claude-3-haiku`) gets tried even when the same vendor's free
-  // key has 429'd its way into vendor cooldown. Per-model cooldown still
-  // applies — we won't retry a model that *itself* just failed.
-  // The seed's head (caller pin OR the strongest connected-BYO flagship) bypasses
-  // vendor-level cooldown so the owner's own account is still tried even when that
-  // vendor's operator key has 429'd its way into vendor cooldown. Per-model cooldown
-  // still applies.
-  const pinnedHint = seedHead.length > 0 ? seedHead[0] : undefined;
-  // Pass seedHead as the cascade HEAD so a deliberately-seeded connected-BYO flagship
-  // (or explicit pin) leads verbatim — otherwise a PREMIUM/ULTRA seed falls behind the
-  // free pool and the connected account is tried last (or never). See composeFreeCappedCascade.
-  const candidates = applyExcludedModels(
-    buildCandidateChain(rt, seed, cooledSet, cooledVendors, pinnedHint, seedHead),
-    body.excludeModels,
-  );
+  // Seed composition, cooldown prefetch and the candidate chain — see `proxyRoutePlan`.
+  const { seed, seedHead, pinnedHint, cooledSet, cooledVendors, candidates } = await planRoute(rt, body, callerModel, opts);
   if (candidates.length === 0) {
     return resolveEmptyChain(rt, {
       body, requestHeaders, signal, traceId: tid, startedAt,

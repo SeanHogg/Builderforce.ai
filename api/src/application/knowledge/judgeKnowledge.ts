@@ -15,7 +15,7 @@
 import type { JudgementRequest, JudgementResult } from '@seanhogg/builderforce-memory/knowledge';
 import { judgeWith } from '@builderforce/agent-tools';
 import type { Env } from '../../env';
-import { JSON_OBJECT_FORMAT, completeJson } from '../llm/completeJson';
+import { JSON_OBJECT_FORMAT, completeJson, type CompleteJsonRequest } from '../llm/completeJson';
 
 export const KNOWLEDGE_JUDGE_USE_CASE = 'knowledge_judge';
 /** Items one judge request may carry (the review sends one per call). */
@@ -29,6 +29,12 @@ export interface JudgeDeps {
   userId: string | null;
 }
 
+/** The ONE request a judgement question is asked as — sent by {@link judgeKnowledge} and
+ *  routed (never sent) by the review's cost estimate, so both read the same shape. */
+export function judgeRequest(system: string, payload: unknown): CompleteJsonRequest {
+  return { system, user: JSON.stringify(payload), schema: JSON_OBJECT_FORMAT, temperature: 0, maxTokens: MAX_TOKENS, useCase: KNOWLEDGE_JUDGE_USE_CASE };
+}
+
 export function judgeKnowledge(deps: JudgeDeps, req: Pick<JudgementRequest, 'kind' | 'items'>): Promise<JudgementResult> {
   const ask = async (system: string, payload: unknown): Promise<unknown> => {
     const out = await completeJson(
@@ -36,7 +42,7 @@ export function judgeKnowledge(deps: JudgeDeps, req: Pick<JudgementRequest, 'kin
         kind: 'tenant', env: deps.env, tenantId: deps.tenantId,
         opts: { meterUseCase: KNOWLEDGE_JUDGE_USE_CASE, userId: deps.userId, projectId: deps.projectId },
       },
-      { system, user: JSON.stringify(payload), schema: JSON_OBJECT_FORMAT, temperature: 0, maxTokens: MAX_TOKENS, useCase: KNOWLEDGE_JUDGE_USE_CASE },
+      judgeRequest(system, payload),
     );
     return out.ok ? out.value : undefined;
   };

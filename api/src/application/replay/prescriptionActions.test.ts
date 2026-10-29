@@ -2,7 +2,7 @@
  * The prescription actions and their human gates (PRD 33 §5.1.4, D13):
  *   • Fix it opens a ticket with the brief and the replay-moment trailer, and
  *     dispatches a coding agent ONLY for a hosted site with a chosen agent — to
- *     build a PREVIEW; nothing goes live from Fix it;
+ *     change the workspace (a person builds the preview); nothing goes live from Fix it;
  *   • Publish moves the live pointer only on a person's call, once a preview exists;
  *   • Test it creates a DRAFT test; only Start makes it run;
  *   • Follow up shows who and what first, and enrols only matched contacts;
@@ -154,20 +154,21 @@ beforeEach(() => {
 });
 
 describe('fix', () => {
-  it('on a hosted app with a chosen agent: a ticket with the brief + moment, and a run that builds a PREVIEW', async () => {
+  it('on a hosted app with a chosen agent: a ticket with the brief + moment, and a run that only changes the workspace', async () => {
     const { db, updates } = fakeDb([[{ id: 'agent-1' }]]);
     const out = await act(db, 'fix', { agentRef: 'agent-1' });
 
     const [dto, tenantId] = mocks.createTask.mock.calls[0]!;
     expect(tenantId).toBe(7);
     expect(dto).toMatchObject({ projectId: 42, assignedAgentRef: 'agent-1', createdVia: 'insights_prescription' });
-    expect(dto.description).toContain('PREVIEW');
+    expect(dto.description).toContain('Do NOT build or publish anything');
     expect(dto.description).toContain('Make Pay respond #0.');
     expect(replayMomentFromDescription(dto.description)).toMatchObject({ siteId: SITE_ID, releaseKey: 'r9', route: '/checkout', metric: 'frustrated' });
 
     const params = mocks.dispatch.mock.calls[0]![4];
     expect(params).toMatchObject({ taskId: 77, tenantId: 7 });
-    expect(JSON.parse(params.payload)).toMatchObject({ cloudAgentRef: 'agent-1', prescriptionFix: { prescriptionId: RX, preview: true } });
+    expect(JSON.parse(params.payload)).toMatchObject({ cloudAgentRef: 'agent-1' });
+    expect(JSON.parse(params.payload)).not.toHaveProperty('prescriptionFix');
     expect(mocks.moveSiteTo).not.toHaveBeenCalled(); // nothing goes live from Fix it
 
     expect(updates[0]).toMatchObject({ status: 'applied', actionKind: 'fix', actionRef: 't=77' });

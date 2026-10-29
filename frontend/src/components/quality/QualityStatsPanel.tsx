@@ -7,6 +7,7 @@ import { BarChart } from '@/components/charts/BarChart';
 import { levelColor, sourceColor, STATUS_TONE } from './qualityColors';
 import { statusColor } from '@/lib/statusTone';
 import { useFormat } from "@/i18n/useFormat";
+import { StatTile } from '@/components/admin/adminShared';
 
 /**
  * Data-driven Quality overview — the "what have we collected, and what is it
@@ -60,10 +61,10 @@ export function QualityStatsPanel({ projectId, days = 30 }: { projectId?: number
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* Volume collected */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
-        <Stat label={t('stats.eventsCollected')} value={stats.totals.events} accent="var(--coral-bright)" />
-        <Stat label={t('summary.groups')} value={stats.totals.groups} />
-        <Stat label={t('summary.users')} value={stats.totals.users} />
-        <Stat label={t('stats.windowDays')} value={stats.windowDays} suffix="d" />
+        <StatTile label={t('stats.eventsCollected')} value={fmt.number(stats.totals.events)} tone="accent" />
+        <StatTile label={t('summary.groups')} value={fmt.number(stats.totals.groups)} />
+        <StatTile label={t('summary.users')} value={fmt.number(stats.totals.users)} />
+        <StatTile label={t('stats.windowDays')} value={`${fmt.number(stats.windowDays)}d`} />
       </div>
 
       {/* Frequency over time */}
@@ -137,14 +138,3 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 12 }}>{children}</div>;
 }
 
-function Stat({ label, value, accent, suffix }: { label: string; value: number; accent?: string; suffix?: string }) {
-  const fmt = useFormat();
-  return (
-    <div style={card}>
-      <div style={{ fontSize: 22, fontWeight: 700, color: accent ?? 'var(--text-primary)' }}>
-        {fmt.number(value)}{suffix ?? ''}
-      </div>
-      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{label}</div>
-    </div>
-  );
-}

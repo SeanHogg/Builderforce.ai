@@ -206,6 +206,9 @@ export const entitlementKey = (tenantId: number): string => `replay:entitled:t${
  */
 export const allowanceOverrideKey = (tenantId: number): string => `replay:allowance-override:t${tenantId}`;
 
+/** Paid units spent this period (`replayUsage.ts`); 30 s TTL. */
+export const paidUsedKey = (tenantId: number, period: string): string => `replay:paid-used:t${tenantId}:${period}`;
+
 /** Per-tenant, per-UTC-day count of AI summaries (`replayAiBudget.ts`). */
 export const replayAiBudgetKey = (tenantId: number, day: string): string => `replay:ai-budget:t${tenantId}:${day}`;
 

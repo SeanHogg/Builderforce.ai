@@ -4,6 +4,7 @@ import type { KnowledgeClient } from '@builderforce/knowledge-client';
 import type { KnowledgeReviewEvent, ReviewControl } from '@builderforce/knowledge-graph-view';
 import { createKnowledgeSource, type DirectoryProvider } from './knowledgeSource';
 import { LIVE_DEBOUNCE_MS } from './liveWatch';
+import { clientCallPrice, type CallPricePort } from './reviewEstimate';
 
 const ROOT = 'web:vfs:7';
 
@@ -154,7 +155,7 @@ describe('browser knowledge source: Live', () => {
 describe('browser knowledge source: the confirm chip estimate', () => {
   const dir = (): DirectorySource => ({ rootId: ROOT, title: 'workspace', async *list() { /* unused */ }, read: async () => { throw new Error('unused'); } });
 
-  async function planEvent(callPriceUsd?: () => number | undefined) {
+  async function planEvent(callPriceUsd?: CallPricePort) {
     const confirmed: unknown[] = [];
     const ctl: ReviewControl = { confirm: async (_plan, estimate) => { confirmed.push(estimate); return false; }, signal: new AbortController().signal };
     const source = createKnowledgeSource({
@@ -173,6 +174,17 @@ describe('browser knowledge source: the confirm chip estimate', () => {
     const { plan, confirmed } = await planEvent(() => 0.02);
     expect(plan.estimate).toEqual({ modelCalls: 4, costUsd: 0.08 });
     expect(confirmed).toEqual([{ modelCalls: 4, costUsd: 0.08 }]);
+  });
+
+  it('prices through the server’s estimate when the host wires the client (web and Rovr do)', async () => {
+    const judgeEstimate = vi.fn(async () => ({ perCallUsd: 0.01, model: 'anthropic/claude-haiku-5-5', local: false }));
+    expect((await planEvent(clientCallPrice({ judgeEstimate }))).plan.estimate).toEqual({ modelCalls: 4, costUsd: 0.04 });
+    expect(judgeEstimate).toHaveBeenCalledTimes(1);
+  });
+
+  it('flags a local engine so the chip shows the no-cost note instead of a price', async () => {
+    const judgeEstimate = async () => ({ perCallUsd: 0, model: 'ollama/llama3', local: true });
+    expect((await planEvent(clientCallPrice({ judgeEstimate }))).plan.estimate).toEqual({ modelCalls: 4, costUsd: 0, local: true });
   });
 
   it('carries only the calls when the host has no price', async () => {

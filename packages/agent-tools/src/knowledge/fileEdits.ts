@@ -79,7 +79,7 @@ export async function markFileEdited(ports: FileEditPorts, rawPath: string): Pro
     const hashes = await currentFileHashes(ports.manifest, ports.rootId);
     if (!hashes.has(path)) return { path, reviewed: false, staled: false };
 
-    const bytes = await ports.fs.readFile(`${ports.rootPath.replace(/\/g, '/').replace(/\/+$/, '')}/${path}`).catch(() => undefined);
+    const bytes = await ports.fs.readFile(`${ports.rootPath.replace(/\\/g, '/').replace(/\/+$/, '')}/${path}`).catch(() => undefined);
     const hash = bytes ? sha256Hex(bytes) : '';
     if (hashes.get(path) === hash) return { path, reviewed: true, staled: false };
 

@@ -42,6 +42,8 @@ vi.mock('../../coordination/coordinationCapability', () => ({
 }));
 
 import { withIdeWorkspace } from './ideWorkspaceProvider';
+import { sha256Hex } from '../../../domain/shared/hash';
+import type { WrittenFileHashes } from './writtenFileHashes';
 
 const ide = { bucket: {} as R2Bucket, projectId: 12, projectName: 'Landing page' };
 const base = { capabilities: new Set(['repo.read', 'repo.write']) } as unknown as CapabilityProvider;
@@ -110,5 +112,47 @@ describe('withIdeWorkspace', () => {
     const { p, writtenPaths } = provider();
     await p.repoWrite!.writeFile('x.ts', 'y');
     expect(writtenPaths.size).toBe(0);
+  });
+
+  describe('written file hashes (the content the run left)', () => {
+    const withHashes = () => {
+      const writtenPaths = new Set<string>();
+      const writtenHashes: WrittenFileHashes = new Map();
+      const p = withIdeWorkspace(base, ide, { tenantId: 1, taskId: 5, executionId: 77, agentLabel: 'Agent', writtenPaths, writtenHashes }, { env: {} as never, db: {} as never });
+      return { p, writtenHashes };
+    };
+
+    it('records the hash of what a write left', async () => {
+      const { p, writtenHashes } = withHashes();
+      await p.repoWrite!.writeFile('index.html', '<h1>Hi</h1>');
+      expect(writtenHashes.get('index.html')).toBe(await sha256Hex('<h1>Hi</h1>'));
+    });
+
+    it('records the hash of the file READ BACK after an edit, not of anything the model sent', async () => {
+      const { p, writtenHashes } = withHashes();
+      await p.repoWrite!.writeFile('index.html', '<h1/>');
+      h.read.mockResolvedValueOnce({ ok: true, path: 'index.html', content: '<h2/>' });
+      await p.repoWrite!.editFile('index.html', '<h1/>', '<h2/>');
+      expect(h.read).toHaveBeenLastCalledWith(ide.bucket, 12, 'index.html');
+      expect(writtenHashes.get('index.html')).toBe(await sha256Hex('<h2/>'));
+    });
+
+    it('drops the earlier hash when the edited file cannot be read back', async () => {
+      const { p, writtenHashes } = withHashes();
+      await p.repoWrite!.writeFile('index.html', '<h1/>');
+      h.read.mockResolvedValueOnce({ ok: false, error: 'file not found: index.html' } as never);
+      await p.repoWrite!.editFile('index.html', '<h1/>', '<h2/>');
+      expect(writtenHashes.has('index.html')).toBe(false);
+    });
+
+    it('forgets the hash of a deleted file, and a failed edit changes nothing', async () => {
+      const { p, writtenHashes } = withHashes();
+      await p.repoWrite!.writeFile('index.html', '<h1/>');
+      h.edit.mockResolvedValueOnce({ ok: false, error: 'old_string not found' } as never);
+      await p.repoWrite!.editFile('index.html', 'nope', 'x');
+      expect(writtenHashes.get('index.html')).toBe(await sha256Hex('<h1/>'));
+      await p.repoWrite!.deleteFile('index.html');
+      expect(writtenHashes.has('index.html')).toBe(false);
+    });
   });
 });

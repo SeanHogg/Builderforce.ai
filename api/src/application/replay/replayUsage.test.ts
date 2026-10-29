@@ -140,7 +140,8 @@ describe('canKeepNewRecording', () => {
 });
 
 describe('usageSnapshot', () => {
-  it('reports free and paid use against the free allowance plus credits', async () => {
+  it('reports free and paid use against the free allowance plus everything bought this period', async () => {
+    // 10,000 bought, 1,000 spent → 9,000 left; limit - used must equal what ingest still allows (9,000).
     mocks.wallet = { credits: 9_000, freeUsed: 5_000, freeRemaining: 0, period: '2026-10' };
     mocks.paidSpent = '-1000';
     expect(await usageSnapshot(env, db, 14)).toEqual({
@@ -149,7 +150,7 @@ describe('usageSnapshot', () => {
       freeUsed: 5_000,
       credits: 9_000,
       used: 6_000,
-      limit: 14_000,
+      limit: 15_000,
     });
   });
 });

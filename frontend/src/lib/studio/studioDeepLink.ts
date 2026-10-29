@@ -50,3 +50,32 @@ export function studioChatHref(projectId: number, link: StudioChatLink): string 
   const qs = query.toString();
   return qs ? `${studioProjectPath(projectId)}?${qs}` : studioProjectPath(projectId);
 }
+
+/** `?panel=publish` opens the workspace's Publish panel; `?prescription=<id>` names the Insights fix being built. */
+export const PUBLISH_PANEL_PARAM = 'panel';
+export const PUBLISH_PANEL_VALUE = 'publish';
+export const PRESCRIPTION_PARAM = 'prescription';
+
+const PRESCRIPTION_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+export interface StudioPublishLink {
+  /** The link asks for the Publish panel to be open on arrival. */
+  openPublish: boolean;
+  /** The Insights fix this workspace was opened for, or null. */
+  prescriptionId: string | null;
+}
+
+/** The Publish-panel request and the fix a link names — the one reading of these parameters. */
+export function studioPublishLinkFrom(params: { get: (name: string) => string | null }): StudioPublishLink {
+  const prescription = params.get(PRESCRIPTION_PARAM);
+  return {
+    openPublish: params.get(PUBLISH_PANEL_PARAM) === PUBLISH_PANEL_VALUE,
+    prescriptionId: prescription && PRESCRIPTION_ID.test(prescription) ? prescription : null,
+  };
+}
+
+/** The Studio page for a project with its Publish panel open, building the preview of an Insights fix. */
+export function studioFixPreviewHref(projectId: number, prescriptionId: string): string {
+  const query = new URLSearchParams({ [PUBLISH_PANEL_PARAM]: PUBLISH_PANEL_VALUE, [PRESCRIPTION_PARAM]: prescriptionId });
+  return `${studioProjectPath(projectId)}?${query.toString()}`;
+}

@@ -41,6 +41,19 @@ describe('knowledgeGraph labels adapter', () => {
     }
   });
 
+  it('words the new keys in every language: edge kinds, packs, write failures, the cost note, the contradiction request', () => {
+    const en_ = reader(en as Tree);
+    for (const [lang, catalog] of [['zh', zh], ['es', es], ['fr', fr], ['de', de]] as const) {
+      const read = reader(catalog as Tree);
+      for (const key of ['factSaveFailed', 'factDeleteFailed', 'reviewPlanCostPending', 'edgeKinds.references', 'edgeKinds.contains', 'edgeKinds.links', 'edgeKinds.calls', 'fix.contradiction']) {
+        expect(read(key), `${lang}.${key}`).not.toBe(en_(key));
+      }
+      const contradiction = read('fix.contradiction') as string;
+      for (const hole of ['{fileA}', '{sectionA}', '{fileB}', '{sectionB}']) expect(contradiction, `${lang} ${hole}`).toContain(hole);
+    }
+    expect(en_('fix.contradiction')).toBe(DEFAULT_KNOWLEDGE_GRAPH_LABELS.fix.contradiction);
+  });
+
   it('keeps the English default for a key a catalog lacks', () => {
     expect(knowledgeGraphLabels(() => undefined).title).toBe(DEFAULT_KNOWLEDGE_GRAPH_LABELS.title);
     expect(knowledgeGraphLabels((k) => `knowledgeGraph.${k}`).reviewFolder).toBe(DEFAULT_KNOWLEDGE_GRAPH_LABELS.reviewFolder);

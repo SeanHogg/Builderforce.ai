@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { adminApi } from '@/lib/adminApi';
-import { VisitorPanel, VISITOR_PANEL_TABS } from './VisitorPanel';
+import { VisitorPanel } from './VisitorPanel';
+import { VISITOR_PANEL_TABS } from './visitorPanelTabs';
 
 /**
  * The admin visitor panel: tabs from `VISITOR_PANEL_TABS`, and erase — now in

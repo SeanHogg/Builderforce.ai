@@ -36,22 +36,7 @@ import { EntityBrowser } from './EntityBrowser';
 import { MetricChart } from './MetricChart';
 import { ObjectTimeline } from './ObjectTimeline';
 import { useFormat } from "@/i18n/useFormat";
-
-function StatTile({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      className="rounded-lg px-4 py-3 min-w-0"
-      style={{ background: 'var(--surface)', border: '1px solid var(--border-subtle)' }}
-    >
-      <p className="m-0 text-[0.65rem] uppercase tracking-wider truncate" style={{ color: 'var(--text-muted)' }}>
-        {label}
-      </p>
-      <p className="m-0 text-2xl font-semibold tabular-nums" style={{ color: 'var(--text-primary)' }}>
-        {value}
-      </p>
-    </div>
-  );
-}
+import { StatTile } from '@/components/admin/adminShared';
 
 export function DomainSurface({
   domain,

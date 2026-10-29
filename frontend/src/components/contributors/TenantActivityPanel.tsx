@@ -3,6 +3,7 @@ import { useTranslations } from 'next-intl';
 import { analyticsApi, type TenantActivityRollup } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { StatTile } from '@/components/admin/adminShared';
 
 /**
  * Owner-facing cross-project activity rollup — the whole tenant's activity from
@@ -13,15 +14,6 @@ import { useErrorMessage } from '@/i18n/useErrorMessage';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
-
-function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {
-  return (
-    <div style={cardStyle}>
-      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, color: accent ?? 'inherit' }}>{value}</div>
-    </div>
-  );
-}
 
 function Spark({ daily, ariaLabel }: { daily: TenantActivityRollup['daily']; ariaLabel: string }) {
   if (daily.length === 0) return null;
@@ -73,10 +65,10 @@ export function TenantActivityPanel() {
       {data && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 12 }}>
-            <Stat label={t('tenant.events', { days: data.windowDays })} value={fmt.number(data.totalEvents)} />
-            <Stat label={t('tenant.activeContributors')} value={fmt.number(data.activeContributors)} />
-            <Stat label={t('tenant.linesAdded')} value={fmt.number(data.totals.linesAdded)} accent="var(--success)" />
-            <Stat label={t('tenant.linesRemoved')} value={fmt.number(data.totals.linesRemoved)} accent="var(--error)" />
+            <StatTile label={t('tenant.events', { days: data.windowDays })} value={fmt.number(data.totalEvents)} />
+            <StatTile label={t('tenant.activeContributors')} value={fmt.number(data.activeContributors)} />
+            <StatTile label={t('tenant.linesAdded')} value={fmt.number(data.totals.linesAdded)} tone="success" />
+            <StatTile label={t('tenant.linesRemoved')} value={fmt.number(data.totals.linesRemoved)} tone="error" />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>

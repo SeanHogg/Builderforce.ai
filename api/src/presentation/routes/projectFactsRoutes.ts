@@ -19,6 +19,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { tenantDoor, type FrontDoor } from '../middleware/frontDoor';
+import { personOf } from '../middleware/personOf';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { hostDirectoryHashReader, parseFactFileAnchors, type FactOriginCost } from '../../application/llm/projectFactsStore';
@@ -64,8 +65,8 @@ const pid = (c: Context): number => Number(c.req.param('projectId'));
 
 /**
  * Who a Q&A cache row belongs to: the authenticated subject (a person, or the
- * `agentHost:<id>` subject the host door publishes) under its role. Unlike `person(c)`
- * below, a host is NOT null here — a host's answers are its own, not the tenant's.
+ * `agentHost:<id>` subject the host door publishes) under its role. Unlike `personOf`
+ * (null for a host), a host is NOT null here — a host's answers are its own, not the tenant's.
  */
 const cachePrincipal = (c: Context): CachePrincipal => ({
   userId: (c.get('userId') as string | undefined) ?? null,
@@ -111,7 +112,7 @@ async function recallCore(env: Env, db: Db, tenantId: number, projectId: number,
   return json({ facts });
 }
 
-async function rememberCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context, userId: string | null, authorId: string | null): Promise<Response> {
+async function rememberCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context, userId: string | null): Promise<Response> {
   if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const body = await parseOptionalBody(c, RememberFactBody);
   const key = typeof body.key === 'string' ? body.key : '';
@@ -128,7 +129,7 @@ async function rememberCore(env: Env, db: Db, tenantId: number, projectId: numbe
   // semantics: server-side provenance and the single-subject anchor correction.
   const ports = knowledgeWritePortsFor(env, db, tenantId, projectId);
   const written = await writeKnowledge(
-    { env, db, tenantId, projectId, store: ports.store, blobs: ports.extracted, userId: authorId, legacyFact: { originExecutionId, origin, retireByAnchor: true } },
+    { env, db, tenantId, projectId, store: ports.store, blobs: ports.extracted, userId, legacyFact: { originExecutionId, origin, retireByAnchor: true } },
     { facts: [{ key, content, source: typeof body.source === 'string' ? body.source : 'agent', fileAnchors: fileAnchors ?? [] }] },
   );
   return json({ ok: written.factsWritten > 0, key: key.trim() });
@@ -255,14 +256,13 @@ export function createProjectFactsRoutes(db: Db, door: FrontDoor = tenantDoor): 
   // other router sharing the mount (run-context accepts JWT on the agent prefix too).
   for (const path of ['/:projectId/facts', '/:projectId/facts/*', '/:projectId/answer']) router.use(path, door.auth);
   const t = (c: Context) => c.get('tenantId') as number;
-  // A host key acts for the agent host, not a person: no user to attribute savings to.
-  const person = (c: Context) => (door.agentHost ? null : (c.get('userId') as string | undefined) ?? null);
-  // Authorship (PRD 38 §8.3): a machine token (`machineActor`) is not a person either.
-  const author = (c: Context) => (c.get('machineActor') ? null : person(c));
+  // A host key or machine token acts for a machine, not a person: no user to attribute
+  // savings to, and no authorship (PRD 38 §8.3).
+  const person = (c: Context) => personOf(c, door);
 
   router.get('/:projectId/facts', (c) => recallCore(c.env as Env, db, t(c), pid(c), c));
-  router.post('/:projectId/facts', (c) => rememberCore(c.env as Env, db, t(c), pid(c), c, person(c), author(c)));
-  router.delete('/:projectId/facts/:key', (c) => forgetCore(c.env as Env, db, t(c), pid(c), c, author(c)));
+  router.post('/:projectId/facts', (c) => rememberCore(c.env as Env, db, t(c), pid(c), c, person(c)));
+  router.delete('/:projectId/facts/:key', (c) => forgetCore(c.env as Env, db, t(c), pid(c), c, person(c)));
   // Memory-first: resolve an answer from memory (skip the LLM) / cache a Q&A pair.
   router.get('/:projectId/answer', (c) => resolveAnswerCore(c.env as Env, db, t(c), pid(c), c, person(c)));
   router.post('/:projectId/answer', (c) => cacheAnswerCore(c.env as Env, db, t(c), pid(c), c, person(c)));

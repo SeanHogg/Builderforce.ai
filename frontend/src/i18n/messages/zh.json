@@ -1537,7 +1537,18 @@
       "preview": "预览",
       "fileCount": "{count, plural, other {# 个文件}}",
       "invalidSubdomain": "请输入有效的子域名（字母、数字和连字符）。",
-      "failed": "发布失败"
+      "failed": "发布失败",
+      "fixPreview": {
+        "title": "Insights 修复的预览",
+        "description": "此工作区是为 Insights 修复而打开的。构建并将结果发布为预览：它与在线站点并存，在线站点不会改变。您通过私有链接审阅，然后在 Insights 中发布。",
+        "action": "发布为此修复的预览",
+        "done": "预览已发布。在线站点保持不变。",
+        "openPreview": "打开预览",
+        "linkNote": "有效期 30 分钟的私有链接。",
+        "noLink": "无法创建私有预览链接。请在 Insights 中打开该修复以获取新链接。",
+        "backToFix": "返回 Insights 中的修复",
+        "failed": "无法发布预览"
+      }
     },
     "deploy": {
       "title": "从 GitHub 部署",
@@ -3646,7 +3657,9 @@
       "stageEmpty": "选择一个问题，即可在此查看其页面。",
       "lensesAria": "页面视角",
       "doNextTitle": "下一步",
-      "doNextEmpty": "收集到足够的会话后，这里会显示按影响排序的修复建议。"
+      "doNextEmpty": "收集到足够的会话后，这里会显示按影响排序的修复建议。",
+      "proofChip": "验证",
+      "proofChipAria": "打开验证记分板：{title}"
     },
     "goals": {
       "activation": "激活",
@@ -3990,6 +4003,9 @@
         "empty": "此时间段内暂无该指标的每日数据。",
         "chartLabel": "{metric}（按天）"
       }
+    },
+    "proof": {
+      "noMeasure": "此验证不衡量访客行为，因此没有可显示的访客记分板。"
     }
   },
   "cloudAgentForm": {
@@ -35172,7 +35188,8 @@
         "dismiss": "忽略",
         "copy-prompt": "复制提示词",
         "apply-page": "应用到页面",
-        "apply-in-composer": "在编辑器中应用"
+        "apply-in-composer": "在编辑器中应用",
+        "build-preview": "构建预览"
       },
       "confirm": {
         "start-test": {
@@ -35924,6 +35941,7 @@
     "reviewPlanModelCalls": "≈ {count} 次模型调用",
     "reviewPlanCost": "≈ {cost}",
     "reviewPlanCostPending": "路由确定后将显示费用。",
+    "reviewPlanCostLocal": "在您的本地模型上运行，无需费用。",
     "reviewPlanSkipped": "跳过 {count} 个",
     "reviewConfirm": "审阅",
     "reviewCancel": "取消",

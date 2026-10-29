@@ -24,6 +24,7 @@ import { CanvasVoiceInspector } from './CanvasVoiceInspector';
 import { CanvasEmailComposer } from '../CanvasEmailComposer';
 import { EvermindInspector } from './EvermindInspector';
 import { PitchInspector } from './PitchInspector';
+import { TaskDescriptionField } from './TaskDescriptionField';
 
 /**
  * Everything a kind's wide-panel `custom.component` section might need. One shape
@@ -325,7 +326,7 @@ export function TaskInspectorSection({
       {taskAgents.length > 0 && <optgroup label={t('assigneeGroupAgents')}>{taskAgents.map((agent) => { const value = agent.data.resourceId?.replace(/^agent:/, '') || agent.id; return <option key={agent.id} value={value}>{agent.data.title}{agent.data.model ? ` · ${String(agent.data.model)}` : ''}</option>; })}</optgroup>}
       {taskAssignees.length > 0 && <optgroup label={t('assigneeGroupPeople')}>{taskAssignees.map((member) => <option key={member.id} value={`user:${member.id}`}>{member.name}</option>)}</optgroup>}
     </select></label>
-    <label>{t('description')}<textarea rows={5} value={typeof data.content === 'string' ? data.content : typeof data.subtitle === 'string' ? data.subtitle : ''} onChange={(event) => onChange({ content: event.target.value })} onBlur={(event) => { if (taskId != null && persistence === 'server') void persistTaskPatch({ description: event.target.value || null }, { content: event.target.value }); }} /></label>
+    <TaskDescriptionField data={data} persistable={taskId != null && persistence === 'server'} onChange={onChange} onPersist={(description) => void persistTaskPatch({ description }, { content: description ?? '' })} />
     <label>{t('acceptanceCriteria')}<textarea rows={4} value={typeof data.acceptanceCriteria === 'string' ? data.acceptanceCriteria : ''} placeholder={t('acceptanceCriteriaPlaceholder')} onChange={(event) => onChange({ acceptanceCriteria: event.target.value })} /></label>
     <section className={styles.taskPrdSummary} aria-label={t('taskPrd')}>
       <div><span>{t('prd')}</span>{prdStatus && <small>{prdStatus}</small>}</div>

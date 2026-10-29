@@ -9,8 +9,10 @@
  *   dist/assets/replay/r/player.<hash>.css    (immutable) — rrweb's replayer stylesheet
  *   dist/assets/replay/r/pagekit.<hash>.js    (immutable) — deriveSelector + applyVisualPatch for the page-review runner
  *
- * `ReplayConfigService` reads `latest` from REPLAY_MANIFEST_URL and names the
- * recorder in the config answer; nothing else reads the manifest.
+ * `ReplayConfigService` reads `pinned`/`channels`/`latest` from REPLAY_MANIFEST_URL and
+ * names the recorder in the config answer; nothing else reads the manifest. This script
+ * writes only `latest`/`player`/`pageKit`: `pinned` and `channels` are operator-set, and
+ * `.github/scripts/cdn-publish.sh` carries them forward from the live manifest.
  * `.github/scripts/cdn-publish.sh` uploads this tree, manifest last.
  */
 import { createHash } from 'node:crypto';
@@ -24,7 +26,11 @@ const out = join(dist, 'assets');
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 const CDN_ORIGIN = 'https://cdn.builderforce.ai';
 
-/** Content hash length — at least 10 hex chars (D5). */
+/**
+ * Content hash length — at least 10 hex chars (D5). MUST equal `RECORDER_HASH_LENGTH` in
+ * `packages/interaction-contract/src/snippets.ts` (this plain-node script cannot import
+ * the TS source; `src/emitAssets.test.ts` fails if the two drift).
+ */
 const HASH_LENGTH = 12;
 
 const loader = readFileSync(join(dist, 'loader.js'));

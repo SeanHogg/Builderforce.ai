@@ -8,7 +8,7 @@ import { useTranslations } from 'next-intl';
 import { KnowledgeGraphView, type KnowledgePanelRenderProps } from '@builderforce/knowledge-graph-view';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { useConfirm } from '@/components/ConfirmProvider';
-import { createKnowledgeSource } from '@builderforce/knowledge-browser';
+import { clientCallPrice, createKnowledgeSource } from '@builderforce/knowledge-browser';
 import { createWebKnowledgeClient } from '@/lib/knowledge/webKnowledgeClient';
 import { webDirectoryProviders } from '@/lib/knowledge/webDirectoryProviders';
 import { reportKnowledgeDegraded } from '@/lib/knowledge/webHost';
@@ -45,12 +45,17 @@ export function CanvasKnowledgeSurface({ projectId, onExit, composeDraft }: Canv
   // launcher) — read once: the view takes it as its initial state.
   const [intent] = useState(() => knowledgeIntentFromSearch(typeof window === 'undefined' ? '' : window.location.search));
 
-  const source = useMemo(() => (projectId === null ? null : createKnowledgeSource({
-    projectId,
-    client: createWebKnowledgeClient(projectId),
-    directorySources: () => webDirectoryProviders({ projectId, workspaceTitle }),
-    onDegraded: reportKnowledgeDegraded,
-  })), [projectId, workspaceTitle]);
+  const source = useMemo(() => {
+    if (projectId === null) return null;
+    const client = createWebKnowledgeClient(projectId);
+    return createKnowledgeSource({
+      projectId,
+      client,
+      callPriceUsd: clientCallPrice(client),
+      directorySources: () => webDirectoryProviders({ projectId, workspaceTitle }),
+      onDegraded: reportKnowledgeDegraded,
+    });
+  }, [projectId, workspaceTitle]);
 
   const renderPanel = useCallback(({ open, title, onClose, children }: KnowledgePanelRenderProps): ReactNode => (
     <SlideOutPanel open={open} onClose={onClose} title={title}>{children}</SlideOutPanel>

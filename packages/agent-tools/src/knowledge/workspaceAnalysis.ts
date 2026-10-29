@@ -63,7 +63,7 @@ export async function readRepoGraph(
     const listed = await read.listFiles(deps.path || undefined).catch(() => undefined);
     if (!listed?.ok || !listed.paths) return null;
     const builder = port.create();
-    const paths = listed.paths.map((p) => p.replace(/\/g, '/')).filter((p) => port.accepts(p, 0)).slice(0, MAX_GRAPH_FILES);
+    const paths = listed.paths.map((p) => p.replace(/\\/g, '/')).filter((p) => port.accepts(p, 0)).slice(0, MAX_GRAPH_FILES);
     for (let i = 0; i < paths.length; i += READ_BATCH) {
         if (signal?.aborted) return null;
         const batch = await Promise.all(paths.slice(i, i + READ_BATCH).map((p) => read.readFile(p).catch(() => undefined)));

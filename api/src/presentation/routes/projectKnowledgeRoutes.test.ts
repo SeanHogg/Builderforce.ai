@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   facts: vi.fn(),
   superadmin: vi.fn(async () => false),
   upsertFact: vi.fn(async () => true),
+  judgeCost: vi.fn(),
   version: { n: 0 },
   bump: vi.fn(async () => { mocks.version.n += 1; }),
 }));
@@ -31,6 +32,7 @@ vi.mock('../../application/knowledge/knowledgePerception', async (importOriginal
   putAnalysisSnapshot: mocks.putAnalysis,
 }));
 vi.mock('../../application/knowledge/listKnowledge', () => ({ listKnowledgeScopes: mocks.scopes, listKnowledgeFacts: mocks.facts }));
+vi.mock('../../application/knowledge/judgeCostEstimate', () => ({ judgeCostFor: mocks.judgeCost }));
 vi.mock('../../infrastructure/auth/superadminFlag', () => ({ resolveIsSuperadmin: mocks.superadmin }));
 vi.mock('../../application/llm/projectFactsWrite', () => ({ upsertProjectFact: mocks.upsertFact, deleteProjectFact: vi.fn() }));
 vi.mock('../../application/knowledge/getKnowledgeGraph', async (importOriginal) => ({
@@ -62,7 +64,7 @@ beforeEach(() => {
   mocks.owned.mockResolvedValue(true);
   mocks.ports.mockImplementation((_env: unknown, _db: unknown, tenantId: number, projectId: number) => ({
     env: {}, db, tenantId, projectId,
-    store: { upsertRelations: mocks.upsertRelations, scopes: vi.fn(async () => []) },
+    store: { upsertRelations: mocks.upsertRelations, scopes: vi.fn(async () => []), factAuthor: vi.fn(async () => undefined) },
     extracted: { setSource: vi.fn(), snapshotReview: vi.fn() },
     graph: { repo: { linked: async () => ({ rootId: 'cloud:r1:' }) } },
     index: {},
@@ -70,7 +72,7 @@ beforeEach(() => {
   mocks.graph.mockResolvedValue({ scope: { rootId: 'r', packs: [], digest: 'd' }, nodes: [], edges: [], findings: [], stats: {} });
 });
 
-const relation = (i: number) => ({ from: `fact:claim:${i}`, to: 'src:r::a.md', kind: 'about', weight: 1, origin: 'model' });
+const relation = (i: number) => ({ from: `fact:claim:${i}`, to: 'src:r::a.md', kind: 'about', weight: 1, origin: 'model', sourceHash: 'h1' });
 
 describe('project knowledge routes', () => {
   it('refuses a project outside the caller’s tenant before composing any port', async () => {
@@ -124,6 +126,38 @@ describe('project knowledge routes', () => {
     const body = JSON.stringify(Array.from({ length: 3000 }, () => big[0]));
     const res = await routes().request('/42/knowledge/extracted/h1', { method: 'PUT', headers: { 'content-type': 'application/json' }, body }, {});
     expect(res.status).toBe(413);
+  });
+
+  it('answers extracted output whose entries are not at the uploaded hash with 400, storing nothing', async () => {
+    const put = vi.fn();
+    mocks.ports.mockImplementation((_e: unknown, _d: unknown, tenantId: number, projectId: number) => ({
+      env: {}, db, tenantId, projectId, store: { markRelationsStale: vi.fn() }, extracted: { get: vi.fn(async () => undefined), put },
+    }));
+    const entry = { sourceRef: 'src:r::a.md', sourceHash: 'other', nodes: [], edges: [], keys: [] };
+    const res = await routes().request('/42/knowledge/extracted/h1', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify([entry]) }, {});
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'source_hash_mismatch' });
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it('answers a model relation on a source with no sourceHash with 400', async () => {
+    const { sourceHash: _omit, ...unhashed } = relation(1);
+    const res = await routes().request('/42/knowledge/write', post({ relations: [unhashed] }), {});
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'missing_source_hash' });
+    expect(mocks.upsertRelations).not.toHaveBeenCalled();
+  });
+
+  it('reports the facts a host key skipped because a person authored them', async () => {
+    mocks.ports.mockImplementation((_e: unknown, _d: unknown, tenantId: number, projectId: number) => ({
+      env: {}, db, tenantId, projectId,
+      store: { upsertRelations: mocks.upsertRelations, factAuthor: vi.fn(async () => 'u7') },
+      extracted: { setSource: vi.fn(), snapshotReview: vi.fn() },
+    }));
+    const res = await hostRoutes().request('/42/knowledge/write', post({ facts: [{ key: 'mine', content: 'c', fileAnchors: [] }] }), {});
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, factsWritten: 0, factsSkipped: ['mine'] });
+    expect(mocks.upsertFact).not.toHaveBeenCalled();
   });
 
   it('passes maxNodes through to the graph use case, which caps it', async () => {
@@ -225,7 +259,7 @@ describe('project knowledge routes', () => {
       const store = {
         scope: vi.fn(async () => ({ rootId: 'cache-root', title: 'Cache', packs: ['docs'], lastDigest: 'dg-cache' })),
         scopes: vi.fn(async () => []), facts, relations: vi.fn(async () => []),
-        upsertRelations: mocks.upsertRelations,
+        upsertRelations: mocks.upsertRelations, factAuthor: vi.fn(async () => undefined),
       };
       mocks.ports.mockImplementation((_e: unknown, _d: unknown, tenantId: number, projectId: number) => ({
         env: {}, db, tenantId, projectId, store,
@@ -261,5 +295,24 @@ describe('project knowledge routes', () => {
       expect(res.status).toBe(200);
       expect((mocks.upsertFact.mock.calls[0] as unknown[])[5]).toBe('l1\nl2\nl3');
     });
+  });
+});
+
+describe('GET /knowledge/judge/estimate (the confirm chip’s ≈ cost)', () => {
+  it('refuses a project outside the caller’s tenant before estimating', async () => {
+    mocks.owned.mockResolvedValue(false);
+    const res = await routes().request('/42/knowledge/judge/estimate', {}, {});
+    expect(res.status).toBe(404);
+    expect(mocks.judgeCost).not.toHaveBeenCalled();
+  });
+
+  it('answers the use case’s estimate for the caller’s tenant and project, on both doors', async () => {
+    mocks.judgeCost.mockResolvedValue({ perCallUsd: 0.0021, model: 'anthropic/claude-haiku-5-5', local: false });
+    for (const app of [routes(), hostRoutes()]) {
+      const res = await app.request('/42/knowledge/judge/estimate', {}, {});
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ perCallUsd: 0.0021, model: 'anthropic/claude-haiku-5-5', local: false });
+    }
+    expect(mocks.judgeCost).toHaveBeenCalledWith(expect.anything(), TENANT, 42);
   });
 });

@@ -33,7 +33,7 @@ export {
 } from './judgement.js';
 export { HUMAN_FACT_SOURCE, humanFactBatch, humanFactKey } from './humanFact.js';
 export {
-    KNOWLEDGE_SKIP_DIRS, MAX_LISTED_FILES, createFsDirectorySource, isSkippedPath, listsFile, normalizePath, textDocument,
+    KNOWLEDGE_SKIP_DIRS, MAX_LISTED_FILES, createFsDirectorySource, isBuilderforceState, isSkippedPath, listsFile, normalizePath, textDocument,
     type FsDirectorySourceOptions, type HashCache, type KnowledgeFs,
 } from './fsDirectorySource.js';
 export { fileManifest, manifestFileName, migratingRootFiles, snapshotFileName, type KnowledgeFiles } from './fileManifest.js';

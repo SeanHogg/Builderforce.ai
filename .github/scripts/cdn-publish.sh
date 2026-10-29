@@ -9,6 +9,11 @@
 # Hashed objects are uploaded first and the manifest LAST so a new manifest
 # never points at a missing recorder. Content types are set explicitly.
 #
+# Rollback is a pin (PRD 33 §3.5): emit-assets writes only latest/player/pageKit,
+# so an operator-set `pinned` / `channels` in the LIVE manifest would be lost on
+# every release. The manifest uploaded here is the new one with the live
+# manifest's `pinned` and `channels` carried forward (a 404 = first publish).
+#
 #   bash .github/scripts/cdn-publish.sh --dry-run
 #   bash .github/scripts/cdn-publish.sh replay-sdk/dist/assets --dry-run
 #   bash .github/scripts/cdn-publish.sh replay-sdk/dist/assets
@@ -25,6 +30,8 @@ manifest goes last.
 Env: CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID (wrangler, unless --dry-run)
      CDN_R2_BUCKET   (default builderforce-cdn)
      CDN_SRC         (overrides the default dir)
+     CDN_MANIFEST_URL (live manifest to carry pinned/channels from;
+                      default https://cdn.builderforce.ai/replay/manifest.json)
      DRY_RUN=1       (same as --dry-run)
 EOF
 }
@@ -47,6 +54,7 @@ if [[ "${DRY_RUN:-}" == "1" ]]; then DRY=1; fi
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BUCKET="${CDN_R2_BUCKET:-builderforce-cdn}"
+LIVE_MANIFEST_URL="${CDN_MANIFEST_URL:-https://cdn.builderforce.ai/replay/manifest.json}"
 
 resolve_src() {
   local candidate="$1"
@@ -108,6 +116,45 @@ put() {
     --remote
 }
 
+# merge_manifest NEW_MANIFEST OUT — OUT is NEW_MANIFEST plus the live manifest's
+# `pinned` and `channels` (the new file's own values win; channels merge by name).
+# A 404 is a first publish. Any other failure aborts a real publish — silently
+# dropping a rollback pin is the bug this exists to prevent — and only warns in a
+# dry run.
+merge_manifest() {
+  local new="$1"
+  local out="$2"
+  local live
+  local code
+  live="$(mktemp)"
+  code="$(curl -sS -o "$live" -w '%{http_code}' "${LIVE_MANIFEST_URL}?t=$(date +%s)" 2>/dev/null || true)"
+  case "$code" in
+    200) ;;
+    404) echo "cdn-publish: no live manifest (first publish) — nothing to carry forward" >&2; : > "$live" ;;
+    *)
+      if [[ "$DRY" == "1" ]]; then
+        echo "cdn-publish: could not read live manifest (HTTP ${code:-none}) — dry run, nothing carried forward" >&2
+        : > "$live"
+      else
+        rm -f "$live"
+        echo "cdn-publish: could not read live manifest ${LIVE_MANIFEST_URL} (HTTP ${code:-none}); refusing to publish over a possible pin" >&2
+        exit 1
+      fi
+      ;;
+  esac
+  node -e '
+    const fs = require("fs");
+    const next = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const raw = fs.readFileSync(process.argv[2], "utf8").trim();
+    let live = {};
+    if (raw) { try { live = JSON.parse(raw); } catch { console.error("cdn-publish: live manifest is not JSON — nothing carried forward"); } }
+    if (live.pinned && !next.pinned) next.pinned = live.pinned;
+    if (live.channels && typeof live.channels === "object") next.channels = { ...live.channels, ...(next.channels || {}) };
+    fs.writeFileSync(process.argv[3], JSON.stringify(next, null, 2) + "\n");
+  ' "$new" "$live" "$out"
+  rm -f "$live"
+}
+
 canonical_dry_run() {
   echo "cdn-publish DRY_RUN (no files at ${SRC} — printing canonical layout)"
   echo "wrangler r2 object put ${BUCKET}/replay/r/recorder.<hash>.js --file=${SRC}/replay/r/recorder.<hash>.js --cache-control=public, max-age=31536000, immutable --content-type=application/javascript; charset=utf-8"
@@ -149,9 +196,22 @@ if [[ ${#hashed[@]} -eq 0 && ${#middle[@]} -eq 0 && ${#manifests[@]} -eq 0 ]]; t
   exit 1
 fi
 
+MERGED_DIR="$(mktemp -d)"
+trap 'rm -rf "$MERGED_DIR"' EXIT
+
 for rel in "${hashed[@]+"${hashed[@]}"}" "${middle[@]+"${middle[@]}"}" "${manifests[@]+"${manifests[@]}"}"; do
   [[ -n "$rel" ]] || continue
-  put "$rel" "${SRC}/${rel}"
+  file="${SRC}/${rel}"
+  if [[ "$rel" == "replay/manifest.json" ]]; then
+    merged="${MERGED_DIR}/manifest.json"
+    merge_manifest "$file" "$merged"
+    if [[ "$DRY" == "1" ]]; then
+      echo "cdn-publish: manifest to upload (live pinned/channels carried forward):"
+      cat "$merged"
+    fi
+    file="$merged"
+  fi
+  put "$rel" "$file"
 done
 
 echo "cdn-publish: uploaded ${SRC} → r2://${BUCKET}"

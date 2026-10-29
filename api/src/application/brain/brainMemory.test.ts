@@ -21,6 +21,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runInRequestScope } from '../shared/requestScope';
 import * as projectFacts from '../llm/projectFactsWrite';
+import * as writePorts from '../knowledge/knowledgeWritePorts';
 import * as llmProxy from '../llm/LlmProxyService';
 import * as timelineTail from '../../domain/shared/timelineTail';
 import * as brainLlmCall from './brainLlmCall';
@@ -32,6 +33,12 @@ import * as brainChatGuards from './brainChatGuards';
 // assertion and the call are the same function, and so summarize never
 // reaches a model or a real access query.
 const upsertProjectFact = vi.spyOn(projectFacts, 'upsertProjectFact').mockResolvedValue(true);
+// The ONE writer asks the store who authored an existing fact before a machine writes over it;
+// these tests' db doubles have no select, and no fact exists here.
+vi.spyOn(writePorts, 'knowledgeWritePortsFor').mockReturnValue({
+  store: { factAuthor: async () => undefined, upsertRelations: async () => 0 },
+  extracted: {},
+} as never);
 vi.spyOn(llmProxy, 'readProxyChoice').mockResolvedValue({
   content: '<think>the user is right - I should have deleted the branch</think>Agreed; the branch stays.',
 } as never);

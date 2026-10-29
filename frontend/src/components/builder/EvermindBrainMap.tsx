@@ -39,6 +39,7 @@ import { evermindRegionSignals, recentForRegion, type EvermindRegionKey } from '
 import { buildSparkline } from '@/lib/sparkline';
 import { useEvermindValidation } from './EvermindValidationContext';
 import { useFormat } from "@/i18n/useFormat";
+import { StatTile } from '@/components/admin/adminShared';
 
 /* ── Geometry (SVG user units; the viewBox scales to the container) ──────────── */
 const VB_W = 860;
@@ -229,9 +230,9 @@ export function EvermindBrainMap({
       </header>
 
       <div style={statStripStyle}>
-        <Stat label={t('statVersion')} value={loaded ? `v${data?.version ?? 0}` : '…'} badge={<RegressionBadge evalPoint={data?.eval ?? null} />} />
-        <Stat label={t('statLearned')} value={loaded ? String(data?.contributions ?? 0) : '…'} />
-        <Stat label={t('statQueued')} value={loaded ? String(data?.pending ?? 0) : '…'} />
+        <StatTile label={t('statVersion')} value={loaded ? `v${data?.version ?? 0}` : '…'} badge={<RegressionBadge evalPoint={data?.eval ?? null} />} />
+        <StatTile label={t('statLearned')} value={loaded ? String(data?.contributions ?? 0) : '…'} />
+        <StatTile label={t('statQueued')} value={loaded ? String(data?.pending ?? 0) : '…'} />
       </div>
 
       {/* Real training telemetry behind each neocortex update — loss + how far the
@@ -397,18 +398,6 @@ function nodeTitle(t: ReturnType<typeof useTranslations>, e: ProjectEvermindRece
   return `${kind} · v${e.version}\n${head}`.slice(0, 220);
 }
 
-function Stat({ label, value, badge }: { label: string; value: string; badge?: React.ReactNode }) {
-  return (
-    <div style={statStyle}>
-      <div style={{ fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>{label}</div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '1.1rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
-        {badge}
-      </div>
-    </div>
-  );
-}
-
 /**
  * The automatic pre/post regression chip on the version stat: ▲ when the merge that
  * produced this version LOWERED held-out loss on the project's prior taught examples
@@ -529,7 +518,6 @@ const rootStyle: React.CSSProperties = {
   borderRadius: 'var(--radius-lg)', padding: '16px 18px', color: 'var(--text-primary)',
 };
 const statStripStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, flexShrink: 0 };
-const statStyle: React.CSSProperties = { background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '8px 12px' };
 const legendStyle: React.CSSProperties = {
   display: 'flex', flexWrap: 'wrap', gap: '10px 20px', flexShrink: 0,
   borderTop: '1px solid var(--border-subtle)', paddingTop: 10,

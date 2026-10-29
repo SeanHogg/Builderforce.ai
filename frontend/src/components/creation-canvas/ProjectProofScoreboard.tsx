@@ -5,25 +5,11 @@
  * beneath it must never wait on this.
  */
 
-import { useEffect, useState } from 'react';
-import { realizationApi, type Realization } from '@/lib/realizationApi';
 import { ProofScoreboard } from './ProofScoreboard';
+import { useProjectProof } from './useProjectProof';
 
 export function ProjectProofScoreboard({ projectId }: { projectId: number }) {
-  const [proof, setProof] = useState<Realization | null>(null);
-
-  useEffect(() => {
-    let live = true;
-    setProof(null);
-    realizationApi.list()
-      .then((rows) => {
-        if (!live) return;
-        setProof(rows.find((r) => r.projectId === projectId && r.status === 'built' && !!r.measure) ?? null);
-      })
-      .catch(() => { if (live) setProof(null); });
-    return () => { live = false; };
-  }, [projectId]);
-
+  const [proof, setProof] = useProjectProof(projectId);
   if (!proof) return null;
   return <ProofScoreboard realization={proof} onRealizationChange={setProof} />;
 }

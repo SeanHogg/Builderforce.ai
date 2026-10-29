@@ -41,6 +41,16 @@ Builderforce cannot see what a visitor does on a page. `lib/visitorJourney.ts` �
 - **Fix it preview:** `publishPreviewRelease` records a release without moving the live pointer. A person sees it through a 30-minute preview link (`?bf_preview=`), and publishes or reverts through the existing pointer move.
 - **Method funnel:** seeded by a superadmin action on the Builderforce workspace's site, not by a fixed-uuid migration.
 
+### 0.3 Amendments from the 2026-10-29 audit
+- **Fix it builds its preview in the browser.** A cloud run on a hosted project edits the project's IDE workspace (`taskWorkspaceTarget`), and only the browser builds an app. The agent changes the workspace and publishes nothing. "Build the preview" on the fix opens the IDE publish panel with `prescription=<id>`. A person builds the app there, and the panel posts `preview=1&prescription=<id>` to `POST /api/ide/projects/:projectId/publish` (`publishPreviewRelease` + `notePrescriptionPreview`). Publish preview, Test it and Revert follow from that release.
+- **Follow up** writes enrolments into the canvas sequence object's `content.enrolments`, which is the structure `sequenceRunner` drives. The 1234 trigger clears `next_due_at`, so the runner picks the new enrolments up on its next tick. `salesPolicy.ts` (commission helpers) has no part in it.
+- **Project scope:** the canvas resolves its hosted site once (`GET /api/projects/:projectId/replay/site`), then reads through `/api/replay/*?site=`. Nothing is mounted twice.
+- **Live** is served by `ReplayReadService.live` and `recordingStatus`; there is no separate `ReplayLiveService`. `active` and `byRoute` are exact counts, and only the visitor list is capped.
+- **The Flow detail strip** opens the issue groups for a path (D15: never browse raw sessions). Recordings are reached from each issue.
+- **Release compare** lives in `HeatmapView`/`HeatmapControls` (side-by-side and difference modes); there is no separate `ReleaseCompare` component.
+- **`replay:read` keys** reach the documented read API: overview, recordings and funnel evaluation (`docs-site …/developers/insights-api.md`). The other reads are for members only.
+- **Recorder hash** length is one contract constant shared by `emit-assets` and `pickRecorder`. `cdn-publish.sh` carries `pinned`/`channels` forward from the live manifest, so a pin survives the next release.
+
 ## 1. Outcome
 
 **The point is to tell people how to improve their website, render the improvement, hand it to an AI as a prompt, and measure the result.** Fixes lead the home of the Insights app for every site, Builderforce's own included (D17). Recordings, heatmaps, funnels, flow, live and overview are evidence, reached from a fix or browsed beside it.
@@ -112,7 +122,7 @@ API Worker
                        │                    + replay_recordings upsert + usage debit
                        └─ replay_releases first/last seen
   /api/replay/*  (membership + requireFeature('sessionReplay'); ?site= must belong to the caller's workspace)
-  /api/projects/:projectId/replay/*  (hosted site of that project; same handlers)
+  /api/projects/:projectId/replay/site  (resolve/enable the project's hosted site; reads then use /api/replay/*?site=)
   /api/admin/replay-ops/*  (superadmin, aggregates only)
 Frontend: /apps/insights · canvas Measure ▸ Visitors · Admin link → ONE InsightsHome + ONE InsightsPanel
 ```
@@ -217,7 +227,7 @@ Tokens only (`var(--surface-card)`, `var(--text-primary)`, `var(--border)`, `var
 1. **Diagnose:** `PRESCRIPTION_RULES` (`domain/replay/prescriptions/rules.ts`): `{ id, area, detect(aggregates): Finding[], effort 1|2|3, actions, thresholds }`, pure over aggregates the application passes in. Rules: `rage_on_element` (≥3% of visits reaching an element rage it), `error_on_step` (an error fingerprint in ≥30% of drops at a step), `dead_click_heading`, `cta_below_fold` (CTA below the depth ≥40% reach), `quickback_after_reveal`, `excessive_scroll_missing_info`, `device_gap` (phone < 50% of desktop), `release_regression` (≥10 points down vs previous release), `pricing_hesitation` and `checkout_abandon_known` (identifiable visitors only), `objection_pattern`, `proof_missed_reason`; plus the page-review rules of §5.2.
 2. **Estimate:** `estimateImpact(finding, cohorts)` = affected × (conversion without − with), 30-day projection, Wilson interval on both cohorts; `confidence: 'low'` and no point estimate below 100 visits in either cohort. Ranked by impact ÷ effort.
 3. **Prescribe:** for the top ≤5 new findings per site per day, `condenseTranscript` (moved to `application/llm/condense.ts`) gets the finding, cited recording digests and the element map, and returns prescription, change and acceptance; uncited sentences are dropped. Shares `REPLAY_SUMMARY_DAILY_LIMIT = 200` per tenant per day.
-4. **Apply:** `PRESCRIPTION_ACTIONS` registry — **Fix it** (task + `dispatchCloudRunForTask` for hosted sites with a coding agent → a preview release a person publishes), **Test it** (`ab_tests` draft via `marketing/experimentation.ts`; the sites Worker serves a sticky `bf_ab_<testId>` split and the loader carries `data-variant`), **Follow up** (sequence enrolment through `salesPolicy.ts`, contacts only via `resolveKnownContacts`), **Ticket**, **Dismiss** (reason required; 30-day suppression), and from §5.2 **Apply in composer**, **Copy prompt**, **Apply page**.
+4. **Apply:** `PRESCRIPTION_ACTIONS` registry — **Fix it** (task + `dispatchCloudRunForTask` for hosted sites with a coding agent → a preview release a person publishes), **Test it** (`ab_tests` draft via `marketing/experimentation.ts`; the sites Worker serves a sticky `bf_ab_<testId>` split and the loader carries `data-variant`), **Follow up** (enrolment into the canvas sequence object that `sequenceRunner` drives, contacts only via `resolveKnownContacts`), **Ticket**, **Dismiss** (reason required; 30-day suppression), and from §5.2 **Apply in composer**, **Copy prompt**, **Apply page**.
 5. **Verify:** fix/ticket by the ticket effect (§5.3.4), test by `variantResults`, follow-up by enrolled vs matched-not-enrolled conversion. Status `worked|no_effect|worse`, outcome event `prescription.verify` (phase `validated`); `worse` on a published Fix it offers Revert.
 
 ### 5.2 The page review (D14)

@@ -7,6 +7,7 @@ export {
   KnowledgeApiError,
   type AnalysisSnapshotPayload,
   type GraphQuery,
+  type JudgeEstimate,
   type KnowledgeClient,
   type KnowledgeClientOptions,
   type KnowledgeFacts,

@@ -43,4 +43,57 @@ describe('the per-sha cache', () => {
         await cache.getOrRun('a', work);
         expect(work).toHaveBeenCalledTimes(4);
     });
+
+    it('expires an entry after its lifetime, whether the cache or the verdict set it', async () => {
+        let t = 0;
+        const cache = createShaCache<number>({ ttlMs: 100, now: () => t, keep: (v) => (v === 2 ? 10 : true) });
+        const work = vi.fn(async () => 1);
+        await cache.getOrRun('k', work);
+        t = 99;
+        await cache.getOrRun('k', work);
+        expect(work).toHaveBeenCalledTimes(1);
+        t = 101;
+        await cache.getOrRun('k', work);
+        expect(work).toHaveBeenCalledTimes(2);
+
+        const short = vi.fn(async () => 2);
+        await cache.getOrRun('s', short);
+        t = 120;
+        await cache.getOrRun('s', short);
+        expect(short).toHaveBeenCalledTimes(1);
+        t = 135;
+        await cache.getOrRun('s', short);
+        expect(short).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops a shared run only when EVERY asker has stopped', async () => {
+        const cache = createShaCache<number>();
+        let seen: AbortSignal | undefined;
+        let release!: (v: number) => void;
+        const work = vi.fn((signal?: AbortSignal) => { seen = signal; return new Promise<number>((r) => { release = r; }); });
+        const a = new AbortController(), b = new AbortController();
+        const first = cache.getOrRun('k', work, a.signal);
+        const second = cache.getOrRun('k', work, b.signal);
+        expect(work).toHaveBeenCalledTimes(1);
+        a.abort();
+        expect(seen?.aborted).toBe(false);
+        b.abort();
+        expect(seen?.aborted).toBe(true);
+        release(5);
+        expect(await Promise.all([first, second])).toEqual([5, 5]);
+    });
+
+    it('an asker without a signal keeps the shared run alive', async () => {
+        const cache = createShaCache<number>();
+        let seen: AbortSignal | undefined;
+        let release!: (v: number) => void;
+        const work = (signal?: AbortSignal) => { seen = signal; return new Promise<number>((r) => { release = r; }); };
+        const a = new AbortController();
+        const first = cache.getOrRun('k', work, a.signal);
+        const second = cache.getOrRun('k', work);
+        a.abort();
+        expect(seen?.aborted).toBe(false);
+        release(1);
+        await Promise.all([first, second]);
+    });
 });

@@ -1,0 +1,47 @@
+/*
+ * Timeline marker hit areas (PRD 33 §4.3). The visual dot stays 22px; on
+ * phones and tablets (<=900px) the row and each marker button grow to a 44px
+ * tap target while the dot is centred inside it. The row grows with them, so
+ * the larger target never overlaps the scrubber below.
+ */
+
+.row {
+  position: relative;
+  height: 22px;
+}
+
+.marker {
+  position: absolute;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transform: translateX(-50%);
+}
+
+.dot {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  background: var(--surface-card);
+}
+
+@media (max-width: 900px) {
+  .row {
+    height: 44px;
+  }
+
+  .marker {
+    width: 44px;
+    height: 44px;
+  }
+}

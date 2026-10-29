@@ -54,6 +54,7 @@ import { ProxyFunding } from './proxyFunding';
 import { ProxyDispatcher } from './proxyDispatcher';
 import { finalizeProxyResult } from './proxyFinalize';
 import { completeChat, type CompleteOptions } from './proxyCompletion';
+import { previewRoute } from './proxyRoutePlan';
 import { proxyModelStatus, type ProxyModelStatus } from './proxyStatus';
 import { codingModelsForPlan, resolveRouting } from './proxyPlanRouting';
 import type {
@@ -180,6 +181,14 @@ export class LlmProxyService {
     opts?: CompleteOptions,
   ): Promise<ProxyResult> {
     return completeChat(this.rt, body, requestHeaders, traceId, signal, opts);
+  }
+
+  /**
+   * The models `body` would try, first to last — the SAME seed and chain `complete()`
+   * walks, without dispatching (no model call, no caches). For pricing a call up front.
+   */
+  previewRoute(body: ChatCompletionRequest, opts?: CompleteOptions): Promise<string[]> {
+    return previewRoute(this.rt, body, opts);
   }
 
   /** Per-model status with cooldown + key-bound info — used by /v1/models. */
