@@ -1,6 +1,6 @@
 /**
  * gates — the ONE on-prem policy-gate evaluation, ported from
- * `agent-runtime/src/agents/policy-gate-seam.ts`.
+ * `agent-runtime/src/agents/policy-gate-seam.ts` (deleted: agent-runtime now asks this module).
  *
  * A path-scoped `block` must actually refuse the call, on every surface. This module
  * evaluates a compiled gate list against one tool call (empty/missing args omit the
@@ -17,7 +17,7 @@ import { evaluatePolicyGate, toolCallPaths, type PolicyDecision, type PolicyGate
 
 /**
  * Native / SDK tool names the model emits, plus the catalog names a gate is typically
- * authored against (`write_file`, `run_command`, …). Verbatim from `policy-gate-seam.ts`.
+ * authored against (`write_file`, `run_command`, …). Verbatim from the on-prem `policy-gate-seam.ts` this module replaced.
  */
 const TOOL_NAME_SYNONYMS: Readonly<Record<string, readonly string[]>> = {
   write: ["write_file", "Write"],
@@ -97,4 +97,60 @@ export function canUseToolDecision(
   const d = evaluatePolicyGateSeam(gates, toolName, input);
   if (!isPolicyRefusal(d)) return { behavior: "allow" };
   return { behavior: "deny", message: policyRefusalMessage(d) };
+}
+
+// ── The allowlist half: which tools a `block` gate withholds ─────────────────
+
+/**
+ * The tool vocabulary a gate is authored against — the names the SDK runner passed
+ * verbatim as its `allowedTools` (`claude-agent-sdk-runner.ts`, deleted with that
+ * runner). A `block` gate names one of these (any case, or a catalog synonym such as
+ * `run_command`) and the tool leaves the advertised set; `Task` is the delegation tool,
+ * so governance can withhold delegation per tenant.
+ */
+export const GATED_TOOL_VOCABULARY = ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "Task"] as const;
+
+/**
+ * The gates that withhold a tool outright: a `block` with no path scope. A path-scoped
+ * block still needs the tool for the unmatched paths — {@link canUseToolDecision} refuses
+ * the matching calls at dispatch.
+ */
+function withholdingGates(gates: readonly PolicyGate[] | undefined): PolicyGate[] {
+  return (gates ?? []).filter((g) => g.effect === "block" && !(g.paths && g.paths.length));
+}
+
+/** True when an unscoped `block` gate withholds `toolName` (any case, any synonym). */
+export function isToolWithheld(gates: readonly PolicyGate[] | undefined, toolName: string): boolean {
+  const blocking = withholdingGates(gates);
+  if (blocking.length === 0) return false;
+  if (blocking.some((g) => !g.tool || g.tool === "*")) return true;
+  const blocked = new Set(blocking.map((g) => (g.tool ?? "").toLowerCase()));
+  return candidateToolNames(toolName).some((n) => blocked.has(n.toLowerCase()));
+}
+
+/**
+ * The tools a run may use after `block` gates are applied: the gate vocabulary plus any
+ * mounted tool entries in `extraTools`, minus what a gate withholds (case-insensitive;
+ * `*` / no tool removes every one). Pure.
+ */
+export function allowedToolsAfterGates(
+  gates: readonly PolicyGate[] | undefined,
+  extraTools: readonly string[] = [],
+): string[] {
+  return [...GATED_TOOL_VOCABULARY, ...extraTools].filter((t) => !isToolWithheld(gates, t));
+}
+
+/**
+ * The refusal a gate hands the model for one call, or nothing when the call may run.
+ * The result carries the gate's id and decision so the model (and the trace) can name
+ * what stopped it.
+ */
+export function gateRefusal(
+  gates: readonly PolicyGate[] | undefined,
+  toolName: string,
+  args?: Record<string, unknown>,
+): { data: Record<string, unknown> } | undefined {
+  const decision = evaluatePolicyGateSeam(gates, toolName, args);
+  if (!isPolicyRefusal(decision)) return undefined;
+  return { data: { ok: false, error: policyRefusalMessage(decision), policy: decision } };
 }

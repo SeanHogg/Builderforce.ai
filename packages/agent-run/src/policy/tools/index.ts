@@ -14,7 +14,7 @@
  *     it (`catalog.ts` — `deferredTools.ts`; `selectTools.ts` — `selectTools.ts` lexical
  *     rank + synonyms + pinning; `searchHelpers.ts` — the `tool_search` meta tool);
  *   • `toolScope: 'chat-reply'` data (`toolset.ts` — `cloudAgentToolset.ts` `CHAT_SCOPED_AGENT_TOOLS`);
- *   • the on-prem policy-gate evaluation (`gates.ts` — `policy-gate-seam.ts` + the SDK
+ *   • the on-prem policy-gate evaluation (`gates.ts` — the former `policy-gate-seam.ts` + the SDK
  *     `allowedToolsAfterGates` allowlist shape);
  *   • the window-sized result cap (`caps.ts` `resultCapFor` / `capToolResult` —
  *     `tool-output-policy`'s `windowedCap` sized by `ModelTransport.window()`, applied to
@@ -43,11 +43,14 @@ import { selectCatalog } from "./catalog.js";
 import { selectToolsForTurn } from "./selectTools.js";
 import { isChatReplyScope, CHAT_REPLY_SCOPED_TOOLS } from "./toolset.js";
 import { coveredReadAnswer, recordServedRead } from "./readCoverage.js";
+import { gateRefusal, isToolWithheld } from "./gates.js";
 
 /** The tools hook, as ported. `select` narrows the surface's schemas to what this run may call. */
 export const toolsHook: ToolsHook = {
-  select(ctx: PolicyContext, tools: readonly ToolSchema[]) {
+  select(ctx: PolicyContext, offered: readonly ToolSchema[]) {
     const { policy, task } = ctx;
+    // A tool an unscoped `block` gate withholds is never advertised (governance, every surface).
+    const tools = offered.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? ""));
 
     // The addressed-reply scope advertises only the chat-scoped tools plus whatever the
     // surface already gated to them; the autonomous scopes advertise the one catalog.
@@ -73,6 +76,8 @@ export const toolsHook: ToolsHook = {
     });
     return selected.tools;
   },
+  // A gate that blocks the call refuses it at dispatch; a path-scoped block lands here too.
+  refuse: (ctx, call) => gateRefusal(ctx.policy.approvalGates, call.name, call.args),
   beforeDispatch: coveredReadAnswer,
   observe: recordServedRead,
 };
@@ -105,7 +110,15 @@ export { runToolSearch, TOOL_SEARCH_MAX, promptNamedTools } from "./searchHelper
 export { CHAT_REPLY_SCOPED_TOOLS, isChatReplyScope, CHAT_REPLY_TOOL_SCOPE } from "./toolset.js";
 export { windowedCap, toolOutputCap, resultCapFor, capToolResult } from "./caps.js";
 export { AGENT_READ_TRAITS, coveredReadAnswer, recordServedRead } from "./readCoverage.js";
-export { evaluatePolicyGateSeam, canUseToolDecision, policyRefusalMessage } from "./gates.js";
+export {
+  evaluatePolicyGateSeam,
+  canUseToolDecision,
+  policyRefusalMessage,
+  allowedToolsAfterGates,
+  gateRefusal,
+  isToolWithheld,
+  GATED_TOOL_VOCABULARY,
+} from "./gates.js";
 export {
   truncateToolResultText,
   truncateToolResultMessage,

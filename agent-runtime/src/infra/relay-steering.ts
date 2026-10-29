@@ -36,6 +36,11 @@ export interface SteeringChannel {
   push(text: unknown): boolean;
   /** Steers queued but not yet handed to the SDK. */
   pending(): number;
+  /**
+   * Take every queued steer, oldest first — the agent's `SteeringSource` port. The run
+   * drains it before each model call, so a steer typed mid-run reaches the next call.
+   */
+  drain(): string[];
   /** True after {@link close}; pushes are refused from then on. */
   closed(): boolean;
   /** End the input stream so the SDK run can finish. Idempotent. */
@@ -69,6 +74,7 @@ export function createSteeringChannel(): SteeringChannel {
       return true;
     },
     pending: () => queue.length,
+    drain: () => queue.splice(0, queue.length),
     closed: () => isClosed,
     close() {
       if (isClosed) return;

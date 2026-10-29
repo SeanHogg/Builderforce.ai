@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { allowedToolsAfterGates, buildGatewayHeaders } from "./claude-agent-sdk-runner.js";
+import { allowedToolsAfterGates } from "@builderforce/agent-run";
+import { buildGatewayHeaders } from "../run/gatewayModelTransport.js";
 
 /**
  * The header string the SDK sends on every gateway request. It is the ONE seam a

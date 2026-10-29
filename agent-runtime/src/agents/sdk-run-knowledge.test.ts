@@ -1,40 +1,51 @@
 import { RunKnowledgeRecorder } from "@builderforce/agent-tools";
+import type { CapabilityProvider } from "@builderforce/agent-tools";
+import type { ModelCompletion, ModelTransport } from "@builderforce/agent-run";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * BuilderForce-V2 (Claude Agent SDK) runs record knowledge: every SUCCESSFUL tool call
- * lands in the run's record, so the run end can write a code map like every runtime.
+ * On-prem runs record knowledge: every SUCCESSFUL tool call lands in the run's record, so
+ * the run end can write a code map like every runtime. (The run-level cases are retargeted
+ * from the deleted Claude Agent SDK runner to the public seam that carries the same
+ * behaviour, PRD 35 §5.1: the scripted model replaces the SDK's scripted `query()`.)
  */
 
-/** Scripted SDK output for one turn. */
-let script: unknown[] = [];
-
-vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
-  query: (params: { prompt: AsyncIterable<unknown> }) =>
-    (async function* () {
-      for await (const _input of params.prompt) {
-        for (const msg of script) yield msg;
-      }
-    })(),
-}));
-vi.mock("./sdk-memory-server.js", () => ({
-  buildSdkMemoryServer: async () => null,
-  SDK_MEMORY_SERVER: "builderforce_memory",
-  SDK_MEMORY_TOOLS: "mcp__builderforce_memory",
-}));
+/** Scripted model output: one completion per model call. */
+let script: ModelCompletion[] = [];
 
 import { mapSdkMessage } from "./claude-agent-v2-events.js";
-import { runClaudeAgentSdkV2 } from "./claude-agent-sdk-runner.js";
+import { runOnPremAgent } from "../run/onPremAdapter.js";
 import { sdkKnowledgeFeed, sdkToolName } from "./sdk-run-knowledge.js";
 
 const ROOT = "/work/ticket";
 
-function toolUse(id: string, name: string, input: Record<string, unknown>) {
-  return { type: "assistant", message: { content: [{ type: "tool_use", id, name, input }] } };
+/** A model turn that makes one tool call. */
+function toolUse(id: string, name: string, input: Record<string, unknown>): ModelCompletion {
+  return { content: "", toolCalls: [{ id, name, arguments: JSON.stringify(input) }] };
 }
 function toolResult(id: string, isError = false) {
   return { type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, is_error: isError, content: "x" }] } };
 }
+
+const scriptedModel = (): ModelTransport => {
+  let call = 0;
+  return { complete: async () => script[call++] ?? { content: "" } };
+};
+
+/** A working tree whose files all exist; a whole-file write is refused, so the failed call is a failed call. */
+const workspace = (): CapabilityProvider => ({
+  capabilities: new Set(["repo.read", "repo.edit", "repo.write"]),
+  repoRead: {
+    listFiles: async () => ({ ok: true, paths: [] }),
+    readFile: async (path: string) => ({ ok: true, path, content: "x" }),
+    searchCode: async (query: string) => ({ ok: true, query, total: 0, matches: [] }),
+  },
+  repoWrite: {
+    writeFile: async () => ({ ok: false, error: "disk full" }),
+    editFile: async () => ({ ok: true, change: "modified", replaced: 1 }),
+    deleteFile: async () => ({ ok: true, deleted: true }),
+  },
+});
 
 const sinks = () => ({ onAssistantText: vi.fn(), onToolUse: vi.fn(), onResult: vi.fn() });
 
@@ -68,36 +79,45 @@ describe("sdkKnowledgeFeed", () => {
   });
 });
 
-describe("runClaudeAgentSdkV2 — the run's record", () => {
+describe("runOnPremAgent — the run's record", () => {
   it("records the task and successful calls, so the run consolidates into a code map", async () => {
     script = [
-      toolUse("1", "Read", { file_path: `${ROOT}/api/src/run/a.ts` }),
-      toolResult("1"),
-      toolUse("2", "Read", { file_path: `${ROOT}/api/src/run/b.ts` }),
-      toolResult("2"),
-      toolUse("3", "Edit", { file_path: `${ROOT}/api/src/run/c.ts` }),
-      toolResult("3"),
-      toolUse("4", "Write", { file_path: `${ROOT}/api/src/run/failed.ts` }),
-      toolResult("4", true),
-      { type: "result", subtype: "success", result: "done" },
+      toolUse("1", "read_file", { path: `${ROOT}/api/src/run/a.ts` }),
+      toolUse("2", "read_file", { path: `${ROOT}/api/src/run/b.ts` }),
+      toolUse("3", "edit_file", { path: `${ROOT}/api/src/run/c.ts`, old_string: "x", new_string: "y" }),
+      toolUse("4", "write_file", { path: `${ROOT}/api/src/run/failed.ts`, content: "y" }),
+      { content: "done" },
     ];
-    const knowledge = new RunKnowledgeRecorder();
-    const out = await runClaudeAgentSdkV2(
-      { prompt: "fix the run loop", cwd: ROOT, anthropicBaseUrl: "https://gw/llm", gatewayAuthKey: "k", knowledge },
+    const committed: unknown[] = [];
+    const out = await runOnPremAgent(
+      {
+        prompt: "fix the run loop",
+        cwd: ROOT,
+        anthropicBaseUrl: "https://gw/llm",
+        gatewayAuthKey: "k",
+        transport: scriptedModel(),
+        capabilities: workspace(),
+        commitMemory: (consolidated) => {
+          committed.push(consolidated);
+        },
+      },
       sinks(),
     );
     expect(out.ok).toBe(true);
-    expect(knowledge.activity.prompt).toBe("fix the run loop");
-    const map = knowledge.consolidate({ root: ROOT });
+    const map = committed[0] as { key?: string; content?: string } | undefined;
+    expect(map?.content).toContain('asked: "fix the run loop"');
     expect(map?.key).toBe("codemap:api/src/run");
     expect(map?.content).toContain("- api/src/run/c.ts (changed)");
     expect(map?.content).not.toContain("failed.ts");
   });
 
   it("records nothing without a record, and still forwards tool use", async () => {
-    script = [toolUse("1", "Read", { file_path: "a.ts" }), toolResult("1"), { type: "result", subtype: "success", result: "ok" }];
+    script = [toolUse("1", "read_file", { path: "a.ts" }), { content: "ok" }];
     const s = sinks();
-    await runClaudeAgentSdkV2({ prompt: "p", cwd: ROOT, anthropicBaseUrl: "https://gw/llm", gatewayAuthKey: "k" }, s);
-    expect(s.onToolUse).toHaveBeenCalledWith("Read", "1", { file_path: "a.ts" });
+    await runOnPremAgent(
+      { prompt: "p", cwd: ROOT, anthropicBaseUrl: "https://gw/llm", gatewayAuthKey: "k", transport: scriptedModel(), capabilities: workspace() },
+      s,
+    );
+    expect(s.onToolUse).toHaveBeenCalledWith("read_file", "1", { path: "a.ts" });
   });
 });

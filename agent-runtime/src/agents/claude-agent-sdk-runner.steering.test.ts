@@ -1,32 +1,34 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { CapabilityProvider } from "@builderforce/agent-tools";
+import type { ModelRequest, ModelTransport } from "@builderforce/agent-run";
 
 /**
- * Mid-run steering (GAP A3). The runner hands `query()` an ASYNC ITERABLE prompt
- * (streaming-input mode, the only mode the SDK accepts extra user turns in) and
- * a portal steer pushed into the channel becomes the next user turn of the SAME
- * run — not a message into a chat session the run never reads.
+ * Mid-run steering (GAP A3). Retargeted from the deleted Claude Agent SDK runner to the
+ * public seam that carries the same behaviour (PRD 35 §5.1): a portal steer pushed into
+ * the run's channel becomes the next user turn of the SAME run — not a message into a chat
+ * session the run never reads. The scripted model replaces the SDK's scripted `query()`:
+ * it answers one model call per turn, and a steer pushed while a turn is in flight is
+ * taken before the run finishes.
  */
 
-type Captured = { prompt: AsyncIterable<{ message: { content: unknown } }> };
-const captured: Captured[] = [];
-/** Per-turn scripted SDK output: the fake consumes one input message per turn. */
-let turnResults: Array<{ type: string; result?: string }> = [];
+/** Per-turn scripted model output: the fake answers one model call per turn. */
+let turnResults: Array<{ result: string; fail?: boolean }> = [];
+/** The requests the model was asked, in order. */
+const requests: ModelRequest[] = [];
 
-vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
-  query: (params: Captured) => {
-    captured.push(params);
-    return (async function* () {
-      let turn = 0;
-      for await (const _input of params.prompt) {
-        const scripted = turnResults[turn++] ?? { type: "result", result: "" };
-        yield { type: "assistant", message: { content: [{ type: "text", text: `turn ${turn}` }] } };
-        yield scripted;
-      }
-    })();
+const scriptedModel: ModelTransport = {
+  complete: async (request) => {
+    requests.push(JSON.parse(JSON.stringify(request)) as ModelRequest);
+    const scripted = turnResults[requests.length - 1] ?? { result: "" };
+    if (scripted.fail) throw new Error(scripted.result);
+    return { content: scripted.result };
   },
-}));
+};
 
-import { runClaudeAgentSdkV2 } from "./claude-agent-sdk-runner.js";
+/** No tool backing: the run's tools are only the ones every surface has (`finish`). */
+const noCapabilities: CapabilityProvider = { capabilities: new Set() };
+
+import { runOnPremAgent } from "../run/onPremAdapter.js";
 import { createSteeringChannel } from "../infra/relay-steering.js";
 
 const baseParams = {
@@ -34,6 +36,8 @@ const baseParams = {
   cwd: "/w",
   anthropicBaseUrl: "https://gw/llm",
   gatewayAuthKey: "k",
+  transport: scriptedModel,
+  capabilities: noCapabilities,
 };
 
 function sinks() {
@@ -46,28 +50,25 @@ function sinks() {
 }
 
 beforeEach(() => {
-  captured.length = 0;
+  requests.length = 0;
   turnResults = [];
 });
 
-describe("runClaudeAgentSdkV2 steering", () => {
-  it("streams the task prompt as the first user turn and ends after one result when nothing is queued", async () => {
-    turnResults = [{ type: "result", result: "done" }];
+describe("runOnPremAgent steering", () => {
+  it("hands the model the task prompt as the first turn and ends after one result when nothing is queued", async () => {
+    turnResults = [{ result: "done" }];
     const s = sinks();
-    const out = await runClaudeAgentSdkV2({ ...baseParams, appendSystemPrompt: "persona" }, s);
+    const out = await runOnPremAgent({ ...baseParams, appendSystemPrompt: "persona" }, s);
 
     expect(out).toEqual({ ok: true, text: "done" });
-    expect(typeof captured[0].prompt[Symbol.asyncIterator]).toBe("function");
+    expect(requests[0].messages[0]).toEqual({ role: "system", content: "persona\n\nbuild it" });
     expect(s.onAssistantText).toHaveBeenCalledTimes(1);
     expect(s.onResult).toHaveBeenCalledTimes(1);
     expect(s.onSteerApplied).not.toHaveBeenCalled();
   });
 
   it("applies a steer pushed mid-run as the next turn and acknowledges it", async () => {
-    turnResults = [
-      { type: "result", result: "first pass" },
-      { type: "result", result: "steered pass" },
-    ];
+    turnResults = [{ result: "first pass" }, { result: "steered pass" }];
     const steering = createSteeringChannel();
     const s = sinks();
     // Push while the first turn is in flight (before its result is observed).
@@ -75,7 +76,7 @@ describe("runClaudeAgentSdkV2 steering", () => {
       expect(steering.push("also add tests")).toBe(true);
     });
 
-    const out = await runClaudeAgentSdkV2({ ...baseParams, steering }, s);
+    const out = await runOnPremAgent({ ...baseParams, steering }, s);
 
     expect(out).toEqual({ ok: true, text: "steered pass" });
     expect(s.onSteerApplied).toHaveBeenCalledWith("also add tests");
@@ -85,10 +86,10 @@ describe("runClaudeAgentSdkV2 steering", () => {
 
   it("closes the channel on failure so a late steer is refused rather than queued forever", async () => {
     const steering = createSteeringChannel();
-    turnResults = [{ type: "result", subtype: "error", result: "boom" } as never];
+    turnResults = [{ fail: true, result: "boom" }];
     const s = sinks();
 
-    const out = await runClaudeAgentSdkV2({ ...baseParams, steering }, s);
+    const out = await runOnPremAgent({ ...baseParams, steering }, s);
 
     expect(out.ok).toBe(false);
     expect(steering.push("too late")).toBe(false);

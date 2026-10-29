@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { PolicyGate } from "@builderforce/agent-tools";
 import {
   canUseToolDecision,
-  evaluateOnPremPolicyGate,
+  evaluatePolicyGateSeam as evaluateOnPremPolicyGate,
   policyRefusalMessage,
-} from "./policy-gate-seam.js";
+} from "@builderforce/agent-run";
 
 const PATH_BLOCK: PolicyGate = {
   id: "no-secrets",

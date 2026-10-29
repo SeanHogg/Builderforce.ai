@@ -2,13 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 
 // Mock the SDK runner so the test asserts the AgentEngine adapter mapping, not the SDK.
 const runMock = vi.fn();
-vi.mock("../agents/claude-agent-sdk-runner.js", () => ({
-  runClaudeAgentSdkV2: (params: unknown, sinks: unknown) => runMock(params, sinks),
+vi.mock("./onPremAdapter.js", () => ({
+  runOnPremAgent: (params: unknown, sinks: unknown) => runMock(params, sinks),
 }));
 
 import { CURRENT_ENGINE_ID } from "@builderforce/agent-tools";
-import { createSteeringChannel } from "./relay-steering.js";
-import { ClaudeSdkAgentEngine } from "./sdk-agent-engine.js";
+import { createSteeringChannel } from "../infra/relay-steering.js";
+import { OnPremAgentEngine as ClaudeSdkAgentEngine } from "./onPremEngine.js";
 
 function makeEngine(over?: Partial<ConstructorParameters<typeof ClaudeSdkAgentEngine>[0]>) {
   const abortController = new AbortController();

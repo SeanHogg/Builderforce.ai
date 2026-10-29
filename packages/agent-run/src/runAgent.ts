@@ -75,7 +75,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   if (!resumed) {
     // The system prompt opens the transcript the kernel drives — the task reaches the
     // model on turn 1, and every saved state carries it.
-    transcript.splice(0, transcript.length, { role: "system", content: systemPrompt(task) });
+    transcript.splice(0, transcript.length, { role: "system", content: systemPrompt(task, policy.approvalGates) });
     state.messages = transcript;
     pack = await buildContextPack(input, hooks, state, offered);
     state.context = pack;

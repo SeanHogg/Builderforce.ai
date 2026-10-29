@@ -204,6 +204,11 @@ export interface ContextHook {
 export interface ToolsHook {
   /** Narrow the schemas the surface can run to the ones this run may call. */
   select(ctx: PolicyContext, tools: readonly ToolSchema[]): Promise<readonly ToolSchema[] | void> | readonly ToolSchema[] | void;
+  /**
+   * Before a call dispatches: a governance gate (`RunPolicy.approvalGates`) that blocks it
+   * answers with its refusal — the tool never runs, and the model reads which gate stopped it.
+   */
+  refuse?(ctx: PolicyContext, call: PolicyToolCall): { data: unknown } | void;
   /** Before a call dispatches: a read whose lines were already SERVED is answered without the disk. */
   beforeDispatch?(ctx: PolicyContext, call: PolicyToolCall): { data: unknown } | void;
   /** After a call returned: record what the model was served (or what a write invalidated). */

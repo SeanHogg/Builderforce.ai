@@ -80,23 +80,31 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
   // served read, a write, a counted call or a fact for memory — only a stub the model reads.
   const stubs = new WeakSet<LoopDispatchResult>();
 
+  /**
+   * Take what the user steered in: a stop command ends the run (the model never gets
+   * another turn after a stop, §6.3); anything else becomes the next user turn, each
+   * acknowledged with `steer.applied` before the turn it reaches.
+   */
+  const takeSteers = async (ctx: { step: number; stepInCall: number }): Promise<"none" | "stop" | "applied"> => {
+    const steered = (ports.steering?.drain() ?? []).map(steerInput);
+    if (steered.length === 0) return "none";
+    const texts = steered.map((s) => s.text);
+    if (isStopSteer(texts)) {
+      run.stopped = true;
+      return "stop";
+    }
+    const injected = await hooks.steering.inject(contextAt(ctx.step, ctx.stepInCall), texts);
+    const rows = injected ?? texts.map((text): RunMessage => ({ role: "user", content: text }));
+    for (const row of rows) transcript.push(row);
+    for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
+    return "applied";
+  };
+
   return {
     beforeTurn: async (ctx) => {
       // Steering is drained BEFORE the model is asked, so a message typed mid-run reaches
-      // the next call rather than the one after it. A stop command ends the run here:
-      // the model never gets another turn after a stop (§6.3).
-      const steered = (ports.steering?.drain() ?? []).map(steerInput);
-      if (steered.length > 0) {
-        const texts = steered.map((s) => s.text);
-        if (isStopSteer(texts)) {
-          run.stopped = true;
-          return { action: "stop", ok: false, output: "cancelled", finished: true };
-        }
-        const injected = await hooks.steering.inject(contextAt(ctx.step, ctx.stepInCall), texts);
-        const rows = injected ?? texts.map((text): RunMessage => ({ role: "user", content: text }));
-        for (const row of rows) transcript.push(row);
-        for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
-      }
+      // the next call rather than the one after it.
+      if ((await takeSteers(ctx)) === "stop") return { action: "stop", ok: false, output: "cancelled", finished: true };
 
       const view = currentView(transcript, offered);
       const compacted = await hooks.compaction.compact(policyContext(input, state, view, ctx.step, ctx.stepInCall));
@@ -137,12 +145,20 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       }
       const output = hooks.stall.settle ? hooks.stall.settle(pctx, turn.content) : turn.content;
       if (output.trim()) transcript.push({ role: "assistant", content: output });
+      // A message steered in while this last turn was in flight is never lost (§6.3): the
+      // run takes one more turn for it instead of finishing past it.
+      const late = await takeSteers(ctx);
+      if (late === "stop") return { action: "stop", ok: false, output: "cancelled", finished: true };
+      if (late === "applied") return { action: "continue" };
       return { action: "finish", output };
     },
 
     beforeDispatch: async (call, ctx) => {
       const pctx = contextAt(ctx.step, ctx.stepInCall);
       const pcall = toPolicyCall(call);
+      // Governance first: a gate that blocks the call refuses it, and nothing else sees it.
+      const refused = hooks.tools.refuse?.(pctx, pcall);
+      if (refused) return { result: { data: refused.data, isError: true } };
       // A3's pause parks the run on a person (the control); any other skip just answers.
       const decision = await hooks.guards.beforeDispatch(pctx, pcall);
       if (decision?.skip) {

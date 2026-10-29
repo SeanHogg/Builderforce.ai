@@ -29,6 +29,8 @@
       "@seanhogg/builderforce-agents/plugin-sdk/account-id": ["./src/plugin-sdk/account-id.ts"],
       "@builderforce/agent-tools": ["../packages/agent-tools/src/index.ts"],
       "@builderforce/agent-tools/*": ["../packages/agent-tools/src/*"],
+      "@builderforce/agent-run": ["../packages/agent-run/src/index.ts"],
+      "@builderforce/difficulty-router": ["../packages/difficulty-router/src/index.ts"],
       "@builderforce/agent-loop": ["../packages/agent-loop/src/index.ts"],
       "@builderforce/agent-skills": ["../packages/agent-skills/src/index.ts"],
       "@builderforce/agent-stall": ["../packages/agent-stall/src/index.ts"],

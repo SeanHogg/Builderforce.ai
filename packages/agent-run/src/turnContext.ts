@@ -12,10 +12,10 @@
  * packer never mistakes a tagged block for the user's latest directive.
  */
 
-import type { ToolSchema } from "@builderforce/agent-tools";
+import { renderPolicyDirectives, type ToolSchema } from "@builderforce/agent-tools";
 import { volatileTail } from "@seanhogg/builderforce-memory/handoff";
 
-import type { ContextPack, RunMessage, RunState, RunTask } from "./contract.js";
+import type { ContextPack, RunMessage, RunPolicy, RunState, RunTask } from "./contract.js";
 import type { PolicyHooks } from "./policy/index.js";
 import { policyContext, type RunAgentInput } from "./runContext.js";
 
@@ -47,9 +47,14 @@ export async function buildContextPack(input: RunAgentInput, hooks: PolicyHooks,
   return recalled && recalled.length > 0 ? { ...pack, recall: [...pack.recall, ...recalled] } : pack;
 }
 
-/** The system prompt: the persona, then the task. The context pack is NOT here — it is volatile. */
-export function systemPrompt(task: RunTask): string {
+/**
+ * The system prompt: the governance gates the run is bound by, then the persona, then the
+ * task. The context pack is NOT here — it is volatile.
+ */
+export function systemPrompt(task: RunTask, gates?: RunPolicy["approvalGates"]): string {
   const parts: string[] = [];
+  const governance = renderPolicyDirectives(gates);
+  if (governance) parts.push(governance);
   if (task.persona && task.persona.trim()) parts.push(task.persona.trim());
   parts.push(task.prompt);
   return parts.join("\n\n");

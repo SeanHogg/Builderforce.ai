@@ -19,12 +19,11 @@ import {
   coercePolicyGates,
   CURRENT_ENGINE_ID,
   resolveEngineById,
-  RunKnowledgeRecorder,
 } from "@builderforce/agent-tools";
 import { WebSocket } from "ws";
 import { buildAssignedCapabilityAppend } from "../agents/assigned-capabilities.js";
 import { resolveRelayTaskModel } from "../agents/model-routing.js";
-import { type V2RunnerSinks } from "../agents/claude-agent-sdk-runner.js";
+import { type OnPremRunSinks } from "../run/onPremAdapter.js";
 import { loadProjectContext, updateProjectContextFields } from "../builderforce/project-context.js";
 import type { IRelayService } from "../builderforce/relay-service.js";
 import { GatewayClient, type GatewayClientOptions } from "../gateway/client.js";
@@ -80,7 +79,7 @@ import {
 } from "./builderforce-relay-outboxes.js";
 import { getKnowledgeLoop } from "./memory-bridge.js";
 import { createGitRepoSync } from "./repo-sync.js";
-import { ClaudeSdkAgentEngine } from "./sdk-agent-engine.js";
+import { OnPremAgentEngine } from "../run/onPremEngine.js";
 import {
   taskWorkspaceDir,
   buildTaskCloneUrl,
@@ -168,11 +167,11 @@ export class BuilderforceRelayService implements IRelayService {
   private gatewayClient: GatewayClient | null = null;
   /** executionId from the last task.assign / task.broadcast dispatch, if any. */
   private pendingExecutionId: number | null = null;
-  /** Abort handles for in-flight V2 (Claude Agent SDK) runs, keyed by executionId,
+  /** Abort handles for in-flight ticket runs (the one agent), keyed by executionId,
    *  so an `execution.cancel` frame from the portal can actually halt the run. */
   private readonly v2Aborts = new Map<number, AbortController>();
   /** Steering channels for in-flight V2 runs, keyed by executionId, so an
-   *  `execution.message` frame from the portal reaches the live SDK run as its
+   *  `execution.message` frame from the portal reaches the live run as its
    *  next user turn instead of a chat session the run never reads. */
   private readonly v2Steering = new Map<number, SteeringChannel>();
   /** Steers that reached a V2 run after its last turn: held until the run has reported
@@ -212,7 +211,7 @@ export class BuilderforceRelayService implements IRelayService {
    * calls `run()` instead of branching. Adding/swapping a runner is a registry entry.
    *
    * There is ONE engine — the current version ({@link CURRENT_ENGINE_ID}, the
-   * Claude-Agent-SDK runner). Any legacy `engine` value on an old dispatch is ignored
+   * one agent, `runAgent` via the on-prem adapter). Any legacy `engine` value on an old dispatch is ignored
    * and resolves to the current engine; the DI seam stays even with one engine so the
    * NEXT runner (a future V4) is a wiring change, not a branch.
    */
@@ -412,14 +411,14 @@ export class BuilderforceRelayService implements IRelayService {
   }
 
   /**
-   * BuilderForce-V2 engine path. Runs the Claude Agent SDK against the workspace,
-   * forwarding its events onto the same relay frames the V1 loop emits
-   * (chat.message for assistant text, tool.audit for tool calls) so the portal
-   * renders both engines identically, then reports the terminal execution state.
+   * The current engine path. Runs the ONE agent (`runAgent`, through the on-prem adapter)
+   * against the workspace, forwarding its events onto the relay frames the portal renders
+   * (chat.message for assistant text, tool.audit for tool calls), then reports the
+   * terminal execution state.
    */
   private async runV2Engine(payload: EngineDispatch, prompt: string): Promise<void> {
     const agentLabel = payload.agentLabel?.trim() || "BuilderForce-V2";
-    const sinks: V2RunnerSinks = {
+    const sinks: OnPremRunSinks = {
       onAssistantText: (text) => {
         // Live view…
         this.sendToRelay({ type: "chat.message", role: "assistant", text, session: "main" });
@@ -460,13 +459,22 @@ export class BuilderforceRelayService implements IRelayService {
           result: text.slice(0, 280),
         });
       },
+      onOutcome: (row) => {
+        // The uniform outcome row (PRD 35 §8.2), one per run, on the durable audit trail.
+        this.toolAudit.emit({
+          executionId: payload.executionId,
+          toolName: "run.outcome",
+          category: "run",
+          args: row,
+        });
+      },
     };
 
     // One shared ephemeral workspace per ticket — every agent on the task works
     // out of it (the ticket is the shared context). Clone happens once.
     const cwd = await this.ensureTaskWorkspace(payload.taskId, payload.repo);
 
-    // Assigned Skills/Personas/Content → appended to the SDK system prompt (the
+    // Assigned Skills/Personas/Content → ahead of the task in the system prompt (the
     // V2 run path injects nothing otherwise). Mirrors the V1 embedded injection.
     const appendSystemPrompt = await buildAssignedCapabilityAppend(cwd);
 
@@ -480,16 +488,13 @@ export class BuilderforceRelayService implements IRelayService {
       this.lateSteers.open(payload.executionId);
     }
 
-    // The run's record (successful tool calls), consolidated into its code map at the end.
-    const knowledge = new RunKnowledgeRecorder();
-
-    // Drive the on-prem loop through the SHARED `AgentEngine` contract (the same
-    // interface the cloud `CloudToolLoopEngine` implements) — so a future V3 is a
+    // Drive the on-prem run through the SHARED `AgentEngine` contract (the same
+    // interface the cloud `CloudToolLoopEngine` implements) — so a future V4 is a
     // sibling `AgentEngine` constructed here, not a rewrite of this path (PRD 12).
-    const engine: AgentEngine = new ClaudeSdkAgentEngine({
+    const engine: AgentEngine = new OnPremAgentEngine({
       cwd,
-      // SDK posts Messages to `${anthropicBaseUrl}/v1/messages`; the gateway's
-      // Anthropic-Messages endpoint lives under /llm.
+      // Model calls go to `${anthropicBaseUrl}/v1/chat/completions` on the gateway's
+      // `/llm` mount.
       anthropicBaseUrl: `${normalizeBaseUrl(this.opts.baseUrl)}/llm`,
       gatewayAuthKey: this.opts.apiKey,
       // Declare what this run IS to the gateway: a self-hosted host execution. The
@@ -501,7 +506,20 @@ export class BuilderforceRelayService implements IRelayService {
       abortController,
       steering,
       sinks,
-      knowledge,
+      // The run's code map, into the same shared facts store every runtime writes to
+      // (paths are relative to the ticket workspace). Fire-and-forget.
+      commitMemory: (consolidated) => getKnowledgeLoop()?.commitConsolidated?.(consolidated),
+      // The run's state lives in a session file beside the ticket workspaces.
+      ...(payload.executionId != null
+        ? {
+            sessionFile: path.join(
+              this.opts.workspaceDir ?? process.cwd(),
+              ".builderforce",
+              "runs",
+              `${payload.executionId}.json`,
+            ),
+          }
+        : {}),
     });
     // The terminal state this run ended in, or null when it completed normally (the
     // ticket stays open and KEEPS its workspace — it is the shared ticket context).
@@ -513,7 +531,7 @@ export class BuilderforceRelayService implements IRelayService {
       let result: { ok: boolean; text: string };
       try {
         const run = await engine.run({
-          // Assigned Skills/Personas/Content ride as the system prompt (the SDK
+          // Assigned Skills/Personas/Content ride as the system prompt (the adapter
           // engine folds it into the prompt); the task message is the user content.
           systemPrompt: appendSystemPrompt,
           userContent: prompt,
@@ -533,9 +551,6 @@ export class BuilderforceRelayService implements IRelayService {
         // Run end: land the batched audit trail before the terminal state is reported,
         // so a finished run's timeline is complete when the portal shows it finished.
         await this.toolAudit.flush();
-        // …and the run's code map, into the same shared facts store every runtime
-        // writes to (paths are relative to the ticket workspace). Fire-and-forget.
-        getKnowledgeLoop()?.commitCodeMap?.(knowledge, cwd);
       }
 
       // If the run was cancelled, the API already flipped the row to CANCELLED (a
@@ -1330,7 +1345,7 @@ export class BuilderforceRelayService implements IRelayService {
       case "execution.message": {
         // Steering: a user sent a follow-up direction to a running execution
         // from the portal. Push it into the live V2 run's streaming input so the
-        // SDK applies it as the next user turn mid-run. The API already persisted
+        // run takes it as the next user turn mid-run. The API already persisted
         // the message (`execution_messages`); this is delivery only.
         const executionId =
           typeof msg.executionId === "number" && Number.isFinite(msg.executionId)
@@ -1362,7 +1377,7 @@ export class BuilderforceRelayService implements IRelayService {
 
       case "execution.cancel": {
         // The user cancelled a running execution from the portal. Halt the work:
-        // abort the in-flight V2 SDK run (if any) and abort the live V1 chat
+        // abort the in-flight ticket run (if any) and abort the live V1 chat
         // session, so cancel actually stops token spend instead of only flipping
         // the DB status.
         const executionId =
