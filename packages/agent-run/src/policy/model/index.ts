@@ -104,7 +104,7 @@ export function policyRole(delegatedRole: string | null | undefined): Pick<RunPo
 
 /** The role the run's turns ask for — what the pick and the usage row are stamped with. */
 export function turnRole(delegatedRole: string | null | undefined): TurnRequest["role"] {
-  return nextTurn(initialModelRunState({ pick: { model: delegatedRole ?? "", strict: false }, delegatedRole }).policy, { hasTools: true }).role;
+  return turnRouting(initialModelRunState({ pick: { model: delegatedRole ?? "", strict: false }, delegatedRole }).policy, true).role;
 }
 
 // ── The run-start pick (cloudRunModelPolicy.ts) ─────────────────────────────
@@ -214,7 +214,7 @@ type RetryOutcome = Extract<RunPolicyState["outcome"], { kind: "retry_turn" }>;
  * Pure: derived from `state.policy` (and the pending one-shot) without mutating it.
  */
 export function requestForTurn(state: ModelRunState, hasTools: boolean): TurnRequest & { toolChoice?: "required" } {
-  return { ...nextTurn(state.policy, { hasTools }), ...(state.forceToolChoice ? { toolChoice: state.forceToolChoice } : {}) };
+  return { ...turnRouting(state.policy, hasTools), ...(state.forceToolChoice ? { toolChoice: state.forceToolChoice } : {}) };
 }
 
 /**
@@ -322,14 +322,8 @@ import { modelDowngrade, runModelPreflight } from "./preflight.js";
  * place a run-policy state becomes request fields — the turn (`modelHook.resolve`) and anything else
  * that calls the model for the run (the compaction summary) read it here, so a change reaches both.
  */
-export function turnRouting(state: RunPolicyState, hasTools: boolean): {
-  role: TurnRequest["role"];
-  model?: string;
-  strict: boolean;
-  excludeModels: readonly string[];
-} {
-  const ask = nextTurn(state, { hasTools });
-  return { role: ask.role, strict: ask.strict, excludeModels: ask.excludeModels, ...(ask.model ? { model: ask.model } : {}) };
+export function turnRouting(state: RunPolicyState, hasTools: boolean): TurnRequest {
+  return nextTurn(state, { hasTools });
 }
 
 /**
@@ -343,7 +337,13 @@ export const modelHook: ModelHook = {
     // The model slice already IS the run-policy state; drive it, never redefine it.
     const routing = turnRouting(ctx.state.model, ctx.tools.length > 0);
     const maxTokens = cappedMaxTokens(routing.role, undefined);
-    return { ...routing, ...(maxTokens !== undefined ? { maxTokens } : {}) };
+    return {
+      role: routing.role,
+      strict: routing.strict,
+      excludeModels: routing.excludeModels,
+      ...(routing.model ? { model: routing.model } : {}),
+      ...(maxTokens !== undefined ? { maxTokens } : {}),
+    };
   },
   preflight: runModelPreflight,
   downgrade: modelDowngrade,

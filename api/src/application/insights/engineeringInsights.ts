@@ -16,7 +16,7 @@ import { runModelOutcomes } from '../../infrastructure/database/schema';
 import { codingEvidence } from '../shared/codingEvidence';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { HOUR_MS } from '../../domain/shared/time';
-import { pricedCostPerMergedUsd, pricedCostUsd } from './pricedCost';
+import { pricedCostPerMergedUsd, pricedCostUsd, pricedRuns } from './pricedCost';
 
 export interface OutcomeRow {
   actionType: string;
@@ -56,6 +56,8 @@ export interface EngineeringInsights {
     costUsd: number | null;
     /** USD per merged PR over the runs that reported a cost; null when no merged run did. */
     costPerMergedPrUsd: number | null;
+    /** How many of `runs` reported a cost — the coverage behind `costUsd`, which counts only those. */
+    pricedRuns: number;
   };
   byModel: EffectivenessBucket[];
   byActionType: EffectivenessBucket[];
@@ -115,6 +117,7 @@ export function summarizeOutcomes(rows: OutcomeRow[], windowDays: number): Engin
       degradedRatePct: rows.length ? (rows.filter((r) => r.degraded).length / rows.length) * 100 : 0,
       costUsd: pricedCostUsd(rows),
       costPerMergedPrUsd: pricedCostPerMergedUsd(rows),
+      pricedRuns: pricedRuns(rows).length,
     },
     byModel,
     byActionType,

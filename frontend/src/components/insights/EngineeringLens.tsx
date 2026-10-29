@@ -9,6 +9,7 @@ import { pct, score2 } from './format';
 import { useInsightFormat } from './format';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { RunAnomaliesCard } from './RunAnomaliesCard';
+import { costCoverage } from './engineeringCost';
 
 /**
  * LENS #1 — AI effectiveness over run_model_outcomes. The "which approach
@@ -24,6 +25,7 @@ export function EngineeringLens() {
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
 
+  const coverage = costCoverage(data.totals);
   const table = (title: string, label: string, rows: EffectivenessBucket[]) => (
     <PmCard title={title}>
       {rows.length === 0 ? (
@@ -66,7 +68,7 @@ export function EngineeringLens() {
         <StatCard label={t('eng.mergeRate')} value={pct(data.totals.mergedRatePct)} sub={t('eng.mergeSub')} />
         <StatCard label={t('eng.ciGreen')} value={pct(data.totals.ciGreenRatePct)} sub={t('eng.ciSub')} />
         <StatCard label={t('eng.degraded')} value={pct(data.totals.degradedRatePct)} sub={t('eng.degradedSub')} />
-        <StatCard label={t('eng.cost')} value={usd(data.totals.costUsd)} sub={t('eng.costSub')} />
+        <StatCard label={t('eng.cost')} value={usd(data.totals.costUsd)} sub={coverage ? t('eng.costCoverage', coverage) : t('eng.costSub')} />
       </KpiGrid>
       <RunAnomaliesCard days={days} projectId={currentProjectId} />
       {table(t('eng.byApproach'), t('eng.approach'), data.byApproach)}

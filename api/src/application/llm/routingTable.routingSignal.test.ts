@@ -20,7 +20,7 @@ vi.mock('../../infrastructure/cache/readThroughCache', async (importOriginal) =>
   setCached: async () => undefined,
 }));
 
-const { reconcileRoutingTable } = await import('./routingTable');
+const { reconcileRoutingTable } = await import('./routingReconcile');
 
 /** The ratings read (a different table) resolves empty and tolerates `.catch`. */
 const coreDb = { select: () => ({ from: () => ({ where: () => ({ groupBy: () => Promise.resolve([]) }) }) }) };

@@ -5,6 +5,7 @@ import { PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { BarChart } from '@/components/charts/BarChart';
 import { KpiGrid } from './LensShell';
 import { pct, score2 } from './format';
+import { costCoverage } from './engineeringCost';
 import { useInsightFormat } from './format';
 import { useAiOverview, useLlmUsage, useLlmBySource } from './insightsSources';
 import { REC_SEVERITY_TONE } from './recSeverityTone';
@@ -112,7 +113,7 @@ export function AiImpactSummary({ days }: { days: number }) {
         <StatCard label={t('aiImpact.productivityScore')} value={score2(p.score)} sub={deltaSub} />
         <StatCard label={t('aiImpact.throughput')} value={pct(p.throughput * 100)} sub={t('aiImpact.throughputSub')} />
         <StatCard label={t('aiImpact.quality')} value={pct(p.quality * 100)} sub={t('aiImpact.qualitySub')} />
-        <StatCard label={t('aiImpact.efficiency')} value={pct(p.efficiency * 100)} sub={t('aiImpact.efficiencySub')} />
+        <StatCard label={t('aiImpact.efficiency')} value={pct(p.efficiency === null ? null : p.efficiency * 100)} sub={t('aiImpact.efficiencySub')} />
       </KpiGrid>
 
       {byModel.length > 0 && (
@@ -164,13 +165,14 @@ export function EngineeringSummary({ days }: { days: number }) {
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={overview ? t('eng.noRuns') : t('loading')} />;
+  const coverage = costCoverage(data.totals);
 
   return (
     <KpiGrid>
       <StatCard label={t('eng.runs')} value={String(data.totals.runs)} sub={t('days', { n: data.windowDays })} />
       <StatCard label={t('eng.avgScore')} value={score2(data.totals.avgScore)} sub={t('eng.scoreSub')} />
       <StatCard label={t('eng.mergeRate')} value={pct(data.totals.mergedRatePct)} sub={t('eng.mergeSub')} />
-      <StatCard label={t('eng.cost')} value={usd(data.totals.costUsd)} sub={t('eng.costSub')} />
+      <StatCard label={t('eng.cost')} value={usd(data.totals.costUsd)} sub={coverage ? t('eng.costCoverage', coverage) : t('eng.costSub')} />
     </KpiGrid>
   );
 }

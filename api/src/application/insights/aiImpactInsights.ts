@@ -88,8 +88,9 @@ export interface ProductivityScore {
   throughput: number;
   /** Quality component 0..1 (avg score blended with CI-green rate). */
   quality: number;
-  /** Efficiency component 0..1 (inverse cost-per-merged-PR, normalized). */
-  efficiency: number;
+  /** Efficiency component 0..1 (inverse cost-per-merged-PR, normalized). null = merges exist but none
+   *  reported a cost: unknown, so the composite is scored on throughput and quality alone. */
+  efficiency: number | null;
   /** Composite 0..100 for the PREVIOUS equal-length window. */
   prevScore: number;
   /** Week-over-window % change of the composite. */
@@ -258,8 +259,13 @@ export function summarizeComparison(outcomes: ImpactOutcomeRow[], tokensByModel:
  * - quality:    avg score blended 50/50 with CI-green rate.
  * - efficiency: inverse cost-per-merged-PR, normalized against a $5 reference.
  * Returns all three in 0..1 plus the 0..100 composite (equal-weighted).
+ *
+ * When merges exist but none of them reported a cost, efficiency is UNKNOWN (null), not the worst
+ * score: the composite is renormalised over throughput and quality (two terms), as the run score
+ * (`computeOutcomeScore`) renormalises over steps when a run's cost is unknown. With no merge at
+ * all efficiency stays 0, as before.
  */
-export function scoreComponents(outcomes: ImpactOutcomeRow[]): { throughput: number; quality: number; efficiency: number; score: number } {
+export function scoreComponents(outcomes: ImpactOutcomeRow[]): { throughput: number; quality: number; efficiency: number | null; score: number } {
   const runs = outcomes.length;
   const merged = outcomes.filter((r) => r.merged).length;
   const avgScore = runs ? outcomes.reduce((a, r) => a + r.score, 0) / runs : 0;
@@ -269,9 +275,10 @@ export function scoreComponents(outcomes: ImpactOutcomeRow[]): { throughput: num
   const quality = clamp01(0.5 * avgScore + 0.5 * ciGreenRate);
   // Cheaper merged PRs score higher; $0 → 1, $5+ → ~0 (reference cost = $5/PR).
   const costPerMerged = pricedCostPerMergedUsd(outcomes);
-  const efficiency = costPerMerged == null ? 0 : clamp01(1 - Math.min(costPerMerged, 5) / 5);
+  const efficiencyUnknown = merged > 0 && costPerMerged == null;
+  const efficiency = efficiencyUnknown ? null : costPerMerged == null ? 0 : clamp01(1 - Math.min(costPerMerged, 5) / 5);
 
-  const score = ((throughput + quality + efficiency) / 3) * 100;
+  const score = efficiency === null ? ((throughput + quality) / 2) * 100 : ((throughput + quality + efficiency) / 3) * 100;
   return { throughput, quality, efficiency, score };
 }
 

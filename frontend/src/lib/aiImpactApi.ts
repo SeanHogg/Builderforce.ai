@@ -39,7 +39,8 @@ export interface ProductivityScore {
   score: number;
   throughput: number;
   quality: number;
-  efficiency: number;
+  /** null = merges exist but none reported a cost: unknown, shown as "—". */
+  efficiency: number | null;
   prevScore: number;
   deltaPct: number;
 }

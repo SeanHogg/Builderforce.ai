@@ -53,7 +53,7 @@ describe('recordClientRunOutcome — routingSignal', () => {
     expect(mocks.bumpOutcomesVersion).not.toHaveBeenCalled();
   });
 
-  it('does not take a canvas report's word that it teaches: the server decides, by entry point or by source', async () => {
+  it("does not take a canvas report's word that it teaches: the server decides, by entry point or by source", async () => {
     await record({ ...base, routingSignal: true });
     await record({ ...base, clientRunId: 'canvas:2', source: 'external', entryPoint: 'canvas', routingSignal: undefined });
     await record({ ...base, clientRunId: 'canvas:3', source: 'canvas', entryPoint: undefined, routingSignal: true });

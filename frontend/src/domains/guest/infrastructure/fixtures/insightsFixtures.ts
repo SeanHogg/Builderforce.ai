@@ -68,6 +68,7 @@ export const insightsFixtures: GuestFixture[] = [
           ciGreenRatePct: Math.min(99, mergedRatePct + 6),
           degradedRatePct: 4,
           costUsd: Math.round(sum(rows, (r) => r.spendCents) / 100 * 100) / 100,
+          pricedRuns: runs,
           costPerMergedPrUsd: merged === 0 ? null : Math.round(sum(rows, (r) => r.spendCents) / merged) / 100,
         },
         byModel: [

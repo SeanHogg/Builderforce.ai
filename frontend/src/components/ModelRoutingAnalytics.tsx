@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react';
 import { formatUsdSpend } from '@/lib/formatSpend';
 import { llmApi, type ModelAnalyticsResponse } from '@/lib/builderforceApi';
+import { EMPTY_VALUE } from '@/i18n/format';
 import { useFormat } from "@/i18n/useFormat";
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 const cardStyle: React.CSSProperties = {
@@ -25,7 +26,7 @@ function fmtScore(n: number): string {
 function fmtPct(n: number): string {
   return `${Math.round(n * 100)}%`;
 }
-const fmtUsd = (millicents: number): string => formatUsdSpend(millicents / 100_000);
+const fmtUsd = (millicents: number | null): string => (millicents === null ? EMPTY_VALUE : formatUsdSpend(millicents / 100_000));
 
 export function ModelRoutingAnalytics() {
   const errorMessage = useErrorMessage();

@@ -2782,6 +2782,7 @@
       "degradedSub": "fell off the coder model",
       "cost": "Agent cost",
       "costSub": "attributed to runs",
+      "costCoverage": "{priced} of {total} runs priced",
       "score": "Score",
       "byApproach": "Approach effectiveness",
       "approach": "Approach",

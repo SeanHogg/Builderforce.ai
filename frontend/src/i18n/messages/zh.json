@@ -2782,6 +2782,7 @@
       "degradedSub": "从编码模型回退",
       "cost": "代理成本",
       "costSub": "归属到运行",
+      "costCoverage": "{total} 次运行中有 {priced} 次含成本",
       "score": "评分",
       "byApproach": "方式效能",
       "approach": "方式",

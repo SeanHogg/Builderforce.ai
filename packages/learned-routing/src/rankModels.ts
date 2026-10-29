@@ -8,7 +8,7 @@
  * a curated pool plus per-model stats, its only output a permutation of that pool.
  */
 
-import { compareAvgCost } from './costEvidence.js';
+import { costForTieBreak, rankWithCostTieBreak } from './costEvidence.js';
 import { blendedQualityScore, isChronicallyRateLimited, qualityEvidence } from './modelQualityScore.js';
 import { pickIndex, sampleQuality, shouldExploreCold, type DecayedEvidence, type RoutingExploration } from './exploration.js';
 
@@ -112,13 +112,14 @@ export function rankModelsForAction(
   }
   const scoreOf = (m: string): number =>
     (sampled.get(m) ?? blendedQualityScore(statByModel.get(m)!)) + (bias[m] ?? 0);
-  eligible.sort((a, b) => {
-    const d = scoreOf(b) - scoreOf(a);
-    if (d !== 0) return d;
-    const c = compareAvgCost(statByModel.get(a)!, statByModel.get(b)!);
-    if (c !== 0) return c;
-    return (curatedIndex.get(a)! - curatedIndex.get(b)!);
+  // Score first; among EQUAL scorers the cheaper priced model leads, an unknown cost keeps its
+  // place (see `rankWithCostTieBreak`); the curated index breaks what is left.
+  const ranked = rankWithCostTieBreak(eligible, {
+    score: scoreOf,
+    index: (m) => curatedIndex.get(m)!,
+    cost: (m) => costForTieBreak(statByModel.get(m)!),
   });
+  eligible.splice(0, eligible.length, ...ranked);
   // The cold slot: at most `coldShare` of picks lead with ONE below-floor model, chosen
   // uniformly — the only path by which a cold model reaches the front.
   if (explore && shouldExploreCold(explore, rest.length)) {

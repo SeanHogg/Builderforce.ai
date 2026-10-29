@@ -41,7 +41,7 @@ export {
   type ModelQualitySignals,
 } from './modelQualityScore.js';
 
-export { compareAvgCost, hasCostMean, type CostStat } from './costEvidence.js';
+export { costForTieBreak, hasCostMean, rankWithCostTieBreak, type CostStat, type RankKeys } from './costEvidence.js';
 
 export {
   DEFAULT_MIN_SAMPLES,

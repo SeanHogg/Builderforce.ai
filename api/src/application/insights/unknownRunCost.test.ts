@@ -46,7 +46,36 @@ describe('cost per merged PR (AI impact)', () => {
     const [comparison] = summarizeComparison([impact({ costUsdMillicents: null })], new Map());
 
     expect(comparison?.costPerMergedPrUsd).toBeNull();
-    expect(scoreComponents([impact({ costUsdMillicents: null })]).efficiency).toBe(0);
+  });
+});
+
+describe('productivity score (AI impact)', () => {
+  it('renormalises over throughput and quality when merges exist but none reported a cost', () => {
+    const unknown = scoreComponents([impact({ costUsdMillicents: null })]);
+
+    expect(unknown.efficiency).toBeNull();
+    expect(unknown.score).toBeCloseTo(((unknown.throughput + unknown.quality) / 2) * 100, 6);
+  });
+
+  it('does not score an unpriced run as the most expensive one', () => {
+    const unknown = scoreComponents([impact({ costUsdMillicents: null })]);
+    const dear = scoreComponents([impact({ costUsdMillicents: 5_000_000 })]);
+
+    expect(dear.efficiency).toBe(0);
+    expect(unknown.score).toBeGreaterThan(dear.score);
+  });
+
+  it('keeps the three-term composite when a merged run reported its cost', () => {
+    const priced = scoreComponents([impact({ costUsdMillicents: 0 })]);
+
+    expect(priced.efficiency).toBe(1);
+    expect(priced.score).toBeCloseTo(((priced.throughput + priced.quality + 1) / 3) * 100, 6);
+  });
+
+  it('keeps efficiency at 0 when nothing merged, as before', () => {
+    const none = scoreComponents([impact({ merged: false, costUsdMillicents: null })]);
+
+    expect(none.efficiency).toBe(0);
   });
 });
 
@@ -57,6 +86,8 @@ describe('spend totals (engineering)', () => {
     expect(insights.totals.costUsd).toBe(1);
     expect(insights.totals.costPerMergedPrUsd).toBe(1);
     expect(insights.totals.runs).toBe(2);
+    // The coverage behind the total: one of two runs reported a cost.
+    expect(insights.totals.pricedRuns).toBe(1);
   });
 
   it('reads a bucket where every run is unknown as unknown, not $0', () => {

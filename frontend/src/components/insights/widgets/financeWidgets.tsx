@@ -31,6 +31,7 @@ import { TrendChart } from '@/components/charts/TrendChart';
 import { colorAt } from '@/components/charts/chartColors';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { pct, score2 } from '../format';
+import { costCoverage } from '../engineeringCost';
 import { useInsightFormat, type InsightFormatters } from '../format';
 import { useEngineering } from '../insightsSources';
 
@@ -214,7 +215,8 @@ function EngCostCard({ days }: ComponentSurfaceProps) {
   const { usd } = useInsightFormat();
   const { data, state, t } = useEng(days);
   if (!data) return state;
-  return <Stat value={usd(data.totals.costUsd)} sub={t('eng.costSub')} />;
+  const coverage = costCoverage(data.totals);
+  return <Stat value={usd(data.totals.costUsd)} sub={coverage ? t('eng.costCoverage', coverage) : t('eng.costSub')} />;
 }
 
 /** Shared effectiveness ranking table (approach / model / action-type). */

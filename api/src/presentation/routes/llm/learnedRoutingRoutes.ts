@@ -18,6 +18,7 @@ import { projectInTenant, projectInTenantCached } from '../../../application/pro
 import { taskInTenant } from '../../../infrastructure/database/tenantScope';
 import {
   actionTypeLabel,
+  hasCostMean,
   OWN_TENANT_SCOPE_TOKEN,
   parseRunOutcomeRequest,
   type ActionType,
@@ -69,10 +70,11 @@ export function mountLearnedRoutingRoutes(router: Hono<HonoEnv>): void {
           samples: m.n,
           avgScore: Math.round(m.avgScore * 1000) / 1000,
           mergeRate: Math.round(m.mergeRate * 1000) / 1000,
-          avgCostMillicents: Math.round(m.avgCostMc),
-          // Runs behind that mean that reported a cost: 0 means it is unknown (not free), and the host's
-          // tie-break must read it so. Absent on a blob built before cost could be unknown.
-          ...(m.costN != null ? { costN: m.costN } : {}),
+          // null = none of this model's runs reported a cost: unknown, not $0.
+          avgCostMillicents: hasCostMean(m) ? Math.round(m.avgCostMc) : null,
+          // Runs behind that mean that reported a cost (a blob folded before cost could be unknown
+          // counted every run), so a host's tie-break reads an unknown cost as no information.
+          costN: m.costN ?? m.n,
           ratedUp: m.ratedUp ?? 0,
           ratedDown: m.ratedDown ?? 0,
           rateLimitRate: Math.round((m.rateLimitRate ?? 0) * 1000) / 1000,

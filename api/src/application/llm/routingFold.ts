@@ -10,10 +10,11 @@
 
 import {
   blendedQualityScore,
-  compareAvgCost,
+  costForTieBreak,
   decayWeight,
   foldDecayedMean,
   isChronicallyRateLimited,
+  rankWithCostTieBreak,
   type ActionType,
 } from '@builderforce/learned-routing';
 import type { ModelRole } from '@builderforce/agent-tools';
@@ -76,18 +77,23 @@ export interface RoutingTable {
 
 /** Re-sort a per-action stat list best-first on the BLENDED quality score (run
  *  outcomes + human thumbs, each weighted by how much evidence it has — see
- *  modelQualityScore.ts); ties break to the cheaper model (lower avgCostMc) when BOTH know their cost — an unknown
- *  cost is no information and neither wins nor loses the tie.
+ *  modelQualityScore.ts); ties break to the cheaper model (lower avgCostMc) among those that know their cost — an
+ *  unknown cost is no information and keeps its place (`rankWithCostTieBreak`).
  *  Stable for deterministic output, and the same ordering `rankModelsForAction`
  *  applies, so the blob and the router never disagree. */
 export function sortStats(stats: ActionModelStat[]): ActionModelStat[] {
-  return stats
-    .map((s, i) => ({ s, i, q: blendedQualityScore(s), rl: isChronicallyRateLimited(s) ? 1 : 0 }))
-    // Rate-limited models form a TRAILING BAND, ranked normally within it. They are not
-    // removed — "the only model left is one the provider keeps refusing" is still
-    // strictly better than returning nothing, and the cascade needs somewhere to land.
-    .sort((a, b) => a.rl - b.rl || b.q - a.q || compareAvgCost(a.s, b.s) || a.i - b.i)
-    .map(({ s }) => s);
+  return rankWithCostTieBreak(
+    stats.map((s, i) => ({ s, i, q: blendedQualityScore(s), rl: isChronicallyRateLimited(s) ? 1 : 0 })),
+    {
+      // Rate-limited models form a TRAILING BAND, ranked normally within it. They are not
+      // removed — "the only model left is one the provider keeps refusing" is still
+      // strictly better than returning nothing, and the cascade needs somewhere to land.
+      band: (e) => e.rl,
+      score: (e) => e.q,
+      index: (e) => e.i,
+      cost: (e) => costForTieBreak(e.s),
+    },
+  ).map(({ s }) => s);
 }
 
 /** One terminal run, as the blob folds it. `rateLimited` rides alongside `merged`
@@ -136,7 +142,9 @@ function foldDecayed(prev: ActionModelStat, score: number, costMc: number | unde
  *  weight behind it (the stat's clock moves to now either way). */
 function foldedCostDecayed(prev: ActionModelStat, costMc: number | undefined, age: number): Pick<ActionModelStat, 'avgCostMc' | 'costN' | 'costEffectiveN'> {
   const costN = prev.costN ?? prev.n;
-  const weight = prev.costEffectiveN ?? prev.costN ?? prev.effectiveN ?? prev.n;
+  // The weight behind the cost mean: its own decayed weight, else the priced SHARE of the decayed run
+  // weight (a plain fold in between moved `n` and `costN` but not the weights), else the raw count.
+  const weight = prev.costEffectiveN ?? (prev.effectiveN != null && prev.n > 0 ? prev.effectiveN * (costN / prev.n) : costN);
   if (costMc === undefined) return { avgCostMc: prev.avgCostMc, costN, costEffectiveN: weight * decayWeight(age) };
   const folded = foldDecayedMean(prev.avgCostMc, weight, costMc, age);
   return { avgCostMc: folded.mean, costN: costN + 1, costEffectiveN: folded.weight };

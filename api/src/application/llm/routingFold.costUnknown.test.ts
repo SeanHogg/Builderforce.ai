@@ -4,8 +4,10 @@
  * whichever writer produced it, and an unknown cost neither wins nor loses a tie-break.
  */
 import { describe, expect, it } from 'vitest';
+import { decayWeight } from '@builderforce/learned-routing';
 import { applyObservation, type RoutingTable } from './routingFold';
-import { assignOutcomeAggregate, type ActionModelStat } from './routingTable';
+import type { ActionModelStat } from './routingFold';
+import { assignOutcomeAggregate } from './routingReconcile';
 
 const empty = (): RoutingTable => ({ updatedAt: new Date(0).toISOString(), byAction: {} });
 const obs = (model: string, costMc?: number, score = 0.8) => ({
@@ -70,6 +72,44 @@ describe('the live fold skips an unreported cost', () => {
     expect(stat.costN).toBe(2);
   });
 
+  it('decayed with an advancing clock: all priced ⇒ the cost weight equals the run weight', () => {
+    const day = 24 * 60 * 60 * 1000;
+    const t0 = Date.UTC(2026, 9, 1);
+    let table = applyObservation(empty(), obs('m', 100), { nowMs: t0 });
+    table = applyObservation(table, obs('m', 300), { nowMs: t0 + 30 * day });
+    table = applyObservation(table, obs('m', 200), { nowMs: t0 + 45 * day });
+
+    const stat = statOf(table, 'm');
+    expect(stat.costEffectiveN).toBeCloseTo(stat.effectiveN!, 9);
+    expect(stat.costN).toBe(3);
+  });
+
+  it('decayed with an advancing clock: an unpriced fold multiplies the cost weight by the decay and leaves the mean', () => {
+    const day = 24 * 60 * 60 * 1000;
+    const t0 = Date.UTC(2026, 9, 1);
+    const priced = statOf(applyObservation(empty(), obs('m', 100), { nowMs: t0 }), 'm');
+    const aged = statOf(applyObservation(applyObservation(empty(), obs('m', 100), { nowMs: t0 }), obs('m'), { nowMs: t0 + 30 * day }), 'm');
+
+    expect(aged.avgCostMc).toBe(priced.avgCostMc);
+    expect(aged.costN).toBe(1);
+    expect(aged.costEffectiveN).toBeCloseTo(priced.costEffectiveN! * decayWeight(30 * day), 9);
+    // The run weight decayed the same way and gained the fresh unpriced run.
+    expect(aged.effectiveN).toBeCloseTo(priced.effectiveN! * decayWeight(30 * day) + 1, 9);
+  });
+
+  it('decayed after a plain fold in between: the cost weight follows the priced share of the decayed run weight', () => {
+    const t0 = Date.UTC(2026, 9, 1);
+    // A stat a plain fold touched: 2 runs, 1 priced, with a decayed run weight of 1 and no cost weight of its own.
+    const table: RoutingTable = {
+      updatedAt: new Date(0).toISOString(),
+      byAction: { sql: [{ model: 'm', n: 2, avgScore: 0.8, mergeRate: 1, avgCostMc: 100, costN: 1, effectiveN: 1, at: t0 }] },
+    };
+
+    const stat = statOf(applyObservation(table, obs('m', 300), { nowMs: t0 }), 'm');
+    // weight before the fold = effectiveN(1) * costN(1)/n(2) = 0.5, so mean = 100 + (300-100)/1.5
+    expect(stat.avgCostMc).toBeCloseTo(100 + 200 / 1.5, 6);
+  });
+
   it('resumes a blob written before cost could be unknown: every earlier run counted as priced', () => {
     const legacy: RoutingTable = {
       updatedAt: new Date(0).toISOString(),
@@ -94,6 +134,16 @@ describe('the tie-break between equal scorers', () => {
     const table = fold([obs('unknown'), obs('priced', 10)]);
 
     expect(table.byAction.sql!.map((s) => s.model)).toEqual(['unknown', 'priced']);
+  });
+
+  it('orders three equal scorers the same however they arrive — and a cheaper priced model never trails a dearer one', () => {
+    // Curated/insertion order [C, B, A]: C dear, B unknown, A cheap. Unknown keeps its slot.
+    const table = fold([obs('C', 9), obs('B'), obs('A', 5)]);
+
+    expect(table.byAction.sql!.map((s) => s.model)).toEqual(['A', 'B', 'C']);
+    // Repeated folds keep the order: the sort is a function of the set, not of which pair was compared last.
+    const again = applyObservation(table, obs('A', 5));
+    expect(again.byAction.sql!.map((s) => s.model).indexOf('A')).toBeLessThan(again.byAction.sql!.map((s) => s.model).indexOf('C'));
   });
 
   it('still prefers the cheaper of two models that both report a cost', () => {

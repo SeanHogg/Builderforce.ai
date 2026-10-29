@@ -73,7 +73,7 @@ function QualityCard({ days }: ComponentSurfaceProps) {
 function EfficiencyCard({ days }: ComponentSurfaceProps) {
   const { data, state, t } = useImpact(days);
   if (!data) return state;
-  return <Stat value={pct(data.productivity.efficiency * 100)} sub={t('aiImpact.efficiencySub')} />;
+  return <Stat value={pct(data.productivity.efficiency === null ? null : data.productivity.efficiency * 100)} sub={t('aiImpact.efficiencySub')} />;
 }
 
 function PrevScoreCard({ days }: ComponentSurfaceProps) {

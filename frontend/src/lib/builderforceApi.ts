@@ -4621,7 +4621,10 @@ export interface ModelAnalyticsEntry {
   samples: number;
   avgScore: number;
   mergeRate: number;
-  avgCostMillicents: number;
+  /** null = none of this model's runs reported a cost: unknown, not $0. */
+  avgCostMillicents: number | null;
+  /** Runs behind that mean that reported a cost. */
+  costN?: number;
 }
 export interface ModelAnalyticsAction {
   actionType: ActionType;
@@ -8113,7 +8116,7 @@ export interface EffectivenessBucket {
 }
 export interface EngineeringInsights {
   windowDays: number;
-  totals: { runs: number; avgScore: number; mergedRatePct: number; ciGreenRatePct: number; degradedRatePct: number; costUsd: number | null; costPerMergedPrUsd: number | null };
+  totals: { runs: number; avgScore: number; mergedRatePct: number; ciGreenRatePct: number; degradedRatePct: number; costUsd: number | null; costPerMergedPrUsd: number | null; pricedRuns: number };
   byModel: EffectivenessBucket[];
   byActionType: EffectivenessBucket[];
   byApproach: EffectivenessBucket[];

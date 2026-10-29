@@ -2782,6 +2782,7 @@
       "degradedSub": "cayó del modelo programador",
       "cost": "Coste del agente",
       "costSub": "atribuido a ejecuciones",
+      "costCoverage": "{priced} de {total} ejecuciones con coste",
       "score": "Puntuación",
       "byApproach": "Eficacia por enfoque",
       "approach": "Enfoque",

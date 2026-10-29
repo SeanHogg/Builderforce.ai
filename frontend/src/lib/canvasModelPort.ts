@@ -26,6 +26,16 @@ function modelUsageOf(usage: NonNullable<CanvasTurn['usage']>): ModelUsage {
   };
 }
 
+/**
+ * What a turn cost, as far as this transport KNOWS it. The gateway reports no per-turn cost here, so
+ * the answer is unknown (nothing returned) — except for a turn the on-device model served: that cost
+ * nothing, which is a fact (a priced zero), not an unreported cost.
+ */
+function knownTurnCost(result: CanvasTurn): Pick<ModelUsage, 'costMc'> {
+  const servedOnDevice = result.localFirst?.some((attempt) => attempt.outcome === 'served' && attempt.target.startsWith('local/')) === true;
+  return servedOnDevice ? { costMc: 0 } : {};
+}
+
 /** The summary's ceiling when the policy names none — the summary request's own bound. */
 const DEFAULT_SUMMARY_TOKENS = 700;
 
@@ -167,8 +177,8 @@ export function canvasModelTransport(run: CanvasRun): ModelTransport {
         toolCalls: result.toolCalls.map((call) => ({ id: call.id, name: call.name, arguments: call.args })),
         ...(result.resolvedModel ? { model: result.resolvedModel } : {}),
         // What the gateway reported, in the agent's words: the run's tally sums these into the
-        // §8.2 row's tokens and cache reads. (The gateway reports no per-turn cost here.)
-        ...(result.usage ? { usage: modelUsageOf(result.usage) } : {}),
+        // §8.2 row's tokens and cache reads, and — for a turn the on-device model served — a known cost of 0.
+        ...(result.usage || result.localFirst ? { usage: { ...(result.usage ? modelUsageOf(result.usage) : {}), ...knownTurnCost(result) } } : {}),
         ...(interrupted ? { interrupted } : {}),
       };
     },
