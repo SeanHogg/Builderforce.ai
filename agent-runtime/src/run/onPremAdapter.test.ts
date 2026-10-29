@@ -18,7 +18,7 @@ import { describe, expect, it, vi } from "vitest";
 import { runAgent } from "@builderforce/agent-run";
 import type { ModelCompletion, ModelRequest, ModelTransport, RunOutcomeRow, RunPolicy } from "@builderforce/agent-run";
 import type { CapabilityProvider } from "@builderforce/agent-tools";
-import { buildRunRowReport } from "../agents/embedded-runner/learned-routing/outcome-reporter.js";
+import { buildRunRowReport } from "./outcomeReporter.js";
 import { createSteeringChannel } from "../infra/relay-steering.js";
 import { runOnPremAgent, type OnPremRunParams } from "./onPremAdapter.js";
 

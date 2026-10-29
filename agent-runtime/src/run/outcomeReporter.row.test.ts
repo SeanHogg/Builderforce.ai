@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RunOutcomeRow } from "@builderforce/agent-run";
-import { relayRunSinks } from "../../../run/relayRunSinks.js";
-import { buildRunRowReport, clientRunIdFor } from "./outcome-reporter.js";
+import { buildRunRowReport, clientRunIdFor } from "./outcomeReporter.js";
+import { relayRunSinks } from "./relayRunSinks.js";
 
 /**
  * The §8.2 uniform row the ONE agent writes, as the on-prem entry point reports it to
@@ -51,6 +51,29 @@ describe("buildRunRowReport", () => {
     expect(buildRunRowReport(row({ terminalStatus: "failed" }))?.terminalStatus).toBe("failed");
     expect(buildRunRowReport(row({ runId: undefined }))).toBeNull();
     expect(buildRunRowReport(row({ model: undefined }))).toBeNull();
+  });
+});
+
+describe("buildRunRowReport — how the run ended, and where it belongs", () => {
+  it("scores a Stop as cancelled, not as a failure of the work", () => {
+    expect(buildRunRowReport(row({ terminalStatus: "failed", cancelled: true }))?.terminalStatus).toBe("cancelled");
+  });
+
+  it("keeps a 429-exhausted run's availability fact beside the score (rateLimited), and says nothing otherwise", () => {
+    const limited = buildRunRowReport(row({ terminalStatus: "failed", rateLimited: true }));
+    expect(limited).toMatchObject({ terminalStatus: "failed", rateLimited: true });
+    expect(buildRunRowReport(row({ terminalStatus: "failed" }))).not.toHaveProperty("rateLimited");
+  });
+
+  it("marks a run served off its intended model as degraded, and says nothing otherwise", () => {
+    expect(buildRunRowReport(row({ degraded: true }))).toMatchObject({ degraded: true });
+    expect(buildRunRowReport(row())).not.toHaveProperty("degraded");
+  });
+
+  it("scopes the report to the project and ticket the relay names, and to the environment's project otherwise", () => {
+    expect(buildRunRowReport(row(), { projectId: 12, taskId: 340 })).toMatchObject({ projectId: 12, taskId: 340 });
+    const bare = buildRunRowReport(row());
+    expect(bare).not.toHaveProperty("taskId");
   });
 });
 

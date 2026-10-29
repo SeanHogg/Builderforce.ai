@@ -11,12 +11,13 @@
  * execution. Nothing here decides what it may do.
  */
 
-import { spawnAgentTool, delegationRole } from "@builderforce/agent-tools";
+import { schemaForCapabilities, spawnAgentTool, delegationRole } from "@builderforce/agent-tools";
 import type { ToolDef } from "./fileTools";
+import { EDITOR_DELEGATION_CAPS } from "./localCapabilities";
 import { resolveChildPersona, type SubagentToolDeps } from "./childPersona";
 
 export function subagentToolDef(deps: SubagentToolDeps & Required<Pick<SubagentToolDeps, "children">>): ToolDef {
-  const schema = spawnAgentTool.schema.function;
+  const schema = schemaForCapabilities(spawnAgentTool, EDITOR_DELEGATION_CAPS).function;
   return {
     name: schema.name,
     description: schema.description,

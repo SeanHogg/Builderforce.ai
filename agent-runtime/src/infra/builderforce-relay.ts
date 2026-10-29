@@ -81,6 +81,7 @@ import { getKnowledgeLoop } from "./memory-bridge.js";
 import { createGitRepoSync } from "./repo-sync.js";
 import { OnPremAgentEngine } from "../run/onPremEngine.js";
 import { configuredModelWindow } from "../run/onPremModelWindow.js";
+import type { OutcomeScope } from "../run/outcomeReporter.js";
 import { relayRunSinks } from "../run/relayRunSinks.js";
 import {
   taskWorkspaceDir,
@@ -420,10 +421,25 @@ export class BuilderforceRelayService implements IRelayService {
    * (chat.message for assistant text, tool.audit for tool calls), then reports the
    * terminal execution state.
    */
+  /** The project (from the linked workspace's context) and ticket a run's outcome row is scoped to. */
+  private async outcomeScope(taskId?: number): Promise<OutcomeScope> {
+    let projectId: number | undefined;
+    try {
+      const raw = (await loadProjectContext(this.opts.workspaceDir ?? process.cwd()))?.builderforce?.projectId;
+      const parsed = raw ? Number(raw) : NaN;
+      if (Number.isInteger(parsed) && parsed > 0) projectId = parsed;
+    } catch (err) {
+      logDebug(`[relay] no project context for the outcome row: ${String(err)}`);
+    }
+    return { ...(projectId !== undefined ? { projectId } : {}), ...(taskId !== undefined ? { taskId } : {}) };
+  }
+
   private async runV2Engine(payload: EngineDispatch, prompt: string): Promise<void> {
     const agentLabel = payload.agentLabel?.trim() || "BuilderForce-V2";
     const sinks: OnPremRunSinks = relayRunSinks({
       executionId: payload.executionId,
+      // The run's row is scoped to the project this host is linked to and the ticket it was dispatched for.
+      outcomeScope: await this.outcomeScope(payload.taskId),
       sendToRelay: (frame) => this.sendToRelay(frame),
       emitAudit: (event) => this.toolAudit.emit(event),
       persistAudit: (event) => this.persistToolAudit(event),

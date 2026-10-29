@@ -222,6 +222,12 @@ export interface RunOutcomeRow {
   unkeptReadyClaims?: number;
   /** The A3 progress trips, by signal ({ signal: count }). */
   progressTrips?: Record<string, number>;
+  /** Present (true) only when the run was STOPPED (a user Stop, a steered stop, a cancelled owner) - not a failure of the work. */
+  cancelled?: boolean;
+  /** Present (true) only when the run died on a provider rate limit - an availability signal, not a quality one. */
+  rateLimited?: boolean;
+  /** Present (true) only when the run was served off its intended model (a failed preflight, or a downgrade). */
+  degraded?: boolean;
 }
 
 /** Where the run's events go: the live trace, the timeline, the relay frames. */

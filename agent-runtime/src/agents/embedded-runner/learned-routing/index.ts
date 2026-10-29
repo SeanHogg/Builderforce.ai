@@ -34,7 +34,7 @@ import { rankCandidates, type RankCandidatesOptions } from "../../candidate-rank
 import { alignStatsToCandidates, candidateKey, type ModelCandidate } from "./candidate-keys.js";
 import { computeLocalBias } from "./local-bias.js";
 import { readLocalOutcomes, recordLocalOutcome } from "./local-history.js";
-import { buildRunOutcomeReport, reportRunOutcome } from "./outcome-reporter.js";
+import { buildRunOutcomeReport, reportRunOutcome } from "../../../run/outcomeReporter.js";
 import { fetchScopeRanking } from "./routing-table-client.js";
 import { learnedSeedingOn, resolveScopeTokens } from "./settings.js";
 
@@ -46,7 +46,7 @@ export {
   clientRunIdFor,
   reportRunOutcome,
   type RunOutcomeFacts,
-} from "./outcome-reporter.js";
+} from "../../../run/outcomeReporter.js";
 export { clearRoutingCache, fetchScopeRanking } from "./routing-table-client.js";
 export { learnedRoutingOn, learnedSeedingOn } from "./settings.js";
 

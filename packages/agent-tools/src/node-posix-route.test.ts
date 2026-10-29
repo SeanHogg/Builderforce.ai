@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NO_POSIX_SHELL, findBash, posixRoute, resetBashCache, runRouted } from "./node-posix-shell.js";
+import { NO_BASH_FOR_POWERSHELL, NO_POSIX_SHELL, findBash, posixRoute, resetBashCache, runRouted } from "./node-posix-shell.js";
 
 /**
  * THE interpreter-routing rule every node shell shares (the on-prem host's and the editor's): on
@@ -129,13 +129,6 @@ describe("the retry signature", () => {
     expect(real).toHaveBeenCalledTimes(1);
   });
 
-  it("recognises Windows PowerShell 5.1's refusal of `&&`", async () => {
-    onWindows();
-    bashFound();
-    const ps = "The token '&&' is not a valid statement separator in this version.";
-    const exec = vi.fn(async (bash: string | null) => (bash ? { ok: true, stdout: "ran" } : { ok: false, stdout: ps }));
-    expect(await runRouted("frobnicate", exec)).toMatchObject({ ok: true, stdout: "ran" });
-  });
 });
 
 /** The on-prem host's choice: bash for EVERY command whenever one exists. */
@@ -155,7 +148,22 @@ describe("defaultInterpreter: bash (the on-prem host)", () => {
     onWindows();
     bashAbsent();
     expect(posixRoute("npm test", bashDefault)).toEqual({ bash: null });
-    expect(posixRoute("set -e\nls", bashDefault)).toEqual({ error: NO_POSIX_SHELL });
+    expect(posixRoute("set -e\nls", bashDefault)).toEqual({ error: NO_BASH_FOR_POWERSHELL });
+  });
+
+  // No bash: the default shell is Windows PowerShell 5.1, so what it can run is judged by PowerShell's
+  // rules, not cmd.exe's (which the editor's default uses).
+  it("with no bash, lets PowerShell run what it aliases, and answers a && chain with the install-Git guidance", () => {
+    onWindows();
+    bashAbsent();
+    for (const ok of ["ls -la src", "cat package.json", "rm -rf build", "pwd", 'echo "a && b"', "git rev-parse $(git branch --show-current)"]) {
+      expect(posixRoute(ok, bashDefault), ok).toEqual({ bash: null });
+    }
+    for (const needsBash of ["npm run build && npm test", "a || b", "git log | head -5", "grep -r foo ."]) {
+      expect(posixRoute(needsBash, bashDefault), needsBash).toEqual({ error: NO_BASH_FOR_POWERSHELL });
+    }
+    // The editor's cmd.exe default is judged by cmd's rules, as before.
+    expect(posixRoute("ls -la src")).toEqual({ error: NO_POSIX_SHELL });
   });
 
   it("leaves the editor's default alone: per-command routing, a plain command stays in the platform shell", () => {

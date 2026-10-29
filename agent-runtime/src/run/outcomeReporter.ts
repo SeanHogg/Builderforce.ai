@@ -25,8 +25,8 @@ import {
   type RunOutcomeRequest,
   type TerminalStatus,
 } from "@builderforce/learned-routing";
-import { logDebug, logWarn } from "../../../logger.js";
-import { learnedRoutingOn, resolveGatewayLink, resolveProjectId } from "./settings.js";
+import { learnedRoutingOn, resolveGatewayLink, resolveProjectId } from "../agents/embedded-runner/learned-routing/settings.js";
+import { logDebug, logWarn } from "../logger.js";
 
 const REPORT_TIMEOUT_MS = 10_000;
 
@@ -60,6 +60,27 @@ export interface RunOutcomeFacts {
   projectId?: number;
 }
 
+/** Where a run belongs, when the host knows more than its environment does. */
+export interface OutcomeScope {
+  projectId?: number;
+  taskId?: number;
+}
+
+/**
+ * What EVERY report from this host carries, whichever reporter built it: the run's namespaced key,
+ * the `'onprem'` source, and the project (the explicit one, else this host's configured one) and
+ * ticket it belongs to. ONE place, so the two builders cannot drift on how a run is keyed or scoped.
+ */
+function reportEnvelope(runId: string, scope: OutcomeScope = {}) {
+  const projectId = resolveProjectId(scope.projectId);
+  return {
+    clientRunId: clientRunIdFor(runId),
+    source: "onprem" as const,
+    ...(projectId != null ? { projectId } : {}),
+    ...(scope.taskId != null ? { taskId: scope.taskId } : {}),
+  };
+}
+
 /**
  * Build the exact body the route parses. Split out from the POST so the payload SHAPE
  * is unit-testable without a network, and so every field name is spelled once, here,
@@ -72,14 +93,11 @@ export interface RunOutcomeFacts {
  * FAILED those gates rather than one they never applied to.
  */
 export function buildRunOutcomeReport(facts: RunOutcomeFacts): RunOutcomeRequest {
-  const projectId = resolveProjectId(facts.projectId);
   return {
-    clientRunId: clientRunIdFor(facts.runId),
-    source: "onprem",
+    ...reportEnvelope(facts.runId, { projectId: facts.projectId }),
     model: facts.model,
     terminalStatus: facts.terminalStatus,
     actionType: facts.actionType,
-    ...(projectId != null ? { projectId } : {}),
     ...(facts.steps != null ? { steps: Math.max(0, Math.floor(facts.steps)) } : {}),
     ...(facts.degraded != null ? { degraded: facts.degraded } : {}),
     ...(facts.rateLimited != null ? { rateLimited: facts.rateLimited } : {}),
@@ -95,27 +113,29 @@ export function buildRunOutcomeReport(facts: RunOutcomeFacts): RunOutcomeRequest
  * joins. Null when the row cannot be keyed or attributed (no run id, no model): nothing to report.
  * PURE.
  */
-export function buildRunRowReport(row: RunOutcomeRow): RunOutcomeRequest | null {
+export function buildRunRowReport(row: RunOutcomeRow, scope: OutcomeScope = {}): RunOutcomeRequest | null {
   const runId = row.runId?.trim();
   const model = row.model?.trim();
   if (!runId || !model) return null;
-  const projectId = resolveProjectId();
   return {
     ...parseRunOutcomeTelemetry({ ...row, parentRunId: row.parentRunId ? clientRunIdFor(row.parentRunId) : undefined }),
-    clientRunId: clientRunIdFor(runId),
-    source: "onprem",
+    ...reportEnvelope(runId, scope),
     model,
-    terminalStatus: row.terminalStatus === "finished" ? "completed" : "failed",
+    // A Stop is not a failure of the work: it scores as cancelled, never as a bad run.
+    terminalStatus: row.cancelled ? "cancelled" : row.terminalStatus === "finished" ? "completed" : "failed",
     actionType: DEFAULT_ACTION_TYPE,
     steps: Math.max(0, Math.floor(row.steps)),
     ...(row.cost !== undefined ? { costMc: Math.max(0, Math.floor(row.cost)) } : {}),
-    ...(projectId != null ? { projectId } : {}),
+    // Availability and degradation are kept beside the score (never folded into it): a throttled model
+    // is demoted without being called bad, and a run served off its model does not earn full credit.
+    ...(row.rateLimited ? { rateLimited: true } : {}),
+    ...(row.degraded ? { degraded: true } : {}),
   };
 }
 
 /** Report the §8.2 row a run ended with, fire-and-forget (see {@link reportRunOutcome}). */
-export function reportRunRow(row: RunOutcomeRow): void {
-  const report = buildRunRowReport(row);
+export function reportRunRow(row: RunOutcomeRow, scope: OutcomeScope = {}): void {
+  const report = buildRunRowReport(row, scope);
   if (report) void reportRunOutcome(report);
 }
 

@@ -83,6 +83,18 @@ export const LOCAL_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
 ]);
 
 /**
+ * What a run that can DELEGATE holds on the editor: the surface's own, plus the editor's children
+ * running live (`subagentControlTools.ts` backs wait/message/stop). The capability set the spawn
+ * tools are described under - not `LOCAL_SURFACE_CAPS` alone, which has no delegation.
+ */
+export const EDITOR_DELEGATION_CAPS: ReadonlySet<Capability> = new Set<Capability>([
+  ...LOCAL_SURFACE_CAPS,
+  "orchestrate",
+  "orchestrate.live",
+  "orchestrate.fanout",
+]);
+
+/**
  * Collapse a large file listing to the deduped set of directory prefixes just below the
  * listed folder (trailing "/"), so an over-broad `list_files` returns a scoping map the
  * model can drill into instead of thousands of paths that blow its context. Files that

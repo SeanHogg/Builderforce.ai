@@ -25,7 +25,7 @@
  * a Worker invocation and a VS Code extension host build the identical row.
  */
 
-import type { RunOutcomeKind, RunOutcomeRow, RunState } from "../contract.js";
+import { RUN_CANCELLED_REASON, type RunOutcomeKind, type RunOutcomeRow, type RunState } from "../contract.js";
 import { defaultEstimateTokens } from "../policy/compaction/pack.js";
 import { turnContextBlock } from "../turnContext.js";
 import { resumeTally } from "./runTally.js";
@@ -40,6 +40,8 @@ export interface OutcomeRowInput {
   parentRunId?: string;
   /** The terminal outcome kind the run settled on. */
   kind: RunOutcomeKind;
+  /** Why a failed run failed (the settle reason): a Stop reads as cancelled, a provider 429 as rate-limited. */
+  reason?: string;
   /** The run's terminal state. */
   state: RunState;
 }
@@ -75,7 +77,20 @@ export function buildOutcomeRow(input: OutcomeRowInput): RunOutcomeRow {
     ...(preflight ? { modelPreflight: preflight } : {}),
     unkeptReadyClaims: progress?.unkeptTurns ?? 0,
     progressTrips: tripsBySignal(progress?.tripsBySignal),
+    ...(input.reason === RUN_CANCELLED_REASON ? { cancelled: true } : {}),
+    ...(input.kind === "failed" && isRateLimitReason(input.reason) ? { rateLimited: true } : {}),
+    ...(isDegraded(state) ? { degraded: true } : {}),
   };
+}
+
+/** A run that died on a provider rate limit: the settle reason carries the HTTP status or the words. */
+function isRateLimitReason(reason: string | undefined): boolean {
+  return !!reason && /\b429\b|rate[\s_-]?limit/i.test(reason);
+}
+
+/** Served off its intended model: the preflight came back degraded, or a turn was answered by another model. */
+function isDegraded(state: RunState): boolean {
+  return (state.preflight?.startsWith("degraded") ?? false) || (state.downgrades?.length ?? 0) > 0;
 }
 
 /** The A3 trips by signal, as a plain `{ signal: count }` map (empty when none tripped). */

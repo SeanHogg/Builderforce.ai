@@ -62,7 +62,7 @@ export async function settle(
 
   // The uniform §8.2 outcome row, built from the run state the whole run carried.
   if (kind === "finished" || kind === "failed") {
-    const row = buildOutcomeRow({ entryPoint: input.policy.entryPoint, runId: input.task.runId, parentRunId: input.task.dispatch.parentRunId, kind, state });
+    const row = buildOutcomeRow({ entryPoint: input.policy.entryPoint, runId: input.task.runId, parentRunId: input.task.dispatch.parentRunId, kind, ...(extra.reason !== undefined ? { reason: extra.reason } : {}), state });
     try {
       await input.ports.events.outcome?.(row);
     } catch {

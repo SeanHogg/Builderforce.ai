@@ -29,13 +29,15 @@ import * as path from "node:path";
  * shell CONTROL form, not something that merely looks unixy, so a plain command with
  * a forward-slash path is never misrouted.
  */
-const POSIX_ONLY = [
+const POSIX_ONLY_CONTROL = [
   /(^|\n)\s*set\s+-[a-z]/,      // `set -e`
-  /\$\((?!\()/,                  // command substitution `$(…)`
   /(^|\s)\[\s/,                  // the `[ … ]` test builtin
   /\|\|\s*\{/,                   // `… || { …; }` grouping
   /(^|\n)\s*export\s+\w+=/,      // `export VAR=…`
 ];
+/** `$(…)` command substitution - POSIX, but Windows PowerShell's `$(…)` subexpression reads it too. */
+const COMMAND_SUBSTITUTION = /\$\((?!\()/;
+const POSIX_ONLY = [...POSIX_ONLY_CONTROL, COMMAND_SUBSTITUTION];
 
 /**
  * Coreutils that DO NOT EXIST as `cmd.exe` commands, so invoking one there fails with
@@ -73,8 +75,36 @@ function commandWords(command: string): string[] {
     .filter(Boolean);
 }
 
-/** Does this command require a POSIX shell to run correctly? */
-export function needsPosixShell(command: string): boolean {
+/**
+ * Utilities Windows PowerShell already has under the same name (aliases), so on a machine whose
+ * default shell IS PowerShell they run there and are not a reason to demand bash.
+ */
+const POWERSHELL_ALIASED: ReadonlySet<string> = new Set(["cat", "ls", "rm", "cp", "mv", "pwd", "sleep", "tee", "diff"]);
+
+/** A command with its quoted strings blanked, so an `&&` inside text is not read as a chain. */
+function withoutQuoted(command: string): string {
+  return command.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, '""');
+}
+
+/**
+ * Does this command require bash on a machine whose default shell is Windows PowerShell 5.1?
+ * `needsPosixShell` is built for cmd.exe and would refuse `ls`/`cat`/`rm`, which PowerShell aliases;
+ * what PowerShell genuinely cannot run is the `&&` / `||` chain (no such operators in 5.1), the POSIX
+ * control forms, and the unix utilities it has no alias for.
+ */
+function needsBashForPowerShell(command: string): boolean {
+  const bare = withoutQuoted(command);
+  if (/&&|\|\|/.test(bare)) return true;
+  if (POSIX_ONLY_CONTROL.some((re) => re.test(bare))) return true;
+  return commandWords(bare).some((w) => POSIX_UTILITIES.has(w) && !POWERSHELL_ALIASED.has(w));
+}
+
+/**
+ * Does this command require a POSIX shell to run correctly? `shell` is the machine's default
+ * interpreter: cmd.exe (the default) or Windows PowerShell.
+ */
+export function needsPosixShell(command: string, shell: "cmd" | "powershell" = "cmd"): boolean {
+  if (shell === "powershell") return needsBashForPowerShell(command);
   if (POSIX_ONLY.some((re) => re.test(command))) return true;
   return commandWords(command).some((w) => POSIX_UTILITIES.has(w));
 }
@@ -97,8 +127,6 @@ const CMD_CANNOT_RUN = [
   // cmd.exe reading `set -e` as its own builtin. Narrowed to a flag-shaped name: a program that DID
   // run and printed "Environment variable FOO not defined" is a real failure, not a reason to rerun.
   /Environment variable -\w+ not defined/i,
-  // Windows PowerShell 5.1 has no `&&` / `||` chain operators.
-  /The token '(&&|\|\|)' is not a valid statement separator/i,
 ];
 
 export function cmdCannotRun(output: string): boolean {
@@ -164,20 +192,6 @@ export function resetBashCache(): void {
 }
 
 /**
- * The `shell` option to spread into an `exec` call for this command — a bash path
- * when the command needs POSIX and one was found, otherwise nothing at all (the
- * platform default shell, exactly as before).
- *
- * On a non-Windows host the default shell is already `/bin/sh`, so this is a no-op
- * there and the probe never runs.
- */
-export function posixShellOption(command: string): { shell?: string } {
-  if (process.platform !== "win32" || !needsPosixShell(command)) return {};
-  const bash = findBash();
-  return bash ? { shell: bash } : {};
-}
-
-/**
  * What this machine can actually do with a POSIX script — the fact that decides
  * whether `git_sync_latest` / `git_undo` / `git_redo` work here at all.
  *
@@ -236,6 +250,12 @@ export const NO_POSIX_SHELL =
   + "and no POSIX shell was found on this Windows machine. "
   + "Install Git for Windows (which ships bash), or re-run the work as plain single-line commands instead.";
 
+/** The refusal when a command needs bash and the machine's default shell is Windows PowerShell with no bash to hand it to. */
+export const NO_BASH_FOR_POWERSHELL =
+  "this command needs a POSIX shell (it chains with && / ||, or uses set -e / [ … ] / export, or a unix utility such as head/grep/sed that Windows PowerShell does not have) "
+  + "and no POSIX shell was found on this Windows machine. "
+  + "Install Git for Windows (which ships bash), or re-run the work as separate single commands instead.";
+
 /**
  * The interpreter a host runs a command in when nothing says otherwise. Windows only:
  *  - `"platform"` — the machine's default shell (cmd.exe), moving a command to bash only when it
@@ -264,8 +284,10 @@ export function posixRoute(command: string, options: RouteOptions = {}): { bash:
   if (process.platform !== "win32") return { bash: null };
   const bash = findBash();
   if (options.defaultInterpreter === "bash" && bash) return { bash };
-  if (!needsPosixShell(command)) return { bash: null };
-  return bash ? { bash } : { error: NO_POSIX_SHELL };
+  // With no bash, a "bash"-default host is on PowerShell: judge the command by what PowerShell cannot run.
+  const powershell = options.defaultInterpreter === "bash";
+  if (!needsPosixShell(command, powershell ? "powershell" : "cmd")) return { bash: null };
+  return bash ? { bash } : { error: powershell ? NO_BASH_FOR_POWERSHELL : NO_POSIX_SHELL };
 }
 
 /**

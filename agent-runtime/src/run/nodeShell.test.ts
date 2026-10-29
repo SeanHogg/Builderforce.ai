@@ -18,6 +18,7 @@ let idler: string;
 let pidFile: string;
 
 beforeEach(async () => {
+  confirmedGone.clear();
   dir = await mkdtemp(path.join(tmpdir(), "node-shell-"));
   pidFile = path.join(dir, "pid");
   idler = path.join(dir, "idle.js");
@@ -44,9 +45,12 @@ function recordedPid(): number | undefined {
   return Number.isFinite(pid) && pid > 0 ? pid : undefined;
 }
 
+/** Pids a test already saw EXIT: their numbers may be reused by now, so cleanup must never signal them. */
+const confirmedGone = new Set<number>();
+
 /** Kill a left-over process and wait until it has actually exited. */
 async function ensureDead(pid: number | undefined): Promise<void> {
-  if (pid === undefined || !alive(pid)) return;
+  if (pid === undefined || confirmedGone.has(pid) || !alive(pid)) return;
   try {
     process.kill(pid);
   } catch {
@@ -85,6 +89,7 @@ async function untilGone(pid: number): Promise<void> {
 async function expectGone(pid: number): Promise<void> {
   await untilGone(pid);
   expect(alive(pid)).toBe(false);
+  confirmedGone.add(pid);
 }
 
 describe("buildNodeShell — the working directory is the shell's, not the command's", () => {

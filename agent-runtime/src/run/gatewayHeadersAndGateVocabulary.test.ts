@@ -44,7 +44,9 @@ describe("allowedToolsAfterGates", () => {
     expect(allowedToolsAfterGates(undefined)).toEqual([...GATED_TOOL_VOCABULARY]);
     // The list is only meaningful if each name reaches a tool the live catalog offers: a block gate
     // authored against the name must withhold at least one tool a fully-granted surface is offered.
-    const offered = offeredTools(["repo.read", "repo.write", "shell", "orchestrate"]);
+    // Every capability the vocabulary's tools sit behind: `Edit` -> edit_file needs repo.edit and
+    // `Grep` -> search_code needs repo.search (separate from repo.write / repo.read by design).
+    const offered = offeredTools(["repo.read", "repo.search", "repo.write", "repo.edit", "shell", "orchestrate"]);
     for (const name of GATED_TOOL_VOCABULARY) {
       const gate: PolicyGate = { id: "g", effect: "block", tool: name };
       expect(offered.some((tool) => isToolWithheld([gate], tool)), `a block gate on '${name}' withholds nothing the catalog offers`).toBe(true);
