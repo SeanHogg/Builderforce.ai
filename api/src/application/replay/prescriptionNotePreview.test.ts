@@ -47,6 +47,12 @@ describe('notePrescriptionPreview', () => {
     expect(mocks.bump).toHaveBeenCalledWith(env, SITE_ID);
   });
 
+  it('replaces an earlier preview on a rebuild, keeping the ticket', async () => {
+    row = { ...row, actionRef: 't=77;p=oldoldold123' };
+    expect(await note()).toBe(true);
+    expect(updates[0]).toMatchObject({ actionRef: 't=77;p=abc123def456' });
+  });
+
   it('refuses another workspace’s prescription', async () => {
     expect(await note({ tenantId: 8 })).toBe(false);
     expect(updates).toHaveLength(0);

@@ -198,6 +198,21 @@ describe('live', () => {
     expect(limits).toContain(200);
   });
 
+  it('caps the by-route list at 50 routes while active stays the exact total', async () => {
+    // A site with 80 distinct routes: the route statement is limited to 50 (the busiest, by the
+    // ORDER BY); the list-of-visitors statement keeps its own 200 cap; the count is not capped.
+    const { db, limits } = liveDb({
+      rows: [],
+      total: 800,
+      routes: Array.from({ length: 50 }, (_, i) => ({ route: `/r${i}`, n: 50 - i })),
+    });
+    const live = await service(db).live({ tenantId: 7, siteId: '44444444-2222-4333-8444-555555555555' });
+    expect(limits.sort((a, b) => a - b)).toEqual([50, 200]);
+    expect(live.byRoute).toHaveLength(50);
+    expect(live.byRoute[0]).toEqual({ route: '/r0', n: 50 });
+    expect(live.active).toBe(800);
+  });
+
   it('is zero on an empty site', async () => {
     const { db } = liveDb({ rows: [], total: 0, routes: [] });
     expect(await service(db).live({ tenantId: 7, siteId: '33333333-2222-4333-8444-555555555555' }))

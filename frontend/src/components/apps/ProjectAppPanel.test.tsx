@@ -14,8 +14,8 @@ vi.mock('@/lib/embeddedApps', async (importOriginal) => ({
   embeddedAppsApi: api,
 }));
 
-vi.mock('@/lib/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/api')>()),
+vi.mock('@/lib/siteApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/siteApi')>()),
   loadLivePreview: vi.fn().mockResolvedValue(null),
 }));
 

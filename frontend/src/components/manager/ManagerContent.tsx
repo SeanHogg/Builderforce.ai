@@ -52,7 +52,7 @@ import {
   tdMutedStyle,
 } from '@/components/dataTableStyles';
 import { useFormat } from "@/i18n/useFormat";
-import { StatTile } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 import { faultMessage } from '@/lib/apiClient';
 import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 /**

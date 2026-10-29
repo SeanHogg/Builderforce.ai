@@ -29,7 +29,7 @@ import {
   restoreSiteRelease,
   type AppPackageTarget,
   type SiteRelease,
-} from '@/lib/api';
+} from '@/lib/siteApi';
 import { useFormat } from "@/i18n/useFormat";
 import { formatBytes } from '@/lib/formatBytes';
 import { faultMessage } from '@/lib/apiClient';

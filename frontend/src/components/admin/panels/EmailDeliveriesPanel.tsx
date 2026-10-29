@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { adminApi, type AdminEmailDeliveryFailurePage } from '@/lib/adminApi';
-import { AdminError, AdminLoading, StatTile, errText, useAdminFormat } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, errText, useAdminFormat } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 import { useFormat } from "@/i18n/useFormat";
 
 const PAGE_SIZE = 50;
 
 export default function EmailDeliveriesPanel() {
+  const t = useTranslations('admin.emailDeliveries');
   const { fmtDateTime } = useAdminFormat();
   const fmt = useFormat();
   const [page, setPage] = useState<AdminEmailDeliveryFailurePage | null>(null);
@@ -34,29 +37,29 @@ export default function EmailDeliveriesPanel() {
     <div>
       <AdminError message={error} />
       <div style={{ marginBottom: 16 }}>
-        <h2 style={{ margin: '0 0 4px' }}>Failed email deliveries</h2>
-        <p className="text-muted" style={{ margin: 0, fontSize: 13 }}>Resend rejections and transport failures. Message bodies, verification codes, and API keys are not stored.</p>
+        <h2 style={{ margin: '0 0 4px' }}>{t('title')}</h2>
+        <p className="text-muted" style={{ margin: 0, fontSize: 'var(--font-size-small)' }}>{t('subtitle')}</p>
       </div>
       {summary && (
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-          <StatTile label="All-time failures" value={fmt.number(summary.total)} tone={summary.total ? 'error' : undefined} />
-          <StatTile label="Last 24 hours" value={fmt.number(summary.last24Hours)} tone={summary.last24Hours ? 'error' : undefined} />
-          <StatTile label="Affected recipients" value={fmt.number(summary.affectedRecipients)} tone={summary.affectedRecipients ? 'error' : undefined} />
+          <StatTile label={t('allTime')} value={fmt.number(summary.total)} tone={summary.total ? 'error' : undefined} />
+          <StatTile label={t('last24h')} value={fmt.number(summary.last24Hours)} tone={summary.last24Hours ? 'error' : undefined} />
+          <StatTile label={t('affected')} value={fmt.number(summary.affectedRecipients)} tone={summary.affectedRecipients ? 'error' : undefined} />
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
         <select className="admin-select" value={deliveryType} onChange={(e) => { setDeliveryType(e.target.value); setOffset(0); }}>
-          <option value="">All email types</option>
+          <option value="">{t('allTypes')}</option>
           {(page?.deliveryTypes ?? []).map((type) => <option key={type} value={type}>{type}</option>)}
         </select>
-        <input className="admin-select" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { setApplied(search); setOffset(0); } }} placeholder="Search recipient or provider error…" style={{ flex: '1 1 260px' }} />
-        <button type="button" className="admin-tab" onClick={() => { setApplied(search); setOffset(0); }}>Filter</button>
-        <button type="button" className="btn-ghost" onClick={reload}>↻ Refresh</button>
+        <input className="admin-select" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { setApplied(search); setOffset(0); } }} placeholder={t('searchPlaceholder')} style={{ flex: '1 1 260px' }} />
+        <button type="button" className="admin-tab" onClick={() => { setApplied(search); setOffset(0); }}>{t('filter')}</button>
+        <button type="button" className="btn-ghost" onClick={reload}>↻ {t('refresh')}</button>
       </div>
-      {rows.length === 0 ? <p className="text-muted" style={{ padding: 24 }}>No failed email deliveries recorded.</p> : (
+      {rows.length === 0 ? <p className="text-muted" style={{ padding: 24 }}>{t('empty')}</p> : (
         <div className="table-wrap">
-          <table className="data-table" style={{ fontSize: 13 }}>
-            <thead><tr><th>Time</th><th>Recipient</th><th>Type</th><th>Provider</th><th>Status</th><th>Error</th></tr></thead>
+          <table className="data-table" style={{ fontSize: 'var(--font-size-small)' }}>
+            <thead><tr><th>{t('time')}</th><th>{t('recipient')}</th><th>{t('type')}</th><th>{t('provider')}</th><th>{t('status')}</th><th>{t('error')}</th></tr></thead>
             <tbody>{rows.map((row) => (
               <tr key={row.id}>
                 <td style={{ whiteSpace: 'nowrap' }}>{fmtDateTime(row.createdAt)}</td>
@@ -71,9 +74,9 @@ export default function EmailDeliveriesPanel() {
         </div>
       )}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
-        <button type="button" className="btn-ghost" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>← Prev</button>
-        <span className="text-muted" style={{ fontSize: 12 }}>{page ? `${offset + 1}–${offset + rows.length} of ${page.total}` : ''}</span>
-        <button type="button" className="btn-ghost" disabled={!page?.hasMore} onClick={() => setOffset(offset + PAGE_SIZE)}>Next →</button>
+        <button type="button" className="btn-ghost" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>← {t('prev')}</button>
+        <span className="text-muted" style={{ fontSize: 'var(--font-size-small)' }}>{page ? t('range', { from: offset + 1, to: offset + rows.length, total: page.total }) : ''}</span>
+        <button type="button" className="btn-ghost" disabled={!page?.hasMore} onClick={() => setOffset(offset + PAGE_SIZE)}>{t('next')} →</button>
       </div>
     </div>
   );

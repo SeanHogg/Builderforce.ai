@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import * as api from '@/lib/api';
+import * as api from '@/lib/siteApi';
 import { replayApi } from '@/lib/replayApi';
 import { replaySitesApi } from '@/lib/replaySitesApi';
 import { PrescriptionPreviewPublish } from './PrescriptionPreviewPublish';
@@ -17,13 +17,19 @@ vi.mock('next/navigation', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next/navigation')>()),
   useSearchParams: () => new URLSearchParams(search.current),
 }));
-vi.mock('@/lib/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/api')>()),
+vi.mock('@/lib/siteApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/siteApi')>()),
   publishSitePreview: vi.fn(),
+}));
+// `recordedFailure` posts to the ingest; here it just resolves to its fallback (its own test is `lib/reportError.test.ts`).
+const recorded = vi.hoisted(() => ({ reasons: [] as string[] }));
+vi.mock('@/lib/reportError', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/reportError')>()),
+  recordedFailure: (what: string, fallback: unknown) => () => { recorded.reasons.push(what); return fallback; },
 }));
 
 const assets = [{ path: 'index.html', data: new Uint8Array([1]) }];
-const result = { versionToken: 'rel-prev', liveVersionToken: 'rel-live', assetCount: 1, totalBytes: 1, url: 'https://shop.builderforce.ai', preview: true as const };
+const result = { versionToken: 'rel-prev', liveVersionToken: 'rel-live', assetCount: 1, totalBytes: 1, url: 'https://shop.builderforce.ai', preview: true as const, recorded: true };
 
 beforeEach(() => {
   search.current = 'panel=publish&prescription=rx-9';
@@ -67,6 +73,27 @@ describe('PrescriptionPreviewPublish', () => {
     fireEvent.click(screen.getByRole('button', { name: 'ide.publish.fixPreview.action' }));
     expect(await screen.findByText('ide.publish.fixPreview.noLink')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'ide.publish.fixPreview.backToFix' })).toBeInTheDocument();
+  });
+
+  it('says the preview was not attached, with no "published" claim or link, when it was not recorded on the fix', async () => {
+    vi.mocked(api.publishSitePreview).mockResolvedValue({ ...result, recorded: false });
+    render(<PrescriptionPreviewPublish projectId={7} onBuild={vi.fn().mockResolvedValue(assets)} />);
+    fireEvent.click(screen.getByRole('button', { name: 'ide.publish.fixPreview.action' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('ide.publish.fixPreview.notRecorded');
+    expect(screen.queryByText(/ide\.publish\.fixPreview\.done/)).toBeNull();
+    expect(screen.queryByRole('link', { name: 'ide.publish.fixPreview.backToFix' })).toBeNull();
+    expect(replayApi.previewUrl).not.toHaveBeenCalled();
+  });
+
+  it('cannot start while the panel is publishing, and reports its own busy state', async () => {
+    const onBusyChange = vi.fn();
+    const { rerender } = render(<PrescriptionPreviewPublish projectId={7} onBuild={vi.fn().mockResolvedValue(assets)} disabled onBusyChange={onBusyChange} />);
+    expect(screen.getByRole('button', { name: 'ide.publish.fixPreview.action' })).toBeDisabled();
+    rerender(<PrescriptionPreviewPublish projectId={7} onBuild={vi.fn().mockResolvedValue(assets)} onBusyChange={onBusyChange} />);
+    fireEvent.click(screen.getByRole('button', { name: 'ide.publish.fixPreview.action' }));
+    await screen.findByRole('link', { name: 'ide.publish.fixPreview.openPreview' });
+    expect(onBusyChange).toHaveBeenCalledWith(true);
+    expect(onBusyChange).toHaveBeenLastCalledWith(false);
   });
 
   it('shows the failure and publishes nothing when the build fails', async () => {

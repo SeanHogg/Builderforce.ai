@@ -7,15 +7,18 @@
  * the preview through a short-lived private link and publishes from Insights.
  *
  * Decides its own visibility: nothing without a fix in the address. The build is the
- * panel's own (`onBuild`); the upload is `publishSitePreview`.
+ * panel's own (`onBuild`); the upload is `publishSitePreview`. The panel's Publish
+ * and this share ONE build, so they exclude each other: `disabled` is the panel's
+ * busy state in, `onBusyChange` is this one's busy state out.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { publishSitePreview, type SitePreviewResult } from '@/lib/api';
+import { publishSitePreview, type SitePreviewResult } from '@/lib/siteApi';
 import { faultText } from '@/lib/apiClient';
+import { recordedFailure } from '@/lib/reportError';
 import { replayApi } from '@/lib/replayApi';
 import { replaySitesApi } from '@/lib/replaySitesApi';
 import { studioPublishLinkFrom } from '@/lib/studio/studioDeepLink';
@@ -27,6 +30,10 @@ interface PrescriptionPreviewPublishProps {
   projectId: number;
   /** Build the project and return its dist assets — the same builder Publish uses. */
   onBuild: () => Promise<Array<{ path: string; data: Uint8Array }>>;
+  /** The panel is already building or uploading its own publish. */
+  disabled?: boolean;
+  /** Called with whether this preview is building or uploading, so the panel can hold its own Publish. */
+  onBusyChange?: (busy: boolean) => void;
 }
 
 type Phase = 'idle' | 'building' | 'uploading' | 'done' | 'error';
@@ -40,7 +47,7 @@ interface Published {
 
 const linkStyle = { color: 'var(--accent)', fontWeight: 600, overflowWrap: 'anywhere' } as const;
 
-export function PrescriptionPreviewPublish({ projectId, onBuild }: PrescriptionPreviewPublishProps) {
+export function PrescriptionPreviewPublish({ projectId, onBuild, disabled = false, onBusyChange }: PrescriptionPreviewPublishProps) {
   const t = useTranslations('ide');
   const prescriptionId = studioPublishLinkFrom(useSearchParams() ?? new URLSearchParams()).prescriptionId;
   const [phase, setPhase] = useState<Phase>('idle');
@@ -56,9 +63,14 @@ export function PrescriptionPreviewPublish({ projectId, onBuild }: PrescriptionP
       const assets = await onBuild();
       setPhase('uploading');
       const result = await publishSitePreview(projectId, assets, prescriptionId);
+      // The release exists, but it is not on the fix (the fix moved on, or is not this project's):
+      // say so rather than claiming a preview "for this fix" nobody can find from it.
+      if (!result.recorded) throw new Error(t('publish.fixPreview.notRecorded'));
       // The signed link and the way back both need the Insights site behind this project.
-      const site = await replaySitesApi.projectSite(projectId).catch(() => null);
-      const previewUrl = site ? await replayApi.previewUrl(site.id, result.versionToken).then((link) => link.url).catch(() => null) : null;
+      const site = await replaySitesApi.projectSite(projectId).catch(recordedFailure('Reading the Insights site of a project', null));
+      const previewUrl = site
+        ? await replayApi.previewUrl(site.id, result.versionToken).then((link) => link.url).catch(recordedFailure('Minting the preview link', null))
+        : null;
       const level: InsightPanelLevel = { kind: 'fix', id: prescriptionId };
       setPublished({
         result,
@@ -72,8 +84,12 @@ export function PrescriptionPreviewPublish({ projectId, onBuild }: PrescriptionP
     }
   }, [prescriptionId, onBuild, projectId, t]);
 
-  if (!prescriptionId) return null;
   const busy = phase === 'building' || phase === 'uploading';
+  useEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
+
+  if (!prescriptionId) return null;
 
   return (
     <section
@@ -82,20 +98,20 @@ export function PrescriptionPreviewPublish({ projectId, onBuild }: PrescriptionP
       style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'var(--surface-card)' }}
     >
       <div style={{ fontWeight: 600 }}>{t('publish.fixPreview.title')}</div>
-      <div style={{ color: 'var(--text-secondary)', fontSize: 12.5 }}>{t('publish.fixPreview.description')}</div>
+      <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)' }}>{t('publish.fixPreview.description')}</div>
       <button
         type="button"
         className="btn-secondary"
         onClick={() => void publish()}
-        disabled={busy}
+        disabled={busy || disabled}
         aria-busy={busy}
         style={{ minHeight: 44 }}
       >
         {phase === 'building' ? t('publish.building') : phase === 'uploading' ? t('publish.uploading') : t('publish.fixPreview.action')}
       </button>
-      {error && <div role="alert" style={{ color: 'var(--error)', fontSize: 12.5, whiteSpace: 'pre-wrap' }}>{error}</div>}
+      {error && <div role="alert" style={{ color: 'var(--error)', fontSize: 'var(--font-size-small)', whiteSpace: 'pre-wrap' }}>{error}</div>}
       {published && (
-        <div role="status" style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12.5 }}>
+        <div role="status" style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 'var(--font-size-small)' }}>
           <span style={{ color: 'var(--text-secondary)' }}>
             {t('publish.fixPreview.done')} · {t('publish.fileCount', { count: published.result.assetCount })}
           </span>

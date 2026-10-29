@@ -60,6 +60,7 @@ import { humanDirected, stampExecutionAuthority } from '../runtime/executionAuth
 import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { resolveHumanActor, SYSTEM_ACTOR, type ActorIdentity } from '../activity/activityLog';
+import { holdBuildPreviewWhileRunning } from './prescriptionFixRuns';
 import { hostedContextOf, loadPrescriptionRow, toPrescriptionDto, type PrescriptionRow } from './prescriptionReads';
 import {
   createPrescriptionTest,
@@ -359,5 +360,7 @@ export async function runPrescriptionAction(
     metadata: { prescriptionId: row.id, ruleId: row.ruleId, ...(outcome.result ?? {}), followUp: undefined, prompt: undefined, selectors: undefined, targets: undefined },
   });
   await bumpSiteVersion(env, scope.siteId);
-  return { prescription: toPrescriptionDto(updated, 0, context), ...outcome.result };
+  // The fix's run may be going right now; the preview is offered once it has finished.
+  const [prescription] = await holdBuildPreviewWhileRunning(db, scope.tenantId, [toPrescriptionDto(updated, 0, context)]);
+  return { prescription: prescription!, ...outcome.result };
 }

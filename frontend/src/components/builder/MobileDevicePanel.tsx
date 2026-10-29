@@ -23,7 +23,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { QrCode } from './QrCode';
-import { fetchSite, fetchLivePreviewUrl, type SiteInfo, type LivePreviewLink } from '@/lib/api';
+import { fetchSite, fetchLivePreviewUrl, type SiteInfo, type LivePreviewLink } from '@/lib/siteApi';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { useFormat } from "@/i18n/useFormat";
 

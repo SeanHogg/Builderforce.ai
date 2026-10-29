@@ -1547,7 +1547,8 @@
         "linkNote": "Un enlace privado válido durante 30 minutos.",
         "noLink": "No se pudo crear el enlace privado de la vista previa. Abre la corrección en Insights para obtener uno nuevo.",
         "backToFix": "Volver a la corrección en Insights",
-        "failed": "No se pudo publicar la vista previa"
+        "failed": "No se pudo publicar la vista previa",
+        "notRecorded": "La vista previa se creó, pero no se pudo asociar a esta corrección; puede que ya haya avanzado. Abre la corrección en Insights para comprobarlo."
       }
     },
     "deploy": {
@@ -16004,6 +16005,27 @@
         "noteWarn": "Por encima del 80 %: el barrido de mantenimiento nocturno ya purga todas las tablas de registro comprimibles con una ventana más corta y recupera espacio de inmediato en lugar de esperar a la reescritura semanal.",
         "noteCritical": "Por encima del 90 %: todas las tablas de registro comprimibles se purgan con su ventana declarada más corta. Las ventanas de cumplimiento y facturación nunca se acortan."
       }
+    },
+    "emailDeliveries": {
+      "title": "Entregas de correo fallidas",
+      "subtitle": "Rechazos de Resend y fallos de transporte. No se almacenan los cuerpos de los mensajes, los códigos de verificación ni las claves de API.",
+      "allTime": "Fallos de todos los tiempos",
+      "last24h": "Últimas 24 horas",
+      "affected": "Destinatarios afectados",
+      "allTypes": "Todos los tipos de correo",
+      "searchPlaceholder": "Buscar destinatario o error del proveedor…",
+      "filter": "Filtrar",
+      "refresh": "Actualizar",
+      "empty": "No se registraron entregas de correo fallidas.",
+      "time": "Hora",
+      "recipient": "Destinatario",
+      "type": "Tipo",
+      "provider": "Proveedor",
+      "status": "Estado",
+      "error": "Error",
+      "prev": "Anterior",
+      "next": "Siguiente",
+      "range": "{from}–{to} de {total}"
     },
     "insightsOps": {
       "title": "Operaciones de Insights",
@@ -35189,7 +35211,8 @@
         "copy-prompt": "Copiar prompt",
         "apply-page": "Aplicar a la página",
         "apply-in-composer": "Aplicar en el editor",
-        "build-preview": "Crear la vista previa"
+        "build-preview": "Crear la vista previa",
+        "rebuild-preview": "Volver a crear la vista previa"
       },
       "confirm": {
         "start-test": {

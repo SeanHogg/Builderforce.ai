@@ -1,7 +1,9 @@
 /**
- * Which fixes a person can "Build the preview" for: a HOSTED app's fix that was
- * applied (the agent only changes the workspace — it cannot build or publish) and has
- * no preview yet. `notePrescriptionPreview` enforces the same rule on the publish.
+ * Which fixes a person can "Build the preview" for: a HOSTED app's fix that was applied
+ * (the agent only changes the workspace — it cannot build or publish). A preview that
+ * already exists is rebuilt, not hidden. Whether the coding run is still going is settled
+ * after the cache by `holdBuildPreviewWhileRunning` (`prescriptionFixRuns.test.ts`).
+ * `notePrescriptionPreview` accepts the publish on the same fix while it is applied.
  */
 import { describe, expect, it } from 'vitest';
 import { hostedContextOf, toPrescriptionDto, type PrescriptionRow } from './prescriptionReads';
@@ -18,12 +20,12 @@ const row = (over: Partial<PrescriptionRow> = {}): PrescriptionRow => ({
 const HOSTED = hostedContextOf({ kind: 'hosted', projectId: 42 });
 
 describe('buildPreview', () => {
-  it('names the project when an applied fix on a hosted app has no preview yet', () => {
-    expect(toPrescriptionDto(row(), 1, HOSTED).buildPreview).toEqual({ projectId: 42 });
+  it('names the project when an applied fix on a hosted app has no run going and no preview yet', () => {
+    expect(toPrescriptionDto(row(), 1, HOSTED).buildPreview).toEqual({ projectId: 42, rebuild: false });
   });
 
-  it('is null once a preview exists', () => {
-    expect(toPrescriptionDto(row({ actionRef: 't=77;p=abc123def456' }), 1, HOSTED).buildPreview).toBeNull();
+  it('keeps offering the build, as a rebuild, once a preview exists', () => {
+    expect(toPrescriptionDto(row({ actionRef: 't=77;p=abc123def456' }), 1, HOSTED).buildPreview).toEqual({ projectId: 42, rebuild: true });
   });
 
   it('is null on an external site, for a fix not yet applied, and for a non-fix action', () => {

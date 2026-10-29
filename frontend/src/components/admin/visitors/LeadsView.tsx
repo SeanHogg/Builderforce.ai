@@ -16,7 +16,8 @@ import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { type AdminGuestSession, type AdminGuestSessionsPage } from '@/lib/adminApi';
 import { GuestSessionCopyButton } from '@/components/visitors/GuestSessionCopyButton';
-import { AdminError, AdminLoading, SortableTh, StatTile, useAdminFormat, useTableSort } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, SortableTh, useAdminFormat, useTableSort } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 
 type SessionSortKey = 'visitor' | 'intent' | 'engagement' | 'lastSeen' | 'conversion';
 

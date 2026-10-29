@@ -1,10 +1,9 @@
 /**
- * The "one zone-ranking rule" guardrail: QaHeatmapService adds no ordering of its own,
- * its zones are exactly `rankHeatZones` (domain/qa/heatZones.ts) over the same rows —
- * the rule session-replay Insights ranks by too.
+ * The zone ranking QaHeatmapService serves — `count × 0.97^ageDays` (domain/qa/heatZones.ts,
+ * the rule session-replay Insights ranks by too) — pinned to literal expected orders for a
+ * fixed fixture, so a change to the rule cannot pass by re-running itself.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { rankHeatZones } from '../../domain/qa/heatZones';
 import { QaHeatmapService } from './QaHeatmapService';
 
 const NOW = new Date('2026-10-12T10:00:00.000Z');
@@ -38,26 +37,25 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('QaHeatmapService.rankZones', () => {
-  it('returns zones byte-identical to rankHeatZones over the same rows', async () => {
-    const limit = 4;
-    const zones = await new QaHeatmapService(fakeDb()).rankZones(7, { limit });
+  /*
+   * Scores = count × 0.97^ageDays at NOW (pageviews are routes with a null selector; the
+   * null-route row is dropped; the null-route element lands on "/"):
+   *   /pricing page  300 × 0.97^0   = 300.0
+   *   .plan          150 × 0.97^1   = 145.5
+   *   #menu           90 × 0.97^3   ≈  82.1
+   *   #pay           400 × 0.97^60  ≈  64.3   (400 clicks, but 60 days stale)
+   *   /checkout page 120 × 0.97^30  ≈  48.1
+   */
+  const ranked = ['/pricing|null', '/pricing|.plan', '/|#menu', '/checkout|#pay', '/checkout|null'];
+  const idOf = (zone: { route: string; selector: string | null }) => `${zone.route}|${zone.selector}`;
 
-    // The same rows the service builds (routes first, then elements), ranked by THE rule.
-    const rows = [
-      ...ROUTES.filter((r) => r.route).map((r) => ({
-        route: r.route as string, selector: null as string | null, kind: 'pageview', label: null as string | null,
-        count: r.heat, lastSeen: new Date(r.lastTs),
-      })),
-      ...ELEMENTS.map((e) => ({
-        route: e.route ?? '/', selector: e.selector as string | null, kind: e.kind, label: e.label as string | null,
-        count: e.heat, lastSeen: new Date(e.lastTs),
-      })),
-    ];
-    const expected = rankHeatZones(rows, NOW, limit).map(({ count, lastSeen: _lastSeen, ...zone }) => ({ ...zone, heat: count }));
+  it('ranks by recency-weighted heat, so a stale 400-click control sits below fresher, less-clicked zones', async () => {
+    const zones = await new QaHeatmapService(fakeDb()).rankZones(7, { limit: 5 });
+    expect(zones.map(idOf)).toEqual(ranked);
+  });
 
-    expect(JSON.stringify(zones)).toBe(JSON.stringify(expected));
-    expect(zones).toHaveLength(limit);
-    // Recency really weighs in: the 400-click control last touched 60 days ago ranks below a fresher, less-clicked page.
-    expect(zones.findIndex((z) => z.selector === '#pay')).toBeGreaterThan(zones.findIndex((z) => z.route === '/pricing' && z.selector === null));
+  it('keeps only the top `limit` of that order', async () => {
+    const zones = await new QaHeatmapService(fakeDb()).rankZones(7, { limit: 3 });
+    expect(zones.map(idOf)).toEqual(ranked.slice(0, 3));
   });
 });

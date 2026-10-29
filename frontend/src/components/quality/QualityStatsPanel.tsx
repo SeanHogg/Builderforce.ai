@@ -7,7 +7,7 @@ import { BarChart } from '@/components/charts/BarChart';
 import { levelColor, sourceColor, STATUS_TONE } from './qualityColors';
 import { statusColor } from '@/lib/statusTone';
 import { useFormat } from "@/i18n/useFormat";
-import { StatTile } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 
 /**
  * Data-driven Quality overview — the "what have we collected, and what is it
@@ -20,6 +20,8 @@ import { StatTile } from '@/components/admin/adminShared';
 export function QualityStatsPanel({ projectId, days = 30 }: { projectId?: number | null; days?: number }) {
   const fmt = useFormat();
   const t = useTranslations('quality');
+  // The shared "{days}d" unit (its own translations per locale), not a hardcoded English suffix.
+  const tUnit = useTranslations('admin.health');
   const [stats, setStats] = useState<QualityStats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -64,7 +66,7 @@ export function QualityStatsPanel({ projectId, days = 30 }: { projectId?: number
         <StatTile label={t('stats.eventsCollected')} value={fmt.number(stats.totals.events)} tone="accent" />
         <StatTile label={t('summary.groups')} value={fmt.number(stats.totals.groups)} />
         <StatTile label={t('summary.users')} value={fmt.number(stats.totals.users)} />
-        <StatTile label={t('stats.windowDays')} value={`${fmt.number(stats.windowDays)}d`} />
+        <StatTile label={t('stats.windowDays')} value={tUnit('windowDays', { days: fmt.number(stats.windowDays) })} />
       </div>
 
       {/* Frequency over time */}

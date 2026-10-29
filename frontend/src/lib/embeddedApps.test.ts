@@ -13,7 +13,7 @@ vi.mock('./apiClient', async (importOriginal) => ({
   apiRequest: transport.apiRequest,
 }));
 
-vi.mock('./api', () => ({ fetchSite: site.fetchSite }));
+vi.mock('./siteApi', () => ({ fetchSite: site.fetchSite }));
 
 vi.mock('./growthApi', () => ({
   siteDomainApi: { get: growth.domain },

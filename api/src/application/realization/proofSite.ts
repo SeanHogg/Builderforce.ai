@@ -10,7 +10,8 @@
  * back door to Insights for a whole app. One cached lookup per site.
  *
  * `ensureProofReplaySite` gives a published proof its hosted `replay_sites` row
- * (idempotent; an existing site — even one a person switched off — is left as is).
+ * (idempotent; a site a person switched OFF stays off — that is their decision — and the
+ * skipped recording is traced as `replay.proof.site_disabled`).
  */
 
 import { and, eq, isNotNull, isNull } from 'drizzle-orm';
@@ -21,6 +22,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { proofSiteKey } from '../replay/replayCacheKeys';
 import { createHostedSite, projectSiteDto } from '../replay/replaySiteAdmin';
+import { recordReplayTrace, REPLAY_TRACE_VERBS } from '../replay/replayTrace';
 import type { ReplaySiteRecord } from '../replay/replaySites';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 
@@ -54,8 +56,9 @@ export async function isProofSite(env: Env, db: Db, site: ReplaySiteRecord): Pro
  * After a proof is published: make sure its project has a hosted Insights site, and
  * drop the cached "is this a proof site" answer so the next config request sees it.
  * The loader injection (`enabledHostedReplaySiteId`) caches under the tenant's sites
- * version, which `createHostedSite` bumps on a new or re-enabled site — so a new
- * proof's loader is injected on the next request, with nothing more to drop here.
+ * version, which `createHostedSite` bumps on a new site — so a new proof's loader is
+ * injected on the next request, with nothing more to drop here. A site a person disabled
+ * is not re-enabled (returns null and traces `replay.proof.site_disabled`).
  * Never throws — recording is a measurement, and it must not fail a build.
  */
 export async function ensureProofReplaySite(
@@ -64,7 +67,21 @@ export async function ensureProofReplaySite(
   input: { tenantId: number; projectId: number; userId: string | null },
 ): Promise<string | null> {
   try {
+    // `projectSiteDto` returns disabled sites too. A site a person switched off is theirs to
+    // switch on: a proof build must not undo it, so it is left off and the skip is traced.
     const existing = await projectSiteDto(env, db, input.tenantId, input.projectId);
+    if (existing && existing.status !== 'active') {
+      await recordReplayTrace(env, db, {
+        tenantId: input.tenantId,
+        siteId: existing.id,
+        verb: REPLAY_TRACE_VERBS.proofSiteDisabled,
+        summary: "A proof was published, but this project's Insights site is switched off — it was left off",
+        metadata: { projectId: input.projectId },
+      });
+      return null;
+    }
+    // No site yet: create it (which bumps the tenant's sites version, so the loader is
+    // injected on the next request). An active one is returned untouched.
     const site = existing ?? await createHostedSite(db, env, {
       tenantId: input.tenantId,
       projectId: input.projectId,

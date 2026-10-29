@@ -42,6 +42,7 @@ import {
   createRealization,
   deleteRealization,
   getRealization,
+  getLiveProofForProject,
   getRealizationsForSession,
   listRealizations,
   setRealizationOutcome,
@@ -195,7 +196,17 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
 
   router.get('/', async (c) => {
     const sessionId = c.req.query('sessionId');
+    const projectIdParam = c.req.query('projectId');
     const tenantId = c.get('tenantId') as number;
+    // `?projectId=<n>&live=1`: that project's live proof alone (zero or one row).
+    if (projectIdParam !== undefined) {
+      const projectId = Number(projectIdParam);
+      if (!Number.isInteger(projectId) || projectId <= 0 || c.req.query('live') !== '1') {
+        return c.json({ error: 'projectId is read with live=1 and must be a positive integer' }, 400);
+      }
+      const proof = await getLiveProofForProject(db, tenantId, projectId);
+      return c.json({ realizations: proof ? [proof] : [] });
+    }
     const rows = sessionId
       ? await getRealizationsForSession(db, tenantId, sessionId)
       : await listRealizations(db, tenantId);

@@ -1,7 +1,7 @@
 /**
  * The brief hands the same finding to a person and an agent. On a hosted app the
  * agent only changes the app's workspace (it cannot build or publish — building is a
- * browser act); a person builds the preview from Insights and publishes it (D13).
+ * browser act); a person builds the preview from the Studio publish panel and publishes it (D13).
  */
 import { describe, expect, it } from 'vitest';
 import { buildPrescriptionBrief, type BriefInput } from './brief';
@@ -25,7 +25,7 @@ describe('buildPrescriptionBrief', () => {
     const { description } = buildPrescriptionBrief(BASE);
     expect(description).toContain("Make and verify the change in this app's workspace");
     expect(description).toContain('Do NOT build or publish anything');
-    expect(description).toContain('a person builds the PREVIEW release from Insights and publishes it after review');
+    expect(description).toContain('a person builds the PREVIEW release from the Studio publish panel and publishes it after review');
     expect(description).not.toContain('`prescription` = the id below');
     expect(description).toContain('Prescription id: rx-1');
   });

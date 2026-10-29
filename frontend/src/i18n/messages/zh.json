@@ -1547,7 +1547,8 @@
         "linkNote": "有效期 30 分钟的私有链接。",
         "noLink": "无法创建私有预览链接。请在 Insights 中打开该修复以获取新链接。",
         "backToFix": "返回 Insights 中的修复",
-        "failed": "无法发布预览"
+        "failed": "无法发布预览",
+        "notRecorded": "预览已构建，但无法关联到此修复——该修复可能已进入下一步。请在 Insights 中打开该修复进行确认。"
       }
     },
     "deploy": {
@@ -16004,6 +16005,27 @@
         "noteWarn": "超过 80%：每晚的维护任务现在会以缩短的保留期清理所有可压缩的日志表，并立即回收空间，而不再等待每周的重写。",
         "noteCritical": "超过 90%：所有可压缩的日志表都以其声明的最短保留期清理。合规与计费窗口绝不会被缩短。"
       }
+    },
+    "emailDeliveries": {
+      "title": "邮件发送失败",
+      "subtitle": "Resend 的拒收和传输失败。不会存储邮件正文、验证码和 API 密钥。",
+      "allTime": "历史失败总数",
+      "last24h": "过去 24 小时",
+      "affected": "受影响的收件人",
+      "allTypes": "所有邮件类型",
+      "searchPlaceholder": "搜索收件人或服务商错误…",
+      "filter": "筛选",
+      "refresh": "刷新",
+      "empty": "没有记录到失败的邮件发送。",
+      "time": "时间",
+      "recipient": "收件人",
+      "type": "类型",
+      "provider": "服务商",
+      "status": "状态",
+      "error": "错误",
+      "prev": "上一页",
+      "next": "下一页",
+      "range": "第 {from}–{to} 条，共 {total} 条"
     },
     "insightsOps": {
       "title": "Insights 运营",
@@ -35189,7 +35211,8 @@
         "copy-prompt": "复制提示词",
         "apply-page": "应用到页面",
         "apply-in-composer": "在编辑器中应用",
-        "build-preview": "构建预览"
+        "build-preview": "构建预览",
+        "rebuild-preview": "重新构建预览"
       },
       "confirm": {
         "start-test": {

@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button, EmptyState, SectionError, SectionLoading } from '@/components/ui';
-import { fetchSite } from '@/lib/api';
+import { fetchSite } from '@/lib/siteApi';
 import { subscribeSitePublished } from '@/lib/sitePublishEvents';
 import { sendWorkspaceCommand } from '@/lib/workspace/workspaceCommands';
 

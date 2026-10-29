@@ -29,6 +29,10 @@ export interface ReplayMoment {
 const OPEN = '<!-- bf:replay-moment ';
 const CLOSE = ' -->';
 const TRAILER = /<!-- bf:replay-moment (\{[^\n]*?\}) -->/;
+/** What separates the person's text from the trailer: it is always appended after a blank line. */
+const SEPARATOR = '\n\n';
+/** The trailer with the separator it was appended with (when it has one): the whole of what is not the person's. */
+const TRAILER_WITH_SEPARATOR = new RegExp(String.raw`(?:\r?\n\r?\n)?${TRAILER.source}`);
 const FIELD_MAX = 200;
 
 function text(value: unknown): string | null {
@@ -55,9 +59,13 @@ export function formatReplayMomentTrailer(moment: ReplayMoment): string {
   return `${OPEN}${json}${CLOSE}`;
 }
 
-/** The description a person reads: the trailer removed (a view that renders text verbatim would show it). */
+/**
+ * The description a person reads: the trailer and its own separator removed (a view that
+ * renders text verbatim would show it). Everything else is the person's, whitespace
+ * included, so an editor built on this does not lose a space as it is typed.
+ */
 export function stripReplayMomentTrailer(description: string): string {
-  return description.replace(TRAILER, '').replace(/\s+$/, '');
+  return description.replace(TRAILER_WITH_SEPARATOR, '');
 }
 
 /**
@@ -65,7 +73,9 @@ export function stripReplayMomentTrailer(description: string): string {
  * that puts the SAME trailer back. An editor that persisted the stripped text would
  * silently drop the moment (and with it the ticket's measured effect), so every
  * surface that writes a description a person can see strips and re-attaches through
- * this one pair. `save` returns null when nothing is left to store.
+ * this one pair, which is whitespace-faithful both ways: `text` is exactly what the person
+ * wrote and `save(text)` is `text` + the separator + the trailer, untrimmed. `save` returns
+ * null when nothing is left to store.
  */
 export function replayMomentDescriptionEditor(raw: string | null | undefined): {
   text: string;
@@ -77,7 +87,7 @@ export function replayMomentDescriptionEditor(raw: string | null | undefined): {
     text: stripReplayMomentTrailer(source),
     save: (edited) => {
       if (!trailer) return edited || null;
-      return edited.trim() ? `${edited.replace(/\s+$/, '')}\n\n${trailer}` : trailer;
+      return edited === '' ? trailer : `${edited}${SEPARATOR}${trailer}`;
     },
   };
 }

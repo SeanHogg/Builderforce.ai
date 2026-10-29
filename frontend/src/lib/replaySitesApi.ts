@@ -17,7 +17,8 @@ import {
   type ReplayUsageDto,
 } from '@builderforce/interaction-contract';
 import { apiRequest, ApiRequestError } from './apiClient';
-import { fetchProjects, fetchSite } from './api';
+import { fetchProjects } from './api';
+import { fetchSite } from './siteApi';
 import { invalidateCapabilityState, oneOf } from './capabilityApi';
 import { fill, listOf } from './replayHttp';
 

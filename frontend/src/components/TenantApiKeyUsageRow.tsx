@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Select } from '@/components/Select';
-import { StatTile } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 import { useFormat } from '@/i18n/useFormat';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**

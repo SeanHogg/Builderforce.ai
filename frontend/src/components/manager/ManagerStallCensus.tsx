@@ -6,7 +6,7 @@ import { managerApi, type StallCensusResponse } from '@/lib/builderforceApi';
 import { ticketHref } from '@/lib/ticketHref';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
-import { StatTile } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 /**
  * The AI Manager's STALL CENSUS and the systemic findings it raised from it.
  *

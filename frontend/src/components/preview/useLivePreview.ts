@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { loadLivePreview, type LivePreviewLink } from '@/lib/api';
+import { loadLivePreview, type LivePreviewLink } from '@/lib/siteApi';
 import { isPlanLimitError } from '@/lib/planLimitError';
 
 export function isExpoPreviewUrl(url: string): boolean {

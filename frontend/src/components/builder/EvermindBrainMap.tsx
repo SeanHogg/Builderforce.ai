@@ -39,7 +39,7 @@ import { evermindRegionSignals, recentForRegion, type EvermindRegionKey } from '
 import { buildSparkline } from '@/lib/sparkline';
 import { useEvermindValidation } from './EvermindValidationContext';
 import { useFormat } from "@/i18n/useFormat";
-import { StatTile } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 
 /* ── Geometry (SVG user units; the viewBox scales to the container) ──────────── */
 const VB_W = 860;

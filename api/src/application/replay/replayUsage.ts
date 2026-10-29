@@ -22,7 +22,7 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { ledgerEntries, tenants } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { getOrSetCached, peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, invalidateCached, peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { parseJsonObject } from '../../domain/shared/json';
 import { DAY_MS } from '../../domain/shared/time';
 import { loadReplayCatalog, REPLAY_RECORDINGS_DENOMINATION, replayPeriod } from '../commerce/replayCatalog';
@@ -208,6 +208,9 @@ export async function chargeUnits(
   if (w.credits >= units) {
     const firstPaid = !(await loadGrantRows(db, input.tenantId)).some((row) => row.kind === 'spend');
     const charged = await debitReplayCredits(db, env, { tenantId: input.tenantId, units, reference, memo, metadata });
+    // The credits balance is read live, the period's paid spend is cached: drop the cache with
+    // the spend so `limit` (which adds the spend back) moves together with `credits`.
+    if (charged) await invalidateCached(env, paidUsedKey(input.tenantId, w.period));
     if (charged && firstPaid) {
       await recordReplayTrace(env, db, {
         tenantId: input.tenantId,

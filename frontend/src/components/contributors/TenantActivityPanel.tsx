@@ -3,7 +3,7 @@ import { useTranslations } from 'next-intl';
 import { analyticsApi, type TenantActivityRollup } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 import { useErrorMessage } from '@/i18n/useErrorMessage';
-import { StatTile } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 
 /**
  * Owner-facing cross-project activity rollup — the whole tenant's activity from

@@ -11,7 +11,7 @@
  * recording a deployment card, `useRecordAppDeployments`) does not re-fetch it.
  */
 
-import type { SitePublishResult } from './api';
+import type { SitePublishResult } from './siteApi';
 import { reportBackgroundFailure } from './reportError';
 
 type Listener = (projectId: number, site: SitePublishResult) => void;

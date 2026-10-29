@@ -74,7 +74,7 @@ export function TicketDetailsPanel({ taskId, onClose }: TicketDetailsPanelProps)
                 <section>
                   <h3 style={{ margin: '0 0 8px', fontSize: 13 }}>{t('descriptionHeading')}</h3>
                   <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                    {(task.description && stripReplayMomentTrailer(task.description)) || t('noDescription')}
+                    {(task.description && stripReplayMomentTrailer(task.description).trim() ? stripReplayMomentTrailer(task.description) : null) || t('noDescription')}
                   </div>
                 </section>
                 {(() => { const moment = replayMomentFromDescription(task.description); return moment && <ReplayEffectChip taskId={task.id} siteId={moment.siteId} />; })()}

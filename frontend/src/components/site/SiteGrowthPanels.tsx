@@ -23,7 +23,7 @@ import {
 } from '@/lib/growthApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultText } from '@/lib/apiClient';
-import { StatTile } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 // ---------------------------------------------------------------------------
 // Shared chrome
 // ---------------------------------------------------------------------------

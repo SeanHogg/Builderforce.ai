@@ -127,7 +127,7 @@ merge_manifest() {
   local live
   local code
   live="$(mktemp)"
-  code="$(curl -sS -o "$live" -w '%{http_code}' "${LIVE_MANIFEST_URL}?t=$(date +%s)" 2>/dev/null || true)"
+  code="$(curl -sS -L --max-time 20 --retry 2 -o "$live" -w '%{http_code}' "${LIVE_MANIFEST_URL}?t=$(date +%s)" 2>/dev/null || true)"
   case "$code" in
     200) ;;
     404) echo "cdn-publish: no live manifest (first publish) — nothing to carry forward" >&2; : > "$live" ;;
@@ -142,16 +142,13 @@ merge_manifest() {
       fi
       ;;
   esac
-  node -e '
-    const fs = require("fs");
-    const next = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-    const raw = fs.readFileSync(process.argv[2], "utf8").trim();
-    let live = {};
-    if (raw) { try { live = JSON.parse(raw); } catch { console.error("cdn-publish: live manifest is not JSON — nothing carried forward"); } }
-    if (live.pinned && !next.pinned) next.pinned = live.pinned;
-    if (live.channels && typeof live.channels === "object") next.channels = { ...live.channels, ...(next.channels || {}) };
-    fs.writeFileSync(process.argv[3], JSON.stringify(next, null, 2) + "\n");
-  ' "$new" "$live" "$out"
+  local dry_flag=()
+  if [[ "$DRY" == "1" ]]; then dry_flag=(--dry-run); fi
+  if ! node "$(dirname "$0")/merge-replay-manifest.mjs" "$new" "$live" "$out" ${dry_flag[@]+"${dry_flag[@]}"}; then
+    rm -f "$live"
+    echo "cdn-publish: could not merge the live manifest's pin into ${new}" >&2
+    exit 1
+  fi
   rm -f "$live"
 }
 

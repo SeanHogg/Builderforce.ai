@@ -137,10 +137,11 @@ export async function startPrescriptionTest(env: Env, db: Db, site: ReplaySiteRe
 }
 
 /**
- * Called by the publish route when a coding agent published a PREVIEW for a
- * prescription (`publishPreviewRelease` + the `prescription` form field): the
- * preview is recorded on the fix and its issue group moves to `preview`. Only a
- * hosted fix of THIS project in THIS workspace that is still `applied` is touched.
+ * Called by the publish route when a person's build is published as a PREVIEW for a
+ * prescription (`publishPreviewRelease` + the `prescription` form field): the preview
+ * is recorded on the fix (replacing an earlier one) and its issue group moves to
+ * `preview`. Only a hosted fix of THIS project in THIS workspace that is still
+ * `applied` is touched; returns whether it was recorded.
  */
 export async function notePrescriptionPreview(
   env: Env,

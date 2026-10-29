@@ -7,7 +7,7 @@
  * customer another's roadmap and the URL of their unlaunched product.
  */
 
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { realizations } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -102,6 +102,27 @@ export async function getRealizationsForSession(
     .where(scopedToTenant(realizations, tenantId, eq(realizations.sessionId, sessionId)))
     .orderBy(desc(realizations.createdAt));
   return rows.map(toRealizationView);
+}
+
+/**
+ * The project's live proof: its newest BUILT realization that declares a visitor measure.
+ * Filtered and limited in SQL — a project with many newer plans, failures or unmeasured
+ * proofs must still find it (ties broken by id so "newest" is deterministic).
+ */
+export async function getLiveProofForProject(db: Db, tenantId: number, projectId: number): Promise<RealizationView | null> {
+  const [row] = await db
+    .select()
+    .from(realizations)
+    .where(scopedToTenant(
+      realizations,
+      tenantId,
+      eq(realizations.projectId, projectId),
+      eq(realizations.status, 'built'),
+      isNotNull(realizations.measure),
+    ))
+    .orderBy(desc(realizations.createdAt), desc(realizations.id))
+    .limit(1);
+  return row ? toRealizationView(row) : null;
 }
 
 export async function getRealization(db: Db, tenantId: number, id: string): Promise<Row | null> {

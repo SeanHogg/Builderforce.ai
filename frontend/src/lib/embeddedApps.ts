@@ -38,7 +38,7 @@
 
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import { apiRequest } from './apiClient';
-import { fetchSite, type SiteInfo } from './api';
+import { fetchSite, type SiteInfo } from './siteApi';
 import {
   siteDataApi,
   siteDomainApi,

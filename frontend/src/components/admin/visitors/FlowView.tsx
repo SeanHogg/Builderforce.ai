@@ -21,7 +21,8 @@ import { filterToQuery, type ReplayFilter } from '@builderforce/interaction-cont
 import { adminApi } from '@/lib/adminApi';
 import { replayApi } from '@/lib/replayApi';
 import type { FlowEdgeInput, FlowNodeInput } from '@/lib/visitorFlowLayout';
-import { AdminError, AdminLoading, StatTile, useAdminData, useAdminFormat } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, useAdminData, useAdminFormat } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 import { VisitorFlowGraph } from '@/components/admin/visitor-flow/VisitorFlowGraph';
 
 /** `/apps/insights?panel=issues&f.visitedPath.eq=<path>` — the step's sessions in the Insights app. */

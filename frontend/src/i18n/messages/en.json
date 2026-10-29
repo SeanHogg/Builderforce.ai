@@ -1547,7 +1547,8 @@
         "linkNote": "A private link that works for 30 minutes.",
         "noLink": "The private preview link could not be created. Open the fix in Insights to get a new one.",
         "backToFix": "Back to the fix in Insights",
-        "failed": "The preview could not be published"
+        "failed": "The preview could not be published",
+        "notRecorded": "The preview was built, but it could not be attached to this fix — the fix may have moved on. Open the fix in Insights to check."
       }
     },
     "deploy": {
@@ -16004,6 +16005,27 @@
         "noteWarn": "Past 80%: the nightly maintenance sweep now purges every compressible log table on a shortened window and reclaims space immediately instead of waiting for the weekly rewrite.",
         "noteCritical": "Past 90%: every compressible log table is being purged at its shortest declared window. Compliance and billing windows are never shortened."
       }
+    },
+    "emailDeliveries": {
+      "title": "Failed email deliveries",
+      "subtitle": "Resend rejections and transport failures. Message bodies, verification codes, and API keys are not stored.",
+      "allTime": "All-time failures",
+      "last24h": "Last 24 hours",
+      "affected": "Affected recipients",
+      "allTypes": "All email types",
+      "searchPlaceholder": "Search recipient or provider error…",
+      "filter": "Filter",
+      "refresh": "Refresh",
+      "empty": "No failed email deliveries recorded.",
+      "time": "Time",
+      "recipient": "Recipient",
+      "type": "Type",
+      "provider": "Provider",
+      "status": "Status",
+      "error": "Error",
+      "prev": "Prev",
+      "next": "Next",
+      "range": "{from}–{to} of {total}"
     },
     "insightsOps": {
       "title": "Insights operations",
@@ -35189,7 +35211,8 @@
         "copy-prompt": "Copy prompt",
         "apply-page": "Apply to the page",
         "apply-in-composer": "Apply in composer",
-        "build-preview": "Build the preview"
+        "build-preview": "Build the preview",
+        "rebuild-preview": "Rebuild the preview"
       },
       "confirm": {
         "start-test": {

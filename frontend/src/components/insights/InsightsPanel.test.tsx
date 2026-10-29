@@ -209,7 +209,9 @@ describe('InsightsPanel', () => {
   });
 
   it('ignores a ?panel= naming an unregistered kind', async () => {
-    window.history.replaceState({}, '', '/apps/insights?panel=funnel:f-1');
+    // `funnel` has been a registered kind since S4c, so the premise needs a kind that is not one.
+    expect(INSIGHT_PANEL_KINDS.map((row) => row.kind as string)).not.toContain('nonexistent');
+    window.history.replaceState({}, '', '/apps/insights?panel=nonexistent:f-1');
     renderPanel([]);
     await Promise.resolve();
     expect(screen.queryByRole('dialog')).toBeNull();

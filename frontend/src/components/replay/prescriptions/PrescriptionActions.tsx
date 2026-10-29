@@ -155,7 +155,7 @@ export function PrescriptionActions({ siteId, prescription, onChanged, only, com
               <Icon name={ui.icon} size={14} /> {t(`actions.${ui.labelKey}`)}
             </button>
           ))}
-          {links.map(({ row, href }) => (
+          {links.map(({ row, href, textKey }) => (
             <Link
               key={row.id}
               href={href}
@@ -163,7 +163,7 @@ export function PrescriptionActions({ siteId, prescription, onChanged, only, com
               className={TONE_CLASS[row.tone]}
               style={{ minHeight: 44, display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)' }}
             >
-              <Icon name={row.icon} size={14} /> {t(`actions.${row.labelKey}`)}
+              <Icon name={row.icon} size={14} /> {t(`actions.${textKey}`)}
             </Link>
           ))}
           {needsProject && !compact && projects.length > 0 && (

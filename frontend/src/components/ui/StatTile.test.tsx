@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { StatTile } from './adminShared';
+import { StatTile } from './StatTile';
 
 describe('StatTile', () => {
   it('renders the label and value', () => {
@@ -37,5 +37,10 @@ describe('StatTile', () => {
   it('uses the default strong colour when no tone is set', () => {
     render(<StatTile label="Visitors" value="42" />);
     expect(screen.getByText('42')).toHaveStyle({ color: 'var(--text-strong)' });
+  });
+
+  it('lets its grid or row decide the width (no fixed floor that overflows a 3-up grid at 360px)', () => {
+    const { container } = render(<StatTile label="Visits" value="9" />);
+    expect(container.firstElementChild).toHaveStyle({ minWidth: '0px' });
   });
 });

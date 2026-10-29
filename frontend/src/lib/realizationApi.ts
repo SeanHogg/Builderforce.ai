@@ -114,6 +114,10 @@ export const realizationApi = {
       sessionId ? `/api/realizations?sessionId=${encodeURIComponent(sessionId)}` : '/api/realizations',
     ).then((r) => r.realizations),
 
+  /** The project's live proof — its newest built realization that carries a visitor measure — or null. Chosen server-side. */
+  liveProofForProject: (projectId: number): Promise<Realization | null> =>
+    request<{ realizations: Realization[] }>(`/api/realizations?projectId=${projectId}&live=1`).then((r) => r.realizations[0] ?? null),
+
   /** Reading it also rolls its verdict up; a read that changed the grade is the method's `proof.grade` act. */
   get: (id: string): Promise<Realization> =>
     request<{ realization: Realization; verdictChanged?: boolean }>(`/api/realizations/${encodeURIComponent(id)}`).then((r) => {

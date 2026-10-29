@@ -11,7 +11,7 @@ import { useTranslations } from 'next-intl';
 import type { FrustrationMarkKind, ReplayOverviewDto } from '@builderforce/interaction-contract';
 import { useFormat } from '@/i18n/useFormat';
 import type { Formatter } from '@/i18n/format';
-import { StatTile } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 import { fmtClock } from '../replayMarks';
 
 const EMPTY = '—';

@@ -12,7 +12,8 @@ import { useTranslations } from 'next-intl';
 import { adminApi, type AdminGuestPrompt, type AdminGuestSession } from '@/lib/adminApi';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useToast } from '@/components/ToastProvider';
-import { AdminError, AdminLoading, StatTile, errText, useAdminData, useAdminFormat } from '@/components/admin/adminShared';
+import { AdminError, AdminLoading, errText, useAdminData, useAdminFormat } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   return (

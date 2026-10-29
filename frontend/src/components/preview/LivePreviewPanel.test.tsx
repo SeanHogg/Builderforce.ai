@@ -7,8 +7,8 @@ vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')
 
 const loadLivePreview = vi.hoisted(() => vi.fn());
 
-vi.mock('@/lib/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/api')>()),
+vi.mock('@/lib/siteApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/siteApi')>()),
   loadLivePreview,
 }));
 

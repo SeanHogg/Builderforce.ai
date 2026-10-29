@@ -20,7 +20,7 @@ import {
   buttonStyle, cardStyle, emptyStyle, gapChipStyle, mutedStyle, primaryButtonStyle, rowStyle, sectionStyle,
   tableStyle, tableWrapStyle, tdStyle, thStyle,
 } from './financeStyles';
-import { StatTile } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 
 type Source = 'observed' | 'declared';
 

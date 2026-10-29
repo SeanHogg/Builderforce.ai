@@ -808,11 +808,13 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       });
       if (!preview.ok) return c.json({ error: preview.error }, preview.status);
       const prescriptionId = form.get('prescription');
-      if (typeof prescriptionId === 'string' && prescriptionId) {
-        await notePrescriptionPreview(c.env, db, { tenantId, projectId, prescriptionId, versionToken: preview.versionToken });
-      }
+      // `recorded` is whether the preview landed on the fix; the release exists either way,
+      // but the publish panel must not say "published for this fix" when it did not.
+      const recorded = typeof prescriptionId === 'string' && prescriptionId
+        ? await notePrescriptionPreview(c.env, db, { tenantId, projectId, prescriptionId, versionToken: preview.versionToken })
+        : false;
       const { ok: _okPreview, ...previewBody } = preview;
-      return c.json({ ...previewBody, preview: true }, 201);
+      return c.json({ ...previewBody, preview: true, recorded }, 201);
     }
 
     // Subdomain claiming, stale-asset cleanup, the project_sites upsert and cache

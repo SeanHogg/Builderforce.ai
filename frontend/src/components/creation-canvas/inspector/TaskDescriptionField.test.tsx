@@ -58,6 +58,20 @@ describe('TaskDescriptionField', () => {
     expect(onChange).toHaveBeenCalledWith({ content: `Rage click on Buy, copy fixed.\n\n${TRAILER}` });
   });
 
+  it('keeps trailing spaces and newlines as they are typed, and the trailer on save', () => {
+    const { box, onChange, onPersist } = setup(RAW);
+    fireEvent.focus(box);
+    for (const typed of ['a', 'a ', 'a \n']) {
+      fireEvent.change(box, { target: { value: typed } });
+      expect(box.value).toBe(typed);
+      expect(onChange).toHaveBeenLastCalledWith({ content: `${typed}\n\n${TRAILER}` });
+    }
+    fireEvent.blur(box);
+    const saved = onPersist.mock.calls[0]![0] as string;
+    expect(saved).toBe(`a \n\n\n${TRAILER}`);
+    expect(replayMomentFromDescription(saved)).toEqual(MOMENT);
+  });
+
   it('persists a plain description as typed, and null when emptied', () => {
     const { box, onPersist } = setup('Plain');
     fireEvent.focus(box);

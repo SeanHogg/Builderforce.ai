@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   previewFollowUp: vi.fn(async () => ({ matched: [], unmatched: 0, draft: { subject: 's', body: 'b' }, platformLeadIds: [], enrolled: 0 })),
   enrolFollowUp: vi.fn(async () => 2),
   resolveKnownContacts: vi.fn(),
+  /** Tickets whose coding run is still going, as the executions table would answer. */
+  runningTaskIds: [] as number[],
 }));
 
 vi.mock('../task/TaskService', () => ({
@@ -131,6 +133,7 @@ function fakeDb(selects: unknown[][] = []) {
       };
       return chain;
     },
+    selectDistinct: () => ({ from: () => ({ where: async () => mocks.runningTaskIds.map((taskId) => ({ taskId })) }) }),
     update: () => ({
       set: (set: Record<string, unknown>) => {
         updates.push(set);
@@ -151,6 +154,7 @@ beforeEach(() => {
   for (const fn of [mocks.createTask, mocks.dispatch, mocks.trace, mocks.createPrescriptionTest, mocks.startPrescriptionTest, mocks.moveSiteTo, mocks.previewFollowUp, mocks.enrolFollowUp]) fn.mockClear();
   mocks.createTask.mockResolvedValue({ toPlain: () => ({ id: 77 }) });
   mocks.dispatch.mockResolvedValue({ executionId: 900 });
+  mocks.runningTaskIds = [];
 });
 
 describe('fix', () => {
@@ -174,6 +178,16 @@ describe('fix', () => {
     expect(updates[0]).toMatchObject({ status: 'applied', actionKind: 'fix', actionRef: 't=77' });
     expect(out).toMatchObject({ taskId: 77, executionId: 900, refusal: null });
     expect(mocks.trace).toHaveBeenCalledWith({}, db, expect.objectContaining({ verb: 'replay.prescription.fix', siteId: SITE_ID, actorId: 'u1' }));
+  });
+
+  it('offers "Build the preview" only once the fix run has finished', async () => {
+    mocks.runningTaskIds = [77];
+    const running = await act(fakeDb([[{ id: 'agent-1' }]]).db, 'fix', { agentRef: 'agent-1' });
+    expect(running.prescription.buildPreview).toBeNull();
+
+    mocks.runningTaskIds = [];
+    const finished = await act(fakeDb([[{ id: 'agent-1' }]]).db, 'fix', { agentRef: 'agent-1' });
+    expect(finished.prescription.buildPreview).toEqual({ projectId: 42, rebuild: false });
   });
 
   it('without an agent, or on an external site, is a ticket only — and asks for a PR when a repo is connected', async () => {

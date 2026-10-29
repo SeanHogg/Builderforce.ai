@@ -106,11 +106,13 @@ export interface ReplayPrescriptionDto {
   refs: { taskId: number | null; testId: number | null; previewRelease: string | null; liveRelease: string | null; sequenceObjectId: string | null };
   /**
    * Non-null when a person can build this fix's PREVIEW now: a hosted app's fix that was
-   * applied (the agent only changes the app's workspace; it cannot build or publish) and
-   * has no preview yet (`refs.previewRelease`). The IDE publish panel for `projectId`
-   * builds it and posts `preview=1&prescription=<id>` to `POST /api/ide/projects/:projectId/publish`.
+   * applied and whose coding run has finished (the agent only changes the app's workspace;
+   * it cannot build or publish). `rebuild` is true when a preview already exists
+   * (`refs.previewRelease`) and building replaces it. The IDE publish panel for
+   * `projectId` builds it and posts `preview=1&prescription=<id>` to
+   * `POST /api/ide/projects/:projectId/publish`.
    */
-  buildPreview?: { projectId: number } | null;
+  buildPreview?: { projectId: number; rebuild: boolean } | null;
   acceptance: ReplayPrescriptionAcceptanceDto | null;
   measured: ReplayPrescriptionMeasuredDto | null;
   dismissReason: string | null;

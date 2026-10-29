@@ -37,7 +37,7 @@ import {
   type SellerEarnings as Earnings,
 } from '@/lib/creationListings';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
-import { StatTile } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 export function SellerEarnings() {
   const errorMessage = useErrorMessage();
   const t = useTranslations('marketplaceCreations');

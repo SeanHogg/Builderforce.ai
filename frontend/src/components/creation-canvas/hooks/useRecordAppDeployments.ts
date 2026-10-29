@@ -16,7 +16,7 @@ import { type Dispatch, type RefObject, type SetStateAction, useEffect, useMemo,
 import { useEffectEvent } from '@/hooks/useEffectEvent';
 import type { Edge } from '@xyflow/react';
 import type { useTranslations } from 'next-intl';
-import { fetchSite } from '@/lib/api';
+import { fetchSite } from '@/lib/siteApi';
 import { subscribeSitePublished } from '@/lib/sitePublishEvents';
 import { appDeploymentChange, appDeploymentNode, type PublishedAppSite } from '@/lib/canvas/appDeployment';
 import { sessionApps, type SessionApp } from '@/lib/canvasSessionApp';

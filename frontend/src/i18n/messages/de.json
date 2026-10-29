@@ -1547,7 +1547,8 @@
         "linkNote": "Ein privater Link, der 30 Minuten gültig ist.",
         "noLink": "Der private Vorschau-Link konnte nicht erstellt werden. Öffne die Korrektur in Insights, um einen neuen zu erhalten.",
         "backToFix": "Zurück zur Korrektur in Insights",
-        "failed": "Die Vorschau konnte nicht veröffentlicht werden"
+        "failed": "Die Vorschau konnte nicht veröffentlicht werden",
+        "notRecorded": "Die Vorschau wurde erstellt, konnte aber nicht an diese Korrektur angehängt werden – möglicherweise ist sie bereits weitergezogen. Öffnen Sie die Korrektur in Insights, um das zu prüfen."
       }
     },
     "deploy": {
@@ -16004,6 +16005,27 @@
         "noteWarn": "Über 80 %: Der nächtliche Wartungslauf bereinigt jetzt alle komprimierbaren Protokolltabellen mit verkürzter Aufbewahrung und gibt Speicher sofort frei, statt auf das wöchentliche Umschreiben zu warten.",
         "noteCritical": "Über 90 %: Alle komprimierbaren Protokolltabellen werden mit ihrer kürzesten deklarierten Aufbewahrung bereinigt. Compliance- und Abrechnungsfenster werden niemals verkürzt."
       }
+    },
+    "emailDeliveries": {
+      "title": "Fehlgeschlagene E-Mail-Zustellungen",
+      "subtitle": "Ablehnungen durch Resend und Übertragungsfehler. Nachrichtentexte, Bestätigungscodes und API-Schlüssel werden nicht gespeichert.",
+      "allTime": "Fehlschläge insgesamt",
+      "last24h": "Letzte 24 Stunden",
+      "affected": "Betroffene Empfänger",
+      "allTypes": "Alle E-Mail-Typen",
+      "searchPlaceholder": "Empfänger oder Anbieterfehler suchen…",
+      "filter": "Filtern",
+      "refresh": "Aktualisieren",
+      "empty": "Keine fehlgeschlagenen E-Mail-Zustellungen erfasst.",
+      "time": "Zeit",
+      "recipient": "Empfänger",
+      "type": "Typ",
+      "provider": "Anbieter",
+      "status": "Status",
+      "error": "Fehler",
+      "prev": "Zurück",
+      "next": "Weiter",
+      "range": "{from}–{to} von {total}"
     },
     "insightsOps": {
       "title": "Insights-Betrieb",
@@ -35189,7 +35211,8 @@
         "copy-prompt": "Prompt kopieren",
         "apply-page": "Auf die Seite anwenden",
         "apply-in-composer": "Im Editor anwenden",
-        "build-preview": "Vorschau erstellen"
+        "build-preview": "Vorschau erstellen",
+        "rebuild-preview": "Vorschau neu erstellen"
       },
       "confirm": {
         "start-test": {

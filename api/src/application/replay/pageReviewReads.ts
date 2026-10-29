@@ -30,7 +30,8 @@ import {
 } from './pageCaptureStore';
 import { newestCaptures } from './pageAggregates';
 import { pagesToReview } from './pageSelection';
-import { loadPrescriptionRow, listPrescriptions } from './prescriptionReads';
+import { loadPrescriptionRow, listPrescriptionsCached } from './prescriptionReads';
+import { holdBuildPreviewWhileRunning } from './prescriptionFixRuns';
 import { ReplayReadService } from './ReplayReadService';
 import { replayReadKeys } from './replayCacheKeys';
 
@@ -75,7 +76,7 @@ export async function listPages(env: Env, db: Db, scope: ReplayScope): Promise<R
     const paths = await pagesToReview(env, db, scope);
     const [captures, prescriptions] = await Promise.all([
       listCaptures(db, scope.siteId, { paths }),
-      listPrescriptions(env, db, scope),
+      listPrescriptionsCached(env, db, scope),
     ]);
     return foldPageList(paths, captures, prescriptions);
   }, TTL);
@@ -85,10 +86,10 @@ export async function pageReview(env: Env, db: Db, scope: ReplayScope, rawPath: 
   const path = rawPath.trim();
   if (!path.startsWith('/') || path.length > 400) throw new ValidationError('path must be a page path starting with /');
   const keys = await replayReadKeys(env, scope);
-  return getOrSetCached(env, keys.pageReview(path), async () => {
+  const review = await getOrSetCached(env, keys.pageReview(path), async () => {
     const [captures, prescriptions, releases] = await Promise.all([
       listCaptures(db, scope.siteId, { paths: [path], limit: CAPTURES_PER_PAGE }),
-      listPrescriptions(env, db, scope),
+      listPrescriptionsCached(env, db, scope),
       new ReplayReadService(env, db).releases(scope),
     ]);
     const byRelease = new Map<string, CaptureRow[]>();
@@ -105,6 +106,8 @@ export async function pageReview(env: Env, db: Db, scope: ReplayScope, rawPath: 
       scoreByRelease,
     };
   }, TTL);
+  // Whether a fix's coding run is still going is live, not part of the cached review: settled here, on a copy.
+  return { ...review, prescriptions: await holdBuildPreviewWhileRunning(db, scope.tenantId, review.prescriptions) };
 }
 
 /**

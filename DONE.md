@@ -1,3 +1,48 @@
+## ✅ RESOLVED 2026-10-29 — PRD 33 (Insights) audit: the gaps behind §0.1's "Built" are closed (api 2026.10.92 · frontend 2026.10.96)
+
+An audit compared every slice S0–S8 of [PRD 33](./docs/specs/33-prd-session-replay.md) with the code. Most of it was real, but these were not. All are fixed, and §0.3 of the spec records the design calls taken.
+
+- **The usage meter disagreed with ingest.** Its limit used the *remaining* credits, so it shrank as credits were spent and passed 100% once they ran out. Now `limit = free allowance + paid used + credits`. The paid-used cache is dropped on every spend, and its key lives in `replayCacheKeys`.
+- **Pinning a site to a recorder hash never matched**, because the API accepted 8 hex characters and the build writes 12. The length is now one contract constant (`RECORDER_HASH_LENGTH`), which a replay-sdk test holds equal to `emit-assets`.
+- **"Rollback is a pin" had no working path.** Each release overwrote the manifest. `cdn-publish.sh` now carries `pinned`/`channels` forward from the live manifest, through `merge-replay-manifest.mjs` (tested). Its curl has a timeout, retries and follows redirects, and a 404 means a first publish.
+- **Live visitor counts stopped at 200.** `active` and `byRoute` are now exact SQL counts; only the visitor list is capped.
+- **Fix it could never produce a preview.** No agent can build and publish a hosted app.
+  - The cloud run now only changes the app's workspace. "Build the preview" on the fix opens the Studio publish panel with `prescription=<id>`, where a person builds the app and publishes it as a preview release (`publishSitePreview` → `preview=1`). Publish preview, Test it and Revert follow from that release.
+  - The link appears only after the fix's coding run has finished. That check (`holdBuildPreviewWhileRunning`, one tenant-scoped query) runs outside the prescription and page-review caches, so the link shows as soon as the run ends. Once a preview exists, it offers a rebuild.
+  - The panel reports an error when the preview was not recorded on the fix. Main publish and preview publish cannot run at once.
+  - The unread `prescriptionFix` payload marker is gone.
+- **The `proof` panel kind and the header proof chip were missing.** Both are now built from the existing `ProofScoreboard`, through one `useProjectProof` hook and a project-filtered `GET /api/realizations?projectId=`.
+- **Release note 1211 was never corrected.** Migration 1283 rewrites its body to describe only what ships.
+- **Replay tickets lost or showed their hidden moment.**
+  - `CeremonyStage`, the calendar and the canvas showed the trailer as raw text.
+  - A canvas inspector blur would have deleted it, which breaks ticket-effect measurement.
+  - Now one `replayMomentDescriptionEditor` strips it for display and adds it back on save, and a blur with no edit sends nothing.
+- **Duplicates removed.**
+  - Visitor panels: one tab registry (`visitorPanelTabs`).
+  - Funnel scan ceiling: one constant.
+  - 17 local `Stat`/`StatTile` copies: replaced by one `components/ui/StatTile` (`tone`, `badge`, `minWidth: 0`). `TicketContextStrip`'s meter is renamed `ContextMeter`.
+- **Proof sites respect the off switch.** A proof build creates a project's replay site when there is none, which bumps the sites version so the loader is injected straight away. It never turns on a site a person switched off; that case is recorded as a `replay.proof.site_disabled` trace instead.
+- **Smaller fixes.**
+  - Timeline markers have a 44 px hit area at ≤900 px.
+  - `useHostedSiteProject` never returns the previous site's project.
+  - `lib/api.ts` is split. Site publish, preview, releases and packaging moved to `lib/siteApi.ts`, and `api.ts` is now under its architecture ceiling.
+  - Failures in the new hooks are recorded (`recordedFailure`), not swallowed.
+  - The `EmailDeliveriesPanel` and `QualityStatsPanel` labels are localised in all five catalogs.
+- **Tests added:**
+  - `ReplayConfigService`, `brief`, `prescriptionReads`, `prescriptionNotePreview`, `prescriptionFixRuns`, `proofSite`, `QaHeatmapService` (literal ranking), live caps.
+  - `RecordingKind`, `PrescriptionLinkActions`, `PrescriptionPreviewPublish`, `TaskDescriptionField`, `useProjectProof`, `useHostedSiteProject`, `siteApi`, `StatTile`, `mergeReplayManifest`, `emitAssets`.
+  - `InsightsPanel`'s "unregistered kind" test was named after `funnel`, which has been registered since S4c. It now uses a kind that really is unregistered.
+- **Spec corrections (§0.3):**
+  - Follow up enrols into the canvas sequence object. The 1234 trigger re-arms the runner; `salesPolicy` has no part in it.
+  - The canvas resolves its project's site once, then reads through `/api/replay/*?site=`.
+  - Live is served by `ReplayReadService`.
+  - The Flow strip opens issue groups (D15).
+  - Release compare lives in `HeatmapView`.
+  - `replay:read` keys cover the documented read API.
+- **Still blocked on the operator (ROADMAP):** production provisioning (§11 runbook) and the first npm publish of `@seanhogg/builderforce-replay`.
+
+---
+
 ## ✅ RESOLVED 2026-10-28 — PRD 35 review: completed items checked against the code, gaps closed (VSIX 2026.10.113 · api 2026.10.91 · agent-run 2026.10.83 · agent-loop 2026.10.14 · agent-tools 2026.10.17 · brain-embedded 2026.10.70)
 
 Every item PRD 35 marked done (WS0, WS1, WS2a–g, WS8a–p) was reviewed against the code. Gaps found and closed:

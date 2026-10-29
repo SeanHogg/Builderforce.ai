@@ -8,7 +8,7 @@
 import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { fetchSite, publishSite, type SiteInfo } from '@/lib/api';
+import { fetchSite, publishSite, type SiteInfo } from '@/lib/siteApi';
 import { formatBytes } from '@/lib/formatBytes';
 import { GitHubDeployPanel } from './builder/GitHubDeployPanel';
 import { SiteDomainPanel, SiteTrafficPanel } from './site/SiteGrowthPanels';
@@ -46,6 +46,8 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState('');
   const [loaded, setLoaded] = useState(false);
+  // The fix-preview publish below builds with the same `onBuild`; the two never run at once.
+  const [previewBusy, setPreviewBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,7 +89,8 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
     }
   }, [subdomain, onBuild, projectId, t]);
 
-  const busy = phase === 'building' || phase === 'uploading';
+  const publishing = phase === 'building' || phase === 'uploading';
+  const busy = publishing || previewBusy;
   // Mirrors HOSTING_APEX (api/src/application/ide/siteHosting.ts) — display only;
   // the live URLs come from the server (site.url / pathUrl).
   const apex = 'builderforce.ai';
@@ -138,9 +141,9 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
       )}
 
       {/* Opened for an Insights fix: a preview release beside the live one. Renders nothing otherwise. */}
-      <PrescriptionPreviewPublish projectId={projectId} onBuild={onBuild} />
+      <PrescriptionPreviewPublish projectId={projectId} onBuild={onBuild} disabled={publishing} onBusyChange={setPreviewBusy} />
 
-      {site && phase !== 'building' && phase !== 'uploading' && (
+      {site && !publishing && (
         <div style={{ borderTop: '1px solid var(--bf-border)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
             {phase === 'done' ? t('publish.published') : t('publish.liveSite')}

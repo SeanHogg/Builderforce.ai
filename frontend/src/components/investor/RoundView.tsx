@@ -22,7 +22,7 @@ import type { CompanyDetail, InvestorGrantSummary } from '@/lib/investorApi';
 import {
   emptyStyle, gapChipStyle, listRowStyle, listStyle, mutedStyle, sectionStyle,
 } from './investorStyles';
-import { StatTile } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 
 export function RoundView({
   detail,

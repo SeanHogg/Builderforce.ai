@@ -26,7 +26,7 @@ import {
   cardStyle, emptyStyle, errorStyle, gapChipStyle, mutedStyle, primaryButtonStyle, rowStyle, sectionStyle,
   tableStyle, tableWrapStyle, tdStyle, thStyle,
 } from './financeStyles';
-import { StatTile } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 
 export function RunwayView({ report, onDeclared }: { report: RunwayReport; onDeclared: () => void }) {
   const t = useTranslations('financeHub.runway');

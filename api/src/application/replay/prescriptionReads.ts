@@ -39,6 +39,7 @@ import { filterCacheKey } from './replayReadModel';
 import { ReplayReadService } from './ReplayReadService';
 import { visualOf } from './pageVisual';
 import { getSiteForTenant } from './replaySites';
+import { holdBuildPreviewWhileRunning } from './prescriptionFixRuns';
 
 export type PrescriptionRow = typeof replayPrescriptions.$inferSelect;
 
@@ -113,8 +114,6 @@ export interface PrescriptionDtoContext {
   hostedProjectId?: number | null;
   /** Open fixes on the row's page (`apply-page`); defaults to the row itself. */
   pageAcceptedFixes?: number;
-  /** Tickets whose fix run is still going (`runningFixTaskIds`); a preview waits for them. */
-  runningFixTaskIds?: ReadonlySet<number>;
 }
 
 const PAGE_ACTION_KINDS: readonly ReplayPrescriptionActionKind[] = ['copy_prompt', 'apply_page', 'apply_in_composer'];
@@ -127,7 +126,10 @@ export function hostedContextOf(site: { kind: string; projectId: number | null }
 }
 
 /** The context of the rows of one site: hosted or not, and the open fixes per page. */
-export function dtoContextFor(site: { kind: string; projectId: number | null }, rows: readonly Pick<PrescriptionRow, 'pagePath' | 'status'>[]): (row: Pick<PrescriptionRow, 'pagePath'>) => PrescriptionDtoContext {
+export function dtoContextFor(
+  site: { kind: string; projectId: number | null },
+  rows: readonly Pick<PrescriptionRow, 'pagePath' | 'status'>[],
+): (row: Pick<PrescriptionRow, 'pagePath'>) => PrescriptionDtoContext {
   const hosted = hostedContextOf(site);
   const open = new Map<string, number>();
   for (const r of rows) if (r.pagePath && OPEN_STATUSES.has(r.status)) open.set(r.pagePath, (open.get(r.pagePath) ?? 0) + 1);
@@ -135,19 +137,25 @@ export function dtoContextFor(site: { kind: string; projectId: number | null }, 
 }
 
 /**
- * Can a person build this fix's preview now? A hosted fix that was applied (the agent
- * changed the app's workspace — it cannot build or publish) and has no preview yet. The
- * browser builds it in the IDE and posts `preview=1&prescription=<id>` to the publish
- * route; `notePrescriptionPreview` enforces the same rule on that write.
+ * Can a person build this fix's preview now? A hosted fix that was applied. Whether its
+ * coding run has FINISHED is a live fact, not part of the cached row: the readers settle it
+ * afterwards with `holdBuildPreviewWhileRunning` (the agent only changes the app's
+ * workspace — it cannot build or publish — and building before it is done would publish
+ * the unchanged app; with no run at all it is offered at once). Once a preview
+ * exists it stays offered, flagged `rebuild`, until the fix moves on (the publish route
+ * accepts a replacement preview while the fix is still applied). The browser builds it in
+ * the IDE and posts `preview=1&prescription=<id>` to the publish route;
+ * `notePrescriptionPreview` records it only on a hosted, still-applied fix of that
+ * project (the same status/kind/hosting conditions, not the run state).
  */
 function buildPreviewOf(
   status: string,
   actionKind: ReplayPrescriptionActionKind | null,
   refs: { previewRelease: string | null },
   ctx: PrescriptionDtoContext,
-): { projectId: number } | null {
-  if (status !== 'applied' || actionKind !== 'fix' || refs.previewRelease) return null;
-  return ctx.hostedProjectId == null ? null : { projectId: ctx.hostedProjectId };
+): { projectId: number; rebuild: boolean } | null {
+  if (status !== 'applied' || actionKind !== 'fix' || ctx.hostedProjectId == null) return null;
+  return { projectId: ctx.hostedProjectId, rebuild: refs.previewRelease !== null };
 }
 
 /** One row as the contract DTO. `rank` is the row's place in its ranked list. */
@@ -218,8 +226,28 @@ export async function loadPrescriptionRow(db: Db, scope: ReplayScope, prescripti
   return row;
 }
 
-/** Open prescriptions first (proposed → measuring), then the decided ones, ranked within each. */
+/**
+ * Open prescriptions first (proposed → measuring), then the decided ones, ranked within each.
+ *
+ * The ranked rows are cached under the site version; whether an applied fix's coding run is
+ * still going is NOT (a run ends without bumping that version), so `buildPreview` is settled
+ * here, after the cache, with one tenant-scoped read that is skipped when no row offers it.
+ */
 export async function listPrescriptions(
+  env: Env,
+  db: Db,
+  scope: ReplayScope,
+  input: { area?: string | null; status?: string | null; filter?: ReplayFilter | null } = {},
+): Promise<ReplayPrescriptionDto[]> {
+  return holdBuildPreviewWhileRunning(db, scope.tenantId, await listPrescriptionsCached(env, db, scope, input));
+}
+
+/**
+ * The ranked list as it is cached: `buildPreview` here does NOT know whether a fix's run is
+ * still going. A reader that caches the list (or a view of it) under its own key must read
+ * this and apply `holdBuildPreviewWhileRunning` AFTER its own cache.
+ */
+export async function listPrescriptionsCached(
   env: Env,
   db: Db,
   scope: ReplayScope,
@@ -259,12 +287,13 @@ export async function getPrescription(env: Env, db: Db, scope: ReplayScope, pres
   const list = await listPrescriptions(env, db, scope);
   const ranked = list.find((p) => p.id === prescriptionId);
   if (ranked) return ranked;
-  return getOrSetCached(env, `${keys.prescriptions('', '', '')}:one:${prescriptionId}`, async () =>
+  const one = await getOrSetCached(env, `${keys.prescriptions('', '', '')}:one:${prescriptionId}`, async () =>
     toPrescriptionDto(
       await loadPrescriptionRow(db, scope, prescriptionId),
       0,
       hostedContextOf(await getSiteForTenant(env, db, scope.tenantId, scope.siteId)),
     ), TTL);
+  return (await holdBuildPreviewWhileRunning(db, scope.tenantId, [one]))[0]!;
 }
 
 const REPORT_MAX = 50;

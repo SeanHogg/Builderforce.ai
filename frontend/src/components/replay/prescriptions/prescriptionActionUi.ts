@@ -22,9 +22,10 @@
  *
  * `PRESCRIPTION_LINK_ACTIONS` are the steps a person takes OUTSIDE the API: not a
  * `next` entry but a link into the product, drawn when the DTO says the step is open.
- * Today: "Build the preview" (`buildPreview`, set by the API while a hosted site's Fix it
- * is applied with no preview release yet) — a person builds the edited workspace in the
- * browser and publishes the build as a preview release (§5.1.4).
+ * Today: "Build the preview" (`buildPreview`, set by the API once a hosted site's Fix it
+ * is applied and its coding run has finished; "Rebuild the preview" when one already
+ * exists) — a person builds the edited workspace in the browser and publishes the build
+ * as a preview release (§5.1.4).
  */
 
 import type { ReplayPrescriptionDto, ReplayPrescriptionRouteAction } from '@builderforce/interaction-contract';
@@ -83,6 +84,8 @@ export interface PrescriptionLinkAction {
   id: 'build-preview';
   /** Under `replay.prescription.actions`. */
   labelKey: string;
+  /** Replaces `labelKey` when the API flags the step as a repeat (`buildPreview.rebuild`). */
+  rebuildLabelKey?: string;
   icon: IconName;
   tone: PrescriptionActionUi['tone'];
   /** The link for this fix, or null when the API does not offer the step (it decides; the UI never re-derives it). */
@@ -93,6 +96,7 @@ export const PRESCRIPTION_LINK_ACTIONS: ReadonlyArray<PrescriptionLinkAction> = 
   {
     id: 'build-preview',
     labelKey: 'build-preview',
+    rebuildLabelKey: 'rebuild-preview',
     icon: 'code',
     tone: 'primary',
     href: (p) => (p.buildPreview ? studioFixPreviewHref(p.buildPreview.projectId, p.id) : null),
@@ -100,9 +104,11 @@ export const PRESCRIPTION_LINK_ACTIONS: ReadonlyArray<PrescriptionLinkAction> = 
 ];
 
 /** The link actions this fix offers right now, each with its address. */
-export function offeredLinkActions(prescription: ReplayPrescriptionDto): Array<{ row: PrescriptionLinkAction; href: string }> {
+export function offeredLinkActions(prescription: ReplayPrescriptionDto): Array<{ row: PrescriptionLinkAction; href: string; textKey: string }> {
   return PRESCRIPTION_LINK_ACTIONS.flatMap((row) => {
     const href = row.href(prescription);
-    return href ? [{ row, href }] : [];
+    if (!href) return [];
+    const repeat = row.id === 'build-preview' && prescription.buildPreview?.rebuild === true;
+    return [{ row, href, textKey: repeat && row.rebuildLabelKey ? row.rebuildLabelKey : row.labelKey }];
   });
 }

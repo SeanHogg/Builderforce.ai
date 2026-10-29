@@ -36,7 +36,7 @@ import { EntityBrowser } from './EntityBrowser';
 import { MetricChart } from './MetricChart';
 import { ObjectTimeline } from './ObjectTimeline';
 import { useFormat } from "@/i18n/useFormat";
-import { StatTile } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 
 export function DomainSurface({
   domain,

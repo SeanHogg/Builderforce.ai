@@ -15,6 +15,11 @@ const mocks = vi.hoisted(() => ({
   debitReplayFree: vi.fn(async () => true),
   debitReplayCredits: vi.fn(async () => true),
   recordReplayTrace: vi.fn(async () => {}),
+  invalidateCached: vi.fn(async () => {}),
+}));
+vi.mock('../../infrastructure/cache/readThroughCache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../infrastructure/cache/readThroughCache')>()),
+  invalidateCached: mocks.invalidateCached,
 }));
 
 vi.mock('../commerce/replayWallet', () => ({
@@ -63,6 +68,7 @@ beforeEach(() => {
   mocks.debitReplayFree.mockClear().mockResolvedValue(true);
   mocks.debitReplayCredits.mockClear().mockResolvedValue(true);
   mocks.recordReplayTrace.mockClear();
+  mocks.invalidateCached.mockClear();
 });
 
 describe('freeAllowance', () => {
@@ -97,6 +103,20 @@ describe('chargeUnits', () => {
     expect(await charge(2)).toEqual({ charged: true, source: 'credits' });
     expect(mocks.debitReplayCredits).toHaveBeenCalledWith(db, env, expect.objectContaining({ units: 1, reference: 'replay-use:rec-1:2' }));
     expect(mocks.recordReplayTrace).toHaveBeenCalledWith(env, db, expect.objectContaining({ verb: 'replay.credits.first_debit', siteId: SITE }));
+  });
+
+  it('drops the cached paid-spend sum with a credits debit, so limit and credits move together', async () => {
+    mocks.wallet = { credits: 10_000, freeUsed: 5_000, freeRemaining: 0, period: '2026-10' };
+    await charge(3);
+    expect(mocks.invalidateCached).toHaveBeenCalledWith(env, 'replay:paid-used:t7:2026-10');
+  });
+
+  it('leaves the paid-spend cache alone for a free-pool charge or a credits debit that did not write', async () => {
+    await charge(1);
+    mocks.wallet = { credits: 10_000, freeUsed: 5_000, freeRemaining: 0, period: '2026-10' };
+    mocks.debitReplayCredits.mockResolvedValueOnce(false);
+    await charge(2);
+    expect(mocks.invalidateCached).not.toHaveBeenCalled();
   });
 
   it('does not re-trace the first debit once a paid spend exists', async () => {

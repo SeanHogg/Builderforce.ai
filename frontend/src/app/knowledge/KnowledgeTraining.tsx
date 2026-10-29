@@ -5,7 +5,7 @@ import { RoleGate } from '@/components/RoleGate';
 import { knowledgeApi, type TrainingItem, type TenantCompliance } from '@/lib/knowledgeApi';
 import { badge } from './knowledgeStyles';
 import { useFormat } from "@/i18n/useFormat";
-import { StatTile } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 
 function stateColor(state: string): React.CSSProperties {
   if (state === 'completed' || state === 'acknowledged')

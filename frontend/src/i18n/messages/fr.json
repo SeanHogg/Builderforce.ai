@@ -1547,7 +1547,8 @@
         "linkNote": "Un lien privé valable 30 minutes.",
         "noLink": "Le lien privé de l’aperçu n’a pas pu être créé. Ouvrez le correctif dans Insights pour en obtenir un nouveau.",
         "backToFix": "Retour au correctif dans Insights",
-        "failed": "L’aperçu n’a pas pu être publié"
+        "failed": "L’aperçu n’a pas pu être publié",
+        "notRecorded": "L’aperçu a été construit, mais n’a pas pu être rattaché à ce correctif ; il a peut-être évolué. Ouvrez le correctif dans Insights pour vérifier."
       }
     },
     "deploy": {
@@ -16004,6 +16005,27 @@
         "noteWarn": "Au-delà de 80 % : le balayage de maintenance nocturne purge désormais toutes les tables de journaux compressibles sur une fenêtre raccourcie et récupère l'espace immédiatement, sans attendre la réécriture hebdomadaire.",
         "noteCritical": "Au-delà de 90 % : toutes les tables de journaux compressibles sont purgées sur leur fenêtre déclarée la plus courte. Les fenêtres de conformité et de facturation ne sont jamais raccourcies."
       }
+    },
+    "emailDeliveries": {
+      "title": "Envois d’e-mails en échec",
+      "subtitle": "Rejets de Resend et échecs de transport. Les corps de message, les codes de vérification et les clés d’API ne sont pas conservés.",
+      "allTime": "Échecs depuis le début",
+      "last24h": "Dernières 24 heures",
+      "affected": "Destinataires concernés",
+      "allTypes": "Tous les types d’e-mail",
+      "searchPlaceholder": "Rechercher un destinataire ou une erreur du fournisseur…",
+      "filter": "Filtrer",
+      "refresh": "Actualiser",
+      "empty": "Aucun échec d’envoi d’e-mail enregistré.",
+      "time": "Heure",
+      "recipient": "Destinataire",
+      "type": "Type",
+      "provider": "Fournisseur",
+      "status": "Statut",
+      "error": "Erreur",
+      "prev": "Précédent",
+      "next": "Suivant",
+      "range": "{from}–{to} sur {total}"
     },
     "insightsOps": {
       "title": "Opérations Insights",
@@ -35189,7 +35211,8 @@
         "copy-prompt": "Copier le prompt",
         "apply-page": "Appliquer à la page",
         "apply-in-composer": "Appliquer dans l’éditeur",
-        "build-preview": "Construire l’aperçu"
+        "build-preview": "Construire l’aperçu",
+        "rebuild-preview": "Reconstruire l’aperçu"
       },
       "confirm": {
         "start-test": {

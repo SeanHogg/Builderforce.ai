@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { useRef, useState } from 'react';
 import type { Edge } from '@xyflow/react';
-import { fetchSite, type SiteInfo, type SitePublishResult } from '@/lib/api';
+import { fetchSite, type SiteInfo, type SitePublishResult } from '@/lib/siteApi';
 import { notifySitePublished } from '@/lib/sitePublishEvents';
 import { readinessSignals } from '@/lib/canvasPhaseReadiness';
 import type { CreationFlowNode } from '../CreationNode';
 import { useRecordAppDeployments, type UseRecordAppDeploymentsDeps } from './useRecordAppDeployments';
 
-vi.mock('@/lib/api', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/api')>()), fetchSite: vi.fn() }));
+vi.mock('@/lib/siteApi', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/siteApi')>()), fetchSite: vi.fn() }));
 
 /**
  * A publish from the App surface's Publish panel — or a site that was already live — puts

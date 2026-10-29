@@ -1,8 +1,8 @@
-import { apiRequest } from './apiClient';
+import { apiRequest, ApiRequestError } from './apiClient';
 import { AUTH_API_URL } from './auth';
 import { getExistingVisitorId } from './visitor';
 import { getVisitId } from './visitorJourney';
-import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
+import { AMBIENT_REQUEST_ERRORS, ApiTransportError } from './errors/transportFailure';
 
 /**
  * The ONE Product Quality ingest origin every reporter on the web app posts to.
@@ -127,6 +127,26 @@ export async function reportBackgroundFailure(
   } catch {
     return false;
   }
+}
+
+/**
+ * A `.catch` handler for a read whose absence the screen tolerates: it RECORDS why
+ * (`reportBackgroundFailure`, warning level) and resolves to `fallback`. The bare
+ * `.catch(() => null)` it replaces discarded the reason, which is how a read that
+ * always fails looks, to everyone, like an empty result. A request failure the HTTP
+ * client already surfaced (`ApiRequestError`, `ApiTransportError`) is not reported again.
+ *
+ *   const site = await api.site(id).catch(recordedFailure('Reading the site', null));
+ */
+export function recordedFailure<T>(what: string, fallback: T): (caught: unknown) => T {
+  return (caught) => {
+    // The transport already surfaced a failed request (the global API-error event, and a
+    // transport-failure report for an unreachable API); a second report would double-count it.
+    if (caught instanceof ApiRequestError || caught instanceof ApiTransportError) return fallback;
+    const reason = caught instanceof Error ? caught.message : String(caught);
+    void reportBackgroundFailure({ message: `${what}: ${reason}`, level: 'warning' });
+    return fallback;
+  };
 }
 
 /**

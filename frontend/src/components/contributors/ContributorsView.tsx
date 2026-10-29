@@ -12,7 +12,7 @@ import { TenantActivityPanel } from './TenantActivityPanel';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
-import { StatTile } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',

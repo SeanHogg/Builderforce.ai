@@ -5,7 +5,7 @@
  *
  *   preview  a hosted app with a coding agent: change and verify the app's
  *            WORKSPACE only. The agent cannot build or publish (building happens in
- *            the browser); a person builds the PREVIEW release from Insights'
+ *            the browser); a person builds the PREVIEW release from the Studio / IDE
  *            publish panel and publishes it after review — never live (D13).
  *   pr       a repo is connected: open a pull request, do not merge.
  *   ticket   a person does it.
@@ -41,7 +41,7 @@ function changeLine(change: unknown): string | null {
 
 const MODE_STEPS: Readonly<Record<BriefMode, string>> = {
   preview: "Make and verify the change in this app's workspace. Do NOT build or publish anything: a person builds the "
-    + 'PREVIEW release from Insights and publishes it after review.',
+    + 'PREVIEW release from the Studio publish panel and publishes it after review.',
   pr: 'Make the change on a branch of the connected repository and open a pull request. Do not merge it: a person reviews it.',
   ticket: 'Make the change, then ship it in the next release; Insights measures it on that release.',
 };

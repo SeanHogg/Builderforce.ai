@@ -6,8 +6,9 @@ import { PrescriptionActions } from './PrescriptionActions';
 import { offeredLinkActions } from './prescriptionActionUi';
 
 /**
- * "Build the preview" (PRD 33 §5.1.4): the API sets `buildPreview` while a hosted
- * site's Fix it is applied with no preview release yet. The card links into that
+ * "Build the preview" (PRD 33 §5.1.4): the API sets `buildPreview` once a hosted
+ * site's Fix it is applied and its run has finished; `rebuild` when a preview already
+ * exists. The card links into that
  * project's workspace with the Publish panel open and the fix named — registry
  * data keyed on the DTO, never re-derived in the UI.
  */
@@ -17,7 +18,7 @@ vi.mock('@/components/RoleGate', () => ({
   RoleGate: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
-const applied = (over = {}) => prescription({ id: 'rx-9', status: 'applied', actionKind: 'fix', next: [], buildPreview: { projectId: 42 }, ...over });
+const applied = (over = {}) => prescription({ id: 'rx-9', status: 'applied', actionKind: 'fix', next: [], buildPreview: { projectId: 42, rebuild: false }, ...over });
 
 describe('Build the preview', () => {
   it('links an applied Fix it to its project workspace, Publish panel open, the fix named', () => {
@@ -33,6 +34,13 @@ describe('Build the preview', () => {
     expect(offeredLinkActions(applied()).map(({ row }) => row.id)).toEqual(['build-preview']);
     expect(offeredLinkActions(applied({ buildPreview: null }))).toEqual([]);
     expect(offeredLinkActions(applied({ buildPreview: undefined }))).toEqual([]);
+  });
+
+  it('reads "Rebuild the preview" when the API flags a preview already exists', () => {
+    render(<PrescriptionActions siteId="site-1" prescription={applied({ buildPreview: { projectId: 42, rebuild: true } })} onChanged={() => undefined} />);
+    expect(screen.getByRole('link', { name: /replay\.prescription\.actions\.rebuild-preview/ })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /actions\.build-preview/ })).toBeNull();
+    expect(offeredLinkActions(applied({ buildPreview: { projectId: 42, rebuild: true } }))[0]!.textKey).toBe('rebuild-preview');
   });
 
   it('draws nothing when the step is closed and the card has no other action', () => {

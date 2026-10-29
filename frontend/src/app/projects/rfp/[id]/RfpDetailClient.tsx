@@ -15,7 +15,7 @@ import { useFormat } from "@/i18n/useFormat";
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { statusColor, type StatusToneMap } from '@/lib/statusTone';
-import { StatTile } from '@/components/admin/adminShared';
+import { StatTile } from '@/components/ui/StatTile';
 
 /**
  * RfpDetailClient — the response workspace for one RFP request. Generates a proposal

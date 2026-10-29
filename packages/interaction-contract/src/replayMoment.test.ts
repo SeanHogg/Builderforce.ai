@@ -41,6 +41,31 @@ describe('replay moment trailer', () => {
 ${formatReplayMomentTrailer(MOMENT)}`)).toBe('Rage click on Buy.');
   });
 
+  it('strips only the trailer and its own separator, never the whitespace a person typed', () => {
+    const trailer = formatReplayMomentTrailer(MOMENT);
+    expect(stripReplayMomentTrailer('a ')).toBe('a ');
+    expect(stripReplayMomentTrailer('a \n')).toBe('a \n');
+    expect(stripReplayMomentTrailer(`a \n\n${trailer}`)).toBe('a ');
+    expect(stripReplayMomentTrailer(`a \n\n\n${trailer}`)).toBe('a \n');
+    expect(stripReplayMomentTrailer(trailer)).toBe('');
+  });
+
+  it('keeps trailing whitespace through text -> save -> text, with the trailer preserved', () => {
+    const trailer = formatReplayMomentTrailer(MOMENT);
+    const editor = replayMomentDescriptionEditor(`Hello\n\n${trailer}`);
+    for (const typed of ['a', 'a ', 'a \n', 'a \n\n', '  ']) {
+      const saved = editor.save(typed)!;
+      expect(saved).toBe(`${typed}\n\n${trailer}`);
+      expect(replayMomentDescriptionEditor(saved).text).toBe(typed);
+      expect(replayMomentFromDescription(saved)).toEqual(MOMENT);
+    }
+    const plain = replayMomentDescriptionEditor('Plain');
+    for (const typed of ['a', 'a ', 'a \n']) {
+      expect(plain.save(typed)).toBe(typed);
+      expect(replayMomentDescriptionEditor(typed).text).toBe(typed);
+    }
+  });
+
   it('edits as visible text and re-attaches the same trailer on save', () => {
     const trailer = formatReplayMomentTrailer(MOMENT);
     const editor = replayMomentDescriptionEditor(`Rage click on Buy.\n\n${trailer}`);
