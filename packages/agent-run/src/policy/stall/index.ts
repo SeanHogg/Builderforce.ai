@@ -132,12 +132,20 @@ export const stallHook = {
     // and we adopt it below).
     const { policy, step } = resolveStallStep(
       ctx.state.model,
-      { text, toolCallCount: 0, availableToolNames: toolNames },
+      {
+        text,
+        toolCallCount: 0,
+        availableToolNames: toolNames,
+        // Whether the user asked for a change decides what handing the work back means.
+        requestText: ctx.task.request ?? ctx.task.prompt,
+        ...(ctx.state.model.model && ctx.state.model.model !== "default" ? { resolvedModel: ctx.state.model.model } : {}),
+      },
       budget.recoveriesUsed,
-      // The failover source rides the run policy's proven/tried set — a host that
-      // wires a picker can pass it through the context; the default never returns
-      // the model that just failed, never more than MAX_MODEL_FAILOVERS deep.
-      {},
+      // The failover source rides the run policy's proven/tried set; the transport names
+      // the models a failover may land on (the tenant's connected flagships, the coding
+      // pool). Without one the default never returns the model that just failed, never
+      // more than MAX_MODEL_FAILOVERS deep.
+      { surface: ctx.ports.model?.fallbackSurface?.() ?? undefined },
     );
 
     switch (step.kind) {
@@ -149,9 +157,10 @@ export const stallHook = {
       case "nudge": {
         budget.recoveriesUsed = step.recoveriesUsed;
         saveBudget(ctx, budget, 1);
+        if (step.toolChoice) ctx.state.forceToolChoice = step.toolChoice;
         // `step.nudge` already forces ONE structured call (it embeds the tool-choice
         // directive), so the re-prompt cannot be answered with another prose promise.
-        return { action: "steer", note: step.nudge };
+        return { action: "steer", note: step.nudge, detail: { model: ctx.state.model.model ?? null, attempt: step.recoveriesUsed, shape: step.shape ?? null } };
       }
       case "failover": {
         budget.recoveriesUsed = step.recoveriesUsed;
@@ -160,13 +169,18 @@ export const stallHook = {
         // that model next turn, and carry the swap's user-facing notice with the
         // first-chance nudge the incoming model gets.
         ctx.state.model = policy;
-        return { action: "escalate", note: `${step.notice}\n\n${step.nudge}` };
+        if (step.toolChoice) ctx.state.forceToolChoice = step.toolChoice;
+        return {
+          action: "escalate",
+          note: `${step.notice}\n\n${step.nudge}`,
+          detail: { from: step.from ?? null, to: step.to, attempt: step.attempt, of: step.of, shape: step.shape ?? null, notice: step.notice },
+        };
       }
       case "exhausted": {
         saveBudget(ctx, budget);
         // Nothing left to try: stop, and carry the exhausted notice so the run's
         // emptiness is explained (`agent-runtime/.../agent-loop/stall-recovery.ts`).
-        return { action: "pause", note: step.notice };
+        return { action: "pause", note: step.notice, detail: { model: ctx.state.model.model ?? null, tried: step.tried, shape: step.shape ?? null } };
       }
     }
   },
@@ -191,8 +205,11 @@ export const stallHook = {
    * only called tools, a budget ran out, a breaker tripped) gets ONE bounded extra call
    * with this prompt and no tools, so the agent always answers (`brain/agentReplyLoop.ts`).
    */
-  synthesis(_ctx: PolicyContext): string {
-    return FORCED_SYNTHESIS_PROMPT;
+  synthesis(ctx: PolicyContext): string {
+    // A run that answers AS a named agent says so; any other keeps the generic prompt.
+    return ctx.task.agentName
+      ? FORCED_SYNTHESIS_PROMPT.replace("AS the agent", `AS ${ctx.task.agentName}`)
+      : FORCED_SYNTHESIS_PROMPT;
   },
 } satisfies StallHook;
 

@@ -21,15 +21,19 @@
 
 import type { RunMessage } from "../../contract.js";
 import type { FinishHook, PolicyContext } from "../hooks.js";
-import type { CiFinishDecision } from "./ciGate.js";
-import { evaluateFinishGates, matchesRequiredReviewSignoff, missingReviewVerdictMessage, type RequiredReviewSignoff } from "./gates.js";
+import { evaluateFinishGates, matchesRequiredReviewSignoff, missingReviewVerdictMessage, type FinishGatePorts, type RequiredReviewSignoff } from "./gates.js";
 import { applyVerifyPhase } from "../verify/runEndMemory.js";
 
+/** Why the last finish attempt was refused, per run (the D1 cascade needs the NAMED verdict, not just the text). */
+const lastReasons = new WeakMap<object, string | undefined>();
+export function lastFinishReason(state: object): string | undefined {
+  return lastReasons.get(state);
+}
+
 /** The optional engine ports a surface binds with {@link createFinishHook}. */
-export interface FinishPorts {
-  read?: (path: string) => Promise<string | null>;
-  pollBranchCi?: () => Promise<CiFinishDecision>;
-  scanPlaceholders?: (paths: readonly string[]) => Promise<{ flagged: Array<{ path: string; markers: string[] }> }>;
+export interface FinishPorts extends FinishGatePorts {
+  /** The run belongs to a delegation tree (its owner or a child). Absent ⇒ only a child (`parentRunId`) is. */
+  delegated?: boolean;
 }
 
 /**
@@ -103,14 +107,17 @@ export function signoffSettleBlock(ctx: PolicyContext): string | null {
  * An adapter binds its ports with `composePolicyHooks({ finish: createFinishHook(ports) })`.
  */
 export function createFinishHook(ports: FinishPorts = {}): FinishHook {
+  const delegated = (ctx: PolicyContext): boolean => ports.delegated ?? ctx.task.dispatch.parentRunId !== undefined;
   return {
     settleBlock: signoffSettleBlock,
+    // An owner never ends with children still working — on `finish` (below) or in prose.
+    liveChildren: async (ctx: PolicyContext): Promise<string | null> => (delegated(ctx) && ports.liveChildren ? ports.liveChildren() : null),
     async gate(ctx: PolicyContext): Promise<string | null> {
       noteSignoff(ctx);
       const verdict = await evaluateFinishGates({
         writtenPaths: writtenPathsOf(ctx),
         requiredSignoff: ctx.policy.signoff,
-        delegated: ctx.task.dispatch.parentRunId !== undefined,
+        delegated: delegated(ctx),
         summary: typeof ctx.content === "string" ? ctx.content : "",
         output: "",
         gates: ctx.state.finish,
@@ -119,9 +126,12 @@ export function createFinishHook(ports: FinishPorts = {}): FinishHook {
         },
         ports,
       });
+      // The descendants' writes the gates folded in are the run's own from here on.
+      if (verdict.writtenPaths) ctx.state.writtenPaths = [...verdict.writtenPaths];
       if (verdict.block) {
         ctx.state.finish = { ...ctx.state.finish, finishBlockedOnce: true };
       }
+      lastReasons.set(ctx.state, verdict.reason);
       return verdict.block;
     },
   };

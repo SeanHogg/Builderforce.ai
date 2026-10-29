@@ -1,14 +1,10 @@
 /**
- * Structured task state (cost lever C3) — the agent's own running record of what it is
- * doing, kept OUTSIDE the transcript so compaction can never summarise it away.
- *
- * The model writes it with `update_task_state`; the loop persists it in
- * `CloudLoopState.taskState` (so every durable tick keeps it) and renders it in the
- * per-turn volatile block after the history. Bounded (~600 tokens) so it stays a
- * summary rather than a second transcript.
+ * policy/tools/taskState — cost lever C3, ported from `api/.../costLoop/taskState.ts` (extracted, not copied:
+ * the api module re-exports this one). The agent writes it with `update_task_state`; `RunState.taskState`
+ * carries it across steps and the memory policy renders it in the per-turn tail.
  */
 import type { ToolSchema } from '@builderforce/agent-tools';
-import { estimateTokensFromChars } from '@builderforce/workload';
+import { defaultEstimateTokens } from '../compaction/pack.js';
 
 export interface TaskState {
   goal?: string;
@@ -81,7 +77,7 @@ export function applyTaskStateUpdate(
     const value = args[key];
     if (Array.isArray(value)) next[key] = value.filter((v): v is string => typeof v === 'string' && v.trim() !== '').map((v) => v.trim());
   }
-  const tokens = estimateTokensFromChars(renderTaskState(next).length);
+  const tokens = defaultEstimateTokens(renderTaskState(next));
   if (tokens > TASK_STATE_MAX_TOKENS) {
     return { ok: false, error: `task state would be ~${tokens} tokens (limit ${TASK_STATE_MAX_TOKENS}) — summarise it more tightly and retry` };
   }

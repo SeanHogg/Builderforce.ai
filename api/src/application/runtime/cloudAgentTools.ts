@@ -11,9 +11,9 @@
  *   • the step budgets and the finish-honesty matcher (loop policy).
  */
 
-import { buildCoreToolRegistry, type Capability, SKILL_TOOLS, SUBAGENT_TOOLS, stableStringify } from '@builderforce/agent-tools';
+import { buildCoreToolRegistry, type Capability, SKILL_TOOLS, SUBAGENT_TOOLS } from '@builderforce/agent-tools';
+export { policyGateCallKey } from '@builderforce/agent-tools';
 import { isCostLeverOn, type CostLeverId } from '@builderforce/cost-levers';
-import { classifyDeliverablePaths } from '../delivery/deliverableEvidence';
 import { TenantRole } from '../../domain/shared/types';
 
 /** The permission role every cloud run acts under — its platform-tool dispatch and the
@@ -24,67 +24,10 @@ export const CLOUD_RUN_TENANT_ROLE = TenantRole.MANAGER;
 /** Shape of one tool call in an OpenAI-compatible completion response. */
 export interface RawToolCall { id?: string; type?: string; function?: { name?: string; arguments?: string } }
 
-/** True when a finish summary claims a build / type-check / lint / test passed —
- *  which the serverless cloud executor cannot have run (it has no shell). Used to
- *  block a fabricated "checks pass" claim once and force an honest summary. Kept
- *  deliberately narrow (a check noun AND a success verb) to avoid false positives
- *  on legitimate descriptions of the work. */
-export function assertsUnrunVerification(summary: string): boolean {
-  const s = summary.toLowerCase();
-  const check = /(type[\s-]?check|typecheck|typescript|\btsc\b|lint|eslint|\btest(s|ing|ed)?\b|\bbuild(s|ing)?\b|compil)/;
-  const pass = /(pass(es|ed|ing)?|succeed(s|ed)?|success|green|no\s+errors?|error[\s-]?free|will\s+now\s+pass|are\s+resolved|is\s+resolved)/;
-  return check.test(s) && pass.test(s);
-}
+// The finish helpers (the honesty matcher, the no-code-deliverable check) live in the agent now: re-exported.
+export { assertsUnrunVerification, hasNoCodeDeliverable } from '@builderforce/agent-run';
 
-/**
- * True when a code-bound run is about to `finish` having produced NO real code
- * deliverable — `writtenPaths` is empty or holds only the seeded `PRD.md` (the PRD
- * is committed during prep, so a PR with PRD.md but no code is the "wrote a plan,
- * shipped a scaffold/nothing" premature-finish footgun from execution #20).
- *
- * This is the cheap, deterministic half of the pre-finish completeness self-review
- * (ROADMAP #38): it does NOT judge requirement coverage, only that *something* was
- * built. Used to block `finish` ONCE and re-prompt the agent to self-review the PRD
- * requirements before accepting an empty finish — so a genuine "nothing to change"
- * run can still finish on the second attempt, while a premature one is forced to
- * reconsider. Pure → unit-testable in isolation.
- */
-export function hasNoCodeDeliverable(writtenPaths: ReadonlySet<string>): boolean {
-  return classifyDeliverablePaths(writtenPaths) !== 'implementation';
-}
-
-/** FNV-1a (32-bit), hex. Not cryptographic — this only needs to be stable, cheap, and
- *  short enough that a run's asked-gate list stays small in the persisted loop state.
- *  A collision would merely let one distinct call reuse another's approval, which is
- *  vanishingly unlikely and bounded by the gates a single run reaches. */
-function hash32(s: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h.toString(16).padStart(8, '0');
-}
-
-/**
- * The identity of ONE `require-approval` decision: the gate, the tool it gated, and
- * the exact arguments of the call.
- *
- * Keying the run's asked-set by `gateId` ALONE (the original bug) made approval
- * once-per-RUN: a human approving `run_command("ls")` also silently pre-approved
- * `run_command("rm -rf /")` and every later call the same gate covered, for the whole
- * run — the gate stopped gating after its first hit. Keying by gate + tool + argument
- * hash makes approval once-per-CALL: each DISTINCT invocation is approved on its own
- * merits, while a RETRIED identical call (same tool, same args — e.g. the agent
- * re-issuing the call after the resume) matches the stored key and proceeds instead of
- * re-parking the run forever.
- *
- * A plain string so it stays JSON-serializable in {@link CloudLoopState.policyAskedGates}
- * across durable-object ticks. Pure → unit-testable.
- */
-export function policyGateCallKey(gateId: string, toolName: string, args: Record<string, unknown>): string {
-  return `${gateId}|${toolName}|${hash32(stableStringify(args))}`;
-}
+/** `policyGateCallKey` (the identity of ONE `require-approval` decision) lives in `@builderforce/agent-tools`: re-exported above for the tests that import it here. */
 
 /** The one registry the cloud engine drives (schemas + dispatch). Seeded from the
  *  shared core tools — adding a tool there makes it available to every surface that

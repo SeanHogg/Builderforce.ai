@@ -24,6 +24,7 @@ import { coordinatorVoice, resolveTicketCoordinator } from '../kanban/ticketCoor
 import { and, eq } from 'drizzle-orm';
 import { approvals, executionPauseState, swimlanes, tasks } from '../../infrastructure/database/schema';
 import { notifyApprovalRequested } from '../approval/approvalNotifier';
+import { GOVERNANCE_GATE_ACTION } from '../../domain/approval/requestKind';
 import { notifyExecutionSubscribers } from './executionEvents';
 import { bumpExecutionState } from './executionStateVersion';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
@@ -205,8 +206,12 @@ async function createCloudQuestion(
   args: {
     tenantId: number; cloudAgentRef?: string; executionId: number;
     agentLabel: string; question: string; context?: string;
+    /** `approval`: a governance gate's call needs an approver (resolved approved / rejected). Default `question`. */
+    kind?: 'question' | 'approval';
   },
 ): Promise<string> {
+  const kind = args.kind ?? 'question';
+  const actionType = kind === 'approval' ? GOVERNANCE_GATE_ACTION : 'clarify.blocked';
   const approvalId = crypto.randomUUID();
   const now = new Date();
   // An agent's question MUST carry an expiry. `expiresAt` is caller-supplied and has
@@ -229,8 +234,8 @@ async function createCloudQuestion(
     executionId:  args.executionId,
     cloudAgentRef: args.cloudAgentRef ?? null,
     requestedBy:  args.agentLabel,
-    kind:         'question',
-    actionType:   'clarify.blocked',
+    kind,
+    actionType,
     description,
     status:       'pending',
     expiresAt,
@@ -241,8 +246,8 @@ async function createCloudQuestion(
   await bumpExecutionState(env, args.tenantId);
 
   await notifyApprovalRequested(env, db, {
-    tenantId: args.tenantId, approvalId, kind: 'question',
-    actionType: 'clarify.blocked', description,
+    tenantId: args.tenantId, approvalId, kind,
+    actionType, description,
   });
 
   // Mirror onto the live execution stream so an open panel shows the ask immediately.
@@ -303,6 +308,8 @@ export async function pauseExecutionForQuestion(
     agentLabel: string;
     question: string;
     context?: string;
+    /** `approval` for a governance gate's call (see `createCloudQuestion`). Default `question`. */
+    kind?: 'question' | 'approval';
     surface: PausedSurface;
     /** Exit-and-redispatch surfaces only — the conversation to resume from. */
     loopState?: PausedLoopState | null;
@@ -320,6 +327,7 @@ export async function pauseExecutionForQuestion(
     ...(args.cloudAgentRef ? { cloudAgentRef: args.cloudAgentRef } : {}),
     agentLabel: coordinatorVoice(coordinator, args.agentLabel), question: args.question,
     ...(args.context ? { context: args.context } : {}),
+    ...(args.kind ? { kind: args.kind } : {}),
   });
 
   // Route the ticket where a human looks. Best-effort: a board/lane problem must

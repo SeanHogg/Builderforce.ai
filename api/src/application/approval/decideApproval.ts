@@ -11,7 +11,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { approvals } from '../../infrastructure/database/schema';
 import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { TenantRole } from '../../domain/shared/types';
-import { normalizeRequestKind, isAnswerableKind } from '../../domain/approval/requestKind';
+import { normalizeRequestKind, isAnswerableKind, GOVERNANCE_GATE_ACTION } from '../../domain/approval/requestKind';
 import { isSelfOwnedApproval, isApprovalVisibleTo } from '../../domain/approval/selfOwned';
 import { memberHasPermission } from '../rbac/effectivePermissions';
 import { resumePausedExecution } from '../runtime/executionResume';
@@ -157,11 +157,14 @@ export async function decideApproval(db: Db, env: ApprovalEnv, input: DecideAppr
 
   // Resume a paused CLOUD run: the answer is delivered as a pending user turn the
   // loop drains on its next tick. (The on-prem relay below covers self-hosted agents.)
-  if (existing.executionId && responseText) {
+  // A governance gate's approval is decided approved / rejected with no text, and resumes the run all the same: the run reads
+  // the STRUCTURED decision off the approval row when it retries the call; the steer only tells the model what was decided.
+  const governanceGate = existing.actionType === GOVERNANCE_GATE_ACTION;
+  if (existing.executionId && (responseText || governanceGate)) {
     await resumePausedExecution(env, db, {
       executionId: existing.executionId,
       tenantId,
-      answer: responseText,
+      answer: responseText ?? (status === 'approved' ? 'Approved.' : `Rejected.${input.reviewNote ? ` ${input.reviewNote}` : ''}`),
       approvalId: id,
     });
   }

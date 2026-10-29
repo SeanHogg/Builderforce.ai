@@ -105,7 +105,8 @@ function transportSummarizer(ctx: PolicyContext): CompactionSummarizer {
 
 /** The recall note for the latest directive, from the run's `memory` capability. */
 function capabilityRecall(ctx: PolicyContext): ((query: string, budgetChars: number) => Promise<string>) | undefined {
-  const memory = ctx.ports.capabilities.memory;
+  // A context assembled without a capability set (a partial host, a unit harness) has no recall, not a crash.
+  const memory = ctx.ports.capabilities?.memory;
   if (!memory) return undefined;
   return async (query, budgetChars) => {
     const result = await memory.recall(query, RECALL_LIMIT);
@@ -181,22 +182,31 @@ function toRunRow(m: PackMessage | Record<string, unknown>): RunMessage {
  * returns the compacted rows with what it dropped and the reserve it held back.
  * Returns nothing when the transcript already fits.
  */
-export const compactionHook: CompactionHook = {
-  async compact(ctx: PolicyContext): Promise<CompactionResult | void> {
-    const options = compactionOptions(ctx);
-    const result = await compactMessages(
-      (ctx.messages as readonly Row[]).map(toPackRow) as unknown as Array<Record<string, unknown>>,
-      options,
-      options.summarize,
-    );
-    if (!result.compacted) return undefined;
-    return {
-      messages: result.messages.map(toRunRow),
-      dropped: result.droppedMessages,
-      reserveTokens: options.reserveOutputTokens,
-    };
-  },
-};
+export function createCompactionHook(hookOptions: CompactionHookOptions = {}): CompactionHook {
+  return {
+    async compact(ctx: PolicyContext): Promise<CompactionResult | void> {
+      const options = compactionOptions(ctx, hookOptions);
+      const result = await compactMessages(
+        (ctx.messages as readonly Row[]).map(toPackRow) as unknown as Array<Record<string, unknown>>,
+        options,
+        options.summarize,
+      );
+      if (!result.compacted) return undefined;
+      return {
+        messages: result.messages.map(toRunRow),
+        dropped: result.droppedMessages,
+        reserveTokens: options.reserveOutputTokens,
+        beforeTokens: result.beforeTokens,
+        afterTokens: result.afterTokens,
+        summarized: result.summarized,
+        ...(result.maskedObservations ? { masked: result.maskedObservations } : {}),
+      };
+    },
+  };
+}
+
+/** The compaction hook with the run's own transport as the summarizer. A surface with its own summary model binds it with {@link createCompactionHook}. */
+export const compactionHook: CompactionHook = createCompactionHook();
 
 export {
   CLOUD_COMPACT_DEFAULTS,

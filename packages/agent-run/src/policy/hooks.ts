@@ -71,6 +71,11 @@ export interface CompactionResult {
   dropped: number;
   /** The tokens reserved for the answer. */
   reserveTokens?: number;
+  /** What the fold cost and saved, for the run's timeline. */
+  beforeTokens?: number;
+  afterTokens?: number;
+  summarized?: boolean;
+  masked?: number;
 }
 
 /** WS2b — stall recovery: narration, repetition, forced synthesis, prose ask-lift. */
@@ -95,6 +100,8 @@ export interface StallDecision {
   action: "steer" | "escalate" | "pause";
   /** The note the model reads on the next turn. */
   note?: string;
+  /** Which model, attempt and stall shape the decision was about, for the run's timeline. */
+  detail?: Record<string, unknown>;
 }
 
 /** WS2c — steering between steps. */
@@ -137,6 +144,11 @@ export interface FinishHook {
    * held to a deliverable. Returns the block reason, or null to let it settle.
    */
   settleBlock(ctx: PolicyContext): string | null;
+  /**
+   * The block on ANY end of a run while sub-agents the run started are still working — their
+   * reports would strand. Null when none is live or the surface has no delegation.
+   */
+  liveChildren?(ctx: PolicyContext): Promise<string | null>;
 }
 
 /** WS2d — the in-run guards: progress (A3), cascade (D1), post-edit check (D7), parallel reads (D8). */
@@ -152,6 +164,12 @@ export interface GuardsHook {
   endTurn?(ctx: PolicyContext, content: string): Promise<void> | void;
   /** D8: whether a call only reads, so a run of them may dispatch together. Absent ⇒ sequential. */
   isReadOnly?(ctx: PolicyContext, name: string): boolean;
+  /** D1 + D2: the model state a FRESH run starts in (weak-first unless the router says skip). Nothing ⇒ unchanged. */
+  seed?(ctx: PolicyContext): Promise<RunState["model"] | void> | RunState["model"] | void;
+  /** D1: the reasoning levers for this turn, raised while a unit is escalated. */
+  reasoning?(ctx: PolicyContext): { thinkLevel?: string } | undefined;
+  /** D1: fold a finish attempt's gate verdict into the cascade; returns the block the kernel reads. */
+  finish?(ctx: PolicyContext, verdict: { block: string | null; reason?: string }): Promise<string | null> | string | null;
 }
 
 /** A control signal a skipped call carries — `ask_human` parks the run on a person. */
@@ -161,6 +179,8 @@ export interface GuardControl {
   question: string;
   /** The answers the person is offered. */
   options?: readonly string[];
+  /** The surface already parked the run on a person (an approver answered 'paused'): park it, never ask again. */
+  parked?: true;
 }
 
 /** What a guard decided about a call. */
@@ -189,6 +209,8 @@ export interface MemoryHook {
   observe?(ctx: PolicyContext, call: PolicyToolCall, result: unknown, isError?: boolean): Promise<void> | void;
   /** The consolidated memory the run produced, written back through `store.commitMemory`. */
   consolidate(ctx: PolicyContext): Promise<unknown> | unknown;
+  /** The code map alone — committed on EVERY terminal outcome (finished, failed, cancelled); learned facts stay finished-only. */
+  codeMap?(ctx: PolicyContext): Promise<unknown> | unknown;
 }
 
 /** WS2e — the context pack's recall. */
@@ -206,6 +228,12 @@ export interface ToolsHook {
   select(ctx: PolicyContext, tools: readonly ToolSchema[]): Promise<readonly ToolSchema[] | void> | readonly ToolSchema[] | void;
   /** Before a call dispatches: a read whose lines were already SERVED is answered without the disk. */
   beforeDispatch?(ctx: PolicyContext, call: PolicyToolCall): { data: unknown } | void;
+  /**
+   * The governance gates (`RunPolicy.approvalGates`) against one call: a `block` refuses it
+   * (the model reads the refusal), a `require-approval` asks the human channel — answered in
+   * run it proceeds, parked it returns the control that parks the run. Nothing ⇒ the call is allowed.
+   */
+  gate?(ctx: PolicyContext, call: PolicyToolCall): Promise<{ data: unknown; isError: true; control?: GuardControl } | void> | { data: unknown; isError: true; control?: GuardControl } | void;
   /** After a call returned: record what the model was served (or what a write invalidated). */
   observe?(ctx: PolicyContext, call: PolicyToolCall, result: unknown, isError: boolean): void;
 }
@@ -214,6 +242,12 @@ export interface ToolsHook {
 export interface ModelHook {
   /** The model this turn asks for, and the cap on its answer. */
   resolve(ctx: PolicyContext): Promise<ModelDecision | void> | ModelDecision | void;
+  /**
+   * What the turn asks of the transport beyond the model: the role it is asked as, the run
+   * phase, whether the model is a hard pin and the models already broken this run. A
+   * transport that routes by role or strictness reads them off the request.
+   */
+  turnFields?(ctx: PolicyContext): { role: string; phase: string; strict?: boolean; excludeModels?: string[]; toolChoice?: "required" };
   /** Before turn 1: the BYO preflight, as the `model.preflight` event the run emits. */
   preflight?(ctx: PolicyContext): Promise<Extract<RunEvent, { kind: "model.preflight" }>> | Extract<RunEvent, { kind: "model.preflight" }>;
   /**

@@ -281,7 +281,7 @@ describe("conformance — the model is asked the same thing either way", () => {
     const requests = await requestsOf(1);
     expect(requests.length).toBeGreaterThan(0);
     for (const request of requests) {
-      expect(request.messages[0]).toEqual({ role: "system", content: TASK.prompt });
+      expect(request.messages[0]).toEqual({ role: "user", content: TASK.prompt });
       const tail = request.messages[request.messages.length - 1];
       expect(tail?.role).toEqual("user");
       expect(tail?.content.startsWith("<run-state>")).toBe(true);

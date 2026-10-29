@@ -84,8 +84,6 @@ for (const root of ROOTS) {
 // empty. WS7 empties this list and flips the guard to enforced.
 const BASELINE = [
   'agent-runtime/src/builderforce/agent-loop/agent-loop.ts',
-  'api/src/application/brain/agentReplyLoop.ts',
-  'api/src/application/runtime/cloudAgentEngine.ts',
   'brain-embedded/src/runStore/runLoop.ts',
   'frontend/src/lib/creationCanvasAi.ts',
 ];

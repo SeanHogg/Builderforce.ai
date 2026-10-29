@@ -14,7 +14,7 @@ vi.mock('./LlmProxyService', () => ({
 vi.mock('./specialists/resolveSpecialist', () => ({ resolveSpecialist }));
 vi.mock('./specialists/evalCaseStore', () => ({ captureSpecialistSample }));
 
-import { buildGatewaySummarizer, compactionSummaryRequest } from './compactMessages';
+import { buildGatewaySummarizer, compactionSummaryRequest } from './gatewaySummarizer';
 
 const env = {} as Env;
 const ok = (content: string) => ({ response: { status: 200 }, content });

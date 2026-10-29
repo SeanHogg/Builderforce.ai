@@ -1,40 +1,29 @@
 /**
- * The cloud loop's COST LEVERS, as one per-tick session the engine wires with a few
- * lines (it must not grow): which tools a turn advertises (C1), the request messages
- * with the volatile tail (B1), compaction extras (C2 masking + the task-brief pin),
- * the `tool_search` / `update_task_state` meta tools (C1 / C3), the per-role output cap
- * (D5), the run budget (A2), and the in-run guards (loopGuards.ts: A3 progress
- * detector, D7 post-edit check, D1 verifier cascade, D8 concurrent reads).
+ * The cloud run's CONTAINMENT session (cost levers A2 and D5), one per tick (PRD 35 WS3).
  *
- * Every lever is read once per tick through `isCostLeverOn`; with a lever off, its
- * part of the session reproduces the engine's behaviour from before the lever existed.
- * What must survive durable ticks rides {@link CostLoopState} (spread into
- * `CloudLoopState`).
+ * What this session decides is whether the run may buy its NEXT paid turn: the declared limits
+ * (files, repositories, spend) and the A2 token cap against what the run has spent so far, the
+ * budget line the model reads in its per-turn tail, and the D5 per-role cap on a reply. It is
+ * HOST work — the ledger and the team alert are the cloud's. Everything that shapes a turn (the
+ * tool catalog, the volatile tail, compaction, the task state, the guards) is the one agent's
+ * (`@builderforce/agent-run`).
+ *
+ * Every lever is read once per tick through `isCostLeverOn`; with a lever off, its part of the
+ * session reproduces the behaviour from before the lever existed. What must survive durable
+ * ticks rides {@link CostLoopState}.
  */
 import { isCostLeverOn } from '@builderforce/cost-levers';
 import { cappedMaxTokens } from '@builderforce/run-policy';
-import type { ToolSchema } from '@builderforce/agent-tools';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { Env } from '../../../env';
 import type { ProxyResult } from '../../llm/proxyTypes';
-import { toolsTokensOf, OBSERVATION_MASK_TURNS, type CompactOptions } from '../../llm/compactMessages';
 import { checkRunLimits, type RunLimits } from '../../../domain/containment/runLimits';
-import {
-  TOOL_SEARCH_SCHEMA, TOOL_SEARCH_TOOL, advertisedTools, deferredToolRole, promptNamedTools, runToolSearch, type DeferredToolRole,
-} from './deferredTools';
-import { UPDATE_TASK_STATE_SCHEMA, UPDATE_TASK_STATE_TOOL, applyTaskStateUpdate, renderTaskState, type TaskState } from './taskState';
 import { ledgerRunSpend, readRunTokenCap, renderBudget, turnSpend, type RunSpend } from './runBudget';
-import { turnRequestMessages } from './volatileTail';
-import { LoopGuards, type LoopGuardState } from './loopGuards';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { notifyContainmentStop } from '../../alerts/containmentAlert';
 
-/** What the cost levers persist across durable ticks. */
-export interface CostLoopState extends LoopGuardState {
-  /** C1: tools loaded beyond the role core set (prompt-named, searched, or called). */
-  loadedTools?: string[];
-  /** C3: the agent's structured task state. */
-  taskState?: TaskState;
+/** What the containment session persists across durable ticks. */
+export interface CostLoopState {
   /** A2: this run's platform spend so far (millicents) — replaces the per-turn ledger SUM. */
   spentMillicents?: number;
   /** A2: prompt + completion tokens this run has consumed (BYO turns included). */
@@ -43,9 +32,7 @@ export interface CostLoopState extends LoopGuardState {
   tokenCap?: number;
 }
 
-type Msg = Record<string, unknown>;
 type Declared = Pick<RunLimits, 'maxFiles' | 'maxRepositories' | 'maxSpendMillicents'>;
-type MetaResult = { data: unknown; isError?: boolean };
 
 export interface CostLoopSessionArgs {
   env: Env;
@@ -59,47 +46,22 @@ export interface CostLoopSessionArgs {
   plan: string;
   /** The run's policy role (explore / code / verify / plan / …). */
   role: string;
-  /** Every tool this run may call (core + curated platform). */
-  catalog: readonly ToolSchema[];
   resume?: CostLoopState;
-  /** The system prompt + task brief — tools they name are loaded up front under C1. */
-  promptTexts: readonly string[];
-  /** Tools the run cannot finish without (e.g. a reviewer's sign-off tool). */
-  required?: readonly string[];
   /** Timeline writer (`recordCloudToolEvent` bound to this run). */
   record: (toolName: string, category: string, detail: Record<string, unknown>, result: string) => Promise<void>;
 }
 
 export class CostLoopSession {
-  readonly stablePrefix: boolean;
-  /** The in-run guards (A3 / D7 / D1 / D8) — the engine wraps its hooks and ports with them. */
-  readonly guards: LoopGuards;
-  private readonly deferred: boolean;
-  private readonly masking: boolean;
-  private readonly taskStateOn: boolean;
   private readonly outputCaps: boolean;
   private readonly budgetOn: boolean;
   private readonly child: boolean;
-  private readonly toolRole: DeferredToolRole;
-  private readonly loaded: Set<string>;
-  private taskState: TaskState | undefined;
   private spend: RunSpend | undefined;
   private budgetLine = '';
-  private toolsSignature = '';
 
   constructor(private readonly a: CostLoopSessionArgs, private readonly tokenCap: number | undefined) {
-    const on = (id: Parameters<typeof isCostLeverOn>[1]) => isCostLeverOn(a.env, id, a.tenantId);
-    this.stablePrefix = on('b1_stable_prefix');
-    this.guards = new LoopGuards(a.env, a.tenantId, a.resume, a.db);
-    this.deferred = on('c1_deferred_tools');
-    this.masking = on('c2_observation_masking');
-    this.taskStateOn = on('c3_task_state');
-    this.outputCaps = on('d5_output_caps');
+    this.outputCaps = isCostLeverOn(a.env, 'd5_output_caps', a.tenantId);
     this.budgetOn = tokenCap !== undefined;
     this.child = a.meterExecutionId !== a.executionId;
-    this.toolRole = deferredToolRole(a.role);
-    this.loaded = new Set(a.resume?.loadedTools ?? [...promptNamedTools(a.catalog, a.promptTexts), ...(a.required ?? [])]);
-    this.taskState = a.resume?.taskState;
     const r = a.resume;
     // A2 running totals, carried tick to tick. Seeded from ONE ledger read on the first
     // turn (so prep spend counts), and re-read every turn when A2 is off (the pre-A2
@@ -109,36 +71,13 @@ export class CostLoopSession {
       : undefined;
   }
 
-  private meta(): ToolSchema[] {
-    return [...(this.deferred ? [TOOL_SEARCH_SCHEMA] : []), ...(this.taskStateOn ? [UPDATE_TASK_STATE_SCHEMA] : [])];
-  }
-
-  /** The tools to advertise this turn. */
-  tools(): ToolSchema[] {
-    return this.deferred
-      ? advertisedTools(this.a.catalog, this.toolRole, this.loaded, this.meta())
-      : [...this.a.catalog, ...this.meta()];
-  }
-
-  /** Compaction extras: the advertised tools, C2 masking, the task-brief pin (C3), and the
-   *  env + tenant the C9 price-tier budget is decided for. */
-  compactOptions(): Pick<CompactOptions, 'tools' | 'maskObservationsAfterTurns' | 'pinTaskBrief' | 'env' | 'tenantId'> {
-    return {
-      tools: this.tools(),
-      env: this.a.env,
-      tenantId: this.a.tenantId,
-      ...(this.masking ? { maskObservationsAfterTurns: OBSERVATION_MASK_TURNS } : {}),
-      ...(this.taskStateOn ? { pinTaskBrief: true } : {}),
-    };
-  }
-
   /**
    * The pre-turn containment check. Lever off: the declared limits against the ledger
    * SUM, exactly as before. On: the token cap joins the limits and the spend comes from
-   * the running totals. Returns the run's stop output, or null to proceed.
+   * the running totals. Returns the run's stop output, or null to proceed. `progress` is the
+   * agent's rendered task state — a contained run tells a follow-up where to resume.
    */
-  async beforeTurn(step: number, declared: Declared | undefined, files: number, repositories: number): Promise<string | null> {
-    await this.recordToolsChange(step);
+  async beforeTurn(step: number, declared: Declared | undefined, files: number, repositories: number, progress = ''): Promise<string | null> {
     if (!this.budgetOn && !declared) return null;
     if (!this.budgetOn || this.child || !this.spend) {
       // Lever off, or a declared limit depends on it: the pre-A2 read, failures and all.
@@ -164,44 +103,24 @@ export class CostLoopSession {
       tenantId: this.a.tenantId, executionId: this.a.executionId, taskId: this.a.taskId ?? null,
       reason, spendMillicents: usage.spendMillicents,
     });
-    const progress = this.budgetOn ? renderTaskState(this.taskState) : '';
-    return `Run contained: ${reason}.${progress ? `\n\nProgress so far — a follow-up run can resume from here:\n${progress}` : ''}`;
+    return `Run contained: ${reason}.${this.budgetOn && progress ? `\n\nProgress so far — a follow-up run can resume from here:\n${progress}` : ''}`;
   }
 
-  /** The request messages for this turn (B1 volatile tail; the budget line, task state and
-   *  the caller's per-turn sections — the run's working-memory brief — ride it). */
-  turnMessages(messages: readonly Msg[], dynamicSystem?: string, extra: readonly (string | null)[] = []): Msg[] {
-    return turnRequestMessages(messages, {
-      stablePrefix: this.stablePrefix,
-      ...(dynamicSystem ? { dynamicSystem } : {}),
-      sections: [this.budgetLine, this.taskStateOn ? renderTaskState(this.taskState) : '', ...this.guards.tailSections(), ...extra],
-    });
+  /**
+   * The A2 budget line for this turn's volatile tail, rendered from the run's CURRENT totals — a resumed tick knows them the
+   * moment the session opens, so the line reaches the model on every turn instead of one turn late. '' when the budget lever
+   * is off or the totals are not known yet (a first turn, or a child billed to its parent).
+   */
+  budgetNote(declared?: Declared, files = 0, repositories = 0): string {
+    if (!this.budgetOn || !this.spend) return this.budgetLine;
+    const limits: RunLimits = { ...(declared ?? { maxFiles: null, maxRepositories: null, maxSpendMillicents: null }), maxTokens: this.tokenCap };
+    return renderBudget(limits, { files, repositories, spendMillicents: this.spend.spentMillicents, tokens: this.spend.tokensUsed });
   }
 
   /** The reply cap for this turn: D5's per-role cap under the caller's, else the caller's. */
   turnFields(callerMaxTokens: number | undefined): { max_tokens?: number } {
     const maxTokens = this.outputCaps ? cappedMaxTokens(this.a.role, callerMaxTokens) : callerMaxTokens;
     return maxTokens != null ? { max_tokens: maxTokens } : {};
-  }
-
-  /** Handle a meta tool (`tool_search` / `update_task_state`); undefined = not ours. */
-  dispatch(call: { name: string; args: Record<string, unknown> }): MetaResult | undefined {
-    if (this.deferred && call.name === TOOL_SEARCH_TOOL) {
-      const advertised = new Set(this.tools().map((t) => t.function.name));
-      const found = runToolSearch(this.a.catalog, advertised, call.args);
-      for (const name of found.load) this.loaded.add(name);
-      return { data: found.data, ...(found.load.length || found.data.ok ? {} : { isError: true }) };
-    }
-    if (this.taskStateOn && call.name === UPDATE_TASK_STATE_TOOL) {
-      const r = applyTaskStateUpdate(this.taskState, call.args);
-      if (!r.ok) return { data: { ok: false, error: r.error }, isError: true };
-      this.taskState = r.state;
-      return { data: { ok: true, note: 'Task state saved — it is shown to you every turn and kept through compaction.' } };
-    }
-    // A deferred tool the model called anyway (the guard still decides if it may) stays
-    // advertised from now on, so the transcript never cites a tool the request omits.
-    if (this.deferred && this.a.catalog.some((t) => t.function.name === call.name)) this.loaded.add(call.name);
-    return undefined;
   }
 
   /** Fold one turn's usage into the A2 running totals. */
@@ -214,25 +133,9 @@ export class CostLoopSession {
   /** What the next durable tick resumes from. */
   snapshot(): CostLoopState {
     return {
-      ...(this.deferred ? { loadedTools: [...this.loaded] } : {}),
-      ...(this.taskState ? { taskState: this.taskState } : {}),
       ...(this.budgetOn && this.spend && !this.child ? { ...this.spend } : {}),
       ...(this.budgetOn ? { tokenCap: this.tokenCap } : {}),
-      ...this.guards.snapshot(),
     };
-  }
-
-  /** C1 telemetry: the advertised set and what its schemas cost, whenever it changes. */
-  private async recordToolsChange(step: number): Promise<void> {
-    if (!this.deferred) return;
-    const tools = this.tools();
-    const signature = tools.map((t) => t.function.name).join(',');
-    if (signature === this.toolsSignature) return;
-    this.toolsSignature = signature;
-    const toolsTokens = toolsTokensOf(tools);
-    await this.a.record('context.tools', 'context', {
-      step, advertised: tools.length, catalog: this.a.catalog.length, toolsTokens, loaded: [...this.loaded],
-    }, `${tools.length}/${this.a.catalog.length} tools advertised (~${toolsTokens} tokens of schemas)`);
   }
 }
 

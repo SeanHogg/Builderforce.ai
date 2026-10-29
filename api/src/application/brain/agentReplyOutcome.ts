@@ -16,7 +16,7 @@ import { vendorForModel } from '../llm/vendors';
 import { resolveChatMode } from './chatMode';
 import { completeTraced, type BrainCallContext } from './brainLlmCall';
 import { appendRaw } from './brainMessageStore';
-import { readByoFunded, readModel, readVendor, type ReplyTurnState } from './agentReplyLoop';
+import { readByoFunded, readModel, readVendor, type ReplyTurnState } from './agentReplyState';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 

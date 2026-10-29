@@ -178,6 +178,4 @@ export function startCancelWatcher(
   };
 }
 
-/** The terminal reason a cooperatively-cancelled cloud run is closed out with —
- *  one string so the loop, the finalize and the tests all name it identically. */
-export const CLOUD_RUN_CANCELLED_REASON = 'Run cancelled before any output was produced.';
+// The terminal reason a cooperatively-cancelled run is closed out with is the agent's: `RUN_CANCELLED_REASON` (`@builderforce/agent-run`).

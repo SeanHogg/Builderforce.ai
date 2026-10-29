@@ -434,6 +434,8 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       taskId: exec.taskId,
       executionId: args.executionId,
       cloudAgentRef: exec.cloudAgentRef ?? null,
+      // The uniform outcome row's telemetry label (PRD 35 §8.2): a cloud execution is scored by the cloud adapter's host.
+      entryPoint: 'cloud',
       actionType,
       role: CLOUD_RUN_ROLE,
       resolvedModel,

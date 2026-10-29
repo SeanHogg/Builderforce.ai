@@ -37,15 +37,15 @@
 
 import { runAgentLoop, type LoopResult } from "@builderforce/agent-loop";
 
-import type { ContextPack, RunMessage, RunOutcome } from "./contract.js";
+import { RUN_CANCELLED_REASON, type ContextPack, type RunMessage, type RunOutcome } from "./contract.js";
 import { composePolicyHooks } from "./policy/index.js";
 import { portInterruptWatch } from "./policy/steering/index.js";
 import { currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
 import { asMessages, freshState, newApprovalId, resumeState } from "./runState.js";
-import { completeTurn, dispatchCall, offeredSchemas, synthesizeFinal } from "./runTurn.js";
+import { causeOf, completeTurn, dispatchCall, offeredSchemas, synthesizeFinal } from "./runTurn.js";
 import { settle } from "./runSettle.js";
 import { kernelHooks, readOnlyPort, type KernelRun } from "./kernelHooks.js";
-import { EMPTY_PACK, buildContextPack, systemPrompt } from "./turnContext.js";
+import { EMPTY_PACK, buildContextPack, openingRows } from "./turnContext.js";
 import { freshTally, type RunTally } from "./telemetry/runTally.js";
 
 export type { RunAgentInput } from "./runContext.js";
@@ -75,7 +75,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   if (!resumed) {
     // The system prompt opens the transcript the kernel drives — the task reaches the
     // model on turn 1, and every saved state carries it.
-    transcript.splice(0, transcript.length, { role: "system", content: systemPrompt(task) });
+    transcript.splice(0, transcript.length, ...openingRows(task));
     state.messages = transcript;
     pack = await buildContextPack(input, hooks, state, offered);
     state.context = pack;
@@ -88,6 +88,9 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
     await emit(ports.events, { kind: "run.started", step: state.step });
     const preflight = await hooks.model.preflight?.(policyContext(input, state, currentView(transcript, offered), state.step, 0));
     if (preflight) await emit(ports.events, preflight);
+    // D1 + D2: a fresh run may start on a weaker model first (the guards decide; a surface with the lever off is unchanged).
+    const seeded = await hooks.guards.seed?.(policyContext(input, state, currentView(transcript, offered), state.step, 0));
+    if (seeded) state.model = seeded;
   }
 
   const run: KernelRun = {
@@ -133,7 +136,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
     });
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    return settle(input, hooks, state, transcript, "failed", { reason });
+    return settle(input, hooks, state, transcript, "failed", { reason, ...(signal?.aborted ? {} : { cause: err }) });
   }
 
   state.step = loopResult.step;
@@ -141,7 +144,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
 
   // A Stop, or a steered stop command: the run settles cancelled, with no further turn.
   if (run.stopped || loopResult.cancelled || signal?.aborted) {
-    return settle(input, hooks, state, transcript, "failed", { reason: "cancelled" });
+    return settle(input, hooks, state, transcript, "failed", { reason: RUN_CANCELLED_REASON });
   }
   if (loopResult.awaitingInput) {
     const approvalId = loopResult.awaitingInput.approvalId ?? newApprovalId(state);
@@ -155,14 +158,15 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
     if (output) return settle(input, hooks, state, transcript, "finished", { output });
   }
   if (loopResult.exhausted) {
-    return settle(input, hooks, state, transcript, "failed", { reason: loopResult.exhaustedBy === "failures" ? "tool calls kept failing" : "step budget spent" });
+    return settle(input, hooks, state, transcript, "failed", { reason: loopResult.exhaustedBy === "failures" ? "tool calls kept failing" : "step budget spent", exhausted: true });
   }
   if (!loopResult.finished) {
     // The invocation's step budget yielded. The state is saved; the next tick resumes.
     return settle(input, hooks, state, transcript, "yielded", {});
   }
   if (!loopResult.ok) {
-    return settle(input, hooks, state, transcript, "failed", { reason: loopResult.output || "the run stopped" });
+    const cause = causeOf(state);
+    return settle(input, hooks, state, transcript, "failed", { reason: loopResult.output || "the run stopped", ...(cause !== undefined ? { cause } : {}) });
   }
   return settle(input, hooks, state, transcript, "finished", { output: loopResult.output });
 }

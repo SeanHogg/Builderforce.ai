@@ -29,6 +29,7 @@
 
 import type { MemoryHook, PolicyContext, PolicyToolCall } from "../hooks.js";
 import { guardsTurnNote } from "../guards/index.js";
+import { renderTaskState } from "../tools/taskState.js";
 import { recorderForState, knowledgeState } from "./knowledge.js";
 import { extractAndWriteLearnedFacts } from "./learnedFacts.js";
 
@@ -70,7 +71,8 @@ export const memoryHook: MemoryHook & {
     if (!recorder.activity.prompt && ctx.task.prompt) recorder.setPrompt(ctx.task.prompt);
     // The recorder's record is written back, so a later turn (and a resume) sees it.
     ctx.state.memory = knowledgeState(recorder);
-    const sections = [recorder.brief() ?? "", guardsTurnNote(ctx)]
+    const taskState = ctx.policy.levers.includes("c3_task_state") ? renderTaskState(ctx.state.taskState) : "";
+    const sections = [recorder.brief() ?? "", taskState, guardsTurnNote(ctx)]
       .filter((part) => part.trim().length > 0);
     return sections.length > 0 ? sections.join(SECTION_BREAK) : null;
   },
@@ -83,6 +85,13 @@ export const memoryHook: MemoryHook & {
    * maps ≥3 files READ as readily as ≥3 changed, so the next run asked about this area
    * starts warm.
    */
+  codeMap(ctx: PolicyContext) {
+    const recorder = recorderForState(ctx.state);
+    ctx.state.memory = knowledgeState(recorder);
+    const map = recorder.consolidate({ root: ctx.task.workspace?.defaultRepo });
+    return map ? { ...map, ...(ctx.task.chatId !== undefined ? { chatId: ctx.task.chatId } : {}) } : undefined;
+  },
+
   async consolidate(ctx: PolicyContext) {
     const recorder = recorderForState(ctx.state);
     ctx.state.memory = knowledgeState(recorder);

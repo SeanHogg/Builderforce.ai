@@ -270,10 +270,11 @@ export class CloudRunnerDO implements DurableObject {
         return;
       }
 
-      // One LLM step per tick; resume from the saved conversation state. The engine
-      // is resolved through the ONE seam (resolveAgentEngine) — this surface only says
-      // it is durable and hands over THIS tick's evolving affect; the engine owns the
-      // loop, the directive and the resume/deferral wiring.
+      // One LLM step per tick; resume from the saved run state. The engine is resolved
+      // through the ONE seam (resolveAgentEngine) — this surface only says it is durable
+      // and hands over THIS tick's evolving affect. The engine hands the run to the cloud
+      // adapter, which calls the one agent with `maxSteps: 1` and the cursor's `RunState`
+      // (PRD 35 WS3); the directive and the resume/deferral wiring are the adapter's.
       const reviewRole = parseReviewRole(cursor.payload);
       const reviewLane = parseLaneKey(cursor.payload);
       const requiredSignoff = reviewRole
@@ -296,6 +297,8 @@ export class CloudRunnerDO implements DurableObject {
         ...(originatingChatId != null ? { originatingChatId } : {}),
         ...(requiredSignoff ? { requiredSignoff } : {}),
         ...(cursor.execParams ? { execParams: cursor.execParams } : {}),
+        // The board's dispatch provenance (source, the approval that unlocked the run) rides the payload (PRD 35 §6.9).
+        ...(cursor.payload ? { dispatchPayload: cursor.payload } : {}),
         surface: {
           kind: 'durable', maxSteps: 1,
           ...(cursor.limbic && cursor.limbicState ? { limbicState: cursor.limbicState } : {}),

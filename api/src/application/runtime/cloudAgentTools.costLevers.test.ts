@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { CLOUD_SURFACE_CAPS, cloudAgentToolsFor, cloudSurfaceCapsFor } from './cloudAgentTools';
 import { prepSurfaceCaps } from './cloudAgent/runSurfaceCaps';
-import { ROLE_CORE_TOOLS } from './costLoop/deferredTools';
+import { ROLE_CORE_TOOLS } from '@builderforce/agent-run';
 
 const names = (caps: ReadonlySet<string>) => cloudAgentToolsFor(caps as never).map((t) => t.function.name);
 const ON = { COST_LEVER_C5_CLOUD_REPO_MAP: 'on' };

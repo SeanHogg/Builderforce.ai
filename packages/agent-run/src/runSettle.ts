@@ -15,6 +15,10 @@ interface SettleExtra {
   question?: string;
   approvalId?: string;
   reason?: string;
+  /** A non-transport exception that ended the run, for the surface to re-throw (a platform eviction re-arms; it is not a failure). */
+  cause?: unknown;
+  /** A budget or the failure breaker ended the run. */
+  exhausted?: boolean;
 }
 
 /**
@@ -37,8 +41,13 @@ export async function settle(
 ): Promise<RunOutcome> {
   state.messages = transcript;
 
-  if (kind === "finished") {
-    const consolidated = await hooks.memory.consolidate(policyContext(input, state, currentView(transcript, []), state.step, 0));
+  // An exception the surface will re-throw (a platform eviction) is not the run's end: the run resumes, so nothing terminal is written.
+  const resumable = extra.cause !== undefined;
+  if ((kind === "finished" || kind === "failed") && !resumable) {
+    // The code map is committed on EVERY terminal outcome (a stopped or failed investigation still mapped
+    // what it read); the learned facts are a finished run's alone.
+    const pctx = policyContext(input, state, currentView(transcript, []), state.step, 0);
+    const consolidated = kind === "finished" ? await hooks.memory.consolidate(pctx) : await hooks.memory.codeMap?.(pctx);
     if (consolidated !== undefined) {
       try {
         await input.ports.store.commitMemory?.(consolidated);
@@ -54,7 +63,13 @@ export async function settle(
     // A store that cannot save still returns the state to the caller, who holds it.
   }
 
-  // The uniform §8.2 outcome row, built from the run state the whole run carried.
+  // A yielded tick has not finished: the next tick resumes and the trace is one run. Nor has a run that ended in an
+  // exception the surface re-throws (a platform eviction): it resumes. Neither writes a row or closes the trace.
+  if (kind === "yielded" || resumable) {
+    return kind === "failed" ? { kind, reason: extra.reason ?? "failed", state, cause: extra.cause } : { kind: "yielded", state };
+  }
+
+  // The uniform §8.2 outcome row, built from the run state the whole run carried (its tally is in `state.telemetry`).
   if (kind === "finished" || kind === "failed") {
     const row = buildOutcomeRow({ entryPoint: input.policy.entryPoint, runId: input.task.runId, kind, state });
     try {
@@ -63,13 +78,10 @@ export async function settle(
       // As with the trace: a broken sink records nothing.
     }
   }
-  // A yielded tick has not finished: the next tick resumes and the trace is one run.
-  // Emitting `run.finished` here would close a run that is still open.
-  if (kind !== "yielded") await emit(input.ports.events, { kind: "run.finished", step: state.step, outcome: kind });
+  await emit(input.ports.events, { kind: "run.finished", step: state.step, outcome: kind });
 
   if (kind === "finished") return { kind, output: extra.output ?? "", state };
   if (kind === "paused") return { kind, question: extra.question ?? "", approvalId: extra.approvalId ?? newApprovalId(state), state };
-  if (kind === "failed") return { kind, reason: extra.reason ?? "failed", state };
-  return { kind, state };
+  return { kind, reason: extra.reason ?? "failed", state, ...(extra.cause !== undefined ? { cause: extra.cause } : {}), ...(extra.exhausted ? { exhausted: true } : {}) };
 }
 

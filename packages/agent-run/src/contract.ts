@@ -24,19 +24,19 @@
 
 import type {
   CapabilityProvider,
+  ToolDefinition,
   PolicyGate,
-  RunKnowledgeState,
   ToolSchema,
 } from "@builderforce/agent-tools";
+import type { ModelFallbackSurface } from "@builderforce/agent-stall";
 import type { CostLeverId } from "@builderforce/cost-levers";
-import type { CascadeState, RunPolicyState } from "@builderforce/run-policy";
-import type {
-  CoveredRead,
-  ProgressDetectorState,
-  ReadsWithoutSpawnState,
-} from "@builderforce/run-guards";
-import type { FinishGateState } from "./policy/finish/gates.js";
-import type { RunTally } from "./telemetry/runTally.js";
+
+import type { RunEvent } from "./runEvents.js";
+import type { RunState } from "./runStateTypes.js";
+
+// The run's trace events and its state types live in their own modules; one import here gives a consumer the whole contract.
+export * from "./runEvents.js";
+export * from "./runStateTypes.js";
 
 // The reused types, re-exported so one import gives a consumer the whole contract.
 export type { CapabilityProvider, PolicyGate, RunKnowledgeState } from "@builderforce/agent-tools";
@@ -61,10 +61,12 @@ export interface RunAttachment {
 }
 
 export interface RunTask {
-  prompt: string;
   runId?: string;                  // the adapter's id for this run (execution / client run id) — the §8.2 row's run id
+  prompt: string;
   ticketId?: number; chatId?: number | string; projectId?: number;
   persona?: string;                // compiled persona brief
+  request?: string;                // the user's own request, when `prompt` carries more than it (the stall gate reads this)
+  agentName?: string;              // who the run answers as (the forced synthesis names it)
   attachments?: RunAttachment[];
   dispatch: { source: 'board-sweep' | 'lane-entry' | 'chat' | 'manual' | 'ceremony' | 'subagent'; approvalId?: string; parentRunId?: string };
   workspace?: { defaultRepo?: string; focusPaths?: string[] };  // resolved by the adapter (§6.10); git + shell default to defaultRepo
@@ -84,6 +86,23 @@ export interface RunPolicy {
   signoff?: { roleKey: string; laneKey?: string };   // finish blocked until signed off
   approvalGates: PolicyGate[];                        // in-run acts needing an approver — reuse @builderforce/agent-tools spec.ts:118
   delegation: { requested: boolean; readsBeforeNudge: number };  // requested = asksForSubagents(prompt) unless declined; default nudge after 6 reads
+  /**
+   * How the run's model hand-off starts (additive, optional): whether `pinnedModel` is an explicit
+   * pin (asked strictly) or a soft seed, the delegated role the phase rule reads, and the per-phase
+   * models. Absent ⇒ a soft pin on a coding run, exactly as before.
+   */
+  /**
+   * What a stall that has nothing left to try does: `finish` ends the run with what it said and the notice (whatever it
+   * committed still ships; a surface that lands runs wants this), `fail` stops it unfinished. Default `fail`.
+   */
+  stallExhausted?: "finish" | "fail";
+  modelStart?: {
+    strict?: boolean; delegatedRole?: string; phaseModels?: { verify?: string };
+    /** The run-start model when it is a soft seed rather than `pinnedModel`. */
+    model?: string;
+    /** Start the hand-off as the plain policy (no lock after first success, no releasable pin) — an addressed reply's. */
+    plain?: boolean;
+  };
 }
 
 // ── The ports ─────────────────────────────────────────────────────────────────
@@ -108,6 +127,18 @@ export interface ModelRequest {
   tools?: ToolSchema[];
   /** The hard cap for this turn's answer. */
   maxTokens?: number;
+  /** The role the model policy asked this turn as (additive; a transport that routes by role reads it). */
+  role?: string;
+  /** The run phase (`plan` | `code` | `verify`) the turn is asked in (additive; usage rows are stamped with it). */
+  phase?: string;
+  /** A forced `tool_choice` for this one request (additive). */
+  toolChoice?: "auto" | "required";
+  /** The model is a hard pin: dispatch ONLY it, no silent swap (additive). */
+  strict?: boolean;
+  /** Models this turn must not be routed to — the ones the policy already tried and broke (additive). */
+  excludeModels?: string[];
+  /** Reasoning levers the guards raised for this turn (D1's escalation), merged over the surface's own. */
+  reasoning?: { thinkLevel?: string };
 }
 
 /** A tool call as the model asked for it: the arguments are the RAW JSON string. */
@@ -119,10 +150,10 @@ export interface ModelToolCall {
 
 /** What the model spent on the turn. */
 export interface ModelUsage {
+  costMc?: number;                 // millicents the gateway billed, when the transport reports it — §8.2 cost
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;
-  costMc?: number;                 // millicents the gateway billed, when the transport reports it — §8.2 cost
 }
 
 /** What the model answered. */
@@ -147,6 +178,29 @@ export interface ModelTransport {
    * reports only what is STILL unresolved. Absent ⇒ the preflight reads `ok`.
    */
   preflight?(model: string | undefined): Promise<ModelPreflightResult | undefined> | ModelPreflightResult | undefined;
+  /**
+   * The models a stalled run may fail over ONTO, in the shared preference order — the tenant's
+   * own connected flagships and the plan's curated coding pool. Absent ⇒ the stall policy's
+   * default (never the model that just failed).
+   */
+  fallbackSurface?(): ModelFallbackSurface | null;
+}
+
+/**
+ * The error a transport throws when the gateway answered a failure the model policy may route
+ * around (a rate limit, a context-window refusal, an outage). `status` is the HTTP status; the
+ * policy releases a pin on 429/413/503 and re-asks once on the cascade.
+ */
+export class ModelTransportError extends Error {
+  readonly status: number | undefined;
+  /** Whether the model policy may route around this failure. A containment stop is never routable. */
+  readonly routable: boolean;
+  constructor(message: string, status?: number, opts: { routable?: boolean } = {}) {
+    super(message);
+    this.name = "ModelTransportError";
+    this.status = status;
+    this.routable = opts.routable ?? (status !== undefined && status >= 400);
+  }
 }
 
 /** What a transport's preflight found. Empty `byoUnresolved` ⇒ every connected account resolves. */
@@ -169,23 +223,20 @@ export interface RunStore {
   commitMemory?(consolidated: unknown): Promise<void> | void;
 }
 
-/** One event of the run's trace. The trace is what every adapter must match. */
-export type RunEvent =
-  | { kind: 'run.started'; step: number }
-  | { kind: 'turn.started'; step: number }
-  | { kind: 'model.completed'; step: number; model?: string; usage?: ModelUsage }
-  | { kind: 'tool.dispatched'; step: number; tool: string; ok: boolean }
-  | { kind: 'steer.applied'; step: number }          // one per steered message, before the turn it reaches (§6.3)
-  | { kind: 'model.preflight'; step: number; status: 'ok' | 'refreshed' | 'degraded'; notices: string[] }  // once, before turn 1 (§6.10)
-  | { kind: 'llm.model_downgrade'; step: number; requestedModel: string; model: string; reason: string }  // a turn answered by another model than expected (E7)
-  | { kind: 'turn.finished'; step: number }
-  | { kind: 'run.finished'; step: number; outcome: RunOutcomeKind };
-
-/** The uniform outcome row (§8.2): ONE per run, every entry point, built by `telemetry/outcomeRow`
- *  when the run ends. `entryPoint` is a telemetry label — never a behaviour branch (§5 rule 3). */
+/**
+ * The uniform outcome row (§8.2). WS6 owns the full row and the fields it adds.
+ *
+ * One row per run, every entry point. The base counts (steps, toolCalls,
+ * toolErrors, terminalStatus, model) come from the turn tally; the efficiency
+ * fields come from the run state the policy modules carry (compaction count,
+ * written paths, served read windows, the progress detector's unkept-claim /
+ * trip counters). `verify` is the run policy's declared verify phase outcome;
+ * `entryPoint` is the telemetry label the adapter stamps — never a behaviour
+ * branch (§5 rule 3).
+ */
 export interface RunOutcomeRow {
-  entryPoint: string;
   runId?: string;
+  entryPoint: string;
   steps: number;
   toolCalls: number;
   toolErrors: number;
@@ -223,22 +274,22 @@ export interface RunOutcomeRow {
 
 /** Where the run's events go: the live trace, the timeline, the relay frames. */
 export interface EventSink {
-  emit(event: RunEvent): Promise<void> | void;
+  emit(event: RunEvent, meta?: { durationMs?: number }): Promise<void> | void;
   /** The run's outcome row, written once at the end. */
   outcome?(row: RunOutcomeRow): Promise<void> | void;
 }
 
 /** What a human said, or that the run is waiting for one. */
 export type HumanAnswer =
-  | { kind: 'answered'; answer: string }
-  | { kind: 'paused' };
+  | { kind: 'answered'; answer: string; approved?: boolean }  // approved: the STRUCTURED decision of an approval (never read from the answer text)
+  | { kind: 'paused'; approvalId?: string };  // approvalId: the record the surface parked the run on, when it created one
 
 /** How people are reached: the tool-confirm gate, the approval bar, the relay ask. */
 export interface HumanChannel {
   /** Ask a question. `paused` parks the run until the answer arrives. */
   ask(question: string, options?: readonly string[]): Promise<HumanAnswer>;
   /** Approve a gate. Optional: a surface with no approvals omits it. */
-  approve?(gate: PolicyGate): Promise<HumanAnswer>;
+  approve?(gate: PolicyGate, call?: { tool: string; args: Record<string, unknown>; reason?: string; approvalId?: string }): Promise<HumanAnswer>;
 }
 
 /** One steered message, as a port that knows more than its text hands it over. */
@@ -253,7 +304,7 @@ export interface SteerInput {
 /** What the user steered in since the last step. */
 export interface SteeringSource {
   /** The messages since the last drain. Empty when nothing was steered. */
-  drain(): Array<string | SteerInput>;
+  drain(): Array<string | SteerInput> | Promise<Array<string | SteerInput>>;
   /** True while an interrupting message waits. Absent ⇒ steers only land between steps. */
   hasInterrupt?(): boolean;
   /** Be told the moment an interrupting message arrives; returns the unsubscribe. */
@@ -263,6 +314,34 @@ export interface SteeringSource {
 /** The context pack, built once before turn 1 with NO model call (§6.10). */
 export interface ContextSource {
   pack(task: RunTask): Promise<ContextPack> | ContextPack;
+  /**
+   * Sections the surface adds to EVERY turn's volatile tail, rebuilt per request and never
+   * persisted (the cloud's evolving affect block). Absent ⇒ the tail carries the pack and
+   * the brief only.
+   */
+  turnSections?(): readonly string[];
+}
+
+/**
+ * Tools the surface runs itself, beside the registry's (the cloud's curated platform tools,
+ * an addressed reply's chat-scoped set). The agent advertises `schemas`, and dispatches a call
+ * whose name `handles` to `dispatch` — the surface owns what the tool does, the agent owns
+ * when it may be called (the same gates, caps and coverage as every other tool).
+ */
+export interface ToolExtension {
+  /** The tools to advertise. */
+  schemas(): readonly ToolSchema[];
+  /** Whether this extension runs `name`. */
+  handles(name: string): boolean;
+  /** Run the call. A thrown error is the tool's failure, never the run's. */
+  dispatch(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<{ data: unknown; isError?: boolean; control?: { kind: 'finish'; summary: string } }>;
+  /**
+   * A turn whose calls end the run before any of them dispatches (an addressed reply's `ask_user`): the output to
+   * settle with, or nothing to let the calls run. `content` is what the turn said.
+   */
+  terminalTurn?(turn: { content: string }, calls: ReadonlyArray<{ name: string; args: Record<string, unknown>; malformed: boolean }>): string | undefined;
+  /** Shape the result of a tool the REGISTRY ran (the surface saves a snapshot the model reads a summary of). Absent ⇒ as-is. */
+  shape?(name: string, data: unknown): Promise<unknown> | unknown;
 }
 
 export interface RunPorts {
@@ -273,6 +352,8 @@ export interface RunPorts {
   human: HumanChannel;             // ask(question, options) | approve(gate) → answer | 'paused'
   steering?: SteeringSource;       // drain(): user messages since the last step
   context: ContextSource;          // pack(task) → ContextPack, built once before turn 1 with NO model call (§6.10)
+  extensions?: ToolExtension;      // tools the surface runs itself beside the registry's (the platform tools)
+  tools?: readonly ToolDefinition[]; // registry tools only THIS entry point has (skill authoring, delegation)
 }
 
 // ── The context pack ──────────────────────────────────────────────────────────
@@ -288,109 +369,13 @@ export interface ContextPack {
 
 // ── The outcome ───────────────────────────────────────────────────────────────
 
+/** The `failed` reason of a run that was stopped (Stop, an abort, or a steered stop command). */
+export const RUN_CANCELLED_REASON = "cancelled";
+
 export type RunOutcomeKind = 'finished' | 'paused' | 'yielded' | 'failed';
 
 export type RunOutcome =
   | { kind: 'finished'; output: string; state: RunState }
   | { kind: 'paused'; question: string; approvalId: string; state: RunState }
   | { kind: 'yielded'; state: RunState }          // maxSteps reached; resume later
-  | { kind: 'failed'; reason: string; state: RunState };
-
-// ── The state ─────────────────────────────────────────────────────────────────
-
-/**
- * A3's progress detector, D1's cascade and D7's checks note — the guard state a run
- * carries across a step boundary.
- *
- * Mirrors `api/src/application/runtime/costLoop/loopGuards.ts` field for field: WS2d
- * ports that module into `policy/guards` and deletes the API copy, so this becomes the
- * only definition rather than a copy of one.
- */
-export interface LoopGuardState {
-  /** A3: the progress detector's tallies and trip count. */
-  progress?: ProgressDetectorState;
-  /** D1: the cascade's units, the first tick's action type, the seed's softness. */
-  cascade?: CascadeSessionState;
-  /** A3: a pause the next dispatched call parks the run on. */
-  pendingPause?: string;
-  /** D7: the sandbox checks' failures, for the NEXT turn's tail. */
-  checksNote?: string;
-  escalations?: number;            // A3 + D1: moves up the tier ladder this run — §8.2 escalations
-}
-
-/** What the cascade persists across durable ticks — `api/.../costLoop/verifierCascade.ts`. */
-export interface CascadeSessionState {
-  /** The cascade's own state (`@builderforce/run-policy`). */
-  cascade?: CascadeState;
-  /** The task's action type, resolved on the first tick (later ticks only have `other`). */
-  actionType?: string;
-  /** Whether this run's seed is soft (the cascade may move it). */
-  soft?: boolean;
-  /** The steer the next turn shows, until that turn ends. */
-  steer?: string;
-  /** The tenant's prior weak pass rate, read once on the first tick. */
-  priorWeakPassRate?: number;
-  /** Whether that read happened (a cold tenant has no rate, and must not re-ask). */
-  priorRead?: boolean;
-}
-
-/**
- * What compaction carried out. WS1 names the type (there is no home for it today);
- * WS2a owns its behaviour in `policy/compaction`.
- */
-export interface CompactionState {
-  /** How many times the transcript has been compacted this run. */
-  compactions: number;
-  /** The step the last compaction happened at. */
-  lastCompactedStep?: number;
-  /** The tokens reserved for the answer when compacting. */
-  reserveTokens?: number;
-  /** How many messages the last compaction dropped. */
-  droppedMessages?: number;
-}
-
-/**
- * The windows the model was SERVED, plus the read-without-spawn count.
- *
- * The served windows reuse `@builderforce/run-guards`' `CoveredRead` — the read guard
- * already owns what "the model has seen these lines" means — and the delegation
- * counter reuses its `ReadsWithoutSpawnState`. WS2f owns the behaviour in `policy/tools`.
- */
-export interface ReadCoverageState {
-  /** The windows served this run, by the read's canonical key. */
-  served: Record<string, CoveredRead>;
-  /** Read calls made while no spawn had been attempted — the delegation nudge's counter. */
-  readsWithoutSpawn: ReadsWithoutSpawnState;
-  stubCount?: number;  // reads answered from coverage (a stub or a replay), never dispatched — §8.2 coveredReadStubs
-}
-
-/**
- * The stall policy's re-prompt budget — the count the cloud loop kept on its durable
- * model state (`CloudRunModelState.stallRecoveries`), keyed by the model it was spent
- * against so a model change starts the new one with a full budget. WS2b owns it.
- */
-export interface StallState {
-  /** The model the re-prompts below were spent against. */
-  model?: string;
-  /** Re-prompts already spent against `model`. */
-  recoveriesUsed: number;
-  recoveriesTotal?: number;  // every re-prompt this run spent, never reset — §8.2 stallRecoveries
-}
-
-/** Plain JSON. Everything any policy needs across a step boundary. */
-export interface RunState {
-  messages: unknown[]; step: number;
-  guards: LoopGuardState;          // progress, cascade, pendingPause, checksNote — WS1 names this type; today's guard state lives in costLoop/loopGuards.ts
-  finish: FinishGateState;         // placeholder / CI-pending / no-deliverable counters, signoff recorded — reuse cloudAgent/finishGates.ts:55, do not redefine
-  model: RunPolicyState;           // @builderforce/run-policy — pins, tried/broken/proven models, failovers, turnRetries
-  memory: RunKnowledgeState;       // working memory + tool tally — reuse @builderforce/agent-tools run-knowledge.ts:96, do not redefine
-  compaction: CompactionState;
-  writtenPaths: string[];
-  askedGates: string[];
-  reads: ReadCoverageState;        // the windows the model was SERVED (post-trim), plus the read-without-spawn count
-  context?: ContextPack;           // the pack built once before turn 1 (§6.10); a resumed tick renders the same turn-context tail from it
-  stall?: StallState;              // WS2b: the re-prompt budget, keyed by model
-  preflight?: string;              // WS2g: the model preflight's verdict — ok | refreshed | degraded:<reason> (§8.2 modelPreflight)
-  downgrades?: string[];           // WS2g: auto-routed models already reported by llm.model_downgrade (once per served model)
-  telemetry?: RunTally;            // WS6: the per-run counters the §8.2 row reads, summed across ticks
-}
+  | { kind: 'failed'; reason: string; state: RunState; cause?: unknown; exhausted?: boolean };  // cause: a non-transport exception the surface may need to re-throw; exhausted: a budget or breaker ended it
