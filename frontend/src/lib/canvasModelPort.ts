@@ -28,8 +28,8 @@ function modelUsageOf(usage: NonNullable<CanvasTurn['usage']>): ModelUsage {
 }
 
 /** The turn's usage as the agent reads it: what the gateway reported plus a cost only when it is KNOWN. Absent when neither. */
-function turnUsage(result: CanvasTurn, requested: string | undefined): { usage?: ModelUsage } {
-  const cost = knownTurnCost(result, requested);
+function turnUsage(result: CanvasTurn): { usage?: ModelUsage } {
+  const cost = knownTurnCost(result);
   if (!result.usage && cost.costMc === undefined) return {};
   return { usage: { ...(result.usage ? modelUsageOf(result.usage) : {}), ...cost } };
 }
@@ -39,8 +39,8 @@ function turnUsage(result: CanvasTurn, requested: string | undefined): { usage?:
  * the answer is unknown (nothing returned) — except for a turn the on-device model served: that cost
  * nothing, which is a fact (a priced zero), not an unreported cost.
  */
-function knownTurnCost(result: CanvasTurn, requested: string | undefined): Pick<ModelUsage, 'costMc'> {
-  return servedOnDevice(result, requested) ? { costMc: 0 } : {};
+function knownTurnCost(result: CanvasTurn): Pick<ModelUsage, 'costMc'> {
+  return servedOnDevice(result) ? { costMc: 0 } : {};
 }
 
 /** The summary's ceiling when the policy names none — the summary request's own bound. */
@@ -185,7 +185,7 @@ export function canvasModelTransport(run: CanvasRun): ModelTransport {
         ...(result.resolvedModel ? { model: result.resolvedModel } : {}),
         // What the gateway reported, in the agent's words: the run's tally sums these into the
         // §8.2 row's tokens and cache reads, and — for a turn the on-device model served — a known cost of 0.
-        ...turnUsage(result, request.model),
+        ...turnUsage(result),
         ...(interrupted ? { interrupted } : {}),
       };
     },

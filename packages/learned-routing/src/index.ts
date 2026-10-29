@@ -89,6 +89,7 @@ export {
   MODEL_ANALYTICS_PATH,
   RUN_OUTCOME_PATH,
   carriesRoutingSignal,
+  foldsIntoRouting,
   parseRunOutcomeRequest,
   type NormalizedRunOutcome,
   type OutcomeSource,

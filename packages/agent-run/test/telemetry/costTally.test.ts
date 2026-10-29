@@ -60,9 +60,11 @@ describe("the run's reported cost", () => {
 
 describe("the event-trace fold agrees", () => {
   it("latches unpriced the same way", () => {
-    expect(traceCost([0, undefined])).toMatchObject({ cost: 0, costUnpriced: true });
+    // Unknown, never the partial sum of the priced turns.
+    expect(traceCost([0, undefined]).cost).toBeUndefined();
+    expect(traceCost([40, undefined, 60]).cost).toBeUndefined();
     expect(traceCost([0, 0]).cost).toBe(0);
-    expect(traceCost([0, 0]).costUnpriced).toBeUndefined();
     expect(traceCost([40, 60]).cost).toBe(100);
+    expect(traceCost([]).cost).toBeUndefined();
   });
 });

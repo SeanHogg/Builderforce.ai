@@ -20,7 +20,7 @@
     "components/reliability/MonitoringSections.tsx": 954,
     "components/workforce/WorkforceAgents.tsx": 893,
     "lib/adminApi.ts": 1779,
-    "lib/builderforceApi.ts": 9997,
+    "lib/builderforceApi.ts": 9989,
     "lib/founderObjects.ts": 1623,
     "lib/founderOpsApi.ts": 1077,
     "lib/managerDiagnostics.ts": 1879,

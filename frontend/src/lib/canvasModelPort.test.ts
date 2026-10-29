@@ -50,10 +50,18 @@ describe('canvasModelTransport.complete — what a turn cost', () => {
     expect(completion.usage).toEqual({ inputTokens: 10, outputTokens: 5, costMc: 0 });
   });
 
-  it('reads a pinned on-device turn from the model asked for when the stream names none', async () => {
+  it('does NOT call a turn free because a local model was asked for: the stream named no answer', async () => {
     const completion = await canvasModelTransport(completingRun({})).complete(request({ model: 'local/bfi/tiny' }));
 
-    expect(completion.usage).toEqual({ costMc: 0 });
+    expect('usage' in completion).toBe(false);
+  });
+
+  it('reports a picked local model that fell back to the gateway as unknown, even with nothing resolved', async () => {
+    const run = completingRun({ localFirst: [{ target: 'local/ollama/qwen', outcome: 'failed' }, { target: 'gateway', outcome: 'served' }], usage: { prompt: 10, completion: 5 } });
+
+    const completion = await canvasModelTransport(run).complete(request({ model: 'local/ollama/qwen' }));
+
+    expect(completion.usage?.costMc).toBeUndefined();
   });
 
   it('reports a hosted local-grammar runtime (Kimi Code) as unknown: it leaves the device', async () => {
@@ -65,7 +73,6 @@ describe('canvasModelTransport.complete — what a turn cost', () => {
   it('reports a turn answered after a local fallback by the gateway as unknown: it did not run on the device', async () => {
     const completion = await complete({
       localFirst: [{ target: 'local/ollama/qwen', outcome: 'failed' }, { target: 'vendor/model', outcome: 'served' }],
-      resolvedModel: 'vendor/model',
       usage: { prompt: 10, completion: 5 },
     });
 

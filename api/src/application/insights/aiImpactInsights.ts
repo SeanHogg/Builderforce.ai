@@ -253,6 +253,12 @@ export function summarizeComparison(outcomes: ImpactOutcomeRow[], tokensByModel:
   return rows.sort((a, b) => b.runs - a.runs);
 }
 
+/** The 0..100 productivity composite, equal-weighted over its terms; an unknown efficiency (null) is
+ *  left out and the other two are weighted over two, never read as the worst score. */
+function composite(throughput: number, quality: number, efficiency: number | null): number {
+  return efficiency === null ? ((throughput + quality) / 2) * 100 : ((throughput + quality + efficiency) / 3) * 100;
+}
+
 /**
  * Pure: composite productivity components from a set of outcome rows.
  * - throughput: merged-PR volume, log-normalized so it saturates (10 merges ≈ 1).
@@ -278,7 +284,7 @@ export function scoreComponents(outcomes: ImpactOutcomeRow[]): { throughput: num
   const efficiencyUnknown = merged > 0 && costPerMerged == null;
   const efficiency = efficiencyUnknown ? null : costPerMerged == null ? 0 : clamp01(1 - Math.min(costPerMerged, 5) / 5);
 
-  const score = efficiency === null ? ((throughput + quality) / 2) * 100 : ((throughput + quality + efficiency) / 3) * 100;
+  const score = composite(throughput, quality, efficiency);
   return { throughput, quality, efficiency, score };
 }
 
@@ -293,8 +299,7 @@ function comparableScores(
   prev: ReturnType<typeof scoreComponents>,
 ): { score: number; prevScore: number } {
   if (cur.efficiency !== null && prev.efficiency !== null) return { score: cur.score, prevScore: prev.score };
-  const twoTerm = (c: { throughput: number; quality: number }): number => ((c.throughput + c.quality) / 2) * 100;
-  return { score: twoTerm(cur), prevScore: twoTerm(prev) };
+  return { score: composite(cur.throughput, cur.quality, null), prevScore: composite(prev.throughput, prev.quality, null) };
 }
 
 /**

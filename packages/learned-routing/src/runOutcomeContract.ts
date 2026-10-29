@@ -96,8 +96,18 @@ export interface NormalizedRunOutcome extends RunOutcomeTelemetry {
  * evidence about CODING models, whatever `routingSignal` the body claimed; any other run
  * teaches unless it said it should not.
  */
-export function carriesRoutingSignal(o: Pick<NormalizedRunOutcome, 'routingSignal' | 'entryPoint' | 'source'>): boolean {
+export function carriesRoutingSignal(o: { routingSignal?: boolean; entryPoint?: string; source?: string }): boolean {
   return o.entryPoint !== 'canvas' && o.source !== 'canvas' && o.routingSignal !== false;
+}
+
+/**
+ * Whether an outcome is FOLDED into the routing table (and, equally, admitted by a rebuild of it).
+ * It must carry a routing signal ({@link carriesRoutingSignal}) AND not be a run the person STOPPED:
+ * a cancelled run ended because they said so, which says nothing about the model, so it is stored
+ * but never taught as a failure. The ONE decision for the client door and the cloud scorer.
+ */
+export function foldsIntoRouting(o: { routingSignal?: boolean; entryPoint?: string; source?: string; terminalStatus?: string }): boolean {
+  return carriesRoutingSignal(o) && o.terminalStatus !== 'cancelled';
 }
 
 function str(v: unknown): string {

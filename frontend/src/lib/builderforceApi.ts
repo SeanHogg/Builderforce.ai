@@ -4606,14 +4606,6 @@ export type LlmModelsResponse =
   | { configured: false; product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; models: string[]; freeModels?: string[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; canUsePremiumModels?: boolean; premiumInfo?: PremiumModelInfo; byo?: ByoModelInfo }
   | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; object: 'list'; data: LlmModelStatus[]; freeModels?: string[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; canUsePremiumModels?: boolean; premiumInfo?: PremiumModelInfo; byo?: ByoModelInfo };
 
-/** Learned Model Routing (PRD 13) — closed action-type taxonomy. MIRRORS
- *  `packages/learned-routing/src/actionTypes.ts` (the shared package is the source of truth). */
-export const ACTION_TYPES = [
-  'sql', 'frontend_ui', 'backend_api', 'refactor', 'bugfix',
-  'tests', 'docs', 'devops_ci', 'data_migration', 'other',
-] as const;
-export type ActionType = (typeof ACTION_TYPES)[number];
-
 /** Card-validation state — the gate on PREMIUM (any-paid-OpenRouter) model selection.
  *  Mirrors exactly what `GET /api/tenants/:id/card-validation` returns; a field the
  *  route doesn't send has no business being declared here (a non-optional

@@ -56,6 +56,13 @@ describe('runSpendBudget', () => {
     expect(await hooks.beforeTurn!(ctx)).toBeUndefined();
   });
 
+  it('a call to a hosted local-grammar runtime (Kimi Code) is the person’s own spend and counts against the cap', async () => {
+    const { run } = runWith(0.01);
+    const hooks = runSpendBudget(run, priceBookFromPrices([['kimi-code/k2', { input: 1e-6, output: 1e-6 }]]));
+    await hooks.afterTurn!(ctx, turn('local/kimi-code/k2', 50_000_000, 50_000_000));
+    expect(await hooks.beforeTurn!(ctx)).toMatchObject({ action: 'stop' });
+  });
+
   it('warns once past 80%, then stops with a contained reply at the cap', async () => {
     // $1 cap; the model is $1 per million tokens either way.
     const { run, convo, sendMessages } = runWith(1);

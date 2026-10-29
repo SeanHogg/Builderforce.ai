@@ -20,7 +20,7 @@ import type { Env } from '../../env';
 import { approvals, executions, llmUsageLog, pullRequests, tasks, toolAuditEvents, runModelOutcomes } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
-  carriesRoutingSignal,
+  foldsIntoRouting,
   normalizeActionType,
   type NormalizedRunOutcome,
   type OutcomeSource,
@@ -78,8 +78,9 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
       costMc: reportedCostMc,
       approved: !!o.approved,
     });
-    // The server's call: a canvas turn never teaches coding routing, whatever the body said.
-    const routingSignal = carriesRoutingSignal(o);
+    // The server's call: a canvas turn never teaches coding routing, whatever the body said, and a run
+    // the person stopped teaches nothing either (stored, never folded).
+    const routingSignal = foldsIntoRouting(o);
     const plan = await resolveTenantPlan(env, tenantId).then((p) => p.effectivePlan).catch(() => 'free' as const);
 
     const inserted = await runTelemetryDatabase(db)
@@ -327,6 +328,8 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       costUsdMillicents: costMc,
       terminalStatus,
       rateLimited,
+      // A run the person stopped is stored but is not routing evidence (the same rule as the client door).
+      routingSignal: foldsIntoRouting({ terminalStatus }),
       // The PRD 35 §8.2 telemetry label: a server-scored run is a cloud run.
       entryPoint: 'cloud',
       // Literal reinforcement signals (migration 0333).
@@ -377,7 +380,7 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
     // Fold into the routing table — but only for a run that actually ran a model.
     // A run that produced no LLM call ('unknown') carries no model attribution, so
     // learning from it would pollute the ranking.
-    if (model) {
+    if (model && foldsIntoRouting({ terminalStatus })) {
       await applyOutcomeToRoutingTable(env, db, {
         tenantId: exec.tenantId,
         projectId,

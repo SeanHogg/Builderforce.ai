@@ -19,7 +19,7 @@
  * A route left out is read from the model id, as the stream would (`usageRouteOf`).
  */
 
-import { isLocalModelRef } from '@builderforce/local-inference';
+import { hostedDirectRef, runsOnDevice } from '@builderforce/local-inference';
 import { directCatalogId, listPriceOf, snapshotPriceBook, type PriceBook } from '@builderforce/model-catalog';
 import { computeCostMillicents } from '@builderforce/spend-contract';
 import type { UsageRoute } from './usageLedger';
@@ -36,7 +36,8 @@ const n = (v: number | undefined): number => (typeof v === 'number' && Number.is
 
 /** The route a model id alone implies — what a caller without the row's route prices by. */
 function routeOfModel(model: string): UsageRoute {
-  if (isLocalModelRef(model)) return 'local';
+  if (runsOnDevice(model)) return 'local';
+  if (hostedDirectRef(model) !== undefined) return 'byo-direct';
   return directCatalogId(model) !== undefined ? 'byo-direct' : 'gateway';
 }
 
@@ -54,8 +55,10 @@ export function callCostMillicents(
 ): number {
   if (!model) return 0;
   const via = route ?? routeOfModel(model);
-  if (via === 'local' || isLocalModelRef(model)) return 0;
-  const price = isOwnKeySpend(via) ? listPriceOf(book, model) : book.priceOf(model);
+  if (via === 'local' || runsOnDevice(model)) return 0;
+  // A hosted local-grammar runtime is priced under its direct spelling (`direct/kimi-code/k3`).
+  const priced = hostedDirectRef(model) ?? model;
+  const price = isOwnKeySpend(via) ? listPriceOf(book, priced) : book.priceOf(priced);
   if (!price) return 0;
   const prompt = n(tokens.prompt);
   const completion = n(tokens.completion);

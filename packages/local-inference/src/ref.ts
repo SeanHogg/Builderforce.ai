@@ -78,17 +78,35 @@ export interface ServedResult {
   localFirst?: ReadonlyArray<{ target: string; outcome: string }> | undefined;
 }
 
-/** The local ref a local-first stream's SERVED attempt names, when a local model answered. */
-export function servedLocalTarget(result: Pick<ServedResult, 'localFirst'>): string | undefined {
-  return result.localFirst?.find((attempt) => attempt.outcome === 'served' && isLocalModelRef(attempt.target))?.target;
+/**
+ * The ref that ANSWERED a completion: the local-first attempt that was served (a gateway attempt
+ * counts — it names where the turn went), else the model the stream resolved. Undefined when the
+ * result says nothing; the model that was merely ASKED FOR is never an answer (a picked local model
+ * can fall back to the cloud without a word).
+ */
+export function servedRef(result: ServedResult): string | undefined {
+  const served = result.localFirst?.find((attempt) => attempt.outcome === 'served');
+  return served ? served.target : result.resolvedModel;
 }
 
 /**
- * Whether the completion was answered ON THIS DEVICE — and so cost nothing. The served local-first
- * attempt wins; a pinned local call (no attempt summaries) is read from the model that answered, else
- * the one asked for. A hosted local-grammar runtime (Kimi Code) leaves the device, and a gateway
- * answer (even after a local attempt fell over) is not on-device either.
+ * Whether the completion was answered ON THIS DEVICE — and so cost nothing. THE one rule: read from
+ * the registry's `onDevice` through {@link runsOnDevice}, on the ref that answered. A hosted
+ * local-grammar runtime (Kimi Code) leaves the device; a gateway answer, even after a local attempt
+ * fell over, is not on-device; and a result that names no answer is not claimed free.
  */
-export function servedOnDevice(result: ServedResult, requested?: string): boolean {
-  return runsOnDevice(servedLocalTarget(result) ?? result.resolvedModel ?? requested);
+export function servedOnDevice(result: ServedResult): boolean {
+  return runsOnDevice(servedRef(result));
+}
+
+/**
+ * The gateway's `direct/<vendor>/<model>` spelling of a HOSTED local-grammar ref (`local/kimi-code/k3`
+ * → `direct/kimi-code/k3`), or undefined for any other ref. That is the person's own account at a
+ * hosted runtime: priced and capped like a direct (BYO) call, never booked as the device's free work.
+ */
+export function hostedDirectRef(ref: string | undefined): string | undefined {
+  const parsed = parseLocalModelRef(ref);
+  if (!parsed) return undefined;
+  const runtime = localRuntime(parsed.provider);
+  return !runtime.onDevice && runtime.gatewayVendor ? `${GATEWAY_DIRECT_PREFIX}${runtime.gatewayVendor}/${parsed.model}` : undefined;
 }

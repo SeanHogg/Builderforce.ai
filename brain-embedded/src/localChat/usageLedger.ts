@@ -16,7 +16,7 @@
  */
 
 import { newLocalRecord, type LocalFirstStore } from '@builderforce/local-first';
-import { isLocalModelRef, servedLocalTarget } from '@builderforce/local-inference';
+import { hostedDirectRef, servedOnDevice, servedRef } from '@builderforce/local-inference';
 import { directCatalogId, snapshotPriceBook, type PriceBook } from '@builderforce/model-catalog';
 import { computeCostMillicents } from '@builderforce/spend-contract';
 import type { CompletionUsage, StreamChatResult } from '../streamChatCompletion';
@@ -83,9 +83,13 @@ export interface RunUsageValue {
 
 /** Which route served a call, from what the stream reported. */
 export function usageRouteOf(result: Pick<StreamChatResult, 'resolvedModel' | 'localFirst'>, requested?: string): UsageRoute {
-  if (servedLocalTarget(result) !== undefined) return 'local';
-  const model = result.resolvedModel ?? requested ?? '';
-  if (isLocalModelRef(model)) return 'local';
+  // 'local' ONLY for a call the device answered (the one rule, `servedOnDevice`): a call that merely asked
+  // for a local model and was answered elsewhere is not the device's free work.
+  if (servedOnDevice(result)) return 'local';
+  const model = servedRef(result) ?? requested ?? '';
+  // A hosted local-grammar runtime (Kimi Code) is the person's own account: it counts against the cap
+  // and books no local saving, like any other direct call.
+  if (hostedDirectRef(model) !== undefined) return 'byo-direct';
   return directCatalogId(model) !== undefined ? 'byo-direct' : 'gateway';
 }
 

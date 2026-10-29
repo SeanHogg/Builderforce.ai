@@ -12,7 +12,7 @@
  */
 
 import type { ModelUsage, RunEvent } from "../contract.js";
-import { foldTurnCost } from "./costTally.js";
+import { foldTurnCost, reportedRunCost, type RunCost } from "./costTally.js";
 
 /** The base counts folded from a run's event trace. */
 export interface EventTally {
@@ -25,10 +25,11 @@ export interface EventTally {
   tokens?: number;
   /** Sum of cache-read tokens across turns. */
   cacheReadTokens?: number;
-  /** Sum of the millicents the transport reported, over the turns that reported one. */
+  /** The run's cost as it is REPORTED: the sum when every turn was priced, undefined when any turn was
+   *  not (unknown, never a partial sum) or none ran (see `costTally.ts`). */
   cost?: number;
-  /** Some turn reported no cost: the run's cost is UNKNOWN whatever `cost` holds (see `costTally.ts`). */
-  costUnpriced?: true;
+  /** The running sum of the priced turns and the unpriced latch behind `cost` — fold state, not a figure. */
+  costRun?: RunCost;
 }
 
 /** An empty tally — a run that emitted nothing has all-zero counts. */
@@ -47,9 +48,8 @@ export function foldEvent(tally: EventTally, event: RunEvent): EventTally {
     case "model.completed": {
       if (event.model) tally.model = event.model;
       const usage: ModelUsage | undefined = event.usage;
-      const cost = foldTurnCost({ sum: tally.cost, unpriced: tally.costUnpriced }, usage?.costMc);
-      tally.cost = cost.sum;
-      if (cost.unpriced) tally.costUnpriced = true;
+      tally.costRun = foldTurnCost(tally.costRun ?? {}, usage?.costMc);
+      tally.cost = reportedRunCost(tally.costRun);
       if (usage) {
         const turnTokens = (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
         tally.tokens = (tally.tokens ?? 0) + turnTokens;
