@@ -16,6 +16,17 @@ export const KNOWLEDGE_GRAPH_NAMESPACE = 'knowledgeGraph';
 
 type Tree = { [key: string]: string | Tree };
 
+/**
+ * A catalog value, or undefined when the host handed back a FALLBACK instead: use-intl's
+ * `namespace.key`, or a bare `key` / last segment (a `getMessageFallback` returning the key,
+ * as the VS Code webview's does) — those keep the English default, never render a key.
+ */
+function translated(got: unknown, key: string, name: string): string | undefined {
+  if (typeof got !== 'string' || got.length === 0) return undefined;
+  if (got === `${KNOWLEDGE_GRAPH_NAMESPACE}.${key}` || got === key || got === name) return undefined;
+  return got;
+}
+
 /** `raw(key)` reads one catalog leaf under `knowledgeGraph.` (undefined when absent). */
 export function knowledgeGraphLabels(raw: (key: string) => unknown): KnowledgeGraphLabels {
   const walk = (defaults: Tree, prefix: string): Tree => {
@@ -23,8 +34,7 @@ export function knowledgeGraphLabels(raw: (key: string) => unknown): KnowledgeGr
     for (const [name, fallback] of Object.entries(defaults)) {
       const key = prefix ? `${prefix}.${name}` : name;
       if (typeof fallback === 'string') {
-        const got = raw(key);
-        out[name] = typeof got === 'string' && got.length > 0 && got !== `${KNOWLEDGE_GRAPH_NAMESPACE}.${key}` ? got : fallback;
+        out[name] = translated(raw(key), key, name) ?? fallback;
       } else {
         out[name] = walk(fallback, key);
       }

@@ -14,7 +14,12 @@
  *
  * Pure and dependency-free: no env, no fetch, no DB. The transport (base URL,
  * bearer, retries) belongs to whoever calls it.
+ *
+ * The body also carries the PRD 35 §8.2 uniform outcome row (`runOutcomeTelemetry.ts`),
+ * under the row's own field names.
  */
+
+import { parseRunOutcomeTelemetry, type RunOutcomeTelemetry } from './runOutcomeTelemetry.js';
 
 /** How a run ended. Non-'completed' scores 0 (see the api's `computeOutcomeScore`). */
 export type TerminalStatus = 'completed' | 'failed' | 'cancelled';
@@ -33,7 +38,7 @@ export const MODEL_ANALYTICS_PATH = '/llm/v1/model-analytics';
  * The JSON body a client POSTs. `terminalStatus` wins; `success` is a friendly
  * boolean alias for callers that only know "did it work".
  */
-export interface RunOutcomeRequest {
+export interface RunOutcomeRequest extends RunOutcomeTelemetry {
   /** Idempotency key — ONE outcome per id. The client's own execution/run id. */
   clientRunId: string;
   /** The model the run actually used (what it locked onto, not what it asked for). */
@@ -60,7 +65,7 @@ export interface RunOutcomeRequest {
 }
 
 /** A validated, fully-resolved outcome — what the scorer records. */
-export interface NormalizedRunOutcome {
+export interface NormalizedRunOutcome extends RunOutcomeTelemetry {
   clientRunId: string;
   source: OutcomeSource;
   model: string;
@@ -147,6 +152,7 @@ export function parseRunOutcomeRequest(
       ...(costMc != null ? { costMc } : {}),
       ...(approved != null ? { approved } : {}),
       ...(rateLimited != null ? { rateLimited } : {}),
+      ...parseRunOutcomeTelemetry(b),
     },
   };
 }

@@ -19,6 +19,10 @@ export * from "./contract.js";
 // The one agent. `RunAgentInput` is the single entry point.
 export { runAgent, type RunAgentInput } from "./runAgent.js";
 
+// The §8.2 outcome row (WS6): the builder, the per-run tally, and the trace fold an
+// adapter uses to persist base counts for a run that died before it settled.
+export * from "./telemetry/index.js";
+
 // The policy composition — the twelve modules and how they are bound. Exported so a
 // test can assert a module is a no-op, and so an adapter that overrides ONE module
 // (its own compaction, say) can do it without a second composition.

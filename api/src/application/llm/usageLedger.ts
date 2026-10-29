@@ -383,6 +383,9 @@ export interface RecordUsageRow {
   /** ESTIMATED tokens the advertised tool schemas cost on this call (chars/4 over the
    *  serialized `tools`) — null when the producer did not measure it. */
   toolSchemaTokens?: number | null;
+  /** Which entry point ran the call (PRD 35 §8.2): vscode | web | rovr | canvas | on-prem |
+   *  cloud. A telemetry label only — never branched on, never a billing input. */
+  entryPoint?: string | null;
   /** How the provider billed the call. `batch` = a provider batch API (D6), priced at
    *  {@link BATCH_PRICE_MULTIPLIER} and stamped `metadata.pricingTier`. Absent = standard. */
   pricingTier?: UsagePricingTier | null;
@@ -688,6 +691,7 @@ export async function writeUsageRow(
     reasoningTokens:     usage.reasoningTokens ?? null,
     turnIndex:           clampOptionalCount(row.turnIndex),
     toolSchemaTokens:    clampOptionalCount(row.toolSchemaTokens),
+    entryPoint:          row.entryPoint ?? null,
     retries:             row.retries ?? 0,
     streamed:            row.streamed ?? false,
     metadata:            metadata ?? null,

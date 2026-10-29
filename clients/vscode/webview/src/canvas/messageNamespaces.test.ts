@@ -49,6 +49,13 @@ describe('canvas message namespaces', () => {
     expect(namespaces).toEqual(expect.arrayContaining(['aiTraining', 'ide', 'evermindStudio']));
   }, CLOSURE_WALK_TIMEOUT_MS);
 
+  it('derives the Knowledge view namespace from its labels adapter', () => {
+    const { frontendSrc } = canvasPaths(WEBVIEW_DIR);
+    const namespaces = collectCanvasNamespaces(path.join(frontendSrc, 'lib/knowledge/labels.ts'), frontendSrc);
+    // Without it the Visualization panel's Knowledge tab rendered raw keys (emptyTitle, reviewFolder…).
+    expect(namespaces).toContain('knowledgeGraph');
+  }, CLOSURE_WALK_TIMEOUT_MS);
+
   it('ships every derived namespace in every locale catalog', () => {
     const { entry, frontendSrc } = canvasPaths(WEBVIEW_DIR);
     const namespaces = collectCanvasNamespaces(entry, frontendSrc);

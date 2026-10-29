@@ -39,6 +39,7 @@ import {
 } from '../../../application/llm/anthropicMessagesBridge';
 import { proxyForCompletion, tenantCanSelfFund } from '../../../application/llm/gatewayCompletionProxy';
 import { isPaidOverflowExhausted, logFailovers, logProviderAuthAlerts, logUsage } from '../../../application/llm/gatewayUsageLog';
+import { readUsageRunTelemetry } from '../../../application/llm/usageRunTelemetry';
 import { enforceTokenCaps, resolveUsageSurface, resolveWorkHints } from './gatewayGuards';
 import { requireTenantAccess, respondToAccessError, type TenantAccess } from './access';
 import { requestFundingOrder } from './requestFundingOrder';
@@ -109,6 +110,9 @@ export function mountMessagesRoutes(router: Hono<HonoEnv>): void {
     // Which ticket/project this spend belongs to — validated against THIS tenant, so a
     // caller cannot bill another workspace's ticket. Resolved once for both branches.
     const workHints = await resolveWorkHints(c, access, (parsed as { metadata?: unknown }).metadata);
+    // The run's entry point + turn index the client stated, and the tool-schema cost
+    // measured off this request's own `tools` (PRD 35 §8.2) — the same on every branch.
+    const runTelemetry = readUsageRunTelemetry((name) => c.req.header(name), parsed as { tools?: unknown });
 
     // Resolve the tenant's Anthropic credential — an API key OR a connected
     // Claude Pro/Max subscription (OAuth, auto-refreshed). Both pass through to
@@ -172,7 +176,7 @@ export function mountMessagesRoutes(router: Hono<HonoEnv>): void {
               cacheReadTokens: u.cache_read_input_tokens ?? 0,
               cacheCreationTokens: u.cache_creation_input_tokens ?? 0,
             }),
-            metadata: { engine: 'agent' }, idempotencyKey, useCase: 'agent',
+            metadata: { engine: 'agent' }, idempotencyKey, useCase: 'agent', ...runTelemetry,
             tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId, ...workHints },
             // This branch IS the tenant's connected Anthropic credential serving the
             // call, so name it — an unstamped byo row can't attribute to an integration.
@@ -193,7 +197,7 @@ export function mountMessagesRoutes(router: Hono<HonoEnv>): void {
           logUsage(c.env, c.executionCtx, {
             tenantId: access.tenantId, userId: access.userId, llmProduct: product, model,
             retries: 0, streamed: true, usage: parseAnthropicSseUsage(text),
-            metadata: { engine: 'agent' }, idempotencyKey, useCase: 'agent',
+            metadata: { engine: 'agent' }, idempotencyKey, useCase: 'agent', ...runTelemetry,
             tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId, ...workHints },
             byo: true, byoProvider: 'anthropic', surface: resolveUsageSurface(c, access),
           });
@@ -262,7 +266,7 @@ export function mountMessagesRoutes(router: Hono<HonoEnv>): void {
       tenantId: access.tenantId, userId: access.userId, llmProduct: product, model: result.resolvedModel,
       retries: result.retries,
       metadata: { engine: 'agent', resolvedModel: result.resolvedModel }, idempotencyKey,
-      useCase: 'agent', tenantApiKeyId: access.tenantApiKeyId,
+      useCase: 'agent', tenantApiKeyId: access.tenantApiKeyId, ...runTelemetry,
       attribution: { agentHostId: access.agentHostId, ...workHints }, traceId,
       paidOverflow: result.paidOverflow,
       byo: result.byoFunded ?? false,

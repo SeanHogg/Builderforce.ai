@@ -58,6 +58,11 @@ export interface ProgressDetectorState {
   claims?: UnkeptClaimState;
   /** Trips so far this run. */
   trips?: number;
+  /** Trips so far this run, by the signal that caused each (run telemetry, PRD 35 §8.2). */
+  tripsBySignal?: Partial<Record<ProgressSignalKind, number>>;
+  /** Turns this run that claimed readiness and then only read — every one, never reset
+   *  by a trip (the claim tracker's own count is the CURRENT streak). */
+  unkeptTurns?: number;
   /** The steer the NEXT turn shows the model, until that turn ends. */
   steer?: string;
 }
@@ -100,6 +105,8 @@ export class ProgressDetector {
   private readonly progress: NoProgressTracker;
   private readonly claims: UnkeptClaimTracker;
   private trips: number;
+  private tripsBySignal: Partial<Record<ProgressSignalKind, number>>;
+  private unkeptTurns: number;
   private steer: string | undefined;
   private turnSignal: ProgressSignal | null = null;
 
@@ -110,6 +117,8 @@ export class ProgressDetector {
     this.progress = new NoProgressTracker(state.progress, ports);
     this.claims = new UnkeptClaimTracker(state.claims);
     this.trips = state.trips ?? 0;
+    this.tripsBySignal = { ...(state.tripsBySignal ?? {}) };
+    this.unkeptTurns = state.unkeptTurns ?? 0;
     this.steer = state.steer;
   }
 
@@ -172,13 +181,16 @@ export class ProgressDetector {
     this.steer = undefined;
     const idle = this.progress.endTurn();
     // New files do not excuse it: the run said it had what it needed.
+    const unkeptBefore = this.claims.snapshot().unkept;
     const unkept = this.claims.endTurn();
+    if (unkept > unkeptBefore) this.unkeptTurns += 1;
     if (unkept >= UNKEPT_READY_AT) this.raise({ kind: "unkept_ready", count: unkept });
     if (!this.turnSignal && idle >= NO_PROGRESS_TURNS) this.raise({ kind: "no_progress", count: idle });
     const signal = this.turnSignal;
     this.turnSignal = null;
     if (!signal) return null;
     this.trips += 1;
+    this.tripsBySignal[signal.kind] = (this.tripsBySignal[signal.kind] ?? 0) + 1;
     // One stuck stretch is one trip: start every window over.
     this.progress.reset();
     this.claims.reset();
@@ -218,6 +230,8 @@ export class ProgressDetector {
       progress: this.progress.snapshot(),
       ...(this.claims.snapshot().unkept ? { claims: this.claims.snapshot() } : {}),
       ...(this.trips ? { trips: this.trips } : {}),
+      ...(this.trips ? { tripsBySignal: { ...this.tripsBySignal } } : {}),
+      ...(this.unkeptTurns ? { unkeptTurns: this.unkeptTurns } : {}),
       ...(this.steer ? { steer: this.steer } : {}),
     };
   }

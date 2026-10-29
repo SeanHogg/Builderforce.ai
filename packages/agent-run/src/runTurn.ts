@@ -11,7 +11,8 @@ import type { ContextPack, ModelCompletion, ModelRequest, RunMessage, RunPorts, 
 import type { PolicyHooks } from "./policy/index.js";
 import { runToolWithWatch, type InterruptWatch } from "./policy/steering/index.js";
 import { capToolResult, resultCapFor } from "./policy/tools/index.js";
-import { currentView, emit, policyContext, type RunAgentInput, type TurnTally } from "./runContext.js";
+import { currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
+import { tallyTurn, type RunTally } from "./telemetry/runTally.js";
 import { withVolatileTail } from "./turnContext.js";
 
 /** The registry the agent dispatches through. Built once: the catalog does not change per run. */
@@ -94,7 +95,7 @@ export async function synthesizeFinal(
   hooks: PolicyHooks,
   transcript: RunMessage[],
   pack: ContextPack,
-  tally: TurnTally,
+  tally: RunTally,
 ): Promise<string | null> {
   if (input.signal?.aborted) return null;
   const pctx = policyContext(input, state, currentView(transcript, []), state.step, 0);
@@ -119,11 +120,8 @@ export async function synthesizeFinal(
   } catch {
     return null;
   }
-  if (completion.model) {
-    state.model = { ...state.model, model: completion.model };
-    tally.model = completion.model;
-  }
-  if (completion.usage) tally.usage = completion.usage;
+  if (completion.model) state.model = { ...state.model, model: completion.model };
+  tallyTurn(tally, completion.model, completion.usage);
   await emit(input.ports.events, {
     kind: "model.completed",
     step: state.step,

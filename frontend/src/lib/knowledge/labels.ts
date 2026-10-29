@@ -12,7 +12,10 @@ import type { KnowledgeGraphLabels } from '@builderforce/knowledge-graph-view';
 export { KNOWLEDGE_GRAPH_NAMESPACE, knowledgeGraphLabels };
 
 export function useKnowledgeGraphLabels(): KnowledgeGraphLabels {
-  const t = useTranslations(KNOWLEDGE_GRAPH_NAMESPACE);
+  // A LITERAL, not KNOWLEDGE_GRAPH_NAMESPACE: the VS Code webview's catalog trimmer
+  // (`collectCanvasNamespaces`) only sees literals, and without it the panel ships no
+  // `knowledgeGraph` subtree. `labels.test.ts` pins the literal to the constant.
+  const t = useTranslations('knowledgeGraph');
   return useMemo(() => knowledgeGraphLabels((key) => {
     try {
       return t.raw(key);

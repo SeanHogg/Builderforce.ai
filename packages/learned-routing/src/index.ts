@@ -92,3 +92,11 @@ export {
   type RunOutcomeRequest,
   type TerminalStatus,
 } from './runOutcomeContract.js';
+export {
+  CLIENT_ENTRY_POINTS,
+  MODEL_PREFLIGHT_MAX,
+  parseRunOutcomeTelemetry,
+  type ClientEntryPoint,
+  type RunOutcomeTelemetry,
+  type RunVerifyResult,
+} from './runOutcomeTelemetry.js';

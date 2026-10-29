@@ -45,6 +45,7 @@ import { lexicalEval } from '../eval/semanticEval';
 import { resolveUsageDatabase, usageDatabaseOf, usageRequestCount } from '../llm/usageLedger';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { EXECUTION_TERMINAL_SET } from '../../domain/shared/terminalStatus';
+import { runOutcomeTelemetryColumns } from './runOutcomeTelemetryColumns';
 
 // ── D3 score weights + efficiency normalization (named so they're tunable without a
 //    schema change — see the Gap Register note on score calibration). ────────────
@@ -224,6 +225,9 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
         costUsdMillicents: costMc,
         terminalStatus: o.terminalStatus,
         rateLimited: !!o.rateLimited,
+        // The PRD 35 §8.2 uniform outcome row the client's run built (entry point,
+        // tool counts, tokens, the efficiency fields) — validated by the shared contract.
+        ...runOutcomeTelemetryColumns(o),
       })
       .onConflictDoNothing({ target: runModelOutcomes.clientRunId, where: isNotNull(runModelOutcomes.clientRunId) })
       .returning({ id: runModelOutcomes.id });
@@ -442,6 +446,8 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       costUsdMillicents: costMc,
       terminalStatus,
       rateLimited,
+      // The PRD 35 §8.2 telemetry label: a server-scored run is a cloud run.
+      entryPoint: 'cloud',
       // Literal reinforcement signals (migration 0333).
       toolCalls: toolCounts.toolCalls,
       toolErrors: toolCounts.toolErrors,

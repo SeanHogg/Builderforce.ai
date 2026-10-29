@@ -6,7 +6,7 @@
 
 import type { ToolSchema } from "@builderforce/agent-tools";
 import type { ParsedToolCall } from "@builderforce/agent-loop";
-import type { EventSink, ModelUsage, RunEvent, RunMessage, RunPolicy, RunPorts, RunState, RunTask } from "./contract.js";
+import type { EventSink, RunEvent, RunMessage, RunPolicy, RunPorts, RunState, RunTask } from "./contract.js";
 import type { PolicyContext, PolicyModules, PolicyToolCall } from "./policy/index.js";
 
 /** What a caller hands the agent. */
@@ -66,14 +66,6 @@ export function applyCompaction(state: RunState, view: TurnView, result: { messa
     ...(result.reserveTokens !== undefined ? { reserveTokens: result.reserveTokens } : {}),
     droppedMessages: result.dropped,
   };
-}
-
-/** The tally a turn adds to the outcome row. */
-export interface TurnTally {
-  toolCalls: number;
-  toolErrors: number;
-  model?: string;
-  usage?: ModelUsage;
 }
 
 /** The view a hook reads: the transcript and the tools as they stand. */

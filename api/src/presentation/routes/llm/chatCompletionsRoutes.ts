@@ -40,6 +40,7 @@ import { GUEST_TOKEN_PREFIX } from '../../../application/guest/guestToken';
 import { proxyForCompletion, tenantCanSelfFund } from '../../../application/llm/gatewayCompletionProxy';
 import { expandGatewayModelRefs, recordGatewayChatModelActivity } from '../../../application/llm/gatewayChatSupport';
 import { isPaidOverflowExhausted, logFailovers, logProviderAuthAlerts, logUsage } from '../../../application/llm/gatewayUsageLog';
+import { readUsageRunTelemetry } from '../../../application/llm/usageRunTelemetry';
 import { isModelRole } from '@builderforce/agent-tools';
 import { isArcStage } from '@builderforce/workload';
 import { enforceTokenCaps, resolveCallerAttribution, resolveUsageSurface } from './gatewayGuards';
@@ -288,6 +289,7 @@ export function mountChatCompletionsRoutes(router: Hono<HonoEnv>): void {
       byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
       premiumSurcharge: platformSurcharge,
       premium: premiumServed,
+      ...readUsageRunTelemetry((name) => c.req.header(name), bodyAny),
     };
     const traceBase = {
       traceId, surface: 'chat' as const,

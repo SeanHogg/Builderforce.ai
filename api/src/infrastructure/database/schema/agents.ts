@@ -1580,11 +1580,11 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
   hallucinationRate: real('hallucination_rate'),
   /** 'lexical' | 'llm' — which evaluation backend scored this run. */
   evalMethod:       varchar('eval_method', { length: 8 }),
-  // ── PRD 35 §8.2 uniform outcome row (migration 1278) ─────────────────────
+  // ── PRD 35 §8.2 uniform outcome row (transactional 0025 + 0026; core 1282) ─
   // One row per run, every entry point. The telemetry label the adapter stamped
   // (§5 rule 3: never branched on for behaviour); the efficiency counters the run
   // state carried; `verify` the declared verify phase's coarse result. Nullable /
-  // defaulted so rows scored before 1278 stay valid.
+  // defaulted so rows scored before the migration stay valid.
   /** Which entry point ran the run: vscode | web | rovr | canvas | on-prem | cloud. */
   entryPoint:       varchar('entry_point', { length: 16 }),
   /** How many times the transcript was compacted this run. */
@@ -1597,7 +1597,7 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
   verify:           varchar('verify', { length: 8 }).notNull().default('not-run'),
   /** The turn the first spawn happened on; NULL when nothing was spawned. */
   firstSpawnTurn:   integer('first_spawn_turn'),
-  /** Covered reads stubbed for lines the model was never served. */
+  /** Covered reads answered from coverage (a stub or a replay), never dispatched. */
   coveredReadStubs: integer('covered_read_stubs'),
   /** `cat`/`sed`/`head`/`tail` of a workspace file through the shell. */
   shellFileReads:   integer('shell_file_reads'),
@@ -1611,6 +1611,10 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
   unkeptReadyClaims: integer('unkept_ready_claims'),
   /** The A3 progress trips, by signal ({ signal: count } as JSONB). */
   progressTrips:    jsonb('progress_trips'),
+  /** Input + output tokens across the run's turns, as the run counted them. */
+  tokens:           integer('tokens'),
+  /** Prompt-cache reads across the run's turns. */
+  cacheReadTokens:  integer('cache_read_tokens'),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   // Declared with its predicate so an upsert on `clientRunId` is held to restating it
@@ -2152,10 +2156,10 @@ export const llmUsageLog = pgTable('llm_usage_log', {
   savedCompletionTokens:  integer('saved_completion_tokens').notNull().default(0),
   recallPromptTokens:     integer('recall_prompt_tokens').notNull().default(0),
   savedCostUsdMillicents: integer('saved_cost_usd_millicents').notNull().default(0),
-  // ── PRD 35 §8.2 telemetry label (migration 1278) ─────────────────────────
+  // ── PRD 35 §8.2 telemetry label (transactional 0025; core 1282) ───────────
   // Which entry point ran the call: vscode | web | rovr | canvas | on-prem |
   // cloud. A telemetry label only (§5 rule 3) — never branched on for behaviour.
-  // NULLABLE: rows written before 1278 have no label; today's cloud rows stamp
+  // NULLABLE: rows written before the migration have no label; today's cloud rows stamp
   // 'cloud', the adapters stamp their own at WS3/4/5.
   entryPoint:     varchar('entry_point', { length: 16 }),
   createdAt:        timestamp('created_at').notNull().defaultNow(),

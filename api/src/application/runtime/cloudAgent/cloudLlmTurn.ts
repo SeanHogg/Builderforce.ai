@@ -78,6 +78,7 @@ export async function recordCloudUsage(
     },
     turnIndex:        args.turnIndex ?? null,
     toolSchemaTokens: args.toolSchemaTokens ?? null,
+    entryPoint:       'cloud',
     useCase:    'task_execution',
     // Attribute the spend to the run's cloud agent + ticket + project so cost
     // rolls up ticket → project → account (0104 / 0103).

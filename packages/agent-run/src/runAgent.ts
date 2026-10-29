@@ -40,12 +40,13 @@ import { runAgentLoop, type LoopResult } from "@builderforce/agent-loop";
 import type { ContextPack, RunMessage, RunOutcome } from "./contract.js";
 import { composePolicyHooks } from "./policy/index.js";
 import { portInterruptWatch } from "./policy/steering/index.js";
-import { currentView, emit, policyContext, type RunAgentInput, type TurnTally } from "./runContext.js";
+import { currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
 import { asMessages, freshState, newApprovalId, resumeState } from "./runState.js";
 import { completeTurn, dispatchCall, offeredSchemas, synthesizeFinal } from "./runTurn.js";
 import { settle } from "./runSettle.js";
 import { kernelHooks, readOnlyPort, type KernelRun } from "./kernelHooks.js";
 import { EMPTY_PACK, buildContextPack, systemPrompt } from "./turnContext.js";
+import { freshTally, type RunTally } from "./telemetry/runTally.js";
 
 export type { RunAgentInput } from "./runContext.js";
 
@@ -63,7 +64,8 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   const state = input.resume ? resumeState(input.resume, policy, task) : freshState(policy, task);
   const resumed = Boolean(input.resume);
 
-  const tally: TurnTally = { toolCalls: 0, toolErrors: 0 };
+  // The run's counters live on its state, so a resumed tick adds to what earlier ticks counted.
+  const tally: RunTally = (state.telemetry ??= freshTally());
   const offered = offeredSchemas(ports);
   const transcript = asMessages(state.messages);
 
@@ -131,7 +133,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
     });
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    return settle(input, hooks, state, transcript, "failed", { reason }, tally);
+    return settle(input, hooks, state, transcript, "failed", { reason });
   }
 
   state.step = loopResult.step;
@@ -139,28 +141,28 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
 
   // A Stop, or a steered stop command: the run settles cancelled, with no further turn.
   if (run.stopped || loopResult.cancelled || signal?.aborted) {
-    return settle(input, hooks, state, transcript, "failed", { reason: "cancelled" }, tally);
+    return settle(input, hooks, state, transcript, "failed", { reason: "cancelled" });
   }
   if (loopResult.awaitingInput) {
     const approvalId = loopResult.awaitingInput.approvalId ?? newApprovalId(state);
     state.askedGates = [...state.askedGates, approvalId];
-    return settle(input, hooks, state, transcript, "paused", { question: loopResult.awaitingInput.question, approvalId }, tally);
+    return settle(input, hooks, state, transcript, "paused", { question: loopResult.awaitingInput.question, approvalId });
   }
   // A run that ended without an answer — a budget spent, a breaker tripped, a finish
   // with nothing to say — gets the ONE forced no-tools turn before it settles (§6.2).
   if (loopResult.exhausted || (loopResult.finished && loopResult.ok && !loopResult.output.trim())) {
     const output = await synthesizeFinal(input, state, hooks, transcript, pack, tally);
-    if (output) return settle(input, hooks, state, transcript, "finished", { output }, tally);
+    if (output) return settle(input, hooks, state, transcript, "finished", { output });
   }
   if (loopResult.exhausted) {
-    return settle(input, hooks, state, transcript, "failed", { reason: loopResult.exhaustedBy === "failures" ? "tool calls kept failing" : "step budget spent" }, tally);
+    return settle(input, hooks, state, transcript, "failed", { reason: loopResult.exhaustedBy === "failures" ? "tool calls kept failing" : "step budget spent" });
   }
   if (!loopResult.finished) {
     // The invocation's step budget yielded. The state is saved; the next tick resumes.
-    return settle(input, hooks, state, transcript, "yielded", {}, tally);
+    return settle(input, hooks, state, transcript, "yielded", {});
   }
   if (!loopResult.ok) {
-    return settle(input, hooks, state, transcript, "failed", { reason: loopResult.output || "the run stopped" }, tally);
+    return settle(input, hooks, state, transcript, "failed", { reason: loopResult.output || "the run stopped" });
   }
-  return settle(input, hooks, state, transcript, "finished", { output: loopResult.output }, tally);
+  return settle(input, hooks, state, transcript, "finished", { output: loopResult.output });
 }

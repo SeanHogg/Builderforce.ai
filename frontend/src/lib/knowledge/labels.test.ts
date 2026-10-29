@@ -5,7 +5,9 @@ import zh from '@/i18n/messages/zh.json';
 import es from '@/i18n/messages/es.json';
 import fr from '@/i18n/messages/fr.json';
 import de from '@/i18n/messages/de.json';
-import { knowledgeGraphLabels } from './labels';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { KNOWLEDGE_GRAPH_NAMESPACE, knowledgeGraphLabels } from './labels';
 
 type Tree = { [key: string]: unknown };
 
@@ -42,5 +44,18 @@ describe('knowledgeGraph labels adapter', () => {
   it('keeps the English default for a key a catalog lacks', () => {
     expect(knowledgeGraphLabels(() => undefined).title).toBe(DEFAULT_KNOWLEDGE_GRAPH_LABELS.title);
     expect(knowledgeGraphLabels((k) => `knowledgeGraph.${k}`).reviewFolder).toBe(DEFAULT_KNOWLEDGE_GRAPH_LABELS.reviewFolder);
+  });
+
+  it('keeps the English default when the host fallback returns the bare key (the VS Code webview)', () => {
+    const labels = knowledgeGraphLabels((k) => k);
+    expect(labels.emptyTitle).toBe(DEFAULT_KNOWLEDGE_GRAPH_LABELS.emptyTitle);
+    expect(labels.reviewFolder).toBe(DEFAULT_KNOWLEDGE_GRAPH_LABELS.reviewFolder);
+    const leaf = knowledgeGraphLabels((k) => k.split('.').pop());
+    expect(leaf.fix.cloneGroup).toBe(DEFAULT_KNOWLEDGE_GRAPH_LABELS.fix.cloneGroup);
+  });
+
+  it('reads the namespace by the literal the webview trimmer can see, equal to the shared constant', () => {
+    const src = readFileSync(join(__dirname, 'labels.ts'), 'utf8');
+    expect(src).toContain(`useTranslations('${KNOWLEDGE_GRAPH_NAMESPACE}')`);
   });
 });

@@ -183,6 +183,8 @@ export async function importSyncedUsage(
       byo: true,
       byoProvider: usage.route === 'byo-direct' ? directProvider(usage.model) : null,
       surface: 'vsix',
+      // Only the VS Code extension syncs its device-local usage (PRD 35 §8.2 label).
+      entryPoint: 'vscode',
       ...(usage.role ? { attribution: { role: usage.role } } : {}),
       calls: 1,
       createdAt: clampedClientTime(usage.at, ctx.now),

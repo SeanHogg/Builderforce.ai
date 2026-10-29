@@ -24,6 +24,8 @@ export interface EventTally {
   tokens?: number;
   /** Sum of cache-read tokens across turns. */
   cacheReadTokens?: number;
+  /** Sum of the millicents the transport reported, when it reported any. */
+  cost?: number;
 }
 
 /** An empty tally — a run that emitted nothing has all-zero counts. */
@@ -48,6 +50,7 @@ export function foldEvent(tally: EventTally, event: RunEvent): EventTally {
         if (usage.cacheReadTokens) {
           tally.cacheReadTokens = (tally.cacheReadTokens ?? 0) + usage.cacheReadTokens;
         }
+        if (usage.costMc !== undefined) tally.cost = (tally.cost ?? 0) + usage.costMc;
       }
       break;
     }

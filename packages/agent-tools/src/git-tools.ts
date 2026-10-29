@@ -30,7 +30,7 @@ import {
 } from "./git-repo-scope.js";
 
 // The repo-scope helpers live in `git-repo-scope.ts`; these were this module's exports.
-export { buildListCheckoutsCommand, commitPathCandidates, inferRepoFromPath, notARepoResult, safeRepoArg } from "./git-repo-scope.js";
+export { buildListCheckoutsCommand, commitPathCandidates, inferRepoFromPath, isNotARepo, notARepoResult, safeRepoArg } from "./git-repo-scope.js";
 
 // ---------------------------------------------------------------------------
 // Git / version-control tools. Gated to `shell` (a real clone + Linux process),

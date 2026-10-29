@@ -20,7 +20,8 @@
  *
  * WHAT SURVIVES. Every column anything groups or filters by: tenant, user, model,
  * product, surface, role, project, task, execution, chat (and mode), agent host, cloud
- * agent ref, API key, and the BYO / premium / paid-overflow flags. Every quantity
+ * agent ref, API key, the PRD 35 §8.2 `entry_point` label, and the BYO / premium /
+ * paid-overflow flags. Every quantity
  * anything sums: prompt, completion and total tokens, both cache tiers, retries,
  * `cost_usd_millicents` and the memory-savings figures (the `saved_*` / `recall_*`
  * quantities, with `savings_source` / `savings_estimated` kept as dimensions), and the
@@ -76,7 +77,7 @@ const foldDay = (db: Db, day: string) => db.execute(sql`
     SELECT tenant_id, user_id, llm_product, model, chat_id, chat_mode, use_case,
            tenant_api_key_id, agent_host_id, cloud_agent_ref, execution_id, task_id,
            project_id, paid_overflow, premium, byo, byo_provider, byo_credential_id,
-           surface, role, streamed, savings_source, savings_estimated, pipeline_route,
+           surface, role, streamed, savings_source, savings_estimated, pipeline_route, entry_point,
            SUM(calls)::int                 AS calls,
            SUM(prompt_tokens)::int         AS prompt_tokens,
            SUM(completion_tokens)::int     AS completion_tokens,
@@ -96,7 +97,7 @@ const foldDay = (db: Db, day: string) => db.execute(sql`
            MIN(created_at)                 AS created_at
       FROM llm_usage_log
      WHERE created_at >= ${day}::date AND created_at < ${day}::date + interval '1 day'
-     GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24
+     GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25
   ),
   removed AS (
     DELETE FROM llm_usage_log
@@ -108,14 +109,14 @@ const foldDay = (db: Db, day: string) => db.execute(sql`
       (tenant_id, user_id, llm_product, model, chat_id, chat_mode, use_case,
        tenant_api_key_id, agent_host_id, cloud_agent_ref, execution_id, task_id,
        project_id, paid_overflow, premium, byo, byo_provider, byo_credential_id,
-       surface, role, streamed, savings_source, savings_estimated, pipeline_route, calls, prompt_tokens,
+       surface, role, streamed, savings_source, savings_estimated, pipeline_route, entry_point, calls, prompt_tokens,
        completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, retries,
        cost_usd_millicents, saved_prompt_tokens, saved_completion_tokens, recall_prompt_tokens,
        saved_cost_usd_millicents, route_score, reasoning_tokens, tool_schema_tokens, turn_index, created_at)
     SELECT tenant_id, user_id, llm_product, model, chat_id, chat_mode, use_case,
            tenant_api_key_id, agent_host_id, cloud_agent_ref, execution_id, task_id,
            project_id, paid_overflow, premium, byo, byo_provider, byo_credential_id,
-           surface, role, streamed, savings_source, savings_estimated, pipeline_route, calls, prompt_tokens,
+           surface, role, streamed, savings_source, savings_estimated, pipeline_route, entry_point, calls, prompt_tokens,
            completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, retries,
            cost_usd_millicents, saved_prompt_tokens, saved_completion_tokens, recall_prompt_tokens,
            saved_cost_usd_millicents, route_score, reasoning_tokens, tool_schema_tokens, turn_index, created_at

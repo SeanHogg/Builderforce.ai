@@ -3,9 +3,9 @@
  * event and return the outcome.
  */
 
-import type { RunMessage, RunOutcome, RunOutcomeRow, RunState } from "./contract.js";
+import type { RunMessage, RunOutcome, RunState } from "./contract.js";
 import type { PolicyHooks } from "./policy/index.js";
-import { currentView, emit, policyContext, type RunAgentInput, type TurnTally } from "./runContext.js";
+import { currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
 import { newApprovalId } from "./runState.js";
 import { buildOutcomeRow } from "./telemetry/outcomeRow.js";
 
@@ -21,6 +21,11 @@ interface SettleExtra {
  * Save the state, write the outcome row, emit the closing event and return the
  * outcome. Every path out of the run comes through here, so a resumed tick and a
  * continuous run record the same row.
+ *
+ * The row is written ONCE per run (§8.2), when the run ENDS — `finished` or `failed`.
+ * A `yielded` tick and a `paused` run both resume into the same run (the next tick, the
+ * person's answer), so a row there would count one run several times, and the ingest
+ * keeps the FIRST row per run id: an early row would shadow the real outcome.
  */
 export async function settle(
   input: RunAgentInput,
@@ -29,7 +34,6 @@ export async function settle(
   transcript: RunMessage[],
   kind: RunOutcome["kind"],
   extra: SettleExtra,
-  tally: TurnTally,
 ): Promise<RunOutcome> {
   state.messages = transcript;
 
@@ -50,21 +54,14 @@ export async function settle(
     // A store that cannot save still returns the state to the caller, who holds it.
   }
 
-  // The uniform §8.2 outcome row: base counts from the turn tally, efficiency
-  // fields from the run state. One row per run, every entry point (WS6).
-  const row: RunOutcomeRow = buildOutcomeRow({
-    entryPoint: input.policy.entryPoint,
-    kind,
-    steps: state.step,
-    toolCalls: tally.toolCalls,
-    toolErrors: tally.toolErrors,
-    model: tally.model,
-    state,
-  });
-  try {
-    await input.ports.events.outcome?.(row);
-  } catch {
-    // As with the trace: a broken sink records nothing.
+  // The uniform §8.2 outcome row, built from the run state the whole run carried.
+  if (kind === "finished" || kind === "failed") {
+    const row = buildOutcomeRow({ entryPoint: input.policy.entryPoint, runId: input.task.runId, kind, state });
+    try {
+      await input.ports.events.outcome?.(row);
+    } catch {
+      // As with the trace: a broken sink records nothing.
+    }
   }
   // A yielded tick has not finished: the next tick resumes and the trace is one run.
   // Emitting `run.finished` here would close a run that is still open.

@@ -102,6 +102,8 @@ export class RunGuards {
   private turnEdits: VerifyResult[] = [];
   /** D7: the sandbox checks' failures from the last turn, for the next turn's tail. */
   private checksNote = "";
+  /** Moves UP the tier ladder this run (D1's failed verdicts, A3's second trip) — §8.2. */
+  private escalations: number;
 
   constructor(levers: GuardLevers, resume?: LoopGuardState, ports: GuardPorts = {}) {
     this.levers = levers;
@@ -120,6 +122,7 @@ export class RunGuards {
     this.postEdit = !!levers.d7_deterministic_handlers;
     this.pendingPause = resume?.pendingPause;
     this.checksNote = resume?.checksNote ?? "";
+    this.escalations = resume?.escalations ?? 0;
   }
 
   /** The volatile-tail sections this turn carries (empty strings drop out). */
@@ -145,6 +148,7 @@ export class RunGuards {
       ...(this.cascade.on || this.progress ? { cascade: this.cascade.snapshot() } : {}),
       ...(this.pendingPause ? { pendingPause: this.pendingPause } : {}),
       ...(this.checksNote ? { checksNote: this.checksNote } : {}),
+      ...(this.escalations ? { escalations: this.escalations } : {}),
     };
   }
 
@@ -213,6 +217,7 @@ export class RunGuards {
     });
     if (after === before) return;
     model.set(after);
+    if (!verdict.passed) this.escalations += 1;
     await ports.onEvent?.({
       tool: "model.escalated",
       detail: { step, unit: kind, verifier: verdict.verifier, passed: verdict.passed, from: before.model ?? ports.resolvedModel?.() ?? null, to: after.model ?? null },
@@ -228,8 +233,10 @@ export class RunGuards {
       const model = ports.model;
       const ladder = ports.ladder?.() ?? ports.cascade?.ladder;
       const next = model && ladder ? this.cascade.escalate(model.get(), ladder, ports.resolvedModel?.()) : null;
-      if (next && model) model.set(next);
-      else {
+      if (next && model) {
+        model.set(next);
+        this.escalations += 1;
+      } else {
         // Nothing stronger to move to (or the run is pinned): the second trip pauses.
         this.pendingPause = progressPauseQuestion(action.signal, action.trip);
         this.progress?.setSteer(undefined);

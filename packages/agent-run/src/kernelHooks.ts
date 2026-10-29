@@ -11,8 +11,9 @@ import type { LoopControl, LoopDispatchResult, LoopHooks, ParsedToolCall } from 
 import type { ModelUsage, RunMessage, RunState } from "./contract.js";
 import type { GuardControl, PolicyContext, PolicyHooks } from "./policy/index.js";
 import { isStopSteer, steerInput, steerSkip, type InterruptWatch } from "./policy/steering/index.js";
-import { applyCompaction, currentView, emit, policyContext, toPolicyCall, type RunAgentInput, type TurnTally } from "./runContext.js";
+import { applyCompaction, currentView, emit, policyContext, toPolicyCall, type RunAgentInput } from "./runContext.js";
 import { rememberWrite } from "./runState.js";
+import { tallyCall, tallyTurn, tallyVerify, type RunTally } from "./telemetry/runTally.js";
 import type { ToolSchema } from "@builderforce/agent-tools";
 
 /** The tools a run asks a human through — held back while a requested delegation is undone. */
@@ -25,7 +26,7 @@ export interface KernelRun {
   hooks: PolicyHooks;
   transcript: RunMessage[];
   offered: ToolSchema[];
-  tally: TurnTally;
+  tally: RunTally;
   /** Where an interrupting steer is watched (the steering port). */
   watch: InterruptWatch;
   /** The current turn's text, for the guards' turn fold (A3's readiness claims). */
@@ -71,6 +72,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
   const verifyBlock = async (pctx: PolicyContext): Promise<string | null> => {
     if (policy.verify === "none") return null;
     const verdict = await hooks.verify.verify(pctx);
+    if (verdict) tallyVerify(tally, verdict.ok);
     return verdict && !verdict.ok ? verdict.note ?? "Verification failed: fix it before finishing." : null;
   };
 
@@ -106,10 +108,11 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
 
     afterTurn: async (ctx, turn) => {
       run.turnContent = turn.content ?? "";
-      tally.model = turn.meta && typeof turn.meta === "object" ? (turn.meta as { model?: string }).model : tally.model;
-      const usage = turn.meta && typeof turn.meta === "object" ? (turn.meta as { usage?: ModelUsage }).usage : undefined;
-      if (usage) tally.usage = usage;
-      await emit(ports.events, { kind: "model.completed", step: ctx.step, ...(tally.model ? { model: tally.model } : {}), ...(usage ? { usage } : {}) });
+      const meta = turn.meta && typeof turn.meta === "object" ? (turn.meta as { model?: string; usage?: ModelUsage }) : undefined;
+      const model = meta ? meta.model : tally.model;
+      const usage = meta?.usage;
+      tallyTurn(tally, model, usage);
+      await emit(ports.events, { kind: "model.completed", step: ctx.step, ...(model ? { model } : {}), ...(usage ? { usage } : {}) });
     },
 
     onNoToolCalls: async (ctx, turn) => {
@@ -189,8 +192,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       if (!stub) {
         // The trace and the tally fold the same verdict, so the outcome row and the
         // event trace never disagree (telemetry/eventTally.ts).
-        tally.toolCalls += 1;
-        if (!ok) tally.toolErrors += 1;
+        tallyCall(tally, ctx.step, call.name, call.args, result.data, ok);
         // `ctx.step` is the kernel's live step; `state.step` lags until the loop returns.
         await emit(ports.events, { kind: "tool.dispatched", step: ctx.step, tool: call.name, ok });
       }

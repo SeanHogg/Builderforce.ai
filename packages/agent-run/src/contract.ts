@@ -36,6 +36,7 @@ import type {
   ReadsWithoutSpawnState,
 } from "@builderforce/run-guards";
 import type { FinishGateState } from "./policy/finish/gates.js";
+import type { RunTally } from "./telemetry/runTally.js";
 
 // The reused types, re-exported so one import gives a consumer the whole contract.
 export type { CapabilityProvider, PolicyGate, RunKnowledgeState } from "@builderforce/agent-tools";
@@ -61,6 +62,7 @@ export interface RunAttachment {
 
 export interface RunTask {
   prompt: string;
+  runId?: string;                  // the adapter's id for this run (execution / client run id) — the §8.2 row's run id
   ticketId?: number; chatId?: number | string; projectId?: number;
   persona?: string;                // compiled persona brief
   attachments?: RunAttachment[];
@@ -120,6 +122,7 @@ export interface ModelUsage {
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;
+  costMc?: number;                 // millicents the gateway billed, when the transport reports it — §8.2 cost
 }
 
 /** What the model answered. */
@@ -178,19 +181,11 @@ export type RunEvent =
   | { kind: 'turn.finished'; step: number }
   | { kind: 'run.finished'; step: number; outcome: RunOutcomeKind };
 
-/**
- * The uniform outcome row (§8.2). WS6 owns the full row and the fields it adds.
- *
- * One row per run, every entry point. The base counts (steps, toolCalls,
- * toolErrors, terminalStatus, model) come from the turn tally; the efficiency
- * fields come from the run state the policy modules carry (compaction count,
- * written paths, served read windows, the progress detector's unkept-claim /
- * trip counters). `verify` is the run policy's declared verify phase outcome;
- * `entryPoint` is the telemetry label the adapter stamps — never a behaviour
- * branch (§5 rule 3).
- */
+/** The uniform outcome row (§8.2): ONE per run, every entry point, built by `telemetry/outcomeRow`
+ *  when the run ends. `entryPoint` is a telemetry label — never a behaviour branch (§5 rule 3). */
 export interface RunOutcomeRow {
   entryPoint: string;
+  runId?: string;
   steps: number;
   toolCalls: number;
   toolErrors: number;
@@ -206,7 +201,7 @@ export interface RunOutcomeRow {
   model?: string;
   tokens?: number;
   cacheReadTokens?: number;
-  cost?: number;
+  cost?: number;                   // millicents, summed from what the transport reported
   // ── §8.2 efficiency fields ────────────────────────────────────────────────
   /** The turn the first spawn happened on; null when nothing was spawned. */
   firstSpawnTurn?: number | null;
@@ -320,6 +315,7 @@ export interface LoopGuardState {
   pendingPause?: string;
   /** D7: the sandbox checks' failures, for the NEXT turn's tail. */
   checksNote?: string;
+  escalations?: number;            // A3 + D1: moves up the tier ladder this run — §8.2 escalations
 }
 
 /** What the cascade persists across durable ticks — `api/.../costLoop/verifierCascade.ts`. */
@@ -396,4 +392,5 @@ export interface RunState {
   stall?: StallState;              // WS2b: the re-prompt budget, keyed by model
   preflight?: string;              // WS2g: the model preflight's verdict — ok | refreshed | degraded:<reason> (§8.2 modelPreflight)
   downgrades?: string[];           // WS2g: auto-routed models already reported by llm.model_downgrade (once per served model)
+  telemetry?: RunTally;            // WS6: the per-run counters the §8.2 row reads, summed across ticks
 }

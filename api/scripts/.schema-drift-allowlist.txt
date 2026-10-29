@@ -94,24 +94,3 @@ Column 'soc_controls.objective' exists in migrations but is missing from schema.
 Column 'soc_controls.owner' exists in migrations but is missing from schema.ts.
 Column 'soc_controls.note' exists in migrations but is missing from schema.ts.
 Column 'soc_controls.last_reviewed' exists in migrations but is missing from schema.ts.
-#
-# WS6 (PRD 35 §8.2) — run_model_outcomes + the write-side llm_usage_log live on the
-# OPERATIONAL endpoint (NEON_TRANSACTIONAL_DATABASE_URL), so their DDL is created by
-# transactional-migrations/0025_llm_usage_outcome_telemetry.sql, not by any
-# api/migrations/ entry. The core-track run_model_outcomes replica (from
-# migrations/0197) is a drained legacy table (retention sweep only), so these
-# columns have no primary-track migration by design.
-Column 'run_model_outcomes.entry_point' is declared in schema.ts but never created/added by any migration.
-Column 'run_model_outcomes.compactions' is declared in schema.ts but never created/added by any migration.
-Column 'run_model_outcomes.stall_recoveries' is declared in schema.ts but never created/added by any migration.
-Column 'run_model_outcomes.escalations' is declared in schema.ts but never created/added by any migration.
-Column 'run_model_outcomes.verify' is declared in schema.ts but never created/added by any migration.
-Column 'run_model_outcomes.first_spawn_turn' is declared in schema.ts but never created/added by any migration.
-Column 'run_model_outcomes.covered_read_stubs' is declared in schema.ts but never created/added by any migration.
-Column 'run_model_outcomes.shell_file_reads' is declared in schema.ts but never created/added by any migration.
-Column 'run_model_outcomes.repo_errors' is declared in schema.ts but never created/added by any migration.
-Column 'run_model_outcomes.context_pack_tokens' is declared in schema.ts but never created/added by any migration.
-Column 'run_model_outcomes.model_preflight' is declared in schema.ts but never created/added by any migration.
-Column 'run_model_outcomes.unkept_ready_claims' is declared in schema.ts but never created/added by any migration.
-Column 'run_model_outcomes.progress_trips' is declared in schema.ts but never created/added by any migration.
-Column 'llm_usage_log.entry_point' is declared in schema.ts but never created/added by any migration.

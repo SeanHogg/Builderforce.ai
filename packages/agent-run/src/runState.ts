@@ -7,6 +7,7 @@ import { initialRunPolicy, type RunPolicyState } from "@builderforce/run-policy"
 import type { ParsedToolCall } from "@builderforce/agent-loop";
 import type { ReadCoverageState, RunMessage, RunPolicy, RunState, RunTask } from "./contract.js";
 import { initialFinishGateState } from "./policy/finish/gates.js";
+import { freshTally, resumeTally } from "./telemetry/runTally.js";
 
 /**
  * A fresh run's state. Every slice starts empty; a hook fills its own. The finish
@@ -25,6 +26,7 @@ export function freshState(policy: RunPolicy, task: RunTask): RunState {
     writtenPaths: [],
     askedGates: [],
     reads: freshReads(),
+    telemetry: freshTally(),
   };
 }
 
@@ -55,6 +57,7 @@ export function resumeState(saved: RunState, policy: RunPolicy, task: RunTask): 
     writtenPaths: saved.writtenPaths ?? [],
     askedGates: saved.askedGates ?? [],
     reads: saved.reads ?? fresh.reads,
+    telemetry: resumeTally(saved.telemetry),
     messages: Array.isArray(saved.messages) ? saved.messages : [],
   };
 }
