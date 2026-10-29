@@ -415,12 +415,6 @@ export class BuilderforceRelayService implements IRelayService {
     }
   }
 
-  /**
-   * The current engine path. Runs the ONE agent (`runAgent`, through the on-prem adapter)
-   * against the workspace, forwarding its events onto the relay frames the portal renders
-   * (chat.message for assistant text, tool.audit for tool calls), then reports the
-   * terminal execution state.
-   */
   /** The project (from the linked workspace's context) and ticket a run's outcome row is scoped to. */
   private async outcomeScope(taskId?: number): Promise<OutcomeScope> {
     let projectId: number | undefined;
@@ -434,6 +428,12 @@ export class BuilderforceRelayService implements IRelayService {
     return { ...(projectId !== undefined ? { projectId } : {}), ...(taskId !== undefined ? { taskId } : {}) };
   }
 
+  /**
+   * The current engine path. Runs the ONE agent (`runAgent`, through the on-prem adapter)
+   * against the workspace, forwarding its events onto the relay frames the portal renders
+   * (chat.message for assistant text, tool.audit for tool calls), then reports the
+   * terminal execution state.
+   */
   private async runV2Engine(payload: EngineDispatch, prompt: string): Promise<void> {
     const agentLabel = payload.agentLabel?.trim() || "BuilderForce-V2";
     const sinks: OnPremRunSinks = relayRunSinks({

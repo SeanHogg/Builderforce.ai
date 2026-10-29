@@ -156,12 +156,22 @@ describe("defaultInterpreter: bash (the on-prem host)", () => {
   it("with no bash, lets PowerShell run what it aliases, and answers a && chain with the install-Git guidance", () => {
     onWindows();
     bashAbsent();
-    for (const ok of ["ls -la src", "cat package.json", "rm -rf build", "pwd", 'echo "a && b"', "git rev-parse $(git branch --show-current)"]) {
+    // What PowerShell runs correctly: aliased verbs with plain arguments, $(…) subexpressions, quoted text.
+    for (const ok of ["ls src", "cat package.json", "rm build/old.txt", "mv a.txt b.txt", "pwd", 'echo "a && b"', "git rev-parse $(git branch --show-current)", "npm run build --if-present=true"]) {
       expect(posixRoute(ok, bashDefault), ok).toEqual({ bash: null });
     }
-    for (const needsBash of ["npm run build && npm test", "a || b", "git log | head -5", "grep -r foo ."]) {
+    // What it cannot: chains, unix flags on an alias (bound by prefix or not at all), diff (Compare-Object compares
+    // argument strings - it runs and answers wrong), POSIX redirects / substitution / input / env prefixes, unix utilities.
+    for (const needsBash of [
+      "npm run build && npm test", "a || b", "git log | head -5", "grep -r foo .",
+      "ls -la src", "rm -rf build", "rm -f a.txt", "cat -n f.ts", "cp -r a b", "git status | rm -rf x",
+      "diff a.txt b.txt", "npm test 2>/dev/null", "echo `date`", "sort < in.txt", "NODE_ENV=test npm run build",
+    ]) {
       expect(posixRoute(needsBash, bashDefault), needsBash).toEqual({ error: NO_BASH_FOR_POWERSHELL });
     }
+    // The guidance tells the model what to do next: where it is, and the native equivalents.
+    expect(NO_BASH_FOR_POWERSHELL).toContain("Windows PowerShell 5.1");
+    expect(NO_BASH_FOR_POWERSHELL).toMatch(/Remove-Item -Recurse -Force.*Get-ChildItem -Force/);
     // The editor's cmd.exe default is judged by cmd's rules, as before.
     expect(posixRoute("ls -la src")).toEqual({ error: NO_POSIX_SHELL });
   });

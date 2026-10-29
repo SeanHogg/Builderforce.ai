@@ -69,6 +69,13 @@ describe('run failure classification', () => {
     expect(classifyRunFailure('no model available for this request')).toBe('model_unavailable');
   });
 
+  it('does not read a tenant\'s own spent token cap (also a 429) as a provider rate limit', () => {
+    // The shared rate-limit rule (`isRateLimitFailure`, @builderforce/agent-tools) excludes the gateway's
+    // budget 429s: the customer used their allowance, no model was throttled.
+    expect(classifyRunFailure('HTTP 429: Plan daily token limit reached (50,000 tokens).')).toBe('quota_exhausted');
+    expect(classifyRunFailure('HTTP 529: over capacity')).toBe('rate_limited');
+  });
+
   /**
    * `unknown` is the USEFUL answer, never a bug to be tuned away: a wrong class sends
    * the reader to the wrong subsystem, which is worse than an honest "unclassified".

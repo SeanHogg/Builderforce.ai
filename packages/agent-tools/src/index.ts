@@ -18,6 +18,7 @@ export * from "./glob.js";
 export * from "./tool.js";
 export * from "./registry.js";
 export * from "./toolAliases.js";
+export * from "./rateLimitFailure.js";
 export * from "./engine.js";
 export * from "./spec.js";
 export * from "./policyGateCallKey.js";

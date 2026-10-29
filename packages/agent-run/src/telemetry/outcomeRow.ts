@@ -25,6 +25,7 @@
  * a Worker invocation and a VS Code extension host build the identical row.
  */
 
+import { isRateLimitFailure } from "@builderforce/agent-tools";
 import { RUN_CANCELLED_REASON, type RunOutcomeKind, type RunOutcomeRow, type RunState } from "../contract.js";
 import { defaultEstimateTokens } from "../policy/compaction/pack.js";
 import { turnContextBlock } from "../turnContext.js";
@@ -78,19 +79,21 @@ export function buildOutcomeRow(input: OutcomeRowInput): RunOutcomeRow {
     unkeptReadyClaims: progress?.unkeptTurns ?? 0,
     progressTrips: tripsBySignal(progress?.tripsBySignal),
     ...(input.reason === RUN_CANCELLED_REASON ? { cancelled: true } : {}),
-    ...(input.kind === "failed" && isRateLimitReason(input.reason) ? { rateLimited: true } : {}),
+    ...(input.kind === "failed" && isRateLimitFailure(input.reason) ? { rateLimited: true } : {}),
     ...(isDegraded(state) ? { degraded: true } : {}),
   };
 }
 
-/** A run that died on a provider rate limit: the settle reason carries the HTTP status or the words. */
-function isRateLimitReason(reason: string | undefined): boolean {
-  return !!reason && /\b429\b|rate[\s_-]?limit/i.test(reason);
-}
-
-/** Served off its intended model: the preflight came back degraded, or a turn was answered by another model. */
+/**
+ * Served by a WEAKER model than the run asked for. `state.downgrades` records exactly that - an
+ * auto-routed turn that landed on a model the run did not choose because a connected account could not
+ * be used, or on a plan-tier model (`modelDowngrade`). A failover to another model of the same standing
+ * is announced by the `llm.model_downgrade` event but is not recorded there, and a preflight NOTE
+ * (`state.preflight` = degraded:<reason>) is a warning before turn 1, not a verdict on what served the
+ * run; neither makes the run degraded.
+ */
 function isDegraded(state: RunState): boolean {
-  return (state.preflight?.startsWith("degraded") ?? false) || (state.downgrades?.length ?? 0) > 0;
+  return (state.downgrades?.length ?? 0) > 0;
 }
 
 /** The A3 trips by signal, as a plain `{ signal: count }` map (empty when none tripped). */

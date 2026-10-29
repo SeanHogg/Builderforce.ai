@@ -22,7 +22,8 @@ import {
   type RunState,
 } from "../../src/index.js";
 import { freshState } from "../../src/runState.js";
-import { TEST_POLICY, TEST_TASK } from "../support/policyContext.js";
+import { modelDowngrade } from "../../src/policy/model/index.js";
+import { TEST_POLICY, TEST_TASK, policyCtx } from "../support/policyContext.js";
 
 function state(): RunState {
   return freshState(TEST_POLICY, TEST_TASK);
@@ -42,22 +43,37 @@ describe("buildOutcomeRow — how a run ended", () => {
   });
 
   it("a run that died on a provider rate limit reads as rate-limited", () => {
-    expect(failed("chat completion failed: HTTP 429")).toMatchObject({ rateLimited: true });
+    // The real wire string the gateway transport throws (ChatCompletionError).
+    expect(failed('chat completion failed with HTTP 429: {"error":"Too many requests"}')).toMatchObject({ rateLimited: true });
+    // The SAME rule the cloud classifier uses: a capacity ceiling is availability, not quality.
+    expect(failed("chat completion failed with HTTP 529: overloaded, over capacity")).toMatchObject({ rateLimited: true });
     expect(failed("the provider is rate limited")).toMatchObject({ rateLimited: true });
     expect(failed("step budget spent")).not.toHaveProperty("rateLimited");
     // A 429 that did not end the run is not a rate-limited run.
     expect(buildOutcomeRow({ entryPoint: "on-prem", kind: "finished", reason: "429", state: state() })).not.toHaveProperty("rateLimited");
   });
 
-  it("a run served off its intended model reads as degraded - by preflight or by downgrade", () => {
-    const preflight = state();
-    preflight.preflight = "degraded:byo_unresolved";
+  it("a tenant's own spent budget is NOT a model availability signal", () => {
+    for (const code of ["agent_host_token_limit_exceeded", "plan_token_limit_exceeded", "plan_monthly_token_limit_exceeded", "member_spend_cap_exceeded", "premium_daily_cap_exceeded"]) {
+      expect(failed(`chat completion failed with HTTP 429: {"code":"${code}","terminal":true}`), code).not.toHaveProperty("rateLimited");
+    }
+    expect(failed("chat completion failed with HTTP 429: Plan daily token limit reached (50,000 tokens).")).not.toHaveProperty("rateLimited");
+  });
+
+  it("a run served by a WEAKER model than it asked for reads as degraded", () => {
     const downgraded = state();
     downgraded.downgrades = ["flash-1"];
-    for (const s of [preflight, downgraded]) expect(buildOutcomeRow({ entryPoint: "on-prem", kind: "finished", state: s })).toMatchObject({ degraded: true });
-    const ok = state();
-    ok.preflight = "ok";
-    expect(buildOutcomeRow({ entryPoint: "on-prem", kind: "finished", state: ok })).not.toHaveProperty("degraded");
+    expect(buildOutcomeRow({ entryPoint: "on-prem", kind: "finished", state: downgraded })).toMatchObject({ degraded: true });
+  });
+
+  it("a preflight note, or a failover to another model, is not degraded", () => {
+    const note = state();
+    note.preflight = "degraded:openai:expired";
+    expect(buildOutcomeRow({ entryPoint: "on-prem", kind: "finished", state: note })).not.toHaveProperty("degraded");
+    // A pinned model answered by another is announced (llm.model_downgrade, "failover") but not recorded as a downgrade.
+    const ctx = policyCtx();
+    expect(modelDowngrade(ctx, "sonnet", "other-sonnet-class")).toMatchObject({ reason: "failover" });
+    expect(buildOutcomeRow({ entryPoint: "on-prem", kind: "finished", state: ctx.state })).not.toHaveProperty("degraded");
   });
 });
 

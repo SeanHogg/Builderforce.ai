@@ -1,3 +1,4 @@
+import { isRateLimitFailure } from '@builderforce/agent-tools';
 import { isInfrastructureEviction } from './orphanReasons';
 
 /**
@@ -142,7 +143,8 @@ export function classifyRunFailure(message: string | null | undefined): RunFailu
 
   // 2. Generic provider / infrastructure probes, for messages that reach us verbatim
   //    from a vendor rather than through a reason constant.
-  if (/\b429\b|rate.?limit|too many requests|over capacity|capacity limit/i.test(m)) return 'rate_limited';
+  // The ONE rate-limit rule, shared with the agent's outcome row; a tenant's own spent cap is not one.
+  if (isRateLimitFailure(m)) return 'rate_limited';
   if (/\b40[13]\b|unauthorized|unauthenticated|invalid api key|authentication failed|credential/i.test(m)) return 'auth_failed';
   if (/token (budget|cap|limit) (reached|exhausted)|quota (exceeded|exhausted)|run cap/i.test(m)) return 'quota_exhausted';
   if (/no model|model not (found|available)|all models|no provider|unsupported model/i.test(m)) return 'model_unavailable';

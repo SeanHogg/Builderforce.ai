@@ -77,9 +77,31 @@ function commandWords(command: string): string[] {
 
 /**
  * Utilities Windows PowerShell already has under the same name (aliases), so on a machine whose
- * default shell IS PowerShell they run there and are not a reason to demand bash.
+ * default shell IS PowerShell a plain `ls src` / `cat f` / `rm f` runs there and is no reason to demand
+ * bash. NOT `diff`: that is `Compare-Object`, which compares ARGUMENT STRINGS - it runs, and answers wrong.
  */
-const POWERSHELL_ALIASED: ReadonlySet<string> = new Set(["cat", "ls", "rm", "cp", "mv", "pwd", "sleep", "tee", "diff"]);
+const POWERSHELL_ALIASED: ReadonlySet<string> = new Set(["cat", "ls", "rm", "cp", "mv", "pwd", "sleep", "tee"]);
+
+/**
+ * An aliased verb handed a unix `-flag` (`rm -rf`, `ls -la`, `cat -n`, `mv -f`): the alias binds the
+ * flag to a Cmdlet parameter by prefix, or not at all, so the command fails or does something else.
+ * There are no exceptions on purpose - `cp -r` happens to bind to -Recurse, but a list of the forms that
+ * bind correctly is a list that goes stale; the call is cheap to send to bash and costly to get wrong.
+ */
+function aliasedWithUnixFlag(bare: string): boolean {
+  return bare.split(/\|\||&&|[|;\n]/).some((segment) => {
+    const [verb, next] = segment.trim().replace(/^\(+\s*/, "").split(/\s+/);
+    return !!verb && POWERSHELL_ALIASED.has(verb) && !!next && /^-[A-Za-z]/.test(next);
+  });
+}
+
+/** Shell syntax PowerShell 5.1 does not read at all: POSIX redirects and null device, backtick substitution, `<` input, `VAR=x cmd` prefixes. */
+const POWERSHELL_UNSUPPORTED = [
+  /\/dev\/null/,                                  // 2>/dev/null, >/dev/null
+  /`[^`\n]+`/,                                   // `cmd` command substitution (a backtick is PowerShell's ESCAPE)
+  /(^|\s)<\s*\S/,                                 // input redirection
+  /(^|[|;&\n]\s*)[A-Za-z_]\w*=\S*\s+\S/,         // VAR=value cmd
+];
 
 /** A command with its quoted strings blanked, so an `&&` inside text is not read as a chain. */
 function withoutQuoted(command: string): string {
@@ -96,6 +118,8 @@ function needsBashForPowerShell(command: string): boolean {
   const bare = withoutQuoted(command);
   if (/&&|\|\|/.test(bare)) return true;
   if (POSIX_ONLY_CONTROL.some((re) => re.test(bare))) return true;
+  if (POWERSHELL_UNSUPPORTED.some((re) => re.test(bare))) return true;
+  if (aliasedWithUnixFlag(bare)) return true;
   return commandWords(bare).some((w) => POSIX_UTILITIES.has(w) && !POWERSHELL_ALIASED.has(w));
 }
 
@@ -252,9 +276,10 @@ export const NO_POSIX_SHELL =
 
 /** The refusal when a command needs bash and the machine's default shell is Windows PowerShell with no bash to hand it to. */
 export const NO_BASH_FOR_POWERSHELL =
-  "this command needs a POSIX shell (it chains with && / ||, or uses set -e / [ … ] / export, or a unix utility such as head/grep/sed that Windows PowerShell does not have) "
-  + "and no POSIX shell was found on this Windows machine. "
-  + "Install Git for Windows (which ships bash), or re-run the work as separate single commands instead.";
+  "this command needs a POSIX shell (it chains with && / ||, redirects to /dev/null, uses backticks, < or VAR=value prefixes, passes unix flags to ls/rm/cat/cp/mv, "
+  + "or uses a unix utility such as head/grep/sed/diff) and no POSIX shell was found on this Windows machine - the shell here is Windows PowerShell 5.1, which has none of that. "
+  + "Either install Git for Windows (which ships bash), or retry it as separate PowerShell commands joined with ';' using the native equivalents: "
+  + "Remove-Item -Recurse -Force, Get-ChildItem -Force, Get-Content, Select-String, Select-Object -First N, Copy-Item -Recurse, Move-Item, Test-Path, Compare-Object.";
 
 /**
  * The interpreter a host runs a command in when nothing says otherwise. Windows only:

@@ -85,13 +85,17 @@ export const LOCAL_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
 /**
  * What a run that can DELEGATE holds on the editor: the surface's own, plus the editor's children
  * running live (`subagentControlTools.ts` backs wait/message/stop). The capability set the spawn
- * tools are described under - not `LOCAL_SURFACE_CAPS` alone, which has no delegation.
+ * tools are described under - not `LOCAL_SURFACE_CAPS` alone, which has no delegation. Only
+ * `orchestrate.live` changes a description today, so only the capabilities the tools require are here.
+ *
+ * KEEP IN STEP: when the editor moves onto the ONE agent (`runAgent`, PRD 35 WS4) this set must BE the
+ * capability provider's `capabilities`, not a second statement of them - the description a model reads
+ * and the tools it is actually granted must not be able to drift apart.
  */
 export const EDITOR_DELEGATION_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   ...LOCAL_SURFACE_CAPS,
   "orchestrate",
   "orchestrate.live",
-  "orchestrate.fanout",
 ]);
 
 /**

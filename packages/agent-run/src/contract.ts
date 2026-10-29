@@ -226,7 +226,7 @@ export interface RunOutcomeRow {
   cancelled?: boolean;
   /** Present (true) only when the run died on a provider rate limit - an availability signal, not a quality one. */
   rateLimited?: boolean;
-  /** Present (true) only when the run was served off its intended model (a failed preflight, or a downgrade). */
+  /** Present (true) only when the run was served by a WEAKER model than it asked for (a downgrade); a same-tier failover or a preflight note is not degraded. */
   degraded?: boolean;
 }
 
