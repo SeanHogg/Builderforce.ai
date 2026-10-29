@@ -8,6 +8,13 @@
  */
 
 import type { RunOutcomeTelemetry } from '@builderforce/learned-routing';
+import type { runModelOutcomes } from '../../infrastructure/database/schema';
+
+/** The columns a `run_model_outcomes` insert takes. */
+type OutcomeInsert = typeof runModelOutcomes.$inferInsert;
+
+/** Every field of the §8.2 row — a field added to the contract and not mapped fails the `satisfies` below. */
+type EveryTelemetryField = { [K in keyof Required<RunOutcomeTelemetry>]: unknown };
 
 export function runOutcomeTelemetryColumns(t: RunOutcomeTelemetry) {
   return {
@@ -28,5 +35,6 @@ export function runOutcomeTelemetryColumns(t: RunOutcomeTelemetry) {
     modelPreflight:    t.modelPreflight ?? null,
     unkeptReadyClaims: t.unkeptReadyClaims ?? null,
     progressTrips:     t.progressTrips ?? null,
-  };
+    // Compile-time: each key is a `run_model_outcomes` insert column, and every contract field is here.
+  } satisfies Partial<OutcomeInsert> & EveryTelemetryField;
 }

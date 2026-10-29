@@ -4,7 +4,6 @@ import {
   resolveBrainStream,
   formatEvermindMemoryBlock,
   type BrainAction,
-  type ChatCompletionMessage,
 } from '@seanhogg/builderforce-brain-embedded';
 import { brainConfig } from '@/lib/brain/runtime';
 import { guestBrainConfig } from '@/lib/brain/guestRuntime';
@@ -21,23 +20,23 @@ import {
 } from '@/lib/canvasTurnOutcome';
 import { canvasSystemMessages, promptNamedTools } from '@/lib/canvasAiSystemPrompt';
 import { CanvasRunAbortedError } from '@/lib/canvasAiErrors';
-import { MALFORMED_TOOL_CALL_DIRECTIVE, TRUNCATED_ROUND_DIRECTIVE } from '@/lib/canvasAiTurnBudget';
-import { runAgentLoop, openAiChatCodec } from '@builderforce/agent-loop';
-import { initialRunPolicy } from '@builderforce/run-policy';
 import { composeTurnTail, documentShortfallAnswer } from '@/lib/canvasAiTurnTail';
 import { learnFromCanvasAnswer, recallCanvasMemory } from '@/lib/canvasAiEvermind';
 import type { CanvasAiOptions, CanvasRun } from '@/lib/canvasAiRun';
-import { canvasModelPort } from '@/lib/canvasModelPort';
-import { canvasToolPort } from '@/lib/canvasToolPort';
-import { canvasNoToolCallsHook } from '@/lib/canvasNoToolCalls';
+import { canvasRunPolicy, canvasRunPorts, canvasRunTask } from '@/lib/canvasRunPorts';
 
 /**
- * Run the canvas agent loop over the active canvas and shared MCP catalog.
+ * Run one canvas turn on the one agent (`@builderforce/agent-run`) over the active canvas
+ * and the shared MCP catalog.
  *
- * No step cap — the same budget Rovr and the VSIX pass (`runLoop.ts`: `budget: {}`).
- * A turn stops when the model finishes, the user cancels, or the kernel's
- * consecutive-tool-failure breaker trips. A step ceiling is what cut a Stripe
- * checkout off after 16 tool calls.
+ * This is the CALL SITE: it assembles the turn's prompt and the board's tools, hands them
+ * to `runAgent` as ports (`canvasRunPorts.ts`), and composes the answer the user reads from
+ * what the run left on the board. The loop, the stall ladder, the model hand-off and the
+ * tool selection are the agent's.
+ *
+ * No step cap — the same budget Rovr and the VSIX pass. A turn stops when the model
+ * finishes, the user cancels, or the kernel's consecutive-tool-failure breaker trips. A
+ * step ceiling is what cut a Stripe checkout off after 16 tool calls.
  */
 export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<string> {
   /** Every await boundary a stopped turn must not cross. */
@@ -118,14 +117,6 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   const mutationRequested = !options.participant && requestsCanvasMutation(options.prompt);
   const hasTabularData = snapshotHasTabularRows(options.canvasSnapshot);
   const requestedPages = requestedPagesForTurn(options);
-  // THE model hand-off policy (`@builderforce/run-policy`), shared with every other agent
-  // loop. One canvas turn is one logical agent turn, so its continuations stay on the
-  // model that began it (a LOCK — a preference, not a strict pin: the gateway may still
-  // substitute when the provider becomes unavailable), instead of asking Auto to reroute
-  // every tool result (which once moved research from MiniMax to Gemini just before the
-  // required Canvas write). A model that will not act hands the turn to one that already
-  // emitted valid tool calls in it, pinned strictly; models the session already proved
-  // will not execute a command are routed around from the first request.
   const run: CanvasRun = {
     options,
     notices,
@@ -147,78 +138,51 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       unverifiedCreationClaim(notices, answer, run.canvasChanged, hasTabularData, mutationRequested) ?? answer,
     finish,
     throwIfStopped,
-    toolsUsedThisTurn: new Set<string>(),
     changedFiles: new Set<string>(),
     finalText: '',
     canvasChanged: false,
-    executiveRequestRecoveryUsed: false,
-    mutationRecoveries: 0,
-    buildAuthoringRecoveries: 0,
-    degenerateAnswerRecoveryUsed: false,
-    interruptedTurnRecoveries: 0,
     abandonedMidTurn: false,
-    authoringDirectiveIssued: false,
     narrowSearches: 0,
     lastToolError: '',
     lastSpokenAnswer: '',
-    policy: initialRunPolicy({
-      pinnedModel: options.model,
-      strictPin: options.modelStrict,
-      lockAfterFirstSuccess: true,
-      preferProvenFailover: true,
-      strictFailover: true,
-      excludeModels: options.disabledModels ?? [],
-    }),
     providerFailures: 0,
     documentWords: requestedPages == null ? null : documentWordsInSnapshot(options.canvasSnapshot),
     documentWordCountExact: false,
-    settled: null,
-    authoringOnly: false,
-    lastTurnInterruption: null,
-    discardedCallThisRound: false,
     workspaceTurn: false,
     buildTurn: false,
     buildAuthored: false,
     truncatedOnce: false,
+    lastFinishReason: null,
+    loopKept: '',
+    fatal: null,
   };
-  // ── THE loop ────────────────────────────────────────────────────────────────
-  // The model→tools→model skeleton lives ONCE in `@builderforce/agent-loop` (the same
-  // kernel the cloud engine, the Brain and the on-prem runtime drive). The canvas's own
-  // concerns — the reserved authoring phase, the stalled-provider and interruption
-  // ladders, the mutation escalation, the confirm gate, the completion diagnostics —
-  // are hooks and ports closing over this turn's state (`canvasModelPort.ts`,
-  // `canvasToolPort.ts`, `canvasNoToolCalls.ts`). Nothing here iterates.
-  const loop = await runAgentLoop<ChatCompletionMessage>({
-    messages,
-    codec: openAiChatCodec<ChatCompletionMessage>(),
-    signal: options.signal,
-    // No step cap (`stepCap ?? Infinity` in the kernel): the failure streak is the stop.
-    budget: {},
-    ports: { complete: canvasModelPort(run), dispatch: canvasToolPort(run) },
-    hooks: {
-      // A stopped run must not START another tool. One already in flight is left to
-      // settle (its own transport owns the cancellation); nothing after it runs.
-      beforeDispatch: () => { throwIfStopped(); return undefined; },
-      afterToolCalls: () => {
-        run.finalText = '';
-        // The complete calls in a cut-off round already ran and the discarded one got
-        // its own result above; say once, for the round, how to stop it recurring.
-        if (run.discardedCallThisRound) {
-          run.discardedCallThisRound = false;
-          messages.push({
-            role: 'system',
-            content: run.lastTurnInterruption === 'truncated' ? TRUNCATED_ROUND_DIRECTIVE : MALFORMED_TOOL_CALL_DIRECTIVE,
-          });
-        }
-        return undefined;
-      },
-      onNoToolCalls: canvasNoToolCallsHook(run),
-    },
+  // ── THE run ─────────────────────────────────────────────────────────────────
+  // The model→tools→model skeleton lives ONCE in `@builderforce/agent-loop`, driven by the
+  // one agent (`@builderforce/agent-run`) that every entry point shares. The canvas's own
+  // concerns are ports: the model transport (`canvasModelPort.ts`), the board's tools
+  // (`canvasPlatformTools.ts`) and what the turn still owes (`canvasDelivery.ts`).
+  // Nothing here iterates.
+  // A dynamic import: the bundler splits the agent (its policy suite and the shared tool
+  // registry) into its own chunk, fetched when the first turn runs; opening a board does not
+  // wait on it. Everything else this module takes from the agent is a type.
+  const { runAgent } = await import('@builderforce/agent-run');
+  const outcome = await runAgent({
+    task: canvasRunTask(run),
+    policy: canvasRunPolicy(options, webInferenceModeNow()),
+    ports: canvasRunPorts(run),
+    ...(options.signal ? { signal: options.signal } : {}),
   });
   // The user pressed Stop between round-trips (a stop mid-stream or mid-tool throws
   // on its own): typed, so the surface records "you stopped this", not a failure.
-  if (loop.cancelled) throw new CanvasRunAbortedError();
-  if (run.settled !== null) return run.settled;
+  throwIfStopped();
+  // A provider error the policy does not route around (a refusal) surfaces as it is.
+  if (run.fatal) throw run.fatal;
+  if (outcome.kind === 'finished') return finish(outcome.output);
+  // The run stopped without an answer of its own. Nothing the model said in flight is the
+  // answer — except what a LOOPING model said before it looped, delivered when no other
+  // model could take over.
+  run.finalText = run.loopKept;
+  if (run.loopKept) options.onText?.(run.finalText);
   const { speakerLabels } = run;
   const trailing = stripSpeakerLabel(run.finalText, speakerLabels).trim();
   const tail = composeTurnTail({
@@ -230,10 +194,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     canvasChanged: run.canvasChanged,
     abandonedMidTurn: run.abandonedMidTurn,
     providerFailures: run.providerFailures,
-    // Only a step cap produces this notice (`exhaustedBy: 'steps'`). An empty budget
-    // never exhausts that way; a failure-streak stop must not be reported as
-    // "I used every step this turn allows".
-    stepsExhausted: loop.exhaustedBy === 'steps',
+    // A canvas turn has no step cap, so no step notice: a failure-streak stop must not be
+    // reported as "I used every step this turn allows".
+    stepsExhausted: false,
     workspaceTurn: run.workspaceTurn,
     buildTurn: run.buildTurn,
     buildAuthored: run.buildAuthored,

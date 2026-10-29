@@ -14,9 +14,9 @@
  * Pure: no I/O, no clock, no env. The lever decision arrives as a parameter.
  */
 
-import { DEFAULT_TOOL_OUTPUT_CHARS, READ_FILE_TOOL, isShellTool, toolOutputCap, windowedCap } from './caps.js';
+import { DEFAULT_TOOL_OUTPUT_CHARS, isPagedReadTool, isShellTool, toolOutputCap, windowedCap } from './caps.js';
 import { projectJson } from './jsonProjection.js';
-import { READ_FILE_RESULT_CHARS, isReadFileResult, isReadFilesResult, windowReadFile, windowReadFiles, type AttachAdvisory } from './readFileWindow.js';
+import { isReadFileResult, isReadFilesResult, windowReadFile, windowReadFiles, type AttachAdvisory } from './readFileWindow.js';
 import { detectRunner, summarizeShellOutput } from './shellSummary.js';
 import { cutHeadTail } from './textCut.js';
 
@@ -86,7 +86,7 @@ function attach(value: unknown, opts: ShapeToolResultOptions): unknown {
  *  behaviour, so with the lever off every other tool keeps the generic cap it always had. */
 function capFor(tool: string, opts: ShapeToolResultOptions): number {
   if (opts.maxChars !== undefined) return opts.maxChars;
-  const tableCap = !opts.summarize && tool !== READ_FILE_TOOL ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
+  const tableCap = !opts.summarize && !isPagedReadTool(tool) ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
   return windowedCap(tool, tableCap, opts.contextWindowTokens);
 }
 
@@ -111,15 +111,26 @@ function shrinkLogFields(tool: string, out: Record<string, unknown>, cap: number
 }
 
 /**
+ * The sentence that travels WITH a cut result so the model never takes it for the whole:
+ * how long the result was (in chars — the unit the cap counts), the most this surface
+ * returns, and what to do. Short enough to ride inside the cap it describes, and compact
+ * when the cap is tiny. The ONE wording; every host that cuts a result says this.
+ */
+export function truncatedResultNote(originalChars: number, maxChars: number): string {
+  if (maxChars < 600) return 'Truncated: NOT the whole result — do not treat it as complete.';
+  return `Truncated: the full result was ${originalChars.toLocaleString('en-US')} chars and this surface returns at most ~${maxChars.toLocaleString('en-US')}. \`output\` is only a cut of it, NOT the whole — never treat it as complete or write it back as if it were. Re-call with a narrower query, id or filter to see the rest.`;
+}
+
+/**
  * Shape a tool result for the model transcript. `bytes` is always the ORIGINAL size.
  */
 export function shapeToolResult(tool: string, out: unknown, opts: ShapeToolResultOptions = {}): ShapedToolResult {
   const bytes = JSON.stringify(out ?? null).length;
 
-  if (tool === READ_FILE_TOOL && (isReadFileResult(out) || isReadFilesResult(out))) {
+  if (isPagedReadTool(tool) && (isReadFileResult(out) || isReadFilesResult(out))) {
     // The line window's own row (the `caps` override never applied to it), sized to the window.
-    const maxChars = opts.maxChars ?? windowedCap(READ_FILE_TOOL, READ_FILE_RESULT_CHARS, opts.contextWindowTokens);
-    const windowOpts = { maxChars, advisory: opts.advisory, attachAdvisory: opts.attachAdvisory };
+    const maxChars = opts.maxChars ?? windowedCap(tool, toolOutputCap(tool), opts.contextWindowTokens);
+    const windowOpts = { tool, maxChars, advisory: opts.advisory, attachAdvisory: opts.attachAdvisory };
     const windowed = isReadFileResult(out) ? windowReadFile(out, windowOpts) : windowReadFiles(out, windowOpts);
     return { content: JSON.stringify(windowed.value), bytes, truncated: windowed.truncated, served: windowed.served };
   }

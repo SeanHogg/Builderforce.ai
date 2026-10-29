@@ -25,7 +25,7 @@
  */
 
 import type { Capability, ToolSchema } from "@builderforce/agent-tools";
-import { shapeToolResult, toolOutputCap, windowedCap } from "@builderforce/tool-output-policy";
+import { shapeToolResult, toolOutputCap, truncatedResultNote, windowedCap } from "@builderforce/tool-output-policy";
 
 export { toolOutputCap, windowedCap };
 
@@ -55,11 +55,14 @@ function failedResult(data: unknown): { error?: string } | null {
  * The shaper's text (a head+tail cut is not JSON) as a result object whose SERIALISED
  * form fits `maxChars`: JSON escaping inflates the text, so it is cut until it does.
  */
-function fittedText(text: string, failed: { error?: string } | null, maxChars: number): Record<string, unknown> {
+function fittedText(text: string, failed: { error?: string } | null, maxChars: number, originalChars: number): Record<string, unknown> {
+  // The marker rides BEFORE the body, so the cut that makes the result fit can only ever
+  // remove content, never the sentence that says content is missing. One wording, the policy's.
+  const note = truncatedResultNote(originalChars, maxChars);
   const head = failed ? { ok: false, ...failed } : {};
   let body = text;
   for (;;) {
-    const result = { ...head, truncated: true, output: body };
+    const result = { ...head, truncated: true, note, output: body };
     const over = JSON.stringify(result).length - maxChars;
     if (over <= 0 || body.length === 0) return result;
     body = body.slice(0, Math.max(0, body.length - over - 1));
@@ -81,12 +84,12 @@ export function capToolResult(tool: string, data: unknown, maxChars: number): un
   try {
     parsed = JSON.parse(shaped.content) as unknown;
   } catch {
-    return fittedText(shaped.content, failed, maxChars);
+    return fittedText(shaped.content, failed, maxChars, shaped.bytes);
   }
   if (failed && parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
     return { ...(parsed as Record<string, unknown>), ok: false };
   }
-  return failed ? fittedText(shaped.content, failed, maxChars) : parsed;
+  return failed ? fittedText(shaped.content, failed, maxChars, shaped.bytes) : parsed;
 }
 
 // ── The cloud surface capability set (cloudAgentTools.ts + runSurfaceCaps.ts) ───

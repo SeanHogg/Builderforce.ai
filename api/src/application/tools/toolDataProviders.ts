@@ -26,6 +26,7 @@ import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { usageDatabaseOf, usageRequestCount } from '../llm/usageLedger';
 import { memberMetricsPeriod, deploymentEvents, llmUsageLog, projects, runModelOutcomes, ticketAudits, tasks } from '../../infrastructure/database/schema';
+import { codingEvidence } from '../shared/codingEvidence';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { computeDora, computeProjectDeliveryMetrics } from '../metrics/workforceMetrics';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
@@ -267,6 +268,7 @@ const collectAgenticMaturity = async (db: Db, tenantId: number, days: number, pr
     }).from(runModelOutcomes).where(and(
       eq(runModelOutcomes.tenantId, tenantId),
       gte(runModelOutcomes.createdAt, since),
+      codingEvidence,
       ...(forProject ? [eq(runModelOutcomes.projectId, projectId!)] : []),
     )),
   ]);

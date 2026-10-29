@@ -20,6 +20,7 @@
 import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { llmUsageLog, runModelOutcomes } from '../../infrastructure/database/schema';
+import { codingEvidence } from '../shared/codingEvidence';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import { normalizeByoProvider, usageDatabaseOf } from '../llm/usageLedger';
@@ -472,7 +473,7 @@ export async function computeAiImpact(db: Db, tenantId: number, days: number): P
       costUsdMillicents: runModelOutcomes.costUsdMillicents,
     })
     .from(runModelOutcomes)
-    .where(and(eq(runModelOutcomes.tenantId, tenantId), gte(runModelOutcomes.createdAt, since)))) as ImpactOutcomeRow[];
+    .where(and(eq(runModelOutcomes.tenantId, tenantId), gte(runModelOutcomes.createdAt, since), codingEvidence))) as ImpactOutcomeRow[];
 
   // Preceding equal-length window — outcomes only (drives the productivity delta).
   const prevOutcomes = (await outcomesDb
@@ -489,6 +490,7 @@ export async function computeAiImpact(db: Db, tenantId: number, days: number): P
       eq(runModelOutcomes.tenantId, tenantId),
       gte(runModelOutcomes.createdAt, prevSince),
       sql`${runModelOutcomes.createdAt} < ${since}`,
+      codingEvidence,
     ))) as ImpactOutcomeRow[];
 
   return summarizeAiImpact(usage, outcomes, prevOutcomes, days, windowStart, now);

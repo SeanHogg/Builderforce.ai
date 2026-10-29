@@ -1615,6 +1615,11 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
   tokens:           integer('tokens'),
   /** Prompt-cache reads across the run's turns. */
   cacheReadTokens:  integer('cache_read_tokens'),
+  /** TRUE = this row is CODING-RUN EVIDENCE (migration 1284 / transactional 0027). FALSE for a run
+   *  that is not (a Creation Canvas turn): recorded for the uniform telemetry row only — never
+   *  folded into the routing blob or re-admitted by a rebuild, and excluded from every lens that
+   *  ranks models or measures coding effectiveness (see application/shared/codingEvidence). */
+  routingSignal:    boolean('routing_signal').notNull().default(true),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   // Declared with its predicate so an upsert on `clientRunId` is held to restating it

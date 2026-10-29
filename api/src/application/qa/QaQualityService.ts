@@ -24,6 +24,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { pullRequests, qaFindings, runModelOutcomes } from '../../infrastructure/database/schema';
+import { codingEvidence } from '../shared/codingEvidence';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { DAY_MS } from '../../domain/shared/time';
 
@@ -153,6 +154,7 @@ async function attributeEscapedDefects(
       inArray(runModelOutcomes.projectId, projectIds),
       eq(runModelOutcomes.merged, true),
       gte(runModelOutcomes.createdAt, since),
+      codingEvidence,
     ))
     .orderBy(runModelOutcomes.createdAt);
   const runsByProject = new Map<number, typeof merged>();
@@ -208,6 +210,7 @@ export async function computeProjectQualityTrend(
   const outcomeScope = and(
     eq(runModelOutcomes.tenantId, tenantId),
     gte(runModelOutcomes.createdAt, since),
+    codingEvidence,
     ...(projectId != null ? [eq(runModelOutcomes.projectId, projectId)] : []),
   );
 

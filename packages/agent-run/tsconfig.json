@@ -22,6 +22,7 @@
       "@builderforce/agent-tools": ["../agent-tools/src/index.ts"],
       "@builderforce/cost-levers": ["../cost-levers/src/index.ts"],
       "@builderforce/difficulty-router": ["../difficulty-router/src/index.ts"],
+      "@builderforce/learned-routing": ["../learned-routing/src/index.ts"],
       "@builderforce/model-catalog": ["../model-catalog/src/index.ts"],
       "@builderforce/run-guards": ["../run-guards/src/index.ts"],
       "@builderforce/run-policy": ["../run-policy/src/index.ts"],

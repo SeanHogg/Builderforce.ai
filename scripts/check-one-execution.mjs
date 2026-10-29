@@ -87,7 +87,6 @@ const BASELINE = [
   'api/src/application/brain/agentReplyLoop.ts',
   'api/src/application/runtime/cloudAgentEngine.ts',
   'brain-embedded/src/runStore/runLoop.ts',
-  'frontend/src/lib/creationCanvasAi.ts',
 ];
 
 const loopImporters = [...new Set(findings.filter((f) => f.kind === 'kernel-loop').map((f) => f.file))].sort();

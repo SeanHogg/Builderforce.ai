@@ -11,10 +11,12 @@ import type { LoopControl, LoopDispatchResult, LoopHooks, ParsedToolCall } from 
 import type { ModelUsage, RunMessage, RunState } from "./contract.js";
 import type { GuardControl, PolicyContext, PolicyHooks } from "./policy/index.js";
 import { isStopSteer, steerInput, steerSkip, type InterruptWatch } from "./policy/steering/index.js";
-import { applyCompaction, currentView, emit, policyContext, toPolicyCall, type RunAgentInput } from "./runContext.js";
+import { applyCompaction, currentView, emit, policyContext, toPolicyCall, type RunAgentInput, type TurnFacts } from "./runContext.js";
 import { rememberWrite } from "./runState.js";
+import { ownsCall } from "./runTurn.js";
 import { tallyCall, tallyTurn, tallyVerify, type RunTally } from "./telemetry/runTally.js";
 import type { ToolSchema } from "@builderforce/agent-tools";
+import type { TurnInterruption } from "./surface.js";
 
 /** The tools a run asks a human through — held back while a requested delegation is undone. */
 const ASK_TOOLS: ReadonlySet<string> = new Set(["ask_human", "ask_user"]);
@@ -33,6 +35,10 @@ export interface KernelRun {
   turnContent: string;
   /** A steered stop command arrived: the run settles cancelled, no further model turn. */
   stopped: boolean;
+  /** How the turn that just ended was served, for the hooks and dispatch that follow it. */
+  facts: TurnFacts;
+  /** The tools policy's selection for THIS step, made once in `beforeTurn` and reused by the request. */
+  selection?: { tools: readonly ToolSchema[] | void };
 }
 
 /** A guard's control as the kernel's control: the options ride along for the ask hook. */
@@ -98,9 +104,19 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
       }
 
-      const view = currentView(transcript, offered);
+      // Compaction charges the schemas the model will be SHOWN, not every tool the surface
+      // could run: a board with hundreds of tools advertises a fixed, ranked set.
+      const base = currentView(transcript, offered);
+      const advertised = await hooks.tools.select(policyContext(input, state, base, ctx.step, ctx.stepInCall), offered);
+      run.selection = { tools: advertised };
+      const view = advertised ? { ...base, tools: [...advertised] } : base;
       const compacted = await hooks.compaction.compact(policyContext(input, state, view, ctx.step, ctx.stepInCall));
       if (compacted) applyCompaction(state, view, compacted, ctx.step);
+
+      // What the previous step's completion said about itself ends with that step: a step that
+      // yields nothing (`{ skip: true }`, a provider re-route) must not leave it for the next.
+      run.facts.model = undefined;
+      run.facts.interruption = undefined;
 
       await emit(ports.events, { kind: "turn.started", step: ctx.step });
       return undefined;
@@ -108,9 +124,11 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
 
     afterTurn: async (ctx, turn) => {
       run.turnContent = turn.content ?? "";
-      const meta = turn.meta && typeof turn.meta === "object" ? (turn.meta as { model?: string; usage?: ModelUsage }) : undefined;
+      const meta = turn.meta && typeof turn.meta === "object" ? (turn.meta as { model?: string; usage?: ModelUsage; interrupted?: TurnInterruption }) : undefined;
       const model = meta ? meta.model : tally.model;
       const usage = meta?.usage;
+      run.facts.model = meta?.model;
+      run.facts.interruption = meta?.interrupted;
       tallyTurn(tally, model, usage);
       await emit(ports.events, { kind: "model.completed", step: ctx.step, ...(model ? { model } : {}), ...(usage ? { usage } : {}) });
     },
@@ -120,12 +138,23 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       // is narration, or the run may not settle yet.
       const pctx = contextAt(ctx.step, ctx.stepInCall);
       pctx.content = turn.content;
+      pctx.served = { ...(run.facts.model ? { model: run.facts.model } : {}), ...(run.facts.interruption ? { interruption: run.facts.interruption } : {}) };
       const stalled = await hooks.stall.recover(pctx);
       if (stalled && stalled.action === "pause") {
         return { action: "stop", ok: false, output: stalled.note ?? "paused", finished: true };
       }
+      if (stalled && stalled.action === "fail") {
+        return { action: "stop", ok: false, output: stalled.note ?? "failed", finished: true };
+      }
+      if (stalled && stalled.action === "settle") {
+        // The ladder ended the run on an answer of its own (a shortfall, a build never written).
+        const answer = stalled.note ?? "";
+        if (answer.trim()) transcript.push({ role: "assistant", content: answer });
+        return { action: "finish", output: answer };
+      }
       if (stalled) {
-        requeue(turn.content, stalled.note ?? "Continue: do the work, do not describe it.");
+        if (stalled.rows) transcript.push(...stalled.rows);
+        else requeue(turn.content, stalled.note ?? "Continue: do the work, do not describe it.");
         return { action: "continue" };
       }
       // A prose answer is a finish too: the sign-off a reviewer owes and the sub-agents
@@ -208,7 +237,9 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       if (data !== result.data) rewriteRow(message, data);
       if (!stub) {
         hooks.tools.observe?.(pctx, pcall, data, result.isError === true);
-        await hooks.memory.observe?.(pctx, pcall, result.data, result.isError);
+        // The run's memory is the WORKSPACE's (files read and written, searches made); a
+        // call on the surface's own tools acted on its board, not on this work.
+        if (!ownsCall(ports, call.name)) await hooks.memory.observe?.(pctx, pcall, result.data, result.isError);
         rememberWrite(state, call, ok);
       }
       // An interrupting steer skips the rest of this turn's calls (§6.3).
@@ -221,6 +252,13 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       const pctx = contextAt(ctx.step, ctx.stepInCall);
       await hooks.guards.endTurn?.(pctx, run.turnContent);
       hooks.stall.acted?.(pctx);
+      // A round in which a call was declined says, ONCE, how to stop it recurring — after
+      // the complete calls ran and the declined one got its own result.
+      if (run.facts.refused) {
+        run.facts.refused = false;
+        const directive = ports.platform?.malformed?.roundDirective(run.facts.interruption === "truncated");
+        if (directive) transcript.push({ role: "system", content: directive });
+      }
       await emit(ports.events, { kind: "turn.finished", step: ctx.step });
       return undefined;
     },

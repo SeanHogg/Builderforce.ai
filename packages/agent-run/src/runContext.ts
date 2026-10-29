@@ -8,6 +8,7 @@ import type { ToolSchema } from "@builderforce/agent-tools";
 import type { ParsedToolCall } from "@builderforce/agent-loop";
 import type { EventSink, RunEvent, RunMessage, RunPolicy, RunPorts, RunState, RunTask } from "./contract.js";
 import type { PolicyContext, PolicyModules, PolicyToolCall } from "./policy/index.js";
+import type { TurnInterruption } from "./surface.js";
 
 /** What a caller hands the agent. */
 export interface RunAgentInput {
@@ -66,6 +67,18 @@ export function applyCompaction(state: RunState, view: TurnView, result: { messa
     ...(result.reserveTokens !== undefined ? { reserveTokens: result.reserveTokens } : {}),
     droppedMessages: result.dropped,
   };
+}
+
+/**
+ * What the turn that just ended tells the hooks that run after it: how it was served and
+ * whether it was cut off (read by the stall ladder and by the dispatch of its calls), and
+ * whether a call in it was declined (said once, after the round).
+ */
+export interface TurnFacts {
+  model?: string;
+  interruption?: TurnInterruption;
+  /** A call with unusable arguments was declined this round. */
+  refused: boolean;
 }
 
 /** The view a hook reads: the transcript and the tools as they stand. */

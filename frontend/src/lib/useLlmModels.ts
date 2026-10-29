@@ -5,6 +5,7 @@ import { gatewayCanChooseModel, gatewayPlanIsPaid, gatewayPlanModels } from '@se
 import { llmApi, tenantModelApi, type ByoModel, type PremiumModelInfo, type TenantModel } from './builderforceApi';
 import { getPremiumModelCatalog, type ModelRecord } from './modelCatalog';
 import { getStoredTenantToken } from './auth';
+import { LLM_MODELS_CACHE_KEY } from './llmModelWindow';
 import { getOrSetClientCached, invalidateClientCache, readClientCached } from '@/infrastructure/http/readThrough';
 
 /**
@@ -75,7 +76,7 @@ export interface LlmModelLists {
 
 const EMPTY: LlmModelLists = { models: [], freeModels: [], codingModels: [], teacherModels: [], tenantModels: [], isPaid: false, byoModels: [], byoProviders: [], fundingSurface: { data: [], byo: { models: [] } }, canChooseModel: false, canUseFrontierModels: false, canUsePremiumModels: false, premiumModels: [] };
 
-const CACHE_KEY = 'llm-models:lists';
+const CACHE_KEY = LLM_MODELS_CACHE_KEY;
 
 function load(): Promise<LlmModelLists> {
   const cached = readClientCached<LlmModelLists>(CACHE_KEY);

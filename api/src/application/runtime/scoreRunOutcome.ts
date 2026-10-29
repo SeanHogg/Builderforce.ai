@@ -228,6 +228,7 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
         // The PRD 35 §8.2 uniform outcome row the client's run built (entry point,
         // tool counts, tokens, the efficiency fields) — validated by the shared contract.
         ...runOutcomeTelemetryColumns(o),
+        routingSignal: o.routingSignal !== false,
       })
       .onConflictDoNothing({ target: runModelOutcomes.clientRunId, where: isNotNull(runModelOutcomes.clientRunId) })
       .returning({ id: runModelOutcomes.id });
@@ -235,7 +236,9 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
     // Only a first-seen outcome folds into the routing blob (the fold is not
     // idempotent; a duplicate report must not double-count). No PR/CI signal on a
     // client run, but completion + efficiency still carry real reliability signal.
-    if (inserted.length > 0) {
+    // A report that is not a routing signal (a Creation Canvas turn is not evidence about
+    // coding models) is recorded and goes no further: not into the blob, not into the datasets.
+    if (inserted.length > 0 && o.routingSignal !== false) {
       await applyOutcomeToRoutingTable(env, db, {
         tenantId,
         projectId: o.projectId ?? null,

@@ -1,5 +1,5 @@
-import type { BrainAction, BrainTraceEvent, ChatMode, ChatCompletionMessage, resolveBrainStream, turnInterruption } from '@seanhogg/builderforce-brain-embedded';
-import { reduceRunPolicy, type RunPolicyEvent, type RunPolicyState } from '@builderforce/run-policy';
+import type { BrainAction, BrainTraceEvent, ChatMode, ChatCompletionMessage, resolveBrainStream } from '@seanhogg/builderforce-brain-embedded';
+import type { RunOutcomeRow } from '@builderforce/agent-run';
 import type { CanvasNotices } from '@/lib/canvasNotices';
 import type { CanvasRunShaping } from '@/lib/canvasAiTurnBudget';
 import type { CanvasPhase } from '@/lib/canvasPhases';
@@ -10,9 +10,9 @@ import type { CanvasEvermindPort } from '@/lib/canvasAiEvermind';
 /**
  * The Creation Canvas turn's contracts — what a surface hands `runCreationCanvasAi`
  * ({@link CanvasAiOptions}), what it reports per completion ({@link CanvasAiCompletion}),
- * and the ONE turn state ({@link CanvasRun}) the loop's ports and hooks share
- * (`canvasModelPort.ts`, `canvasToolPort.ts`, `canvasNoToolCalls.ts`,
- * `canvasProviderRecovery.ts`), so a counter or a flag can never exist twice.
+ * and the ONE turn state ({@link CanvasRun}) the canvas's ports share
+ * (`canvasModelPort.ts`, `canvasPlatformTools.ts`, `canvasDelivery.ts`), so a counter or
+ * a flag can never exist twice.
  */
 
 export type CanvasAiOptions = {
@@ -45,6 +45,8 @@ export type CanvasAiOptions = {
   autoApprove?: boolean;
   evermind?: CanvasEvermindPort;
   onTrace?: (event: BrainTraceEvent) => void;
+  /** The host's PORT for the run's uniform outcome row (PRD 35 §8.2; `entryPoint: 'canvas'`), once, when the run settles. The run does no network I/O: the host sends it (see `canvasRunOutcome.ts`). */
+  onOutcome?: (row: RunOutcomeRow) => void;
   /** Session diagnostics hook. Contains routing facts only; never prompt text,
    * credentials, or provider response bodies. */
   onCompletion?: (completion: CanvasAiCompletion) => void;
@@ -116,11 +118,19 @@ export interface CanvasAiCompletion {
   finishReason: string | null;
 }
 
-/** ONE canvas turn's state. Fields above `finalText` are fixed once the turn starts. */
+/**
+ * ONE canvas turn's FACTS — what the turn has done to the board and what it has said.
+ *
+ * The run's POLICY is not here: the model hand-off, the re-statement ladder and the
+ * tool-selection live in `@builderforce/agent-run`. The three canvas ports read and write
+ * these facts (`canvasModelPort.ts` the transport, `canvasPlatformTools.ts` the board's
+ * tools, `canvasDelivery.ts` what the turn still owes), so a counter or a flag can never
+ * exist twice. Fields above `finalText` are fixed once the turn starts.
+ */
 export interface CanvasRun {
   options: CanvasAiOptions;
   notices: CanvasNotices;
-  /** The turn's request transcript — system messages and directives are appended. */
+  /** The turn's opening rows — the system blocks, the conversation and the user's request. */
   messages: ChatCompletionMessage[];
   /** Where each round trip runs (the Brain's own stream). */
   stream: ReturnType<typeof resolveBrainStream>;
@@ -142,64 +152,37 @@ export interface CanvasRun {
   finish: (answer: string) => Promise<string>;
   /** Every await boundary a stopped turn must not cross. */
   throwIfStopped: () => void;
-  /** Tools this turn has called so far — pinned through per-turn selection so a
-   *  multi-step task never loses a tool mid-flight. */
-  toolsUsedThisTurn: Set<string>;
   /** The app files this turn wrote — named in the out-of-steps notice, which is all the
    *  next turn's transcript keeps of this one. */
   changedFiles: Set<string>;
 
+  /** The text of the completion in flight (or the last one, when it called no tool). */
   finalText: string;
   /** A tool this turn STAGED (`proposed: true`) or COMMITTED (`applied: true`) a canvas
    *  change — see `toolOutcomeChangedCanvas`. */
   canvasChanged: boolean;
-  executiveRequestRecoveryUsed: boolean;
-  /** Act-now escalations spent on a model that answered in prose instead of calling a
-   *  canvas tool. Two: the first re-states the command, the second runs with research
-   *  and board re-reads already withdrawn and tells it why prose is not an artifact. */
-  mutationRecoveries: number;
-  /** The same ladder for a build turn that provisioned a workspace and tried to end
-   *  without writing a file of the app (`BUILD_NOT_AUTHORED_DIRECTIVE`). */
-  buildAuthoringRecoveries: number;
-  degenerateAnswerRecoveryUsed: boolean;
-  interruptedTurnRecoveries: number;
-  /** The loop stopped on a `failed` rung — the turn was ABANDONED, not finished — so a
+  /** The run was ABANDONED mid-turn (no model left to route a provider failure to), so a
    *  board change it made is partial work, never "added to the canvas". */
   abandonedMidTurn: boolean;
-  authoringDirectiveIssued: boolean;
   narrowSearches: number;
   lastToolError: string;
   /**
    * The most recent real thing the model SAID this turn — non-empty, not an echo of an
-   * earlier reply. Held across iterations because the recovery paths deliberately clear
-   * `finalText` before continuing, and one of them then gives up: without this, an
-   * answer the model actually produced is unrecoverable by the time the loop ends.
+   * earlier reply. Held across iterations because the re-statements deliberately drop the
+   * reply they answer, and the ladder can then give up: without this, an answer the model
+   * actually produced is unrecoverable by the time the run ends.
    */
   lastSpokenAnswer: string;
-  /** THE model hand-off policy's state — advanced only through {@link reportToPolicy}. */
-  policy: RunPolicyState;
   /** Provider failures this turn had to route around — silent, broken or looping
    *  streams, resets — in total, for the tail's "the provider failed" verdict. */
   providerFailures: number;
   documentWords: number | null;
   documentWordCountExact: boolean;
-  /** The answer a turn SETTLED on inside the loop (a `finish(...)` return), or null
-   *  when the loop stopped without one and the tail decides what the user gets. */
-  settled: string | null;
-  /** Whether THIS round-trip ran in the reserved authoring phase — set per turn by the
-   *  model port, read by dispatch to refuse research calls. */
-  authoringOnly: boolean;
-  /** How the LAST completion ended, read by dispatch so a call whose arguments never
-   *  parsed is refused with the reason that matches — cut off, or mis-encoded. */
-  lastTurnInterruption: ReturnType<typeof turnInterruption>;
-  /** Set when dispatch discarded an unusable call this round, so the follow-up
-   *  directive is pushed once per round rather than once per call. */
-  discardedCallThisRound: boolean;
   /** Set once the turn calls any build tool (`CANVAS_BUILD_TOOLS`): it is working inside
-   *  an app, so it gets the code output ceiling and the code step budget from then on. */
+   *  an app, so it gets the code output ceiling from then on. */
   workspaceTurn: boolean;
   /** Set once a workspace write commits: the turn has BUILT something, which is what the
-   *  tail and the build-not-authored recovery read. */
+   *  tail and the build-not-authored rung read. */
   buildTurn: boolean;
   /** Set once a file of the app itself is written (`CANVAS_BUILD_FILE_WRITE_TOOLS`) — the
    *  difference between a build turn that delivered an app and one that only seeded the
@@ -210,9 +193,10 @@ export interface CanvasRun {
    *  document, five identical cut-offs in a row), so the rest of the turn gets the
    *  wider ceiling. Widened once; never narrowed back. */
   truncatedOnce: boolean;
-}
-
-/** Report an event to the run policy; the new state is the turn's. */
-export function reportToPolicy(run: CanvasRun, event: RunPolicyEvent): RunPolicyState {
-  return (run.policy = reduceRunPolicy(run.policy, event));
+  /** How the LAST completion ended (the vendor's own spelling), for the interruption trace. */
+  lastFinishReason: string | null;
+  /** What a LOOPING model said before it looped — delivered when no model is left. */
+  loopKept: string;
+  /** A provider error the policy does not route around (a refusal): the runner rethrows it as it is. */
+  fatal: unknown;
 }

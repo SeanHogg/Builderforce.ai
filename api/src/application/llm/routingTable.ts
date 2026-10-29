@@ -24,6 +24,7 @@ import type { Env } from '../../env';
 import { getOrSetCached, peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { llmActionRatings, runModelOutcomes } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
+import { codingEvidence } from '../shared/codingEvidence';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   blendedQualityScore,
@@ -241,14 +242,17 @@ export async function reconcileRoutingTable(env: Env, db: Db, scope: RoutingScop
     // merged by (action, model) in memory below.
     const outcomeAggregate = outcomeAggregateFor(decay);
     const outcomesDb = runTelemetryDatabase(db);
+    // A row recorded as NOT a routing signal (a Creation Canvas run) is telemetry only: no
+    // reconcile may re-admit it, or a rebuild would undo what the live fold declined to do.
+    const teaches = codingEvidence;
     const [rows, ratingRows, roleRows] = await Promise.all([
       outcomesDb
         .select({ actionType: runModelOutcomes.actionType, ...outcomeAggregate })
         .from(runModelOutcomes)
         .where(
-          scope.kind === 'project' ? and(eq(runModelOutcomes.projectId, scope.id), gte(runModelOutcomes.createdAt, start))
-          : scope.kind === 'tenant' ? scopedToTenant(runModelOutcomes, scope.id, gte(runModelOutcomes.createdAt, start))
-          : acrossTenants(runModelOutcomes, 'platform_aggregate', gte(runModelOutcomes.createdAt, start)),
+          scope.kind === 'project' ? and(eq(runModelOutcomes.projectId, scope.id), gte(runModelOutcomes.createdAt, start), teaches)
+          : scope.kind === 'tenant' ? scopedToTenant(runModelOutcomes, scope.id, and(gte(runModelOutcomes.createdAt, start), teaches))
+          : acrossTenants(runModelOutcomes, 'platform_aggregate', and(gte(runModelOutcomes.createdAt, start), teaches)),
         )
         .groupBy(runModelOutcomes.actionType, runModelOutcomes.resolvedModel),
       db
@@ -273,9 +277,9 @@ export async function reconcileRoutingTable(env: Env, db: Db, scope: RoutingScop
         .select({ role: runModelOutcomes.role, ...outcomeAggregate })
         .from(runModelOutcomes)
         .where(
-          scope.kind === 'project' ? and(eq(runModelOutcomes.projectId, scope.id), gte(runModelOutcomes.createdAt, start), isNotNull(runModelOutcomes.role))
-          : scope.kind === 'tenant' ? scopedToTenant(runModelOutcomes, scope.id, and(gte(runModelOutcomes.createdAt, start), isNotNull(runModelOutcomes.role)))
-          : acrossTenants(runModelOutcomes, 'platform_aggregate', and(gte(runModelOutcomes.createdAt, start), isNotNull(runModelOutcomes.role))),
+          scope.kind === 'project' ? and(eq(runModelOutcomes.projectId, scope.id), gte(runModelOutcomes.createdAt, start), isNotNull(runModelOutcomes.role), teaches)
+          : scope.kind === 'tenant' ? scopedToTenant(runModelOutcomes, scope.id, and(gte(runModelOutcomes.createdAt, start), isNotNull(runModelOutcomes.role), teaches))
+          : acrossTenants(runModelOutcomes, 'platform_aggregate', and(gte(runModelOutcomes.createdAt, start), isNotNull(runModelOutcomes.role), teaches)),
         )
         .groupBy(runModelOutcomes.role, runModelOutcomes.resolvedModel),
     ]);

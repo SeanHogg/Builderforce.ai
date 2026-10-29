@@ -60,6 +60,13 @@
         "../../../packages/creation-canvas-contract/src/creativeCapabilities.ts"
       ],
       "@builderforce/agent-loop": ["../../../packages/agent-loop/src/index.ts"],
+      // The canvas runs on the one agent: `@builderforce/agent-run` and everything it imports.
+      "@builderforce/agent-run": ["../../../packages/agent-run/src/index.ts"],
+      "@builderforce/cost-levers": ["../../../packages/cost-levers/src/index.ts"],
+      "@builderforce/difficulty-router": ["../../../packages/difficulty-router/src/index.ts"],
+      "@builderforce/learned-routing": ["../../../packages/learned-routing/src/index.ts"],
+      "@builderforce/run-guards": ["../../../packages/run-guards/src/index.ts"],
+      "@builderforce/tool-output-policy": ["../../../packages/tool-output-policy/src/index.ts"],
       "@builderforce/agent-skills": ["../../../packages/agent-skills/src/index.ts"],
       "@builderforce/ide-file-contract": ["../../../packages/ide-file-contract/src/index.ts"],
       "@builderforce/ide-templates": ["../../../packages/ide-templates/src/index.ts"],
@@ -83,6 +90,8 @@
       "@react-three/drei": ["../../../frontend/node_modules/@react-three/drei"],
       "@seanhogg/builderforce-memory/knowledge": ["../node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.d.ts"],
       "@seanhogg/builderforce-memory/ingest": ["../node_modules/@seanhogg/builderforce-memory/dist/ingest/index.d.ts"],
+      "@seanhogg/builderforce-memory/handoff": ["../node_modules/@seanhogg/builderforce-memory/dist/handoff/index.d.ts"],
+      "@seanhogg/builderforce-memory/working": ["../node_modules/@seanhogg/builderforce-memory/dist/working/index.d.ts"],
       "@builderforce/model-catalog": ["../../../packages/model-catalog/src/index.ts"],
       "@builderforce/provider-connect": ["../../../packages/provider-connect/src/index.ts"],
       "@builderforce/run-policy": ["../../../packages/run-policy/src/index.ts"],

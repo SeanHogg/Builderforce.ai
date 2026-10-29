@@ -91,10 +91,10 @@ function transportSummarizer(ctx: PolicyContext): CompactionSummarizer {
   return async (conversationText) => {
     const request = compactionSummaryRequest(conversationText);
     try {
-      const completion = await ctx.ports.model.complete(
-        { messages: request.messages, maxTokens: request.max_tokens },
-        ctx.signal,
-      );
+      // A surface that shows its turns to a person answers a summary on its own path.
+      const model = ctx.ports.model;
+      const asked = { messages: request.messages, maxTokens: request.max_tokens };
+      const completion = model.summarize ? await model.summarize(asked, ctx.signal) : await model.complete(asked, ctx.signal);
       const text = completion.content?.trim();
       return text ? text : null;
     } catch {
@@ -126,7 +126,8 @@ export function compactionOptions(ctx: PolicyContext, opts: CompactionHookOption
   const recall = opts.recall ?? capabilityRecall(ctx);
   // The reply reserve is the shared hand-off default (the run's token BUDGET is a cost
   // ceiling, not a reply size), raised to on-prem's reserve floor (20,000).
-  const reserve = compactionReserve(undefined);
+  // The host-neutral floor (on-prem parity) unless the surface bounded its replies lower.
+  const reserve = ctx.policy.budgets.reserveTokens ?? compactionReserve(undefined);
   return {
     ...CLOUD_COMPACT_DEFAULTS,
     maxTokens: opts.maxTokens ?? ctx.policy.budgets.tokens ?? CLOUD_COMPACT_DEFAULTS.maxTokens,
@@ -144,7 +145,8 @@ export function compactionOptions(ctx: PolicyContext, opts: CompactionHookOption
 
 /** Map a RunMessage row to the packer's OpenAI shape. */
 function toPackRow(m: RunMessage): PackMessage {
-  const row: PackMessage = { role: m.role, content: m.content };
+  const row: PackMessage & { task?: true } = { role: m.role, content: m.content };
+  if (m.task) row.task = true;
   if (m.toolCalls && m.toolCalls.length > 0) {
     row.tool_calls = m.toolCalls.map((tc) => ({
       id: tc.id,
@@ -158,7 +160,7 @@ function toPackRow(m: RunMessage): PackMessage {
 
 /** Map a packed OpenAI row back to the RunMessage row shape. */
 function toRunRow(m: PackMessage | Record<string, unknown>): RunMessage {
-  const src = m as PackMessage;
+  const src = m as PackMessage & { task?: unknown };
   const toolCalls = Array.isArray(src.tool_calls)
     ? (src.tool_calls as Array<{ id?: string; function?: { name?: string; arguments?: string } }>).map((tc) => ({
         id: tc.id ?? "",
@@ -172,6 +174,7 @@ function toRunRow(m: PackMessage | Record<string, unknown>): RunMessage {
   };
   if (toolCalls && toolCalls.length > 0) out.toolCalls = toolCalls;
   if (src.tool_call_id != null) out.toolCallId = src.tool_call_id;
+  if (src.task === true) out.task = true;
   return out;
 }
 

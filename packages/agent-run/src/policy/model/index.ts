@@ -50,6 +50,7 @@ import {
 
 import { isModelRole } from "@builderforce/agent-tools";
 import type { ModelHook } from "../hooks.js";
+import { recoverProviderFailure } from "./failure.js";
 
 export type { RunPolicyEvent, RunPolicyState, StallStep, TurnRequest };
 
@@ -327,11 +328,21 @@ export const modelHook: ModelHook = {
     const ask = nextTurn(ctx.state.model, { hasTools: ctx.tools.length > 0 });
     const model = ask.model ?? undefined;
     const maxTokens = cappedMaxTokens(ask.role, undefined);
-    if (!model && maxTokens === undefined) return undefined;
-    return { ...(model ? { model } : {}), ...(maxTokens !== undefined ? { maxTokens } : {}) };
+    // The whole request the policy makes of the gateway: the model and how strictly, the
+    // role, the models routed around — `turnRequestFields`, handed to the transport as data.
+    return {
+      ...(model ? { model } : {}),
+      ...(maxTokens !== undefined ? { maxTokens } : {}),
+      role: ask.role,
+      strict: ask.strict,
+      excludeModels: ask.excludeModels,
+    };
   },
   preflight: runModelPreflight,
   downgrade: modelDowngrade,
+  recoverFailure: recoverProviderFailure,
 };
+
+export { recoverProviderFailure };
 
 export default modelHook;

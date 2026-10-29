@@ -18,6 +18,7 @@
 
 import type { ToolSchema } from "@builderforce/agent-tools";
 import type { HumanAnswer, RunEvent, RunMessage, RunPolicy, RunPorts, RunState, RunTask } from "../contract.js";
+import type { TransportFailure, TurnInterruption } from "../surface.js";
 
 /** What every policy hook sees: the run, its policy, its state and its ports. */
 export interface PolicyContext {
@@ -43,6 +44,8 @@ export interface PolicyContext {
   toolCalls?: readonly PolicyToolCall[];
   /** The cancellation signal, when the caller supplied one. */
   signal?: AbortSignal;
+  /** How the turn that just ended was served, when the hook runs after the model answered. */
+  served?: { model?: string; interruption?: TurnInterruption };
 }
 
 /** One tool call, as the policy sees it. */
@@ -91,10 +94,16 @@ export interface StallHook {
 
 /** What to do about a stalled turn. */
 export interface StallDecision {
-  /** Steer the model back on track. */
-  action: "steer" | "escalate" | "pause";
-  /** The note the model reads on the next turn. */
+  /**
+   * Steer the model back on track, hand it to another model, pause the run, `fail` it
+   * (the run ends without an answer; `note` says why), or `settle` it: the turn ends the
+   * run, and `note` is the answer it ends on.
+   */
+  action: "steer" | "escalate" | "pause" | "settle" | "fail";
+  /** The note the model reads on the next turn (for `settle`, the answer). */
   note?: string;
+  /** The transcript rows to append, in place of the default pair (what the model said, then `note` as a user row). */
+  rows?: RunMessage[];
 }
 
 /** WS2c — steering between steps. */
@@ -212,7 +221,13 @@ export interface ToolsHook {
 
 /** WS2g — the model policy: the role ladder, the cascade, the learned routing, the pins. */
 export interface ModelHook {
-  /** The model this turn asks for, and the cap on its answer. */
+  /**
+   * The model this turn asks for, and the cap on its answer.
+   *
+   * A decision WITHOUT `model` (a module that returns only `{ maxTokens }`) asks for the
+   * transport's own choice and RELEASES the run's pin; the pin (`RunPolicy.pinnedModel`) is
+   * consulted only when the module returns nothing at all.
+   */
   resolve(ctx: PolicyContext): Promise<ModelDecision | void> | ModelDecision | void;
   /** Before turn 1: the BYO preflight, as the `model.preflight` event the run emits. */
   preflight?(ctx: PolicyContext): Promise<Extract<RunEvent, { kind: "model.preflight" }>> | Extract<RunEvent, { kind: "model.preflight" }>;
@@ -222,7 +237,17 @@ export interface ModelHook {
    * degraded model). Nothing when the answer is the expected one.
    */
   downgrade?(ctx: PolicyContext, requested: string | undefined, served: string | undefined): Extract<RunEvent, { kind: "llm.model_downgrade" }> | void;
+  /**
+   * The transport failed in a way it classified as the provider's (a dropped or silent
+   * stream, a reset, an HTTP status). The policy routes around it — a model that already
+   * acted takes over, or the gateway's pool is asked again with the broken one left out —
+   * or decides the turn is lost. `retry` re-asks now; `note` is what the model reads.
+   */
+  recoverFailure?(ctx: PolicyContext, failure: TransportFailure, failedModel: string | undefined, message: string): FailureRoute;
 }
+
+/** What the model policy decided about a provider failure. */
+export type FailureRoute = { kind: "retry"; note?: string } | { kind: "fail" };
 
 /** What the model policy decided. */
 export interface ModelDecision {
@@ -230,6 +255,12 @@ export interface ModelDecision {
   model?: string;
   /** The hard cap on this turn's answer, in tokens. */
   maxTokens?: number;
+  /** The role the turn asks for. */
+  role?: string;
+  /** Whether `model` is a strict pin. */
+  strict?: boolean;
+  /** Models this run routes around. */
+  excludeModels?: readonly string[];
 }
 
 /** Every hook, in one object. The composition passes this whole object around. */

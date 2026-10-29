@@ -75,7 +75,9 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   if (!resumed) {
     // The system prompt opens the transcript the kernel drives — the task reaches the
     // model on turn 1, and every saved state carries it.
-    transcript.splice(0, transcript.length, { role: "system", content: systemPrompt(task) });
+    // A surface that assembles its own prompt (system blocks, the conversation so far, the
+    // user turn) hands the rows over; otherwise the task is one system row.
+    transcript.splice(0, transcript.length, ...(task.transcript ?? [{ role: "system" as const, content: systemPrompt(task) }]));
     state.messages = transcript;
     pack = await buildContextPack(input, hooks, state, offered);
     state.context = pack;
@@ -100,6 +102,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
     watch: portInterruptWatch(ports.steering),
     turnContent: "",
     stopped: false,
+    facts: { refused: false },
   };
   const isReadOnly = readOnlyPort(run);
 
@@ -123,8 +126,8 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
         }),
       },
       ports: {
-        complete: (ctx) => completeTurn(input, state, hooks, ctx, offered, transcript, pack),
-        dispatch: (call) => dispatchCall(input, state, call, run.watch),
+        complete: (ctx) => completeTurn(input, state, hooks, ctx, offered, transcript, pack, run.selection),
+        dispatch: (call) => dispatchCall(input, state, call, run.watch, run.facts),
         ...(isReadOnly ? { isReadOnly } : {}),
       },
       hooks: kernelHooks(run),

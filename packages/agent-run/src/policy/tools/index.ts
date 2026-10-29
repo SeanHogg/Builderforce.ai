@@ -40,6 +40,7 @@
 import type { Capability, ToolSchema } from "@builderforce/agent-tools";
 import type { PolicyContext, ToolsHook } from "../hooks.js";
 import { selectCatalog } from "./catalog.js";
+import { selectPlatformCatalog } from "./platform.js";
 import { selectToolsForTurn } from "./selectTools.js";
 import { isChatReplyScope, CHAT_REPLY_SCOPED_TOOLS } from "./toolset.js";
 import { coveredReadAnswer, recordServedRead } from "./readCoverage.js";
@@ -59,10 +60,16 @@ export const toolsHook: ToolsHook = {
       });
     }
 
+    const pinned = pinnedNames(ctx);
+
+    // A surface whose own tools are the whole catalog advertises exactly those, ranked by
+    // the same selector; the shared registry's core set is a repository's catalog, not a board's.
+    const own = selectPlatformCatalog(ctx, pinned);
+    if (own) return own;
+
     // The ONE catalog strategy: role core set + tool_search + find_symbol, with the
     // pinned, required and prompt-named tools kept. The lexical selector then trims an
     // oversized catalog to the turn's fixed set (stable advertised bytes).
-    const pinned = pinnedNames(ctx);
     const catalog = selectCatalog(tools, policy.role, catalogCaps(ctx), {
       pinned,
       prompt: task.prompt,

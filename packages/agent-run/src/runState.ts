@@ -36,7 +36,7 @@ export function freshState(policy: RunPolicy, task: RunTask): RunState {
  * unpinned run lets the transport choose.
  */
 function initialModelState(policy: RunPolicy): RunPolicyState {
-  return initialRunPolicy({ pinnedModel: policy.pinnedModel });
+  return initialRunPolicy({ pinnedModel: policy.pinnedModel, ...(policy.modelOptions ?? {}) });
 }
 
 function freshReads(): ReadCoverageState {

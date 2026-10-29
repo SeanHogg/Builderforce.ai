@@ -1,6 +1,6 @@
 {
   "name": "@builderforce/agent-run",
-  "version": "2026.10.83",
+  "version": "2026.10.84",
   "private": true,
   "type": "module",
   "description": "THE one agent — the policy-bearing core every BuilderForce entry point drives. Owns the run contract, the prompt assembly and the policy hooks (compaction, stall, steering, ask, finish, guards, verify, tools, model, memory, subagents); every surface supplies only PORTS (model, capabilities, store, events, human, steering, context) and none of them carries a loop or a branch on behaviour. The ONE importer of the kernel. Worker-, browser- and Node-safe: no node builtins, no DOM.",

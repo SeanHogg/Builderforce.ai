@@ -16,6 +16,9 @@
 // The run contract — every type an adapter and the agent exchange.
 export * from "./contract.js";
 
+// The optional ports a surface with its own tools and deliverables supplies (canvas).
+export * from "./surface.js";
+
 // The one agent. `RunAgentInput` is the single entry point.
 export { runAgent, type RunAgentInput } from "./runAgent.js";
 

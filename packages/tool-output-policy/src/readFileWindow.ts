@@ -16,7 +16,7 @@
  * dishonest one — and the model can page forward instead of guessing.
  */
 
-import { TOOL_OUTPUT_CAPS } from './caps.js';
+import { TOOL_OUTPUT_CAPS, pagedReadOffsetsPerPath, pagedReadSearchTool } from './caps.js';
 
 /** Per-result cap for `read_file` (chars of JSON). */
 export const READ_FILE_RESULT_CHARS = TOOL_OUTPUT_CAPS.read_file ?? 16_000;
@@ -27,6 +27,7 @@ export type AttachAdvisory = (result: unknown, advisory: string) => unknown;
 /** The shape `read_file` hands back on success — the fields this module rewrites. */
 export interface ReadFileResult {
   ok?: unknown;
+  path?: unknown;
   content: string;
   offset?: unknown;
   totalLines?: unknown;
@@ -42,6 +43,13 @@ export function isReadFileResult(out: unknown): out is ReadFileResult {
 }
 
 export interface ReadFileWindowOptions {
+  /** The tool the model calls to continue (its name goes in the continuation note). Default `read_file`. */
+  tool?: string;
+  /**
+   * The file is one of several in a multi-path read, whose continuation is not available
+   * there: the note tells the model to read THIS file alone (by its path) at the offset.
+   */
+  alone?: string;
   maxChars?: number;
   advisory?: string | null;
   attachAdvisory?: AttachAdvisory;
@@ -63,6 +71,7 @@ export interface ReadFileWindowed {
  */
 export function windowReadFile(out: ReadFileResult, opts: ReadFileWindowOptions = {}): ReadFileWindowed {
   const maxChars = opts.maxChars ?? READ_FILE_RESULT_CHARS;
+  const tool = opts.tool ?? 'read_file';
   const withNote = (result: Record<string, unknown>): Record<string, unknown> =>
     opts.advisory && opts.attachAdvisory ? (opts.attachAdvisory(result, opts.advisory) as Record<string, unknown>) : result;
   /** `served` is the window before the advisory — what read coverage records. */
@@ -83,8 +92,11 @@ export function windowReadFile(out: ReadFileResult, opts: ReadFileWindowOptions 
   // Whole result within budget: the tool's own fields stand; only the advisory is added.
   if (fits(withNote({ ...out }))) return done({ ...out }, false);
 
+  const how = (next: number): string => opts.alone !== undefined
+    ? `call ${tool} again with ONLY the path ${JSON.stringify(opts.alone)} (offset applies to a single file) and offset ${next}`
+    : `call ${tool} again with offset ${next}`;
   const continuation = (lastLine: number): string =>
-    `Showing lines ${offset}–${lastLine} of ${totalLines}. This surface returns at most ~${maxChars.toLocaleString('en-US')} chars per read, so a large file arrives in several windows — call read_file again with offset ${lastLine + 1} to continue from exactly where this one stopped. Do not re-request lines you already have.`;
+    `Showing lines ${offset}–${lastLine} of ${totalLines}. This surface returns at most ~${maxChars.toLocaleString('en-US')} chars per read, so a large file arrives in several windows — ${how(lastLine + 1)} to continue from exactly where this one stopped. Do not re-request lines you already have.`;
 
   // Largest whole-line prefix that fits. Monotonic in the line count, so a binary
   // search over 0..lines.length costs ~11 stringifies of a bounded string.
@@ -105,8 +117,14 @@ export function windowReadFile(out: ReadFileResult, opts: ReadFileWindowOptions 
     // Even the first line alone overflows (a minified bundle, a one-line JSON blob).
     // Paging by line cannot help; hand over as much of it as fits and say so plainly.
     const first = lines[0] ?? '';
-    const head = first.slice(0, Math.max(0, maxChars - 600));
-    const note = `Line ${offset} of ${totalLines} is longer than the ~${maxChars.toLocaleString('en-US')}-char read budget; the first ${head.length.toLocaleString('en-US')} of its ${first.length.toLocaleString('en-US')} chars are shown. Paging by offset cannot reach the rest of this line — use search_code for the specific symbol instead.`;
+    // A share too small for the note and any of the line (a file among many) gives NO content —
+    // and says so, with how to read it — rather than a few stray characters.
+    const room = maxChars - 600;
+    const head = room >= 200 ? first.slice(0, room) : '';
+    const more = lines.length > 1 ? ` The lines AFTER it continue at offset ${offset + 1}: ${how(offset + 1)}.` : '';
+    const note = head
+      ? `Line ${offset} of ${totalLines} is longer than the ~${maxChars.toLocaleString('en-US')}-char read budget; the first ${head.length.toLocaleString('en-US')} of its ${first.length.toLocaleString('en-US')} chars are shown. Paging by offset cannot reach the rest of this line — use ${pagedReadSearchTool(tool)} for the specific symbol instead.${more}`
+      : `Skipped: this file's share of the read budget (~${Math.max(0, maxChars).toLocaleString('en-US')} chars) is too small for even its first line (${first.length.toLocaleString('en-US')} chars). Read it ${opts.alone !== undefined ? 'on its own' : 'again with a larger budget'}: ${how(offset)}, or use ${pagedReadSearchTool(tool)} for the specific symbol.`;
     return done({ ...out, content: head, offset, totalLines, truncated: true, note }, true);
   }
 
@@ -143,9 +161,11 @@ export function windowReadFiles(out: ReadFilesResult, opts: ReadFileWindowOption
   let truncated = false;
   order.forEach(({ i, size }, n) => {
     const file = files[i];
+    // Only a tool whose `offset` is NOT per path sends the model back to read a file alone.
+    const alone = !pagedReadOffsetsPerPath(opts.tool ?? 'read_file') && isReadFileResult(file) && typeof file.path === 'string' ? file.path : undefined;
     const share = Math.floor(remaining / (order.length - n));
     if (isReadFileResult(file) && size > share) {
-      const windowed = windowReadFile(file, { maxChars: share });
+      const windowed = windowReadFile(file, { ...(opts.tool ? { tool: opts.tool } : {}), ...(alone ? { alone } : {}), maxChars: share });
       servedFiles[i] = windowed.served;
       truncated = truncated || windowed.truncated;
     }

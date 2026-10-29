@@ -13,6 +13,7 @@ import type { DbHandle } from '../shared/dbHandle';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { tasks, runModelOutcomes } from '../../infrastructure/database/schema';
+import { codingEvidence } from '../shared/codingEvidence';
 
 export function getRecallSeed(env: Env, db: DbHandle, tenantId: number, limit: number) {
   return getOrSetCached(
@@ -29,7 +30,8 @@ export function getRecallSeed(env: Env, db: DbHandle, tenantId: number, limit: n
           taskId: runModelOutcomes.taskId,
         })
         .from(runModelOutcomes)
-        .where(eq(runModelOutcomes.tenantId, tenantId))
+        // Only outcomes that teach: a telemetry-only report (a Creation Canvas run) seeds no recall.
+        .where(and(eq(runModelOutcomes.tenantId, tenantId), codingEvidence))
         .orderBy(desc(runModelOutcomes.createdAt))
         .limit(limit);
       const taskIds = [...new Set(rows.flatMap((r) => (r.taskId == null ? [] : [r.taskId])))];

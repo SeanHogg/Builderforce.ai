@@ -17,6 +17,7 @@ import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import type { SessionApp } from './embeddedApps';
 import type { OutcomeMetric, OutcomeMetricFamilyRef } from './outcomeMetrics';
 import type { ListingTier, LlmProvider } from '@builderforce/model-catalog';
+import { RUN_OUTCOME_PATH, type RunOutcomeRequest } from '@builderforce/learned-routing';
 
 /**
  * `request` / `webRequest` are the two credential flavours this module's ~250
@@ -4703,6 +4704,15 @@ export const llmApi = {
    *  `project:<id>`. */
   modelAnalytics: (scope: string = 'tenant'): Promise<ModelAnalyticsResponse> =>
     request<ModelAnalyticsResponse>(`/llm/v1/model-analytics?scope=${encodeURIComponent(scope)}`),
+
+  /**
+   * Report a settled NON-cloud run (the Creation Canvas, an IDE, on-prem) to the one
+   * write-back door: records the run's PRD 35 §8.2 uniform outcome row and — unless the body
+   * says `routingSignal: false` — teaches learned routing. Idempotent on `clientRunId`. The body is the shared contract's
+   * (`@builderforce/learned-routing`), so no field name is spelled here.
+   */
+  reportRunOutcome: (body: RunOutcomeRequest): Promise<{ ok: boolean }> =>
+    request<{ ok: boolean }>(RUN_OUTCOME_PATH, { method: 'POST', body: JSON.stringify(body), expectedErrors: AMBIENT_REQUEST_ERRORS }),
 
   /**
    * Record this user's thumb on one AI response, filed against the model that served

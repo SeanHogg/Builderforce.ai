@@ -62,6 +62,12 @@ export interface RunOutcomeRequest extends RunOutcomeTelemetry {
   /** The run died on a provider rate limit — an AVAILABILITY signal that demotes the
    *  model without teaching the router it is low-quality. */
   rateLimited?: boolean;
+  /**
+   * Whether this outcome teaches the routing table. Default true. A run that is not
+   * evidence about CODING models (a Creation Canvas turn) reports with `false`: its
+   * telemetry row is recorded, and never folded into — or rebuilt into — the ranking.
+   */
+  routingSignal?: boolean;
 }
 
 /** A validated, fully-resolved outcome — what the scorer records. */
@@ -81,6 +87,7 @@ export interface NormalizedRunOutcome extends RunOutcomeTelemetry {
   costMc?: number;
   approved?: boolean;
   rateLimited?: boolean;
+  routingSignal?: boolean;
 }
 
 function str(v: unknown): string {
@@ -131,6 +138,7 @@ export function parseRunOutcomeRequest(
   const costMc = num(b.costMc);
   const approved = bool(b.approved);
   const rateLimited = bool(b.rateLimited);
+  const routingSignal = bool(b.routingSignal);
   const actionType = str(b.actionType);
   const role = str(b.role);
 
@@ -152,6 +160,7 @@ export function parseRunOutcomeRequest(
       ...(costMc != null ? { costMc } : {}),
       ...(approved != null ? { approved } : {}),
       ...(rateLimited != null ? { rateLimited } : {}),
+      ...(routingSignal != null ? { routingSignal } : {}),
       ...parseRunOutcomeTelemetry(b),
     },
   };

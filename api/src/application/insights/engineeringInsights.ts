@@ -13,6 +13,7 @@
 import { and, eq, gte } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { runModelOutcomes } from '../../infrastructure/database/schema';
+import { codingEvidence } from '../shared/codingEvidence';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { HOUR_MS } from '../../domain/shared/time';
 
@@ -134,6 +135,7 @@ export async function computeEngineeringInsights(db: Db, tenantId: number, days:
       eq(runModelOutcomes.tenantId, tenantId),
       ...(projectId != null ? [eq(runModelOutcomes.projectId, projectId)] : []),
       gte(runModelOutcomes.createdAt, since),
+      codingEvidence,
     ))) as OutcomeRow[];
   return summarizeOutcomes(rows, days);
 }

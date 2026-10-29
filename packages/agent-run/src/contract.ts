@@ -29,14 +29,16 @@ import type {
   ToolSchema,
 } from "@builderforce/agent-tools";
 import type { CostLeverId } from "@builderforce/cost-levers";
-import type { CascadeState, RunPolicyState } from "@builderforce/run-policy";
+import type { CascadeState, RunPolicyOptions, RunPolicyState } from "@builderforce/run-policy";
 import type {
   CoveredRead,
   ProgressDetectorState,
   ReadsWithoutSpawnState,
 } from "@builderforce/run-guards";
+import type { EntryPoint } from "@builderforce/learned-routing";
 import type { FinishGateState } from "./policy/finish/gates.js";
 import type { RunTally } from "./telemetry/runTally.js";
+import type { DeliveryLedger, PlatformTools, TurnInterruption } from "./surface.js";
 
 // The reused types, re-exported so one import gives a consumer the whole contract.
 export type { CapabilityProvider, PolicyGate, RunKnowledgeState } from "@builderforce/agent-tools";
@@ -68,22 +70,31 @@ export interface RunTask {
   attachments?: RunAttachment[];
   dispatch: { source: 'board-sweep' | 'lane-entry' | 'chat' | 'manual' | 'ceremony' | 'subagent'; approvalId?: string; parentRunId?: string };
   workspace?: { defaultRepo?: string; focusPaths?: string[] };  // resolved by the adapter (§6.10); git + shell default to defaultRepo
+  /** The opening rows when the surface assembles its own prompt (system blocks, prior conversation, the user turn). Absent ⇒ one system row from the persona and prompt. */
+  transcript?: RunMessage[];
 }
 
 // ── The policy ────────────────────────────────────────────────────────────────
 
 export interface RunPolicy {
-  entryPoint: 'vscode' | 'web' | 'rovr' | 'canvas' | 'on-prem' | 'cloud';  // telemetry label only — NEVER branched on for behaviour
+  entryPoint: EntryPoint;          // telemetry label only — NEVER branched on for behaviour; the list is the wire contract's (`@builderforce/learned-routing`)
   toolScope: 'ticket' | 'chat-reply' | 'chat-work' | 'canvas' | 'subagent';
   role: string;                    // tier ladder, verify phase
   levers: readonly CostLeverId[];   // @builderforce/cost-levers owns the ids — A3, C5, C7, D1, D7, D8 …
-  budgets: { steps?: number; tokens?: number };
+  budgets: {
+    steps?: number;
+    tokens?: number;
+    /** Tokens held back for the reply when compaction sizes the transcript. Absent ⇒ the host-neutral floor (`compactionReserve`). A surface whose replies are bounded far below it says so here (≤ about a quarter of its smallest window). */
+    reserveTokens?: number;
+  };
   pinnedModel?: string;
   inference: 'local-only' | 'hybrid' | 'specific';
   verify: 'declared-checks' | 'branch-ci' | 'none';
   signoff?: { roleKey: string; laneKey?: string };   // finish blocked until signed off
   approvalGates: PolicyGate[];                        // in-run acts needing an approver — reuse @builderforce/agent-tools spec.ts:118
   delegation: { requested: boolean; readsBeforeNudge: number };  // requested = asksForSubagents(prompt) unless declined; default nudge after 6 reads
+  /** How the model policy hands a run between models, where the surface's session has a say (routed-around models, strict failover). Absent ⇒ the policy's defaults. */
+  modelOptions?: Pick<RunPolicyOptions, 'strictPin' | 'pinReleasable' | 'lockAfterFirstSuccess' | 'preferProvenFailover' | 'strictFailover' | 'excludeModels'>;
 }
 
 // ── The ports ─────────────────────────────────────────────────────────────────
@@ -96,6 +107,8 @@ export interface RunMessage {
   toolCalls?: { id: string; name: string; arguments: string }[];
   /** The call this row answers. */
   toolCallId?: string;
+  /** This row carries the TASK the run was given: compaction pins it, whatever else the transcript holds before it (a prior conversation). Absent ⇒ the first user row. */
+  task?: true;
 }
 
 /** What the agent asks the model for. The transport translates it to its own wire shape. */
@@ -108,6 +121,12 @@ export interface ModelRequest {
   tools?: ToolSchema[];
   /** The hard cap for this turn's answer. */
   maxTokens?: number;
+  /** The role the turn asks for (`plan` | `code` | `chat` …), as the model policy chose it. */
+  role?: string;
+  /** Whether `model` is a strict pin the gateway must not route off. */
+  strict?: boolean;
+  /** Models the policy routes around. */
+  excludeModels?: readonly string[];
 }
 
 /** A tool call as the model asked for it: the arguments are the RAW JSON string. */
@@ -131,6 +150,8 @@ export interface ModelCompletion {
   toolCalls?: ModelToolCall[];
   usage?: ModelUsage;
   model?: string;
+  /** Set when the turn was cut off (the output ceiling, an unparseable call) rather than finished. The transport reads its own vendor's finish reason. */
+  interrupted?: TurnInterruption;
 }
 
 /** Where the model runs. The ONE thing an entry point supplies about the model. */
@@ -141,6 +162,12 @@ export interface ModelTransport {
    * its result cap from it (§6.10); `undefined` ⇒ the fixed caps of today.
    */
   window?(model: string): number | undefined;
+  /**
+   * The compaction summarizer's call. A surface whose `complete` is visible to a person
+   * (a streamed answer, a provenance row, a failure ledger) answers this one WITHOUT those
+   * side effects: a summary is not a turn. Absent ⇒ the policy uses `complete`.
+   */
+  summarize?(request: ModelRequest, signal?: AbortSignal): Promise<ModelCompletion>;
   /**
    * The BYO preflight (§6.10): before turn 1, which connected accounts the run's model
    * would need cannot be used. The transport refreshes an `expired` token once itself and
@@ -181,45 +208,9 @@ export type RunEvent =
   | { kind: 'turn.finished'; step: number }
   | { kind: 'run.finished'; step: number; outcome: RunOutcomeKind };
 
-/** The uniform outcome row (§8.2): ONE per run, every entry point, built by `telemetry/outcomeRow`
- *  when the run ends. `entryPoint` is a telemetry label — never a behaviour branch (§5 rule 3). */
-export interface RunOutcomeRow {
-  entryPoint: string;
-  runId?: string;
-  steps: number;
-  toolCalls: number;
-  toolErrors: number;
-  /** How many times the transcript was compacted this run. */
-  compactions: number;
-  /** How many stall recoveries the run's model policy performed. */
-  stallRecoveries: number;
-  /** How many times the run escalated (a forced-progress / stronger-model step). */
-  escalations: number;
-  /** The declared verify phase's result. */
-  verify: 'passed' | 'failed' | 'not-run';
-  terminalStatus: string;
-  model?: string;
-  tokens?: number;
-  cacheReadTokens?: number;
-  cost?: number;                   // millicents, summed from what the transport reported
-  // ── §8.2 efficiency fields ────────────────────────────────────────────────
-  /** The turn the first spawn happened on; null when nothing was spawned. */
-  firstSpawnTurn?: number | null;
-  /** How many covered reads were stubbed (a window already served, re-served). */
-  coveredReadStubs?: number;
-  /** `cat`/`sed`/`head`/`tail` of a workspace file through the shell. */
-  shellFileReads?: number;
-  /** Calls that errored with "not a repo". */
-  repoErrors?: number;
-  /** Tokens the context pack contributed. */
-  contextPackTokens?: number;
-  /** The model preflight result: ok | refreshed | degraded:<reason>. */
-  modelPreflight?: string;
-  /** Turns that claimed readiness then only read (WS8p `unkept_ready`). */
-  unkeptReadyClaims?: number;
-  /** The A3 progress trips, by signal ({ signal: count }). */
-  progressTrips?: Record<string, number>;
-}
+// The uniform outcome row (§8.2) lives with the telemetry that builds it.
+export type { RunOutcomeRow } from "./telemetry/rowType.js";
+import type { RunOutcomeRow } from "./telemetry/rowType.js";
 
 /** Where the run's events go: the live trace, the timeline, the relay frames. */
 export interface EventSink {
@@ -273,6 +264,8 @@ export interface RunPorts {
   human: HumanChannel;             // ask(question, options) | approve(gate) → answer | 'paused'
   steering?: SteeringSource;       // drain(): user messages since the last step
   context: ContextSource;          // pack(task) → ContextPack, built once before turn 1 with NO model call (§6.10)
+  platform?: PlatformTools;        // the surface's own tools as a capability provider on this run (canvas board tools)
+  delivery?: DeliveryLedger;       // what the task still owes when a turn ends in prose — the stall ladder's rungs
 }
 
 // ── The context pack ──────────────────────────────────────────────────────────
@@ -375,6 +368,8 @@ export interface StallState {
   /** Re-prompts already spent against `model`. */
   recoveriesUsed: number;
   recoveriesTotal?: number;  // every re-prompt this run spent, never reset — §8.2 stallRecoveries
+  rungs?: Record<string, number>;  // the delivery ladder's re-statements spent per rung (`DeliveryLedger`); reset when the turn moves to another model
+  said?: string[];                 // rung ids whose one-time note was already said
 }
 
 /** Plain JSON. Everything any policy needs across a step boundary. */

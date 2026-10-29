@@ -87,6 +87,18 @@ export function canvasTurnShape(base: number, shaping: CanvasRunShaping | undefi
 export const CANVAS_TOOL_LIMIT = 96;
 
 /**
+ * The most context one canvas turn carries before the agent compacts its transcript.
+ *
+ * A canvas turn has no cost cap — the free pool and a connected account bill the user
+ * nothing per token here — so this is not a spend limit; it is the ceiling under which a
+ * turn's system blocks, board snapshot, conversation and tool results still fit the
+ * smallest window in the gateway's coding pool. The agent's compaction otherwise defaults
+ * to the cloud loop's 40K cost cap, which the canvas prompt and a modest board exceed
+ * before the first model call.
+ */
+export const CANVAS_CONTEXT_TOKENS = 128_000;
+
+/**
  * The tool result a call that arrived with unusable arguments gets INSTEAD of
  * being run. The wording, and the truncated-vs-malformed decision, belong to the
  * kernel that sets the flag (`@builderforce/agent-loop`), so this loop and the
@@ -136,3 +148,52 @@ export const TRUNCATED_TURN_DIRECTIVE = 'Your previous response was cut off at t
  * "answer" here would discard a correct intent, so the directive keeps the action
  * and constrains only the encoding. */
 export const MALFORMED_TOOL_CALL_DIRECTIVE = 'Your previous tool call could not be parsed and was discarded. Make the same call again with strictly valid JSON arguments: no comments, no trailing commas, no unescaped newlines or quotes inside string values, and no placeholder text. Send one tool call.';
+
+/**
+ * What a canvas turn says to a model that spent a rung of the delivery ladder badly.
+ * The MECHANICS — how many times, in what order, when a proven model takes over — are
+ * `@builderforce/agent-run`'s (`policy/stall/ladder.ts`); the WORDS are the canvas's, and
+ * `canvasDelivery.ts` hands them over as rungs.
+ */
+
+/** Said once, with the first act-now re-statement: the research phase is over, and the
+ * tools that served it are withdrawn from the menu. */
+export const AUTHORING_PHASE_DIRECTIVE = 'The research phase is over. Use the remaining turns only to create or update the requested Canvas artifacts with canvas_* tools. Build from what you already have — you have the board snapshot and do not need to read it again — state any evidence gap inside the artifact, and do not make another search or fetch call.';
+
+/** A degenerate turn — nothing at all, or an earlier reply reproduced. */
+export const DEGENERATE_ANSWER_DIRECTIVE = 'Your prior response was empty or repeated an earlier message in this conversation, so it did not answer anything. Do not restate a previous reply, and do not prefix your answer with a speaker name. Answer the user\'s latest message directly now, and call the canvas_* tools for any change it asks for.';
+
+/** The first act-now re-statement for a model that discussed an imperative canvas request. */
+export const MUTATION_ACT_NOW_DIRECTIVE = 'Your prior response described or discussed an imperative Canvas request without executing it. Act now with the available canvas_add_object or canvas_update_object tool. If a non-Chat object is selected, update that exact object unless the user explicitly requested another one. For a Website/WYSIWYG change, send the complete authored fields.pages structure and websiteTheme; do not ask another optional question and do not rely on renderer defaults.';
+
+/**
+ * The second re-statement runs with research and board re-reads already withdrawn, so
+ * repeating "act now" adds nothing. What the first directive never supplies is the reason
+ * a model stalls here: it has written the answer in prose and has no idea the prose is
+ * not the artifact. Say that, and name the one call left to it.
+ */
+export const MUTATION_PROSE_IS_NOT_ARTIFACT_DIRECTIVE = 'You have now answered twice in prose without creating anything. Prose in a reply is NOT a canvas artifact and the user cannot keep, edit or export it — only a canvas_add_object call puts it on their board. Make that call now, passing the full text you just wrote as the new object\'s authored content, and write nothing else in this response.';
+
+/** Hand-off wording when the model that would not act is replaced by one that did. */
+export const MUTATION_HANDOFF_DIRECTIVE = 'The prior model did not execute the Canvas command after a retry and has been disabled for this session. Stop researching and use canvas_add_object or canvas_update_object now to complete the user\'s requested artifact.';
+
+/** A C-suite teammate request answered without adding the Agent or its deliverable. */
+export const EXECUTIVE_ACT_NOW_DIRECTIVE = 'Your prior response did not execute the requested teammate action. Act now: add the named executive Agent, add the fully authored requested deliverable, and connect them with the available Canvas tools. A new canvas is sufficient context; put assumptions and open questions in the deliverable instead of asking a follow-up question.';
+
+/** Hand-off wording for a model that ran past the output limit without finishing. */
+export const TRUNCATED_HANDOFF_DIRECTIVE = 'The prior model kept running past the output limit without finishing and has been disabled for this session. Author the requested artifact in small steps.';
+
+/** Hand-off wording for a model whose tool calls the provider could not parse. */
+export const MALFORMED_HANDOFF_DIRECTIVE = 'The prior model kept emitting tool calls the provider could not parse and has been disabled for this session.';
+
+/** Hand-off wording for a model that returned an empty or repeated response twice. */
+export const DEGENERATE_HANDOFF_DIRECTIVE = 'The prior model returned an empty or repeated response twice and has been disabled for this session.';
+
+/** Hand-off wording for a model that provisioned a workspace and never wrote the app. */
+export const BUILD_HANDOFF_DIRECTIVE = `The prior model provisioned the workspace and stopped without writing the app. ${BUILD_NOT_AUTHORED_DIRECTIVE}`;
+
+/** Hand-off wording when the provider broke under a model that had been acting. */
+export const PROVIDER_HANDOFF_DIRECTIVE = 'The prior model failed mid-request and has been disabled for this session.';
+
+/** Said when a broken provider's turn is re-asked of the gateway's pool. */
+export const PROVIDER_REROUTE_DIRECTIVE = 'The prior model failed mid-request, so this turn now continues on a different model. Continue the user\'s request from where it left off, building on the work already done.';
