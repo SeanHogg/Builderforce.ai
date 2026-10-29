@@ -13,12 +13,16 @@
  *     still in the transcript, a REPLAY of the requested window from the served copy once
  *     compaction dropped it. A jump to unserved lines still runs.
  *   • {@link recordServedRead} (after dispatch) records a successful read, or forgets
- *     exactly what a non-read call could have changed.
+ *     exactly what a non-read call could have changed. A read-only `run_command` forgets
+ *     nothing (`git log`, `ls`, a `for` loop of `git rev-list` change no file), and one that
+ *     PRINTED a workspace file (`cat`, `sed -n 'A,Bp'`, `head`, `tail`) is recorded as the
+ *     `read_file` it stands for — the same rules the Brain's read guard keeps
+ *     (`@builderforce/run-guards` `readOnlyShell.ts` / `shellPrint.ts`).
  *
  * No `node:*` imports, no DOM.
  */
 
-import { ReadCoverage, canonicalReadArgs, type CachedRead, type CoveredRead, type ReadCoverageTraits } from "@builderforce/run-guards";
+import { ReadCoverage, canonicalReadArgs, isReadOnlyShellCall, shellPrintAsRead, type CachedRead, type CoveredRead, type ReadCoverageTraits } from "@builderforce/run-guards";
 import { isReadFileResult, sliceReadFile } from "@builderforce/tool-output-policy";
 import type { RunState } from "../../contract.js";
 import type { PolicyContext, PolicyToolCall } from "../hooks.js";
@@ -51,7 +55,8 @@ export const AGENT_READ_TRAITS: ReadCoverageTraits = {
   },
   activityTarget: pathOf,
   questionSeparator: SEPARATOR,
-  isUnscopedMutation: (tool) => UNSCOPED_MUTATIONS.has(tool),
+  // A shell command that provably only reads changes no file: it forgets no read.
+  isUnscopedMutation: (tool, args) => UNSCOPED_MUTATIONS.has(tool) && !isReadOnlyShellCall(tool, args),
   isCodeChangeTool: (tool) => CODE_CHANGES.has(tool),
   isLocalWorkspaceTool: (tool) =>
     DEDUPABLE_READS.has(tool) || CODE_CHANGES.has(tool) || UNSCOPED_MUTATIONS.has(tool) || tool.startsWith("git_"),
@@ -148,6 +153,27 @@ function failed(result: unknown): boolean {
   return !!result && typeof result === "object" && (result as { ok?: unknown }).ok === false;
 }
 
+/** Was the result cut to the window-sized cap (`capToolResult`)? Its lines were not all served. */
+function cutToCap(result: unknown): boolean {
+  return !!result && typeof result === "object" && (result as { truncated?: unknown }).truncated === true;
+}
+
+/**
+ * A read-only shell print of one workspace file, recorded as the `read_file` it stands for —
+ * in the guard and in `RunState.reads.served`, keyed and spanned exactly as that `read_file`
+ * would be. Nothing is recorded for a print the cap cut: it did not show every line it printed.
+ */
+function recordShellPrint(ctx: PolicyContext, coverage: ReadCoverage, call: PolicyToolCall, served: unknown): void {
+  const read = shellPrintAsRead(call.name, call.args, served, !cutToCap(served));
+  if (!read) return;
+  coverage.record("read_file", read.args);
+  const cached: CachedRead = { result: read.result, served: read.result, anchor: call.id };
+  coverage.cacheResult("read_file", read.args, cached);
+  const entry: CoveredRead = { ...servedSpan(read.result), cached, note: "" };
+  const reads = ctx.state.reads;
+  ctx.state.reads = { ...reads, served: { ...reads.served, [servedKey("read_file", read.args)]: entry } };
+}
+
 /**
  * After dispatch: record what the model was SERVED (the capped result), or forget what a
  * non-read call could have changed — in the guard and in `RunState.reads.served`.
@@ -171,4 +197,6 @@ export function recordServedRead(ctx: PolicyContext, call: PolicyToolCall, serve
     if (read && coverage.isRepeat(read.tool, read.args)) kept[key] = entry;
   }
   ctx.state.reads = { ...reads, served: kept };
+  // After the forgetting: a print of a file is a read made NOW, so it is never what is forgotten.
+  if (!isError && !failed(served)) recordShellPrint(ctx, coverage, call, served);
 }
