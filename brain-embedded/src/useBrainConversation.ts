@@ -36,8 +36,8 @@ import type { EvermindRunHooks } from './evermindMemory';
 import type { ReasoningIntent } from './effort';
 import type { RunWindowSources } from './windowFit/modelWindow';
 import { useComposerAttachments } from './useComposerAttachments';
-import { continueOnSettle } from './runStore/continueChat';
-import { getRunDriver } from './runDriver';
+import { useContinuation } from './useContinuation';
+import { continueStranded } from './runStore/wakeChat';
 import { composeUserTurn, userTurnContentOf } from './attachmentTranscript';
 import { scopeToConsolidation } from '@seanhogg/builderforce-memory/working';
 import { contextUsageOf, type ContextUsage } from './contextUsage';
@@ -415,6 +415,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster],
   );
 
+  const bindContinuation = useContinuation(persistence, prepareRun);
   /**
    * Start a run on `id`: the request this hook builds, with the host's run-time parts
    * (`prepareRun`) laid over it. Resolves when the run settles, or at once when
@@ -439,15 +440,13 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         if (row) updateMessages(id, (prev) => [...prev, row]);
         return;
       }
-      // Direction the run never reads becomes this chat's next turn, whichever chat is on screen.
-      // Only where the run executes HERE: a host-driven run (the editor's webview) settles elsewhere.
-      if (!getRunDriver()) continueOnSettle(id, persistence);
+      bindContinuation(id); // direction the run never reads becomes this chat's next turn
       await startRun(id, extra ? { ...request, ...extra } : request);
     } finally {
       launchingRef.current.delete(id);
       cancelledLaunchRef.current.delete(id);
     }
-  }, [prepareRun, persistence, updateMessages]);
+  }, [prepareRun, persistence, updateMessages, bindContinuation]);
 
   const send = useCallback(
     async (text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null; attachments?: ChatInputAttachment[] }): Promise<boolean> => {
@@ -566,6 +565,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         // The files go back to the composer that is SHOWING, switched away or not - the same place the
         // host puts the typed text back (the false return) - so a message is never half-restored.
         if (!given) composer.restore(attachments);
+        continueStranded(id); // steers typed while this send was saving: the chat's next turn, never stranded
         if (stillOpen()) setLocalError(e instanceof Error ? e.message : 'Send failed');
         return false;
       } finally {

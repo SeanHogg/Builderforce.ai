@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
-import { useChatTurns, type ChatTurnsOptions } from './useChatTurns';
+import { useChatTurns, type ChatTurns, type ChatTurnsOptions } from './useChatTurns';
 import { useChatCreation } from './useChatCreation';
 import { drainRunSteering, hasRunInterrupt, resetRunSteering } from './runSteering';
 
@@ -314,19 +314,58 @@ describe('useChatTurns — a mid-run message steers by default (PRD 35 E10)', ()
     expect(hasRunInterrupt(15)).toBe(true);
   });
 
-  it('hands a host steer port the door\'s own verdict, and the label agrees with it (M1)', async () => {
+  it('a host steer port asks the door\'s own predicate, and the Send label agrees with it (M1)', async () => {
     const verdicts: boolean[] = [];
-    const steer = vi.fn((_turn: string, steersOwnRun: boolean) => { verdicts.push(steersOwnRun); return false; });
-    const { result } = renderHook(() => useChatTurns<string>({ running: true, runKey: 17, send: vi.fn(), steer }));
+    const door: { current?: ChatTurns<string> } = {};
+    const steer = vi.fn((_turn: string) => { verdicts.push(door.current!.steers({ directed: false })); return false; });
+    const { result } = renderHook(() => (door.current = useChatTurns<string>({ running: true, runKey: 17, send: vi.fn(), steer })));
 
     expect(result.current.steers({ directed: false })).toBe(true);
     await act(async () => { await result.current.submit('first'); });
-    // The port declined, so the turn is held - and the next one waits behind it: the door's verdict
+    // The port declined, so the turn is held - and the next one waits behind it: the verdict
     // flips with the label, from one predicate.
     await act(async () => { await result.current.queueAfter('held'); });
     expect(result.current.steers({ directed: false })).toBe(false);
     await act(async () => { await result.current.submit('third'); });
     expect(verdicts).toEqual([true, false]);
+  });
+
+  it('holds - never steers - while the run is not live yet: the editor\'s limbic fetch window (MUST-FIX 1)', async () => {
+    const send = vi.fn();
+    // In flight (a send getting ready) but with no run to speak to: `steerable` is the run's own state.
+    const { result, rerender } = renderHook((props: ChatTurnsOptions<string>) => useChatTurns(props), {
+      initialProps: { running: true, steerable: false, runKey: 18, send } as ChatTurnsOptions<string>,
+    });
+    expect(result.current.steers({ directed: false })).toBe(false);
+
+    await act(async () => { await result.current.submit('second turn'); });
+    expect(hasRunInterrupt(18)).toBe(false);
+    expect(drainRunSteering(18)).toEqual([]);
+    expect(result.current.queued.items.map((i) => i.value)).toEqual(['second turn']);
+
+    // The run goes live: now a message steers it, and the held turn still waits for the falling edge.
+    rerender({ running: true, steerable: true, runKey: 18, send });
+    expect(result.current.steers({ directed: false })).toBe(false); // behind the turn already held
+    rerender({ running: false, steerable: false, runKey: 18, send });
+    expect(send).toHaveBeenCalledWith('second turn');
+  });
+
+  it('a turn addressed to a participant never goes to a chat\'s run or inbox: it stays its own, addressee intact', async () => {
+    type Turn = { text: string; to: string | null };
+    let settle!: (kept: boolean) => void;
+    const send = vi.fn(() => new Promise<boolean>((resolve) => { settle = resolve; }));
+    const props = (running: boolean, runKey: number): ChatTurnsOptions<Turn> =>
+      ({ running, runKey, send, textOf: (t) => t.text, isDirected: (t) => t.to != null });
+    const { result, rerender } = renderHook((p: ChatTurnsOptions<Turn>) => useChatTurns<Turn>(p), { initialProps: props(true, 19) });
+    await act(async () => { await result.current.queueAfter({ text: '@dev look', to: 'dev' }); });
+    await act(async () => { rerender(props(false, 19)); });
+    expect(send).toHaveBeenCalledTimes(1);
+    // The person switched chats while it was being sent, and the send was not kept.
+    await act(async () => { rerender(props(false, 20)); });
+    await act(async () => { settle(false); });
+
+    expect(drainRunSteering(19)).toEqual([]);
+    expect(result.current.queued.items.map((i) => i.value)).toEqual([{ text: '@dev look', to: 'dev' }]);
   });
 
   it('does not jump ahead of turns already held: it waits behind them', async () => {
@@ -496,6 +535,26 @@ describe('useChatTurns - a flush that is not kept, a Stop, and the line of waiti
     await act(async () => { await result.current.submit('mid-run'); });
     expect(hasRunInterrupt(54)).toBe(true);
     expect(result.current.queued.count).toBe(2);
+  });
+
+  it('one path sends: a turn typed while a queued one is being sent follows it, and the edge does not double-send', async () => {
+    let settle!: (kept: boolean) => void;
+    const send = vi.fn(() => new Promise<boolean>((resolve) => { settle = resolve; }));
+    const { result, rerender } = mount({ running: true, runKey: 58, send });
+    await act(async () => { await result.current.queueAfter('A'); });
+    await act(async () => { await result.current.queueAfter('B'); });
+    await act(async () => { rerender({ running: false, runKey: 58, send }); });
+    expect(send.mock.calls.map((c) => c[0])).toEqual(['A']);
+
+    // Idle, A still being sent: C waits behind B, nothing else is sent beside A.
+    await act(async () => { await result.current.submit('C'); });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(result.current.queued.items.map((i) => i.value)).toEqual(['B', 'C']);
+
+    // A was kept and started its run: B and C wait for that run's falling edge.
+    await act(async () => { settle(true); });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(result.current.queued.items.map((i) => i.value)).toEqual(['B', 'C']);
   });
 
   it('an idle turn that starts no run (a typed stop) does not strand the turns held behind it', async () => {

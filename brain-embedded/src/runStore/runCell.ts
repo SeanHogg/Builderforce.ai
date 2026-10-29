@@ -155,6 +155,12 @@ export interface RunCell {
   liveTurn: LiveTurn | null;
   /** The request this chat last ran with: what a turn handed to it later runs with (`continueChat.ts`). */
   lastRequest: BrainRunRequest | null;
+  /**
+   * How many times this chat was told to Stop - counted even when nothing was running. A turn
+   * being made from direction (`continueChat.ts`) compares it with the count it started at: a
+   * Stop pressed in between must not be outrun by a run that starts after it.
+   */
+  stopEpoch: number;
   /** What the last Stop cut off, until the unwinding run persists it ({@link keepStoppedTurn}). */
   stoppedTurn: StoppedTurn | null;
   /** Cached immutable snapshot; identity changes only when something changed. */
@@ -214,6 +220,7 @@ export function makeCell(): RunCell {
     pendingGate: null,
     liveTurn: null,
     lastRequest: null,
+    stopEpoch: 0,
     stoppedTurn: null,
     snapshot: EMPTY_SNAPSHOT,
   };

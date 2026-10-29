@@ -29,6 +29,16 @@ async function requestLimbic(text: string): Promise<string> {
   }
 }
 
+/**
+ * What the turn door is told about the chat's run. A send is IN FLIGHT from the moment it starts
+ * fetching its per-turn limbic block (`preparing`, up to 4 s) - turns typed then are held behind it -
+ * but the run is LIVE, and can be steered, only once `conv.sending`: in the fetch window there is no
+ * run to speak to, and a steer there would start the later turn ahead of the one still getting ready.
+ */
+export function chatRunLiveness(sending: boolean, preparing: boolean): { running: boolean; steerable: boolean } {
+  return { running: sending || preparing, steerable: sending };
+}
+
 export function useChatSend({ conv, chatId, input, setInput, recipient, liveChildren, setTurnLimbic, reloadChats }: {
   conv: UseBrainConversation;
   chatId: number | null;
@@ -101,7 +111,7 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
   // says nothing (chat #133). The queue is FIFO, one per completed run (each stays a
   // distinct steerable turn), never flushed across a chat switch, and cleared with it.
   const turns: ChatTurns<QueuedTurn> = useChatTurns<QueuedTurn>({
-    running: conv.sending || preparing,
+    ...chatRunLiveness(conv.sending, preparing),
     runKey: chatId,
     send: (m) => dispatchSend(m.text, m.recipient, m.attachments),
     textOf: (m) => m.text,
@@ -118,11 +128,12 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
     // the step in flight and reaches the next model call, instead of waiting behind a run
     // that may hold for minutes. A stop command ("STOP executing") stops it (the host
     // reads that). Holding it for after the run is the explicit alternative: `queueAfter`.
-    // `steersOwnRun` is the door's verdict - the predicate the composer's Send label reads (a turn
-    // behind one held with Alt+Enter, or carrying a file a steer would drop, waits its turn) - so
-    // the label and the turn cannot disagree.
-    steer: ({ text, recipient: to, attachments }, steersOwnRun) => {
+    steer: ({ text, recipient: to, attachments }) => {
       const child = childTarget(text, to, liveChildren);
+      // The door's own predicate - the one the Send label reads (a turn behind one held with Alt+Enter,
+      // or carrying a file a steer would drop, waits its turn; nothing steers before the run is live) -
+      // so the label and the turn cannot disagree.
+      const steersOwnRun = !to && turns.steers({ directed: false, attachments });
       // A message to a live sub-agent goes in whole: a file a steer would drop (anything but a
       // picture) holds the message for after instead of being lost.
       const atts = attachments ?? [];

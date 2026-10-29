@@ -69,9 +69,15 @@ export interface QueuedTurnsOptions<T> {
    * trimmed and checked directly; omit this for them.
    */
   textOf?: (value: T) => string;
+  /**
+   * Asked on the running->idle edge before a held turn is taken: false leaves the queue alone. A
+   * host that is already sending a turn (and will chain on to the next when it is done) says so, so
+   * the edge and that chain never both send - one path, whatever order the renders land in.
+   */
+  mayFlush?: () => boolean;
 }
 
-export function useQueuedTurns<T = string>({ running, send, resetKey = null, textOf }: QueuedTurnsOptions<T>): QueuedTurns<T> {
+export function useQueuedTurns<T = string>({ running, send, resetKey = null, textOf, mayFlush }: QueuedTurnsOptions<T>): QueuedTurns<T> {
   const [queued, setQueued] = useState<QueuedItem<T>[]>([]);
   // The queue is READ synchronously too (`takeFront`, the flush): this ref is the source of
   // truth and every change goes through `update`, so two moves in one tick see each other.
@@ -91,6 +97,9 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
   const textOfRef = useRef(textOf);
   // eslint-disable-next-line react-hooks/refs
   textOfRef.current = textOf;
+  const mayFlushRef = useRef(mayFlush);
+  // eslint-disable-next-line react-hooks/refs
+  mayFlushRef.current = mayFlush;
   const runningRef = useRef(running);
 
   const submit = useCallback((value: T) => {
@@ -128,6 +137,7 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
     const was = prev.current;
     prev.current = { key: resetKey, running };
     if (was.key !== resetKey || !was.running || running) return;
+    if (mayFlushRef.current && !mayFlushRef.current()) return;
     const next = takeFront();
     if (next !== undefined) sendRef.current(next);
   }, [running, resetKey, takeFront]);

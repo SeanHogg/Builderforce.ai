@@ -170,17 +170,19 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
     },
     stop: conv.stop,
   });
+  // A turn the door did not keep (the send failed before it was saved - an expired session) gives its
+  // words back to the box, as the web and the editor do: a message is never lost to a failed send.
+  const offer = (text: string, door: (text: string) => Promise<boolean>) => {
+    setDraft('');
+    void door(text).then((kept) => { if (!kept) setDraft((cur) => cur || text); });
+  };
   const send = () => {
     const text = draft.trim();
-    if (!text) return;
-    setDraft('');
-    void turns.submit(text);
+    if (text) offer(text, turns.submit);
   };
   const queueAfter = () => {
     const text = draft.trim();
-    if (!text) return;
-    setDraft('');
-    void turns.queueAfter(text);
+    if (text) offer(text, turns.queueAfter);
   };
   const answer = useCallback((text: string) => void turns.submit(text), [turns.submit]);
 
