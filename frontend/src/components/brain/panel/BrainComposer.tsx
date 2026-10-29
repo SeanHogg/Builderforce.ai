@@ -4,7 +4,7 @@ import {
   PersonaPicker, RecipientPicker, stringsFrom,
   DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS,
 } from '@seanhogg/builderforce-brain-ui';
-import { lastServedModel, steersByDefault, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
+import { lastServedModel, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import { ChatInput } from '@/components/ChatInput';
 import { PreviewPickChips } from '@/components/builder/PreviewPickChip';
 import { useSpendPreviewPicksOnSettle } from '@/lib/workspace/previewPick';
@@ -50,6 +50,7 @@ export function BrainComposer() {
     setInput,
     handleSend,
     handleQueueAfter,
+    sendSteers,
     recipient,
     chooseRecipient,
     participants,
@@ -100,8 +101,9 @@ export function BrainComposer() {
       // A message typed mid-run steers the run; this is the explicit way to hold it for after.
       onQueue={handleQueueAfter}
       // Send's verb is read from the predicate the door decides with, so it never promises a steer
-      // the turn will not get (a participant, a turn behind held ones, a file the run cannot read).
-      sendSteers={steersByDefault({ directed: recipient != null, held: queued.count, attachments: conv.pendingAttachments })}
+      // the turn will not get (a participant, a turn behind held ones, a file the run cannot read,
+      // a run being stopped).
+      sendSteers={sendSteers}
       // A builder's chat is about changing the thing on screen, so it says so.
       placeholder={recipient ? tBrain('messageParticipant', { name: recipient.name }) : tBrain(capabilitySurface === 'build' ? 'messagePlaceholderBuild' : 'messagePlaceholder')}
       running={conv.sending}

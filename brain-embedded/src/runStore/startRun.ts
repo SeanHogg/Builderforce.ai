@@ -25,6 +25,7 @@ import { resolveServerChatId } from './serverChat';
 import { runLoop } from './runLoop';
 import { reportRunEnd } from './runEndOutcome';
 import { beginRun } from './beginRun';
+import { continueLeftovers, takeContinueOnSettle } from './continueChat';
 import { markPersonTurn } from './chatAsks';
 import type { BrainRunRequest } from './runTypes';
 import type { RunCell } from './runCell';
@@ -71,6 +72,7 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
   const req: BrainRunRequest = { ...request, persistence: runPersistence };
   c.persistStep = (ev) => persistStep(chatId, runPersistence, ev);
   beginRun(c, chatId);
+  c.lastRequest = request;
 
   // Seed the rich transcript from prior persisted history the FIRST time we
   // touch this chat this session, then append the triggering user turn — done
@@ -103,6 +105,8 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
     }
   } finally {
     const aborted = c.abort?.signal.aborted ?? false;
+    // Opted in by the conversation that launched it (the editor's host wakes its own).
+    const continues = takeContinueOnSettle(runKey);
     c.running = false;
     c.streamingText = '';
     c.abort = null;
@@ -191,5 +195,8 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
     // (a failure stays queued for the outbox's own retry) and never throws. The live
     // view is already settled above, so nothing visible waits on it.
     await steps.flush();
+    // Direction nobody read becomes THIS chat's next turn, whichever chat is on screen. A Stop
+    // ends the conversation's work, waiting words included.
+    if (continues && !aborted) await continueLeftovers(runKey, c, startRun);
   }
 }

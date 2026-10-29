@@ -541,6 +541,10 @@
     "message": "Jetzt in den laufenden Durchgang senden",
     "description": "Send while a run is streaming: steers the live run now"
   },
+  "cmpQueueHold": {
+    "message": "Nachricht einreihen – wird gesendet, wenn der aktuelle Lauf endet",
+    "description": "Send while a run is streaming when the message will be HELD for after it (a participant, a file a steer would drop, turns already waiting, a run being stopped)"
+  },
   "cmpQueueAfter": {
     "message": "Für nach dem Lauf einreihen ($1)",
     "description": "The explicit hold-for-after button beside Send while a run streams; $1 = the keyboard shortcut"

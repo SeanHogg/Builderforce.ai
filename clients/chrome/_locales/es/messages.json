@@ -541,6 +541,10 @@
     "message": "Enviar ahora al turno en curso",
     "description": "Send while a run is streaming: steers the live run now"
   },
+  "cmpQueueHold": {
+    "message": "Poner el mensaje en cola: se envía cuando termine la ejecución actual",
+    "description": "Send while a run is streaming when the message will be HELD for after it (a participant, a file a steer would drop, turns already waiting, a run being stopped)"
+  },
   "cmpQueueAfter": {
     "message": "Poner en cola para después de la ejecución ($1)",
     "description": "The explicit hold-for-after button beside Send while a run streams; $1 = the keyboard shortcut"

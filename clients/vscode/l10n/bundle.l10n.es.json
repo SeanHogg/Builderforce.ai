@@ -21,6 +21,7 @@
   "Queued for after the run": "En cola para después de la ejecución",
   "Review my uncommitted changes and point out anything risky.": "Revisa mis cambios sin confirmar y señala cualquier riesgo.",
   "Send into the running turn now": "Enviar ahora al turno en curso",
+  "Queue message — sends when the current run finishes": "Poner el mensaje en cola — se envía cuando termine la ejecución actual",
   "Queue for after the run ({keys})": "Poner en cola para después de la ejecución ({keys})",
   "Queue": "En cola",
   "Write tests for the file I have open.": "Escribe pruebas para el archivo que tengo abierto.",

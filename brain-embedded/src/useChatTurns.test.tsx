@@ -433,3 +433,74 @@ describe('useChatTurns - what the door will not steer, and what it will not lose
     expect(drainRunSteering(44).map((m) => m.text)).toEqual(['for the first chat']);
   });
 });
+
+describe('useChatTurns - a flush that is not kept, a Stop, and the line of waiting turns', () => {
+  beforeEach(() => { stopRun.mockClear(); resetRunSteering(); });
+
+  function mount(initial: ChatTurnsOptions<string>) {
+    return renderHook((props: ChatTurnsOptions<string>) => useChatTurns(props), { initialProps: initial });
+  }
+
+  it('hands a failed flush back to ITS chat when the person has switched away - never into the chat now showing', async () => {
+    let settle!: (kept: boolean) => void;
+    const send = vi.fn(() => new Promise<boolean>((resolve) => { settle = resolve; }));
+    const { result, rerender } = mount({ running: true, runKey: 50, send });
+    await act(async () => { await result.current.queueAfter('mine'); });
+
+    rerender({ running: false, runKey: 50, send });
+    expect(send).toHaveBeenCalledWith('mine');
+    rerender({ running: false, runKey: 51, send });
+    await act(async () => { settle(false); });
+
+    expect(result.current.queued.count).toBe(0);
+    expect(drainRunSteering(50).map((m) => m.text)).toEqual(['mine']);
+  });
+
+  it('does not put a turn back when a Stop landed while its send was in flight', async () => {
+    let settle!: (kept: boolean) => void;
+    const send = vi.fn(() => new Promise<boolean>((resolve) => { settle = resolve; }));
+    const { result, rerender } = mount({ running: true, runKey: 53, send });
+    await act(async () => { await result.current.queueAfter('in flight'); });
+    rerender({ running: false, runKey: 53, send });
+
+    act(() => result.current.stop());
+    await act(async () => { settle(false); });
+
+    expect(result.current.queued.count).toBe(0);
+  });
+
+  it('an idle send goes BEHIND the turns waiting (the oldest is sent now), and a put-back turn does not force-hold the next run', async () => {
+    const send = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    const { result, rerender } = mount({ running: true, runKey: 54, send });
+    await act(async () => { await result.current.queueAfter('A'); });
+    await act(async () => { await result.current.queueAfter('B'); });
+
+    // The run ends: the oldest is sent, is not kept, and goes back to the front.
+    await act(async () => { rerender({ running: false, runKey: 54, send }); });
+    expect(result.current.queued.items.map((i) => i.value)).toEqual(['A', 'B']);
+
+    // Idle, the person types C: A (the oldest) goes first; C waits behind B.
+    await act(async () => { await result.current.submit('C'); });
+    expect(send).toHaveBeenLastCalledWith('A');
+    expect(result.current.queued.items.map((i) => i.value)).toEqual(['B', 'C']);
+
+    // The next run starts with those two carried in: a message typed during it still steers.
+    await act(async () => { rerender({ running: true, runKey: 54, send }); });
+    await act(async () => { await result.current.submit('mid-run'); });
+    expect(hasRunInterrupt(54)).toBe(true);
+    expect(result.current.queued.count).toBe(2);
+  });
+
+  it('words Send from the same predicate: a run being stopped, and a turn behind held ones, will not steer', async () => {
+    const { result } = mount({ running: true, runKey: 55, send: vi.fn() });
+    expect(result.current.steers({ directed: false })).toBe(true);
+    expect(result.current.steers({ directed: true })).toBe(false);
+    expect(result.current.steers({ directed: false, attachments: [{}] })).toBe(false);
+
+    await act(async () => { await result.current.queueAfter('held'); });
+    expect(result.current.steers({ directed: false })).toBe(false);
+
+    act(() => result.current.stop());
+    expect(result.current.steers({ directed: false })).toBe(false);
+  });
+});

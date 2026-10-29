@@ -25,6 +25,8 @@ export interface ComposerTrailingButtonProps {
   onStop?: () => void;
   /** Mid-run "Queue for after" — shown beside Send while a run is going and there is text. */
   onQueue?: () => void;
+  /** Whether Send while a run streams steers the run (true/absent: the host's `queueSend` verb) or holds the message (false: `queueHold`). */
+  sendSteers?: boolean;
   /** Offer dictation. Needs the current text reader + setter. */
   voice?: { getValue: () => string; setValue: (value: string) => void };
 }
@@ -32,7 +34,7 @@ export interface ComposerTrailingButtonProps {
 const noopGet = () => '';
 const noopSet = () => undefined;
 
-export function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, onSend, onStop, onQueue, voice }: ComposerTrailingButtonProps) {
+export function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, onSend, onStop, onQueue, sendSteers, voice }: ComposerTrailingButtonProps) {
   const dictation = useVoiceDictation(voice?.getValue ?? noopGet, voice?.setValue ?? noopSet);
   const action = promptTrailingAction({
     canSubmit,
@@ -64,7 +66,7 @@ export function ComposerTrailingButton({ labels, canSubmit, running, disabled = 
       </button>
     );
   }
-  const label = running ? labels.queueSend : labels.send;
+  const label = running ? (sendSteers === false ? labels.queueHold : labels.queueSend) : labels.send;
   const send = (
     <button type="submit" className="bf-cmp-iconbtn bf-cmp-iconbtn--send" onClick={(e) => { e.preventDefault(); onSend(); }} disabled={!canSubmit || disabled} title={label} aria-label={label}>
       <IconSend />

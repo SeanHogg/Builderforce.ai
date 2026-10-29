@@ -51,27 +51,23 @@ export function ChatInput(props: ChatInputProps) {
   const options = useComposerOptions(props);
   const accountPort = useComposerAccount({ enabled: account !== null, projectId: account?.projectId ?? null });
   const bundle = useBrainComposerLabels(modeVocabulary);
-  // The host's own words win where it has them: the verb on Send (the canvas names
-  // its intent), and why memory is unavailable on this surface. Send while a run streams
-  // does one of three things, and its verb names which: a host with an explicit queue
-  // (`onQueue`) STEERS the live run with it (the catalog's `queueSend`); a host that holds
-  // its sends and has no steer (the canvas) QUEUES them (`queueHold`); a host with neither
-  // acts on it now, so its own verb names that button.
+  // The host's own words win where it has them: the verb on Send (the canvas names its
+  // intent), and why memory is unavailable on this surface. What Send does while a run
+  // streams - steer it, or queue the message - is the composer's `sendSteers`: the host says
+  // so from its turn door; a host that holds its sends and gives no explicit queue (the
+  // canvas) is queueing; a host with neither acts on it now, so its own verb names that button.
   const holdsQueue = queued !== undefined;
-  const steers = sendSteers ?? onQueue !== undefined;
-  const labels = useMemo<BrainComposerLabels>(() => {
-    const queueSend = holdsQueue && !steers ? t('queueHold') : undefined;
-    if (!submitLabel && !memoryUnavailableReason && !queueSend) return bundle;
-    return {
-      ...bundle,
-      composer: {
-        ...bundle.composer,
-        ...(queueSend ? { queueSend } : {}),
-        ...(submitLabel ? { send: submitLabel, ...(holdsQueue ? {} : { queueSend: submitLabel }) } : {}),
-        ...(memoryUnavailableReason ? { memoryUnavailable: memoryUnavailableReason } : {}),
-      },
-    };
-  }, [bundle, submitLabel, memoryUnavailableReason, holdsQueue, steers, t]);
+  const labels = useMemo<BrainComposerLabels>(() => (submitLabel || memoryUnavailableReason
+    ? {
+        ...bundle,
+        composer: {
+          ...bundle.composer,
+          ...(submitLabel ? { send: submitLabel, ...(holdsQueue ? {} : { queueSend: submitLabel }) } : {}),
+          ...(memoryUnavailableReason ? { memoryUnavailable: memoryUnavailableReason } : {}),
+        },
+      }
+    : bundle), [bundle, submitLabel, memoryUnavailableReason, holdsQueue]);
+  const sendVerbSteers = sendSteers ?? (holdsQueue && onQueue === undefined ? false : undefined);
 
   // Starting points and next steps: the same two affordances on every prompt. The
   // catalogue opens from `+`; the chips stand down while it is open, while a turn
@@ -150,6 +146,7 @@ export function ChatInput(props: ChatInputProps) {
         running={running}
         onStop={onStop}
         onQueue={onQueue}
+        {...(sendVerbSteers !== undefined ? { sendSteers: sendVerbSteers } : {})}
         disabled={closed}
         blockedNotice={<AssessmentGateNotice gate={gate} />}
         placeholder={placeholder}

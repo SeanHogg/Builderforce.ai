@@ -74,21 +74,6 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     }
 
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    // "Where is X defined?" answered from the symbol index for the `#file` reference read below
-    // - the same memoized computation the run's PreFetch gate asks (`runSetupPorts.ts`), so it
-    // runs once per request.
-    const deterministicAnswer = root ? () => whereDefinedOnce(root, request.prompt, CONTEXT_PACK_DEADLINE_MS) : undefined;
-    // `#file` / `#selection` references, inlined into the turn under the route's mention
-    // budget (long prose compressed first) — the panel's attachment ingress. Started now,
-    // overlapping the setup below; never read for a turn answered without a model, and
-    // abandoned once the request is cancelled.
-    const referencedReady = referencesTurnBlock(request.references, {
-      reader: workspaceReferenceReader(),
-      budget: () => routeMentionBudget(modelChoice),
-      deps: hostIngressDeps(),
-      ...(deterministicAnswer ? { deterministicAnswer } : {}),
-      cancelled: () => token.isCancellationRequested,
-    }).catch(() => "");
     const cfg = vscode.workspace.getConfiguration("builderforce");
     const permissionMode = resolvePermissionMode();
 
@@ -198,6 +183,29 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
       return {};
     }
 
+    // The chat already has a run in flight (this participant's last turn, the panel's): say so
+    // BEFORE anything is looked up or saved - right after the fail-closed policy, ahead of the tool
+    // catalog, the workspace's rules, the sub-agent controls and the `#file` references: a refused turn
+    // reads nothing and leaves no user row behind. (`runNativeBrain` checks again at the claim.)
+    if (isRunning(runChatId) || runHost?.isBusy(runChatId)) {
+      stream.markdown(`**${vscode.l10n.t("Error:")}** ${ALREADY_RUNNING()}`);
+      return { metadata: { brainChatId } };
+    }
+    // "Where is X defined?" answered from the symbol index for the `#file` reference read below
+    // - the same memoized computation the run's PreFetch gate asks (`runSetupPorts.ts`), so it
+    // runs once per request.
+    const deterministicAnswer = root ? () => whereDefinedOnce(root, request.prompt, CONTEXT_PACK_DEADLINE_MS) : undefined;
+    // `#file` / `#selection` references, inlined into the turn under the route's mention
+    // budget (long prose compressed first) — the panel's attachment ingress. Started now,
+    // overlapping the setup below; never read for a turn answered without a model, and
+    // abandoned once the request is cancelled.
+    const referencedReady = referencesTurnBlock(request.references, {
+      reader: workspaceReferenceReader(),
+      budget: () => routeMentionBudget(modelChoice),
+      deps: hostIngressDeps(),
+      ...(deterministicAnswer ? { deterministicAnswer } : {}),
+      cancelled: () => token.isCancellationRequested,
+    }).catch(() => "");
     const runChatId = brainChatId;
     const { systemPrompt, seed } = splitSystemPrompt(messages);
     // Sub-agents run in the editor's run host as ordinary runs owned by THIS turn, and
@@ -230,13 +238,6 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     knowledge.setPrompt(request.prompt);
     const referenced = await referencedReady;
     if (token.isCancellationRequested) return {};
-    // The chat already has a run in flight (this participant's last turn, the panel's): say so
-    // BEFORE anything is looked up or saved - a refused turn reads no workspace and leaves no
-    // user row behind. (`runNativeBrain` checks again at the claim, for the race.)
-    if (isRunning(runChatId) || runHost?.isBusy(runChatId)) {
-      stream.markdown(`**${vscode.l10n.t("Error:")}** ${ALREADY_RUNNING()}`);
-      return { metadata: { brainChatId } };
-    }
     // The run's SETUP, from the same ports and functions the panel's run host uses (PRD 35 E2 /
     // E3 / E7). Started only now - after the fail-closed policy and every cancellation return -
     // so a refused or cancelled turn never reads the workspace or starts a checkout lookup.

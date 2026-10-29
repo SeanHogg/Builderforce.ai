@@ -92,21 +92,25 @@ export function useBrainPanelTurns({ conv, chats, recipient, input, setInput, sh
   /**
    * Offer what is in the box through `offer` (the door's submit, or its explicit queue). The
    * composer's attachments travel with the turn - and leave the composer once the turn has
-   * them, because the turn is sent WITH its files (`conv.send` does not take the composer's
-   * for a turn that has its own), so nothing else would clear them.
+   * them - taken out as the offer STARTS (a steer, a held turn or a send all carry their own
+   * copy), and put back, merged by key, if the turn was not kept. A send that is in flight for
+   * the whole run therefore never leaves its files sitting in the composer.
    */
   const offerBox = useCallback(async (offer: (turn: BrainPanelTurn) => Promise<boolean>) => {
     const text = input.trim();
     if (!text || !assistantGate.assistantAllowed) return;
     const attachments = [...convRef.current.pendingAttachments];
+    for (const a of attachments) convRef.current.removeAttachment(a.key);
     setInput('');
     // Audited engagement signal: interacting with the AI agent is billable activity.
     trackActivity('agent_message', { weight: 2 });
     // Restore the text if the send fails before it's persisted (e.g. an expired
     // session) so the user's message is never silently lost.
     const ok = await offer({ text, addressedTo: recipient, ...(attachments.length ? { attachments } : {}) });
-    if (!ok) setInput((cur) => cur || text);
-    else for (const a of attachments) convRef.current.removeAttachment(a.key);
+    if (!ok) {
+      setInput((cur) => cur || text);
+      convRef.current.restoreAttachments(attachments);
+    }
   }, [assistantGate.assistantAllowed, input, recipient, setInput]);
 
   const handleSend = useCallback(() => offerBox(submitTurn), [offerBox, submitTurn]);
@@ -122,5 +126,7 @@ export function useBrainPanelTurns({ conv, chats, recipient, input, setInput, sh
     stopTurn: turns.stop,
     handleSend,
     handleQueueAfter,
+    /** Whether Send mid-run would steer the run or the message be held - the door's own predicate, for Send's verb. */
+    sendSteers: turns.steers({ directed: recipient != null, attachments: conv.pendingAttachments }),
   };
 }

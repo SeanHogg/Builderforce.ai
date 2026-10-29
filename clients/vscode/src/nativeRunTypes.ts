@@ -8,6 +8,7 @@
 
 import type { RunKnowledgeLog } from "@builderforce/agent-tools";
 import type {
+  ChatCompletionMessage,
   BrainRunPersistence,
   BrainRunRequest,
   BrainStreamFn,

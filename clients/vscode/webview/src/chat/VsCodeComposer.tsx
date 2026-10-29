@@ -69,6 +69,8 @@ export interface VsCodeComposerProps {
   /** Alt+Enter mid-run — `useChatSend().queueAfter`: hold the message for after the run
    *  (Send steers the running turn; this is the explicit alternative). */
   onQueue?: () => void;
+  /** Whether Send mid-run steers the run (true) or the message is held (false) - `useChatSend().sendSteers`, the door's own predicate; it words the Send button. */
+  sendSteers?: boolean;
   /** The composer's Stop — `useChatSend().stop`: drops the held turns AND stops the run. */
   onStop: () => void;
   /** Seed the box with a fixed starter's prompt and focus it — the empty state's tiles do the same. */
@@ -108,7 +110,7 @@ export interface VsCodeComposerProps {
 
 export function VsCodeComposer(props: VsCodeComposerProps) {
   const {
-    composerId, init, apiReq, conv, value, onChange, onSubmit, onQueue, onStop, onPickStarter, focusToken, chatId, projectId, ensureChatId,
+    composerId, init, apiReq, conv, value, onChange, onSubmit, onQueue, sendSteers, onStop, onPickStarter, focusToken, chatId, projectId, ensureChatId,
     chatTickets, linkTicket, participants, mentionable, hasLiveChildren,
     recipient, chooseRecipient, persona, onPersona, personaAgents, queue, onRemoveQueued,
     mode, memory, shaping, models, servedModel, autoMode, session, suggest = true,
@@ -184,6 +186,7 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
       onStop={onStop}
       // Send steers the running turn; Alt+Enter holds the message for after it.
       {...(onQueue ? { onQueue } : {})}
+      {...(sendSteers !== undefined ? { sendSteers } : {})}
       focusToken={focusToken}
       placeholder={recipient
         ? t('app.messageParticipant', 'Message {name}…').replace('{name}', recipient.name)

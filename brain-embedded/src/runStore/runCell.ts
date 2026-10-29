@@ -11,7 +11,7 @@ import type { ChatErrorAction } from '../chatError';
 import type { BrainRunActivity } from '../runActivity';
 import type { CompactMemo } from '@seanhogg/builderforce-memory/working';
 import { emptyRunUsage, type RunUsageTally } from '../memorySavings';
-import type { BrainRunSnapshot, RunTurn } from './runTypes';
+import type { BrainRunRequest, BrainRunSnapshot, RunTurn } from './runTypes';
 import type { PendingGateOutcome } from './prefetchGate';
 
 /** The completion streaming right now — and, once the gateway names it, the model serving it. */
@@ -153,6 +153,8 @@ export interface RunCell {
    * record of which model a Stop cut off: an aborted stream never returns its result.
    */
   liveTurn: LiveTurn | null;
+  /** The request this chat last ran with: what a turn handed to it later runs with (`continueChat.ts`). */
+  lastRequest: BrainRunRequest | null;
   /** What the last Stop cut off, until the unwinding run persists it ({@link keepStoppedTurn}). */
   stoppedTurn: StoppedTurn | null;
   /** Cached immutable snapshot; identity changes only when something changed. */
@@ -211,6 +213,7 @@ export function makeCell(): RunCell {
     lastServedModel: null,
     pendingGate: null,
     liveTurn: null,
+    lastRequest: null,
     stoppedTurn: null,
     snapshot: EMPTY_SNAPSHOT,
   };

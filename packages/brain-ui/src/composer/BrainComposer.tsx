@@ -60,6 +60,8 @@ export interface BrainComposerProps {
    * Send STEERS the running turn instead of queueing behind it. Omitted ⇒ Alt+Enter sends.
    */
   onQueue?: () => void;
+  /** Whether Send while a run streams steers it (true/absent) or holds the message (false) - words the Send button. */
+  sendSteers?: boolean;
   disabled?: boolean;
   /** Why the box is closed to input (an exam in progress, …) — shown above it. */
   blockedNotice?: ReactNode;
@@ -129,7 +131,7 @@ const noop = () => undefined;
 
 export function BrainComposer(props: BrainComposerProps) {
   const {
-    value, onChange, onSubmit, running = false, onStop, onQueue, disabled = false, blockedNotice,
+    value, onChange, onSubmit, running = false, onStop, onQueue, sendSteers, disabled = false, blockedNotice,
     placeholder, ariaLabel, rows = 2, submitOnEnter = true, focusToken, options, account,
     onAccountSettings, attachments, onAddContext, webBrowsing, addMenuItems, mentions, tickets,
     pickersDisabled = false, voice = false, context, contextUsage, above, suggestions, below, modeGate, labels: labelBundle, className,
@@ -302,6 +304,7 @@ export function BrainComposer(props: BrainComposerProps) {
             onSend={submit}
             onStop={onStop}
             {...(onQueue ? { onQueue: queue } : {})}
+            {...(sendSteers !== undefined ? { sendSteers } : {})}
             voice={voice ? { getValue, setValue: onChange } : undefined}
           />
         )}

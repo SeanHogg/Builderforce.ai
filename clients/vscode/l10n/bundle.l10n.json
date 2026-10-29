@@ -21,6 +21,7 @@
   "Queued for after the run": "Queued for after the run",
   "Review my uncommitted changes and point out anything risky.": "Review my uncommitted changes and point out anything risky.",
   "Send into the running turn now": "Send into the running turn now",
+  "Queue message — sends when the current run finishes": "Queue message — sends when the current run finishes",
   "Queue for after the run ({keys})": "Queue for after the run ({keys})",
   "Queue": "Queue",
   "Write tests for the file I have open.": "Write tests for the file I have open.",

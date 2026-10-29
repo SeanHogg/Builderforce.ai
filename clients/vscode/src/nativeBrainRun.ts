@@ -146,9 +146,9 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<boole
   const persistence = opts.persistence ?? transientRunPersistence();
 
   // A user Stop cancels the in-flight completion and unwinds the loop cleanly — the
-  // same Stop the webview's button fires.
+  // same Stop the webview's button fires. Cancelled before the claim: nothing ran, so the caller saves no turn for it.
   const onAbort = () => stopRun(chatId);
-  if (signal.aborted) return true;
+  if (signal.aborted) return false;
   signal.addEventListener("abort", onAbort, { once: true });
 
   // Human-in-the-loop: the loop pauses by publishing a `pendingConfirm` and waiting;

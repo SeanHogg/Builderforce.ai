@@ -251,6 +251,7 @@ export function brainChatLabels(): Record<string, string> {
     // "Queue for after" (its button, or Alt/⌥+Enter — `{keys}`, per platform) holds it,
     // drained one per completed run.
     "app.queueSend": t("Send into the running turn now"),
+    "app.queueHold": t("Queue message — sends when the current run finishes"),
     "app.queueAfter": t("Queue for after the run ({keys})"),
     "app.queueAfterShort": t("Queue"),
     "app.queuedLabel": t("Queued for after the run"),

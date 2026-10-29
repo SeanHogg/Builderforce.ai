@@ -178,6 +178,7 @@ export const MESSAGE_KEYS = [
   'cmpOn',
   'cmpOff',
   'cmpQueueSend',
+  'cmpQueueHold',
   'cmpQueueAfter',
   'cmpQueueAfterShort',
   'cmpDictate',

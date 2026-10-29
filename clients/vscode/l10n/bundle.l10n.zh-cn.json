@@ -21,6 +21,7 @@
   "Queued for after the run": "排队至运行结束后",
   "Review my uncommitted changes and point out anything risky.": "检查我未提交的更改，并指出任何有风险的地方。",
   "Send into the running turn now": "立即发送到正在运行的回合",
+  "Queue message — sends when the current run finishes": "将消息排队——当前运行结束后发送",
   "Queue for after the run ({keys})": "排队到运行结束后（{keys}）",
   "Queue": "排队",
   "Write tests for the file I have open.": "为我打开的文件编写测试。",

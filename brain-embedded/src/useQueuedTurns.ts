@@ -23,6 +23,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * `useChatTurns` — the ONE send/stop/queue door — owns it, and the core must not
  * depend on the UI package.
  */
+/** The text a turn carries, trimmed - the ONE blank check every door uses. A string turn is its own text. */
+export function turnBody<T>(turn: T, textOf?: (turn: T) => string): string {
+  return (typeof turn === 'string' ? turn : (textOf?.(turn) ?? '')).trim();
+}
+
 export interface QueuedItem<T> {
   /** Stable per held turn, so a host can render it and let the user remove it. */
   readonly id: number;
@@ -44,6 +49,10 @@ export interface QueuedTurns<T = string> {
   remove: (id: number) => void;
   /** Put a turn back at the FRONT of the queue - a flushed turn the host did not keep must not be lost. */
   requeue: (value: T) => void;
+  /** Add a turn at the BACK, held or not - an idle send waits behind the turns already waiting. */
+  pushBack: (value: T) => void;
+  /** Take the OLDEST waiting turn out of the queue now (undefined when none). */
+  takeFront: () => T | undefined;
   /** Drop everything waiting — a stopped run, or a switched conversation. */
   clear: () => void;
 }
@@ -72,6 +81,15 @@ export interface QueuedTurnsOptions<T> {
 
 export function useQueuedTurns<T = string>({ running, send, resetKey = null, textOf, lead }: QueuedTurnsOptions<T>): QueuedTurns<T> {
   const [queued, setQueued] = useState<QueuedItem<T>[]>([]);
+  // The queue is READ synchronously too (`takeFront`, the flush): this ref is the source of
+  // truth and every change goes through `update`, so two moves in one tick see each other.
+  const queueRef = useRef<QueuedItem<T>[]>([]);
+  const update = useCallback((change: (current: QueuedItem<T>[]) => QueuedItem<T>[]) => {
+    const next = change(queueRef.current);
+    if (next === queueRef.current) return;
+    queueRef.current = next;
+    setQueued(next);
+  }, []);
   const nextId = useRef(0);
   // The flush effect must call the CURRENT send closure without re-running (and
   // re-sending) every time the host re-renders with a new one.
@@ -87,22 +105,29 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
   const runningRef = useRef(running);
 
   const submit = useCallback((value: T) => {
-    const text = typeof value === 'string' ? value.trim() : (textOfRef.current?.(value) ?? '').trim();
+    const text = turnBody(value, textOfRef.current);
     if (!text) return false;
     if (!runningRef.current) return false;
     const held = (typeof value === 'string' ? text : value) as T;
-    setQueued((current) => [...current, { id: (nextId.current += 1), value: held }]);
+    update((current) => [...current, { id: (nextId.current += 1), value: held }]);
     return true;
-  }, []);
+  }, [update]);
   // Read through a ref so `submit`'s identity survives a run starting: hosts
   // wrap it in their own useCallback, and a changing identity there re-creates
   // the composer's submit handler on every token.
   // eslint-disable-next-line react-hooks/refs
   runningRef.current = running;
 
-  const remove = useCallback((id: number) => setQueued((current) => current.filter((item) => item.id !== id)), []);
-  const clear = useCallback(() => setQueued((current) => (current.length ? [] : current)), []);
-  const requeue = useCallback((value: T) => setQueued((current) => [{ id: (nextId.current += 1), value }, ...current]), []);
+  const remove = useCallback((id: number) => update((current) => current.filter((item) => item.id !== id)), [update]);
+  const clear = useCallback(() => update((current) => (current.length ? [] : current)), [update]);
+  const requeue = useCallback((value: T) => update((current) => [{ id: (nextId.current += 1), value }, ...current]), [update]);
+  const pushBack = useCallback((value: T) => update((current) => [...current, { id: (nextId.current += 1), value }]), [update]);
+  const takeFront = useCallback((): T | undefined => {
+    const [first] = queueRef.current;
+    if (!first) return undefined;
+    update((current) => current.slice(1));
+    return first.value;
+  }, [update]);
 
   // Flush exactly one held turn per completed run, on the running→idle edge — and
   // only when that edge happened on the SAME conversation. `running` is per
@@ -119,15 +144,13 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
       sendRef.current(first);
       return;
     }
-    if (queued.length === 0) return;
-    const [next, ...rest] = queued;
-    setQueued(rest);
-    if (next) sendRef.current(next.value);
-  }, [running, queued, resetKey]);
+    const next = takeFront();
+    if (next !== undefined) sendRef.current(next);
+  }, [running, resetKey, takeFront]);
 
   // Queued text belongs to the conversation it was typed in, never the one
   // switched to.
-  useEffect(() => { setQueued([]); }, [resetKey]);
+  useEffect(() => { update(() => []); }, [resetKey, update]);
 
-  return { items: queued, count: queued.length, submit, remove, requeue, clear };
+  return { items: queued, count: queued.length, submit, remove, requeue, pushBack, takeFront, clear };
 }

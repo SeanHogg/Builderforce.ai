@@ -21,6 +21,7 @@
   "Queued for after the run": "Für nach dem Lauf eingereiht",
   "Review my uncommitted changes and point out anything risky.": "Prüfe meine nicht committeten Änderungen und weise auf Risiken hin.",
   "Send into the running turn now": "Jetzt in den laufenden Durchgang senden",
+  "Queue message — sends when the current run finishes": "Nachricht einreihen — wird gesendet, wenn der aktuelle Lauf endet",
   "Queue for after the run ({keys})": "Für nach dem Lauf einreihen ({keys})",
   "Queue": "Einreihen",
   "Write tests for the file I have open.": "Schreibe Tests für die geöffnete Datei.",

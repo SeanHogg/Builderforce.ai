@@ -317,6 +317,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
               running={conv.sending}
               onStop={turns.stop}
               onQueue={queueAfter}
+              sendSteers={turns.steers({ directed: false })}
               above={(
                 <QueuedTurnChips
                   items={turns.queued.items}

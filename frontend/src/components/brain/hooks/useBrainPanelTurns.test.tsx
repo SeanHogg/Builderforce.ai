@@ -14,7 +14,7 @@ const door = vi.hoisted(() => ({
 vi.mock('@seanhogg/builderforce-brain-embedded', () => ({
   useChatTurns: (options: Record<string, unknown>) => {
     door.options = options;
-    return { queued: { items: [], count: 0, remove: vi.fn() }, submit: door.submit, queueAfter: door.queueAfter, stop: door.stop };
+    return { queued: { items: [], count: 0, remove: vi.fn() }, submit: door.submit, queueAfter: door.queueAfter, stop: door.stop, steers: () => true };
   },
 }));
 vi.mock('@/lib/brain/dockedBrain', () => ({ useDockedComposer: vi.fn() }));
@@ -29,8 +29,9 @@ const notes = { key: 'n1', name: 'notes.txt', type: 'text/plain' };
 function conversation(pending = [notes]) {
   const send = vi.fn(async () => true);
   const removeAttachment = vi.fn();
-  const conv = { sending: false, stop: vi.fn(), send, pendingAttachments: pending, removeAttachment } as unknown as Conv;
-  return { conv, send, removeAttachment };
+  const restoreAttachments = vi.fn();
+  const conv = { sending: false, stop: vi.fn(), send, pendingAttachments: pending, removeAttachment, restoreAttachments } as unknown as Conv;
+  return { conv, send, removeAttachment, restoreAttachments };
 }
 
 function mount(conv: Conv, input = 'fix the build') {
@@ -48,25 +49,31 @@ beforeEach(() => {
 });
 
 describe('the web panel\'s turn door and the composer\'s attachments', () => {
-  it('offers the box with a snapshot of its attachments, then takes them out of the composer', async () => {
+  it('takes the box\'s attachments out of the composer as the offer STARTS - a send in flight for the whole run leaves none behind', async () => {
     const { conv, removeAttachment } = conversation();
     const { hook, setInput } = mount(conv);
+    let finish!: (kept: boolean) => void;
+    door.submit.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve; }));
 
-    await act(async () => { await hook.result.current.handleSend(); });
+    let offered!: Promise<void>;
+    act(() => { offered = hook.result.current.handleSend() as Promise<void>; });
+
+    expect(removeAttachment).toHaveBeenCalledWith('n1');
+    await act(async () => { finish(true); await offered; });
 
     expect(door.submit).toHaveBeenCalledWith({ text: 'fix the build', addressedTo: null, attachments: [notes] });
     expect(setInput).toHaveBeenCalledWith('');
     expect(removeAttachment).toHaveBeenCalledWith('n1');
   });
 
-  it('keeps the attachments - and puts the text back - when the turn was not kept', async () => {
+  it('puts the attachments back - and the text - when the turn was not kept', async () => {
     door.submit.mockResolvedValue(false);
-    const { conv, removeAttachment } = conversation();
+    const { conv, restoreAttachments } = conversation();
     const { hook, setInput } = mount(conv);
 
     await act(async () => { await hook.result.current.handleSend(); });
 
-    expect(removeAttachment).not.toHaveBeenCalled();
+    expect(restoreAttachments).toHaveBeenCalledWith([notes]);
     const restore = setInput.mock.calls.map((c) => c[0]).find((v) => typeof v === 'function') as ((cur: string) => string) | undefined;
     expect(restore?.('')).toBe('fix the build');
   });

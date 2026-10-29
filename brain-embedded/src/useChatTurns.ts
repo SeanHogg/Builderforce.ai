@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { stopRun } from './brainRunStore';
 import type { RunKey } from './brainRunStore';
 import { drainRunSteering, queueRunSteering } from './runSteering';
 import type { ChatInputAttachment } from './types';
-import { useQueuedTurns, type QueuedTurns } from './useQueuedTurns';
+import { wakeChat } from './runStore/wakeChat';
+import { turnBody, useQueuedTurns, type QueuedTurns } from './useQueuedTurns';
 import { startsRun } from './userTurnRuns';
 
 /**
@@ -84,6 +85,12 @@ export interface ChatTurns<T> {
   queueAfter: (turn: T) => Promise<boolean>;
   /** Clear the queue and stop the run. Stable identity. */
   stop: () => void;
+  /**
+   * Would a message typed NOW steer the live run, or be held? The composer words its Send button
+   * from this - the same predicate `submit` decides with, over the same state (a run being
+   * stopped, turns already held this run). `preview` is what the box holds now. Read it during render.
+   */
+  steers: (preview: { directed: boolean; attachments?: readonly { imageUrl?: string }[] }) => boolean;
 }
 
 /**
@@ -105,14 +112,19 @@ export function useChatTurns<T = string>({ running, runKey, send, steer, stop, t
   // eslint-disable-next-line react-hooks/refs
   ports.current = { send, steer, stop, textOf, isDirected, attachmentsOf, turnOf, runKey, running };
   // A stopped run is unwinding: a message typed meanwhile cannot steer it (the model gets no
-  // further turn), so it is held for after — until the run's falling edge clears the mark.
-  const stopping = useRef(false);
-  useEffect(() => { if (!running) stopping.current = false; }, [running]);
+  // further turn), so it is held for after - until the run's falling edge clears the mark. State
+  // as well as a ref: the composer words its Send button from it.
+  const stoppingRef = useRef(false);
+  const [stopping, setStopping] = useState(false);
+  const markStopping = useCallback((on: boolean) => { stoppingRef.current = on; setStopping(on); }, []);
+  useEffect(() => { if (!running && stoppingRef.current) markStopping(false); }, [running, markStopping]);
+  // Counts Stops: a send in flight when one lands must not put its turn back afterwards.
+  const stopEpoch = useRef(0);
 
   // Direction steered into the run after its last drain would never be read: when the run
-  // completes it becomes the next turn, oldest first, ahead of the held ones. Keyed on the
-  // run's own key: a chat switched away from keeps its unread steer in its inbox (the run it
-  // belongs to, or its next one, reads it) - it is never sent into the chat now showing.
+  // completes it becomes the next turn, oldest first, ahead of the held ones. For a run that
+  // opted in (`continueOnSettle`) the run store has already made it the chat's next turn - on
+  // any chat, on screen or not - so this finds nothing; it covers a host whose runs do not.
   const lead = useCallback((): T | undefined => {
     const { steer: route, runKey: key, turnOf: build } = ports.current;
     if (route || typeof key !== 'number') return undefined;
@@ -124,11 +136,24 @@ export function useChatTurns<T = string>({ running, runKey, send, steer, stop, t
 
   // A flushed turn the host did not keep (its send failed before the turn was saved) goes back
   // to the front of the queue: it is the person's message, and a failed send is not a reason to
-  // lose it. It waits there, removable, for the next completed run.
+  // lose it. If the person has switched chats meanwhile it goes back to ITS chat instead
+  // (`wakeChat`: that chat's next turn; failing that, its inbox), never into the one now showing.
+  // And a Stop since the send began ended the conversation's work: nothing is put back.
   const requeueRef = useRef<(turn: T) => void>(() => undefined);
   const flush = useCallback(async (turn: T): Promise<void> => {
+    const key = ports.current.runKey;
+    const epoch = stopEpoch.current;
     const kept = await Promise.resolve(ports.current.send(turn)).then((ok) => ok !== false, () => false);
-    if (!kept) requeueRef.current(turn);
+    if (kept || stopEpoch.current !== epoch) return;
+    if (ports.current.runKey === key) {
+      requeueRef.current(turn);
+      return;
+    }
+    if (typeof key !== 'number') return;
+    const { textOf: text, attachmentsOf: attached } = ports.current;
+    const body = turnBody(turn, text);
+    const files = attached?.(turn);
+    if (!wakeChat(key, body, files)) queueRunSteering(key, body, { fromPerson: true, persist: true, ...(files?.length ? { attachments: files } : {}) });
   }, []);
 
   const queued = useQueuedTurns<T>({
@@ -140,25 +165,34 @@ export function useChatTurns<T = string>({ running, runKey, send, steer, stop, t
   });
   // eslint-disable-next-line react-hooks/refs
   requeueRef.current = queued.requeue;
-  const { submit: hold, clear } = queued;
+  const { submit: hold, clear, takeFront, pushBack } = queued;
   // Turns already held: a message typed behind them waits its turn (it must not jump ahead).
+  // Only those held THIS run count: a turn put back while idle (a failed flush) is carried into
+  // the next run and must not force-hold everything typed during it.
   const held = useRef(0);
   // eslint-disable-next-line react-hooks/refs
   held.current = queued.count;
+  const carried = useRef(0);
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    if (running && !wasRunning.current) carried.current = held.current;
+    wasRunning.current = running;
+  }, [running]);
 
   const stopTurns = useCallback(() => {
     clear();
-    if (ports.current.running) stopping.current = true;
+    stopEpoch.current += 1;
+    if (ports.current.running) markStopping(true);
     const { stop: halt, runKey: key } = ports.current;
     // A steer typed before the Stop is dropped with the run - it must not start the next one.
     if (typeof key === 'number') drainRunSteering(key);
     if (halt) halt();
     else if (key != null) stopRun(key);
-  }, [clear]);
+  }, [clear, markStopping]);
 
   const submit = useCallback(async (turn: T): Promise<boolean> => {
     const { send: deliver, steer: route, textOf: text, isDirected: directed, attachmentsOf: attached, turnOf: rebuild, runKey: key, running: live } = ports.current;
-    const body = typeof turn === 'string' ? turn.trim() : (text?.(turn) ?? '').trim();
+    const body = turnBody(turn, text);
     if (!body) return false;
     const isStop = !startsRun(body) && !directed?.(turn);
     // A host that routed it (the editor's run hears it as its Stop) still drops what is held.
@@ -176,22 +210,37 @@ export function useChatTurns<T = string>({ running, runKey, send, steer, stop, t
     // reads it. A host that supplied `steer` routed (or declined) it above and owns the rest.
     // The predicate is `steersByDefault`, which the composer's label reads too.
     const canRebuild = typeof turn === 'string' || !!rebuild;
-    if (live && !route && canRebuild && typeof key === 'number' && !stopping.current
-      && steersByDefault({ directed: !!directed?.(turn), held: held.current, attachments: attached?.(turn) })) {
+    if (live && !route && canRebuild && typeof key === 'number' && !stoppingRef.current
+      && steersByDefault({ directed: !!directed?.(turn), held: Math.max(0, held.current - carried.current), attachments: attached?.(turn) })) {
       queueRunSteering(key, body, { interrupt: true, fromPerson: true, persist: true, attachments: attached?.(turn) });
       return true;
     }
     if (hold(turn)) return true;
+    // Idle with turns still waiting (a flush the host did not keep): this one goes BEHIND them -
+    // the oldest is sent now, and this follows when its run completes. It never jumps the line.
+    const oldest = live ? undefined : takeFront();
+    if (oldest !== undefined) {
+      pushBack(turn);
+      void flush(oldest);
+      return true;
+    }
     return (await deliver(turn)) !== false;
-  }, [hold, stopTurns]);
+  }, [hold, stopTurns, takeFront, pushBack, flush]);
 
   const queueAfter = useCallback(async (turn: T): Promise<boolean> => {
     const { textOf: text, send: deliver } = ports.current;
-    const body = typeof turn === 'string' ? turn.trim() : (text?.(turn) ?? '').trim();
-    if (!body) return false;
+    if (!turnBody(turn, text)) return false;
     if (hold(turn)) return true;
     return (await deliver(turn)) !== false;
   }, [hold]);
 
-  return { queued, submit, queueAfter, stop: stopTurns };
+  const steers = useCallback((preview: { directed: boolean; attachments?: readonly { imageUrl?: string }[] }): boolean => {
+    const { runKey: key, turnOf: rebuild, textOf: text } = ports.current;
+    // A string turn has no `textOf`; any other turn is rebuilt from steered text by `turnOf`.
+    const canRebuild = !!rebuild || !text;
+    return typeof key === 'number' && canRebuild && !stopping
+      && steersByDefault({ ...preview, held: Math.max(0, held.current - carried.current) });
+  }, [stopping]);
+
+  return { queued, submit, queueAfter, stop: stopTurns, steers };
 }

@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { steersByDefault, useChatTurns, useRunRefreshTick, type BrainMessage, type ChatInputAttachment, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
+import { steersByDefault, useChatTurns, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { request } from '../vscodeBridge';
 import { childTarget, steerRun, type useChatChildren } from './chatChildren';
 import type { QueuedTurn } from './VsCodeComposer';
@@ -61,7 +61,10 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
     // a gap between staging and sending (its queue would flush a held turn into it).
     setPreparing(false);
     void sending.then((ok) => {
-      if (!ok) setInput((cur) => cur || queued.text);
+      if (ok) return;
+      // Not kept: the words AND the files go back to the composer - the one restore, merged by key.
+      setInput((cur) => cur || queued.text);
+      conv.restoreAttachments(queued.attachments ?? []);
     });
     // Keyed only on the nonce: `conv` is read fresh from this render's closure, which
     // already carries the just-set turnLimbic in its system prompt.
@@ -74,6 +77,7 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
   // snapshot+clear of `pendingAttachments` never sees them twice.
   // The fetch takes up to 4 s before `conv.send` even starts, so the turn counts as in
   // flight meanwhile: a Stop (button or typed) in that window drops the send.
+  const { restoreAttachments } = conv;
   const [preparing, setPreparing] = useState(false);
   const stopPreparingRef = useRef(false);
   const dispatchSend = useCallback(async (text: string, to: DirectedRecipient | null, attachments?: ChatInputAttachment[]) => {
@@ -81,23 +85,22 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
     setPreparing(true);
     const block = await requestLimbic(text);
     if (stopPreparingRef.current) {
-      // Stopped while it got ready: nothing was sent — the words go back to the composer.
+      // Stopped while it got ready: nothing was sent - the words and the files go back to the composer.
       setPreparing(false);
       setInput((cur) => cur || text);
+      restoreAttachments(attachments ?? []);
       return;
     }
     setTurnLimbic(block);
     pendingSendRef.current = { text, recipient: to, attachments };
     setSendNonce((n) => n + 1);
-  }, [setInput, setTurnLimbic]);
+  }, [setInput, setTurnLimbic, restoreAttachments]);
 
   // THE ONE turn door (shared): steer → queue while a run is in flight → send. Calling
   // `conv.send` directly is what lost answers — it refuses while the chat is running and
   // says nothing (chat #133). The queue is FIFO, one per completed run (each stays a
   // distinct steerable turn), never flushed across a chat switch, and cleared with it.
-  // How many turns are held right now, for the steer below (it is created before `turns`).
-  const heldCount = useRef(0);
-  const turns = useChatTurns<QueuedTurn>({
+  const turns: ChatTurns<QueuedTurn> = useChatTurns<QueuedTurn>({
     running: conv.sending || preparing,
     runKey: chatId,
     send: (m) => dispatchSend(m.text, m.recipient, m.attachments),
@@ -120,14 +123,17 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
       // The chat's own run is steered only by a turn that may jump nothing: one behind a turn
       // held with Alt+Enter waits its turn, and a file that is not a picture is held (a steer
       // would drop it) - the same predicate the web composer's Send reads.
-      const steersOwnRun = conv.sending && !to && chatId != null && steersByDefault({ directed: false, held: heldCount.current, attachments });
+      const steersOwnRun = conv.sending && !to && chatId != null && steersByDefault({ directed: false, held: turns.queued.count, attachments });
+      // A message to a live sub-agent goes in whole: a file a steer would drop (anything but a
+      // picture) holds the message for after instead of being lost.
+      const atts = attachments ?? [];
+      if (child && !atts.every((a) => !!a.imageUrl)) return false;
       if (!child && !steersOwnRun) return false;
       // Reaching here means we WILL steer (a live sub-agent or the running chat run),
       // and the steer path bypasses `conv.send` — which is what normally snapshots +
       // clears `pendingAttachments`. The turn already carries its own attachment
       // snapshot (taken at submit, before the composer's clear), so ride it along
       // explicitly or a mid-run image would be silently dropped.
-      const atts = attachments ?? [];
       if (child) steerRun(child.key, text, atts);
       else steerRun(chatId as number, text, atts);
       return true;
@@ -135,8 +141,6 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
   });
   const { submit: submitTurn } = turns;
   const { submit: holdTurn } = turns.queued;
-  // eslint-disable-next-line react-hooks/refs
-  heldCount.current = turns.queued.count;
 
   // A run moves what the chat row reports (its spend & savings, ticket counts), and the
   // host drives the run, so the in-page loop's `onActivity` never sees it: re-read the row
@@ -154,6 +158,7 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
   // and this identity flows into `answerQuestion` / `replayMessage` — the transcript's
   // props — so keying on it re-rendered every visible row on each keystroke and frame.
   const { pendingAttachments, removeAttachment } = conv;
+  const composerFiles = pendingAttachments;
   const takeAttachments = useCallback((): ChatInputAttachment[] => {
     const attachments = [...pendingAttachments];
     for (const a of attachments) removeAttachment(a.key);
@@ -194,5 +199,7 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
   }, [recipient, sendOrQueue]);
 
   // `stop` clears the held turns AND stops the chat's run — the composer's Stop.
-  return { queued: turns.queued, stop: turns.stop, submit, queueAfter, answerQuestion, replayMessage };
+  // Send's verb: whether a message typed now would steer the run or be held (the door's own predicate).
+  const sendSteers = turns.steers({ directed: recipient != null, attachments: composerFiles });
+  return { queued: turns.queued, stop: turns.stop, submit, queueAfter, answerQuestion, replayMessage, sendSteers };
 }

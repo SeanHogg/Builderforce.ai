@@ -203,7 +203,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
 
   // A run's steps are persisted as durable step rows by the run loop the HOST drives
   // (`brainRunHost.ts`), not here: runs outlive this view.
-  const { queued, submit, queueAfter, stop, answerQuestion, replayMessage } = useChatSend({
+  const { queued, submit, queueAfter, stop, answerQuestion, replayMessage, sendSteers } = useChatSend({
     conv, chatId, input, setInput, recipient, liveChildren, setTurnLimbic, reloadChats,
   });
 
@@ -345,6 +345,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
               onChange={setInput}
               onSubmit={submit}
               onQueue={queueAfter}
+              sendSteers={sendSteers}
               onStop={stop}
               onPickStarter={pickStarter}
               focusToken={focusToken}

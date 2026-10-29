@@ -21,6 +21,7 @@
   "Queued for after the run": "En file pour après l’exécution",
   "Review my uncommitted changes and point out anything risky.": "Passe en revue mes modifications non validées et signale tout risque.",
   "Send into the running turn now": "Envoyer maintenant dans le tour en cours",
+  "Queue message — sends when the current run finishes": "Mettre le message en file — envoyé à la fin de l’exécution en cours",
   "Queue for after the run ({keys})": "Mettre en file pour après l’exécution ({keys})",
   "Queue": "En file",
   "Write tests for the file I have open.": "Écris des tests pour le fichier que j’ai ouvert.",
