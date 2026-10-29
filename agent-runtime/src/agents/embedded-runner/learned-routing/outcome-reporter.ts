@@ -16,8 +16,11 @@
  * ends in a logged warning and a resolved promise.
  */
 
+import type { RunOutcomeRow } from "@builderforce/agent-run";
 import {
+  DEFAULT_ACTION_TYPE,
   RUN_OUTCOME_PATH,
+  parseRunOutcomeTelemetry,
   type ActionType,
   type RunOutcomeRequest,
   type TerminalStatus,
@@ -81,6 +84,39 @@ export function buildRunOutcomeReport(facts: RunOutcomeFacts): RunOutcomeRequest
     ...(facts.degraded != null ? { degraded: facts.degraded } : {}),
     ...(facts.rateLimited != null ? { rateLimited: facts.rateLimited } : {}),
   };
+}
+
+/**
+ * The body for the PRD 35 §8.2 uniform row the ONE agent (`runAgent`) writes at the end of a run -
+ * the on-prem entry point's report to the fleet. The row's field names ARE the wire's, so the
+ * telemetry half goes through the shared validator (a malformed counter is a missing fact, never a
+ * rejected report). The row's run id and its owner's go through {@link clientRunIdFor} TOGETHER, so a
+ * sub-agent's `parentRunId` is the `clientRunId` its owner's row was reported under and the pointer
+ * joins. Null when the row cannot be keyed or attributed (no run id, no model): nothing to report.
+ * PURE.
+ */
+export function buildRunRowReport(row: RunOutcomeRow): RunOutcomeRequest | null {
+  const runId = row.runId?.trim();
+  const model = row.model?.trim();
+  if (!runId || !model) return null;
+  const projectId = resolveProjectId();
+  return {
+    ...parseRunOutcomeTelemetry({ ...row, parentRunId: row.parentRunId ? clientRunIdFor(row.parentRunId) : undefined }),
+    clientRunId: clientRunIdFor(runId),
+    source: "onprem",
+    model,
+    terminalStatus: row.terminalStatus === "finished" ? "completed" : "failed",
+    actionType: DEFAULT_ACTION_TYPE,
+    steps: Math.max(0, Math.floor(row.steps)),
+    ...(row.cost !== undefined ? { costMc: Math.max(0, Math.floor(row.cost)) } : {}),
+    ...(projectId != null ? { projectId } : {}),
+  };
+}
+
+/** Report the §8.2 row a run ended with, fire-and-forget (see {@link reportRunOutcome}). */
+export function reportRunRow(row: RunOutcomeRow): void {
+  const report = buildRunRowReport(row);
+  if (report) void reportRunOutcome(report);
 }
 
 /**

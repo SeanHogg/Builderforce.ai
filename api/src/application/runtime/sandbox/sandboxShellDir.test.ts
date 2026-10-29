@@ -25,7 +25,7 @@ describe('the sandbox shell and a working directory', () => {
     await shell.run('npm test', { cwd: 'app' });
     await shell.run('ls');
     await shell.run('ls', { cwd: '.' });
-    expect(commands).toEqual(['cd -- "./app" || exit 1\nnpm test', 'ls', 'ls']);
+    expect(commands).toEqual(['cd "./app" || exit 1\nnpm test', 'ls', 'ls']);
   });
 
   it('refuses a directory that leaves the workspace or reads as an option, without running anything', async () => {

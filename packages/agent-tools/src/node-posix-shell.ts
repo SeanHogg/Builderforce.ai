@@ -94,7 +94,11 @@ const CMD_CANNOT_RUN = [
   /is not recognized as the name of a cmdlet/i,
   /The syntax of the command is incorrect/i,
   /was unexpected at this time/i,
-  /Environment variable .* not defined/i,
+  // cmd.exe reading `set -e` as its own builtin. Narrowed to a flag-shaped name: a program that DID
+  // run and printed "Environment variable FOO not defined" is a real failure, not a reason to rerun.
+  /Environment variable -\w+ not defined/i,
+  // Windows PowerShell 5.1 has no `&&` / `||` chain operators.
+  /The token '(&&|\|\|)' is not a valid statement separator/i,
 ];
 
 export function cmdCannotRun(output: string): boolean {
@@ -233,15 +237,35 @@ export const NO_POSIX_SHELL =
   + "Install Git for Windows (which ships bash), or re-run the work as plain single-line commands instead.";
 
 /**
- * Which interpreter runs `command`: bash (`{ bash }`) when it is POSIX and one exists, the platform
- * default (`{ bash: null }`), or a refusal naming the cause. A POSIX script with no POSIX shell
- * must say so: letting it through hands it to cmd.exe, which parses `set -e` as its own builtin and
- * fails with "Environment variable -e not defined" — a message that names neither the cause nor
- * anything the agent could do about it.
+ * The interpreter a host runs a command in when nothing says otherwise. Windows only:
+ *  - `"platform"` — the machine's default shell (cmd.exe), moving a command to bash only when it
+ *    needs POSIX. The editor's shell.
+ *  - `"bash"` — bash whenever one exists (the default shell is used only when there is none). The
+ *    on-prem host's shell: a model writes `a && b` and `$VAR` as it does for the Bash tool, and
+ *    Windows PowerShell 5.1 parses neither.
+ * The HOST chooses; the routing rule below is the same for both.
  */
-export function posixRoute(command: string): { bash: string | null } | { error: string } {
-  if (needsPosixShell(command) && !findBash()) return { error: NO_POSIX_SHELL };
-  return { bash: posixShellOption(command).shell ?? null };
+export type DefaultInterpreter = "platform" | "bash";
+
+export interface RouteOptions {
+  defaultInterpreter?: DefaultInterpreter;
+}
+
+/**
+ * Which interpreter runs `command`: bash (`{ bash }`), the platform default (`{ bash: null }`), or a
+ * refusal naming the cause. A POSIX script with no POSIX shell must say so: letting it through hands
+ * it to cmd.exe, which parses `set -e` as its own builtin and fails with "Environment variable -e
+ * not defined" — a message that names neither the cause nor anything the agent could do about it.
+ *
+ * A STRICT NO-OP off Windows: the default shell there is already POSIX, and refusing a `grep` because
+ * `/bin/bash` is absent (Alpine, NixOS) would break hosts that work today.
+ */
+export function posixRoute(command: string, options: RouteOptions = {}): { bash: string | null } | { error: string } {
+  if (process.platform !== "win32") return { bash: null };
+  const bash = findBash();
+  if (options.defaultInterpreter === "bash" && bash) return { bash };
+  if (!needsPosixShell(command)) return { bash: null };
+  return bash ? { bash } : { error: NO_POSIX_SHELL };
 }
 
 /**
@@ -257,8 +281,12 @@ export async function runRouted<R extends { ok: boolean; stdout?: string; aborte
   command: string,
   exec: (bash: string | null) => Promise<R>,
   signal?: AbortSignal,
+  options: RouteOptions = {},
 ): Promise<R | { ok: false; error: string }> {
-  const route = posixRoute(command);
+  // Off Windows there is nothing to route and — above all — nothing to RE-RUN: a retry repeats the
+  // command's side effects, so it exists only for the one case it is a fix (cmd.exe could not parse it).
+  if (process.platform !== "win32") return exec(null);
+  const route = posixRoute(command, options);
   if ("error" in route) return { ok: false, error: route.error };
   const first = await exec(route.bash);
   if (first.ok || route.bash || first.aborted) return first;

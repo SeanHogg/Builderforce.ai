@@ -46,7 +46,7 @@ describe('createWorkspaceShell — the working directory', () => {
     const shell = createWorkspaceShell(store, { boot: async () => runtime });
     await shell.run('npm test', { cwd: 'app' });
     await shell.run('ls');
-    expect(spawned.map((s) => s.args[1])).toEqual(['cd -- "./app" || exit 1\nnpm test', 'ls']);
+    expect(spawned.map((s) => s.args[1])).toEqual(['cd "./app" || exit 1\nnpm test', 'ls']);
   });
 
   it('refuses an unsafe directory without booting the runtime', async () => {

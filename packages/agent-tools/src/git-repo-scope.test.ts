@@ -83,6 +83,24 @@ describe("buildGitCommand repo scoping", () => {
     }
   });
 
+  it("refuses a whitespace-only repo (a repo that cannot be honoured), but treats an empty one as absent", async () => {
+    const sh = mockShell(() => ({ ok: true, exitCode: 0, stdout: "## main" }));
+    expect(data(await gitUndoTool.execute({ repo: "   " }, sh as never))).toMatchObject({ ok: false, action: "undo" });
+    expect(sh.scripts).toEqual([]);
+    await gitStatusTool.execute({ repo: "" }, sh as never);
+    expect(sh.scripts).toEqual(["git status --short --branch"]);
+  });
+
+  it("takes a Windows-style separator as the same directory instead of refusing it with a message about '..'", async () => {
+    const sh = mockShell(() => ({ ok: true, exitCode: 0, stdout: "## main" }));
+    await gitStatusTool.execute({ repo: "apps\\web" }, sh as never);
+    expect(sh.cwds).toEqual(["apps/web"]);
+    // …while a backslash traversal is still an escape.
+    const escaped = data(await gitStatusTool.execute({ repo: "..\\elsewhere" }, sh as never));
+    expect(escaped.ok).toBe(false);
+    expect(sh.cwds).toEqual(["apps/web"]);
+  });
+
   it("refuses an escaping repo for the publish tools too, running nothing", async () => {
     const sh = mockShell(() => ({ ok: true, exitCode: 0, stdout: "ok" }));
     const pushed = data(await gitPushTool.execute({ repo: "../x" }, sh as never));

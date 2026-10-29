@@ -49,4 +49,16 @@ describe("createSteeringChannel", () => {
     ch.push("second");
     expect(listener).toHaveBeenCalledTimes(1);
   });
+
+  it("a listener that throws neither fails the push, loses the steer, nor starves the listeners after it", () => {
+    const ch = createSteeringChannel();
+    const after = vi.fn();
+    ch.onPush(() => {
+      throw new Error("listener bug");
+    });
+    ch.onPush(after);
+    expect(ch.push("still queued")).toBe(true);
+    expect(after).toHaveBeenCalledTimes(1);
+    expect(ch.drain()).toEqual(["still queued"]);
+  });
 });

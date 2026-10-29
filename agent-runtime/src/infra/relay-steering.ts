@@ -16,6 +16,8 @@
  * idempotency key here — only the API's `messageId`, carried through for a late steer.
  */
 
+import { logWarn } from "../logger.js";
+
 /** Normalise steering text from the wire: trimmed string or null when unusable. */
 export function normalizeSteeringText(text: unknown): string | null {
   const trimmed = typeof text === "string" ? text.trim() : "";
@@ -63,7 +65,15 @@ export function createSteeringChannel(): SteeringChannel {
       const normalized = normalizeSteeringText(text);
       if (!normalized || isClosed) return false;
       queue.push(messageId !== undefined ? { text: normalized, messageId } : { text: normalized });
-      for (const listener of [...listeners]) listener();
+      // The steer IS queued: a listener that throws must neither undo that nor hide it from the
+      // listeners after it, nor fail the push the caller is acknowledging.
+      for (const listener of [...listeners]) {
+        try {
+          listener();
+        } catch (err) {
+          logWarn(`[steering] a push listener threw: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
       return true;
     },
     pending: () => queue.length,

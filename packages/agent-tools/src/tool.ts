@@ -106,6 +106,12 @@ export interface ToolDefinition {
   /** Capabilities the surface MUST advertise for this tool to be offered. Empty =
    *  always available (e.g. `finish`). */
   readonly requires: readonly Capability[];
+  /**
+   * The description to OFFER under a given capability set, when it depends on what the surface
+   * grants (a delegation tool that promises background children only where they run live). Absent =
+   * `schema` as it stands. The registry applies it when it builds the schemas for a surface.
+   */
+  describeFor?(caps: ReadonlySet<Capability>): string;
   execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult>;
 }
 

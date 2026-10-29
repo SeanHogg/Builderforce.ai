@@ -4,8 +4,10 @@
  *
  * One reason to change: HOW a foreground command runs here. WHERE it runs is the tool's
  * `cwd` option, which this shell spawns the process in (the command line is never prefixed with
- * a `cd`); WHICH interpreter runs it is the shared routing rule (`node-posix-shell`: a POSIX
- * script goes to bash on Windows, with the one cmd→bash retry); WHETHER it may run (governance
+ * a `cd`); WHICH interpreter runs it is the shared routing rule (`node-posix-shell`) with
+ * THIS host's default: on Windows every command runs under bash whenever one exists (a model writes
+ * `a && b` and `$VAR` as it does for the Bash tool; PowerShell 5.1 parses neither) and PowerShell only
+ * when there is none; off Windows nothing is routed. WHETHER it may run (governance
  * gates) is the agent's policy.
  *
  * Stop reaches the process: aborting `opts.signal` kills the command's whole tree
@@ -115,7 +117,7 @@ async function runForeground(command: string, options: NodeShellOptions, runOpts
   if (signal?.aborted) return { ok: false, aborted: true, error: "aborted before it started" };
   const where = resolveShellCwd(options.cwd, runOpts?.cwd);
   if (!where.ok) return { ok: false, error: where.error };
-  return runRouted(command, (bash) => runOnce(command, bash, where.dir, options, signal), signal);
+  return runRouted(command, (bash) => runOnce(command, bash, where.dir, options, signal), signal, { defaultInterpreter: "bash" });
 }
 
 /** The on-prem shell: foreground commands in `options.cwd`, killed with the run's Stop. */

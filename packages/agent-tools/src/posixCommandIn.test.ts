@@ -12,9 +12,13 @@ describe("posixCommandIn", () => {
   });
 
   it("puts the directory in as a guarded leading line — a failed cd must not run the rest at the root", () => {
-    expect(posixCommandIn("app", "npm test")).toBe('cd -- "./app" || exit 1\nnpm test');
-    expect(posixCommandIn("app", "a; b")).toBe('cd -- "./app" || exit 1\na; b');
-    expect(posixCommandIn("Builderforce.ai", "set -e\nnpm test")).toBe('cd -- "./Builderforce.ai" || exit 1\nset -e\nnpm test');
+    expect(posixCommandIn("app", "npm test")).toBe('cd "./app" || exit 1\nnpm test');
+    expect(posixCommandIn("app", "a; b")).toBe('cd "./app" || exit 1\na; b');
+    expect(posixCommandIn("Builderforce.ai", "set -e\nnpm test")).toBe('cd "./Builderforce.ai" || exit 1\nset -e\nnpm test');
+    // A Windows-style separator is the same directory.
+    expect(posixCommandIn("apps\\web", "ls")).toBe('cd "./apps/web" || exit 1\nls');
+    // No `--`: bfsh's cd takes its first argument literally (see bfshRealCd.test.ts).
+    expect(posixCommandIn("app", "ls")).not.toContain("--");
   });
 
   it("refuses a directory that leaves the workspace, reads as an option, or carries shell syntax", () => {

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { allowedToolsAfterGates, offeredTools } from "../../test/helpers/gatedTools.js";
+import { isToolWithheld } from "@builderforce/agent-run";
+import type { PolicyGate } from "@builderforce/agent-tools";
+import { GATED_TOOL_VOCABULARY, allowedToolsAfterGates, offeredTools } from "../../test/helpers/gatedTools.js";
 import { gatewayHeaders } from "../run/gatewayModelTransport.js";
 
 /**
@@ -38,16 +40,15 @@ describe("gatewayHeaders", () => {
 });
 
 describe("allowedToolsAfterGates", () => {
-  it("keeps the full vocabulary with no gates", () => {
-    expect(allowedToolsAfterGates(undefined)).toEqual([
-      "Read",
-      "Write",
-      "Edit",
-      "Bash",
-      "Glob",
-      "Grep",
-      "Task",
-    ]);
+  it("keeps the full vocabulary with no gates, and every name in it is a REAL gate target", () => {
+    expect(allowedToolsAfterGates(undefined)).toEqual([...GATED_TOOL_VOCABULARY]);
+    // The list is only meaningful if each name reaches a tool the live catalog offers: a block gate
+    // authored against the name must withhold at least one tool a fully-granted surface is offered.
+    const offered = offeredTools(["repo.read", "repo.write", "shell", "orchestrate"]);
+    for (const name of GATED_TOOL_VOCABULARY) {
+      const gate: PolicyGate = { id: "g", effect: "block", tool: name };
+      expect(offered.some((tool) => isToolWithheld([gate], tool)), `a block gate on '${name}' withholds nothing the catalog offers`).toBe(true);
+    }
   });
 
   // `allowedTools` is passed verbatim to the SDK, so this list is what the agent CAN

@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { findBash } from "@builderforce/agent-tools/node-posix-shell.js";
 import { buildNodeShell, shellInvocation } from "./nodeShell.js";
 
 /**
@@ -101,6 +102,21 @@ describe("buildNodeShell — the working directory is the shell's, not the comma
       expect(await where(cwd)).toMatchObject({ ok: false, error: expect.stringContaining("outside the workspace") });
     }
     expect(await where("missing")).toMatchObject({ ok: false, error: expect.stringContaining("does not exist") });
+  });
+});
+
+// The on-prem host runs EVERY command under bash on Windows whenever one exists (parity with the Bash
+// tool the model was written for): PowerShell 5.1 has no `&&`. Without bash on a Windows machine the
+// chain cannot be run at all, so the case is skipped there rather than asserted.
+describe.skipIf(process.platform === "win32" && !findBash())("buildNodeShell — a model-written chain", () => {
+  it("runs `a && b` and keeps the last program's exit code, under whatever interpreter this host chose", async () => {
+    const shell = buildNodeShell({ cwd: dir });
+    const hello = `node "${path.join(dir, "hello.js")}"`;
+    const exit3 = `node "${path.join(dir, "exit3.js")}"`;
+    expect(await shell.run(`${hello} && ${hello}`)).toMatchObject({ ok: true, stdout: expect.stringContaining("hi") });
+    expect(await shell.run(`${hello} && ${exit3}`)).toMatchObject({ ok: false, exitCode: 3 });
+    // The chain stops at the first failure.
+    expect((await shell.run(`${exit3} && ${hello}`)).stdout ?? "").not.toContain("hi");
   });
 });
 

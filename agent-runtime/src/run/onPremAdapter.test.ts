@@ -18,6 +18,7 @@ import { describe, expect, it, vi } from "vitest";
 import { runAgent } from "@builderforce/agent-run";
 import type { ModelCompletion, ModelRequest, ModelTransport, RunOutcomeRow, RunPolicy } from "@builderforce/agent-run";
 import type { CapabilityProvider } from "@builderforce/agent-tools";
+import { buildRunRowReport } from "../agents/embedded-runner/learned-routing/outcome-reporter.js";
 import { createSteeringChannel } from "../infra/relay-steering.js";
 import { runOnPremAgent, type OnPremRunParams } from "./onPremAdapter.js";
 
@@ -160,14 +161,14 @@ describe("runOnPremAgent — conformance", () => {
   it("stamps ONE run id: a sub-agent's row names the row of the owner that spawned it", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "onprem-runid-"));
     try {
-      const SPAWN: ModelCompletion = { content: "", toolCalls: [{ id: "s1", name: "spawn_agent", arguments: '{"label":"look","task":"where is it?"}' }] };
+      const SPAWN: ModelCompletion = { content: "", toolCalls: [{ id: "s1", name: "spawn_agent", arguments: '{"label":"look","task":"where is it?"}' }], model: "fake-model" };
       const s = sinks();
       // The child gets its own sinks from `forChild`; collect its row beside the owner's.
       const rows: RunOutcomeRow[] = [];
       s.onOutcome.mockImplementation((row: RunOutcomeRow) => void rows.push(row));
       const child = { onAssistantText: vi.fn(), onToolUse: vi.fn(), onResult: vi.fn(), onOutcome: (row: RunOutcomeRow) => void rows.push(row) };
       // Owner: spawn → (child answers) → owner finishes.
-      const transport = scripted([SPAWN, { content: "found it in a.ts" }, { content: "all done" }]);
+      const transport = scripted([SPAWN, { content: "found it in a.ts", model: "fake-model" }, { content: "all done", model: "fake-model" }]);
       const result = await runOnPremAgent(
         { prompt: PROMPT, cwd: dir, anthropicBaseUrl: "https://gw/llm", gatewayAuthKey: "k", transport, executionId: 77 },
         { ...s, forChild: () => child },
@@ -176,8 +177,18 @@ describe("runOnPremAgent — conformance", () => {
       const owner = rows.find((r) => r.parentRunId === undefined);
       const kid = rows.find((r) => r.parentRunId !== undefined);
       expect(owner?.runId).toBe("77");
-      // The child's pointer is the owner's row id — it points at a row that exists.
+      // The child's pointer is the owner's row id — it points at a row that exists…
       expect(kid?.parentRunId).toBe(owner?.runId);
+      // …and has an id of its own, so its row can be reported under it.
+      expect(kid?.runId).toBeTruthy();
+      expect(kid?.runId).not.toBe(owner?.runId);
+      // On the wire both ids are namespaced TOGETHER: the child's parent_run_id is the owner's client_run_id.
+      const reports = rows.map((r) => buildRunRowReport(r));
+      const ownerReport = reports[rows.indexOf(owner!)];
+      const kidReport = reports[rows.indexOf(kid!)];
+      expect(ownerReport?.clientRunId).toBe("onprem:77");
+      expect(kidReport?.parentRunId).toBe(ownerReport?.clientRunId);
+      expect(ownerReport?.parentRunId).toBeUndefined();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

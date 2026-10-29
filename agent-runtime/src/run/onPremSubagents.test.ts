@@ -82,6 +82,9 @@ describe("childRunner", () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ entryPoint: "on-prem", parentRunId: "42", terminalStatus: "finished" });
+    // It has an id of its own: the row is reported under it, and names the owner's as its parent.
+    expect(rows[0]?.runId).toBeTruthy();
+    expect(rows[0]?.runId).not.toBe("42");
   });
 
   it("reports a child that failed as a failed delegation", async () => {

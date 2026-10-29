@@ -10,6 +10,8 @@
  * the owner's chat.
  */
 
+import type { RunOutcomeRow } from "@builderforce/agent-run";
+import { reportRunRow } from "../agents/embedded-runner/learned-routing/outcome-reporter.js";
 import type { ToolAuditEvent } from "../infra/builderforce-relay-outboxes.js";
 import type { OnPremRunSinks } from "./onPremEvents.js";
 
@@ -23,11 +25,14 @@ export interface RelayRunSinkDeps {
   emitAudit(event: ToolAuditEvent): void;
   /** Durable only: a timeline row with no live `tool.audit` frame (its live form is another frame). */
   persistAudit(event: ToolAuditEvent): void;
+  /** Teach the fleet from a run's §8.2 row (`/llm/v1/run-outcome`); defaults to the learned-routing reporter. */
+  reportOutcome?(row: RunOutcomeRow): void;
 }
 
 /** The sinks for one run. */
 export function relayRunSinks(deps: RelayRunSinkDeps): OnPremRunSinks {
   const { executionId } = deps;
+  const reportOutcome = deps.reportOutcome ?? reportRunRow;
   return {
     onAssistantText: (text) => {
       // Live view…
@@ -51,6 +56,7 @@ export function relayRunSinks(deps: RelayRunSinkDeps): OnPremRunSinks {
     onOutcome: (row) => {
       // The uniform outcome row (PRD 35 §8.2), one per run, on the durable audit trail.
       deps.emitAudit({ executionId, toolName: "run.outcome", category: "run", args: row });
+      reportOutcome(row);
     },
     forChild: (label) => ({
       onAssistantText: () => undefined,
@@ -60,6 +66,7 @@ export function relayRunSinks(deps: RelayRunSinkDeps): OnPremRunSinks {
       onResult: () => undefined,
       onOutcome: (row) => {
         deps.emitAudit({ executionId, toolName: "run.outcome", category: "run", args: { ...row, child: label } });
+        reportOutcome(row);
       },
     }),
   };

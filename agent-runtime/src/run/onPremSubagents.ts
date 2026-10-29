@@ -16,6 +16,7 @@
  * run of it.
  */
 
+import { randomUUID } from "node:crypto";
 import { childPolicy, childProvider, childResult, runAgent } from "@builderforce/agent-run";
 import type { HumanChannel, ModelTransport, RunPolicy } from "@builderforce/agent-run";
 import type { CapabilityProvider, SubagentRequest, SubagentResult } from "@builderforce/agent-tools";
@@ -45,7 +46,8 @@ export function childRunner(owner: ChildRunContext): (request: SubagentRequest) 
     // A child with no observer of its own reports nothing live — it never borrows the owner's.
     const sinks: OnPremRunSinks = own ?? { onAssistantText: () => undefined, onToolUse: () => undefined, onResult: () => undefined };
     const outcome = await runAgent({
-      task: { prompt: request.task, dispatch: { source: "subagent", parentRunId: owner.parentRunId } },
+      // Its own id: the row it writes is reported under it, and names the owner's as its parent.
+      task: { runId: randomUUID(), prompt: request.task, dispatch: { source: "subagent", parentRunId: owner.parentRunId } },
       policy: childPolicy(owner.policy, request),
       ports: {
         model: observedModel(owner.model, sinks),

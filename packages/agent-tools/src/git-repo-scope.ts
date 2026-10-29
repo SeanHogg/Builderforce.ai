@@ -30,8 +30,10 @@ export function safeGitArg(v: unknown): string | null {
  * traversal is rejected separately here — the one place it would actually escape.
  */
 export function safeRepoArg(repo: unknown): string | null {
-  const arg = safeGitArg(repo);
-  return arg && !arg.split(/[\\/]/).includes("..") && !arg.startsWith("/") ? arg : null;
+  // A Windows-style separator is the same directory (`apps\\web` = `apps/web`), so it is
+  // normalised rather than refused with a message about `..` that does not apply.
+  const arg = safeGitArg(typeof repo === "string" ? repo.replace(/\\/g, "/") : repo);
+  return arg && !arg.split("/").includes("..") && !arg.startsWith("/") ? arg : null;
 }
 
 /**
@@ -41,7 +43,8 @@ export function safeRepoArg(repo: unknown): string | null {
  * a DIFFERENT repository than the one asked for.
  */
 export function invalidRepoResult(action: string, repo: unknown): ToolResult | null {
-  if (typeof repo !== "string" || repo.trim() === "" || safeRepoArg(repo) !== null) return null;
+  // "" is an absent repo; whitespace-only is a repo that cannot be honoured, so it is refused.
+  if (typeof repo !== "string" || repo === "" || safeRepoArg(repo) !== null) return null;
   return { data: { ok: false, action, error: `repo '${repo}' must be a directory inside the workspace (no '..', not absolute), so nothing was run` } };
 }
 
@@ -54,14 +57,16 @@ export function invalidRepoResult(action: string, repo: unknown): ToolResult | n
  * Returns the command untouched for no directory (or the root), and `null` when `dir` is not a
  * safe workspace-relative directory — the caller refuses; a command is never run at the root in
  * place of the directory that was asked for. The directory goes in as a GUARDED LEADING LINE
- * (`cd -- "./dir" || exit 1`): the one-liner `cd "dir" && a; b` would run `b` at the root when the
- * `cd` fails, and `--` with `./` keeps a directory named like an option from being read as one.
+ * (`cd "./dir" || exit 1`): the one-liner `cd "dir" && a; b` would run `b` at the root when the
+ * `cd` fails. There is NO `--`: bfsh's `cd` (the in-browser shell) takes its first argument
+ * literally and would look for a directory named `--`. The `./` prefix plus the refusal of a
+ * leading `-` already keep a directory named like an option from being read as one.
  */
 export function posixCommandIn(dir: string | undefined, command: string): string | null {
   if (!dir || dir === ".") return command;
   const safe = safeRepoArg(dir);
   if (!safe || safe.startsWith("-")) return null;
-  return `cd -- "./${safe}" || exit 1\n${command}`;
+  return `cd "./${safe}" || exit 1\n${command}`;
 }
 
 /**

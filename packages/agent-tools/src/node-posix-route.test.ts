@@ -90,3 +90,83 @@ describe("runRouted", () => {
     expect(exec).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Off Windows the rule is a STRICT no-op: the default shell is already POSIX, so a host without
+ * /bin/bash (Alpine, NixOS) must not have `grep` refused, and a failing command must never be run
+ * again - a retry repeats its side effects.
+ */
+describe("off Windows — nothing is routed and nothing is re-run", () => {
+  it("does not refuse a unix utility when there is no bash", async () => {
+    setPlatform("linux");
+    bashAbsent();
+    expect(posixRoute("grep -r foo . | head -5")).toEqual({ bash: null });
+    const exec = vi.fn(async (_bash: string | null) => ({ ok: true, stdout: "x" }));
+    expect(await runRouted("grep -r foo . | head -5", exec)).toMatchObject({ ok: true });
+    expect(exec.mock.calls).toEqual([[null]]);
+  });
+
+  it("never reruns a failing command, even when its output looks like a cmd.exe complaint", async () => {
+    for (const platform of ["linux", "darwin"] as const) {
+      setPlatform(platform);
+      bashFound();
+      const exec = vi.fn(async (_bash: string | null) => ({ ok: false, stdout: "Environment variable -e not defined" }));
+      await runRouted("make deploy", exec);
+      expect(exec).toHaveBeenCalledTimes(1);
+    }
+  });
+});
+
+describe("the retry signature", () => {
+  it("fires for cmd.exe reading `set -e`, and not for a program that ran and printed a similar line", async () => {
+    onWindows();
+    bashFound();
+    const reran = vi.fn(async (bash: string | null) => (bash ? { ok: true, stdout: "" } : { ok: false, stdout: "Environment variable -e not defined" }));
+    await runRouted("frobnicate", reran);
+    expect(reran).toHaveBeenCalledTimes(2);
+    const real = vi.fn(async () => ({ ok: false, stdout: "Environment variable DATABASE_URL not defined" }));
+    await runRouted("frobnicate", real);
+    expect(real).toHaveBeenCalledTimes(1);
+  });
+
+  it("recognises Windows PowerShell 5.1's refusal of `&&`", async () => {
+    onWindows();
+    bashFound();
+    const ps = "The token '&&' is not a valid statement separator in this version.";
+    const exec = vi.fn(async (bash: string | null) => (bash ? { ok: true, stdout: "ran" } : { ok: false, stdout: ps }));
+    expect(await runRouted("frobnicate", exec)).toMatchObject({ ok: true, stdout: "ran" });
+  });
+});
+
+/** The on-prem host's choice: bash for EVERY command whenever one exists. */
+describe("defaultInterpreter: bash (the on-prem host)", () => {
+  const bashDefault = { defaultInterpreter: "bash" as const };
+
+  it("routes a plain chain to bash when bash exists, and runs it once", async () => {
+    onWindows();
+    bashFound();
+    expect(posixRoute("npm run build && npm test", bashDefault)).toEqual({ bash: GIT_BASH });
+    const exec = vi.fn(async (_bash: string | null) => ({ ok: false, stdout: "1 test failed" }));
+    await runRouted("npm run build && npm test", exec, undefined, bashDefault);
+    expect(exec.mock.calls).toEqual([[GIT_BASH]]);
+  });
+
+  it("falls back to the platform shell when there is no bash, refusing only a script that needs POSIX", () => {
+    onWindows();
+    bashAbsent();
+    expect(posixRoute("npm test", bashDefault)).toEqual({ bash: null });
+    expect(posixRoute("set -e\nls", bashDefault)).toEqual({ error: NO_POSIX_SHELL });
+  });
+
+  it("leaves the editor's default alone: per-command routing, a plain command stays in the platform shell", () => {
+    onWindows();
+    bashFound();
+    expect(posixRoute("npm run build && npm test")).toEqual({ bash: null });
+  });
+
+  it("does nothing off Windows", () => {
+    setPlatform("linux");
+    bashFound();
+    expect(posixRoute("npm test", bashDefault)).toEqual({ bash: null });
+  });
+});
