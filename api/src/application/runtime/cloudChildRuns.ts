@@ -148,9 +148,17 @@ export async function absorbChildWrites(db: Db, tenantId: number, parentExecutio
   if (diff.ok) for (const f of diff.files) writtenPaths.add(f.path);
 }
 
+const childStateOf = (row: ChildRow): ChildReportLike['state'] =>
+  row.status === 'completed' ? 'done' : row.status === 'cancelled' ? 'stopped' : 'failed';
+
+/** A settled child's whole answer — what the chat carries; its owner reads it clipped. */
+function childAnswerOf(row: ChildRow): string {
+  return (childStateOf(row) === 'done' ? row.result : row.errorMessage ?? row.result) ?? '';
+}
+
 function reportOf(row: ChildRow, spec: CloudChildSpec): ChildReportLike {
-  const state = row.status === 'completed' ? 'done' : row.status === 'cancelled' ? 'stopped' : 'failed';
-  const answer = (state === 'done' ? row.result : row.errorMessage ?? row.result) ?? '';
+  const state = childStateOf(row);
+  const answer = childAnswerOf(row);
   const { openIssues } = parseSubagentReport(answer);
   return {
     handle: spec.handle,
@@ -183,12 +191,14 @@ export async function settleCloudChildLineage(db: Db, runtime: RuntimeService, e
     // its owner, not a follow-up run, decides what happens next.
     await releasePendingSteers(db, row.tenantId, executionId);
     const report = reportOf(row, spec);
-    // The chat hears every child, as it does in the editor.
+    // The chat hears every child, as it does in the editor — whole: the owner's clipped
+    // copy points here for the rest ("the full text is in the chat").
+    const answer = childAnswerOf(row);
     await postSubagentChatReport(db, row.tenantId, parseOriginatingChatId(row.payload), parseCloudAgentRef(row.payload ?? undefined), {
       ok: report.state === 'done',
       label: spec.label,
-      output: report.output,
-      ...(report.state !== 'done' ? { error: report.output || `the sub-agent ${report.state}` } : {}),
+      output: answer,
+      ...(report.state !== 'done' ? { error: answer || `the sub-agent ${report.state}` } : {}),
       ...(spec.ticket ? { ticket: spec.ticket } : {}),
       ...(spec.asAgent ? { asAgent: spec.asAgent } : {}),
     });

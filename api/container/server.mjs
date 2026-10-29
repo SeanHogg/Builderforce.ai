@@ -327,7 +327,7 @@ async function closeSandbox(executionId) {
 }
 
 /** Route one `/sandbox/*` request. Every body names its execution. */
-async function handleSandbox(path, body, req) {
+async function handleSandbox(path, body, res) {
   if (typeof body.executionId !== 'number') return [400, { ok: false, error: 'executionId is required' }];
   if (path === '/sandbox/open') {
     if (!body.token || !body.internalBaseUrl) return [400, { ok: false, error: 'missing open spec fields' }];
@@ -343,8 +343,10 @@ async function handleSandbox(path, body, req) {
   const box = sandboxes.get(body.executionId);
   if (!box) return [409, { ok: false, error: 'not_open' }];
   if (!['/sandbox/fs', '/sandbox/run', '/sandbox/checks'].includes(path)) return [404, { ok: false, error: 'not found' }];
-  // The engine aborting its fetch (a cancel) closes this request: kill the command.
-  return [200, await serveSandbox(box, path, body, (kill) => { req.on('close', kill); return () => req.off('close', kill); })];
+  // The engine aborting its fetch (a cancel) closes the connection: kill the command. The
+  // RESPONSE's 'close' — the request's has already fired once its body was read, so a
+  // listener on it would never hear the cancel.
+  return [200, await serveSandbox(box, path, body, (kill) => { res.on('close', kill); return () => res.off('close', kill); })];
 }
 
 // ── Web-security-scan stages ─────────────────────────────────────────────────
@@ -542,7 +544,7 @@ const server = createServer((req, res) => {
     void readJson(req).then(async (body) => {
       if (!body) { sendJson(res, 400, { ok: false, error: 'bad request' }); return; }
       try {
-        const [status, out] = await handleSandbox(req.url, body, req);
+        const [status, out] = await handleSandbox(req.url, body, res);
         if (!res.writableEnded) sendJson(res, status, out);
       } catch (e) {
         if (!res.writableEnded) sendJson(res, 500, { ok: false, error: e instanceof Error ? e.message : String(e) });

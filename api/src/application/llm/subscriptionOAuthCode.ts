@@ -256,7 +256,7 @@ export function isRevokedRefresh(error: unknown): boolean {
 /**
  * Re-mint subscription tokens. Throws the shared {@link TokenEndpointError},
  * whose `status` is the UPSTREAM status — the resolvers read it to tell a revoked
- * refresh token (401/403) from a transient failure, which a 400/403/502 API
+ * refresh token ({@link isRevokedRefresh}) from a transient failure, which a 400/403/502 API
  * status would blur.
  */
 export function refreshSubscriptionToken(client: SubscriptionOAuthClient, refreshToken: string): Promise<TokenResponse> {
