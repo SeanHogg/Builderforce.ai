@@ -111,6 +111,9 @@ export function canvasModelTransport(run: CanvasRun): ModelTransport {
         }),
         request.model,
       )({ system, user, maxTokens: request.maxTokens ?? DEFAULT_SUMMARY_TOKENS, signal: signal ?? options.signal });
+      // No note is a failed summary, not an empty one: it takes the failure path, so the policy
+      // falls back to its recall note instead of folding a blank "memory" into the transcript.
+      if (!note) throw new Error('The summary model returned no note.');
       return { content: note };
     },
     async complete(request: ModelRequest, signal?: AbortSignal): Promise<ModelCompletion> {
