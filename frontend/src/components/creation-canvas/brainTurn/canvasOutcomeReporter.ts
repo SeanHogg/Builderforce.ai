@@ -1,6 +1,6 @@
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import type { RunOutcomeRow } from '@builderforce/agent-run';
-import { llmApi } from '@/lib/builderforceApi';
+import { learnedRoutingApi } from '@/lib/learnedRoutingApi';
 import { getStoredTenantToken } from '@/lib/auth';
 import { webInferenceModeNow } from '@/lib/localFirst/webInferenceMode';
 import { canvasOutcomeRequest } from '@/lib/canvasRunOutcome';
@@ -38,6 +38,6 @@ export function canvasOutcomeReporter(turn: {
       projectId: turn.projectId ?? null,
     });
     if (!body) return note('no model answered the run');
-    llmApi.reportRunOutcome(body).catch((error: unknown) => note(error instanceof Error ? error.message : String(error)));
+    learnedRoutingApi.reportRunOutcome(body).catch((error: unknown) => note(error instanceof Error ? error.message : String(error)));
   };
 }

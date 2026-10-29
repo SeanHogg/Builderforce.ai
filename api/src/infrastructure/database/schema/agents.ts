@@ -1504,7 +1504,7 @@ export const importRuns = pgTable('import_runs', {
 // Learned Model Routing (PRD 13 / migration 0198) — the OUTCOME fact table.
 // One row per TERMINAL cloud run, joining its (action_type, resolved_model) to a
 // composite 0..1 outcome score. The durable source of truth analytics + the
-// derived `routing:<scope>` KV blob read from. Idempotent on execution_id.
+// derived `routing:v2:<scope>` KV blob read from. Idempotent on execution_id.
 // ---------------------------------------------------------------------------
 // LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0013), resolved through
 // `runTelemetryDatabase()` — agent-run telemetry is grouped with the usage ledger by

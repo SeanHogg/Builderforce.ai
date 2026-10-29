@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   mode: vi.fn((): string => 'hybrid'),
 }));
 
-vi.mock('@/lib/builderforceApi', () => ({ llmApi: { reportRunOutcome: mocks.reportRunOutcome } }));
+vi.mock('@/lib/learnedRoutingApi', () => ({ learnedRoutingApi: { reportRunOutcome: mocks.reportRunOutcome } }));
 vi.mock('@/lib/auth', () => ({ getStoredTenantToken: () => mocks.token() }));
 vi.mock('@/lib/localFirst/webInferenceMode', () => ({ webInferenceModeNow: () => mocks.mode() }));
 

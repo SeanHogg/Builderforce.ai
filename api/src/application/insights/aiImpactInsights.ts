@@ -284,6 +284,20 @@ export function scoreComponents(outcomes: ImpactOutcomeRow[]): { throughput: num
 
 
 /**
+ * The two windows' composites on the SAME terms, so their delta is apples to apples. When both windows
+ * know their efficiency the three-term composites compare; when either does not (merges with no
+ * reported cost), both are scored on throughput and quality alone.
+ */
+function comparableScores(
+  cur: ReturnType<typeof scoreComponents>,
+  prev: ReturnType<typeof scoreComponents>,
+): { score: number; prevScore: number } {
+  if (cur.efficiency !== null && prev.efficiency !== null) return { score: cur.score, prevScore: prev.score };
+  const twoTerm = (c: { throughput: number; quality: number }): number => ((c.throughput + c.quality) / 2) * 100;
+  return { score: twoTerm(cur), prevScore: twoTerm(prev) };
+}
+
+/**
  * Pure: assemble the full AiImpactInsights from already-fetched rows. `prev` is
  * the outcome set for the immediately-preceding equal-length window (for the
  * productivity delta). `windowStart`/`now` anchor the weekly buckets.
@@ -304,7 +318,8 @@ export function summarizeAiImpact(
 
   const cur = scoreComponents(outcomes);
   const prev = scoreComponents(prevOutcomes);
-  const deltaPct = prev.score > 0 ? ((cur.score - prev.score) / prev.score) * 100 : (cur.score > 0 ? 100 : 0);
+  const { score, prevScore } = comparableScores(cur, prev);
+  const deltaPct = prevScore > 0 ? ((score - prevScore) / prevScore) * 100 : (score > 0 ? 100 : 0);
 
   const grain = adoptionGrainFor(windowDays);
   const models = summarizeModelConsumption(usage);
@@ -325,11 +340,11 @@ export function summarizeAiImpact(
       byoTokens: usage.reduce((s, r) => s + (r.byo ? r.totalTokens : 0), 0),
     },
     productivity: {
-      score: cur.score,
+      score,
       throughput: cur.throughput,
       quality: cur.quality,
       efficiency: cur.efficiency,
-      prevScore: prev.score,
+      prevScore,
       deltaPct,
     },
   };

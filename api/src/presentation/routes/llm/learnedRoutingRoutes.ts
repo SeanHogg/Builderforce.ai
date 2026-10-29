@@ -27,7 +27,7 @@ import { requireTenantAccess, respondToAccessError, type TenantAccess } from './
 
 export function mountLearnedRoutingRoutes(router: Hono<HonoEnv>): void {
   // The per-action-type model ranking the learned router seeds from (PRD 13 §6.5).
-  // Reads the SAME cached `routing:<scope>` KV blob the router reads (one source) — so
+  // Reads the SAME cached `routing:v2:<scope>` KV blob the router reads (one source) — so
   // it's O(1) and DB-free on a warm cache; a cold scope reconciles once from the
   // durable outcomes table. Tenant-scoped.
   router.get('/v1/model-analytics', async (c) => {

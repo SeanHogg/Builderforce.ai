@@ -5,11 +5,10 @@ import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { DaysWindowSelect, KpiGrid } from './LensShell';
-import { pct, score2 } from './format';
+import { costCoverage, pct, score2 } from './format';
 import { useInsightFormat } from './format';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { RunAnomaliesCard } from './RunAnomaliesCard';
-import { costCoverage } from './engineeringCost';
 
 /**
  * LENS #1 — AI effectiveness over run_model_outcomes. The "which approach

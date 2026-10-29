@@ -1,5 +1,5 @@
 /**
- * Learned Model Routing analytics (PRD 13 §6.5). Reads the cached `routing:<scope>`
+ * Learned Model Routing analytics (PRD 13 §6.5). Reads the cached `routing:v2:<scope>`
  * KV blob via `/llm/v1/model-analytics` and renders, per action type, the models
  * ranked by empirical outcome score — the same ranking the router seeds runs from.
  * Read-only; the panel is the cache (the route just reads the blob).
@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { formatUsdSpend } from '@/lib/formatSpend';
-import { llmApi, type ModelAnalyticsResponse } from '@/lib/builderforceApi';
+import { learnedRoutingApi, type ModelAnalyticsResponse } from '@/lib/learnedRoutingApi';
 import { EMPTY_VALUE } from '@/i18n/format';
 import { useFormat } from "@/i18n/useFormat";
 import { useErrorMessage } from '@/i18n/useErrorMessage';
@@ -42,7 +42,7 @@ export function ModelRoutingAnalytics() {
   // the `loading: true` initial state.
   useEffect(() => {
     let cancelled = false;
-    llmApi
+    learnedRoutingApi
       .modelAnalytics(scope)
       .then((res) => { if (!cancelled) setData(res); })
       .catch((e) => { if (!cancelled) setError(errorMessage(e)); })

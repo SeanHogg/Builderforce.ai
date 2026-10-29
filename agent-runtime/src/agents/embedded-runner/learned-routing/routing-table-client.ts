@@ -2,7 +2,7 @@
  * Learned Model Routing (PRD 13) — the host's READ of the fleet's learned ranking.
  *
  * The api's `GET /llm/v1/model-analytics?scope=<token>` serves the SAME cached
- * `routing:<scope>` blob the cloud router seeds from, shaped per action type. This is
+ * `routing:v2:<scope>` blob the cloud router seeds from, shaped per action type. This is
  * the only place in the host that calls it, and the only place a routing response is
  * cached — one cache, one TTL, one shape.
  *

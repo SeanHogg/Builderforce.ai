@@ -4,7 +4,7 @@
  * which no run reported a cost reads as unknown (null) — never as $0 or as the cheapest run.
  */
 import { describe, expect, it } from 'vitest';
-import { scoreComponents, summarizeComparison, type ImpactOutcomeRow } from './aiImpactInsights';
+import { scoreComponents, summarizeAiImpact, summarizeComparison, type ImpactOutcomeRow } from './aiImpactInsights';
 import { summarizeOutcomes, type OutcomeRow } from './engineeringInsights';
 import { pricedCostPerMergedUsd, pricedCostUsd } from './pricedCost';
 
@@ -76,6 +76,32 @@ describe('productivity score (AI impact)', () => {
     const none = scoreComponents([impact({ merged: false, costUsdMillicents: null })]);
 
     expect(none.efficiency).toBe(0);
+  });
+});
+
+describe('productivity delta (AI impact)', () => {
+  const DAY = 86_400_000;
+  const NOW = Date.UTC(2026, 9, 29);
+  const at = (outcomes: ImpactOutcomeRow[], prev: ImpactOutcomeRow[]) => summarizeAiImpact([], outcomes, prev, 30, NOW - 30 * DAY, NOW).productivity;
+
+  it('compares both windows on throughput and quality when only one of them is priced', () => {
+    const priced = [impact({ costUsdMillicents: 0 })];
+    const unpriced = [impact({ costUsdMillicents: null })];
+
+    const p = at(priced, unpriced);
+
+    // Identical runs, so on the same terms the score is flat: the delta is 0, not an artefact of one
+    // window being three-term (efficiency 1) and the other two-term.
+    expect(p.score).toBeCloseTo(p.prevScore, 6);
+    expect(p.deltaPct).toBeCloseTo(0, 6);
+    expect(p.efficiency).toBe(1);
+  });
+
+  it('keeps the three-term composites when both windows are priced', () => {
+    const p = at([impact({ costUsdMillicents: 0 })], [impact({ costUsdMillicents: 0 })]);
+
+    expect(p.score).toBeCloseTo(scoreComponents([impact({ costUsdMillicents: 0 })]).score, 6);
+    expect(p.deltaPct).toBeCloseTo(0, 6);
   });
 });
 

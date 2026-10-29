@@ -28,7 +28,7 @@ describe('codingEvidence', () => {
     'tools/toolDataProviders.ts',
     'llm/recallSeed.ts',
     'eval/variantEval.ts',
-    'llm/routingTable.ts',
+    'llm/routingReconcile.ts',
   ];
 
   it.each(LENSES)('%s reads coding evidence only', (file) => {

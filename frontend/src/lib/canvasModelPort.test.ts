@@ -44,9 +44,28 @@ describe('canvasModelTransport.complete — what a turn cost', () => {
     expect(completion.usage).toEqual({ inputTokens: 10, outputTokens: 5, costMc: 0 });
   });
 
+  it('reports a pinned on-device turn (no local-first attempts) as a known 0, from the model that answered', async () => {
+    const completion = await complete({ resolvedModel: 'local/webllm/qwen', usage: { prompt: 10, completion: 5 } });
+
+    expect(completion.usage).toEqual({ inputTokens: 10, outputTokens: 5, costMc: 0 });
+  });
+
+  it('reads a pinned on-device turn from the model asked for when the stream names none', async () => {
+    const completion = await canvasModelTransport(completingRun({})).complete(request({ model: 'local/bfi/tiny' }));
+
+    expect(completion.usage).toEqual({ costMc: 0 });
+  });
+
+  it('reports a hosted local-grammar runtime (Kimi Code) as unknown: it leaves the device', async () => {
+    const completion = await complete({ resolvedModel: 'local/kimi-code/k2', usage: { prompt: 10, completion: 5 } });
+
+    expect(completion.usage?.costMc).toBeUndefined();
+  });
+
   it('reports a turn answered after a local fallback by the gateway as unknown: it did not run on the device', async () => {
     const completion = await complete({
       localFirst: [{ target: 'local/ollama/qwen', outcome: 'failed' }, { target: 'vendor/model', outcome: 'served' }],
+      resolvedModel: 'vendor/model',
       usage: { prompt: 10, completion: 5 },
     });
 
@@ -57,6 +76,12 @@ describe('canvasModelTransport.complete — what a turn cost', () => {
     const completion = await complete({ usage: { prompt: 10, completion: 5 } });
 
     expect(completion.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
+  });
+
+  it('sends no usage at all when the gateway reported none and the cost is not known', async () => {
+    const completion = await complete({});
+
+    expect('usage' in completion).toBe(false);
   });
 });
 

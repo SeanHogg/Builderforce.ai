@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { costCoverage } from './engineeringCost';
+import { costCoverage } from './format';
 
 describe('costCoverage', () => {
   it('names how many runs the spend total covers when some did not report a cost', () => {

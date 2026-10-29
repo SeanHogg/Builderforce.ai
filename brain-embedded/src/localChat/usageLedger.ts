@@ -16,7 +16,7 @@
  */
 
 import { newLocalRecord, type LocalFirstStore } from '@builderforce/local-first';
-import { isLocalModelRef } from '@builderforce/local-inference';
+import { isLocalModelRef, servedLocalTarget } from '@builderforce/local-inference';
 import { directCatalogId, snapshotPriceBook, type PriceBook } from '@builderforce/model-catalog';
 import { computeCostMillicents } from '@builderforce/spend-contract';
 import type { CompletionUsage, StreamChatResult } from '../streamChatCompletion';
@@ -83,7 +83,7 @@ export interface RunUsageValue {
 
 /** Which route served a call, from what the stream reported. */
 export function usageRouteOf(result: Pick<StreamChatResult, 'resolvedModel' | 'localFirst'>, requested?: string): UsageRoute {
-  if (result.localFirst?.some((attempt) => attempt.outcome === 'served' && isLocalModelRef(attempt.target))) return 'local';
+  if (servedLocalTarget(result) !== undefined) return 'local';
   const model = result.resolvedModel ?? requested ?? '';
   if (isLocalModelRef(model)) return 'local';
   return directCatalogId(model) !== undefined ? 'byo-direct' : 'gateway';

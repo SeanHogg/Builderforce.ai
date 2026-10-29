@@ -71,3 +71,24 @@ export function runsOnDevice(ref: string | undefined): boolean {
   const parsed = parseLocalModelRef(ref);
   return !!parsed && localRuntime(parsed.provider).onDevice;
 }
+
+/** What a completion reports of how it was served: the local-first attempts and the model that answered. */
+export interface ServedResult {
+  resolvedModel?: string | undefined;
+  localFirst?: ReadonlyArray<{ target: string; outcome: string }> | undefined;
+}
+
+/** The local ref a local-first stream's SERVED attempt names, when a local model answered. */
+export function servedLocalTarget(result: Pick<ServedResult, 'localFirst'>): string | undefined {
+  return result.localFirst?.find((attempt) => attempt.outcome === 'served' && isLocalModelRef(attempt.target))?.target;
+}
+
+/**
+ * Whether the completion was answered ON THIS DEVICE — and so cost nothing. The served local-first
+ * attempt wins; a pinned local call (no attempt summaries) is read from the model that answered, else
+ * the one asked for. A hosted local-grammar runtime (Kimi Code) leaves the device, and a gateway
+ * answer (even after a local attempt fell over) is not on-device either.
+ */
+export function servedOnDevice(result: ServedResult, requested?: string): boolean {
+  return runsOnDevice(servedLocalTarget(result) ?? result.resolvedModel ?? requested);
+}

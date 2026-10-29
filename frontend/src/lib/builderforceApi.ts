@@ -17,7 +17,6 @@ import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import type { SessionApp } from './embeddedApps';
 import type { OutcomeMetric, OutcomeMetricFamilyRef } from './outcomeMetrics';
 import type { ListingTier, LlmProvider } from '@builderforce/model-catalog';
-import { RUN_OUTCOME_PATH, type RunOutcomeRequest } from '@builderforce/learned-routing';
 
 /**
  * `request` / `webRequest` are the two credential flavours this module's ~250
@@ -4615,28 +4614,6 @@ export const ACTION_TYPES = [
 ] as const;
 export type ActionType = (typeof ACTION_TYPES)[number];
 
-/** One model's learned ranking within an action type — from `/llm/v1/model-analytics`. */
-export interface ModelAnalyticsEntry {
-  model: string;
-  samples: number;
-  avgScore: number;
-  mergeRate: number;
-  /** null = none of this model's runs reported a cost: unknown, not $0. */
-  avgCostMillicents: number | null;
-  /** Runs behind that mean that reported a cost. */
-  costN?: number;
-}
-export interface ModelAnalyticsAction {
-  actionType: ActionType;
-  label: string;
-  models: ModelAnalyticsEntry[];
-}
-export interface ModelAnalyticsResponse {
-  scope: string;
-  updatedAt: string;
-  byAction: ModelAnalyticsAction[];
-}
-
 /** Card-validation state — the gate on PREMIUM (any-paid-OpenRouter) model selection.
  *  Mirrors exactly what `GET /api/tenants/:id/card-validation` returns; a field the
  *  route doesn't send has no business being declared here (a non-optional
@@ -4701,21 +4678,6 @@ export const llmApi = {
 
   models: (): Promise<LlmModelsResponse> =>
     request<LlmModelsResponse>('/llm/v1/models'),
-
-  /** Learned Model Routing analytics — the per-action-type model ranking the router
-   *  seeds from. `scope` defaults to the caller's tenant; pass `global` or
-   *  `project:<id>`. */
-  modelAnalytics: (scope: string = 'tenant'): Promise<ModelAnalyticsResponse> =>
-    request<ModelAnalyticsResponse>(`/llm/v1/model-analytics?scope=${encodeURIComponent(scope)}`),
-
-  /**
-   * Report a settled NON-cloud run (the Creation Canvas, an IDE, on-prem) to the one
-   * write-back door: records the run's PRD 35 §8.2 uniform outcome row and — unless the body
-   * says `routingSignal: false` — teaches learned routing. Idempotent on `clientRunId`. The body is the shared contract's
-   * (`@builderforce/learned-routing`), so no field name is spelled here.
-   */
-  reportRunOutcome: (body: RunOutcomeRequest): Promise<{ ok: boolean }> =>
-    request<{ ok: boolean }>(RUN_OUTCOME_PATH, { method: 'POST', body: JSON.stringify(body), expectedErrors: AMBIENT_REQUEST_ERRORS }),
 
   /**
    * Record this user's thumb on one AI response, filed against the model that served

@@ -1,7 +1,8 @@
 /**
  * The routing blob's shapes and the pure arithmetic that folds a run (or a human thumb) into it:
  * the per-model running stats, the best-first sort, and the plain (Welford) and recency-decayed
- * folds. Split out of `routingTable.ts`, which owns the cache, the reconcile and the scope ladder.
+ * folds. Split out of `routingTable.ts` (the cache reads, the scope ladder and the incremental writes
+ * that call these folds) and `routingReconcile.ts` (the rebuild from SQL).
  *
  * ONE rule for a run that reported no cost: it is UNKNOWN, not free. The live fold here skips it
  * (the cost mean and its count `costN` move only on a priced run) exactly as the reconcile's SQL
@@ -79,8 +80,9 @@ export interface RoutingTable {
  *  outcomes + human thumbs, each weighted by how much evidence it has — see
  *  modelQualityScore.ts); ties break to the cheaper model (lower avgCostMc) among those that know their cost — an
  *  unknown cost is no information and keeps its place (`rankWithCostTieBreak`).
- *  Stable for deterministic output, and the same ordering `rankModelsForAction`
- *  applies, so the blob and the router never disagree. */
+ *  Deterministic, and it applies the same score-then-cost rule as `rankModelsForAction`. The
+ *  router's own final order also folds in per-call bias, exploration and the curated index, so
+ *  this is the blob's stored ranking, not a promise of the router's output. */
 export function sortStats(stats: ActionModelStat[]): ActionModelStat[] {
   return rankWithCostTieBreak(
     stats.map((s, i) => ({ s, i, q: blendedQualityScore(s), rl: isChronicallyRateLimited(s) ? 1 : 0 })),

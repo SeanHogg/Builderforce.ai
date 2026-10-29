@@ -40,7 +40,7 @@ export {
   type LocalRuntimeReach,
   type LocalToolSupport,
 } from './runtimes.js';
-export { LOCAL_MODEL_PREFIX, clientPinOf, formatLocalModelRef, isLocalModelRef, parseLocalModelRef, runsOnDevice } from './ref.js';
+export { LOCAL_MODEL_PREFIX, clientPinOf, formatLocalModelRef, isLocalModelRef, parseLocalModelRef, runsOnDevice, servedLocalTarget, servedOnDevice, type ServedResult } from './ref.js';
 export {
   GATEWAY_COMPLETIONS_PATH,
   LOCAL_COMPLETIONS_PATH,

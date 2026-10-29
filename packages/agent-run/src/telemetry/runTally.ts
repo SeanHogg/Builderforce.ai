@@ -15,6 +15,7 @@ import { isNotARepo, resolveToolAlias } from "@builderforce/agent-tools";
 import { parseShellFileRead } from "@builderforce/run-guards";
 import type { ModelUsage } from "../contract.js";
 import { isSpawnTool } from "../policy/subagents/delegationRequest.js";
+import { foldTurnCost } from "./costTally.js";
 
 /** What a run has spent and done so far — carried on `RunState.telemetry`. */
 export interface RunTally {
@@ -28,8 +29,10 @@ export interface RunTally {
   tokens: number;
   /** Prompt-cache reads across every turn. */
   cacheReadTokens: number;
-  /** Millicents the transport reported it was billed, summed; absent when none reported. */
+  /** Millicents the transport reported it was billed, summed over the turns that reported one. */
   costMc?: number;
+  /** Some turn reported no cost: the run's cost is UNKNOWN whatever `costMc` holds (see `costTally.ts`). */
+  costUnpriced?: true;
   /** The step the first `spawn_agent(s)` call was dispatched on; absent ⇒ nothing spawned. */
   firstSpawnTurn?: number;
   /** `cat`/`sed`/`head`/`tail` prints of one workspace file through the shell. */
@@ -53,10 +56,13 @@ export function resumeTally(saved: Partial<RunTally> | undefined): RunTally {
 /** One model turn answered: who served it and what it cost. */
 export function tallyTurn(tally: RunTally, model: string | undefined, usage: ModelUsage | undefined): void {
   if (model) tally.model = model;
+  // A turn with no usage at all is an unpriced turn too: it latches the run's cost unknown.
+  const cost = foldTurnCost({ sum: tally.costMc, unpriced: tally.costUnpriced }, usage?.costMc);
+  tally.costMc = cost.sum;
+  if (cost.unpriced) tally.costUnpriced = true;
   if (!usage) return;
   tally.tokens += (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
   tally.cacheReadTokens += usage.cacheReadTokens ?? 0;
-  if (usage.costMc !== undefined) tally.costMc = (tally.costMc ?? 0) + usage.costMc;
 }
 
 /** One dispatched call: counted, and read for the §8.2 efficiency facts it carries. */

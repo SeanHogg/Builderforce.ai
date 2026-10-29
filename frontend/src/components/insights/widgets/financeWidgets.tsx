@@ -30,8 +30,7 @@ import { BarChart } from '@/components/charts/BarChart';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { colorAt } from '@/components/charts/chartColors';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
-import { pct, score2 } from '../format';
-import { costCoverage } from '../engineeringCost';
+import { costCoverage, pct, score2 } from '../format';
 import { useInsightFormat, type InsightFormatters } from '../format';
 import { useEngineering } from '../insightsSources';
 
