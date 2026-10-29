@@ -120,11 +120,15 @@ describe('issues', () => {
 describe('live', () => {
   it('is held in the isolate for a few seconds and never touches KV', async () => {
     const kv = { get: vi.fn(async () => null), put: vi.fn(async () => undefined), delete: vi.fn(async () => undefined) };
-    const { db, selectCount } = fakeStore([[], []]);
+    // One cache fill runs several selects (visitor list, exact total, by-route aggregate).
+    const { db, selectCount } = fakeStore([[], [{ n: '0' }], []]);
     const reads = service(db, { AUTH_CACHE_KV: kv });
     await reads.live(SCOPE);
+    const afterFirst = selectCount();
+    expect(afterFirst).toBeGreaterThan(0);
+    // The second call inside the TTL is served from the isolate: no new selects.
     await reads.live(SCOPE);
-    expect(selectCount()).toBe(1);
+    expect(selectCount()).toBe(afterFirst);
     const touched = [...kv.get.mock.calls, ...kv.put.mock.calls].map((call) => String((call as unknown[])[0]));
     expect(touched.some((key) => key.includes(':live'))).toBe(false);
   });
