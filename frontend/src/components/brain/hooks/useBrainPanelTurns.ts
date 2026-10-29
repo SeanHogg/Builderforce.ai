@@ -1,5 +1,5 @@
 import { useCallback, useMemo, type Dispatch, type SetStateAction } from 'react';
-import { useChatTurns, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
+import { useChatTurns, type ChatInputAttachment, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import type { useBrainChats, useBrainConversation } from '@/lib/brain';
 import { useDockedComposer } from '@/lib/brain/dockedBrain';
 import { trackActivity } from '@/lib/activity/tracker';
@@ -14,6 +14,8 @@ import { useAssistantGate } from '@/lib/academic/useAssistantGate';
 export interface BrainPanelTurn {
   text: string;
   addressedTo: DirectedRecipient | null;
+  /** The files attached when it was offered - they ride a steer, a held turn and a send alike. */
+  attachments?: ChatInputAttachment[];
 }
 
 const turnText = (turn: BrainPanelTurn) => turn.text;
@@ -39,8 +41,12 @@ export function useBrainPanelTurns({ conv, chats, recipient, input, setInput, sh
   const turns = useChatTurns<BrainPanelTurn>({
     running: conv.sending,
     runKey: chats.activeChatId,
-    send: ({ text, addressedTo }) => conv.send(text, { addressedTo }),
+    send: ({ text, addressedTo, attachments }) => conv.send(text, { addressedTo, ...(attachments?.length ? { attachments } : {}) }),
     textOf: turnText,
+    // A message typed mid-run STEERS the run (the shared door's default): its attachments
+    // ride along, and what the run leaves in its inbox becomes the next turn.
+    attachmentsOf: (turn) => turn.attachments,
+    turnOf: (text, attachments) => ({ text, addressedTo: null, attachments }),
     // A turn for a participant is a message to them — never the Brain's Stop.
     isDirected: (turn) => turn.addressedTo != null,
     // The conversation's Stop: it also drops a launch still getting ready.
@@ -75,17 +81,29 @@ export function useBrainPanelTurns({ conv, chats, recipient, input, setInput, sh
   }), [setInput, showChatTab, assistantGate.assistantAllowed, submitTurn]);
   useDockedComposer(acceptsHandover, dockedComposer);
 
-  const handleSend = useCallback(async () => {
+  /**
+   * Offer what is in the box through `offer` (the door's submit, or its explicit queue). The
+   * composer's attachments travel with the turn - and leave the composer once the turn has
+   * them, because a steer or a held turn never passes through `conv.send`, which is what
+   * normally clears them.
+   */
+  const offerBox = useCallback(async (offer: (turn: BrainPanelTurn) => Promise<boolean>) => {
     const text = input.trim();
     if (!text || !assistantGate.assistantAllowed) return;
+    const attachments = [...conv.pendingAttachments];
     setInput('');
     // Audited engagement signal: interacting with the AI agent is billable activity.
     trackActivity('agent_message', { weight: 2 });
     // Restore the text if the send fails before it's persisted (e.g. an expired
     // session) so the user's message is never silently lost.
-    const ok = await submitTurn({ text, addressedTo: recipient });
+    const ok = await offer({ text, addressedTo: recipient, ...(attachments.length ? { attachments } : {}) });
     if (!ok) setInput((cur) => cur || text);
-  }, [assistantGate.assistantAllowed, input, recipient, setInput, submitTurn]);
+    else for (const a of attachments) conv.removeAttachment(a.key);
+  }, [assistantGate.assistantAllowed, conv, input, recipient, setInput]);
+
+  const handleSend = useCallback(() => offerBox(submitTurn), [offerBox, submitTurn]);
+  /** The explicit alternative to steering: hold what is in the box for after the run. */
+  const handleQueueAfter = useCallback(() => offerBox(turns.queueAfter), [offerBox, turns.queueAfter]);
 
   return {
     /** The held turns as the composer renders them (text), removable. */
@@ -95,5 +113,6 @@ export function useBrainPanelTurns({ conv, chats, recipient, input, setInput, sh
     /** Stop the run AND drop the held turns — the composer's Stop. */
     stopTurn: turns.stop,
     handleSend,
+    handleQueueAfter,
   };
 }

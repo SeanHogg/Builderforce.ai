@@ -32,6 +32,8 @@ const COMPOSER_KEY: Readonly<Record<string, MessageKey>> = {
   remove: 'remove',
   send: 'send',
   queueSend: 'cmpQueueSend',
+  queueAfter: 'cmpQueueAfter',
+  queueAfterShort: 'cmpQueueAfterShort',
   stop: 'stop',
   dictate: 'cmpDictate',
   stopDictation: 'cmpStopDictation',

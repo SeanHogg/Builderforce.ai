@@ -266,7 +266,7 @@ describe('useChatTurns — a mid-run message steers by default (PRD 35 E10)', ()
     return renderHook((props: ChatTurnsOptions<string>) => useChatTurns(props), { initialProps: initial });
   }
 
-  it('posts the message to the run, interrupting the step in flight — nothing is held, nothing is sent', async () => {
+  it('posts the message to the run, interrupting the step in flight - nothing is held, nothing is sent', async () => {
     const send = vi.fn();
     const { result } = mount({ running: true, runKey: 12, send });
 
@@ -279,11 +279,12 @@ describe('useChatTurns — a mid-run message steers by default (PRD 35 E10)', ()
     expect(steer).toMatchObject({ text: 'write the update now', fromPerson: true, persist: true });
   });
 
-  it('carries a non-string turn's attachments so a mid-run image is not dropped', async () => {
+  it('carries a non-string turn attachments so a mid-run image is not dropped', async () => {
     type Turn = { text: string; attachments: Array<{ key: string; name: string; type: string; imageUrl: string }> };
     const send = vi.fn();
     const { result } = renderHook(() => useChatTurns<Turn>({
       running: true, runKey: 13, send, textOf: (t) => t.text, attachmentsOf: (t) => t.attachments,
+      turnOf: (text) => ({ text, attachments: [] }),
     }));
     const attachments = [{ key: 'a', name: 'shot.png', type: 'image/png', imageUrl: 'data:image/png;base64,AAA' }];
 
@@ -303,5 +304,75 @@ describe('useChatTurns — a mid-run message steers by default (PRD 35 E10)', ()
     await act(async () => { await stopped.result.current.submit('after the stop'); });
     expect(stopped.result.current.queued.count).toBe(1);
     expect(hasRunInterrupt(14)).toBe(false);
+  });
+
+  it('holds a turn whose shape cannot be rebuilt from steered text (no turnOf) rather than steer it', async () => {
+    type Turn = { text: string; to: string | null };
+    const { result } = renderHook(() => useChatTurns<Turn>({ running: true, runKey: 15, send: vi.fn(), textOf: (t) => t.text }));
+    await act(async () => { await result.current.submit({ text: 'later', to: null }); });
+    expect(result.current.queued.count).toBe(1);
+    expect(hasRunInterrupt(15)).toBe(false);
+  });
+
+  it('does not jump ahead of turns already held: it waits behind them', async () => {
+    const send = vi.fn();
+    const { result } = mount({ running: true, runKey: 16, send });
+    await act(async () => { await result.current.queueAfter('first, for after'); });
+    await act(async () => { await result.current.submit('then this'); });
+    expect(result.current.queued.count).toBe(2);
+    expect(hasRunInterrupt(16)).toBe(false);
+  });
+});
+
+describe('useChatTurns — direction the run never drained is not lost (B1)', () => {
+  beforeEach(() => { stopRun.mockClear(); resetRunSteering(); });
+
+  function mount(initial: ChatTurnsOptions<string>) {
+    return renderHook((props: ChatTurnsOptions<string>) => useChatTurns(props), { initialProps: initial });
+  }
+
+  it('a steer queued after the loop's final drain is sent as the next turn when the run completes', async () => {
+    const send = vi.fn();
+    const { result, rerender } = mount({ running: true, runKey: 20, send });
+
+    await act(async () => { await result.current.submit('one more thing'); });
+    await act(async () => { await result.current.submit('and this'); });
+    expect(send).not.toHaveBeenCalled();
+
+    rerender({ running: false, runKey: 20, send });
+    expect(send).toHaveBeenCalledTimes(1);
+    // Oldest first, as ONE turn.
+    expect(send).toHaveBeenCalledWith('one more thing
+
+and this');
+    expect(drainRunSteering(20)).toEqual([]);
+  });
+
+  it('goes ahead of a held turn, which follows on the run after (one turn per completed run)', async () => {
+    const send = vi.fn();
+    const { result, rerender } = mount({ running: true, runKey: 21, send });
+    await act(async () => { await result.current.submit('steered first'); });
+    await act(async () => { await result.current.queueAfter('held after'); });
+
+    rerender({ running: false, runKey: 21, send });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenLastCalledWith('steered first');
+
+    rerender({ running: true, runKey: 21, send });
+    rerender({ running: false, runKey: 21, send });
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send).toHaveBeenLastCalledWith('held after');
+  });
+
+  it('a steer typed before a Stop does not appear in the next run', async () => {
+    const send = vi.fn();
+    const { result, rerender } = mount({ running: true, runKey: 22, send });
+
+    await act(async () => { await result.current.submit('typed before the stop'); });
+    act(() => result.current.stop());
+    expect(drainRunSteering(22)).toEqual([]);
+
+    rerender({ running: false, runKey: 22, send });
+    expect(send).not.toHaveBeenCalled();
   });
 });

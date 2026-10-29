@@ -29,6 +29,8 @@ export interface RunSteerDeps {
   isBusy(runKey: number): boolean;
   /** Whether the host has claimed this key and its loop has not started yet. */
   isSettingUp(runKey: number): boolean;
+  /** Drop the turns parked behind this key's live run (a Stop ends them with it). */
+  dropParked?(runKey: number): void;
   /** The top-level owner's name, as the chat shows it. */
   ownerName: string;
 }
@@ -56,6 +58,7 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
   const stop = (runKey: number): void => {
     // Nothing claimed: nothing to stop, and no mark left to swallow the NEXT run's words.
     if (!deps.isBusy(runKey)) return;
+    deps.dropParked?.(runKey);
     stopped.add(runKey);
     deps.childHost.stop(runKey);
   };

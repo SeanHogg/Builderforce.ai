@@ -151,9 +151,10 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   });
   const messages = conv.messages;
 
-  // THE one door a turn leaves through: a turn typed while a run streams is HELD and
-  // delivered on the run's falling edge (the composer's Send says "Queue message");
-  // Stop drops what is held, then stops the run.
+  // THE one door a turn leaves through: a turn typed while a run streams STEERS it (the
+  // composer's Send says so) - it interrupts the step in flight and reaches the next model
+  // call; what the run never drained is sent as the next turn. The explicit "Queue for
+  // after" holds one for the run's falling edge. Stop drops what is held, then stops the run.
   const turns = useChatTurns<string>({
     running: conv.sending,
     runKey: chatId,
@@ -174,6 +175,12 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
     if (!text) return;
     setDraft('');
     void turns.submit(text);
+  };
+  const queueAfter = () => {
+    const text = draft.trim();
+    if (!text) return;
+    setDraft('');
+    void turns.queueAfter(text);
   };
   const answer = useCallback((text: string) => void turns.submit(text), [turns.submit]);
 
@@ -309,6 +316,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
               onSubmit={send}
               running={conv.sending}
               onStop={turns.stop}
+              onQueue={queueAfter}
               above={(
                 <QueuedTurnChips
                   items={turns.queued.items}

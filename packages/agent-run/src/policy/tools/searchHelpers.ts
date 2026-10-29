@@ -7,7 +7,7 @@
  */
 
 import type { ToolSchema } from "@builderforce/agent-tools";
-import { rankLexically, searchToolSchemas, TOOL_SEARCH_TOOL } from "@builderforce/agent-tools";
+import { searchToolSchemas, TOOL_SEARCH_TOOL } from "@builderforce/agent-tools";
 
 /** Hard ceiling on one `tool_search` answer (`deferredTools.ts`). */
 export const TOOL_SEARCH_MAX = 15;

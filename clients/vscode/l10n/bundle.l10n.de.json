@@ -74,6 +74,7 @@
   "Billed to your own {provider} account — no plan credit used.": "Wird deinem eigenen {provider}-Konto berechnet – kein Tarifguthaben wird verbraucht.",
   "Blocked": "Blockiert",
   "Blocked by a governance gate: {0}": "Von einem Governance-Gate blockiert: {0}",
+  "BuilderForce is still working on this chat's previous request. Wait for it to finish or stop it, then ask again.": "BuilderForce bearbeitet noch die vorherige Anfrage dieses Chats. Warte, bis sie fertig ist, oder stoppe sie, und frage dann erneut.",
   "Branch {0}": "Branch {0}",
   "Browse the web": "Im Web suchen",
   "Browser": "Browser-Vorschau",

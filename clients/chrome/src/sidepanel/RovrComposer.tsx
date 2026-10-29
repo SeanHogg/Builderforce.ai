@@ -25,6 +25,8 @@ export interface RovrComposerProps {
   onSubmit(): void;
   running: boolean;
   onStop(): void;
+  /** The explicit "queue for after" beside Send while a run streams: Send itself steers the run. */
+  onQueue?(): void;
   chatOptions: RovrChatOptions;
   onOpenSettings(): void;
   /** Above the text — the held turns (the shared queued chips). */
@@ -36,7 +38,7 @@ export interface RovrComposerProps {
   contextUsage?: ContextUsage | null;
 }
 
-export function RovrComposer({ composerId, value, onChange, onSubmit, running, onStop, chatOptions, onOpenSettings, above, showSuggestions, contextUsage }: RovrComposerProps) {
+export function RovrComposer({ composerId, value, onChange, onSubmit, running, onStop, onQueue, chatOptions, onOpenSettings, above, showSuggestions, contextUsage }: RovrComposerProps) {
   const { options, memoryGap, request, projectId } = chatOptions;
   const labels = useMemo(() => rovrComposerLabels(memoryGap), [memoryGap]);
   // Where models run — the `/` menu's Run models control and the first-run question.
@@ -73,6 +75,7 @@ export function RovrComposer({ composerId, value, onChange, onSubmit, running, o
       onSubmit={onSubmit}
       running={running}
       onStop={onStop}
+      {...(onQueue ? { onQueue } : {})}
       placeholder={t('composerPlaceholder')}
       ariaLabel={t('composerLabel')}
       options={composerOptions}

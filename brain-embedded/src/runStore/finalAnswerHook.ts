@@ -83,7 +83,7 @@ export function finalAnswerHook(run: RunLoopContext): NonNullable<LoopHooks<Chat
     // Multiple queued steers join into one text part; their images ride as vision parts.
     const steering = takeRunSteering(c, runKey, iter);
     if (steering.length > 0) {
-      for (const steer of steering) persistSteer(c, chatId, persistence, steer);
+      for (const steer of steering) await persistSteer(c, chatId, persistence, steer);
       const joinedText = steering.map((m) => m.text).join('\n\n');
       const imageAtts = steering.flatMap((m) => (m.attachments ?? []).filter((a) => a.imageUrl));
       const nudge: string | ContentPart[] = imageAtts.length > 0

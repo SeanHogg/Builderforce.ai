@@ -656,8 +656,16 @@
     "description": "Toggle state: off"
   },
   "cmpQueueSend": {
-    "message": "Queue message — sends when the current run finishes",
-    "description": "Send while a run is streaming"
+    "message": "Send into the running turn now",
+    "description": "Send while a run is streaming: steers the live run now"
+  },
+  "cmpQueueAfter": {
+    "message": "Queue for after the run ($1)",
+    "description": "The explicit hold-for-after button beside Send while a run streams; $1 = the keyboard shortcut"
+  },
+  "cmpQueueAfterShort": {
+    "message": "Queue",
+    "description": "Its short visible text (the icon stands alone at narrow widths)"
   },
   "cmpDictate": {
     "message": "Dictate",

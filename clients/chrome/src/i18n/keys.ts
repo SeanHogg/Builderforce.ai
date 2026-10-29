@@ -178,6 +178,8 @@ export const MESSAGE_KEYS = [
   'cmpOn',
   'cmpOff',
   'cmpQueueSend',
+  'cmpQueueAfter',
+  'cmpQueueAfterShort',
   'cmpDictate',
   'cmpStopDictation',
   'cmpModeChat',

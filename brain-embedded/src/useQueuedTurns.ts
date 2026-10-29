@@ -58,9 +58,17 @@ export interface QueuedTurnsOptions<T> {
    * trimmed and checked directly; omit this for them.
    */
   textOf?: (value: T) => string;
+  /**
+   * A turn that goes BEFORE the held ones when a run completes — e.g. direction steered into
+   * the run after its last drain, which nothing else would ever deliver. Asked once per
+   * completed run, on the falling edge; a turn it returns is sent INSTEAD of one held turn
+   * (held turns keep their one-per-run rhythm and follow on the next edge). Nothing ⇒ the
+   * held queue flushes as usual.
+   */
+  lead?: () => T | undefined;
 }
 
-export function useQueuedTurns<T = string>({ running, send, resetKey = null, textOf }: QueuedTurnsOptions<T>): QueuedTurns<T> {
+export function useQueuedTurns<T = string>({ running, send, resetKey = null, textOf, lead }: QueuedTurnsOptions<T>): QueuedTurns<T> {
   const [queued, setQueued] = useState<QueuedItem<T>[]>([]);
   const nextId = useRef(0);
   // The flush effect must call the CURRENT send closure without re-running (and
@@ -71,6 +79,9 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
   const textOfRef = useRef(textOf);
   // eslint-disable-next-line react-hooks/refs
   textOfRef.current = textOf;
+  const leadRef = useRef(lead);
+  // eslint-disable-next-line react-hooks/refs
+  leadRef.current = lead;
   const runningRef = useRef(running);
 
   const submit = useCallback((value: T) => {
@@ -99,7 +110,13 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
   useEffect(() => {
     const was = prev.current;
     prev.current = { key: resetKey, running };
-    if (was.key !== resetKey || !was.running || running || queued.length === 0) return;
+    if (was.key !== resetKey || !was.running || running) return;
+    const first = leadRef.current?.();
+    if (first !== undefined) {
+      sendRef.current(first);
+      return;
+    }
+    if (queued.length === 0) return;
     const [next, ...rest] = queued;
     setQueued(rest);
     if (next) sendRef.current(next.value);

@@ -42,7 +42,7 @@ import {
   type BrainStreamFn,
 } from "@seanhogg/builderforce-brain-embedded";
 import type { ToolDef } from "./fileTools";
-import { approvalRequestFor, createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs } from "./nativeBrainRun";
+import { approvalRequestFor, argsRecord, createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs } from "./nativeBrainRun";
 import { withRunPreamble } from "./runPreamble";
 import { chatLedgerRequest } from "./runUsageLedgerPorts";
 import { replaceWorkspaceMap } from "./idePersona";
@@ -58,7 +58,7 @@ import { runContextFields, startRunRepo } from "./runSetup";
 import { runRequestFields } from "./stageModels";
 import { createRunSteer } from "./runSteer";
 import { createTurnQueue } from "./runTurnQueue";
-import { argsRecord, askedText } from "./runAsked";
+import { askedText } from "./runAsked";
 
 export { syncMessageFor } from "./brainRunHostProtocol";
 export type { RunHostMessage, RunSink, RunSyncMessage, RunToolMessage, SinkEntry, WebviewRunStart } from "./brainRunHostProtocol";
@@ -122,7 +122,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
   /** The claimed keys whose loop has not ENDED yet — before it starts, a steer is heard at turn 1. */
   const settingUp = new Set<number>();
   /** A turn for a key whose run is live waits here, never dropped (`runTurnQueue.ts`). */
-  const turnQueue = createTurnQueue<RunSpec>({ isRunning, subscribe: subscribeRun, run: (spec) => run(spec) });
+  const turnQueue = createTurnQueue<RunSpec>({ isRunning, isLive: (key) => active.has(key) || isRunning(key), subscribe: subscribeRun, run: (spec) => run(spec) });
 
   /**
    * ONE run entry for every run: a chat's turn, a sub-agent (its key is its own, its
@@ -156,10 +156,9 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       // A child's report that arrived as this run was ending is heard now…
       childHost.afterRun(key);
       // …and so is what the person typed as it ended (unless they stopped it), then the turn
-      // submitted while it ran.
-      const wasStopped = steering.stopped(key);
+      // submitted while it ran (a Stop already dropped the ones parked before it).
       steering.settled(key);
-      turnQueue.settled(key, wasStopped);
+      turnQueue.settled(key);
     }
   };
 
@@ -336,6 +335,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     childHost,
     isBusy: (key) => active.has(key) || isRunning(key),
     isSettingUp: (key) => settingUp.has(key),
+    // A Stop ends the conversation's work: the turns parked behind the run go with it.
+    dropParked: (key) => turnQueue.drop(key),
     ownerName: OWNER_NAME,
   });
 
@@ -381,6 +382,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       return detach;
     },
     dispose() {
+      turnQueue.dispose();
       offStore();
       watches.dispose();
       relay.dispose();

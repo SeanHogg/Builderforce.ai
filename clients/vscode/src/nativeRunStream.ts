@@ -7,7 +7,7 @@
  */
 
 import type { BrainRunPersistence, BrainRunSnapshot, BrainTraceEvent } from "@seanhogg/builderforce-brain-embedded";
-import type { NativeRunEvents } from "./nativeBrainRun";
+import type { NativeRunEvents } from "./nativeRunTypes";
 
 /**
  * Turn the run store's observable state into the linear markdown stream the native

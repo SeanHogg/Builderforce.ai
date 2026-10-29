@@ -538,8 +538,16 @@
     "description": "Toggle state: off"
   },
   "cmpQueueSend": {
-    "message": "Poner el mensaje en cola: se envía cuando termine la ejecución actual",
-    "description": "Send while a run is streaming"
+    "message": "Enviar ahora al turno en curso",
+    "description": "Send while a run is streaming: steers the live run now"
+  },
+  "cmpQueueAfter": {
+    "message": "Poner en cola para después de la ejecución ($1)",
+    "description": "The explicit hold-for-after button beside Send while a run streams; $1 = the keyboard shortcut"
+  },
+  "cmpQueueAfterShort": {
+    "message": "En cola",
+    "description": "Its short visible text (the icon stands alone at narrow widths)"
   },
   "cmpDictate": {
     "message": "Dictar",

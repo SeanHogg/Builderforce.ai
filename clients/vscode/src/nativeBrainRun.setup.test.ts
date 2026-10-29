@@ -6,7 +6,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resetBrainRunStore } from "@seanhogg/builderforce-brain-embedded";
+import { isRunning, resetBrainRunStore, startRun } from "@seanhogg/builderforce-brain-embedded";
 import { fakeGateway } from "../harness/fakeGateway";
 import type { ToolDef, ToolRunOptions } from "./fileTools";
 import { runNativeBrain, transientRunPersistence, type NativeBrainRunOptions } from "./nativeBrainRun";
@@ -93,5 +93,48 @@ describe("the native participant's run setup", () => {
     const { chatId } = await turn({ settleRun });
     expect(settleRun).toHaveBeenCalledTimes(1);
     expect(settleRun).toHaveBeenCalledWith(chatId);
+  });
+
+  it("does nothing - and settles nothing - when another path already holds the chat's run", async () => {
+    const chatId = ++nextChatId;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const other = fakeGateway([{ text: "the other run" }]);
+    const first = startRun(chatId, {
+      resolvedSystemPrompt: "sys",
+      stream: async (opts, handlers) => {
+        await held;
+        return other.stream(opts, handlers);
+      },
+      persistence: transientRunPersistence(),
+      userTurn: "first",
+    });
+    while (!isRunning(chatId)) await new Promise((r) => setTimeout(r, 5));
+
+    const mine = fakeGateway([{ text: "never asked" }]);
+    const settleRun = vi.fn();
+    const errors: string[] = [];
+    await runNativeBrain({
+      chatId,
+      systemPrompt: "sys",
+      seed: [],
+      userTurn: "second",
+      tools: [],
+      root: "/workspace",
+      permissionMode: "ask",
+      approve: async () => true,
+      stream: mine.stream,
+      persistence: transientRunPersistence(),
+      signal: new AbortController().signal,
+      labels: { ...LABELS, alreadyRunning: "Still working on your last request." },
+      events: { onText: () => undefined, onToolStart: () => undefined, onToolResult: () => undefined, onError: (message) => { errors.push(message); } },
+      settleRun,
+    });
+
+    expect(mine.requests).toHaveLength(0);
+    expect(settleRun).not.toHaveBeenCalled();
+    expect(errors).toEqual(["Still working on your last request."]);
+    release();
+    await first;
   });
 });

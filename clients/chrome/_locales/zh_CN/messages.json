@@ -538,8 +538,16 @@
     "description": "Toggle state: off"
   },
   "cmpQueueSend": {
-    "message": "将消息排队——当前运行结束后发送",
-    "description": "Send while a run is streaming"
+    "message": "立即发送到正在运行的回合",
+    "description": "Send while a run is streaming: steers the live run now"
+  },
+  "cmpQueueAfter": {
+    "message": "排队到运行结束后（$1）",
+    "description": "The explicit hold-for-after button beside Send while a run streams; $1 = the keyboard shortcut"
+  },
+  "cmpQueueAfterShort": {
+    "message": "排队",
+    "description": "Its short visible text (the icon stands alone at narrow widths)"
   },
   "cmpDictate": {
     "message": "语音输入",

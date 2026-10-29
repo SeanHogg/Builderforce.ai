@@ -49,6 +49,7 @@ export function BrainComposer() {
     input,
     setInput,
     handleSend,
+    handleQueueAfter,
     recipient,
     chooseRecipient,
     participants,
@@ -96,6 +97,8 @@ export function BrainComposer() {
       value={input}
       onChange={setInput}
       onSubmit={handleSend}
+      // A message typed mid-run steers the run; this is the explicit way to hold it for after.
+      onQueue={handleQueueAfter}
       // A builder's chat is about changing the thing on screen, so it says so.
       placeholder={recipient ? tBrain('messageParticipant', { name: recipient.name }) : tBrain(capabilitySurface === 'build' ? 'messagePlaceholderBuild' : 'messagePlaceholder')}
       running={conv.sending}

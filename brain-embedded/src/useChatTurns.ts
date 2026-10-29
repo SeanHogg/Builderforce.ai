@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { stopRun } from './brainRunStore';
 import type { RunKey } from './brainRunStore';
-import { queueRunSteering } from './runSteering';
+import { drainRunSteering, queueRunSteering } from './runSteering';
 import type { ChatInputAttachment } from './types';
 import { useQueuedTurns, type QueuedTurns } from './useQueuedTurns';
 import { startsRun } from './userTurnRuns';
@@ -22,10 +22,13 @@ import { startsRun } from './userTurnRuns';
  *  2. mid-run, a host with no `steer` port STEERS the chat's own run by default (PRD 35 E10):
  *     the message is posted to the run's inbox, interrupts the step in flight and reaches the
  *     next model call — it does not wait behind a run that may hold for minutes. Holding it
- *     for after the run is the explicit alternative: `queueAfter`;
+ *     for after the run is the explicit alternative: `queueAfter`. Direction that arrives
+ *     after the run's last drain is sent as the NEXT turn when the run completes (the web twin
+ *     of the editor's `runSteer.settled`), and a Stop drops what is still waiting;
  *  3. the queue — a turn that cannot steer (addressed to a participant, a canvas key, a run
- *     being stopped) is HELD and sent on the run's falling edge (`useQueuedTurns`: FIFO, one
- *     per completed run, discarded on a `runKey` switch);
+ *     being stopped, or one behind turns already held, which it must not jump) is HELD and
+ *     sent on the run's falling edge (`useQueuedTurns`: FIFO, one per completed run,
+ *     discarded on a `runKey` switch);
  *  4. otherwise `send` now.
  *
  * A stop ("Stop the run") is the Stop: mid-run it stops the run and drops what is held
@@ -59,6 +62,13 @@ export interface ChatTurnsOptions<T> {
   isDirected?: (turn: T) => boolean;
   /** Optional: the attachments a non-string turn carries — they ride a steer so a mid-run image is not dropped. */
   attachmentsOf?: (turn: T) => ChatInputAttachment[] | undefined;
+  /**
+   * Optional: build a turn from steered text, for a host whose turn is more than a string. A
+   * mid-run message steers by default only when a turn can be rebuilt from it — a string turn
+   * always can; any other needs this. It is how direction left in the inbox when the run
+   * completes becomes the next turn.
+   */
+  turnOf?: (text: string, attachments: ChatInputAttachment[]) => T;
 }
 
 export interface ChatTurns<T> {
@@ -76,35 +86,55 @@ export interface ChatTurns<T> {
   stop: () => void;
 }
 
-export function useChatTurns<T = string>({ running, runKey, send, steer, stop, textOf, isDirected, attachmentsOf }: ChatTurnsOptions<T>): ChatTurns<T> {
+export function useChatTurns<T = string>({ running, runKey, send, steer, stop, textOf, isDirected, attachmentsOf, turnOf }: ChatTurnsOptions<T>): ChatTurns<T> {
   // Newest ports, read at call time — `submit`/`stop` keep their identity across renders
   // (hosts hand them to memoized composers and to callbacks captured at run start).
-  const ports = useRef({ send, steer, stop, textOf, isDirected, attachmentsOf, runKey, running });
+  const ports = useRef({ send, steer, stop, textOf, isDirected, attachmentsOf, turnOf, runKey, running });
   // eslint-disable-next-line react-hooks/refs
-  ports.current = { send, steer, stop, textOf, isDirected, attachmentsOf, runKey, running };
+  ports.current = { send, steer, stop, textOf, isDirected, attachmentsOf, turnOf, runKey, running };
   // A stopped run is unwinding: a message typed meanwhile cannot steer it (the model gets no
   // further turn), so it is held for after — until the run's falling edge clears the mark.
   const stopping = useRef(false);
   useEffect(() => { if (!running) stopping.current = false; }, [running]);
+
+  // Direction steered into the run after its last drain would never be read: when the run
+  // completes it becomes the next turn, oldest first, ahead of the held ones.
+  const lead = useCallback((): T | undefined => {
+    const { steer: route, runKey: key, turnOf: build } = ports.current;
+    if (route || typeof key !== 'number') return undefined;
+    const left = drainRunSteering(key);
+    if (left.length === 0) return undefined;
+    const text = left.map((m) => m.text).join('
+
+');
+    return build ? build(text, left.flatMap((m) => m.attachments ?? [])) : (text as unknown as T);
+  }, []);
 
   const queued = useQueuedTurns<T>({
     running,
     send: (turn) => { void ports.current.send(turn); },
     resetKey: runKey,
     textOf,
+    lead,
   });
   const { submit: hold, clear } = queued;
+  // Turns already held: a message typed behind them waits its turn (it must not jump ahead).
+  const held = useRef(0);
+  // eslint-disable-next-line react-hooks/refs
+  held.current = queued.count;
 
   const stopTurns = useCallback(() => {
     clear();
     if (ports.current.running) stopping.current = true;
     const { stop: halt, runKey: key } = ports.current;
+    // A steer typed before the Stop is dropped with the run — it must not start the next one.
+    if (typeof key === 'number') drainRunSteering(key);
     if (halt) halt();
     else if (key != null) stopRun(key);
   }, [clear]);
 
   const submit = useCallback(async (turn: T): Promise<boolean> => {
-    const { send: deliver, steer: route, textOf: text, isDirected: directed, attachmentsOf: attached, runKey: key, running: live } = ports.current;
+    const { send: deliver, steer: route, textOf: text, isDirected: directed, attachmentsOf: attached, turnOf, runKey: key, running: live } = ports.current;
     const body = typeof turn === 'string' ? turn.trim() : (text?.(turn) ?? '').trim();
     if (!body) return false;
     const isStop = !startsRun(body) && !directed?.(turn);
@@ -121,7 +151,8 @@ export function useChatTurns<T = string>({ running, runKey, send, steer, stop, t
     // Mid-run, the chat's own run is spoken to NOW: the message interrupts the step in flight
     // and is in front of the next model call. `persist` has the run save and show it as it
     // reads it. A host that supplied `steer` routed (or declined) it above and owns the rest.
-    if (live && !route && typeof key === 'number' && !directed?.(turn) && !stopping.current) {
+    const canRebuild = typeof turn === 'string' || !!turnOf;
+    if (live && !route && canRebuild && typeof key === 'number' && !directed?.(turn) && !stopping.current && held.current === 0) {
       queueRunSteering(key, body, { interrupt: true, fromPerson: true, persist: true, attachments: attached?.(turn) });
       return true;
     }

@@ -19,165 +19,44 @@
  * gateway — see `nativeBrainRun.test.ts`.
  */
 
-import type { RunKnowledgeLog } from "@builderforce/agent-tools";
+
 import {
   clearRunError,
   streamChatCompletion,
   getRunSnapshot,
   getRunTrace,
+  isRunning,
   resolveRunConfirm,
   runBrainLoop,
   stopRun,
-  toolSpecsFor,
   subscribeRun,
   withUsageSurface,
   USAGE_SURFACE_HEADER,
   type UsageSurface,
-  type BrainAction,
-  type BrainRunPersistence,
-  type BrainRunRequest,
   type BrainStreamFn,
-  type BrainToolSpec,
   type BrainTransport,
-  type ChatCompletionMessage,
-  type ChatErrorAction,
-  type ChatMode,
-  type EvermindRunHooks,
 } from "@seanhogg/builderforce-brain-embedded";
-import { resolveToolAlias } from "@builderforce/agent-tools";
-import { describeTool, type ToolDef } from "./fileTools";
-import { evaluatePolicyGate, toolCallPaths, type PolicyGate } from "./policy";
 import { withRunPreamble } from "./runPreamble";
-import { runRequestFields, type EditorRunSettings } from "./stageModels";
-import type { RunDirectives, RunHooks } from "./hooks/runHooks";
+import { runRequestFields } from "./stageModels";
 import { createStreamRelay, exhaustedToolBudget, transientRunPersistence } from "./nativeRunStream";
+import { approvalRequestFor, createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs } from "./nativeRunTool";
+import type { NativeBrainRunOptions } from "./nativeRunTypes";
 
-// The stream relay, the exhausted-budget test and the transient persistence live in
-// `nativeRunStream.ts`; they are re-exported so importers of this module are unchanged.
+// The run's contract, its tool bridge and its stream relay live in their own modules
+// (`nativeRunTypes.ts`, `nativeRunTool.ts`, `nativeRunStream.ts`); every name is re-exported
+// here so importers of this module are unchanged.
+export type { NativeApprovalRequest, NativeBrainRunOptions, NativeRunEvents, NativeRunLabels } from "./nativeRunTypes";
+export {
+  approvalRequestFor,
+  argsRecord,
+  createNativeRunTool,
+  nativeNeedsConfirm,
+  nativeToolSpecs,
+  parseToolOutput,
+  toolDefActions,
+  toolLabel,
+} from "./nativeRunTool";
 export { createStreamRelay, exhaustedToolBudget, transientRunPersistence };
-
-/**
- * The native surface renders MARKDOWN, not the webview's `<BrainTimeline>`, so the
- * loop's observable state has to be translated into a linear stream of calls. This is
- * the same four-event contract the participant has always consumed.
- */
-export interface NativeRunEvents {
-  onText(delta: string): void;
-  onToolStart(label: string): void;
-  onToolResult(label: string, ok: boolean): void;
-  /**
-   * The run failed. `action` is the SHARED entitlement verdict the loop already derived
-   * from the gateway's structured fields (expired session / needs a plan / needs a
-   * card), so the participant can offer the fix as a link instead of only restating the
-   * sentence — the markdown twin of the webview's error banner.
-   */
-  onError(message: string, action: ChatErrorAction | null): void;
-}
-
-/** A tool call the loop paused on, waiting for an explicit human decision. */
-export interface NativeApprovalRequest {
-  /** Tool the model asked to run. */
-  name: string;
-  args: Record<string, unknown>;
-  /** Human one-liner for the modal — "edit src/app.ts", "run: pnpm test". */
-  label: string;
-  /**
-   * Set only when a GOVERNANCE gate (not the ordinary write-confirm) is what paused
-   * the call, carrying the gate's reason. The host phrases those two prompts
-   * differently, so the distinction has to survive to the modal.
-   */
-  gateReason?: string;
-}
-
-/** Prose the HOST owns, because it must be localized through `vscode.l10n.t()`. */
-export interface NativeRunLabels {
-  /** Appended when the loop stopped the run itself — its last few tool calls all failed
-   *  and it had to be forced to answer (or gave up outright). */
-  dispatchHint: string;
-  /** Handed to the model in place of a call a governance `block` gate refused. */
-  blockedByPolicy(reason: string): string;
-}
-
-export interface NativeBrainRunOptions {
-  /**
-   * The Brain chat this turn belongs to. Also the run store's cell key, so a run
-   * survives anything that happens on the host side while it is in flight.
-   */
-  chatId: number;
-  /**
-   * The SERVER chat this turn's server-addressed work names (PRD 36): `chatId` is a
-   * local view key that never leaves the machine. `null` = an unbound local chat (no
-   * chat id is sent); omitted = `chatId` is itself a server chat.
-   */
-  serverChatId?: number | null;
-  /** The local chat's client id — diagnostics on the gateway metadata only. */
-  clientChatId?: string;
-  /** The whole system prompt, already assembled by the host (persona + grounding +
-   *  editor context + limbic + governance directives). */
-  systemPrompt: string;
-  /** Prior turns of this session, oldest first. */
-  seed: ChatCompletionMessage[];
-  /** The user turn that triggered this run. */
-  userTurn: string;
-  /** Local file tools + cognition + the gateway's platform catalog. */
-  tools: ToolDef[];
-  /** Workspace root; '' when no folder is open (the file tools are then absent). */
-  root: string;
-  /** The chat's project — enables the loop's code-change→ticket backstops. */
-  projectId?: number;
-  model?: string;
-  modelStrict?: boolean;
-  routingMode?: "auto" | "byo_pool";
-  /** Stage models, pipeline routing and the USD cap (`editorRunSettings.ts`). */
-  runSettings?: EditorRunSettings;
-  /** How the run ended, for the chat's usage ledger (the pipeline route report). */
-  recordRunOutcome?: BrainRunRequest["recordRunOutcome"];
-  /** A model call a PreFetch ANSWER avoided, for the chat's usage ledger. */
-  recordAvoidedCall?: BrainRunRequest["recordAvoidedCall"];
-  /** Conversation vs execution (0409). Defaults to `work` inside the loop. */
-  chatMode?: ChatMode;
-  permissionMode: "ask" | "acceptEdits";
-  /** Compiled governance gates, enforced at the tool seam exactly as the cloud does. */
-  policyGates?: PolicyGate[];
-  /** The workspace's committed rules + hooks (`.builderforce/`), when it has any. */
-  directives?: RunDirectives;
-  /** Ask the human. Resolves true to run the call, false to skip it. */
-  approve(request: NativeApprovalRequest): Promise<boolean>;
-  /** Transport-bound streaming completion fn. */
-  stream: BrainStreamFn;
-  /**
-   * Where the loop writes its intermediate turns. Defaults to
-   * {@link transientRunPersistence} — the native participant persists the WHOLE turn
-   * once, after the loop, so the loop's own writes must not double-post.
-   */
-  persistence?: BrainRunPersistence;
-  /** Project-Evermind hooks: recall, the memory-first answer, the answer cache. */
-  evermind?: EvermindRunHooks;
-  /** The run's volatile turn context, awaited before turn 1 — the participant hands the
-   *  deterministic pre-search hits here, as the panel's run host does in its context pack. */
-  turnContext?: BrainRunRequest["turnContext"];
-  /**
-   * The task context pack's fields (PRD 35 E2 / E7) — the SAME fields the panel's run host
-   * builds (`runSetup.ts` `runContextFields`): the pack's block as the turn context, the recall
-   * hint, the files it served whole, and the BYO preflight. Spread under {@link turnContext}.
-   */
-  runContext?: Pick<BrainRunRequest, "turnContext" | "recallHint" | "servedReads" | "modelPreflight">;
-  /** The run's default checkout, read per call, and the wait for it to resolve (PRD 35 E3). */
-  defaultRepo?: () => string | undefined;
-  repoReady?: Promise<void>;
-  /** The run SETTLED — finished, failed or stopped: release what it held outside the loop
-   *  (its background shell jobs, `localShellJobs.ts`). Called once, whatever the outcome. */
-  settleRun?: (runKey: number) => void;
-  /** The deterministic-first PreFetch port ("where is X defined?" answered with no model
-   *  call, and every registry row after it) — the same port the panel's run host passes. */
-  prefetch?: BrainRunRequest["prefetch"];
-  /** The run's record of what it did and read — the per-turn ledger, and what the caller
-   *  commits at run end (`recordEditorRunEnd`). Omitted ⇒ the loop keeps its own. */
-  knowledge?: RunKnowledgeLog;
-  signal: AbortSignal;
-  labels: NativeRunLabels;
-  events: NativeRunEvents;
-}
 
 /**
  * The header that tells the gateway WHICH surface spent the tokens, so BYO / free
@@ -209,176 +88,6 @@ export function createNativeStream(
   return (opts, handlers) => streamChatCompletion({ ...opts, transport }, handlers);
 }
 
-/** Coerce a tool-call argument bag to a plain record. */
-function argsRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-/**
- * A human one-liner for a tool call — the text that reaches the approval modal and the
- * `✓`/`✗` progress lines.
- *
- * Local tools get {@link describeTool}'s path-aware phrasing; a REMOTE (gateway MCP)
- * tool is named by its verb plus whatever subject its arguments carry. Both used to be
- * re-derived inside the deleted SDK adapter; this is the one definition.
- */
-export function toolLabel(defs: readonly ToolDef[], name: string, args: Record<string, unknown>): string {
-  const def = defs.find((candidate) => candidate.name === name);
-  if (!def?.remote) return describeTool(name, args);
-  const verb = name.replace(/^builtin_/, "").replace(/_/g, " ");
-  const subject =
-    (typeof args.title === "string" && args.title) ||
-    (typeof args.name === "string" && args.name) ||
-    (typeof args.id !== "undefined" && `#${String(args.id)}`) ||
-    "";
-  return subject ? `${verb}: ${subject}` : verb;
-}
-
-/**
- * The extension's `ToolDef` shape expressed as the brain core's {@link BrainAction} —
- * the ONE place that mapping lives, so the model is shown identical names, descriptions
- * and schemas whether the run is a real chat turn or an offline harness scenario.
- * `run` is supplied by the caller because WHO executes differs (the real dispatcher
- * here, a canned responder in the harness) while WHAT is advertised must not.
- */
-export function toolDefActions(
-  defs: readonly ToolDef[],
-  run: (name: string, args: unknown) => Promise<unknown>,
-): BrainAction[] {
-  return defs.map((def) => ({
-    name: def.name,
-    description: def.description,
-    parameters: def.parameters,
-    mutates: def.mutating,
-    run: (args: unknown) => run(def.name, args),
-  }));
-}
-
-/** Advertise the host's tool defs to the model, through the ONE shared mapping. */
-export function nativeToolSpecs(defs: readonly ToolDef[]): BrainToolSpec[] {
-  // Execution goes through `createNativeRunTool`, never the action's own `run` — the
-  // action shape exists here only so the spec mapping stays shared with every host.
-  return toolSpecsFor(toolDefActions(defs, async () => ({ ok: false, error: "not dispatched here" })));
-}
-
-/**
- * Whether a pending call must pause for a human. TRUE for a governance
- * `require-approval` gate (always — an "acceptEdits" preference cannot waive a
- * compiled policy) and for a mutating tool while the permission mode is `ask`.
- *
- * Pure, so the loop can consult it synchronously; the actual modal is resolved
- * asynchronously off the run's pending-confirm channel.
- */
-export function nativeNeedsConfirm(
-  defs: readonly ToolDef[],
-  permissionMode: "ask" | "acceptEdits",
-  gates: readonly PolicyGate[] | undefined,
-): (req: { name: string; args: unknown }) => boolean {
-  return ({ name, args }) => {
-    if (evaluatePolicyGate(gates, name, toolCallPaths(argsRecord(args))).action === "require-approval") return true;
-    if (permissionMode === "acceptEdits") return false;
-    const def = defs.find((candidate) => candidate.name === name);
-    // Fail safe: a tool we don't recognise is treated as mutating.
-    return def ? def.mutating : true;
-  };
-}
-
-/** What to ask the human about a paused call. */
-export function approvalRequestFor(
-  defs: readonly ToolDef[],
-  gates: readonly PolicyGate[] | undefined,
-  name: string,
-  args: unknown,
-): NativeApprovalRequest {
-  const record = argsRecord(args);
-  const decision = evaluatePolicyGate(gates, name, toolCallPaths(record));
-  return {
-    name,
-    args: record,
-    label: toolLabel(defs, name, record),
-    ...(decision.action === "require-approval" ? { gateReason: decision.reason } : {}),
-  };
-}
-
-/**
- * A tool result the loop can reason about. The host's `ToolDef.execute` returns a JSON
- * STRING; handing that straight to the loop would hide `{ ok:false }` from the failure
- * detector and defeat the deterministic chat↔work auto-link, which reads the created
- * row's `id` off an OBJECT. Parse when it parses, keep the text when it doesn't.
- */
-export function parseToolOutput(raw: string): unknown {
-  const text = raw?.trim() ?? "";
-  if (!text || (text[0] !== "{" && text[0] !== "[")) return raw;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return raw;
-  }
-}
-
-/**
- * The loop's tool dispatcher for this host: enforce the governance gates at the tool
- * seam, run the real implementation, and narrate both ends onto the chat stream.
- *
- * A `block` gate never reaches the implementation — the model gets a refusal it can
- * recover from, exactly as the cloud loop's seam behaves. `require-approval` is not
- * handled here: it is a PAUSE, and pausing is the run store's confirm channel.
- */
-export function createNativeRunTool(opts: {
-  defs: readonly ToolDef[];
-  root: string;
-  gates?: readonly PolicyGate[];
-  /** The workspace's tool hooks (`.builderforce/hooks.json`): a preTool refusal, postTool feedback. */
-  hooks?: Pick<RunHooks, "beforeTool" | "afterTool">;
-  events: Pick<NativeRunEvents, "onToolStart" | "onToolResult">;
-  labels: Pick<NativeRunLabels, "blockedByPolicy">;
-  /** The run's default checkout, read per call (resolved after the run started). */
-  defaultRepo?: () => string | undefined;
-  /** The run's key — the owner of the background jobs its calls start. */
-  runKey?: number;
-}): (name: string, args: unknown, signal?: AbortSignal) => Promise<unknown> {
-  return async (name, args, signal) => {
-    const resolved = resolveToolAlias(name);
-    const record = argsRecord(args);
-    const label = toolLabel(opts.defs, resolved, record);
-    const decision = evaluatePolicyGate(opts.gates, resolved, toolCallPaths(record));
-    if (decision.action === "block") {
-      const message = opts.labels.blockedByPolicy(decision.reason);
-      opts.events.onToolResult(label, false);
-      return { ok: false, error: message };
-    }
-    const def = opts.defs.find((candidate) => candidate.name === resolved);
-    if (!def) return { ok: false, error: `Unknown tool: ${name}` };
-    // A workspace preTool hook is a gate the repository set for itself — refused the same
-    // recoverable way a governance block is.
-    const refused = await opts.hooks?.beforeTool(resolved, record);
-    if (refused) {
-      opts.events.onToolResult(label, false);
-      return { ok: false, error: refused };
-    }
-    opts.events.onToolStart(label);
-    try {
-      // The call's Stop and the run's default checkout — only when there is one, so a
-      // surface that passes neither calls the tool exactly as before.
-      const defaultRepo = opts.defaultRepo?.();
-      const runKey = opts.runKey;
-      const run = signal || defaultRepo || runKey !== undefined
-        ? { ...(signal ? { signal } : {}), ...(defaultRepo ? { defaultRepo } : {}), ...(runKey !== undefined ? { runKey } : {}) }
-        : undefined;
-      const out = run ? await def.execute(record, opts.root, run) : await def.execute(record, opts.root);
-      opts.events.onToolResult(label, true);
-      const parsed = parseToolOutput(out);
-      return opts.hooks ? opts.hooks.afterTool(resolved, record, parsed) : parsed;
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      opts.events.onToolResult(`${label} — ${message}`, false);
-      return { ok: false, error: message };
-    }
-  };
-}
-
 /**
  * Run one native chat turn on the shared loop.
  *
@@ -398,6 +107,14 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<void>
     labels,
     signal,
   } = opts;
+
+  // The chat's run is already in flight on another path (a second turn, the panel's run): this
+  // call claimed nothing, so it neither starts a run nor settles one that is not its own - the
+  // jobs it would kill belong to the run that holds the key.
+  if (isRunning(chatId)) {
+    if (labels.alreadyRunning) events.onError(labels.alreadyRunning, null);
+    return;
+  }
 
   const native = createNativeRunTool({
     defs: tools,
@@ -468,7 +185,6 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<void>
       ...(opts.projectId != null ? { projectId: opts.projectId } : {}),
       ...(opts.evermind ? { evermind: opts.evermind } : {}),
       ...opts.runContext,
-      ...(opts.turnContext ? { turnContext: opts.turnContext } : {}),
       ...(opts.prefetch ? { prefetch: opts.prefetch } : {}),
       ...(opts.knowledge ? { knowledge: opts.knowledge } : {}),
       ...runRequestFields(opts.runSettings, { child: false }),

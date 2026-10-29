@@ -1,6 +1,5 @@
 /**
- * Two small readings of a run spec the host makes: the user's ask as plain text, and a tool
- * call's arguments as a record. Split from `brainRunHost.ts` (one reason to change each).
+ * The user's ask of a run spec, as plain text. Split from `brainRunHost.ts`.
  */
 
 import type { RunSpec } from "./childRunHost";
@@ -20,8 +19,4 @@ export function askedText(turn: RunSpec["userTurn"]): string | undefined {
   }
   const asked = parts.join(" ").replace(/\s+/g, " ").trim();
   return asked || undefined;
-}
-
-export function argsRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }

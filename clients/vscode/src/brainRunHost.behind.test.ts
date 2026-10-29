@@ -107,4 +107,57 @@ describe("a turn submitted while the key's run is live (PRD 35 E10)", () => {
     expect(seen.every((ctx) => !textOf(ctx).includes("second ask"))).toBe(true);
     expect(isRunning(chatId)).toBe(false);
   });
+
+  /** A host whose first model call waits on `release`, recording what each call was sent. */
+  function slowHost() {
+    const seen: TurnContext[] = [];
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const gateway = fakeGateway((ctx) => {
+      seen.push(ctx);
+      return { text: `answer ${seen.length}` };
+    });
+    const slow: BrainStreamFn = async (opts, handlers) => {
+      if (seen.length === 0) await held;
+      return gateway.stream(opts, handlers);
+    };
+    return { seen, release, host: createBrainRunHost({ ...ports(gateway), stream: async () => slow }) };
+  }
+  const start = (host: ReturnType<typeof createBrainRunHost>, chatId: number, userTurn: string) =>
+    host.start({ chatId, systemPrompt: "sys", userTurn, autoApprove: true, evermind: false });
+
+  it("keeps the order of two or more parked turns", async () => {
+    const chatId = freshChatId();
+    const { seen, release, host } = slowHost();
+    const first = start(host, chatId, "first ask");
+    while (!isRunning(chatId)) await new Promise((r) => setTimeout(r, 5));
+    const second = start(host, chatId, "second ask");
+    const third = start(host, chatId, "third ask");
+
+    release();
+    await Promise.all([first, second, third]);
+
+    expect(seen).toHaveLength(3);
+    expect(textOf(seen[1]!)).toContain("second ask");
+    expect(textOf(seen[2]!)).toContain("third ask");
+  });
+
+  it("a Stop drops the turns parked before it, but a turn typed after it is the person's new request and runs", async () => {
+    const chatId = freshChatId();
+    const { seen, release, host } = slowHost();
+    const first = start(host, chatId, "first ask");
+    while (!isRunning(chatId)) await new Promise((r) => setTimeout(r, 5));
+    const parkedBefore = start(host, chatId, "parked before the stop");
+    host.stop(chatId);
+    const typedAfter = start(host, chatId, "typed after the stop");
+
+    release();
+    await Promise.all([first, parkedBefore, typedAfter]);
+
+    const sent = seen.map(textOf).join("
+");
+    expect(sent).not.toContain("parked before the stop");
+    expect(seen.some((ctx) => textOf(ctx).includes("typed after the stop"))).toBe(true);
+    expect(isRunning(chatId)).toBe(false);
+  });
 });

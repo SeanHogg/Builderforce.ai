@@ -178,7 +178,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       return null;
     },
 
-    onAskHuman: async (ctx, control, call) => {
+    onAskHuman: async (ctx, control) => {
       const answer = await hooks.ask.answer(contextAt(ctx.step, ctx.stepInCall), control.question, optionsOf(control));
       // Answered in-run: the kernel puts the answer in the call's own row and does not park
       // the run. Anything else returns nothing, and the run pauses on the person.

@@ -2,7 +2,7 @@ import { RunKnowledgeRecorder } from "@builderforce/agent-tools";
 import { recordEditorRunEnd } from "./editorRunEnd";
 import { editorRunSettings } from "./editorRunSettings";
 import * as vscode from "vscode";
-import { runAbortSignal, withRunUsage, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
+import { runAbortSignal, withRunUsage } from "@seanhogg/builderforce-brain-embedded";
 import { ChatMessage, SECRET_KEY, getLocalModelsConfig } from "./gateway";
 import { turnLimbicBlock } from "./personalityLimbic";
 import { resolveModelRoute, routeNeedsLocalModel, routeNeedsSpecificModel, routeRequiresSignIn, routeStream } from "./modelRouting";
@@ -26,54 +26,12 @@ import { withWorkspaceStaleness } from "./memoryStaleness";
 import { runNativeBrain, type NativeApprovalRequest } from "./nativeBrainRun";
 import { referencesTurnBlock, workspaceReferenceReader } from "./chatReferences";
 import { hostIngressDeps, routeMentionBudget } from "./hostIngress";
-import { preSearchOnce, whereDefinedOnce } from "./contextPack/preSearchSource";
-import { editorPrefetchPort } from "./prefetch/editorPrefetchPort";
-import { editorKnowledgeRowsHost } from "./knowledge/knowledgeRows";
+import { whereDefinedOnce } from "./contextPack/preSearchSource";
 import { CONTEXT_PACK_DEADLINE_MS } from "./contextPack/deadline";
-import { editorRunSetupPorts } from "./runSetupPorts";
-import { runContextFields, startRunRepo } from "./runSetup";
+import { nativeRunSetup } from "./runSetupPorts";
+import { priorBrainChatId, splitSystemPrompt } from "./participantSession";
 
 const PARTICIPANT_ID = "builderforce.agent";
-
-/**
- * Recover the session's Brain chat id from the native chat history: it is stashed in
- * every prior response turn's `result.metadata.brainChatId` (the Chat Participant
- * API's per-session state channel — there is no stable session id in the stable API).
- * The most recent one wins. Returns undefined on the first turn of a session.
- */
-function priorBrainChatId(history: readonly vscode.ChatRequestTurn[] | readonly unknown[]): number | undefined {
-  for (let i = history.length - 1; i >= 0; i--) {
-    const turn = history[i];
-    if (turn instanceof vscode.ChatResponseTurn) {
-      const id = (turn.result?.metadata as { brainChatId?: unknown } | undefined)?.brainChatId;
-      if (typeof id === "number") return id;
-    }
-  }
-  return undefined;
-}
-
-/**
- * The shared run loop takes ONE system prompt string plus a plain conversation seed,
- * where this surface has always assembled a list of `system` messages (persona, active
- * project, workspace map, editor context, limbic block, governance). Fold them here —
- * order preserved, so the model reads exactly what it read before.
- */
-function splitSystemPrompt(messages: readonly ChatMessage[]): {
-  systemPrompt: string;
-  seed: ChatCompletionMessage[];
-} {
-  const system: string[] = [];
-  const seed: ChatCompletionMessage[] = [];
-  for (const message of messages) {
-    const content = typeof message.content === "string" ? message.content : "";
-    if (message.role === "system") {
-      if (content) system.push(content);
-    } else if (content) {
-      seed.push({ role: message.role, content });
-    }
-  }
-  return { systemPrompt: system.join("\n\n"), seed };
-}
 
 /**
  * The shared chat request handler — drives the agent loop and streams into a
@@ -112,15 +70,9 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     }
 
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    // The deterministic pre-search (identifiers → symbol index + ripgrep, no model call),
-    // started now so its ~1.5 s deadline overlaps the setup below — the same hits block the
-    // panel's runs carry in their context pack (`runSetupPorts.ts`), which asks this same
-    // memoized computation.
-    if (root) void preSearchOnce(root, request.prompt, CONTEXT_PACK_DEADLINE_MS);
-    // The PreFetch gate ("where is X defined?" from the symbol index, and every registry
-    // row after it) — the panel's port. Its executors and the reference read below ask the
-    // SAME memoized computations, so each runs once per request.
-    const prefetch = root ? editorPrefetchPort(() => root, ctx.globalState, { ownWords: request.prompt, knowledge: editorKnowledgeRowsHost(ctx.secrets), localModels: getLocalModelsConfig }) : undefined;
+    // "Where is X defined?" answered from the symbol index for the `#file` reference read below
+    // - the same memoized computation the run's PreFetch gate asks (`runSetupPorts.ts`), so it
+    // runs once per request.
     const deterministicAnswer = root ? () => whereDefinedOnce(root, request.prompt, CONTEXT_PACK_DEADLINE_MS) : undefined;
     // `#file` / `#selection` references, inlined into the turn under the route's mention
     // budget (long prose compressed first) — the panel's attachment ingress. Started now,
@@ -217,21 +169,6 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     const abort = new AbortController();
     token.onCancellationRequested(() => abort.abort());
 
-    // The run's SETUP, from the same ports and functions the panel's run host uses
-    // (`runSetupPorts.ts` / `runSetup.ts`): the task context pack (PRD 35 E2) with the
-    // pre-search hits in it, the BYO preflight (E7) and the run's default checkout (E3) —
-    // resolved now, in parallel with the setup below. Keyed on the turn's run key, so the
-    // background jobs the turn starts die with it.
-    const setup = editorRunSetupPorts(ctx.secrets, () => root ?? "", ctx.globalState, getLocalModelsConfig);
-    const repo = startRunRepo(setup, { ...(activeProject ? { projectId: activeProject.id } : {}), request: request.prompt });
-    const { turnContext, recallHint, servedReads, modelPreflight } = runContextFields(setup, {
-      ...(activeProject ? { projectId: activeProject.id } : {}),
-      serverChatId: serverChatId ?? null,
-      request: request.prompt,
-      memory: !!activeProject,
-      child: false,
-    });
-
     // Accumulate the assistant's reply so, after the run, we can feed this
     // exchange back to the project's Evermind (the same learning loop cloud/on-prem
     // runs — best-effort, gated by `builderforce.evermindLearning`).
@@ -289,6 +226,15 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     knowledge.setPrompt(request.prompt);
     const referenced = await referencedReady;
     if (token.isCancellationRequested) return {};
+    // The run's SETUP, from the same ports and functions the panel's run host uses (PRD 35 E2 /
+    // E3 / E7). Started only now - after the fail-closed policy and every cancellation return -
+    // so a refused or cancelled turn never reads the workspace or starts a checkout lookup.
+    const setup = nativeRunSetup(ctx.secrets, () => root ?? "", ctx.globalState, getLocalModelsConfig, {
+      ...(activeProject ? { projectId: activeProject.id } : {}),
+      serverChatId: serverChatId ?? null,
+      request: request.prompt,
+      memory: !!activeProject,
+    });
     try {
       await runNativeBrain({
         knowledge,
@@ -300,20 +246,10 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
         systemPrompt,
         seed,
         userTurn: referenced ? `${request.prompt}\n\n${referenced}` : request.prompt,
-        // The task context pack (the pre-search hits included) as the run's volatile turn
-        // context, and "where is X defined?" answered from the symbol index with no model
-        // call — parity with the panel.
-        runContext: {
-          ...(turnContext ? { turnContext } : {}),
-          ...(recallHint ? { recallHint } : {}),
-          ...(servedReads ? { servedReads } : {}),
-          ...(modelPreflight ? { modelPreflight } : {}),
-        },
-        defaultRepo: repo.current,
-        repoReady: repo.ready,
-        settleRun: setup.settleRun,
-        // Asked of the person's own words, not the turn with its inlined references.
-        ...(prefetch ? { prefetch } : {}),
+        // The task context pack (the pre-search hits included), the preflight, the default
+        // checkout and the PreFetch gate - "where is X defined?" answered with no model call -
+        // exactly as the panel's runs have them.
+        ...setup,
         tools,
         root: root ?? "",
         // The code-change backstops need a project. An unbound chat still gets its ticket
@@ -351,6 +287,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
             "_This turn was stopped because its last few tool calls all failed. Read what they answered and reply with what they ask for, or hand the work to a cloud agent from the board so it continues in its own runtime._",
           ),
           blockedByPolicy: (reason: string) => vscode.l10n.t("Blocked by a governance gate: {0}", reason),
+          alreadyRunning: vscode.l10n.t("BuilderForce is still working on this chat's previous request. Wait for it to finish or stop it, then ask again."),
         },
         events: {
           onText: (delta) => {

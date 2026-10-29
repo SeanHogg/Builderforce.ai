@@ -538,8 +538,16 @@
     "description": "Toggle state: off"
   },
   "cmpQueueSend": {
-    "message": "Nachricht einreihen – wird gesendet, wenn der aktuelle Lauf endet",
-    "description": "Send while a run is streaming"
+    "message": "Jetzt in den laufenden Durchgang senden",
+    "description": "Send while a run is streaming: steers the live run now"
+  },
+  "cmpQueueAfter": {
+    "message": "Für nach dem Lauf einreihen ($1)",
+    "description": "The explicit hold-for-after button beside Send while a run streams; $1 = the keyboard shortcut"
+  },
+  "cmpQueueAfterShort": {
+    "message": "Einreihen",
+    "description": "Its short visible text (the icon stands alone at narrow widths)"
   },
   "cmpDictate": {
     "message": "Diktieren",

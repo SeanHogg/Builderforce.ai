@@ -74,6 +74,7 @@
   "Billed to your own {provider} account — no plan credit used.": "计入您自己的 {provider} 账户：不消耗套餐额度。",
   "Blocked": "受阻",
   "Blocked by a governance gate: {0}": "被治理关卡拦截：{0}",
+  "BuilderForce is still working on this chat's previous request. Wait for it to finish or stop it, then ask again.": "BuilderForce 仍在处理此聊天的上一个请求。请等待其完成或将其停止，然后再提问。",
   "Branch {0}": "分支 {0}",
   "Browse the web": "浏览网页",
   "Browser": "浏览器预览",
