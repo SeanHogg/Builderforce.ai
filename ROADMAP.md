@@ -327,6 +327,18 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 - **[gateway] Who may reconnect or replace the workspace's provider subscriptions.** `GET /llm/provider-keys`, `POST /llm/provider-keys/:provider/test` and `/oauth/start|complete` check only tenant membership (`requireTenantAccess`), not role. Any member can therefore replace the workspace's Claude, ChatGPT, Grok or Kimi subscription with their own account, and now from every chat's `/` menu (Status ▸ Connected accounts) as well as Settings ▸ API Keys. If this should be owner/manager only: gate the routes server-side, then render the composer section and the settings card disabled-with-reason through the RBAC primitive (never hidden). *Blocker: operator decision on the role policy.*
 
+- **[ci] `main` is red at `7b79a244f`, before and independent of the TypeScript 7 migration.** A clean worktree of HEAD (TS 6 and TS 7 give identical errors) fails on:
+  - Unterminated strings, from unescaped apostrophes or raw newlines inside quotes: `packages/agent-tools/src/knowledge/reviewRunner.test.ts:154`, `packages/agent-tools/src/prefetch/prefetch.test.ts`, `frontend/src/components/creation-canvas/CanvasKnowledgeSurface.test.tsx:52`, `frontend/src/components/creation-canvas/inspector/TaskDescriptionField.test.tsx:64`, `clients/vscode/src/prefetch/knowledgeAskRow.test.ts:71`, `api/src/application/replay/prescriptionReads.test.ts:26`. The next build also fails: `frontend/src/app/studio/project/[id]/page.tsx:11` redeclares `params`.
+  - Source importing builderforce-memory exports that are not published yet. `nameResolver`, `clampQuote`, `oneLineLabel`, `MAX_QUOTE_CHARS`/`MAX_QUOTE_LINES` and `PlanOptions.force` are absent from 2026.10.31. This fails api, agent-run, agent-runtime and brain-embedded's dts build, and then brain-ui and clients/chrome.
+  - `packages/repo-map/src/extract.ts:12` cannot resolve `@builderforce/agent-tools/symbols` from agent-runtime's NodeNext program. repo-map does not declare the dependency.
+  - Stale ratchets:
+    - `check:silent-catches`: api 526 against 524, frontend 264 against 262.
+    - `frontend/src/lib/api.ts` is 1025 lines against a ceiling of 990.
+    - The design-scale baseline is stale.
+    - `check:react-hooks` reports `useProjectProof.ts` at 0 → 1.
+  - Fixing these turns CI and the frontend deploy green again. *Blocker: every listed file carries uncommitted edits from a concurrent session in the shared tree. Editing them here would clobber that work. Each owner finishes, or publishes builderforce-memory, and commits.*
+- **[ci] The builderforce-inference console only builds when the repo is nested inside `Builderforce.ai/`.** `app/console` links `../../../brain-embedded` and `../../../packages/brain-ui`, maps `../../../frontend/src/lib/evermindRegions.ts`, and runs `../../../scripts/ensure-linked-deps.mjs`. From the sibling checkout at `C:/code/agentic/builderforce-inference`, every link dangles, so `tsc` and `vite build` cannot resolve the brain packages. *Blocker: operator decision on the canonical checkout layout (nest it, or point the paths at `../../../Builderforce.ai/`).*
+
 ### Production ops (2026-10-10 log review)
 
 - **Disconnect Moonshot on tenant 1** (empty pay-as-you-go balance; use the Kimi Code subscription). *Blocker: operator clicks Disconnect in Settings.*
