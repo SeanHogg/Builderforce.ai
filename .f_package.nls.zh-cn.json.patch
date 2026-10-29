@@ -1,0 +1,12 @@
+diff --git a/clients/vscode/package.nls.zh-cn.json b/clients/vscode/package.nls.zh-cn.json
+index 393d4449d..31c422666 100644
+--- a/clients/vscode/package.nls.zh-cn.json
++++ b/clients/vscode/package.nls.zh-cn.json
+@@ -5,6 +5,7 @@
+   "view.evermind": "Evermind",
+   "command.openChat": "BuilderForce：打开对话",
+   "command.openCreateCanvas": "BuilderForce：在画布上创建",
++  "command.openVisualization": "BuilderForce：打开可视化面板",
+   "command.refreshInsights": "BuilderForce：刷新洞察",
+   "command.refreshEvermind": "BuilderForce：刷新 Evermind",
+   "command.signIn": "BuilderForce：登录",
