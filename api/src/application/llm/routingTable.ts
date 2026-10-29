@@ -144,6 +144,8 @@ function assignOutcomeAggregate(
   stat.n = Number(r.n) || 0;
   stat.avgScore = Number(r.avgScore) || 0;
   stat.mergeRate = Number(r.mergeRate) || 0;
+  // The aggregate skips runs that reported no cost (NULL); a model none of whose runs did has no
+  // mean at all, and the blob's numeric tie-break field reads that as 0.
   stat.avgCostMc = Number(r.avgCost) || 0;
   stat.rateLimitRate = Number(r.rateLimitRate) || 0;
   if (r.effectiveN != null) {
@@ -214,7 +216,9 @@ function outcomeAggregateFor(decay: boolean) {
     };
   }
   const w = sql`power(0.5::float8, extract(epoch from (now() - ${runModelOutcomes.createdAt}))::float8 / ${sql.raw(String(HALF_LIFE_SECONDS))})`;
-  const weighted = (x: SQL) => sql<number>`(sum(${w} * ${x})::float8 / nullif(sum(${w}), 0)::float8)`;
+  // The denominator counts only the rows that HAVE a value: a NULL (a cost the run never reported)
+  // is unknown, so it must not pull the mean toward zero.
+  const weighted = (x: SQL) => sql<number>`(sum(${w} * ${x})::float8 / nullif(sum(case when ${x} is not null then ${w} end), 0)::float8)`;
   return {
     ...base,
     effectiveN: sql<number | null>`sum(${w})::float8`,

@@ -8,10 +8,22 @@
 -- rebuild cannot re-admit them.
 --
 -- Additive + defaulted (TRUE): every existing row keeps teaching exactly as before.
+--
+-- Also: cost_usd_millicents becomes NULLABLE with no default. A run that never reported its
+-- cost (a canvas turn, a client run with no gateway cost) is UNKNOWN, not free; storing 0
+-- made it read as the cheapest run in every average. Existing rows keep the value they have
+-- (a 0 already written stays a 0); the writers pass the cost explicitly, so the default was
+-- never relied on. Relaxing a constraint is expand-only: nothing is dropped or rewritten.
 -- Expand now; nothing contracts. The operational track's copy (the table's live home) is
 -- transactional-migrations/0027_run_outcome_routing_signal.sql — same DDL on both tracks.
 ALTER TABLE run_model_outcomes
   ADD COLUMN IF NOT EXISTS routing_signal BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE run_model_outcomes ALTER COLUMN cost_usd_millicents DROP NOT NULL;
+ALTER TABLE run_model_outcomes ALTER COLUMN cost_usd_millicents DROP DEFAULT;
+
+COMMENT ON COLUMN run_model_outcomes.cost_usd_millicents IS
+  'Millicents the run cost; NULL = the run reported none (unknown, not zero). Sums and averages skip NULLs.';
 
 COMMENT ON COLUMN run_model_outcomes.routing_signal IS
   'FALSE = recorded for telemetry only: not folded into the routing blob and excluded from reconcile (a Creation Canvas run is not evidence about coding models).';

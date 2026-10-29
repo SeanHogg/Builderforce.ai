@@ -193,7 +193,10 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
     // Only a known role is evidence; anything else is recorded as unknown (NULL).
     const role = isModelRole(o.role) ? o.role : null;
     const steps = Math.max(0, Math.floor(o.steps ?? 0));
-    const costMc = Math.max(0, Math.floor(o.costMc ?? 0));
+    // The cost the run REPORTED; absent is unknown, stored as NULL — never as a free run. The score
+    // and the live fold below still read an absent cost as 0 (their running mean has no count to skip with).
+    const reportedCostMc = o.costMc === undefined ? null : Math.max(0, Math.floor(o.costMc));
+    const costMc = reportedCostMc ?? 0;
     const { score } = computeOutcomeScore({
       terminalStatus: o.terminalStatus,
       merged: !!o.merged,
@@ -225,7 +228,7 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
         ciGreen: !!o.ciGreen,
         degraded: !!o.degraded,
         steps,
-        costUsdMillicents: costMc,
+        costUsdMillicents: reportedCostMc,
         terminalStatus: o.terminalStatus,
         rateLimited: !!o.rateLimited,
         // The PRD 35 §8.2 uniform outcome row the client's run built (entry point,

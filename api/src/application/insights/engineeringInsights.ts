@@ -25,7 +25,8 @@ export interface OutcomeRow {
   ciGreen: boolean;
   degraded: boolean;
   steps: number;
-  costUsdMillicents: number;
+  /** NULL = the run reported no cost: unknown, not free. The spend sums skip it. */
+  costUsdMillicents: number | null;
 }
 
 export interface EffectivenessBucket {
@@ -69,7 +70,7 @@ function bucket(key: string, rows: OutcomeRow[], extra: Partial<EffectivenessBuc
     ciGreenRatePct: pct(rows.filter((r) => r.ciGreen).length),
     degradedRatePct: pct(rows.filter((r) => r.degraded).length),
     avgSteps: runs ? rows.reduce((a, r) => a + r.steps, 0) / runs : 0,
-    costUsd: rows.reduce((a, r) => a + r.costUsdMillicents, 0) / MILLICENTS_PER_USD,
+    costUsd: rows.reduce((a, r) => a + (r.costUsdMillicents ?? 0), 0) / MILLICENTS_PER_USD,
     ...extra,
   };
 }
@@ -109,7 +110,7 @@ export function summarizeOutcomes(rows: OutcomeRow[], windowDays: number): Engin
       mergedRatePct: rows.length ? (rows.filter((r) => r.merged).length / rows.length) * 100 : 0,
       ciGreenRatePct: rows.length ? (rows.filter((r) => r.ciGreen).length / rows.length) * 100 : 0,
       degradedRatePct: rows.length ? (rows.filter((r) => r.degraded).length / rows.length) * 100 : 0,
-      costUsd: rows.reduce((a, r) => a + r.costUsdMillicents, 0) / MILLICENTS_PER_USD,
+      costUsd: rows.reduce((a, r) => a + (r.costUsdMillicents ?? 0), 0) / MILLICENTS_PER_USD,
     },
     byModel,
     byActionType,

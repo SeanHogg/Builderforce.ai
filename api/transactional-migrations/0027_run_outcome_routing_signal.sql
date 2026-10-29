@@ -3,3 +3,7 @@
 -- additive column in migrations/1284_run_outcome_routing_signal.sql so both copies agree.
 -- Additive + defaulted TRUE: rows written before this stay valid and keep teaching.
 ALTER TABLE run_model_outcomes ADD COLUMN IF NOT EXISTS routing_signal BOOLEAN NOT NULL DEFAULT TRUE;
+-- cost_usd_millicents is NULLABLE with no default: a run that reported no cost is UNKNOWN, not free
+-- (see migrations/1284). Relaxing the constraint is expand-only; existing values are untouched.
+ALTER TABLE run_model_outcomes ALTER COLUMN cost_usd_millicents DROP NOT NULL;
+ALTER TABLE run_model_outcomes ALTER COLUMN cost_usd_millicents DROP DEFAULT;

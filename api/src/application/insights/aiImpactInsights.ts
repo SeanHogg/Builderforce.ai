@@ -50,7 +50,20 @@ export interface ImpactOutcomeRow {
   merged: boolean;
   ciGreen: boolean;
   steps: number;
-  costUsdMillicents: number;
+  /** NULL = the run reported no cost: unknown, not free. Sums and averages skip it. */
+  costUsdMillicents: number | null;
+}
+
+/**
+ * USD per merged PR over the runs that REPORTED a cost. A run with no cost is unknown, so it
+ * joins neither the spend nor the merged count it is divided by (it would otherwise dilute the
+ * figure toward free). Null when no merged run reported a cost.
+ */
+function costPerMergedPrUsd(rows: ImpactOutcomeRow[]): number | null {
+  const priced = rows.filter((r) => r.costUsdMillicents !== null);
+  const merged = priced.filter((r) => r.merged).length;
+  if (!merged) return null;
+  return priced.reduce((a, r) => a + (r.costUsdMillicents ?? 0), 0) / MILLICENTS_PER_USD / merged;
 }
 
 /** Bucket grain for the adoption series — daily for short windows (so a 7-day
@@ -350,7 +363,6 @@ export function summarizeComparison(outcomes: ImpactOutcomeRow[], tokensByModel:
   for (const [model, rs] of groups) {
     const runs = rs.length;
     const merged = rs.filter((r) => r.merged).length;
-    const costUsd = rs.reduce((a, r) => a + r.costUsdMillicents, 0) / MILLICENTS_PER_USD;
     rows.push({
       model,
       runs,
@@ -358,7 +370,7 @@ export function summarizeComparison(outcomes: ImpactOutcomeRow[], tokensByModel:
       mergedRatePct: runs ? (merged / runs) * 100 : 0,
       ciGreenRatePct: runs ? (rs.filter((r) => r.ciGreen).length / runs) * 100 : 0,
       avgSteps: runs ? rs.reduce((a, r) => a + r.steps, 0) / runs : 0,
-      costPerMergedPrUsd: merged ? costUsd / merged : null,
+      costPerMergedPrUsd: costPerMergedPrUsd(rs),
       tokens: tokensByModel.get(canonModelKey(model)) ?? 0,
     });
   }
@@ -377,12 +389,11 @@ export function scoreComponents(outcomes: ImpactOutcomeRow[]): { throughput: num
   const merged = outcomes.filter((r) => r.merged).length;
   const avgScore = runs ? outcomes.reduce((a, r) => a + r.score, 0) / runs : 0;
   const ciGreenRate = runs ? outcomes.filter((r) => r.ciGreen).length / runs : 0;
-  const costUsd = outcomes.reduce((a, r) => a + r.costUsdMillicents, 0) / MILLICENTS_PER_USD;
 
   const throughput = clamp01(Math.log10(merged + 1) / Math.log10(11)); // 0 → 0, 10 → 1
   const quality = clamp01(0.5 * avgScore + 0.5 * ciGreenRate);
   // Cheaper merged PRs score higher; $0 → 1, $5+ → ~0 (reference cost = $5/PR).
-  const costPerMerged = merged ? costUsd / merged : null;
+  const costPerMerged = costPerMergedPrUsd(outcomes);
   const efficiency = costPerMerged == null ? 0 : clamp01(1 - Math.min(costPerMerged, 5) / 5);
 
   const score = ((throughput + quality + efficiency) / 3) * 100;

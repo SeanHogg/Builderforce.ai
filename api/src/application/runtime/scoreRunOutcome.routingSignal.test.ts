@@ -63,6 +63,14 @@ describe('recordClientRunOutcome — routingSignal', () => {
     expect(mocks.bumpOutcomesVersion).not.toHaveBeenCalled();
   });
 
+  it('stores a run that reported no cost as NULL (unknown), and a reported cost as the cost', async () => {
+    await record({ ...base, routingSignal: false });
+    await record({ ...base, clientRunId: 'canvas:2', routingSignal: false, costMc: 830.7 });
+    await record({ ...base, clientRunId: 'canvas:3', routingSignal: false, costMc: 0 });
+
+    expect(mocks.inserted.map((row) => row.costUsdMillicents)).toEqual([null, 830, 0]);
+  });
+
   it('a report without the flag teaches the routing table exactly as before', async () => {
     await record({ clientRunId: 'ide-1', source: 'ide', model: 'm', terminalStatus: 'completed' });
 
