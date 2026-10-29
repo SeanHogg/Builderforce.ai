@@ -8,7 +8,9 @@
 import { describe, expect, it } from "vitest";
 import {
   evaluateFinishGates,
+  finishGateSnapshot,
   initialFinishGateState,
+  isInconclusiveFinishBlock,
   missingReviewVerdictMessage,
   type FinishGateArgs,
   type FinishGatePorts,
@@ -186,5 +188,22 @@ describe("finish gate resume state", () => {
     expect(resumed.ciFailureBlocks).toBe(2);
     expect(resumed.ciVerified).toBe(false);
     expect(resumed.finishBlockedOnce).toBe(false);
+  });
+});
+
+// The two source cases the gates above do not already carry, through the same seam: the
+// changed-file source policy reads the committed file through the `read` port.
+describe("evaluateFinishGates — source quality and the durable snapshot", () => {
+  it("names a source-quality block", async () => {
+    const v = await evaluateFinishGates(finishInput({ writtenPaths: ["cfg.json"] }, { read: async () => '{ "a": ' }));
+    expect(v.reason).toBe("source_quality");
+    expect(v.block).toContain("cfg.json");
+    expect(isInconclusiveFinishBlock(v.reason)).toBe(false);
+  });
+
+  it("carries its counters through a durable snapshot", () => {
+    const g = initialFinishGateState({ placeholderBlocks: 2, ciPendingBlocks: 1 }, true);
+    expect(g.noDeliverableBlocked).toBe(true);
+    expect(finishGateSnapshot(g)).toEqual({ noDeliverableBlocked: true, reviewVerdictRecorded: false, placeholderBlocks: 2, ciPendingBlocks: 1, ciFailureBlocks: 0 });
   });
 });

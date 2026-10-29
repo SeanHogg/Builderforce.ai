@@ -3,7 +3,9 @@
  *
  * Owned by WS2c. It ports, behind the {@link SteeringHook} the composition calls:
  *   - `runtime/cloudLoopControl.ts` (the between-iteration steering drain and the
- *     cooperative cancel watcher) — `cloudLoopControl.ts`;
+ *     cooperative cancel watcher) — absorbed: the drain is `beforeTurn` over the
+ *     `SteeringSource` port, cancel is the run's abort signal; `cloudLoopControl.ts`
+ *     keeps only the cancelled-run reason;
  *   - `brain-embedded/src/runStore/steerInterrupt.ts` (the steer that interrupts the
  *     step in flight) — `steerInterrupt.ts`;
  *   - `packages/run-guards/src/stopIntent.ts` (a message typed during a run that IS a
@@ -25,14 +27,32 @@
  * and Node.
  */
 
-import type { RunMessage } from "../../contract.js";
+import type { RunMessage, SteerInput, SteeringSource } from "../../contract.js";
 import type { PolicyContext, SteeringHook } from "../hooks.js";
 import { stopIntent } from "./stopIntent.js";
+import type { InterruptWatch } from "./steerInterrupt.js";
+
+/** A drained steer, read the same whether the port sent a bare string or a message. */
+export function steerInput(raw: string | SteerInput): SteerInput {
+  return typeof raw === "string" ? { text: raw } : raw;
+}
 
 /**
- * True when one of the drained texts IS a stop command — the SteerSource port then
- * marks it `interrupt: true`, and {@link runToolInterruptibly} aborts the step in
- * flight the way the Stop button does (PRD 35 §6.3, WS8e E10).
+ * The port's interrupt watch: what the agent's dispatch listens on so an interrupting
+ * steer aborts the foreground command in flight and skips the turn's remaining calls.
+ * A port that cannot push an interrupt yields a watch that never fires — its steers
+ * still reach the next model call, between steps.
+ */
+export function portInterruptWatch(source: SteeringSource | undefined): InterruptWatch {
+  return {
+    hasInterrupt: () => source?.hasInterrupt?.() ?? false,
+    onInterrupt: (listener) => source?.onInterrupt?.(listener) ?? (() => undefined),
+  };
+}
+
+/**
+ * True when one of the drained texts IS a stop command (`stopIntent`). The agent then
+ * cancels the run before the model gets another turn (PRD 35 §6.3, WS8e E10).
  */
 export function isStopSteer(steered: readonly string[]): boolean {
   return steered.some((text) => stopIntent(text));
@@ -54,20 +74,22 @@ export {
   SKIPPED_BY_STEER,
   WAIT_INTERRUPTED_BY_STEER,
   isInterruptibleCall,
+  runInterruptWatch,
   runToolInterruptibly,
-  skipRemainingOnSteer,
-  steerAppliedTrace,
-  type SteerApplied,
+  runToolWithWatch,
+  skipOnSteer,
+  steerSkip,
+  type InterruptWatch,
   type SteerMessage,
-  type SteerRegistry,
 } from "./steerInterrupt.js";
 export {
-  CLOUD_RUN_CANCELLED_REASON,
-  CANCEL_POLL_MS,
-  applyPendingSteering,
-  startCancelWatcher,
-  type CooperativeCancel,
-  type LoopMessage,
-  type SteerSink,
-} from "./cloudLoopControl.js";
+  drainRunSteering,
+  hasRunInterrupt,
+  onRunInterrupt,
+  queueRunSteering,
+  resetRunSteering,
+  runSteeringSource,
+  type RunSteerMessage,
+} from "./runSteering.js";
+export { CLOUD_RUN_CANCELLED_REASON } from "./cloudLoopControl.js";
 export { ABORT_TRIGGERS, isAbortTrigger, stopIntent } from "./stopIntent.js";

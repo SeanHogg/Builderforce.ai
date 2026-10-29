@@ -56,38 +56,44 @@ import {
   type StallShape,
 } from "@builderforce/agent-stall";
 import { liftProseAskUser, trimRepetitionLoop } from "@builderforce/agent-loop";
-import type { PolicyContext, StallDecision } from "../hooks.js";
+import type { StallState } from "../../contract.js";
+import type { PolicyContext, StallDecision, StallHook } from "../hooks.js";
 
 // ── The re-prompt budget (WS2b's slice of the run) ───────────────────────────
 //
 // `resolveStallStep` is stateless about how many re-prompts the CURRENT model has
 // already spent — the host keeps that count. The cloud loop kept it on its durable
 // model state (`CloudRunModelState.stallRecoveries`, reset on a failover); here it
-// lives on the hook, keyed by the model it was spent against, so a stepped
-// (`maxSteps: 1`) run resumes on the same budget and a failover starts the new model
-// with a full one.
+// lives on the run's state (`RunState.stall`), keyed by the model it was spent
+// against, so a stepped (`maxSteps: 1`) run resumes on the same budget, a failover (or
+// any other model change) starts the new model with a full one, and a turn that acted
+// resets it — exactly as the cloud loop's `cloudStallStep` did.
 
-interface StallBudget {
-  /** The model the budget below was spent against. */
-  model?: string;
-  /** Re-prompts already spent against `model`. */
-  recoveriesUsed: number;
+/** The model the run is on now, as the budget keys it. */
+function currentModel(ctx: PolicyContext): string | undefined {
+  return ctx.state.model?.model ?? undefined;
 }
 
-const freshBudget = (): StallBudget => ({ recoveriesUsed: 0 });
-
-/** Read the budget the hook carries, tolerating an absent slot. */
-function budgetOf(ctx: PolicyContext): StallBudget {
-  const slot = (ctx.state as unknown as { stall?: unknown }).stall;
-  if (slot && typeof slot === "object" && "recoveriesUsed" in slot) {
-    return slot as StallBudget;
-  }
-  return freshBudget();
+/** Read the budget: the saved one when it was spent against the CURRENT model, else full. */
+function budgetOf(ctx: PolicyContext): StallState {
+  const slot = ctx.state.stall;
+  const model = currentModel(ctx);
+  if (slot && typeof slot.recoveriesUsed === "number" && slot.model === model) return { ...slot };
+  return model !== undefined ? { model, recoveriesUsed: 0 } : { recoveriesUsed: 0 };
 }
 
-/** Persist the budget back onto the run's state, so a stepped resume keeps it. */
-function saveBudget(ctx: PolicyContext, budget: StallBudget): void {
-  (ctx.state as unknown as { stall?: StallBudget }).stall = budget;
+/**
+ * Persist the budget back onto the run's state, keyed by the model it now belongs to.
+ * `spent` adds to the run's cumulative recovery count, which no reset ever clears.
+ */
+function saveBudget(ctx: PolicyContext, budget: StallState, spent = 0): void {
+  const model = currentModel(ctx);
+  const total = (ctx.state.stall?.recoveriesTotal ?? 0) + spent;
+  ctx.state.stall = {
+    ...(model !== undefined ? { model } : {}),
+    recoveriesUsed: budget.recoveriesUsed,
+    ...(total > 0 ? { recoveriesTotal: total } : {}),
+  };
 }
 
 // ── The ported glue ──────────────────────────────────────────────────────────
@@ -107,7 +113,9 @@ export const FORCED_SYNTHESIS_PROMPT =
  * The stall hook. `recover` judges a turn that ended without acting and returns what
  * the kernel should do: `steer` (re-prompt — the note is the correction), `escalate`
  * (hand to a different model), or `pause` (nothing left — stop with the explanation).
- * It returns nothing to accept the turn as the answer.
+ * It returns nothing to accept the turn as the answer. `settle` shapes the answer it
+ * accepted, `acted` resets the budget after a turn that called a tool, and `synthesis`
+ * is the prompt for the one forced no-tools turn a run that never spoke gets.
  */
 export const stallHook = {
   recover(ctx: PolicyContext): StallDecision | void {
@@ -133,25 +141,21 @@ export const stallHook = {
     );
 
     switch (step.kind) {
-      case "none": {
-        // Not a stall — but the turn may be a repetition loop (one block said over
-        // and over), which is not an answer either: steer back rather than settle on
-        // a run to the output ceiling (`agent-loop/repetitionLoop.ts`).
-        if (trimRepetitionLoop(text) !== text) {
-          return { action: "steer", note: stallRecoveryNudge(false, "announced") };
-        }
+      case "none":
+        // Not a stall: the turn is the answer. A repetition loop in it is trimmed when it
+        // settles (`settle`), as every source does — never re-prompted, which would spend
+        // turns with no budget bounding them.
         return undefined;
-      }
       case "nudge": {
         budget.recoveriesUsed = step.recoveriesUsed;
-        saveBudget(ctx, budget);
+        saveBudget(ctx, budget, 1);
         // `step.nudge` already forces ONE structured call (it embeds the tool-choice
         // directive), so the re-prompt cannot be answered with another prose promise.
         return { action: "steer", note: step.nudge };
       }
       case "failover": {
         budget.recoveriesUsed = step.recoveriesUsed;
-        saveBudget(ctx, budget);
+        saveBudget(ctx, budget, 1);
         // The policy moved the run onto `step.to` — apply it so the kernel asks for
         // that model next turn, and carry the swap's user-facing notice with the
         // first-chance nudge the incoming model gets.
@@ -166,7 +170,31 @@ export const stallHook = {
       }
     }
   },
-};
+
+  /**
+   * The settled answer, shaped the way every source shapes it: a reply stuck on one
+   * block posts that block once (`trimRepetitionLoop`, `brain/agentReplyLoop.ts`), and a
+   * prose question with options becomes the canonical ```ask-user block the surfaces
+   * render as a choice (`liftProseAskUser`, `brain-embedded/.../finalAnswerHook.ts`).
+   */
+  settle(_ctx: PolicyContext, text: string): string {
+    return liftProseAskUser(trimRepetitionLoop(text.trim()));
+  },
+
+  /** A turn that called a tool is never a stall: the current model's budget starts full again. */
+  acted(ctx: PolicyContext): void {
+    if (ctx.state.stall && ctx.state.stall.recoveriesUsed > 0) saveBudget(ctx, { recoveriesUsed: 0 });
+  },
+
+  /**
+   * The forced no-tools final synthesis: a run that ended without speaking (every turn
+   * only called tools, a budget ran out, a breaker tripped) gets ONE bounded extra call
+   * with this prompt and no tools, so the agent always answers (`brain/agentReplyLoop.ts`).
+   */
+  synthesis(_ctx: PolicyContext): string {
+    return FORCED_SYNTHESIS_PROMPT;
+  },
+} satisfies StallHook;
 
 // ── Re-exported so a host can drive the same step without re-deriving it ─────
 

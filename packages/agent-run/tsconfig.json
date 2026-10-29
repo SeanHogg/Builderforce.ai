@@ -1,6 +1,9 @@
 // paths: this package imports sibling workspace packages by source. esbuild (wrangler,
 // the VSIX and agent-runtime bundles) resolves a bare specifier through the NEAREST
 // tsconfig to the importing file, so the mapping must live here, not only in each host's.
+// `@seanhogg/builderforce-memory` is a BUILT package (a declared dependency): its own
+// install comes first; without one, the sibling memory repo's dist — beside the main
+// checkout (3 up) or beside a worktree under `.builderforce/worktrees/` (6 up).
 {
   "compilerOptions": {
     "target": "ES2022",
@@ -9,6 +12,7 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "lib": ["ES2022", "DOM"],
+    "types": ["node"],
     "declaration": true,
     "skipLibCheck": true,
     "noEmit": true,
@@ -18,10 +22,30 @@
       "@builderforce/agent-tools": ["../agent-tools/src/index.ts"],
       "@builderforce/cost-levers": ["../cost-levers/src/index.ts"],
       "@builderforce/difficulty-router": ["../difficulty-router/src/index.ts"],
+      "@builderforce/model-catalog": ["../model-catalog/src/index.ts"],
       "@builderforce/run-guards": ["../run-guards/src/index.ts"],
       "@builderforce/run-policy": ["../run-policy/src/index.ts"],
       "@builderforce/tool-output-policy": ["../tool-output-policy/src/index.ts"],
-      "@seanhogg/builderforce-memory/working": ["../../../../../../builderforce-memory/packages/memory/dist/working/index.d.ts"]
+      "@seanhogg/builderforce-memory/working": [
+        "./node_modules/@seanhogg/builderforce-memory/dist/working/index.d.ts",
+        "../../../builderforce-memory/packages/memory/dist/working/index.d.ts",
+        "../../../../../../builderforce-memory/packages/memory/dist/working/index.d.ts"
+      ],
+      "@seanhogg/builderforce-memory/handoff": [
+        "./node_modules/@seanhogg/builderforce-memory/dist/handoff/index.d.ts",
+        "../../../builderforce-memory/packages/memory/dist/handoff/index.d.ts",
+        "../../../../../../builderforce-memory/packages/memory/dist/handoff/index.d.ts"
+      ],
+      "@seanhogg/builderforce-memory/knowledge": [
+        "./node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.d.ts",
+        "../../../builderforce-memory/packages/memory/dist/knowledge/index.d.ts",
+        "../../../../../../builderforce-memory/packages/memory/dist/knowledge/index.d.ts"
+      ],
+      "@seanhogg/builderforce-memory/ingest": [
+        "./node_modules/@seanhogg/builderforce-memory/dist/ingest/index.d.ts",
+        "../../../builderforce-memory/packages/memory/dist/ingest/index.d.ts",
+        "../../../../../../builderforce-memory/packages/memory/dist/ingest/index.d.ts"
+      ]
     }
   },
   "include": ["src/**/*.ts", "test/**/*.ts"],

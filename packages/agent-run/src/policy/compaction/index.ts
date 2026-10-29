@@ -5,13 +5,12 @@
  * Owned by WS2a. This module replaces the no-op stub with a real port of the
  * compaction behaviour the platform already runs today:
  *
- *   • `pack.ts` ports the pure `packHandoff` transcript packer
+ *   • `pack.ts` BINDS the pure `packHandoff` transcript packer
  *     (`@seanhogg/builderforce-memory/handoff`, PRD 34 §3.3) — the leading system
  *     messages stay first, the latest user directive stays verbatim, tool-call pairing
  *     is never broken, the verbatim tail takes what the budget allows, and the dropped
  *     middle becomes ONE note (summary → recall → elision marker) whose role keeps
- *     turns alternating. It is ported here, unchanged in algorithm, so this
- *     dependency-free package needs no runtime dependency.
+ *     turns alternating. Imported, never copied (PRD 35 §3.1).
  *
  *   • `compact.ts` ports the cloud loop's `compactMessages`
  *     (`api/src/application/llm/compactMessages.ts`): gate on window pressure with
@@ -19,13 +18,15 @@
  *     observations (C2), pin the task brief when a nudge is the latest directive,
  *     compress the middle into ONE memory note, and fall back to truncating bulky tool
  *     results in place only when packing alone cannot fit. Never drops the system
- *     prompt or the current task. The Worker `env`/tenant service concerns (C9 tier
- *     reads, the gateway summarizer, specialist capture) are the surface's wiring, not
- *     the policy, so they are not carried — the budget rule and the summary request
- *     shape ARE.
+ *     prompt or the current task. C9 reads `RunPolicy.levers` and the model's tier
+ *     boundary (`@builderforce/model-catalog`); specialist capture is the surface's. The summarizer IS: the dropped middle is summarised through the
+ *     run's own `ModelTransport` with the source's summary request
+ *     (`compactionSummaryRequest`), and the recall note comes from the run's `memory`
+ *     capability — both PORTS, so a surface supplies no compaction wiring at all.
  *
- *   • `reserve.ts` ports the reserve tokens (`DEFAULT_HANDOFF_RESERVE_TOKENS` /
- *     `handoffReserveTokens` and the on-prem floor/ensure helpers).
+ *   • `reserve.ts` binds the reply reserve (`@builderforce/run-policy`
+ *     `DEFAULT_HANDOFF_RESERVE_TOKENS` / `handoffReserveTokens`) and ports on-prem's
+ *     reserve floor (`agent-settings.ts`, 20,000) with its ensure/resolve pair.
  *
  * The hook below is the ONE export the composition in `policy/index.ts` calls:
  * `compactionHook`. It reads the run's `PolicyContext`, returns the compacted
@@ -38,20 +39,25 @@
  * and Node.
  */
 
-import type { RunMessage } from "../../contract.js";
+import type { CostLeverId, RunMessage } from "../../contract.js";
 import type { CompactionHook, CompactionResult, PolicyContext } from "../hooks.js";
 import {
   CLOUD_COMPACT_DEFAULTS,
+  OBSERVATION_MASK_TURNS,
   compactMessages,
+  compactionSummaryRequest,
   type CompactionSummarizer,
 } from "./compact.js";
-import { compactReserveTokens, resolveCompactReserveTokensFloor, ensureCompactReserveTokens } from "./reserve.js";
+import { priceTierBoundary } from "@builderforce/model-catalog";
+import { compactionReserve } from "./reserve.js";
 import type { PackMessage } from "./pack.js";
 
 /** Cost lever C2 — mask stale tool-result observations before packing. */
-const MASK_OBSERVATIONS_TURNS = 6;
+const C2_MASK_LEVER: CostLeverId = "c2_observation_masking";
 /** Cost lever C9 — cap the budget at the model's long-context price-tier boundary. */
-const C9_TIER_LEVER = "c9_price_tier_budget";
+const C9_TIER_LEVER: CostLeverId = "c9_price_tier_budget";
+/** How many recalled entries the dropped-middle note may draw on. */
+const RECALL_LIMIT = 8;
 
 /** A RunMessage row, widened to what the packer reads (content stays a string). */
 type Row = RunMessage & Record<string, unknown>;
@@ -71,8 +77,41 @@ export interface CompactionHookOptions {
 }
 
 /** True when the run's policy carries a cost lever by id. */
-function leverOn(ctx: PolicyContext, id: string): boolean {
-  return ctx.policy.levers.some((l) => String(l) === id);
+function leverOn(ctx: PolicyContext, id: CostLeverId): boolean {
+  return ctx.policy.levers.includes(id);
+}
+
+/**
+ * The summarizer for the dropped middle, through the run's own model transport — the
+ * source's gateway summarizer (`buildGatewaySummarizer`) with the same request
+ * (`compactionSummaryRequest`). A transport that fails or answers nothing returns null,
+ * and the packer falls back to recall, then the elision marker.
+ */
+function transportSummarizer(ctx: PolicyContext): CompactionSummarizer {
+  return async (conversationText) => {
+    const request = compactionSummaryRequest(conversationText);
+    try {
+      const completion = await ctx.ports.model.complete(
+        { messages: request.messages, maxTokens: request.max_tokens },
+        ctx.signal,
+      );
+      const text = completion.content?.trim();
+      return text ? text : null;
+    } catch {
+      return null; // the packer's fallback chain owns a failed summary
+    }
+  };
+}
+
+/** The recall note for the latest directive, from the run's `memory` capability. */
+function capabilityRecall(ctx: PolicyContext): ((query: string, budgetChars: number) => Promise<string>) | undefined {
+  const memory = ctx.ports.capabilities.memory;
+  if (!memory) return undefined;
+  return async (query, budgetChars) => {
+    const result = await memory.recall(query, RECALL_LIMIT);
+    if (!result.ok || !result.entries?.length) return "";
+    return result.entries.map((e) => `- ${e.key}: ${e.content}`).join("\n").slice(0, budgetChars);
+  };
 }
 
 /**
@@ -80,23 +119,24 @@ function leverOn(ctx: PolicyContext, id: string): boolean {
  * the advertised tool schemas, the C2/C9 cost levers and the cost cap.
  */
 export function compactionOptions(ctx: PolicyContext, opts: CompactionHookOptions = {}) {
-  const model = ctx.policy.pinnedModel ?? "";
+  // The model about to serve: what the model policy last settled on (a failover moves
+  // it), else the pin. Its window caps the budget.
+  const model = ctx.state.model?.model ?? ctx.policy.pinnedModel ?? "";
   const window = ctx.ports.model.window?.(model);
-  // On-prem floor: never let the reserve sit below the serving model's window floor.
-  const reserve = ensureCompactReserveTokens(
-    compactReserveTokens(ctx.policy.budgets.tokens),
-    resolveCompactReserveTokensFloor(window),
-  );
+  const recall = opts.recall ?? capabilityRecall(ctx);
+  // The reply reserve is the shared hand-off default (the run's token BUDGET is a cost
+  // ceiling, not a reply size), raised to on-prem's reserve floor (20,000).
+  const reserve = compactionReserve(undefined);
   return {
     ...CLOUD_COMPACT_DEFAULTS,
     maxTokens: opts.maxTokens ?? ctx.policy.budgets.tokens ?? CLOUD_COMPACT_DEFAULTS.maxTokens,
     contextWindow: window,
-    priceTierBoundary: leverOn(ctx, C9_TIER_LEVER) ? opts.priceTierBoundary : undefined,
+    priceTierBoundary: leverOn(ctx, C9_TIER_LEVER) ? opts.priceTierBoundary ?? priceTierBoundary(model) : undefined,
     reserveOutputTokens: reserve,
     tools: ctx.tools as unknown,
-    ...(leverOn(ctx, "c2_mask_stale_observations") ? { maskObservationsAfterTurns: MASK_OBSERVATIONS_TURNS } : {}),
-    ...(opts.summarize ? { summarize: opts.summarize } : {}),
-    ...(opts.recall ? { recall: opts.recall } : {}),
+    ...(leverOn(ctx, C2_MASK_LEVER) ? { maskObservationsAfterTurns: OBSERVATION_MASK_TURNS } : {}),
+    summarize: opts.summarize ?? transportSummarizer(ctx),
+    ...(recall ? { recall } : {}),
     pinTaskBrief: opts.pinTaskBrief ?? true,
     timeoutMs: CLOUD_COMPACT_DEFAULTS.timeoutMs,
   };
@@ -161,7 +201,7 @@ export const compactionHook: CompactionHook = {
 export {
   CLOUD_COMPACT_DEFAULTS,
   compactMessages,
-  compactionTokenBudget,
+  compactionBudget,
   elideToFit,
   maskOldObservations,
   toolsTokensOf,
@@ -170,11 +210,12 @@ export {
 } from "./compact.js";
 export {
   compactReserveTokens,
-  resolveCompactReserveTokensFloor,
-  ensureCompactReserveTokens,
+  compactionReserve,
+  ensureCompactionReserveTokens,
+  resolveCompactionReserveTokensFloor,
   DEFAULT_COMPACT_RESERVE_TOKENS,
-  MIN_COMPACT_RESERVE_TOKENS,
+  DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR,
 } from "./reserve.js";
 export { packHandoff, handoffBudget, defaultEstimateTokens } from "./pack.js";
-export type { CompactionSummarizer } from "./compact.js";
+export type { CompactionSummarizer, CompactOptions } from "./compact.js";
 export type { PackMessage, PackInput, PackResult, TokenEstimator } from "./pack.js";

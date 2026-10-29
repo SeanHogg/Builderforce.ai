@@ -4,7 +4,7 @@
  */
 
 import type { RunMessage, RunOutcome, RunOutcomeRow, RunState } from "./contract.js";
-import { composePolicyHooks } from "./policy/index.js";
+import type { PolicyHooks } from "./policy/index.js";
 import { currentView, emit, policyContext, type RunAgentInput, type TurnTally } from "./runContext.js";
 import { newApprovalId } from "./runState.js";
 import { buildOutcomeRow } from "./telemetry/outcomeRow.js";
@@ -24,6 +24,7 @@ interface SettleExtra {
  */
 export async function settle(
   input: RunAgentInput,
+  hooks: PolicyHooks,
   state: RunState,
   transcript: RunMessage[],
   kind: RunOutcome["kind"],
@@ -33,7 +34,7 @@ export async function settle(
   state.messages = transcript;
 
   if (kind === "finished") {
-    const consolidated = await composePolicyHooks(input.modules).memory.consolidate(policyContext(input, state, currentView(transcript, []), state.step, 0));
+    const consolidated = await hooks.memory.consolidate(policyContext(input, state, currentView(transcript, []), state.step, 0));
     if (consolidated !== undefined) {
       try {
         await input.ports.store.commitMemory?.(consolidated);

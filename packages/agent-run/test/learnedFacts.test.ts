@@ -1,19 +1,29 @@
 /**
- * The learned-facts extraction — brought from `clients/vscode/src/memoryCommit.test.ts`
- * with imports retargeted and the node-I/O cases (`readChangedExcerpt`,
- * `commitRunKnowledge`, `commitRunKnowledgeIfAllowed`) dropped: they read the workspace
- * (`node:fs` + `git`), which is the adapter's job in this Worker/browser/Node-safe
- * package. The pure extraction half is ported unchanged.
+ * The run-end memory commit — brought from `clients/vscode/src/memoryCommit.test.ts` with
+ * imports retargeted and nothing else changed.
+ *
+ * One source case is NOT carried: `readChangedExcerpt` reads the workspace with node
+ * `fs` + `git`, which this Worker/browser/Node-safe package may not do; it is the
+ * surface's `MemoryCommitDeps.excerpt` port here and stays with the VS Code adapter.
  */
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import {
-  commitLearnedFacts,
-  memoryCommitPrompt,
-  MIN_FACT_CHARS,
-  parseLearnedFacts,
-} from "../src/policy/memory/learnedFacts.js";
+import { RunKnowledgeRecorder } from "@builderforce/agent-tools";
+import { commitLearnedFacts, memoryCommitPrompt, MIN_FACT_CHARS, parseLearnedFacts } from "../src/policy/memory/learnedFacts.js";
+import { commitRunKnowledge, commitRunKnowledgeIfAllowed } from "../src/policy/memory/runKnowledgeCommit.js";
 
 const DECISION = "Refresh the map token from file mtime, not from names alone.";
+
+/** A finished run's record, from the tool calls it made. */
+function ran(calls: Array<[string, Record<string, unknown>]>, prompt?: string): RunKnowledgeRecorder {
+  const r = new RunKnowledgeRecorder();
+  if (prompt) r.setPrompt(prompt);
+  for (const [name, args] of calls) r.record(name, args);
+  return r;
+}
+const reads = (...paths: string[]): Array<[string, Record<string, unknown>]> => paths.map((p) => ["read_file", { path: p }]);
 
 describe("parseLearnedFacts", () => {
   it("reads a fenced JSON array and prefixes a stable learned: key", () => {
@@ -101,5 +111,77 @@ describe("commitLearnedFacts", () => {
 
   it("tells the model not to guess when there is no evidence", () => {
     expect(memoryCommitPrompt({ changed: ["src/a.ts"] })).toContain("return [] rather than guess");
+  });
+});
+
+describe("commitRunKnowledge", () => {
+  it("maps a read-only investigation without spending a completion", async () => {
+    const complete = vi.fn(async () => "[]");
+    const remember = vi.fn(async () => true);
+    await commitRunKnowledge(
+      os.tmpdir(),
+      ran(reads("web/src/a.tsx", "web/src/b.tsx", "web/src/c.tsx"), "where is the canvas drawn?"),
+      { complete, remember },
+    );
+    expect(complete).not.toHaveBeenCalled();
+    expect(remember).toHaveBeenCalledTimes(1);
+    expect(remember).toHaveBeenCalledWith("codemap:web/src", expect.stringContaining("- web/src/a.tsx"));
+  });
+
+  it("writes the map and still extracts learned facts for a run that changed files", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "bf-rk-"));
+    await fs.writeFile(path.join(root, "a.ts"), "export const a = 1;\n");
+    const complete = vi.fn(async () => JSON.stringify([{ key: "map-token", kind: "decision", content: DECISION }]));
+    const remember = vi.fn(async (_key: string, _content: string) => true);
+    // builderforce-memory 2026.10.27: the 3-file code-map floor holds for a run that
+    // changed files too, so the run also reads two files to be worth a map.
+    await commitRunKnowledge(root, ran([["edit_file", { path: "a.ts" }], ["read_file", { path: "b.ts" }], ["read_file", { path: "c.ts" }]]), { complete, remember });
+    expect(remember.mock.calls.map((c) => c[0])).toEqual(["codemap:(root)", "learned:map-token"]);
+  });
+
+  it("does not let a failed map write cost the learned facts", async () => {
+    const remember = vi.fn(async (key: string) => {
+      if (key.startsWith("codemap:")) throw new Error("down");
+      return true;
+    });
+    const complete = vi.fn(async () => JSON.stringify([{ key: "k", kind: "convention", content: DECISION }]));
+    await commitRunKnowledge(os.tmpdir(), ran([["edit_file", { path: "missing.ts" }]]), { complete, remember });
+    expect(remember).toHaveBeenCalledWith("learned:k", DECISION);
+  });
+});
+
+describe("commitRunKnowledgeIfAllowed", () => {
+  const activity = ran(reads("web/src/a.tsx", "web/src/b.tsx", "web/src/c.tsx"));
+
+  it("with the chat's Memory switch off, never even resolves the facts port", async () => {
+    const resolveDeps = vi.fn(async () => ({ complete: async () => "[]", remember: async () => true }));
+    await commitRunKnowledgeIfAllowed(os.tmpdir(), activity, { memory: false }, resolveDeps);
+    expect(resolveDeps).not.toHaveBeenCalled();
+  });
+
+  it("with Memory on, commits through the resolved port", async () => {
+    const remember = vi.fn(async (_key: string, _content: string) => true);
+    await commitRunKnowledgeIfAllowed(os.tmpdir(), activity, { memory: true }, async () => ({ complete: async () => "[]", remember }));
+    expect(remember).toHaveBeenCalledWith("codemap:web/src", expect.any(String));
+  });
+
+  it("swallows a port that cannot be resolved — a finished run never fails over memory", async () => {
+    await expect(
+      commitRunKnowledgeIfAllowed(os.tmpdir(), activity, { memory: true }, async () => {
+        throw new Error("no project");
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("maps absolute paths under the workspace root as repo files", async () => {
+    const root = path.join(os.tmpdir(), "bf-abs-root");
+    const remember = vi.fn(async (_key: string, _content: string) => true);
+    const abs = (rel: string) => path.join(root, rel);
+    await commitRunKnowledge(
+      root,
+      ran(reads(abs("web/src/a.tsx"), abs("web/src/b.tsx"), abs("web/src/c.tsx"))),
+      { complete: async () => "[]", remember },
+    );
+    expect(remember).toHaveBeenCalledWith("codemap:web/src", expect.stringContaining("- web/src/a.tsx"));
   });
 });

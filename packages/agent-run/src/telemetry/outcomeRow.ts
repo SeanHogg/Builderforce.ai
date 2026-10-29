@@ -81,18 +81,10 @@ function firstSpawnTurn(state: RunState): number | null {
   return model?.firstSpawnTurn ?? null;
 }
 
-/** Covered reads that were stubbed: served windows whose lines were never
- *  actually delivered to the model (a re-served window). The served set is keyed
- *  by the read's canonical key; a window already present is a stub. */
+/** Covered reads answered without a dispatch (a stub or a replay of a served window),
+ *  as the read-coverage policy counted them. */
 function countCoveredReadStubs(state: RunState): number {
-  const served = state.reads?.served;
-  if (!served) return 0;
-  // The read guard records the served windows; a stub is a window re-requested
-  // after it was already fully served. The guard's own counter is authoritative
-  // when present, else we count duplicated keys defensively.
-  const reads = state.reads as { stubCount?: number };
-  if (typeof reads.stubCount === "number") return reads.stubCount;
-  return 0;
+  return state.reads?.stubCount ?? 0;
 }
 
 /** `cat`/`sed`/`head`/`tail` of a workspace file, counted from the shell tool
@@ -116,14 +108,13 @@ function contextPackTokens(state: RunState): number {
 
 /** The model preflight result the model policy recorded before turn 1. */
 function modelPreflight(state: RunState): string | undefined {
-  const model = state.model as { preflight?: string } | undefined;
-  return model?.preflight;
+  return state.preflight;
 }
 
-/** Stall recoveries: the model policy's failover count (a stall it recovered from). */
+/** Stall recoveries: every re-prompt the stall policy spent this run (cumulative —
+ *  the per-model budget `recoveriesUsed` resets when a turn acts). */
 function countStallRecoveries(state: RunState): number {
-  const model = state.model as { stallRecoveries?: number; failovers?: number } | undefined;
-  return model?.stallRecoveries ?? model?.failovers ?? 0;
+  return state.stall?.recoveriesTotal ?? 0;
 }
 
 /** The A3 progress trips, by signal. The detector records the trip count; the

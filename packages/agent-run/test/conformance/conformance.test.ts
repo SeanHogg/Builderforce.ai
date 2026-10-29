@@ -239,3 +239,53 @@ describe("conformance — continuous vs maxSteps:1", () => {
     }
   });
 });
+
+describe("conformance — the model is asked the same thing either way", () => {
+  /** Ports whose model is ONE scripted transport for the whole run (shared across ticks), recording every request. */
+  function recordingPorts(
+    store: ReturnType<typeof memoryStore>,
+    sink: ReturnType<typeof traceSink>["sink"],
+    model: ModelTransport,
+    requests: ModelRequest[],
+  ): RunPorts {
+    return {
+      ...buildPorts(store, sink),
+      model: {
+        complete: (request, signal) => {
+          requests.push(JSON.parse(JSON.stringify(request)) as ModelRequest);
+          return model.complete(request, signal);
+        },
+      },
+    };
+  }
+
+  async function requestsOf(maxSteps?: number): Promise<ModelRequest[]> {
+    const store = memoryStore();
+    const { sink } = traceSink();
+    const model = scriptedModel(SCRIPT);
+    const requests: ModelRequest[] = [];
+    const step = maxSteps !== undefined ? { maxSteps } : {};
+    let outcome = await runAgent({ task: TASK, policy: POLICY, ports: recordingPorts(store, sink, model, requests), ...step });
+    for (let tick = 0; outcome.kind === "yielded"; tick += 1) {
+      if (tick > 100) throw new Error("requestsOf: run never finished after 100 ticks");
+      outcome = await runAgent({ task: TASK, policy: POLICY, ports: recordingPorts(store, sink, model, requests), resume: store.saved, ...step });
+    }
+    return requests;
+  }
+
+  it("a stepped run sends the model the same requests as a continuous run", async () => {
+    expect(await requestsOf(1)).toEqual(await requestsOf());
+  });
+
+  it("every request opens with the task and ends with the context pack's volatile tail", async () => {
+    const requests = await requestsOf(1);
+    expect(requests.length).toBeGreaterThan(0);
+    for (const request of requests) {
+      expect(request.messages[0]).toEqual({ role: "system", content: TASK.prompt });
+      const tail = request.messages[request.messages.length - 1];
+      expect(tail?.role).toEqual("user");
+      expect(tail?.content.startsWith("<run-state>")).toBe(true);
+      expect(tail?.content).toContain("# fixture");
+    }
+  });
+});

@@ -165,8 +165,12 @@ export interface LoopHooks<M> {
   beforeDispatch?(call: ParsedToolCall, ctx: TurnContext<M>): Promise<DispatchDecision> | DispatchDecision;
   /** A tool returned `finish`. Return a block reason to REFUSE the finish (the model sees `{ok:false,error}` and keeps going), or null to accept. */
   onFinish?(ctx: TurnContext<M>, summary: string, call: ParsedToolCall): Promise<string | null> | string | null;
-  /** A tool returned `ask_human`. The run ends after this turn's remaining calls with `awaitingInput` set. */
-  onAskHuman?(ctx: TurnContext<M>, control: Extract<LoopControl, { kind: "ask_human" }>, call: ParsedToolCall): Promise<void> | void;
+  /**
+   * A tool returned `ask_human`. Returning nothing parks the run: it ends after this turn's
+   * remaining calls with `awaitingInput` set. Returning a result means the question was
+   * answered in-run: that result becomes the call's row and the run does NOT pause.
+   */
+  onAskHuman?(ctx: TurnContext<M>, control: Extract<LoopControl, { kind: "ask_human" }>, call: ParsedToolCall): Promise<LoopDispatchResult | void> | LoopDispatchResult | void;
   /** Per call, after its result row was pushed (`message` is that row). */
   afterDispatch?(call: ParsedToolCall, result: LoopDispatchResult, message: M, ctx: TurnContext<M>): Promise<AfterDispatchDecision | void> | AfterDispatchDecision | void;
   /** After every call of the turn ran. May override `finished` (queued steering re-opens a finished run). */

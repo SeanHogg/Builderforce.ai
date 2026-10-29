@@ -65,7 +65,7 @@ describe("planInRunVerify", () => {
     });
   });
 
-  it("sandbox / on-prem plan the package scripts (no SSH)", () => {
+  it("container / github_actions / on-prem plan the package scripts (no SSH)", () => {
     for (const surface of ["sandbox", "on-prem"] as const) {
       const plan = planInRunVerify({ surface, packageScripts: SCRIPTS });
       expect(plan.kind).toBe("run");

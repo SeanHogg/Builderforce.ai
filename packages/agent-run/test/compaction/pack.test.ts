@@ -14,11 +14,33 @@ import {
 } from "../../src/policy/compaction/index.js";
 import {
   compactReserveTokens,
-  resolveCompactReserveTokensFloor,
-  ensureCompactReserveTokens,
+  compactionReserve,
+  ensureCompactionReserveTokens,
   DEFAULT_COMPACT_RESERVE_TOKENS,
-  MIN_COMPACT_RESERVE_TOKENS,
+  DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR,
 } from "../../src/policy/compaction/index.js";
+
+/**
+ * The origin/main reserve helpers this file tested were replaced by the source's own
+ * (`agent-runtime/src/agents/agent-settings.ts`, WS2a). `ensureCompactReserveTokens`'
+ * case still describes that source — the reserve never sits below the floor — so it
+ * runs through the source's seam, `ensureCompactionReserveTokens` over an in-memory
+ * settings record, with its own inputs and expected values. Its floor constant
+ * (`MIN_COMPACT_RESERVE_TOKENS`, 1,024) is no longer a package value; it is the case's input.
+ */
+const MIN_COMPACT_RESERVE_TOKENS = 1_024;
+function ensureCompactReserveTokens(reserve: number, floor: number): number {
+  let reserveTokens = reserve;
+  return ensureCompactionReserveTokens({
+    settingsManager: {
+      getCompactionReserveTokens: () => reserveTokens,
+      applyOverrides: (o) => {
+        reserveTokens = o.compaction.reserveTokens;
+      },
+    },
+    minReserveTokens: floor,
+  }).reserveTokens;
+}
 
 function sys(content: string): PackMessage {
   return { role: "system", content };
@@ -159,14 +181,15 @@ describe("reserve tokens", () => {
     expect(compactReserveTokens(8_192)).toBe(8_192);
   });
 
-  it("resolveCompactReserveTokensFloor is the floor only when a window is known", () => {
-    expect(resolveCompactReserveTokensFloor(131_072)).toBe(MIN_COMPACT_RESERVE_TOKENS);
-    expect(resolveCompactReserveTokensFloor(undefined)).toBe(0);
-  });
-
   it("ensureCompactReserveTokens never lets the reserve sit below the floor", () => {
     expect(ensureCompactReserveTokens(512, MIN_COMPACT_RESERVE_TOKENS)).toBe(MIN_COMPACT_RESERVE_TOKENS);
     expect(ensureCompactReserveTokens(8_192, MIN_COMPACT_RESERVE_TOKENS)).toBe(8_192);
     expect(ensureCompactReserveTokens(8_192, 0)).toBe(8_192);
+  });
+
+  it("compactionReserve raises the reply reserve to on-prem's 20,000 floor, or the configured one", () => {
+    expect(compactionReserve(undefined)).toBe(DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR);
+    expect(compactionReserve(32_000)).toBe(32_000);
+    expect(compactionReserve(undefined, { agents: { defaults: { compaction: { reserveTokensFloor: 0 } } } })).toBe(DEFAULT_COMPACT_RESERVE_TOKENS);
   });
 });

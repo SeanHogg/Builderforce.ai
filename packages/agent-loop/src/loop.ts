@@ -177,8 +177,11 @@ export async function runAgentLoop<M>(args: LoopRunArgs<M>): Promise<LoopResult>
           if (result.control.summary) ctx.output = result.control.summary;
         }
       } else if (result.control?.kind === "ask_human") {
-        await hooks.onAskHuman?.(ctx, result.control, call);
-        awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call.id };
+        const answered = await hooks.onAskHuman?.(ctx, result.control, call);
+        // An answer given in-run replaces the parked result: the call's row carries it and
+        // the run keeps going. No answer parks the run on the person.
+        if (answered) result = answered;
+        else awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call.id };
       }
 
       // A control signal is the run steering itself, not a tool failing; only a dispatch

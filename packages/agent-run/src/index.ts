@@ -16,9 +16,8 @@
 // The run contract — every type an adapter and the agent exchange.
 export * from "./contract.js";
 
-// The one agent. `RunAgentInput` is the single entry point; `readSavedToolCalls` is
-// exposed for the conformance harness.
-export { runAgent, readSavedToolCalls, type RunAgentInput } from "./runAgent.js";
+// The one agent. `RunAgentInput` is the single entry point.
+export { runAgent, type RunAgentInput } from "./runAgent.js";
 
 // The policy composition — the twelve modules and how they are bound. Exported so a
 // test can assert a module is a no-op, and so an adapter that overrides ONE module
@@ -39,6 +38,7 @@ export {
   type SubagentsHook,
   type FinishHook,
   type GuardsHook,
+  type GuardControl,
   type GuardDecision,
   type VerifyHook,
   type VerifyResult,
@@ -48,3 +48,7 @@ export {
   type ModelHook,
   type ModelDecision,
 } from "./policy/index.js";
+
+// The in-process steering queue as a `SteeringSource` port — what a surface that keeps
+// its composer queue in memory hands the agent (`queueRunSteering` posts to it).
+export { queueRunSteering, runSteeringSource } from "./policy/steering/index.js";

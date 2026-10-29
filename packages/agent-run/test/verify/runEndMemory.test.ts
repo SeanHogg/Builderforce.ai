@@ -139,7 +139,7 @@ describe("the run-end tail: events, then memory (findings 11 & 12)", () => {
     expect(outcome.mayFinish).toBe(true);
   });
 
-  it("plans only declared checks, and planning records nothing", () => {
+  it("plans only declared checks, and planning records nothing", async () => {
     const plan = planInRunVerify({ surface: "sandbox", packageScripts: { typecheck: "tsc --noEmit", test: "vitest run" } });
     expect(plan.commands).toEqual(["npm run typecheck", "npm run test"]);
   });

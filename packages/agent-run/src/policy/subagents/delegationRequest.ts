@@ -26,6 +26,8 @@ export interface DelegationTraceEvent {
   label: string;
   /** The event's class — only `tool` is read. */
   category: string;
+  /** When it happened (the Brain's trace stamps every event); never read by the gate. */
+  ts?: string;
 }
 
 /** The local delegation tools. Calling either — successfully or not — is an attempt. */

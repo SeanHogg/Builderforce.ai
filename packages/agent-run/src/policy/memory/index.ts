@@ -27,22 +27,52 @@
  * and Node.
  */
 
-import type { MemoryHook, PolicyContext } from "../hooks.js";
+import type { MemoryHook, PolicyContext, PolicyToolCall } from "../hooks.js";
+import { guardsTurnNote } from "../guards/index.js";
 import { recorderForState, knowledgeState } from "./knowledge.js";
 import { extractAndWriteLearnedFacts } from "./learnedFacts.js";
 
-/** The memory hook, as it stands. */
-export const memoryHook: MemoryHook = {
+/** Between the tail's sections. */
+const SECTION_BREAK = "\n\n";
+
+/** A dispatched result the tool reported as failed (`{ ok: false }`) — never recorded. */
+function failed(result: unknown): boolean {
+  return !!result && typeof result === "object" && (result as { ok?: unknown }).ok === false;
+}
+
+/**
+ * The memory hook. Beyond the {@link MemoryHook} contract it carries `observe`, the
+ * per-call record the brief and the map are built from (brain-embedded's
+ * `toolCallHooks.ts` records each SUCCESSFUL call; the cloud engine does the same) — the
+ * composition calls it after every dispatched call.
+ */
+export const memoryHook: MemoryHook & {
+  observe(ctx: PolicyContext, call: PolicyToolCall, result: unknown, isError?: boolean): void;
+} = {
+  /** Record one dispatched call into the run's memory — successful calls only. */
+  observe(ctx: PolicyContext, call: PolicyToolCall, result: unknown, isError?: boolean) {
+    if (isError || failed(result)) return;
+    const recorder = recorderForState(ctx.state);
+    recorder.record(call.name, call.args);
+    ctx.state.memory = knowledgeState(recorder);
+  },
+
   /**
-   * The brief for this turn, or null when there is nothing worth saying. The recorder
-   * is restored from `state.memory` (once per state object), so a resumed run's brief
-   * continues the SAME record a continuous run holds.
+   * The volatile tail for this turn, or null when there is nothing worth saying: the
+   * run's own record (the recorder is restored from `state.memory` once per state object,
+   * so a resumed run's brief continues the SAME record a continuous run holds), then the
+   * guards' A3 / D1 / D7 notes — the sections `costLoop/volatileTail.ts` assembled, in
+   * front of THIS turn only. (The delegation nudge rides the read result that earns it.)
    */
   brief(ctx: PolicyContext) {
     const recorder = recorderForState(ctx.state);
+    // The task the brief and the map are about (`runPreamble.ts` / the cloud engine set it once).
+    if (!recorder.activity.prompt && ctx.task.prompt) recorder.setPrompt(ctx.task.prompt);
     // The recorder's record is written back, so a later turn (and a resume) sees it.
     ctx.state.memory = knowledgeState(recorder);
-    return recorder.brief();
+    const sections = [recorder.brief() ?? "", guardsTurnNote(ctx)]
+      .filter((part) => part.trim().length > 0);
+    return sections.length > 0 ? sections.join(SECTION_BREAK) : null;
   },
 
   /**
@@ -62,6 +92,17 @@ export const memoryHook: MemoryHook = {
     });
     // `undefined` (no map) leaves the store's commitMemory alone; a map is always
     // committed even when no learned fact landed — the map is the deterministic half.
-    return map ?? (facts !== null && facts.length > 0 ? { facts } : undefined);
+    // The write carries the chat it came from (WS8d); the anchors are derived server-side.
+    const chat = ctx.task.chatId !== undefined ? { chatId: ctx.task.chatId } : {};
+    if (map) return { ...map, ...chat };
+    return facts !== null && facts.length > 0 ? { facts, ...chat } : undefined;
   },
 };
+
+export {
+  MEMORY_OFF_NOTE,
+  commitRunKnowledge,
+  commitRunKnowledgeIfAllowed,
+  type FinishedRun,
+  type MemoryCommitDeps,
+} from "./runKnowledgeCommit.js";

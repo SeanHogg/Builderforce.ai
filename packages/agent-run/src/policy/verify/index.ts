@@ -17,21 +17,30 @@
 import type { PolicyContext, VerifyHook, VerifyResult } from "../hooks.js";
 import { runSandboxVerify, type VerifySandbox, type VerifyShell } from "./sandboxVerify.js";
 import { runVerifyPhase } from "./runEndMemory.js";
+import { recordVerifyEvents } from "./recordVerifyEvents.js";
+import type { InRunVerifyOutcome } from "./inRunVerify.js";
 
-/** The optional engine ports a surface may thread through `PolicyContext` extras. */
+/** The optional engine ports a surface binds with {@link createVerifyHook}. */
 export interface VerifyPorts {
   /** The sandbox's clone, when this surface has one (enables the declared-checks verify). */
   sandbox?: VerifySandbox;
   /** The shell the commands run through (heartbeat + cancel), when this surface has one. */
   shell?: VerifyShell;
-  /** Read a written file's committed content (the shell-free static fallback). */
-  read?: (path: string) => Promise<string | null>;
   /** Record the ordered verify events this verify emitted, on the run's timeline. */
   recordEvents?: (events: { type: "verify_started" } | { tool: string; category: string; detail: Record<string, unknown>; result: string }) => Promise<void> | void;
+  /**
+   * Which runtime the shell belongs to. The host names it — never inferred from
+   * `RunPolicy.entryPoint`. Absent ⇒ `durable` (no shell).
+   */
+  surface?: "durable" | "sandbox" | "on-prem";
 }
 
-function portsOf(ctx: PolicyContext): VerifyPorts {
-  return (ctx as { verifyPorts?: VerifyPorts }).verifyPorts ?? {};
+/** The ordered pair every surface records: `verify_started`, then the outcome. */
+async function record(ports: VerifyPorts, outcome: InRunVerifyOutcome): Promise<void> {
+  if (!ports.recordEvents) return;
+  const events = recordVerifyEvents(outcome);
+  await ports.recordEvents(events.started);
+  await ports.recordEvents(events.completed);
 }
 
 function writtenPathsOf(ctx: PolicyContext): readonly string[] {
@@ -39,39 +48,44 @@ function writtenPathsOf(ctx: PolicyContext): readonly string[] {
 }
 
 /**
- * The verify hook the composition calls. With a sandbox + shell the project's OWN
- * declared checks run and their honest exit codes become the verdict; without one the
- * shell-less surface records an honest skip and the branch's CI (the finish gate's
- * `pollBranchCi` port) remains the source of truth. Never fakes a check a surface could
- * not run.
+ * The verify hook for a surface's engine couplings. `RunPolicy.verify` decides WHAT
+ * verifies: `none` ⇒ nothing; `declared-checks` ⇒ the project's OWN declared checks run
+ * in the shell when the surface has one, and their honest exit codes become the verdict;
+ * `branch-ci` (or a shell-less surface) ⇒ the honest skip, and the branch's CI (the
+ * finish gate's `pollBranchCi` port) remains the source of truth. Never fakes a check a
+ * surface could not run. An adapter binds its ports with
+ * `composePolicyHooks({ verify: createVerifyHook(ports) })`.
  */
-export const verifyHook: VerifyHook = {
-  async verify(ctx: PolicyContext): Promise<VerifyResult | void> {
-    const ports = portsOf(ctx);
-    const writtenPaths = writtenPathsOf(ctx);
-    // Nothing written ⇒ nothing to verify. The finish gate owns the no-deliverable decision.
-    if (writtenPaths.length === 0) return undefined;
+export function createVerifyHook(ports: VerifyPorts = {}): VerifyHook {
+  return {
+    async verify(ctx: PolicyContext): Promise<VerifyResult | void> {
+      if (ctx.policy.verify === "none") return undefined;
+      const writtenPaths = writtenPathsOf(ctx);
+      // Nothing written ⇒ nothing to verify. The finish gate owns the no-deliverable decision.
+      if (writtenPaths.length === 0) return undefined;
 
-    // A shell surface runs the declared checks over the clone; a shell-less surface
-    // records the skip. `surface` arrives through the extras — the host names which
-    // runtime it is, never branched on `RunPolicy.entryPoint`.
-    const surface = (ctx as { verifySurface?: "durable" | "sandbox" | "on-prem" }).verifySurface ?? "durable";
+      const surface = ports.surface ?? "durable";
+      if (ctx.policy.verify === "declared-checks" && ports.sandbox && ports.shell && surface !== "durable") {
+        const ran = await runSandboxVerify(ports.sandbox, ports.shell);
+        const outcome = runVerifyPhase({
+          surface: surface === "on-prem" ? "on-prem" : "sandbox",
+          writtenPaths,
+          packageScripts: ran.packageScripts,
+          runner: ran.runner,
+          results: ran.results,
+        });
+        await record(ports, outcome);
+        return { ok: outcome.mayFinish, note: outcome.note };
+      }
 
-    if (ports.sandbox && ports.shell && surface !== "durable") {
-      const ran = await runSandboxVerify(ports.sandbox, ports.shell);
-      const outcome = runVerifyPhase({
-        surface: surface === "on-prem" ? "on-prem" : "sandbox",
-        writtenPaths,
-        packageScripts: ran.packageScripts,
-        runner: ran.runner,
-        results: ran.results,
-      });
+      // Shell-less (or branch CI): the honest answer, never a claimed pass. The branch's
+      // CI gate (the finish hook's `pollBranchCi` port) is the in-run check here.
+      const outcome = runVerifyPhase({ surface: "durable", writtenPaths, results: null });
+      await record(ports, outcome);
       return { ok: outcome.mayFinish, note: outcome.note };
-    }
+    },
+  };
+}
 
-    // Shell-less: the honest answer, never a claimed pass. The branch's CI gate (the
-    // finish hook's `pollBranchCi` port) is the in-run build/type-check/test here.
-    const outcome = runVerifyPhase({ surface: "durable", writtenPaths, results: null });
-    return { ok: outcome.mayFinish, note: outcome.note };
-  },
-};
+/** The verify hook with no engine couplings: the honest shell-less verdict. */
+export const verifyHook: VerifyHook = createVerifyHook();

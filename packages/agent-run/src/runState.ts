@@ -5,23 +5,20 @@
 
 import { initialRunPolicy, type RunPolicyState } from "@builderforce/run-policy";
 import type { ParsedToolCall } from "@builderforce/agent-loop";
-import type { ReadCoverageState, RunMessage, RunPolicy, RunState } from "./contract.js";
+import type { ReadCoverageState, RunMessage, RunPolicy, RunState, RunTask } from "./contract.js";
+import { initialFinishGateState } from "./policy/finish/gates.js";
 
-/** A fresh run's state. Every slice starts empty; a hook fills its own. */
-export function freshState(policy: RunPolicy): RunState {
+/**
+ * A fresh run's state. Every slice starts empty; a hook fills its own. The finish
+ * counters start the way `policy/finish` starts them: a sub-agent's deliverable gate
+ * starts spent, because its OWNER is held to it for the whole tree.
+ */
+export function freshState(policy: RunPolicy, task: RunTask): RunState {
   return {
     messages: [],
     step: 0,
     guards: {},
-    finish: {
-      noDeliverableBlocked: false,
-      reviewVerdictRecorded: false,
-      placeholderBlocks: 0,
-      ciPendingBlocks: 0,
-      ciFailureBlocks: 0,
-      ciVerified: false,
-      finishBlockedOnce: false,
-    },
+    finish: initialFinishGateState(undefined, task.dispatch.parentRunId !== undefined),
     model: initialModelState(policy),
     memory: { memory: { created: [], edited: [], deleted: [], read: [], searched: [] }, tools: [] },
     compaction: { compactions: 0 },
@@ -45,8 +42,8 @@ function freshReads(): ReadCoverageState {
 }
 
 /** The state a resume hands back, with every slice present even if an older writer omitted one. */
-export function resumeState(saved: RunState, policy: RunPolicy): RunState {
-  const fresh = freshState(policy);
+export function resumeState(saved: RunState, policy: RunPolicy, task: RunTask): RunState {
+  const fresh = freshState(policy, task);
   return {
     ...fresh,
     ...saved,

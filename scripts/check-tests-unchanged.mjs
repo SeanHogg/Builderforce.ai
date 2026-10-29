@@ -1,108 +1,188 @@
 /**
  * check:tests-unchanged — PRD 35 §5.1, report mode.
  *
- * §5.1 forbids editing a test to fit new code: the only allowed change to a test file
- * on a `feat/agent-run-ws*` branch is an import line that moved from a deleted module
- * to its replacement, plus the `vi.mock` path that follows it. Everything else —
- * changed inputs, changed fixtures, changed expected values, a deleted test, a new
- * `.skip`/`.only`/`.todo`, a loosened matcher — invalidates the oracle and fails the
- * workstream.
+ * §5.1 forbids editing a test to fit new code: the only allowed change to a test file is
+ * an import that moved from a deleted module to its replacement, plus the `vi.mock` path
+ * that follows it. Everything else — changed inputs, changed fixtures, changed expected
+ * values, a deleted test, a new `.skip`/`.only`/`.todo`/`it.fails`, a loosened matcher —
+ * invalidates the oracle.
  *
- * This guard diffs every test file the current branch touches against `main` and
- * reports which lines changed and whether each hunk is an import-only change.
+ * Two kinds of test file are checked:
  *
- * REPORT MODE (WS1): it prints a per-file report. WS7 flips it to enforced mode —
- * failing on any non-import hunk and any new skip marker. Until then the program
- * works against this baseline.
+ *   1. EDITED — a test that exists on BASE and differs in the working tree (committed on
+ *      this branch or not). Its body is compared with BASE's after both have their import
+ *      statements and `vi.mock` paths normalised away; any other difference is reported.
+ *   2. BROUGHT ALONG — a test under `packages/agent-run/test/` that names its source test
+ *      (a backticked `*.test.ts` path in its header, e.g. "brought along from
+ *      `api/.../compactMessages.test.ts`"). §5.1 says such a file runs its source's cases
+ *      UNCHANGED, so its body is compared with the source's the same way, and the number
+ *      of `it(` / `test(` cases must not drop.
+ *
+ * REPORT MODE (WS1): it prints a per-file verdict and exits 0. WS7 flips it to enforced
+ * mode; pass `--enforce` to preview that verdict (exit 1 on any REVIEW). A repository
+ * where BASE cannot be read (a shallow clone, no `main`) reports that and exits 0 — a
+ * report-mode guard never fails a build on its own plumbing.
  */
 import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { collectSourceFiles, toPosix } from './lib/moduleImports.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-
-/** The base branch the feature branches cut from. */
 const BASE = process.env.AGENT_RUN_BASE ?? 'main';
+const ENFORCE = process.argv.includes('--enforce');
+const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
+const BROUGHT_ALONG_DIR = 'packages/agent-run/test';
 
-/** True when a changed line is an allowed import-related edit (an `import`/`export ... from`,
- *  a `vi.mock`/`vi.doMock` path argument, or the closing of a multi-line import). */
-function isImportLine(line) {
-  const t = line.trim();
-  return (
-    /\bimport\b/.test(t) ||
-    /\bfrom\s+['"][^'"]+['"]/.test(t) ||
-    /\bexport\b[^'"]*\bfrom\s+['"][^'"]+['"]/.test(t) ||
-    /\bvi\.(do)?mock\s*\(/.test(t) ||
-    /^[)\]}]+\s*;?\s*$/.test(t) || // the closing paren/brace of a multi-line import or mock
-    /^from\s+['"][^'"]+['"]/.test(t) // the `from` tail of a multi-line import
-  );
+function git(args) {
+  return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 });
 }
 
-/** True when `file` exists on BASE — §5.1 governs edits to pre-existing tests; a brand-new
- *  test file (e.g. a new package's suite) is not an edit of the oracle. */
-function existsOnBase(file) {
+/** The file's content on BASE, or null when it is not there. */
+function onBase(file) {
   try {
-    execFileSync('git', ['cat-file', '-e', `${BASE}:${file}`], { cwd: repoRoot, stdio: 'ignore' });
-    return true;
+    return git(['show', `${BASE}:${file}`]);
   } catch {
-    return false;
+    return null;
   }
 }
 
-/** Every pre-existing test file this branch changed relative to BASE. */
-function changedTestFiles() {
-  const out = execFileSync('git', ['diff', '--name-only', `${BASE}...HEAD`], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  });
-  return out
+/**
+ * A test file's body with everything §5.1 lets change normalised away: comments, import /
+ * re-export statements (single- or multi-line), `vi.mock` / `vi.doMock` path arguments,
+ * quote style and blank lines. What is left is the oracle — inputs, fixtures, expectations.
+ */
+function oracleLines(text) {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '')
+    .replace(/^\s*import\s+[\s\S]*?from\s*['"][^'"]+['"]\s*;?\s*$/gm, '')
+    .replace(/^\s*import\s*['"][^'"]+['"]\s*;?\s*$/gm, '')
+    .replace(/^\s*export\s+(?:type\s+)?(?:\*|\{[\s\S]*?\})\s*from\s*['"][^'"]+['"]\s*;?\s*$/gm, '')
+    .replace(/\bvi\.(do)?mock\(\s*['"][^'"]+['"]/g, 'vi.$1mock(<path>')
+    .replace(/'/g, '"')
     .split('\n')
-    .map((s) => s.trim())
-    .filter((s) => /\.(test|spec)\.[cm]?[jt]sx?$/.test(s))
-    .filter(existsOnBase);
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
 }
 
-/** The diff hunks of one file, split into added (`+`) and removed (`-`) content lines. */
-function fileDiff(file) {
-  const out = execFileSync('git', ['diff', `${BASE}...HEAD`, '--', file], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  });
+/** How many test cases a file declares (`it(`, `test(`, and their `.each` forms). */
+function caseCount(text) {
+  return (text.match(/^\s*(?:it|test)(?:\.each\([\s\S]*?\))?\s*\(/gm) ?? []).length;
+}
+
+/** Skip / only / todo / it.fails markers. */
+function skipMarkers(text) {
+  return (text.match(/\b(?:it|test|describe)\.(?:skip|only|todo|fails)\b/g) ?? []).length;
+}
+
+/** Lines in `after` that are not in `before` (and vice versa), as a multiset difference. */
+function lineDiff(before, after) {
+  const count = new Map();
+  for (const line of before) count.set(line, (count.get(line) ?? 0) + 1);
   const added = [];
-  const removed = [];
-  for (const line of out.split('\n')) {
-    if (line.startsWith('+++') || line.startsWith('---')) continue;
-    if (line.startsWith('+')) added.push(line.slice(1));
-    else if (line.startsWith('-')) removed.push(line.slice(1));
+  for (const line of after) {
+    const n = count.get(line) ?? 0;
+    if (n > 0) count.set(line, n - 1);
+    else added.push(line);
   }
+  const removed = [...count.entries()].flatMap(([line, n]) => Array(n).fill(line));
   return { added, removed };
 }
 
-console.log(`check:tests-unchanged (report mode, base=${BASE})`);
+/** Compare one test against its oracle; returns the verdict line and whether it needs review. */
+function verdict(label, oracleText, currentText) {
+  const { added, removed } = lineDiff(oracleLines(oracleText), oracleLines(currentText));
+  const before = caseCount(oracleText);
+  const after = caseCount(currentText);
+  const newSkips = Math.max(0, skipMarkers(currentText) - skipMarkers(oracleText));
+  const problems = [];
+  // Added lines alone are new cases or new fixtures — allowed. A REMOVED oracle line is an
+  // input, a fixture or an expectation that no longer runs as written.
+  if (removed.length > 0) problems.push(`${removed.length} oracle line(s) changed/removed (${added.length} added)`);
+  if (after < before) problems.push(`cases ${before} → ${after}`);
+  if (newSkips > 0) problems.push(`${newSkips} new skip marker(s)`);
+  const review = problems.length > 0;
+  console.log(`  ${label}: ${review ? `REVIEW (${problems.join('; ')})` : 'import-only'}`);
+  if (review) for (const line of removed.slice(0, 3)) console.log(`      - ${line.slice(0, 140)}`);
+  return review;
+}
 
-const files = changedTestFiles();
-if (files.length === 0) {
-  console.log('  No test files changed on this branch relative to ' + BASE + '.');
-  console.log('  Enforced in WS7 — this guard is report-only until the program reaches delete/close.');
+/** Pre-existing test files that differ from BASE — committed on this branch or still in the tree. */
+function editedTests() {
+  const changed = new Set();
+  for (const range of [[`${BASE}...HEAD`], []]) {
+    for (const file of git(['diff', '--name-only', '--diff-filter=MR', ...range]).split('\n')) {
+      const f = file.trim();
+      if (f && TEST_FILE.test(f)) changed.add(f);
+    }
+  }
+  return [...changed].filter((f) => existsSync(resolve(repoRoot, f)) && onBase(f) !== null).sort();
+}
+
+/** Tests the branch DELETED that exist on BASE — a deleted oracle is never import-only. */
+function deletedTests() {
+  return git(['diff', '--name-only', '--diff-filter=D', `${BASE}...HEAD`])
+    .split('\n')
+    .concat(git(['diff', '--name-only', '--diff-filter=D']).split('\n'))
+    .map((f) => f.trim())
+    .filter((f) => f && TEST_FILE.test(f));
+}
+
+/** agent-run tests that name the source test they were brought along from. */
+function broughtAlong() {
+  const pairs = [];
+  for (const file of collectSourceFiles(resolve(repoRoot, BROUGHT_ALONG_DIR))) {
+    if (!TEST_FILE.test(file)) continue;
+    const text = readFileSync(file, 'utf8');
+    const header = text.slice(0, 1500);
+    const sources = [...header.matchAll(/`([\w./-]+\.(?:test|spec)\.[cm]?[jt]sx?)`/g)]
+      .map(([, path]) => path)
+      .filter((path) => !path.startsWith('packages/agent-run/') && existsSync(resolve(repoRoot, path)));
+    if (sources.length === 1) pairs.push({ file: toPosix(file).replace(toPosix(repoRoot) + '/', ''), source: sources[0], text });
+  }
+  return pairs;
+}
+
+console.log(`check:tests-unchanged (${ENFORCE ? 'enforce preview' : 'report mode'}, base=${BASE})`);
+
+let review = 0;
+try {
+  git(['rev-parse', '--verify', BASE]);
+} catch {
+  console.log(`  Base '${BASE}' is not readable here (shallow clone?) — nothing compared.`);
   process.exit(0);
 }
 
-let anyNonImport = false;
-for (const file of files) {
-  const { added, removed } = fileDiff(file);
-  const importOnly =
-    added.every(isImportLine) &&
-    removed.every(isImportLine) &&
-    // A pure import move adds and removes the same number of lines; a deleted test
-    // removes far more than it adds, which must not read as "import-only".
-    added.length > 0 &&
-    removed.length > 0;
-  const newSkip = added.some((l) => /\.(skip|only|todo)\b/.test(l) || /\bit\.fails\b/.test(l));
-  const flag = importOnly && !newSkip ? 'import-only' : 'REVIEW';
-  if (!importOnly || newSkip) anyNonImport = true;
-  console.log(`  ${file}: ${flag} (+${added.length}/-${removed.length}${newSkip ? ', new skip marker' : ''})`);
+let edited = [];
+let deleted = [];
+try {
+  edited = editedTests();
+  deleted = deletedTests();
+} catch {
+  // No merge base with BASE (a shallow clone): the edited-file half cannot be read here.
+  console.log(`  No merge base with '${BASE}' — edited-test comparison skipped.`);
+}
+if (edited.length === 0 && deleted.length === 0) console.log(`  No pre-existing test file differs from ${BASE}.`);
+for (const file of edited) {
+  if (verdict(file, onBase(file) ?? '', readFileSync(resolve(repoRoot, file), 'utf8'))) review += 1;
+}
+for (const file of deleted) {
+  console.log(`  ${file}: REVIEW (deleted)`);
+  review += 1;
+}
+
+const pairs = broughtAlong();
+if (pairs.length > 0) console.log(`  Brought-along tests in ${BROUGHT_ALONG_DIR}, against the source they name:`);
+for (const { file, source, text } of pairs) {
+  if (verdict(`${file} ← ${source}`, readFileSync(resolve(repoRoot, source), 'utf8'), text)) review += 1;
 }
 
 console.log('  §5.1: only import / vi.mock path changes are allowed in a test file.');
-console.log('  Enforced in WS7 — this guard is report-only until the program reaches delete/close.');
+if (ENFORCE && review > 0) {
+  console.log(`  ✗ ${review} test file(s) need review.`);
+  process.exit(1);
+}
+if (!ENFORCE) console.log(`  Report only (${review} to review) — WS7 enforces.`);
 process.exit(0);

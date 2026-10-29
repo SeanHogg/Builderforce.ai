@@ -1,10 +1,51 @@
 /**
  * What the model reads besides the transcript: the system prompt (persona, then task)
- * and the volatile turn-context block, rebuilt every turn and never part of the cached
- * prefix.
+ * and the volatile turn-context tail, rebuilt for every request and never part of the
+ * cached prefix.
+ *
+ * The tail follows the ONE volatile-tail convention (`@seanhogg/builderforce-memory/
+ * handoff` `volatileTail`): a single `user` row opened by the `<run-state>` tag,
+ * appended AFTER the history, built per request and NEVER persisted into the
+ * transcript. Both readers of that convention depend on it — the gateway's prompt
+ * caching puts the history breakpoint before the tagged block (an untagged or
+ * mid-transcript block that changes every turn re-bills the whole prefix), and the
+ * packer never mistakes a tagged block for the user's latest directive.
  */
 
-import type { ContextPack, RunMessage, RunTask } from "./contract.js";
+import type { ToolSchema } from "@builderforce/agent-tools";
+import { volatileTail } from "@seanhogg/builderforce-memory/handoff";
+
+import type { ContextPack, RunMessage, RunState, RunTask } from "./contract.js";
+import type { PolicyHooks } from "./policy/index.js";
+import { policyContext, type RunAgentInput } from "./runContext.js";
+
+/** The pack a run carries when its source has nothing (or cannot build). */
+export const EMPTY_PACK: ContextPack = { focus: [], facts: [], recall: [] };
+
+/**
+ * Build the context pack ONCE, before turn 1, with no model call (§6.10): the adapter's
+ * `ContextSource`, then the context policy's recall lines appended. The recall hook is
+ * handed a context source that answers the pack already built, so the source is asked
+ * exactly once per run. A source that throws yields the empty pack — the task still has
+ * its prompt, and a missing context is the model's to notice, not a failed run.
+ */
+export async function buildContextPack(input: RunAgentInput, hooks: PolicyHooks, state: RunState, offered: ToolSchema[]): Promise<ContextPack> {
+  let pack: ContextPack;
+  try {
+    pack = await input.ports.context.pack(input.task);
+  } catch {
+    pack = EMPTY_PACK;
+  }
+  const built = pack;
+  const once: RunAgentInput = { ...input, ports: { ...input.ports, context: { pack: () => built } } };
+  let recalled: readonly string[] | void = undefined;
+  try {
+    recalled = await hooks.context.recall(policyContext(once, state, { messages: [], tools: offered }, state.step, 0));
+  } catch {
+    recalled = undefined; // recall is best-effort; it never fails a run
+  }
+  return recalled && recalled.length > 0 ? { ...pack, recall: [...pack.recall, ...recalled] } : pack;
+}
 
 /** The system prompt: the persona, then the task. The context pack is NOT here — it is volatile. */
 export function systemPrompt(task: RunTask): string {
@@ -15,9 +56,8 @@ export function systemPrompt(task: RunTask): string {
 }
 
 /**
- * The volatile turn-context block. It is rebuilt every turn from the pack and the
- * memory brief, and it is NEVER part of the cached prefix — that is why it is its
- * own message rather than folded into the system prompt.
+ * The turn-context sections, from the pack and the memory brief, or null when there is
+ * nothing to say.
  */
 export function turnContextBlock(pack: ContextPack, brief: string | null): string | null {
   const lines: string[] = [];
@@ -36,40 +76,19 @@ export function turnContextBlock(pack: ContextPack, brief: string | null): strin
     lines.push(`## repo ${repo.repo}`, `branch ${repo.branch}`, repo.dirty.length > 0 ? `dirty: ${repo.dirty.join(", ")}` : "clean");
   }
   for (const fact of pack.facts) lines.push(`## ${fact.key}`, fact.content);
-  for (const line of pack.recall) lines.push(line);
+  if (pack.recall.length > 0) lines.push("## recall", ...pack.recall);
   if (brief && brief.trim()) lines.push("## brief", brief.trim());
   if (lines.length === 0) return null;
   return lines.join("\n");
 }
 
-/** The volatile block's marker, so a later turn replaces it rather than stacking another. */
-const VOLATILE_PREFIX = "<turn-context>";
-const VOLATILE_SUFFIX = "</turn-context>";
-
-/** Replace the previous volatile block with this turn's, or append one. */
-export function replaceVolatile(transcript: RunMessage[], block: string | null): void {
-  const index = transcript.findIndex((row) => row.role === "user" && row.content.startsWith(VOLATILE_PREFIX));
-  if (!block) {
-    if (index >= 0) transcript.splice(index, 1);
-    return;
-  }
-  const row: RunMessage = { role: "user", content: `${VOLATILE_PREFIX}\n${block}\n${VOLATILE_SUFFIX}` };
-  if (index >= 0) transcript[index] = row;
-  else transcript.push(row);
-}
-
 /**
- * The volatile block's inner content, as saved in a resumed transcript, or null when
- * none is present. A resumed run replays the pack it saved (not a rebuilt one), so the
- * volatile block the last turn wrote is reconstructed instead of being dropped.
+ * The messages one request carries: the transcript as it stands plus this turn's
+ * volatile tail, LAST. The transcript itself is never touched, so the saved state (and
+ * the cached prefix) holds no per-turn context and a resumed tick rebuilds the same tail
+ * from the persisted pack.
  */
-export function extractVolatile(transcript: RunMessage[]): ContextPack | null {
-  const row = transcript.find((r) => r.role === "user" && r.content.startsWith(VOLATILE_PREFIX) && r.content.endsWith(VOLATILE_SUFFIX));
-  if (!row) return null;
-  const inner = row.content.slice(VOLATILE_PREFIX.length, row.content.length - VOLATILE_SUFFIX.length).trim();
-  // The block's exact pack is not recoverable field-for-field; what matters for trace
-  // fidelity is that a non-empty block is re-rendered (a non-empty focus/facts pack),
-  // which keeps the resumed run's volatile row from vanishing.
-  return inner ? { focus: [{ path: "<resumed>" }], facts: [], recall: [] } : null;
+export function withVolatileTail(transcript: readonly RunMessage[], pack: ContextPack, brief: string | null): RunMessage[] {
+  const tail = volatileTail([turnContextBlock(pack, brief)]);
+  return tail ? [...transcript, tail] : [...transcript];
 }
-
