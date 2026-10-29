@@ -13,7 +13,7 @@
  * version token (`outcomesVersionKey`) — the run scorer bumps it whenever a run lands,
  * so a new run re-reads rather than waiting out the TTL.
  */
-import { and, desc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull } from 'drizzle-orm';
 import { getCacheVersion, getOrSetCached, outcomesVersionKey } from '../../infrastructure/cache/readThroughCache';
 import type { Db } from '../../infrastructure/database/connection';
 import { executions, runModelOutcomes } from '../../infrastructure/database/schema';
@@ -45,8 +45,7 @@ async function readRuns(db: Db, tenantId: number, days: number, projectId: numbe
       executionId: runModelOutcomes.executionId,
       taskId: runModelOutcomes.taskId,
       model: runModelOutcomes.resolvedModel,
-      // An unknown cost (NULL) contributes nothing to a dashboard sum; it is never read as a price.
-      costUsdMillicents: sql<number>`coalesce(${runModelOutcomes.costUsdMillicents}, 0)`,
+      costUsdMillicents: runModelOutcomes.costUsdMillicents,
       toolErrors: runModelOutcomes.toolErrors,
     })
     .from(runModelOutcomes)

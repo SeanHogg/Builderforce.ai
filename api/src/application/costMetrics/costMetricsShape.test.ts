@@ -95,13 +95,13 @@ describe('buildRunBudget', () => {
 describe('compareLeverArms', () => {
   it('pairs each lever on-arm with its off-arm and differences the metrics', () => {
     const groups = [
-      toGroupMetrics(row({ groupKey: 'c1_deferred_tools', arm: 'on', cacheReadTokens: 8_000, medianContextTokens: 600 })),
-      toGroupMetrics(row({ groupKey: 'c1_deferred_tools', arm: 'off', cacheReadTokens: 5_000, medianContextTokens: 1_000 })),
+      toGroupMetrics(row({ groupKey: 'c2_observation_masking', arm: 'on', cacheReadTokens: 8_000, medianContextTokens: 600 })),
+      toGroupMetrics(row({ groupKey: 'c2_observation_masking', arm: 'off', cacheReadTokens: 5_000, medianContextTokens: 1_000 })),
       toGroupMetrics(row({ groupKey: 'b2_semantic_cache', arm: 'off' })),
     ];
     const [b2, c1] = compareLeverArms(groups);
-    expect(c1!.lever).toBe('c1_deferred_tools');
-    expect(c1!.requirement).toBe('C1');
+    expect(c1!.lever).toBe('c2_observation_masking');
+    expect(c1!.requirement).toBe('C2');
     expect(c1!.delta.cacheHitRate).toBeCloseTo(0.3);
     expect(c1!.delta.medianContextTokens).toBe(-400);
     expect(b2!.on).toBeNull();
@@ -110,7 +110,7 @@ describe('compareLeverArms', () => {
 
   it('only builds comparisons for groupBy=lever', () => {
     expect(buildCostMetricsReport([row()], { window: '7d', windowDays: 7, groupBy: 'none', limit: 200, served: NO_SERVED })).not.toHaveProperty('levers');
-    const report = buildCostMetricsReport([row({ groupKey: 'c1_deferred_tools', arm: 'on' })], { window: '30d', windowDays: 30, groupBy: 'lever', limit: 1, served: NO_SERVED });
+    const report = buildCostMetricsReport([row({ groupKey: 'c2_observation_masking', arm: 'on' })], { window: '30d', windowDays: 30, groupBy: 'lever', limit: 1, served: NO_SERVED });
     expect(report.levers).toHaveLength(1);
     expect(report.truncated).toBe(true);
     expect(report.basis).toBe('provider_reported');

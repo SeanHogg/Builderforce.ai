@@ -11,7 +11,7 @@ const alert = vi.hoisted(() => ({ notifyContainmentStop: vi.fn(async () => 'rais
 vi.mock('../../alerts/containmentAlert', () => alert);
 
 const ALL_ON = {
-  COST_LEVER_A2_RUN_BUDGET: 'on', COST_LEVER_B1_STABLE_PREFIX: 'on', COST_LEVER_C1_DEFERRED_TOOLS: 'on',
+  COST_LEVER_A2_RUN_BUDGET: 'on', COST_LEVER_B1_STABLE_PREFIX: 'on',
   COST_LEVER_C2_OBSERVATION_MASKING: 'on', COST_LEVER_C3_TASK_STATE: 'on', COST_LEVER_D5_OUTPUT_CAPS: 'on',
 };
 
