@@ -114,7 +114,7 @@ describe("the native participant's run setup", () => {
     const mine = fakeGateway([{ text: "never asked" }]);
     const settleRun = vi.fn();
     const errors: string[] = [];
-    await runNativeBrain({
+    const ran = await runNativeBrain({
       chatId,
       systemPrompt: "sys",
       seed: [],
@@ -131,10 +131,39 @@ describe("the native participant's run setup", () => {
       settleRun,
     });
 
+    expect(ran).toBe(false);
     expect(mine.requests).toHaveLength(0);
     expect(settleRun).not.toHaveBeenCalled();
     expect(errors).toEqual(["Still working on your last request."]);
     release();
     await first;
+  });
+
+  it("also counts the run host's setup window: a key the host claimed but has not started is busy", async () => {
+    const mine = fakeGateway([{ text: "never asked" }]);
+    const settleRun = vi.fn();
+    const errors: string[] = [];
+    const ran = await runNativeBrain({
+      chatId: ++nextChatId,
+      systemPrompt: "sys",
+      seed: [],
+      userTurn: "second",
+      tools: [],
+      root: "/workspace",
+      permissionMode: "ask",
+      approve: async () => true,
+      stream: mine.stream,
+      persistence: transientRunPersistence(),
+      signal: new AbortController().signal,
+      labels: { ...LABELS, alreadyRunning: "busy" },
+      events: { onText: () => undefined, onToolStart: () => undefined, onToolResult: () => undefined, onError: (message) => { errors.push(message); } },
+      settleRun,
+      isBusy: () => true,
+    });
+
+    expect(ran).toBe(false);
+    expect(mine.requests).toHaveLength(0);
+    expect(settleRun).not.toHaveBeenCalled();
+    expect(errors).toEqual(["busy"]);
   });
 });

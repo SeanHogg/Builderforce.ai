@@ -121,14 +121,19 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
   const active = new Set<number>();
   /** The claimed keys whose loop has not ENDED yet — before it starts, a steer is heard at turn 1. */
   const settingUp = new Set<number>();
+  /** Is the key claimed - setting up, running or unwinding, by this host or any other path? */
+  const isBusy = (key: number): boolean => active.has(key) || isRunning(key);
+  /** Set by `dispose`: a turn that was waiting must not start a run on a host that is gone. */
+  let disposed = false;
   /** A turn for a key whose run is live waits here, never dropped (`runTurnQueue.ts`). */
-  const turnQueue = createTurnQueue<RunSpec>({ isRunning, isLive: (key) => active.has(key) || isRunning(key), subscribe: subscribeRun, run: (spec) => run(spec) });
+  const turnQueue = createTurnQueue<RunSpec>({ isRunning, isLive: isBusy, subscribe: subscribeRun, run: (spec) => run(spec) });
 
   /**
    * ONE run entry for every run: a chat's turn, a sub-agent (its key is its own, its
    * chat is its owner's), and an idle owner woken by a child's report.
    */
   const run = async (p: RunSpec): Promise<void> => {
+    if (disposed) return;
     const key = p.chatId;
     watches.watch(key);
     // A run is live on this key (a second tab, a double submit, a steer turn re-submitted as
@@ -136,7 +141,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     if (active.has(key)) return turnQueue.park(key, p);
     if (isRunning(key)) {
       await turnQueue.whenIdle(key);
-      return run(p);
+      // The wait also ends because the host was disposed; a disposed host starts nothing.
+      return disposed ? undefined : run(p);
     }
     active.add(key);
     settingUp.add(key);
@@ -325,7 +331,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // `builderforce.models.subagent` — what a sub-agent codes on unless its owner's pick is strict.
     ...(ports.runSettings ? { subagentModel: async () => (await ports.runSettings!()).subagentModel } : {}),
     start,
-    isBusy: (key) => active.has(key) || isRunning(key),
+    isBusy,
     autoApproveOf,
     persistence: ports.persistence,
     announce,
@@ -333,7 +339,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
   const steering = createRunSteer({
     registry,
     childHost,
-    isBusy: (key) => active.has(key) || isRunning(key),
+    isBusy,
     isSettingUp: (key) => settingUp.has(key),
     // A Stop ends the conversation's work: the turns parked behind the run go with it.
     dropParked: (key) => turnQueue.drop(key),
@@ -381,7 +387,9 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       for (const chatId of known) if (chatId > 0) sink.post({ type: "run.children", chatId, children: registry.viewsIn(chatId) });
       return detach;
     },
+    isBusy,
     dispose() {
+      disposed = true;
       turnQueue.dispose();
       offStore();
       watches.dispose();

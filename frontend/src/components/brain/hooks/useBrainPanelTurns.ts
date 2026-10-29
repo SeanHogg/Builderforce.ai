@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
 import { useChatTurns, type ChatInputAttachment, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import type { useBrainChats, useBrainConversation } from '@/lib/brain';
 import { useDockedComposer } from '@/lib/brain/dockedBrain';
@@ -41,7 +41,10 @@ export function useBrainPanelTurns({ conv, chats, recipient, input, setInput, sh
   const turns = useChatTurns<BrainPanelTurn>({
     running: conv.sending,
     runKey: chats.activeChatId,
-    send: ({ text, addressedTo, attachments }) => conv.send(text, { addressedTo, ...(attachments?.length ? { attachments } : {}) }),
+    // ALWAYS given its attachments (none included): a turn that carries its own files neither
+    // takes nor clears what the composer holds now - a held turn flushed while a new file is
+    // pending must leave that file where it is (`useBrainConversation.send`).
+    send: ({ text, addressedTo, attachments }) => conv.send(text, { addressedTo, attachments: attachments ?? [] }),
     textOf: turnText,
     // A message typed mid-run STEERS the run (the shared door's default): its attachments
     // ride along, and what the run leaves in its inbox becomes the next turn.
@@ -81,16 +84,21 @@ export function useBrainPanelTurns({ conv, chats, recipient, input, setInput, sh
   }), [setInput, showChatTab, assistantGate.assistantAllowed, submitTurn]);
   useDockedComposer(acceptsHandover, dockedComposer);
 
+  // The conversation changes identity on every token; the composer's handlers must not.
+  const convRef = useRef(conv);
+  // eslint-disable-next-line react-hooks/refs
+  convRef.current = conv;
+
   /**
    * Offer what is in the box through `offer` (the door's submit, or its explicit queue). The
    * composer's attachments travel with the turn - and leave the composer once the turn has
-   * them, because a steer or a held turn never passes through `conv.send`, which is what
-   * normally clears them.
+   * them, because the turn is sent WITH its files (`conv.send` does not take the composer's
+   * for a turn that has its own), so nothing else would clear them.
    */
   const offerBox = useCallback(async (offer: (turn: BrainPanelTurn) => Promise<boolean>) => {
     const text = input.trim();
     if (!text || !assistantGate.assistantAllowed) return;
-    const attachments = [...conv.pendingAttachments];
+    const attachments = [...convRef.current.pendingAttachments];
     setInput('');
     // Audited engagement signal: interacting with the AI agent is billable activity.
     trackActivity('agent_message', { weight: 2 });
@@ -98,8 +106,8 @@ export function useBrainPanelTurns({ conv, chats, recipient, input, setInput, sh
     // session) so the user's message is never silently lost.
     const ok = await offer({ text, addressedTo: recipient, ...(attachments.length ? { attachments } : {}) });
     if (!ok) setInput((cur) => cur || text);
-    else for (const a of attachments) conv.removeAttachment(a.key);
-  }, [assistantGate.assistantAllowed, conv, input, recipient, setInput]);
+    else for (const a of attachments) convRef.current.removeAttachment(a.key);
+  }, [assistantGate.assistantAllowed, input, recipient, setInput]);
 
   const handleSend = useCallback(() => offerBox(submitTurn), [offerBox, submitTurn]);
   /** The explicit alternative to steering: hold what is in the box for after the run. */

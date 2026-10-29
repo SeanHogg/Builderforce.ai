@@ -64,6 +64,12 @@ export interface ChatInputProps {
    */
   onQueue?: () => void;
   /**
+   * Whether Send mid-run STEERS the live run (true) or holds the message for after it (false).
+   * The host derives it from the same predicate its turn door decides with; absent, a host
+   * that gave `onQueue` is taken to steer.
+   */
+  sendSteers?: boolean;
+  /**
    * Turns the user typed while a run was in flight and this composer is holding
    * (the host's `useChatTurns`). Listed above the input as the shared
    * `QueuedTurnChips`, each removable — the same chips on every surface.

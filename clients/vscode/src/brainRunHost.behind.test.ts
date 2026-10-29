@@ -154,10 +154,24 @@ describe("a turn submitted while the key's run is live (PRD 35 E10)", () => {
     release();
     await Promise.all([first, parkedBefore, typedAfter]);
 
-    const sent = seen.map(textOf).join("
-");
+    const sent = seen.map(textOf).join("\n");
     expect(sent).not.toContain("parked before the stop");
     expect(seen.some((ctx) => textOf(ctx).includes("typed after the stop"))).toBe(true);
     expect(isRunning(chatId)).toBe(false);
+  });
+
+  it("a host disposed while a turn waits settles it and starts nothing", async () => {
+    const chatId = freshChatId();
+    const { seen, release, host } = slowHost();
+    const first = start(host, chatId, "first ask");
+    while (!isRunning(chatId)) await new Promise((r) => setTimeout(r, 5));
+    const waiting = start(host, chatId, "waits for a host that goes away");
+
+    host.dispose();
+    release();
+    await Promise.all([first, waiting]);
+
+    expect(seen.map(textOf).join("\n")).not.toContain("waits for a host that goes away");
+    expect(host.isBusy(chatId)).toBe(false);
   });
 });

@@ -33,7 +33,7 @@ const noop = () => {};
 export function ChatInput(props: ChatInputProps) {
   const {
     value, onChange, onSubmit, placeholder, ariaLabel, disabled = false, submitLabel,
-    running = false, onStop, onQueue, queued, rows = 2, submitOnEnter = true,
+    running = false, onStop, onQueue, sendSteers, queued, rows = 2, submitOnEnter = true,
     onAttach, onAddContext, webBrowsing, onWebBrowsingChange, accountSettingsHref,
     modeVocabulary, memoryUnavailableReason, showBrainIcon = false, showVoice = false,
     pendingAttachments = NO_ATTACHMENTS, onRemoveAttachment, secondaryContent,
@@ -58,7 +58,7 @@ export function ChatInput(props: ChatInputProps) {
   // its sends and has no steer (the canvas) QUEUES them (`queueHold`); a host with neither
   // acts on it now, so its own verb names that button.
   const holdsQueue = queued !== undefined;
-  const steers = onQueue !== undefined;
+  const steers = sendSteers ?? onQueue !== undefined;
   const labels = useMemo<BrainComposerLabels>(() => {
     const queueSend = holdsQueue && !steers ? t('queueHold') : undefined;
     if (!submitLabel && !memoryUnavailableReason && !queueSend) return bundle;

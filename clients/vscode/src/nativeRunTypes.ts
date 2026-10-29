@@ -123,7 +123,7 @@ export interface NativeBrainRunOptions {
   /**
    * The task context pack's fields (PRD 35 E2 / E7) — the SAME fields the panel's run host
    * builds (`runSetup.ts` `runContextFields`): the pack's block as the turn context, the recall
-   * hint, the files it served whole, and the BYO preflight. Spread under {@link turnContext}.
+   * hint, the files it served whole, and the BYO preflight.
    */
   runContext?: Pick<BrainRunRequest, "turnContext" | "recallHint" | "servedReads" | "modelPreflight">;
   /** The run's default checkout, read per call, and the wait for it to resolve (PRD 35 E3). */
@@ -132,6 +132,9 @@ export interface NativeBrainRunOptions {
   /** The run SETTLED — finished, failed or stopped: release what it held outside the loop
    *  (its background shell jobs, `localShellJobs.ts`). Called once, whatever the outcome. */
   settleRun?: (runKey: number) => void;
+  /** Whether another path holds the chat's run - the run host, which also counts the window
+   *  while a run is still setting up. Asked with `isRunning` before this call claims the key. */
+  isBusy?: (chatId: number) => boolean;
   /** The deterministic-first PreFetch port ("where is X defined?" answered with no model
    *  call, and every registry row after it) — the same port the panel's run host passes. */
   prefetch?: BrainRunRequest["prefetch"];

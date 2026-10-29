@@ -819,3 +819,42 @@ describe('Stop while a send is still getting ready', () => {
     expect(rowsOfRole('user').map((m) => m.content)).toEqual(['do the work']);
   });
 });
+
+describe('a send given its own attachments (a held turn flushed) and the composer\'s pending ones', () => {
+  const held = { key: 'held-1', name: 'old.png', type: 'image/png', imageUrl: 'data:image/png;base64,AA==' };
+
+  async function withPendingFile(chatId: number) {
+    vi.mocked(persistence.upload).mockResolvedValueOnce({ key: 'pending-1', name: 'notes.txt', type: 'text/plain' } as never);
+    const { result: hook } = renderHook(() => useBrainConversation({ chatId, toolSpecs: [], runTool: vi.fn() }), { wrapper });
+    await act(async () => { await hook.current.attach(new File(['x'], 'notes.txt', { type: 'text/plain' })); });
+    expect(hook.current.pendingAttachments.map((a) => a.key)).toEqual(['pending-1']);
+    return hook;
+  }
+
+  it('neither takes nor clears what the composer holds now', async () => {
+    mockStream.mockResolvedValueOnce(result({ text: 'ok' }));
+    const hook = await withPendingFile(35);
+
+    await act(async () => { await hook.current.send('the held one', { attachments: [held as never] }); });
+
+    expect(hook.current.pendingAttachments.map((a) => a.key)).toEqual(['pending-1']);
+  });
+
+  it('a failed send restores nothing into the composer - the turn that was given its files keeps them', async () => {
+    vi.mocked(persistence.sendMessages).mockRejectedValueOnce(new Error('expired'));
+    const hook = await withPendingFile(36);
+
+    await act(async () => { await hook.current.send('the held one', { attachments: [held as never] }); });
+
+    expect(hook.current.pendingAttachments.map((a) => a.key)).toEqual(['pending-1']);
+  });
+
+  it('a send NOT given any still takes the composer\'s and clears it', async () => {
+    mockStream.mockResolvedValueOnce(result({ text: 'ok' }));
+    const hook = await withPendingFile(37);
+
+    await act(async () => { await hook.current.send('with the pending file'); });
+
+    expect(hook.current.pendingAttachments).toEqual([]);
+  });
+});

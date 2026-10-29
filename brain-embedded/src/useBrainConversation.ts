@@ -474,9 +474,12 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
 
       // An explicit opts.attachments (a turn queued while the composer still held them —
       // by the time a queued turn sends, the composer snapshot has moved on) wins over
-      // the live composer snapshot.
+      // the live composer snapshot. A turn GIVEN its attachments is not the composer's: it
+      // neither takes nor clears what the composer holds now (a held turn flushed while a new
+      // file is pending must leave that file where it is), and a failed send restores nothing.
+      const given = opts?.attachments !== undefined;
       const attachments = [...(opts?.attachments ?? pendingAttachments)];
-      setPendingAttachments([]);
+      if (!given) setPendingAttachments([]);
       setLocalError('');
 
       // Persisted/display content stays text-only (the chat tables store a
@@ -550,7 +553,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         // was NOT saved. Restore the attachments too so the whole message can be
         // resent, and signal failure so the composer keeps the typed text.
         if (stillOpen()) {
-          setPendingAttachments(attachments);
+          if (!given) setPendingAttachments(attachments);
           setLocalError(e instanceof Error ? e.message : 'Send failed');
         }
         return false;

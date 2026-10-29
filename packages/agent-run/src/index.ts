@@ -56,11 +56,10 @@ export {
 // The in-process steering queue as a `SteeringSource` port — what a surface that keeps
 // its composer queue in memory hands the agent (`queueRunSteering` posts to it).
 export { queueRunSteering, runSteeringSource } from "./policy/steering/index.js";
-// The queue's other half — what a surface that DRAINS it itself (the Brain's run store) reads.
-// ONE copy: `brain-embedded` re-exports these, it keeps no queue of its own.
 // The product-vocabulary classes the per-turn tool selector expands a query through.
 export { expandWithSynonyms, synonymsFor } from "./policy/tools/toolVocabulary.js";
-// The delegation gate —the ask for sub-agents, whether the run left it undone, and the nudges.
+
+// The delegation gate - the ask for sub-agents, whether the run left it undone, and the nudges.
 export {
   asksForSubagents,
   attemptedDelegation,
@@ -71,6 +70,9 @@ export {
   undelegatedRequestNudge,
   type DelegationRequestInput,
 } from "./policy/subagents/delegationRequest.js";
+
+// The step a steer interrupts, and the rows the model reads for it - one copy, shared with the
+// Brain's run store (`brain-embedded` re-exports these).
 export {
   INTERRUPTED_BY_STEER,
   SKIPPED_BY_STEER,
@@ -79,6 +81,9 @@ export {
   runToolInterruptibly,
   skipOnSteer,
 } from "./policy/steering/index.js";
+
+// The queue's other half - what a surface that DRAINS it itself (the Brain's run store) reads.
+// ONE copy: `brain-embedded` re-exports these, it keeps no queue of its own.
 export {
   drainRunSteering,
   hasRunInterrupt,

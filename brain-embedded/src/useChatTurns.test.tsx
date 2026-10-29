@@ -331,7 +331,7 @@ describe('useChatTurns — direction the run never drained is not lost (B1)', ()
     return renderHook((props: ChatTurnsOptions<string>) => useChatTurns(props), { initialProps: initial });
   }
 
-  it('a steer queued after the loop's final drain is sent as the next turn when the run completes', async () => {
+  it("a steer queued after the loop's final drain is sent as the next turn when the run completes", async () => {
     const send = vi.fn();
     const { result, rerender } = mount({ running: true, runKey: 20, send });
 
@@ -342,9 +342,7 @@ describe('useChatTurns — direction the run never drained is not lost (B1)', ()
     rerender({ running: false, runKey: 20, send });
     expect(send).toHaveBeenCalledTimes(1);
     // Oldest first, as ONE turn.
-    expect(send).toHaveBeenCalledWith('one more thing
-
-and this');
+    expect(send).toHaveBeenCalledWith('one more thing\n\nand this');
     expect(drainRunSteering(20)).toEqual([]);
   });
 
@@ -374,5 +372,64 @@ and this');
 
     rerender({ running: false, runKey: 22, send });
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+describe('useChatTurns - what the door will not steer, and what it will not lose', () => {
+  beforeEach(() => { stopRun.mockClear(); resetRunSteering(); });
+
+  type Turn = { text: string; attachments: Array<{ key: string; name: string; type: string; imageUrl?: string }> };
+  const mountTurns = (send: ChatTurnsOptions<Turn>['send'], runKey: ChatTurnsOptions<Turn>['runKey'] = 40, running = true) =>
+    renderHook((props: ChatTurnsOptions<Turn>) => useChatTurns<Turn>(props), {
+      initialProps: {
+        running, runKey, send, textOf: (t) => t.text, attachmentsOf: (t) => t.attachments,
+        turnOf: (text, attachments) => ({ text, attachments }),
+      } as ChatTurnsOptions<Turn>,
+    });
+
+  it('steers a turn whose files are all pictures, but HOLDS one with a file a steer would drop', async () => {
+    const picture = { key: 'p', name: 'shot.png', type: 'image/png', imageUrl: 'data:image/png;base64,AAA' };
+    const notes = { key: 'n', name: 'notes.txt', type: 'text/plain' };
+    const { result } = mountTurns(vi.fn(), 41);
+
+    await act(async () => { await result.current.submit({ text: 'look at this', attachments: [picture] }); });
+    expect(hasRunInterrupt(41)).toBe(true);
+    expect(result.current.queued.count).toBe(0);
+
+    await act(async () => { await result.current.submit({ text: 'and read this', attachments: [notes] }); });
+    expect(result.current.queued.count).toBe(1);
+    expect(result.current.queued.items[0]?.value.attachments).toEqual([notes]);
+  });
+
+  it('puts a flushed turn the host did not keep back at the front of the queue', async () => {
+    const send = vi.fn().mockResolvedValue(false);
+    const { result, rerender } = mountTurns(send, 42);
+    await act(async () => { await result.current.queueAfter({ text: 'hold me', attachments: [] }); });
+
+    await act(async () => { rerender({ running: false, runKey: 42, send, textOf: (t) => t.text }); });
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(result.current.queued.items.map((i) => i.value.text)).toEqual(['hold me']);
+  });
+
+  it('refuses to hold a blank turn for after', async () => {
+    const send = vi.fn();
+    const { result } = mountTurns(send, 43);
+    await act(async () => { await expect(result.current.queueAfter({ text: '   ', attachments: [] })).resolves.toBe(false); });
+    expect(result.current.queued.count).toBe(0);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('never sends the previous chat\'s unread steer into the chat now showing - it stays in its own inbox', async () => {
+    const send = vi.fn();
+    const { result, rerender } = renderHook((props: ChatTurnsOptions<string>) => useChatTurns(props), {
+      initialProps: { running: true, runKey: 44, send } as ChatTurnsOptions<string>,
+    });
+    await act(async () => { await result.current.submit('for the first chat'); });
+
+    rerender({ running: false, runKey: 45, send });
+
+    expect(send).not.toHaveBeenCalled();
+    expect(drainRunSteering(44).map((m) => m.text)).toEqual(['for the first chat']);
   });
 });

@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { useChatTurns, useRunRefreshTick, type BrainMessage, type ChatInputAttachment, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
+import { steersByDefault, useChatTurns, useRunRefreshTick, type BrainMessage, type ChatInputAttachment, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { request } from '../vscodeBridge';
 import { childTarget, steerRun, type useChatChildren } from './chatChildren';
 import type { QueuedTurn } from './VsCodeComposer';
@@ -95,6 +95,8 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
   // `conv.send` directly is what lost answers — it refuses while the chat is running and
   // says nothing (chat #133). The queue is FIFO, one per completed run (each stays a
   // distinct steerable turn), never flushed across a chat switch, and cleared with it.
+  // How many turns are held right now, for the steer below (it is created before `turns`).
+  const heldCount = useRef(0);
   const turns = useChatTurns<QueuedTurn>({
     running: conv.sending || preparing,
     runKey: chatId,
@@ -115,7 +117,11 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
     // reads that). Holding it for after the run is the explicit alternative: `queueAfter`.
     steer: ({ text, recipient: to, attachments }) => {
       const child = childTarget(text, to, liveChildren);
-      if (!child && !(conv.sending && !to && chatId != null)) return false;
+      // The chat's own run is steered only by a turn that may jump nothing: one behind a turn
+      // held with Alt+Enter waits its turn, and a file that is not a picture is held (a steer
+      // would drop it) - the same predicate the web composer's Send reads.
+      const steersOwnRun = conv.sending && !to && chatId != null && steersByDefault({ directed: false, held: heldCount.current, attachments });
+      if (!child && !steersOwnRun) return false;
       // Reaching here means we WILL steer (a live sub-agent or the running chat run),
       // and the steer path bypasses `conv.send` — which is what normally snapshots +
       // clears `pendingAttachments`. The turn already carries its own attachment
@@ -129,6 +135,8 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
   });
   const { submit: submitTurn } = turns;
   const { submit: holdTurn } = turns.queued;
+  // eslint-disable-next-line react-hooks/refs
+  heldCount.current = turns.queued.count;
 
   // A run moves what the chat row reports (its spend & savings, ticket counts), and the
   // host drives the run, so the in-page loop's `onActivity` never sees it: re-read the row

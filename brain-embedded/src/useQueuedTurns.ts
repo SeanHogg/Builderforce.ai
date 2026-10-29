@@ -42,6 +42,8 @@ export interface QueuedTurns<T = string> {
   submit: (value: T) => boolean;
   /** Drop one held turn (the user removed it, or steered it into the run). */
   remove: (id: number) => void;
+  /** Put a turn back at the FRONT of the queue - a flushed turn the host did not keep must not be lost. */
+  requeue: (value: T) => void;
   /** Drop everything waiting — a stopped run, or a switched conversation. */
   clear: () => void;
 }
@@ -100,6 +102,7 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
 
   const remove = useCallback((id: number) => setQueued((current) => current.filter((item) => item.id !== id)), []);
   const clear = useCallback(() => setQueued((current) => (current.length ? [] : current)), []);
+  const requeue = useCallback((value: T) => setQueued((current) => [{ id: (nextId.current += 1), value }, ...current]), []);
 
   // Flush exactly one held turn per completed run, on the running→idle edge — and
   // only when that edge happened on the SAME conversation. `running` is per
@@ -126,5 +129,5 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
   // switched to.
   useEffect(() => { setQueued([]); }, [resetKey]);
 
-  return { items: queued, count: queued.length, submit, remove, clear };
+  return { items: queued, count: queued.length, submit, remove, requeue, clear };
 }

@@ -95,7 +95,7 @@ export function createNativeStream(
  * inside `runBrainLoop`'s own teardown — so the caller can persist the turn knowing
  * every visible line has already been streamed.
  */
-export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<void> {
+export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<boolean> {
   const {
     chatId,
     tools,
@@ -108,12 +108,13 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<void>
     signal,
   } = opts;
 
-  // The chat's run is already in flight on another path (a second turn, the panel's run): this
-  // call claimed nothing, so it neither starts a run nor settles one that is not its own - the
-  // jobs it would kill belong to the run that holds the key.
-  if (isRunning(chatId)) {
+  // The chat's run is already in flight on another path (a second turn, the panel's run - its
+  // host also counts the window while that run is still SETTING UP): this call claimed nothing,
+  // so it neither starts a run nor settles one that is not its own - the jobs it would kill
+  // belong to the run that holds the key. Told to the caller, which saves nothing for it.
+  if (isRunning(chatId) || opts.isBusy?.(chatId)) {
     if (labels.alreadyRunning) events.onError(labels.alreadyRunning, null);
-    return;
+    return false;
   }
 
   const native = createNativeRunTool({
@@ -147,7 +148,7 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<void>
   // A user Stop cancels the in-flight completion and unwinds the loop cleanly — the
   // same Stop the webview's button fires.
   const onAbort = () => stopRun(chatId);
-  if (signal.aborted) return;
+  if (signal.aborted) return true;
   signal.addEventListener("abort", onAbort, { once: true });
 
   // Human-in-the-loop: the loop pauses by publishing a `pendingConfirm` and waiting;
@@ -209,7 +210,7 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<void>
     opts.settleRun?.(chatId);
   }
 
-  if (signal.aborted) return;
+  if (signal.aborted) return true;
 
   if (exhaustedToolBudget(getRunTrace(chatId).slice(traceBefore))) {
     events.onText(`\n\n${labels.dispatchHint}\n`);
@@ -222,4 +223,5 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<void>
     events.onError(settled.error, settled.errorAction);
     clearRunError(chatId);
   }
+  return true;
 }
