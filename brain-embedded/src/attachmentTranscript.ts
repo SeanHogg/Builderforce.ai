@@ -14,7 +14,7 @@
  * sent with). A `blob:` URL is never recorded or re-sent as model content.
  */
 
-import { attachmentTurnContent } from './attachmentContent';
+import { attachmentLink, attachmentTurnContent } from './attachmentContent';
 import type { BrainPersistenceAdapter } from './config';
 import type { ContentPart } from './streamChatCompletion';
 import type { BrainMessage, ChatInputAttachment } from './types';
@@ -61,6 +61,33 @@ export async function attachmentTurn(
     content,
     meta: { attachments: [...attachments], ...(modelText !== displayContent ? { [MODEL_TEXT_META_KEY]: modelText } : {}) },
   };
+}
+
+/** What a persisted user turn is made of: the row's text, the model's content, the row's metadata. */
+export interface ComposedUserTurn {
+  /** The persisted text: what was typed, plus a link per attachment (the chat tables store a string). */
+  displayContent: string;
+  /** What the model reads: pictures as vision parts, readable files inlined, anything else a link. */
+  turn: AttachmentTurn;
+}
+
+/**
+ * THE composition of a user turn that carries files - the ONE path every door takes (a typed send,
+ * a held turn flushed, the direction a run never read made the chat's next turn): the display text
+ * with a link per attachment, and the model content + record that go with it. Resolved BEFORE the
+ * row is persisted, so the next run's transcript, a retry and a reload re-send what the model read.
+ */
+export async function composeUserTurn(
+  trimmed: string,
+  attachments: readonly ChatInputAttachment[],
+  persistence: Pick<BrainPersistenceAdapter, 'uploadUrl' | 'inlineAttachments'>,
+): Promise<ComposedUserTurn> {
+  let displayContent = trimmed;
+  if (attachments.length > 0) {
+    const refs = attachments.map((a) => attachmentLink(a, persistence.uploadUrl)).join('\n');
+    displayContent = `${trimmed}\n\n${refs}`;
+  }
+  return { displayContent, turn: await attachmentTurn(trimmed, displayContent, attachments, persistence) };
 }
 
 function metaOf(m: Pick<BrainMessage, 'metadata'>): Record<string, unknown> | null {

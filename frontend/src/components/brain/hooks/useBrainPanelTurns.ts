@@ -47,9 +47,8 @@ export function useBrainPanelTurns({ conv, chats, recipient, input, setInput, sh
     send: ({ text, addressedTo, attachments }) => conv.send(text, { addressedTo, attachments: attachments ?? [] }),
     textOf: turnText,
     // A message typed mid-run STEERS the run (the shared door's default): its attachments
-    // ride along, and what the run leaves in its inbox becomes the next turn.
+    // ride along, and what the run leaves in its inbox the run store makes the chat's next turn.
     attachmentsOf: (turn) => turn.attachments,
-    turnOf: (text, attachments) => ({ text, addressedTo: null, attachments }),
     // A turn for a participant is a message to them — never the Brain's Stop.
     isDirected: (turn) => turn.addressedTo != null,
     // The conversation's Stop: it also drops a launch still getting ready.

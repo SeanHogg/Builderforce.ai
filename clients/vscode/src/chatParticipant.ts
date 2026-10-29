@@ -187,7 +187,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     // BEFORE anything is looked up or saved - right after the fail-closed policy, ahead of the tool
     // catalog, the workspace's rules, the sub-agent controls and the `#file` references: a refused turn
     // reads nothing and leaves no user row behind. (`runNativeBrain` checks again at the claim.)
-    if (isRunning(runChatId) || runHost?.isBusy(runChatId)) {
+    if (isRunning(brainChatId) || runHost?.isBusy(brainChatId)) {
       stream.markdown(`**${vscode.l10n.t("Error:")}** ${ALREADY_RUNNING()}`);
       return { metadata: { brainChatId } };
     }

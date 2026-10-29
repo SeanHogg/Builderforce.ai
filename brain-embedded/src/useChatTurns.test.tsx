@@ -284,7 +284,6 @@ describe('useChatTurns — a mid-run message steers by default (PRD 35 E10)', ()
     const send = vi.fn();
     const { result } = renderHook(() => useChatTurns<Turn>({
       running: true, runKey: 13, send, textOf: (t) => t.text, attachmentsOf: (t) => t.attachments,
-      turnOf: (text) => ({ text, attachments: [] }),
     }));
     const attachments = [{ key: 'a', name: 'shot.png', type: 'image/png', imageUrl: 'data:image/png;base64,AAA' }];
 
@@ -306,12 +305,28 @@ describe('useChatTurns — a mid-run message steers by default (PRD 35 E10)', ()
     expect(hasRunInterrupt(14)).toBe(false);
   });
 
-  it('holds a turn whose shape cannot be rebuilt from steered text (no turnOf) rather than steer it', async () => {
+  it('steers a turn of any shape - steered words need only text and files - and words Send the same way (M1)', async () => {
     type Turn = { text: string; to: string | null };
     const { result } = renderHook(() => useChatTurns<Turn>({ running: true, runKey: 15, send: vi.fn(), textOf: (t) => t.text }));
-    await act(async () => { await result.current.submit({ text: 'later', to: null }); });
-    expect(result.current.queued.count).toBe(1);
-    expect(hasRunInterrupt(15)).toBe(false);
+    expect(result.current.steers({ directed: false })).toBe(true);
+    await act(async () => { await result.current.submit({ text: 'now', to: null }); });
+    expect(result.current.queued.count).toBe(0);
+    expect(hasRunInterrupt(15)).toBe(true);
+  });
+
+  it('hands a host steer port the door\'s own verdict, and the label agrees with it (M1)', async () => {
+    const verdicts: boolean[] = [];
+    const steer = vi.fn((_turn: string, steersOwnRun: boolean) => { verdicts.push(steersOwnRun); return false; });
+    const { result } = renderHook(() => useChatTurns<string>({ running: true, runKey: 17, send: vi.fn(), steer }));
+
+    expect(result.current.steers({ directed: false })).toBe(true);
+    await act(async () => { await result.current.submit('first'); });
+    // The port declined, so the turn is held - and the next one waits behind it: the door's verdict
+    // flips with the label, from one predicate.
+    await act(async () => { await result.current.queueAfter('held'); });
+    expect(result.current.steers({ directed: false })).toBe(false);
+    await act(async () => { await result.current.submit('third'); });
+    expect(verdicts).toEqual([true, false]);
   });
 
   it('does not jump ahead of turns already held: it waits behind them', async () => {
@@ -324,29 +339,26 @@ describe('useChatTurns — a mid-run message steers by default (PRD 35 E10)', ()
   });
 });
 
-describe('useChatTurns — direction the run never drained is not lost (B1)', () => {
+describe('useChatTurns — direction the run never drained belongs to the run store (D)', () => {
   beforeEach(() => { stopRun.mockClear(); resetRunSteering(); });
 
   function mount(initial: ChatTurnsOptions<string>) {
     return renderHook((props: ChatTurnsOptions<string>) => useChatTurns(props), { initialProps: initial });
   }
 
-  it("a steer queued after the loop's final drain is sent as the next turn when the run completes", async () => {
+  it("never drains the run's inbox when the run completes - the run store (continueOnSettle) is its one owner", async () => {
     const send = vi.fn();
     const { result, rerender } = mount({ running: true, runKey: 20, send });
 
     await act(async () => { await result.current.submit('one more thing'); });
     await act(async () => { await result.current.submit('and this'); });
-    expect(send).not.toHaveBeenCalled();
 
     rerender({ running: false, runKey: 20, send });
-    expect(send).toHaveBeenCalledTimes(1);
-    // Oldest first, as ONE turn.
-    expect(send).toHaveBeenCalledWith('one more thing\n\nand this');
-    expect(drainRunSteering(20)).toEqual([]);
+    expect(send).not.toHaveBeenCalled();
+    expect(drainRunSteering(20).map((m) => m.text)).toEqual(['one more thing', 'and this']);
   });
 
-  it('goes ahead of a held turn, which follows on the run after (one turn per completed run)', async () => {
+  it('flushes only the turns it holds itself, one per completed run, leaving the inbox alone', async () => {
     const send = vi.fn();
     const { result, rerender } = mount({ running: true, runKey: 21, send });
     await act(async () => { await result.current.submit('steered first'); });
@@ -354,12 +366,8 @@ describe('useChatTurns — direction the run never drained is not lost (B1)', ()
 
     rerender({ running: false, runKey: 21, send });
     expect(send).toHaveBeenCalledTimes(1);
-    expect(send).toHaveBeenLastCalledWith('steered first');
-
-    rerender({ running: true, runKey: 21, send });
-    rerender({ running: false, runKey: 21, send });
-    expect(send).toHaveBeenCalledTimes(2);
     expect(send).toHaveBeenLastCalledWith('held after');
+    expect(drainRunSteering(21).map((m) => m.text)).toEqual(['steered first']);
   });
 
   it('a steer typed before a Stop does not appear in the next run', async () => {
@@ -383,7 +391,6 @@ describe('useChatTurns - what the door will not steer, and what it will not lose
     renderHook((props: ChatTurnsOptions<Turn>) => useChatTurns<Turn>(props), {
       initialProps: {
         running, runKey, send, textOf: (t) => t.text, attachmentsOf: (t) => t.attachments,
-        turnOf: (text, attachments) => ({ text, attachments }),
       } as ChatTurnsOptions<Turn>,
     });
 
@@ -489,6 +496,39 @@ describe('useChatTurns - a flush that is not kept, a Stop, and the line of waiti
     await act(async () => { await result.current.submit('mid-run'); });
     expect(hasRunInterrupt(54)).toBe(true);
     expect(result.current.queued.count).toBe(2);
+  });
+
+  it('an idle turn that starts no run (a typed stop) does not strand the turns held behind it', async () => {
+    const send = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    const { result, rerender } = mount({ running: true, runKey: 56, send });
+    await act(async () => { await result.current.queueAfter('Stop the run'); });
+    await act(async () => { await result.current.queueAfter('then do this'); });
+
+    // The run ends: the stop is sent, not kept, and goes back; the person then types a third.
+    await act(async () => { rerender({ running: false, runKey: 56, send }); });
+    expect(result.current.queued.items.map((i) => i.value)).toEqual(['Stop the run', 'then do this']);
+    send.mockClear();
+    await act(async () => { await result.current.submit('third'); });
+
+    // The stop starts no run, so no falling edge would send the rest: it chains on at once.
+    expect(send.mock.calls.map((c) => c[0])).toEqual(['Stop the run', 'then do this']);
+    expect(result.current.queued.items.map((i) => i.value)).toEqual(['third']);
+  });
+
+  it('counts held-this-run by turn id: removing a carried turn does not make a new one look carried', async () => {
+    const send = vi.fn().mockResolvedValue(false);
+    const { result, rerender } = mount({ running: true, runKey: 57, send });
+    await act(async () => { await result.current.queueAfter('A'); });
+    await act(async () => { await result.current.queueAfter('B'); });
+    await act(async () => { rerender({ running: false, runKey: 57, send }); });
+    // A was put back (not kept); B is still waiting. The next run carries both.
+    await act(async () => { rerender({ running: true, runKey: 57, send }); });
+    const [first] = result.current.queued.items;
+    act(() => result.current.queued.remove(first!.id));
+    // Nothing was held THIS run, however many were carried in: a message typed now still steers.
+    expect(result.current.steers({ directed: false })).toBe(true);
+    await act(async () => { await result.current.queueAfter('held this run'); });
+    expect(result.current.steers({ directed: false })).toBe(false);
   });
 
   it('words Send from the same predicate: a run being stopped, and a turn behind held ones, will not steer', async () => {

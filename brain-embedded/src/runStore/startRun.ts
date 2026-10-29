@@ -72,7 +72,10 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
   const req: BrainRunRequest = { ...request, persistence: runPersistence };
   c.persistStep = (ev) => persistStep(chatId, runPersistence, ev);
   beginRun(c, chatId);
-  c.lastRequest = request;
+  // What the chat re-runs with when direction arrives after the run ended: the run's wiring, not the
+  // turn it carried - the turn, its row and the history it was seeded from are this run's alone.
+  const { userTurn: _turn, userTurnMessageId: _row, seed: _seed, seedIds: _seedIds, priorResearch: _research, ...rerun } = request;
+  c.lastRequest = rerun;
 
   // Seed the rich transcript from prior persisted history the FIRST time we
   // touch this chat this session, then append the triggering user turn — done

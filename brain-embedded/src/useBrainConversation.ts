@@ -35,10 +35,10 @@ import type { BrainToolSpec, ContentPart } from './streamChatCompletion';
 import type { EvermindRunHooks } from './evermindMemory';
 import type { ReasoningIntent } from './effort';
 import type { RunWindowSources } from './windowFit/modelWindow';
-import { attachmentLink } from './attachmentContent';
 import { useComposerAttachments } from './useComposerAttachments';
 import { continueOnSettle } from './runStore/continueChat';
-import { attachmentTurn, userTurnContentOf } from './attachmentTranscript';
+import { getRunDriver } from './runDriver';
+import { composeUserTurn, userTurnContentOf } from './attachmentTranscript';
 import { scopeToConsolidation } from '@seanhogg/builderforce-memory/working';
 import { contextUsageOf, type ContextUsage } from './contextUsage';
 import { priorResearchDigest } from './priorResearch';
@@ -440,7 +440,8 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         return;
       }
       // Direction the run never reads becomes this chat's next turn, whichever chat is on screen.
-      continueOnSettle(id);
+      // Only where the run executes HERE: a host-driven run (the editor's webview) settles elsewhere.
+      if (!getRunDriver()) continueOnSettle(id, persistence);
       await startRun(id, extra ? { ...request, ...extra } : request);
     } finally {
       launchingRef.current.delete(id);
@@ -497,13 +498,6 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       composer.take(attachments);
       setLocalError('');
 
-      // Persisted/display content stays text-only (the chat tables store a
-      // string): every attachment shows as a markdown link the user can click.
-      let displayContent = trimmed;
-      if (attachments.length > 0) {
-        const refs = attachments.map((a) => attachmentLink(a, persistence.uploadUrl)).join('\n');
-        displayContent = `${trimmed}\n\n${refs}`;
-      }
       const addressedList = addressedTo == null
         ? null
         : Array.isArray(addressedTo)
@@ -516,7 +510,9 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       // the mention budget, anything else a link (`attachmentContent.ts`). Resolved BEFORE
       // the persist: the row records the text the model read, so the next run's
       // transcript, a retry and a reload re-send it (`attachmentTranscript.ts`). Never rejects.
-      const turn = await attachmentTurn(trimmed, displayContent, attachments, persistence);
+      // Persisted/display content stays text-only (the chat tables store a string): every
+      // attachment shows as a link the user can click. The ONE composition (`composeUserTurn`).
+      const { displayContent, turn } = await composeUserTurn(trimmed, attachments, persistence);
       const metadata = withDirectedMetadata(addressedList, turn.meta);
 
       try {
@@ -567,10 +563,10 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         // Persisting the user turn failed (commonly an expired token) — the turn
         // was NOT saved. Restore the attachments too so the whole message can be
         // resent, and signal failure so the composer keeps the typed text.
-        if (stillOpen()) {
-          if (!given) composer.restore(attachments);
-          setLocalError(e instanceof Error ? e.message : 'Send failed');
-        }
+        // The files go back to the composer that is SHOWING, switched away or not - the same place the
+        // host puts the typed text back (the false return) - so a message is never half-restored.
+        if (!given) composer.restore(attachments);
+        if (stillOpen()) setLocalError(e instanceof Error ? e.message : 'Send failed');
         return false;
       } finally {
         cancelledLaunchRef.current.delete(runChatId);

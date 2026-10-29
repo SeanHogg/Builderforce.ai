@@ -69,17 +69,9 @@ export interface QueuedTurnsOptions<T> {
    * trimmed and checked directly; omit this for them.
    */
   textOf?: (value: T) => string;
-  /**
-   * A turn that goes BEFORE the held ones when a run completes — e.g. direction steered into
-   * the run after its last drain, which nothing else would ever deliver. Asked once per
-   * completed run, on the falling edge; a turn it returns is sent INSTEAD of one held turn
-   * (held turns keep their one-per-run rhythm and follow on the next edge). Nothing ⇒ the
-   * held queue flushes as usual.
-   */
-  lead?: () => T | undefined;
 }
 
-export function useQueuedTurns<T = string>({ running, send, resetKey = null, textOf, lead }: QueuedTurnsOptions<T>): QueuedTurns<T> {
+export function useQueuedTurns<T = string>({ running, send, resetKey = null, textOf }: QueuedTurnsOptions<T>): QueuedTurns<T> {
   const [queued, setQueued] = useState<QueuedItem<T>[]>([]);
   // The queue is READ synchronously too (`takeFront`, the flush): this ref is the source of
   // truth and every change goes through `update`, so two moves in one tick see each other.
@@ -99,9 +91,6 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
   const textOfRef = useRef(textOf);
   // eslint-disable-next-line react-hooks/refs
   textOfRef.current = textOf;
-  const leadRef = useRef(lead);
-  // eslint-disable-next-line react-hooks/refs
-  leadRef.current = lead;
   const runningRef = useRef(running);
 
   const submit = useCallback((value: T) => {
@@ -139,11 +128,6 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
     const was = prev.current;
     prev.current = { key: resetKey, running };
     if (was.key !== resetKey || !was.running || running) return;
-    const first = leadRef.current?.();
-    if (first !== undefined) {
-      sendRef.current(first);
-      return;
-    }
     const next = takeFront();
     if (next !== undefined) sendRef.current(next);
   }, [running, resetKey, takeFront]);

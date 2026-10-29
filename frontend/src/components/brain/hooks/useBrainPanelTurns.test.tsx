@@ -99,12 +99,10 @@ describe('the web panel\'s turn door and the composer\'s attachments', () => {
     expect(send).toHaveBeenCalledWith('a held turn', { addressedTo: null, attachments: [] });
   });
 
-  it('rebuilds a turn from steered text, and hands the door the files a steer would carry', () => {
+  it('hands the door the files a steer would carry', () => {
     mount(conversation().conv);
-    const turnOf = door.options?.turnOf as (text: string, attachments: unknown[]) => BrainPanelTurn;
     const attachmentsOf = door.options?.attachmentsOf as (turn: BrainPanelTurn) => unknown;
 
-    expect(turnOf('left in the inbox', [notes])).toEqual({ text: 'left in the inbox', addressedTo: null, attachments: [notes] });
     expect(attachmentsOf({ text: 't', addressedTo: null, attachments: [notes] })).toEqual([notes]);
   });
 

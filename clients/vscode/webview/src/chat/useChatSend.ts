@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { steersByDefault, useChatTurns, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
+import { useChatTurns, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { request } from '../vscodeBridge';
 import { childTarget, steerRun, type useChatChildren } from './chatChildren';
 import type { QueuedTurn } from './VsCodeComposer';
@@ -118,12 +118,11 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
     // the step in flight and reaches the next model call, instead of waiting behind a run
     // that may hold for minutes. A stop command ("STOP executing") stops it (the host
     // reads that). Holding it for after the run is the explicit alternative: `queueAfter`.
-    steer: ({ text, recipient: to, attachments }) => {
+    // `steersOwnRun` is the door's verdict - the predicate the composer's Send label reads (a turn
+    // behind one held with Alt+Enter, or carrying a file a steer would drop, waits its turn) - so
+    // the label and the turn cannot disagree.
+    steer: ({ text, recipient: to, attachments }, steersOwnRun) => {
       const child = childTarget(text, to, liveChildren);
-      // The chat's own run is steered only by a turn that may jump nothing: one behind a turn
-      // held with Alt+Enter waits its turn, and a file that is not a picture is held (a steer
-      // would drop it) - the same predicate the web composer's Send reads.
-      const steersOwnRun = conv.sending && !to && chatId != null && steersByDefault({ directed: false, held: turns.queued.count, attachments });
       // A message to a live sub-agent goes in whole: a file a steer would drop (anything but a
       // picture) holds the message for after instead of being lost.
       const atts = attachments ?? [];
