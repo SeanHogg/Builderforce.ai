@@ -317,6 +317,22 @@ import { modelDowngrade, runModelPreflight } from "./preflight.js";
 // ── The hook (what runAgent drives) ─────────────────────────────────────────
 
 /**
+ * What the policy asks of the transport for a turn: the role, the model (absent = the transport's
+ * own choice, e.g. after a released pin), how strictly, and the models it routes around. THE one
+ * place a run-policy state becomes request fields — the turn (`modelHook.resolve`) and anything else
+ * that calls the model for the run (the compaction summary) read it here, so a change reaches both.
+ */
+export function turnRouting(state: RunPolicyState, hasTools: boolean): {
+  role: TurnRequest["role"];
+  model?: string;
+  strict: boolean;
+  excludeModels: readonly string[];
+} {
+  const ask = nextTurn(state, { hasTools });
+  return { role: ask.role, strict: ask.strict, excludeModels: ask.excludeModels, ...(ask.model ? { model: ask.model } : {}) };
+}
+
+/**
  * The model hook. `resolve` asks the policy what this turn wants: the pinned / locked /
  * phase-default model (or nothing, to auto-select) and the role cap on its answer. The
  * loop calls `recordSuccess` / `routeAroundFailure` / `stallStep` around the call — the
@@ -325,18 +341,9 @@ import { modelDowngrade, runModelPreflight } from "./preflight.js";
 export const modelHook: ModelHook = {
   resolve(ctx) {
     // The model slice already IS the run-policy state; drive it, never redefine it.
-    const ask = nextTurn(ctx.state.model, { hasTools: ctx.tools.length > 0 });
-    const model = ask.model ?? undefined;
-    const maxTokens = cappedMaxTokens(ask.role, undefined);
-    // The whole request the policy makes of the gateway: the model and how strictly, the
-    // role, the models routed around — `turnRequestFields`, handed to the transport as data.
-    return {
-      ...(model ? { model } : {}),
-      ...(maxTokens !== undefined ? { maxTokens } : {}),
-      role: ask.role,
-      strict: ask.strict,
-      excludeModels: ask.excludeModels,
-    };
+    const routing = turnRouting(ctx.state.model, ctx.tools.length > 0);
+    const maxTokens = cappedMaxTokens(routing.role, undefined);
+    return { ...routing, ...(maxTokens !== undefined ? { maxTokens } : {}) };
   },
   preflight: runModelPreflight,
   downgrade: modelDowngrade,

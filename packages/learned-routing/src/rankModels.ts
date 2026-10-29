@@ -8,6 +8,7 @@
  * a curated pool plus per-model stats, its only output a permutation of that pool.
  */
 
+import { compareAvgCost } from './costEvidence.js';
 import { blendedQualityScore, isChronicallyRateLimited, qualityEvidence } from './modelQualityScore.js';
 import { pickIndex, sampleQuality, shouldExploreCold, type DecayedEvidence, type RoutingExploration } from './exploration.js';
 
@@ -19,6 +20,8 @@ export interface ActionModelRankStat {
   n: number;
   avgScore: number;
   avgCostMc: number;
+  /** Runs behind `avgCostMc` that reported a cost; absent = all of them. See `costEvidence.ts`. */
+  costN?: number;
   /** Human thumbs on this (action, model) — see `modelQualityScore.ts`. Optional:
    *  absent on blobs written before migration 0468. */
   ratedUp?: number;
@@ -112,7 +115,7 @@ export function rankModelsForAction(
   eligible.sort((a, b) => {
     const d = scoreOf(b) - scoreOf(a);
     if (d !== 0) return d;
-    const c = statByModel.get(a)!.avgCostMc - statByModel.get(b)!.avgCostMc;
+    const c = compareAvgCost(statByModel.get(a)!, statByModel.get(b)!);
     if (c !== 0) return c;
     return (curatedIndex.get(a)! - curatedIndex.get(b)!);
   });

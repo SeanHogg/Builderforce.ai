@@ -16,6 +16,7 @@ import { runModelOutcomes } from '../../infrastructure/database/schema';
 import { codingEvidence } from '../shared/codingEvidence';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { HOUR_MS } from '../../domain/shared/time';
+import { pricedCostPerMergedUsd, pricedCostUsd } from './pricedCost';
 
 export interface OutcomeRow {
   actionType: string;
@@ -39,7 +40,8 @@ export interface EffectivenessBucket {
   ciGreenRatePct: number;
   degradedRatePct: number;
   avgSteps: number;
-  costUsd: number;
+  /** USD spent by the runs that reported a cost; null when none did (unknown, not $0). */
+  costUsd: number | null;
 }
 
 export interface EngineeringInsights {
@@ -50,14 +52,15 @@ export interface EngineeringInsights {
     mergedRatePct: number;
     ciGreenRatePct: number;
     degradedRatePct: number;
-    costUsd: number;
+    /** USD spent by the runs that reported a cost; null when none did (unknown, not $0). */
+    costUsd: number | null;
+    /** USD per merged PR over the runs that reported a cost; null when no merged run did. */
+    costPerMergedPrUsd: number | null;
   };
   byModel: EffectivenessBucket[];
   byActionType: EffectivenessBucket[];
   byApproach: EffectivenessBucket[]; // actionType × model — the headline ranking
 }
-
-const MILLICENTS_PER_USD = 100_000;
 
 function bucket(key: string, rows: OutcomeRow[], extra: Partial<EffectivenessBucket> = {}): EffectivenessBucket {
   const runs = rows.length;
@@ -70,7 +73,7 @@ function bucket(key: string, rows: OutcomeRow[], extra: Partial<EffectivenessBuc
     ciGreenRatePct: pct(rows.filter((r) => r.ciGreen).length),
     degradedRatePct: pct(rows.filter((r) => r.degraded).length),
     avgSteps: runs ? rows.reduce((a, r) => a + r.steps, 0) / runs : 0,
-    costUsd: rows.reduce((a, r) => a + (r.costUsdMillicents ?? 0), 0) / MILLICENTS_PER_USD,
+    costUsd: pricedCostUsd(rows),
     ...extra,
   };
 }
@@ -110,7 +113,8 @@ export function summarizeOutcomes(rows: OutcomeRow[], windowDays: number): Engin
       mergedRatePct: rows.length ? (rows.filter((r) => r.merged).length / rows.length) * 100 : 0,
       ciGreenRatePct: rows.length ? (rows.filter((r) => r.ciGreen).length / rows.length) * 100 : 0,
       degradedRatePct: rows.length ? (rows.filter((r) => r.degraded).length / rows.length) * 100 : 0,
-      costUsd: rows.reduce((a, r) => a + (r.costUsdMillicents ?? 0), 0) / MILLICENTS_PER_USD,
+      costUsd: pricedCostUsd(rows),
+      costPerMergedPrUsd: pricedCostPerMergedUsd(rows),
     },
     byModel,
     byActionType,

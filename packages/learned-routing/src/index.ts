@@ -41,6 +41,8 @@ export {
   type ModelQualitySignals,
 } from './modelQualityScore.js';
 
+export { compareAvgCost, hasCostMean, type CostStat } from './costEvidence.js';
+
 export {
   DEFAULT_MIN_SAMPLES,
   rankModelsForAction,

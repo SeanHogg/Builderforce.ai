@@ -70,6 +70,9 @@ export function mountLearnedRoutingRoutes(router: Hono<HonoEnv>): void {
           avgScore: Math.round(m.avgScore * 1000) / 1000,
           mergeRate: Math.round(m.mergeRate * 1000) / 1000,
           avgCostMillicents: Math.round(m.avgCostMc),
+          // Runs behind that mean that reported a cost: 0 means it is unknown (not free), and the host's
+          // tie-break must read it so. Absent on a blob built before cost could be unknown.
+          ...(m.costN != null ? { costN: m.costN } : {}),
           ratedUp: m.ratedUp ?? 0,
           ratedDown: m.ratedDown ?? 0,
           rateLimitRate: Math.round((m.rateLimitRate ?? 0) * 1000) / 1000,

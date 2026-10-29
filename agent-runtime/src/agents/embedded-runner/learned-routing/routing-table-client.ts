@@ -46,6 +46,7 @@ interface AnalyticsRow {
   samples?: unknown;
   avgScore?: unknown;
   avgCostMillicents?: unknown;
+  costN?: unknown;
   ratedUp?: unknown;
   ratedDown?: unknown;
   rateLimitRate?: unknown;
@@ -69,6 +70,9 @@ export function toRankStat(row: AnalyticsRow): ActionModelRankStat | null {
     n: n(row.samples),
     avgScore: n(row.avgScore),
     avgCostMc: n(row.avgCostMillicents),
+    // Runs behind the cost that reported one; absent (an older table) = all of them, so the tie-break
+    // reads an unknown cost as no information exactly as the cloud router does.
+    ...(typeof row.costN === "number" && Number.isFinite(row.costN) ? { costN: row.costN } : {}),
     ratedUp: n(row.ratedUp),
     ratedDown: n(row.ratedDown),
     rateLimitRate: n(row.rateLimitRate),

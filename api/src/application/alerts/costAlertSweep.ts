@@ -24,9 +24,9 @@ import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { resultRows } from '../kernel/metricRollup';
 import {
   costAlertHourKey, isRunCostOutlier, runCostOutlierMessage, spendSpikeMessage, spendSpikeVerdict,
-  RUN_OUTLIER_HISTORY_DAYS, RUN_OUTLIER_MIN_SAMPLES, RUN_OUTLIER_MIN_USD, RUN_OUTLIER_MULTIPLIER,
-  RUN_OUTLIER_PERCENTILE, SPEND_BASELINE_DAYS,
+  RUN_OUTLIER_MULTIPLIER, SPEND_BASELINE_DAYS,
 } from './costAlertRules';
+import { runOutlierStatement } from './runOutlierStatement';
 import { raiseSystemAlert, SYSTEM_ALERT_METRICS } from './systemAlert';
 
 const SOURCE = 'application/alerts/costAlertSweep.ts';
@@ -102,31 +102,7 @@ async function sweepSpendSpikes(env: Env, db: Db, nowMs: number): Promise<{ tena
 }
 
 async function sweepRunOutliers(env: Env, db: Db, nowMs: number): Promise<number> {
-  const rows = resultRows(await runTelemetryDatabase(db).execute(sql`
-    WITH recent AS (
-      SELECT tenant_id, execution_id, action_type, cost_usd_millicents
-        FROM run_model_outcomes
-       WHERE tenant_id IS NOT NULL AND execution_id IS NOT NULL
-         AND created_at >= NOW() - make_interval(hours => ${OUTLIER_LOOKBACK_HOURS}::int)
-    ),
-    hist AS (
-      SELECT o.tenant_id, o.action_type,
-             percentile_cont(${RUN_OUTLIER_PERCENTILE}::float8) WITHIN GROUP (ORDER BY o.cost_usd_millicents) AS p90
-        FROM run_model_outcomes o
-        JOIN (SELECT DISTINCT tenant_id, action_type FROM recent) k
-          ON k.tenant_id = o.tenant_id AND k.action_type = o.action_type
-       WHERE o.created_at >= NOW() - make_interval(days => ${RUN_OUTLIER_HISTORY_DAYS}::int)
-       GROUP BY o.tenant_id, o.action_type
-      HAVING COUNT(*) >= ${RUN_OUTLIER_MIN_SAMPLES}::int
-    )
-    SELECT r.tenant_id, r.execution_id, r.action_type, r.cost_usd_millicents, h.p90
-      FROM recent r
-      JOIN hist h ON h.tenant_id = r.tenant_id AND h.action_type = r.action_type
-     WHERE r.cost_usd_millicents > ${RUN_OUTLIER_MULTIPLIER}::int * h.p90
-       AND r.cost_usd_millicents >= ${Math.round(RUN_OUTLIER_MIN_USD * 100_000)}::int
-     ORDER BY r.cost_usd_millicents DESC
-     LIMIT ${OUTLIER_ROW_LIMIT}
-  `));
+  const rows = resultRows(await runTelemetryDatabase(db).execute(runOutlierStatement(OUTLIER_LOOKBACK_HOURS, OUTLIER_ROW_LIMIT)));
   let outliers = 0;
   for (const r of rows) {
     const costUsd = millicentsToUsd(Number(r.cost_usd_millicents ?? 0));

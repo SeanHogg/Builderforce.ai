@@ -26,7 +26,8 @@ import {
   RATE_LIMIT_MIN_RUNS,
   type ActionModelRankStat,
 } from '@builderforce/learned-routing';
-import { applyObservation, type RoutingTable } from './routingTable';
+import { applyObservation } from './routingFold';
+import type { RoutingTable } from './routingTable';
 import { judgePoolHealth, codingPoolVendors, POOL_RATE_LIMITED_RATIO } from './poolHealth';
 import type { VendorId } from './vendors';
 

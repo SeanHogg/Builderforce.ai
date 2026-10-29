@@ -8108,11 +8108,12 @@ export const personasApi = {
 export interface EffectivenessBucket {
   key: string; actionType?: string; model?: string;
   runs: number; avgScore: number; mergedRatePct: number; ciGreenRatePct: number;
-  degradedRatePct: number; avgSteps: number; costUsd: number;
+  /** null = no run in the bucket reported a cost (unknown, not $0). */
+  degradedRatePct: number; avgSteps: number; costUsd: number | null;
 }
 export interface EngineeringInsights {
   windowDays: number;
-  totals: { runs: number; avgScore: number; mergedRatePct: number; ciGreenRatePct: number; degradedRatePct: number; costUsd: number };
+  totals: { runs: number; avgScore: number; mergedRatePct: number; ciGreenRatePct: number; degradedRatePct: number; costUsd: number | null; costPerMergedPrUsd: number | null };
   byModel: EffectivenessBucket[];
   byActionType: EffectivenessBucket[];
   byApproach: EffectivenessBucket[];

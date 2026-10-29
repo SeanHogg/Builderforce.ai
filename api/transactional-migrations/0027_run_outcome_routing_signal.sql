@@ -7,3 +7,9 @@ ALTER TABLE run_model_outcomes ADD COLUMN IF NOT EXISTS routing_signal BOOLEAN N
 -- (see migrations/1284). Relaxing the constraint is expand-only; existing values are untouched.
 ALTER TABLE run_model_outcomes ALTER COLUMN cost_usd_millicents DROP NOT NULL;
 ALTER TABLE run_model_outcomes ALTER COLUMN cost_usd_millicents DROP DEFAULT;
+
+COMMENT ON COLUMN run_model_outcomes.cost_usd_millicents IS
+  'Millicents the run cost; NULL = the run reported none (unknown, not zero). Sums and averages skip NULLs.';
+
+COMMENT ON COLUMN run_model_outcomes.routing_signal IS
+  'FALSE = recorded for telemetry only: not folded into the routing blob and excluded from reconcile (a Creation Canvas run is not evidence about coding models).';

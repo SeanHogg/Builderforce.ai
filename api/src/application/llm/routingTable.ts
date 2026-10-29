@@ -27,12 +27,9 @@ import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { codingEvidence } from '../shared/codingEvidence';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
-  blendedQualityScore,
   DECAYED_WINDOW_DAYS,
   DEFAULT_MIN_SAMPLES,
-  foldDecayedMean,
   ROUTING_HALF_LIFE_DAYS,
-  isChronicallyRateLimited,
   learnedRoutingEnabled,
   normalizeActionType,
   parseScopeToken,
@@ -45,6 +42,18 @@ import { isModelRole, type ModelRole } from '@builderforce/agent-tools';
 import { roleUsesLearnedRanking } from '@builderforce/model-router';
 import type { ArcStage } from '@builderforce/workload';
 import { isCostLeverOn } from '@builderforce/cost-levers';
+import {
+  applyObservation,
+  sortStats,
+  type ActionModelStat,
+  type FoldDecay,
+  type RoutingObservation,
+  type RoutingTable,
+} from './routingFold';
+
+// The blob's shapes live with the fold arithmetic; re-exported because this module is where its
+// readers already look for them.
+export type { ActionModelStat, RoutingTable };
 
 // The scope type + its token are the shared contract (an on-prem host reads the same
 // `?scope=` token), so they live in `@builderforce/learned-routing`. Re-exported here
@@ -74,82 +83,35 @@ export function routingDecayOn(env: unknown): boolean {
   return isCostLeverOn(env, 'd3_routing_exploration', null);
 }
 
-/** Per-model running stats for one action type. n/avgScore/avgCost are maintained
- *  incrementally (Welford); the array is kept sorted best-first (avgScore desc,
- *  then avgCost asc as the tie-break). */
-export interface ActionModelStat {
-  model: string;
-  n: number;
-  avgScore: number;
-  /** Running merge rate (mean of the 0/1 merged flag) — a corroborating signal. */
-  mergeRate: number;
-  /** Running mean per-run cost in millicents — the tie-break between equal scorers. */
-  avgCostMc: number;
-  /**
-   * HUMAN thumbs on this (action, model), from `llm_action_ratings` (migration 0468).
-   *
-   * Kept as raw counts rather than a pre-blended score because the blend depends on
-   * how much evidence the OTHER side has, and that is a read-time decision
-   * (`rankModelsForAction`). They are a genuinely independent signal: a chat or
-   * canvas turn has no merge and no CI, so for most model calls these are the ONLY
-   * quality evidence that exists. Optional — blobs written before 0468 have none.
-   */
-  ratedUp?: number;
-  ratedDown?: number;
-  /**
-   * Share of this bucket's runs that died on a provider 429 (migration 0485).
-   *
-   * An AVAILABILITY signal, kept strictly beside the quality score rather than inside
-   * it — see `modelQualityScore.ts` for why conflating the two poisons the ranking.
-   * Optional: blobs written before 0485 have none, and absent reads as 0 (not
-   * rate-limited), which under-reports rather than demoting on evidence nobody has.
-   */
-  rateLimitRate?: number;
-  /**
-   * Effective (recency-decayed) run count behind the means, and the epoch ms they were
-   * last folded at (cost PRD D3). Written only while the table decays; absent means the
-   * means are plain window averages, read exactly as before. `n` stays the RAW count so
-   * the evidence floor and the rate-limit minimum keep their meaning.
-   */
-  effectiveN?: number;
-  at?: number;
-}
-
-export interface RoutingTable {
-  updatedAt: string;
-  /** action_type → models ranked best-first. */
-  byAction: Partial<Record<ActionType, ActionModelStat[]>>;
-  /** model ROLE → models ranked best-first, from the outcomes that recorded which role
-   *  their model played (migration 1169). Optional: blobs written before it have none. */
-  byRole?: Partial<Record<ModelRole, ActionModelStat[]>>;
-}
-
 /** The stat for `model` under `key`, created empty when absent. Shared by every grain
  *  the reconcile folds (per action, per role). */
 function statIn<K extends string>(map: Partial<Record<K, ActionModelStat[]>>, key: K, model: string): ActionModelStat {
   const list = (map[key] ??= []);
   const found = list.find((s) => s.model === model);
   if (found) return found;
-  const fresh: ActionModelStat = { model, n: 0, avgScore: 0, mergeRate: 0, avgCostMc: 0, rateLimitRate: 0 };
+  const fresh: ActionModelStat = { model, n: 0, avgScore: 0, mergeRate: 0, avgCostMc: 0, costN: 0, rateLimitRate: 0 };
   list.push(fresh);
   return fresh;
 }
 
 /** Copy one grouped outcome aggregate onto its stat. */
-function assignOutcomeAggregate(
+export function assignOutcomeAggregate(
   stat: ActionModelStat,
-  r: { n: unknown; avgScore: unknown; avgCost: unknown; mergeRate: unknown; rateLimitRate: unknown; effectiveN?: unknown },
+  r: { n: unknown; avgScore: unknown; avgCost: unknown; costN: unknown; mergeRate: unknown; rateLimitRate: unknown; effectiveN?: unknown; costEffectiveN?: unknown },
   nowMs: number,
 ): void {
   stat.n = Number(r.n) || 0;
   stat.avgScore = Number(r.avgScore) || 0;
   stat.mergeRate = Number(r.mergeRate) || 0;
-  // The aggregate skips runs that reported no cost (NULL); a model none of whose runs did has no
-  // mean at all, and the blob's numeric tie-break field reads that as 0.
+  // The aggregate skips runs that reported no cost (NULL) and counts the ones that did (`costN`), as
+  // the live fold does. A model none of whose runs did has no mean (`costN` 0): the tie-break
+  // reads that as no information, and the numeric field holds 0 only to stay a number.
   stat.avgCostMc = Number(r.avgCost) || 0;
+  stat.costN = Number(r.costN) || 0;
   stat.rateLimitRate = Number(r.rateLimitRate) || 0;
   if (r.effectiveN != null) {
     stat.effectiveN = Number(r.effectiveN) || 0;
+    stat.costEffectiveN = Number(r.costEffectiveN) || 0;
     stat.at = nowMs;
   }
 }
@@ -160,21 +122,6 @@ function cacheKey(scope: RoutingScope): string {
 
 function emptyTable(): RoutingTable {
   return { updatedAt: new Date(0).toISOString(), byAction: {} };
-}
-
-/** Re-sort a per-action stat list best-first on the BLENDED quality score (run
- *  outcomes + human thumbs, each weighted by how much evidence it has — see
- *  modelQualityScore.ts); ties break to the cheaper model (lower avgCostMc).
- *  Stable for deterministic output, and the same ordering `rankModelsForAction`
- *  applies, so the blob and the router never disagree. */
-function sortStats(stats: ActionModelStat[]): ActionModelStat[] {
-  return stats
-    .map((s, i) => ({ s, i, q: blendedQualityScore(s), rl: isChronicallyRateLimited(s) ? 1 : 0 }))
-    // Rate-limited models form a TRAILING BAND, ranked normally within it. They are not
-    // removed — "the only model left is one the provider keeps refusing" is still
-    // strictly better than returning nothing, and the cascade needs somewhere to land.
-    .sort((a, b) => a.rl - b.rl || b.q - a.q || a.s.avgCostMc - b.s.avgCostMc || a.i - b.i)
-    .map(({ s }) => s);
 }
 
 /**
@@ -203,6 +150,8 @@ function outcomeAggregateFor(decay: boolean) {
   const base = {
     model: runModelOutcomes.resolvedModel,
     n: sql<number>`count(*)::int`,
+    // Runs that REPORTED a cost: the count behind `avgCost`, which skips the rest (NULL = unknown).
+    costN: sql<number>`count(${runModelOutcomes.costUsdMillicents})::int`,
   };
   if (!decay) {
     return {
@@ -213,6 +162,7 @@ function outcomeAggregateFor(decay: boolean) {
       rateLimitRate: sql<number>`(sum(case when ${runModelOutcomes.rateLimited} then 1 else 0 end)::float8 / count(*))`,
       // Same row shape both ways; NULL = "not decayed", read as absent.
       effectiveN: sql<number | null>`null::float8`,
+      costEffectiveN: sql<number | null>`null::float8`,
     };
   }
   const w = sql`power(0.5::float8, extract(epoch from (now() - ${runModelOutcomes.createdAt}))::float8 / ${sql.raw(String(HALF_LIFE_SECONDS))})`;
@@ -222,6 +172,7 @@ function outcomeAggregateFor(decay: boolean) {
   return {
     ...base,
     effectiveN: sql<number | null>`sum(${w})::float8`,
+    costEffectiveN: sql<number | null>`sum(case when ${runModelOutcomes.costUsdMillicents} is not null then ${w} end)::float8`,
     avgScore: weighted(sql`${runModelOutcomes.score}`),
     avgCost: weighted(sql`${runModelOutcomes.costUsdMillicents}`),
     mergeRate: weighted(sql`(case when ${runModelOutcomes.merged} then 1 else 0 end)`),
@@ -383,117 +334,6 @@ export async function roleRoutingStats(
     reportCaughtError(error, { source: 'application/llm/routingTable.ts', operation: 'roleRoutingStats' });
     return undefined;
   }
-}
-
-/** One terminal run, as the blob folds it. `rateLimited` rides alongside `merged`
- *  because it is the same grain — a property of THIS run — and giving it its own
- *  fold path would mean two writers racing on one bucket. */
-export interface RoutingObservation {
-  actionType: ActionType;
-  model: string;
-  score: number;
-  costMc: number;
-  merged: boolean;
-  /** The run died on a provider rate limit (`classifyRunFailure === 'rate_limited'`). */
-  rateLimited?: boolean;
-  /** The role the model played, when known — also folds into `byRole`. */
-  role?: ModelRole | null;
-}
-
-/** How one fold treats age: absent = plain Welford (today), present = decayed means. */
-export interface FoldDecay {
-  nowMs: number;
-}
-
-/** Recency-decayed fold (cost PRD D3): every running mean carries its effective weight,
- *  decayed from the stat's last fold to now, before the fresh point lands. A stat with
- *  no `at` (written before decay was on) carries its raw `n` undecayed — no age is
- *  invented for it. */
-function foldDecayed(prev: ActionModelStat, score: number, costMc: number, merged: boolean, rl: number, nowMs: number): ActionModelStat {
-  const weight = prev.effectiveN ?? prev.n;
-  const age = prev.at != null ? nowMs - prev.at : 0;
-  const fold = (mean: number, x: number) => foldDecayedMean(mean, weight, x, age);
-  const scored = fold(prev.avgScore, score);
-  return {
-    ...prev,
-    n: prev.n + 1,
-    avgScore: scored.mean,
-    mergeRate: fold(prev.mergeRate, merged ? 1 : 0).mean,
-    avgCostMc: fold(prev.avgCostMc, costMc).mean,
-    rateLimitRate: fold(prev.rateLimitRate ?? 0, rl).mean,
-    effectiveN: scored.weight,
-    at: nowMs,
-  };
-}
-
-/** Welford-style update of one model's running stats with a fresh observation — or the
- *  decayed fold when `decay` is given. */
-function foldObservation(prev: ActionModelStat | undefined, model: string, score: number, costMc: number, merged: boolean, rateLimited: boolean, decay?: FoldDecay): ActionModelStat {
-  const rl = rateLimited ? 1 : 0;
-  if (!prev) {
-    return {
-      model, n: 1, avgScore: score, mergeRate: merged ? 1 : 0, avgCostMc: costMc, rateLimitRate: rl,
-      ...(decay ? { effectiveN: 1, at: decay.nowMs } : {}),
-    };
-  }
-  if (decay) return { ...foldDecayed(prev, score, costMc, merged, rl, decay.nowMs), model };
-  const n = prev.n + 1;
-  return {
-    ...prev,
-    model,
-    n,
-    avgScore: prev.avgScore + (score - prev.avgScore) / n,
-    mergeRate: prev.mergeRate + ((merged ? 1 : 0) - prev.mergeRate) / n,
-    avgCostMc: prev.avgCostMc + (costMc - prev.avgCostMc) / n,
-    rateLimitRate: (prev.rateLimitRate ?? 0) + (rl - (prev.rateLimitRate ?? 0)) / n,
-  };
-}
-
-/** Fold an observation into one stat list (pure) — returns a NEW list, re-sorted. */
-function foldIntoList(list: ActionModelStat[] | undefined, obs: RoutingObservation, decay?: FoldDecay): ActionModelStat[] {
-  const next = (list ?? []).slice();
-  const idx = next.findIndex((s) => s.model === obs.model);
-  const updated = foldObservation(idx >= 0 ? next[idx] : undefined, obs.model, obs.score, obs.costMc, obs.merged, obs.rateLimited === true, decay);
-  if (idx >= 0) next[idx] = updated;
-  else next.push(updated);
-  return sortStats(next);
-}
-
-/** Apply one fresh observation to a blob (pure) — returns a NEW table, re-sorted. A
- *  role-bearing observation also folds into that role's list. */
-export function applyObservation(
-  table: RoutingTable,
-  obs: RoutingObservation,
-  decay?: FoldDecay,
-): RoutingTable {
-  const byAction = { ...table.byAction, [obs.actionType]: foldIntoList(table.byAction[obs.actionType], obs, decay) };
-  const byRole = obs.role
-    ? { ...table.byRole, [obs.role]: foldIntoList(table.byRole?.[obs.role], obs, decay) }
-    : table.byRole;
-  return { updatedAt: new Date().toISOString(), byAction, ...(byRole ? { byRole } : {}) };
-}
-
-/** Apply one human thumb to a blob (pure) — returns a NEW table, re-sorted. A model
- *  with no outcome row yet gets one at `n: 0`: for a chat or canvas turn there is no
- *  run to score, and the rating is the only evidence there will ever be. */
-export function applyRatingObservation(
-  table: RoutingTable,
-  obs: { actionType: ActionType; model: string; up: boolean },
-): RoutingTable {
-  const byAction = { ...table.byAction };
-  const list = (byAction[obs.actionType] ?? []).slice();
-  const idx = list.findIndex((s) => s.model === obs.model);
-  const prev = idx >= 0 ? list[idx]! : { model: obs.model, n: 0, avgScore: 0, mergeRate: 0, avgCostMc: 0, rateLimitRate: 0 };
-  const updated: ActionModelStat = {
-    ...prev,
-    ratedUp: (prev.ratedUp ?? 0) + (obs.up ? 1 : 0),
-    ratedDown: (prev.ratedDown ?? 0) + (obs.up ? 0 : 1),
-  };
-  if (idx >= 0) list[idx] = updated;
-  else list.push(updated);
-  byAction[obs.actionType] = sortStats(list);
-  // A thumb carries no role, so the per-role lists pass through untouched.
-  return { updatedAt: new Date().toISOString(), byAction, ...(table.byRole ? { byRole: table.byRole } : {}) };
 }
 
 /**

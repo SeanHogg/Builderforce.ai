@@ -106,7 +106,7 @@ export function canvasModelTransport(run: CanvasRun): ModelTransport {
           idleTimeoutMs: CANVAS_STREAM_IDLE_MS,
           routingMode: options.routingMode,
           // The run's pin keeps its strictness, and the models it routes around stay out of the summary too.
-          ...(request.model && request.strict ? { modelStrict: true as const } : {}),
+          modelStrict: request.model ? request.strict : undefined,
           ...(request.excludeModels && request.excludeModels.length > 0 ? { excludeModels: [...request.excludeModels] } : {}),
           metadata: { guestTurnId, guestTurnInput: options.guestTurnInput ?? options.prompt },
         }),

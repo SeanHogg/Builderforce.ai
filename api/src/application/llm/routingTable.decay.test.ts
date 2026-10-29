@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ROUTING_HALF_LIFE_DAYS } from '@builderforce/learned-routing';
-import { applyObservation, routingDecayOn, type RoutingTable } from './routingTable';
+import { applyObservation } from './routingFold';
+import { routingDecayOn, type RoutingTable } from './routingTable';
 
 const DAY = 86_400_000;
 const empty = (): RoutingTable => ({ updatedAt: new Date(0).toISOString(), byAction: {} });
