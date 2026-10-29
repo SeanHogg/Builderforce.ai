@@ -163,8 +163,12 @@ export interface LoopHooks<M> {
   beforeToolCalls?(ctx: TurnContext<M>, turn: LoopTurn, calls: ParsedToolCall[]): Promise<StopDecision | void> | StopDecision | void;
   /** Per call, before dispatch. May short-circuit with a result or rewrite the call. */
   beforeDispatch?(call: ParsedToolCall, ctx: TurnContext<M>): Promise<DispatchDecision> | DispatchDecision;
-  /** A tool returned `finish`. Return a block reason to REFUSE the finish (the model sees `{ok:false,error}` and keeps going), or null to accept. */
-  onFinish?(ctx: TurnContext<M>, summary: string, call: ParsedToolCall): Promise<string | null> | string | null;
+  /**
+   * A tool returned `finish`. Return a block reason to REFUSE the finish (the model sees `{ok:false,error}`
+   * and keeps going), `{ note }` to DEFER it without a failure (the model sees `{ok:true,finished:false,note}`
+   * — nothing went wrong, so it is not counted toward the failure streak), or null to accept.
+   */
+  onFinish?(ctx: TurnContext<M>, summary: string, call: ParsedToolCall): Promise<string | { note: string } | null> | string | { note: string } | null;
   /**
    * A tool returned `ask_human`. Returning nothing parks the run: it ends after this turn's
    * remaining calls with `awaitingInput` set. Returning a result means the question was

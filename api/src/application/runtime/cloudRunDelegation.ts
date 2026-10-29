@@ -11,8 +11,7 @@
  */
 
 import { MAX_SUBAGENT_DEPTH } from '@builderforce/agent-loop';
-import type { Capability } from '@builderforce/agent-tools';
-import { childCapabilities, DELEGATION_CAPABILITIES } from './cloudSubagent';
+import { childCapabilities, DELEGATION_CAPABILITIES, type Capability } from '@builderforce/agent-tools';
 import type { CloudChildSpec } from './cloudChildRuns';
 import type { LiveParentRun } from './cloudLiveOrchestration';
 import type { RuntimeService } from './RuntimeService';

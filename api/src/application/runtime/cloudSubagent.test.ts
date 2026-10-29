@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { Capability } from '@builderforce/agent-tools';
 import {
   childCapabilities,
   DELEGATION_CAPABILITIES,
   NON_DELEGABLE_CAPABILITIES,
-  resolveDelegatePersona,
-} from './cloudSubagent';
+  type Capability,
+} from '@builderforce/agent-tools';
+import { resolveDelegatePersona } from './cloudSubagent';
 
 /**
  * What a child HOLDS and WHO it runs as — a security boundary and a staffing rule, so

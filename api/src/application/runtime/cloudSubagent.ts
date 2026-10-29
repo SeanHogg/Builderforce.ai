@@ -18,10 +18,6 @@ import {
   staffDelegation,
 } from '@builderforce/agent-tools';
 
-// What a child holds is ONE rule for every surface: it lives in `@builderforce/agent-tools`
-// (the cloud, the editor and the on-prem children all subtract the same capabilities).
-export { childCapabilities, DELEGATION_CAPABILITIES, NON_DELEGABLE_CAPABILITIES } from '@builderforce/agent-tools';
-
 /** Resolves one of the WORKSPACE's agents (by id or name) to the persona a child runs as. */
 export type PersonaBriefPort = (agent: string) => Promise<{ name: string; brief: string; roleKeys?: readonly string[] } | null>;
 

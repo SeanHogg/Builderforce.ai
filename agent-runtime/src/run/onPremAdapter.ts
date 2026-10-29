@@ -13,7 +13,8 @@
  *                  and nothing ever resumes it (a late steer starts a NEW follow-up run);
  *   events       — relay frames through the host's {@link OnPremRunSinks}, plus the
  *                  uniform outcome row;
- *   human        — the process-wide approval gate, through the provider's `human` capability;
+ *   human        — the process-wide approval gate (`onPremHuman`): questions through the
+ *                  provider's `human` capability, governance approvals straight to the gate;
  *   steering     — the relay's steering queue (`SteeringChannel`): a steer reaches the next
  *                  model call, one that lands during the last turn is taken too, and what
  *                  is still queued when the run settles goes back to the host as a late steer;
@@ -28,11 +29,12 @@
 
 import { randomUUID } from "node:crypto";
 import { RUN_CANCELLED_REASON, asksForSubagents, runAgent } from "@builderforce/agent-run";
-import type { ContextSource, HumanAnswer, HumanChannel, ModelTransport, RunOutcome, RunPolicy, RunPorts, RunState, RunStore } from "@builderforce/agent-run";
+import type { ContextSource, ModelTransport, RunOutcome, RunPolicy, RunPorts, RunState, RunStore } from "@builderforce/agent-run";
 import { RunKnowledgeRecorder, type CapabilityProvider, type PolicyGate, type RunKnowledgeLog } from "@builderforce/agent-tools";
 import type { QueuedSteer, SteeringChannel } from "../infra/relay-steering.js";
 import { logWarn } from "../logger.js";
 import { gatewayModelTransport } from "./gatewayModelTransport.js";
+import { onPremHuman } from "./onPremHuman.js";
 import { acknowledgedSteering, observedModel, relayEventSink, type OnPremRunSinks } from "./onPremEvents.js";
 import { buildOnPremProvider } from "./onPremProvider.js";
 import { childRunner } from "./onPremSubagents.js";
@@ -97,14 +99,6 @@ export interface OnPremRunResult {
 }
 
 const EMPTY_PACK: ContextSource = { pack: () => ({ focus: [], facts: [], recall: [] }) };
-
-/** Ask through the provider's `human` capability (the approval gate answers inline). */
-async function askHuman(caps: CapabilityProvider, question: string, options?: readonly string[]): Promise<HumanAnswer> {
-  if (!caps.human) return { kind: "paused" };
-  const result = await caps.human.ask(question, options?.length ? `Options: ${options.join(" | ")}` : undefined);
-  if (result.paused) return { kind: "paused" };
-  return { kind: "answered", answer: result.answer ?? result.note ?? result.error ?? "" };
-}
 
 /** The policy DATA of an on-prem ticket run. How the run behaves is the agent's. */
 function policyOf(params: OnPremRunParams): RunPolicy {
@@ -180,10 +174,11 @@ export async function runOnPremAgent(params: OnPremRunParams, sinks: OnPremRunSi
     const model = observedModel(transport, sinks);
     // The provider is built after the ports that need it, so those read it late.
     let capabilities!: CapabilityProvider;
-    const human: HumanChannel = { ask: (question, options) => askHuman(capabilities, question, options) };
+    const human = onPremHuman(() => capabilities);
     const events = relayEventSink(sinks, steering?.takeApplied ?? (() => ""));
     const spawn = childRunner({
       model: transport,
+      human,
       get capabilities() {
         return capabilities;
       },

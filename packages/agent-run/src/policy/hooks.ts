@@ -161,6 +161,8 @@ export interface GuardControl {
   question: string;
   /** The answers the person is offered. */
   options?: readonly string[];
+  /** The surface already parked the run on a person (an approver answered 'paused'): park it, never ask again. */
+  parked?: true;
 }
 
 /** What a guard decided about a call. */
@@ -204,18 +206,16 @@ export interface ContextHook {
 export interface ToolsHook {
   /** Narrow the schemas the surface can run to the ones this run may call. */
   select(ctx: PolicyContext, tools: readonly ToolSchema[]): Promise<readonly ToolSchema[] | void> | readonly ToolSchema[] | void;
-  /**
-   * Before a call dispatches: a governance gate (`RunPolicy.approvalGates`) that stops it
-   * answers in its place — the tool never runs. A `block` answers with its refusal; a
-   * `require-approval` asks the human channel once per call and either lets the call
-   * through (approved), parks the run on the person (`control`), or — when the surface has
-   * no approver — refuses.
-   */
-  refuse?(ctx: PolicyContext, call: PolicyToolCall): Promise<{ data: unknown; control?: GuardControl } | void> | { data: unknown; control?: GuardControl } | void;
   /** Before a call dispatches: a read whose lines were already SERVED is answered without the disk. */
   beforeDispatch?(ctx: PolicyContext, call: PolicyToolCall): { data: unknown } | void;
   /** After a call returned: record what the model was served (or what a write invalidated). */
   observe?(ctx: PolicyContext, call: PolicyToolCall, result: unknown, isError: boolean): void;
+  /**
+   * The governance gates (`RunPolicy.approvalGates`) against one call: a `block` refuses it
+   * (the model reads the refusal), a `require-approval` asks the human channel — answered in
+   * run it proceeds, parked it returns the control that parks the run. Nothing ⇒ the call is allowed.
+   */
+  gate?(ctx: PolicyContext, call: PolicyToolCall): Promise<{ data: unknown; isError: true; control?: GuardControl } | void> | { data: unknown; isError: true; control?: GuardControl } | void;
 }
 
 /** WS2g — the model policy: the role ladder, the cascade, the learned routing, the pins. */

@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildNodeShell } from "./nodeShell.js";
+import { buildNodeShell, shellInvocation } from "./nodeShell.js";
 
 /**
  * PRD 35 §3.3: Stop settles the run in ≤2 s with no child process left. The command here
@@ -20,6 +20,9 @@ beforeEach(async () => {
   pidFile = path.join(dir, "pid");
   idler = path.join(dir, "idle.js");
   await writeFile(idler, `require("node:fs").writeFileSync(process.argv[2], String(process.pid)); setInterval(() => {}, 1000);`);
+  // Scripts, not `node -e "…"`: nested quotes are the one thing the platform shells disagree on.
+  await writeFile(path.join(dir, "hello.js"), `console.log("hi");`);
+  await writeFile(path.join(dir, "exit3.js"), `process.exit(3);`);
 });
 
 afterEach(async () => {
@@ -53,13 +56,28 @@ async function expectGone(pid: number): Promise<void> {
   expect(alive(pid)).toBe(false);
 }
 
+describe("shellInvocation", () => {
+  it("hands the shell the command without argv quoting, and keeps the command's own exit code", () => {
+    const command = 'echo "a b"';
+    const { args } = shellInvocation(command);
+    if (process.platform === "win32") {
+      const encoded = args[args.indexOf("-EncodedCommand") + 1] ?? "";
+      const script = Buffer.from(encoded, "base64").toString("utf16le");
+      expect(script).toContain(command);
+      expect(script).toContain("exit $LASTEXITCODE");
+    } else {
+      expect(args.at(-1)).toBe(command);
+    }
+  });
+});
+
 describe("buildNodeShell", () => {
   it("returns the combined output and the exit code", async () => {
     const shell = buildNodeShell({ cwd: dir });
-    const ok = await shell.run(`node -e "console.log('hi')"`);
+    const ok = await shell.run(`node "${path.join(dir, "hello.js")}"`);
     expect(ok).toMatchObject({ ok: true, exitCode: 0 });
     expect(ok.stdout).toContain("hi");
-    const failed = await shell.run(`node -e "process.exit(3)"`);
+    const failed = await shell.run(`node "${path.join(dir, "exit3.js")}"`);
     expect(failed).toMatchObject({ ok: false, exitCode: 3 });
   });
 

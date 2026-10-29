@@ -81,6 +81,7 @@ import { getKnowledgeLoop } from "./memory-bridge.js";
 import { createGitRepoSync } from "./repo-sync.js";
 import { OnPremAgentEngine } from "../run/onPremEngine.js";
 import { configuredModelWindow } from "../run/onPremModelWindow.js";
+import { relayRunSinks } from "../run/relayRunSinks.js";
 import {
   taskWorkspaceDir,
   buildTaskCloneUrl,
@@ -178,6 +179,8 @@ export class BuilderforceRelayService implements IRelayService {
   /** Steers that reached a V2 run after its last turn: held until the run has reported
    *  its terminal state, then handed to the API, which starts a follow-up run. */
   private readonly lateSteers = createLateSteerRegistry();
+  /** The context window of a gateway model, from the models config read once at startup. */
+  private readonly modelWindow = configuredModelWindow();
   /** Tracks pending remote task correlations so results can be sent back. */
   private pendingRemoteCorrelations = new Map<
     string,
@@ -419,80 +422,12 @@ export class BuilderforceRelayService implements IRelayService {
    */
   private async runV2Engine(payload: EngineDispatch, prompt: string): Promise<void> {
     const agentLabel = payload.agentLabel?.trim() || "BuilderForce-V2";
-    const sinks: OnPremRunSinks = {
-      onAssistantText: (text) => {
-        // Live view…
-        this.sendToRelay({ type: "chat.message", role: "assistant", text, session: "main" });
-        // …and durable persistence, so the V2 run's natural-language turns show on
-        // the Logs/Timeline after it ends (parity with V1's `agent.message`).
-        void this.persistToolAudit({
-          executionId: payload.executionId,
-          toolName: "agent.message",
-          category: "message",
-          result: text,
-        });
-      },
-      onToolUse: (toolName, toolCallId, args) => {
-        // Live (fans out to subscribers) and durable (the relay DO persists the frame),
-        // so the run stays on the timeline after it ends; HTTP only if the socket is down.
-        this.toolAudit.emit({
-          executionId: payload.executionId,
-          toolName,
-          toolCallId,
-          category: "v2",
-          args,
-        });
-      },
-      onResult: () => {
-        /* terminal state is reported below from the runner's return value */
-      },
-      onSteerApplied: (text) => {
-        // Acknowledge on the timeline exactly as the cloud loop does
-        // (`steer.applied`, category `message`, args.text) — live + durable. The
-        // relay DO already echoed the user's turn to browsers, so only the
-        // acknowledgement is emitted here.
-        const detail = { text };
-        this.toolAudit.emit({
-          executionId: payload.executionId,
-          toolName: "steer.applied",
-          category: "message",
-          args: detail,
-          result: text.slice(0, 280),
-        });
-      },
-      onOutcome: (row) => {
-        // The uniform outcome row (PRD 35 §8.2), one per run, on the durable audit trail.
-        this.toolAudit.emit({
-          executionId: payload.executionId,
-          toolName: "run.outcome",
-          category: "run",
-          args: row,
-        });
-      },
-      // A sub-agent is observed on its own: its calls and its outcome row (which names its
-      // owner) go to the audit trail tagged with its label — never to the owner's chat.
-      forChild: (label) => ({
-        onAssistantText: () => undefined,
-        onToolUse: (toolName, toolCallId, args) => {
-          this.toolAudit.emit({
-            executionId: payload.executionId,
-            toolName,
-            toolCallId,
-            category: "v2-child",
-            args: { child: label, args },
-          });
-        },
-        onResult: () => undefined,
-        onOutcome: (row) => {
-          this.toolAudit.emit({
-            executionId: payload.executionId,
-            toolName: "run.outcome",
-            category: "run",
-            args: { ...row, child: label },
-          });
-        },
-      }),
-    };
+    const sinks: OnPremRunSinks = relayRunSinks({
+      executionId: payload.executionId,
+      sendToRelay: (frame) => this.sendToRelay(frame),
+      emitAudit: (event) => this.toolAudit.emit(event),
+      persistAudit: (event) => this.persistToolAudit(event),
+    });
 
     // One shared ephemeral workspace per ticket — every agent on the task works
     // out of it (the ticket is the shared context). Clone happens once.
@@ -539,7 +474,7 @@ export class BuilderforceRelayService implements IRelayService {
         for (const steer of late) this.lateSteers.hold(payload.executionId, steer);
       },
       // The context window of the model, from the host's own models config (none ⇒ unknown).
-      window: configuredModelWindow(),
+      window: this.modelWindow,
     });
     // The terminal state this run ended in, or null when it completed normally (the
     // ticket stays open and KEEPS its workspace — it is the shared ticket context).
@@ -548,7 +483,7 @@ export class BuilderforceRelayService implements IRelayService {
     // `.builderforce/tasks/<taskId>` (and its clone) until the 24h stale sweep.
     let terminal: TaskTerminalState | null = null;
     try {
-      let result: { ok: boolean; text: string };
+      let result: { ok: boolean; text: string; cancelled: boolean; finished: boolean };
       try {
         const run = await engine.run({
           // Assigned Skills/Personas/Content ride as the system prompt (the adapter
@@ -561,11 +496,8 @@ export class BuilderforceRelayService implements IRelayService {
           signal: abortController.signal,
           ...(payload.policyGates?.length ? { policy: { gates: payload.policyGates } } : {}),
         });
-        // A stop command steered in ends the run without the portal knowing (no cancel frame),
-        // so it reports like any other run that did not complete.
-        result = { ok: run.ok, text: run.cancelled && !abortController.signal.aborted ? "Stopped by a stop command from the user." : run.output };
+        result = { ok: run.ok, text: run.output, cancelled: run.cancelled, finished: run.finished };
       } finally {
-        steering.close();
         if (payload.executionId != null) {
           this.v2Aborts.delete(payload.executionId);
           this.v2Steering.delete(payload.executionId);
@@ -596,14 +528,19 @@ export class BuilderforceRelayService implements IRelayService {
         );
       }
 
+      // A stop command steered in ends the run without a cancel frame, so the portal does not
+      // know: it is reported cancelled here. A run that neither finished nor was stopped (it
+      // parked on a person, or ran out of steps) did not complete, whatever `ok` says.
+      const state = result.cancelled ? "cancelled" : result.finished && result.ok ? "completed" : "failed";
       if (payload.executionId != null) {
         await this.reportExecutionState(
           payload.executionId,
-          result.ok ? "completed" : "failed",
-          result.ok ? { result: result.text } : { errorMessage: result.text },
+          state,
+          state === "completed" ? { result: result.text } : { errorMessage: result.text || "The run ended before it finished." },
         );
       }
-      if (!result.ok) terminal = "failed";
+      if (state === "cancelled") terminal = "cancelled";
+      else if (state === "failed") terminal = "failed";
     } catch (err) {
       // The engine threw before it could report anything — still a terminal end.
       const message = err instanceof Error ? err.message : String(err);

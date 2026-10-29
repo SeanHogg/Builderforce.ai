@@ -14,6 +14,7 @@ import {
   type HumanChannel,
   type ModelCompletion,
   type ModelRequest,
+  type RunEvent,
   type RunOutcome,
   type RunPorts,
   type RunState,
@@ -33,6 +34,7 @@ const SAY = (content: string): ModelCompletion => ({ content });
 /** Build a run's ports around a script; `writes` records every file the provider was asked to write. */
 function setup(script: Array<ModelCompletion | Error>, over: { human?: HumanChannel; caps?: Capability[]; commits?: unknown[] } = {}) {
   const requests: ModelRequest[] = [];
+  const events: RunEvent[] = [];
   const writes: string[] = [];
   let call = 0;
   const ports: RunPorts = {
@@ -66,11 +68,11 @@ function setup(script: Array<ModelCompletion | Error>, over: { human?: HumanChan
       save: () => undefined,
       commitMemory: (consolidated: unknown) => void over.commits?.push(consolidated),
     },
-    events: { emit: () => undefined },
+    events: { emit: (event) => void events.push(event) },
     human: over.human ?? { ask: async () => ({ kind: "paused" }) },
     context: { pack: () => ({ focus: [], facts: [], recall: [] }) },
   };
-  return { ports, requests, writes };
+  return { ports, requests, writes, events };
 }
 
 const gate = (over: Partial<PolicyGate>): PolicyGate => ({ id: "g", effect: "block", ...over }) as PolicyGate;
@@ -78,39 +80,82 @@ const policyWith = (approvalGates: PolicyGate[]) => ({ ...TEST_POLICY, approvalG
 const toolNames = (request: ModelRequest | undefined) => (request?.tools ?? []).map((t) => t.function.name);
 
 describe("a block gate", () => {
-  it("refuses the call without running the tool, and names the gate", async () => {
-    const { ports, writes } = setup([WRITE("secrets/key.txt"), SAY("blocked")]);
+  it("refuses the call without running the tool, names the gate, and says so on the timeline", async () => {
+    const { ports, writes, events } = setup([WRITE("secrets/key.txt"), SAY("blocked")]);
     const outcome = await runAgent({
       task: TEST_TASK,
       policy: policyWith([gate({ id: "no-secrets", tool: "write_file", paths: ["secrets/**"], reason: "do not write secrets" })]),
       ports,
     });
     expect(writes).toEqual([]);
-    expect(JSON.stringify(outcome.state.messages)).toContain("no-secrets");
+    expect(JSON.stringify(outcome.state.messages)).toContain("do not write secrets");
+    expect(events).toContainEqual(expect.objectContaining({ kind: "policy.blocked", tool: "write_file", gateId: "no-secrets", reason: "do not write secrets" }));
   });
 });
 
 describe("a require-approval gate", () => {
   const approvalGate = gate({ id: "ask-first", effect: "require-approval", tool: "write_file", reason: "writes need a person" });
+  const approved = { kind: "answered", answer: "yes", approved: true } as const;
 
-  it("asks the human channel ONCE per call and proceeds on the answer", async () => {
-    const asked: string[] = [];
+  it("asks the approver ONCE per call, handing it the call, and proceeds on an approving answer", async () => {
+    const asked: Array<{ gate: string; tool?: string; path?: unknown }> = [];
     const human: HumanChannel = {
       ask: async () => ({ kind: "paused" }),
-      approve: async (g) => {
-        asked.push(g.id);
-        return { kind: "answered", answer: "yes" };
+      approve: async (g, call) => {
+        asked.push({ gate: g.id, tool: call?.tool, path: call?.args.path });
+        return approved;
       },
     };
     const { ports, writes } = setup([WRITE("a.ts"), WRITE("a.ts"), WRITE("b.ts"), SAY("done")], { human });
     const outcome = await runAgent({ task: TEST_TASK, policy: policyWith([approvalGate]), ports });
     expect(outcome.kind).toBe("finished");
     // The identical retried call rides the first answer; a DIFFERENT call is asked on its own merits.
-    expect(asked).toEqual(["ask-first", "ask-first"]);
+    expect(asked).toEqual([
+      { gate: "ask-first", tool: "write_file", path: "a.ts" },
+      { gate: "ask-first", tool: "write_file", path: "b.ts" },
+    ]);
     expect(writes).toEqual(["a.ts", "a.ts", "b.ts"]);
   });
 
-  it("parks the run when the channel parks, and the identical call proceeds after the resume", async () => {
+  it("declines the call when the approver rejects it — the tool does not run", async () => {
+    const human: HumanChannel = {
+      ask: async () => ({ kind: "paused" }),
+      approve: async () => ({ kind: "answered", answer: "not on prod", approved: false }),
+    };
+    const { ports, writes } = setup([WRITE("a.ts"), SAY("declined")], { human });
+    const outcome = await runAgent({ task: TEST_TASK, policy: policyWith([approvalGate]), ports });
+    expect(writes).toEqual([]);
+    expect(JSON.stringify(outcome.state.messages)).toContain("The approver declined");
+    expect(outcome.state.approvedCalls ?? []).toEqual([]);
+  });
+
+  it("reads the structured decision, never the words of the answer", async () => {
+    const human: HumanChannel = { ask: async () => ({ kind: "paused" }), approve: async () => ({ kind: "answered", answer: "approve", approved: false }) };
+    const { ports, writes } = setup([WRITE("a.ts"), SAY("declined")], { human });
+    await runAgent({ task: TEST_TASK, policy: policyWith([approvalGate]), ports });
+    expect(writes).toEqual([]);
+  });
+
+  it("parks the run when the approver parks, WITHOUT asking a second time, and the tool is not reported done", async () => {
+    let asks = 0;
+    const human: HumanChannel = {
+      // If the run asked again, this would answer in-run and report the call as done.
+      ask: async () => {
+        asks += 1;
+        return { kind: "answered", answer: "yes" };
+      },
+      approve: async () => ({ kind: "paused", approvalId: "appr-9" }),
+    };
+    const { ports, writes, events } = setup([WRITE("a.ts")], { human });
+    const parked: RunOutcome = await runAgent({ task: TEST_TASK, policy: policyWith([approvalGate]), ports });
+    expect(parked.kind).toBe("paused");
+    expect(parked.kind === "paused" && parked.approvalId).toBe("appr-9");
+    expect(asks).toBe(0);
+    expect(writes).toEqual([]);
+    expect(events).toContainEqual(expect.objectContaining({ kind: "tool.dispatched", tool: "write_file", ok: false }));
+  });
+
+  it("proceeds after the resume: the parked call is in approvedCalls, and the identical retried call runs", async () => {
     let approvals = 0;
     const human: HumanChannel = {
       ask: async () => ({ kind: "paused" }),
@@ -122,8 +167,7 @@ describe("a require-approval gate", () => {
     const first = setup([WRITE("a.ts")], { human });
     const parked: RunOutcome = await runAgent({ task: TEST_TASK, policy: policyWith([approvalGate]), ports: first.ports });
     expect(parked.kind).toBe("paused");
-    expect(first.writes).toEqual([]);
-    expect(approvals).toBe(1);
+    expect(parked.state.approvedCalls).toHaveLength(1);
 
     const resumed = setup([WRITE("a.ts"), SAY("done")], { human });
     const outcome = await runAgent({ task: TEST_TASK, policy: policyWith([approvalGate]), ports: resumed.ports, resume: parked.state as RunState });
@@ -132,11 +176,19 @@ describe("a require-approval gate", () => {
     expect(approvals).toBe(1);
   });
 
-  it("refuses with the gate's message when the surface has no approver", async () => {
-    const { ports, writes } = setup([WRITE("a.ts"), SAY("refused")]);
+  it("falls back to a plain question when the surface has no approver — an answer is not an approval", async () => {
+    const asked: string[] = [];
+    const human: HumanChannel = {
+      ask: async (question) => {
+        asked.push(question);
+        return { kind: "answered", answer: "sure" };
+      },
+    };
+    const { ports, writes } = setup([WRITE("a.ts"), SAY("declined")], { human });
     const outcome = await runAgent({ task: TEST_TASK, policy: policyWith([approvalGate]), ports });
+    expect(asked).toHaveLength(1);
     expect(writes).toEqual([]);
-    expect(JSON.stringify(outcome.state.messages)).toContain("requires human approval");
+    expect(JSON.stringify(outcome.state.messages)).toContain("The approver declined");
   });
 });
 

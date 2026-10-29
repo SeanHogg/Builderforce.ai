@@ -76,3 +76,19 @@ describe("evaluateOnPremPolicyGate", () => {
     if (d.action === "block") expect(d.gateId).toBe("no-write");
   });
 });
+
+// The deleted SDK `canUseToolDecision` cases, asked of the one evaluation: the SDK's tool
+// name (`Write`) against a gate authored for the catalog's (`write_file`).
+describe("canUseToolDecision", () => {
+  it("denies a path-scoped write_file block", () => {
+    const d = evaluateOnPremPolicyGate([PATH_BLOCK], "Write", { path: "secrets/key.txt" });
+    expect(d.action).toBe("block");
+    if (d.action === "block") expect(policyRefusalMessage(d)).toContain("no-secrets");
+  });
+
+  it("allows a write outside the glob", () => {
+    expect(evaluateOnPremPolicyGate([PATH_BLOCK], "Write", { path: "src/a.ts" })).toEqual({
+      action: "allow",
+    });
+  });
+});

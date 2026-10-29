@@ -105,7 +105,7 @@ export async function resolveSubagentSpawnModel(params: {
 
 /**
  * The model a relay-dispatched task runs on when the dispatch pinned none. The task runs
- * the Claude Agent SDK loop against the Builderforce gateway, so only candidates the
+ * the one agent against the Builderforce gateway, so only candidates the
  * gateway itself serves (the `builderforcellm` provider) are eligible, and its `auto`
  * pool id is not a choice — it is the absence of one. Returns the gateway model id, or
  * `undefined` to leave the choice to the engine/gateway exactly as before.

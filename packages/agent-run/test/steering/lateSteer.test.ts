@@ -60,6 +60,8 @@ describe("a steer that lands during the last turn", () => {
     expect(requests).toHaveLength(2);
     expect(JSON.stringify(requests[1]?.messages)).toContain("also add tests");
     expect(steerEvents(events)).toHaveLength(1);
+    // Deferring the finish for a message is not a failure: the call is not an error row.
+    expect(events).toContainEqual(expect.objectContaining({ kind: "tool.dispatched", tool: "finish", ok: true }));
   });
 
   it("lets a stop command win over the finish and settles the run cancelled", async () => {

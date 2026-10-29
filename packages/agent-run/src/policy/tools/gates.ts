@@ -8,32 +8,28 @@
  * `evaluatePolicyGate`), matching tool-name synonyms so a `write_file` gate still
  * covers on-prem `write` / SDK `Write`. `block` wins over `require-approval`.
  *
- * Three things a gate can do to a call (see {@link gateVerdict}):
+ * Three things a gate can do (see {@link gateCall} and {@link isToolWithheld}):
  *   - `block` — the tool never runs; the model reads which gate stopped it;
- *   - `require-approval` — the run asks a human once per CALL (gate + tool + argument
- *     hash, {@link policyGateCallKey}) and proceeds on the answer, or parks;
- *   - an unscoped `block` also withholds the tool from the advertised catalog
- *     ({@link isToolWithheld}).
- * The control tools (`finish`, `ask_human`, `ask_user`) are how a run ends or asks: a
- * gate that names no tool (or `*`) never withholds or refuses them, so a fully-gated
- * run can still stop and ask. A gate that NAMES one still applies.
+ *   - `require-approval` — the run asks the human channel once per CALL (gate + tool +
+ *     argument hash, {@link policyGateCallKey}) and proceeds on an approving answer;
+ *   - an unscoped `block` also withholds the tool from the advertised catalog.
+ * The control tools (`finish`, `ask_human`, `ask_user`) are how a run ends or asks: a gate
+ * that names no tool (or `*`) never withholds or refuses them, so a fully-gated run can
+ * still stop and ask. A gate that NAMES one still applies.
  *
  * No `node:*` imports, no DOM: this file is compiled into the Worker, the browser
  * and Node.
  */
 
-import {
-  evaluatePolicyGate,
-  policyGateCallKey,
-  toolCallPaths,
-  type PolicyDecision,
-  type PolicyGate,
-} from "@builderforce/agent-tools";
+import { evaluatePolicyGate, policyGateCallKey, toolCallPaths, type PolicyDecision, type PolicyGate } from "@builderforce/agent-tools";
+import type { GuardControl, PolicyContext, PolicyToolCall } from "../hooks.js";
+
+export { policyGateCallKey };
 
 /**
  * Native / SDK tool names the model emits, plus the catalog names a gate is typically
  * authored against (`write_file`, `run_command`, …). The on-prem `policy-gate-seam.ts`
- * table, extended with the SDK vocabulary the SDK runner's allowlist covered: `Task` is
+ * table, extended with the SDK vocabulary its runner's allowlist covered: `Task` is
  * delegation (`spawn_agent(s)`), `Glob` / `Grep` are `list_files` / `search_code`, and a
  * write gate also covers `delete_file` (a delete is a write).
  */
@@ -70,14 +66,14 @@ export function isPolicyRefusal(d: PolicyDecision): d is PolicyRefusal {
   return d.action === "block" || d.action === "require-approval";
 }
 
-/** Message the model sees when a gate refuses the call. */
+/** Message the model sees when a gate refuses the call (for a surface with no approver to ask). */
 export function policyRefusalMessage(d: PolicyRefusal): string {
   if (d.action === "block") {
     return `Policy gate ${d.gateId} blocked this tool call: ${d.reason}`;
   }
   return (
     `Policy gate ${d.gateId} requires human approval before this tool call (${d.reason}). ` +
-    "This runner has no approval pause; the call was refused."
+    "No approver is available on this host (no approval pause), so the call was refused."
   );
 }
 
@@ -92,39 +88,38 @@ function candidateToolNames(toolName: string): string[] {
   return out;
 }
 
-/**
- * Evaluate compiled gates against one tool call. Empty/missing args (no path) omit the
- * path argument so path-scoped gates stay unmatched — the same contract as the shared
- * `evaluatePolicyGate`. `block` wins over `require-approval` across every name synonym.
- */
-export function evaluatePolicyGateSeam(
-  gates: readonly PolicyGate[] | undefined,
-  toolName: string,
-  args?: Record<string, unknown>,
-): PolicyDecision {
-  const paths = toolCallPaths(args);
-  const pathArg = paths.length ? paths : undefined;
-  let approval: PolicyRefusal | undefined;
-  for (const name of candidateToolNames(toolName)) {
-    const d = evaluatePolicyGate(gates, name, pathArg);
-    if (d.action === "block") return d;
-    if (d.action === "require-approval") approval = d;
-  }
-  return approval ?? { action: "allow" };
-}
-
 /** The gates that apply to `toolName`: for a control tool, only those that NAME a tool. */
 function gatesFor(gates: readonly PolicyGate[] | undefined, toolName: string): readonly PolicyGate[] {
   const all = gates ?? [];
   return CONTROL_TOOLS.has(toolName) ? all.filter((g) => g.tool && g.tool !== "*") : all;
 }
 
-// ── The catalog half: which tools an unscoped `block` gate withholds ─────────
+/**
+ * Evaluate compiled gates against one tool call. Empty/missing args (no path) omit the
+ * path argument so path-scoped gates stay unmatched — the same contract as the shared
+ * `evaluatePolicyGate`. `block` wins over `require-approval` across every synonym.
+ */
+export function evaluatePolicyGateSeam(
+  gates: readonly PolicyGate[] | undefined,
+  toolName: string,
+  args?: Record<string, unknown>,
+): PolicyDecision {
+  const applicable = gatesFor(gates, toolName);
+  const paths = toolCallPaths(args);
+  const pathArg = paths.length ? paths : undefined;
+  let approval: PolicyRefusal | undefined;
+  for (const name of candidateToolNames(toolName)) {
+    const d = evaluatePolicyGate(applicable, name, pathArg);
+    if (d.action === "block") return d;
+    if (d.action === "require-approval") approval = d;
+  }
+  return approval ?? { action: "allow" };
+}
 
 /**
  * True when an unscoped `block` gate withholds `toolName` (any case, any synonym). A
- * path-scoped block still needs the tool for the unmatched paths — the dispatch refusal
- * ({@link gateVerdict}) stops the matching calls.
+ * path-scoped block still needs the tool for the unmatched paths — {@link gateCall} refuses
+ * the matching calls at dispatch.
  */
 export function isToolWithheld(gates: readonly PolicyGate[] | undefined, toolName: string): boolean {
   const blocking = gatesFor(gates, toolName).filter((g) => g.effect === "block" && !(g.paths && g.paths.length));
@@ -134,41 +129,53 @@ export function isToolWithheld(gates: readonly PolicyGate[] | undefined, toolNam
   return candidateToolNames(toolName).some((n) => blocked.has(n.toLowerCase()));
 }
 
-// ── The dispatch half: what a gate does to one call ──────────────────────────
+// ── The in-run gate (RunPolicy.approvalGates) — ported from the cloud loop's beforeDispatch ──
 
-/** What the gates decided about one call. */
-export type GateVerdict =
-  | { kind: "allow" }
-  /** Refuse: `data` is the result the model reads in place of the tool's. */
-  | { kind: "block"; data: Record<string, unknown> }
-  /** Ask a human once for THIS call; `key` is its identity in `RunState.askedGates`. */
-  | { kind: "approve"; gate: PolicyGate; key: string; reason: string };
-
-/** Decide one call against the run's gates. Pure. */
-export function gateVerdict(
-  gates: readonly PolicyGate[] | undefined,
-  toolName: string,
-  args: Record<string, unknown>,
-): GateVerdict {
-  const applicable = gatesFor(gates, toolName);
-  const decision = evaluatePolicyGateSeam(applicable, toolName, args);
+/**
+ * Judge one call against `RunPolicy.approvalGates`. A `block` refuses it (the model reads
+ * why and takes another path). A `require-approval` asks the human channel the FIRST time
+ * that exact call is reached: answered in-run, it proceeds on an approving answer and is
+ * declined on any other; parked, it returns the control that parks the run (already parked
+ * on the approver — the kernel must not ask again), and the retried identical call proceeds
+ * once the person has answered (the key is in `approvedCalls`). Nothing ⇒ the call is allowed.
+ */
+export async function gateCall(
+  ctx: PolicyContext,
+  call: PolicyToolCall,
+): Promise<{ data: unknown; isError: true; control?: GuardControl } | void> {
+  const gates = ctx.policy.approvalGates;
+  if (!gates || gates.length === 0) return undefined;
+  const decision = evaluatePolicyGateSeam(gates, call.name, call.args);
   if (decision.action === "block") {
-    return { kind: "block", data: { ok: false, error: policyRefusalMessage(decision), policy: decision } };
-  }
-  if (decision.action === "require-approval") {
-    const gate = applicable.find((g) => g.id === decision.gateId) ?? {
-      id: decision.gateId,
-      effect: "require-approval" as const,
-      tool: toolName,
-      reason: decision.reason,
+    await ctx.ports.events.emit({ kind: "policy.blocked", step: ctx.step, tool: call.name, gateId: decision.gateId, reason: decision.reason });
+    return {
+      data: { ok: false, error: `Blocked by governance policy: ${decision.reason}. Do not retry this tool — accomplish the task another way, or finish and explain why it cannot proceed.` },
+      isError: true,
     };
-    return { kind: "approve", gate, key: policyGateCallKey(decision.gateId, toolName, args), reason: decision.reason };
   }
-  return { kind: "allow" };
-}
+  if (decision.action !== "require-approval") return undefined;
+  const key = policyGateCallKey(decision.gateId, call.name, call.args);
+  if ((ctx.state.approvedCalls ?? []).includes(key)) return undefined;
 
-/** The result a call gets when it needs approval and the surface has no one to ask. */
-export function approvalRefusal(verdict: Extract<GateVerdict, { kind: "approve" }>): { data: Record<string, unknown> } {
-  const decision: PolicyRefusal = { action: "require-approval", gateId: verdict.gate.id, reason: verdict.reason };
-  return { data: { ok: false, error: policyRefusalMessage(decision), policy: decision } };
+  const gate: PolicyGate = gates.find((g) => g.id === decision.gateId) ?? { id: decision.gateId, effect: "require-approval", reason: decision.reason };
+  const question = `Approve the agent's use of "${call.name}"? ${decision.reason}`;
+  const human = ctx.ports.human;
+  const answer = human.approve
+    ? await human.approve(gate, { tool: call.name, args: call.args, reason: decision.reason })
+    : await human.ask(question);
+  // The decision is the approval's STRUCTURED outcome, never matched out of the answer's words.
+  if (answer.kind === "answered") {
+    if (answer.approved === true) {
+      ctx.state.approvedCalls = [...(ctx.state.approvedCalls ?? []), key];
+      return undefined;
+    }
+    return { data: { ok: false, error: `The approver declined "${call.name}" (governance gate ${decision.gateId}).${answer.answer ? ` ${answer.answer}` : ""}` }, isError: true };
+  }
+  // Parked: the person answers after the resume, and the retried identical call proceeds.
+  ctx.state.approvedCalls = [...(ctx.state.approvedCalls ?? []), key];
+  return {
+    data: { ok: false, error: `Paused for human approval of "${call.name}" (governance gate ${decision.gateId}).` },
+    isError: true,
+    control: { kind: "ask_human", question, parked: true, ...(answer.approvalId ? { approvalId: answer.approvalId } : {}) },
+  };
 }

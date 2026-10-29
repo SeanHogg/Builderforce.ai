@@ -42,16 +42,15 @@ export async function settle(
   // run LEARNED is a judgement of a completed one, so that half is finished-only. A run that
   // parked or yielded is not over.
   if (kind === "finished" || kind === "failed") {
-    const consolidated = await hooks.memory.consolidate(
-      policyContext(input, state, currentView(transcript, []), state.step, 0),
-      { learn: kind === "finished" },
-    );
-    if (consolidated !== undefined) {
-      try {
-        await input.ports.store.commitMemory?.(consolidated);
-      } catch {
-        // A failed write-back is recorded by its absence, not by failing a finished run.
-      }
+    try {
+      const consolidated = await hooks.memory.consolidate(
+        policyContext(input, state, currentView(transcript, []), state.step, 0),
+        { learn: kind === "finished" },
+      );
+      if (consolidated !== undefined) await input.ports.store.commitMemory?.(consolidated);
+    } catch {
+      // A failed consolidation or write-back is recorded by its absence: it must neither fail
+      // the run nor cost it the state, the outcome row and the closing event below.
     }
   }
 

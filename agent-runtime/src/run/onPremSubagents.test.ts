@@ -23,6 +23,7 @@ const OWNER_CAPS: CapabilityProvider = {
   orchestration: { spawn: async () => ({ ok: true }) },
 };
 
+const HUMAN = { ask: async () => ({ kind: "paused" as const }) };
 const quiet = (): OnPremRunSinks => ({ onAssistantText: vi.fn(), onToolUse: vi.fn(), onResult: vi.fn() });
 
 function model(answers: string[], requests: ModelRequest[]): ModelTransport {
@@ -38,7 +39,7 @@ function model(answers: string[], requests: ModelRequest[]): ModelTransport {
 describe("childRunner", () => {
   it("runs the brief as its own run and returns the child's report", async () => {
     const requests: ModelRequest[] = [];
-    const spawn = childRunner({ model: model(["found it in agent-loop.ts"], requests), capabilities: OWNER_CAPS, policy: POLICY, sinks: quiet(), parentRunId: "42" });
+    const spawn = childRunner({ model: model(["found it in agent-loop.ts"], requests), capabilities: OWNER_CAPS, human: HUMAN, policy: POLICY, sinks: quiet(), parentRunId: "42" });
 
     const result = await spawn({ label: "find handler", task: "where is the handler?" });
 
@@ -49,7 +50,7 @@ describe("childRunner", () => {
 
   it("holds a clone of its owner's tools, minus delegation, asking a person and authoring skills", async () => {
     const requests: ModelRequest[] = [];
-    const spawn = childRunner({ model: model(["ok"], requests), capabilities: OWNER_CAPS, policy: POLICY, sinks: quiet(), parentRunId: "42" });
+    const spawn = childRunner({ model: model(["ok"], requests), capabilities: OWNER_CAPS, human: HUMAN, policy: POLICY, sinks: quiet(), parentRunId: "42" });
     await spawn({ label: "x", task: "y" });
     const offered = (requests[0]?.tools ?? []).map((t) => t.function.name);
     expect(offered).toContain("read_file");
@@ -62,7 +63,7 @@ describe("childRunner", () => {
     const owner = quiet();
     const child = quiet();
     const forChild = vi.fn(() => child);
-    const spawn = childRunner({ model: model(["child answer"], []), capabilities: OWNER_CAPS, policy: POLICY, sinks: { ...owner, forChild }, parentRunId: "42" });
+    const spawn = childRunner({ model: model(["child answer"], []), capabilities: OWNER_CAPS, human: HUMAN, policy: POLICY, sinks: { ...owner, forChild }, parentRunId: "42" });
 
     await spawn({ label: "find handler", task: "go" });
 
@@ -75,7 +76,7 @@ describe("childRunner", () => {
   it("writes an outcome row that names its owner, so it is not a second run of it", async () => {
     const rows: RunOutcomeRow[] = [];
     const child: OnPremRunSinks = { ...quiet(), onOutcome: (row) => void rows.push(row) };
-    const spawn = childRunner({ model: model(["done"], []), capabilities: OWNER_CAPS, policy: POLICY, sinks: { ...quiet(), forChild: () => child }, parentRunId: "42" });
+    const spawn = childRunner({ model: model(["done"], []), capabilities: OWNER_CAPS, human: HUMAN, policy: POLICY, sinks: { ...quiet(), forChild: () => child }, parentRunId: "42" });
 
     await spawn({ label: "x", task: "y" });
 
@@ -85,14 +86,14 @@ describe("childRunner", () => {
 
   it("reports a child that failed as a failed delegation", async () => {
     const failing: ModelTransport = { complete: async () => Promise.reject(new Error("gateway 503")) };
-    const spawn = childRunner({ model: failing, capabilities: OWNER_CAPS, policy: POLICY, sinks: quiet(), parentRunId: "42" });
+    const spawn = childRunner({ model: failing, capabilities: OWNER_CAPS, human: HUMAN, policy: POLICY, sinks: quiet(), parentRunId: "42" });
     expect(await spawn({ label: "x", task: "y" })).toMatchObject({ ok: false });
   });
 
   it("stops with its owner", async () => {
     const stop = new AbortController();
     stop.abort();
-    const spawn = childRunner({ model: model(["never"], []), capabilities: OWNER_CAPS, policy: POLICY, sinks: quiet(), signal: stop.signal, parentRunId: "42" });
+    const spawn = childRunner({ model: model(["never"], []), capabilities: OWNER_CAPS, human: HUMAN, policy: POLICY, sinks: quiet(), signal: stop.signal, parentRunId: "42" });
     expect(await spawn({ label: "x", task: "y" })).toMatchObject({ ok: false, error: "cancelled" });
   });
 });

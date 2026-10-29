@@ -28,6 +28,8 @@ export interface ChildRunContext {
   /** The owner's capabilities; resolved at spawn time (the provider is built after the ports). */
   readonly capabilities: CapabilityProvider;
   policy: RunPolicy;
+  /** How people are reached: the owner's channel, so a governance approval a child needs reaches the same approver. */
+  human: HumanChannel;
   /** The owner's sinks: only `forChild` and `onOutcome` are used, never the owner's chat frames. */
   sinks: OnPremRunSinks;
   /** Stopping the owner stops the child. */
@@ -35,9 +37,6 @@ export interface ChildRunContext {
   /** The owner's run id: stamped on the child's dispatch and outcome row. */
   parentRunId: string;
 }
-
-/** A child that cannot ask: it is told so by the channel, as the cloud's children are. */
-const CHILD_HUMAN: HumanChannel = { ask: async () => ({ kind: "paused" }) };
 
 /** The `OrchestrationCapability.spawn` for one owner run. */
 export function childRunner(owner: ChildRunContext): (request: SubagentRequest) => Promise<SubagentResult> {
@@ -54,7 +53,7 @@ export function childRunner(owner: ChildRunContext): (request: SubagentRequest) 
         // A child is one invocation: nothing resumes it, so nothing is kept.
         store: { load: () => undefined, save: () => undefined },
         events: relayEventSink(sinks, () => ""),
-        human: CHILD_HUMAN,
+        human: owner.human,
         context: { pack: () => ({ focus: [], facts: [], recall: [] }) },
       },
       ...(owner.signal ? { signal: owner.signal } : {}),

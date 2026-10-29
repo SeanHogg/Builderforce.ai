@@ -35,6 +35,21 @@ function ceilingLabel(ms: number): string {
   return ms >= 60_000 ? `${Math.round(ms / 60_000)} minutes` : `${Math.max(1, Math.round(ms / 1000))} seconds`;
 }
 
+/**
+ * The program and argv that run `command` in this platform's shell. On Windows the shell is
+ * PowerShell, which would otherwise be handed the command through argv quoting (nested
+ * quotes arrive mangled) and would report exit code 1 for ANY failed native program; so the
+ * script goes in as `-EncodedCommand` (no quoting at all) and ends by exiting with the last
+ * native program's own code.
+ */
+export function shellInvocation(command: string): { shell: string; args: string[] } {
+  const { shell, args } = getShellConfig();
+  if (process.platform !== "win32") return { shell, args: [...args, command] };
+  const script = `${command}
+if ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE }`;
+  return { shell, args: [...args.slice(0, -1), "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")] };
+}
+
 /** Run one command to completion (or abort, or the ceiling). Never throws. */
 function runForeground(command: string, options: NodeShellOptions, runOpts?: ShellRunOptions): Promise<ShellResult> {
   const signal = runOpts?.signal;
@@ -42,8 +57,8 @@ function runForeground(command: string, options: NodeShellOptions, runOpts?: She
   if (signal?.aborted) return Promise.resolve({ ok: false, aborted: true, error: "aborted before it started" });
 
   return new Promise<ShellResult>((resolve) => {
-    const { shell, args } = getShellConfig();
-    const child = spawn(shell, [...args, command], {
+    const { shell, args } = shellInvocation(command);
+    const child = spawn(shell, args, {
       cwd: options.cwd,
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],

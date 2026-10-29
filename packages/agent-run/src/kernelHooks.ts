@@ -105,7 +105,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
    * answered with; null when nothing was steered (the finish stands). A stop command lets
    * the finish stand and settles the run cancelled, as it does anywhere else.
    */
-  const lateSteerNote = async (ctx: { step: number }): Promise<string | null> => {
+  const lateSteerNote = async (ctx: { step: number }): Promise<{ note: string } | null> => {
     const steered = (ports.steering?.drain() ?? []).map(steerInput);
     if (steered.length === 0) return null;
     const texts = steered.map((s) => s.text);
@@ -115,10 +115,11 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
     }
     for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
     const many = texts.length > 1;
-    return (
-      `The user sent ${many ? "messages" : "a message"} while you were finishing, so do not finish yet:\n` +
-      `${texts.map((t) => `- ${t}`).join("\n")}\nAddress ${many ? "them" : "it"}, then finish.`
-    );
+    return {
+      note:
+        `The user sent ${many ? "messages" : "a message"} while you were finishing, so do not finish yet:\n` +
+        `${texts.map((t) => `- ${t}`).join("\n")}\nAddress ${many ? "them" : "it"}, then finish.`,
+    };
   };
 
   return {
@@ -177,11 +178,10 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
     beforeDispatch: async (call, ctx) => {
       const pctx = contextAt(ctx.step, ctx.stepInCall);
       const pcall = toPolicyCall(call);
-      // Governance first: a gate that blocks the call refuses it, and nothing else sees it.
-      const refused = await hooks.tools.refuse?.(pctx, pcall);
-      if (refused) {
-        return { result: { data: refused.data, isError: true, ...(refused.control ? { control: asLoopControl(refused.control) } : {}) } };
-      }
+      // Governance gates (`RunPolicy.approvalGates`): a block refuses the call, an approval
+      // asks the human channel and parks the run on the approver.
+      const gated = await hooks.tools.gate?.(pctx, pcall);
+      if (gated) return { result: { data: gated.data, isError: true, ...(gated.control ? { control: asLoopControl(gated.control) } : {}) } };
       // A3's pause parks the run on a person (the control); any other skip just answers.
       const decision = await hooks.guards.beforeDispatch(pctx, pcall);
       if (decision?.skip) {
@@ -222,6 +222,9 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
     },
 
     onAskHuman: async (ctx, control, call) => {
+      // The approver's channel already answered 'paused': the run parks on that record. Asking
+      // again could answer in-run and report a call that never ran as done.
+      if ((control as { parked?: true }).parked) return undefined;
       const answer = await hooks.ask.answer(contextAt(ctx.step, ctx.stepInCall), control.question, optionsOf(control));
       // Answered in-run: the kernel puts the answer in the call's own row and does not park
       // the run. Anything else returns nothing, and the run pauses on the person.

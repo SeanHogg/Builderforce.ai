@@ -177,6 +177,7 @@ export type RunEvent =
   | { kind: 'tool.dispatched'; step: number; tool: string; ok: boolean }
   | { kind: 'steer.applied'; step: number }          // one per steered message, before the turn it reaches (§6.3)
   | { kind: 'model.preflight'; step: number; status: 'ok' | 'refreshed' | 'degraded'; notices: string[] }  // once, before turn 1 (§6.10)
+  | { kind: 'policy.blocked'; step: number; tool: string; gateId: string; reason: string }  // a governance gate refused a call
   | { kind: 'llm.model_downgrade'; step: number; requestedModel: string; model: string; reason: string }  // a turn answered by another model than expected (E7)
   | { kind: 'turn.finished'; step: number }
   | { kind: 'run.finished'; step: number; outcome: RunOutcomeKind };
@@ -232,15 +233,15 @@ export interface EventSink {
 
 /** What a human said, or that the run is waiting for one. */
 export type HumanAnswer =
-  | { kind: 'answered'; answer: string }
-  | { kind: 'paused' };
+  | { kind: 'answered'; answer: string; approved?: boolean }  // approved: the STRUCTURED decision of an approval (never read from the answer text)
+  | { kind: 'paused'; approvalId?: string };  // approvalId: the record the surface parked the run on, when it created one
 
 /** How people are reached: the tool-confirm gate, the approval bar, the relay ask. */
 export interface HumanChannel {
   /** Ask a question. `paused` parks the run until the answer arrives. */
   ask(question: string, options?: readonly string[]): Promise<HumanAnswer>;
   /** Approve a gate. Optional: a surface with no approvals omits it. */
-  approve?(gate: PolicyGate): Promise<HumanAnswer>;
+  approve?(gate: PolicyGate, call?: { tool: string; args: Record<string, unknown>; reason?: string }): Promise<HumanAnswer>;
 }
 
 /** One steered message, as a port that knows more than its text hands it over. */
@@ -392,6 +393,7 @@ export interface RunState {
   compaction: CompactionState;
   writtenPaths: string[];
   askedGates: string[];
+  approvedCalls?: string[];        // WS2c: the `require-approval` calls a person already decided (one policyGateCallKey each)
   reads: ReadCoverageState;        // the windows the model was SERVED (post-trim), plus the read-without-spawn count
   context?: ContextPack;           // the pack built once before turn 1 (§6.10); a resumed tick renders the same turn-context tail from it
   stall?: StallState;              // WS2b: the re-prompt budget, keyed by model

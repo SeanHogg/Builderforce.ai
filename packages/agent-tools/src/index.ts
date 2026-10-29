@@ -20,6 +20,7 @@ export * from "./registry.js";
 export * from "./toolAliases.js";
 export * from "./engine.js";
 export * from "./spec.js";
+export * from "./policyGateCallKey.js";
 export * from "./core-tools.js";
 export * from "./writeOverwriteGuard.js";
 export * from "./psychometric-dims.js";

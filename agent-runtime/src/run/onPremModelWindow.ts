@@ -9,13 +9,22 @@
 import { resolveContextWindowInfo } from "../agents/context-window-guard.js";
 import { DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { loadConfig, type BuilderForceAgentsConfig } from "../config/config.js";
+import { logWarn } from "../logger.js";
 
-/** `ModelTransport.window` over the host's config. The config is read once, when asked. */
-export function configuredModelWindow(cfg?: BuilderForceAgentsConfig): (model: string) => number | undefined {
-  let loaded = cfg;
+/** The host's config, or nothing (said, not silent) when it cannot be read — no window is then known. */
+function readConfig(): BuilderForceAgentsConfig | undefined {
+  try {
+    return loadConfig();
+  } catch (err) {
+    logWarn(`[on-prem] models config unreadable, no model window known: ${String(err)}`);
+    return undefined;
+  }
+}
+
+/** `ModelTransport.window` over the host's config. The config is read ONCE, here — at startup, not per lookup. */
+export function configuredModelWindow(cfg: BuilderForceAgentsConfig | undefined = readConfig()): (model: string) => number | undefined {
   return (model) => {
-    loaded ??= loadConfig();
-    const info = resolveContextWindowInfo({ cfg: loaded, provider: DEFAULT_PROVIDER, modelId: model, defaultTokens: 0 });
+    const info = resolveContextWindowInfo({ cfg, provider: DEFAULT_PROVIDER, modelId: model, defaultTokens: 0 });
     return info.source === "default" ? undefined : info.tokens;
   };
 }
