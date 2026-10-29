@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Capability, CapabilityProvider } from "@builderforce/agent-tools";
-import { childPolicy, childProvider, childResult, type RunOutcome, type RunPolicy, type RunState } from "../../src/index.js";
+import { childPolicy, childProvider, childResult, runAgent, type ModelCompletion, type ModelRequest, type RunOutcome, type RunPolicy, type RunState } from "../../src/index.js";
 import { TEST_POLICY } from "../support/policyContext.js";
 
 const OWNER: RunPolicy = {
@@ -65,5 +65,45 @@ describe("childResult", () => {
     expect(outcome({ kind: "failed", reason: "gateway 503", state })).toEqual({ ok: false, error: "gateway 503" });
     expect(outcome({ kind: "paused", question: "which one?", approvalId: "a1", state })).toMatchObject({ ok: false });
     expect(outcome({ kind: "yielded", state })).toEqual({ ok: true, output: "", truncated: true, steps: 3 });
+  });
+});
+
+describe("a parent can delegate through the agent's own catalog", () => {
+  it("offers spawn_agent when the surface grants orchestrate, and dispatches it to the surface's spawn", async () => {
+    const spawned: Array<{ label: string; task: string }> = [];
+    const requests: ModelRequest[] = [];
+    const script: ModelCompletion[] = [
+      { content: "", toolCalls: [{ id: "s1", name: "spawn_agent", arguments: JSON.stringify({ label: "find it", task: "where is the handler?" }) }] },
+      { content: "done" },
+    ];
+    let call = 0;
+    const outcome = await runAgent({
+      task: { prompt: "delegate the search", dispatch: { source: "manual" } },
+      policy: TEST_POLICY,
+      ports: {
+        model: {
+          complete: async (request) => {
+            requests.push(JSON.parse(JSON.stringify(request)) as ModelRequest);
+            return script[call++] ?? { content: "" };
+          },
+        },
+        capabilities: {
+          capabilities: new Set<Capability>(["orchestrate"]),
+          orchestration: {
+            spawn: async (req) => {
+              spawned.push({ label: req.label, task: req.task });
+              return { ok: true, output: "in agent-loop.ts" };
+            },
+          },
+        },
+        store: { load: () => undefined, save: () => undefined },
+        events: { emit: () => undefined },
+        human: { ask: async () => ({ kind: "paused" }) },
+        context: { pack: () => ({ focus: [], facts: [], recall: [] }) },
+      },
+    });
+    expect((requests[0]?.tools ?? []).map((t) => t.function.name)).toContain("spawn_agent");
+    expect(spawned).toEqual([{ label: "find it", task: "where is the handler?" }]);
+    expect(outcome.kind).toBe("finished");
   });
 });

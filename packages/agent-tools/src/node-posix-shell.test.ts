@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { needsPosixShell, cmdCannotRun, findBash, bashCandidates, posixShellReport, posixShellStatus, resetBashCache, toBashNullDevice } from "./posixShell";
-import { buildGitCommand } from "@builderforce/agent-tools";
+import { needsPosixShell, cmdCannotRun, findBash, bashCandidates, posixShellReport, posixShellStatus, resetBashCache, toBashNullDevice } from "./node-posix-shell.js";
+import { buildGitCommand } from "./git-tools.js";
 
 beforeEach(resetBashCache);
 

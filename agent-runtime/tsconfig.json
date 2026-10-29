@@ -29,6 +29,11 @@
       "@seanhogg/builderforce-agents/plugin-sdk/account-id": ["./src/plugin-sdk/account-id.ts"],
       "@builderforce/agent-tools": ["../packages/agent-tools/src/index.ts"],
       "@builderforce/agent-tools/*": ["../packages/agent-tools/src/*"],
+      // `packages/repo-map` (reached through agent-tools' knowledge code) imports this subpath
+      // WITHOUT an extension from an ES-module package; under NodeNext the wildcard above is not
+      // probed for `.ts`, so the one extensionless subpath is spelled out (as repo-map's own
+      // tsconfig does).
+      "@builderforce/agent-tools/symbols": ["../packages/agent-tools/src/symbols.ts"],
       "@builderforce/agent-run": ["../packages/agent-run/src/index.ts"],
       "@builderforce/difficulty-router": ["../packages/difficulty-router/src/index.ts"],
       "@builderforce/agent-loop": ["../packages/agent-loop/src/index.ts"],

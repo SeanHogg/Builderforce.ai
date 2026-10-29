@@ -11,6 +11,7 @@
     "./knowledge-index": "./src/knowledge-index.ts",
     "./prefetch": "./src/prefetch/index.ts",
     "./node-path": "./src/node-path.ts",
+    "./node-posix-shell": "./src/node-posix-shell.ts",
     "./node-symbols": "./src/node-symbols.ts",
     "./node-git-ignore": "./src/node-git-ignore.ts",
     "./node-git-remote": "./src/node-git-remote.ts",

@@ -20,6 +20,7 @@
 import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
 import {
   commitPathCandidates,
+  invalidRepoResult,
   notARepoWithCandidates,
   runInRepoScope,
   safeGitArg,
@@ -29,7 +30,7 @@ import {
 } from "./git-repo-scope.js";
 
 // The repo-scope helpers live in `git-repo-scope.ts`; these were this module's exports.
-export { buildListCheckoutsCommand, commitPathCandidates, inferRepoFromPath, isNotARepo, notARepoResult, safeRepoArg } from "./git-repo-scope.js";
+export { buildListCheckoutsCommand, commitPathCandidates, inferRepoFromPath, isNotARepo, notARepoResult, posixCommandIn, safeRepoArg } from "./git-repo-scope.js";
 
 // ---------------------------------------------------------------------------
 // Git / version-control tools. Gated to `shell` (a real clone + Linux process),
@@ -78,8 +79,6 @@ export function buildGitCommand(action: GitAction, opts?: { path?: string; baseB
   // NOT part of its text: the tool hands `repo` to the shell as the working directory
   // (`ShellRunOptions.cwd`, validated by `safeRepoArg` — a `..` segment would walk OUT of the
   // workspace), so the same command text runs under sh, cmd and PowerShell alike.
-  const scoped = (cmd: string): string => cmd;
-  const scopedScript = (lines: string[]): string => lines.join("\n");
   // A clone that mirrors a surface-owned branch (`ShellCapability.trackedBranch`): absorb
   // that branch before moving history (the surface may have committed since) and
   // publish the result, or the pull request never sees the sync / rewind.
@@ -90,17 +89,17 @@ export function buildGitCommand(action: GitAction, opts?: { path?: string; baseB
   const publish = (force: boolean): string[] => (tracked ? [force ? "git push --force-with-lease origin HEAD" : "git push origin HEAD"] : []);
   switch (action) {
     case "status":
-      return scoped("git status --short --branch");
+      return "git status --short --branch";
     case "diff":
-      return scoped(`git --no-pager diff${pathArg}`);
+      return `git --no-pager diff${pathArg}`;
     case "history": {
       const limit = Number.isFinite(opts?.limit) && (opts!.limit as number) > 0 ? Math.min(Math.floor(opts!.limit as number), 200) : 30;
-      return scoped(`git --no-pager log --oneline -n ${limit}${pathArg}`);
+      return `git --no-pager log --oneline -n ${limit}${pathArg}`;
     }
     case "sync_latest": {
       const base = safeGitArg(opts?.baseBranch);
       const resolveBase = base ? `BASE="${base}"` : RESOLVE_BASE;
-      return scopedScript([
+      return [
         ...(tracked ? absorb : ["set -e"]),
         resolveBase,
         ...(tracked ? [] : [IDENTITY_EMAIL, IDENTITY_NAME]),
@@ -108,27 +107,27 @@ export function buildGitCommand(action: GitAction, opts?: { path?: string; baseB
         'git merge --no-edit "origin/$BASE" || { git merge --abort; echo MERGE_CONFLICT; exit 3; }',
         ...publish(false),
         'echo "Synced with origin/$BASE"',
-      ]);
+      ].join("\n");
     }
     case "undo":
       // Drop the last commit, reflog-recoverable via redo. Guard a dirty tree so
       // uncommitted work is never silently lost.
-      return scopedScript([
+      return [
         ...absorb,
         '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
         "git reset --hard HEAD~1",
         ...publish(true),
         'echo "Undid the last commit (use git_redo to reapply)"',
-      ]);
+      ].join("\n");
     case "redo":
       // Reapply the change undone by the most recent reset (the reflog redo).
-      return scopedScript([
+      return [
         ...absorb,
         '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
         'git reset --hard "HEAD@{1}"',
         ...publish(true),
         'echo "Reapplied the last undone change"',
-      ]);
+      ].join("\n");
   }
 }
 
@@ -146,6 +145,8 @@ function gitToolResult(action: GitAction, r: { ok: boolean; stdout?: string; exi
 }
 
 async function runGitTool(action: GitAction, opts: { path?: string; baseBranch?: string; limit?: number; repo?: string }, ctx: GitShellCtx): Promise<ToolResult> {
+  const refused = invalidRepoResult(action, opts.repo);
+  if (refused) return refused;
   const trackedBranch = ctx.caps.shell?.trackedBranch;
   // "fatal: not a git repository" at the root is not the end of the road: the checkout
   // the path names, then the run's default — and if none is a repository, NAME the
@@ -302,7 +303,7 @@ function buildCommitCommand(opts: { message: string; paths: string[]; branch?: s
 }
 
 /** Build the push script. Refuses the base branch unless the caller DECLARED it. */
-function buildPushCommand(opts: { allowBaseBranch?: boolean; repo?: string }): string {
+function buildPushCommand(opts: { allowBaseBranch?: boolean }): string {
   return [
     "set -e",
     RESOLVE_BASE,
@@ -322,7 +323,7 @@ function buildPushCommand(opts: { allowBaseBranch?: boolean; repo?: string }): s
 /** Build the `gh pr create` script. The GitHub CLI is used rather than the REST API
  *  because this surface has a shell and the user's own gh auth, so no token has to be
  *  plumbed through the agent. */
-function buildPullRequestCommand(opts: { title: string; body: string; base?: string; reviewers?: string[]; repo?: string }): string {
+function buildPullRequestCommand(opts: { title: string; body: string; base?: string; reviewers?: string[] }): string {
   const base = safeGitArg(opts.base);
   const reviewers = (opts.reviewers ?? []).map((r) => safeGitArg(r)).filter((r): r is string => !!r);
   return [
@@ -359,7 +360,7 @@ function buildPullRequestCommand(opts: { title: string; body: string; base?: str
  * the base under a new hash; that is what `force` is for, and it is also detected
  * automatically when the remote branch is gone but the local branch was pushed.
  */
-function buildCleanupCommand(opts: { branch?: string; baseBranch?: string; force?: boolean; repo?: string }): string {
+function buildCleanupCommand(opts: { branch?: string; baseBranch?: string; force?: boolean }): string {
   const branch = safeGitArg(opts.branch);
   const base = safeGitArg(opts.baseBranch);
   return [
@@ -454,6 +455,8 @@ async function runPublishTool(
   repo: string | undefined,
   ctx: GitShellCtx,
 ): Promise<ToolResult> {
+  const refused = invalidRepoResult(action, repo);
+  if (refused) return refused;
   // A builder, when the script's own text depends on the repo (commit's path candidates).
   const build = (scope: string | undefined): string => (typeof command === "string" ? command : command(scope));
   const ran = await runInRepoScope(ctx, repo ? { repo } : {}, (scope) => shellRunWithStop(ctx, build(scope), safeRepoArg(scope) ?? undefined));
@@ -510,7 +513,7 @@ export const gitPushTool: ToolDefinition = defineTool({
   requires: ["git.write"],
   execute: (args, ctx) => {
     const repo = typeof args.repo === "string" ? args.repo : undefined;
-    return runPublishTool("push", buildPushCommand({ allowBaseBranch: args.allowBaseBranch === true, repo }), repo, ctx);
+    return runPublishTool("push", buildPushCommand({ allowBaseBranch: args.allowBaseBranch === true }), repo, ctx);
   },
 });
 
@@ -538,7 +541,7 @@ export const openPullRequestTool: ToolDefinition = defineTool({
     const reviewers = Array.isArray(args.reviewers) ? args.reviewers.filter((r): r is string => typeof r === "string") : undefined;
     return runPublishTool(
       "pull_request",
-      buildPullRequestCommand({ title, body, base: typeof args.base === "string" ? args.base : undefined, reviewers, repo }),
+      buildPullRequestCommand({ title, body, base: typeof args.base === "string" ? args.base : undefined, reviewers }),
       repo,
       ctx,
     );
@@ -575,7 +578,6 @@ export const gitCleanupMergedTool: ToolDefinition = defineTool({
         branch: typeof args.branch === "string" ? args.branch : undefined,
         baseBranch: typeof args.baseBranch === "string" ? args.baseBranch : undefined,
         force: args.force === true,
-        repo,
       }),
       repo,
       ctx,

@@ -40,6 +40,20 @@ describe('measured code analysis', () => {
     const failed = await analyzeCodebaseTool.execute({}, { caps: { shell: { run } } } as never);
     expect((failed.data.snapshot as CodeAnalysisSnapshot).tools.every((t) => t.status === 'failed')).toBe(true);
   });
+  it('runs Knip IN the scoped directory (the shell cwd), never behind a written cd', async () => {
+    const calls: Array<{ command: string; cwd?: string }> = [];
+    const run = async (command: string, opts?: { cwd?: string }) => {
+      calls.push({ command, cwd: opts?.cwd });
+      return { ok: true, exitCode: 0, stdout: command.includes('depcruise') ? JSON.stringify(dependency) : command.includes('knip') ? JSON.stringify(unused) : '' };
+    };
+    await analyzeCodebaseTool.execute({ path: 'packages/app' }, { caps: { shell: { run }, repoRead: { readFile: async () => ({ ok: true, content: JSON.stringify(duplicates) }) } } } as never);
+    const knip = calls.filter((c) => c.command.includes('knip'));
+    expect(knip).toHaveLength(1);
+    expect(knip[0]).toMatchObject({ cwd: 'packages/app' });
+    expect(calls.some((c) => /\bcd\b/.test(c.command))).toBe(false);
+    // The other analyzers keep taking the scope as an argument, at the root.
+    expect(calls.filter((c) => !c.command.includes('knip')).every((c) => c.cwd === undefined)).toBe(true);
+  });
   it('rejects command injection and path traversal in analysis scope', async () => {
     const run = vi.fn();
     for (const path of ['../private', '/private', 'src;whoami', '$(whoami)']) {

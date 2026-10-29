@@ -198,7 +198,9 @@ class HostIndex implements HostKnowledgeIndexCore {
         await this.ready();
         await this.exclusive(async () => {
             // The graph is the truth: provisional claim cards it does not hold were never written.
-            const held = new Set(g.nodes.map((n) => n.ref));
+            // Card ids are plain strings (a node ref is one kind of them), so the set is of strings: it is
+            // asked about the provisional ids, which are not all refs.
+            const held = new Set<string>(g.nodes.map((n) => n.ref));
             const phantoms = [...this.provisional].filter((id) => !held.has(id));
             this.provisional.clear();
             if (phantoms.length > 0) {

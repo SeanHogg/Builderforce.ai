@@ -32,9 +32,9 @@ import {
   buildCoreToolRegistry,
   type Capability,
   type CapabilityProvider,
-  type ShellResult,
 } from "@builderforce/agent-tools";
 import { buildNodeCapabilityProvider } from "../../src/agents/node-capability-provider.js";
+import { buildNodeShell } from "../../src/run/nodeShell.js";
 import { Agent } from "../../src/builderforce/agent-loop/agent.js";
 import { AssistantMessageEventStream } from "../../src/builderforce/agent-loop/event-stream.js";
 import { registryToAgentTools } from "../../src/builderforce/agent-loop/tool-adapter.js";
@@ -209,29 +209,10 @@ export function withShell(provider: CapabilityProvider, cwd: string): Capability
   return {
     ...provider,
     capabilities: new Set<Capability>([...provider.capabilities, "shell"]),
-    shell: {
-      async run(command: string): Promise<ShellResult> {
-        try {
-          const { stdout, stderr } = await execFileAsync(command, {
-            cwd,
-            shell: true,
-            // Matches the cloud Container's COMMAND_TIMEOUT_MS: a real `tsc --noEmit` /
-            // `npm test` grading run needs minutes, not the old 120s ceiling.
-            timeout: 10 * 60 * 1000,
-            maxBuffer: 8 * 1024 * 1024,
-          } as Parameters<typeof execFileAsync>[1]);
-          return { ok: true, stdout: `${stdout}${stderr}`, exitCode: 0 };
-        } catch (err) {
-          const e = err as { stdout?: string; stderr?: string; code?: number; message?: string };
-          return {
-            ok: false,
-            stdout: `${e.stdout ?? ""}${e.stderr ?? ""}`,
-            exitCode: typeof e.code === "number" ? e.code : 1,
-            error: e.message,
-          };
-        }
-      },
-    },
+    // THE on-prem shell (it honours `ShellRunOptions.cwd`, which a hand-rolled one ignored, so a
+    // `repo`-scoped git call here would have run at the root). The ceiling matches the cloud
+    // Container's COMMAND_TIMEOUT_MS: a real `tsc --noEmit` / `npm test` grading run needs minutes.
+    shell: buildNodeShell({ cwd, timeoutMs: 10 * 60 * 1000 }),
   };
 }
 

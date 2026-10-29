@@ -4,7 +4,7 @@ import { autoApproveDefault } from "./permissionMode";
 import { JOURNAL_FILE } from "./localFirstJournalIo";
 import { listLocalModels, localModelOptions } from "./localModels";
 import { BUILD_ID, BUILT_AT } from "./buildInfo";
-import { posixShellReport } from "./posixShell";
+import { posixShellReport } from "@builderforce/agent-tools/node-posix-shell";
 import { getTenantJwt, getCurrentUserId } from "./bfApi";
 import { getBaseUrl, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY } from "./gateway";
 import { fetchPersonalityBlock } from "./personalityLimbic";

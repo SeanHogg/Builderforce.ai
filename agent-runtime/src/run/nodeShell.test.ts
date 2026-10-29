@@ -77,6 +77,15 @@ describe("buildNodeShell — the working directory is the shell's, not the comma
   });
 });
 
+describe("shellInvocation — interpreter routing", () => {
+  it("runs a command routed to bash as `bash -c`, with a cmd-style null device rewritten", () => {
+    expect(shellInvocation("git log 2>nul | head -5", "C:\\Program Files\\Git\\bin\\bash.exe")).toEqual({
+      shell: "C:\\Program Files\\Git\\bin\\bash.exe",
+      args: ["-c", "git log 2>/dev/null | head -5"],
+    });
+  });
+});
+
 describe("shellInvocation", () => {
   it("hands the shell the command without argv quoting, and keeps the command's own exit code", () => {
     const command = 'echo "a b"';

@@ -62,6 +62,9 @@ export { queueRunSteering, runSteeringSource } from "./policy/steering/index.js"
 // child run is derived from its owner's — its policy, its capabilities, its result.
 export { asksForSubagents, childPolicy, childProvider, childResult } from "./policy/subagents/index.js";
 
+// The tools a surface granting these capabilities is offered, before the tools policy narrows them.
+export { offeredSchemas } from "./runTurn.js";
+
 // The ONE governance-gate evaluation (path-scoped `block`, synonyms across `write` /
 // `write_file` / `Write`). A surface whose own tool dispatch is not yet the agent's
 // (the embedded runner's native loop) asks it here instead of keeping a second copy.

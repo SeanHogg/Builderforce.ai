@@ -27,6 +27,11 @@ export default defineConfig({
         replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-path.ts"),
       },
       {
+        // The shared interpreter routing (a POSIX script → bash on Windows), same NodeNext `.js` form.
+        find: "@builderforce/agent-tools/node-posix-shell.js",
+        replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-posix-shell.ts"),
+      },
+      {
         // The second node-only export (the definition index behind find_symbol /
         // file_outline), spelled the same NodeNext way for the same reason.
         find: "@builderforce/agent-tools/node-symbols.js",

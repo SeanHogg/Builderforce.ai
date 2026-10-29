@@ -29,7 +29,7 @@
  * `{ ok: false, error }` the model can read and relay; nothing here throws.
  */
 import type { PreviewRuntime, SnapshotStore } from '@seanhogg/builderforce-webcontainers';
-import type { ShellCapability, ShellResult } from '@builderforce/agent-tools';
+import { posixCommandIn, type ShellCapability, type ShellResult } from '@builderforce/agent-tools';
 import { validateFileContentForPath } from '@builderforce/ide-file-contract';
 import { isGeneratedPath } from '@/lib/workspace/generatedPaths';
 import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
@@ -205,16 +205,6 @@ async function saveBack(
   };
 }
 
-/**
- * A command run in a workspace-relative directory. The in-browser runtime's `bfsh -c` takes only
- * a command line (no working directory), and `bfsh` is a POSIX-style shell, so the `cd` lives
- * HERE, behind this adapter: the shared tools hand the directory over as `ShellRunOptions.cwd`.
- */
-export function inWorkspaceDir(command: string, cwd: string | undefined): string {
-  if (!cwd || cwd === '.') return command;
-  return /\r?\n/.test(command.trim()) ? `cd "${cwd}" || exit 1\n${command}` : `cd "${cwd}" && ${command}`;
-}
-
 /** Run one command line to completion (or the timeout) and report it. */
 async function runInRuntime(
   runtime: PreviewRuntime,
@@ -253,6 +243,10 @@ export function createWorkspaceShell(store: WorkspaceFileStore, deps: WorkspaceS
   const timeoutMs = deps.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
 
   const run = async (command: string, cwd?: string): Promise<WorkspaceShellResult> => {
+    // `bfsh -c` takes only a command line, so the working directory the shared tools hand over
+    // (`ShellRunOptions.cwd`) is written in by the ONE shared helper; an unsafe one is refused.
+    const scoped = posixCommandIn(cwd, command);
+    if (scoped === null) return { ok: false, error: `'${cwd}' is not a directory inside the workspace, so no command was run there` };
     let runtime: PreviewRuntime;
     try {
       runtime = await boot();
@@ -280,7 +274,7 @@ export function createWorkspaceShell(store: WorkspaceFileStore, deps: WorkspaceS
 
     let ran: Awaited<ReturnType<typeof runInRuntime>>;
     try {
-      ran = await runInRuntime(runtime, inWorkspaceDir(command, cwd), timeoutMs);
+      ran = await runInRuntime(runtime, scoped, timeoutMs);
     } catch (error) {
       return { ok: false, error: `The command could not be started: ${toolErrorMessage(error, 'spawn failed')}` };
     }

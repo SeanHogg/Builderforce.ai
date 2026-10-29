@@ -44,7 +44,12 @@ export function watchFolder(
   const close = (): void => {
     if (closed) return;
     closed = true;
-    try { void Promise.resolve(watcher?.close()).catch(() => undefined); } catch { /* already closed */ }
+    // A watcher that fails to close is already gone; say so (debug) rather than swallow it.
+    try {
+      void Promise.resolve(watcher?.close()).catch((error: unknown) => logDebug(`[knowledge] folder watch close failed: ${String(error)}`));
+    } catch (error) {
+      logDebug(`[knowledge] folder watch close threw: ${String(error)}`);
+    }
   };
   try {
     watcher = open(base, (path) => ignoredByKnowledgeWatch(base, path));

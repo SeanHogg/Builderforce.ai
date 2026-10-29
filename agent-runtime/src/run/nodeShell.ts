@@ -2,9 +2,11 @@
  * `buildNodeShell` — the on-prem host's `ShellCapability`: a real shell on this machine,
  * in the run's working tree (`run_command`'s backing).
  *
- * One reason to change: HOW a foreground command runs here. WHERE it runs (`cwd`, the
- * run's default checkout) is the shared `run_command` tool's job, which scopes the
- * command line itself; WHETHER it may run (governance gates) is the agent's policy.
+ * One reason to change: HOW a foreground command runs here. WHERE it runs is the tool's
+ * `cwd` option, which this shell spawns the process in (the command line is never prefixed with
+ * a `cd`); WHICH interpreter runs it is the shared routing rule (`node-posix-shell`: a POSIX
+ * script goes to bash on Windows, with the one cmd→bash retry); WHETHER it may run (governance
+ * gates) is the agent's policy.
  *
  * Stop reaches the process: aborting `opts.signal` kills the command's whole tree
  * (`killProcessTree`, the same kill the native exec tool uses) and the result comes back
@@ -13,9 +15,9 @@
  */
 
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import path from "node:path";
 import type { ShellCapability, ShellResult, ShellRunOptions } from "@builderforce/agent-tools";
+import { resolveShellCwd } from "@builderforce/agent-tools/node-path.js";
+import { runRouted, toBashNullDevice } from "@builderforce/agent-tools/node-posix-shell.js";
 import { getShellConfig, killProcessTree } from "../agents/shell-utils.js";
 
 /** The foreground ceiling: a command that needs longer belongs in a background job. */
@@ -32,36 +34,21 @@ export interface NodeShellOptions {
   timeoutMs?: number;
 }
 
-/**
- * The directory a command runs in: `relative` (the tool's workspace-relative `cwd`, already
- * validated) under `root`, or `root` itself when none is named. A path that resolves OUTSIDE
- * the root, or to a directory that is not there, is refused with the reason — the working
- * directory is the host's to honour, so the host is also the one to keep it inside the workspace.
- */
-export function resolveShellCwd(root: string, relative?: string): { ok: true; dir: string } | { ok: false; error: string } {
-  if (!relative || relative === ".") return { ok: true, dir: root };
-  const dir = path.resolve(root, relative);
-  const within = path.relative(root, dir);
-  if (within.startsWith("..") || path.isAbsolute(within)) {
-    return { ok: false, error: `'${relative}' is outside the workspace, so no command was run there` };
-  }
-  if (!existsSync(dir)) return { ok: false, error: `the directory '${relative}' does not exist in the workspace` };
-  return { ok: true, dir };
-}
-
 /** The ceiling as the model reads it: whole minutes, or seconds for a short test ceiling. */
 function ceilingLabel(ms: number): string {
   return ms >= 60_000 ? `${Math.round(ms / 60_000)} minutes` : `${Math.max(1, Math.round(ms / 1000))} seconds`;
 }
 
 /**
- * The program and argv that run `command` in this platform's shell. On Windows the shell is
- * PowerShell, which would otherwise be handed the command through argv quoting (nested
- * quotes arrive mangled) and would report exit code 1 for ANY failed native program; so the
- * script goes in as `-EncodedCommand` (no quoting at all) and ends by exiting with the last
- * native program's own code.
+ * The program and argv that run `command`: under `bash` when the shared routing chose it
+ * (`bash -c`, with a cmd-style `2>nul` rewritten so it cannot create an undeletable `nul` file),
+ * else in this platform's shell. On Windows that is PowerShell, which would otherwise be handed the
+ * command through argv quoting (nested quotes arrive mangled) and would report exit code 1 for ANY
+ * failed native program; so the script goes in as `-EncodedCommand` (no quoting at all) and ends
+ * by exiting with the last native program's own code.
  */
-export function shellInvocation(command: string): { shell: string; args: string[] } {
+export function shellInvocation(command: string, bash: string | null = null): { shell: string; args: string[] } {
+  if (bash) return { shell: bash, args: ["-c", toBashNullDevice(command)] };
   const { shell, args } = getShellConfig();
   if (process.platform !== "win32") return { shell, args: [...args, command] };
   const script = `${command}
@@ -69,18 +56,13 @@ if ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE }`;
   return { shell, args: [...args.slice(0, -1), "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")] };
 }
 
-/** Run one command to completion (or abort, or the ceiling). Never throws. */
-function runForeground(command: string, options: NodeShellOptions, runOpts?: ShellRunOptions): Promise<ShellResult> {
-  const signal = runOpts?.signal;
+/** Run one command once, in the interpreter named (`null` = the platform shell), to completion (or abort, or the ceiling). Never throws. */
+function runOnce(command: string, bash: string | null, dir: string, options: NodeShellOptions, signal?: AbortSignal): Promise<ShellResult> {
   const ceiling = options.timeoutMs ?? SHELL_FOREGROUND_TIMEOUT_MS;
-  if (signal?.aborted) return Promise.resolve({ ok: false, aborted: true, error: "aborted before it started" });
-  const where = resolveShellCwd(options.cwd, runOpts?.cwd);
-  if (!where.ok) return Promise.resolve({ ok: false, error: where.error });
-
   return new Promise<ShellResult>((resolve) => {
-    const { shell, args } = shellInvocation(command);
+    const { shell, args } = shellInvocation(command, bash);
     const child = spawn(shell, args, {
-      cwd: where.dir,
+      cwd: dir,
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -125,6 +107,15 @@ function runForeground(command: string, options: NodeShellOptions, runOpts?: She
     child.on("error", (err) => finish({ ok: false, error: err.message }));
     child.on("close", (code) => finish({ ok: code === 0, ...(code !== null ? { exitCode: code } : {}) }));
   });
+}
+
+/** Run one command: in the named directory, under the shared interpreter routing. Never throws. */
+async function runForeground(command: string, options: NodeShellOptions, runOpts?: ShellRunOptions): Promise<ShellResult> {
+  const signal = runOpts?.signal;
+  if (signal?.aborted) return { ok: false, aborted: true, error: "aborted before it started" };
+  const where = resolveShellCwd(options.cwd, runOpts?.cwd);
+  if (!where.ok) return { ok: false, error: where.error };
+  return runRouted(command, (bash) => runOnce(command, bash, where.dir, options, signal), signal);
 }
 
 /** The on-prem shell: foreground commands in `options.cwd`, killed with the run's Stop. */

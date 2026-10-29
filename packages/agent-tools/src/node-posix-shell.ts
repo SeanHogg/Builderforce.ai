@@ -225,3 +225,44 @@ export function posixShellReport(env: NodeJS.ProcessEnv = process.env): string {
     ...status.candidates.map((c) => `    ${c}`),
   ].join("\n");
 }
+
+/** The refusal when a POSIX script has no POSIX shell to run it. */
+export const NO_POSIX_SHELL =
+  "this command needs a POSIX shell (it uses set -e / $(…) / [ … ], or a unix utility such as head/grep/sed that cmd.exe does not have) "
+  + "and no POSIX shell was found on this Windows machine. "
+  + "Install Git for Windows (which ships bash), or re-run the work as plain single-line commands instead.";
+
+/**
+ * Which interpreter runs `command`: bash (`{ bash }`) when it is POSIX and one exists, the platform
+ * default (`{ bash: null }`), or a refusal naming the cause. A POSIX script with no POSIX shell
+ * must say so: letting it through hands it to cmd.exe, which parses `set -e` as its own builtin and
+ * fails with "Environment variable -e not defined" — a message that names neither the cause nor
+ * anything the agent could do about it.
+ */
+export function posixRoute(command: string): { bash: string | null } | { error: string } {
+  if (needsPosixShell(command) && !findBash()) return { error: NO_POSIX_SHELL };
+  return { bash: posixShellOption(command).shell ?? null };
+}
+
+/**
+ * Run `command` through THE interpreter-routing rule every node shell shares: the route above,
+ * then — when the default shell could not even ATTEMPT it (an unlisted unix utility, a
+ * single-quoted argument, a `$VAR`; `needsPosixShell` is a whitelist and always incomplete) —
+ * ONE retry under bash, which is what the command was written for. A genuine non-zero exit from
+ * a program that DID run does not match {@link cmdCannotRun}, so nothing that legitimately failed
+ * is run twice, and a stopped command is never started again under another interpreter.
+ * `exec` runs the command in the interpreter it is given (`null` = the platform default).
+ */
+export async function runRouted<R extends { ok: boolean; stdout?: string; aborted?: boolean }>(
+  command: string,
+  exec: (bash: string | null) => Promise<R>,
+  signal?: AbortSignal,
+): Promise<R | { ok: false; error: string }> {
+  const route = posixRoute(command);
+  if ("error" in route) return { ok: false, error: route.error };
+  const first = await exec(route.bash);
+  if (first.ok || route.bash || first.aborted) return first;
+  const retryBash = findBash();
+  if (!retryBash || !cmdCannotRun(first.stdout ?? "") || signal?.aborted) return first;
+  return exec(retryBash);
+}

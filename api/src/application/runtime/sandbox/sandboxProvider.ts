@@ -21,7 +21,7 @@
  *     stale clone can never revert another commit to that file, applies the shared edit
  *     core and commits the result via `writeFile`.
  */
-import { applyStringEdit, editFacts, type Capability, type CapabilityProvider, type RepoEditResult, type ShellCapability } from '@builderforce/agent-tools';
+import { applyStringEdit, editFacts, posixCommandIn, type Capability, type CapabilityProvider, type RepoEditResult, type ShellCapability } from '@builderforce/agent-tools';
 import type { RunSandbox } from './runSandbox';
 import { SANDBOX_COMMAND_HEARTBEAT_MS } from '../cloudAgent/runContext';
 import { reportedFallback } from '../../observability/caughtErrorReporter';
@@ -33,17 +33,6 @@ export interface SandboxProviderOptions {
   heartbeat: () => Promise<unknown>;
   /** The ticket branch the clone mirrors (the provider commits to it). */
   trackedBranch?: string;
-}
-
-/**
- * A command run in a workspace-relative directory, for a sandbox whose exec API takes only a
- * command line (`RunSandbox.run(command, signal, timeoutMs)` — a remote POSIX `sh`, never the
- * host's shell). The `cd` lives HERE, behind this adapter: the shared tools hand the directory
- * over as `ShellRunOptions.cwd` and never write it into a command.
- */
-export function inSandboxDir(command: string, cwd: string | undefined): string {
-  if (!cwd || cwd === '.') return command;
-  return /\r?\n/.test(command.trim()) ? `cd "${cwd}" || exit 1\n${command}` : `cd "${cwd}" && ${command}`;
 }
 
 /**
@@ -61,7 +50,13 @@ export function sandboxShell(sandbox: RunSandbox, opts: SandboxProviderOptions):
     }
   };
   return {
-    run: (command, runOpts) => runFor(inSandboxDir(command, runOpts?.cwd)),
+    // The sandbox's exec API takes only a command line (a remote POSIX sh), so the working
+    // directory the shared tools hand over (`ShellRunOptions.cwd`) is written in by the ONE
+    // shared helper — and a directory that is not a safe workspace-relative one is refused.
+    run: async (command, runOpts) => {
+      const scoped = posixCommandIn(runOpts?.cwd, command);
+      return scoped === null ? { ok: false, error: `'${runOpts?.cwd}' is not a directory inside the workspace, so no command was run there` } : runFor(scoped);
+    },
     runFor,
     ...(opts.trackedBranch ? { trackedBranch: opts.trackedBranch } : {}),
   };

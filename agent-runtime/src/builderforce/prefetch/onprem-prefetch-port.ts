@@ -32,7 +32,7 @@ import { requestHumanInput } from "../../infra/approval-gate.js";
 import { withOnPremKnowledgeRows } from "../../agents/knowledge/onPremKnowledge.js";
 import { buildNodeCapabilityProvider } from "../../agents/node-capability-provider.js";
 import { runExecProcess } from "../../agents/bash-tools.exec-runtime.js";
-import { resolveShellCwd } from "../../run/nodeShell.js";
+import { resolveShellCwd } from "@builderforce/agent-tools/node-path.js";
 import { onPremRootId, onPremWorkspaceKnowledgeIndex } from "../../agents/knowledge/index/onPremKnowledgeIndex.js";
 
 /** `knowledge.ask` (the workspace's knowledge index), then the shared rows — validated once. */

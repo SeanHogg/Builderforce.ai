@@ -65,13 +65,31 @@ describe("buildGitCommand repo scoping", () => {
     }
   });
 
-  it("refuses a repo that would walk OUT of the workspace", async () => {
-    // The directory becomes the shell's working directory: traversal is an escape, not merely a wider scope.
+  // DELIBERATE BEHAVIOUR CHANGE (was: a repo that walked out was silently dropped and the command
+  // ran at the workspace root). The directory is now the shell's working directory, so an explicit
+  // repo that is not a safe workspace-relative one is REFUSED and nothing runs — dropping it would
+  // make git_undo / git_redo reset a different repository than the one the caller named.
+  it("refuses a repo that would walk OUT of the workspace, running nothing", async () => {
     for (const repo of ["../elsewhere", "a/../../etc", "..", "/etc"]) {
       const sh = mockShell(() => ({ ok: true, exitCode: 0, stdout: "## main" }));
-      await gitStatusTool.execute({ repo }, sh as never);
-      expect(sh.cwds).not.toContain(repo);
+      const out = data(await gitStatusTool.execute({ repo }, sh as never));
+      expect(out).toEqual({
+        ok: false,
+        action: "status",
+        error: `repo '${repo}' must be a directory inside the workspace (no '..', not absolute), so nothing was run`,
+      });
+      expect(sh.scripts).toEqual([]);
+      expect(sh.cwds).toEqual([]);
     }
+  });
+
+  it("refuses an escaping repo for the publish tools too, running nothing", async () => {
+    const sh = mockShell(() => ({ ok: true, exitCode: 0, stdout: "ok" }));
+    const pushed = data(await gitPushTool.execute({ repo: "../x" }, sh as never));
+    expect(pushed).toMatchObject({ ok: false, action: "push", error: expect.stringContaining("must be a directory inside the workspace") });
+    const committed = data(await gitCommitTool.execute({ message: "m", paths: ["a.ts"], repo: "../x" }, sh as never));
+    expect(committed).toMatchObject({ ok: false, action: "commit" });
+    expect(sh.scripts).toEqual([]);
   });
 
   it("still accepts a directory whose name contains dots", async () => {
@@ -100,7 +118,28 @@ describe("buildGitCommand repo scoping", () => {
         expect(buildGitCommand(action)).toBe(buildGitCommand(action, {}));
         expect(buildGitCommand(action).startsWith("cd ")).toBe(false);
       });
+
+      it(`${action} refuses a repo that would walk out of the workspace`, async () => {
+        const sh = mockShell(() => ({ ok: true, exitCode: 0, stdout: "ok" }));
+        const tool = { sync_latest: gitSyncLatestTool, undo: gitUndoTool, redo: gitRedoTool }[action];
+        const out = data(await tool.execute({ repo: "../elsewhere" }, sh as never));
+        expect(out).toMatchObject({ ok: false, action, error: expect.stringContaining("must be a directory inside the workspace") });
+        // Not run at the root in its place: undo/redo would reset the WRONG repository.
+        expect(sh.scripts).toEqual([]);
+      });
     }
+
+    it("sync_latest still aborts the whole script when the checkout directory is missing", async () => {
+      // The host refuses to start a command in a directory that is not there; the script (whose
+      // own `set -e` guards the rest) is never started at the root, in ONE shell call, and the
+      // tool reports the cause rather than a misleading "not a repository" walk through candidates.
+      const sh = mockShell(() => ({ ok: false, error: "the directory 'app' does not exist in the workspace" }));
+      const out = data(await gitSyncLatestTool.execute({ repo: "app" }, sh as never));
+      expect(sh.scripts).toHaveLength(1);
+      expect(sh.cwds).toEqual(["app"]);
+      expect(out.ok).toBe(false);
+      expect(out.error).toMatch(/does not exist/);
+    });
   });
 });
 

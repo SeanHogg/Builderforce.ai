@@ -6,11 +6,11 @@
  * timeout and output bound, the same result shape.
  */
 
-import { existsSync } from "fs";
 import * as path from "path";
 import type { ChildProcess } from "child_process";
 import type { ShellJobStart, ShellJobStatus, ShellResult } from "@builderforce/agent-tools";
-import { needsPosixShell, findBash, posixShellOption, cmdCannotRun } from "./posixShell";
+import { posixRoute, runRouted } from "@builderforce/agent-tools/node-posix-shell";
+import { resolveShellCwd } from "@builderforce/agent-tools/node-path";
 import { spawnCommand, stopCommand } from "./processTree";
 import { killJob, pollJob, startJob, type JobOwner } from "./localShellJobs";
 
@@ -86,12 +86,6 @@ export interface LocalShell {
   kill(id: string): Promise<ShellJobStatus>;
 }
 
-/** The POSIX-shell refusal, shared by the foreground and background paths. */
-const NO_POSIX_SHELL =
-  "this command needs a POSIX shell (it uses set -e / $(…) / [ … ], or a unix utility such as head/grep/sed that cmd.exe does not have) "
-  + "and no POSIX shell was found on this Windows machine. "
-  + "Install Git for Windows (which ships bash), or re-run the work as plain single-line commands instead.";
-
 const aborted = (out: string): ShellResult => ({
   ok: false,
   aborted: true,
@@ -104,16 +98,6 @@ const aborted = (out: string): ShellResult => ({
 export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {}): LocalShell {
   const cwd = path.resolve(root);
   const owner = opts.jobOwner;
-
-  /** The working directory for a command: `relative` under the root, refused when it leaves it or is not there. */
-  function dirOf(relative: string | undefined): { dir: string } | { error: string } {
-    if (!relative || relative === ".") return { dir: cwd };
-    const dir = path.resolve(cwd, relative);
-    const within = path.relative(cwd, dir);
-    if (within.startsWith("..") || path.isAbsolute(within)) return { error: `'${relative}' is outside the workspace, so no command was run there` };
-    if (!existsSync(dir)) return { error: `the directory '${relative}' does not exist in the workspace` };
-    return { dir };
-  }
 
   /** Execute once, in a named interpreter. `bash` null ⇒ the platform default shell. */
   async function execOnce(command: string, bash: string | null, options: LocalShellOptions, dir: string): Promise<ShellResult> {
@@ -165,37 +149,19 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
 
   return {
     async run(command: string, options: LocalShellOptions = {}): Promise<ShellResult> {
-      // A POSIX script with no POSIX shell to run it must say so. Letting it through
-      // hands the script to `cmd.exe`, which parses `set -e` as its own builtin and
-      // fails with "Environment variable -e not defined" — a message that names
-      // neither the cause nor anything the agent could do about it.
-      if (needsPosixShell(command) && !findBash()) {
-        return { ok: false, error: NO_POSIX_SHELL };
-      }
-      const where = dirOf(options.cwd);
-      if ("error" in where) return { ok: false, error: where.error };
-      const bash = posixShellOption(command).shell ?? null;
-      const first = await execOnce(command, bash, options, where.dir);
-      // A stopped command is never started again under another interpreter.
-      if (first.ok || bash || first.aborted) return first;
-      // cmd.exe could not even ATTEMPT the command — an unlisted unix utility, a
-      // single-quoted argument, a `$VAR`. `needsPosixShell` is a whitelist and will
-      // always be incomplete, so the failure that reaches the agent must not be
-      // `'head' is not recognized as an internal or external command`: retry once in
-      // bash, which is what the command was written for. A genuine non-zero exit from
-      // a program that DID run (a failing build) does not match, so nothing that
-      // legitimately failed is run twice.
-      const retryBash = findBash();
-      if (!retryBash || !cmdCannotRun(first.stdout ?? "") || options.signal?.aborted) return first;
-      return execOnce(command, retryBash, options, where.dir);
+      const where = resolveShellCwd(cwd, options.cwd);
+      if (!where.ok) return { ok: false, error: where.error };
+      // Which interpreter, and the one cmd→bash retry, are THE shared routing rule.
+      return runRouted(command, (bash) => execOnce(command, bash, options, where.dir), options.signal);
     },
     async start(command: string, options: LocalShellOptions = {}): Promise<ShellJobStart> {
-      if (needsPosixShell(command) && !findBash()) return { ok: false, error: NO_POSIX_SHELL };
-      const where = dirOf(options.cwd);
-      if ("error" in where) return { ok: false, error: where.error };
+      const route = posixRoute(command);
+      if ("error" in route) return { ok: false, error: route.error };
+      const where = resolveShellCwd(cwd, options.cwd);
+      if (!where.ok) return { ok: false, error: where.error };
       return startJob(command, {
         cwd: where.dir,
-        bash: posixShellOption(command).shell ?? null,
+        bash: route.bash,
         maxOutput: RUN_MAX_OUTPUT,
         ...(owner !== undefined ? { owner } : {}),
         ...(options.env ? { env: options.env } : {}),

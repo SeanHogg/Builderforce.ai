@@ -1611,6 +1611,8 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
   unkeptReadyClaims: integer('unkept_ready_claims'),
   /** The A3 progress trips, by signal ({ signal: count } as JSONB). */
   progressTrips:    jsonb('progress_trips'),
+  /** A sub-agent's row: the `client_run_id` of the owner's row (migrations 1285 / 0028); NULL for an owner. */
+  parentRunId:      varchar('parent_run_id', { length: 128 }),
   /** Input + output tokens across the run's turns, as the run counted them. */
   tokens:           integer('tokens'),
   /** Prompt-cache reads across the run's turns. */

@@ -5,8 +5,8 @@
  * allowlist, which the gate tests were written in.
  */
 
-import { isToolWithheld } from "@builderforce/agent-run";
-import { buildCoreToolRegistry, type Capability, type PolicyGate } from "@builderforce/agent-tools";
+import { isToolWithheld, offeredSchemas } from "@builderforce/agent-run";
+import type { Capability, PolicyGate } from "@builderforce/agent-tools";
 
 export const GATED_TOOL_VOCABULARY = ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "Task"] as const;
 
@@ -15,10 +15,9 @@ export function allowedToolsAfterGates(gates: readonly PolicyGate[] | undefined,
   return [...GATED_TOOL_VOCABULARY, ...extraTools].filter((tool) => !isToolWithheld(gates, tool));
 }
 
-/** The tools a surface granting `caps` is OFFERED under `gates`: the live catalog, minus what a gate withholds. */
+/** The tools a surface granting `caps` is OFFERED under `gates`: the agent's live catalog, minus what a gate withholds. */
 export function offeredTools(caps: readonly Capability[], gates?: readonly PolicyGate[]): string[] {
-  return buildCoreToolRegistry()
-    .schemasFor({ capabilities: new Set(caps) })
+  return offeredSchemas({ capabilities: { capabilities: new Set(caps) } })
     .map((schema) => schema.function.name)
     .filter((name) => !isToolWithheld(gates, name));
 }

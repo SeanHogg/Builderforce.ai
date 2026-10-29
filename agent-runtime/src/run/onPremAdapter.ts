@@ -159,6 +159,10 @@ export async function runOnPremAgent(params: OnPremRunParams, sinks: OnPremRunSi
     if (leftover.length > 0) params.onLateSteers?.(leftover);
   };
 
+  // ONE id for this run: the owner's row carries it as its `runId`, and every sub-agent it spawns
+  // names it as its `parentRunId`, so a child's row points at a row that exists.
+  const runId = params.executionId !== undefined ? String(params.executionId) : randomUUID();
+
   let result: OnPremRunResult;
   try {
     const policy = policyOf(params);
@@ -185,7 +189,7 @@ export async function runOnPremAgent(params: OnPremRunParams, sinks: OnPremRunSi
       policy,
       sinks,
       ...(signal ? { signal } : {}),
-      parentRunId: params.executionId !== undefined ? String(params.executionId) : randomUUID(),
+      parentRunId: runId,
     });
     capabilities = params.capabilities ?? (await buildOnPremProvider({ workspaceRoot: params.cwd, spawn }));
 
@@ -200,6 +204,7 @@ export async function runOnPremAgent(params: OnPremRunParams, sinks: OnPremRunSi
     };
     const outcome = await runAgent({
       task: {
+        runId,
         prompt: params.prompt,
         ...(params.appendSystemPrompt?.trim() ? { persona: params.appendSystemPrompt.trim() } : {}),
         dispatch: { source: "manual" },

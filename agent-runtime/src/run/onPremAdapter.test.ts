@@ -11,6 +11,9 @@
  * test environment.)
  */
 
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { runAgent } from "@builderforce/agent-run";
 import type { ModelCompletion, ModelRequest, ModelTransport, RunOutcomeRow, RunPolicy } from "@builderforce/agent-run";
@@ -152,6 +155,32 @@ describe("runOnPremAgent — conformance", () => {
     expect(result.ok).toBe(false);
     expect(late).toHaveBeenCalledWith([{ text: "one more thing", messageId: 11 }]);
     expect(steering.push("too late")).toBe(false);
+  });
+
+  it("stamps ONE run id: a sub-agent's row names the row of the owner that spawned it", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "onprem-runid-"));
+    try {
+      const SPAWN: ModelCompletion = { content: "", toolCalls: [{ id: "s1", name: "spawn_agent", arguments: '{"label":"look","task":"where is it?"}' }] };
+      const s = sinks();
+      // The child gets its own sinks from `forChild`; collect its row beside the owner's.
+      const rows: RunOutcomeRow[] = [];
+      s.onOutcome.mockImplementation((row: RunOutcomeRow) => void rows.push(row));
+      const child = { onAssistantText: vi.fn(), onToolUse: vi.fn(), onResult: vi.fn(), onOutcome: (row: RunOutcomeRow) => void rows.push(row) };
+      // Owner: spawn → (child answers) → owner finishes.
+      const transport = scripted([SPAWN, { content: "found it in a.ts" }, { content: "all done" }]);
+      const result = await runOnPremAgent(
+        { prompt: PROMPT, cwd: dir, anthropicBaseUrl: "https://gw/llm", gatewayAuthKey: "k", transport, executionId: 77 },
+        { ...s, forChild: () => child },
+      );
+      expect(result).toMatchObject({ ok: true });
+      const owner = rows.find((r) => r.parentRunId === undefined);
+      const kid = rows.find((r) => r.parentRunId !== undefined);
+      expect(owner?.runId).toBe("77");
+      // The child's pointer is the owner's row id — it points at a row that exists.
+      expect(kid?.parentRunId).toBe(owner?.runId);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("does not hand back a steer the run took", async () => {
