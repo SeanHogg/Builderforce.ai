@@ -289,6 +289,7 @@ export const MESSAGE_KEYS = [
   'engineCrashed',
   'engineDetached',
   'modelKeepsCrashing',
+  'continuationTimedOut',
   'manageLocalModels',
   'platformRefusedMode',
   'platformRefusedSync',

@@ -357,11 +357,15 @@ describe('useChatTurns — a mid-run message steers by default (PRD 35 E10)', ()
     expect(drainRunSteering(18)).toEqual([]);
     expect(result.current.queued.items.map((i) => i.value)).toEqual(['second turn']);
 
-    // The run goes live: now a message steers it, and the held turn still waits for the falling edge.
+    // The run goes live: the turn held ONLY because it was not yet is a follow-up to it - steered in at once.
     rerender({ running: true, steerable: true, runKey: 18, send });
-    expect(result.current.steers({ directed: false })).toBe(false); // behind the turn already held
+    expect(hasRunInterrupt(18)).toBe(true);
+    expect(drainRunSteering(18)).toMatchObject([{ text: 'second turn', fromPerson: true, persist: true }]);
+    expect(result.current.queued.count).toBe(0);
+    expect(result.current.steers({ directed: false })).toBe(true);
+    // ...so nothing is left to send on the falling edge.
     rerender({ running: false, steerable: false, runKey: 18, send });
-    expect(send).toHaveBeenCalledWith('second turn');
+    expect(send).not.toHaveBeenCalled();
   });
 
   it('a turn addressed to a participant, not kept after a chat switch, goes back to the COMPOSER - never to a queue or a run (BLOCKER C)', async () => {
@@ -657,18 +661,38 @@ describe('useChatTurns - where a turn goes when it is not kept after a chat swit
     }
   });
 
-  it('turns held before the run went LIVE are carried: they do not stop later messages steering it', async () => {
+  it('turns held only because no run was live are steered in ORDER when it goes live, before any later message; queue-after turns stay queued', async () => {
     const send = vi.fn();
     const props = (steerable: boolean): ChatTurnsOptions<string> => ({ running: true, steerable, runKey: 72, send });
     const { result, rerender } = renderHook((p: ChatTurnsOptions<string>) => useChatTurns<string>(p), { initialProps: props(false) });
-    await act(async () => { await result.current.submit('typed in the fetch window'); });
-    expect(result.current.queued.count).toBe(1);
+    await act(async () => { await result.current.submit('M1'); });
+    await act(async () => { await result.current.submit('M2'); });
+    await act(async () => { await result.current.queueAfter('for the next turn'); });
+    expect(result.current.queued.count).toBe(3);
 
-    rerender(props(true)); // the run goes live
+    rerender(props(true)); // the run goes live: M1, M2 are follow-ups to it
     expect(result.current.steers({ directed: false })).toBe(true);
-    await act(async () => { await result.current.submit('mid-run'); });
+    await act(async () => { await result.current.submit('M3'); });
 
     expect(hasRunInterrupt(72)).toBe(true);
-    expect(result.current.queued.count).toBe(1); // the earlier turn still waits for the falling edge
+    expect(drainRunSteering(72).map((m) => m.text)).toEqual(['M1', 'M2', 'M3']);
+    expect(result.current.queued.items.map((i) => i.value)).toEqual(['for the next turn']);
+  });
+
+  it('flushing is per chat: a turn typed in idle chat B is sent while chat A\'s queued turn still awaits its run', async () => {
+    let settleA!: (kept: boolean) => void;
+    const send = vi.fn((turn: string) => (turn === 'for A' ? new Promise<boolean>((resolve) => { settleA = resolve; }) : Promise.resolve(true)));
+    const props = (running: boolean, runKey: number): ChatTurnsOptions<string> => ({ running, runKey, send });
+    const { result, rerender } = renderHook((p: ChatTurnsOptions<string>) => useChatTurns<string>(p), { initialProps: props(true, 80) });
+    await act(async () => { await result.current.queueAfter('for A'); });
+    await act(async () => { rerender(props(false, 80)); }); // A's run ended: its queued turn is being sent (awaiting its run)
+    expect(send).toHaveBeenCalledWith('for A');
+
+    await act(async () => { rerender(props(false, 81)); }); // the person is now in idle chat B
+    await act(async () => { await expect(result.current.submit('for B')).resolves.toBe(true); });
+
+    expect(send).toHaveBeenCalledWith('for B'); // sent now - not lined up behind A's
+    expect(result.current.queued.count).toBe(0);
+    await act(async () => { settleA(true); });
   });
 });

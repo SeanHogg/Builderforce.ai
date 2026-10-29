@@ -13,6 +13,11 @@ const door = vi.hoisted(() => ({
 
 vi.mock('@seanhogg/builderforce-brain-embedded', () => ({
   chatDoorLiveness: (conv: { sending: boolean; runLive: boolean }) => ({ running: conv.sending, steerable: conv.runLive }),
+  restoreTurn: (turn: { text: string; attachments?: unknown[]; recipient: unknown }, composer: { setInput: (f: (cur: string) => string) => void; restoreAttachments: (f: unknown[]) => void; chooseRecipient: (to: unknown) => void }) => {
+    composer.setInput((cur) => cur || turn.text);
+    composer.restoreAttachments(turn.attachments ?? []);
+    composer.chooseRecipient(turn.recipient);
+  },
   useChatTurns: (options: Record<string, unknown>) => {
     door.options = options;
     return { queued: { items: [], count: 0, remove: vi.fn() }, submit: door.submit, queueAfter: door.queueAfter, stop: door.stop, steers: () => true };

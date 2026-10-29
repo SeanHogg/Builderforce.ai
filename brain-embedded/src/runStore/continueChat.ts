@@ -27,9 +27,10 @@ import { chatErrorAction } from '../chatError';
 import type { ContentPart } from '../streamChatCompletion';
 import type { BrainMessage, ChatInputAttachment } from '../types';
 import type { RunCell } from './runCell';
-import { emit, getCell, nowIso, pushTrace, recordAppended } from './runCells';
+import { emit, getCell, nowIso, onStoreReset, pushTrace, recordAppended } from './runCells';
 import { claimRun, claimStopped, releaseClaim, type RunClaim } from './runClaim';
-import { bounded, continuationLimits } from './deadline';
+import { bounded, continuationLimits, within } from './deadline';
+import { stopBeforeStart } from './runControl';
 import type { BrainRunRequest, RunKey } from './runTypes';
 
 /** What a user turn's files need to be linked and made model-readable - the conversation's adapter. */
@@ -83,6 +84,7 @@ export function resetContinuations(): void {
   bindings.clear();
   depth.clear();
 }
+onStoreReset(resetContinuations);
 
 /** Was this run opted in? Reading consumes the mark: it is per run. */
 export function takeContinueOnSettle(runKey: RunKey): boolean {
@@ -134,6 +136,20 @@ function trace(c: RunCell, label: string, args: Record<string, unknown>, result:
 }
 
 /**
+ * A Stop landed while the words were becoming the next turn. Whatever user row is saved is unanswered: a
+ * reopened chat (the auto-reply on load, Retry) would run it after all. So it gets the same "stopped before
+ * it started" answer a launch writes (`stopBeforeStart`) - bounded, like every await a claim holder makes.
+ */
+async function endStopped(c: RunCell, runKey: number, chatId: number, persistence: BrainRunRequest['persistence']): Promise<boolean> {
+  await within(
+    continuationLimits.prepareMs,
+    async () => { await stopBeforeStart(runKey, chatId, persistence); },
+    () => trace(c, 'steer.stop_unrecorded', {}, 'The stop could not be recorded in time; the saved message may run again when the chat is reopened.'),
+  );
+  return true;
+}
+
+/**
  * Make `steers` the chat's next turn, under `claim`. False when the chat cannot take it - it has no
  * request to run with (never ran in this session) or it has continued as often as it may without a
  * person's turn (`MAX_CONTINUATIONS`) - and the caller keeps the words. True when the words were
@@ -156,34 +172,38 @@ export async function continueChat(runKey: number, c: RunCell, steers: readonly 
   const fresh = steers.filter((m) => !m.saved);
   const said = steers.filter((m) => m.saved);
   const reading = continuationLimits.prepareMs;
-  const freshTurn = fresh.length > 0 ? await bounded(reading, compose(fresh, ports), 'Reading the attachments') : null;
-  const saidTurn = said.length > 0 ? await bounded(reading, compose(said, ports), 'Reading the attachments') : null;
+  const freshTurn = fresh.length > 0 ? await bounded(reading, compose(fresh, ports)) : null;
+  const saidTurn = said.length > 0 ? await bounded(reading, compose(said, ports)) : null;
   // No Stop check before the save: words already in hand are the person's message - a Stop keeps them as
   // a row (the record of what was said) and starts nothing, below.
   let row: BrainMessage | undefined;
   if (freshTurn) {
     // A plain user row (no mid-turn mark): the reply to it is an ordinary answer.
     const metadata = withDirectedMetadata(null, freshTurn.turn.meta);
-    [row] = await request.persistence.sendMessages(chatId, [{ role: 'user', content: freshTurn.displayContent, ...(metadata ? { metadata } : {}) }]);
+    // Bounded like every await a claim holder makes. A save that is only SLOW may still land after the
+    // timeout; the words then wait in the inbox to be saved again - at-least-once, never lost.
+    [row] = await bounded(reading, Promise.resolve(request.persistence.sendMessages(chatId, [{ role: 'user', content: freshTurn.displayContent, ...(metadata ? { metadata } : {}) }])));
     if (row) {
       recordAppended(c, row);
       emit(c);
     }
-    if (claimStopped(c, claim)) return true;
+    if (claimStopped(c, claim)) return endStopped(c, runKey, chatId, request.persistence);
   }
   const content = saidTurn && freshTurn ? joinContent(saidTurn.turn.content, freshTurn.turn.content) : (saidTurn ?? freshTurn)!.turn.content;
   // The host's run-time parts, fresh. A host that refuses leaves the (saved) words waiting in the inbox.
   let fresher: Partial<BrainRunRequest> | undefined;
   try {
-    fresher = await bounded(continuationLimits.prepareMs, binding.prepareRun?.(runKey), 'Preparing the run');
+    fresher = await bounded(continuationLimits.prepareMs, binding.prepareRun?.(runKey));
   } catch (e) {
+    // A Stop that landed first ends it: its words are not requeued.
+    if (claimStopped(c, claim)) return endStopped(c, runKey, chatId, request.persistence);
     surface(c, e);
     trace(c, 'steer.prepare_failed', { error: e instanceof Error ? e.message : String(e) },
       'The host could not prepare a run for direction the last run never read; it waits for the chat\'s next run.');
     keepAsSaid(runKey, recordedModelText(content), [...(freshTurn?.attachments ?? []), ...(saidTurn?.attachments ?? [])]);
     return true;
   }
-  if (claimStopped(c, claim)) return true;
+  if (claimStopped(c, claim)) return endStopped(c, runKey, chatId, request.persistence);
   // The continuation keeps catching up with a person who keeps typing - to the bound above. Stop and
   // delete still end it: a stopped run continues nothing, and a deleted chat has no cell to start.
   depth.set(runKey, links + 1);

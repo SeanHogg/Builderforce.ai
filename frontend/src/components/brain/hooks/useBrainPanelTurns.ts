@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
-import { chatDoorLiveness, useChatTurns, type ChatInputAttachment, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, restoreTurn, useChatTurns, type ChatInputAttachment, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import type { useBrainChats, useBrainConversation } from '@/lib/brain';
 import { useDockedComposer } from '@/lib/brain/dockedBrain';
 import { trackActivity } from '@/lib/activity/tracker';
@@ -55,11 +55,7 @@ export function useBrainPanelTurns({ conv, chats, recipient, chooseRecipient, in
     // A turn for a participant is a message to them — never the Brain's Stop.
     isDirected: (turn) => turn.addressedTo != null,
     // ...and one whose send was not kept after the chat changed returns to the box, addressee intact.
-    restore: (turn) => {
-      setInput((cur) => cur || turn.text);
-      conv.restoreAttachments(turn.attachments ?? []);
-      chooseRecipient(turn.addressedTo);
-    },
+    restore: (turn) => restoreTurn({ ...turn, recipient: turn.addressedTo }, { setInput, restoreAttachments: conv.restoreAttachments, chooseRecipient }),
     // The conversation's Stop: it also drops a launch still getting ready.
     stop: conv.stop,
   });

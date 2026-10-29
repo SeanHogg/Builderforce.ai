@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { chatDoorLiveness, useChatTurns, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, restoreTurn, useChatTurns, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { request } from '../vscodeBridge';
 import { stageSend } from './stageSend';
 import { childTarget, steerRun, type useChatChildren } from './chatChildren';
@@ -61,6 +61,13 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, chooseRe
     const queued = pendingSendRef.current;
     if (!queued) return;
     pendingSendRef.current = null;
+    // A Stop that landed between staging and this commit drops the send like one during the fetch.
+    if (stopPreparingRef.current) {
+      setPreparing(false);
+      giveBack({ text: queued.text, recipient: queued.recipient, attachments: queued.attachments });
+      queued.done(true);
+      return;
+    }
     // `addressedTo` routes the turn: a participant is talked to (no BRAIN run); null (default)
     // runs the BRAIN. A held turn carries its OWN attachment snapshot (the composer was cleared
     // when the turn queued), passed explicitly so the images survive the wait. Never into a chat the
@@ -88,13 +95,13 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, chooseRe
   const { restoreAttachments } = conv;
   const [preparing, setPreparing] = useState(false);
   const stopPreparingRef = useRef(false);
-  // A turn that could not go goes back to the box: text, files and addressee - the ONE restore.
-  const giveBack = useCallback((m: QueuedTurn) => {
-    setInput((cur) => cur || m.text);
-    restoreAttachments(m.attachments ?? []);
-    if (m.recipient) chooseRecipient(m.recipient);
-  }, [setInput, restoreAttachments, chooseRecipient]);
-  const dispatchSend = useCallback(async (text: string, to: DirectedRecipient | null, attachments?: ChatInputAttachment[]): Promise<boolean> => {
+  // A turn that could not go goes back to the box: text, files and addressee - THE restore every host shares.
+  const giveBack = useCallback((m: QueuedTurn) => restoreTurn(m, { setInput, restoreAttachments, chooseRecipient }), [setInput, restoreAttachments, chooseRecipient]);
+  // Turns whose send ended because another chat was showing (not a failure after a run): only THESE are returned
+  // to whichever composer is showing; a failure that comes back late never lands in a different chat's box.
+  const switchedRef = useRef(new WeakSet<QueuedTurn>());
+  const dispatchSend = useCallback(async (m: QueuedTurn): Promise<boolean> => {
+    const { text, recipient: to, attachments } = m;
     stopPreparingRef.current = false;
     setPreparing(true);
     const startedIn = chatIdRef.current;
@@ -104,9 +111,10 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, chooseRe
       if (staged.why === 'stopped') {
         // Stopped while it got ready: nothing was sent - the words and the files go back to the box, and the
         // Stop has already dropped the queue, so this is the turn's one restore.
-        giveBack({ text, recipient: to, attachments });
+        giveBack(m);
         return true;
       }
+      switchedRef.current.add(m);
       return false; // another chat is showing: not sent, and the caller returns it to the box
     }
     setTurnLimbic(staged.block);
@@ -128,7 +136,7 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, chooseRe
     // webview's inbox is read by nobody) returns to the box with its addressee.
     restore: giveBack,
     runKey: chatId,
-    send: (m) => dispatchSend(m.text, m.recipient, m.attachments),
+    send: dispatchSend,
     textOf: (m) => m.text,
     // A turn for a participant is a message to them — never the Brain's Stop.
     isDirected: (m) => m.recipient != null,
@@ -192,9 +200,11 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, chooseRe
 
   const sendOrQueue = useCallback((text: string, to: DirectedRecipient | null, attachments?: ChatInputAttachment[]) => {
     const turn: QueuedTurn = { text, recipient: to, attachments: attachments ?? takeAttachments() };
+    const typedIn = chatIdRef.current;
     // A send that was not kept (the session expired, or another chat is showing) gives the words, the
-    // files and the addressee back to the box - the one restore, whichever way the turn left it.
-    void submitTurn(turn).then((kept) => { if (!kept) giveBack(turn); });
+    // files and the addressee back to the box - but never into a DIFFERENT chat's box after the fact, unless
+    // the turn itself ended because that chat was showing (a switch during the limbic fetch).
+    void submitTurn(turn).then((kept) => { if (!kept && (chatIdRef.current === typedIn || switchedRef.current.has(turn))) giveBack(turn); });
   }, [submitTurn, takeAttachments, giveBack]);
 
   const submit = useCallback(() => {

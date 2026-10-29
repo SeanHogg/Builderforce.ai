@@ -877,6 +877,10 @@
     "message": "Ce modèle plante sans cesse sur cet appareil. Supprimez-le ou essayez un autre modèle.",
     "description": "Chat error: this model crashed repeatedly on this device and is refused for now"
   },
+  "continuationTimedOut": {
+    "message": "L’exécution n’a pas pu être préparée à temps. Renvoyez votre message.",
+    "description": "Chat error: continuing a run with the words typed meanwhile took too long; they are kept and the person sends again"
+  },
   "manageLocalModels": {
     "message": "Gérer les modèles sur l’appareil",
     "description": "Button: open Settings, where on-device models are managed and removed"

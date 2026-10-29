@@ -4,28 +4,10 @@ import { codeRunOutcome } from './runOutcomeReport';
 import { resetBrainRunStore } from './runStore/runControl';
 import { getCell } from './runStore/runCells';
 import { startRun } from './runStore/startRun';
-import { servedLocally } from './servedLocally';
 
 const turn = (args: Record<string, unknown>): BrainTraceEvent => ({ ts: 't', category: 'llm', label: 'llm.complete', args, result: 'ok' }) as BrainTraceEvent;
 const outcomeOf = (trace: BrainTraceEvent[]) => codeRunOutcome({
   runId: 'ide:1:1', codeModel: 'local/ollama/qwen', codeChanged: true, aborted: false, failed: false, shipped: false, trace,
-});
-
-describe('servedLocally - on THIS device, from the transport that actually served the turn', () => {
-  it('is true for a local-first runner that served on this machine, or a local model ref', () => {
-    expect(servedLocally({ localFirst: [{ target: 'local/ollama/llama3', outcome: 'served' }] }, 'auto')).toBe(true);
-    expect(servedLocally({ resolvedModel: 'local/ollama/phi' })).toBe(true);
-  });
-
-  it('is false for a hosted runtime dispatched from here (local in grammar, but paid and off the device)', () => {
-    expect(servedLocally({ resolvedModel: 'local/kimi-code/k3' })).toBe(false);
-    expect(servedLocally({ localFirst: [{ target: 'local/kimi-code/k3', outcome: 'served' }] })).toBe(false);
-  });
-
-  it('is false when the local attempt only failed over to the gateway, or the model is a cloud one', () => {
-    expect(servedLocally({ localFirst: [{ target: 'local/ollama/llama3', outcome: 'failed' }, { target: 'gateway', outcome: 'served' }], resolvedModel: 'gpt-5' }, 'auto')).toBe(false);
-    expect(servedLocally({ resolvedModel: 'gpt-5' })).toBe(false);
-  });
 });
 
 describe('a run served entirely on this machine reports it was free', () => {

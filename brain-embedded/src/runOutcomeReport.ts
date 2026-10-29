@@ -38,6 +38,9 @@ export interface BrainRunOutcome {
   projectId?: number;
 }
 
+/** A turn that reported its own cost as exactly 0 (served on this device - `servedOnDevice`). */
+const reportedFree = (e: BrainTraceEvent): boolean => (e.args as { costMc?: unknown } | null | undefined)?.costMc === 0;
+
 /** A run's idempotency key: one chat runs one run at a time, so chat + start is unique. */
 export function runOutcomeId(chatId: number, startedAtMs: number): string {
   return `ide:${chatId}:${startedAtMs}`;
@@ -82,7 +85,7 @@ export function codeRunOutcome(args: {
   const turns = args.trace.filter((e) => e.label === 'llm.complete' && !e.isError);
   const steps = turns.length;
   // Free only when EVERY turn reported 0 (served on this machine); one turn with no cost leaves the run's unknown.
-  const allLocal = steps > 0 && turns.every((e) => e.args?.costMc === 0);
+  const allLocal = steps > 0 && turns.every(reportedFree);
   const base = { clientRunId: args.runId, role: 'code' as const, source: 'ide' as const, steps, ...(allLocal ? { costMc: 0 as const } : {}), ...(args.projectId != null ? { projectId: args.projectId } : {}) };
   if (args.codeChanged) {
     if (args.aborted || !args.codeModel) return null;

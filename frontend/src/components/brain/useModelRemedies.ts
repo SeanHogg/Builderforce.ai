@@ -15,6 +15,7 @@ type Remedies = Pick<ChatErrorBannerProps, 'onSwitchToHybrid' | 'onDownloadLocal
     | 'engineCrashed'
     | 'engineDetached'
     | 'modelKeepsCrashing'
+    | 'continuationTimedOut'
     | 'manageLocalModels'
     | 'platformRefusedMode'
     | 'platformRefusedSync'
@@ -55,6 +56,7 @@ export function useModelRemedies(onDismiss: () => void, composerId: string, retr
       engineCrashed: t('engineCrashed'),
       engineDetached: t('engineDetached'),
       modelKeepsCrashing: t('modelKeepsCrashing'),
+      continuationTimedOut: t('continuationTimedOut'),
       manageLocalModels: t('manageLocalModels'),
       // A platform call this run needed was refused (`platform_refused`): by Local only,
       // by account sync being off, or by another platform setting.

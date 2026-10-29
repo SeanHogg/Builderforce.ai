@@ -165,9 +165,12 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
   const takeFrontRef = useRef<() => T | undefined>(() => undefined);
   // Turns being sent from the queue right now. ONE path sends them: the falling edge starts it
   // (`mayFlush`), a turn typed meanwhile joins the line, and the loop below carries on to the next.
-  const flushing = useRef(0);
+  // Counted PER CHAT: a turn sent from chat A's queue (awaiting its run) must not line up a turn typed in B.
+  const flushing = useRef(new Map<RunKey | null, number>());
+  const flushingIn = (key: RunKey | null): number => flushing.current.get(key) ?? 0;
   const flush = useCallback(async (first: T): Promise<void> => {
-    flushing.current += 1;
+    const chat = ports.current.runKey;
+    flushing.current.set(chat, flushingIn(chat) + 1);
     try {
       let turn: T | undefined = first;
       while (turn !== undefined) {
@@ -200,7 +203,7 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
         }
       }
     } finally {
-      flushing.current -= 1;
+      flushing.current.set(chat, flushingIn(chat) - 1);
     }
   }, []);
 
@@ -209,7 +212,7 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     send: (turn) => { void flush(turn); },
     resetKey: runKey,
     textOf,
-    mayFlush: () => flushing.current === 0,
+    mayFlush: () => flushingIn(ports.current.runKey) === 0,
   });
   const { submit: hold, clear, takeFront, pushBack } = queued;
   // eslint-disable-next-line react-hooks/refs
@@ -246,6 +249,28 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     ports.current.steerable && typeof ports.current.runKey === 'number' && !stoppingRef.current
       && steersByDefault({ ...preview, held: heldThisRun() })
   ), [heldThisRun]);
+  // The run went live: the turns held ONLY because it was not yet are follow-ups to it - steered in, in the
+  // order they were typed, before any later message. Turns the person queued for after (`queueAfter`) stay
+  // queued for the next turn; one a steer would not carry (a file it would drop) stays too, and so does
+  // everything behind it.
+  const { remove } = queued;
+  useEffect(() => {
+    if (!running || !steerable) return;
+    const { steer: route, runKey: key, textOf: text, isDirected: directed, attachmentsOf: attached } = ports.current;
+    if (typeof key !== 'number' || stoppingRef.current) return;
+    for (const item of itemsRef.current) {
+      if (!item.preLive) continue;
+      const turn = item.value;
+      if (!steersByDefault({ directed: !!directed?.(turn), held: 0, attachments: attached?.(turn) })) break;
+      if (route) {
+        if (!route(turn)) break;
+      } else {
+        queueRunSteering(key, turnBody(turn, text), { interrupt: true, fromPerson: true, persist: true, attachments: attached?.(turn) });
+      }
+      remove(item.id);
+    }
+  }, [running, steerable, remove]);
+
   const stopTurns = useCallback(() => {
     clear();
     stopEpoch.current += 1;
@@ -280,9 +305,12 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
       queueRunSteering(key, body, { interrupt: true, fromPerson: true, persist: true, attachments: attached?.(turn) });
       return true;
     }
-    if (hold(turn)) return true;
-    // A turn from the queue is being sent right now: this one follows it, never beside it.
-    if (!live && flushing.current > 0) {
+    // Held while no run is live yet (the window before the turn that starts it is running): a FOLLOW-UP to that
+    // run, steered into it in order the moment it goes live (below). Not for an addressed turn or a Stop.
+    const preLive = !ports.current.steerable && typeof key === 'number' && !stoppingRef.current && !directed?.(turn);
+    if (hold(turn, preLive ? { preLive: true } : undefined)) return true;
+    // A turn from the queue is being sent right now (in THIS chat): this one follows it, never beside it.
+    if (!live && flushingIn(key) > 0) {
       pushBack(turn);
       return true;
     }

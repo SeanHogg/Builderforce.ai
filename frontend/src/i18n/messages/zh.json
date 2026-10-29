@@ -12329,6 +12329,7 @@
     "engineCrashed": "设备上的模型已崩溃。请重新发送以重启它。",
     "engineDetached": "设备上的模型在完成前停止了。请重新发送以重试。",
     "modelKeepsCrashing": "此模型在本设备上反复崩溃。请将其移除，或换用其他模型。",
+    "continuationTimedOut": "未能及时准备好运行。请重新发送你的消息。",
     "manageLocalModels": "管理设备上的模型",
     "platformRefusedMode": "“仅本地”会让此次运行留在本设备上，因此无法连接 BuilderForce。请在 / 菜单的“模型”中切换到混合模式以允许连接。",
     "platformRefusedSync": "账户同步已关闭，因此无法保存到你的账户。请在平台设置中开启同步，或继续在本地工作。",

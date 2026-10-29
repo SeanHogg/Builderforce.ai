@@ -815,6 +815,7 @@ export { USAGE_SURFACE_HEADER, USAGE_SURFACES, isUsageSurface, withUsageSurface,
 // under it (moved from brain-ui, which re-exports it), and "the first message creates
 // the chat" (single in-flight create + first-turn auto-title port).
 export { chatDoorLiveness, steersByDefault, useChatTurns } from './useChatTurns';
+export { restoreTurn } from './restoreTurn';
 export { startsRun } from './userTurnRuns';
 export type { ChatTurns, ChatTurnsOptions } from './useChatTurns';
 export { useRunRefreshTick, RUN_REFRESH_MS } from './useRunRefreshTick';

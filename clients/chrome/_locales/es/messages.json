@@ -877,6 +877,10 @@
     "message": "Este modelo se bloquea una y otra vez en este dispositivo. Quítalo o prueba otro modelo.",
     "description": "Chat error: this model crashed repeatedly on this device and is refused for now"
   },
+  "continuationTimedOut": {
+    "message": "No se pudo preparar la ejecución a tiempo. Vuelve a enviar tu mensaje.",
+    "description": "Chat error: continuing a run with the words typed meanwhile took too long; they are kept and the person sends again"
+  },
   "manageLocalModels": {
     "message": "Gestionar modelos del dispositivo",
     "description": "Button: open Settings, where on-device models are managed and removed"

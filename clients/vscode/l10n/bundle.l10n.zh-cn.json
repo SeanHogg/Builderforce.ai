@@ -936,6 +936,7 @@
   "The on-device model crashed. Send again to restart it.": "设备上的模型已崩溃。请重新发送以重启它。",
   "The on-device model stopped before it finished. Send again to retry.": "设备上的模型在完成前停止了。请重新发送以重试。",
   "This model keeps crashing on this device. Remove it, or try another model.": "此模型在本设备上反复崩溃。请将其移除，或换用其他模型。",
+  "The run could not be prepared in time. Send your message again.": "未能及时准备好运行。请重新发送你的消息。",
   "Manage on-device models": "管理设备上的模型",
   "Your pick {0} failed; answered with Auto.": "您选择的 {0} 失败；已改用自动模式回答。",
   "Hybrid": "混合",

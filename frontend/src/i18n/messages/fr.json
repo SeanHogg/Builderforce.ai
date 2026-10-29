@@ -12329,6 +12329,7 @@
     "engineCrashed": "Le modèle sur cet appareil a planté. Renvoyez le message pour le redémarrer.",
     "engineDetached": "Le modèle sur cet appareil s’est arrêté avant d’avoir terminé. Renvoyez le message pour réessayer.",
     "modelKeepsCrashing": "Ce modèle plante sans cesse sur cet appareil. Supprimez-le ou essayez un autre modèle.",
+    "continuationTimedOut": "L’exécution n’a pas pu être préparée à temps. Renvoyez votre message.",
     "manageLocalModels": "Gérer les modèles sur l’appareil",
     "platformRefusedMode": "Local uniquement garde cette exécution sur cet appareil : elle n’a donc pas pu joindre BuilderForce. Passez en Hybride dans le menu /, sous Modèle, pour l’autoriser.",
     "platformRefusedSync": "La synchronisation du compte est désactivée : ceci n’a donc pas pu être enregistré dans votre compte. Activez la synchronisation dans les paramètres de la plateforme, ou continuez en local.",

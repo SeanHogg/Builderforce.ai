@@ -31,7 +31,7 @@ import { accrueByoUnresolved, accrueProviderCap, emit, emitStreaming, nowIso, no
 import { modelDowngradeEvent } from './modelDowngrade';
 import { gatewayRoutingArgs } from './gatewayRoutingTrace';
 import { turnMenu } from './turnMenu';
-import { servedLocally } from '../servedLocally';
+import { servedOnDevice } from '@builderforce/local-inference';
 import { markPersonTurn } from './chatAsks';
 import { asLiveTurn, connectRetryStep, liveTurnModel } from './turnPersistence';
 import { reportToPolicy, type RunLoopContext, type TurnMeta } from './runLoopContext';
@@ -336,7 +336,7 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
         account: result.account,
         // A turn answered on this machine cost nothing: reported as 0 explicitly. Any other turn carries NO cost
         // (unknown, never free) - the run's total is decided over all of them (`codeRunOutcome`).
-        ...(servedLocally(result, requested) ? { costMc: 0 } : {}),
+        ...(servedOnDevice(result) ? { costMc: 0 } : {}),
         byoUnresolved: result.byoUnresolved,
         // How the gateway ROUTED the turn: the candidates it walked and every model it
         // tried and left (`model:status kind`). The only record of why a coding turn

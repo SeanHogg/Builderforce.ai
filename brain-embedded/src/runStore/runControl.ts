@@ -7,7 +7,6 @@
 
 import { stepRow } from '@builderforce/agent-loop';
 import type { BrainMessage } from '../types';
-import { resetContinuations } from './continueChat';
 import type { BrainTraceEvent } from '../brainTriage';
 import { getRunDriver } from '../runDriver';
 import { forgetResolvedModels } from '../lastResolvedModel';
@@ -32,7 +31,7 @@ import type { BrainRunPersistence, BrainRunSnapshot, GlobalRunState, RunKey } fr
  */
 export function resetBrainRunStore(): void {
   cells.clear();
-  resetContinuations();
+  runStoreResetHooks();
   forgetResolvedModels();
 }
 
@@ -178,12 +177,9 @@ export function stopRun(chatId: RunKey): void {
   const c = cells.get(chatId);
   if (c) {
     c.stopEpoch += 1;
-    // A Stop frees a chat held by a continuation (or a settling run's slow backstops): the stalled work
-    // sees the epoch change and starts nothing, and the chat is no longer live.
-    if (c.claim) {
-      c.claim = null;
-      emit(c);
-    }
+    // A claim is released ONLY by its holder (and every await the holder makes is bounded): a Stop
+    // does not take the chat from it. The holder sees the epoch at its next boundary and exits.
+    if (c.claim) emit(c);
   }
   // Already stopped and unwinding: a second press must not record a second Stop.
   if (!c || !c.running || c.abort?.signal.aborted) return;

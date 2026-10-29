@@ -558,11 +558,11 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         // attachment is work: the reload reads the text with its links, so it runs too); a
         // Stop pressed while this send got ready drops the launch.
         const runs = attachments.length > 0 || startsRun(trimmed);
-        if (runs) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id));
+        // The row IS saved: a run that fails to start/finish (a host's run.failed) shows its error - never restores the text, which would send a second row.
+        if (runs) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id)).catch((err: unknown) => { if (stillOpen()) setLocalError(err instanceof Error ? err.message : 'Run failed'); });
         return true;
       } catch (e) {
-        // Persisting the user turn failed (commonly an expired token) — the turn was NOT saved. The files go
-        // back to the composer that is SHOWING (where the host puts the typed text on the false return).
+        // Saving the turn failed (an expired token): NOT saved. Files go back to the SHOWING composer, like the text.
         if (!given) composer.restore(attachments);
         if (stillOpen()) setLocalError(e instanceof Error ? e.message : 'Send failed');
         return false;

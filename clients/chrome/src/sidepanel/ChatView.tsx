@@ -288,6 +288,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
             engineCrashed: t('engineCrashed'),
             engineDetached: t('engineDetached'),
             modelKeepsCrashing: t('modelKeepsCrashing'),
+            continuationTimedOut: t('continuationTimedOut'),
             manageLocalModels: t('manageLocalModels'),
                 platformRefusedMode: t('platformRefusedMode'),
                 platformRefusedSync: t('platformRefusedSync'),

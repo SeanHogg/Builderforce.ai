@@ -90,20 +90,38 @@ describe('a continuation holds the chat while it is made (the claim)', () => {
     expect(drainRunSteering(9320)).toEqual([]);
   });
 
-  it('a Stop during prepareRun frees the chat AT ONCE and starts nothing: the saved row stays', async () => {
+  it('a Stop during prepareRun starts nothing: the saved row stays AND is answered "stopped", so a reopen does not run it', async () => {
     const { c, release } = await waiting(9321, ['Done.', 'must never run']);
 
     expect(wakeChat(9321, 'said, then stopped', undefined)).toBe(true);
     await until(() => userRows(c).length === 1); // the row is saved; prepareRun is now waiting
+    const before = c.saved.length;
     stopRun(9321);
-    // Not when the stalled host call finally returns: a Stop frees the chat now.
-    expect(isLive(9321)).toBe(false);
+    // A claim is released ONLY by its holder: the Stop does not take the chat from it.
+    expect(isLive(9321)).toBe(true);
     release();
-    await new Promise((r) => setTimeout(r, 60));
+    await until(() => !isLive(9321));
 
     expect(userRows(c)).toEqual(['said, then stopped']);
     expect(c.asked).toHaveLength(1);
-    expect(isLive(9321)).toBe(false);
+    expect(c.saved.slice(before).some((row) => row.role === 'assistant' && row.content === 'Stopped before it started.')).toBe(true);
+  });
+
+  it('a Stop, then a prepareRun that fails: the stopped words are not requeued', async () => {
+    let fail!: () => void;
+    const gate = new Promise<void>((_, reject) => { fail = () => reject(new Error('host gone')); });
+    const c = chat(['Done.', 'must never run']);
+    continueOnSettle(9331, { ports: () => ports, prepareRun: async () => { await gate; return {}; } });
+    await startRun(9331, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+
+    expect(wakeChat(9331, 'stopped words', undefined)).toBe(true);
+    await until(() => userRows(c).length === 1);
+    stopRun(9331);
+    fail();
+    await until(() => !isLive(9331));
+
+    expect(drainRunSteering(9331)).toEqual([]);
+    expect(c.asked).toHaveLength(1);
   });
 
   it('two continuations race: ONE run; the other\'s words wait in the inbox that run reads', async () => {
@@ -168,7 +186,9 @@ describe('a claim cannot hold a chat forever', () => {
       expect(c.asked).toHaveLength(1);
       expect(userRows(c)).toEqual(['host is stuck']);
       expect(drainRunSteering(9328)).toMatchObject([{ fromPerson: true, saved: true }]);
-      expect(getCell(9328).error).toContain('timed out');
+      // A CODE, rendered in the person's language by each host - never an English sentence from the store.
+      expect(getCell(9328).error).toBe('continuation_timed_out');
+      expect(getCell(9328).errorAction).toEqual({ kind: 'continuation_timed_out' });
       expect(getCell(9328).trace.some((e) => e.label === 'steer.prepare_failed')).toBe(true);
     } finally {
       Object.assign(continuationLimits, saved);

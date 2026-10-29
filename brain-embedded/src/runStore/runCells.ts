@@ -12,6 +12,15 @@ import type { RunKey } from './runTypes';
 
 export const cells = new Map<RunKey, RunCell>();
 
+/** What else forgets its state when the store is reset (tests, teardown): modules register themselves. */
+const resetHooks = new Set<() => void>();
+export function onStoreReset(hook: () => void): void {
+  resetHooks.add(hook);
+}
+export function runStoreResetHooks(): void {
+  for (const hook of resetHooks) hook();
+}
+
 /**
  * Global run-store listeners — notified on ANY cell change (not one chat's), so a
  * view can render a CROSS-CHAT indicator of which OTHER chats are live without

@@ -99,4 +99,12 @@ describe('an addressed turn the door could not keep', () => {
     expect(conv.restoreAttachments).toHaveBeenCalledWith([file]);
     expect(chooseRecipient).toHaveBeenCalledWith(dev);
   });
+
+  it('resets the composer\'s addressee for a turn that had none - a Brain turn never comes back pointed at a participant', () => {
+    const { options, chooseRecipient } = mount({ sending: false, runLive: false });
+
+    (options.restore as (m: Turn) => void)({ text: 'plain', recipient: null });
+
+    expect(chooseRecipient).toHaveBeenCalledWith(null);
+  });
 });
