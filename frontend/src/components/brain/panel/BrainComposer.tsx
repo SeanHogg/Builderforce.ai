@@ -49,6 +49,8 @@ export function BrainComposer() {
     input,
     setInput,
     handleSend,
+    handleQueueAfter,
+    sendSteers,
     recipient,
     chooseRecipient,
     participants,
@@ -96,6 +98,12 @@ export function BrainComposer() {
       value={input}
       onChange={setInput}
       onSubmit={handleSend}
+      // A message typed mid-run steers the run; this is the explicit way to hold it for after.
+      onQueue={handleQueueAfter}
+      // Send's verb is read from the predicate the door decides with, so it never promises a steer
+      // the turn will not get (a participant, a turn behind held ones, a file the run cannot read,
+      // a run being stopped).
+      sendSteers={sendSteers}
       // A builder's chat is about changing the thing on screen, so it says so.
       placeholder={recipient ? tBrain('messageParticipant', { name: recipient.name }) : tBrain(capabilitySurface === 'build' ? 'messagePlaceholderBuild' : 'messagePlaceholder')}
       running={conv.sending}

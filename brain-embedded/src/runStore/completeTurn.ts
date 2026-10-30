@@ -20,6 +20,7 @@ import { createComposingActivity, toolCallArgBytes } from '../composingActivity'
 import { hasCallMarkup } from '../xmlToolCalls';
 import { turnInterruption } from '../finishReason.js';
 import { takeRunSteering } from './steerInterrupt';
+import { persistSteer } from './steerPersistence';
 import { steerModelContent } from '../runSteering';
 import { buildWorkingTranscript } from '@seanhogg/builderforce-memory/working';
 import { summarizeMiddle } from '../transcriptSummarizer';
@@ -30,6 +31,7 @@ import { accrueByoUnresolved, accrueProviderCap, emit, emitStreaming, nowIso, no
 import { modelDowngradeEvent } from './modelDowngrade';
 import { gatewayRoutingArgs } from './gatewayRoutingTrace';
 import { turnMenu } from './turnMenu';
+import { servedOnDevice } from '@builderforce/local-inference';
 import { markPersonTurn } from './chatAsks';
 import { asLiveTurn, connectRetryStep, liveTurnModel } from './turnPersistence';
 import { reportToPolicy, type RunLoopContext, type TurnMeta } from './runLoopContext';
@@ -50,6 +52,8 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     for (const steer of takeRunSteering(c, runKey, iter)) {
       const msg: ChatCompletionMessage = { role: 'user', content: steerModelContent(steer) };
       convo.push(steer.fromPerson ? markPersonTurn(msg) : msg);
+      // A steer no surface has shown yet (the web composer's) is saved as the run reads it.
+      await persistSteer(c, chatId, req.persistence, steer);
     }
     // Auto-compact BEFORE the turn: summarize the older middle into a memory note
     // when the transcript exceeds the token budget (instead of silently dropping it
@@ -330,6 +334,9 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
         // could NOT resolve — so triage tells "ran on the shared pool despite a
         // connected Claude account (expired?)" apart from "nothing connected".
         account: result.account,
+        // A turn answered on this machine cost nothing: reported as 0 explicitly. Any other turn carries NO cost
+        // (unknown, never free) - the run's total is decided over all of them (`codeRunOutcome`).
+        ...(servedOnDevice(result) ? { costMc: 0 } : {}),
         byoUnresolved: result.byoUnresolved,
         // How the gateway ROUTED the turn: the candidates it walked and every model it
         // tried and left (`model:status kind`). The only record of why a coding turn

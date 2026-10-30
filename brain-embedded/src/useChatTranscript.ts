@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BrainPersistenceAdapter } from './config';
 import { mergeTranscript } from './mergeTranscript';
+import { replayPendingWords } from './pendingWords';
 import { getRunSnapshot, type BrainRunSnapshot } from './brainRunStore';
 import type { BrainMessage } from './types';
 
@@ -59,8 +60,9 @@ export function useChatTranscript(
     }
     setLoadingMessages(true);
     cb.current.onLoadStart();
-    persistence
-      .getMessages(chatId)
+    // Words an EARLIER page load left unsaved are saved first (idempotent on their keys), so they are in this read.
+    replayPendingWords(chatId, persistence)
+      .then(() => persistence.getMessages(chatId))
       .then((list) => {
         // MERGE, never replace: a run that persisted its reply hands it over through
         // the run store's `appended` buffer, and this fetch can resolve after that

@@ -54,8 +54,12 @@ describe('Rovr platform policy', () => {
     await vi.waitFor(() => expect(worker.allows('synchronize')).toBe(false));
   });
 
-  it('gates every outbox send path absolutely while sync is disabled, and resumes on grant', async () => {
-    const storage = createMemoryKeyValue({ 'session.key': 'bfk_live_example' });
+  // The send gate is "the platform is reachable" (gateway, connected features or sync), not the
+  // sync switch: 7dbaaeb25 (2026-10-22) moved it, because gating run writes, activity beats and
+  // outcomes on sync held a Hybrid run's own writes (`platform_send_disabled`). The absolute gate
+  // is therefore proved where nothing is reachable - a signed-out person in Local only.
+  it('gates every outbox send path absolutely while the platform is unreachable, and resumes when the person reaches it', async () => {
+    const storage = createMemoryKeyValue();
     const policy = createRovrPlatformPolicy(storage);
     await policy.ready();
     const sent: string[] = [];
@@ -75,13 +79,18 @@ describe('Rovr platform policy', () => {
     expect(sent).toEqual([]);
     expect(outbox.size()).toBe(1); // nothing dropped
 
-    await policy.setCapability('synchronize', true);
+    // Signing in moves an undecided person onto Hybrid: the platform is reachable, so the backlog
+    // goes and a request may carry the queue - with sync still off (`synchronize` waits for its own grant).
+    await storage.set('session.key', 'bfk_live_example');
     await vi.waitFor(() => expect(sent).toEqual(['queued while denied']));
     expect(outbox.size()).toBe(0);
+    expect(policy.allows('synchronize')).toBe(false);
+    await expect(outbox.drainWith('chat', async () => ' ridden')).resolves.toBe(' ridden');
 
-    // Revocation stops sends again and keeps the backlog.
-    await policy.setCapability('synchronize', false);
-    outbox.enqueue('chat', 'after revocation');
+    // Signing out makes the platform unreachable again: sends stop and the backlog is kept.
+    await storage.remove('session.key');
+    await vi.waitFor(() => expect(policy.allows('gateway-inference')).toBe(false));
+    outbox.enqueue('chat', 'after sign-out');
     await outbox.flush();
     expect(sent).toEqual(['queued while denied']);
     expect(outbox.stats().queued).toBe(1);
@@ -99,6 +108,7 @@ describe('Rovr platform policy', () => {
     expect(online.isOnline()).toBe(true);
     expect(policy.allows('synchronize')).toBe(false);
     expect(policy.inferenceMode()).toEqual({ mode: 'local-only', chosen: false, signedIn: false, loaded: true });
+    expect(platformSendPermission(policy).isAllowed()).toBe(false); // genuinely unreachable
 
     // Signing in (unchosen) is Hybrid: the gateway and connected features open, so the
     // person's turns and reads work — but sync still waits for its own grant.
@@ -109,7 +119,9 @@ describe('Rovr platform policy', () => {
     expect(policy.allows('connected-feature')).toBe(true);
     expect(policy.allows('authenticate')).toBe(true);
     expect(policy.allows('synchronize')).toBe(false);
-    expect(platformSendPermission(policy).isAllowed()).toBe(false);
+    // The send permission is "the platform is reachable", not the sync switch (7dbaaeb25, 2026-10-22):
+    // a signed-in Hybrid person's activity beats, run writes and outcomes go with sync still off.
+    expect(platformSendPermission(policy).isAllowed()).toBe(true);
 
     // Signing out returns to Local only.
     await storage.remove('session.key');
@@ -176,7 +188,11 @@ describe('Rovr platform policy', () => {
     expect(platformCapabilityFor('https://api.builderforce.ai/llm/chat/completions', { method: 'POST' })).toBe(
       'gateway-inference',
     );
-    expect(platformCapabilityFor(`${base}/api/brain/chats`, { method: 'POST' })).toBe('synchronize');
+    // Binding a chat to the account sends its title and project only - never the transcript - so it is a
+    // connected feature, not a write (9f6feefa7, 2026-10-24; `platformRoutes.test.ts` holds the table).
+    expect(platformCapabilityFor(`${base}/api/brain/chats`, { method: 'POST' })).toBe('connected-feature');
+    // The transcript itself still rides the sync gate: a POST that is not a read.
+    expect(platformCapabilityFor(`${base}/api/brain/chats/3/messages`, { method: 'POST' })).toBe('synchronize');
     // A POST that READS is a connected feature (the shared route table), behind the mount too.
     expect(platformCapabilityFor(`${base}/api/limbic/block`, { method: 'POST' })).toBe('connected-feature');
     expect(platformCapabilityFor(`${base}/llm/v1/models`, { method: 'POST' })).toBe('connected-feature');

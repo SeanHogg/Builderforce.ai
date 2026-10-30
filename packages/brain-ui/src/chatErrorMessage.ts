@@ -43,6 +43,8 @@ export function chatErrorMessage(error: string, action: ChatErrorAction | null, 
       return engineMessage(action.engineCode, labels, error);
     case 'platform_refused':
       return platformRefusedMessage(action.setting, labels);
+    case 'continuation_timed_out':
+      return labels.continuationTimedOut;
     default:
       return error;
   }

@@ -22,9 +22,13 @@ export interface ComposerLabels {
   off: string;
   remove: string;
   send: string;
-  /** Send while a run streams queues the message behind it — its name says so. (A host
-   *  whose Send STEERS the run words it so; its queue is then {@link queueAfter}.) */
+  /** Send while a run streams speaks to the run now (it steers) - its name says so; the message
+   *  reaches the run's next model call. A message that would be held reads {@link queueHold}; the
+   *  explicit hold-for-after is {@link queueAfter}. */
   queueSend: string;
+  /** Send while a run streams when the message will be HELD for after it (a participant, a file a steer
+   *  would drop, turns already waiting, a run being stopped) - read when the host says Send does not steer. */
+  queueHold: string;
   /** The "Queue for after" button beside Send mid-run — `keys` is the platform's
    *  shortcut (`Alt+Enter`, `⌥+Enter` on macOS). */
   queueAfter: (keys: string) => string;
@@ -67,7 +71,8 @@ export const DEFAULT_COMPOSER_LABELS: ComposerLabels = {
   off: 'Off',
   remove: 'Remove',
   send: 'Send',
-  queueSend: 'Queue message — sends when the current run finishes',
+  queueSend: 'Send into the running turn now',
+  queueHold: 'Queue message — sends when the current run finishes',
   queueAfter: (keys) => `Queue for after the run (${keys})`,
   queueAfterShort: 'Queue',
   stop: 'Stop',

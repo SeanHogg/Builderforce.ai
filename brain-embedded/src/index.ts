@@ -308,6 +308,7 @@ export {
   stopRun,
   stopBeforeStart,
   isRunning,
+  isLive,
   subscribeRun,
   getRunSnapshot,
   getRunTrace,
@@ -813,7 +814,10 @@ export { USAGE_SURFACE_HEADER, USAGE_SURFACES, isUsageSurface, withUsageSurface,
 // THE ONE turn door (steer → queue while running → send) and Stop, the ONE turn queue
 // under it (moved from brain-ui, which re-exports it), and "the first message creates
 // the chat" (single in-flight create + first-turn auto-title port).
-export { useChatTurns } from './useChatTurns';
+export { chatDoorLiveness, steersByDefault, useChatTurns } from './useChatTurns';
+export { restoreTurn } from './restoreTurn';
+export { useComposerDraft } from './useComposerDraft';
+export { slotKeyedRows, type KeyedSlot } from './keyedRows';
 export { startsRun } from './userTurnRuns';
 export type { ChatTurns, ChatTurnsOptions } from './useChatTurns';
 export { useRunRefreshTick, RUN_REFRESH_MS } from './useRunRefreshTick';

@@ -140,7 +140,7 @@ export function createBrainRestPersistence(opts: BrainRestOptions) {
      * "Connected, yet nothing learned" became an unexplained mystery in the VSIX.
      * Folding it HERE is what stops one host from forgetting again.
      */
-    sendMessages: (chatId: number, messages: Array<{ role: string; content: string; metadata?: string }>) =>
+    sendMessages: (chatId: number, messages: Array<{ role: string; content: string; metadata?: string; eventKey?: string }>) =>
       request<{ messages: BrainMessage[]; evermindLearn?: EvermindLearnOutcome }>(
         `/api/brain/chats/${chatId}/messages`,
         { method: 'POST', body: JSON.stringify({ messages }) },

@@ -54,7 +54,16 @@ export type ChatErrorActionKind =
    * and {@link ChatErrorAction.setting} the switch that governs it, so the banner names
    * the mode / switch and how to change it — never the raw code.
    */
-  | 'platform_refused';
+  | 'platform_refused'
+  /**
+   * A continuation (direction a run never read, made the chat's next turn) waited too long on the host or the
+   * attachments and gave up. The words are KEPT (saved or waiting) and are read with the next message; the
+   * banner says so in the person's language - the person does not send them again.
+   */
+  | 'continuation_timed_out';
+
+/** The code a bounded continuation step rejects with (`runStore/deadline.ts`) - never shown raw. */
+export const CONTINUATION_TIMED_OUT = 'continuation_timed_out';
 
 /** What a `platform_refused` verdict names: a policy capability, or `send` (an outbox's
  *  administrative gate — the mode does not reach the platform). */
@@ -239,6 +248,7 @@ export function chatErrorAction(err: unknown): ChatErrorAction | null {
   if (message === NOT_SIGNED_IN) return { kind: 'sign_in' };
   if (message === NO_LOCAL_MODEL) return { kind: 'no_local_model' };
   if (message === NO_SPECIFIC_MODEL) return { kind: 'no_specific_model' };
+  if (message === CONTINUATION_TIMED_OUT) return { kind: 'continuation_timed_out' };
   const engineCode = localEngineCode(err instanceof BrainRequestError ? err.code : undefined, message);
   if (engineCode) return { kind: 'local_engine_failed', engineCode };
   const refused = platformRefusal(err, message);

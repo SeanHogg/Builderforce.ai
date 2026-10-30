@@ -220,6 +220,9 @@ export interface BrainRunHost {
    * render a run cell's confirm).
    */
   childControls(owner: ChildOwner, base: Omit<WebviewRunStart, "chatId">, approve?: ChildApprover): ChildControls;
+  /** Is the run key claimed - setting up, running or unwinding? Another path (the native chat
+   *  participant) asks before it starts a run of its own on the same key. */
+  isBusy(runKey: number): boolean;
   /** Watch the runs from a panel. The panel is brought up to date immediately. */
   attach(sink: RunSink): () => void;
   dispose(): void;

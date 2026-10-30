@@ -11,7 +11,7 @@
 
 import { useEffect, type MutableRefObject } from 'react';
 import { isMidTurnMetadata } from '@builderforce/agent-loop';
-import { isRunning } from './brainRunStore';
+import { isLive } from './brainRunStore';
 import { isDirectedToParticipant } from './directedMessage';
 import type { BrainMessage } from './types';
 import { startsRun } from './userTurnRuns';
@@ -28,7 +28,7 @@ export function useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending
 }): void {
   useEffect(() => {
     if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
-    if (isRunning(chatId)) return;
+    if (isLive(chatId)) return;
     const last = messages[messages.length - 1]!;
     if (last.role !== 'user') return;
     // A trailing message addressed to a participant is NOT a directive for the

@@ -87,7 +87,7 @@ export function parseSubagentOrigin(msg: { metadata?: string | null }): Subagent
 export interface LineagePersistence {
   sendMessages(
     chatId: number,
-    messages: Array<{ role: string; content: string; metadata?: string }>,
+    messages: Array<{ role: string; content: string; metadata?: string; eventKey?: string }>,
   ): Promise<BrainMessage[]>;
 }
 

@@ -24,6 +24,9 @@ importers:
       '@builderforce/agent-loop':
         specifier: link:../packages/agent-loop
         version: link:../packages/agent-loop
+      '@builderforce/agent-run':
+        specifier: link:../packages/agent-run
+        version: link:../packages/agent-run
       '@builderforce/agent-skills':
         specifier: link:../packages/agent-skills
         version: link:../packages/agent-skills

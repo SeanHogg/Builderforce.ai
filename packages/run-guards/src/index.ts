@@ -27,6 +27,8 @@ export {
 } from "./readCoverage.js";
 export { perFileResults, singleReadsOf } from "./multiRead.js";
 export { parseShellFileRead, shellReadAsFileRead, type ShellFileRead, type ShellReadAsFileRead } from "./shellFileRead.js";
+export { isReadOnlyShellCall, isReadOnlyShellCommand } from "./readOnlyShell.js";
+export { recordShellFileRead, shellPrintAsRead } from "./shellPrint.js";
 export {
   FAILURE_HARD_AT,
   FAILURE_NUDGE_AT,

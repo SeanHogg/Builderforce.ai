@@ -8,9 +8,31 @@
 
 import { isFailedToolResult } from '../brainTriage';
 import { workItemLinkFromCreate, type LinkedTicketToAdvance } from '../chatWorkLinking';
+import type { BrainTraceEvent } from '../brainTriage';
 import type { RunCell } from './runCell';
 import { nowIso, nowMs, pushTrace } from './runCells';
 import type { BrainRunRequest } from './runTypes';
+
+/** What a ticket backstop reads and writes of a run. A live RunCell has it all; a SETTLING run gets a detached
+ *  snapshot ({@link settleView}), so work that outlives its deadline never touches the NEXT run's cell. */
+export type BackstopState = Pick<RunCell, 'deltaRecordedFiles' | 'touchedFiles' | 'deltaTicketId' | 'ticketRecorded'>;
+export type BackstopRun = BackstopState & { note?: (ev: BrainTraceEvent) => void };
+
+/** The run's state at the moment it settled, apart from the cell. Trace lines are written to the cell only while
+ *  it is still THIS run's (`runId` unchanged); late work after the next run began writes nowhere. */
+export function settleView(c: RunCell, runId: string): BackstopRun {
+  return {
+    touchedFiles: [...c.touchedFiles],
+    deltaRecordedFiles: [...c.deltaRecordedFiles],
+    deltaTicketId: c.deltaTicketId,
+    ticketRecorded: c.ticketRecorded,
+    note: (ev) => { if (c.runId === runId) pushTrace(c, ev); },
+  };
+}
+
+function noteOf(c: RunCell | BackstopRun): (ev: BrainTraceEvent) => void {
+  return 'note' in c && c.note ? c.note : (ev) => pushTrace(c as RunCell, ev);
+}
 
 /**
  * ONE ticket per run: point the model's own `from_delta` call at the ticket this run
@@ -55,7 +77,7 @@ export function attachDeltaToRunTicket(toolName: string, args: unknown, deltaTic
  */
 export async function recordCodeChangeTicket(
   serverChatId: number | null,
-  c: RunCell,
+  c: RunCell | BackstopRun,
   req: BrainRunRequest,
   phase: 'open' | 'settle',
 ): Promise<void> {
@@ -101,7 +123,7 @@ export async function recordCodeChangeTicket(
     // performed satisfies the same guarantee, so the settle pass must not mint again.
     c.ticketRecorded = true;
   }
-  pushTrace(c, {
+  noteOf(c)({
     ts: nowIso(),
     category: 'tool',
     label: 'builtin_tickets_from_delta',
@@ -138,7 +160,7 @@ export async function recordCodeChangeTicket(
  */
 export async function updateLinkedTickets(
   serverChatId: number | null,
-  c: RunCell,
+  c: RunCell | BackstopRun,
   req: BrainRunRequest,
   select: (listed: unknown) => LinkedTicketToAdvance[],
   status: 'in_progress' | 'done',
@@ -162,7 +184,7 @@ export async function updateLinkedTickets(
     } catch (e) {
       out = { ok: false, error: e instanceof Error ? e.message : String(e) };
     }
-    pushTrace(c, {
+    noteOf(c)({
       ts: nowIso(),
       category: 'tool',
       label: 'builtin_tasks_update',

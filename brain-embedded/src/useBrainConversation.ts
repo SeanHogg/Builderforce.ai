@@ -35,8 +35,9 @@ import type { BrainToolSpec, ContentPart } from './streamChatCompletion';
 import type { EvermindRunHooks } from './evermindMemory';
 import type { ReasoningIntent } from './effort';
 import type { RunWindowSources } from './windowFit/modelWindow';
-import { attachmentLink, prepareAttachment } from './attachmentContent';
-import { attachmentTurn, userTurnContentOf } from './attachmentTranscript';
+import { useComposerAttachments } from './useComposerAttachments';
+import { useContinuation } from './useContinuation';
+import { composeUserTurn, userTurnContentOf } from './attachmentTranscript';
 import { scopeToConsolidation } from '@seanhogg/builderforce-memory/working';
 import { contextUsageOf, type ContextUsage } from './contextUsage';
 import { priorResearchDigest } from './priorResearch';
@@ -52,6 +53,7 @@ import {
   stopRun,
   stopBeforeStart,
   isRunning,
+  isLive,
   getRunTrace,
   resolveRunConfirm,
   clearRunError,
@@ -173,6 +175,8 @@ export interface UseBrainConversation {
   /** Force a transcript refetch without changing the chat id (e.g. after a merge). */
   reloadMessages: () => void;
   sending: boolean;
+  /** A run is executing or being made for this chat: what a typed message can STEER (`sending` also covers a send still saving). */
+  runLive: boolean;
   error: string;
   /**
    * What the user can DO about {@link error}: reconnect an expired session, upgrade
@@ -200,8 +204,11 @@ export interface UseBrainConversation {
    * persisted and the run has started (the message can no longer be lost), or
    * `false` if it failed before persisting (e.g. the token expired mid-send) —
    * so a composer can restore the text the user typed instead of dropping it.
+   * `attachments` is the turn's OWN files (a held turn, a steer's leftovers): omitted, the turn
+   * takes the composer's; given, exactly those leave the composer as the send starts and a
+   * failure leaves them to the caller (`restoreAttachments`).
    */
-  send(text: string, opts?: { addressedTo?: DirectedRecipient | null }): Promise<boolean>;
+  send(text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null; attachments?: ChatInputAttachment[] }): Promise<boolean>;
   /**
    * Answer the active chat's REFUSED turn again — the trailing user message nothing
    * replied to (only step rows after it), e.g. a turn a `no_local_model` verdict stopped.
@@ -225,6 +232,12 @@ export interface UseBrainConversation {
   rateMessage(msg: BrainMessage, rating: 1 | -1 | 0): Promise<void>;
   attach(file: File): Promise<void>;
   removeAttachment(key: string): void;
+  /**
+   * Put files back in the composer after a send that was not kept - merged by key, so calling it
+   * twice (or for a file already there) never duplicates. The ONE restore: the web panel and the
+   * editor's chat both use it for a turn they gave its own files.
+   */
+  restoreAttachments(files: readonly ChatInputAttachment[]): void;
   setError(msg: string): void;
   /**
    * Dismiss the current error banner. Clears BOTH the hook's local error and the
@@ -332,8 +345,8 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   chatIdRef.current = chatId;
   const [localError, setLocalError] = useState('');
   const [ratings, setRatings] = useState<Record<number, 1 | -1>>({});
-  const [pendingAttachments, setPendingAttachments] = useState<ChatInputAttachment[]>([]);
-  const [uploading, setUploading] = useState(false);
+  const composer = useComposerAttachments(persistence, imagePrep, setLocalError);
+  const { pending: pendingAttachments, uploading } = composer;
   const autoRepliedChatIdRef = useRef<number | null>(null);
 
   // Live view of the chat's run (owned by the module-level store) — always THIS chat's
@@ -404,6 +417,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster],
   );
 
+  const bindContinuation = useContinuation(persistence, prepareRun);
   /**
    * Start a run on `id`: the request this hook builds, with the host's run-time parts
    * (`prepareRun`) laid over it. Resolves when the run settles, or at once when
@@ -428,18 +442,19 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         if (row) updateMessages(id, (prev) => [...prev, row]);
         return;
       }
+      bindContinuation(id); // direction the run never reads becomes this chat's next turn
       await startRun(id, extra ? { ...request, ...extra } : request);
     } finally {
       launchingRef.current.delete(id);
       cancelledLaunchRef.current.delete(id);
     }
-  }, [prepareRun, persistence, updateMessages]);
+  }, [prepareRun, persistence, updateMessages, bindContinuation]);
 
   const send = useCallback(
     async (text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null; attachments?: ChatInputAttachment[] }): Promise<boolean> => {
       const trimmed = text.trim();
       // Busy only for THIS chat: a run in flight elsewhere never blocks this one.
-      if (!trimmed || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
+      if (!trimmed || sendingRef.current.has(chatId) || isLive(chatId)) return false;
       // A message addressed to a participant (an invited agent/human) is a chat
       // turn for THEM, not a directive for the BRAIN — persist it, but don't run
       // the agent loop. `null`/omitted means the BRAIN (existing behavior).
@@ -474,18 +489,16 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
 
       // An explicit opts.attachments (a turn queued while the composer still held them —
       // by the time a queued turn sends, the composer snapshot has moved on) wins over
-      // the live composer snapshot.
+      // the live composer snapshot. Exactly this turn's OWN files leave the composer as the send
+      // STARTS (by key: a held turn flushed while a new file is pending leaves that file where it
+      // is, and one whose files already left is a no-op). A failed send puts back only the files
+      // it took from the composer itself; a turn GIVEN its files is restored by whoever gave
+      // them (`restoreAttachments`), which may instead keep the turn for later.
+      const given = opts?.attachments !== undefined;
       const attachments = [...(opts?.attachments ?? pendingAttachments)];
-      setPendingAttachments([]);
+      composer.take(attachments);
       setLocalError('');
 
-      // Persisted/display content stays text-only (the chat tables store a
-      // string): every attachment shows as a markdown link the user can click.
-      let displayContent = trimmed;
-      if (attachments.length > 0) {
-        const refs = attachments.map((a) => attachmentLink(a, persistence.uploadUrl)).join('\n');
-        displayContent = `${trimmed}\n\n${refs}`;
-      }
       const addressedList = addressedTo == null
         ? null
         : Array.isArray(addressedTo)
@@ -498,7 +511,9 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       // the mention budget, anything else a link (`attachmentContent.ts`). Resolved BEFORE
       // the persist: the row records the text the model read, so the next run's
       // transcript, a retry and a reload re-send it (`attachmentTranscript.ts`). Never rejects.
-      const turn = await attachmentTurn(trimmed, displayContent, attachments, persistence);
+      // Persisted/display content stays text-only (the chat tables store a string): every
+      // attachment shows as a link the user can click. The ONE composition (`composeUserTurn`).
+      const { displayContent, turn } = await composeUserTurn(trimmed, attachments, persistence);
       const metadata = withDirectedMetadata(addressedList, turn.meta);
 
       try {
@@ -543,23 +558,20 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         // attachment is work: the reload reads the text with its links, so it runs too); a
         // Stop pressed while this send got ready drops the launch.
         const runs = attachments.length > 0 || startsRun(trimmed);
-        if (runs) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id));
+        // The row IS saved: a run that fails to start/finish (a host's run.failed) shows its error - never restores the text, which would send a second row.
+        if (runs) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id)).catch((err: unknown) => { if (stillOpen()) setLocalError(err instanceof Error ? err.message : 'Run failed'); });
         return true;
       } catch (e) {
-        // Persisting the user turn failed (commonly an expired token) — the turn
-        // was NOT saved. Restore the attachments too so the whole message can be
-        // resent, and signal failure so the composer keeps the typed text.
-        if (stillOpen()) {
-          setPendingAttachments(attachments);
-          setLocalError(e instanceof Error ? e.message : 'Send failed');
-        }
+        // Saving the turn failed (an expired token): NOT saved. Files go back to the SHOWING composer, like the text.
+        if (!given) composer.restore(attachments);
+        if (stillOpen()) setLocalError(e instanceof Error ? e.message : 'Send failed');
         return false;
       } finally {
         cancelledLaunchRef.current.delete(runChatId);
         markSending(runChatId, false);
       }
     },
-    [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages],
+    [persistence, chatId, markSending, composer.take, composer.restore, pendingAttachments, messages, ensureChatId, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages],
   );
 
   const replyToTrailingTurn = useCallback((id: number, last: BrainMessage) => {
@@ -569,7 +581,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending, messages, repliedRef: autoRepliedChatIdRef, reply: replyToTrailingTurn });
 
   const retryLastTurn = useCallback((): boolean => {
-    if (chatId == null || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
+    if (chatId == null || sendingRef.current.has(chatId) || isLive(chatId)) return false;
     const index = unansweredTurnIndex(messages);
     if (index < 0) return false;
     const turn = messages[index];
@@ -603,24 +615,6 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       );
     } catch { /* best-effort */ }
   }, [persistence, chatId]);
-
-  const attach = useCallback(async (file: File) => {
-    setUploading(true);
-    try {
-      // Uploaded (a picture as its prepared copy), with a model-visible source for a
-      // picture: an inline data URL when it fits, else a signed URL (`attachmentContent.ts`).
-      const attachment = await prepareAttachment(file, persistence, imagePrep);
-      setPendingAttachments((prev) => [...prev, attachment]);
-    } catch (e) {
-      setLocalError(e instanceof Error ? e.message : 'Upload failed');
-    } finally {
-      setUploading(false);
-    }
-  }, [persistence, imagePrep]);
-
-  const removeAttachment = useCallback((key: string) => {
-    setPendingAttachments((prev) => prev.filter((a) => a.key !== key));
-  }, []);
 
   const resolveConfirm = useCallback((ok: boolean) => {
     if (chatId != null) resolveRunConfirm(chatId, ok);
@@ -663,7 +657,8 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     messages,
     loadingMessages,
     reloadMessages,
-    sending: localSending || snapshot.running,
+    sending: localSending || isLive(chatId),
+    runLive: isLive(chatId),
     error: localError || snapshot.error,
     /** What the user can DO about `error` (reconnect / upgrade / add a card), when
      *  the failure was actionable. Only meaningful for a RUN error — a local error
@@ -678,8 +673,9 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     retryLastTurn,
     stop,
     rateMessage,
-    attach,
-    removeAttachment,
+    attach: composer.attach,
+    removeAttachment: composer.remove,
+    restoreAttachments: composer.restore,
     setError: setLocalError,
     clearError,
     pendingConfirm: snapshot.pendingConfirm,

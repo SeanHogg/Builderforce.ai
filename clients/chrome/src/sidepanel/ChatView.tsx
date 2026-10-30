@@ -36,7 +36,7 @@ import {
   useModelFallback,
 } from '@seanhogg/builderforce-brain-ui';
 import catalogs from 'virtual:rovr-timeline-catalogs';
-import { deriveChatTitle, useBrainConversation, useChatCreation, useChatTurns } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, deriveChatTitle, restoreTurn, useBrainConversation, useChatCreation, useChatTurns, useComposerDraft } from '@seanhogg/builderforce-brain-embedded';
 import { PRICING_URL } from '../config';
 import { t, uiCatalogLocale, type MessageKey } from '../i18n/t';
 import type { LocalChat } from '../store/records';
@@ -151,11 +151,12 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   });
   const messages = conv.messages;
 
-  // THE one door a turn leaves through: a turn typed while a run streams is HELD and
-  // delivered on the run's falling edge (the composer's Send says "Queue message");
-  // Stop drops what is held, then stops the run.
+  // THE one door a turn leaves through: a turn typed while a run streams STEERS it (the
+  // composer's Send says so) - it interrupts the step in flight and reaches the next model
+  // call; what the run never drained is sent as the next turn. The explicit "Queue for
+  // after" holds one for the run's falling edge. Stop drops what is held, then stops the run.
   const turns = useChatTurns<string>({
-    running: conv.sending,
+    ...chatDoorLiveness(conv),
     runKey: chatId,
     send: async (text) => {
       try {
@@ -169,13 +170,29 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
     },
     stop: conv.stop,
   });
+  // A turn the door did not keep (the send failed before it was saved - an expired session) gives its
+  // words back to the box, as the web and the editor do: a message is never lost to a failed send.
+  const composer = useComposerDraft(draft, setDraft);
+  const { restoreAttachments } = conv;
+  const giveBack = useCallback((text: string) => restoreTurn({ text, recipient: null }, {
+    draft: composer.draft, setInput: composer.fillIfEmpty, restoreAttachments, chooseRecipient: () => undefined,
+  }), [composer, restoreAttachments]);
+  const offer = (text: string, door: (text: string) => Promise<boolean>) => {
+    composer.setInput('');
+    void door(text).then((kept) => { if (!kept) giveBack(text); });
+  };
   const send = () => {
     const text = draft.trim();
-    if (!text) return;
-    setDraft('');
-    void turns.submit(text);
+    if (text) offer(text, turns.submit);
   };
-  const answer = useCallback((text: string) => void turns.submit(text), [turns.submit]);
+  const queueAfter = () => {
+    const text = draft.trim();
+    if (text) offer(text, turns.queueAfter);
+  };
+  // An answered ask_user card is a turn like a typed one: a failed send gives the answer back to the box.
+  const answer = useCallback((text: string) => {
+    void turns.submit(text).then((kept) => { if (!kept) giveBack(text); });
+  }, [turns.submit, giveBack]);
 
   // The question this chat is blocked on, restated above the composer — the same
   // predicate the transcript's card uses, so banner and card never disagree.
@@ -276,6 +293,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
             engineCrashed: t('engineCrashed'),
             engineDetached: t('engineDetached'),
             modelKeepsCrashing: t('modelKeepsCrashing'),
+            continuationTimedOut: t('continuationTimedOut'),
             manageLocalModels: t('manageLocalModels'),
                 platformRefusedMode: t('platformRefusedMode'),
                 platformRefusedSync: t('platformRefusedSync'),
@@ -309,6 +327,8 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
               onSubmit={send}
               running={conv.sending}
               onStop={turns.stop}
+              onQueue={queueAfter}
+              sendSteers={turns.steers({ directed: false })}
               above={(
                 <QueuedTurnChips
                   items={turns.queued.items}

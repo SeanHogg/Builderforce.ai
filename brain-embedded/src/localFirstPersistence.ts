@@ -10,6 +10,7 @@ import type { PriceBook } from '@builderforce/model-catalog';
 import { summarizeTranscript, type SummaryCompletion } from '@seanhogg/builderforce-memory/working';
 import { combineSpendSavings, type SpendSavingsSummary } from '@builderforce/spend-contract';
 import type { BrainPersistenceAdapter } from './config';
+import { slotKeyedRows } from './keyedRows';
 import type { BrainChat, BrainMessage } from './types';
 import { transcriptSeedOf } from './transcriptSeed';
 import { boundServerId } from './localChat/chatIdentity';
@@ -266,17 +267,36 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
         const existing = (await messages(tx)).filter((row) => row.payload.chatId === chatId);
         const firstId = await nextId(tx);
         const stamp = now().toISOString();
-        const added = input.map((message, index): BrainMessage => ({
-          id: firstId + index,
-          role: message.role,
-          content: message.content,
-          metadata: message.metadata ?? null,
-          seq: existing.length + index + 1,
-          createdAt: stamp,
-        }));
+        // A row sent again under the key it was saved with is the SAME row (`keyedRows.ts`): the saved one comes
+        // back, nothing is written - the server's upsert on (chat, event_key), kept on the device.
+        const known = new Map(existing.map((row) => [row.payload.eventKey, row.payload.message] as const));
+        const results: BrainMessage[] = [];
+        const added: BrainMessage[] = [];
+        const keys: string[] = [];
+        for (const slot of slotKeyedRows(input, (key) => known.get(key))) {
+          if (slot.kind === 'known') {
+            results.push(slot.prior);
+            continue;
+          }
+          if (slot.kind === 'repeat') {
+            results.push(results[slot.of]!);
+            continue;
+          }
+          const message = slot.row;
+          const row: BrainMessage = {
+            id: firstId + added.length,
+            role: message.role,
+            content: message.content,
+            metadata: message.metadata ?? null,
+            seq: existing.length + added.length + 1,
+            createdAt: stamp,
+          };
+          results.push(row);
+          added.push(row);
+          keys.push(slot.key ?? `message:${newId()}`);
+        }
         for (const [index, message] of added.entries()) {
-          const source = input[index] as typeof input[number] & { eventKey?: string };
-          const eventKey = source.eventKey ?? `message:${newId()}`;
+          const eventKey = keys[index]!;
           const clientId = newId();
           const record = newLocalRecord<MessageValue>({
             id: clientId,
@@ -293,7 +313,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
           const nextChat = { ...chat, version: chat.version + 1, updatedAt: stamp, payload: { ...chat.payload, chat: { ...chat.payload.chat, updatedAt: stamp } } };
           await tx.put(nextChat, chat.version);
         }
-        return added;
+        return results;
       });
     },
     async setMessageFeedback(messageId, feedback, context) {

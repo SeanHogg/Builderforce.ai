@@ -19,7 +19,8 @@
  * record that may be uploaded or logged. The rules themselves are not restated here —
  * they come from `packages/local-first`, the contract both hosts share.
  */
-import type { BrainMessage, ChatMode, Effort } from '@seanhogg/builderforce-brain-embedded';
+import { slotKeyedRows, type BrainMessage, type ChatMode, type Effort } from '@seanhogg/builderforce-brain-embedded';
+import { publicMessage } from './storedMessage';
 // G26: the durability rules are NOT restated here. `durabilityContract` has no
 // subpath export and is not re-exported from the package entry (owned elsewhere),
 // so it is imported by path — the same way `clients/vscode/src/localFirstStore.ts`
@@ -111,6 +112,8 @@ export interface MessageInput {
   role: string;
   content: string;
   metadata?: string;
+  /** The row's key: a row saved again under it is the same row (`slotKeyedRows`), and it is the sync outbox's entry key. */
+  eventKey?: string;
 }
 
 export interface RovrRecords {
@@ -318,7 +321,7 @@ export const ROVR_REQUIRES_RECOVERY_COPY = requiresRecoveryCopy('indexeddb');
 /** In-memory {@link RovrRecords} — the tests' adapter. */
 export function createMemoryRecords(): RovrRecords {
   const chats = new Map<number, LocalChat>();
-  const messages: Array<BrainMessage & { chatId: number }> = [];
+  const messages: Array<BrainMessage & { chatId: number; eventKey?: string }> = [];
   const tasks = new Map<string, LocalTask>();
   const ledger: LedgerEntry[] = [];
   let seq = 0;
@@ -350,17 +353,23 @@ export function createMemoryRecords(): RovrRecords {
       // Validate while `chatId` is still on the row, then strip it for the caller.
       const own = messages.filter((m) => m.chatId === chatId);
       readStoredMessages(own, chatId);
-      return own.map(({ chatId: _c, ...m }) => m);
+      return own.map(publicMessage);
     },
     async appendMessages(chatId, rows) {
       const createdAt = new Date().toISOString();
-      return rows.map((row) => {
-        seq += 1;
-        const msg = { id: seq, chatId, role: row.role, content: row.content, metadata: row.metadata ?? null, seq, createdAt };
-        messages.push(msg);
-        const { chatId: _c, ...out } = msg;
-        return out;
-      });
+      const out: BrainMessage[] = [];
+      // A row sent again under the key it was saved with is the same row: the saved one comes back (`slotKeyedRows`).
+      for (const slot of slotKeyedRows(rows, (key) => messages.find((m) => m.chatId === chatId && m.eventKey === key))) {
+        if (slot.kind === 'known') out.push(publicMessage(slot.prior));
+        else if (slot.kind === 'repeat') out.push(out[slot.of]!);
+        else {
+          seq += 1;
+          const msg = { id: seq, chatId, role: slot.row.role, content: slot.row.content, metadata: slot.row.metadata ?? null, seq, createdAt, ...(slot.key ? { eventKey: slot.key } : {}) };
+          messages.push(msg);
+          out.push(publicMessage(msg));
+        }
+      }
+      return out;
     },
     async listTasks(chatId) {
       return [...tasks.values()].filter((t) => t.chatId === chatId);

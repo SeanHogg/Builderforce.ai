@@ -29,8 +29,17 @@ export interface BrainRunOutcome {
   merged: boolean;
   /** Completed model turns — the efficiency half of the score. */
   steps: number;
+  /**
+   * What the run cost in millicents. Present ONLY as 0, and only when every completed turn was served by a
+   * model on this machine (the hybrid local tier): that run was genuinely free and stays "priced at 0". An
+   * unknown cost is ABSENT - never 0 - so a gateway or BYO run is not mistaken for a free one.
+   */
+  costMc?: 0;
   projectId?: number;
 }
+
+/** A turn that reported its own cost as exactly 0 (served on this device - `servedOnDevice`). */
+const reportedFree = (e: BrainTraceEvent): boolean => (e.args as { costMc?: unknown } | null | undefined)?.costMc === 0;
 
 /** A run's idempotency key: one chat runs one run at a time, so chat + start is unique. */
 export function runOutcomeId(chatId: number, startedAtMs: number): string {
@@ -73,8 +82,11 @@ export function codeRunOutcome(args: {
   askedForChange?: boolean;
 }): BrainRunOutcome | null {
   if (!args.runId) return null;
-  const steps = args.trace.filter((e) => e.label === 'llm.complete' && !e.isError).length;
-  const base = { clientRunId: args.runId, role: 'code' as const, source: 'ide' as const, steps, ...(args.projectId != null ? { projectId: args.projectId } : {}) };
+  const turns = args.trace.filter((e) => e.label === 'llm.complete' && !e.isError);
+  const steps = turns.length;
+  // Free only when EVERY turn reported 0 (served on this machine); one turn with no cost leaves the run's unknown.
+  const allLocal = steps > 0 && turns.every(reportedFree);
+  const base = { clientRunId: args.runId, role: 'code' as const, source: 'ide' as const, steps, ...(allLocal ? { costMc: 0 as const } : {}), ...(args.projectId != null ? { projectId: args.projectId } : {}) };
   if (args.codeChanged) {
     if (args.aborted || !args.codeModel) return null;
     return { ...base, model: args.codeModel, terminalStatus: args.failed ? 'failed' : 'completed', merged: args.shipped };

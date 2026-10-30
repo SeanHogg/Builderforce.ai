@@ -44,7 +44,7 @@
  * and Node. Never branches on `RunPolicy.entryPoint`.
  */
 
-import { initialRunPolicy, nextTurn, reduceRunPolicy, resolveStallStep } from "@builderforce/run-policy";
+import { nextTurn, reduceRunPolicy, resolveStallStep } from "@builderforce/run-policy";
 import {
   isExhaustedStall,
   modelFailoverNotice,

@@ -85,6 +85,7 @@ export {
 export {
   drainRunSteering,
   hasRunInterrupt,
+  newSteerKey,
   onRunInterrupt,
   queueRunSteering,
   resetRunSteering,

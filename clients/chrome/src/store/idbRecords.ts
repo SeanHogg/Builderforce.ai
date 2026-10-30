@@ -21,7 +21,7 @@
  * Both are the shared rules from `packages/local-first`, reached through `records.ts` —
  * this file states what it does with them, it does not redefine them.
  */
-import type { BrainMessage } from '@seanhogg/builderforce-brain-embedded';
+import { slotKeyedRows, type BrainMessage } from '@seanhogg/builderforce-brain-embedded';
 import {
   newLocalChatId,
   readStoredChats,
@@ -43,7 +43,7 @@ const TASKS = 'tasks';
 const LEDGER = 'ledger';
 const BY_CHAT = 'byChat';
 
-type StoredMessage = Omit<BrainMessage, 'id' | 'seq'> & { id?: number; chatId: number };
+type StoredMessage = Omit<BrainMessage, 'id' | 'seq'> & { id?: number; chatId: number; eventKey?: string };
 
 function promised<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -129,30 +129,42 @@ export function createIdbRecords(factory: IDBFactory, dbName: string): RovrRecor
       // Validate while `chatId` is still on the row, then strip it for the caller.
       // Dropping one bad row would silently shorten the only copy of the transcript.
       readStoredMessages(rows, chatId);
-      return rows.sort((a, b) => a.id - b.id).map(({ chatId: _c, ...m }) => ({ ...m, seq: m.id }));
+      return rows.sort((a, b) => a.id - b.id).map(({ chatId: _c, eventKey: _k, ...m }) => ({ ...m, seq: m.id }));
     },
     async appendMessages(chatId: number, rows: readonly MessageInput[]) {
       const createdAt = new Date().toISOString();
       const tx = (await open()).transaction([MESSAGES, CHATS], 'readwrite');
       const store = tx.objectStore(MESSAGES);
+      // A row sent again under the key it was saved with is the same row: the saved one comes back (`slotKeyedRows`).
+      const saved = await promised(store.index(BY_CHAT).getAll(IDBKeyRange.only(chatId)) as IDBRequest<Array<StoredMessage & { id: number }>>);
+      const slots = slotKeyedRows(rows, (key) => saved.find((m) => m.eventKey === key));
+      const inserts = slots.flatMap((slot) => (slot.kind === 'new' ? [slot] : []));
       const ids = await Promise.all(
-        rows.map((row) => {
-          const stored: StoredMessage = { chatId, role: row.role, content: row.content, metadata: row.metadata ?? null, createdAt };
+        inserts.map(({ row, key }) => {
+          const stored: StoredMessage = { chatId, role: row.role, content: row.content, metadata: row.metadata ?? null, createdAt, ...(key ? { eventKey: key } : {}) };
           return promised(store.add(stored) as IDBRequest<IDBValidKey>);
         }),
       );
-      const chats = tx.objectStore(CHATS);
-      const chat = await promised(chats.get(chatId) as IDBRequest<LocalChat | undefined>);
-      if (chat) chats.put({ ...chat, updatedAt: createdAt });
+      if (inserts.length > 0) {
+        const chats = tx.objectStore(CHATS);
+        const chat = await promised(chats.get(chatId) as IDBRequest<LocalChat | undefined>);
+        if (chat) chats.put({ ...chat, updatedAt: createdAt });
+      }
       await done(tx);
-      return rows.map((row, i) => ({
-        id: Number(ids[i]),
-        seq: Number(ids[i]),
-        role: row.role,
-        content: row.content,
-        metadata: row.metadata ?? null,
-        createdAt,
-      }));
+      const out: BrainMessage[] = [];
+      let next = 0;
+      for (const slot of slots) {
+        if (slot.kind === 'known') {
+          const m = slot.prior;
+          out.push({ id: m.id, seq: m.id, role: m.role, content: m.content, metadata: m.metadata ?? null, createdAt: m.createdAt });
+        } else if (slot.kind === 'repeat') {
+          out.push(out[slot.of]!);
+        } else {
+          const id = Number(ids[next++]);
+          out.push({ id, seq: id, role: slot.row.role, content: slot.row.content, metadata: slot.row.metadata ?? null, createdAt });
+        }
+      }
+      return out;
     },
     listTasks: (chatId) => byChat<LocalTask>(TASKS, chatId),
     async getTask(id) {

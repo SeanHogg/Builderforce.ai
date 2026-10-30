@@ -82,16 +82,28 @@ describe('useQueuedTurns', () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it('discards held turns when the conversation changes', () => {
-    const { q, rerender, send } = setup();
-    rerender({ running: true, resetKey: 'chat-1' });
-    act(() => { q().submit('meant for chat 1'); });
+  // SANCTIONED CHANGE (replaces "discards held turns when the conversation changes"): a chat switch no longer
+  // loses what a person typed - every held turn is handed to ITS OWN conversation, oldest first.
+  it('hands every held turn to its own conversation when the conversation changes - nothing is discarded', () => {
+    const handed: Array<{ held: string[]; from: string | number | null }> = [];
+    const send = vi.fn();
+    const current: { value: QueuedTurns | null } = { value: null };
+    function Probe({ running, resetKey }: { running: boolean; resetKey: string }) {
+      current.value = useQueuedTurns({ running, send, resetKey, handOff: (held, from) => handed.push({ held: held.map((i) => String(i.value)), from }) });
+      return null;
+    }
+    const el = document.createElement('div');
+    let root!: Root;
+    act(() => { root = createRoot(el); root.render(<Probe running resetKey="chat-1" />); });
+    act(() => { current.value!.submit('first for chat 1'); });
+    act(() => { current.value!.submit('second for chat 1'); });
 
-    rerender({ running: true, resetKey: 'chat-2' });
-    rerender({ running: false, resetKey: 'chat-2' });
+    act(() => { root.render(<Probe running resetKey="chat-2" />); });
+    act(() => { root.render(<Probe running={false} resetKey="chat-2" />); });
 
+    expect(handed).toEqual([{ held: ['first for chat 1', 'second for chat 1'], from: 'chat-1' }]);
     expect(send).not.toHaveBeenCalled();
-    expect(q().count).toBe(0);
+    expect(current.value!.count).toBe(0);
   });
 
   it('never flushes a held turn into the conversation switched to mid-run', () => {

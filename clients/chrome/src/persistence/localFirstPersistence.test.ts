@@ -13,7 +13,7 @@ describe('local-first persistence', () => {
 
     const saved = await persistence.sendMessages(chat.id, [
       { role: 'user', content: 'hi' },
-      // A step row as the step outbox hands it: the event key is the outbox's, not ours.
+      // A step row as the step outbox hands it: its event key is the row's own key (kept, and the sync entry's).
       { role: 'tool', content: '', metadata: '{"kind":"step"}', eventKey: 'step:abc' } as never,
     ]);
 
@@ -24,7 +24,7 @@ describe('local-first persistence', () => {
         chatId: chat.id,
         items: [
           { kind: 'message', row: { role: 'user', content: 'hi' } },
-          { kind: 'message', row: { role: 'tool', content: '', metadata: '{"kind":"step"}' } },
+          { kind: 'message', row: { role: 'tool', content: '', metadata: '{"kind":"step"}', eventKey: 'step:abc' } },
         ],
       },
     ]);

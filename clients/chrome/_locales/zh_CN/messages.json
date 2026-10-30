@@ -538,8 +538,20 @@
     "description": "Toggle state: off"
   },
   "cmpQueueSend": {
+    "message": "立即发送到正在运行的回合",
+    "description": "Send while a run is streaming: steers the live run now"
+  },
+  "cmpQueueHold": {
     "message": "将消息排队——当前运行结束后发送",
-    "description": "Send while a run is streaming"
+    "description": "Send while a run is streaming when the message will be HELD for after it (a participant, a file a steer would drop, turns already waiting, a run being stopped)"
+  },
+  "cmpQueueAfter": {
+    "message": "排队到运行结束后（$1）",
+    "description": "The explicit hold-for-after button beside Send while a run streams; $1 = the keyboard shortcut"
+  },
+  "cmpQueueAfterShort": {
+    "message": "排队",
+    "description": "Its short visible text (the icon stands alone at narrow widths)"
   },
   "cmpDictate": {
     "message": "语音输入",
@@ -864,6 +876,10 @@
   "modelKeepsCrashing": {
     "message": "此模型在本设备上反复崩溃。请将其移除，或换用其他模型。",
     "description": "Chat error: this model crashed repeatedly on this device and is refused for now"
+  },
+  "continuationTimedOut": {
+    "message": "这花了太长时间。你的消息已保留，将与你的下一条消息一起被读取。",
+    "description": "Chat error: continuing a run with the words typed meanwhile took too long; the words are kept and read with the next message"
   },
   "manageLocalModels": {
     "message": "管理设备上的模型",

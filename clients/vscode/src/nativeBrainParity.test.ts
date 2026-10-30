@@ -65,7 +65,7 @@ describe("native participant parity with the panel's run host", () => {
   });
 
   it("hands the model the pre-search hits as the turn's context", async () => {
-    const { sent } = await turn({ turnContext: async () => "PRE-SEARCH HITS: Widget → src/widget.ts:12" }, "fix Widget");
+    const { sent } = await turn({ runContext: { turnContext: async () => "PRE-SEARCH HITS: Widget → src/widget.ts:12" } }, "fix Widget");
     expect(JSON.stringify(sent[0])).toContain("PRE-SEARCH HITS");
   });
 });

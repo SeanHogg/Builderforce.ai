@@ -23,6 +23,25 @@ export interface RunSteerMessage {
   attachments?: unknown;
   /** The person typed it — not a child's report or an owner's direction to a sub-agent. */
   fromPerson?: boolean;
+  /**
+   * No surface has shown or saved this message yet — the run must, when it drains it. A host
+   * that shows the person's words itself as it queues them (the editor's `say`) leaves it unset.
+   */
+  persist?: boolean;
+  /**
+   * A row for these words already exists in the chat (they were said while a run was starting and
+   * saved with the send). Explicit, never inferred from the other flags: a host that queues
+   * `{ fromPerson: true }` alone (the editor's `say`) means NOT saved by this surface. A continuation
+   * (`brain-embedded/src/runStore/continueChat.ts`) saves only the words that are not `saved`.
+   */
+  saved?: boolean;
+  /**
+   * The key the saved ROW is stored under (the server upserts on `(chat, event_key)`), minted ONCE: when the words
+   * the run will save are first enqueued (the Brain's wrapper), or - for a steer with none (an owner's, a child's) -
+   * by the continuation just before its FIRST save attempt, and kept through every requeue. A save that is
+   * retried, after a timeout or a requeue, therefore never makes a second row.
+   */
+  eventKey?: string;
 }
 
 const inboxes = new Map<number, RunSteerMessage[]>();
@@ -34,11 +53,16 @@ const interruptListeners = new Map<number, Set<() => void>>();
  * Queue one message for a run's next turn. Blank text is ignored. `interrupt` also
  * aborts the run's interruptible step now and skips the rest of its turn's calls.
  */
-export function queueRunSteering(runKey: number, text: string, opts?: { interrupt?: boolean; attachments?: unknown; fromPerson?: boolean }): void {
+/** The key a steered message's row is stored under: minted once at first enqueue, kept through every requeue. */
+export function newSteerKey(): string {
+  return `steer:${crypto.randomUUID()}`;
+}
+
+export function queueRunSteering(runKey: number, text: string, opts?: { interrupt?: boolean; attachments?: unknown; fromPerson?: boolean; persist?: boolean; saved?: boolean; eventKey?: string }): void {
   const trimmed = text.trim();
   if (!trimmed) return;
   const queue = inboxes.get(runKey) ?? [];
-  queue.push({ text: trimmed, attachments: opts?.attachments, ...(opts?.fromPerson ? { fromPerson: true } : {}) });
+  queue.push({ text: trimmed, attachments: opts?.attachments, ...(opts?.fromPerson ? { fromPerson: true } : {}), ...(opts?.persist ? { persist: true } : {}), ...(opts?.saved ? { saved: true } : {}), ...(opts?.eventKey ? { eventKey: opts.eventKey } : {}) });
   inboxes.set(runKey, queue);
   if (!opts?.interrupt) return;
   interrupting.add(runKey);

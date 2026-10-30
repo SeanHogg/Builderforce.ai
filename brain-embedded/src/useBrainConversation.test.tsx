@@ -819,3 +819,87 @@ describe('Stop while a send is still getting ready', () => {
     expect(rowsOfRole('user').map((m) => m.content)).toEqual(['do the work']);
   });
 });
+
+describe('a send given its own attachments (a held turn flushed) and the composer\'s pending ones', () => {
+  const held = { key: 'held-1', name: 'old.png', type: 'image/png', imageUrl: 'data:image/png;base64,AA==' };
+
+  async function withPendingFile(chatId: number) {
+    vi.mocked(persistence.upload).mockResolvedValueOnce({ key: 'pending-1', name: 'notes.txt', type: 'text/plain' } as never);
+    const { result: hook } = renderHook(() => useBrainConversation({ chatId, toolSpecs: [], runTool: vi.fn() }), { wrapper });
+    await act(async () => { await hook.current.attach(new File(['x'], 'notes.txt', { type: 'text/plain' })); });
+    expect(hook.current.pendingAttachments.map((a) => a.key)).toEqual(['pending-1']);
+    return hook;
+  }
+
+  it('neither takes nor clears what the composer holds now', async () => {
+    mockStream.mockResolvedValueOnce(result({ text: 'ok' }));
+    const hook = await withPendingFile(35);
+
+    await act(async () => { await hook.current.send('the held one', { attachments: [held as never] }); });
+
+    expect(hook.current.pendingAttachments.map((a) => a.key)).toEqual(['pending-1']);
+  });
+
+  it('a failed send restores nothing into the composer - the turn that was given its files keeps them', async () => {
+    vi.mocked(persistence.sendMessages).mockRejectedValueOnce(new Error('expired'));
+    const hook = await withPendingFile(36);
+
+    await act(async () => { await hook.current.send('the held one', { attachments: [held as never] }); });
+
+    expect(hook.current.pendingAttachments.map((a) => a.key)).toEqual(['pending-1']);
+  });
+
+  it('a send NOT given any still takes the composer\'s and clears it', async () => {
+    mockStream.mockResolvedValueOnce(result({ text: 'ok' }));
+    const hook = await withPendingFile(37);
+
+    await act(async () => { await hook.current.send('with the pending file'); });
+
+    expect(hook.current.pendingAttachments).toEqual([]);
+  });
+
+  it('takes the composer\'s own files out AS THE SEND STARTS (not when the run settles), and gives them back if it fails', async () => {
+    let fail!: () => void;
+    vi.mocked(persistence.sendMessages).mockImplementationOnce(
+      () => new Promise((_resolve, reject) => { fail = () => reject(new Error('expired')); }),
+    );
+    const hook = await withPendingFile(38);
+
+    let sent!: Promise<boolean>;
+    act(() => { sent = hook.current.send('with the pending file'); });
+    await waitFor(() => expect(hook.current.sending).toBe(true));
+    expect(hook.current.pendingAttachments).toEqual([]);
+
+    await act(async () => { fail(); await sent; });
+    expect(hook.current.pendingAttachments.map((a) => a.key)).toEqual(['pending-1']);
+  });
+
+  it('a turn given files that are still in the composer takes exactly those out as it starts', async () => {
+    let finish!: () => void;
+    vi.mocked(persistence.sendMessages).mockImplementationOnce(
+      (_chatId: number, msgs: Array<{ role: string; content: string; metadata?: string }>) =>
+        new Promise((resolve) => {
+          finish = () => resolve(msgs.map((m) => ({ id: ++seq, role: m.role, content: m.content, metadata: m.metadata ?? null, seq, createdAt: '' })) as never);
+        }),
+    );
+    const hook = await withPendingFile(39);
+    const own = hook.current.pendingAttachments;
+
+    let sent!: Promise<boolean>;
+    act(() => { sent = hook.current.send('its own files', { attachments: [...own, held as never] }); });
+    await waitFor(() => expect(hook.current.sending).toBe(true));
+    expect(hook.current.pendingAttachments).toEqual([]);
+
+    await act(async () => { finish(); await sent; });
+  });
+
+  it('restoreAttachments puts files back merged by key: twice, or for a file already there, adds nothing', async () => {
+    const hook = await withPendingFile(40);
+    const back = { key: 'back-1', name: 'back.txt', type: 'text/plain' };
+
+    act(() => { hook.current.restoreAttachments([back as never]); });
+    act(() => { hook.current.restoreAttachments([back as never, ...hook.current.pendingAttachments]); });
+
+    expect(hook.current.pendingAttachments.map((a) => a.key).sort()).toEqual(['back-1', 'pending-1']);
+  });
+});

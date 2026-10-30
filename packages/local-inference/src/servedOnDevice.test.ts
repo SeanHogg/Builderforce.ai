@@ -127,3 +127,29 @@ describe('the hosted aliases resolve through both spellings (clientPinOf)', () =
   });
 });
 
+
+// The VS Code/web-panel cut-over's cases for the same "this call was free" rule: judged by what SERVED the
+// call, never by what was asked for. (Its `servedRef` case that read the gateway placeholder back as the
+// served model is superseded by the rule above: a placeholder is never a model.)
+describe('the "this call was free" rule, as the cut-over callers read it', () => {
+  it('servedRef falls back to the resolved model, else nothing', () => {
+    expect(servedRef({ resolvedModel: 'local/ollama/phi' })).toBe('local/ollama/phi');
+    expect(servedRef({})).toBeUndefined();
+  });
+
+  it('servedOnDevice is true for an on-device runtime, however the transport reports it', () => {
+    expect(servedOnDevice({ localFirst: [{ target: 'local/ollama/llama3', outcome: 'served' }] })).toBe(true);
+    expect(servedOnDevice({ resolvedModel: 'local/ollama/phi' })).toBe(true);
+  });
+
+  it('the attempt marked served wins over the resolved model', () => {
+    expect(servedOnDevice({ localFirst: [{ target: 'local/ollama/a', outcome: 'failed' }, { target: 'gateway', outcome: 'served' }], resolvedModel: 'local/ollama/a' })).toBe(false);
+  });
+
+  it('servedOnDevice is false for a hosted runtime dispatched from here, a cloud model, and a result that names nothing', () => {
+    expect(servedOnDevice({ resolvedModel: 'local/kimi-code/k3' })).toBe(false);
+    expect(servedOnDevice({ localFirst: [{ target: 'local/kimi-code/k3', outcome: 'served' }] })).toBe(false);
+    expect(servedOnDevice({ resolvedModel: 'gpt-5' })).toBe(false);
+    expect(servedOnDevice({})).toBe(false);
+  });
+});
