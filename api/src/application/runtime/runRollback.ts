@@ -10,9 +10,10 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * Three entry points, ONE rulebook:
  *   • {@link recordRunRollbackSnapshot} — at finalize, snapshot what the run changed
  *     (branch/base, written paths, commit shas, PR) into `execution_rollbacks`.
- *   • {@link teardownRunBranch} — a run ended failed/cancelled with no PR: sweep the
- *     branch, if and only if it is provably safe to. Only a CANCELLED run reaches it (from
- *     the cloud finalize); a FAILED run's branch is NOT swept - see the note there.
+ *   • {@link teardownRunBranch} — a run ended CANCELLED with no PR: sweep the branch when
+ *     the shared decision (rule 7 is PER TASK) allows it. Only a cancelled run reaches it (from
+ *     the cloud finalize); a FAILED run's branch is NOT swept - see the ROADMAP Consolidated Gap
+ *     Register entry "A FAILED cloud run's branch residue is never swept" (run-branch sweeps).
  *   • {@link revertRun} — a human undoes a completed run: close the PR and delete
  *     the branch, if and only if it is provably safe to. If the run's PR already
  *     MERGED there is nothing on a branch left to undo, so this escalates to
@@ -247,9 +248,12 @@ export type TeardownOutcome =
  * a PR. Called from the cloud finalize chokepoint.
  *
  * This is the conservative path by design: it deletes only when
- * {@link decideBranchTeardown} can prove the branch is nothing but this run's
- * abandoned output. Every other outcome leaves the branch in place and records
- * WHY, because residue is recoverable and a wrong delete is not.
+ * {@link decideBranchTeardown} allows it. That decision's authorship rule (7) is per TASK
+ * (`runCommitMarker(taskId)`), not per execution, so it does NOT prove the branch is only
+ * THIS run's output - a cancelled retry or child run can still reach an earlier run's or a
+ * live parent's commits (ROADMAP Consolidated Gap Register: run-branch sweeps need
+ * per-execution commit attribution). Every other outcome leaves the branch in place and
+ * records WHY, because residue is recoverable and a wrong delete is not.
  */
 export async function teardownRunBranch(
   env: Env | undefined,

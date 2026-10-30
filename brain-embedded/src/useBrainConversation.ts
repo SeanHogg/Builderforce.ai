@@ -48,12 +48,11 @@ import { localRatingVerdict, ratedTurnContext, withRating } from './turnRating';
 import { submitLocalTurnVerdict } from './localSuccess/verifiedLocalLabel';
 import type { ChatErrorAction } from './chatError';
 import type { DraftToken } from './draftBinding';
+import { useLaunchCancel } from './launchCancel';
 import type { ChatMode, ChatRosterAgent } from './chatMode';
 import {
   startRun,
-  stopRun,
   stopBeforeStart,
-  isRunning,
   isLive,
   getRunTrace,
   resolveRunConfirm,
@@ -331,11 +330,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   // server row `ensureChatId` is still creating.
   const sendingRef = useRef<ReadonlySet<number | null>>(new Set());
   const [sendingChats, setSendingChats] = useState<ReadonlySet<number | null>>(sendingRef.current);
-  /** Chats whose Stop came while a send was getting ready — its launch is dropped. `null`
-   *  is a draft whose row is still being created; the mark moves to the chat it becomes. */
-  const cancelledLaunchRef = useRef(new Set<number | null>());
-  /** Chats with a launch (send, auto-reply or Retry) not yet started — a Stop drops it. */
-  const launchingRef = useRef(new Set<number>());
+  const { cancelledLaunchRef, launchingRef, draftMadeRef, stopConversation } = useLaunchCancel(sendingRef);
   const markSending = useCallback((key: number | null, on: boolean) => {
     const next = new Set(sendingRef.current);
     if (on) next.add(key);
@@ -483,6 +478,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
           return false;
         }
         if (cancelled) cancelledLaunchRef.current.add(id);
+        draftMadeRef.current.add(id); // a Stop on the draft view still reaches this chat's launch (`launchCancel.ts`)
         markSending(id, true);
         markSending(origin, false);
       }
@@ -566,6 +562,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         return false;
       } finally {
         cancelledLaunchRef.current.delete(runChatId);
+        draftMadeRef.current.delete(runChatId);
         markSending(runChatId, false);
       }
     },
@@ -623,16 +620,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     clearRunError(chatId);
   }, [chatId]);
 
-  const stop = useCallback(() => {
-    if (chatId == null) {
-      // A draft's first send is still creating its chat: the launch is dropped once it has one.
-      if (sendingRef.current.has(null)) cancelledLaunchRef.current.add(null);
-      return;
-    }
-    // A send still getting ready has no run to stop yet: its launch is dropped instead.
-    if ((sendingRef.current.has(chatId) || launchingRef.current.has(chatId)) && !isRunning(chatId)) cancelledLaunchRef.current.add(chatId);
-    stopRun(chatId);
-  }, [chatId]);
+  const stop = useCallback(() => stopConversation(chatId), [chatId, stopConversation]);
 
   const buildTriageReport = useCallback(
     (agentLabel?: string, surface?: string) =>

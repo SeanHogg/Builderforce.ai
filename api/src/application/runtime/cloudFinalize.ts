@@ -209,8 +209,9 @@ ${ciVerified
   //      PR create FAILED: the commits are still real work on a real branch, and
   //      the honest response is to make them revertable, NOT to delete them.
   //  (b) The run was CANCELLED → its half-written branch is residue → hand it to
-  //      the shared teardown decision, which deletes it ONLY if it can prove the
-  //      branch is nothing but this run's abandoned work.
+  //      the shared teardown decision, which deletes it only when its rules allow. Rule 7
+  //      (authorship) is per TASK, not per execution, so it does NOT prove the branch is only
+  //      this run's work - see the ROADMAP Consolidated Gap Register entry on run-branch sweeps.
   //
   // A run that lands FAILED does not reach (b) (a failed one that wrote files is snapshotted under
   // (a)): its branch residue is NOT swept automatically.

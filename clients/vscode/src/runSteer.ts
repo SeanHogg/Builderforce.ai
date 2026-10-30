@@ -56,7 +56,7 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
   const stopped = new Set<number>();
   /** The keys of the turns already heard, per run (the newest few: a repeat arrives close behind the original). */
   const heard = new Map<number, Set<string>>();
-  const MAX_HEARD = 256; // a backstop: a run's keys are cleared when it is stopped or settles
+  const MAX_HEARD = 256; // a backstop: a run's keys are cleared when it settles - not when it is stopped, so a repeated batch while the stopped run unwinds stays deduped
   const firstHearing = (runKey: number, key: string): boolean => {
     const keys = heard.get(runKey) ?? new Set<string>();
     heard.set(runKey, keys);
@@ -73,7 +73,6 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
   };
 
   const stop = (runKey: number): void => {
-    heard.delete(runKey);
     // Nothing claimed: nothing to stop, and no mark left to swallow the NEXT run's words.
     if (!deps.isBusy(runKey)) return;
     deps.dropParked?.(runKey);
@@ -139,8 +138,9 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
         if (!firstHearing(runKey, turn.eventKey)) continue;
         const taken = take(runKey, turn.text, turn.attachments);
         if (taken === "stopped") return;
-        // A stop for a chat with nothing running ends the work this batch queued - as sequential `steer` calls would (the
-        // first wakes a run, the stop stops it): what it queued is dropped, nothing is woken.
+        // A stop for a chat with nothing running ends the work this batch queued: what the batch HELD is dropped and nothing
+        // is woken. Unlike sequential `steer` calls (the first wakes a run, the stop stops it, and `settled` has already
+        // persisted/said what that run heard), the dropped words are never persisted or said.
         if (taken === "stop-idle" && idle) {
           drainRunSteering(runKey);
           return;

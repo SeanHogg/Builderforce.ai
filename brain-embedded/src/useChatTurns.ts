@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { stopRun } from './brainRunStore';
+import { useCallback, useEffect, useRef } from 'react';
+import { useDoorStopMarks, stopDoorTurns } from './doorStop';
 import type { RunKey } from './brainRunStore';
 import { queueRunSteering } from './runSteering';
 import type { ChatInputAttachment } from './types';
@@ -164,14 +164,9 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
   // eslint-disable-next-line react-hooks/refs
   ports.current = { send, steer, stop, restore, join, textOf, isDirected, attachmentsOf, runKey, running, steerable, drafts };
   // A stopped run is unwinding: a message typed meanwhile cannot steer it (the model gets no
-  // further turn), so it is held for after - until the run's falling edge clears the mark. The ref is
-  // what is read; the state exists only to repaint, because the composer words its Send button from it.
-  const stoppingRef = useRef(false);
-  const [, repaint] = useState(false);
-  const markStopping = useCallback((on: boolean) => { stoppingRef.current = on; repaint(on); }, []);
-  useEffect(() => { if (!running && stoppingRef.current) markStopping(false); }, [running, markStopping]);
-  // Counts Stops: a send in flight when one lands must not put its turn back afterwards.
-  const stopEpoch = useRef(0);
+  // further turn), so it is held for after - until the run's falling edge clears the mark (`doorStop.ts`).
+  const marks = useDoorStopMarks(running);
+  const { stoppingRef, stopEpoch } = marks;
 
   // Direction steered into the run after its last drain is NOT this hook's to deliver: the run
   // store owns it (`continueOnSettle` -> `continueLeftovers`), on any chat, on screen or not.
@@ -322,21 +317,7 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     }
   }, [running, steerable, remove, runKey]);
 
-  const stopTurns = useCallback(() => {
-    clear();
-    stopEpoch.current += 1;
-    if (ports.current.running) markStopping(true);
-    const { stop: halt, runKey: key, drafts: binding } = ports.current;
-    // A steer typed before the Stop is dropped with the run, and so is what a draft's creation delivered to this chat that
-    // its run has not heard yet (the store's Stop drains the inbox, the device's journal and the chat's waiting turns -
-    // every entry point to Stop does) - none of it may start the next one.
-    if (halt) halt();
-    else if (key != null) stopRun(key);
-    // On a draft whose creation already made chat N, the turns waiting for N's run are the conversation's too: the same Stop.
-    const token = key === null ? binding?.current() : null;
-    const made = token != null ? binding?.outcomeOf(token) : undefined;
-    if (typeof made === 'number') stopRun(made);
-  }, [clear, markStopping]);
+  const stopTurns = useCallback(() => stopDoorTurns(ports.current, marks, clear), [clear, marks]);
 
   const submit = useCallback(async (turn: T): Promise<boolean> => {
     const { steer: route, textOf: text, isDirected: directed, attachmentsOf: attached, runKey: key, running: live } = ports.current;

@@ -85,7 +85,7 @@ describe('check:execution-landing scanner', () => {
     ['a stored builder used inside a nested block of its scope', "const q = db.update(executions);\nif (go) {\n  await q.set({ status: 'failed' });\n}"],
     ['a stored builder whose name is also used for another binding LATER in the file', "function a() { const q = db.update(executions); return q.set({ status: 'failed' }); }\nfunction b() { const q = db.update(tasks); return q.set({ status: 'done' }); }"],
     ['a stored builder whose name is re-declared inside a nested arrow body', "const q = db.update(executions);\nconst h = () => { const q = db.select(); return q; };\nawait q.set({ status: 'failed' });"],
-    ['a stored builder whose name appears in a destructure pattern default', "const q = db.update(executions);\nconst { q = 1 } = o;\nawait q.set({ status: 'failed' });"],
+    ['a stored builder whose name appears in a destructure default in a nested function parameter list', "const q = db.update(executions);\nconst h = ({ q = 1 }) => q;\nawait q.set({ status: 'failed' });"],
     ['raw SQL whose opaque target follows a WHERE inside a ${} hole', 'await db.execute(sql`UPDATE executions SET result = ${cond ? sql`WHERE a` : sql`x`}, ${sql.identifier(col)} = ${v} WHERE id = ${id}`);'],
   ])('flags %s', (_name, source) => {
     expect(flagged(source)).toBeGreaterThan(0);
@@ -153,6 +153,14 @@ describe('check:execution-landing scanner', () => {
     ['a builder passed through a function', "run(db.update(executions));\nfunction run(q) { return q.set({ status: 'failed' }); }"],
   ])('documented limit, not flagged: %s', (_name, source) => {
     expect(flagged(source)).toBe(0);
+  });
+
+  // ACCEPTED OVER-FLAG: the rebind walk looks only at depth 0 of the builder's block, so an assignment-destructure that genuinely
+  // rebinds the builder name (`({ q = 1 } = o)` assigns `q`) is not seen as the rebind it is - the builder's scope runs on and the
+  // later `.set({ status })` is flagged though `q` no longer holds the builder. The scan errs toward flagging, never toward
+  // missing a write; a real site like this takes the per-site allow-list. Pinned so closing it is a deliberate edit.
+  it('over-flags (never under-flags) a genuine destructure rebind of a stored builder name', () => {
+    expect(flagged("let q = db.update(executions);\n({ q = 1 } = o);\nawait q.set({ status: 'failed' });")).toBeGreaterThan(0);
   });
 
   it('reports each offending statement with a snippet the per-site allow-list can match', () => {

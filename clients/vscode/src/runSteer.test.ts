@@ -76,7 +76,7 @@ describe("runSteer.steerTurns - several turns said to a chat's run together", ()
     expect(drainRunSteering(26).map((m) => m.text)).toEqual(["go"]);
   });
 
-  it("a run's heard keys are forgotten when it settles or is stopped: the same key on its next run is heard", () => {
+  it("a run's heard keys are forgotten when it SETTLES - not when it is stopped: a repeated batch while the stopped run unwinds stays deduped", () => {
     const { s } = steer(new Set([27]));
     s.steerTurns(27, [{ text: "x", eventKey: "k1" }]);
     expect(drainRunSteering(27).map((m) => m.text)).toEqual(["x"]);
@@ -85,6 +85,9 @@ describe("runSteer.steerTurns - several turns said to a chat's run together", ()
     s.steerTurns(27, [{ text: "x", eventKey: "k1" }]);
     expect(drainRunSteering(27).map((m) => m.text)).toEqual(["x"]);
     s.stop(27);
+    s.steerTurns(27, [{ text: "x", eventKey: "k1" }]); // the same batch again while the stopped run unwinds
+    expect(drainRunSteering(27)).toEqual([]);
+    s.settled(27); // the run has unwound: its next run hears the key
     drainRunSteering(27);
     s.steerTurns(27, [{ text: "x", eventKey: "k1" }]);
     expect(drainRunSteering(27).map((m) => m.text)).toEqual(["x"]);

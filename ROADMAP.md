@@ -341,6 +341,7 @@ Waves 1–3 shipped (see DONE.md 2026-10-22 and 2026-10-23). Still open:
 - **Ask-the-Manager zero tool calls — suspect the vendor path.** Instrument `buildResponsesBody` so the 102-tool payload shape lands in the logs. Not blocked.
 - **Inherited Evermind endpoints still accept writes** (UI is read-only); a 409 would change the front-door contract.
 - **AI Surface — duplicate label tables.** Every host (Web Brain panel/canvas/guest, VS Code, Rovr) is on `AiSurface` with `--bf-*` tokens (DONE 2026-10-17); audit each host for a second catalog→labels table inside the same host. Not blocked.
+- **`DEFAULT_CHAT_TITLE = 'New chat'` has two homes.** `brain-embedded/src/chatTitle.ts` (the client placeholder that auto-titling replaces) and `api/src/application/brain/chatTitle.ts` (the column default `normalizeChatTitle` falls back to) must stay equal. No source-only package both already depend on fits a chat-title constant (the shared ones are agent-loop, run-policy, model-catalog and the like), and a new dependency edge for one string was not added. **Next:** give the Brain chat contract (title placeholder and `CHAT_TITLE_MAX_LENGTH`) a shared home both import, then delete both copies. Not blocked.
 
 ### Evermind / SSM `[agents]`
 
