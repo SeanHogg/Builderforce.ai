@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.115] — See why a review failed
+
+- **A failed review says why.** The Knowledge tab shows the reason under "The review failed", and **Copy details** puts the error, its stack, the folder, the last phase reached, the extension version and the time on your clipboard.
+- **The BuilderForce output channel logs every review and plan failure** with the same details.
+
 ## [2026.10.114] — Knowledge you can rely on
 
 - **The Knowledge tab speaks plainly.** It shows its labels and empty states instead of raw keys, and the claim colour no longer looks like "agrees" in dark and high-contrast themes. Muted text in the light theme meets contrast.

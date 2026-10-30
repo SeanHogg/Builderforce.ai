@@ -35980,6 +35980,8 @@
     "reviewContinue": "Continue",
     "reviewAborted": "Review stopped. What was written stays.",
     "reviewFailed": "The review failed. Nothing more was written.",
+    "reviewFailedReason": "Reason: {message}",
+    "reviewCopyDetails": "Copy details",
     "reviewProgress": "{phase} · {done} of {total}",
     "phases": {
       "plan": "Planning",

@@ -7,9 +7,10 @@
  * exactly what is drawn, through memory's `toMermaid`.
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { toMermaid, traceGraph, UNPARTITIONED_LANE, type KnowledgeGraph, type NodeRef, type Trace } from '@seanhogg/builderforce-memory/knowledge';
 import { fillTemplate, type KnowledgeGraphLabels } from './labels';
+import { CopiedNote, CopyFallback, useCopyText } from './copyText';
 import { labelFor, nodeIndex } from './graphModel';
 import { edgeKindLabel } from './names';
 import { cssVar } from './scene/themeColors';
@@ -45,17 +46,8 @@ export function TracePanel({ graph, from, labels }: TracePanelProps) {
     const { trace, laned, lanes, laneOf } = useMemo(() => drawnTrace(graph, from), [graph, from]);
     const label = (r: string) => labelFor(index, r);
     const mermaid = useMemo(() => toMermaid(trace, (r) => labelFor(index, r)), [trace, index]);
-    const [copy, setCopy] = useState<'idle' | 'copied' | 'failed'>('idle');
+    const copier = useCopyText();
     const laneName = (lane: string) => (laned ? (lane === UNPARTITIONED_LANE ? labels.partitionNone : lane) : label(lane));
-
-    const onCopy = async () => {
-        try {
-            await navigator.clipboard.writeText(mermaid);
-            setCopy('copied');
-        } catch {
-            setCopy('failed');
-        }
-    };
 
     if (trace.steps.length === 0) return <p style={muted}>{labels.traceEmpty}</p>;
 
@@ -105,15 +97,10 @@ export function TracePanel({ graph, from, labels }: TracePanelProps) {
             </div>
             {trace.truncated && <p style={muted}>{labels.traceTruncated}</p>}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <button type="button" onClick={() => void onCopy()} style={button}>{labels.copyMermaid}</button>
-                {copy === 'copied' && <span role="status" style={muted}>{labels.copied}</span>}
+                <button type="button" onClick={() => void copier.copy(mermaid)} style={button}>{labels.copyMermaid}</button>
+                <CopiedNote status={copier.status} labels={labels} />
             </div>
-            {copy === 'failed' && (
-                <>
-                    <p role="status" style={muted}>{labels.copyFailed}</p>
-                    <textarea readOnly value={mermaid} aria-label={labels.copyMermaid} rows={6} style={{ width: '100%', font: '12px monospace' }} />
-                </>
-            )}
+            <CopyFallback status={copier.status} text={mermaid} label={labels.copyMermaid} labels={labels} />
         </section>
     );
 }

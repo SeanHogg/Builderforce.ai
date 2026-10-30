@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { KnowledgeGraph, ReviewPlan, ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
-import type { KnowledgeReviewEvent } from '@builderforce/knowledge-graph-view';
+import { ReviewFailure, type KnowledgeReviewEvent } from '@builderforce/knowledge-graph-view';
 import type { KnowledgeCall, KnowledgeEvent } from '../../../src/knowledge/knowledgeProtocol';
 import { createHostKnowledgeGraphSource, type KnowledgeTransport } from './hostKnowledgeGraphSource';
 
@@ -15,7 +15,7 @@ const GRAPH: KnowledgeGraph = {
 };
 
 /** A scripted host: records every call; `run` posts progress then the report. */
-function fakeHost(opts: { cancel?: boolean; fail?: boolean } = {}) {
+function fakeHost(opts: { cancel?: boolean; fail?: boolean; failDetail?: { detail: string; host: string; rootPath: string } } = {}) {
   const calls: KnowledgeCall[] = [];
   const listeners = new Set<(e: KnowledgeEvent) => void>();
   const emit = (e: KnowledgeEvent) => { for (const l of [...listeners]) l(e); };
@@ -28,7 +28,7 @@ function fakeHost(opts: { cancel?: boolean; fail?: boolean } = {}) {
           queueMicrotask(() => {
             emit({ stream: 'r1', type: 'progress', progress: { phase: 'extract', done: 1, total: 2, path: 'a.md' } });
             emit({ stream: 'other', type: 'failed', error: 'not mine' });
-            emit(opts.fail ? { stream: 'r1', type: 'failed', error: 'disk full' } : { stream: 'r1', type: 'done', rootId: 'ws', report: REPORT });
+            emit(opts.fail ? { stream: 'r1', type: 'failed', error: 'disk full', ...opts.failDetail } : { stream: 'r1', type: 'done', rootId: 'ws', report: REPORT });
           });
           return { started: true } as T;
         case 'factActions': return { canDelete: call.ref === 'fact:note:1' } as T;
@@ -80,6 +80,21 @@ describe('the editor knowledge source — the review handshake', () => {
   it('surfaces a failed review as an error', async () => {
     const host = fakeHost({ fail: true });
     await expect(drain(createHostKnowledgeGraphSource(host.t).review!({}, control(true)))).rejects.toThrow('disk full');
+  });
+
+  it('carries the host detail (stack, build, folder) on the thrown error', async () => {
+    const failDetail = { detail: 'Error: disk full\n    at write (store.ts:1)', host: 'BuilderForce for VS Code 1.2.3', rootPath: '/work/docs' };
+    const host = fakeHost({ fail: true, failDetail });
+    const err = await drain(createHostKnowledgeGraphSource(host.t).review!({}, control(true))).then(() => undefined, (e: unknown) => e);
+    expect(err).toBeInstanceOf(ReviewFailure);
+    expect(err).toMatchObject({ message: 'disk full', ...failDetail });
+  });
+
+  it('throws a failure without detail when the host sent none', async () => {
+    const host = fakeHost({ fail: true });
+    const err = await drain(createHostKnowledgeGraphSource(host.t).review!({}, control(true))).then(() => undefined, (e: unknown) => e);
+    expect(err).toBeInstanceOf(ReviewFailure);
+    expect((err as ReviewFailure).detail).toBeUndefined();
   });
 });
 

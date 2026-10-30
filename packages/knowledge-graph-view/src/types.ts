@@ -18,6 +18,8 @@
  *   4. `false` ⇒ the source yields `{ type: 'cancelled' }` and returns, having written
  *      nothing. `true` ⇒ it runs `reviewDirectory`, yielding `{ type: 'progress' }` per
  *      step, then `{ type: 'done', report }`.
+ *      A run that fails THROWS: any Error works; a `ReviewFailure` (`reviewFailure.ts`) also
+ *      carries the host's stack / build / folder, which the failed chip's *Copy details* reports.
  *   5. `ctl.signal` aborts a running review (Stop). Facts already written stay; each
  *      file is written whole or not at all.
  *

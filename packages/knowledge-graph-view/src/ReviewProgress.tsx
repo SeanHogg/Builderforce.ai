@@ -12,6 +12,7 @@ import type { ReactNode } from 'react';
 import type { KnowledgeGraphLabels } from './labels';
 import { fillTemplate } from './labels';
 import { packLabel } from './names';
+import { ReviewFailed } from './ReviewFailed';
 import type { ReviewRun } from './useReviewRun';
 import { cssVar } from './scene/themeColors';
 import { button, card, heading, muted, primaryButton, quietButton } from './styles';
@@ -101,6 +102,8 @@ export function ReviewProgress({ run, labels, titleOf, onContinue }: ReviewProgr
         );
     }
 
-    const text = s.status === 'cancelled' ? labels.reviewCancelled : s.status === 'aborted' ? labels.reviewAborted : labels.reviewFailed;
+    if (s.status === 'error') return shell(<ReviewFailed key={s.at} error={s} labels={labels} dismiss={dismiss} />);
+
+    const text = s.status === 'cancelled' ? labels.reviewCancelled : labels.reviewAborted;
     return shell(<div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><p style={{ margin: 0, fontSize: 13, flex: 1 }}>{text}</p>{dismiss}</div>);
 }
