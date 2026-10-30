@@ -144,7 +144,7 @@ export const PRIVACY_CONTENT_PROBES: ReadonlyArray<{
     candidates: /(delete[-_]?account|account[-_]?deletion|erasure|gdpr[-_]?delete|data[-_]?deletion|forget[-_]?me|right[-_]?to[-_]?(be[-_]?forgotten|erasure))/i,
     // Proof that it DELETES: a destructive statement or an ORM delete. A status
     // flag alone is a soft delete, which is exactly what erasure is not.
-    proof: /(DELETE\s+FROM|\.delete\s*\(|deleteMany|destroy\s*\(|drop\s*\(|anonymi[sz]e|scrub|purge)/i,
+    proof: /(\bDELETE\s+FROM\b|\.delete\s*\(|deleteMany|destroy\s*\(|drop\s*\(|anonymi[sz]e|scrub|purge)/i,
   },
   {
     signal: 'exportProducesData',
@@ -164,7 +164,7 @@ export const PRIVACY_CONTENT_PROBES: ReadonlyArray<{
     signal: 'retentionPurges',
     candidates: /(retention|purge|data[-_]?ttl|expire[-_]?(records|data)|prune[-_]?(logs|data)|cleanup[-_]?(job|cron))/i,
     // Proof that the schedule ACTS: a delete bounded by an age comparison.
-    proof: /((DELETE\s+FROM|\.delete\s*\(|deleteMany)[\s\S]{0,300}(older|interval|cutoff|retention|before|lt\s*\(|<\s*now)|cutoff[\s\S]{0,200}(DELETE|\.delete\s*\())/i,
+    proof: /((\bDELETE\s+FROM\b|\.delete\s*\(|deleteMany)[\s\S]{0,300}(older|interval|cutoff|retention|before|lt\s*\(|<\s*now)|cutoff[\s\S]{0,200}(\bDELETE\b|\.delete\s*\())/i,
   },
 ];
 

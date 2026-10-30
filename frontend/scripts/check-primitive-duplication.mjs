@@ -107,7 +107,7 @@ const PRIMITIVES = [
       { name: 'Monday-first weekday index', test: /getDay\(\)[^;\n)]*%\s*7|%\s*7[^;\n]*getDay\(\)/ },
       // A day cell that belongs to the month either side, dimmed. Only a month grid has
       // days it is drawing and not about.
-      { name: 'outside-month day cells', test: /inMonth|data-outside|outsideMonth/ },
+      { name: 'outside-month day cells', test: /\binMonth\b|data-outside|outsideMonth/ },
       // The weekday header row a seven-column grid grows the moment it means days.
       { name: 'weekday header row', test: /weekday:\s*['"](?:short|narrow)['"]/ },
     ],

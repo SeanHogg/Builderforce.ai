@@ -103,7 +103,7 @@ describe('the workspace fingerprint', () => {
         expect(script).toContain('cd "$(git --no-optional-locks rev-parse --show-toplevel)"');
         expect(script).toContain('GIT_INDEX_FILE');
         // Every git in the script takes no locks.
-        expect(script.match(/git (?!--no-optional-locks)/g) ?? []).toEqual([]);
+        expect(script.match(/\bgit (?!--no-optional-locks)/g) ?? []).toEqual([]);
         // A fresh memo (another process turn) reads again.
         forgetWorkspaceFingerprints();
         await workspaceFingerprint({ caps: c });
