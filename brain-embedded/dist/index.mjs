@@ -84,7 +84,7 @@ import {
   stripReasoningTagsFromText,
   thoughtTextOf,
   within
-} from "./chunk-B5IJHF5M.mjs";
+} from "./chunk-3VDSYRNP.mjs";
 import {
   BrainRequestError,
   LOCAL_ENGINE_FAILURE_CODES,
@@ -24812,7 +24812,10 @@ function withUsageSurface(fetchImpl, surface2) {
 }
 
 // src/useChatTurns.ts
-import { useCallback as useCallback12, useEffect as useEffect12, useRef as useRef10, useState as useState12 } from "react";
+import { useCallback as useCallback13, useEffect as useEffect12, useRef as useRef10, useState as useState12 } from "react";
+
+// src/turnLanding.ts
+import { useCallback as useCallback12 } from "react";
 
 // src/runStore/wakeChat.ts
 function wakeChat2(runKey, turns, attachments) {
@@ -24820,11 +24823,83 @@ function wakeChat2(runKey, turns, attachments) {
 }
 
 // src/useQueuedTurns.ts
-import { useCallback as useCallback11, useEffect as useEffect11, useRef as useRef9, useState as useState11 } from "react";
+import { useCallback as useCallback11, useEffect as useEffect11, useMemo as useMemo7, useRef as useRef9, useState as useState11, useSyncExternalStore as useSyncExternalStore2 } from "react";
+
+// src/draftBinding.ts
+function createDraftBinding() {
+  let seq = 0;
+  let live2 = null;
+  const tokens2 = /* @__PURE__ */ new Map();
+  const watchers = /* @__PURE__ */ new Set();
+  const listeners = /* @__PURE__ */ new Set();
+  const setLive = (token) => {
+    if (live2 === token) return;
+    live2 = token;
+    for (const watcher of [...watchers]) watcher();
+  };
+  const adopt = () => {
+    if (live2 !== null) return live2;
+    seq += 1;
+    tokens2.set(seq, { sends: 0, creating: false, outcome: void 0 });
+    setLive(seq);
+    return seq;
+  };
+  const finish = (token, outcome) => {
+    const entry = tokens2.get(token);
+    if (!entry || entry.outcome !== void 0) return;
+    entry.outcome = outcome;
+    if (outcome === null && live2 === token) setLive(null);
+    for (const listener of [...listeners]) listener(token, outcome);
+    if (live2 !== token) tokens2.delete(token);
+  };
+  return {
+    begin: () => {
+      const token = adopt();
+      tokens2.get(token).sends += 1;
+      return token;
+    },
+    adopt,
+    current: () => live2,
+    startCreation: (token) => {
+      const entry = tokens2.get(token);
+      if (entry) entry.creating = true;
+    },
+    resolve: (token, chatId) => finish(token, chatId),
+    fail: (token) => finish(token, null),
+    settle: (token) => {
+      const entry = tokens2.get(token);
+      if (!entry) return;
+      entry.sends -= 1;
+      if (entry.sends <= 0 && !entry.creating && entry.outcome === void 0) finish(token, null);
+    },
+    leave: () => {
+      const left = live2;
+      if (left === null) return;
+      setLive(null);
+      if (tokens2.get(left)?.outcome !== void 0) tokens2.delete(left);
+    },
+    outcomeOf: (token) => tokens2.get(token)?.outcome,
+    subscribe: (listener) => {
+      watchers.add(listener);
+      return () => {
+        watchers.delete(listener);
+      };
+    },
+    onOutcome: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    }
+  };
+}
+var NO_DRAFTS = createDraftBinding();
+
+// src/useQueuedTurns.ts
 function turnBody(turn, textOf2) {
   return (typeof turn === "string" ? turn : textOf2?.(turn) ?? "").trim();
 }
-function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFlush, handOff, createdChatId = null }) {
+function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFlush, handOff, drafts = NO_DRAFTS, landDraft }) {
   const [queued, setQueued] = useState11([]);
   const queueRef = useRef9([]);
   const update = useCallback11((change) => {
@@ -24842,72 +24917,122 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
   handOffRef.current = handOff;
   const mayFlushRef = useRef9(mayFlush);
   mayFlushRef.current = mayFlush;
-  const createdRef = useRef9(createdChatId);
-  createdRef.current = createdChatId;
-  const unconfirmed = useRef9(null);
+  const landDraftRef = useRef9(landDraft);
+  landDraftRef.current = landDraft;
+  const draftOnScreen = useSyncExternalStore2(drafts.subscribe, drafts.current, drafts.current);
+  const shown = resetKey === null ? draftOnScreen : null;
+  const shownRef = useRef9(shown);
+  shownRef.current = shown;
   const runningRef = useRef9(running);
   const submit = useCallback11((value, opts) => {
     const text = turnBody(value, textOfRef.current);
     if (!text) return false;
     if (!runningRef.current) return false;
     const held = typeof value === "string" ? text : value;
-    update((current) => [...current, { id: nextId.current += 1, value: held, ...opts?.preLiveFor !== void 0 ? { preLiveFor: opts.preLiveFor } : {} }]);
+    update((current) => [...current, {
+      id: nextId.current += 1,
+      value: held,
+      ...opts?.preLiveFor !== void 0 ? { preLiveFor: opts.preLiveFor } : {},
+      ...opts?.draft ? { draft: opts.draft } : {}
+    }]);
     return true;
   }, [update]);
   runningRef.current = running;
   const remove = useCallback11((id) => update((current) => current.filter((item) => item.id !== id)), [update]);
-  const clear = useCallback11(() => update((current) => current.length ? [] : current), [update]);
+  const clear = useCallback11(() => update((current) => {
+    const own = (item) => !item.draft || item.draft.token === shownRef.current;
+    return current.some(own) ? current.filter((item) => !own(item)) : current;
+  }), [update]);
   const requeue2 = useCallback11((value) => update((current) => [{ id: nextId.current += 1, value }, ...current]), [update]);
-  const pushBack = useCallback11((value) => update((current) => [...current, { id: nextId.current += 1, value }]), [update]);
+  const pushBack = useCallback11((value, opts) => update((current) => [
+    ...current,
+    { id: nextId.current += 1, value, ...opts?.preLiveFor !== void 0 ? { preLiveFor: opts.preLiveFor } : {} }
+  ]), [update]);
   const takeFront = useCallback11(() => {
-    const [first] = queueRef.current;
+    const first = queueRef.current.find((item) => !item.draft);
     if (!first) return void 0;
-    update((current) => current.slice(1));
+    update((current) => current.filter((item) => item !== first));
     return first.value;
   }, [update]);
-  const settle2 = useCallback11((created) => {
-    const wait = unconfirmed.current;
-    if (!wait) return;
-    unconfirmed.current = null;
-    if (created === wait.to) {
-      update((current) => current.map((item) => wait.ids.has(item.id) && item.preLiveFor === null ? { ...item, preLiveFor: wait.to } : item));
-      return;
-    }
-    const mine = queueRef.current.filter((item) => wait.ids.has(item.id));
+  useEffect11(() => drafts.onOutcome((token, outcome) => {
+    const mine = queueRef.current.filter((item) => item.draft?.token === token);
     if (mine.length === 0) return;
-    update((current) => current.filter((item) => !wait.ids.has(item.id)));
-    handOffRef.current?.(mine, null);
-  }, [update]);
-  useEffect11(() => {
-    if (createdChatId !== null) settle2(createdChatId);
-  }, [createdChatId, settle2]);
+    update((current) => current.filter((item) => item.draft?.token !== token));
+    landDraftRef.current?.(mine.map((item) => ({ value: item.value, followUp: item.draft.followUp })), outcome);
+  }), [drafts, update]);
   const prev = useRef9({ key: resetKey, running });
   useEffect11(() => {
     const was = prev.current;
     prev.current = { key: resetKey, running };
-    if (!running) settle2(createdRef.current);
     if (was.key !== resetKey || !was.running || running) return;
     if (mayFlushRef.current && !mayFlushRef.current()) return;
     const next = takeFront();
     if (next !== void 0) sendRef.current(next);
-  }, [running, resetKey, takeFront, settle2]);
+  }, [running, resetKey, takeFront]);
   const heldIn = useRef9(resetKey);
   useEffect11(() => {
     const from = heldIn.current;
     if (from === resetKey) return;
     heldIn.current = resetKey;
-    settle2(createdRef.current);
-    const held = queueRef.current;
+    const held = queueRef.current.filter((item) => !item.draft);
     if (held.length === 0) return;
-    if (from === null && typeof resetKey === "number" && runningRef.current) {
-      unconfirmed.current = { to: resetKey, ids: new Set(held.map((item) => item.id)) };
-      if (createdRef.current !== null) settle2(createdRef.current);
+    update((current) => current.filter((item) => item.draft));
+    handOffRef.current?.(held, from);
+  }, [resetKey, update]);
+  const items = useMemo7(() => queued.filter((item) => !item.draft || item.draft.token === shown), [queued, shown]);
+  return { items, count: items.length, submit, remove, requeue: requeue2, pushBack, takeFront, clear };
+}
+
+// src/turnLanding.ts
+function handToChat(chat, turns) {
+  const inbox = (turn, interrupt) => queueRunSteering2(chat, turn.text, {
+    fromPerson: true,
+    persist: true,
+    ...interrupt ? { interrupt: true } : {},
+    ...turn.attachments?.length ? { attachments: [...turn.attachments] } : {}
+  });
+  if (isLive(chat)) {
+    for (const turn of turns) inbox(turn, !!turn.interrupt);
+    return;
+  }
+  if (!wakeChat2(chat, turns)) for (const turn of turns) inbox(turn, false);
+}
+function useTurnLanding(ports, pushBackRef) {
+  const giveBackAll = useCallback12((turns) => {
+    const { restore: giveBack, join } = ports.current;
+    if (!giveBack || turns.length === 0) return;
+    if (join && turns.length > 1) giveBack(join(turns));
+    else for (const turn of turns) giveBack(turn);
+  }, []);
+  const handOff = useCallback12((held, from) => {
+    const { textOf: text, attachmentsOf: attached2, isDirected: directed } = ports.current;
+    const back = [];
+    const chat = [];
+    for (const { value: turn } of held) {
+      if (directed?.(turn) || getRunDriver() || typeof from !== "number") back.push(turn);
+      else chat.push({ text: turnBody(turn, text), attachments: attached2?.(turn) });
+    }
+    giveBackAll(back);
+    if (chat.length > 0 && typeof from === "number") handToChat(from, chat);
+  }, [giveBackAll]);
+  const landDraft = useCallback12((held, outcome) => {
+    if (outcome === null) {
+      giveBackAll(held.map((h) => h.value));
       return;
     }
-    update(() => []);
-    handOffRef.current?.(held, from);
-  }, [resetKey, update, settle2]);
-  return { items: queued, count: queued.length, submit, remove, requeue: requeue2, pushBack, takeFront, clear };
+    const { textOf: text, attachmentsOf: attached2, isDirected: directed, runKey: key, running: live2 } = ports.current;
+    const back = [];
+    const chat = [];
+    for (const { value: turn, followUp } of held) {
+      const here = key === outcome && live2;
+      if (here) pushBackRef.current(turn, followUp && !directed?.(turn) ? { preLiveFor: outcome } : void 0);
+      else if (directed?.(turn) || getRunDriver()) back.push(turn);
+      else chat.push({ text: turnBody(turn, text), attachments: attached2?.(turn), interrupt: followUp });
+    }
+    giveBackAll(back);
+    if (chat.length > 0) handToChat(outcome, chat);
+  }, [giveBackAll]);
+  return { handOff, landDraft };
 }
 
 // src/useChatTurns.ts
@@ -24917,12 +25042,12 @@ function steersByDefault(turn) {
 function chatDoorLiveness(conv, extraInFlight = false) {
   return { running: conv.sending || extraInFlight, steerable: conv.runLive };
 }
-function useChatTurns({ running, steerable = running, runKey, createdChatId, send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf }) {
-  const ports = useRef10({ send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable });
-  ports.current = { send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable };
+function useChatTurns({ running, steerable = running, runKey, drafts, send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf }) {
+  const ports = useRef10({ send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable, drafts });
+  ports.current = { send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable, drafts };
   const stoppingRef = useRef10(false);
   const [, repaint] = useState12(false);
-  const markStopping = useCallback12((on) => {
+  const markStopping = useCallback13((on) => {
     stoppingRef.current = on;
     repaint(on);
   }, []);
@@ -24932,9 +25057,19 @@ function useChatTurns({ running, steerable = running, runKey, createdChatId, sen
   const stopEpoch = useRef10(0);
   const requeueRef = useRef10(() => void 0);
   const takeFrontRef = useRef10(() => void 0);
+  const pushBackRef = useRef10(() => void 0);
   const flushing = useRef10(/* @__PURE__ */ new Map());
   const flushingIn = (key) => flushing.current.get(key) ?? 0;
-  const flush = useCallback12(async (first) => {
+  const sendOnce = useCallback13(async (turn) => {
+    const { send: deliver, runKey: key, drafts: binding } = ports.current;
+    const token = key === null ? binding?.begin() : void 0;
+    try {
+      return await deliver(turn);
+    } finally {
+      if (token !== void 0) binding?.settle(token);
+    }
+  }, []);
+  const flush = useCallback13(async (first) => {
     const chat = ports.current.runKey;
     flushing.current.set(chat, flushingIn(chat) + 1);
     try {
@@ -24944,7 +25079,7 @@ function useChatTurns({ running, steerable = running, runKey, createdChatId, sen
         const epoch = stopEpoch.current;
         const sent = turn;
         const kept = await new Promise((resolve) => {
-          resolve(ports.current.send(sent));
+          resolve(sendOnce(sent));
         }).then((ok) => ok !== false, () => false);
         if (stopEpoch.current !== epoch) return;
         const { textOf: text, attachmentsOf: attached2, isDirected: directed } = ports.current;
@@ -24959,9 +25094,7 @@ function useChatTurns({ running, steerable = running, runKey, createdChatId, sen
         } else if (directed?.(sent) || getRunDriver()) {
           ports.current.restore?.(sent);
         } else if (typeof key === "number") {
-          const body = turnBody(sent, text);
-          const files = attached2?.(sent);
-          if (!wakeChat2(key, body, files)) queueRunSteering2(key, body, { fromPerson: true, persist: true, ...files?.length ? { attachments: files } : {} });
+          handToChat(key, [{ text: turnBody(sent, text), attachments: attached2?.(sent) }]);
         }
       }
     } finally {
@@ -24969,37 +25102,35 @@ function useChatTurns({ running, steerable = running, runKey, createdChatId, sen
       if (rest > 0) flushing.current.set(chat, rest);
       else flushing.current.delete(chat);
     }
-  }, []);
-  const handOff = useCallback12((held, from) => {
-    const { textOf: text, attachmentsOf: attached2, isDirected: directed, restore: giveBack, join: join2 } = ports.current;
-    const back = [];
-    const chat = [];
-    for (const { value: turn } of held) {
-      if (directed?.(turn) || getRunDriver() || typeof from !== "number") back.push(turn);
-      else chat.push({ text: turnBody(turn, text), attachments: attached2?.(turn) });
-    }
-    if (giveBack && back.length > 0) {
-      if (join2 && back.length > 1) giveBack(join2(back));
-      else for (const turn of back) giveBack(turn);
-    }
-    if (chat.length > 0 && typeof from === "number" && !wakeChat2(from, chat)) {
-      for (const turn of chat) queueRunSteering2(from, turn.text, { fromPerson: true, persist: true, ...turn.attachments?.length ? { attachments: [...turn.attachments] } : {} });
-    }
-  }, []);
+  }, [sendOnce]);
+  const { handOff, landDraft } = useTurnLanding(ports, pushBackRef);
   const queued = useQueuedTurns({
     running,
     send: (turn) => {
       void flush(turn);
     },
     resetKey: runKey,
-    createdChatId,
+    drafts,
     textOf: textOf2,
     mayFlush: () => flushingIn(ports.current.runKey) === 0,
-    handOff
+    handOff,
+    landDraft
   });
   const { submit: hold, clear, takeFront, pushBack } = queued;
+  const holdForDraft = useCallback13((turn, followUp) => {
+    const { runKey: key, drafts: binding, running: live2 } = ports.current;
+    const token = key === null && live2 ? binding?.current() : null;
+    if (token == null || !binding) return false;
+    const answered2 = binding.outcomeOf(token);
+    if (typeof answered2 === "number") {
+      landDraft([{ value: turn, followUp }], answered2);
+      return true;
+    }
+    return hold(turn, { draft: { token, followUp } });
+  }, [hold, landDraft]);
   requeueRef.current = queued.requeue;
   takeFrontRef.current = takeFront;
+  pushBackRef.current = pushBack;
   const itemsRef = useRef10(queued.items);
   itemsRef.current = queued.items;
   const carriedIds = useRef10(/* @__PURE__ */ new Set());
@@ -25010,8 +25141,8 @@ function useChatTurns({ running, steerable = running, runKey, createdChatId, sen
     wasRunning.current = running;
     wasSteerable.current = steerable;
   }
-  const heldThisRun = useCallback12(() => itemsRef.current.filter((item) => !carriedIds.current.has(item.id)).length, []);
-  const steers = useCallback12((preview) => ports.current.steerable && typeof ports.current.runKey === "number" && !stoppingRef.current && steersByDefault({ ...preview, held: heldThisRun() }), [heldThisRun]);
+  const heldThisRun = useCallback13(() => itemsRef.current.filter((item) => !carriedIds.current.has(item.id)).length, []);
+  const steers = useCallback13((preview) => ports.current.steerable && typeof ports.current.runKey === "number" && !stoppingRef.current && steersByDefault({ ...preview, held: heldThisRun() }), [heldThisRun]);
   const { remove } = queued;
   const dueHere = queued.items.filter((item) => item.preLiveFor === runKey).length;
   useEffect12(() => {
@@ -25033,7 +25164,7 @@ function useChatTurns({ running, steerable = running, runKey, createdChatId, sen
       carriedIds.current = new Set([...carriedIds.current].filter((id) => id !== item.id));
     }
   }, [running, steerable, remove, runKey, dueHere]);
-  const stopTurns = useCallback12(() => {
+  const stopTurns = useCallback13(() => {
     clear();
     stopEpoch.current += 1;
     if (ports.current.running) markStopping(true);
@@ -25041,8 +25172,8 @@ function useChatTurns({ running, steerable = running, runKey, createdChatId, sen
     if (halt) halt();
     else if (key != null) stopRun(key);
   }, [clear, markStopping]);
-  const submit = useCallback12(async (turn) => {
-    const { send: deliver, steer: route, textOf: text, isDirected: directed, attachmentsOf: attached2, runKey: key, running: live2 } = ports.current;
+  const submit = useCallback13(async (turn) => {
+    const { steer: route, textOf: text, isDirected: directed, attachmentsOf: attached2, runKey: key, running: live2 } = ports.current;
     const body = turnBody(turn, text);
     if (!body) return false;
     const isStop = !startsRun(body) && !directed?.(turn);
@@ -25058,7 +25189,8 @@ function useChatTurns({ running, steerable = running, runKey, createdChatId, sen
       queueRunSteering2(key, body, { interrupt: true, fromPerson: true, persist: true, attachments: attached2?.(turn) });
       return true;
     }
-    const preLiveFor = !ports.current.steerable && (typeof key === "number" || key === null) && !stoppingRef.current && !directed?.(turn) ? key : void 0;
+    if (holdForDraft(turn, !stoppingRef.current && !directed?.(turn))) return true;
+    const preLiveFor = !ports.current.steerable && typeof key === "number" && !stoppingRef.current && !directed?.(turn) ? key : void 0;
     if (hold(turn, preLiveFor !== void 0 ? { preLiveFor } : void 0)) return true;
     if (!live2 && flushingIn(key) > 0) {
       pushBack(turn);
@@ -25070,14 +25202,14 @@ function useChatTurns({ running, steerable = running, runKey, createdChatId, sen
       void flush(oldest);
       return true;
     }
-    return await deliver(turn) !== false;
-  }, [hold, stopTurns, takeFront, pushBack, flush, steers]);
-  const queueAfter = useCallback12(async (turn) => {
-    const { textOf: text, send: deliver } = ports.current;
+    return await sendOnce(turn) !== false;
+  }, [hold, holdForDraft, stopTurns, takeFront, pushBack, flush, steers, sendOnce]);
+  const queueAfter = useCallback13(async (turn) => {
+    const { textOf: text } = ports.current;
     if (!turnBody(turn, text)) return false;
-    if (hold(turn)) return true;
-    return await deliver(turn) !== false;
-  }, [hold]);
+    if (holdForDraft(turn, false) || hold(turn)) return true;
+    return await sendOnce(turn) !== false;
+  }, [hold, holdForDraft, sendOnce]);
   return { queued, submit, queueAfter, stop: stopTurns, steers };
 }
 
@@ -25099,11 +25231,11 @@ function restoreTurn(turn, composer) {
 }
 
 // src/useComposerDraft.ts
-import { useMemo as useMemo7, useRef as useRef11 } from "react";
+import { useMemo as useMemo8, useRef as useRef11 } from "react";
 function useComposerDraft(input, setInput) {
   const ref = useRef11(input);
   ref.current = input;
-  return useMemo7(() => ({
+  return useMemo8(() => ({
     draft: () => ref.current,
     setInput: (text) => {
       ref.current = text;
@@ -25133,7 +25265,7 @@ function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
 }
 
 // src/useChatCreation.ts
-import { useCallback as useCallback13, useEffect as useEffect14, useRef as useRef13, useState as useState14 } from "react";
+import { useCallback as useCallback14, useEffect as useEffect14, useRef as useRef13, useState as useState14 } from "react";
 function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }) {
   const chatIdRef = useRef13(chatId);
   chatIdRef.current = chatId;
@@ -25143,33 +25275,42 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   autoTitleRef.current = autoTitle;
   const captureRef = useRef13(onCaptureOriginalRequest);
   captureRef.current = onCaptureOriginalRequest;
+  const [drafts] = useState14(createDraftBinding);
   const creating = useRef13(null);
-  const [createdChatId, setCreatedChatId] = useState14(null);
   useEffect14(() => {
-    if (chatId != null) creating.current = null;
-  }, [chatId]);
-  const ensureChatId = useCallback13(() => {
+    if (chatId == null) return;
+    creating.current = null;
+    drafts.leave();
+  }, [chatId, drafts]);
+  const ensureChatId = useCallback14(() => {
     const open = chatIdRef.current;
     if (open != null) return Promise.resolve(open);
-    if (!creating.current) setCreatedChatId(null);
-    creating.current ??= createRef.current().then(
-      (id) => {
-        if (id == null) creating.current = null;
-        else setCreatedChatId(id);
-        return id;
-      },
-      (error) => {
-        creating.current = null;
-        throw error;
-      }
-    );
+    if (!creating.current) {
+      const token = drafts.adopt();
+      drafts.startCreation(token);
+      const mine = (async () => createRef.current())().then(
+        (id) => {
+          if (id == null) {
+            if (creating.current === mine) creating.current = null;
+            drafts.fail(token);
+          } else drafts.resolve(token, id);
+          return id;
+        },
+        (error) => {
+          if (creating.current === mine) creating.current = null;
+          drafts.fail(token);
+          throw error;
+        }
+      );
+      creating.current = mine;
+    }
     return creating.current;
-  }, []);
-  const onFirstUserTurn = useCallback13(async (id, firstUserText) => {
+  }, [drafts]);
+  const onFirstUserTurn = useCallback14(async (id, firstUserText) => {
     void captureRef.current?.(id, firstUserText);
     await autoTitleRef.current?.(id, firstUserText);
   }, []);
-  return { ensureChatId, onFirstUserTurn, createdChatId };
+  return { ensureChatId, onFirstUserTurn, drafts };
 }
 export {
   ADDRESSED_TO_META_KEY,
@@ -25344,6 +25485,7 @@ export {
   createBrainRestPersistence,
   createBrowserEngineProber,
   createComposingActivity,
+  createDraftBinding,
   createEngineWorker,
   createHandoffFit,
   createHostModelStream,
@@ -25561,6 +25703,7 @@ export {
   runOutcomesSince,
   runProgressVerdict,
   savePendingPrompt,
+  savedChatOf,
   scopeToConsolidation3 as scopeToConsolidation,
   selectPendingAskUser,
   selectToolsForTurn2 as selectToolsForTurn,

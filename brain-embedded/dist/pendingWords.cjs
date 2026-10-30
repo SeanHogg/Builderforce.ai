@@ -162,7 +162,8 @@ function holdSession() {
   if (locks?.request) {
     void locks.request(lockName(SESSION), () => new Promise(() => void 0)).catch((e) => {
       reportPendingWordsFailure("hold_session", e);
-      beatWhileAlive();
+      if (owner) beatWhileAlive();
+      else holding = false;
     });
     return;
   }
