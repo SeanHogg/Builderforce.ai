@@ -100,3 +100,4 @@ export {
   type RunOutcomeTelemetry,
   type RunVerifyResult,
 } from './runOutcomeTelemetry.js';
+export { TENANT_BUDGET_CODES, isRateLimitFailure, isTenantBudgetFailure } from './rateLimitFailure.js';

@@ -53,7 +53,7 @@ export interface RunOutcomeFacts {
   /** The run died on a provider rate limit — an AVAILABILITY signal, kept beside the
    *  quality score so a throttled model is demoted without being called bad. */
   rateLimited?: boolean;
-  /** The run was served by a WEAKER model than it asked for (a downgrade); a same-tier failover is not degraded. */
+  /** The run was served by a WEAKER model than it asked for (`isWeakerModel`, the rule the ONE agent's row uses). A failover onto a model of the same standing, or one the price book cannot rank, is not recorded as a downgrade. */
   degraded?: boolean;
   /** LLM calls the run made. Feeds the efficiency half of the outcome score. */
   steps?: number;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { schemaForCapabilities, spawnAgentTool } from "@builderforce/agent-tools";
+import { schemaForCapabilities, spawnAgentTool, spawnAgentsTool } from "@builderforce/agent-tools";
 import type { ChildControls } from "./childRunSpawner";
-import { LOCAL_SURFACE_CAPS } from "./localCapabilities";
+import { EDITOR_DELEGATION_CAPS } from "./localCapabilities";
 import { subagentFanOutToolDef } from "./subagentFanOutTool";
 import { subagentToolDef } from "./subagentTool";
 
@@ -20,9 +20,14 @@ describe("the spawn tools the editor builds", () => {
     }
   });
 
-  it("is the description the capability path gives - not a hand-picked copy of the schema", () => {
-    expect(subagentToolDef(deps).description).toBe(
-      schemaForCapabilities(spawnAgentTool, new Set([...LOCAL_SURFACE_CAPS, "orchestrate", "orchestrate.live"])).function.description,
-    );
+  it("is the description the capability path gives under the SAME set the editor holds - for both tools", () => {
+    expect(subagentToolDef(deps).description).toBe(schemaForCapabilities(spawnAgentTool, EDITOR_DELEGATION_CAPS).function.description);
+    expect(subagentFanOutToolDef(deps).description).toBe(schemaForCapabilities(spawnAgentsTool, EDITOR_DELEGATION_CAPS).function.description);
+  });
+
+  it("holds every capability the spawn tools require, fan-out included", () => {
+    for (const tool of [spawnAgentTool, spawnAgentsTool]) {
+      for (const needed of tool.requires) expect(EDITOR_DELEGATION_CAPS.has(needed), `${tool.name} requires ${needed}`).toBe(true);
+    }
   });
 });

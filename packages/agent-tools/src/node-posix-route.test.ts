@@ -157,7 +157,7 @@ describe("defaultInterpreter: bash (the on-prem host)", () => {
     onWindows();
     bashAbsent();
     // What PowerShell runs correctly: aliased verbs with plain arguments, $(…) subexpressions, quoted text.
-    for (const ok of ["ls src", "cat package.json", "rm build/old.txt", "mv a.txt b.txt", "pwd", 'echo "a && b"', "git rev-parse $(git branch --show-current)", "npm run build --if-present=true"]) {
+    for (const ok of ["ls src", "cat package.json", "rm build/old.txt", "mv a.txt b.txt", "pwd", 'echo "a && b"', "rm -Recurse -Force build", "ls -Force src", "echo hello", "curl https://example.com", "git rev-parse $(git branch --show-current)", "npm run build --if-present=true"]) {
       expect(posixRoute(ok, bashDefault), ok).toEqual({ bash: null });
     }
     // What it cannot: chains, unix flags on an alias (bound by prefix or not at all), diff (Compare-Object compares
@@ -165,7 +165,7 @@ describe("defaultInterpreter: bash (the on-prem host)", () => {
     for (const needsBash of [
       "npm run build && npm test", "a || b", "git log | head -5", "grep -r foo .",
       "ls -la src", "rm -rf build", "rm -f a.txt", "cat -n f.ts", "cp -r a b", "git status | rm -rf x",
-      "diff a.txt b.txt", "npm test 2>/dev/null", "echo `date`", "sort < in.txt", "NODE_ENV=test npm run build",
+      "diff a.txt b.txt", "find . -name '*.ts'", "curl -s https://example.com", "wget -q https://example.com/x", "kill -9 123", "echo -n hi", "npm test 2>/dev/null", "echo `date`", "sort < in.txt", "NODE_ENV=test npm run build",
     ]) {
       expect(posixRoute(needsBash, bashDefault), needsBash).toEqual({ error: NO_BASH_FOR_POWERSHELL });
     }

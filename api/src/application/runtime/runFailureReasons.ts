@@ -1,4 +1,4 @@
-import { isRateLimitFailure } from '@builderforce/agent-tools';
+import { isRateLimitFailure, isTenantBudgetFailure } from '@builderforce/learned-routing';
 import { isInfrastructureEviction } from './orphanReasons';
 
 /**
@@ -143,7 +143,9 @@ export function classifyRunFailure(message: string | null | undefined): RunFailu
 
   // 2. Generic provider / infrastructure probes, for messages that reach us verbatim
   //    from a vendor rather than through a reason constant.
-  // The ONE rate-limit rule, shared with the agent's outcome row; a tenant's own spent cap is not one.
+  // A tenant spending its OWN allowance is checked first: it is also a 429, but no model was throttled.
+  if (isTenantBudgetFailure(m)) return 'quota_exhausted';
+  // The ONE rate-limit rule, shared with the agent's outcome row.
   if (isRateLimitFailure(m)) return 'rate_limited';
   if (/\b40[13]\b|unauthorized|unauthenticated|invalid api key|authentication failed|credential/i.test(m)) return 'auth_failed';
   if (/token (budget|cap|limit) (reached|exhausted)|quota (exceeded|exhausted)|run cap/i.test(m)) return 'quota_exhausted';

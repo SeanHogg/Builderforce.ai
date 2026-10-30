@@ -64,13 +64,23 @@ export interface ErrorClassification {
   message: string;
 }
 
-/** Tenant-cap codes — all per-tenant (not per-model), so all TERMINAL for the window. */
+/**
+ * Tenant-cap codes — all per-tenant (not per-model), so all TERMINAL for the window.
+ *
+ * MIRRORS `TENANT_BUDGET_CODES` in `@builderforce/learned-routing` (the platform's own list, which the
+ * cloud failure classifier and the agent's outcome row read). This package is published standalone
+ * (`rootDir: src`, no workspace dependency), so it cannot import that private package; a parity test in
+ * the api (`tenantBudgetCodesParity.test.ts`) fails the build if the two lists differ.
+ */
 const TOKEN_CAP_CODES: ReadonlySet<string> = new Set([
+  'agent_host_token_limit_exceeded',
   'plan_token_limit_exceeded',
   'plan_monthly_token_limit_exceeded',
-  'agent_host_token_limit_exceeded',
-  'claw_token_limit_exceeded',
+  'member_spend_cap_exceeded',
+  'premium_daily_cap_exceeded',
   'image_credit_limit_exceeded',
+  'video_credit_limit_exceeded',
+  'claw_token_limit_exceeded',
 ]);
 
 /**

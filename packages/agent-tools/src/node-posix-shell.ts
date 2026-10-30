@@ -60,12 +60,15 @@ const POSIX_UTILITIES: ReadonlySet<string> = new Set([
 ]);
 
 /** Split a command into its pipeline/chain segments — the positions a COMMAND WORD can
- *  start at (`|`, `||`, `&&`, `;`, and newlines). Quotes are not parsed: a separator
- *  inside a string can only ever cause an extra (harmless) bash route, never a miss. */
+ *  start at (`|`, `||`, `&&`, `;`, and newlines), each trimmed of leading parentheses. Quotes are not
+ *  parsed: a separator inside a string can only ever cause an extra (harmless) bash route, never a miss.
+ *  The ONE segmenter: {@link commandWords} and the PowerShell flag check both read it. */
+function segments(command: string): string[] {
+  return command.split(/\|\||&&|[|;\n]/).map((seg) => seg.trim().replace(/^\(+\s*/, ""));
+}
+
 function commandWords(command: string): string[] {
-  return command
-    .split(/\|\||&&|[|;\n]/)
-    .map((seg) => seg.trim().replace(/^\(+\s*/, ""))
+  return segments(command)
     // Skip `VAR=value cmd` prefixes and redirections to reach the real verb.
     .map((seg) => seg.replace(/^(?:\w+=\S*\s+)+/, ""))
     .map((seg) => (/^[\w./-]+/.exec(seg)?.[0] ?? ""))
@@ -83,15 +86,26 @@ function commandWords(command: string): string[] {
 const POWERSHELL_ALIASED: ReadonlySet<string> = new Set(["cat", "ls", "rm", "cp", "mv", "pwd", "sleep", "tee"]);
 
 /**
- * An aliased verb handed a unix `-flag` (`rm -rf`, `ls -la`, `cat -n`, `mv -f`): the alias binds the
- * flag to a Cmdlet parameter by prefix, or not at all, so the command fails or does something else.
- * There are no exceptions on purpose - `cp -r` happens to bind to -Recurse, but a list of the forms that
- * bind correctly is a list that goes stale; the call is cheap to send to bash and costly to get wrong.
+ * Verbs whose PowerShell meaning is NOT the unix one once a unix flag is handed to them: the aliases above,
+ * plus `find` (Windows' find.exe: a text filter), `curl` / `wget` (aliases of Invoke-WebRequest), `kill`
+ * (Stop-Process) and `echo` (Write-Output). Plain, flagless use of the aliased ones still runs.
+ */
+const POWERSHELL_FLAG_SENSITIVE: ReadonlySet<string> = new Set([...POWERSHELL_ALIASED, "find", "curl", "wget", "kill", "echo"]);
+
+/**
+ * A flag-sensitive verb handed a unix `-flag` (`rm -rf`, `ls -la`, `cat -n`, `mv -f`, `curl -s`): the alias
+ * binds the flag to a Cmdlet parameter by prefix, or not at all, so the command fails or does something
+ * else. A unix flag is a lowercase letter, a digit (`kill -9`) or `--`: PowerShell's own parameters are written `-Force`,
+ * `-Recurse` (capitalised) and are valid there, so they are NOT refused. No exceptions for the unix forms
+ * on purpose - `cp -r` happens to bind to -Recurse, but a list of forms that bind goes stale.
  */
 function aliasedWithUnixFlag(bare: string): boolean {
-  return bare.split(/\|\||&&|[|;\n]/).some((segment) => {
-    const [verb, next] = segment.trim().replace(/^\(+\s*/, "").split(/\s+/);
-    return !!verb && POWERSHELL_ALIASED.has(verb) && !!next && /^-[A-Za-z]/.test(next);
+  const unixFlag = (token: string | undefined): boolean => !!token && /^-(?:[a-z0-9]|-)/.test(token);
+  return segments(bare).some((segment) => {
+    const [verb, ...args] = segment.split(/\s+/);
+    if (!verb || !POWERSHELL_FLAG_SENSITIVE.has(verb)) return false;
+    // `find` takes its flags AFTER the path (`find . -name x`); the others straight after the verb.
+    return verb === "find" ? args.some(unixFlag) : unixFlag(args[0]);
   });
 }
 

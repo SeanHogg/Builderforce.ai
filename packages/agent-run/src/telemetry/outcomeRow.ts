@@ -25,7 +25,7 @@
  * a Worker invocation and a VS Code extension host build the identical row.
  */
 
-import { isRateLimitFailure } from "@builderforce/agent-tools";
+import { isRateLimitFailure } from "@builderforce/learned-routing";
 import { RUN_CANCELLED_REASON, type RunOutcomeKind, type RunOutcomeRow, type RunState } from "../contract.js";
 import { defaultEstimateTokens } from "../policy/compaction/pack.js";
 import { turnContextBlock } from "../turnContext.js";
@@ -87,11 +87,12 @@ export function buildOutcomeRow(input: OutcomeRowInput): RunOutcomeRow {
 /**
  * Served by a WEAKER model than the run asked for. `state.downgrades` records exactly that
  * (`modelDowngrade`): an auto-routed turn that landed on a model the run did not choose because a
- * connected account could not be used, or on a plan-tier model, or a failover onto a worse catalog tier
- * (`isWeakerModel` - the same rule the legacy embedded runner derives its `degraded` from). A failover to
- * a model of the same standing is announced by the `llm.model_downgrade` event but not recorded, and a
- * preflight NOTE (`state.preflight` = degraded:<reason>) is a warning before turn 1, not a verdict on
- * what served the run; neither makes the run degraded.
+ * connected account could not be used, or on a plan-tier model, or a PINNED model's failover onto a worse
+ * catalog tier (`isWeakerModel` - the same rule the legacy embedded runner derives its `degraded` from).
+ * A pinned-model failover onto a model of the same standing (or one the price book cannot rank) is
+ * announced by the `llm.model_downgrade` event but NOT recorded as a downgrade, and a preflight NOTE
+ * (`state.preflight` = degraded:<reason>) is a warning before turn 1, not a verdict on what served the
+ * run; neither makes the run degraded.
  */
 function isDegraded(state: RunState): boolean {
   return (state.downgrades?.length ?? 0) > 0;

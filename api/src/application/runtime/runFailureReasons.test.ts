@@ -76,6 +76,14 @@ describe('run failure classification', () => {
     expect(classifyRunFailure('HTTP 529: over capacity')).toBe('rate_limited');
   });
 
+  it('classifies each tenant-budget 429 body (with its code) as quota_exhausted, and a provider throttle as rate_limited', () => {
+    for (const code of ['plan_monthly_token_limit_exceeded', 'member_spend_cap_exceeded', 'premium_daily_cap_exceeded', 'agent_host_token_limit_exceeded', 'image_credit_limit_exceeded']) {
+      expect(classifyRunFailure(`chat completion failed with HTTP 429: {"code":"${code}","terminal":true}`), code).toBe('quota_exhausted');
+    }
+    // OpenAI's own throttle code is NOT a tenant budget.
+    expect(classifyRunFailure('chat completion failed with HTTP 429: {"error":{"code":"rate_limit_exceeded"}}')).toBe('rate_limited');
+  });
+
   /**
    * `unknown` is the USEFUL answer, never a bug to be tuned away: a wrong class sends
    * the reader to the wrong subsystem, which is worse than an honest "unclassified".
