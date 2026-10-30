@@ -31,6 +31,27 @@ export function checkFootprintLimits(
   return null;
 }
 
+/** How a run that hit its OWN per-run cap reads in its failure message. ONE spelling: the builders below write
+ *  it and {@link isRunCapMessage} reads it, so the classifier never holds a second copy of the text. */
+export const RUN_SPEND_LIMIT_PREFIX = 'spend limit reached';
+export const RUN_TOKEN_LIMIT_PREFIX = 'token limit reached';
+
+export function runSpendLimitMessage(used: number, cap: number): string {
+  return `${RUN_SPEND_LIMIT_PREFIX} (${used}/${cap} millicents)`;
+}
+
+export function runTokenLimitMessage(used: number, cap: number): string {
+  return `${RUN_TOKEN_LIMIT_PREFIX} (${used}/${cap} tokens)`;
+}
+
+/** The per-run message shape: a prefix, then `(used/cap `. A tenant's allowance reads `(N tokens)` with no slash. */
+const RUN_CAP_MESSAGE = new RegExp(`(?:${RUN_SPEND_LIMIT_PREFIX}|${RUN_TOKEN_LIMIT_PREFIX}) \\(\\d+/\\d+ `);
+
+/** True when `message` is a run stopping at ITS OWN per-run spend / token cap (`checkRunLimits`) - not a tenant's quota. */
+export function isRunCapMessage(message: string | null | undefined): boolean {
+  return !!message && RUN_CAP_MESSAGE.test(message);
+}
+
 export function checkRunLimits(limits: RunLimits, usage: RunUsage): string | null {
   const footprint = checkFootprintLimits(limits, usage);
   if (footprint) return footprint;
@@ -38,9 +59,7 @@ export function checkRunLimits(limits: RunLimits, usage: RunUsage): string | nul
   // run to (`@builderforce/spend-contract` `runBudget.ts`); only the wording is ours.
   const breach = runBudgetBreach(limits, usage);
   if (!breach) return null;
-  return breach.kind === 'spend'
-    ? `spend limit reached (${breach.used}/${breach.cap} millicents)`
-    : `token limit reached (${breach.used}/${breach.cap} tokens)`;
+  return breach.kind === 'spend' ? runSpendLimitMessage(breach.used, breach.cap) : runTokenLimitMessage(breach.used, breach.cap);
 }
 
 /** Default per-run token ceiling by plan (cost lever A2). An unknown plan gets the free cap. */

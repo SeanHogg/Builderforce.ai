@@ -48,7 +48,16 @@ export interface RunOutcomeTelemetry {
   unkeptReadyClaims?: number;
   /** The A3 progress trips, by signal. */
   progressTrips?: Record<string, number>;
+  /**
+   * Set on a SUB-AGENT's row: the `clientRunId` its owner's row was reported under, so a child is
+   * one more row of the owner's tree and never a second run of it. The row's OWN run id is the
+   * request's `clientRunId` (the idempotency key), so only the parent needs a field.
+   */
+  parentRunId?: string;
 }
+
+/** The longest `parentRunId` the column holds — the same bound as `client_run_id`. */
+export const PARENT_RUN_ID_MAX = 128;
 
 /** The plain counters — each a non-negative integer. */
 const COUNTERS = [
@@ -73,6 +82,12 @@ function modelPreflight(v: unknown): string | undefined {
   const s = v.trim();
   if (s !== 'ok' && s !== 'refreshed' && !s.startsWith('degraded')) return undefined;
   return s.slice(0, MODEL_PREFLIGHT_MAX);
+}
+
+function parentRunId(v: unknown): string | undefined {
+  if (typeof v !== 'string') return undefined;
+  const s = v.trim();
+  return s.length > 0 && s.length <= PARENT_RUN_ID_MAX && /^[\w:.\-]+$/.test(s) ? s : undefined;
 }
 
 function progressTrips(v: unknown): Record<string, number> | undefined {
@@ -108,5 +123,7 @@ export function parseRunOutcomeTelemetry(b: Record<string, unknown>): RunOutcome
   if (preflight) out.modelPreflight = preflight;
   const trips = progressTrips(b.progressTrips);
   if (trips) out.progressTrips = trips;
+  const parent = parentRunId(b.parentRunId);
+  if (parent) out.parentRunId = parent;
   return out;
 }

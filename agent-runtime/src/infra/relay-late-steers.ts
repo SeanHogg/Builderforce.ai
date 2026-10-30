@@ -3,9 +3,9 @@
  * it was sent to can no longer take it.
  *
  * Two windows produce one:
- *   - `run_finishing`: the SDK runner closes its input stream the moment a turn returns
- *     with nothing queued, so the steering channel refuses the push while the run is
- *     still reporting, committing and settling;
+ *   - `run_finishing`: the run closes its steering channel the moment it settles, so the
+ *     channel refuses the push while the run is still reporting, committing and settling —
+ *     and a steer it accepted but never reached comes back to be held here too;
  *   - `no_live_run`: this host holds no run for the execution at all (a cloud fallback,
  *     a restart, a run that already ended and left).
  *

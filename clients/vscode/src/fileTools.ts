@@ -9,7 +9,7 @@
  */
 
 import type { Capability } from "@builderforce/agent-tools";
-import { buildCoreToolRegistry } from "@builderforce/agent-tools";
+import { buildCoreToolRegistry, schemaForCapabilities } from "@builderforce/agent-tools";
 import { buildLocalCapabilityProvider, LOCAL_SURFACE_CAPS } from "./localCapabilities";
 import { findRipgrep } from "./ripgrep";
 import { hostCostLeverOn } from "./hostCostLevers";
@@ -88,7 +88,7 @@ export const TOOL_DEFS: ToolDef[] = registry
   .filter((def) => !EXCLUDED_TOOLS.has(def.name))
   .map((def) => ({
     name: def.name,
-    description: def.schema.function.description,
+    description: schemaForCapabilities(def, LOCAL_SURFACE_CAPS).function.description,
     parameters: def.schema.function.parameters as Record<string, unknown>,
     mutating: isMutating(def.name, def.requires),
     execute: async (args, root, run) => {

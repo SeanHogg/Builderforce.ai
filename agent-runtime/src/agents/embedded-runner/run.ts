@@ -1,5 +1,4 @@
 import fs from "node:fs/promises";
-import { DEFAULT_ACTION_TYPE, type ActionType } from "@builderforce/learned-routing";
 import type { ThinkLevel } from "../../auto-reply/thinking.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { enqueueCommandInLane } from "../../process/command-queue.js";
@@ -35,7 +34,7 @@ import {
   pickFallbackThinkingLevel,
   type FailoverReason,
 } from "../embedded-helpers.js";
-import { FailoverError, isFailoverError, resolveFailoverStatus } from "../failover-error.js";
+import { FailoverError, resolveFailoverStatus } from "../failover-error.js";
 import {
   ensureAuthProfileStore,
   getApiKeyForModel,
@@ -49,7 +48,7 @@ import { redactRunIdentifier, resolveRunWorkspaceDir } from "../workspace-run.js
 import { compactEmbeddedSessionDirect } from "./compact.js";
 import { buildAutoContinuePrompt, shouldAutoContinueRun } from "./continuation-policy.js";
 import { resolveGlobalLane, resolveSessionLane } from "./lanes.js";
-import { completeLearnedRun, type CompleteRunInput } from "./learned-routing/index.js";
+import { trackRunOutcome } from "./learned-routing/run-outcome.js";
 import { log } from "./logger.js";
 import { resolveLearnedModelSeed, resolveModel } from "./model.js";
 import { runEmbeddedAttempt } from "./run/attempt.js";
@@ -191,50 +190,9 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
       : "markdown");
   const isProbeSession = params.sessionId?.startsWith("probe-") ?? false;
 
-  /**
-   * Learned Model Routing (PRD 13) — what this run will teach the fleet.
-   *
-   * Filled in as the run learns it (the action label at seed time, the model it
-   * actually LOCKED ONTO as failover resolves) and reported once, after the run has
-   * terminated, by the wrapper below. It lives out here because the run body has many
-   * exits — a timeout return, a normal return, a thrown FailoverError — and a report
-   * attached to only some of them would teach the learner a survivorship-biased table
-   * in which models mostly succeed.
-   */
-  const outcome: {
-    actionType: ActionType;
-    provider: string;
-    model: string;
-    steps: number;
-    degraded: boolean;
-  } = {
-    actionType: DEFAULT_ACTION_TYPE,
-    provider: "",
-    model: "",
-    steps: 0,
-    degraded: false,
-  };
-
-  const reportOutcome = (
-    terminalStatus: CompleteRunInput["terminalStatus"],
-    error?: unknown,
-  ): void => {
-    if (!outcome.model || isProbeSession) {
-      return;
-    }
-    const rateLimited = isFailoverError(error) && error.reason === "rate_limit";
-    // Fire-and-forget: a run that has already finished must never be held up — or
-    // failed — by bookkeeping about it. `completeLearnedRun` never throws.
-    void completeLearnedRun({
-      runId: params.runId,
-      model: `${outcome.provider}/${outcome.model}`,
-      actionType: outcome.actionType,
-      terminalStatus,
-      rateLimited,
-      degraded: outcome.degraded,
-      steps: outcome.steps,
-    });
-  };
+  // Learned Model Routing (PRD 13): what this run will teach the fleet (see `learned-routing/run-outcome.ts`).
+  const tracker = trackRunOutcome({ runId: params.runId, isProbeSession });
+  const { outcome } = tracker;
 
   const runPromise: Promise<EmbeddedRunResult> = enqueueSession(() =>
     enqueueGlobal(async () => {
@@ -349,8 +307,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
       if (!model) {
         throw new Error(error ?? `Unknown model: ${provider}/${modelId}`);
       }
-      outcome.provider = provider;
-      outcome.model = model.id;
+      tracker.lockOnto({ provider, model: model.id }, { provider, model: model.id });
 
       const ctxInfo = resolveContextWindowInfo({
         cfg: params.config,
@@ -1060,8 +1017,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
           const promptTokens = derivePromptTokens(lastRunPromptUsage);
           // The run may have failed over: what it LOCKED ONTO is the truth the learner
           // must be told, not the model it was seeded with.
-          outcome.provider = lastAssistant?.provider ?? provider;
-          outcome.model = lastAssistant?.model ?? model.id;
+          tracker.lockOnto({ provider: lastAssistant?.provider ?? provider, model: lastAssistant?.model ?? model.id }, { provider, model: model.id });
           // `steps` feeds the api's EFFICIENCY half of the outcome score, which counts
           // model turns. The closest honest local proxy is the tool calls this run made
           // plus each auto-continue nudge plus the final turn.
@@ -1069,9 +1025,6 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
             (Array.isArray(attempt.toolMetas) ? attempt.toolMetas.length : 0) +
             autoContinueNudges +
             1;
-          if (outcome.model !== model.id) {
-            outcome.degraded = true;
-          }
           const agentMeta: EmbeddedAgentMeta = {
             sessionId: sessionIdUsed,
             provider: lastAssistant?.provider ?? provider,
@@ -1230,11 +1183,11 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
   // than a failure: a user stopping a run says nothing about the model.
   return runPromise.then(
     (result) => {
-      reportOutcome(result.meta?.aborted ? "cancelled" : "completed");
+      tracker.report(result.meta?.aborted ? "cancelled" : "completed");
       return result;
     },
     (error: unknown) => {
-      reportOutcome("failed", error);
+      tracker.report("failed", error);
       throw error;
     },
   );

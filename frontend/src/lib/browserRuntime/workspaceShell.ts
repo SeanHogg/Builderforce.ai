@@ -29,7 +29,7 @@
  * `{ ok: false, error }` the model can read and relay; nothing here throws.
  */
 import type { PreviewRuntime, SnapshotStore } from '@seanhogg/builderforce-webcontainers';
-import type { ShellCapability, ShellResult } from '@builderforce/agent-tools';
+import { posixCommandIn, type ShellCapability, type ShellResult } from '@builderforce/agent-tools';
 import { validateFileContentForPath } from '@builderforce/ide-file-contract';
 import { isGeneratedPath } from '@/lib/workspace/generatedPaths';
 import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
@@ -242,7 +242,11 @@ export function createWorkspaceShell(store: WorkspaceFileStore, deps: WorkspaceS
   const boot = deps.boot ?? bootSharedPreviewRuntime;
   const timeoutMs = deps.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
 
-  const run = async (command: string): Promise<WorkspaceShellResult> => {
+  const run = async (command: string, cwd?: string): Promise<WorkspaceShellResult> => {
+    // `bfsh -c` takes only a command line, so the working directory the shared tools hand over
+    // (`ShellRunOptions.cwd`) is written in by the ONE shared helper; an unsafe one is refused.
+    const scoped = posixCommandIn(cwd, command);
+    if (scoped === null) return { ok: false, error: `'${cwd}' is not a directory inside the workspace, so no command was run there` };
     let runtime: PreviewRuntime;
     try {
       runtime = await boot();
@@ -270,7 +274,7 @@ export function createWorkspaceShell(store: WorkspaceFileStore, deps: WorkspaceS
 
     let ran: Awaited<ReturnType<typeof runInRuntime>>;
     try {
-      ran = await runInRuntime(runtime, command, timeoutMs);
+      ran = await runInRuntime(runtime, scoped, timeoutMs);
     } catch (error) {
       return { ok: false, error: `The command could not be started: ${toolErrorMessage(error, 'spawn failed')}` };
     }
@@ -302,5 +306,5 @@ export function createWorkspaceShell(store: WorkspaceFileStore, deps: WorkspaceS
     };
   };
 
-  return { run: (command) => serialized(() => run(command)) };
+  return { run: (command, opts) => serialized(() => run(command, opts?.cwd)) };
 }

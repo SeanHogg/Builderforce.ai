@@ -21,12 +21,15 @@ import type { ToolResult } from "./tool.js";
 /** A shell that records the script it was handed and reports success. */
 function recordingShell() {
   const scripts: string[] = [];
+  const cwds: Array<string | undefined> = [];
   return {
     scripts,
+    cwds,
     caps: {
       shell: {
-        async run(command: string) {
+        async run(command: string, opts?: { cwd?: string }) {
           scripts.push(command);
+          cwds.push(opts?.cwd);
           return { ok: true, exitCode: 0, stdout: "ok" };
         },
       },
@@ -109,11 +112,20 @@ describe("git_cleanup_merged", () => {
   it("scopes into a repo subdirectory, and refuses one that walks out of the workspace", async () => {
     const scoped = recordingShell();
     await gitCleanupMergedTool.execute({ branch: "x", repo: "Builderforce.ai" }, scoped as never);
-    expect(scoped.scripts[0]?.startsWith('cd "Builderforce.ai" || exit 1\n')).toBe(true);
+    expect(scoped.cwds).toEqual(["Builderforce.ai"]);
+    expect(scoped.scripts[0]?.startsWith("cd ")).toBe(false);
 
+    // DELIBERATE BEHAVIOUR CHANGE (was: the repo was dropped and the cleanup ran at the workspace
+    // root). An explicit repo that leaves the workspace is REFUSED and nothing runs.
     const escape = recordingShell();
-    await gitCleanupMergedTool.execute({ branch: "x", repo: "../elsewhere" }, escape as never);
-    expect(escape.scripts[0]?.startsWith("cd ")).toBe(false);
+    const refused = await gitCleanupMergedTool.execute({ branch: "x", repo: "../elsewhere" }, escape as never);
+    expect(data(refused)).toEqual({
+      ok: false,
+      action: "cleanup",
+      error: "repo '../elsewhere' must be a directory inside the workspace (no '..', not absolute), so nothing was run",
+    });
+    expect(escape.scripts).toEqual([]);
+    expect(escape.cwds).toEqual([]);
   });
 });
 

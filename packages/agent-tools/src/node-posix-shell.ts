@@ -29,13 +29,15 @@ import * as path from "node:path";
  * shell CONTROL form, not something that merely looks unixy, so a plain command with
  * a forward-slash path is never misrouted.
  */
-const POSIX_ONLY = [
+const POSIX_ONLY_CONTROL = [
   /(^|\n)\s*set\s+-[a-z]/,      // `set -e`
-  /\$\((?!\()/,                  // command substitution `$(…)`
   /(^|\s)\[\s/,                  // the `[ … ]` test builtin
   /\|\|\s*\{/,                   // `… || { …; }` grouping
   /(^|\n)\s*export\s+\w+=/,      // `export VAR=…`
 ];
+/** `$(…)` command substitution - POSIX, but Windows PowerShell's `$(…)` subexpression reads it too. */
+const COMMAND_SUBSTITUTION = /\$\((?!\()/;
+const POSIX_ONLY = [...POSIX_ONLY_CONTROL, COMMAND_SUBSTITUTION];
 
 /**
  * Coreutils that DO NOT EXIST as `cmd.exe` commands, so invoking one there fails with
@@ -58,12 +60,15 @@ const POSIX_UTILITIES: ReadonlySet<string> = new Set([
 ]);
 
 /** Split a command into its pipeline/chain segments — the positions a COMMAND WORD can
- *  start at (`|`, `||`, `&&`, `;`, and newlines). Quotes are not parsed: a separator
- *  inside a string can only ever cause an extra (harmless) bash route, never a miss. */
+ *  start at (`|`, `||`, `&&`, `;`, and newlines), each trimmed of leading parentheses. Quotes are not
+ *  parsed: a separator inside a string can only ever cause an extra (harmless) bash route, never a miss.
+ *  The ONE segmenter: {@link commandWords} and the PowerShell flag check both read it. */
+function segments(command: string): string[] {
+  return command.split(/\|\||&&|[|;\n]/).map((seg) => seg.trim().replace(/^\(+\s*/, ""));
+}
+
 function commandWords(command: string): string[] {
-  return command
-    .split(/\|\||&&|[|;\n]/)
-    .map((seg) => seg.trim().replace(/^\(+\s*/, ""))
+  return segments(command)
     // Skip `VAR=value cmd` prefixes and redirections to reach the real verb.
     .map((seg) => seg.replace(/^(?:\w+=\S*\s+)+/, ""))
     .map((seg) => (/^[\w./-]+/.exec(seg)?.[0] ?? ""))
@@ -73,8 +78,77 @@ function commandWords(command: string): string[] {
     .filter(Boolean);
 }
 
-/** Does this command require a POSIX shell to run correctly? */
-export function needsPosixShell(command: string): boolean {
+/**
+ * Utilities Windows PowerShell already has under the same name (aliases), so on a machine whose
+ * default shell IS PowerShell a plain `ls src` / `cat f` / `rm f` runs there and is no reason to demand
+ * bash. NOT `diff`: that is `Compare-Object`, which compares ARGUMENT STRINGS - it runs, and answers wrong.
+ */
+const POWERSHELL_ALIASED: ReadonlySet<string> = new Set(["cat", "ls", "rm", "cp", "mv", "pwd", "sleep", "tee"]);
+
+/**
+ * Verbs whose PowerShell meaning is NOT the unix one once a unix flag is handed to them: the aliases above,
+ * plus `find` (Windows' find.exe: a text filter), `curl` / `wget` (aliases of Invoke-WebRequest), `kill`
+ * (Stop-Process) and `echo` (Write-Output). Plain, flagless use of the aliased ones still runs.
+ */
+const POWERSHELL_FLAG_SENSITIVE: ReadonlySet<string> = new Set([...POWERSHELL_ALIASED, "find", "curl", "wget", "kill", "echo"]);
+
+/**
+ * A flag-sensitive verb handed a unix `-flag` (`rm -rf`, `ls -la`, `cat -n`, `mv -f`, `curl -s`): the alias
+ * binds the flag to a Cmdlet parameter by prefix, or not at all, so the command fails or does something
+ * else. A token is a PowerShell PARAMETER only if it is a capitalised word (`-Force`, `-Recurse`, `-Path`):
+ * every other `-token` is a unix flag - `-R`, `-A`, `-Rf`, `-KILL`, `-9`, `-L`, `--long` - however it is
+ * cased, because a one- or two-letter capital is a unix flag (`ls -R`, `rm -Rf`), not a parameter name. No
+ * exceptions for the unix forms on purpose - `cp -r` happens to bind to -Recurse, but a list of forms that
+ * bind goes stale.
+ */
+const POWERSHELL_PARAMETER = /^-[A-Z][a-z]{2,}[A-Za-z]*$/;
+const isUnixFlag = (token: string | undefined): boolean => !!token && token.length > 1 && token.startsWith("-") && !POWERSHELL_PARAMETER.test(token);
+
+/** Verbs whose flags may come AFTER their operands (`find . -name x`, `curl url -o f`, `wget -O f url`). */
+const FLAGS_ANYWHERE: ReadonlySet<string> = new Set(["find", "curl", "wget"]);
+
+function aliasedWithUnixFlag(bare: string): boolean {
+  return segments(bare).some((segment) => {
+    const [verb, ...args] = segment.split(/\s+/);
+    if (!verb || !POWERSHELL_FLAG_SENSITIVE.has(verb)) return false;
+    return FLAGS_ANYWHERE.has(verb) ? args.some(isUnixFlag) : isUnixFlag(args[0]);
+  });
+}
+
+/** Shell syntax PowerShell 5.1 does not read at all: POSIX redirects and null device, backtick substitution, `<` input, `VAR=x cmd` prefixes. */
+const POWERSHELL_UNSUPPORTED = [
+  /\/dev\/null/,                                  // 2>/dev/null, >/dev/null
+  /`[^`\n]+`/,                                   // `cmd` command substitution (a backtick is PowerShell's ESCAPE)
+  /(^|\s)<\s*\S/,                                 // input redirection
+  /(^|[|;&\n]\s*)[A-Za-z_]\w*=\S*\s+\S/,         // VAR=value cmd
+];
+
+/** A command with its quoted strings blanked, so an `&&` inside text is not read as a chain. */
+function withoutQuoted(command: string): string {
+  return command.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, '""');
+}
+
+/**
+ * Does this command require bash on a machine whose default shell is Windows PowerShell 5.1?
+ * `needsPosixShell` is built for cmd.exe and would refuse `ls`/`cat`/`rm`, which PowerShell aliases;
+ * what PowerShell genuinely cannot run is the `&&` / `||` chain (no such operators in 5.1), the POSIX
+ * control forms, and the unix utilities it has no alias for.
+ */
+function needsBashForPowerShell(command: string): boolean {
+  const bare = withoutQuoted(command);
+  if (/&&|\|\|/.test(bare)) return true;
+  if (POSIX_ONLY_CONTROL.some((re) => re.test(bare))) return true;
+  if (POWERSHELL_UNSUPPORTED.some((re) => re.test(bare))) return true;
+  if (aliasedWithUnixFlag(bare)) return true;
+  return commandWords(bare).some((w) => POSIX_UTILITIES.has(w) && !POWERSHELL_ALIASED.has(w));
+}
+
+/**
+ * Does this command require a POSIX shell to run correctly? `shell` is the machine's default
+ * interpreter: cmd.exe (the default) or Windows PowerShell.
+ */
+export function needsPosixShell(command: string, shell: "cmd" | "powershell" = "cmd"): boolean {
+  if (shell === "powershell") return needsBashForPowerShell(command);
   if (POSIX_ONLY.some((re) => re.test(command))) return true;
   return commandWords(command).some((w) => POSIX_UTILITIES.has(w));
 }
@@ -94,7 +168,9 @@ const CMD_CANNOT_RUN = [
   /is not recognized as the name of a cmdlet/i,
   /The syntax of the command is incorrect/i,
   /was unexpected at this time/i,
-  /Environment variable .* not defined/i,
+  // cmd.exe reading `set -e` as its own builtin. Narrowed to a flag-shaped name: a program that DID
+  // run and printed "Environment variable FOO not defined" is a real failure, not a reason to rerun.
+  /Environment variable -\w+ not defined/i,
 ];
 
 export function cmdCannotRun(output: string): boolean {
@@ -160,20 +236,6 @@ export function resetBashCache(): void {
 }
 
 /**
- * The `shell` option to spread into an `exec` call for this command — a bash path
- * when the command needs POSIX and one was found, otherwise nothing at all (the
- * platform default shell, exactly as before).
- *
- * On a non-Windows host the default shell is already `/bin/sh`, so this is a no-op
- * there and the probe never runs.
- */
-export function posixShellOption(command: string): { shell?: string } {
-  if (process.platform !== "win32" || !needsPosixShell(command)) return {};
-  const bash = findBash();
-  return bash ? { shell: bash } : {};
-}
-
-/**
  * What this machine can actually do with a POSIX script — the fact that decides
  * whether `git_sync_latest` / `git_undo` / `git_redo` work here at all.
  *
@@ -224,4 +286,78 @@ export function posixShellReport(env: NodeJS.ProcessEnv = process.env): string {
     "  Install Git for Windows (it ships bash). Probed, in order:",
     ...status.candidates.map((c) => `    ${c}`),
   ].join("\n");
+}
+
+/** The refusal when a POSIX script has no POSIX shell to run it. */
+export const NO_POSIX_SHELL =
+  "this command needs a POSIX shell (it uses set -e / $(…) / [ … ], or a unix utility such as head/grep/sed that cmd.exe does not have) "
+  + "and no POSIX shell was found on this Windows machine. "
+  + "Install Git for Windows (which ships bash), or re-run the work as plain single-line commands instead.";
+
+/** The refusal when a command needs bash and the machine's default shell is Windows PowerShell with no bash to hand it to. */
+export const NO_BASH_FOR_POWERSHELL =
+  "this command needs a POSIX shell (it chains with && / ||, redirects to /dev/null, uses backticks, < or VAR=value prefixes, passes unix flags to ls/rm/cat/cp/mv, "
+  + "or uses a unix utility such as head/grep/sed/diff) and no POSIX shell was found on this Windows machine - the shell here is Windows PowerShell 5.1, which has none of that. "
+  + "Either install Git for Windows (which ships bash), or retry it as separate PowerShell commands joined with ';' using the native equivalents: "
+  + "Remove-Item -Recurse -Force, Get-ChildItem -Force, Get-Content, Select-String, Select-Object -First N, Copy-Item -Recurse, Move-Item, Test-Path, Compare-Object.";
+
+/**
+ * The interpreter a host runs a command in when nothing says otherwise. Windows only:
+ *  - `"platform"` — the machine's default shell (cmd.exe), moving a command to bash only when it
+ *    needs POSIX. The editor's shell.
+ *  - `"bash"` — bash whenever one exists (the default shell is used only when there is none). The
+ *    on-prem host's shell: a model writes `a && b` and `$VAR` as it does for the Bash tool, and
+ *    Windows PowerShell 5.1 parses neither.
+ * The HOST chooses; the routing rule below is the same for both.
+ */
+export type DefaultInterpreter = "platform" | "bash";
+
+export interface RouteOptions {
+  defaultInterpreter?: DefaultInterpreter;
+}
+
+/**
+ * Which interpreter runs `command`: bash (`{ bash }`), the platform default (`{ bash: null }`), or a
+ * refusal naming the cause. A POSIX script with no POSIX shell must say so: letting it through hands
+ * it to cmd.exe, which parses `set -e` as its own builtin and fails with "Environment variable -e
+ * not defined" — a message that names neither the cause nor anything the agent could do about it.
+ *
+ * A STRICT NO-OP off Windows: the default shell there is already POSIX, and refusing a `grep` because
+ * `/bin/bash` is absent (Alpine, NixOS) would break hosts that work today.
+ */
+export function posixRoute(command: string, options: RouteOptions = {}): { bash: string | null } | { error: string } {
+  if (process.platform !== "win32") return { bash: null };
+  const bash = findBash();
+  if (options.defaultInterpreter === "bash" && bash) return { bash };
+  // With no bash, a "bash"-default host is on PowerShell: judge the command by what PowerShell cannot run.
+  const powershell = options.defaultInterpreter === "bash";
+  if (!needsPosixShell(command, powershell ? "powershell" : "cmd")) return { bash: null };
+  return bash ? { bash } : { error: powershell ? NO_BASH_FOR_POWERSHELL : NO_POSIX_SHELL };
+}
+
+/**
+ * Run `command` through THE interpreter-routing rule every node shell shares: the route above,
+ * then — when the default shell could not even ATTEMPT it (an unlisted unix utility, a
+ * single-quoted argument, a `$VAR`; `needsPosixShell` is a whitelist and always incomplete) —
+ * ONE retry under bash, which is what the command was written for. A genuine non-zero exit from
+ * a program that DID run does not match {@link cmdCannotRun}, so nothing that legitimately failed
+ * is run twice, and a stopped command is never started again under another interpreter.
+ * `exec` runs the command in the interpreter it is given (`null` = the platform default).
+ */
+export async function runRouted<R extends { ok: boolean; stdout?: string; aborted?: boolean }>(
+  command: string,
+  exec: (bash: string | null) => Promise<R>,
+  signal?: AbortSignal,
+  options: RouteOptions = {},
+): Promise<R | { ok: false; error: string }> {
+  // Off Windows there is nothing to route and — above all — nothing to RE-RUN: a retry repeats the
+  // command's side effects, so it exists only for the one case it is a fix (cmd.exe could not parse it).
+  if (process.platform !== "win32") return exec(null);
+  const route = posixRoute(command, options);
+  if ("error" in route) return { ok: false, error: route.error };
+  const first = await exec(route.bash);
+  if (first.ok || route.bash || first.aborted) return first;
+  const retryBash = findBash();
+  if (!retryBash || !cmdCannotRun(first.stdout ?? "") || signal?.aborted) return first;
+  return exec(retryBash);
 }

@@ -5,22 +5,29 @@ import {
   gitCommitTool,
   gitDiffTool,
   gitPushTool,
+  gitRedoTool,
   gitStatusTool,
+  gitSyncLatestTool,
+  gitUndoTool,
   inferRepoFromPath,
 } from "./git-tools.js";
 import type { ToolResult } from "./tool.js";
 
 const NOT_A_REPO = "fatal: not a git repository (or any of the parent directories): .git";
 
-function mockShell(handler: (command: string) => { ok: boolean; stdout?: string; exitCode?: number; error?: string }) {
+/** A shell that records each command and the directory it was asked to run in (`ShellRunOptions.cwd`). */
+function mockShell(handler: (command: string, cwd?: string) => { ok: boolean; stdout?: string; exitCode?: number; error?: string }) {
   const scripts: string[] = [];
+  const cwds: Array<string | undefined> = [];
   return {
     scripts,
+    cwds,
     caps: {
       shell: {
-        async run(command: string) {
+        async run(command: string, opts?: { cwd?: string }) {
           scripts.push(command);
-          return handler(command);
+          cwds.push(opts?.cwd);
+          return handler(command, opts?.cwd);
         },
       },
     },
@@ -51,20 +58,63 @@ describe("buildGitCommand repo scoping", () => {
     expect(buildGitCommand("history", { limit: 5 })).toBe("git --no-pager log --oneline -n 5");
   });
 
-  it("scopes the read-only actions into the named checkout", () => {
-    expect(buildGitCommand("status", { repo: "Builderforce.ai" })).toBe('cd "Builderforce.ai" && git status --short --branch');
-    expect(buildGitCommand("diff", { repo: "app", path: "src" })).toBe('cd "app" && git --no-pager diff -- "src"');
-  });
-
-  it("refuses a repo that would walk OUT of the workspace", () => {
-    // `cd` makes traversal an escape, not merely a wider scope.
-    for (const repo of ["../elsewhere", "a/../../etc", "..", "/etc"]) {
-      expect(buildGitCommand("status", { repo })).toBe("git status --short --branch");
+  it("builds the same command for every checkout: the directory is the shell's cwd, never a `cd`", () => {
+    expect(buildGitCommand("diff", { path: "src" })).toBe('git --no-pager diff -- "src"');
+    for (const action of ["status", "diff", "history", "sync_latest", "undo", "redo"] as const) {
+      expect(buildGitCommand(action)).not.toMatch(/\bcd\b/);
     }
   });
 
-  it("still accepts a directory whose name contains dots", () => {
-    expect(buildGitCommand("status", { repo: "Builderforce.ai" })).toContain('cd "Builderforce.ai"');
+  // DELIBERATE BEHAVIOUR CHANGE (was: a repo that walked out was silently dropped and the command
+  // ran at the workspace root). The directory is now the shell's working directory, so an explicit
+  // repo that is not a safe workspace-relative one is REFUSED and nothing runs — dropping it would
+  // make git_undo / git_redo reset a different repository than the one the caller named.
+  it("refuses a repo that would walk OUT of the workspace, running nothing", async () => {
+    for (const repo of ["../elsewhere", "a/../../etc", "..", "/etc"]) {
+      const sh = mockShell(() => ({ ok: true, exitCode: 0, stdout: "## main" }));
+      const out = data(await gitStatusTool.execute({ repo }, sh as never));
+      expect(out).toEqual({
+        ok: false,
+        action: "status",
+        error: `repo '${repo}' must be a directory inside the workspace (no '..', not absolute), so nothing was run`,
+      });
+      expect(sh.scripts).toEqual([]);
+      expect(sh.cwds).toEqual([]);
+    }
+  });
+
+  it("refuses a whitespace-only repo (a repo that cannot be honoured), but treats an empty one as absent", async () => {
+    const sh = mockShell(() => ({ ok: true, exitCode: 0, stdout: "## main" }));
+    expect(data(await gitUndoTool.execute({ repo: "   " }, sh as never))).toMatchObject({ ok: false, action: "undo" });
+    expect(sh.scripts).toEqual([]);
+    await gitStatusTool.execute({ repo: "" }, sh as never);
+    expect(sh.scripts).toEqual(["git status --short --branch"]);
+  });
+
+  it("takes a Windows-style separator as the same directory instead of refusing it with a message about '..'", async () => {
+    const sh = mockShell(() => ({ ok: true, exitCode: 0, stdout: "## main" }));
+    await gitStatusTool.execute({ repo: "apps\\web" }, sh as never);
+    expect(sh.cwds).toEqual(["apps/web"]);
+    // …while a backslash traversal is still an escape.
+    const escaped = data(await gitStatusTool.execute({ repo: "..\\elsewhere" }, sh as never));
+    expect(escaped.ok).toBe(false);
+    expect(sh.cwds).toEqual(["apps/web"]);
+  });
+
+  it("refuses an escaping repo for the publish tools too, running nothing", async () => {
+    const sh = mockShell(() => ({ ok: true, exitCode: 0, stdout: "ok" }));
+    const pushed = data(await gitPushTool.execute({ repo: "../x" }, sh as never));
+    expect(pushed).toMatchObject({ ok: false, action: "push", error: expect.stringContaining("must be a directory inside the workspace") });
+    const committed = data(await gitCommitTool.execute({ message: "m", paths: ["a.ts"], repo: "../x" }, sh as never));
+    expect(committed).toMatchObject({ ok: false, action: "commit" });
+    expect(sh.scripts).toEqual([]);
+  });
+
+  it("still accepts a directory whose name contains dots", async () => {
+    const sh = mockShell(() => ({ ok: true, exitCode: 0, stdout: "## main" }));
+    await gitStatusTool.execute({ repo: "Builderforce.ai" }, sh as never);
+    expect(sh.cwds).toEqual(["Builderforce.ai"]);
+    expect(sh.scripts).toEqual(["git status --short --branch"]);
   });
 
   // The multi-line actions took no `repo` at all, so in a folder that CONTAINS
@@ -73,26 +123,40 @@ describe("buildGitCommand repo scoping", () => {
   // nothing about why.
   describe("multi-line actions", () => {
     for (const action of ["sync_latest", "undo", "redo"] as const) {
-      it(`${action} enters the checkout on its own line, before anything else`, () => {
-        const lines = buildGitCommand(action, { repo: "app" }).split("\n");
-        // A `cd X && Y` prefix would scope only the FIRST line of the script.
-        expect(lines[0]).toBe('cd "app" || exit 1');
-        expect(lines.length).toBeGreaterThan(1);
+      it(`${action} runs in the checkout as the shell's cwd, with its script untouched`, async () => {
+        const sh = mockShell(() => ({ ok: true, exitCode: 0, stdout: "ok" }));
+        const tool = { sync_latest: gitSyncLatestTool, undo: gitUndoTool, redo: gitRedoTool }[action];
+        await tool.execute({ repo: "app" }, sh as never);
+        expect(sh.cwds).toEqual(["app"]);
+        expect(sh.scripts[0]).toBe(buildGitCommand(action));
+        expect(sh.scripts[0]!.startsWith("cd ")).toBe(false);
       });
 
-      it(`${action} is byte-for-byte unchanged with no repo`, () => {
+      it(`${action} is the same script with no repo`, () => {
         expect(buildGitCommand(action)).toBe(buildGitCommand(action, {}));
         expect(buildGitCommand(action).startsWith("cd ")).toBe(false);
       });
 
-      it(`${action} refuses a repo that would walk out of the workspace`, () => {
-        expect(buildGitCommand(action, { repo: "../elsewhere" })).toBe(buildGitCommand(action));
+      it(`${action} refuses a repo that would walk out of the workspace`, async () => {
+        const sh = mockShell(() => ({ ok: true, exitCode: 0, stdout: "ok" }));
+        const tool = { sync_latest: gitSyncLatestTool, undo: gitUndoTool, redo: gitRedoTool }[action];
+        const out = data(await tool.execute({ repo: "../elsewhere" }, sh as never));
+        expect(out).toMatchObject({ ok: false, action, error: expect.stringContaining("must be a directory inside the workspace") });
+        // Not run at the root in its place: undo/redo would reset the WRONG repository.
+        expect(sh.scripts).toEqual([]);
       });
     }
 
-    it("sync_latest still aborts the whole script when the cd fails", () => {
-      // `set -e` follows the cd, so the guard has to be on the cd itself.
-      expect(buildGitCommand("sync_latest", { repo: "app" })).toContain("|| exit 1");
+    it("sync_latest still aborts the whole script when the checkout directory is missing", async () => {
+      // The host refuses to start a command in a directory that is not there; the script (whose
+      // own `set -e` guards the rest) is never started at the root, in ONE shell call, and the
+      // tool reports the cause rather than a misleading "not a repository" walk through candidates.
+      const sh = mockShell(() => ({ ok: false, error: "the directory 'app' does not exist in the workspace" }));
+      const out = data(await gitSyncLatestTool.execute({ repo: "app" }, sh as never));
+      expect(sh.scripts).toHaveLength(1);
+      expect(sh.cwds).toEqual(["app"]);
+      expect(out.ok).toBe(false);
+      expect(out.error).toMatch(/does not exist/);
     });
   });
 });
@@ -113,8 +177,8 @@ describe("inferRepoFromPath", () => {
 
 describe("runGitTool at a multi-checkout workspace root", () => {
   it("infers repo from a path's first segment and retries scoped", async () => {
-    const sh = mockShell((cmd) => {
-      if (cmd.startsWith('cd "Builderforce.ai"')) {
+    const sh = mockShell((_cmd, cwd) => {
+      if (cwd === "Builderforce.ai") {
         return { ok: true, exitCode: 0, stdout: "M packages/x.ts" };
       }
       return { ok: false, exitCode: 128, stdout: NOT_A_REPO };
@@ -123,7 +187,8 @@ describe("runGitTool at a multi-checkout workspace root", () => {
     expect(data(r).ok).toBe(true);
     expect(data(r).repo).toBe("Builderforce.ai");
     expect(sh.scripts[0]).toBe('git --no-pager diff -- "Builderforce.ai/packages/x.ts"');
-    expect(sh.scripts[1]).toBe('cd "Builderforce.ai" && git --no-pager diff -- "packages/x.ts"');
+    expect(sh.scripts[1]).toBe('git --no-pager diff -- "packages/x.ts"');
+    expect(sh.cwds).toEqual([undefined, "Builderforce.ai"]);
   });
 
   it("names candidate checkouts in the error and never mentions list_files", async () => {
@@ -144,8 +209,8 @@ describe("runGitTool at a multi-checkout workspace root", () => {
   });
 
   it("lets an explicit repo win over a path that would infer a different checkout", async () => {
-    const sh = mockShell((cmd) => {
-      if (cmd.startsWith('cd "other-project"')) {
+    const sh = mockShell((_cmd, cwd) => {
+      if (cwd === "other-project") {
         return { ok: true, exitCode: 0, stdout: "M foo" };
       }
       return { ok: false, exitCode: 128, stdout: NOT_A_REPO };
@@ -155,17 +220,18 @@ describe("runGitTool at a multi-checkout workspace root", () => {
       sh as never,
     );
     expect(sh.scripts).toHaveLength(1);
-    expect(sh.scripts[0]).toBe('cd "other-project" && git --no-pager diff -- "Builderforce.ai/foo.ts"');
+    expect(sh.scripts[0]).toBe('git --no-pager diff -- "Builderforce.ai/foo.ts"');
+    expect(sh.cwds).toEqual(["other-project"]);
     expect(data(r).ok).toBe(true);
     expect(data(r).repo).toBe("other-project");
   });
 });
 
-/** A shell at a multi-checkout root: only commands that `cd` into `app` find a repository. */
+/** A shell at a multi-checkout root: only commands run with `app` as their cwd find a repository. */
 function rootOfCheckouts(defaultRepo?: string) {
-  const sh = mockShell((cmd) => {
+  const sh = mockShell((cmd, cwd) => {
     if (cmd === buildListCheckoutsCommand()) return { ok: true, exitCode: 0, stdout: "app\napi\n" };
-    if (cmd.startsWith('cd "app"')) return { ok: true, exitCode: 0, stdout: "## main" };
+    if (cwd === "app") return { ok: true, exitCode: 0, stdout: "## main" };
     return { ok: false, exitCode: 128, stdout: NOT_A_REPO };
   });
   if (defaultRepo) Object.assign(sh.caps.shell, { defaultRepo });
@@ -189,13 +255,15 @@ describe("the run's default repo (ShellCapability.defaultRepo)", () => {
     const r = await gitStatusTool.execute({}, sh as never);
     expect(data(r).ok).toBe(true);
     expect(data(r).repo).toBe("app");
-    expect(sh.scripts).toEqual(["git status --short --branch", 'cd "app" && git status --short --branch']);
+    expect(sh.scripts).toEqual(["git status --short --branch", "git status --short --branch"]);
+    expect(sh.cwds).toEqual([undefined, "app"]);
   });
 
   it("an explicit repo wins over the default", async () => {
     const sh = rootOfCheckouts("api");
     const r = await gitStatusTool.execute({ repo: "app" }, sh as never);
-    expect(sh.scripts).toEqual(['cd "app" && git status --short --branch']);
+    expect(sh.scripts).toEqual(["git status --short --branch"]);
+    expect(sh.cwds).toEqual(["app"]);
     expect(data(r).repo).toBe("app");
   });
 
@@ -203,7 +271,8 @@ describe("the run's default repo (ShellCapability.defaultRepo)", () => {
     const sh = rootOfCheckouts("api");
     const r = await gitDiffTool.execute({ path: "app/src/x.ts" }, sh as never);
     expect(data(r).repo).toBe("app");
-    expect(sh.scripts[1]).toBe('cd "app" && git --no-pager diff -- "src/x.ts"');
+    expect(sh.scripts[1]).toBe('git --no-pager diff -- "src/x.ts"');
+    expect(sh.cwds[1]).toBe("app");
     expect(sh.scripts).toHaveLength(2);
   });
 
@@ -218,14 +287,16 @@ describe("the run's default repo (ShellCapability.defaultRepo)", () => {
     const sh = rootOfCheckouts("app");
     const r = await gitPushTool.execute({}, sh as never);
     expect(data(r).repo).toBe("app");
-    expect(sh.scripts[1]!.startsWith('cd "app" || exit 1\n')).toBe(true);
+    expect(sh.cwds[1]).toBe("app");
+    expect(sh.scripts[1]!.startsWith("cd ")).toBe(false);
   });
 
   it("a commit in the default checkout resolves workspace-root paths inside it", async () => {
     const sh = rootOfCheckouts("app");
     await gitCommitTool.execute({ message: "fix", paths: ["app/src/x.ts"], branch: "ticket/1-fix" }, sh as never);
     const scoped = sh.scripts[1]!;
-    expect(scoped.startsWith('cd "app" || exit 1\n')).toBe(true);
+    expect(sh.cwds[1]).toBe("app");
+    expect(scoped.startsWith("cd ")).toBe(false);
     expect(scoped).toContain("'src/x.ts'");
   });
 });
@@ -237,7 +308,8 @@ describe("a root known not to be a checkout (the verdict is cached per shell)", 
     const before = sh.scripts.length;
     const r = await gitStatusTool.execute({}, sh as never);
     expect(data(r).repo).toBe("app");
-    expect(sh.scripts.slice(before)).toEqual(['cd "app" && git status --short --branch']);
+    expect(sh.scripts.slice(before)).toEqual(["git status --short --branch"]);
+    expect(sh.cwds.slice(before)).toEqual(["app"]);
   });
 
   it("publish tools share the verdict", async () => {
@@ -246,7 +318,8 @@ describe("a root known not to be a checkout (the verdict is cached per shell)", 
     const before = sh.scripts.length;
     await gitPushTool.execute({}, sh as never);
     expect(sh.scripts.slice(before)).toHaveLength(1);
-    expect(sh.scripts[before]!.startsWith('cd "app" || exit 1\n')).toBe(true);
+    expect(sh.cwds[before]).toBe("app");
+    expect(sh.scripts[before]!.startsWith("cd ")).toBe(false);
   });
 
   it("without a default repo the root is still tried every time", async () => {

@@ -37,7 +37,7 @@
 
 import { runAgentLoop, type LoopResult } from "@builderforce/agent-loop";
 
-import type { ContextPack, RunMessage, RunOutcome } from "./contract.js";
+import { RUN_CANCELLED_REASON, type ContextPack, type RunMessage, type RunOutcome } from "./contract.js";
 import { composePolicyHooks } from "./policy/index.js";
 import { portInterruptWatch } from "./policy/steering/index.js";
 import { currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
@@ -45,7 +45,7 @@ import { asMessages, freshState, newApprovalId, resumeState } from "./runState.j
 import { completeTurn, dispatchCall, offeredSchemas, synthesizeFinal } from "./runTurn.js";
 import { settle } from "./runSettle.js";
 import { kernelHooks, readOnlyPort, type KernelRun } from "./kernelHooks.js";
-import { EMPTY_PACK, buildContextPack, systemPrompt } from "./turnContext.js";
+import { EMPTY_PACK, buildContextPack, openingRows } from "./turnContext.js";
 import { freshTally, type RunTally } from "./telemetry/runTally.js";
 
 export type { RunAgentInput } from "./runContext.js";
@@ -73,9 +73,10 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   // renders the same per-turn context tail from it rather than rebuilding (or losing) it.
   let pack: ContextPack = state.context ?? EMPTY_PACK;
   if (!resumed) {
-    // The system prompt opens the transcript the kernel drives — the task reaches the
-    // model on turn 1, and every saved state carries it.
-    transcript.splice(0, transcript.length, { role: "system", content: systemPrompt(task) });
+    // The opening rows (governance + persona, then the task as the first user turn) open
+    // the transcript the kernel drives — the task reaches the model on turn 1, and every
+    // saved state carries it.
+    transcript.splice(0, transcript.length, ...openingRows(task, policy.approvalGates));
     state.messages = transcript;
     pack = await buildContextPack(input, hooks, state, offered);
     state.context = pack;
@@ -141,7 +142,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
 
   // A Stop, or a steered stop command: the run settles cancelled, with no further turn.
   if (run.stopped || loopResult.cancelled || signal?.aborted) {
-    return settle(input, hooks, state, transcript, "failed", { reason: "cancelled" });
+    return settle(input, hooks, state, transcript, "failed", { reason: RUN_CANCELLED_REASON });
   }
   if (loopResult.awaitingInput) {
     const approvalId = loopResult.awaitingInput.approvalId ?? newApprovalId(state);

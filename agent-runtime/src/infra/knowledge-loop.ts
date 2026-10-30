@@ -196,15 +196,26 @@ export class KnowledgeLoopService {
   /**
    * Consolidate a finished run's record into its code map and write it to the shared
    * project facts store — the ONE run-end map commit for this host. Event-fed runs reach
-   * it from {@link onRunComplete}; a run whose loop keeps its own record (the Claude
-   * Agent SDK relay run, which works in a ticket workspace under `root`) calls it
-   * directly. Fire-and-forget; no-op without project credentials or a map worth keeping.
+   * it from {@link onRunComplete}; a run whose loop keeps its own record under `root`
+   * calls it directly (a run driven by the one agent hands over what the agent already
+   * consolidated: {@link commitConsolidated}). Fire-and-forget; no-op without project
+   * credentials or a map worth keeping.
    */
   commitCodeMap(knowledge: Pick<RunKnowledgeLog, "consolidate">, root: string): void {
+    if (!this.projectEvermindConfig()) return;
+    this.commitConsolidated(knowledge.consolidate({ root }));
+  }
+
+  /**
+   * Write a run-end memory the AGENT already consolidated (`policy/memory`, handed to the
+   * host through `RunStore.commitMemory`) to the same shared facts store. A consolidation
+   * with no code map (`{ key, content }`) has nothing for this store.
+   */
+  commitConsolidated(consolidated: unknown): void {
     const factsCfg = this.projectEvermindConfig();
-    if (!factsCfg) return;
-    const codeMap = knowledge.consolidate({ root });
-    if (codeMap) void pushProjectFact(factsCfg, codeMap.key, codeMap.content);
+    if (!factsCfg || !consolidated || typeof consolidated !== "object") return;
+    const { key, content } = consolidated as { key?: unknown; content?: unknown };
+    if (typeof key === "string" && typeof content === "string") void pushProjectFact(factsCfg, key, content);
   }
 
   /** Stop listening and clear accumulated state. */

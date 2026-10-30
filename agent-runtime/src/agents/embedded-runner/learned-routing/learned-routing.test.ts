@@ -8,7 +8,7 @@ import {
   recordLocalOutcome,
   HISTORY_CAPACITY,
 } from "./local-history.js";
-import { buildRunOutcomeReport, clientRunIdFor } from "./outcome-reporter.js";
+import { buildRunOutcomeReport, clientRunIdFor } from "../../../run/outcomeReporter.js";
 import { toRankStat, toScopeRanking } from "./routing-table-client.js";
 import { catalogViewFromEntries } from "../../model-catalog-view.js";
 import { seedLearnedModel } from "./index.js";

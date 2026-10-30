@@ -56,3 +56,16 @@ export {
 // The in-process steering queue as a `SteeringSource` port — what a surface that keeps
 // its composer queue in memory hands the agent (`queueRunSteering` posts to it).
 export { queueRunSteering, runSteeringSource } from "./policy/steering/index.js";
+
+// What an adapter needs to FILL the policy and to run a child (never to decide behaviour):
+// whether the user asked for sub-agents (`RunPolicy.delegation.requested`), and what a
+// child run is derived from its owner's — its policy, its capabilities, its result.
+export { asksForSubagents, childPolicy, childProvider, childResult } from "./policy/subagents/index.js";
+
+// The tools a surface granting these capabilities is offered, before the tools policy narrows them.
+export { offeredSchemas } from "./runTurn.js";
+
+// The ONE governance-gate evaluation (path-scoped `block`, synonyms across `write` /
+// `write_file` / `Write`). A surface whose own tool dispatch is not yet the agent's
+// (the embedded runner's native loop) asks it here instead of keeping a second copy.
+export { evaluatePolicyGateSeam, isPolicyRefusal, isToolWithheld, policyRefusalMessage } from "./policy/tools/gates.js";

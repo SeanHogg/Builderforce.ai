@@ -13,6 +13,17 @@ import type { Capability, CapabilityProvider } from "./capabilities.js";
 import type { ToolDefinition, ToolResult, ToolSchema, ToolContext } from "./tool.js";
 import { resolveToolAlias } from "./toolAliases.js";
 
+/**
+ * The schema a tool is OFFERED under `caps`: its own, with the description its `describeFor` picks for
+ * what the surface grants. The ONE place a capability-dependent description is applied - the registry
+ * uses it for every catalog, and a host that adapts a tool itself (the editor's spawn tools) calls it
+ * rather than reading `def.schema` and bypassing the capability.
+ */
+export function schemaForCapabilities(def: ToolDefinition, caps: ReadonlySet<Capability>): ToolSchema {
+  if (!def.describeFor) return def.schema;
+  return { ...def.schema, function: { ...def.schema.function, description: def.describeFor(caps) } };
+}
+
 export class ToolRegistry {
   private readonly tools = new Map<string, ToolDefinition>();
 
@@ -53,7 +64,7 @@ export class ToolRegistry {
   /** The OpenAI-schema array for a raw capability set (schema-only surfaces, e.g. a
    *  container that runs its own loop and just needs the advertised schema). */
   schemasForCapabilities(caps: ReadonlySet<Capability>): ToolSchema[] {
-    return this.toolsForCapabilities(caps).map((d) => d.schema);
+    return this.toolsForCapabilities(caps).map((d) => schemaForCapabilities(d, caps));
   }
 
   /** The OpenAI-schema array to send to the model for this surface. */

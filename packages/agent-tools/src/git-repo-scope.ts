@@ -24,14 +24,49 @@ export function safeGitArg(v: unknown): string | null {
 /**
  * The validated `repo` subdirectory, or null.
  *
- * Held to a stricter rule than the other args: it becomes the target of a `cd`, so a
- * `..` segment would walk OUT of the workspace rather than merely widening a diff.
+ * Held to a stricter rule than the other args: it becomes a working directory (the shell's
+ * `cwd`), so a `..` segment would walk OUT of the workspace rather than merely widening a diff.
  * `safeGitArg` permits dots (a directory really can be named `Builderforce.ai`), so
  * traversal is rejected separately here — the one place it would actually escape.
  */
 export function safeRepoArg(repo: unknown): string | null {
-  const arg = safeGitArg(repo);
-  return arg && !arg.split(/[\\/]/).includes("..") && !arg.startsWith("/") ? arg : null;
+  // A Windows-style separator is the same directory (`apps\\web` = `apps/web`), so it is
+  // normalised rather than refused with a message about `..` that does not apply.
+  const arg = safeGitArg(typeof repo === "string" ? repo.replace(/\\/g, "/") : repo);
+  return arg && !arg.split("/").includes("..") && !arg.startsWith("/") ? arg : null;
+}
+
+/**
+ * The refusal for a `repo` the caller NAMED that is not a safe workspace-relative directory, or
+ * null when `repo` is absent or fine. An explicit repo that cannot be honoured must stop the
+ * tool, never fall back to running at the workspace root: for git_undo / git_redo that would reset
+ * a DIFFERENT repository than the one asked for.
+ */
+export function invalidRepoResult(action: string, repo: unknown): ToolResult | null {
+  // "" is an absent repo; whitespace-only is a repo that cannot be honoured, so it is refused.
+  if (typeof repo !== "string" || repo === "" || safeRepoArg(repo) !== null) return null;
+  return { data: { ok: false, action, error: `repo '${repo}' must be a directory inside the workspace (no '..', not absolute), so nothing was run` } };
+}
+
+/**
+ * `command` run inside the workspace-relative directory `dir`, for a host whose exec transport
+ * takes only a command line (the cloud sandbox's remote POSIX sh, the in-browser runtime's `bfsh`)
+ * and so cannot be handed a working directory. Every other host spawns the process with the
+ * directory (`ShellRunOptions.cwd`); this is that rule's fallback, in ONE place.
+ *
+ * Returns the command untouched for no directory (or the root), and `null` when `dir` is not a
+ * safe workspace-relative directory — the caller refuses; a command is never run at the root in
+ * place of the directory that was asked for. The directory goes in as a GUARDED LEADING LINE
+ * (`cd "./dir" || exit 1`): the one-liner `cd "dir" && a; b` would run `b` at the root when the
+ * `cd` fails. There is NO `--`: bfsh's `cd` (the in-browser shell) takes its first argument
+ * literally and would look for a directory named `--`. The `./` prefix plus the refusal of a
+ * leading `-` already keep a directory named like an option from being read as one.
+ */
+export function posixCommandIn(dir: string | undefined, command: string): string | null {
+  if (!dir || dir === ".") return command;
+  const safe = safeRepoArg(dir);
+  if (!safe || safe.startsWith("-")) return null;
+  return `cd "./${safe}" || exit 1\n${command}`;
 }
 
 /**
@@ -48,19 +83,6 @@ export function inferRepoFromPath(path?: string): string | null {
   const parts = path.split(/[\\/]/).filter((s) => s.length > 0 && s !== ".");
   if (parts.length < 2) return null;
   return safeRepoArg(parts[0]);
-}
-
-/**
- * Scope a multi-line script into a repository subdirectory.
- *
- * A multi-line script cannot take the `cd X && Y` prefix — that would scope only its
- * FIRST line — so the `cd` becomes a guarded leading statement instead. Every script
- * that goes through here already requires a POSIX shell (they use `$(…)` and `[ … ]`),
- * which is what makes a bare `cd` line safe here and not for the one-liners.
- */
-export function repoScopedScript(script: string, repo: unknown): string {
-  const dir = safeRepoArg(repo);
-  return dir ? `cd "${dir}" || exit 1\n${script}` : script;
 }
 
 /**
@@ -117,7 +139,7 @@ export function notARepoResult(action: string, candidates: string[] = []): ToolR
 }
 
 export type GitShellCtx = {
-  caps: { shell?: { run(c: string, opts?: { signal?: AbortSignal }): Promise<{ ok: boolean; stdout?: string; exitCode?: number; error?: string }>; trackedBranch?: string; defaultRepo?: string } };
+  caps: { shell?: { run(c: string, opts?: { signal?: AbortSignal; cwd?: string }): Promise<{ ok: boolean; stdout?: string; exitCode?: number; error?: string }>; trackedBranch?: string; defaultRepo?: string } };
   /** The call's Stop (`ToolContext.signal`): a git command in flight is killed with the run. */
   signal?: AbortSignal;
 };
@@ -125,15 +147,19 @@ export type GitShellCtx = {
 /**
  * Run one command through the call's shell WITH the call's Stop (`ToolContext.signal`,
  * PRD 35 E10): a hung `git push`, an analyzer or a build dies with the run instead of
- * holding it to the shell's timeout. No signal ⇒ the shell is called exactly as before.
+ * holding it to the shell's timeout. `cwd` is the (validated, workspace-relative) directory the
+ * command runs in — handed to the shell as an option, never prefixed to the command. Neither a
+ * signal nor a cwd ⇒ the shell is called exactly as before.
  * The one way a tool runs a shell command.
  */
 export function shellRunWithStop<R>(
-  ctx: { caps: { shell?: { run(c: string, opts?: { signal?: AbortSignal }): Promise<R> } }; signal?: AbortSignal },
+  ctx: { caps: { shell?: { run(c: string, opts?: { signal?: AbortSignal; cwd?: string }): Promise<R> } }; signal?: AbortSignal },
   command: string,
+  cwd?: string,
 ): Promise<R> {
   const shell = ctx.caps.shell!;
-  return ctx.signal ? shell.run(command, { signal: ctx.signal }) : shell.run(command);
+  const opts = { ...(ctx.signal ? { signal: ctx.signal } : {}), ...(cwd ? { cwd } : {}) };
+  return Object.keys(opts).length > 0 ? shell.run(command, opts) : shell.run(command);
 }
 
 /** The run's resolved default checkout (`ShellCapability.defaultRepo`), validated — the

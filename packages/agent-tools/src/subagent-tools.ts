@@ -17,13 +17,13 @@
 import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
 import type { SubagentResult } from "./capabilities.js";
 import { delegationRole, MODEL_ROLES, MODEL_ROLE_DESCRIPTIONS } from "./modelRoles.js";
-import { LIVE_DELEGATION_NOTE, LIVE_FANOUT_NEXT, SUBAGENT_CONTROL_TOOLS } from "./live-subagent-tools.js";
+import { LIVE_DELEGATION_NOTE, LIVE_FANOUT_NEXT, SUBAGENT_CONTROL_TOOLS, withDelegationNote } from "./live-subagent-tools.js";
 
 const ROLE_ENUM_DESCRIPTION = MODEL_ROLES
   .map((role) => `${role} — ${MODEL_ROLE_DESCRIPTIONS[role]}`)
   .join(" · ");
 
-export const spawnAgentTool: ToolDefinition = defineTool({
+export const spawnAgentTool: ToolDefinition = withDelegationNote(defineTool({
   name: "spawn_agent",
   description:
     "Delegate a self-contained sub-task to a child agent that works in its OWN context and reports back when it is done. Use it when finding something out would take many turns you do not want to carry — locating where a behaviour lives across an unfamiliar tree, checking whether a pattern is used anywhere else, summarising a large file you only need one fact from. The child sees NOTHING of this conversation, so `task` must state everything it needs to know, and it answers in prose — it cannot hand you files or tool output. Do NOT delegate work you can do in a turn or two. The child is a clone of you: it holds every tool you hold and carries its slice out end to end — investigating, editing, running commands, recording the work. You remain accountable for what ships, so check what it reports. " + LIVE_DELEGATION_NOTE,
@@ -71,7 +71,7 @@ export const spawnAgentTool: ToolDefinition = defineTool({
     })) as SubagentResult;
     return { data: r as unknown as Record<string, unknown>, ...(r.ok ? {} : { isError: true }) };
   },
-});
+}));
 
 // ── Several children, side by side ──────────────────────────────────────────────
 //
@@ -127,7 +127,7 @@ export function parseWorkstreams(raw: unknown): Workstream[] | string {
   return out;
 }
 
-export const spawnAgentsTool: ToolDefinition = defineTool({
+export const spawnAgentsTool: ToolDefinition = withDelegationNote(defineTool({
   name: SPAWN_AGENTS_TOOL,
   description:
     `Run SEVERAL independent workstreams side by side — up to ${MAX_WORKSTREAMS} child agents at once, each in its own context, each reporting back to the chat. ` +
@@ -183,7 +183,7 @@ export const spawnAgentsTool: ToolDefinition = defineTool({
       },
     };
   },
-});
+}));
 
 /** The delegation tools, for a surface that backs `orchestrate`. The owner's verbs
  *  require `orchestrate.live`, so they are offered only where children run live. */

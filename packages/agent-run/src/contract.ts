@@ -177,6 +177,7 @@ export type RunEvent =
   | { kind: 'tool.dispatched'; step: number; tool: string; ok: boolean }
   | { kind: 'steer.applied'; step: number }          // one per steered message, before the turn it reaches (§6.3)
   | { kind: 'model.preflight'; step: number; status: 'ok' | 'refreshed' | 'degraded'; notices: string[] }  // once, before turn 1 (§6.10)
+  | { kind: 'policy.blocked'; step: number; tool: string; gateId: string; reason: string }  // a governance gate refused a call
   | { kind: 'llm.model_downgrade'; step: number; requestedModel: string; model: string; reason: string }  // a turn answered by another model than expected (E7)
   | { kind: 'turn.finished'; step: number }
   | { kind: 'run.finished'; step: number; outcome: RunOutcomeKind };
@@ -186,6 +187,8 @@ export type RunEvent =
 export interface RunOutcomeRow {
   entryPoint: string;
   runId?: string;
+  /** Set on a SUB-AGENT's row: the run that spawned it (`RunTask.dispatch.parentRunId`), so a child is never counted as a second run of its owner. */
+  parentRunId?: string;
   steps: number;
   toolCalls: number;
   toolErrors: number;
@@ -219,6 +222,12 @@ export interface RunOutcomeRow {
   unkeptReadyClaims?: number;
   /** The A3 progress trips, by signal ({ signal: count }). */
   progressTrips?: Record<string, number>;
+  /** Present (true) only when the run was STOPPED (a user Stop, a steered stop, a cancelled owner) - not a failure of the work. */
+  cancelled?: boolean;
+  /** Present (true) only when the run died on a provider rate limit - an availability signal, not a quality one. */
+  rateLimited?: boolean;
+  /** Present (true) only when the run was served by a WEAKER model than it asked for (a recorded downgrade). A failover onto a model of the same standing (or one the price book cannot rank), and a preflight note, are not recorded as a downgrade. */
+  degraded?: boolean;
 }
 
 /** Where the run's events go: the live trace, the timeline, the relay frames. */
@@ -230,15 +239,15 @@ export interface EventSink {
 
 /** What a human said, or that the run is waiting for one. */
 export type HumanAnswer =
-  | { kind: 'answered'; answer: string }
-  | { kind: 'paused' };
+  | { kind: 'answered'; answer: string; approved?: boolean }  // approved: the STRUCTURED decision of an approval (never read from the answer text)
+  | { kind: 'paused'; approvalId?: string };  // approvalId: the record the surface parked the run on, when it created one
 
 /** How people are reached: the tool-confirm gate, the approval bar, the relay ask. */
 export interface HumanChannel {
   /** Ask a question. `paused` parks the run until the answer arrives. */
   ask(question: string, options?: readonly string[]): Promise<HumanAnswer>;
   /** Approve a gate. Optional: a surface with no approvals omits it. */
-  approve?(gate: PolicyGate): Promise<HumanAnswer>;
+  approve?(gate: PolicyGate, call?: { tool: string; args: Record<string, unknown>; reason?: string }): Promise<HumanAnswer>;
 }
 
 /** One steered message, as a port that knows more than its text hands it over. */
@@ -287,6 +296,9 @@ export interface ContextPack {
 }
 
 // ── The outcome ───────────────────────────────────────────────────────────────
+
+/** The `failed` reason of a run that was stopped (Stop, an abort, or a steered stop command). */
+export const RUN_CANCELLED_REASON = "cancelled";
 
 export type RunOutcomeKind = 'finished' | 'paused' | 'yielded' | 'failed';
 
@@ -387,10 +399,12 @@ export interface RunState {
   compaction: CompactionState;
   writtenPaths: string[];
   askedGates: string[];
+  approvedCalls?: string[];        // WS2c: the `require-approval` calls a person already decided (one policyGateCallKey each)
   reads: ReadCoverageState;        // the windows the model was SERVED (post-trim), plus the read-without-spawn count
   context?: ContextPack;           // the pack built once before turn 1 (§6.10); a resumed tick renders the same turn-context tail from it
   stall?: StallState;              // WS2b: the re-prompt budget, keyed by model
   preflight?: string;              // WS2g: the model preflight's verdict — ok | refreshed | degraded:<reason> (§8.2 modelPreflight)
-  downgrades?: string[];           // WS2g: auto-routed models already reported by llm.model_downgrade (once per served model)
+  downgrades?: string[];           // WS2g: auto-routed models already ANNOUNCED by llm.model_downgrade (once per served model) - the announcement dedupe, not the row's fact
+  degradedBy?: string[];           // the served models that were WEAKER than the run asked for (an auto-routed downgrade, or a pinned failover onto a worse tier): what makes the row `degraded`
   telemetry?: RunTally;            // WS6: the per-run counters the §8.2 row reads, summed across ticks
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ShellCapability, ShellJobStatus } from "./capabilities.js";
 import { runCommandTool } from "./core-tools.js";
-import { commandStatusTool, commandStopTool, cwdArg, scopeCommand } from "./shell-tools.js";
+import { commandStatusTool, commandStopTool, cwdArg } from "./shell-tools.js";
 import type { ToolContext } from "./tool.js";
 
 function ctxWith(shell: Partial<ShellCapability> & Pick<ShellCapability, "run">, signal?: AbortSignal): ToolContext & { caps: { shell: ShellCapability } } {
@@ -11,13 +11,14 @@ function ctxWith(shell: Partial<ShellCapability> & Pick<ShellCapability, "run">,
   } as never;
 }
 
-const okRun = () => vi.fn(async (_command: string, _opts?: { signal?: AbortSignal }) => ({ ok: true, exitCode: 0, stdout: "done" }));
+const okRun = () => vi.fn(async (_command: string, _opts?: { signal?: AbortSignal; cwd?: string }) => ({ ok: true, exitCode: 0, stdout: "done" }));
 
 describe("run_command — where it runs (PRD 35 E3)", () => {
   it("runs in the run's default checkout and says so", async () => {
     const run = okRun();
     const r = await runCommandTool.execute({ command: "npm test" }, ctxWith({ run, defaultRepo: "app" }));
-    expect(run).toHaveBeenCalledWith('cd "app" && npm test');
+    // The directory is the shell's working directory (an option), never a `cd` in the command.
+    expect(run).toHaveBeenCalledWith("npm test", { cwd: "app" });
     expect(r.data.cwd).toBe("app");
   });
 
@@ -25,7 +26,7 @@ describe("run_command — where it runs (PRD 35 E3)", () => {
     const run = okRun();
     await runCommandTool.execute({ command: "npm test", cwd: "api/" }, ctxWith({ run, defaultRepo: "app" }));
     await runCommandTool.execute({ command: "ls", cwd: "." }, ctxWith({ run, defaultRepo: "app" }));
-    expect(run.mock.calls.map((c) => c[0])).toEqual(['cd "api" && npm test', "ls"]);
+    expect(run.mock.calls).toEqual([["npm test", { cwd: "api" }], ["ls"]]);
   });
 
   it("refuses a cwd outside the workspace without running anything", async () => {
@@ -49,8 +50,19 @@ describe("run_command — where it runs (PRD 35 E3)", () => {
     expect(run).toHaveBeenCalledWith("npm test");
   });
 
-  it("scopes a multi-line script with a guarded leading cd", () => {
-    expect(scopeCommand("set -e\nnpm test", "app")).toBe('cd "app" || exit 1\nset -e\nnpm test');
+  it("hands a multi-line script to the shell untouched, with the directory as its cwd", async () => {
+    const run = okRun();
+    await runCommandTool.execute({ command: "set -e\nnpm test", cwd: "app" }, ctxWith({ run }));
+    expect(run).toHaveBeenCalledWith("set -e\nnpm test", { cwd: "app" });
+  });
+
+  it("starts a background job in the directory too", async () => {
+    const start = vi.fn(async (_command: string, _opts?: { cwd?: string }) => ({ ok: true, id: "j1" }));
+    await runCommandTool.execute({ command: "npm run dev", cwd: "app", background: true }, ctxWith({ run: okRun(), start, poll: vi.fn() }));
+    expect(start).toHaveBeenCalledWith("npm run dev", { cwd: "app" });
+  });
+
+  it("reads the cwd argument", () => {
     expect(cwdArg(undefined)).toBeUndefined();
     expect(cwdArg("./app")).toBe("app");
     expect(cwdArg("..")).toBeNull();

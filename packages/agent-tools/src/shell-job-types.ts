@@ -7,6 +7,15 @@
 
 export interface ShellRunOptions {
   /**
+   * The directory the command runs in: a WORKSPACE-RELATIVE path, already validated by the
+   * tool (no `..`, not absolute, no shell metacharacters). The host spawns the command with
+   * that working directory — the command text is never prefixed with a `cd`, because `cd X &&
+   * cmd` is not one language (Windows PowerShell 5.1 cannot parse `&&`). Omitted ⇒ the
+   * workspace root. A host whose transport cannot take a working directory scopes the command
+   * itself, behind its own adapter.
+   */
+  cwd?: string;
+  /**
    * The run's (or the step's) cancel signal. Aborting it kills the command — its whole
    * process tree — and the result comes back `{ ok: false, aborted: true }`. A shell that
    * cannot kill simply finishes; the caller still drops the late result.

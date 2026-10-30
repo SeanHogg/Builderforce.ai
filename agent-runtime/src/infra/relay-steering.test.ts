@@ -1,18 +1,5 @@
-import { describe, expect, it } from "vitest";
-import {
-  buildSteeringMessage,
-  createSteeringChannel,
-  normalizeSteeringText,
-} from "./relay-steering.js";
-
-async function collect<T>(iterable: AsyncIterable<T>, max: number): Promise<T[]> {
-  const out: T[] = [];
-  for await (const item of iterable) {
-    out.push(item);
-    if (out.length >= max) break;
-  }
-  return out;
-}
+import { describe, expect, it, vi } from "vitest";
+import { createSteeringChannel, normalizeSteeringText } from "./relay-steering.js";
 
 describe("normalizeSteeringText", () => {
   it("trims usable text and rejects empty / whitespace-only / non-string", () => {
@@ -24,73 +11,54 @@ describe("normalizeSteeringText", () => {
   });
 });
 
-describe("buildSteeringMessage", () => {
-  it("builds a top-level SDK user turn", () => {
-    expect(buildSteeringMessage("tighten the error handling")).toEqual({
-      type: "user",
-      message: { role: "user", content: "tighten the error handling" },
-      parent_tool_use_id: null,
-    });
-  });
-});
-
 describe("createSteeringChannel", () => {
-  it("yields the task prompt first, then steers in push order, and ends on close", async () => {
-    const ch = createSteeringChannel();
-    const applied: string[] = [];
-    const it = ch.messages("build the feature", (t) => applied.push(t))[Symbol.asyncIterator]();
-
-    expect((await it.next()).value.message.content).toBe("build the feature");
-    expect(applied).toEqual([]);
-
-    expect(ch.push("  add tests  ")).toBe(true);
-    expect(ch.push("then document it")).toBe(true);
-    expect(ch.pending()).toBe(2);
-
-    expect((await it.next()).value.message.content).toBe("add tests");
-    expect((await it.next()).value.message.content).toBe("then document it");
-    expect(applied).toEqual(["add tests", "then document it"]);
-    expect(ch.pending()).toBe(0);
-
-    ch.close();
-    expect((await it.next()).done).toBe(true);
-  });
-
-  it("wakes a consumer waiting on an empty queue when a steer arrives", async () => {
-    const ch = createSteeringChannel();
-    const it = ch.messages("start")[Symbol.asyncIterator]();
-    await it.next();
-
-    const pending = it.next();
-    ch.push("steer now");
-    expect((await pending).value.message.content).toBe("steer now");
-  });
-
-  it("wakes a consumer waiting on an empty queue when the channel closes", async () => {
-    const ch = createSteeringChannel();
-    const it = ch.messages("start")[Symbol.asyncIterator]();
-    await it.next();
-
-    const pending = it.next();
-    ch.close();
-    expect((await pending).done).toBe(true);
-  });
-
-  it("refuses pushes after close and drains queued steers before ending", async () => {
-    const ch = createSteeringChannel();
-    ch.push("queued before close");
-    ch.close();
-    expect(ch.closed()).toBe(true);
-    expect(ch.push("too late")).toBe(false);
-
-    const msgs = await collect(ch.messages("start"), 10);
-    expect(msgs.map((m) => m.message.content)).toEqual(["start", "queued before close"]);
-  });
-
   it("ignores unusable text without queueing", () => {
     const ch = createSteeringChannel();
     expect(ch.push("   ")).toBe(false);
     expect(ch.push(undefined)).toBe(false);
     expect(ch.pending()).toBe(0);
+  });
+
+  it("drains the queued steers oldest first, once", () => {
+    const ch = createSteeringChannel();
+    expect(ch.push("  add tests  ")).toBe(true);
+    expect(ch.push("then document it")).toBe(true);
+    expect(ch.pending()).toBe(2);
+    expect(ch.drain()).toEqual(["add tests", "then document it"]);
+    expect(ch.pending()).toBe(0);
+    expect(ch.drain()).toEqual([]);
+  });
+
+  it("refuses pushes once closed, and still hands back what was queued before the close", () => {
+    const ch = createSteeringChannel();
+    ch.push("queued before close", 7);
+    ch.close();
+    expect(ch.closed()).toBe(true);
+    expect(ch.push("too late")).toBe(false);
+    expect(ch.takeAll()).toEqual([{ text: "queued before close", messageId: 7 }]);
+    expect(ch.takeAll()).toEqual([]);
+  });
+
+  it("tells a listener the moment a steer is queued, until it unsubscribes", () => {
+    const ch = createSteeringChannel();
+    const listener = vi.fn();
+    const off = ch.onPush(listener);
+    ch.push("first");
+    expect(listener).toHaveBeenCalledTimes(1);
+    off();
+    ch.push("second");
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("a listener that throws neither fails the push, loses the steer, nor starves the listeners after it", () => {
+    const ch = createSteeringChannel();
+    const after = vi.fn();
+    ch.onPush(() => {
+      throw new Error("listener bug");
+    });
+    ch.onPush(after);
+    expect(ch.push("still queued")).toBe(true);
+    expect(after).toHaveBeenCalledTimes(1);
+    expect(ch.drain()).toEqual(["still queued"]);
   });
 });

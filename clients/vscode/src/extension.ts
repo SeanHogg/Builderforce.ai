@@ -59,7 +59,7 @@ import { MeetingsTreeProvider, joinMeetingInBrowser, joinMeetingNative, openMeet
 import { ProjectContextTreeProvider } from "./projectContextTree";
 import { registerSidebarViews } from "./sidebarViews";
 import { PendingChangesController } from "./pendingChangesTree";
-import { posixShellReport } from "./posixShell";
+import { posixShellReport } from "@builderforce/agent-tools/node-posix-shell";
 import { editWorkspaceHooks } from "./hooks/editorDirectives";
 import { buildIdentityReport } from "./buildIdentityReport";
 import { initErrorReporter, reportExtensionError, surfaceError } from "./errorReporter";

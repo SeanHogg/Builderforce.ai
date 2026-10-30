@@ -9,7 +9,8 @@
 import * as path from "path";
 import type { ChildProcess } from "child_process";
 import type { ShellJobStart, ShellJobStatus, ShellResult } from "@builderforce/agent-tools";
-import { needsPosixShell, findBash, posixShellOption, cmdCannotRun } from "./posixShell";
+import { posixRoute, runRouted } from "@builderforce/agent-tools/node-posix-shell";
+import { resolveShellCwd } from "@builderforce/agent-tools/node-path";
 import { spawnCommand, stopCommand } from "./processTree";
 import { killJob, pollJob, startJob, type JobOwner } from "./localShellJobs";
 
@@ -57,6 +58,13 @@ function collect(child: ChildProcess, onOverflow: () => void): Promise<Exited> {
 }
 
 export interface LocalShellOptions {
+  /**
+   * The directory this command runs in: a workspace-relative path (already validated by the
+   * tool: no `..`, not absolute). The command is spawned WITH that working directory — it is
+   * never prefixed with a `cd`, which `cmd.exe` and Windows PowerShell 5.1 do not share a
+   * grammar for. Omitted ⇒ the shell's root.
+   */
+  cwd?: string;
   /** Wall-clock bound for this command; defaults to {@link RUN_TIMEOUT_MS}. */
   timeoutMs?: number;
   /** Extra environment for this command, layered over the editor's own. */
@@ -78,12 +86,6 @@ export interface LocalShell {
   kill(id: string): Promise<ShellJobStatus>;
 }
 
-/** The POSIX-shell refusal, shared by the foreground and background paths. */
-const NO_POSIX_SHELL =
-  "this command needs a POSIX shell (it uses set -e / $(…) / [ … ], or a unix utility such as head/grep/sed that cmd.exe does not have) "
-  + "and no POSIX shell was found on this Windows machine. "
-  + "Install Git for Windows (which ships bash), or re-run the work as plain single-line commands instead.";
-
 const aborted = (out: string): ShellResult => ({
   ok: false,
   aborted: true,
@@ -98,7 +100,7 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
   const owner = opts.jobOwner;
 
   /** Execute once, in a named interpreter. `bash` null ⇒ the platform default shell. */
-  async function execOnce(command: string, bash: string | null, options: LocalShellOptions): Promise<ShellResult> {
+  async function execOnce(command: string, bash: string | null, options: LocalShellOptions, dir: string): Promise<ShellResult> {
     const timeout = options.timeoutMs ?? RUN_TIMEOUT_MS;
     const signal = options.signal;
     if (signal?.aborted) return aborted("");
@@ -108,7 +110,7 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
     // `spawnCommand` puts it in its own process group, so Stop can kill the group.
     let child: ChildProcess;
     try {
-      child = spawnCommand(command, bash, { cwd, ...(options.env ? { env: { ...process.env, ...options.env } } : {}) });
+      child = spawnCommand(command, bash, { cwd: dir, ...(options.env ? { env: { ...process.env, ...options.env } } : {}) });
     } catch (e) {
       return { ok: false, exitCode: 1, stdout: e instanceof Error ? e.message : String(e) };
     }
@@ -147,33 +149,19 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
 
   return {
     async run(command: string, options: LocalShellOptions = {}): Promise<ShellResult> {
-      // A POSIX script with no POSIX shell to run it must say so. Letting it through
-      // hands the script to `cmd.exe`, which parses `set -e` as its own builtin and
-      // fails with "Environment variable -e not defined" — a message that names
-      // neither the cause nor anything the agent could do about it.
-      if (needsPosixShell(command) && !findBash()) {
-        return { ok: false, error: NO_POSIX_SHELL };
-      }
-      const bash = posixShellOption(command).shell ?? null;
-      const first = await execOnce(command, bash, options);
-      // A stopped command is never started again under another interpreter.
-      if (first.ok || bash || first.aborted) return first;
-      // cmd.exe could not even ATTEMPT the command — an unlisted unix utility, a
-      // single-quoted argument, a `$VAR`. `needsPosixShell` is a whitelist and will
-      // always be incomplete, so the failure that reaches the agent must not be
-      // `'head' is not recognized as an internal or external command`: retry once in
-      // bash, which is what the command was written for. A genuine non-zero exit from
-      // a program that DID run (a failing build) does not match, so nothing that
-      // legitimately failed is run twice.
-      const retryBash = findBash();
-      if (!retryBash || !cmdCannotRun(first.stdout ?? "") || options.signal?.aborted) return first;
-      return execOnce(command, retryBash, options);
+      const where = resolveShellCwd(cwd, options.cwd);
+      if (!where.ok) return { ok: false, error: where.error };
+      // Which interpreter, and the one cmd→bash retry, are THE shared routing rule.
+      return runRouted(command, (bash) => execOnce(command, bash, options, where.dir), options.signal);
     },
     async start(command: string, options: LocalShellOptions = {}): Promise<ShellJobStart> {
-      if (needsPosixShell(command) && !findBash()) return { ok: false, error: NO_POSIX_SHELL };
+      const route = posixRoute(command);
+      if ("error" in route) return { ok: false, error: route.error };
+      const where = resolveShellCwd(cwd, options.cwd);
+      if (!where.ok) return { ok: false, error: where.error };
       return startJob(command, {
-        cwd,
-        bash: posixShellOption(command).shell ?? null,
+        cwd: where.dir,
+        bash: route.bash,
         maxOutput: RUN_MAX_OUTPUT,
         ...(owner !== undefined ? { owner } : {}),
         ...(options.env ? { env: options.env } : {}),

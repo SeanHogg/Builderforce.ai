@@ -16,10 +16,10 @@ import {
 } from "@builderforce/agent-loop";
 import { RunKnowledgeRecorder } from "@builderforce/agent-tools";
 import {
-  evaluateOnPremPolicyGate,
+  evaluatePolicyGateSeam as evaluateOnPremPolicyGate,
   isPolicyRefusal,
   policyRefusalMessage,
-} from "../../agents/policy-gate-seam.js";
+} from "@builderforce/agent-run";
 import type {
   AgentContext,
   AgentEvent,

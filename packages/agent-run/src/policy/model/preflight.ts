@@ -16,7 +16,7 @@
  * No `node:*`, no DOM. The hook halves read their port and the run state; the rest is pure.
  */
 
-import { isAgenticTier, listPriceOf, resolveModelTier, snapshotPriceBook, type ModelTier, type PriceBook } from "@builderforce/model-catalog";
+import { isAgenticTier, isWeakerModel, listPriceOf, resolveModelTier, snapshotPriceBook, type ModelTier, type PriceBook } from "@builderforce/model-catalog";
 import type { ModelPreflightResult, RunEvent } from "../../contract.js";
 import type { PolicyContext } from "../hooks.js";
 
@@ -191,6 +191,12 @@ export async function runModelPreflight(ctx: PolicyContext): Promise<ModelPrefli
   return event;
 }
 
+/** The row's fact: this served model was weaker than the run asked for (once per model). */
+function recordWeaker(ctx: PolicyContext, served: string): void {
+  const recorded = ctx.state.degradedBy ?? [];
+  if (!recorded.includes(served)) ctx.state.degradedBy = [...recorded, served];
+}
+
 /**
  * `llm.model_downgrade` for one turn (PRD 35 E7):
  *  - a turn that ASKED for a model (a pin, a lock, the phase default) answered by another
@@ -198,11 +204,17 @@ export async function runModelPreflight(ctx: PolicyContext): Promise<ModelPrefli
  *  - an AUTO-ROUTED turn (asked for nothing) while the preflight found a connected account
  *    it could not use, or a plan-phase turn (no code changed yet) that landed on a
  *    Flash-class model — said once per served model per run (`RunState.downgrades`).
+ * Either that lands on a WEAKER model than asked is also recorded in `RunState.degradedBy`,
+ * which is what the outcome row's `degraded` reads.
  */
-export function modelDowngrade(ctx: PolicyContext, requested: string | undefined, served: string | undefined): ModelDowngradeEvent | undefined {
+export function modelDowngrade(ctx: PolicyContext, requested: string | undefined, served: string | undefined, book: PriceBook = snapshotPriceBook()): ModelDowngradeEvent | undefined {
   if (!served || served === "default") return undefined;
   if (requested && requested !== "default") {
     if (served === requested) return undefined;
+    // A failover onto a WEAKER model is a fact the outcome row carries (once per served model). It is
+    // NOT an announcement of the auto-routed kind, so it never enters `downgrades` (that list dedupes
+    // those announcements and must not be suppressed by a pinned failover).
+    if (isWeakerModel(requested, served, book)) recordWeaker(ctx, served);
     return { kind: "llm.model_downgrade", step: ctx.step, requestedModel: requested, model: served, reason: "failover" };
   }
   if ((ctx.state.downgrades ?? []).includes(served)) return undefined;
@@ -211,5 +223,7 @@ export function modelDowngrade(ctx: PolicyContext, requested: string | undefined
   const flash = !byo && ctx.state.writtenPaths.length === 0 ? planModelWarning(served) : null;
   if (!byo && !flash) return undefined;
   ctx.state.downgrades = [...(ctx.state.downgrades ?? []), served];
+  // An auto-routed downgrade is weaker than asked by definition (a connected account unusable, or a Flash-class plan model).
+  recordWeaker(ctx, served);
   return { kind: "llm.model_downgrade", step: ctx.step, requestedModel: "default", model: served, reason: byo ? `byo_unresolved:${byo}` : `plan_tier:${flash!.tier}` };
 }

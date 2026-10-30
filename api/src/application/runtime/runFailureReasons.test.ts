@@ -3,6 +3,7 @@ import {
   classifyRunFailure, rollUpRunFailures, isPlatformFailure, RUN_FAILURE_LABEL,
   type RunFailureClass,
 } from './runFailureReasons';
+import { runSpendLimitMessage, runTokenLimitMessage } from '../../domain/containment/runLimits';
 import {
   CLOUD_ORPHAN_REASON, CLOUD_LONG_LIVED_ORPHAN_REASON, INFRA_EVICTION_REASON,
   GITHUB_ACTIONS_NEVER_SCHEDULED_REASON, PAUSED_ORPHAN_REASON, HOST_ORPHAN_REASON,
@@ -67,6 +68,34 @@ describe('run failure classification', () => {
     expect(classifyRunFailure('401 Unauthorized: invalid api key')).toBe('auth_failed');
     expect(classifyRunFailure('merge conflict: cannot apply')).toBe('repo_error');
     expect(classifyRunFailure('no model available for this request')).toBe('model_unavailable');
+  });
+
+  it('does not read a tenant\'s own spent token cap (also a 429) as a provider rate limit', () => {
+    // The shared rate-limit rule (`isRateLimitFailure`, @builderforce/learned-routing) excludes the gateway's
+    // budget 429s: the customer used their allowance, no model was throttled.
+    expect(classifyRunFailure('HTTP 429: Plan daily token limit reached (50,000 tokens).')).toBe('quota_exhausted');
+    expect(classifyRunFailure('HTTP 529: over capacity')).toBe('rate_limited');
+  });
+
+  it('a run that hit its OWN per-run cap is run_cap_reached - the tenant did not run out, the run looped', () => {
+    // Built by the SAME message builders `checkRunLimits` writes with, not a hand-copied string.
+    expect(classifyRunFailure(runTokenLimitMessage(250_000, 200_000))).toBe('run_cap_reached');
+    expect(classifyRunFailure(runSpendLimitMessage(900_000, 800_000))).toBe('run_cap_reached');
+    expect(classifyRunFailure(`Run stopped: ${runTokenLimitMessage(2_100_000, 2_000_000)}`)).toBe('run_cap_reached');
+    // …while the TENANT's plan allowance is quota_exhausted, in the gateway's own words.
+    expect(classifyRunFailure('Plan daily token limit reached (200,000 tokens).')).toBe('quota_exhausted');
+    expect(classifyRunFailure('Plan monthly token allowance reached (2,000,000 tokens).')).toBe('quota_exhausted');
+    expect(classifyRunFailure('Monthly cloud-run allowance reached (50/50 on the free plan).')).toBe('quota_exhausted');
+    // A per-run cap is not the platform's fault either.
+    expect(isPlatformFailure('run_cap_reached')).toBe(false);
+  });
+
+  it('classifies each tenant-budget 429 body (with its code) as quota_exhausted, and a provider throttle as rate_limited', () => {
+    for (const code of ['plan_monthly_token_limit_exceeded', 'member_spend_cap_exceeded', 'premium_daily_cap_exceeded', 'agent_host_token_limit_exceeded', 'image_credit_limit_exceeded']) {
+      expect(classifyRunFailure(`chat completion failed with HTTP 429: {"code":"${code}","terminal":true}`), code).toBe('quota_exhausted');
+    }
+    // OpenAI's own throttle code is NOT a tenant budget.
+    expect(classifyRunFailure('chat completion failed with HTTP 429: {"error":{"code":"rate_limit_exceeded"}}')).toBe('rate_limited');
   });
 
   /**

@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { PolicyGate } from "@builderforce/agent-tools";
 import {
-  canUseToolDecision,
-  evaluateOnPremPolicyGate,
+  evaluatePolicyGateSeam as evaluateOnPremPolicyGate,
   policyRefusalMessage,
-} from "./policy-gate-seam.js";
+} from "@builderforce/agent-run";
 
 const PATH_BLOCK: PolicyGate = {
   id: "no-secrets",
@@ -78,16 +77,18 @@ describe("evaluateOnPremPolicyGate", () => {
   });
 });
 
+// The deleted SDK `canUseToolDecision` cases, asked of the one evaluation: the SDK's tool
+// name (`Write`) against a gate authored for the catalog's (`write_file`).
 describe("canUseToolDecision", () => {
   it("denies a path-scoped write_file block", () => {
-    const d = canUseToolDecision([PATH_BLOCK], "Write", { path: "secrets/key.txt" });
-    expect(d.behavior).toBe("deny");
-    if (d.behavior === "deny") expect(d.message).toContain("no-secrets");
+    const d = evaluateOnPremPolicyGate([PATH_BLOCK], "Write", { path: "secrets/key.txt" });
+    expect(d.action).toBe("block");
+    if (d.action === "block") expect(policyRefusalMessage(d)).toContain("no-secrets");
   });
 
   it("allows a write outside the glob", () => {
-    expect(canUseToolDecision([PATH_BLOCK], "Write", { path: "src/a.ts" })).toEqual({
-      behavior: "allow",
+    expect(evaluateOnPremPolicyGate([PATH_BLOCK], "Write", { path: "src/a.ts" })).toEqual({
+      action: "allow",
     });
   });
 });

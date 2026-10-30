@@ -20,6 +20,7 @@ export * from "./registry.js";
 export * from "./toolAliases.js";
 export * from "./engine.js";
 export * from "./spec.js";
+export * from "./policyGateCallKey.js";
 export * from "./core-tools.js";
 export * from "./writeOverwriteGuard.js";
 export * from "./psychometric-dims.js";
@@ -29,6 +30,7 @@ export * from "./run-knowledge.js";
 export * from "./skill-tools.js";
 export * from "./subagent-tools.js";
 export * from "./live-subagent-tools.js";
+export * from "./childCapabilities.js";
 export * from "./git-tools.js";
 // The run's default checkout in a folder that CONTAINS checkouts (pure resolver).
 export * from "./defaultRepo.js";

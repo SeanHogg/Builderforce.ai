@@ -80,23 +80,53 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
   // served read, a write, a counted call or a fact for memory — only a stub the model reads.
   const stubs = new WeakSet<LoopDispatchResult>();
 
+  /**
+   * Take what the user steered in: a stop command ends the run (the model never gets
+   * another turn after a stop, §6.3); anything else becomes the next user turn, each
+   * acknowledged with `steer.applied` before the turn it reaches.
+   */
+  const takeSteers = async (ctx: { step: number; stepInCall: number }): Promise<"none" | "stop" | "applied"> => {
+    const steered = (ports.steering?.drain() ?? []).map(steerInput);
+    if (steered.length === 0) return "none";
+    const texts = steered.map((s) => s.text);
+    if (isStopSteer(texts)) {
+      run.stopped = true;
+      return "stop";
+    }
+    const injected = await hooks.steering.inject(contextAt(ctx.step, ctx.stepInCall), texts);
+    const rows = injected ?? texts.map((text): RunMessage => ({ role: "user", content: text }));
+    for (const row of rows) transcript.push(row);
+    for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
+    return "applied";
+  };
+
+  /**
+   * What the user steered in while a `finish` call was in flight, as the note the finish is
+   * answered with; null when nothing was steered (the finish stands). A stop command lets
+   * the finish stand and settles the run cancelled, as it does anywhere else.
+   */
+  const lateSteerNote = async (ctx: { step: number }): Promise<{ note: string } | null> => {
+    const steered = (ports.steering?.drain() ?? []).map(steerInput);
+    if (steered.length === 0) return null;
+    const texts = steered.map((s) => s.text);
+    if (isStopSteer(texts)) {
+      run.stopped = true;
+      return null;
+    }
+    for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
+    const many = texts.length > 1;
+    return {
+      note:
+        `The user sent ${many ? "messages" : "a message"} while you were finishing, so do not finish yet:\n` +
+        `${texts.map((t) => `- ${t}`).join("\n")}\nAddress ${many ? "them" : "it"}, then finish.`,
+    };
+  };
+
   return {
     beforeTurn: async (ctx) => {
       // Steering is drained BEFORE the model is asked, so a message typed mid-run reaches
-      // the next call rather than the one after it. A stop command ends the run here:
-      // the model never gets another turn after a stop (§6.3).
-      const steered = (ports.steering?.drain() ?? []).map(steerInput);
-      if (steered.length > 0) {
-        const texts = steered.map((s) => s.text);
-        if (isStopSteer(texts)) {
-          run.stopped = true;
-          return { action: "stop", ok: false, output: "cancelled", finished: true };
-        }
-        const injected = await hooks.steering.inject(contextAt(ctx.step, ctx.stepInCall), texts);
-        const rows = injected ?? texts.map((text): RunMessage => ({ role: "user", content: text }));
-        for (const row of rows) transcript.push(row);
-        for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
-      }
+      // the next call rather than the one after it.
+      if ((await takeSteers(ctx)) === "stop") return { action: "stop", ok: false, output: "cancelled", finished: true };
 
       const view = currentView(transcript, offered);
       const compacted = await hooks.compaction.compact(policyContext(input, state, view, ctx.step, ctx.stepInCall));
@@ -137,12 +167,21 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       }
       const output = hooks.stall.settle ? hooks.stall.settle(pctx, turn.content) : turn.content;
       if (output.trim()) transcript.push({ role: "assistant", content: output });
+      // A message steered in while this last turn was in flight is never lost (§6.3): the
+      // run takes one more turn for it instead of finishing past it.
+      const late = await takeSteers(ctx);
+      if (late === "stop") return { action: "stop", ok: false, output: "cancelled", finished: true };
+      if (late === "applied") return { action: "continue" };
       return { action: "finish", output };
     },
 
     beforeDispatch: async (call, ctx) => {
       const pctx = contextAt(ctx.step, ctx.stepInCall);
       const pcall = toPolicyCall(call);
+      // Governance gates (`RunPolicy.approvalGates`): a block refuses the call, an approval
+      // asks the human channel and parks the run on the approver.
+      const gated = await hooks.tools.gate?.(pctx, pcall);
+      if (gated) return { result: { data: gated.data, isError: true, ...(gated.control ? { control: asLoopControl(gated.control) } : {}) } };
       // A3's pause parks the run on a person (the control); any other skip just answers.
       const decision = await hooks.guards.beforeDispatch(pctx, pcall);
       if (decision?.skip) {
@@ -175,10 +214,17 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         state.finish = { ...state.finish, finishBlockedOnce: true };
         return block;
       }
-      return null;
+      // A message steered in while this finish was in flight is never lost (§6.3): the call
+      // is answered with it instead, so the run takes one more turn for it. (The steer is NOT
+      // spliced into the transcript here — the finish call's own result row must follow the
+      // assistant row that made it.)
+      return lateSteerNote(ctx);
     },
 
     onAskHuman: async (ctx, control, call) => {
+      // The approver's channel already answered 'paused': the run parks on that record. Asking
+      // again could answer in-run and report a call that never ran as done.
+      if ((control as { parked?: true }).parked) return undefined;
       const answer = await hooks.ask.answer(contextAt(ctx.step, ctx.stepInCall), control.question, optionsOf(control));
       // Answered in-run: the kernel puts the answer in the call's own row and does not park
       // the run. Anything else returns nothing, and the run pauses on the person.

@@ -1,3 +1,5 @@
+import { isRateLimitFailure, isTenantBudgetFailure } from '@builderforce/learned-routing';
+import { isRunCapMessage } from '../../domain/containment/runLimits';
 import { isInfrastructureEviction } from './orphanReasons';
 
 /**
@@ -48,8 +50,10 @@ export type RunFailureClass =
   | 'rate_limited'
   /** A credential was rejected — BYO key, OAuth token, or provider auth. */
   | 'auth_failed'
-  /** The tenant's token budget or run cap stopped it. */
+  /** The TENANT's quota stopped it: a plan daily/monthly allowance, the premium budget, a seat spend cap, the cloud-run allowance. */
   | 'quota_exhausted'
+  /** The run stopped at its OWN per-run spend / token cap - it looped. The strongest negative evidence about a model, so it keeps teaching routing. */
+  | 'run_cap_reached'
   /** The repo/branch/PR layer refused — clone, push, or branch protection. */
   | 'repo_error'
   /** Terminal, but the message matches no named reason. Carries a sample. */
@@ -69,7 +73,8 @@ export const RUN_FAILURE_LABEL: Record<RunFailureClass, string> = {
   model_unavailable: 'no model available — none resolved or all refused',
   rate_limited: 'provider rate limit or capacity ceiling',
   auth_failed: 'a credential was rejected',
-  quota_exhausted: 'token budget or run cap reached',
+  quota_exhausted: 'the tenant’s plan, premium, spend or cloud-run allowance reached',
+  run_cap_reached: 'the run hit its own per-run spend or token cap',
   repo_error: 'the repository refused the operation',
   unknown: 'unclassified — see the sample message',
 };
@@ -142,9 +147,17 @@ export function classifyRunFailure(message: string | null | undefined): RunFailu
 
   // 2. Generic provider / infrastructure probes, for messages that reach us verbatim
   //    from a vendor rather than through a reason constant.
-  if (/\b429\b|rate.?limit|too many requests|over capacity|capacity limit/i.test(m)) return 'rate_limited';
+  // A run stopping at its OWN per-run cap (`token limit reached (used/cap tokens)`, `spend limit reached (…)`)
+  // is the run looping, not the tenant running out: it is the strongest evidence about a model, so it gets its
+  // own reason and keeps teaching routing. `quota_exhausted` is the TENANT's quota only.
+  if (isRunCapMessage(m)) return 'run_cap_reached';
+  // A tenant spending its OWN allowance is checked next: it is also a 429, but no model was throttled.
+  if (isTenantBudgetFailure(m)) return 'quota_exhausted';
+  // The ONE rate-limit rule, shared with the agent's outcome row.
+  if (isRateLimitFailure(m)) return 'rate_limited';
   if (/\b40[13]\b|unauthorized|unauthenticated|invalid api key|authentication failed|credential/i.test(m)) return 'auth_failed';
-  if (/token (budget|cap|limit) (reached|exhausted)|quota (exceeded|exhausted)|run cap/i.test(m)) return 'quota_exhausted';
+  // Tenant wording only (a plan/daily/monthly allowance, a quota) - the per-run cap was classified above.
+  if (/quota (exceeded|exhausted)|(plan|daily|monthly)\b[^.]{0,30}(limit|allowance|budget) (reached|exhausted)/i.test(m)) return 'quota_exhausted';
   if (/no model|model not (found|available)|all models|no provider|unsupported model/i.test(m)) return 'model_unavailable';
   if (/merge conflict|could not clone|push (was )?rejected|branch protection|repository not found/i.test(m)) return 'repo_error';
 

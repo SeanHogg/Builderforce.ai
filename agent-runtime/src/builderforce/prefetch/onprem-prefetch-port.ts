@@ -4,8 +4,8 @@
  * runtime's own seams, never a copy:
  *
  *   - files through the on-prem disk provider (`buildNodeCapabilityProvider`);
- *   - commands through the native exec runtime (`runExecProcess`, what the `exec` tool
- *     runs) — killed by the action's deadline or the run's abort;
+ *   - commands through the on-prem shell (`buildNodeShell`, what `run_command` runs) —
+ *     killed by the action's deadline or the run's abort;
  *   - tools detected in the workspace (`detectTools` over the Node probe), memoised per
  *     root and finished by `prepare` before the gate reads them;
  *   - WRITE actions confirmed through the approval gate the portal answers
@@ -31,50 +31,22 @@ import { resolve } from "node:path";
 import { requestHumanInput } from "../../infra/approval-gate.js";
 import { withOnPremKnowledgeRows } from "../../agents/knowledge/onPremKnowledge.js";
 import { buildNodeCapabilityProvider } from "../../agents/node-capability-provider.js";
-import { runExecProcess } from "../../agents/bash-tools.exec-runtime.js";
+import { buildNodeShell } from "../../run/nodeShell.js";
 import { onPremRootId, onPremWorkspaceKnowledgeIndex } from "../../agents/knowledge/index/onPremKnowledgeIndex.js";
 
 /** `knowledge.ask` (the workspace's knowledge index), then the shared rows — validated once. */
 export const ONPREM_PREFETCH_REGISTRY: readonly PrefetchAction[] = defineRegistry([KNOWLEDGE_ASK_ROW, ...SHARED_PREFETCH_ROWS]);
 
 /** The longest one PreFetch command may run (each action's own budget is usually shorter). */
-const COMMAND_TIMEOUT_SEC = 300;
-/** Output kept per command before the executor caps it again. */
-const COMMAND_OUTPUT_CHARS = 200_000;
+const COMMAND_TIMEOUT_MS = 300_000;
 
-/** The exec runtime as a `ShellCapability`: one foreground command in `root`, killed on abort. */
+/**
+ * One foreground command in `root`, killed on abort: THE on-prem shell (`buildNodeShell`), so the
+ * working directory, the interpreter routing and the kill are the same rules `run_command` runs
+ * under - not a third implementation. Only the ceiling is this port's own.
+ */
 export function onPremShell(root: string): ShellCapability {
-  return {
-    async run(command, opts) {
-      const env = Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => typeof e[1] === "string"));
-      const handle = await runExecProcess({
-        command,
-        workdir: root,
-        env,
-        usePty: false,
-        warnings: [],
-        maxOutput: COMMAND_OUTPUT_CHARS,
-        pendingMaxOutput: COMMAND_OUTPUT_CHARS,
-        notifyOnExit: false,
-        timeoutSec: COMMAND_TIMEOUT_SEC,
-      });
-      const kill = (): void => handle.kill();
-      if (opts?.signal?.aborted) kill();
-      opts?.signal?.addEventListener("abort", kill, { once: true });
-      try {
-        const outcome = await handle.promise;
-        if (opts?.signal?.aborted) return { ok: false, aborted: true, stdout: outcome.aggregated };
-        return {
-          ok: outcome.status === "completed" && (outcome.exitCode ?? 0) === 0,
-          ...(typeof outcome.exitCode === "number" ? { exitCode: outcome.exitCode } : {}),
-          stdout: outcome.aggregated,
-          ...(outcome.timedOut ? { error: "timed out" } : outcome.reason ? { error: outcome.reason } : {}),
-        };
-      } finally {
-        opts?.signal?.removeEventListener("abort", kill);
-      }
-    },
-  };
+  return buildNodeShell({ cwd: root, timeoutMs: COMMAND_TIMEOUT_MS });
 }
 
 /** One detection per workspace root, for the process's life. */

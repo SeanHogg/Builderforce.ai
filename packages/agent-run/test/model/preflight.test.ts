@@ -3,6 +3,8 @@
  * (§6.10, E7) — from the transport's BYO-resolution port and the run's own state.
  */
 import { describe, expect, it } from "vitest";
+import { priceBookFromPrices } from "@builderforce/model-catalog";
+import { buildOutcomeRow } from "../../src/index.js";
 import { modelDowngrade, modelPreflightEvent, preflightVerdict, runModelPreflight } from "../../src/policy/model/index.js";
 import { policyCtx } from "../support/policyContext.js";
 
@@ -41,6 +43,48 @@ describe("runModelPreflight — the hook half", () => {
   it("a transport whose preflight throws costs the notice, never the run", async () => {
     const ctx = policyCtx({ ports: { model: { complete: async () => ({ content: "" }), preflight: () => { throw new Error("down"); } } } });
     expect((await runModelPreflight(ctx)).status).toBe("ok");
+  });
+});
+
+/** A tiny price book: output $/token decides the tier (>= $20/M ULTRA, $8-20 PREMIUM, < $8 STANDARD, 0 FREE). */
+const BOOK = priceBookFromPrices([
+  ["opus", { input: 5e-6, output: 25e-6 }],
+  ["opus-2", { input: 5e-6, output: 25e-6 }],
+  ["sonnet", { input: 3e-6, output: 15e-6 }],
+  ["haiku", { input: 1e-7, output: 5e-7 }],
+  ["free-pool", { input: 0, output: 0 }],
+]);
+
+describe("a pinned failover and an auto-routed downgrade on the SAME model", () => {
+  it("records the pinned failover for the row without suppressing the auto-routed announcement that follows", () => {
+    const ctx = policyCtx();
+    ctx.state.preflight = "degraded:openai:expired";
+    // Turn 1: a pinned model fails over onto a weaker one.
+    expect(modelDowngrade(ctx, "opus", "haiku", BOOK)).toMatchObject({ reason: "failover" });
+    // Later: an auto-routed turn (asked for nothing) lands on that same model while a connected account is unusable.
+    const announced = modelDowngrade(ctx, undefined, "haiku", BOOK);
+    expect(announced).toMatchObject({ requestedModel: "default", model: "haiku", reason: "byo_unresolved:openai:expired" });
+    expect(ctx.state.downgrades).toEqual(["haiku"]);
+    expect(ctx.state.degradedBy).toEqual(["haiku"]);
+    // …said ONCE: the same auto-routed turn again does not repeat it.
+    expect(modelDowngrade(ctx, undefined, "haiku", BOOK)).toBeUndefined();
+  });
+});
+
+describe("modelDowngrade records a downgrade only when the served model is weaker", () => {
+  it("a failover onto a weaker model is recorded once (the row reads it as degraded); a same-tier failover is not", () => {
+    const weaker = policyCtx();
+    expect(modelDowngrade(weaker, "opus", "haiku", BOOK)).toMatchObject({ reason: "failover" });
+    expect(modelDowngrade(weaker, "opus", "haiku", BOOK)).toMatchObject({ reason: "failover" });
+    expect(weaker.state.degradedBy).toEqual(["haiku"]);
+    // A pinned failover is a FACT for the row, not an auto-routed announcement: it never enters the dedupe list.
+    expect(weaker.state.downgrades ?? []).toEqual([]);
+    expect(buildOutcomeRow({ entryPoint: "on-prem", kind: "finished", state: weaker.state })).toMatchObject({ degraded: true });
+
+    const sameTier = policyCtx();
+    expect(modelDowngrade(sameTier, "opus", "opus-2", BOOK)).toMatchObject({ reason: "failover" });
+    expect(sameTier.state.degradedBy ?? []).toEqual([]);
+    expect(buildOutcomeRow({ entryPoint: "on-prem", kind: "finished", state: sameTier.state })).not.toHaveProperty("degraded");
   });
 });
 

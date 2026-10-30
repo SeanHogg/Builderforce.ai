@@ -73,10 +73,10 @@ export function createAnalyzeCodebaseTool(options: AnalyzeCodebaseOptions = {}):
             const cleanup = await shellRunWithStop(ctx, `node -e "require('fs').mkdirSync('${outputDir}',{recursive:true})"`);
             if (!cleanup.ok) throw new Error('Could not clear the previous duplication artifact');
           }
-          const command = analyzer.name === 'knip'
-            ? (scope === '.' ? analyzer.command : analyzer.command.replace('knip --reporter', `cd ${scope} && knip --reporter`))
-            : analyzer.command.replace(/ \."$/, ` ${scope}"`);
-          const result = await shellRunWithStop(ctx, command.replaceAll('.builderforce/code-analysis', outputDir));
+          // Knip analyses the directory it RUNS in, so the scope is its working directory (the shell's
+          // `cwd`) rather than a `cd` written into the command; the others take the scope as an argument.
+          const command = analyzer.name === 'knip' ? analyzer.command : analyzer.command.replace(/ \."$/, ` ${scope}"`);
+          const result = await shellRunWithStop(ctx, command.replaceAll('.builderforce/code-analysis', outputDir), analyzer.name === 'knip' && scope !== '.' ? scope : undefined);
           const artifact = analyzer.name === 'jscpd' ? await ctx.caps.repoRead!.readFile(`${outputDir}/jscpd-report.json`) : undefined;
           const text = artifact ? artifact.content : result.stdout;
           if (!text || artifact?.truncated) throw new Error('Analyzer output is empty or truncated; scan a smaller project');

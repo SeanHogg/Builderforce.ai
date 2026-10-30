@@ -15,15 +15,17 @@ import {
   LIVE_FANOUT_NEXT,
   delegationRole,
   parseWorkstreams,
+  schemaForCapabilities,
   spawnAgentsTool,
 } from "@builderforce/agent-tools";
 import type { ToolDef } from "./fileTools";
+import { EDITOR_DELEGATION_CAPS } from "./localCapabilities";
 import { resolveChildPersona, type SubagentToolDeps } from "./childPersona";
 
 export { LIVE_FANOUT_NEXT, MAX_WORKSTREAMS } from "@builderforce/agent-tools";
 
 export function subagentFanOutToolDef(deps: SubagentToolDeps & Required<Pick<SubagentToolDeps, "children">>): ToolDef {
-  const schema = spawnAgentsTool.schema.function;
+  const schema = schemaForCapabilities(spawnAgentsTool, EDITOR_DELEGATION_CAPS).function;
   return {
     name: schema.name,
     description: schema.description,

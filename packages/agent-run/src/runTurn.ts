@@ -5,7 +5,7 @@
  * gets before it settles.
  */
 
-import { buildCoreToolRegistry, type ToolSchema } from "@builderforce/agent-tools";
+import { buildCoreToolRegistry, SKILL_TOOLS, SUBAGENT_TOOLS, type ToolSchema } from "@builderforce/agent-tools";
 import type { LoopDispatchResult, LoopTurn, ParsedToolCall, TurnContext } from "@builderforce/agent-loop";
 import type { ContextPack, ModelCompletion, ModelRequest, RunMessage, RunPorts, RunState } from "./contract.js";
 import type { PolicyHooks } from "./policy/index.js";
@@ -15,14 +15,21 @@ import { currentView, emit, policyContext, type RunAgentInput } from "./runConte
 import { tallyTurn, type RunTally } from "./telemetry/runTally.js";
 import { withVolatileTail } from "./turnContext.js";
 
-/** The registry the agent dispatches through. Built once: the catalog does not change per run. */
+/**
+ * The registry the agent dispatches through. Built once: the catalog does not change per run.
+ * Delegation and skill authoring are not core task tools, so they are registered on top of the
+ * core set on the same terms as the cloud's registry: a surface is offered them only by granting
+ * `orchestrate` / `skill.author`. Without them a parent could never delegate — and a child, being a
+ * clone of its parent, could not either.
+ */
 const REGISTRY = buildCoreToolRegistry();
+for (const tool of [...SUBAGENT_TOOLS, ...SKILL_TOOLS]) REGISTRY.register(tool);
 
 /** The hard cap on the forced synthesis turn's answer — the source's bounded extra call. */
 const SYNTHESIS_MAX_TOKENS = 1_000;
 
 /** The schemas the model is offered, before the tools policy narrows them. */
-export function offeredSchemas(ports: RunPorts): ToolSchema[] {
+export function offeredSchemas(ports: Pick<RunPorts, "capabilities">): ToolSchema[] {
   return REGISTRY.schemasFor(ports.capabilities);
 }
 

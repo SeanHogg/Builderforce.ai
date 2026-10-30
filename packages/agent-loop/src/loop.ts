@@ -170,7 +170,10 @@ export async function runAgentLoop<M>(args: LoopRunArgs<M>): Promise<LoopResult>
       let result = dispatched;
       if (result.control?.kind === "finish") {
         const block = await hooks.onFinish?.(ctx, result.control.summary, call);
-        if (block) {
+        if (typeof block === "object" && block !== null) {
+          // Deferred, not failed: the finish waits for something the run was just told.
+          result = { data: { ok: true, finished: false, note: block.note } };
+        } else if (block) {
           result = { data: { ok: false, error: block }, isError: true };
         } else {
           finished = true;

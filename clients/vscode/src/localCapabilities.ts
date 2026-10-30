@@ -16,7 +16,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import { hostCostLeverOn } from "./hostCostLevers";
-import { matchGlobInScope, dirMayContainGlobMatch, applyStringEdit, editFacts, normalizeScopeDir } from "@builderforce/agent-tools";
+import { matchGlobInScope, dirMayContainGlobMatch, applyStringEdit, editFacts, normalizeScopeDir, DELEGATION_CAPABILITIES } from "@builderforce/agent-tools";
 // The ONE workspace-containment resolver, shared with the agent-runtime Node provider.
 // Node-only, so it comes from the `/node-path` export condition (the package root stays
 // node-builtin-free for the Worker).
@@ -81,6 +81,19 @@ export const LOCAL_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   // a surface may push to a remote is a different question from whether it has a shell.
   "git.write",
 ]);
+
+/**
+ * What a run that can DELEGATE holds on the editor: the surface's own, plus the editor's children
+ * running live (`subagentControlTools.ts` backs wait/message/stop) and fanning out. The capability set
+ * the spawn tools are described under - not `LOCAL_SURFACE_CAPS` alone, which has no delegation. The
+ * delegation capabilities are the shared list (`DELEGATION_CAPABILITIES`), so the fan-out tool's own
+ * requirement is held too and there is no second statement of them.
+ *
+ * KEEP IN STEP: when the editor moves onto the ONE agent (`runAgent`, PRD 35 WS4) this set must BE the
+ * capability provider's `capabilities`, not a second statement of them - the description a model reads
+ * and the tools it is actually granted must not be able to drift apart.
+ */
+export const EDITOR_DELEGATION_CAPS: ReadonlySet<Capability> = new Set<Capability>([...LOCAL_SURFACE_CAPS, ...DELEGATION_CAPABILITIES]);
 
 /**
  * Collapse a large file listing to the deduped set of directory prefixes just below the

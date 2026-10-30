@@ -10,7 +10,7 @@
  * caller owning terminal-state reporting. THIS one is an ORCHESTRATION-layer engine:
  * `run(dispatch, prompt) → void`, owning the ticket-workspace lifecycle, change
  * attribution, commit/push/PR, and execution-state reporting itself. A relay engine
- * may internally drive a shared `AgentEngine` (or the Claude Agent SDK) for the loop;
+ * may internally drive a shared `AgentEngine` (the on-prem adapter's engine) for the loop;
  * the two interfaces are deliberately distinct layers, named apart to avoid confusion.
  *
  * Dependency injection: an engine receives its collaborators (gateway client,
@@ -42,8 +42,8 @@ export interface EngineDispatch {
   policyGates?: PolicyGate[];
 }
 
-/** One relay task runtime. Sole implementation: the Claude Agent SDK loop, the
- *  current engine ({@link CURRENT_ENGINE_ID}). Legacy ids resolve to it. */
+/** One relay task runtime. Sole implementation: the one agent (`runAgent`, through
+ *  the on-prem adapter), the current engine ({@link CURRENT_ENGINE_ID}). Legacy ids resolve to it. */
 export interface RelayTaskEngine {
   /** Stable engine id matched against `EngineDispatch.engine`. */
   readonly id: string;

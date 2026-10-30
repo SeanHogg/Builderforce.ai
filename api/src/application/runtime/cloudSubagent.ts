@@ -14,33 +14,9 @@
  */
 
 import {
-  type Capability,
   type ModelRole,
   staffDelegation,
 } from '@builderforce/agent-tools';
-
-/** The delegation capabilities — granted to a child only while it may still spawn. */
-export const DELEGATION_CAPABILITIES: readonly Capability[] = ['orchestrate', 'orchestrate.fanout', 'orchestrate.live'];
-
-/**
- * Never handed to a child, whatever its owner holds.
- *
- * `skill.author` is withheld for the reason the tool exists at all: a skill is a
- * procedure every FUTURE run is told to follow, and the run accountable for proposing
- * one is the run a person can ask about it — not a child its owner commissioned and
- * summarised in a sentence.
- */
-export const NON_DELEGABLE_CAPABILITIES: readonly Capability[] = ['human', 'skill.author'];
-
-/** The child's capability set: its owner's, minus what is never delegable, minus
- *  delegation itself at the depth cap. */
-export function childCapabilities(parent: ReadonlySet<Capability>, canSpawn = false): ReadonlySet<Capability> {
-  const withheld = new Set<Capability>([
-    ...NON_DELEGABLE_CAPABILITIES,
-    ...(canSpawn ? [] : DELEGATION_CAPABILITIES),
-  ]);
-  return new Set([...parent].filter((c) => !withheld.has(c)));
-}
 
 /** Resolves one of the WORKSPACE's agents (by id or name) to the persona a child runs as. */
 export type PersonaBriefPort = (agent: string) => Promise<{ name: string; brief: string; roleKeys?: readonly string[] } | null>;

@@ -21,6 +21,7 @@
  * style differs.
  */
 
+import { statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
 /** Thrown by {@link resolveInsideRootOrThrow} when a path leaves the workspace root. */
@@ -52,7 +53,7 @@ export function resolveInsideRoot(root: string, relPath: string): string | null 
   }
   // `relative()` returns an absolute path when the two live on different Windows drives
   // (or different UNC shares), which is an escape even though it starts with no "..".
-  if (rel.startsWith("..") || rel.split(sep).includes("..") || isAbsolute(rel)) {
+  if (rel.split(sep).includes("..") || isAbsolute(rel)) {
     return null;
   }
   return abs;
@@ -79,4 +80,21 @@ export function resolveInsideRootOrThrow(root: string, relPath: unknown): string
     throw new PathEscapesRootError(relPath);
   }
   return abs;
+}
+
+/**
+ * The directory a SHELL command runs in: `relative` (the tool's workspace-relative `cwd`, already
+ * validated) under `root`, or `root` itself when none is named. A path that leaves the root, or
+ * that is not a directory, is refused with the reason — the working directory is the host's to
+ * honour, so the host is also the one that keeps it inside the workspace. ONE rule for every
+ * node shell (the on-prem host's, the prefetch exec shell, the editor's).
+ */
+export function resolveShellCwd(root: string, relative?: string): { ok: true; dir: string } | { ok: false; error: string } {
+  if (!relative || relative === ".") return { ok: true, dir: resolve(root) };
+  const dir = resolveInsideRoot(root, relative);
+  if (dir === null) return { ok: false, error: `'${relative}' is outside the workspace, so no command was run there` };
+  if (!statSync(dir, { throwIfNoEntry: false })?.isDirectory()) {
+    return { ok: false, error: `the directory '${relative}' does not exist in the workspace` };
+  }
+  return { ok: true, dir };
 }

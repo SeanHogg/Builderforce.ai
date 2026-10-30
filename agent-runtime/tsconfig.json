@@ -31,6 +31,8 @@
       "@builderforce/agent-tools/*": ["../packages/agent-tools/src/*"],
       // Exact entry: `packages/repo-map` imports `@builderforce/agent-tools/symbols` extensionless, and NodeNext does not probe `.ts` for a path-mapped target (the `/*` form above only serves imports that already end in `.js`).
       "@builderforce/agent-tools/symbols": ["../packages/agent-tools/src/symbols.ts"],
+      "@builderforce/agent-run": ["../packages/agent-run/src/index.ts"],
+      "@builderforce/difficulty-router": ["../packages/difficulty-router/src/index.ts"],
       "@builderforce/agent-loop": ["../packages/agent-loop/src/index.ts"],
       "@builderforce/agent-skills": ["../packages/agent-skills/src/index.ts"],
       "@builderforce/agent-stall": ["../packages/agent-stall/src/index.ts"],
@@ -46,6 +48,14 @@
       // of its own (as in frontend/ and clients/*/tsconfig.json): the memory subpath it
       // reaches resolves from THIS package's install.
       "@seanhogg/builderforce-memory/knowledge": ["./node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.d.ts"],
+      // The same install serves the subpaths `@builderforce/agent-tools` reaches (the run's
+      // working memory, the ingest hashes): agent-tools has no install in a checkout that
+      // typechecks from here, so they resolve from THIS package's install.
+      "@seanhogg/builderforce-memory/working": ["./node_modules/@seanhogg/builderforce-memory/dist/working/index.d.ts"],
+      "@seanhogg/builderforce-memory/ingest": ["./node_modules/@seanhogg/builderforce-memory/dist/ingest/index.d.ts"],
+      // agent-tools' symbol extractor loads `web-tree-sitter` lazily; its install lives with
+      // agent-tools (a declared dependency there), so the types resolve from it.
+      "web-tree-sitter": ["../packages/agent-tools/node_modules/web-tree-sitter/tree-sitter-web.d.ts"],
       "@builderforce/run-policy": ["../packages/run-policy/src/index.ts"],
       "@builderforce/run-context": ["../packages/run-context/src/index.ts"],
       "@builderforce/run-guards": ["../packages/run-guards/src/index.ts"],

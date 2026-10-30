@@ -161,6 +161,8 @@ export interface GuardControl {
   question: string;
   /** The answers the person is offered. */
   options?: readonly string[];
+  /** The surface already parked the run on a person (an approver answered 'paused'): park it, never ask again. */
+  parked?: true;
 }
 
 /** What a guard decided about a call. */
@@ -188,7 +190,7 @@ export interface MemoryHook {
   /** Record one dispatched call into the run's memory (the brief and the map are built from it). */
   observe?(ctx: PolicyContext, call: PolicyToolCall, result: unknown, isError?: boolean): Promise<void> | void;
   /** The consolidated memory the run produced, written back through `store.commitMemory`. */
-  consolidate(ctx: PolicyContext): Promise<unknown> | unknown;
+  consolidate(ctx: PolicyContext, opts?: { learn?: boolean }): Promise<unknown> | unknown;
 }
 
 /** WS2e — the context pack's recall. */
@@ -208,6 +210,12 @@ export interface ToolsHook {
   beforeDispatch?(ctx: PolicyContext, call: PolicyToolCall): { data: unknown } | void;
   /** After a call returned: record what the model was served (or what a write invalidated). */
   observe?(ctx: PolicyContext, call: PolicyToolCall, result: unknown, isError: boolean): void;
+  /**
+   * The governance gates (`RunPolicy.approvalGates`) against one call: a `block` refuses it
+   * (the model reads the refusal), a `require-approval` asks the human channel — answered in
+   * run it proceeds, parked it returns the control that parks the run. Nothing ⇒ the call is allowed.
+   */
+  gate?(ctx: PolicyContext, call: PolicyToolCall): Promise<{ data: unknown; isError: true; control?: GuardControl } | void> | { data: unknown; isError: true; control?: GuardControl } | void;
 }
 
 /** WS2g — the model policy: the role ladder, the cascade, the learned routing, the pins. */

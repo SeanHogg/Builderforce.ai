@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
-// Mock the SDK runner so the test asserts the AgentEngine adapter mapping, not the SDK.
+// Mock the adapter so the test asserts the AgentEngine mapping, not the run.
 const runMock = vi.fn();
-vi.mock("../agents/claude-agent-sdk-runner.js", () => ({
-  runClaudeAgentSdkV2: (params: unknown, sinks: unknown) => runMock(params, sinks),
+vi.mock("./onPremAdapter.js", () => ({
+  runOnPremAgent: (params: unknown, sinks: unknown) => runMock(params, sinks),
 }));
 
 import { CURRENT_ENGINE_ID } from "@builderforce/agent-tools";
-import { createSteeringChannel } from "./relay-steering.js";
-import { ClaudeSdkAgentEngine } from "./sdk-agent-engine.js";
+import { createSteeringChannel } from "../infra/relay-steering.js";
+import { OnPremAgentEngine as ClaudeSdkAgentEngine } from "./onPremEngine.js";
 
 function makeEngine(over?: Partial<ConstructorParameters<typeof ClaudeSdkAgentEngine>[0]>) {
   const abortController = new AbortController();
@@ -30,7 +30,7 @@ describe("ClaudeSdkAgentEngine", () => {
     expect(engine.id).toBe(CURRENT_ENGINE_ID);
   });
 
-  it("maps AgentRunInput → SDK params and SDK result → a terminal AgentRunResult", async () => {
+  it("maps AgentRunInput → run params and the run result → a terminal AgentRunResult", async () => {
     runMock.mockResolvedValueOnce({ ok: true, text: "done" });
     const { engine, abortController, sinks } = makeEngine();
 
@@ -47,7 +47,7 @@ describe("ClaudeSdkAgentEngine", () => {
       cwd: "/work",
       anthropicBaseUrl: "https://gw.test/llm",
       gatewayAuthKey: "k",
-      // contract systemPrompt → SDK appendSystemPrompt (the runner prepends it)
+      // contract systemPrompt → appendSystemPrompt (the run takes it as its persona)
       appendSystemPrompt: "persona",
       abortController,
     });
@@ -68,11 +68,11 @@ describe("ClaudeSdkAgentEngine", () => {
 
 /**
  * GAP-B2/B4 — the gateway can only apply its fail-closed BYO rule to a CLOUD agent
- * execution if the runner declares what it is. The SDK exposes no header hook other
- * than `ANTHROPIC_CUSTOM_HEADERS`, so that string is the contract.
+ * execution if the runner declares what it is. The declaration (surface + execution id)
+ * rides to the transport, which sends it as request headers.
  */
 describe("gateway surface declaration", () => {
-  it("passes the surface + execution id through to the SDK runner", async () => {
+  it("passes the surface + execution id through to the adapter", async () => {
     runMock.mockResolvedValueOnce({ ok: true, text: "done" });
     const { engine } = makeEngine({ surface: "on_prem", executionId: 77 });
 
@@ -95,7 +95,7 @@ describe("gateway surface declaration", () => {
 
 /** GAP A3 — the steering channel is a construction collaborator like the abort handle. */
 describe("mid-run steering channel", () => {
-  it("passes the channel through to the SDK runner", async () => {
+  it("passes the channel through to the adapter", async () => {
     runMock.mockResolvedValueOnce({ ok: true, text: "done" });
     const steering = createSteeringChannel();
     const { engine } = makeEngine({ steering });

@@ -28,5 +28,8 @@ export function runOutcomeTelemetryColumns(t: RunOutcomeTelemetry) {
     modelPreflight:    t.modelPreflight ?? null,
     unkeptReadyClaims: t.unkeptReadyClaims ?? null,
     progressTrips:     t.progressTrips ?? null,
+    // The row's own run id is the request's `clientRunId` (`client_run_id`, set beside these
+    // columns), so only the owner a sub-agent's row points at is new.
+    parentRunId:       t.parentRunId ?? null,
   };
 }

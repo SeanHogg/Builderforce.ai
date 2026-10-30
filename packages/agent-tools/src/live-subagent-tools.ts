@@ -10,11 +10,29 @@
  */
 
 import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
-import type { ChildReportLike, LiveChildControls } from "./capabilities.js";
+import type { Capability, ChildReportLike, LiveChildControls } from "./capabilities.js";
 
 /** Appended to both spawn tools' description on a surface whose children run live. */
 export const LIVE_DELEGATION_NOTE =
   "HERE the child runs IN THE BACKGROUND: the call returns its handle at once and you keep working — plan, code, or start more children — while it does its slice. Its messages appear in the chat under its own name, and its report reaches you on its own when it finishes (call wait_agents only when you cannot go on without it). Redirect it with message_agent; cancel it with stop_agent. Do not edit the files a child is working on while it runs.";
+
+/** Appended to the spawn tools' description on a surface whose children BLOCK the owner (no `orchestrate.live`). */
+export const BLOCKING_DELEGATION_NOTE =
+  "HERE the call BLOCKS: you wait while the child does its slice, and its report is the call's result. There is no background handle, nothing to wait for or redirect afterwards, so delegate a slice you can afford to wait for. A child cannot delegate further.";
+
+/** The delegation note for what a surface grants: background children where they run live, a blocking call elsewhere. */
+export function delegationNote(caps: ReadonlySet<Capability>): string {
+  return caps.has("orchestrate.live") ? LIVE_DELEGATION_NOTE : BLOCKING_DELEGATION_NOTE;
+}
+
+/**
+ * Make a spawn tool's description follow what the surface grants: the tool is written once with
+ * {@link LIVE_DELEGATION_NOTE} (what `schema` carries), and `describeFor` swaps in the note that is
+ * TRUE for the capability set it is offered under.
+ */
+export function withDelegationNote(def: ToolDefinition): ToolDefinition {
+  return { ...def, describeFor: (caps) => def.schema.function.description.replace(LIVE_DELEGATION_NOTE, delegationNote(caps)) };
+}
 
 /**
  * How an owner checks finished code: the type-check, build and tests go to ONE `verify`

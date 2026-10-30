@@ -12,7 +12,7 @@
  */
 
 import { execFile, spawn, type ChildProcess, type SpawnOptions } from "child_process";
-import { toBashNullDevice } from "./posixShell";
+import { toBashNullDevice } from "@builderforce/agent-tools/node-posix-shell";
 
 /**
  * Start a command so {@link killProcessTree} reaches everything it starts: in its own

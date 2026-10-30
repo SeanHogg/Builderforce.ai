@@ -298,7 +298,7 @@ function policyGateDirective(g: PolicyGate): string {
 /**
  * Render governance gates as binding system-prompt lines (the "Governance" block).
  * Shared so every surface that injects gates into a prompt — the canonical
- * {@link lowerAgentSpec} AND the on-prem SDK runner (which builds its own prompt) —
+ * {@link lowerAgentSpec} AND the one agent (`agent-run`'s opening rows, which render a run's gates) —
  * renders them identically. Returns '' when there are no gates.
  */
 export function renderPolicyDirectives(gates: readonly PolicyGate[] | undefined): string {

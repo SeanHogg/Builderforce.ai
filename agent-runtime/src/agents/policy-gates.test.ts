@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowedToolsAfterGates } from "./claude-agent-sdk-runner.js";
+import { allowedToolsAfterGates } from "../../test/helpers/gatedTools.js";
 import { renderPolicyDirectives } from "@builderforce/agent-tools";
 
 describe("on-prem governance — allowedToolsAfterGates", () => {

@@ -4,8 +4,8 @@
  * Operator decision 2026-09-12: "steers that arrive after a run's last turn => spend the
  * tokens." Every surface has a window in which a steer can no longer reach the run it was
  * sent to:
- *   - the on-prem SDK runner closes its input stream the moment a turn returns with
- *     nothing queued, so the relay is refused (`run_finishing`), or the host no longer
+ *   - the on-prem run closes its steering channel the moment it settles, so the relay
+ *     is refused (`run_finishing`), or the host no longer
  *     holds the run at all (`no_live_run`);
  *   - a cloud loop (durable / container / GitHub Actions) drains pending steers at the top
  *     of each step, so one posted after its final step is never read (`run_ended`);

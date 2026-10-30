@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SsmMemoryService } from "../infra/ssm-memory-service.js";
-import { ssmMemoryBackend } from "./sdk-memory-server.js";
+import { ssmMemoryBackend } from "../run/nodeMemory.js";
 
 /** A stand-in for the package's MemoryStoreBackend: records the raw keyed puts. */
 class FakeStoreBackend {

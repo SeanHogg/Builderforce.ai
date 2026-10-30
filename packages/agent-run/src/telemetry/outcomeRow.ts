@@ -25,7 +25,8 @@
  * a Worker invocation and a VS Code extension host build the identical row.
  */
 
-import type { RunOutcomeKind, RunOutcomeRow, RunState } from "../contract.js";
+import { isRateLimitFailure } from "@builderforce/learned-routing";
+import { RUN_CANCELLED_REASON, type RunOutcomeKind, type RunOutcomeRow, type RunState } from "../contract.js";
 import { defaultEstimateTokens } from "../policy/compaction/pack.js";
 import { turnContextBlock } from "../turnContext.js";
 import { resumeTally } from "./runTally.js";
@@ -36,8 +37,12 @@ export interface OutcomeRowInput {
   entryPoint: string;
   /** The adapter's id for the run, when it named one. */
   runId?: string;
+  /** The run that spawned this one, for a sub-agent's row. */
+  parentRunId?: string;
   /** The terminal outcome kind the run settled on. */
   kind: RunOutcomeKind;
+  /** Why a failed run failed (the settle reason): a Stop reads as cancelled, a provider 429 as rate-limited. */
+  reason?: string;
   /** The run's terminal state. */
   state: RunState;
 }
@@ -52,6 +57,7 @@ export function buildOutcomeRow(input: OutcomeRowInput): RunOutcomeRow {
   return {
     entryPoint: input.entryPoint,
     ...(input.runId ? { runId: input.runId } : {}),
+    ...(input.parentRunId ? { parentRunId: input.parentRunId } : {}),
     steps: state.step,
     toolCalls: tally.toolCalls,
     toolErrors: tally.toolErrors,
@@ -72,7 +78,24 @@ export function buildOutcomeRow(input: OutcomeRowInput): RunOutcomeRow {
     ...(preflight ? { modelPreflight: preflight } : {}),
     unkeptReadyClaims: progress?.unkeptTurns ?? 0,
     progressTrips: tripsBySignal(progress?.tripsBySignal),
+    ...(input.reason === RUN_CANCELLED_REASON ? { cancelled: true } : {}),
+    ...(input.kind === "failed" && isRateLimitFailure(input.reason) ? { rateLimited: true } : {}),
+    ...(isDegraded(state) ? { degraded: true } : {}),
   };
+}
+
+/**
+ * Served by a WEAKER model than the run asked for: `state.degradedBy` records exactly that
+ * (`modelDowngrade`) - an auto-routed turn that landed on a model the run did not choose because a
+ * connected account could not be used or on a plan-tier model, or a PINNED model's failover onto a worse
+ * catalog tier (`isWeakerModel`, the model catalog's rule - the same one the legacy embedded runner and the
+ * cloud scorer ask). A pinned failover onto a model of the same standing (or one the catalog cannot rank) is
+ * announced by `llm.model_downgrade` but NOT recorded, and a preflight NOTE (`state.preflight` =
+ * degraded:<reason>) is a warning before turn 1, not a verdict on what served the run; neither makes the
+ * run degraded.
+ */
+function isDegraded(state: RunState): boolean {
+  return (state.degradedBy?.length ?? 0) > 0;
 }
 
 /** The A3 trips by signal, as a plain `{ signal: count }` map (empty when none tripped). */
