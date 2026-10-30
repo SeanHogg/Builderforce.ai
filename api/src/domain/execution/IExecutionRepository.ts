@@ -15,5 +15,18 @@ export interface IExecutionRepository {
   findByTenant(tenantId: TenantId, limit?: number): Promise<Execution[]>;
   findBySession(tenantId: TenantId, sessionId: string, limit?: number): Promise<Execution[]>;
   save(execution: Execution): Promise<Execution>;
+  /** Non-terminal writes only; a terminal status is refused (see {@link IExecutionRepository.land}) and never overwrites a terminal row. */
   update(execution: Execution): Promise<Execution>;
+  /**
+   * THE terminal transition: conditional on a non-terminal status, so exactly one writer wins. `won: false` returns the winner's row
+   * and the caller skips its side effects; the outcome owner is told only of a win.
+   */
+  land(id: ExecutionId, status: TerminalStatus, fields?: LandFields, from?: readonly ExecutionStatus[]): Promise<{ won: boolean; execution: Execution }>;
+  /** The productivity verdict of a landed run - a field write that never touches the status. */
+  setProduced(id: ExecutionId, produced: boolean): Promise<Execution>;
 }
+
+/** The terminal execution statuses: reachable only through {@link IExecutionRepository.land}. */
+export type TerminalStatus = ExecutionStatus.COMPLETED | ExecutionStatus.FAILED | ExecutionStatus.CANCELLED;
+
+export interface LandFields { result?: string | null; errorMessage?: string | null; produced?: boolean | null; completedAt?: Date | null }

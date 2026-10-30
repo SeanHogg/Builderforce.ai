@@ -394,8 +394,7 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       ciGreen: pr.ciGreen,
       degraded,
       steps,
-      // An unknown cost scores the cost term neutrally (halfway) — neither free nor expensive.
-      costMc: costMc ?? EFFICIENCY_COST_NORM_MC / 2,
+      costMc,
       approved,
     });
 
@@ -478,9 +477,8 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
 
     // Fold into the routing table — but only for a run that actually ran a model.
     // A run that produced no LLM call ('unknown') carries no model attribution, so
-    // learning from it would pollute the ranking. The routing table averages cost, and an UNKNOWN cost (null) is never free:
-    // such a run is not folded (the stored column keeps its NULL).
-    if (model && costMc !== null) {
+    // learning from it would pollute the ranking.
+    if (model) {
       await applyOutcomeToRoutingTable(env, db, {
         tenantId: exec.tenantId,
         projectId,

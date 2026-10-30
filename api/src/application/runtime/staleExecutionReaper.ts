@@ -214,9 +214,10 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
         completedAt: sql`now()`,
         updatedAt: sql`now()`,
       })
-      .where(and(inArray(executions.id, ids), eq(executions.status, 'running')))
+      .where(acrossTenants(executions, 'scheduled_sweep', and(inArray(executions.id, ids), eq(executions.status, 'running'))))
       .returning(REAPED_RETURNING);
     cloudRunning.push(...failed);
+    await recordReapedOutcomes(db, failed); // per batch, right after the UPDATE that landed it
   }
 
   // Dropped queue: submitted/pending but no agent ever took it.
@@ -231,7 +232,6 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
   // terminal the ticket can never auto-run again. Measured from `updated_at` so a
   // still-active back-and-forth on the question keeps the run alive.
   const paused: ReapedRow[] = probe.paused ? await failStaleBatch(db, stale.paused, PAUSED_ORPHAN_REASON) : [];
-  await recordReapedOutcomes(db, [...running, ...queued, ...paused, ...cloudRunning]);
 
   // A full batch means a backlog remains: keep the next tick's gate open so it drains
   // promptly instead of waiting for the floor sweep.
@@ -346,7 +346,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
  * the old unbounded UPDATE behaved.
  */
 async function failStaleBatch(db: Db, stalePredicate: SQL, errorMessage: string): Promise<ReapedRow[]> {
-  return db
+  const failed: ReapedRow[] = await db
     .update(executions)
     .set({ status: 'failed', errorMessage, completedAt: sql`now()`, updatedAt: sql`now()` })
     .where(acrossTenants(executions, 'scheduled_sweep', stalePredicate, inArray(executions.id, db
@@ -355,6 +355,7 @@ async function failStaleBatch(db: Db, stalePredicate: SQL, errorMessage: string)
       .where(acrossTenants(executions, 'scheduled_sweep', stalePredicate))
       .limit(REAP_BATCH_LIMIT))))
     .returning(REAPED_RETURNING);
+  return recordReapedOutcomes(db, failed).then(() => failed); // per batch, right after the UPDATE that landed it
 }
 
 interface ReapedRow {

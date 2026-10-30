@@ -1,7 +1,7 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { isValidatorReviewPayload } from '../validation/validatorReviewMarker';
 import { isIncidentTriagePayload } from '../incident/incidentTriageMarker';
-import { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
+import { IExecutionRepository, type TerminalStatus } from '../../domain/execution/IExecutionRepository';
 import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { IAgentRepository } from '../../domain/agent/IAgentRepository';
 import { IAuditRepository } from '../../domain/audit/IAuditRepository';
@@ -436,7 +436,10 @@ export class RuntimeService {
     }
     try {
       const failed = e.markFailed(this.orphanReason(e));
-      const saved = await this.executions.update(failed);
+      const landed = await this.land(failed);
+      // Lost the race to another terminal transition (a completion, a cancel, the cron reaper): the winner owns the side effects.
+      if (!landed.won) return landed.execution;
+      const saved = landed.execution;
       await this.audit.save(AuditEvent.create({
         tenantId:     e.tenantId,
         userId:       null,
@@ -471,10 +474,19 @@ export class RuntimeService {
     return this.executions.findBySession(asTenantId(tenantId), sessionId, limit);
   }
 
+  /** Land a terminal entity (already transitioned under the domain's rules) through the repository's ONE conditional write. */
+  private land(terminal: Execution): Promise<{ won: boolean; execution: Execution }> {
+    const p = terminal.toPlain();
+    return this.executions.land(terminal.id, p.status as TerminalStatus, { result: p.result, errorMessage: p.errorMessage, produced: p.produced, completedAt: p.completedAt });
+  }
+
   async cancel(id: number, cancelledBy: string): Promise<Execution> {
     const execution = await this.getExecution(id);
     const cancelled = execution.cancel();
-    const saved     = await this.executions.update(cancelled);
+    const landed    = await this.land(cancelled);
+    // A cancel that lost to a completion (or any other terminal transition) does nothing: no signal, no audit, no milestone.
+    if (!landed.won) return landed.execution;
+    const saved     = landed.execution;
     // Right after the row flips, so a durable runner mid-step stops on its next cancel poll.
     await this.ports.onCancelled?.(saved).catch((error) => reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "cancel", context: { logMessage: '[runtime] cancel signal to the cloud runner failed', details: { executionId: saved.id } } }));
 
@@ -514,7 +526,15 @@ export class RuntimeService {
         throw new ForbiddenError(`Cannot transition to status '${dto.status}' via this endpoint`);
     }
 
-    let saved = await this.executions.update(execution);
+    // A terminal status LANDS (one winner); a non-terminal one is an ordinary write.
+    let saved: Execution;
+    if (dto.status === ExecutionStatus.COMPLETED || dto.status === ExecutionStatus.FAILED) {
+      const landed = await this.land(execution);
+      if (!landed.won) return landed.execution; // another writer already landed it: its row stands and its side effects are done
+      saved = landed.execution;
+    } else {
+      saved = await this.executions.update(execution);
+    }
     let movedTicket = false;
 
     // sync task status based on execution state --------------------------------
@@ -733,7 +753,7 @@ export class RuntimeService {
     // an empty completion and can trip the unproductive-run breaker.
     if (dto.status === ExecutionStatus.COMPLETED && movedTicket && saved.produced !== true) {
       try {
-        saved = await this.executions.update(saved.markProduced(true));
+        saved = await this.executions.setProduced(saved.id, true);
       } catch (error) {
         reportCaughtError(error, {
           source: 'application/runtime/RuntimeService.ts',

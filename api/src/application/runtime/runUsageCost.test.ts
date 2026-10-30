@@ -1,6 +1,6 @@
 /**
- * The cloud scorer's row: an UNKNOWN cost is NULL, never free; a genuine zero stays zero. (The `client_run_id` the row is
- * keyed under is the domain's `cloudRunId`, tested with it.)
+ * resolveRunModel - what a cloud run cost, read from its usage ledger. (Unknown-cost-is-NULL semantics arrive with the cost-nullable
+ * migration owned by ws4-canvas; until then no usage rows or a failed lookup read as 0, reported.)
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -18,27 +18,21 @@ vi.mock('../llm/usageLedger', async (orig) => ({
 
 import { resolveRunModel } from './runUsageCost';
 
-/** A db whose usage query answers `h.rows` (or throws), whatever the query builder is asked. */
 const db = {
   select: () => ({ from: () => ({ where: () => ({ groupBy: () => ({ orderBy: async () => { if (h.fail) throw new Error('usage db down'); return h.rows; } }) }) }) }),
 } as never;
 
 beforeEach(() => { h.rows = []; h.fail = false; h.report.mockClear(); });
 
-describe('resolveRunModel — what a run cost', () => {
-  it('no usage rows: the cost is UNKNOWN (null), not free', async () => {
-    expect(await resolveRunModel(db, 9)).toEqual({ model: '', steps: 0, costMc: null });
+describe('resolveRunModel', () => {
+  it('no usage rows: no model, no steps, no cost', async () => {
+    expect(await resolveRunModel(db, 9)).toEqual({ model: '', steps: 0, costMc: 0 });
   });
 
-  it('a lookup that throws: the cost is UNKNOWN (null), and the failure is reported rather than recorded as a free run', async () => {
+  it('a lookup that throws is reported and reads as nothing measured', async () => {
     h.fail = true;
-    expect(await resolveRunModel(db, 9)).toEqual({ model: '', steps: 0, costMc: null });
+    expect(await resolveRunModel(db, 9)).toEqual({ model: '', steps: 0, costMc: 0 });
     expect(h.report).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ operation: 'resolveRunModel' }));
-  });
-
-  it('usage rows that really sum to zero (BYO / local) stay a genuine 0', async () => {
-    h.rows = [{ model: 'local-model', n: 4, cost: 0 }];
-    expect(await resolveRunModel(db, 9)).toEqual({ model: 'local-model', steps: 4, costMc: 0 });
   });
 
   it('sums the cost and steps across models and names the most-used one', async () => {

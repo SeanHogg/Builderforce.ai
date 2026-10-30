@@ -16,6 +16,18 @@ const h = vi.hoisted(() => ({
   script: [] as Array<{ content: string; toolCalls?: Array<{ id: string; name: string; arguments: string }> }>,
 }));
 vi.mock('./cloudToolEvents', () => ({ recordCloudToolEvent: async (_db: unknown, row: Record<string, unknown>) => { h.rows.push(row); } }));
+// The outcome row is written by the ONE owner (`recordTerminalOutcome`) at the landing: its multi-row insert lands in the same timeline.
+vi.mock('../shared/runTelemetryDatabase', () => ({
+  runTelemetryDatabase: () => ({
+    insert: () => ({
+      values: (rows: unknown) => {
+        const list = (Array.isArray(rows) ? rows : [rows]) as Array<Record<string, unknown>>;
+        list.forEach((r) => h.rows.push(r));
+        return Object.assign(Promise.resolve(undefined), { onConflictDoNothing: () => ({ returning: async () => list.map((r) => ({ executionId: r.executionId })) }) });
+      },
+    }),
+  }),
+}));
 vi.mock('../provenance/finishClaimService', () => ({ recordTypedExecutionClaim: vi.fn(async () => ({ ok: true })) }));
 vi.mock('./executionPause', () => ({ pauseExecutionForQuestion: vi.fn(async () => ({ approvalId: 'appr-1' })) }));
 vi.mock('./cloudLoopControl', () => ({ applyPendingSteering: async () => [] }));
@@ -39,6 +51,7 @@ vi.mock('./cloudAgent/cloudLlmTurn', () => ({
 
 import { cloudModelPort } from './cloudAdapterModel';
 import { durableHuman, pendingSteering, timelineSink } from './cloudAdapterPorts';
+import { recordTerminalOutcome } from './cloudOutcomeRow';
 import { containProvider, platformTools } from './cloudAdapterTools';
 
 const REFS = { tenantId: 1, projectId: 2, taskId: 3, executionId: 4, agentLabel: 'Reviewer' };
@@ -73,7 +86,7 @@ function ports(store: { saved?: RunState }, requests: unknown[]): RunPorts {
     model,
     capabilities: containProvider({ capabilities: new Set() }, { db: {} as never, tenantId: 1, executionId: 4, declared: undefined, writtenPaths: new Set(), repositories: 0 }),
     store: { load: () => store.saved, save: (s) => { store.saved = JSON.parse(JSON.stringify(s)) as RunState; } },
-    events: timelineSink({} as never, REFS),
+    events: timelineSink({} as never, REFS, () => null, () => undefined),
     human: durableHuman({} as never, {} as never, REFS),
     steering: pendingSteering({} as never, REFS, model.currentStep),
     context: { pack: () => ({ focus: [], facts: [], recall: [] }), turnSections: () => ['## affect\ncalm'] },
@@ -92,6 +105,8 @@ async function drive(maxSteps?: number): Promise<{ outcome: RunOutcome; trace: s
     if (tick > 50) throw new Error('never finished');
     outcome = await runAgent({ task: TASK, policy: POLICY, ports: ports(store, requests), resume: store.saved, ...step });
   }
+  // The run landed: the one outcome owner records its row (as the repository's terminal hook does).
+  await recordTerminalOutcome({} as never, { id: 4, tenantId: 1, cloudAgentRef: null, agentHostId: null, status: 'completed', errorMessage: null });
   // The timeline the adapter wrote: the rows' names in order (durations are measured, so not compared).
   return { outcome, trace: h.rows.map((r) => `${String(r.toolName)}`), requests };
 }

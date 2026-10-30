@@ -1,8 +1,5 @@
 /**
  * runUsageCost — what a cloud run actually used, read from its usage ledger (extracted from `scoreRunOutcome`).
- *
- * An UNKNOWN cost is NULL, never free: no usage rows, or a lookup that failed, yield `costMc: null`; a genuine zero (BYO / local
- * usage rows that really sum to 0) stays 0.
  */
 import { desc, eq, sql } from 'drizzle-orm';
 import { llmUsageLog } from '../../infrastructure/database/schema';
@@ -12,7 +9,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 /** Most-frequent llm_usage_log.model for an execution — the model the run actually
  *  locked onto (the truth of what ran). Empty when the run produced no LLM calls. */
-export async function resolveRunModel(db: Db, executionId: number): Promise<{ model: string; steps: number; costMc: number | null }> {
+export async function resolveRunModel(db: Db, executionId: number): Promise<{ model: string; steps: number; costMc: number }> {
   try {
     const rows = await usageDatabaseOf(db)
       .select({
@@ -24,14 +21,14 @@ export async function resolveRunModel(db: Db, executionId: number): Promise<{ mo
       .where(eq(llmUsageLog.executionId, executionId))
       .groupBy(llmUsageLog.model)
       .orderBy(desc(usageRequestCount()));
-    // No usage rows means the cost is UNKNOWN, not zero: NULL, never free. (A genuine 0 below is real usage that sums to 0.)
-    if (rows.length === 0) return { model: '', steps: 0, costMc: null };
+    // No usage rows: nothing measured (the null-cost semantics arrive with the cost-nullable migration, owned by ws4-canvas).
+    if (rows.length === 0) return { model: '', steps: 0, costMc: 0 };
     const steps = rows.reduce((a, r) => a + (Number(r.n) || 0), 0);
     const costMc = rows.reduce((a, r) => a + (Number(r.cost) || 0), 0);
     return { model: rows[0]?.model ?? '', steps, costMc };
   } catch (error) {
-    // A failed lookup is an unknown cost, not a free run: reported, and NULL is what gets stored.
+    // A failed lookup is reported (cost reads as 0 until the nullable column lands with ws4-canvas).
     reportCaughtError(error, { source: 'application/runtime/runUsageCost.ts', operation: 'resolveRunModel', context: { executionId } });
-    return { model: '', steps: 0, costMc: null };
+    return { model: '', steps: 0, costMc: 0 };
   }
 }

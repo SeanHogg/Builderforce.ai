@@ -1,5 +1,5 @@
 import { and, desc, eq, getTableColumns, inArray, or, sql } from 'drizzle-orm';
-import { IExecutionRepository, type ExecutionReadOptions } from '../../domain/execution/IExecutionRepository';
+import { IExecutionRepository, type ExecutionReadOptions, type LandFields, type TerminalStatus } from '../../domain/execution/IExecutionRepository';
 import { Execution, ExecutionProps } from '../../domain/execution/Execution';
 import {
   ExecutionId, TaskId, TenantId, AgentId, AgentHostId, ExecutionStatus,
@@ -109,44 +109,86 @@ export class ExecutionRepository implements IExecutionRepository {
     return toDomain(inserted);
   }
 
+  /**
+   * Non-terminal field writes only (start, in-flight state). A terminal status is NEVER written here - it lands through
+   * {@link land} - and the write is guarded `status NOT IN terminal`, so a stale RUNNING write can never resurrect a
+   * cancelled / failed / completed row.
+   */
   async update(execution: Execution): Promise<Execution> {
     const plain = execution.toPlain();
+    if (isTerminalStatus(plain.status)) throw new TerminalStatusViaUpdateError(plain.status);
     const [updated] = await this.db
       .update(executionsTable)
       .set({
         status:       plain.status,
         result:       plain.result ?? undefined,
         errorMessage: plain.errorMessage ?? undefined,
-        // The productivity verdict (0385) must actually LAND. Without this column in the
-        // set, `markProduced(true)` round-trips through the domain, writes everything
-        // except the one field it exists for, and `toDomain(updated)` reads the unchanged
-        // value straight back — a silent no-op that leaves the lane-move signal dead and
-        // lets a legitimate no-code ticket be judged an empty completion.
-        //
-        // `?? undefined` is load-bearing: drizzle omits an undefined key, so a `null`
-        // (not judged) can never overwrite a verdict `finalizeCloudRun` already wrote,
-        // while `false` — a real "this run shipped nothing" — is persisted.
-        produced:     plain.produced ?? undefined,
         startedAt:    plain.startedAt ?? undefined,
-        completedAt:  plain.completedAt ?? undefined,
         updatedAt:    new Date(),
       })
-      // A terminal status lands ONCE: racing writers (a reap and a cancel, a re-run after an eviction) cannot both transition. The
-      // write applies to a run that is not yet terminal, or re-asserts the SAME status (the productivity verdict follows a landing).
-      .where(and(
-        eq(executionsTable.id, plain.id),
-        EXECUTION_NON_TERMINAL_STATUSES.includes(plain.status) ? undefined : or(inArray(executionsTable.status, [...EXECUTION_NON_TERMINAL_STATUSES]), eq(executionsTable.status, plain.status)),
-      ))
+      .where(and(eq(executionsTable.id, plain.id), inArray(executionsTable.status, [...EXECUTION_NON_TERMINAL_STATUSES])))
       .returning();
     if (!updated) {
-      // Lost the race to another terminal transition: the winner's state stands, and only the winner records the outcome.
-      const current = EXECUTION_NON_TERMINAL_STATUSES.includes(plain.status) ? null : await this.findById(plain.id);
+      // The run went terminal under a stale write: the terminal row stands.
+      const current = await this.findById(plain.id);
       if (current) return current;
       throw new Error('Execution update returned no rows');
     }
-    const saved = toDomain(updated);
-    await this.hooks.onTerminal?.(saved);
-    return saved;
+    return toDomain(updated);
+  }
+
+  /**
+   * THE terminal transition: `UPDATE ... WHERE status IN (non-terminal)`. Exactly one writer wins; the winner's row is returned with
+   * `won: true` and the outcome owner (`hooks.onTerminal`) is told ONCE, after the row is persisted. A loser gets the winner's row
+   * with `won: false` and nothing fires - callers skip their side effects (audit, milestones, DO signals, lane moves).
+   */
+  async land(
+    id: ExecutionId,
+    status: TerminalStatus,
+    fields: LandFields = {},
+    /** Land only from these statuses (default: any non-terminal one) - e.g. a stranded dispatch must never clobber a run that has started. */
+    from: readonly ExecutionStatus[] = EXECUTION_NON_TERMINAL_STATUSES,
+  ): Promise<{ won: boolean; execution: Execution }> {
+    const now = new Date();
+    const [row] = await this.db
+      .update(executionsTable)
+      .set({
+        status,
+        result:       fields.result ?? undefined,
+        errorMessage: fields.errorMessage ?? undefined,
+        // `?? undefined` is load-bearing: a null (not judged) never overwrites a verdict `finalizeCloudRun` already wrote.
+        produced:     fields.produced ?? undefined,
+        completedAt:  fields.completedAt ?? now,
+        updatedAt:    now,
+      })
+      .where(and(eq(executionsTable.id, id), inArray(executionsTable.status, [...from])))
+      .returning();
+    if (!row) {
+      const winner = await this.findById(id);
+      if (!winner) throw new Error('Execution land found no row');
+      return { won: false, execution: winner };
+    }
+    const execution = toDomain(row);
+    await this.hooks.onTerminal?.(execution);
+    return { won: true, execution };
+  }
+
+  /** The productivity verdict (0385) - a field of a LANDED run, written without touching its status. */
+  async setProduced(id: ExecutionId, produced: boolean): Promise<Execution> {
+    const [row] = await this.db.update(executionsTable).set({ produced, updatedAt: new Date() }).where(eq(executionsTable.id, id)).returning();
+    if (!row) throw new Error('Execution setProduced returned no rows');
+    return toDomain(row);
+  }
+}
+
+
+const isTerminalStatus = (status: ExecutionStatus): status is TerminalStatus => !EXECUTION_NON_TERMINAL_STATUSES.includes(status);
+
+/** `update()` was handed a terminal status: callers must land it (`land`). */
+export class TerminalStatusViaUpdateError extends Error {
+  constructor(status: string) {
+    super(`ExecutionRepository.update refuses terminal status '${status}': use land()`);
+    this.name = 'TerminalStatusViaUpdateError';
   }
 }
 
