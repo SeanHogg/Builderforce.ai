@@ -25,7 +25,7 @@
  * No `node:*` imports, no DOM.
  */
 
-import { verifyWrittenFiles } from "../guards/sourcePolicy.js";
+import { verifyWrittenFiles, type VerifyResult } from "../guards/sourcePolicy.js";
 import {
   MAX_PLACEHOLDER_FINISH_BLOCKS,
   assertsUnrunVerification,
@@ -102,6 +102,8 @@ export type FinishBlockReason =
 export interface FinishGateVerdict {
   block: string | null;
   reason?: FinishBlockReason;
+  /** The run's written set once its descendants' writes were folded in (set only when it grew). */
+  writtenPaths?: readonly string[];
 }
 
 /** Blocks that are not the MODEL's failure — waiting on CI, or on its own children. */
@@ -125,19 +127,33 @@ export interface PlaceholderScan {
 }
 
 export interface FinishGatePorts {
+  /** Called once at the start of every finish attempt, before any other port: a surface that memoises reads for an attempt starts a fresh memo here (the model edits files between attempts). */
+  beginAttempt?: () => void;
   /** Read a written file's committed content (enables the source/config policy). */
   read?: (path: string) => Promise<string | null>;
-  /** Poll the branch's CI and decide whether it blocks finish. */
-  pollBranchCi?: () => Promise<CiFinishDecision>;
+  /** The surface's own changed-file validation, when it has a better one than reading each file (the cloud's repo-backed one). Wins over `read`. */
+  verify?: (paths: readonly string[]) => Promise<VerifyResult>;
+  /** Poll the branch's CI and decide whether it blocks finish. The run's counters tell the decision how many pending / failed blocks it has already spent. */
+  pollBranchCi?: (counters: { pendingBlocks: number; failureBlocks: number }) => Promise<CiFinishDecision>;
   /** Scan the written files for placeholder/stub code. */
   scanPlaceholders?: (paths: readonly string[]) => Promise<PlaceholderScan>;
+  /** The sub-agents the run started that are still working → the block text; null when none is live. */
+  liveChildren?: () => Promise<string | null>;
+  /** Fold the files the run's descendants committed into the run's written set (they committed from their own runs). */
+  absorbChildWrites?: (paths: Set<string>) => Promise<void>;
+  /** Record the structural evidence for a completion claim; `ok: false` refuses the finish. */
+  recordClaim?: (statement: string, paths: readonly string[]) => Promise<{ ok: boolean; error?: string }>;
+  /** The run is bound to a repository. Absent ⇒ bound. Only a bound run is held to the deliverable, CI, placeholder and claim gates. */
+  bound?: boolean;
+  /** Told of every block, for the run's timeline. */
+  onBlocked?: (reason: FinishBlockReason, block: string, detail: Record<string, unknown>, result: string) => Promise<void> | void;
 }
 
 export interface FinishGateArgs {
   /** The files the run wrote (empty ⇒ no deliverable / nothing to verify). */
   writtenPaths: readonly string[];
   requiredSignoff: RequiredReviewSignoff | undefined;
-  /** The run is a node of a delegation tree (unused here: the engine owns child tracking). */
+  /** The run is a node of a delegation tree: its live children block a finish and its descendants' writes join its own. */
   delegated: boolean;
   summary: string;
   output: string;
@@ -149,19 +165,49 @@ export interface FinishGateArgs {
 }
 
 /** Run every gate; the first that blocks wins. Validation is AUTOMATIC: a model that
- *  rushes straight to `finish` cannot skip it. */
+ *  rushes straight to `finish` cannot skip it. Every block is told to the surface's
+ *  `onBlocked` port, so the run's timeline names what refused the finish and why. */
 export async function evaluateFinishGates(a: FinishGateArgs): Promise<FinishGateVerdict> {
-  const { writtenPaths, requiredSignoff, summary, gates } = a;
-  const wrote = writtenPaths.length > 0;
-  const verification = a.ports?.read && wrote
-    ? await verifyWrittenFiles(a.ports.read, writtenPaths)
-    : null;
+  const { requiredSignoff, summary, gates } = a;
+  let writtenPaths = a.writtenPaths;
+  let absorbed: readonly string[] | undefined;
+  a.ports?.beginAttempt?.();
+
+  const blocked = async (reason: FinishBlockReason, block: string, detail: Record<string, unknown>, result: string): Promise<FinishGateVerdict> => {
+    await a.ports?.onBlocked?.(reason, block, detail, result);
+    return { block, reason, ...(absorbed ? { writtenPaths: absorbed } : {}) };
+  };
+
+  if (a.delegated && a.ports?.liveChildren) {
+    // An owner never ends with children still working (their reports would strand).
+    const childBlock = await a.ports.liveChildren();
+    if (childBlock) return { block: childBlock, reason: "children_running" };
+    if (a.ports.absorbChildWrites) {
+      // The children committed from their own runs; the pull request is the whole tree's.
+      const merged = new Set(writtenPaths);
+      await a.ports.absorbChildWrites(merged);
+      if (merged.size !== writtenPaths.length) {
+        writtenPaths = [...merged];
+        absorbed = writtenPaths;
+      }
+    }
+  }
+  const bound = a.ports?.bound !== false;
+  const wrote = bound && writtenPaths.length > 0;
+  // A run bound to a repository (it has a way to read its committed files) is held to
+  // the deliverable gate even before it has written anything: "only the PRD (or nothing)".
+  const codeBound = bound && (wrote || a.ports?.read !== undefined || a.ports?.verify !== undefined);
+  const verification = wrote && a.ports?.verify
+    ? await a.ports.verify(writtenPaths)
+    : wrote && a.ports?.read
+      ? await verifyWrittenFiles(a.ports.read, writtenPaths)
+      : null;
   // Branch CI is polled once static validation is clean; its decision is applied in
   // order below so a green/none result still falls through to honesty + anti-stub.
   let ci: CiFinishDecision | null = null;
   let ciPending = false;
   if (a.ports?.pollBranchCi && wrote && verification?.ok !== false) {
-    ci = await a.ports.pollBranchCi();
+    ci = await a.ports.pollBranchCi({ pendingBlocks: gates.ciPendingBlocks, failureBlocks: gates.ciFailureBlocks });
     // A pending block is the one that spent a pending allowance.
     ciPending = ci.pendingBlocks > gates.ciPendingBlocks;
     gates.ciPendingBlocks = ci.pendingBlocks;
@@ -174,30 +220,32 @@ export async function evaluateFinishGates(a: FinishGateArgs): Promise<FinishGate
 
   if (requiredSignoff && !gates.reviewVerdictRecorded) {
     const block = missingReviewVerdictMessage(requiredSignoff);
-    return { block, reason: "review_verdict_missing" };
+    return blocked("review_verdict_missing", block, { ...requiredSignoff }, block);
   }
-  if (wrote && !gates.noDeliverableBlocked && hasNoCodeDeliverable(writtenPaths)) {
+  if (codeBound && !gates.noDeliverableBlocked && hasNoCodeDeliverable(writtenPaths)) {
     // A code-bound run is finishing with NO code deliverable: block ONCE and make it
     // self-review the requirements. A legitimate no-op run finishes on the retry.
     gates.noDeliverableBlocked = true;
-    return {
-      block:
-        "Before finishing: you have not committed any code changes for this task — only the PRD (or nothing) is on the branch. Re-read the task requirements and verify EACH is actually implemented. If work remains, use search_code/read_file to find the right place and write_file to implement it, then finish. If — and only if — this task genuinely requires no code change, call finish again and state explicitly why no change was needed.",
-      reason: "no_deliverable",
-    };
+    return blocked(
+      "no_deliverable",
+      "Before finishing: you have not committed any code changes for this task — only the PRD (or nothing) is on the branch. Re-read the task requirements and verify EACH is actually implemented. If work remains, use search_code/read_file to find the right place and write_file to implement it, then finish. If — and only if — this task genuinely requires no code change, call finish again and state explicitly why no change was needed.",
+      {},
+      "Blocked finish: no code deliverable — self-review required",
+    );
   }
   if (verification && !verification.ok) {
-    return {
-      block:
-        `Cannot finish — changed-file validation found ${verification.errors.length} issue(s). ` +
-        "Repair every issue, then finish again. This is a shell-free source policy, not a claim that the full project type-check ran.\n" +
-        verification.errors.map((e) => `- ${e.path}${e.line ? `:${e.line}` : ""}${e.ruleId ? ` [${e.ruleId}]` : ""}: ${e.message}`).join("\n"),
-      reason: "source_quality",
-    };
+    const block =
+      `Cannot finish — changed-file validation found ${verification.errors.length} issue(s). ` +
+      "Repair every issue, then finish again. This is a shell-free source policy, not a claim that the full project type-check ran.\n" +
+      verification.errors.map((e) => `- ${e.path}${e.line ? `:${e.line}` : ""}${e.ruleId ? ` [${e.ruleId}]` : ""}: ${e.message}`).join("\n");
+    return blocked("source_quality", block, { errors: verification.errors }, `Blocked finish: ${verification.errors.length} source/config quality issue(s)`);
   }
   if (ci?.block) {
-    const v: FinishGateVerdict = { block: ci.block, reason: "branch_ci" };
-    return ciPending ? { ...v, reason: "branch_ci_pending" } : v;
+    // Branch commit status / check-runs are this executor's build/type-check/test.
+    // The timeline keeps its one reason ("branch_ci") for a red and a pending CI; the verdict NAMES a pending one, because
+    // waiting on CI is nobody's failure and the cascade must not punish it.
+    const recorded = await blocked("branch_ci", ci.block, { pendingBlocks: gates.ciPendingBlocks, failureBlocks: gates.ciFailureBlocks }, ci.block.slice(0, 300));
+    return ciPending ? { ...recorded, reason: "branch_ci_pending" } : recorded;
   }
   if (summary && !gates.finishBlockedOnce && !gates.ciVerified && assertsUnrunVerification(summary)) {
     // The summary claims a check passed, but nothing was (or could be) run. Block once.
@@ -205,6 +253,7 @@ export async function evaluateFinishGates(a: FinishGateArgs): Promise<FinishGate
     return {
       block: "You stated that a build/type-check/lint/test passed or is resolved, but this executor cannot run a local shell and in-run CI did not report success. Call run_checks (it polls branch CI) or finish again with a summary that does NOT claim a check passed.",
       reason: "honesty",
+      ...(absorbed ? { writtenPaths: absorbed } : {}),
     };
   }
   if (wrote && gates.placeholderBlocks < MAX_PLACEHOLDER_FINISH_BLOCKS && a.ports?.scanPlaceholders) {
@@ -212,14 +261,25 @@ export async function evaluateFinishGates(a: FinishGateArgs): Promise<FinishGate
     const scan = await a.ports.scanPlaceholders(writtenPaths);
     if (scan.flagged.length) {
       gates.placeholderBlocks += 1;
-      return {
-        block:
-          `Cannot finish — ${scan.flagged.length} committed file(s) still contain placeholder/stub code instead of a real implementation. ` +
+      return blocked(
+        "placeholders",
+        `Cannot finish — ${scan.flagged.length} committed file(s) still contain placeholder/stub code instead of a real implementation. ` +
           "Replace each stub with a working implementation that uses the existing infrastructure (search_code for it first), or if a file is dead code that should not ship in this PR, remove it with delete_file. Then call finish again.\n" +
           scan.flagged.map((f) => `- ${f.path}: ${f.markers.join("; ")}`).join("\n"),
-        reason: "placeholders",
+        { files: scan.flagged },
+        `Blocked finish: ${scan.flagged.map((f) => f.path).join(", ")}`,
+      );
+    }
+  }
+  if (wrote && a.ports?.recordClaim) {
+    const claim = await a.ports.recordClaim(summary || a.output || `Completed changes to ${writtenPaths.join(", ")}`, writtenPaths);
+    if (!claim.ok) {
+      return {
+        block: `Cannot finish — no structural evidence record supports this completion claim (${claim.error ?? "no evidence"}). Retry the successful write or verification, then finish again.`,
+        reason: "claim_evidence",
+        ...(absorbed ? { writtenPaths: absorbed } : {}),
       };
     }
   }
-  return { block: null };
+  return absorbed ? { block: null, writtenPaths: absorbed } : { block: null };
 }

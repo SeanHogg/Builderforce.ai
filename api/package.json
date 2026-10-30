@@ -34,6 +34,7 @@
     "check:api-contract-mirror": "node scripts/check-api-contract-mirror.mjs",
     "check:project-ownership": "node scripts/check-project-ownership.mjs",
     "check:tenant-scope": "node scripts/check-tenant-scope.mjs",
+    "check:execution-landing": "node scripts/check-execution-landing.mjs",
     "check:source": "node scripts/check-source-text.mjs",
     "check:silent-catches": "node ../scripts/check-silent-catches.mjs",
     "check:unvalidated-bodies": "node scripts/check-unvalidated-bodies.mjs",

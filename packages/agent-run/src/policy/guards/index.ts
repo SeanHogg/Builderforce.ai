@@ -2,7 +2,7 @@
  * policy/guards — the A3 progress detector, the D1 verifier cascade, the D7 post-edit
  * check and the D8 parallel-reads port, wired onto the kernel's hooks in one place.
  *
- * Owned by WS2d. Ports `api/src/application/runtime/costLoop/loopGuards.ts` behind the
+ * Owned by WS2d. Ports the cloud's retired per-tick `LoopGuards` behind the
  * `GuardsHook` contract `policy/hooks.ts` names. Each lever the source switched on
  * (`a3_progress_detector`, `d7_deterministic_handlers`, `d1_verifier_cascade`,
  * `d8_parallel_tool_calls`) is a constructor input here, read from `RunPolicy.levers` —
@@ -38,6 +38,8 @@ export interface GuardLevers {
 
 /** The engine couplings the guards wrap, as optional ports a surface supplies. */
 export interface GuardPorts {
+  /** The run is bound to a repository. Absent ⇒ bound. An unbound run has no post-edit check (D7). */
+  bound?: boolean;
   /** Read a written file's committed content (D7 edit check on the committed result). */
   read?: (path: string) => Promise<string | null>;
   /** The run's sandbox fast checks over the turn's edits (the D1 code unit's stronger verifier). */
@@ -49,6 +51,10 @@ export interface GuardPorts {
   cascade?: {
     shouldSkipWeakAttempt?: (features: DifficultyFeatures) => Promise<boolean> | boolean;
     weakPassRate?: (actionType: string) => Promise<number | undefined> | number | undefined;
+    /** Raise a think level one step (the surface's reasoning ladder). With none, D1's reasoning escalation is inert. */
+    escalateThinkLevel?: (level: string) => string;
+    /** The think level a run reasons at when the caller passed none (the role's default). */
+    defaultThinkLevel?: string;
     recordOutcome?: (row: {
       actionType: string;
       weakModel: string;
@@ -112,6 +118,8 @@ export class RunGuards {
         ? (f) => ports.cascade!.shouldSkipWeakAttempt!({ actionType: f.actionType, priorWeakPassRate: f.priorWeakPassRate } as DifficultyFeatures)
         : undefined,
       weakPassRate: ports.cascade?.weakPassRate,
+      escalateThinkLevel: ports.cascade?.escalateThinkLevel,
+      defaultThinkLevel: ports.cascade?.defaultThinkLevel,
       recordOutcome: ports.cascade?.recordOutcome
         ? (row) => ports.cascade!.recordOutcome!({ ...row, features: row.features as DifficultyFeatures })
         : undefined,
@@ -163,7 +171,7 @@ export class RunGuards {
    */
   async checkEdit(call: PolicyToolCall, data: unknown, ports: GuardPorts): Promise<unknown> {
     if (!this.postEdit && !this.cascade.on) return data;
-    const verdict = await verifyAfterEdit(call, data, { read: ports.read });
+    const verdict = await verifyAfterEdit(call, data, { read: ports.read, bound: ports.bound });
     if (!verdict) return data;
     this.turnEdits.push(verdict);
     return this.postEdit ? withPostEditNote(data, verdict) : data;
@@ -312,7 +320,7 @@ function sessionOf(ctx: PolicyContext, ports: GuardPorts): RunGuards {
  * The A3 / D1 / D7 notes the next turn opens with (the volatile tail, never the cached
  * prefix): the progress detector's steer, the cascade's note and the sandbox checks'
  * failures. Empty when the guards have nothing to say. The memory policy composes it
- * into the turn's brief, as `costLoop/volatileTail.ts` did.
+ * into the turn's brief (the volatile tail).
  */
 export function guardsTurnNote(ctx: PolicyContext): string {
   // A resumed tick asks for the brief before any guard hook ran on its state: read the
@@ -359,6 +367,26 @@ export function createGuardsHook(ports: GuardPorts = {}): GuardsHook {
     },
     isReadOnly(ctx: PolicyContext, name: string) {
       return sessionOf(ctx, ports).isReadOnly(name);
+    },
+    async seed(ctx: PolicyContext) {
+      const ladder = ports.ladder?.() ?? ports.cascade?.ladder;
+      if (!ladder) return undefined;
+      const seeded = await sessionOf(ctx, ports).seedModel(ctx.state.model, {
+        strict: ctx.policy.modelStart?.strict === true,
+        ladder,
+        features: ports.features?.(0) ?? { actionType: "other", role: ctx.policy.role, promptTokens: 0, toolCount: ctx.tools.length, turnIndex: 0 },
+      });
+      ctx.state.guards = sessionOf(ctx, ports).snapshot();
+      return seeded;
+    },
+    reasoning(ctx: PolicyContext) {
+      return sessionOf(ctx, ports).reasoning(undefined);
+    },
+    async finish(ctx: PolicyContext, verdict: { block: string | null; reason?: string }) {
+      const g = sessionOf(ctx, ports);
+      const block = await g.finish(verdict, ctx.step, ports);
+      ctx.state.guards = g.snapshot();
+      return block;
     },
   };
 }

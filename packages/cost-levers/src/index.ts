@@ -28,7 +28,6 @@ export type CostLeverId =
   | 'b2_semantic_cache'
   | 'b3_single_flight'
   | 'b4_agent_answer_replay'
-  | 'c1_deferred_tools'
   | 'c2_observation_masking'
   | 'c3_task_state'
   | 'c4_adaptive_context'
@@ -72,7 +71,6 @@ export const COST_LEVERS: readonly CostLeverSpec[] = [
   { id: 'b2_semantic_cache', requirement: 'B2', rollout: 10, summary: 'Scoped semantic cache on tool-free chat' },
   { id: 'b3_single_flight', requirement: 'B3', rollout: 100, summary: 'Coalesce identical in-flight requests' },
   { id: 'b4_agent_answer_replay', requirement: 'B4', rollout: 10, summary: 'Memory answer replay for agent sub-questions' },
-  { id: 'c1_deferred_tools', requirement: 'C1', rollout: 10, summary: 'Role core tool set + tool_search' },
   { id: 'c2_observation_masking', requirement: 'C2', rollout: 10, summary: 'Mask tool outputs older than N turns' },
   { id: 'c3_task_state', requirement: 'C3', rollout: 10, summary: 'Structured task state kept through compaction' },
   { id: 'c4_adaptive_context', requirement: 'C4', rollout: 10, summary: 'Start retrieval small, widen on low confidence' },
@@ -107,7 +105,7 @@ export function costLeverSpec(id: CostLeverId): CostLeverSpec {
   return spec;
 }
 
-/** Env key for a lever: `c1_deferred_tools` → `COST_LEVER_C1_DEFERRED_TOOLS`. */
+/** Env key for a lever: `c2_observation_masking` → `COST_LEVER_C2_OBSERVATION_MASKING`. */
 export function costLeverEnvKey(id: CostLeverId): string {
   return `COST_LEVER_${id.toUpperCase()}`;
 }

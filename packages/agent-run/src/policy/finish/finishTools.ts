@@ -9,19 +9,18 @@
 
 // ── Honesty: a claimed check that could not have run ─────────────────────────
 
-/** Verb shapes that mean "a build/type-check/test was RUN". */
-const CHECK_CLAIM_RE = /\b(type[- ]?check(?:ed)?|ran\s+tests?|tests?\s+pass(?:ed)?|build\s+(?:is\s+)?(?:green|pass(?:ed)?|succeeded)|lint(?:ing)?\s+clean|compil(?:es|ed)|ci\s+(?:is\s+)?green)\b/i;
-/** Shapes that assert the claim positively ("passed", "green"), not merely that it was attempted. */
-const PASS_CLAIM_RE = /\b(pass(?:ed)?|green|succeeded|ok|clean|resolved|fixed)\b/i;
-
 /**
- * Whether a finish SUMMARY asserts a build/type-check/lint/test ran and passed that the
- * executor could not have run (no shell) — the honesty gate refuses to let a claim like
- * "all tests passed" ship when nothing was (or could be) executed.
+ * True when a finish SUMMARY claims a build / type-check / lint / test passed — which a
+ * shell-less executor cannot have run. The honesty gate blocks a fabricated "checks pass"
+ * claim once and forces an honest summary. Deliberately narrow (a check noun AND a success
+ * verb) to avoid false positives on legitimate descriptions of the work. The cloud's own
+ * matcher (`cloudAgentTools.assertsUnrunVerification`), now the agent's.
  */
 export function assertsUnrunVerification(summary: string): boolean {
-  if (!summary || typeof summary !== "string") return false;
-  return CHECK_CLAIM_RE.test(summary) && PASS_CLAIM_RE.test(summary);
+  const s = summary.toLowerCase();
+  const check = /(type[\s-]?check|typecheck|typescript|\btsc\b|lint|eslint|\btest(s|ing|ed)?\b|\bbuild(s|ing)?\b|compil)/;
+  const pass = /(pass(es|ed|ing)?|succeed(s|ed)?|success|green|no\s+errors?|error[\s-]?free|will\s+now\s+pass|are\s+resolved|is\s+resolved)/;
+  return check.test(s) && pass.test(s);
 }
 
 // ── No code deliverable: the run is finishing with only docs (or nothing) ────

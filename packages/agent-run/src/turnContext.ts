@@ -70,7 +70,7 @@ export function openingRows(task: RunTask, gates?: RunPolicy["approvalGates"]): 
  * The turn-context sections, from the pack and the memory brief, or null when there is
  * nothing to say.
  */
-export function turnContextBlock(pack: ContextPack, brief: string | null): string | null {
+export function turnContextBlock(pack: ContextPack, brief: string | null, sections: readonly string[] = []): string | null {
   const lines: string[] = [];
   for (const file of pack.focus) {
     if (file.content !== undefined) {
@@ -89,6 +89,7 @@ export function turnContextBlock(pack: ContextPack, brief: string | null): strin
   for (const fact of pack.facts) lines.push(`## ${fact.key}`, fact.content);
   if (pack.recall.length > 0) lines.push("## recall", ...pack.recall);
   if (brief && brief.trim()) lines.push("## brief", brief.trim());
+  for (const section of sections) if (section.trim()) lines.push(section.trim());
   if (lines.length === 0) return null;
   return lines.join("\n");
 }
@@ -99,7 +100,7 @@ export function turnContextBlock(pack: ContextPack, brief: string | null): strin
  * the cached prefix) holds no per-turn context and a resumed tick rebuilds the same tail
  * from the persisted pack.
  */
-export function withVolatileTail(transcript: readonly RunMessage[], pack: ContextPack, brief: string | null): RunMessage[] {
-  const tail = volatileTail([turnContextBlock(pack, brief)]);
+export function withVolatileTail(transcript: readonly RunMessage[], pack: ContextPack, brief: string | null, sections: readonly string[] = []): RunMessage[] {
+  const tail = volatileTail([turnContextBlock(pack, brief, sections)]);
   return tail ? [...transcript, tail] : [...transcript];
 }

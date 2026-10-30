@@ -38,6 +38,7 @@ export * from "./symbols.js";
 export * from "./symbol-tools.js";
 export * from "./semantic-tools.js";
 export * from "./stableStringify.js";
+export * from "./policyGateCallKey.js";
 export * from './codeAnalysis.js';
 export { savedCodeAnalysisSummary } from './codeAnalysisTool.js';
 // The code pack for memory's knowledge graph (PRD 38); also the `./knowledge` subpath.

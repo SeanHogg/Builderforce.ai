@@ -15,7 +15,6 @@ import { reportCaughtError } from './application/observability/caughtErrorReport
  */
 import type { Env } from './env';
 import type { Db } from './infrastructure/database/connection';
-import { ExecutionRepository } from './infrastructure/repositories/ExecutionRepository';
 import { TaskRepository } from './infrastructure/repositories/TaskRepository';
 import { AgentRepository } from './infrastructure/repositories/AgentRepository';
 import { AuditRepository } from './infrastructure/repositories/AuditRepository';
@@ -23,6 +22,7 @@ import { RuntimeService } from './application/runtime/RuntimeService';
 import { recordRunFailureEvent } from './application/runtime/recordRunFailureEvent';
 import { loadCloudRunForSelfHeal, selfHealCloudRun } from './application/runtime/cloudSelfHeal';
 import { signalCloudRunnerConcluded } from './application/runtime/cloudRunnerStub';
+import { executionRepositoryFor } from './application/runtime/executionLanding';
 import { wireExecutionEventSinks } from './application/runtime/wireExecutionEventSinks';
 import { syncExecutionTaskLifecycle } from './application/task/taskLifecycle';
 import { maybeAutoRunOnLaneEntry } from './application/swimlane/laneEntryTrigger';
@@ -47,7 +47,7 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
   // instance it belongs to; it is only ever invoked after construction completes.
   let runtimeService: RuntimeService;
   runtimeService = new RuntimeService({
-    executions: new ExecutionRepository(db),
+    executions: executionRepositoryFor(db),
     tasks: new TaskRepository(db),
     agents: new AgentRepository(db),
     audit: new AuditRepository(db, env),

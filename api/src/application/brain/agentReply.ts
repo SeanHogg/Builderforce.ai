@@ -21,7 +21,7 @@
  * still the BRAIN/host loop's job; this is the platform-tool layer.
  *
  *   agentReplyPrompt  — toolset + system prompt
- *   agentReplyLoop    — the model/tool loop + forced synthesis
+ *   agentReplyRun     — the reply's ports for the one agent (model, tools, trace)
  *   agentReplyOutcome — Evermind regeneration, empty-reply diagnostic, persist
  */
 
@@ -43,7 +43,7 @@ import { appendRaw } from './brainMessageStore';
 import type { BrainCallContext } from './brainLlmCall';
 import { agentReplySystemPrompt, agentReplyToolset } from './agentReplyPrompt';
 import { renderSkillCatalogBlock, skillLibraryCatalog } from '../skills/skillLibrary';
-import { runAgentReplyLoop } from './agentReplyLoop';
+import { runAgentReply } from './agentReplyRun';
 import { emptyReplyError, persistAgentReply, regenerateOnEvermind } from './agentReplyOutcome';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -197,8 +197,8 @@ export async function agentReply(
     chatId, projectId: projectHint, agentRef: input.agentRef,
   };
 
-  const s = await runAgentReplyLoop({
-    db, env, tenantId, userId, agentRef: input.agentRef, agentName, opts,
+  const s = await runAgentReply({
+    db, env, tenantId, userId, chatId, agentRef: input.agentRef, agentName, opts,
     service, convo, toolset, userRequest, replyTemp, pinnedModel, byoVendors, plan, call,
   });
 

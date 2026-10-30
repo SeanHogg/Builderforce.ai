@@ -11,7 +11,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { approvals } from '../../infrastructure/database/schema';
 import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { TenantRole } from '../../domain/shared/types';
-import { normalizeRequestKind, isAnswerableKind } from '../../domain/approval/requestKind';
+import { normalizeRequestKind, isAnswerableKind, GOVERNANCE_GATE_ACTION } from '../../domain/approval/requestKind';
 import { isSelfOwnedApproval, isApprovalVisibleTo } from '../../domain/approval/selfOwned';
 import { memberHasPermission } from '../rbac/effectivePermissions';
 import { resumePausedExecution } from '../runtime/executionResume';
@@ -101,6 +101,18 @@ async function bridgeRoleSignoff(
   }
 }
 
+/**
+ * What the paused run reads when a governance gate's approval is decided. It names WHAT was decided and carries the approval's
+ * id, so no two decisions in one run read alike: a canned "Approved." was deduped against the transcript, and the second
+ * approval of a run was dropped before the run ever saw it.
+ */
+export function governanceGateDecisionText(existing: Pick<ApprovalRow, 'description'>, id: string, status: 'approved' | 'rejected', reviewNote: string | null | undefined): string {
+  // The gate asked `Approve the agent's use of "<tool>"? <reason>`: the decision names the tool, not the question that was asked.
+  const tool = /"([^"]+)"/.exec(existing.description ?? '')?.[1];
+  const subject = tool ? `the agent's use of "${tool}"` : 'the gated call';
+  return `${status === 'approved' ? 'Approved' : 'Rejected'}: ${subject} (approval ${id}).${status === 'rejected' && reviewNote ? ` ${reviewNote}` : ''}`;
+}
+
 export async function decideApproval(db: Db, env: ApprovalEnv, input: DecideApprovalInput): Promise<DecideApprovalResult> {
   const { tenantId, approvalId: id, actor } = input;
   const userId = actor.userId;
@@ -157,11 +169,17 @@ export async function decideApproval(db: Db, env: ApprovalEnv, input: DecideAppr
 
   // Resume a paused CLOUD run: the answer is delivered as a pending user turn the
   // loop drains on its next tick. (The on-prem relay below covers self-hosted agents.)
-  if (existing.executionId && responseText) {
+  // A governance gate's approval is decided approved / rejected with no text, and resumes the run all the same: the run reads
+  // the STRUCTURED decision off the approval row when it retries the call; the steer only tells the model what was decided.
+  const governanceGate = existing.actionType === GOVERNANCE_GATE_ACTION;
+  // What the run is told: an answered question's text; a governance gate's approved / rejected decision (named, see
+  // governanceGateDecisionText); nothing for any other approval, which does not resume a run.
+  const resumeAnswer = status === 'answered' ? responseText : governanceGate ? governanceGateDecisionText(existing, id, status, input.reviewNote) : null;
+  if (existing.executionId && resumeAnswer) {
     await resumePausedExecution(env, db, {
       executionId: existing.executionId,
       tenantId,
-      answer: responseText,
+      answer: resumeAnswer,
       approvalId: id,
     });
   }

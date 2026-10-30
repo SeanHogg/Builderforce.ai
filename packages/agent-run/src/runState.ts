@@ -7,6 +7,7 @@ import { initialRunPolicy, type RunPolicyState } from "@builderforce/run-policy"
 import type { ParsedToolCall } from "@builderforce/agent-loop";
 import type { ReadCoverageState, RunMessage, RunPolicy, RunState, RunTask } from "./contract.js";
 import { initialFinishGateState } from "./policy/finish/gates.js";
+import { initialModelRunState } from "./policy/model/index.js";
 import { freshTally, resumeTally } from "./telemetry/runTally.js";
 
 /**
@@ -36,7 +37,21 @@ export function freshState(policy: RunPolicy, task: RunTask): RunState {
  * unpinned run lets the transport choose.
  */
 function initialModelState(policy: RunPolicy): RunPolicyState {
-  return initialRunPolicy({ pinnedModel: policy.pinnedModel, ...(policy.modelOptions ?? {}) });
+  const start = policy.modelStart;
+  // A surface that names how the hand-off starts (a strict pin, the delegated role the phase
+  // rule reads, the per-phase models) gets the model policy's own seed; any other run starts
+  // as it always did. `modelOptions` is how a surface's session tunes the hand-off itself.
+  if (!start) return initialRunPolicy({ pinnedModel: policy.pinnedModel, ...(policy.modelOptions ?? {}) });
+  const model = start.model ?? policy.pinnedModel ?? "";
+  if (start.plain) {
+    const verify = start.phaseModels?.verify;
+    return initialRunPolicy({ pinnedModel: model, ...(policy.modelOptions ?? {}), ...(verify ? { phaseModels: { verify }, reviewModel: verify } : {}) });
+  }
+  return initialModelRunState({
+    pick: { model, strict: start.strict ?? false },
+    delegatedRole: start.delegatedRole,
+    ...(start.phaseModels ? { phaseModels: start.phaseModels } : {}),
+  }).policy;
 }
 
 function freshReads(): ReadCoverageState {
@@ -82,6 +97,12 @@ export function asMessages(raw: readonly unknown[]): RunMessage[] {
 /** Record a write the run made, so the finish gates can see what was delivered. */
 export function rememberWrite(state: RunState, call: ParsedToolCall, ok: boolean): void {
   if (!ok) return;
+  // A path the run deleted is no longer part of what it delivers.
+  if (call.name === "delete_file") {
+    const gone = typeof call.args.path === "string" ? call.args.path : undefined;
+    if (gone) state.writtenPaths = state.writtenPaths.filter((p) => p !== gone);
+    return;
+  }
   if (call.name !== "write_file" && call.name !== "edit_file") return;
   const path = typeof call.args.path === "string" ? call.args.path : undefined;
   if (path && !state.writtenPaths.includes(path)) state.writtenPaths = [...state.writtenPaths, path];

@@ -29,6 +29,7 @@
 
 import type { MemoryHook, PolicyContext, PolicyToolCall } from "../hooks.js";
 import { guardsTurnNote } from "../guards/index.js";
+import { renderTaskState } from "../tools/taskState.js";
 import { recorderForState, knowledgeState } from "./knowledge.js";
 import { extractAndWriteLearnedFacts } from "./learnedFacts.js";
 
@@ -38,6 +39,17 @@ const SECTION_BREAK = "\n\n";
 /** A dispatched result the tool reported as failed (`{ ok: false }`) — never recorded. */
 function failed(result: unknown): boolean {
   return !!result && typeof result === "object" && (result as { ok?: unknown }).ok === false;
+}
+
+/**
+ * The deterministic half of the run-end write-back: the code map (the `codemap:` fields), carrying the chat it came from
+ * (WS8d), or nothing when the run read and changed too little to map. The ONE definition — `consolidate` calls it.
+ */
+function codeMapOf(ctx: PolicyContext) {
+  const recorder = recorderForState(ctx.state);
+  ctx.state.memory = knowledgeState(recorder);
+  const map = recorder.consolidate({ root: ctx.task.workspace?.defaultRepo });
+  return map ? { ...map, ...(ctx.task.chatId !== undefined ? { chatId: ctx.task.chatId } : {}) } : undefined;
 }
 
 /**
@@ -70,7 +82,8 @@ export const memoryHook: MemoryHook & {
     if (!recorder.activity.prompt && ctx.task.prompt) recorder.setPrompt(ctx.task.prompt);
     // The recorder's record is written back, so a later turn (and a resume) sees it.
     ctx.state.memory = knowledgeState(recorder);
-    const sections = [recorder.brief() ?? "", guardsTurnNote(ctx)]
+    const taskState = ctx.policy.levers.includes("c3_task_state") ? renderTaskState(ctx.state.taskState) : "";
+    const sections = [recorder.brief() ?? "", taskState, guardsTurnNote(ctx)]
       .filter((part) => part.trim().length > 0);
     return sections.length > 0 ? sections.join(SECTION_BREAK) : null;
   },
@@ -86,19 +99,17 @@ export const memoryHook: MemoryHook & {
    * of a completed run, so a caller that is settling a failure passes `learn: false`.
    */
   async consolidate(ctx: PolicyContext, opts?: { learn?: boolean }) {
-    const recorder = recorderForState(ctx.state);
-    ctx.state.memory = knowledgeState(recorder);
-    const map = recorder.consolidate({ root: ctx.task.workspace?.defaultRepo });
+    // The deterministic half — the code map, already carrying the chat it came from (WS8d) — is `codeMapOf`'s.
+    const map = codeMapOf(ctx);
     const facts = opts?.learn === false
       ? null
       : await extractAndWriteLearnedFacts({
-          activity: recorder.activity,
+          activity: recorderForState(ctx.state).activity,
         });
     // `undefined` (no map) leaves the store's commitMemory alone; a map is always
-    // committed even when no learned fact landed — the map is the deterministic half.
-    // The write carries the chat it came from (WS8d); the anchors are derived server-side.
+    // committed even when no learned fact landed. The anchors are derived server-side.
+    if (map) return map;
     const chat = ctx.task.chatId !== undefined ? { chatId: ctx.task.chatId } : {};
-    if (map) return { ...map, ...chat };
     return facts !== null && facts.length > 0 ? { facts, ...chat } : undefined;
   },
 };

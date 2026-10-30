@@ -20,6 +20,13 @@ export type RequestKind = (typeof REQUEST_KINDS)[number];
 
 export const DEFAULT_REQUEST_KIND: RequestKind = 'approval';
 
+/**
+ * The action type of an approval a governance gate raises on a run's tool call (`RunPolicy.approvalGates`, PRD 35 §6.9):
+ * a `kind: 'approval'` request resolved `approved` / `rejected`, bound to the execution, whose decision resumes the run
+ * even without any answer text.
+ */
+export const GOVERNANCE_GATE_ACTION = 'governance.tool_call';
+
 /** Coerce arbitrary input to a valid kind, falling back to 'approval'. */
 export function normalizeRequestKind(value: unknown): RequestKind {
   return REQUEST_KINDS.includes(value as RequestKind) ? (value as RequestKind) : DEFAULT_REQUEST_KIND;

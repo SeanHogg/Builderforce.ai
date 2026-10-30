@@ -44,6 +44,8 @@ import { markReaperRequeued, wasReaperRequeued, parseCloudAgentRef } from './clo
 import { recordCloudToolEvent } from './cloudToolEvents';
 import { cloudRunnerStub } from './cloudRunnerStub';
 import { notifyExecutionSubscribers } from './executionEvents';
+import { landExecution } from './executionLanding';
+import { ExecutionStatus } from '../../domain/shared/types';
 
 /** Live (non-terminal) statuses an orphaned/crashed run can be recovered from. */
 const RECOVERABLE = new Set(['running', 'submitted', 'pending']);
@@ -228,10 +230,10 @@ export async function handleCloudRunCrash(env: Env, db: Db, executionId: number,
     return 'requeued';
   }
 
-  const failed = await db.update(executions)
-    .set({ status: 'failed', errorMessage: reason, completedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(executions.id, executionId), ne(executions.status, 'failed'), ne(executions.status, 'cancelled')))
-    .returning({ id: executions.id })
+  // The ONE terminal transition: it can fail only a run that is still non-terminal (a run that already COMPLETED is never
+  // overwritten), and it records the run's outcome row. `won` is false when another writer landed it first.
+  const won = await landExecution(db, executionId, ExecutionStatus.FAILED, { errorMessage: reason })
+    .then((landed) => landed.won)
     .catch((error) => {
       reportCaughtError(error, { source: "application/runtime/cloudSelfHeal.ts", operation: "handleCloudRunCrash", context: { logMessage: '[cloud-self-heal] terminal failure transition failed', details: {
         tenantId: run.tenantId,
@@ -239,8 +241,10 @@ export async function handleCloudRunCrash(env: Env, db: Db, executionId: number,
         reason,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
       } } });
-      return [] as { id: number }[];
+      return false;
     });
+  // A run something else already landed has nothing more to say here: no failure row, no `done`.
+  if (!won) return 'ineligible';
   await recordCloudToolEvent(db, {
     tenantId: run.tenantId, ...(run.cloudAgentRef ? { cloudAgentRef: run.cloudAgentRef } : {}),
     executionId,
@@ -251,14 +255,12 @@ export async function handleCloudRunCrash(env: Env, db: Db, executionId: number,
   // did not just die would overwrite a truthful terminal state in every open view.
   // `taskId` is carried because this module holds raw columns, not a hydrated
   // Execution; the board sink resolves the project room from it.
-  if (failed.length > 0) {
-    notifyExecutionSubscribers(executionId, {
-      type: 'done',
-      executionId,
-      status: 'failed',
-      taskId: run.taskId,
-      ts: new Date().toISOString(),
-    });
-  }
+  notifyExecutionSubscribers(executionId, {
+    type: 'done',
+    executionId,
+    status: 'failed',
+    taskId: run.taskId,
+    ts: new Date().toISOString(),
+  });
   return 'ineligible';
 }

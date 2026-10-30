@@ -38,17 +38,22 @@
  */
 
 import type { Capability, ToolSchema } from "@builderforce/agent-tools";
-import type { PolicyContext, ToolsHook } from "../hooks.js";
+import type { PolicyContext, PolicyToolCall, ToolsHook } from "../hooks.js";
 import { selectCatalog } from "./catalog.js";
 import { selectPlatformCatalog } from "./platform.js";
 import { selectToolsForTurn } from "./selectTools.js";
+import { TOOL_SEARCH_TOOL, runToolSearch } from "./searchHelpers.js";
+import { UPDATE_TASK_STATE_SCHEMA, UPDATE_TASK_STATE_TOOL, applyTaskStateUpdate } from "./taskState.js";
+
 import { isChatReplyScope, CHAT_REPLY_SCOPED_TOOLS } from "./toolset.js";
 import { coveredReadAnswer, recordServedRead } from "./readCoverage.js";
 import { gateCall, isToolWithheld } from "./gates.js";
 
-/** The tools hook, as ported. `select` narrows the surface's schemas to what this run may call. */
-export const toolsHook: ToolsHook = {
-  select(ctx: PolicyContext, offered: readonly ToolSchema[]) {
+/** The tool that records a reviewer's verdict — required of a run whose policy owes a sign-off. */
+const SIGNOFF_TOOL = "builtin_kanban_signoff";
+
+/** The schemas this run may call this turn — the ONE catalog strategy (see {@link toolsHook}). */
+function selectedTools(ctx: PolicyContext, offered: readonly ToolSchema[]): ToolSchema[] {
     const { policy, task } = ctx;
     // A tool an unscoped `block` gate withholds is never advertised (governance, every surface).
     const tools = offered.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? ""));
@@ -56,10 +61,13 @@ export const toolsHook: ToolsHook = {
     // The addressed-reply scope advertises only the chat-scoped tools plus whatever the
     // surface already gated to them; the autonomous scopes advertise the one catalog.
     if (isChatReplyScope(policy.toolScope)) {
+      // The tools the surface supplies itself (`ports.extensions` — the curated platform set
+      // the reply was composed with) are the reply's own; the chat-scoped ids are granted by name.
       const allowed = new Set(CHAT_REPLY_SCOPED_TOOLS);
+      const extension = ctx.ports.extensions;
       return tools.filter((t) => {
         const name = t.function?.name;
-        return name ? allowed.has(name) : false;
+        return name ? allowed.has(name) || Boolean(extension?.handles(name)) : false;
       });
     }
 
@@ -68,24 +76,64 @@ export const toolsHook: ToolsHook = {
     // A surface whose own tools are the whole catalog advertises exactly those, ranked by
     // the same selector; the shared registry's core set is a repository's catalog, not a board's.
     const own = selectPlatformCatalog(ctx, pinned);
-    if (own) return own;
+    if (own) return [...own];
 
     // The ONE catalog strategy: role core set + tool_search + find_symbol, with the
     // pinned, required and prompt-named tools kept. The lexical selector then trims an
     // oversized catalog to the turn's fixed set (stable advertised bytes).
-    const catalog = selectCatalog(tools, policy.role, catalogCaps(ctx), {
-      pinned,
-      prompt: task.prompt,
-    });
-    const selected = selectToolsForTurn(catalog, {
-      query: task.prompt,
-      pinned,
-    });
-    return selected.tools;
+    // A run owing a sign-off cannot finish without the tool that records it, so it is always advertised.
+    const required = policy.signoff ? [SIGNOFF_TOOL] : [];
+    const pinned = [...pinnedNames(ctx), ...required];
+    // Tools the persona or the governance text names are advertised as well as the ones the task names.
+    const prompt = [task.persona, task.prompt].filter(Boolean).join("\n");
+    const catalog = selectCatalog(tools, policy.role, catalogCaps(ctx), { pinned, required, prompt });
+    const selected = selectToolsForTurn(catalog, { query: task.prompt, pinned });
+    return policy.levers.includes("c3_task_state") ? [...selected.tools, UPDATE_TASK_STATE_SCHEMA] : selected.tools;
+}
+
+/**
+ * `tool_search`, the meta tool the catalog advertises: it searches the tools this turn does
+ * NOT advertise and loads the matches for the rest of the run (`RunState.loadedTools`). It runs
+ * in the policy, not the registry — nothing about the surface decides what is advertised.
+ */
+function toolSearchAnswer(ctx: PolicyContext, call: PolicyToolCall): { data: unknown } | void {
+  // C3: the agent's structured task state — a meta tool, answered by the policy, never the surface.
+  if (call.name === UPDATE_TASK_STATE_TOOL && ctx.policy.levers.includes("c3_task_state")) {
+    const updated = applyTaskStateUpdate(ctx.state.taskState, call.args);
+    if (!updated.ok) return { data: { ok: false, error: updated.error } };
+    ctx.state.taskState = updated.state;
+    return { data: { ok: true, note: "Task state saved — it is shown to you every turn and kept through compaction." } };
+  }
+  if (call.name !== TOOL_SEARCH_TOOL) return undefined;
+  const advertised = new Set(selectedTools(ctx, ctx.tools).map((t) => t.function.name));
+  const found = runToolSearch(ctx.tools, advertised, call.args);
+  if (found.load.length > 0) ctx.state.loadedTools = [...new Set([...(ctx.state.loadedTools ?? []), ...found.load])];
+  return { data: found.data };
+}
+
+/**
+ * A deferred tool the model calls anyway is LOADED: it stays advertised for the rest of the run. Kept in the run state
+ * (`loadedTools`), not derived from the transcript, so compaction dropping the call never withdraws the tool again.
+ * Dispatch itself stays with the capability gate.
+ */
+function loadCalledDeferredTool(ctx: PolicyContext, call: PolicyToolCall): void {
+  if (call.name === TOOL_SEARCH_TOOL || call.name === UPDATE_TASK_STATE_TOOL) return;
+  if ((ctx.state.loadedTools ?? []).includes(call.name)) return;
+  if (!ctx.tools.some((t) => t.function?.name === call.name)) return;
+  if (selectedTools(ctx, ctx.tools).some((t) => t.function?.name === call.name)) return;
+  ctx.state.loadedTools = [...(ctx.state.loadedTools ?? []), call.name];
+}
+
+/** The tools hook, as ported. `select` narrows the surface's schemas to what this run may call. */
+export const toolsHook: ToolsHook = {
+  select: selectedTools,
+  beforeDispatch: (ctx, call) => {
+    loadCalledDeferredTool(ctx, call);
+    return coveredReadAnswer(ctx, call);
   },
-  gate: gateCall,
-  beforeDispatch: coveredReadAnswer,
+  meta: toolSearchAnswer,
   observe: recordServedRead,
+  gate: gateCall,
 };
 
 // The capability set is the surface's to report (`CapabilityProvider.capabilities`): the
@@ -97,7 +145,7 @@ function catalogCaps(ctx: PolicyContext): ReadonlySet<Capability> {
 // Pinned tools are the ones the run already called: a tool the model used stays
 // advertised, so the turn's set never drops what the run is mid-way through using.
 function pinnedNames(ctx: PolicyContext): readonly string[] {
-  const names = new Set<string>();
+  const names = new Set<string>(ctx.state.loadedTools ?? []);
   for (const message of ctx.messages) {
     for (const call of message.toolCalls ?? []) if (call.name) names.add(call.name);
   }

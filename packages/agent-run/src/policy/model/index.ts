@@ -345,6 +345,17 @@ export const modelHook: ModelHook = {
       ...(maxTokens !== undefined ? { maxTokens } : {}),
     };
   },
+  turnFields(ctx) {
+    const ask = nextTurn(ctx.state.model, { hasTools: ctx.tools.length > 0 });
+    return {
+      role: ask.role,
+      phase: ctx.state.model.phase,
+      ...(ask.strict ? { strict: true } : {}),
+      ...(ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {}),
+      // A stall recovery's one-shot forced tool call, spent by the next request.
+      ...(ctx.state.forceToolChoice ? { toolChoice: ctx.state.forceToolChoice } : {}),
+    };
+  },
   preflight: runModelPreflight,
   downgrade: modelDowngrade,
   recoverFailure: recoverProviderFailure,

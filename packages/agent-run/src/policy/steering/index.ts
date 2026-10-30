@@ -4,8 +4,8 @@
  * Owned by WS2c. It ports, behind the {@link SteeringHook} the composition calls:
  *   - `runtime/cloudLoopControl.ts` (the between-iteration steering drain and the
  *     cooperative cancel watcher) — absorbed: the drain is `beforeTurn` over the
- *     `SteeringSource` port, cancel is the run's abort signal; `cloudLoopControl.ts`
- *     keeps only the cancelled-run reason;
+ *     `SteeringSource` port, cancel is the run's abort signal; `cancelNotice.ts`
+ *     keeps only the cancelled-run notice;
  *   - `brain-embedded/src/runStore/steerInterrupt.ts` (the steer that interrupts the
  *     step in flight) — `steerInterrupt.ts`;
  *   - `packages/run-guards/src/stopIntent.ts` (a message typed during a run that IS a
@@ -92,5 +92,5 @@ export {
   runSteeringSource,
   type RunSteerMessage,
 } from "./runSteering.js";
-export { CLOUD_RUN_CANCELLED_REASON } from "./cloudLoopControl.js";
+export { RUN_CANCELLED_NOTICE } from "./cancelNotice.js";
 export { ABORT_TRIGGERS, isAbortTrigger, stopIntent } from "./stopIntent.js";

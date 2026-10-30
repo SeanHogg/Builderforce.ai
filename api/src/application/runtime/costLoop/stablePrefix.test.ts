@@ -1,7 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { VOLATILE_TAIL_TAG } from '@seanhogg/builderforce-memory/handoff';
 import { anthropicModule } from '../../llm/vendors/anthropic';
-import { turnRequestMessages } from './volatileTail';
+import { withVolatileTail } from '@builderforce/agent-run';
+
+// The per-turn volatile block is the agent's (`turnContext.withVolatileTail`): the affect directive and every volatile
+// section trail the history in ONE tagged user message, never persisted. This is the cloud's prompt-cache proof over it.
+const turnRequestMessages = (
+  messages: readonly Record<string, unknown>[],
+  opts: { stablePrefix: true; dynamicSystem?: string; sections: readonly string[] },
+): Record<string, unknown>[] =>
+  withVolatileTail(messages as never, { focus: [], facts: [], recall: [] }, null, [opts.dynamicSystem ?? '', ...opts.sections]) as never;
 
 // ---------------------------------------------------------------------------
 // Cost lever B1: two consecutive turns of a tool loop must send byte-identical bytes
@@ -61,13 +69,6 @@ describe('B1 stable prefix', () => {
     expect(a[lastBreakpoint]!.key).toContain('tool_result');
     expect(a[a.length - 1]!.key).toContain(VOLATILE_TAIL_TAG);
     expect(a[a.length - 1]!.marked).toBe(false);
-  });
-
-  it('lever off: the prepended affect system block changes the cached system prefix', async () => {
-    const a = units(await requestBody(turnRequestMessages(turnN, { stablePrefix: false, dynamicSystem: 'Affect: calm.', sections: [] })));
-    const b = units(await requestBody(turnRequestMessages(turnN1, { stablePrefix: false, dynamicSystem: 'Affect: cautious.', sections: [] })));
-    const firstSystem = a.findIndex((u) => u.key.startsWith('system:'));
-    expect(b[firstSystem]!.key).not.toBe(a[firstSystem]!.key);
   });
 
   it('adds no tail at all when there is nothing volatile', () => {

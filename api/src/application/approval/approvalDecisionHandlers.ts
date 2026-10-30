@@ -18,6 +18,7 @@ import { approvals } from '../../infrastructure/database/schema';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import { dispatchCloudRunForTask, type CloudDispatchOutcome } from '../runtime/dispatchCloudRun';
 import { parseApprovalReplay } from '../runtime/executionApprovalGate';
+import { withRunDispatch } from '../runtime/runDispatch';
 import { approvalSubjectRef } from './approvalGate';
 import {
   startApprovedWorkflowRun,
@@ -78,7 +79,9 @@ const startApprovedTaskRun: ApprovalDecisionHandler = async (ctx) => {
   const started = await dispatchCloudRunForTask(ctx.env, ctx.db, ctx.runtimeService, ctx.waitUntil, {
     taskId: replay.taskId,
     tenantId: ctx.tenantId,
-    payload: replay.payload,
+    // The approval that unlocked this run rides its payload as `dispatch.approvalId` (PRD 35 §6.9),
+    // so the run's agent can name who authorised it. Everything else about the replay is unchanged.
+    payload: withRunDispatch(replay.payload, { approvalId: ctx.approval.id }),
     agentHostId: replay.agentHostId,
     submittedBy: ctx.approval.requestedBy ?? ctx.userId,
     // A manager just approved THIS run — the same explicit human override "Run now"

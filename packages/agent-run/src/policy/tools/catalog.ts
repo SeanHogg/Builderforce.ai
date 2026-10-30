@@ -3,11 +3,11 @@
  * `tool_search`, with NO lever; the pinned, required and named-in-prompt tools stay
  * advertised; `find_symbol` wherever `repo.symbols` exists, cloud included.
  *
- * Ported from `costLoop/deferredTools.ts` (the role core sets and the `tool_search`
+ * Ported from the cloud's retired deferred-tools module (the role core sets and the `tool_search`
  * meta tool). The source's catalog was the cloud cost loop's `DeferredToolRole` registry;
  * here the catalog is the shared `@builderforce/agent-tools` registry the run already
  * holds, so the policy narrows schemas rather than re-deriving them. The core-set LISTS
- * are copied verbatim from `deferredTools.ts` — the pinned tests assert them exactly.
+ * are copied verbatim from that module — the pinned tests assert them exactly.
  *
  * No `node:*` imports, no DOM: this file is compiled into the Worker, the browser
  * and Node.
@@ -17,15 +17,15 @@ import type { Capability, ToolSchema } from "@builderforce/agent-tools";
 import { TOOL_SEARCH_SCHEMA, TOOL_SEARCH_TOOL } from "@builderforce/agent-tools";
 import { promptNamedTools } from "./searchHelpers.js";
 
-/** The role the run acts under — `deferredTools.ts` `DeferredToolRole`. */
+/** The role the run acts under — the retired module's `DeferredToolRole`. */
 export type DeferredToolRole = "explore" | "code" | "verify" | "plan";
 
-/** Core set every role holds, verbatim from `deferredTools.ts` `ALWAYS`. */
+/** Core set every role holds, verbatim from the retired module's `ALWAYS`. */
 export const ALWAYS_CORE_TOOLS: readonly string[] = [
   "read_file", "search_code", "list_files", "edit_file", "run_checks", "run_command", "finish", "ask_human", "spawn_agent",
 ];
 
-/** Role-specific additions, verbatim from `deferredTools.ts` `ROLE_CORE_TOOLS`. */
+/** Role-specific additions, verbatim from the retired module's `ROLE_CORE_TOOLS`. */
 export const ROLE_CORE_TOOLS: Readonly<Record<DeferredToolRole, readonly string[]>> = {
   explore: ["repo_map", "memory_recall", "workspace_read", "web_search", "web_fetch"],
   code: ["repo_map", "write_file", "delete_file", "update_prd", "memory_recall", "memory_remember", "claim_resource", "release_resource", "workspace_note"],

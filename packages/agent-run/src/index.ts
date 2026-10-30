@@ -56,6 +56,75 @@ export {
   type ModelDecision,
 } from "./policy/index.js";
 
+// The ENGINE ports an adapter binds a module with (`composePolicyHooks({ finish: createFinishHook(ports) })`):
+// the module stays the policy's; the adapter only hands it the couplings its surface has.
+export { createFinishHook, type FinishPorts } from "./policy/finish/index.js";
+export { createGuardsHook, type GuardPorts } from "./policy/guards/index.js";
+export { createVerifyHook, type VerifyPorts } from "./policy/verify/index.js";
+// The verify phase's PURE functions, for the surfaces that run it outside a hook (a cloud run's tail, an @-reply): one
+// definition, not a copy per surface. The DB-bound halves (the audit rows, the memory write) stay with the surface.
+export { applyVerifyPhase, describeVerifyOutcome, runVerifyPhase, type RunVerifyInput, type RunVerifySurface } from "./policy/verify/runEndMemory.js";
+export { inRunVerifyOutcome, planInRunVerify, type InRunVerifyOutcome, type InRunVerifySurface } from "./policy/verify/inRunVerify.js";
+export { runSandboxVerify, type SandboxVerifyResult, type VerifySandbox, type VerifyShell } from "./policy/verify/sandboxVerify.js";
+// The finish gates and the model hand-off, for the surfaces whose own modules compose them with their dependencies.
+export {
+  evaluateFinishGates,
+  finishGateSnapshot,
+  initialFinishGateState,
+  isInconclusiveFinishBlock,
+  matchesRequiredReviewSignoff,
+  missingReviewVerdictMessage,
+  type FinishBlockReason,
+  type FinishGateArgs,
+  type FinishGatePorts,
+  type FinishGateSnapshot,
+  type FinishGateVerdict,
+  type RequiredReviewSignoff,
+} from "./policy/finish/gates.js";
+export { assertsUnrunVerification, hasNoCodeDeliverable } from "./policy/finish/finishTools.js";
+export {
+  cascadeReason,
+  initialModelRunState,
+  policyRole,
+  recordSuccess,
+  requestForTurn,
+  resumeModelRunState,
+  retryOutcome,
+  routeAroundFailure,
+  stallStep,
+  turnRequestFields,
+  turnRole,
+  type ModelRunState,
+  type PolicyTurnRequest,
+} from "./policy/model/index.js";
+export { ROLE_CORE_TOOLS, selectCatalog, deferredToolRole, coreToolNames } from "./policy/tools/catalog.js";
+export { runToolSearch, promptNamedTools } from "./policy/tools/searchHelpers.js";
+export { withVolatileTail } from "./turnContext.js";
+export {
+  UPDATE_TASK_STATE_SCHEMA,
+  UPDATE_TASK_STATE_TOOL,
+  TASK_STATE_MAX_TOKENS,
+  applyTaskStateUpdate,
+  renderTaskState,
+  type TaskState,
+} from "./policy/tools/taskState.js";
+export { openingRows } from "./turnContext.js";
+export { RUN_CANCELLED_NOTICE } from "./policy/steering/index.js";
+export { createCompactionHook, type CompactionHookOptions } from "./policy/compaction/index.js";
+// The compaction primitives a surface sizes its own budgets with (the cost-loop session, the gateway summarizer).
+export {
+  OBSERVATION_MASK_TURNS,
+  compactMessages,
+  compactionBudget,
+  compactionSummaryRequest,
+  elideToFit,
+  maskOldObservations,
+  toolsTokensOf,
+  CLOUD_COMPACT_DEFAULTS,
+  type CompactOptions,
+  type CompactionSummarizer,
+} from "./policy/compaction/compact.js";
+
 // The in-process steering queue as a `SteeringSource` port — what a surface that keeps
 // its composer queue in memory hands the agent (`queueRunSteering` posts to it).
 export { queueRunSteering, runSteeringSource } from "./policy/steering/index.js";

@@ -8,12 +8,13 @@
 
 import type { LoopControl, LoopDispatchResult, LoopHooks, ParsedToolCall } from "@builderforce/agent-loop";
 
-import type { ModelUsage, RunMessage, RunState } from "./contract.js";
+import { RUN_CANCELLED_REASON, type ModelUsage, type RunMessage, type RunState } from "./contract.js";
 import type { GuardControl, PolicyContext, PolicyHooks } from "./policy/index.js";
 import { isStopSteer, steerInput, steerSkip, type InterruptWatch } from "./policy/steering/index.js";
 import { applyCompaction, currentView, emit, policyContext, toPolicyCall, type RunAgentInput, type TurnFacts } from "./runContext.js";
 import { rememberWrite } from "./runState.js";
 import { ownsCall } from "./runTurn.js";
+import { lastFinishReason } from "./policy/finish/index.js";
 import { tallyCall, tallyTurn, tallyVerify, type RunTally } from "./telemetry/runTally.js";
 import type { ToolSchema } from "@builderforce/agent-tools";
 import type { TurnInterruption } from "./surface.js";
@@ -85,6 +86,11 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
   // The results a covered read was answered with: no tool ran, so none of them is a
   // served read, a write, a counted call or a fact for memory — only a stub the model reads.
   const stubs = new WeakSet<LoopDispatchResult>();
+  // The results of a call the run PARKED on a person (a governance gate, A3's pause): the call never ran, so it is no counted
+  // call and no error; the retry after the answer is the call that counts.
+  const held = new WeakSet<LoopDispatchResult>();
+  /** When each call started, so a call's duration is MEASURED, not inferred from the events around it. */
+  const starts = new Map<string, number>();
 
   /**
    * Take what the user steered in: a stop command ends the run (the model never gets
@@ -92,7 +98,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
    * acknowledged with `steer.applied` before the turn it reaches.
    */
   const takeSteers = async (ctx: { step: number; stepInCall: number }): Promise<"none" | "stop" | "applied"> => {
-    const steered = (ports.steering?.drain() ?? []).map(steerInput);
+    const steered = ((await ports.steering?.drain()) ?? []).map(steerInput);
     if (steered.length === 0) return "none";
     const texts = steered.map((s) => s.text);
     if (isStopSteer(texts)) {
@@ -112,7 +118,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
    * the finish stand and settles the run cancelled, as it does anywhere else.
    */
   const lateSteerNote = async (ctx: { step: number }): Promise<{ note: string } | null> => {
-    const steered = (ports.steering?.drain() ?? []).map(steerInput);
+    const steered = ((await ports.steering?.drain()) ?? []).map(steerInput);
     if (steered.length === 0) return null;
     const texts = steered.map((s) => s.text);
     if (isStopSteer(texts)) {
@@ -132,7 +138,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
     beforeTurn: async (ctx) => {
       // Steering is drained BEFORE the model is asked, so a message typed mid-run reaches
       // the next call rather than the one after it.
-      if ((await takeSteers(ctx)) === "stop") return { action: "stop", ok: false, output: "cancelled", finished: true };
+      if ((await takeSteers(ctx)) === "stop") return { action: "stop", ok: false, output: RUN_CANCELLED_REASON, finished: true };
 
       // Compaction charges the schemas the model will be SHOWN, not every tool the surface
       // could run: a board with hundreds of tools advertises a fixed, ranked set.
@@ -141,7 +147,16 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       run.selection = { tools: advertised };
       const view = advertised ? { ...base, tools: [...advertised] } : base;
       const compacted = await hooks.compaction.compact(policyContext(input, state, view, ctx.step, ctx.stepInCall));
-      if (compacted) applyCompaction(state, view, compacted, ctx.step);
+      if (compacted) {
+        applyCompaction(state, view, compacted, ctx.step);
+        await emit(ports.events, {
+          kind: "context.compacted", step: ctx.step, dropped: compacted.dropped,
+          ...(compacted.beforeTokens !== undefined ? { beforeTokens: compacted.beforeTokens } : {}),
+          ...(compacted.afterTokens !== undefined ? { afterTokens: compacted.afterTokens } : {}),
+          ...(compacted.summarized !== undefined ? { summarized: compacted.summarized } : {}),
+          ...(compacted.masked ? { masked: compacted.masked } : {}),
+        });
+      }
 
       // What the previous step's completion said about itself ends with that step: a step that
       // yields nothing (`{ skip: true }`, a provider re-route) must not leave it for the next.
@@ -169,9 +184,20 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       const pctx = contextAt(ctx.step, ctx.stepInCall);
       pctx.content = turn.content;
       pctx.served = { ...(run.facts.model ? { model: run.facts.model } : {}), ...(run.facts.interruption ? { interruption: run.facts.interruption } : {}) };
+      // An owner never ends with children still working: their reports would strand.
+      const children = await hooks.finish.liveChildren?.(pctx);
+      if (children) {
+        requeue(turn.content, children);
+        return { action: "continue" };
+      }
       const stalled = await hooks.stall.recover(pctx);
+      if (stalled) await emit(ports.events, { kind: "stall.recovered", step: ctx.step, action: stalled.action, ...(stalled.note ? { note: stalled.note } : {}), ...(stalled.detail ? { detail: stalled.detail } : {}) });
       if (stalled && stalled.action === "pause") {
-        return { action: "stop", ok: false, output: stalled.note ?? "paused", finished: true };
+        const notice = stalled.note ?? "paused";
+        // A surface that lands runs ends it with what it said and why it stopped (a finish, not a failure — whatever it
+        // committed still ships); any other stops it unfinished.
+        if (policy.stallExhausted === "finish") return { action: "finish", output: turn.content.trim() ? `${turn.content}\n\n${notice}` : notice };
+        return { action: "stop", ok: false, output: notice, finished: true };
       }
       if (stalled && stalled.action === "fail") {
         return { action: "stop", ok: false, output: stalled.note ?? "failed", finished: true };
@@ -189,7 +215,9 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       }
       // A prose answer is a finish too: the sign-off a reviewer owes and the sub-agents
       // the user asked for hold it exactly as they hold the `finish` tool.
-      const block = hooks.finish.settleBlock(pctx) ?? hooks.subagents.backstop(pctx);
+      const owed = hooks.finish.settleBlock(pctx);
+      if (owed) await emit(ports.events, { kind: "finish.blocked", step: ctx.step, reason: "review_verdict_missing", block: owed, detail: { ...policy.signoff } });
+      const block = owed ?? hooks.subagents.backstop(pctx);
       if (block) {
         requeue(turn.content, block);
         return { action: "continue" };
@@ -204,18 +232,35 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       return { action: "finish", output };
     },
 
+    onRepetitionLoop: async (ctx, loop) => {
+      await emit(ports.events, { kind: "loop.repetition", step: ctx.step, copies: loop.copies, block: loop.block });
+    },
+
+    beforeToolCalls: (_ctx, turn, calls) => {
+      // A turn whose calls end the run before any of them dispatches (an addressed reply's `ask_user`).
+      const output = ports.extensions?.terminalTurn?.({ content: turn.content ?? "" }, calls.map((c) => ({ name: c.name, args: c.args, malformed: c.malformed })));
+      return output === undefined ? undefined : { action: "stop", ok: true, output, finished: true };
+    },
+
     beforeDispatch: async (call, ctx) => {
+      starts.set(call.id, Date.now());
       const pctx = contextAt(ctx.step, ctx.stepInCall);
       const pcall = toPolicyCall(call);
       // Governance gates (`RunPolicy.approvalGates`): a block refuses the call, an approval
       // asks the human channel and parks the run on the approver.
       const gated = await hooks.tools.gate?.(pctx, pcall);
-      if (gated) return { result: { data: gated.data, isError: true, ...(gated.control ? { control: asLoopControl(gated.control) } : {}) } };
+      if (gated) {
+        const refused: LoopDispatchResult = { data: gated.data, isError: true, ...(gated.control ? { control: asLoopControl(gated.control) } : {}) };
+        if (gated.control) held.add(refused);
+        return { result: refused };
+      }
       // A3's pause parks the run on a person (the control); any other skip just answers.
       const decision = await hooks.guards.beforeDispatch(pctx, pcall);
       if (decision?.skip) {
         const { data, isError, control } = decision.skip;
-        return { result: { data, isError: isError ?? true, ...(control ? { control: asLoopControl(control) } : {}) } };
+        const skipped: LoopDispatchResult = { data, isError: isError ?? true, ...(control ? { control: asLoopControl(control) } : {}) };
+        if (control) held.add(skipped);
+        return { result: skipped };
       }
       // A run about to ASK while the sub-agents it was asked for are undone is told to
       // start them instead — the question it would ask is the one the user answered.
@@ -223,6 +268,9 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         const note = hooks.subagents.backstop(pctx);
         if (note) return { result: { data: { ok: false, error: note }, isError: true } };
       }
+      // A meta tool (tool_search, update_task_state) is the policy's own answer — still a CALL: tallied, traced, observed.
+      const meta = hooks.tools.meta?.(pctx, pcall);
+      if (meta) return { result: { data: meta.data } };
       // Read coverage: a read whose lines were already served is answered without the disk.
       const covered = hooks.tools.beforeDispatch?.(pctx, pcall);
       if (covered) {
@@ -238,7 +286,12 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       pctx.content = summary;
       pctx.toolCalls = [toPolicyCall(call)];
       // The verify runs first: a finish the declared checks refuse never reaches the gates.
-      const block = (await verifyBlock(pctx)) ?? (await hooks.finish.gate(pctx)) ?? hooks.subagents.backstop(pctx);
+      const verifyRefused = await verifyBlock(pctx);
+      const gated = verifyRefused ?? (await hooks.finish.gate(pctx));
+      // D1: the cascade learns the NAMED verdict of this finish attempt (a red CI is the model's failure, CI still running is not).
+      // A refusal by the verify phase is not a finish gate's: it carries no gate reason.
+      const judged = hooks.guards.finish ? await hooks.guards.finish(pctx, { block: gated, reason: verifyRefused ? "verify" : lastFinishReason(state) }) : gated;
+      const block = judged ?? hooks.subagents.backstop(pctx);
       if (block) {
         state.finish = { ...state.finish, finishBlockedOnce: true };
         return block;
@@ -262,14 +315,15 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
     },
 
     afterDispatch: async (call, result, message, ctx) => {
-      const stub = stubs.has(result);
+      const stub = stubs.has(result) || held.has(result);
       const ok = !result.isError && !(result.data && typeof result.data === "object" && (result.data as { ok?: unknown }).ok === false);
       if (!stub) {
         // The trace and the tally take the same verdict, so the outcome row and the
         // event trace never disagree.
         tallyCall(tally, ctx.step, call.name, call.args, result.data, ok);
         // `ctx.step` is the kernel's live step; `state.step` lags until the loop returns.
-        await emit(ports.events, { kind: "tool.dispatched", step: ctx.step, tool: call.name, ok });
+        await emit(ports.events, { kind: "tool.dispatched", step: ctx.step, tool: call.name, ok, callId: call.id, args: call.args, result: result.data }, { durationMs: Date.now() - (starts.get(call.id) ?? Date.now()) });
+        starts.delete(call.id);
       }
       const pctx = contextAt(ctx.step, ctx.stepInCall);
       const pcall = toPolicyCall(call);
@@ -287,6 +341,11 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         // call on the surface's own tools acted on its board, not on this work.
         if (!ownsCall(ports, call.name)) await hooks.memory.observe?.(pctx, pcall, result.data, result.isError);
         rememberWrite(state, call, ok);
+      }
+      // A call the run parked on an approver ends the turn's dispatching: nothing after it may run while the run waits on a
+      // person (the retry after the answer re-asks for them).
+      if (held.has(result) && (result.control as { parked?: true } | undefined)?.parked) {
+        return { skipRemaining: { data: { ok: false, skipped: true, error: "Not run: the run is parked on an approval." }, isError: false } };
       }
       // An interrupting steer skips the rest of this turn's calls (§6.3).
       return steerSkip(run.watch);

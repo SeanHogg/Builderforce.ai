@@ -100,6 +100,22 @@ export function usageSnapshotRows(host: HostIdentity, events: UsageSnapshotInput
   }));
 }
 
+/** Tool names that are the CLOUD's own rows: a host never sends them and must not forge one for a run (`run.outcome` is the cloud's one-per-run row). */
+const CLOUD_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set(['run.outcome']);
+
+/**
+ * Admit a host's batch: drop the cloud-only rows, and every row whose `executionId` is not in the host's own TENANT (the id arrives in
+ * the BODY, so it is checked, in ONE query). Rows are dropped, never the whole batch.
+ */
+export async function admitToolAuditRows(db: Db, host: HostIdentity, rows: ReturnType<typeof toolAuditRows>): Promise<ReturnType<typeof toolAuditRows>> {
+  const candidates = rows.filter((row) => !CLOUD_ONLY_TOOL_NAMES.has(row.toolName));
+  const ids = [...new Set(candidates.flatMap((row) => (row.executionId != null ? [row.executionId] : [])))];
+  if (ids.length === 0) return candidates;
+  const owned = await db.select({ id: executions.id }).from(executions).where(and(inArray(executions.id, ids), eq(executions.tenantId, host.tenantId)));
+  const mine = new Set(owned.map((row) => row.id));
+  return candidates.filter((row) => row.executionId == null || mine.has(row.executionId));
+}
+
 /** Insert in ONE statement; returns the rows written. */
 export async function insertToolAuditRows(db: Db, rows: ReturnType<typeof toolAuditRows>): Promise<number> {
   if (rows.length === 0) return 0;

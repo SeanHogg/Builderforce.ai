@@ -46,7 +46,7 @@ application/runtime/cloudAgent/routing.ts:1
 application/runtime/cloudAgent/runContext.ts:3
 application/runtime/cloudSelfHeal.ts:1
 application/runtime/scoreRunOutcome.ts:4
-application/runtime/staleExecutionReaper.ts:3
+application/runtime/staleExecutionReaper.ts:2
 application/seams/webhookService.ts:5
 application/seams/workItemWebhook.ts:1
 application/security/findingMarkers.ts:1

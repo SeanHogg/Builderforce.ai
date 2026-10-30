@@ -53,6 +53,7 @@ export default [
   ['check:api-contract-mirror', 'check-api-contract-mirror.mjs'],
   ['check:project-ownership', 'check-project-ownership.mjs'],
   ['check:tenant-scope', 'check-tenant-scope.mjs'],
+  ['check:execution-landing', 'check-execution-landing.mjs'],
   ['check:source', 'check-source-text.mjs'],
   // Repo-level: ONE silent-catch guard scans every package's source tree against
   // the shared baseline in scripts/silent-catches.baseline.json. api's chain runs

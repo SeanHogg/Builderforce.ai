@@ -12,8 +12,8 @@
  */
 
 import { buildCoreToolRegistry, type Capability, SKILL_TOOLS, SUBAGENT_TOOLS } from '@builderforce/agent-tools';
+export { policyGateCallKey } from '@builderforce/agent-tools';
 import { isCostLeverOn, type CostLeverId } from '@builderforce/cost-levers';
-import { classifyDeliverablePaths } from '../delivery/deliverableEvidence';
 import { TenantRole } from '../../domain/shared/types';
 
 /** The permission role every cloud run acts under — its platform-tool dispatch and the
@@ -24,38 +24,10 @@ export const CLOUD_RUN_TENANT_ROLE = TenantRole.MANAGER;
 /** Shape of one tool call in an OpenAI-compatible completion response. */
 export interface RawToolCall { id?: string; type?: string; function?: { name?: string; arguments?: string } }
 
-/** True when a finish summary claims a build / type-check / lint / test passed —
- *  which the serverless cloud executor cannot have run (it has no shell). Used to
- *  block a fabricated "checks pass" claim once and force an honest summary. Kept
- *  deliberately narrow (a check noun AND a success verb) to avoid false positives
- *  on legitimate descriptions of the work. */
-export function assertsUnrunVerification(summary: string): boolean {
-  const s = summary.toLowerCase();
-  const check = /(type[\s-]?check|typecheck|typescript|\btsc\b|lint|eslint|\btest(s|ing|ed)?\b|\bbuild(s|ing)?\b|compil)/;
-  const pass = /(pass(es|ed|ing)?|succeed(s|ed)?|success|green|no\s+errors?|error[\s-]?free|will\s+now\s+pass|are\s+resolved|is\s+resolved)/;
-  return check.test(s) && pass.test(s);
-}
+// The finish helpers (the honesty matcher, the no-code-deliverable check) live in the agent now: re-exported.
+export { assertsUnrunVerification, hasNoCodeDeliverable } from '@builderforce/agent-run';
 
-/**
- * True when a code-bound run is about to `finish` having produced NO real code
- * deliverable — `writtenPaths` is empty or holds only the seeded `PRD.md` (the PRD
- * is committed during prep, so a PR with PRD.md but no code is the "wrote a plan,
- * shipped a scaffold/nothing" premature-finish footgun from execution #20).
- *
- * This is the cheap, deterministic half of the pre-finish completeness self-review
- * (ROADMAP #38): it does NOT judge requirement coverage, only that *something* was
- * built. Used to block `finish` ONCE and re-prompt the agent to self-review the PRD
- * requirements before accepting an empty finish — so a genuine "nothing to change"
- * run can still finish on the second attempt, while a premature one is forced to
- * reconsider. Pure → unit-testable in isolation.
- */
-export function hasNoCodeDeliverable(writtenPaths: ReadonlySet<string>): boolean {
-  return classifyDeliverablePaths(writtenPaths) !== 'implementation';
-}
-
-/** The identity of ONE `require-approval` decision (gate + tool + argument hash): the one
- *  agent asks the same question on every surface, so it lives in `@builderforce/agent-tools`. */
-export { policyGateCallKey } from '@builderforce/agent-tools';
+/** `policyGateCallKey` (the identity of ONE `require-approval` decision) lives in `@builderforce/agent-tools`: re-exported above for the tests that import it here. */
 
 /** The one registry the cloud engine drives (schemas + dispatch). Seeded from the
  *  shared core tools — adding a tool there makes it available to every surface that

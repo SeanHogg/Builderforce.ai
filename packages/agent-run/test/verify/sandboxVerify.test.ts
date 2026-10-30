@@ -50,6 +50,15 @@ describe("runSandboxVerify", () => {
     expect(r.results[0]?.command).toBe("pnpm run typecheck");
   });
 
+  // Ported from api sandboxVerify.test "a nested lockfile does not decide the root runner" (same input: a lockfile under packages/x).
+  it("a nested lockfile does not decide the root runner", async () => {
+    const r = await runSandboxVerify(
+      sandbox({ list: async (glob) => (glob === "yarn.lock" ? ["packages/x/yarn.lock"] : []) }),
+      shell(async () => ({ exitCode: 0 })),
+    );
+    expect(r.runner).toBe("npm");
+  });
+
   it("detects yarn from a root lockfile, and npm when none matches", async () => {
     const yarn = await runSandboxVerify(
       sandbox({ list: async (glob) => (glob === "yarn.lock" ? ["yarn.lock"] : []) }),

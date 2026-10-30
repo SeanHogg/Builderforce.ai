@@ -32,6 +32,7 @@ import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { ChatTicketService, ticketKindForTaskType } from '../brain/ChatTicketService';
 import { cloudOrphanReason, cloudSilenceCeilingMs, PAUSED_DEADLINE_MS, PAUSED_ORPHAN_REASON } from './orphanReasons';
+import { recordReapedOutcomes } from './cloudOutcomeRow';
 import { markReaperRequeued, parseExecutor } from './cloudDispatch';
 import { isSelfHealEligible, buildDurableStartBody, dispatchDurableStart } from './cloudSelfHeal';
 import { resolveParkAgeTimeoutMs, runParkAgeTimeoutSweep, type ParkAgeTimeoutResult } from '../maintenance/parkAgeTimeout';
@@ -99,12 +100,8 @@ export interface ReapResult {
  * rows are also the shape the read-path repair speaks.
  */
 const REAPED_RETURNING = {
-  id: executions.id,
-  tenant_id: executions.tenantId,
-  agent_host_id: executions.agentHostId,
-  payload: executions.payload,
-  error_message: executions.errorMessage,
-  task_id: executions.taskId,
+  id: executions.id, tenant_id: executions.tenantId, agent_host_id: executions.agentHostId, cloud_agent_ref: executions.cloudAgentRef,
+  payload: executions.payload, error_message: executions.errorMessage, task_id: executions.taskId,
 } as const;
 
 export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db = buildDatabase(env)): Promise<ReapResult> {
@@ -217,9 +214,10 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
         completedAt: sql`now()`,
         updatedAt: sql`now()`,
       })
-      .where(and(inArray(executions.id, ids), eq(executions.status, 'running')))
+      .where(acrossTenants(executions, 'scheduled_sweep', and(inArray(executions.id, ids), eq(executions.status, 'running'))))
       .returning(REAPED_RETURNING);
     cloudRunning.push(...failed);
+    await recordReapedOutcomes(db, failed); // per batch, right after the UPDATE that landed it
   }
 
   // Dropped queue: submitted/pending but no agent ever took it.
@@ -348,7 +346,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
  * the old unbounded UPDATE behaved.
  */
 async function failStaleBatch(db: Db, stalePredicate: SQL, errorMessage: string): Promise<ReapedRow[]> {
-  return db
+  const failed: ReapedRow[] = await db
     .update(executions)
     .set({ status: 'failed', errorMessage, completedAt: sql`now()`, updatedAt: sql`now()` })
     .where(acrossTenants(executions, 'scheduled_sweep', stalePredicate, inArray(executions.id, db
@@ -357,6 +355,7 @@ async function failStaleBatch(db: Db, stalePredicate: SQL, errorMessage: string)
       .where(acrossTenants(executions, 'scheduled_sweep', stalePredicate))
       .limit(REAP_BATCH_LIMIT))))
     .returning(REAPED_RETURNING);
+  return recordReapedOutcomes(db, failed).then(() => failed); // per batch, right after the UPDATE that landed it
 }
 
 interface ReapedRow {
@@ -367,6 +366,7 @@ interface ReapedRow {
   error_message: string | null;
   /** The ticket the run served — the chat-narration fan-out key (chat_ticket_links). */
   task_id: number | null;
+  cloud_agent_ref: string | null;
 }
 
 /**

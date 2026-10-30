@@ -43,9 +43,10 @@ function succeeded(data: unknown): boolean {
 export function verifyAfterEdit(
   call: { name: string; args: Record<string, unknown> },
   data: unknown,
-  opts: { content?: string | null; read?: (path: string) => Promise<string | null> } = {},
+  opts: { content?: string | null; read?: (path: string) => Promise<string | null>; bound?: boolean } = {},
 ): Promise<VerifyResult | null> | VerifyResult | null {
-  if (!EDIT_TOOLS.has(call.name) || !succeeded(data)) return null;
+  // D7 checks a repository-bound run's edits; a run with no repository has nothing to check them against.
+  if (opts.bound === false || !EDIT_TOOLS.has(call.name) || !succeeded(data)) return null;
   const path = typeof call.args.path === "string" ? call.args.path.trim() : "";
   if (!path || !isVerifiablePath(path)) return null;
   const content = call.name === "write_file" && typeof call.args.content === "string"

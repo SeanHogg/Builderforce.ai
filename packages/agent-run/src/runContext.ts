@@ -92,9 +92,9 @@ export function toPolicyCall(call: ParsedToolCall): PolicyToolCall {
 }
 
 /** Emit one trace event. A sink that throws must not sink the run. */
-export async function emit(events: EventSink, event: RunEvent): Promise<void> {
+export async function emit(events: EventSink, event: RunEvent, meta?: { durationMs?: number }): Promise<void> {
   try {
-    await events.emit(event);
+    await events.emit(event, meta);
   } catch {
     // Telemetry is best-effort. A broken sink records nothing; it does not fail the run.
   }

@@ -207,3 +207,67 @@ describe("evaluateFinishGates — source quality and the durable snapshot", () =
     expect(finishGateSnapshot(g)).toEqual({ noDeliverableBlocked: true, reviewVerdictRecorded: false, placeholderBlocks: 2, ciPendingBlocks: 1, ciFailureBlocks: 0 });
   });
 });
+
+// ── The cloud's finish-gate cases (`api/.../cloudAgent/finishGates.test.ts`), over the ports the cloud binds ──────────
+// The source mocked the api's repo / CI / claim modules; here those are the gates' ports. Inputs and expected values are the source's.
+describe("evaluateFinishGates — over the cloud's ports", () => {
+  const verdictOf = (status: "success" | "failure" | "pending" | "none") => ({ status, sha: "abcdef1234", count: 1, failed: status === "failure" ? ["build"] : [] });
+  const reasons: string[] = [];
+  const cloud = (over: { verify?: FinishGatePorts["verify"]; ci?: "success" | "failure" | "pending" | "none" } = {}): FinishGatePorts => ({
+    bound: true,
+    verify: over.verify ?? (async () => ({ ok: true, checked: [A_TS], skipped: [], errors: [] }) as never),
+    pollBranchCi: async (counters) => ciFinishDecision(verdictOf(over.ci ?? "success"), counters),
+    scanPlaceholders: async () => ({ flagged: [] }),
+    recordClaim: async () => ({ ok: true }),
+    onBlocked: (reason) => { reasons.push(reason); },
+  });
+  const cloudArgs = (patch: Partial<FinishGateArgs> = {}, ports: FinishGatePorts = cloud()) =>
+    finishInput({ writtenPaths: [A_TS], summary: "Implemented the change.", ...patch }, ports);
+
+  it("ships a verified finish, enters verify and marks CI green", async () => {
+    let entered = 0;
+    const a = cloudArgs({ enterVerify: () => { entered += 1; } });
+    expect(await evaluateFinishGates(a)).toEqual({ block: null });
+    expect(entered).toBeGreaterThan(0);
+    expect(a.gates.ciVerified).toBe(true);
+  });
+
+  it("names a source-quality block", async () => {
+    const v = await evaluateFinishGates(cloudArgs({}, cloud({ verify: async () => ({ ok: false, checked: [], skipped: [], errors: [{ path: "src/a.ts", line: 3, message: "Unexpected token" }] }) as never })));
+    expect(v.reason).toBe("source_quality");
+    expect(v.block).toContain("src/a.ts:3");
+  });
+
+  it("tells a pending CI block (not the model's failure) from a red one", async () => {
+    reasons.length = 0;
+    const pending = await evaluateFinishGates(cloudArgs({}, cloud({ ci: "pending" })));
+    expect(pending.reason).toBe("branch_ci_pending");
+    expect(isInconclusiveFinishBlock(pending.reason)).toBe(true);
+    const red = await evaluateFinishGates(cloudArgs({}, cloud({ ci: "failure" })));
+    expect(red.reason).toBe("branch_ci");
+    expect(isInconclusiveFinishBlock(red.reason)).toBe(false);
+    // The timeline keeps its one reason for both.
+    expect(reasons).toEqual(["branch_ci", "branch_ci"]);
+  });
+
+  it("blocks an unrun-verification claim once", async () => {
+    const a = cloudArgs({ summary: "All tests passed and the build is green." }, cloud({ ci: "none" }));
+    expect((await evaluateFinishGates(a)).reason).toBe("honesty");
+    expect((await evaluateFinishGates(a)).block).toBeNull();
+  });
+
+  it("requires the reviewer verdict before anything else", async () => {
+    const v = await evaluateFinishGates(cloudArgs({ requiredSignoff: { roleKey: "code-reviewer" } }));
+    expect(v.reason).toBe("review_verdict_missing");
+  });
+
+  it("absorbs nothing for a run with no children, and starts every attempt with beginAttempt", async () => {
+    let absorbed = 0;
+    let attempts = 0;
+    const ports: FinishGatePorts = { ...cloud(), absorbChildWrites: async () => { absorbed += 1; }, beginAttempt: () => { attempts += 1; } };
+    await evaluateFinishGates(cloudArgs({ delegated: false }, ports));
+    await evaluateFinishGates(cloudArgs({ delegated: false }, ports));
+    expect(absorbed).toBe(0);
+    expect(attempts).toBe(2);
+  });
+});

@@ -65,6 +65,12 @@ function makeService(opts: {
   const executions = {
     findById: async () => storedExecution,
     update: async (e: Execution) => { storedExecution = e; return e; },
+    // The terminal transition lands through the repository's conditional write (one winner); the fake always wins.
+    land: async (_id: unknown, status: string, f: { result?: string | null; errorMessage?: string | null } = {}) => {
+      storedExecution = status === 'completed' ? storedExecution.markCompleted(f.result ?? '') : status === 'failed' ? storedExecution.markFailed(f.errorMessage ?? '') : storedExecution.cancel();
+      return { won: true, execution: storedExecution };
+    },
+    setProduced: async (_id: unknown, produced: boolean) => { storedExecution = storedExecution.markProduced(produced); return storedExecution; },
   } as unknown as IExecutionRepository;
   const tasks = {
     findById: async () => stored,

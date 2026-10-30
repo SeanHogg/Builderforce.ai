@@ -12,8 +12,8 @@ describe('costLeverArmsStamp', () => {
   });
 
   it('drops a lever forced fully on or off by env — it has no control group', () => {
-    const stamp = costLeverArmsStamp({ COST_LEVER_C1_DEFERRED_TOOLS: 'on', COST_LEVER_C2_OBSERVATION_MASKING: 'off' }, 42)!;
-    expect([...stamp.on, ...stamp.off]).not.toContain('c1_deferred_tools');
+    const stamp = costLeverArmsStamp({ COST_LEVER_C3_TASK_STATE: 'on', COST_LEVER_C2_OBSERVATION_MASKING: 'off' }, 42)!;
+    expect([...stamp.on, ...stamp.off]).not.toContain('c3_task_state');
     expect([...stamp.on, ...stamp.off]).not.toContain('c2_observation_masking');
   });
 
