@@ -660,7 +660,9 @@ jobs:
           pnpm install --frozen-lockfile
           # packages/agent-tools is compiled from source (tsconfig paths), and its imports of npm
           # packages (@seanhogg/builderforce-memory/working) resolve from ITS node_modules.
+          # Likewise packages/agent-run (its imports of @seanhogg/builderforce-memory/handoff).
           pnpm --dir ../packages/agent-tools install --frozen-lockfile
+          pnpm --dir ../packages/agent-run install --frozen-lockfile
           ${{ matrix.run }}
 
   deploy-api:
@@ -717,6 +719,7 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm --dir ../packages/agent-tools install --frozen-lockfile
+          pnpm --dir ../packages/agent-run install --frozen-lockfile
           npm run db:migrate
 
           for attempt in 1 2 3; do
