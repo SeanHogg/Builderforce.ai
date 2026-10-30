@@ -5,7 +5,16 @@
  *   • fail carrying the REAL reason (so the timeline says why).
  * Once-only + idempotent: a run already carrying the retry flag is never re-queued.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The outcome row is telemetry: a failure to write it is REPORTED and swallowed, so a fake that cannot serve it would pass silently.
+// Every landing test below asserts the row WAS written and that nothing was reported.
+const reported = vi.hoisted(() => vi.fn());
+vi.mock('../observability/caughtErrorReporter', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../observability/caughtErrorReporter')>()),
+  reportCaughtError: reported,
+}));
+
 import {
   isSelfHealEligible,
   buildDurableStartBody,
@@ -16,6 +25,11 @@ import {
 import { executions, toolAuditEvents } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { notifyExecutionSubscribers } from './executionEvents';
+
+vi.mock('./executionEvents', async (importOriginal) => ({ ...(await importOriginal<typeof import('./executionEvents')>()), notifyExecutionSubscribers: vi.fn() }));
+
+beforeEach(() => { reported.mockClear(); vi.mocked(notifyExecutionSubscribers).mockClear(); });
 
 // --- pure logic --------------------------------------------------------------
 
@@ -49,7 +63,19 @@ describe('buildDurableStartBody', () => {
 
 // --- fakes -------------------------------------------------------------------
 
-interface FakeOpts { prCount?: number; runRow?: Record<string, unknown> | null }
+interface FakeOpts {
+  prCount?: number;
+  runRow?: Record<string, unknown> | null;
+  /** The status another writer already landed: the terminal UPDATE then matches no row and `findById` answers this one. */
+  alreadyLanded?: 'completed' | 'cancelled';
+}
+
+/** A full `executions` row, as the repository maps it. */
+const executionRow = (status: string) => ({
+  id: 62, taskId: 78, agentId: null, agentRegistrationId: null, agentHostId: null, tenantId: 1, submittedBy: 'u1', sessionId: null, status,
+  payload: '{"model":"m"}', source: 'agent', cloudAgentRef: 'bob', result: null, errorMessage: null, produced: null, startedAt: null, completedAt: null,
+  createdAt: new Date(0), updatedAt: new Date(0),
+});
 
 function makeFakeDb(opts: FakeOpts = {}) {
   const inserts: Array<{ table: unknown; row: Record<string, unknown> }> = [];
@@ -66,7 +92,9 @@ function makeFakeDb(opts: FakeOpts = {}) {
   };
 
   const db = {
-    select: (cols: Record<string, unknown>) => {
+    select: (cols?: Record<string, unknown>) => {
+      // `select()` with no columns is the repository's `findById` (the winner's row after a lost landing).
+      if (!cols) return thenable(opts.alreadyLanded ? [executionRow(opts.alreadyLanded)] : []);
       const isRunLoad = Object.prototype.hasOwnProperty.call(cols, 'executionId');
       const value = isRunLoad ? (runRow ? [runRow] : []) : Array.from({ length: prCount }, (_, i) => ({ id: i }));
       return thenable(value);
@@ -80,7 +108,9 @@ function makeFakeDb(opts: FakeOpts = {}) {
       set: (vals: Record<string, unknown>) => ({
         where: () => {
           updates.push({ table, vals });
-          const affected = [{ id: (vals.id as number | undefined) ?? 1 }];
+          // A terminal write is the repository's `land`: it gets the full row back, or none when another writer landed first.
+          const landing = table === executions && typeof vals.status === 'string' && ['completed', 'failed', 'cancelled'].includes(vals.status);
+          const affected = landing ? (opts.alreadyLanded ? [] : [executionRow(vals.status as string)]) : [{ id: (vals.id as number | undefined) ?? 1 }];
           return {
             returning: () => Promise.resolve(affected),
             then: (onF: (v: unknown) => unknown, onR?: (e: unknown) => unknown) =>
@@ -90,7 +120,16 @@ function makeFakeDb(opts: FakeOpts = {}) {
         },
       }),
     }),
-    insert: (table: unknown) => ({ values: async (row: Record<string, unknown>) => { inserts.push({ table, row }); } }),
+    // Awaitable AND `.onConflictDoNothing().returning()` (the outcome row's insert): the row "wins" unless one is already recorded.
+    insert: (table: unknown) => ({
+      values: (row: Record<string, unknown> | Array<Record<string, unknown>>) => {
+        const list = Array.isArray(row) ? row : [row];
+        for (const r of list) inserts.push({ table, row: r });
+        return Object.assign(Promise.resolve(undefined), {
+          onConflictDoNothing: () => ({ returning: async () => list.map((r) => ({ executionId: r.executionId })) }),
+        });
+      },
+    }),
   } as unknown as Db;
 
   const rowsFor = (table: unknown) => inserts.filter((i) => i.table === table).map((i) => i.row);
@@ -186,5 +225,20 @@ describe('handleCloudRunCrash', () => {
     expect(failUpdate?.vals.errorMessage).toBe(reason);
     // and a run.failed timeline row carries it too
     expect(rowsFor(toolAuditEvents).find((r) => r.toolName === 'run.failed')?.result).toBe(reason);
+    // the run's ONE outcome row was written with the landed status (and its run.finished close), and nothing was swallowed
+    const outcomes = rowsFor(toolAuditEvents).filter((r) => r.toolName === 'run.outcome');
+    expect(outcomes).toHaveLength(1);
+    expect(JSON.parse(String(outcomes[0]!.args))).toMatchObject({ entryPoint: 'cloud', terminalStatus: 'failed', reason });
+    expect(rowsFor(toolAuditEvents).some((r) => r.toolName === 'run.finished')).toBe(true);
+    expect(reported).not.toHaveBeenCalled();
+    expect(vi.mocked(notifyExecutionSubscribers)).toHaveBeenCalledWith(62, expect.objectContaining({ type: 'done', status: 'failed' }));
+  });
+
+  it('LOSES to a writer that already landed the run: ineligible, no outcome row, no run.failed, no done notify', async () => {
+    const { db, rowsFor } = makeFakeDb({ runRow: { ...RUN_ROW }, prCount: 0, alreadyLanded: 'completed' });
+    expect(await handleCloudRunCrash({} as Env, db, 62, 'runtime crashed')).toBe('ineligible');
+    expect(rowsFor(toolAuditEvents).filter((r) => ['run.outcome', 'run.finished', 'run.failed'].includes(String(r.toolName)))).toEqual([]);
+    expect(vi.mocked(notifyExecutionSubscribers)).not.toHaveBeenCalled();
+    expect(reported).not.toHaveBeenCalled();
   });
 });

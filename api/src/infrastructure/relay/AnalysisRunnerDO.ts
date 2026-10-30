@@ -40,6 +40,7 @@ import {
 import { scopedToTenant } from '../database/tenantScope';
 import { ExecutionStatus } from '../../domain/shared/types';
 import { landExecution } from '../../application/runtime/executionLanding';
+import { buildExecutionRepository } from '../../buildExecutionRepository';
 import { decryptCredentials } from '../../application/boardsync/drizzleStore';
 import { WorkerSubrequestExhaustedError } from '../../application/llm/vendors/types';
 import {
@@ -669,18 +670,17 @@ export class AnalysisRunnerDO implements DurableObject {
   /** Mark the linked execution row terminal and move the task to its final lane. */
   private async closeTaskAndExecution(cursor: Cursor, execStatus: 'completed' | 'failed', taskStatus: string): Promise<void> {
     const now = new Date();
+    let won = true; // no linked execution row: nothing to race
     if (cursor.executionId != null) {
-      // The analysis run's execution row lands through the ONE terminal transition (never overwriting a run that already landed).
-      await landExecution(this.db, cursor.executionId, execStatus === 'completed' ? ExecutionStatus.COMPLETED : ExecutionStatus.FAILED)
-        .catch((error) => this.reportError(error, { operation: "closeTaskAndExecution", context: { logMessage: '[analysis-runner] terminal execution transition failed', details: {
-          runId: cursor.runId,
-          executionId: cursor.executionId,
-          tenantId: cursor.tenantId,
-          status: execStatus,
+      // The ONE terminal transition (never overwrites a landed run); a lost race or failed landing skips the lane move below.
+      won = await landExecution(buildExecutionRepository(this.db), cursor.executionId, execStatus === 'completed' ? ExecutionStatus.COMPLETED : ExecutionStatus.FAILED)
+        .then((landed) => landed.won)
+        .catch((error) => { this.reportError(error, { operation: "closeTaskAndExecution", context: { logMessage: '[analysis-runner] terminal execution transition failed', details: {
+          runId: cursor.runId, executionId: cursor.executionId, tenantId: cursor.tenantId, status: execStatus,
           error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-        } } }));
+        } } }); return false; });
     }
-    if (cursor.taskId != null) {
+    if (won && cursor.taskId != null) {
       await this.db
         .update(tasks)
         .set({ status: taskStatus, updatedAt: now })

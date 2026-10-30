@@ -22,7 +22,7 @@ import { RuntimeService } from './application/runtime/RuntimeService';
 import { recordRunFailureEvent } from './application/runtime/recordRunFailureEvent';
 import { loadCloudRunForSelfHeal, selfHealCloudRun } from './application/runtime/cloudSelfHeal';
 import { signalCloudRunnerConcluded } from './application/runtime/cloudRunnerStub';
-import { executionRepositoryFor } from './application/runtime/executionLanding';
+import { buildExecutionRepository } from './buildExecutionRepository';
 import { wireExecutionEventSinks } from './application/runtime/wireExecutionEventSinks';
 import { syncExecutionTaskLifecycle } from './application/task/taskLifecycle';
 import { maybeAutoRunOnLaneEntry } from './application/swimlane/laneEntryTrigger';
@@ -47,7 +47,7 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
   // instance it belongs to; it is only ever invoked after construction completes.
   let runtimeService: RuntimeService;
   runtimeService = new RuntimeService({
-    executions: executionRepositoryFor(db),
+    executions: buildExecutionRepository(db),
     tasks: new TaskRepository(db),
     agents: new AgentRepository(db),
     audit: new AuditRepository(db, env),

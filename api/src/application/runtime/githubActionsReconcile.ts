@@ -53,7 +53,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * second later. It is a cron-driven write path, not a read endpoint, and it runs
  * at most once per repo per tick.
  */
-import { and, eq, gte, inArray, isNull, like, lte } from 'drizzle-orm';
+import { and, gte, inArray, isNull, like, lte } from 'drizzle-orm';
 import { githubRequest, repoPath, resolveRepoAuth } from '../repos/githubClient';
 import { resolveDefaultRepoForTask } from '../repos/resolveDefaultRepo';
 import { AGENT_WORKFLOW_PATH, parseExecutionIdFromRunName } from './githubActionsWorkflow';
@@ -69,6 +69,7 @@ import { executions, toolAuditEvents } from '../../infrastructure/database/schem
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { ExecutionStatus } from '../../domain/shared/types';
 import { landExecution } from './executionLanding';
+import { buildExecutionRepository } from '../../buildExecutionRepository';
 import type { Env } from '../../env';
 
 /** Just the workflow file's basename — the runs endpoint keys on it, exactly as
@@ -206,7 +207,7 @@ export interface ActionsReconcileResult {
 }
 
 /** A dispatched execution that has not yet reported in. */
-interface StrandedRow {
+export interface StrandedRow {
   id: number;
   tenantId: number;
   taskId: number | null;
@@ -369,16 +370,12 @@ function epochMs(v: unknown): number | null {
  * Mirrors the failure onto the Observability timeline exactly as the reaper does —
  * without it the run simply stops with no explanation there.
  */
-async function failStrandedDispatch(db: Db, row: StrandedRow, reason: string): Promise<boolean> {
+export async function failStrandedDispatch(db: Db, row: StrandedRow, reason: string): Promise<boolean> {
   // The ONE terminal transition, from the two statuses a stranded dispatch can be in (a runner that checked in is RUNNING and is never clobbered).
-  const updated = await landExecution(db, row.id, ExecutionStatus.FAILED, { errorMessage: reason }, [ExecutionStatus.PENDING, ExecutionStatus.SUBMITTED])
+  const updated = await landExecution(buildExecutionRepository(db), row.id, ExecutionStatus.FAILED, { errorMessage: reason }, [ExecutionStatus.PENDING, ExecutionStatus.SUBMITTED])
     .then((landed) => (landed.won ? [{ id: row.id }] : []))
     .catch((error) => {
-      reportCaughtError(error, { source: "application/runtime/githubActionsReconcile.ts", operation: "updated", context: { logMessage: '[github-actions-reconcile] stranded execution transition failed', details: {
-        tenantId: row.tenantId,
-        executionId: row.id,
-        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      } } });
+      reportCaughtError(error, { source: "application/runtime/githubActionsReconcile.ts", operation: "updated", context: { logMessage: '[github-actions-reconcile] stranded execution transition failed', details: { tenantId: row.tenantId, executionId: row.id, error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) } } });
       return [];
     });
   if (updated.length === 0) return false;

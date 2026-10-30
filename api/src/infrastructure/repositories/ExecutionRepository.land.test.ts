@@ -3,6 +3,8 @@
  * told only of a win, `update()` refuses a terminal status and cannot resurrect a terminal row, `setProduced` never touches status.
  */
 import { describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 import { ExecutionStatus, asExecutionId } from '../../domain/shared/types';
 import { ExecutionRepository, TerminalStatusViaUpdateError } from './ExecutionRepository';
 import { Execution } from '../../domain/execution/Execution';
@@ -16,12 +18,16 @@ const row = (status: string) => ({
 /** A db whose UPDATE ... WHERE <non-terminal> answers `updated` (one row, or none when another writer got there first); SELECT answers `current`. */
 function fakeDb(opts: { updated: Array<ReturnType<typeof row>>; current?: ReturnType<typeof row> }) {
   const sets: Array<Record<string, unknown>> = [];
+  const wheres: SQL[] = [];
   const db = {
-    update: () => ({ set: (v: Record<string, unknown>) => { sets.push(v); return { where: () => ({ returning: async () => opts.updated }) }; } }),
+    update: () => ({ set: (v: Record<string, unknown>) => { sets.push(v); return { where: (w: SQL) => { wheres.push(w); return { returning: async () => opts.updated }; } }; } }),
     select: () => ({ from: () => ({ where: () => ({ limit: async () => (opts.current ? [opts.current] : []) }) }) }),
   } as never;
-  return { db, sets };
+  return { db, sets, wheres };
 }
+
+/** The WHERE the repository sent, as the SQL Postgres would receive it. */
+const rendered = (where: SQL | undefined) => new PgDialect().sqlToQuery(where!);
 
 describe('land()', () => {
   it('a run that is not yet terminal is landed once: the row is returned and the outcome owner is told', async () => {
@@ -41,6 +47,33 @@ describe('land()', () => {
     expect(landed.won).toBe(false);
     expect(landed.execution.status).toBe('completed');
     expect(onTerminal).not.toHaveBeenCalled();
+  });
+});
+
+describe('the rendered WHERE (the one-winner guarantee lives in the SQL, not in a fake)', () => {
+  const NON_TERMINAL = ['pending', 'submitted', 'running', 'paused'];
+
+  it('land() writes only a non-terminal row: id = ? AND status IN (every non-terminal status), no terminal one', async () => {
+    const { db, wheres } = fakeDb({ updated: [row('completed')] });
+    await new ExecutionRepository(db).land(asExecutionId(9), ExecutionStatus.COMPLETED);
+    const { sql, params } = rendered(wheres[0]);
+    expect(sql).toMatch(/"id" = \$1/);
+    expect(sql).toMatch(/"status" in \(/);
+    expect(params.slice(1).sort()).toEqual([...NON_TERMINAL].sort());
+  });
+
+  it('land(from) narrows the predicate to exactly those statuses', async () => {
+    const { db, wheres } = fakeDb({ updated: [row('failed')] });
+    await new ExecutionRepository(db).land(asExecutionId(9), ExecutionStatus.FAILED, {}, [ExecutionStatus.PENDING, ExecutionStatus.SUBMITTED]);
+    expect(rendered(wheres[0]).params.slice(1).sort()).toEqual(['pending', 'submitted']);
+  });
+
+  it('update() carries the same non-terminal predicate, so a stale RUNNING write cannot reach a landed row', async () => {
+    const { db, wheres } = fakeDb({ updated: [row('running')] });
+    await new ExecutionRepository(db).update(Execution.reconstitute({ ...row('running'), id: 9, taskId: 3, tenantId: 4 } as never));
+    const { sql, params } = rendered(wheres[0]);
+    expect(sql).toMatch(/"status" in \(/);
+    expect(params.slice(1).sort()).toEqual([...NON_TERMINAL].sort());
   });
 });
 

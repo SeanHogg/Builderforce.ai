@@ -1,4 +1,4 @@
-import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { reportedFallback } from '../observability/caughtErrorReporter';
 /**
  * rehearsalService — start, run and read rehearsals.
  *
@@ -31,6 +31,7 @@ import { agentDefinitionVersions, executions, ideAgents, projects, rehearsalStep
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { ExecutionStatus } from '../../domain/shared/types';
 import { landExecution } from '../runtime/executionLanding';
+import { buildExecutionRepository } from '../../buildExecutionRepository';
 import { ShadowRecorder, shadowProvider } from './shadowProvider';
 import { prepareCloudRun, resolveAgentEngine } from '../runtime/cloudAgentEngine';
 import type { Db } from '../../infrastructure/database/connection';
@@ -217,6 +218,7 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
   const executionId = exec.id;
   await db.update(rehearsals).set({ executionId }).where(scopedToTenant(rehearsals, tenantId, eq(rehearsals.id, rehearsalId)));
 
+  const executionPort = buildExecutionRepository(db);
   const recorder = new ShadowRecorder();
   const taskRow = { id: task.id, title: task.title, description: task.description };
 
@@ -263,6 +265,8 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
       );
     }
 
+    // The execution lands FIRST (the ONE terminal transition; its outcome row carries the run's tally), then the rehearsal row flips.
+    await landExecution(executionPort, executionId, ExecutionStatus.COMPLETED, { result: result.output.slice(0, 20_000) }, undefined, { telemetry: result.telemetry });
     await db
       .update(rehearsals)
       .set({
@@ -270,27 +274,21 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
         steps: recorder.steps.length,
         suppressedWrites: recorder.writeCount,
         finishedOk: result.finished === true && result.ok,
-        summary: `${missingPrdDuringReadOnlyPrep ? '[REHEARSAL GAP] This ticket had no PRD. Read-only prep could not draft the PRD that a live run would receive.\n\n' : ''}${result.output}`.slice(0, 20_000),
+        summary: `${missingPrdDuringReadOnlyPrep ? '[REHEARSAL GAP] This ticket had no PRD. Read-only prep could not draft the PRD that a live run would receive.
+
+' : ''}${result.output}`.slice(0, 20_000),
         completedAt: new Date(),
       })
       .where(scopedToTenant(rehearsals, tenantId, eq(rehearsals.id, rehearsalId)));
-
-    // The shadow execution lands through the ONE terminal transition (a rehearsal's outcome row is recorded by its owner).
-    await landExecution(db, executionId, ExecutionStatus.COMPLETED, { result: result.output.slice(0, 20_000) });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    await db
-      .update(rehearsals)
-      .set({ status: 'failed', errorMessage: message.slice(0, 2000), completedAt: new Date() })
+    // Land first, then flip the rehearsal row to what the execution LANDED as (it may already be completed).
+    const landed = await landExecution(executionPort, executionId, ExecutionStatus.FAILED, { errorMessage: message.slice(0, 2000) })
+      .catch(reportedFallback(null, { source: 'application/rehearsal/rehearsalService.ts', operation: 'runRehearsal', context: { logMessage: '[rehearsal] execution failure transition failed', details: { rehearsalId, executionId, tenantId, originalError: message } } }));
+    const alreadyCompleted = landed?.execution.status === ExecutionStatus.COMPLETED;
+    await db.update(rehearsals)
+      .set(alreadyCompleted ? { status: 'completed', completedAt: new Date() } : { status: 'failed', errorMessage: message.slice(0, 2000), completedAt: new Date() })
       .where(scopedToTenant(rehearsals, tenantId, eq(rehearsals.id, rehearsalId)));
-    await landExecution(db, executionId, ExecutionStatus.FAILED, { errorMessage: message.slice(0, 2000) })
-      .catch((writeError) => reportCaughtError(writeError, { source: "application/rehearsal/rehearsalService.ts", operation: "runRehearsal", context: { logMessage: '[rehearsal] execution failure transition failed', details: {
-        rehearsalId,
-        executionId,
-        tenantId,
-        originalError: message,
-        writeError: writeError instanceof Error ? `${writeError.name}: ${writeError.message}` : String(writeError),
-      } } }));
   }
 
   return rehearsalId;

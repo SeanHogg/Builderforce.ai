@@ -128,9 +128,13 @@ export function createReaperFakeDb(script: ReaperFakeDbScript) {
     insert: () => {
       script.calls.push('insert');
       return {
-        values: (v: Row) => {
-          script.onInsert(v);
-          return Promise.resolve();
+        // One row or a batch (the run.outcome writer inserts a batch): awaitable, and `.onConflictDoNothing().returning()` answers every row as won.
+        values: (v: Row | Row[]) => {
+          const list = Array.isArray(v) ? v : [v];
+          for (const row of list) script.onInsert(row);
+          return Object.assign(Promise.resolve(), {
+            onConflictDoNothing: () => ({ returning: () => Promise.resolve(list.map((row) => ({ executionId: row.executionId }))) }),
+          });
         },
       };
     },

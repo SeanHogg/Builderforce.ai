@@ -6,10 +6,11 @@
  * landing it, a cancel (whatever its prior status), either reaper, the Durable Object's crash path, a platform halt — writes the
  * same row, once, with the status the execution LANDED with. Nothing else writes it.
  *
- * Counts (tool calls, tokens, cost, model, verify) are the run's final tally, `RunState.telemetry`: the cloud tail returns it on the
- * terminal result and the terminal transition passes it here (`recordTerminalOutcome`'s `telemetry`). A run with no tally (a cancel or
- * a reap between ticks - the cursor lives in the Durable Object, so a mid-tick end records none), or only a PARTIAL one (a legacy
- * cursor resumed with a fresh tally), carries NO counts: unknown is absent, never zero.
+ * Counts (tool calls, tokens, cost, model, verify) are the run's final tally, `RunState.telemetry`: the cloud tail hands it to the
+ * terminal transition that lands the run (the Durable Object's update, a steered stop's cancel, a rehearsal's landing) and that transition
+ * passes it here (`recordTerminalOutcome`'s `telemetry`). Only an EXTERNAL cancel or reap between ticks has no tally (the cursor lives in
+ * the Durable Object, so the writer cannot see it), and a PARTIAL one (a legacy cursor resumed with a fresh tally) is no better: both
+ * carry NO counts - unknown is absent, never zero.
  *
  * Uniqueness belongs to the table (a partial unique index, migrations 1286 / 0029) and the insert is ON CONFLICT DO NOTHING, so
  * racing writers and a re-run after an eviction record one row. The matching `run.finished` trace row is written only by the
@@ -31,9 +32,8 @@ export const OUTCOME_ROW_TOOL = 'run.outcome';
 const LANDED: Readonly<Record<string, LandedStatus>> = { completed: 'finished', failed: 'failed', cancelled: 'cancelled' };
 
 /**
- * The row's counts, from the run's final tally (`RunState.telemetry`) - or NONE: a run with no tally (a cancel or a reap between
- * ticks: the cursor lives in the Durable Object, so a mid-tick end records no counts), and a tally that is only PARTIAL (a legacy
- * cursor resumed with a fresh tally) carry absent counts, never zeros.
+ * The row's counts, from the run's final tally (`RunState.telemetry`) - or NONE: a run with no tally (an external cancel or a reap
+ * between ticks), and a tally that is only PARTIAL (a legacy cursor resumed with a fresh tally), carry absent counts, never zeros.
  */
 function countsOf(telemetry: object | undefined): Record<string, unknown> {
   const t = telemetry as (Partial<RunTally> & { partial?: boolean }) | undefined;

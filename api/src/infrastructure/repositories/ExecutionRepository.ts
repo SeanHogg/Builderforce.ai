@@ -1,5 +1,5 @@
 import { and, desc, eq, getTableColumns, inArray, or, sql } from 'drizzle-orm';
-import { IExecutionRepository, type ExecutionReadOptions, type LandContext, type LandFields, type TerminalStatus } from '../../domain/execution/IExecutionRepository';
+import { IExecutionRepository, type ExecutionReadOptions, type LandContext, type LandFields, type NonTerminalStatus, type TerminalStatus } from '../../domain/execution/IExecutionRepository';
 import { Execution, ExecutionProps } from '../../domain/execution/Execution';
 import {
   ExecutionId, TaskId, TenantId, AgentId, AgentHostId, ExecutionStatus,
@@ -147,7 +147,7 @@ export class ExecutionRepository implements IExecutionRepository {
     status: TerminalStatus,
     fields: LandFields = {},
     /** Land only from these statuses (default: any non-terminal one) - e.g. a stranded dispatch must never clobber a run that has started. */
-    from: readonly ExecutionStatus[] = EXECUTION_NON_TERMINAL_STATUSES,
+    from?: readonly NonTerminalStatus[],
     /** What the winner's outcome owner needs beyond the row: the run's final tally. */
     context: LandContext = {},
   ): Promise<{ won: boolean; execution: Execution }> {
@@ -163,7 +163,7 @@ export class ExecutionRepository implements IExecutionRepository {
         completedAt:  fields.completedAt ?? now,
         updatedAt:    now,
       })
-      .where(and(eq(executionsTable.id, id), inArray(executionsTable.status, [...from])))
+      .where(and(eq(executionsTable.id, id), inArray(executionsTable.status, [...(from ?? EXECUTION_NON_TERMINAL_STATUSES)])))
       .returning();
     if (!row) {
       const winner = await this.findById(id);

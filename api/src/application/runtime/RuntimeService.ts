@@ -2,7 +2,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { isValidatorReviewPayload } from '../validation/validatorReviewMarker';
 import { isIncidentTriagePayload } from '../incident/incidentTriageMarker';
 import { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
-import { persistTransition, stampProducedFromLaneMove } from './executionLanding';
+import { persistTransition } from './executionLanding';
+import { stampProducedFromLaneMove } from './stampProducedFromLaneMove';
 import type { RunTally } from '@builderforce/agent-run';
 import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { IAgentRepository } from '../../domain/agent/IAgentRepository';
@@ -476,10 +477,11 @@ export class RuntimeService {
     return this.executions.findBySession(asTenantId(tenantId), sessionId, limit);
   }
 
-  async cancel(id: number, cancelledBy: string): Promise<Execution> {
+  /** `opts.telemetry`: the run's final tally when the canceller is the run itself (a steered stop), so the cancel's outcome row carries its counts. */
+  async cancel(id: number, cancelledBy: string, opts: { telemetry?: RunTally } = {}): Promise<Execution> {
     const execution = await this.getExecution(id);
     const cancelled = execution.cancel();
-    const { won, execution: saved } = await persistTransition(this.executions, cancelled);
+    const { won, execution: saved } = await persistTransition(this.executions, cancelled, opts.telemetry);
     if (!won) return saved; // a cancel that lost to a completion does nothing: no signal, no audit, no milestone
     // Right after the row flips, so a durable runner mid-step stops on its next cancel poll.
     await this.ports.onCancelled?.(saved).catch((error) => reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "cancel", context: { logMessage: '[runtime] cancel signal to the cloud runner failed', details: { executionId: saved.id } } }));

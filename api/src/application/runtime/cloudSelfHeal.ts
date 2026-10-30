@@ -45,6 +45,7 @@ import { recordCloudToolEvent } from './cloudToolEvents';
 import { cloudRunnerStub } from './cloudRunnerStub';
 import { notifyExecutionSubscribers } from './executionEvents';
 import { landExecution } from './executionLanding';
+import { buildExecutionRepository } from '../../buildExecutionRepository';
 import { ExecutionStatus } from '../../domain/shared/types';
 
 /** Live (non-terminal) statuses an orphaned/crashed run can be recovered from. */
@@ -232,7 +233,7 @@ export async function handleCloudRunCrash(env: Env, db: Db, executionId: number,
 
   // The ONE terminal transition: it can fail only a run that is still non-terminal (a run that already COMPLETED is never
   // overwritten), and it records the run's outcome row. `won` is false when another writer landed it first.
-  const won = await landExecution(db, executionId, ExecutionStatus.FAILED, { errorMessage: reason })
+  const won = await landExecution(buildExecutionRepository(db), executionId, ExecutionStatus.FAILED, { errorMessage: reason })
     .then((landed) => landed.won)
     .catch((error) => {
       reportCaughtError(error, { source: "application/runtime/cloudSelfHeal.ts", operation: "handleCloudRunCrash", context: { logMessage: '[cloud-self-heal] terminal failure transition failed', details: {

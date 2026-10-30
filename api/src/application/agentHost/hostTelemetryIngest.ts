@@ -14,6 +14,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { executions, taskFileChanges, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import { OUTCOME_ROW_TOOL } from '../runtime/cloudOutcomeRow';
 
 /** Most events one batch may carry (mirrors the route schema). */
 export const HOST_TELEMETRY_BATCH_MAX = 200;
@@ -101,17 +102,20 @@ export function usageSnapshotRows(host: HostIdentity, events: UsageSnapshotInput
 }
 
 /** Tool names that are the CLOUD's own rows: a host never sends them and must not forge one for a run (`run.outcome` is the cloud's one-per-run row). */
-const CLOUD_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set(['run.outcome']);
+const CLOUD_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set([OUTCOME_ROW_TOOL]);
 
 /**
- * Admit a host's batch: drop the cloud-only rows, and every row whose `executionId` is not in the host's own TENANT (the id arrives in
- * the BODY, so it is checked, in ONE query). Rows are dropped, never the whole batch.
+ * Admit a host's batch: drop the cloud-only rows, and every row whose `executionId` is not one of THIS host's own runs (tenant AND
+ * `agentHostId`, exactly as {@link ingestFileChanges} - the id arrives in the BODY, so it is checked, in ONE query). A cloud run has no
+ * host, so a host cannot write `run.finished` (or anything else) onto one either: the cloud writes that trace itself, with the landed
+ * status. Rows are dropped, never the whole batch.
  */
 export async function admitToolAuditRows(db: Db, host: HostIdentity, rows: ReturnType<typeof toolAuditRows>): Promise<ReturnType<typeof toolAuditRows>> {
   const candidates = rows.filter((row) => !CLOUD_ONLY_TOOL_NAMES.has(row.toolName));
   const ids = [...new Set(candidates.flatMap((row) => (row.executionId != null ? [row.executionId] : [])))];
   if (ids.length === 0) return candidates;
-  const owned = await db.select({ id: executions.id }).from(executions).where(and(inArray(executions.id, ids), eq(executions.tenantId, host.tenantId)));
+  const owned = await db.select({ id: executions.id }).from(executions)
+    .where(and(inArray(executions.id, ids), eq(executions.tenantId, host.tenantId), eq(executions.agentHostId, host.agentHostId)));
   const mine = new Set(owned.map((row) => row.id));
   return candidates.filter((row) => row.executionId == null || mine.has(row.executionId));
 }
