@@ -1,7 +1,9 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { isValidatorReviewPayload } from '../validation/validatorReviewMarker';
 import { isIncidentTriagePayload } from '../incident/incidentTriageMarker';
-import { IExecutionRepository, type TerminalStatus } from '../../domain/execution/IExecutionRepository';
+import { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
+import { persistTransition, stampProducedFromLaneMove } from './executionLanding';
+import type { RunTally } from '@builderforce/agent-run';
 import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { IAgentRepository } from '../../domain/agent/IAgentRepository';
 import { IAuditRepository } from '../../domain/audit/IAuditRepository';
@@ -41,6 +43,8 @@ export interface UpdateExecutionDto {
   status:        ExecutionStatus;
   result?:       string;
   errorMessage?: string;
+  /** The run's final tally (`RunState.telemetry`), handed to the one outcome-row writer when this update LANDS the run. */
+  telemetry?: RunTally;
 }
 
 /** Recover the lane an auto-run dispatch was started FOR from its stored payload
@@ -436,10 +440,8 @@ export class RuntimeService {
     }
     try {
       const failed = e.markFailed(this.orphanReason(e));
-      const landed = await this.land(failed);
-      // Lost the race to another terminal transition (a completion, a cancel, the cron reaper): the winner owns the side effects.
-      if (!landed.won) return landed.execution;
-      const saved = landed.execution;
+      const { won, execution: saved } = await persistTransition(this.executions, failed);
+      if (!won) return saved; // lost the race to another terminal transition: the winner owns the side effects
       await this.audit.save(AuditEvent.create({
         tenantId:     e.tenantId,
         userId:       null,
@@ -474,19 +476,11 @@ export class RuntimeService {
     return this.executions.findBySession(asTenantId(tenantId), sessionId, limit);
   }
 
-  /** Land a terminal entity (already transitioned under the domain's rules) through the repository's ONE conditional write. */
-  private land(terminal: Execution): Promise<{ won: boolean; execution: Execution }> {
-    const p = terminal.toPlain();
-    return this.executions.land(terminal.id, p.status as TerminalStatus, { result: p.result, errorMessage: p.errorMessage, produced: p.produced, completedAt: p.completedAt });
-  }
-
   async cancel(id: number, cancelledBy: string): Promise<Execution> {
     const execution = await this.getExecution(id);
     const cancelled = execution.cancel();
-    const landed    = await this.land(cancelled);
-    // A cancel that lost to a completion (or any other terminal transition) does nothing: no signal, no audit, no milestone.
-    if (!landed.won) return landed.execution;
-    const saved     = landed.execution;
+    const { won, execution: saved } = await persistTransition(this.executions, cancelled);
+    if (!won) return saved; // a cancel that lost to a completion does nothing: no signal, no audit, no milestone
     // Right after the row flips, so a durable runner mid-step stops on its next cancel poll.
     await this.ports.onCancelled?.(saved).catch((error) => reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "cancel", context: { logMessage: '[runtime] cancel signal to the cloud runner failed', details: { executionId: saved.id } } }));
 
@@ -526,15 +520,9 @@ export class RuntimeService {
         throw new ForbiddenError(`Cannot transition to status '${dto.status}' via this endpoint`);
     }
 
-    // A terminal status LANDS (one winner); a non-terminal one is an ordinary write.
-    let saved: Execution;
-    if (dto.status === ExecutionStatus.COMPLETED || dto.status === ExecutionStatus.FAILED) {
-      const landed = await this.land(execution);
-      if (!landed.won) return landed.execution; // another writer already landed it: its row stands and its side effects are done
-      saved = landed.execution;
-    } else {
-      saved = await this.executions.update(execution);
-    }
+    const landed = await persistTransition(this.executions, execution, dto.telemetry);
+    if (!landed.won) return landed.execution; // another writer already landed it: its side effects stand
+    let saved = landed.execution;
     let movedTicket = false;
 
     // sync task status based on execution state --------------------------------
@@ -746,22 +734,8 @@ export class RuntimeService {
       } } });
     }
 
-    // A lane advance is a durable product of the run just as much as a commit or PR.
-    // `finalizeCloudRun` stamps repository artifacts before this lifecycle transition;
-    // complete the verdict here, after the authoritative from/to statuses are known.
-    // Without this, a legitimate no-code workflow that advances a ticket is counted as
-    // an empty completion and can trip the unproductive-run breaker.
-    if (dto.status === ExecutionStatus.COMPLETED && movedTicket && saved.produced !== true) {
-      try {
-        saved = await this.executions.setProduced(saved.id, true);
-      } catch (error) {
-        reportCaughtError(error, {
-          source: 'application/runtime/RuntimeService.ts',
-          operation: 'markProducedFromLaneMove',
-          context: { executionId: Number(saved.id), taskId: Number(saved.taskId) },
-        });
-      }
-    }
+    // A lane advance is a durable product of the run (see `stampProducedFromLaneMove`).
+    if (dto.status === ExecutionStatus.COMPLETED && movedTicket) saved = await stampProducedFromLaneMove(this.executions, saved);
 
     const auditType = dto.status === ExecutionStatus.RUNNING
       ? AuditEventType.EXECUTION_STARTED

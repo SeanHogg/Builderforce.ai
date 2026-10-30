@@ -10,7 +10,7 @@
  * counters at the top level). {@link toRunState} reads it once, so a deploy mid-run
  * resumes the same conversation on the one agent instead of starting it over.
  */
-import { initialModelRunState, type RunMessage, type RunState } from '@builderforce/agent-run';
+import { freshTally, initialModelRunState, type RunMessage, type RunState } from '@builderforce/agent-run';
 import type { RunKnowledgeState } from '@builderforce/agent-tools';
 import type { RunPolicyState } from '@builderforce/run-policy';
 import type { TicketRepoContext } from '../repos/commitFileAsPendingChange';
@@ -113,6 +113,9 @@ export function toRunState(saved: CloudLoopState | undefined, trustedApprovals: 
     // the call was approved - a cursor parked on a still-pending approval, or on one that was rejected, holds the key too. Only the
     // keys the execution's approval record confirms (`trustedLegacyApprovals`) resume as APPROVED calls.
     approvedCalls: [...trustedApprovals],
+    // A cursor written before the cutover carried no tally: the run resumes counting from here, so its tally covers only the rest of
+    // the run - PARTIAL - and the outcome row records no counts for it (absent, never a floor presented as the total).
+    telemetry: { ...freshTally(), partial: true },
     ...(saved.modelPolicy?.forceToolChoice ? { forceToolChoice: saved.modelPolicy.forceToolChoice } : {}),
     ...(saved.taskState ? { taskState: saved.taskState } : {}),
     ...(saved.loadedTools ? { loadedTools: saved.loadedTools } : {}),

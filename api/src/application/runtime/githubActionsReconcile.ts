@@ -68,6 +68,7 @@ import { buildDatabase, type Db } from '../../infrastructure/database/connection
 import { executions, toolAuditEvents } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { ExecutionStatus } from '../../domain/shared/types';
+import { landExecution } from './executionLanding';
 import type { Env } from '../../env';
 
 /** Just the workflow file's basename — the runs endpoint keys on it, exactly as
@@ -369,14 +370,9 @@ function epochMs(v: unknown): number | null {
  * without it the run simply stops with no explanation there.
  */
 async function failStrandedDispatch(db: Db, row: StrandedRow, reason: string): Promise<boolean> {
-  const updated = await db
-    .update(executions)
-    .set({ status: ExecutionStatus.FAILED, errorMessage: reason, completedAt: new Date(), updatedAt: new Date() })
-    .where(and(
-      eq(executions.id, row.id),
-      inArray(executions.status, [ExecutionStatus.PENDING, ExecutionStatus.SUBMITTED]),
-    ))
-    .returning({ id: executions.id })
+  // The ONE terminal transition, from the two statuses a stranded dispatch can be in (a runner that checked in is RUNNING and is never clobbered).
+  const updated = await landExecution(db, row.id, ExecutionStatus.FAILED, { errorMessage: reason }, [ExecutionStatus.PENDING, ExecutionStatus.SUBMITTED])
+    .then((landed) => (landed.won ? [{ id: row.id }] : []))
     .catch((error) => {
       reportCaughtError(error, { source: "application/runtime/githubActionsReconcile.ts", operation: "updated", context: { logMessage: '[github-actions-reconcile] stranded execution transition failed', details: {
         tenantId: row.tenantId,

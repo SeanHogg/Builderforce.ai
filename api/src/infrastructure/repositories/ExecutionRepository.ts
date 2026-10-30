@@ -1,5 +1,5 @@
 import { and, desc, eq, getTableColumns, inArray, or, sql } from 'drizzle-orm';
-import { IExecutionRepository, type ExecutionReadOptions, type LandFields, type TerminalStatus } from '../../domain/execution/IExecutionRepository';
+import { IExecutionRepository, type ExecutionReadOptions, type LandContext, type LandFields, type TerminalStatus } from '../../domain/execution/IExecutionRepository';
 import { Execution, ExecutionProps } from '../../domain/execution/Execution';
 import {
   ExecutionId, TaskId, TenantId, AgentId, AgentHostId, ExecutionStatus,
@@ -23,7 +23,7 @@ export class ExecutionRepository implements IExecutionRepository {
    * terminal status lands, so the run's outcome row is recorded here and nowhere else (`cloudOutcomeRow`). Optional: a repository
    * built without it (a read path, a test) records nothing.
    */
-  constructor(private readonly db: Db, private readonly hooks: { onTerminal?: (saved: Execution) => Promise<void> } = {}) {}
+  constructor(private readonly db: Db, private readonly hooks: { onTerminal?: (saved: Execution, context: LandContext) => Promise<void> } = {}) {}
 
   async findById(id: ExecutionId): Promise<Execution | null> {
     const [row] = await this.db
@@ -148,6 +148,8 @@ export class ExecutionRepository implements IExecutionRepository {
     fields: LandFields = {},
     /** Land only from these statuses (default: any non-terminal one) - e.g. a stranded dispatch must never clobber a run that has started. */
     from: readonly ExecutionStatus[] = EXECUTION_NON_TERMINAL_STATUSES,
+    /** What the winner's outcome owner needs beyond the row: the run's final tally. */
+    context: LandContext = {},
   ): Promise<{ won: boolean; execution: Execution }> {
     const now = new Date();
     const [row] = await this.db
@@ -169,7 +171,7 @@ export class ExecutionRepository implements IExecutionRepository {
       return { won: false, execution: winner };
     }
     const execution = toDomain(row);
-    await this.hooks.onTerminal?.(execution);
+    await this.hooks.onTerminal?.(execution, context);
     return { won: true, execution };
   }
 

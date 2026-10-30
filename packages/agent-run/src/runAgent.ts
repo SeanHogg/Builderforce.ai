@@ -158,8 +158,9 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
     try {
       output = await synthesizeFinal(input, state, hooks, transcript, pack, tally);
     } catch (err) {
-      // Only a resumable interruption escapes the synthesis turn (see `synthesizeFinal`): the run resumes, it did not end.
-      return settle(input, hooks, state, transcript, "failed", { reason: err instanceof Error ? err.message : String(err), cause: err });
+      // Whatever escaped the synthesis turn settles the run the way any other port exception does: the cause rides only when the
+      // surface says it is resumable (`synthesizeFinal` rethrows only those); anything else fails the run terminal.
+      return settle(input, hooks, state, transcript, "failed", { reason: err instanceof Error ? err.message : String(err), ...(isResumable(input, err) ? { cause: err } : {}) });
     }
     if (output) return settle(input, hooks, state, transcript, "finished", { output });
   }

@@ -70,7 +70,7 @@ function makeService(opts: {
       storedExecution = status === 'completed' ? storedExecution.markCompleted(f.result ?? '') : status === 'failed' ? storedExecution.markFailed(f.errorMessage ?? '') : storedExecution.cancel();
       return { won: true, execution: storedExecution };
     },
-    setProduced: async () => storedExecution,
+    setProduced: async (_id: unknown, produced: boolean) => { storedExecution = storedExecution.markProduced(produced); return storedExecution; },
   } as unknown as IExecutionRepository;
   const tasks = {
     findById: async () => stored,

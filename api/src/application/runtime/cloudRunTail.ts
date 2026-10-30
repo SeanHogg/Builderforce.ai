@@ -16,12 +16,11 @@
  *     eviction handling re-arms the run instead of failing it.
  */
 import {
-  ModelTransportError, RUN_CANCELLED_REASON, buildOutcomeRow, describeVerifyOutcome, runSandboxVerify, runVerifyPhase,
-  type RunOutcome, type RunOutcomeRow, type RunState, type VerifySandbox,
+  ModelTransportError, RUN_CANCELLED_REASON, describeVerifyOutcome, runSandboxVerify, runVerifyPhase,
+  type RunOutcome, type RunState, type VerifySandbox,
 } from '@builderforce/agent-run';
 import type { RunSandbox } from './sandbox/runSandbox';
 import { handOffOutcomeCounts } from './cloudOutcomeRow';
-import { cloudRunId } from '../../domain/execution/cloudRunId';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { releaseAllForExecution } from '../coordination/leaseService';
 import { coordinationScopeKey } from '../../domain/coordination/resourceKey';
@@ -177,17 +176,15 @@ async function land(host: CloudRunHost, state: RunState, output: string, cancell
 }
 
 /**
- * Map the agent's outcome to the cloud's result and, on a terminal one, land the run. The run's counts (its `RunState.telemetry`,
- * as the outcome row) are handed to the ONE outcome-row writer (`cloudOutcomeRow`), which records the row at the terminal
- * transition with the status the execution LANDED with — a missing sign-off, a breaker that lands COMPLETED, a steered stop and a
- * rehearsal that spent its step budget all differ from what the agent settled on. A run that goes on (paused, a durable tick that
- * yielded) hands over nothing; an exception the Durable Object re-arms throws before it gets here.
+ * Map the agent's outcome to the cloud's result and, on a terminal one, land the run. A terminal result carries the run's final tally
+ * (`RunState.telemetry`); the terminal transition hands it to the ONE outcome-row writer (`cloudOutcomeRow`), which records the row with
+ * the status the execution LANDED with - a missing sign-off, a breaker that lands COMPLETED, a steered stop and a rehearsal that spent its
+ * step budget all differ from what the agent settled on. A run that goes on (paused, a durable tick that yielded) carries none; an
+ * exception the Durable Object re-arms throws before it gets here.
  */
 export async function settleCloudRun(host: CloudRunHost, outcome: RunOutcome, stash: RunStash, model: CloudModelPort): Promise<CloudLoopResult> {
   const result = await mapOutcome(host, outcome, stash, model);
-  if (!result.finished) return result;
-  handOffOutcomeCounts(host.refs.executionId, stash.row ?? buildOutcomeRow({ entryPoint: 'cloud', runId: cloudRunId(host.refs.executionId), kind: result.ok ? 'finished' : 'failed', state: outcome.state }));
-  return result;
+  return result.finished && outcome.state.telemetry ? { ...result, telemetry: outcome.state.telemetry } : result;
 }
 
 async function mapOutcome(host: CloudRunHost, outcome: RunOutcome, stash: RunStash, model: CloudModelPort): Promise<CloudLoopResult> {

@@ -12,10 +12,8 @@ const h = vi.hoisted(() => ({
   commit: vi.fn(async () => true),
   workerCancel: vi.fn(async () => undefined),
   sender: vi.fn(async (..._a: unknown[]) => null as string | null),
-  row: vi.fn(async (..._a: unknown[]) => undefined),
 }));
 vi.mock('./executionSteering', () => ({ lastPersonSteerSender: h.sender }));
-vi.mock('./cloudOutcomeRow', async (orig) => ({ ...(await orig<Record<string, unknown>>()), handOffOutcomeCounts: h.row }));
 vi.mock('../../buildRuntimeService', () => ({ buildRuntimeService: () => ({ cancel: h.workerCancel }) }));
 vi.mock('./cloudFinalize', () => ({ finalizeCloudRun: h.finalize }));
 vi.mock('../coordination/leaseService', () => ({ releaseAllForExecution: h.release }));
@@ -115,23 +113,28 @@ describe('settleCloudRun', () => {
     expect(rehearsal).toEqual({ ok: true, output: 'last words', cancelled: false, finished: true });
   });
 
-  describe("the agent's counts are handed to the ONE outcome-row writer at the landing", () => {
-    it("a finished run hands over the agent's own row", async () => {
-      const agentRow = { entryPoint: 'cloud', steps: 3, toolCalls: 4, toolErrors: 1, terminalStatus: 'finished' };
-      await settleCloudRun(host(), { kind: 'finished', output: 'done', state }, { row: agentRow as never }, model());
-      expect(h.row).toHaveBeenCalledTimes(1);
-      expect(h.row).toHaveBeenCalledWith(9, agentRow);
+  describe("a TERMINAL result carries the run's final tally for the ONE outcome-row writer", () => {
+    const tallied = { ...state, telemetry: { toolCalls: 4, toolErrors: 1, tokens: 900, cacheReadTokens: 0, shellFileReads: 0, repoErrors: 0 } } as unknown as RunState;
+
+    it('a finished run, a missing sign-off (ok:false) and a steered stop each carry the tally the transition lands with', async () => {
+      const finished = await settleCloudRun(host(), { kind: 'finished', output: 'done', state: tallied }, stash, model());
+      expect(finished).toMatchObject({ finished: true, telemetry: { toolCalls: 4, toolErrors: 1 } });
+      const noVerdict = { ...tallied, finish: { ciVerified: false, reviewVerdictRecorded: false } } as unknown as RunState;
+      const refused = await settleCloudRun(host({ opts: { requiredSignoff: { roleKey: 'qa-tester' } } }), { kind: 'finished', output: 'ok', state: noVerdict }, stash, model());
+      expect(refused).toMatchObject({ ok: false, telemetry: { toolCalls: 4 } });
+      const stopped = await settleCloudRun(host(), { kind: 'failed', reason: 'cancelled', state: tallied }, stash, model());
+      expect(stopped).toMatchObject({ cancelled: true, telemetry: { toolCalls: 4 } });
     });
 
-    it('a rehearsal that spent its step budget (settled yielded, landed terminal) hands over a row built from its state', async () => {
-      await settleCloudRun(host({ opts: { suppressFinalize: true } }), { kind: 'yielded', state }, {}, model());
-      expect(h.row).toHaveBeenCalledWith(9, expect.objectContaining({ entryPoint: 'cloud', runId: 'cloud:9', steps: 3 }));
+    it('a rehearsal that spent its step budget (settled yielded, landed terminal) carries its tally too', async () => {
+      const rehearsal = await settleCloudRun(host({ opts: { suppressFinalize: true } }), { kind: 'yielded', state: tallied }, stash, model());
+      expect(rehearsal).toMatchObject({ finished: true, telemetry: { toolCalls: 4 } });
     });
 
-    it('a run that goes on (paused, a durable tick that yielded) hands over nothing', async () => {
-      await settleCloudRun(host(), { kind: 'paused', question: 'q?', approvalId: 'a1', state }, {}, model());
-      await settleCloudRun(host({ opts: { deferFinalize: true } }), { kind: 'yielded', state }, {}, model());
-      expect(h.row).not.toHaveBeenCalled();
+    it('a run that goes on (paused, a durable tick that yielded) and a run with no tally carry none', async () => {
+      expect(await settleCloudRun(host(), { kind: 'paused', question: 'q?', approvalId: 'a1', state: tallied }, stash, model())).not.toHaveProperty('telemetry');
+      expect(await settleCloudRun(host({ opts: { deferFinalize: true } }), { kind: 'yielded', state: tallied }, stash, model())).not.toHaveProperty('telemetry');
+      expect(await settleCloudRun(host(), { kind: 'finished', output: 'done', state }, stash, model())).not.toHaveProperty('telemetry');
     });
   });
 

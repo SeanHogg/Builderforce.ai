@@ -24,12 +24,12 @@ beforeEach(() => vi.clearAllMocks());
 
 describe('timelineSink', () => {
   it('records a dispatched call with its args, its capped result and its MEASURED duration', async () => {
-    await timelineSink({} as never, run, () => null, () => undefined).emit({ kind: 'tool.dispatched', step: 1, tool: 'write_file', ok: true, callId: 'c1', args: { path: 'a.ts', summary: 's', content: 'x' }, result: { ok: true } }, { durationMs: 42 });
+    await timelineSink({} as never, run, () => null).emit({ kind: 'tool.dispatched', step: 1, tool: 'write_file', ok: true, callId: 'c1', args: { path: 'a.ts', summary: 's', content: 'x' }, result: { ok: true } }, { durationMs: 42 });
     expect(rowOf('write_file')).toMatchObject({ tenantId: 1, executionId: 4, category: 'tool', toolCallId: 'c1', detail: { path: 'a.ts', summary: 's' }, durationMs: 42 });
   });
 
   it('files a typed claim for a successful validation or review verdict — and only a successful one', async () => {
-    const sink = timelineSink({} as never, run, () => null, () => undefined);
+    const sink = timelineSink({} as never, run, () => null);
     await sink.emit({ kind: 'tool.dispatched', step: 1, tool: 'run_checks', ok: true, args: {}, result: {} });
     await sink.emit({ kind: 'tool.dispatched', step: 1, tool: 'builtin_reviews_record', ok: true, args: {}, result: {} });
     await sink.emit({ kind: 'tool.dispatched', step: 1, tool: 'run_command', ok: false, args: {}, result: {} });
@@ -37,7 +37,7 @@ describe('timelineSink', () => {
   });
 
   it('restores the governance, finish, repetition and compaction rows in the shapes the UI reads', async () => {
-    const sink = timelineSink({} as never, run, () => 'm-1', () => undefined);
+    const sink = timelineSink({} as never, run, () => 'm-1');
     await sink.emit({ kind: 'policy.blocked', step: 1, tool: 'delete_file', gateId: 'g2', reason: 'no deletes' });
     await sink.emit({ kind: 'finish.blocked', step: 1, reason: 'review_verdict_missing', block: 'sign off first', detail: { roleKey: 'qa' } });
     await sink.emit({ kind: 'loop.repetition', step: 2, copies: 4, block: 'same words' });
@@ -49,23 +49,21 @@ describe('timelineSink', () => {
   });
 
   it('names a released model and why on the cascade row', async () => {
-    await timelineSink({} as never, run, () => null, () => undefined).emit({ kind: 'model.cascade', step: 4, from: 'opus', status: 413, released: true });
+    await timelineSink({} as never, run, () => null).emit({ kind: 'model.cascade', step: 4, from: 'opus', status: 413, released: true });
     expect(rowOf('model.cascade')).toMatchObject({ detail: { step: 4, from: 'opus', reason: '413' } });
   });
 
   it('a sink that cannot write never fails the run', async () => {
     h.record.mockRejectedValueOnce(new Error('db down'));
-    const sink = timelineSink({} as never, run, () => null, () => undefined);
+    const sink = timelineSink({} as never, run, () => null);
     await expect(sink.emit({ kind: 'run.started', step: 0 })).resolves.toBeUndefined();
   });
 
-  it('hands the outcome row to the tail instead of writing it: the cloud writes the ONE row after the run has landed', async () => {
-    const taken: unknown[] = [];
-    const sink = timelineSink({} as never, run, () => null, (row) => { taken.push(row); });
-    const row = { entryPoint: 'cloud', steps: 3, toolCalls: 2, toolErrors: 0, compactions: 0, stallRecoveries: 0, escalations: 0, verify: 'not-run', terminalStatus: 'finished' } as const;
-    await sink.outcome?.(row);
-    expect(taken).toEqual([row]);
-    expect(h.record).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ toolName: 'run.outcome' }));
+  it("writes neither the outcome row nor the agent's run.finished: the ONE owner records both at the terminal transition", async () => {
+    const sink = timelineSink({} as never, run, () => null);
+    expect(sink.outcome).toBeUndefined();
+    await sink.emit({ kind: 'run.finished', step: 3, outcome: 'finished' });
+    expect(h.record).not.toHaveBeenCalled();
   });
 });
 

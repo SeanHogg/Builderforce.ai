@@ -29,6 +29,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { agentDefinitionVersions, executions, ideAgents, projects, rehearsalSteps, rehearsals, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { ExecutionStatus } from '../../domain/shared/types';
+import { landExecution } from '../runtime/executionLanding';
 import { ShadowRecorder, shadowProvider } from './shadowProvider';
 import { prepareCloudRun, resolveAgentEngine } from '../runtime/cloudAgentEngine';
 import type { Db } from '../../infrastructure/database/connection';
@@ -273,20 +275,15 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
       })
       .where(scopedToTenant(rehearsals, tenantId, eq(rehearsals.id, rehearsalId)));
 
-    await db
-      .update(executions)
-      .set({ status: 'completed', result: result.output.slice(0, 20_000), completedAt: new Date() })
-      .where(scopedToTenant(executions, tenantId, eq(executions.id, executionId)));
+    // The shadow execution lands through the ONE terminal transition (a rehearsal's outcome row is recorded by its owner).
+    await landExecution(db, executionId, ExecutionStatus.COMPLETED, { result: result.output.slice(0, 20_000) });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     await db
       .update(rehearsals)
       .set({ status: 'failed', errorMessage: message.slice(0, 2000), completedAt: new Date() })
       .where(scopedToTenant(rehearsals, tenantId, eq(rehearsals.id, rehearsalId)));
-    await db
-      .update(executions)
-      .set({ status: 'failed', errorMessage: message.slice(0, 2000), completedAt: new Date() })
-      .where(scopedToTenant(executions, tenantId, eq(executions.id, executionId)))
+    await landExecution(db, executionId, ExecutionStatus.FAILED, { errorMessage: message.slice(0, 2000) })
       .catch((writeError) => reportCaughtError(writeError, { source: "application/rehearsal/rehearsalService.ts", operation: "runRehearsal", context: { logMessage: '[rehearsal] execution failure transition failed', details: {
         rehearsalId,
         executionId,

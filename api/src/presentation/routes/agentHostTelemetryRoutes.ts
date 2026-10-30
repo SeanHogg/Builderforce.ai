@@ -21,6 +21,7 @@ import {
   insertToolAuditRows,
   insertUsageSnapshotRows,
   toolAuditRows,
+  admitToolAuditRows,
   usageSnapshotRows,
   type HostIdentity,
 } from '../../application/agentHost/hostTelemetryIngest';
@@ -47,7 +48,8 @@ export function registerHostTelemetryRoutes<E extends HonoEnv>(
     const { events, single } = eventsOf(await parseBody(c, ToolAuditIngestBody));
     const rows = toolAuditRows(host, events);
     if (single && rows.length === 0) return c.json({ error: 'toolName is required' }, 400);
-    const inserted = await insertToolAuditRows(deps.db, rows);
+    // Drop (never fail the batch on) cloud-only rows and rows naming another tenant's execution.
+    const inserted = await insertToolAuditRows(deps.db, await admitToolAuditRows(deps.db, host, rows));
     return c.json(single ? { ok: true } : { ok: true, inserted });
   });
 

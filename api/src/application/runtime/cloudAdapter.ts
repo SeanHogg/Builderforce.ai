@@ -144,7 +144,7 @@ export async function runCloudAgent(
       // A platform eviction is not the run's failure: the Durable Object re-arms it from its cursor.
       isResumable: (err) => isInfrastructureEviction(err instanceof Error ? err.message : String(err)),
     },
-    events: timelineSink(db, refs, () => model.servedModel() ?? host.pick.model, (row) => { stash.row = row; }),
+    events: timelineSink(db, refs, () => model.servedModel() ?? host.pick.model),
     human: durableHuman(env, db, refs),
     steering: pendingSteering(db, refs, model.currentStep),
     context: { pack: () => NO_PACK, turnSections: () => [opts.dynamicSystem ?? '', host.cost.budgetNote(host.declaredLimits, host.writtenPaths.size, host.repoCtx ? 1 : 0)].filter(Boolean) },

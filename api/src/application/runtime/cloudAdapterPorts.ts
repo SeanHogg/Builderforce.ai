@@ -3,7 +3,7 @@
  *
  *   events   — the run TIMELINE: every trace event the agent emits lands as a tool-audit row
  *              in the shape the Observability UI has always read (`recordCloudToolEvent`),
- *              plus the WS6 uniform outcome row, best-effort like every timeline write;
+ *              (its outcome row and closing run.finished are the terminal transition's: `cloudOutcomeRow`);
  *   human    — the durable pause: the surface parks the run on an approval and /resume wakes
  *              it. A question the agent asks arrives here ALREADY parked (the `ask_human` tool
  *              or a guard created the approval), so `ask` only reports the pause; a governance
@@ -15,7 +15,7 @@
 import { and, eq } from 'drizzle-orm';
 import { cascadeReason } from '@builderforce/agent-run';
 import { approvals } from '../../infrastructure/database/schema';
-import type { EventSink, HumanChannel, RunEvent, RunOutcomeRow, SteeringSource } from '@builderforce/agent-run';
+import type { EventSink, HumanChannel, RunEvent, SteeringSource } from '@builderforce/agent-run';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
@@ -96,8 +96,8 @@ function rowFor(event: RunEvent, meta: { durationMs?: number } | undefined, serv
   }
 }
 
-/** The run timeline; the outcome row's counts are handed to `onOutcome`. A sink that cannot write records nothing; it never fails the run. */
-export function timelineSink(db: Db, run: CloudRunRefs, served: () => string | null, onOutcome: (row: RunOutcomeRow) => void): EventSink {
+/** The run timeline. The outcome row and the closing `run.finished` are NOT written here (see `cloudOutcomeRow`). A sink that cannot write records nothing; it never fails the run. */
+export function timelineSink(db: Db, run: CloudRunRefs, served: () => string | null): EventSink {
   const write = (row: Row): Promise<void> =>
     recordCloudToolEvent(db, { ...base(run), ...row }).catch((error) =>
       reportCaughtError(error, { source: 'application/runtime/cloudAdapterPorts.ts', operation: 'timelineSink', context: { logMessage: '[cloud-run] timeline write failed', details: { executionId: run.executionId, error } } }),
@@ -114,11 +114,7 @@ export function timelineSink(db: Db, run: CloudRunRefs, served: () => string | n
           .catch((error) => reportCaughtError(error, { source: 'application/runtime/cloudAdapterPorts.ts', operation: 'typedClaim', context: { executionId: run.executionId, error } }));
       }
     },
-    // The sink never writes the outcome row: it hands the COUNTS to the tail, and the ONE writer (`cloudOutcomeRow`) records the row at
-    // the terminal transition, with the status the execution landed with.
-    outcome(outcome: RunOutcomeRow) {
-      onOutcome(outcome);
-    },
+    // No `outcome`: the run's outcome row is written by the ONE owner (`cloudOutcomeRow`) at the terminal transition, with the landed status.
   };
 }
 

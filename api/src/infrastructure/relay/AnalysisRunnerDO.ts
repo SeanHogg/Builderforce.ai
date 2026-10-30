@@ -36,9 +36,10 @@ import {
   llmUsageLog,
   specs,
   tasks,
-  executions,
 } from '../database/schema';
 import { scopedToTenant } from '../database/tenantScope';
+import { ExecutionStatus } from '../../domain/shared/types';
+import { landExecution } from '../../application/runtime/executionLanding';
 import { decryptCredentials } from '../../application/boardsync/drizzleStore';
 import { WorkerSubrequestExhaustedError } from '../../application/llm/vendors/types';
 import {
@@ -669,10 +670,8 @@ export class AnalysisRunnerDO implements DurableObject {
   private async closeTaskAndExecution(cursor: Cursor, execStatus: 'completed' | 'failed', taskStatus: string): Promise<void> {
     const now = new Date();
     if (cursor.executionId != null) {
-      await this.db
-        .update(executions)
-        .set({ status: execStatus, completedAt: now, updatedAt: now })
-        .where(eq(executions.id, cursor.executionId))
+      // The analysis run's execution row lands through the ONE terminal transition (never overwriting a run that already landed).
+      await landExecution(this.db, cursor.executionId, execStatus === 'completed' ? ExecutionStatus.COMPLETED : ExecutionStatus.FAILED)
         .catch((error) => this.reportError(error, { operation: "closeTaskAndExecution", context: { logMessage: '[analysis-runner] terminal execution transition failed', details: {
           runId: cursor.runId,
           executionId: cursor.executionId,

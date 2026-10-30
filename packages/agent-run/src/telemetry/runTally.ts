@@ -38,6 +38,8 @@ export interface RunTally {
   repoErrors: number;
   /** The run-end verify's verdict, when the declared verify ran. */
   verify?: "passed" | "failed";
+  /** True when the tally does NOT cover the whole run (a legacy cursor resumed with a fresh tally): the counts are a floor, so a consumer records none. */
+  partial?: boolean;
 }
 
 /** A fresh run's tally: nothing spent, nothing done. */

@@ -5,6 +5,7 @@
  * host facts a durable tick reuses.
  */
 import type { CloudLoopState } from './cloudRunState';
+import type { RunTally } from '@builderforce/agent-run';
 import type { ArcStage } from '@builderforce/workload';
 import type { RunSandbox } from './sandbox/runSandbox';
 import { type CapabilityProvider, type PolicyGate, type AgentExecParams } from '@builderforce/agent-tools';
@@ -108,4 +109,6 @@ export interface CloudLoopResult {
    *  (NOT finished — no PR, not terminal). `state` carries the resume point so the
    *  surface persists it and wakes the loop once the question is answered. */
   awaitingInput?: { approvalId: string; question: string };
+  /** A TERMINAL result carries the run's final tally (`RunState.telemetry`): the terminal transition hands it to the one outcome-row writer. Absent otherwise. */
+  telemetry?: RunTally;
 }

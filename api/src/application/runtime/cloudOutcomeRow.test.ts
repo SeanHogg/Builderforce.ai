@@ -32,7 +32,9 @@ vi.mock('../shared/runTelemetryDatabase', () => ({
   }),
 }));
 
-import { handOffOutcomeCounts, recordReapedOutcomes, recordTerminalOutcome } from './cloudOutcomeRow';
+import { recordReapedOutcomes, recordTerminalOutcome } from './cloudOutcomeRow';
+
+const TALLY = { toolCalls: 5, toolErrors: 1, tokens: 900, cacheReadTokens: 0, shellFileReads: 0, repoErrors: 0, model: 'm-1' };
 
 const rows = () => h.inserts.flat();
 const outcomes = () => rows().filter((r) => r.toolName === 'run.outcome');
@@ -44,11 +46,10 @@ beforeEach(() => { h.written.clear(); h.inserts.length = 0; });
 
 describe('recordTerminalOutcome', () => {
   it('records the row with the status the execution LANDED with, and the agent\'s counts when the run had a tally', async () => {
-    handOffOutcomeCounts(9, { entryPoint: 'cloud', steps: 3, toolCalls: 5, toolErrors: 1, terminalStatus: 'failed' });
-    await recordTerminalOutcome({} as never, exec({ status: 'completed' }));
+    await recordTerminalOutcome({} as never, exec({ status: 'completed' }), TALLY);
     expect(outcomes()).toHaveLength(1);
-    expect(outcomes()[0]).toMatchObject({ tenantId: 4, executionId: 9, category: 'run', result: 'finished after 3 step(s)' });
-    expect(detail(outcomes()[0]!)).toMatchObject({ entryPoint: 'cloud', runId: 'cloud:9', steps: 3, toolCalls: 5, toolErrors: 1, terminalStatus: 'finished' });
+    expect(outcomes()[0]).toMatchObject({ tenantId: 4, executionId: 9, category: 'run', result: 'finished' });
+    expect(detail(outcomes()[0]!)).toMatchObject({ entryPoint: 'cloud', runId: 'cloud:9', toolCalls: 5, toolErrors: 1, tokens: 900, model: 'm-1', terminalStatus: 'finished' });
     expect(finishes()).toHaveLength(1);
     expect(detail(finishes()[0]!)).toEqual({ kind: 'run.finished', outcome: 'finished' });
   });
@@ -60,6 +61,21 @@ describe('recordTerminalOutcome', () => {
     expect(d).not.toHaveProperty('steps');
     expect(d).not.toHaveProperty('toolCalls');
     expect(d).not.toHaveProperty('toolErrors');
+  });
+
+  it('a PARTIAL tally (a legacy cursor resumed with a fresh tally) records no counts either - a floor is not a total', async () => {
+    await recordTerminalOutcome({} as never, exec({ status: 'completed' }), { ...TALLY, partial: true });
+    const d = detail(outcomes()[0]!);
+    expect(d).not.toHaveProperty('toolCalls');
+    expect(d.terminalStatus).toBe('finished');
+  });
+
+  it('missing sign-off and a steered stop land as what they landed as, with the counts of the run', async () => {
+    await recordTerminalOutcome({} as never, exec({ id: 10, status: 'failed', errorMessage: 'qa-tester verdict missing' }), TALLY);
+    await recordTerminalOutcome({} as never, exec({ id: 11, status: 'cancelled' }), TALLY);
+    const byId = new Map(outcomes().map((r) => [r.executionId, detail(r)]));
+    expect(byId.get(10)).toMatchObject({ terminalStatus: 'failed', reason: 'qa-tester verdict missing', toolCalls: 5 });
+    expect(byId.get(11)).toMatchObject({ terminalStatus: 'cancelled', toolCalls: 5 });
   });
 
   it('names why a run that did not finish stopped', async () => {
