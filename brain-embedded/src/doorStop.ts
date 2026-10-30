@@ -16,8 +16,11 @@ export interface DoorStopMarks {
   /** True from a Stop until the run's falling edge: a message typed meanwhile cannot steer the unwinding run, it is held. */
   stoppingRef: MutableRefObject<boolean>;
   markStopping: (on: boolean) => void;
-  /** Counts Stops: a send in flight when one lands must not put its turn back afterwards. */
-  stopEpoch: MutableRefObject<number>;
+  /**
+   * Counts Stops PER VIEW, by the run key the Stop was pressed on: a send in flight when a Stop lands on ITS view must not put
+   * its turn back afterwards. A Stop on another view is not that send's (it would drop the turn: in no box, queue or chat).
+   */
+  stopEpochs: MutableRefObject<Map<RunKey | null, number>>;
 }
 
 export function useDoorStopMarks(running: boolean): DoorStopMarks {
@@ -26,10 +29,13 @@ export function useDoorStopMarks(running: boolean): DoorStopMarks {
   const [, repaint] = useState(false);
   const markStopping = useCallback((on: boolean) => { stoppingRef.current = on; repaint(on); }, []);
   useEffect(() => { if (!running && stoppingRef.current) markStopping(false); }, [running, markStopping]);
-  const stopEpoch = useRef(0);
+  const stopEpochs = useRef(new Map<RunKey | null, number>());
   // Stable identity: `stop` keeps its identity across renders.
-  return useMemo(() => ({ stoppingRef, markStopping, stopEpoch }), [markStopping]);
+  return useMemo(() => ({ stoppingRef, markStopping, stopEpochs }), [markStopping]);
 }
+
+/** The Stops pressed so far on the view with this run key (a draft's is `null`). */
+export const stopEpochOf = (marks: DoorStopMarks, key: RunKey | null): number => marks.stopEpochs.current.get(key) ?? 0;
 
 /** The ports a Stop reads, newest at call time. */
 export interface DoorStopPorts {
@@ -53,7 +59,7 @@ export function stopDoorTurns(ports: DoorStopPorts, marks: DoorStopMarks, clear:
   // An empty new draft has no run, no send in flight and no draft to stop: it must not bump the epoch (a send in flight
   // elsewhere would be told it was stopped) or word the Send button for a run that is not unwinding.
   if (token === null) return;
-  marks.stopEpoch.current += 1;
+  marks.stopEpochs.current.set(key, stopEpochOf(marks, key) + 1);
   if (ports.running) marks.markStopping(true);
   // A steer typed before the Stop is dropped with the run, and so is what a draft's creation delivered to this chat that
   // its run has not heard yet (the store's Stop drains the inbox, the device's journal and the chat's waiting turns -

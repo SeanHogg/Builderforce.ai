@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef } from 'react';
-import { useDoorStopMarks, stopDoorTurns } from './doorStop';
+import { useDoorStopMarks, stopDoorTurns, stopEpochOf } from './doorStop';
 import type { RunKey } from './brainRunStore';
 import { queueRunSteering } from './runSteering';
 import type { ChatInputAttachment } from './types';
@@ -166,7 +166,7 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
   // A stopped run is unwinding: a message typed meanwhile cannot steer it (the model gets no
   // further turn), so it is held for after - until the run's falling edge clears the mark (`doorStop.ts`).
   const marks = useDoorStopMarks(running);
-  const { stoppingRef, stopEpoch } = marks;
+  const { stoppingRef } = marks;
 
   // Direction steered into the run after its last drain is NOT this hook's to deliver: the run
   // store owns it (`continueOnSettle` -> `continueLeftovers`), on any chat, on screen or not.
@@ -197,11 +197,11 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
       let turn: T | undefined = first;
       while (turn !== undefined) {
         const key = ports.current.runKey;
-        const epoch = stopEpoch.current;
+        const epoch = stopEpochOf(marks, key); // the Stops on THIS turn's view: one on another chat is not its to heed
         const sent: T = turn;
         // A host's send may throw synchronously: that is a send not kept, never a lost turn.
         const kept = await new Promise<unknown>((resolve) => { resolve(sendOnce(sent)); }).then((ok) => ok !== false, () => false);
-        if (stopEpoch.current !== epoch) return;
+        if (stopEpochOf(marks, key) !== epoch) return;
         const { textOf: text, attachmentsOf: attached, isDirected: directed } = ports.current;
         if (kept) {
           // A turn that starts no run (a typed stop, sent idle) raises no falling edge, so the turns
@@ -226,7 +226,7 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
       if (rest > 0) flushing.current.set(chat, rest);
       else flushing.current.delete(chat);
     }
-  }, [sendOnce]);
+  }, [sendOnce, marks]);
 
   const queued = useQueuedTurns<T>({
     running,

@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { chatDoorLiveness, joinRestorableTurns, restoreTurn, useChatTurns, useComposerDraft, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type DraftBinding, type DraftToken, type SendContext, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, joinRestorableTurns, restoreTurn, useChatTurns, useComposerDraft, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type DraftBinding, type SendContext, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { request } from '../vscodeBridge';
 import { stageSend, stopReaches, type SendStage } from './stageSend';
 import { childTarget, steerRun, type useChatChildren } from './chatChildren';
@@ -51,8 +51,8 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
   // already reflects the new system prompt. This is the webview's per-turn limbic seam.
   const pendingSendRef = useRef<{
     text: string; recipient: DirectedRecipient | null; attachments?: ChatInputAttachment[];
-    /** The chat it was typed in, how the door hears whether the send was kept, and the draft token it began with (a send from a draft). */
-    startedIn: number | null; done: (kept: boolean) => void; draft?: DraftToken; stage: SendStage;
+    /** How the door hears whether the send was kept, and where it was typed in (the chat, and the draft token of a send from a draft) - with the Stop's mark. */
+    done: (kept: boolean) => void; stage: SendStage;
   } | null>(null);
   const [sendNonce, setSendNonce] = useState(0);
   const chatIdRef = useRef(chatId);
@@ -70,16 +70,16 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
       setPreparing(false);
       // A send from a draft is put back by the door (its token fails: nothing was created) - one restore with whatever was
       // held behind it; any other is put back here and reported kept.
-      if (queued.draft === undefined) giveBack({ text: queued.text, recipient: queued.recipient, attachments: queued.attachments });
-      queued.done(queued.draft === undefined);
+      if (queued.stage.draft === undefined) giveBack({ text: queued.text, recipient: queued.recipient, attachments: queued.attachments });
+      queued.done(queued.stage.draft === undefined);
       return;
     }
     // `addressedTo` routes the turn: a participant is talked to (no BRAIN run); null (default)
     // runs the BRAIN. A held turn carries its OWN attachment snapshot (the composer was cleared
     // when the turn queued), passed explicitly so the images survive the wait. Never into a chat the
     // person has since switched to: that is another chat's turn.
-    const sending = chatIdRef.current === queued.startedIn
-      ? conv.send(queued.text, { addressedTo: queued.recipient, ...(queued.attachments ? { attachments: queued.attachments } : {}), ...(queued.draft !== undefined ? { draft: queued.draft } : {}) })
+    const sending = chatIdRef.current === queued.stage.chat
+      ? conv.send(queued.text, { addressedTo: queued.recipient, ...(queued.attachments ? { attachments: queued.attachments } : {}), ...(queued.stage.draft !== undefined ? { draft: queued.stage.draft } : {}) })
       : Promise.resolve(false);
     // Cleared only now, in the same commit as `conv.sending`, so the turn door never sees
     // a gap between staging and sending (its queue would flush a held turn into it).
@@ -127,7 +127,7 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
     }
     setTurnLimbic(staged.block);
     return new Promise<boolean>((done) => {
-      pendingSendRef.current = { text, recipient: to, attachments, startedIn, done, draft: ctx?.draft, stage };
+      pendingSendRef.current = { text, recipient: to, attachments, done, stage };
       setSendNonce((n) => n + 1);
     });
   }, [setTurnLimbic, giveBack]);
