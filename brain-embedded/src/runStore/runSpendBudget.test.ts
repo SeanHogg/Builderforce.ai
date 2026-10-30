@@ -6,7 +6,7 @@ import { isVolatileTail } from '@seanhogg/builderforce-memory/handoff';
 import { makeCell } from './runCell';
 import { cells } from './runCells';
 import type { RunLoopContext } from './runLoopContext';
-import { budgetContainedReply, runBudgetCapMillicents, runSpendBudget } from './runSpendBudget';
+import { budgetContainedReply, budgetWarning, runBudgetCapMillicents, runSpendBudget } from './runSpendBudget';
 
 /** A run with a USD cap, and the persistence its contained stop writes through. A
  *  `runKey` registers its cell (as `getCell` does); `ownerKey` makes it a sub-agent. */
@@ -32,6 +32,9 @@ const BOOK = priceBookFromPrices([['openai/gpt-x', { input: 1e-6, output: 1e-6 }
 /** A turn whose call used `prompt` + `completion` tokens on `model`. */
 const turn = (model: string, prompt: number, completion = 0): LoopTurn =>
   ({ content: '', toolCalls: [], meta: { result: { text: '', toolCalls: [], resolvedModel: model, usage: { prompt, completion } }, requested: model } }) as unknown as LoopTurn;
+/** A turn whose call reported NO usage at all. */
+const noUsageTurn = (model: string): LoopTurn =>
+  ({ content: '', toolCalls: [], meta: { result: { text: '', toolCalls: [], resolvedModel: model }, requested: model } }) as unknown as LoopTurn;
 
 describe('runBudgetCapMillicents', () => {
   it('is null for no cap, 0 or nonsense; millicents otherwise', () => {
@@ -73,6 +76,27 @@ describe('runSpendBudget', () => {
     expect(run.c.trace.filter((event) => event.label === 'run.budget_unpriced')).toHaveLength(1);
     await hooks.afterTurn!(ctx, turn('vendor/not-in-the-book', 1_000));
     expect(run.c.trace.filter((event) => event.label === 'run.budget_unpriced')).toHaveLength(1);
+  });
+
+  it('a call that reported no usage OFF the device is counted unpriced and traced; the contained reply says the spend is a floor', async () => {
+    const { run } = runWith(1);
+    const hooks = runSpendBudget(run, BOOK);
+    await hooks.afterTurn!(ctx, noUsageTurn('openai/gpt-x'));
+    expect(run.c.trace.filter((event) => event.label === 'run.budget_unpriced')).toHaveLength(1);
+    await hooks.afterTurn!(ctx, turn('openai/gpt-x', 1_000_000));
+    const decision = await hooks.beforeTurn!(ctx);
+    expect(decision && decision.output).toContain('at least $1.00 spent — 1 call had no known price');
+  });
+
+  it('a call that reported no usage ON the device counts nothing and traces nothing', async () => {
+    const { run } = runWith(1);
+    const hooks = runSpendBudget(run, BOOK);
+    await hooks.afterTurn!(ctx, noUsageTurn('local/ollama/qwen3:8b'));
+    expect(run.c.trace.filter((event) => event.label === 'run.budget_unpriced')).toHaveLength(0);
+    await hooks.afterTurn!(ctx, turn('openai/gpt-x', 1_000_000));
+    const decision = await hooks.beforeTurn!(ctx);
+    expect(decision && decision.output).toContain('($1.00 spent)');
+    expect(decision && decision.output).not.toContain('no known price');
   });
 
   it('warns once past 80%, then stops with a contained reply at the cap', async () => {
@@ -144,6 +168,13 @@ describe('runSpendBudget', () => {
     } finally {
       cells.delete(7101);
     }
+  });
+
+  it('the warning and the contained reply say "at least" and count the calls once any had no known price', () => {
+    expect(budgetWarning(850_000, 1_000_000, { unpricedCalls: 2 })).toContain('at least $0.85 (2 calls had no known price)');
+    expect(budgetWarning(850_000, 1_000_000, { unpricedCalls: 0 })).not.toContain('at least');
+    expect(budgetContainedReply(260_000, 250_000, { unpricedCalls: 3 })).toContain('at least $2.60 spent — 3 calls had no known price');
+    expect(budgetContainedReply(260_000, 250_000, { unpricedCalls: 1 })).toContain('1 call had no known price');
   });
 
   it('the contained reply names the cap and the setting', () => {

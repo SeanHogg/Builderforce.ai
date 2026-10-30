@@ -989,7 +989,7 @@
   "Avg score": "平均分数",
   "Full pipeline": "完整流水线",
   "Quick pass": "快速处理",
-  "{0} + {1} unpriced": "{0} + {1} 次未计价",
+  "{0} + {1} unpriced": "{0} + {1} 次运行未计价",
   "unpriced": "未计价",
   "Score histogram": "分数分布",
   "Score": "分数",

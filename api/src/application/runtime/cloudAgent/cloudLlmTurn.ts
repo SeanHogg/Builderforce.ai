@@ -19,6 +19,7 @@ import type { RawToolCall } from '../cloudAgentTools';
 import { recordCloudToolEvent } from '../cloudToolEvents';
 import { notifyExecutionSubscribers } from '../executionEvents';
 import { emitCodingModelDegraded } from './routing';
+import { WEAKER_SERVED_KEY, servedWeakerThanRequested } from './servedWeaker';
 import type { LlmUsage } from '../../llm/proxyTypes';
 import { CONTEXT_CATEGORIES_KEY, contextCategoryTokens, type ContextCategoryTokens, type TurnInput } from '../../costMetrics/contextCategories';
 
@@ -239,9 +240,12 @@ export async function recordCloudLlmTurn(
   const upstream = await result.response.json().catch(() => null);
   writeCloudTrace(upstream, null);
   const { content, reasoning, toolCalls } = parseLlmChoice(upstream);
+  // Decided on THIS turn, against what THIS turn asked for: a run that floors onto a weaker model for one turn
+  // is degraded for the run, whatever the later turns (which lock onto the served model) compare against.
+  const weaker = await servedWeakerThanRequested(rc.env, rc.requestedModel, resolvedModel);
   await recordCloudToolEvent(rc.db, {
     ...evtBase, toolName: 'llm.complete', category: 'llm',
-    detail: { model: resolvedModel, provider: result.resolvedVendor, byo: result.byoFunded ?? false, keySource: result.byoFunded ? 'byo' : 'builderforce-managed', traceId: result.traceId ?? null, step: opts.step, toolCalls: toolCalls.length, reasoningChars: reasoning.length },
+    detail: { model: resolvedModel, requestedModel: rc.requestedModel ?? null, [WEAKER_SERVED_KEY]: weaker, provider: result.resolvedVendor, byo: result.byoFunded ?? false, keySource: result.byoFunded ? 'byo' : 'builderforce-managed', traceId: result.traceId ?? null, step: opts.step, toolCalls: toolCalls.length, reasoningChars: reasoning.length },
     result: `${toolCalls.length} tool call(s)${content ? ` · ${content.length} chars` : ''}`, durationMs,
   });
   await emitCodingModelDegraded(rc.db, { ...evtBase, resolvedModel, requestedModel: rc.requestedModel ?? '' });

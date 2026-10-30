@@ -211,7 +211,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       if (attemptedDelegation(trace)) delegatingCells.add(c);
       const outcome = req.reportOutcome && codeRunOutcome({
         runId: c.runId, codeModel: c.codeModel, codeChanged: c.codeChanged, aborted,
-        failed: c.error !== '', shipped, trace, projectId: req.projectId,
+        failed: c.error !== '', error: c.error, shipped, trace, projectId: req.projectId,
         askedForChange: !wakeTurn && asksForChange(requestText),
       });
       if (outcome) void req.reportOutcome!(outcome).catch(() => undefined);

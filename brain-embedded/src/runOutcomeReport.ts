@@ -13,6 +13,7 @@
  * `@builderforce/learned-routing`); the host owns the transport. Pure.
  */
 
+import { isTenantBudgetFailure } from '@builderforce/learned-routing';
 import type { BrainTraceEvent } from './brainTriage';
 import { attemptedDelegation } from './delegationRequest';
 import { modelScorecard } from './modelScorecard';
@@ -36,6 +37,9 @@ export interface BrainRunOutcome {
    */
   costMc?: 0;
   projectId?: number;
+  /** The run failed because the TENANT ran out of quota/budget (the platform's one reading of that failure,
+   *  `isTenantBudgetFailure`): stored, never taught to routing - it says nothing about the model. Present only when true. */
+  quotaExhausted?: true;
 }
 
 /** A turn that reported its own cost as exactly 0 (served on this device - `servedOnDevice`). */
@@ -75,6 +79,8 @@ export function codeRunOutcome(args: {
   aborted: boolean;
   failed: boolean;
   shipped: boolean;
+  /** The run's failure message (`RunCell.error`), when it failed - read for the tenant-budget fact, nothing else. */
+  error?: string;
   /** THIS run's trace — the completed turns are counted from it. */
   trace: readonly BrainTraceEvent[];
   projectId?: number | null;
@@ -87,14 +93,16 @@ export function codeRunOutcome(args: {
   // Free only when EVERY turn reported 0 (served on this machine); one turn with no cost leaves the run's unknown.
   const allLocal = steps > 0 && turns.every(reportedFree);
   const base = { clientRunId: args.runId, role: 'code' as const, source: 'ide' as const, steps, ...(allLocal ? { costMc: 0 as const } : {}), ...(args.projectId != null ? { projectId: args.projectId } : {}) };
+  // Classified ONCE, here, by the shared taxonomy; a run that did not fail never carries it.
+  const quota = args.failed && isTenantBudgetFailure(args.error) ? { quotaExhausted: true as const } : {};
   if (args.codeChanged) {
     if (args.aborted || !args.codeModel) return null;
-    return { ...base, model: args.codeModel, terminalStatus: args.failed ? 'failed' : 'completed', merged: args.shipped };
+    return { ...base, ...quota, model: args.codeModel, terminalStatus: args.failed ? 'failed' : 'completed', merged: args.shipped };
   }
   const emptyHanded = args.askedForChange && steps >= NO_DELIVERABLE_MIN_STEPS && !attemptedDelegation(args.trace);
   const model = emptyHanded ? busiestModel(args.trace) : null;
   if (!model) return null;
-  return { ...base, model, terminalStatus: 'failed', merged: false };
+  return { ...base, ...quota, model, terminalStatus: 'failed', merged: false };
 }
 
 /** The model that served the most completed turns — not merely the last one, which may be

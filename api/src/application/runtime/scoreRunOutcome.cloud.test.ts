@@ -8,6 +8,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   inserted: [] as Array<Record<string, unknown>>,
+  updated: [] as Array<Record<string, unknown>>,
+  /** True = the row already exists (a re-score): the insert conflicts and the scorer updates instead. */
+  conflict: false,
+  /** True = a turn of the run recorded `weaker: true` on its `llm.complete` event (the scorer's filtered read finds a row). */
+  weakerTurn: false,
   exec: { status: 'cancelled', errorMessage: null as string | null },
   applyOutcomeToRoutingTable: vi.fn(async (..._args: unknown[]) => undefined),
   bumpOutcomesVersion: vi.fn(async (..._args: unknown[]) => undefined),
@@ -30,12 +35,12 @@ function queryChain(rowsFor: (table: unknown) => unknown[]) {
 
 vi.mock('../shared/runTelemetryDatabase', () => ({
   runTelemetryDatabase: () => ({
-    select: () => queryChain(() => [{}]),
-    update: () => queryChain(() => []),
+    select: () => queryChain(() => [mocks.weakerTurn ? { id: 5 } : {}]),
+    update: () => ({ set: (values: Record<string, unknown>) => { mocks.updated.push(values); return queryChain(() => []); } }),
     insert: () => ({
       values: (row: Record<string, unknown>) => {
         mocks.inserted.push(row);
-        return { onConflictDoNothing: () => ({ returning: async () => [{ id: mocks.inserted.length }] }) };
+        return { onConflictDoNothing: () => ({ returning: async () => (mocks.conflict ? [] : [{ id: mocks.inserted.length }]) }) };
       },
     }),
   }),
@@ -72,6 +77,9 @@ const score = (status: string, errorMessage: string | null = null) => {
 
 beforeEach(() => {
   mocks.inserted.length = 0;
+  mocks.updated.length = 0;
+  mocks.conflict = false;
+  mocks.weakerTurn = false;
   mocks.applyOutcomeToRoutingTable.mockClear();
   mocks.bumpOutcomesVersion.mockClear();
 });
@@ -82,9 +90,9 @@ describe('the cloud scorer — a run the person stopped', () => {
 
     expect(mocks.inserted).toHaveLength(1);
     expect(mocks.inserted[0]).toMatchObject({ executionId: 11, terminalStatus: 'cancelled', quotaExhausted: false });
-    // `routing_signal` is not touched by the stop: it keeps its default (TRUE — coding-run evidence), so the
-    // lenses still count the run and a stop rate stays computable.
-    expect(mocks.inserted[0]).not.toHaveProperty('routingSignal');
+    // `routing_signal` is not touched by the stop: it stays TRUE (coding-run evidence, written explicitly), so
+    // the lenses still count the run and a stop rate stays computable.
+    expect(mocks.inserted[0]).toMatchObject({ routingSignal: true });
     expect(mocks.applyOutcomeToRoutingTable).not.toHaveBeenCalled();
     expect(mocks.bumpOutcomesVersion).toHaveBeenCalledTimes(1);
   });
@@ -104,6 +112,31 @@ describe('the cloud scorer — a run the tenant’s quota ended', () => {
     expect(mocks.inserted[0]).toMatchObject({ terminalStatus: 'failed', quotaExhausted: true, rateLimited: false });
     expect(mocks.applyOutcomeToRoutingTable).not.toHaveBeenCalled();
     expect(mocks.bumpOutcomesVersion).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the cloud scorer — degraded is read from the turns’ own served-weaker flags', () => {
+  it('marks the run degraded when a turn recorded it, and not otherwise', async () => {
+    await score('completed');
+    expect(mocks.inserted[0]).toMatchObject({ degraded: false });
+
+    mocks.weakerTurn = true;
+    await score('completed');
+    expect(mocks.inserted[1]).toMatchObject({ degraded: true });
+  });
+});
+
+describe('the cloud scorer — a re-score keeps the one classification', () => {
+  it('refreshes quotaExhausted beside rateLimited, from the same single classification', async () => {
+    mocks.conflict = true;
+    await score('failed', 'quota exceeded for this workspace');
+
+    expect(mocks.updated[0]).toMatchObject({ quotaExhausted: true, rateLimited: false });
+    // A re-score never re-applies the routing increment.
+    expect(mocks.applyOutcomeToRoutingTable).not.toHaveBeenCalled();
+
+    await score('failed', 'HTTP 429 too many requests');
+    expect(mocks.updated[1]).toMatchObject({ quotaExhausted: false, rateLimited: true });
   });
 });
 

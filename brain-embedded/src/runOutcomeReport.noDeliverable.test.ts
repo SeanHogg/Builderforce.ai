@@ -32,6 +32,11 @@ describe('codeRunOutcome — a run asked for a change that delivered none (VS Co
     });
   });
 
+  it('an empty-handed run that died on a tenant budget code is stored as quota-exhausted, never taught', () => {
+    expect(codeRunOutcome({ ...emptyHanded, failed: true, error: '{"code":"plan_token_limit_exceeded"}' })).toMatchObject({ terminalStatus: 'failed', quotaExhausted: true });
+    expect(codeRunOutcome({ ...emptyHanded, failed: true, error: 'the build failed' })).not.toHaveProperty('quotaExhausted');
+  });
+
   it('grades a long empty-handed run the person stopped, too', () => {
     expect(codeRunOutcome({ ...emptyHanded, aborted: true })?.terminalStatus).toBe('failed');
   });

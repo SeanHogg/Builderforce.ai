@@ -15,7 +15,7 @@ const book: PriceBook = { priceOf: (model) => PRICES[model] };
 
 function slice(over: Partial<UsageSlice> = {}): UsageSlice {
   return {
-    model: PRICED, byo: false, savingsSource: null, savingsEstimated: false,
+    model: PRICED, unpriced: !PRICES[over.model ?? PRICED], byo: false, savingsSource: null, savingsEstimated: false,
     prompt: 0, completion: 0, cacheRead: 0, cacheCreation: 0, total: 0,
     costMc: 0, calls: 0, cacheCalls: 0,
     savedPrompt: 0, savedCompletion: 0, recallPrompt: 0, savedCostMc: 0,

@@ -9,12 +9,12 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *
  * The pure {@link computeOutcomeScore} implements D3 and is unit-tested in isolation;
  * `scoreRunOutcome` only gathers the inputs (all of which already exist: executions
- * status, the PR row, coding_model_degraded events, llm_usage_log cost/turns, any
+ * status, the PR row, the turns' served-weaker flags, llm_usage_log cost/turns, any
  * resolved approval) and persists, then folds the result into the routing-table KV
  * blobs (Welford, no table scan) so the next run's seed reflects it.
  */
 
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, like, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { approvals, executions, pullRequests, tasks, toolAuditEvents, runModelOutcomes } from '../../infrastructure/database/schema';
@@ -35,7 +35,7 @@ export type { NormalizedRunOutcome, OutcomeSource, TerminalStatus };
 import { classifyRunFailure } from './runFailureReasons';
 import { applyOutcomeToRoutingTable } from '../llm/routingTable';
 import type { ModelRole } from '@builderforce/agent-tools';
-import { isWeakerModel } from '@builderforce/model-catalog';
+import { WEAKER_SERVED_MARKER } from './cloudAgent/servedWeaker';
 
 /** The role a CLOUD run's outcome scores. The primary loop is the run's coding work
  *  (`pickCloudModel` is called with role 'code'), so its merge/CI/completion outcome is
@@ -95,34 +95,25 @@ async function resolveToolCounts(db: Db, executionId: number): Promise<{ toolCal
 }
 
 /**
- * Was any turn served by a WEAKER model than the run asked for? The `coding_model_degraded` event
- * fires whenever the served model is not a curated coder - which includes a generalist STRONGER than the
- * coder the run wanted - so its existence is not the answer. Its detail carries the intended and the
- * served model; the answer is the catalog's rule (`isWeakerModel`), the one the ONE agent's outcome row
- * and the legacy runner ask too. An event with no intended model says nothing about weaker.
+ * Was any turn served by a WEAKER model than the run asked for? Each turn decided that when it was recorded
+ * (`recordCloudLlmTurn` -> `servedWeakerThanRequested`, the catalog's `isWeakerModel`) and wrote it on its
+ * `llm.complete` event; this asks the database whether ANY such event exists - a filter, so no sample of events
+ * decides it and no ordering is needed.
  */
-export function weakerServedIn(events: ReadonlyArray<{ args: string | null }>): boolean {
-  return events.some((event) => {
-    try {
-      const detail = JSON.parse(event.args ?? 'null') as { requestedModel?: unknown; resolvedModel?: unknown } | null;
-      return typeof detail?.requestedModel === 'string' && typeof detail.resolvedModel === 'string'
-        && isWeakerModel(detail.requestedModel, detail.resolvedModel);
-    } catch (err) {
-      reportCaughtError(err, { source: "application/runtime/scoreRunOutcome.ts", operation: "weakerServedIn" });
-      return false;
-    }
-  });
-}
-
 async function runWasDegraded(db: Db, executionId: number): Promise<boolean> {
   try {
-    const events = await db
-      .select({ args: toolAuditEvents.args })
+    const [hit] = await db
+      .select({ id: toolAuditEvents.id })
       .from(toolAuditEvents)
-      .where(and(eq(toolAuditEvents.executionId, executionId), eq(toolAuditEvents.toolName, 'coding_model_degraded')))
-      .limit(50);
-    return weakerServedIn(events);
-  } catch {
+      .where(and(
+        eq(toolAuditEvents.executionId, executionId),
+        eq(toolAuditEvents.toolName, 'llm.complete'),
+        like(toolAuditEvents.args, `%${WEAKER_SERVED_MARKER}%`),
+      ))
+      .limit(1);
+    return hit?.id !== undefined;
+  } catch (err) {
+    reportCaughtError(err, { source: "application/runtime/scoreRunOutcome.ts", operation: "runWasDegraded" });
     return false;
   }
 }
@@ -241,6 +232,8 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       terminalStatus,
       rateLimited,
       quotaExhausted,
+      // A cloud run is coding-run evidence (`codingEvidence`): stated, not left to the column default.
+      routingSignal: true,
       // The PRD 35 §8.2 telemetry label: a server-scored run is a cloud run.
       entryPoint: 'cloud',
       // Literal reinforcement signals (migration 0333).
@@ -266,7 +259,7 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       await telemetryDb
         .update(runModelOutcomes)
         .set({
-          score, merged: pr.merged, ciGreen: pr.ciGreen, degraded, steps, costUsdMillicents: costMc, resolvedModel, plan, rateLimited,
+          score, merged: pr.merged, ciGreen: pr.ciGreen, degraded, steps, costUsdMillicents: costMc, resolvedModel, plan, rateLimited, quotaExhausted,
           clientRunId: cloudRunId(args.executionId),
           // Refresh the literal signals on re-score too (a late PR-close / approval lands here).
           toolCalls: toolCounts.toolCalls, toolErrors: toolCounts.toolErrors, humanRejected,
@@ -313,7 +306,6 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
     }
   } catch (error) {
     // Never let scoring fail a run.
-  
     reportCaughtError(error, { source: "application/runtime/scoreRunOutcome.ts", operation: "scoreRunOutcome" });
   }
 }
