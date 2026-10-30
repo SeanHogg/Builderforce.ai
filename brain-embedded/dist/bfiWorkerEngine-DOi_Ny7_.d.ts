@@ -1,77 +1,4 @@
-/**
- * The runtime REGISTRY — every runtime a client on the user's machine can drive
- * directly, as data.
- *
- * Membership means "the CLIENT performs this call itself", not "the weights are on this
- * disk". Six entries are on-device engines (Synapse's native `bfi`, Ollama, FreeToken,
- * and three engines inside the page: our `bfi` compiled to WebAssembly over WebGPU,
- * WebLLM, and the browser's own built-in model): no account, no metering, available
- * offline, and the only ones local-first routing will try. `kimi-code` is Kimi's hosted API and belongs here anyway: its edge
- * refuses a hosted gateway before reading a credential, while the identical request
- * from the developer's own machine is the personal client the subscription is licensed
- * for. Same mechanism, different reason — hence `onDevice`.
- *
- * Kept as DATA so a host never branches on a runtime id: the picker, the probe, the
- * plan and the catalog binding all read the fields below.
- */
-type LocalRuntimeId = 'synapse' | 'ollama' | 'freetoken' | 'bfi' | 'webllm' | 'browser' | 'kimi-code';
-/**
- * Where a runtime's calls go, and what (if anything) authenticates them. An on-device
- * engine normally leaves `token` unset; `bfi serve --api-key` and a signed-in Kimi
- * install carry one. Callers never branch on which — they pass the endpoint through.
- */
-interface LocalEndpoint {
-    /** Runtime root (unnormalized is fine — every consumer normalizes). */
-    baseUrl: string;
-    /** Bearer credential, when this runtime needs one. */
-    token?: string;
-    /**
-     * A bearer that outlives no run — a fifteen-minute Kimi token — asked for afresh before
-     * every request (`fetchLocal`), so a long run never sends one that expired mid-way.
-     * `rejected` is the token the provider just answered 401 to: drop it and get another,
-     * or null when there is none better.
-     */
-    credential?: (rejected?: string) => Promise<string | null>;
-}
-
-/**
- * What the runtimes on this machine serve RIGHT NOW, and what each model can do.
- *
- * A runtime that is not running is the NORMAL case — a developer with only Ollama still
- * opens the picker — so every failure (refused, wedged, non-OK, malformed) reads as "no
- * models" and the probe never throws. A short timeout keeps a wrong-port endpoint from
- * stalling the caller: this is localhost, where a healthy answer is immediate.
- *
- * `fetch` is injected, never the global: the same probe runs in the editor's Node host,
- * a web page and an MV3 service worker, and a test pins it without patching globals.
- */
-
-/** One model a runtime serves. */
-interface LocalModel {
-    /** The full `local/<runtime>/<model>` ref. */
-    ref: string;
-    /** The runtime serving it (named `provider` because every stored ref and picker row
-     *  already says so). */
-    provider: LocalRuntimeId;
-    /** The bare id the runtime itself knows, e.g. `qwen3:8b`. */
-    model: string;
-    /** The runtime's own human label, when it publishes one (Kimi declares "K2.7 Coding");
-     *  a picker falls back to the id. */
-    label?: string;
-    /** May take a TOOL turn. Absent/false = no — see `LocalToolSupport`: unknown is never
-     *  read as capable. */
-    tools?: boolean;
-    /** Context window in tokens, when the runtime reports one. Absent = unknown. */
-    contextTokens?: number;
-}
-/** One runtime's answer. */
-interface LocalRuntimeProbe {
-    provider: LocalRuntimeId;
-    endpoint: LocalEndpoint;
-    /** Its catalog route answered OK. False = not running / wrong port / refused. */
-    reachable: boolean;
-    models: LocalModel[];
-}
+import { L as LocalRuntimeId, a as LocalRuntimeProbe } from './probe-BF7uUc_H.js';
 
 /**
  * Can THIS device run a catalog model — and on which backend? Answered from what the
@@ -750,4 +677,4 @@ interface BfiWorkerEngine extends BfiPageEngine {
 /** The PAGE half: a `bfi` page engine whose engine runs in the worker. */
 declare function createBfiWorkerEngine(options: BfiWorkerEngineOptions): BfiWorkerEngine;
 
-export { createBfiEngine as $, type PageEngineServerIo as A, type BfiWorkerEngineOptions as B, type ChatCompletionChunk as C, createBfiWorkerEngine as D, ENGINE_WORKER_FATAL as E, createEngineWorker as F, createPageEngineClient as G, type HfModelStore as H, isPageEngineReply as I, isPageEngineRequest as J, isWasmTrap as K, type LocalRuntimeId as L, serveEngineWorker as M, servePageEngines as N, BFI_THREADS_START_TIMEOUT_MS as O, type PageEngine as P, type BfiEngineOptions as Q, type BfiLoadOptions as R, type BfiPageEngine as S, BfiThreadsError as T, type BfiThreadsSource as U, type BfiWasmSource as V, type WorkerLike as W, type BfiWebImporter as X, type BfiWebModule as Y, type RunBfiWorkerOptions as Z, bfiSupportWithoutWasm as _, type LocalEndpoint as a, forgetBfiWeb as a0, hfResolveUrl as a1, isBfiThreadsError as a2, loadBfiWeb as a3, runBfiWorker as a4, type LocalRuntimeProbe as b, type LocalModel as c, type LocalBackend as d, type LocalModelUnfit as e, type BfiEngineInstance as f, type BfiEngineStatic as g, type BfiModelInfo as h, type BfiModule as i, type BfiWorkerEngine as j, type ChatCompletionsRequest as k, ENGINE_WORKER_IDLE_MS as l, ENGINE_WORKER_INVALIDATE as m, type EngineWorker as n, type EngineWorkerEndpoint as o, type EngineWorkerEvents as p, type EngineWorkerHandle as q, type EngineWorkerOptions as r, PAGE_ENGINE_REPLY_TYPES as s, PAGE_ENGINE_REQUEST_TYPES as t, type PageEngineClient as u, type PageEngineClientOptions as v, PageEngineError as w, type PageEnginePort as x, type PageEngineReply as y, type PageEngineRequest as z };
+export { loadBfiWeb as $, isPageEngineReply as A, type BfiWorkerEngineOptions as B, type ChatCompletionChunk as C, isPageEngineRequest as D, ENGINE_WORKER_FATAL as E, isWasmTrap as F, serveEngineWorker as G, type HfModelStore as H, servePageEngines as I, BFI_THREADS_START_TIMEOUT_MS as J, type BfiEngineOptions as K, type LocalBackend as L, type BfiLoadOptions as M, type BfiPageEngine as N, BfiThreadsError as O, type PageEngine as P, type BfiThreadsSource as Q, type BfiWasmSource as R, type BfiWebImporter as S, type BfiWebModule as T, type RunBfiWorkerOptions as U, bfiSupportWithoutWasm as V, type WorkerLike as W, createBfiEngine as X, forgetBfiWeb as Y, hfResolveUrl as Z, isBfiThreadsError as _, type LocalModelUnfit as a, runBfiWorker as a0, type BfiEngineInstance as b, type BfiEngineStatic as c, type BfiModelInfo as d, type BfiModule as e, type BfiWorkerEngine as f, type ChatCompletionsRequest as g, ENGINE_WORKER_IDLE_MS as h, ENGINE_WORKER_INVALIDATE as i, type EngineWorker as j, type EngineWorkerEndpoint as k, type EngineWorkerEvents as l, type EngineWorkerHandle as m, type EngineWorkerOptions as n, PAGE_ENGINE_REPLY_TYPES as o, PAGE_ENGINE_REQUEST_TYPES as p, type PageEngineClient as q, type PageEngineClientOptions as r, PageEngineError as s, type PageEnginePort as t, type PageEngineReply as u, type PageEngineRequest as v, type PageEngineServerIo as w, createBfiWorkerEngine as x, createEngineWorker as y, createPageEngineClient as z };

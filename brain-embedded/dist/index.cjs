@@ -1512,6 +1512,7 @@ function setPendingWordsOwner(who) {
   const next = who ? `${who.tenant}:${who.user}` : null;
   const changed = next !== owner;
   owner = next;
+  if (!owner) stopBeating();
   if (changed && owner && startupPersistence) void replayAllPendingWords(startupPersistence);
 }
 function registerPendingWordsReplay(persistence) {
@@ -1566,6 +1567,7 @@ function write(key, list3) {
   }, false);
 }
 var holding = false;
+var beatTimer = null;
 function holdSession() {
   if (holding) return;
   holding = true;
@@ -1582,8 +1584,14 @@ function holdSession() {
 function beatWhileAlive() {
   const beat = () => onStorage((store) => store.setItem(`${BEAT_PREFIX}${SESSION}`, String(Date.now())), void 0);
   beat();
-  const timer = setInterval(beat, BEAT_MS);
-  timer.unref?.();
+  beatTimer = setInterval(beat, BEAT_MS);
+  beatTimer.unref?.();
+}
+function stopBeating() {
+  if (beatTimer === null) return;
+  clearInterval(beatTimer);
+  beatTimer = null;
+  holding = false;
 }
 async function sessionAlive(session) {
   if (session === SESSION) return true;
@@ -1595,7 +1603,7 @@ async function sessionAlive(session) {
   const beat = Number(onStorage((store) => store.getItem(`${BEAT_PREFIX}${session}`), null));
   return Number.isFinite(beat) && beat > 0 && Date.now() - beat < BEAT_DEAD_MS;
 }
-function rememberPendingWords(chatId, eventKey, text) {
+function rememberPendingWords(chatId, eventKey, text, savedTo = chatId) {
   const key = keyOf(chatId);
   const body = text.trim();
   if (!key || !body) return false;
@@ -1603,7 +1611,7 @@ function rememberPendingWords(chatId, eventKey, text) {
   const list3 = read(key);
   if (!list3) return false;
   if (list3.some((p) => p.eventKey === eventKey)) return true;
-  return write(key, [...list3, { eventKey, text: body, session: SESSION, at: Date.now() }].slice(-PER_CHAT_CAP));
+  return write(key, [...list3, { eventKey, text: body, session: SESSION, at: Date.now(), chatId: savedTo }].slice(-PER_CHAT_CAP));
 }
 function forgetPendingWords(chatId, eventKeys) {
   const key = keyOf(chatId);
@@ -1623,6 +1631,7 @@ function markPendingWordsRead(chatId, eventKeys) {
   write(key, list3.map((p) => drained.has(p.eventKey) ? { ...p, read: true } : p));
 }
 function clearPendingWords() {
+  stopBeating();
   onStorage((store) => {
     for (const key of [...keysStarting(PREFIX), ...keysStarting(BEAT_PREFIX)]) store.removeItem(key);
   }, void 0);
@@ -1646,7 +1655,7 @@ async function replayOne(chatId, key, persistence) {
     if (left <= 0) break;
     try {
       const row = { role: "user", content: word.text, ...word.read ? { metadata: steerMetadata({}) } : {}, eventKey: word.eventKey };
-      await bounded(Math.min(SAVE_MS, left), persistence.sendMessages(chatId, [row]));
+      await bounded(Math.min(SAVE_MS, left), persistence.sendMessages(word.chatId ?? chatId, [row]));
       forgetPendingWords(chatId, [word.eventKey]);
       saved += 1;
     } catch (e) {
@@ -8346,7 +8355,8 @@ var CLIENT_ENTRY_POINTS = ALL_ENTRY_POINTS.filter(
 );
 
 // ../packages/learned-routing/src/rateLimitFailure.ts
-var AVAILABILITY = /\b429\b|\b529\b|rate.?limit|too many requests|over ?capacity|capacity limit|overloaded|resource.?exhausted|\bin cooldown\b|cooldown or unavailable/i;
+var AVAILABILITY = /\b429\b|\b529\b|rate.?limit|too many requests|over ?capacity|capacity limit|overloaded|resource has been exhausted|\bin cooldown\b|cooldown or unavailable/i;
+var GRPC_RESOURCE_EXHAUSTED = /\bRESOURCE_EXHAUSTED\b/;
 var AVAILABILITY_STATUSES = /* @__PURE__ */ new Set([429, 529]);
 var TENANT_BUDGET_CODES = [
   "agent_host_token_limit_exceeded",
@@ -8374,7 +8384,7 @@ function isTenantBudgetFailure(message2) {
 }
 function isRateLimitFailure(message2, status2) {
   if (isTenantBudgetFailure(message2)) return false;
-  return status2 != null && AVAILABILITY_STATUSES.has(status2) || !!message2 && AVAILABILITY.test(message2);
+  return status2 != null && AVAILABILITY_STATUSES.has(status2) || !!message2 && (AVAILABILITY.test(message2) || GRPC_RESOURCE_EXHAUSTED.test(message2));
 }
 
 // ../packages/workload/src/actionClassifier.ts
@@ -18662,84 +18672,155 @@ var import_handoff9 = require("@seanhogg/builderforce-memory/handoff");
 var CORE_REGISTRY = buildCoreToolRegistry();
 for (const tool of [...SKILL_TOOLS, ...SUBAGENT_TOOLS]) CORE_REGISTRY.register(tool);
 
-// src/runSteering.ts
-function queueRunSteering2(runKey, text, opts) {
-  const queued = queueRunSteering(runKey, text, opts);
-  if (queued?.persist && queued.eventKey) rememberPendingWords(runKey, queued.eventKey, queued.text);
+// src/directedMessage.ts
+var ADDRESSED_TO_META_KEY = "addressedTo";
+var AUTHORED_BY_META_KEY = "authoredBy";
+function asRecipient(value) {
+  const a = value;
+  if (a && typeof a.ref === "string" && typeof a.name === "string" && (a.kind === "agent" || a.kind === "human")) {
+    return { kind: a.kind, ref: a.ref, name: a.name };
+  }
+  return null;
 }
-function requeueRunSteering2(runKey, steers) {
-  requeueRunSteering(runKey, steers);
+function parseMessageAuthor(msg) {
+  if (!msg.metadata) return null;
+  try {
+    return asRecipient(JSON.parse(msg.metadata).authoredBy);
+  } catch {
+  }
+  return null;
 }
-function drainRunSteering2(runKey) {
-  return drainRunSteering(runKey);
+function withDirectedMetadata(recipient, base) {
+  const meta = { ...base ?? {} };
+  const list3 = recipient == null ? [] : "kind" in recipient ? [recipient] : recipient;
+  if (list3.length === 1) meta[ADDRESSED_TO_META_KEY] = list3[0];
+  else if (list3.length > 1) meta[ADDRESSED_TO_META_KEY] = { kind: "group", members: [...list3] };
+  return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
 }
-function steerModelContent(msg) {
-  const imageAtts = (msg.attachments ?? []).filter((a) => a.imageUrl);
-  if (imageAtts.length === 0) return msg.text;
-  return [
-    { type: "text", text: msg.text },
-    ...imageAtts.map((a) => ({ type: "image_url", image_url: { url: a.imageUrl } }))
-  ];
+function parseDirectedRecipients(msg) {
+  if (!msg.metadata) return [];
+  try {
+    const a = JSON.parse(msg.metadata).addressedTo;
+    if (!a || typeof a !== "object") return [];
+    if (a.kind !== "group") {
+      const one = asRecipient(a);
+      return one ? [one] : [];
+    }
+    if (Array.isArray(a.members)) {
+      return a.members.map(asRecipient).filter((r) => r !== null);
+    }
+    if (Array.isArray(a.refs)) {
+      return a.refs.filter((ref) => typeof ref === "string" && ref.length > 0).map((ref) => ({ kind: "agent", ref, name: ref }));
+    }
+  } catch {
+  }
+  return [];
+}
+function isDirectedToParticipant(msg) {
+  return parseDirectedRecipients(msg).length > 0;
+}
+function directedAgentRecipients(recipient) {
+  if (recipient == null) return [];
+  const one = recipient;
+  const list3 = Array.isArray(recipient) ? recipient : one.kind === "group" ? one.members ?? [] : [one];
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const r of list3) {
+    if (!r || typeof r.ref !== "string" || !r.ref || r.kind === "human") continue;
+    if (seen.has(r.ref)) continue;
+    seen.add(r.ref);
+    out.push({ kind: "agent", ref: r.ref, name: typeof r.name === "string" && r.name ? r.name : r.ref });
+  }
+  return out;
+}
+function activeMentionToken(text, caret) {
+  const at2 = text.lastIndexOf("@", Math.max(0, caret - 1));
+  if (at2 < 0 || at2 >= caret) return null;
+  if (at2 > 0 && !/\s/.test(text[at2 - 1])) return null;
+  const query = text.slice(at2 + 1, caret);
+  if (/[\s@]/.test(query)) return null;
+  return { query, start: at2, end: caret };
+}
+function filterMentionCandidates(participants, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return participants;
+  return participants.map((p) => ({ p, idx: p.name.toLowerCase().indexOf(q) })).filter((s) => s.idx >= 0).sort((a, b) => a.idx - b.idx || a.p.name.localeCompare(b.p.name)).map((s) => s.p);
+}
+function mentionRecipient(text, participants) {
+  const m = /^\s*@([^\s@]+)/.exec(text);
+  if (!m) return null;
+  const tag = m[1].toLowerCase();
+  return participants.find((p) => {
+    const name = p.name.toLowerCase();
+    return name === tag || name.split(/\s+/)[0] === tag || name.startsWith(tag);
+  }) ?? null;
+}
+function resolveRecipient(choice, mention) {
+  if (choice === "brain") return null;
+  return choice ?? mention;
+}
+var activeHashtagToken = activeTicketToken;
+function activeTicketToken(text, caret) {
+  const hash2 = text.lastIndexOf("#", Math.max(0, caret - 1));
+  if (hash2 < 0 || hash2 >= caret) return null;
+  if (hash2 > 0 && !/\s/.test(text[hash2 - 1])) return null;
+  const query = text.slice(hash2 + 1, caret);
+  if (/[\s#]/.test(query)) return null;
+  return { query, start: hash2, end: caret };
+}
+function filterTicketCandidates(tickets, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return tickets;
+  return tickets.map((t) => {
+    const titleIdx = t.title.toLowerCase().indexOf(q);
+    const keyIdx = t.key?.toLowerCase().indexOf(q) ?? -1;
+    const idx = titleIdx >= 0 ? titleIdx : keyIdx;
+    return { t, idx };
+  }).filter((s) => s.idx >= 0).sort((a, b) => a.idx - b.idx || a.t.title.localeCompare(b.t.title)).map((s) => s.t);
 }
 
-// src/runActivity.ts
-var TARGET_KEYS = ["path", "file", "filePath", "command", "cmd", "glob", "query", "q", "search", "url", "name", "title", "id"];
-var MAX_DETAIL = 72;
-function shortenTarget(value, max = MAX_DETAIL) {
-  const v = value.replace(/\s+/g, " ").trim();
-  if (v.length <= max) return v;
-  if (v.includes("/") || v.includes("\\")) return `\u2026${v.slice(v.length - (max - 1))}`;
-  return `${v.slice(0, max - 1)}\u2026`;
-}
-function activityTarget(args) {
-  if (!args || typeof args !== "object" || Array.isArray(args)) return void 0;
-  const record3 = args;
-  for (const key of TARGET_KEYS) {
-    const value = record3[key];
-    if (typeof value === "string" && value.trim()) return shortenTarget(value);
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+// src/runLineage.ts
+var savedChatOf = (runKey, lineage) => lineage?.rootChatId ?? runKey;
+var SUBAGENT_OF_META_KEY = "subagentOf";
+function lineageMetadata(lineage, metadata) {
+  let base = {};
+  if (metadata) {
+    try {
+      const parsed = JSON.parse(metadata);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) base = parsed;
+    } catch {
+    }
   }
-  if (Array.isArray(record3.paths)) {
-    const names = record3.paths.filter((p) => typeof p === "string" && p.trim() !== "");
-    if (names.length) return shortenTarget(names.join(", "));
+  return JSON.stringify({
+    ...base,
+    [MID_TURN_META_KEY]: true,
+    [AUTHORED_BY_META_KEY]: { kind: "agent", ref: lineage.agent.ref, name: lineage.agent.name },
+    [SUBAGENT_OF_META_KEY]: { handle: lineage.handle, owner: lineage.ownerName, label: lineage.label }
+  });
+}
+function parseSubagentOrigin(msg) {
+  if (!msg.metadata) return null;
+  try {
+    const o = JSON.parse(msg.metadata)[SUBAGENT_OF_META_KEY];
+    if (o && typeof o.handle === "string" && typeof o.owner === "string") {
+      return { handle: o.handle, owner: o.owner, label: typeof o.label === "string" ? o.label : "" };
+    }
+  } catch {
   }
-  return void 0;
+  return null;
 }
-var QUESTION_KEYS = ["query", "q", "search", "pattern", "glob", "key"];
-var VISIT_QUESTION_SEPARATOR = " \u220B ";
-function visitTarget(args) {
-  const scope = activityTarget(args);
-  if (!scope) return void 0;
-  const record3 = args;
-  for (const key of QUESTION_KEYS) {
-    const value = record3[key];
-    if (typeof value !== "string" || !value.trim()) continue;
-    const question = shortenTarget(value);
-    return question === scope ? scope : `${scope}${VISIT_QUESTION_SEPARATOR}${question}`;
-  }
-  return scope;
-}
-function toolActivity(label, args, step, startedAt) {
-  const detail = activityTarget(args);
-  return { phase: "tool", label, startedAt, step, ...detail ? { detail } : {} };
-}
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  return bytes < 1024 ? `${Math.round(bytes)} B` : `${(bytes / 1024).toFixed(1)} KB`;
-}
-function elapsedText(ms) {
-  if (!Number.isFinite(ms) || ms <= 0) return "0s";
-  if (ms < 6e4) return `${Math.round(ms / 1e3)}s`;
-  return `${Math.floor(ms / 6e4)}m ${Math.round(ms % 6e4 / 1e3)}s`;
-}
-function describeLiveStep(step, capturedAtMs) {
-  const elapsed = elapsedText(Number.isFinite(capturedAtMs) ? capturedAtMs - step.startedAt : 0);
-  const what = step.phase === "tool" ? `running \`${step.label}\`${step.detail ? ` on ${step.detail}` : ""}` : step.phase === "awaiting" ? `PAUSED waiting for the user to approve \`${step.label}\` \u2014 nothing advances until they answer` : step.phase === "composing" ? `composing a \`${step.label || "tool"}\` call${step.bytes != null ? ` \u2014 ${formatBytes(step.bytes)} of arguments so far` : ""}` : step.phase === "thinking" ? "waiting on the model (no token received yet)" : step.phase === "writing" ? "streaming the reply" : step.phase === "finishing" ? "doing post-run work (ticket capture / status reconciliation)" : "starting up";
-  return `${what} (${elapsed} so far${step.step > 0 ? `, loop step ${step.step}` : ""})`;
-}
-function midRunNotice(activity, capturedAtMs) {
-  const doing = activity ? ` At capture it was ${describeLiveStep(activity, capturedAtMs)}.` : " No in-flight step was recorded at capture.";
-  return `\u26A0 CAPTURED MID-RUN \u2014 the agent was STILL EXECUTING when this report was taken.${doing} Anything below that reads as "it never did X" may simply be work it had not reached yet; re-copy once the run settles to get a verdict on a finished run.`;
+function lineagePersistence(base, lineage, onPersisted) {
+  return {
+    ...base,
+    async sendMessages(chatId, messages) {
+      const saved = await base.sendMessages(
+        chatId,
+        messages.map((m) => ({ ...m, metadata: lineageMetadata(lineage, m.metadata) }))
+      );
+      for (const msg of saved) if (msg.role !== "tool") onPersisted(msg);
+      return saved;
+    }
+  };
 }
 
 // src/memorySavings.ts
@@ -18924,6 +19005,86 @@ function accrueByoUnresolved(c, raw) {
 }
 function accrueProviderCap(c, raw) {
   accrueProviders(c, "providerCap", raw);
+}
+
+// src/runSteering.ts
+function queueRunSteering2(runKey, text, opts) {
+  const queued = queueRunSteering(runKey, text, opts);
+  if (queued?.persist && queued.eventKey) rememberPendingWords(runKey, queued.eventKey, queued.text, savedChatOf(runKey, cells.get(runKey)?.lastRequest?.lineage));
+}
+function requeueRunSteering2(runKey, steers) {
+  requeueRunSteering(runKey, steers);
+}
+function drainRunSteering2(runKey) {
+  return drainRunSteering(runKey);
+}
+function steerModelContent(msg) {
+  const imageAtts = (msg.attachments ?? []).filter((a) => a.imageUrl);
+  if (imageAtts.length === 0) return msg.text;
+  return [
+    { type: "text", text: msg.text },
+    ...imageAtts.map((a) => ({ type: "image_url", image_url: { url: a.imageUrl } }))
+  ];
+}
+
+// src/runActivity.ts
+var TARGET_KEYS = ["path", "file", "filePath", "command", "cmd", "glob", "query", "q", "search", "url", "name", "title", "id"];
+var MAX_DETAIL = 72;
+function shortenTarget(value, max = MAX_DETAIL) {
+  const v = value.replace(/\s+/g, " ").trim();
+  if (v.length <= max) return v;
+  if (v.includes("/") || v.includes("\\")) return `\u2026${v.slice(v.length - (max - 1))}`;
+  return `${v.slice(0, max - 1)}\u2026`;
+}
+function activityTarget(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return void 0;
+  const record3 = args;
+  for (const key of TARGET_KEYS) {
+    const value = record3[key];
+    if (typeof value === "string" && value.trim()) return shortenTarget(value);
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  if (Array.isArray(record3.paths)) {
+    const names = record3.paths.filter((p) => typeof p === "string" && p.trim() !== "");
+    if (names.length) return shortenTarget(names.join(", "));
+  }
+  return void 0;
+}
+var QUESTION_KEYS = ["query", "q", "search", "pattern", "glob", "key"];
+var VISIT_QUESTION_SEPARATOR = " \u220B ";
+function visitTarget(args) {
+  const scope = activityTarget(args);
+  if (!scope) return void 0;
+  const record3 = args;
+  for (const key of QUESTION_KEYS) {
+    const value = record3[key];
+    if (typeof value !== "string" || !value.trim()) continue;
+    const question = shortenTarget(value);
+    return question === scope ? scope : `${scope}${VISIT_QUESTION_SEPARATOR}${question}`;
+  }
+  return scope;
+}
+function toolActivity(label, args, step, startedAt) {
+  const detail = activityTarget(args);
+  return { phase: "tool", label, startedAt, step, ...detail ? { detail } : {} };
+}
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  return bytes < 1024 ? `${Math.round(bytes)} B` : `${(bytes / 1024).toFixed(1)} KB`;
+}
+function elapsedText(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return "0s";
+  if (ms < 6e4) return `${Math.round(ms / 1e3)}s`;
+  return `${Math.floor(ms / 6e4)}m ${Math.round(ms % 6e4 / 1e3)}s`;
+}
+function describeLiveStep(step, capturedAtMs) {
+  const elapsed = elapsedText(Number.isFinite(capturedAtMs) ? capturedAtMs - step.startedAt : 0);
+  const what = step.phase === "tool" ? `running \`${step.label}\`${step.detail ? ` on ${step.detail}` : ""}` : step.phase === "awaiting" ? `PAUSED waiting for the user to approve \`${step.label}\` \u2014 nothing advances until they answer` : step.phase === "composing" ? `composing a \`${step.label || "tool"}\` call${step.bytes != null ? ` \u2014 ${formatBytes(step.bytes)} of arguments so far` : ""}` : step.phase === "thinking" ? "waiting on the model (no token received yet)" : step.phase === "writing" ? "streaming the reply" : step.phase === "finishing" ? "doing post-run work (ticket capture / status reconciliation)" : "starting up";
+  return `${what} (${elapsed} so far${step.step > 0 ? `, loop step ${step.step}` : ""})`;
+}
+function midRunNotice(activity, capturedAtMs) {
+  const doing = activity ? ` At capture it was ${describeLiveStep(activity, capturedAtMs)}.` : " No in-flight step was recorded at capture.";
+  return `\u26A0 CAPTURED MID-RUN \u2014 the agent was STILL EXECUTING when this report was taken.${doing} Anything below that reads as "it never did X" may simply be work it had not reached yet; re-copy once the run settles to get a verdict on a finished run.`;
 }
 
 // src/runStore/turnPersistence.ts
@@ -21644,156 +21805,6 @@ function leftChangeUnreviewed(input) {
 }
 function unreviewedChangeNudge() {
   return 'You changed the app in this run and ended the turn without reviewing it. In the Studio you are the reviewer \u2014 nobody else can see this preview, so an unreviewed change parks its ticket in review forever. Finish it now: call `canvas_inspect_preview` with the selectors your change targets and the widths the request is about, check the measurements against what was asked (fix and re-inspect if they fail), then record builtin_reviews_record on each ticket the change delivers \u2014 verdict "complete" quoting the measurements, or "gaps" naming what is missing. A complete review after a passing inspection closes the ticket when your turn ends. If you genuinely cannot verify \u2014 the preview is not running, or the change is unfinished \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
-}
-
-// src/directedMessage.ts
-var ADDRESSED_TO_META_KEY = "addressedTo";
-var AUTHORED_BY_META_KEY = "authoredBy";
-function asRecipient(value) {
-  const a = value;
-  if (a && typeof a.ref === "string" && typeof a.name === "string" && (a.kind === "agent" || a.kind === "human")) {
-    return { kind: a.kind, ref: a.ref, name: a.name };
-  }
-  return null;
-}
-function parseMessageAuthor(msg) {
-  if (!msg.metadata) return null;
-  try {
-    return asRecipient(JSON.parse(msg.metadata).authoredBy);
-  } catch {
-  }
-  return null;
-}
-function withDirectedMetadata(recipient, base) {
-  const meta = { ...base ?? {} };
-  const list3 = recipient == null ? [] : "kind" in recipient ? [recipient] : recipient;
-  if (list3.length === 1) meta[ADDRESSED_TO_META_KEY] = list3[0];
-  else if (list3.length > 1) meta[ADDRESSED_TO_META_KEY] = { kind: "group", members: [...list3] };
-  return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
-}
-function parseDirectedRecipients(msg) {
-  if (!msg.metadata) return [];
-  try {
-    const a = JSON.parse(msg.metadata).addressedTo;
-    if (!a || typeof a !== "object") return [];
-    if (a.kind !== "group") {
-      const one = asRecipient(a);
-      return one ? [one] : [];
-    }
-    if (Array.isArray(a.members)) {
-      return a.members.map(asRecipient).filter((r) => r !== null);
-    }
-    if (Array.isArray(a.refs)) {
-      return a.refs.filter((ref) => typeof ref === "string" && ref.length > 0).map((ref) => ({ kind: "agent", ref, name: ref }));
-    }
-  } catch {
-  }
-  return [];
-}
-function isDirectedToParticipant(msg) {
-  return parseDirectedRecipients(msg).length > 0;
-}
-function directedAgentRecipients(recipient) {
-  if (recipient == null) return [];
-  const one = recipient;
-  const list3 = Array.isArray(recipient) ? recipient : one.kind === "group" ? one.members ?? [] : [one];
-  const seen = /* @__PURE__ */ new Set();
-  const out = [];
-  for (const r of list3) {
-    if (!r || typeof r.ref !== "string" || !r.ref || r.kind === "human") continue;
-    if (seen.has(r.ref)) continue;
-    seen.add(r.ref);
-    out.push({ kind: "agent", ref: r.ref, name: typeof r.name === "string" && r.name ? r.name : r.ref });
-  }
-  return out;
-}
-function activeMentionToken(text, caret) {
-  const at2 = text.lastIndexOf("@", Math.max(0, caret - 1));
-  if (at2 < 0 || at2 >= caret) return null;
-  if (at2 > 0 && !/\s/.test(text[at2 - 1])) return null;
-  const query = text.slice(at2 + 1, caret);
-  if (/[\s@]/.test(query)) return null;
-  return { query, start: at2, end: caret };
-}
-function filterMentionCandidates(participants, query) {
-  const q = query.trim().toLowerCase();
-  if (!q) return participants;
-  return participants.map((p) => ({ p, idx: p.name.toLowerCase().indexOf(q) })).filter((s) => s.idx >= 0).sort((a, b) => a.idx - b.idx || a.p.name.localeCompare(b.p.name)).map((s) => s.p);
-}
-function mentionRecipient(text, participants) {
-  const m = /^\s*@([^\s@]+)/.exec(text);
-  if (!m) return null;
-  const tag = m[1].toLowerCase();
-  return participants.find((p) => {
-    const name = p.name.toLowerCase();
-    return name === tag || name.split(/\s+/)[0] === tag || name.startsWith(tag);
-  }) ?? null;
-}
-function resolveRecipient(choice, mention) {
-  if (choice === "brain") return null;
-  return choice ?? mention;
-}
-var activeHashtagToken = activeTicketToken;
-function activeTicketToken(text, caret) {
-  const hash2 = text.lastIndexOf("#", Math.max(0, caret - 1));
-  if (hash2 < 0 || hash2 >= caret) return null;
-  if (hash2 > 0 && !/\s/.test(text[hash2 - 1])) return null;
-  const query = text.slice(hash2 + 1, caret);
-  if (/[\s#]/.test(query)) return null;
-  return { query, start: hash2, end: caret };
-}
-function filterTicketCandidates(tickets, query) {
-  const q = query.trim().toLowerCase();
-  if (!q) return tickets;
-  return tickets.map((t) => {
-    const titleIdx = t.title.toLowerCase().indexOf(q);
-    const keyIdx = t.key?.toLowerCase().indexOf(q) ?? -1;
-    const idx = titleIdx >= 0 ? titleIdx : keyIdx;
-    return { t, idx };
-  }).filter((s) => s.idx >= 0).sort((a, b) => a.idx - b.idx || a.t.title.localeCompare(b.t.title)).map((s) => s.t);
-}
-
-// src/runLineage.ts
-var SUBAGENT_OF_META_KEY = "subagentOf";
-function lineageMetadata(lineage, metadata) {
-  let base = {};
-  if (metadata) {
-    try {
-      const parsed = JSON.parse(metadata);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) base = parsed;
-    } catch {
-    }
-  }
-  return JSON.stringify({
-    ...base,
-    [MID_TURN_META_KEY]: true,
-    [AUTHORED_BY_META_KEY]: { kind: "agent", ref: lineage.agent.ref, name: lineage.agent.name },
-    [SUBAGENT_OF_META_KEY]: { handle: lineage.handle, owner: lineage.ownerName, label: lineage.label }
-  });
-}
-function parseSubagentOrigin(msg) {
-  if (!msg.metadata) return null;
-  try {
-    const o = JSON.parse(msg.metadata)[SUBAGENT_OF_META_KEY];
-    if (o && typeof o.handle === "string" && typeof o.owner === "string") {
-      return { handle: o.handle, owner: o.owner, label: typeof o.label === "string" ? o.label : "" };
-    }
-  } catch {
-  }
-  return null;
-}
-function lineagePersistence(base, lineage, onPersisted) {
-  return {
-    ...base,
-    async sendMessages(chatId, messages) {
-      const saved = await base.sendMessages(
-        chatId,
-        messages.map((m) => ({ ...m, metadata: lineageMetadata(lineage, m.metadata) }))
-      );
-      for (const msg of saved) if (msg.role !== "tool") onPersisted(msg);
-      return saved;
-    }
-  };
 }
 
 // src/runStore/runBackstops.ts
@@ -25176,7 +25187,6 @@ onStoreReset(resetContinuations);
 function takeContinueOnSettle(runKey) {
   return continuing.delete(runKey);
 }
-var chatIdOf = (request, runKey) => request.lineage?.rootChatId ?? runKey;
 async function compose(m, ports) {
   const attachments = m.attachments ?? [];
   return { ...await composeUserTurn(m.text, attachments, ports), text: m.text, attachments };
@@ -25257,7 +25267,7 @@ async function continueChat(runKey, c, steers, start, claim, left, progress = { 
     trace3(c, "steer.continue_limit", { continuations: links }, "The run was continued as often as it may be without a new message; the direction waits for your next turn.");
     return false;
   }
-  const chatId = chatIdOf(request, runKey);
+  const chatId = savedChatOf(runKey, request.lineage);
   const stopped = { c, runKey, chatId, persistence: request.persistence, claim, keys: steers.map((m) => m.eventKey) };
   const ports = binding.ports();
   const turns = [];
@@ -25324,7 +25334,7 @@ async function continueOrKeep(runKey, c, steers, start, claim) {
       const request = c.lastRequest;
       const keys = keyed.map((m) => m.eventKey);
       if (request && (progress.saving || keyed.some((m) => m.saved))) {
-        await endStopped({ c, runKey, chatId: chatIdOf(request, runKey), persistence: request.persistence, claim, keys }, left(), progress.saving);
+        await endStopped({ c, runKey, chatId: savedChatOf(runKey, request.lineage), persistence: request.persistence, claim, keys }, left(), progress.saving);
       } else {
         forgetPendingWords(runKey, keys);
       }
@@ -25367,7 +25377,7 @@ function wakeChat(runKey, turns, start) {
     eventKey: newSteerKey(),
     ...t.attachments?.length ? { attachments: [...t.attachments] } : {}
   }));
-  for (const steer of steers) rememberPendingWords(runKey, steer.eventKey, steer.text);
+  for (const steer of steers) rememberPendingWords(runKey, steer.eventKey, steer.text, savedChatOf(runKey, c.lastRequest.lineage));
   void continueOrKeep(runKey, c, steers, start, claim);
   return true;
 }
@@ -25400,7 +25410,7 @@ async function startRun(runKey, request, claim) {
     return "joined";
   }
   const lineage = request.lineage;
-  const chatId = lineage?.rootChatId ?? runKey;
+  const chatId = savedChatOf(runKey, lineage);
   const serverChatId = resolveServerChatId(chatId, request);
   const steps = batchStepPersistence(request.persistence, stepDurabilityFor(chatId, runKey));
   const runPersistence = lineage ? lineagePersistence(steps.persistence, lineage, (msg) => appendRunMessage(chatId, msg)) : steps.persistence;
@@ -27631,7 +27641,7 @@ var import_react15 = require("react");
 function turnBody(turn, textOf2) {
   return (typeof turn === "string" ? turn : textOf2?.(turn) ?? "").trim();
 }
-function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFlush, handOff }) {
+function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFlush, handOff, createdChatId = null }) {
   const [queued, setQueued] = (0, import_react15.useState)([]);
   const queueRef = (0, import_react15.useRef)([]);
   const update = (0, import_react15.useCallback)((change) => {
@@ -27649,6 +27659,9 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
   handOffRef.current = handOff;
   const mayFlushRef = (0, import_react15.useRef)(mayFlush);
   mayFlushRef.current = mayFlush;
+  const createdRef = (0, import_react15.useRef)(createdChatId);
+  createdRef.current = createdChatId;
+  const unconfirmed = (0, import_react15.useRef)(null);
   const runningRef = (0, import_react15.useRef)(running);
   const submit = (0, import_react15.useCallback)((value, opts) => {
     const text = turnBody(value, textOfRef.current);
@@ -27669,29 +27682,48 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
     update((current) => current.slice(1));
     return first.value;
   }, [update]);
+  const settle2 = (0, import_react15.useCallback)((created) => {
+    const wait = unconfirmed.current;
+    if (!wait) return;
+    unconfirmed.current = null;
+    if (created === wait.to) {
+      update((current) => current.map((item) => wait.ids.has(item.id) && item.preLiveFor === null ? { ...item, preLiveFor: wait.to } : item));
+      return;
+    }
+    const mine = queueRef.current.filter((item) => wait.ids.has(item.id));
+    if (mine.length === 0) return;
+    update((current) => current.filter((item) => !wait.ids.has(item.id)));
+    handOffRef.current?.(mine, null);
+  }, [update]);
+  (0, import_react15.useEffect)(() => {
+    if (createdChatId !== null) settle2(createdChatId);
+  }, [createdChatId, settle2]);
   const prev = (0, import_react15.useRef)({ key: resetKey, running });
   (0, import_react15.useEffect)(() => {
     const was = prev.current;
     prev.current = { key: resetKey, running };
+    if (!running) settle2(createdRef.current);
     if (was.key !== resetKey || !was.running || running) return;
     if (mayFlushRef.current && !mayFlushRef.current()) return;
     const next = takeFront();
     if (next !== void 0) sendRef.current(next);
-  }, [running, resetKey, takeFront]);
+  }, [running, resetKey, takeFront, settle2]);
   const heldIn = (0, import_react15.useRef)(resetKey);
   (0, import_react15.useEffect)(() => {
     const from = heldIn.current;
     if (from === resetKey) return;
     heldIn.current = resetKey;
+    settle2(createdRef.current);
     const held = queueRef.current;
     if (held.length === 0) return;
     if (from === null && typeof resetKey === "number" && runningRef.current) {
-      update((current) => current.map((item) => item.preLiveFor === null ? { ...item, preLiveFor: resetKey } : item));
+      unconfirmed.current = { to: resetKey, ids: new Set(held.map((item) => item.id)) };
+      if (createdRef.current !== null) settle2(createdRef.current);
       return;
     }
     update(() => []);
     handOffRef.current?.(held, from);
-  }, [resetKey, update]);
+  }, [resetKey, update, settle2]);
   return { items: queued, count: queued.length, submit, remove, requeue: requeue2, pushBack, takeFront, clear };
 }
 
@@ -27702,7 +27734,7 @@ function steersByDefault(turn) {
 function chatDoorLiveness(conv, extraInFlight = false) {
   return { running: conv.sending || extraInFlight, steerable: conv.runLive };
 }
-function useChatTurns({ running, steerable = running, runKey, send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf }) {
+function useChatTurns({ running, steerable = running, runKey, createdChatId, send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf }) {
   const ports = (0, import_react16.useRef)({ send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable });
   ports.current = { send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable };
   const stoppingRef = (0, import_react16.useRef)(false);
@@ -27777,6 +27809,7 @@ function useChatTurns({ running, steerable = running, runKey, send, steer, stop,
       void flush(turn);
     },
     resetKey: runKey,
+    createdChatId,
     textOf: textOf2,
     mayFlush: () => flushingIn(ports.current.runKey) === 0,
     handOff
@@ -27797,6 +27830,7 @@ function useChatTurns({ running, steerable = running, runKey, send, steer, stop,
   const heldThisRun = (0, import_react16.useCallback)(() => itemsRef.current.filter((item) => !carriedIds.current.has(item.id)).length, []);
   const steers = (0, import_react16.useCallback)((preview) => ports.current.steerable && typeof ports.current.runKey === "number" && !stoppingRef.current && steersByDefault({ ...preview, held: heldThisRun() }), [heldThisRun]);
   const { remove } = queued;
+  const dueHere = queued.items.filter((item) => item.preLiveFor === runKey).length;
   (0, import_react16.useEffect)(() => {
     if (!running || !steerable) return;
     const { steer: route, runKey: key, textOf: text, isDirected: directed, attachmentsOf: attached2 } = ports.current;
@@ -27815,7 +27849,7 @@ function useChatTurns({ running, steerable = running, runKey, send, steer, stop,
       }
       carriedIds.current = new Set([...carriedIds.current].filter((id) => id !== item.id));
     }
-  }, [running, steerable, remove, runKey]);
+  }, [running, steerable, remove, runKey, dueHere]);
   const stopTurns = (0, import_react16.useCallback)(() => {
     clear();
     stopEpoch.current += 1;
@@ -27927,15 +27961,18 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   const captureRef = (0, import_react19.useRef)(onCaptureOriginalRequest);
   captureRef.current = onCaptureOriginalRequest;
   const creating = (0, import_react19.useRef)(null);
+  const [createdChatId, setCreatedChatId] = (0, import_react19.useState)(null);
   (0, import_react19.useEffect)(() => {
     if (chatId != null) creating.current = null;
   }, [chatId]);
   const ensureChatId = (0, import_react19.useCallback)(() => {
     const open = chatIdRef.current;
     if (open != null) return Promise.resolve(open);
+    if (!creating.current) setCreatedChatId(null);
     creating.current ??= createRef.current().then(
       (id) => {
         if (id == null) creating.current = null;
+        else setCreatedChatId(id);
         return id;
       },
       (error) => {
@@ -27949,7 +27986,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
     void captureRef.current?.(id, firstUserText);
     await autoTitleRef.current?.(id, firstUserText);
   }, []);
-  return { ensureChatId, onFirstUserTurn };
+  return { ensureChatId, onFirstUserTurn, createdChatId };
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

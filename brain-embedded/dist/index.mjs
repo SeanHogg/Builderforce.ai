@@ -1,14 +1,4 @@
 import {
-  BrainRequestError,
-  CONTINUATION_TIMED_OUT,
-  LOCAL_ENGINE_FAILURE_CODES,
-  NOT_SIGNED_IN,
-  NO_LOCAL_MODEL,
-  NO_SPECIFIC_MODEL,
-  brainRequestError,
-  chatErrorAction
-} from "./chunk-GCFXVJYE.mjs";
-import {
   BROWSER_ENGINE_BASE_URL,
   ENGINE_WORKER_FATAL,
   ENGINE_WORKER_IDLE_MS,
@@ -18,19 +8,15 @@ import {
   LOCAL_PICKER_GROUPS,
   PAGE_ENGINE_REPLY_TYPES,
   PAGE_ENGINE_REQUEST_TYPES,
-  PageEngineError,
   WEBLLM_ENGINE_BASE_URL,
-  abortReason,
   catalogProbe,
   clientPinOf,
   createBfiWorkerEngine,
   createEngineWorker,
   createHfModelStore,
   createPageEngineClient,
-  errorMessage,
   fetchLocal,
   formatLocalModelRef,
-  hasTools,
   hasWebGPU,
   hostedDirectRef,
   isLocalModelRef,
@@ -44,11 +30,9 @@ import {
   localModelFit,
   localPickerView,
   localRuntime,
-  memoizedProbe,
   normalizeLocalBaseUrl,
   parseLocalModelRef,
   pricedId,
-  reportPageEngineFailure,
   rewriteToLocalUrl,
   runLocalFirst,
   runsOnDevice,
@@ -57,1036 +41,70 @@ import {
   servedIdentity,
   servedOnDevice,
   webGpuSupport
-} from "./chunk-FLHJS4U5.mjs";
+} from "./chunk-KKJPRCUF.mjs";
+import {
+  ASK_USER_TOOL,
+  ASK_USER_TOOL_SPEC,
+  DEFAULT_TOOL_FAILURE_STREAK,
+  MALFORMED_CALL_RESULT,
+  MID_TURN_META_KEY,
+  TRUNCATED_CALL_RESULT,
+  answerTextOf,
+  asToolArgs,
+  askUserAnchorId,
+  askUserBlock,
+  bounded,
+  budget,
+  canonicalReasoningText,
+  clearPendingWords,
+  coerceAskUserPayload,
+  continuationLimits,
+  detectRepetitionLoop,
+  forgetPendingWords,
+  isMidTurnMetadata,
+  liftProseAskUser,
+  malformedCallLabel,
+  malformedCallOutcome,
+  markPendingWordsRead,
+  openAiChatCodec,
+  parseAskUser,
+  registerPendingWordsReplay,
+  rememberPendingWords,
+  replayPendingWords,
+  replayTextOf,
+  runAgentLoop,
+  selectPendingAskUser,
+  serializeAskUser,
+  setPendingWordsOwner,
+  settledWithin,
+  splitVendorReasoning,
+  steerMetadata,
+  stepRow,
+  stripAskUser,
+  stripReasoningTagsFromText,
+  thoughtTextOf,
+  within
+} from "./chunk-B5IJHF5M.mjs";
+import {
+  BrainRequestError,
+  LOCAL_ENGINE_FAILURE_CODES,
+  NOT_SIGNED_IN,
+  NO_LOCAL_MODEL,
+  NO_SPECIFIC_MODEL,
+  brainRequestError,
+  chatErrorAction
+} from "./chunk-GCFXVJYE.mjs";
+import {
+  PageEngineError,
+  abortReason,
+  errorMessage,
+  hasTools,
+  memoizedProbe,
+  reportPageEngineFailure
+} from "./chunk-A5TKRKGR.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";
-
-// src/runStore/deadline.ts
-var continuationLimits = { prepareMs: 15e3, settleMs: 3e4 };
-function budget(ms) {
-  const end = Date.now() + ms;
-  return () => Math.max(1, end - Date.now());
-}
-async function bounded(ms, promise) {
-  let timer;
-  const late = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(CONTINUATION_TIMED_OUT)), ms);
-  });
-  try {
-    return await Promise.race([Promise.resolve(promise), late]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-async function settledWithin(ms, promise) {
-  let timer;
-  const late = new Promise((resolve) => {
-    timer = setTimeout(() => resolve("pending"), ms);
-  });
-  try {
-    return await Promise.race([promise.then(() => "ok", () => "failed"), late]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-async function within(ms, work, onLate, onError = () => void 0) {
-  let timer;
-  const late = new Promise((resolve) => {
-    timer = setTimeout(() => resolve("late"), ms);
-  });
-  const settled2 = (async () => {
-    try {
-      await work();
-    } catch (e) {
-      onError(e);
-    }
-    return "done";
-  })();
-  try {
-    if (await Promise.race([settled2, late]) === "late") onLate();
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// src/pendingWordsFailure.ts
-function reportPendingWordsFailure(stage, error) {
-  console.warn(`BuilderForce pending words: ${stage} failed (${errorMessage(error)})`);
-}
-
-// ../packages/agent-loop/src/types.ts
-var DEFAULT_TOOL_FAILURE_STREAK = 5;
-
-// ../packages/agent-loop/src/parseToolCall.ts
-function asToolArgs(value) {
-  if (value && typeof value === "object" && !Array.isArray(value)) return value;
-  return null;
-}
-function parseToolArgs(raw) {
-  const text = typeof raw === "string" ? raw.trim() : "";
-  if (!text) return { args: {}, malformed: false };
-  try {
-    const bag = asToolArgs(JSON.parse(text));
-    return bag ? { args: bag, malformed: false } : { args: {}, malformed: true };
-  } catch {
-    return { args: {}, malformed: true };
-  }
-}
-function parseToolCall(raw) {
-  const { args, malformed } = parseToolArgs(raw.arguments);
-  return { id: raw.id, name: raw.name, args, raw, malformed };
-}
-
-// ../packages/agent-loop/src/repetitionLoop.ts
-var COUNT_MIN_RUN = 50;
-var COUNT_MAX_DIGITS = 6;
-var isDigit = (code) => code >= 48 && code <= 57;
-var isCountSeparator = (code) => code === 32 || code === 9 || code === 10 || code === 13 || code === 44;
-function tailCountingRun(text) {
-  let pos = text.length;
-  let expected = null;
-  let count = 0;
-  let start = pos;
-  for (; ; ) {
-    let end = pos;
-    while (end > 0 && isCountSeparator(text.charCodeAt(end - 1))) end -= 1;
-    let begin = end;
-    while (begin > 0 && end - begin <= COUNT_MAX_DIGITS && isDigit(text.charCodeAt(begin - 1))) begin -= 1;
-    if (begin === end || end - begin > COUNT_MAX_DIGITS) break;
-    if (begin > 0 && !isCountSeparator(text.charCodeAt(begin - 1))) break;
-    const value = Number(text.slice(begin, end));
-    if (expected !== null && value !== expected) break;
-    count += 1;
-    start = begin;
-    pos = begin;
-    expected = value - 1;
-  }
-  if (count < COUNT_MIN_RUN) return null;
-  return { block: text.slice(start).trim(), copies: count, kept: text.slice(0, start).trimEnd() };
-}
-var LOOP_MIN_COPIES = 3;
-var LOOP_MIN_BLOCK_CHARS = 40;
-var LOOP_LONG_BLOCK_CHARS = 240;
-var LOOP_LONG_MIN_COPIES = 2;
-var LOOP_MAX_BLOCK_CHARS = 4e3;
-var minCopiesFor = (chars) => chars >= LOOP_LONG_BLOCK_CHARS ? LOOP_LONG_MIN_COPIES : LOOP_MIN_COPIES;
-var LOOP_MIN_BLOCK_WORDS = 5;
-function inOpenCodeFence(text) {
-  let fences = 0;
-  for (let i = text.indexOf("```"); i !== -1; i = text.indexOf("```", i + 3)) fences += 1;
-  return fences % 2 === 1;
-}
-function readsAsProse(block) {
-  let words3 = 0;
-  for (const word of block.split(/\s+/)) {
-    if (/\p{L}/u.test(word)) words3 += 1;
-    if (words3 >= LOOP_MIN_BLOCK_WORDS) return true;
-  }
-  return false;
-}
-function tailHasPeriod(text, p, span) {
-  const end = text.length;
-  for (let i = end - 1; i >= end - span + p; i -= 1) {
-    if (text.charCodeAt(i) !== text.charCodeAt(i - p)) return false;
-  }
-  return true;
-}
-function detectRepetitionLoop(text) {
-  const counting = tailCountingRun(text);
-  if (counting) return inOpenCodeFence(text) ? null : counting;
-  const length = text.length;
-  if (length < LOOP_MIN_COPIES * LOOP_MIN_BLOCK_CHARS) return null;
-  const maxBlock = Math.min(LOOP_MAX_BLOCK_CHARS, Math.floor(length / LOOP_LONG_MIN_COPIES));
-  for (let p = LOOP_MIN_BLOCK_CHARS; p <= maxBlock; p += 1) {
-    const copies = minCopiesFor(p);
-    if (copies * p > length || !tailHasPeriod(text, p, copies * p)) continue;
-    let start = length - copies * p;
-    while (start > 0 && text.charCodeAt(start - 1) === text.charCodeAt(start - 1 + p)) start -= 1;
-    const block = text.slice(start, start + p);
-    if (!readsAsProse(block)) continue;
-    if (inOpenCodeFence(text)) return null;
-    return { block, copies: Math.floor((length - start) / p), kept: text.slice(0, start + p) };
-  }
-  return null;
-}
-
-// ../packages/agent-loop/src/loop.ts
-var Ctx = class {
-  constructor(messages, signal) {
-    this.messages = messages;
-    this.signal = signal;
-  }
-  messages;
-  signal;
-  step = 0;
-  stepInCall = 0;
-  output = "";
-  failureStreak = 0;
-};
-var CANCELLED = /* @__PURE__ */ Symbol("cancelled");
-function raceCancel(work, signal) {
-  if (!signal) return work;
-  return new Promise((resolve, reject) => {
-    const onAbort = () => resolve(CANCELLED);
-    if (signal.aborted) onAbort();
-    else signal.addEventListener("abort", onAbort, { once: true });
-    work.then(
-      (value) => {
-        signal.removeEventListener("abort", onAbort);
-        resolve(value);
-      },
-      (error) => {
-        signal.removeEventListener("abort", onAbort);
-        reject(error);
-      }
-    );
-  });
-}
-function readOnlySpan(calls, start, isReadOnly) {
-  let end = start;
-  while (end < calls.length && isReadOnly(calls[end])) end++;
-  return end - start >= 2 ? end - start : 1;
-}
-async function runAgentLoop(args) {
-  const { codec, ports, budget: budget2, signal } = args;
-  const hooks = args.hooks ?? {};
-  const ctx = new Ctx(args.messages, signal);
-  const startStep = Math.max(0, budget2.startStep ?? 0);
-  const maxThisCall = budget2.maxSteps ?? Number.POSITIVE_INFINITY;
-  const stepCap = () => budget2.stepCap ?? Number.POSITIVE_INFINITY;
-  const failureStreakCap = budget2.failureStreakCap ?? DEFAULT_TOOL_FAILURE_STREAK;
-  ctx.step = startStep;
-  ctx.output = args.initialOutput ?? "";
-  let ok = true;
-  let finished = false;
-  let cancelled = false;
-  let failuresTripped = false;
-  let awaitingInput;
-  const isCancelled = async () => Boolean(signal?.aborted) || Boolean(await hooks.isCancelled?.(ctx));
-  for (; ctx.step < stepCap() && !finished && ctx.stepInCall < maxThisCall; ctx.step++, ctx.stepInCall++) {
-    if (await isCancelled()) {
-      cancelled = true;
-      break;
-    }
-    const before = await hooks.beforeTurn?.(ctx);
-    if (before?.action === "stop") {
-      ok = before.ok ?? false;
-      if (before.output !== void 0) ctx.output = before.output;
-      finished = before.finished ?? true;
-      break;
-    }
-    let turnResult;
-    try {
-      turnResult = await ports.complete(ctx);
-    } catch (err) {
-      if (signal?.aborted) {
-        cancelled = true;
-        break;
-      }
-      throw err;
-    }
-    if ("skip" in turnResult) continue;
-    if ("failed" in turnResult) {
-      ok = false;
-      ctx.output = turnResult.failed;
-      finished = true;
-      break;
-    }
-    let turn = turnResult;
-    const looped = turn.content ? detectRepetitionLoop(turn.content) : null;
-    if (looped) {
-      turn = { ...turn, content: looped.kept };
-      await hooks.onRepetitionLoop?.(ctx, looped);
-    }
-    if (turn.content) ctx.output = turn.content;
-    await hooks.afterTurn?.(ctx, turn);
-    if (turn.toolCalls.length === 0) {
-      const decision = await hooks.onNoToolCalls?.(ctx, turn) ?? { action: "finish" };
-      if (decision.action === "continue") continue;
-      if (decision.action === "stop") {
-        ok = decision.ok ?? false;
-        if (decision.output !== void 0) ctx.output = decision.output;
-        finished = decision.finished ?? true;
-        break;
-      }
-      if (decision.output !== void 0) ctx.output = decision.output;
-      finished = true;
-      break;
-    }
-    const calls = turn.toolCalls.map(parseToolCall);
-    const gate = await hooks.beforeToolCalls?.(ctx, turn, calls);
-    if (gate?.action === "stop") {
-      ok = gate.ok ?? true;
-      if (gate.output !== void 0) ctx.output = gate.output;
-      finished = gate.finished ?? true;
-      break;
-    }
-    ctx.messages.push(codec.assistant(turn));
-    const settle2 = async (i, call2, dispatched) => {
-      let result = dispatched;
-      if (result.control?.kind === "finish") {
-        const block = await hooks.onFinish?.(ctx, result.control.summary, call2);
-        if (typeof block === "object" && block !== null) {
-          result = { data: { ok: true, finished: false, note: block.note } };
-        } else if (block) {
-          result = { data: { ok: false, error: block }, isError: true };
-        } else {
-          finished = true;
-          if (result.control.summary) ctx.output = result.control.summary;
-        }
-      } else if (result.control?.kind === "ask_human") {
-        const answered2 = await hooks.onAskHuman?.(ctx, result.control, call2);
-        if (answered2) result = answered2;
-        else awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call2.id };
-      }
-      if (!result.control) ctx.failureStreak = result.isError ? ctx.failureStreak + 1 : 0;
-      const row = codec.tool(call2, result);
-      ctx.messages.push(row);
-      const post = await hooks.afterDispatch?.(call2, result, row, ctx);
-      if (!post?.skipRemaining) return false;
-      const skipped = { data: post.skipRemaining.data, isError: post.skipRemaining.isError ?? true };
-      for (const rest of calls.slice(i + 1)) ctx.messages.push(codec.tool(rest, skipped));
-      return true;
-    };
-    for (let i = 0; i < calls.length; ) {
-      const span = ports.isReadOnly ? readOnlySpan(calls, i, ports.isReadOnly) : 1;
-      const prepared = [];
-      for (let j = i; j < i + span; j++) {
-        let call2 = calls[j];
-        let result;
-        const pre = await hooks.beforeDispatch?.(call2, ctx);
-        if (pre && "result" in pre) result = pre.result;
-        else if (pre && "rewrite" in pre) call2 = pre.rewrite;
-        prepared.push(result ? { call: call2, result } : { call: call2 });
-        if (span > 1 && (result?.control || !result && !ports.isReadOnly(call2))) break;
-      }
-      const last = prepared[prepared.length - 1];
-      const tail = prepared.length > 1 && !last.result && !ports.isReadOnly(last.call) ? last : void 0;
-      const batch = tail ? prepared.slice(0, -1) : prepared;
-      const dispatchOne = (p) => p.result ? Promise.resolve(p.result) : raceCancel(ports.dispatch(p.call, ctx), signal);
-      const results = await Promise.all(batch.map(dispatchOne));
-      if (tail && !results.includes(CANCELLED)) results.push(await raceCancel(ports.dispatch(tail.call, ctx), signal));
-      if (results.includes(CANCELLED)) {
-        const stopped = { data: { ok: false, aborted: true, error: "stopped" }, isError: true };
-        for (const rest of calls.slice(i)) ctx.messages.push(codec.tool(rest, stopped));
-        cancelled = true;
-        break;
-      }
-      let stop = false;
-      for (let k = 0; k < prepared.length && !stop; k++) stop = await settle2(i + k, prepared[k].call, results[k]);
-      if (stop) break;
-      i += prepared.length;
-    }
-    if (cancelled) break;
-    const after = await hooks.afterToolCalls?.(ctx, finished);
-    if (after && after.finished !== void 0) finished = after.finished;
-    if (awaitingInput) break;
-    if (!finished && ctx.failureStreak >= failureStreakCap) {
-      ctx.step++;
-      ctx.stepInCall++;
-      failuresTripped = true;
-      break;
-    }
-  }
-  const exhausted = !finished && !cancelled && !awaitingInput && (failuresTripped || ctx.step >= stepCap());
-  return {
-    ok,
-    output: ctx.output,
-    finished,
-    cancelled,
-    step: ctx.step,
-    exhausted,
-    ...exhausted ? { exhaustedBy: failuresTripped ? "failures" : "steps" } : {},
-    failureStreak: ctx.failureStreak,
-    ...awaitingInput ? { awaitingInput } : {}
-  };
-}
-
-// ../packages/agent-loop/src/malformedCall.ts
-var MALFORMED_CALL_RESULT = "This tool call's arguments were not valid JSON, so it was NOT executed. Re-issue it with strictly valid JSON: no comments, no trailing commas, no unescaped newlines or quotes inside string values.";
-var TRUNCATED_CALL_RESULT = "This tool call was cut off by the output limit before its arguments were complete, so it was NOT executed. Re-issue it in your next response as ONE call with complete JSON \u2014 never several calls in one response. If the content is long, write it in parts: create it with its essential fields first, then extend it with follow-up calls.";
-function malformedCallOutcome(call2, truncated, retryHint) {
-  if (!call2.malformed) return null;
-  const base = truncated ? TRUNCATED_CALL_RESULT : MALFORMED_CALL_RESULT;
-  return { error: retryHint ? `${base} ${retryHint}` : base };
-}
-function malformedCallLabel(name, truncated) {
-  return truncated ? `${name} (cut off by the output limit)` : `${name} (unparseable arguments)`;
-}
-
-// ../packages/agent-loop/src/runNarration.ts
-var NARRATION_OPENER = new RegExp(
-  "^(?:(?:now|next|first|then|so|okay|ok|alright|actually|great|good|perfect|but|and|also|finally)[,!.]?\\s+)*(?:let me|let's|i(?:'ll| will| need to| should| want to| am going to|'m going to| think| see| can see| notice| ran)\\b|looking (?:at|back|for)\\b|checking\\b|now the\\b|that was expected\\b)",
-  "i"
-);
-
-// ../packages/agent-loop/src/turnPhase.ts
-var MID_TURN_META_KEY = "midTurn";
-function isMidTurnMetadata(metadata) {
-  let meta = metadata;
-  if (typeof meta === "string") {
-    if (!meta.includes(MID_TURN_META_KEY)) return false;
-    try {
-      meta = JSON.parse(meta);
-    } catch {
-      return false;
-    }
-  }
-  return typeof meta === "object" && meta !== null && meta[MID_TURN_META_KEY] === true;
-}
-
-// ../packages/agent-loop/src/stepRow.ts
-var STEP_RESULT_CAP = 4e3;
-function capped(value) {
-  let s;
-  try {
-    s = JSON.stringify(value ?? null);
-  } catch {
-    return String(value);
-  }
-  return s.length > STEP_RESULT_CAP ? `${s.slice(0, STEP_RESULT_CAP)}\u2026[${s.length - STEP_RESULT_CAP} more chars]` : value ?? null;
-}
-function stepRow(step) {
-  const metadata = JSON.stringify({
-    kind: "step",
-    category: step.category,
-    label: step.label,
-    args: step.args ?? null,
-    result: capped(step.result),
-    isError: step.isError ?? false,
-    // Diagnostics scalars — tiny, and the whole point of keeping the row.
-    ...step.durationMs != null ? { durationMs: step.durationMs } : {},
-    ...step.resultBytes != null ? { resultBytes: step.resultBytes } : {},
-    ...step.truncated ? { truncated: true } : {},
-    ...step.usage ? { usage: step.usage } : {},
-    ...step.finishReason != null ? { finishReason: step.finishReason } : {},
-    ...step.textChars != null ? { textChars: step.textChars } : {},
-    ...step.ttftMs != null ? { ttftMs: step.ttftMs } : {},
-    ts: step.ts
-  });
-  return { role: "tool", content: "", metadata };
-}
-
-// ../packages/agent-loop/src/taskClosedState.ts
-var TASK_CLOSED_STATUSES = ["done", "cancelled", "canceled", "completed", "archived"];
-var CLOSED = new Set(TASK_CLOSED_STATUSES);
-
-// ../packages/agent-loop/src/reasoning.ts
-var REASONING_TAG = "think(?:ing)?|thought|antthinking|scratchpad|reasoning";
-var QUICK_TAG_RE = new RegExp(`<\\s*/?\\s*(?:${REASONING_TAG}|final)\\b`, "i");
-var FINAL_TAG_RE = /<\s*\/?\s*final\b[^<>]*>/gi;
-var REASONING_TAG_RE = new RegExp(`<\\s*(/?)\\s*(?:${REASONING_TAG})\\b[^<>]*>`, "gi");
-function findCodeRegions(text) {
-  const regions = [];
-  const fencedRe = /(^|\n)(```|~~~)[^\n]*\n[\s\S]*?(?:(\n\2(?:\n|$))|$)/g;
-  for (const match of text.matchAll(fencedRe)) {
-    const lead = match[1] ?? "";
-    const start = (match.index ?? 0) + lead.length;
-    regions.push({ start, end: start + match[0].length - lead.length, unterminated: match[3] === void 0 });
-  }
-  const inlineRe = /`+(?:[^`\n]|\n(?![ \t]*\n))+`+/g;
-  for (const match of text.matchAll(inlineRe)) {
-    const start = match.index ?? 0;
-    const end = start + match[0].length;
-    const insideFenced = regions.some((r) => start >= r.start && end <= r.end);
-    if (!insideFenced) regions.push({ start, end });
-  }
-  regions.sort((a, b) => a.start - b.start);
-  return regions;
-}
-function isInsideCode(pos, regions) {
-  return regions.some((r) => pos >= r.start && pos < r.end);
-}
-function codeRegionAt(pos, regions) {
-  return regions.find((r) => pos >= r.start && pos < r.end);
-}
-function scanReasoning(text) {
-  const regions = findCodeRegions(text);
-  const spans = [];
-  let kind = "answer";
-  let start = 0;
-  let contentStart = 0;
-  REASONING_TAG_RE.lastIndex = 0;
-  for (const match of text.matchAll(REASONING_TAG_RE)) {
-    const idx = match.index ?? 0;
-    const isClose = match[1] === "/";
-    const region = codeRegionAt(idx, regions);
-    if (region) {
-      const releases = region.unterminated === true && kind === "thought" && isClose && region.start >= contentStart;
-      if (!releases) continue;
-      region.end = idx;
-    }
-    if (kind === "thought" && !isClose) continue;
-    const after = idx + match[0].length;
-    spans.push({ kind, start, contentStart, contentEnd: idx, end: isClose ? after : idx, unterminated: false });
-    kind = isClose ? "answer" : "thought";
-    start = isClose ? after : idx;
-    contentStart = after;
-  }
-  spans.push({
-    kind,
-    start,
-    contentStart,
-    contentEnd: text.length,
-    end: text.length,
-    unterminated: kind === "thought"
-  });
-  return spans;
-}
-function splitReasoningSegments(text) {
-  if (!text) return [];
-  if (!QUICK_TAG_RE.test(text)) return [{ kind: "answer", content: text }];
-  const cleaned = unwrapFinalTags(text);
-  const segments = segmentsOf(cleaned, scanReasoning(cleaned));
-  if (segments.length === 0) return [{ kind: "answer", content: text }];
-  return stitchSplitSentence(promoteSwallowedAnswer(segments));
-}
-var EMPTY_TOOL_CALL_WRAPPER = /<([a-z][\w-]*:tool_call)\b[^<>]*>\s*<\/\1>/gi;
-function segmentsOf(text, spans) {
-  const out = [];
-  for (const span of spans) {
-    const raw = text.slice(span.contentStart, span.contentEnd);
-    const content = (span.kind === "thought" ? raw.replace(EMPTY_TOOL_CALL_WRAPPER, "") : raw).trim();
-    if (content) out.push({ kind: span.kind, content });
-  }
-  return out;
-}
-function unwrapFinalTags(text) {
-  FINAL_TAG_RE.lastIndex = 0;
-  if (!FINAL_TAG_RE.test(text)) {
-    FINAL_TAG_RE.lastIndex = 0;
-    return text;
-  }
-  FINAL_TAG_RE.lastIndex = 0;
-  const regions = findCodeRegions(text);
-  const cuts = [];
-  for (const match of text.matchAll(FINAL_TAG_RE)) {
-    const start = match.index ?? 0;
-    if (!isInsideCode(start, regions)) cuts.push({ start, length: match[0].length });
-  }
-  let out = text;
-  for (let i = cuts.length - 1; i >= 0; i--) {
-    const cut = cuts[i];
-    out = out.slice(0, cut.start) + out.slice(cut.start + cut.length);
-  }
-  return out;
-}
-function stripReasoningTagsFromText(text, options) {
-  if (!text) return text;
-  if (!QUICK_TAG_RE.test(text)) return text;
-  const mode = options?.mode ?? "strict";
-  const trimMode = options?.trim ?? "both";
-  const cleaned = unwrapFinalTags(text);
-  let result = "";
-  for (const span of scanReasoning(cleaned)) {
-    if (span.kind === "answer") result += cleaned.slice(span.contentStart, span.contentEnd);
-    else if (span.unterminated && mode === "preserve") result += cleaned.slice(span.contentStart, span.contentEnd);
-  }
-  if (trimMode === "none") return result;
-  return trimMode === "start" ? result.trimStart() : result.trim();
-}
-var MAX_FRAGMENT_CHARS = 40;
-var REPLY_OPENER = /^[A-Z0-9#*\-_>`[|("']/;
-function isFragment(text) {
-  return text.length > 0 && text.length <= MAX_FRAGMENT_CHARS && !REPLY_OPENER.test(text);
-}
-function promoteSwallowedAnswer(segments) {
-  const answers = segments.filter((s) => s.kind === "answer");
-  if (answers.length === 0) return segments;
-  const answerText = answers.map((s) => s.content).join(" ").trim();
-  if (!isFragment(answerText)) return segments;
-  const thoughts = segments.filter((s) => s.kind === "thought");
-  const richest = thoughts.reduce(
-    (best, s) => !best || s.content.length > best.content.length ? s : best,
-    null
-  );
-  if (!richest || richest.content.length <= answerText.length) return segments;
-  const promoted = [{ kind: "answer", content: `${richest.content} ${answerText}`.trim() }];
-  for (const s of thoughts) if (s !== richest) promoted.unshift(s);
-  return promoted;
-}
-var UNFINISHED_TAIL = /[\p{L}\p{N},]$/u;
-var LOWERCASE_OPENER = /^\p{Ll}/u;
-function lastSentenceStart(text) {
-  let cut = text.lastIndexOf("\n") + 1;
-  for (const match of text.matchAll(/[.!?](?=\s)/g)) {
-    const after = (match.index ?? 0) + 1;
-    if (after > cut) cut = after;
-  }
-  return cut;
-}
-function stitchSplitSentence(segments) {
-  const out = [...segments];
-  for (let i = 1; i < out.length; i++) {
-    const prev = out[i - 1];
-    const cur = out[i];
-    if (prev.kind !== "thought" || cur.kind !== "answer") continue;
-    if (cur.content.length <= MAX_FRAGMENT_CHARS) continue;
-    if (!LOWERCASE_OPENER.test(cur.content) || !UNFINISHED_TAIL.test(prev.content)) continue;
-    const cut = lastSentenceStart(prev.content);
-    const head = prev.content.slice(0, cut).trim();
-    out[i] = { kind: "answer", content: `${prev.content.slice(cut).trim()} ${cur.content}` };
-    if (head) {
-      out[i - 1] = { kind: "thought", content: head };
-    } else {
-      out.splice(i - 1, 1);
-      i -= 1;
-    }
-  }
-  return out;
-}
-function answerTextOf(content) {
-  return splitReasoningSegments(content).filter((s) => s.kind === "answer").map((s) => s.content).join("\n\n").trim();
-}
-function thoughtTextOf(content) {
-  return splitReasoningSegments(content).filter((s) => s.kind === "thought").map((s) => s.content).join("\n\n").trim();
-}
-function replayTextOf(content) {
-  return answerTextOf(content) || thoughtTextOf(content);
-}
-function detailsText(details) {
-  if (!Array.isArray(details)) return "";
-  return details.map((d) => {
-    const item = d;
-    return item && (item.type === void 0 || item.type === "reasoning.text") && typeof item.text === "string" ? item.text : "";
-  }).filter(Boolean).join("\n");
-}
-function splitVendorReasoning(message) {
-  const rawContent = typeof message?.content === "string" ? message.content : "";
-  const inlineThought = thoughtTextOf(rawContent);
-  const content = inlineThought ? answerTextOf(rawContent) : rawContent;
-  const structured = [
-    typeof message?.reasoning_content === "string" ? message.reasoning_content : "",
-    typeof message?.reasoning === "string" ? message.reasoning : "",
-    detailsText(message?.reasoning_details)
-  ].map((s) => s.trim()).filter(Boolean);
-  const reasoning = [...structured, ...inlineThought ? [inlineThought] : []].join("\n\n").trim();
-  return { content, reasoning };
-}
-function canonicalReasoningText(content, reasoning) {
-  const answer2 = (content ?? "").trim();
-  const thought = (reasoning ?? "").trim();
-  if (!thought) return answer2;
-  return answer2 ? `<think>${thought}</think>
-
-${answer2}` : `<think>${thought}</think>`;
-}
-
-// ../packages/agent-loop/src/openaiCodec.ts
-function toOpenAiToolCall(call2) {
-  return { id: call2.id, type: "function", function: { name: call2.name, arguments: call2.arguments?.trim() ? call2.arguments : "{}" } };
-}
-var defaultToolRowSerializer = (result) => JSON.stringify(result.data ?? null);
-function resolveSerializer(opts) {
-  if (typeof opts === "function") return opts;
-  if (opts?.serialize) return opts.serialize;
-  const policy = opts?.toolResultPolicy;
-  if (policy) return (result, call2) => policy(call2.name, result.data ?? null);
-  return defaultToolRowSerializer;
-}
-function openAiChatCodec(serializeOrOptions) {
-  const serialize = resolveSerializer(serializeOrOptions);
-  return {
-    assistant(turn) {
-      const row = {
-        role: "assistant",
-        content: turn.content ?? "",
-        tool_calls: turn.toolCalls.map(toOpenAiToolCall)
-      };
-      return row;
-    },
-    tool(call2, result) {
-      const row = { role: "tool", tool_call_id: call2.id, content: serialize(result, call2) };
-      return row;
-    }
-  };
-}
-
-// ../packages/agent-loop/src/index.ts
-var ASK_USER_TOOL = "ask_user";
-var ASK_USER_TOOL_SPEC = {
-  type: "function",
-  function: {
-    name: ASK_USER_TOOL,
-    description: "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose \u2014 the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
-    parameters: {
-      type: "object",
-      properties: {
-        question: { type: "string", description: "The single, specific question to ask." },
-        options: {
-          type: "array",
-          description: "2\u20136 distinct, mutually-exclusive choices (unless multiSelect).",
-          items: {
-            type: "object",
-            properties: {
-              label: { type: "string", description: "Short choice text (1\u20135 words)." },
-              description: { type: "string", description: "Optional one-line explanation of this choice." }
-            },
-            required: ["label"]
-          }
-        },
-        multiSelect: { type: "boolean", description: "Allow choosing more than one option. Default false." }
-      },
-      required: ["question", "options"]
-    }
-  }
-};
-var ASK_USER_FENCE = /```ask-user\s*\n([\s\S]*?)\n```/i;
-function coerceAskUserPayload(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  const o = raw;
-  const question = typeof o.question === "string" ? o.question.trim() : "";
-  const optionsIn = Array.isArray(o.options) ? o.options : [];
-  const options = optionsIn.map((it) => {
-    if (typeof it === "string") return it.trim() ? { label: it.trim() } : null;
-    if (it && typeof it === "object") {
-      const rec = it;
-      const label = typeof rec.label === "string" ? rec.label.trim() : "";
-      const description = typeof rec.description === "string" ? rec.description.trim() : void 0;
-      return label ? { label, ...description ? { description } : {} } : null;
-    }
-    return null;
-  }).filter((x) => !!x);
-  if (!question || options.length < 2) return null;
-  return { question, options, multiSelect: o.multiSelect === true };
-}
-function serializeAskUser(payload) {
-  return ["```ask-user", JSON.stringify(payload), "```"].join("\n");
-}
-function askUserBlock(args) {
-  const payload = coerceAskUserPayload(args);
-  return payload ? serializeAskUser(payload) : null;
-}
-function parseAskUser(text) {
-  if (!text || !text.includes("ask-user")) return null;
-  const body = text.match(ASK_USER_FENCE)?.[1];
-  if (!body) return null;
-  try {
-    return coerceAskUserPayload(JSON.parse(body));
-  } catch {
-    return null;
-  }
-}
-var PROSE_LIST_ITEM = /^\s*(?:[-*•+]|\d{1,2}[.)])\s+(\S.*)$/;
-var PROSE_BOLD_LEAD = /^\s*(?:\*\*|__)([^*_\n]+?)(?:\*\*|__)\s*(.*)$/;
-var PROSE_CONTINUATION = /^\s{2,}\S/;
-var PROSE_CHOICE_CUE = /\b(?:options?|choices?|choose|pick|which|prefer|approach|alternatives?)\b|\bwhat (?:would|do|should) (?:you|we) (?:like to )?(?:do|want)\b|\bhow (?:would|do) you (?:like|want)\b/i;
-var PROSE_MAX_LABEL = 80;
-var PROSE_MAX_OPTIONS = 6;
-var plainLine = (line2) => line2.replace(/\*\*|__|`/g, "").trim();
-function proseItemKind(line2) {
-  if (PROSE_LIST_ITEM.test(line2)) return "marked";
-  const bold = line2.match(PROSE_BOLD_LEAD);
-  if (!bold) return null;
-  return !(bold[2] ?? "").trim() && plainLine(line2).endsWith(":") ? null : "bold";
-}
-var isProseItem = (line2) => proseItemKind(line2) !== null;
-function proseOption(line2) {
-  const body = line2.match(PROSE_LIST_ITEM)?.[1] ?? line2.trim();
-  const bold = body.match(PROSE_BOLD_LEAD);
-  let label;
-  let rest;
-  if (bold) {
-    label = bold[1] ?? "";
-    rest = bold[2] ?? "";
-  } else {
-    const sep = body.match(/\s+[—–-]\s+|:\s+/);
-    label = sep?.index !== void 0 ? body.slice(0, sep.index) : body;
-    rest = sep?.index !== void 0 ? body.slice(sep.index + sep[0].length) : "";
-  }
-  label = plainLine(label).replace(/[:.]$/, "").trim();
-  const description = plainLine(rest).replace(/^[\s—–:-]+/, "").trim();
-  if (!label || label.length > PROSE_MAX_LABEL) return null;
-  return description ? { label, description } : { label };
-}
-function proseOptions(lines) {
-  const options = [];
-  for (const line2 of lines) {
-    if (!line2.trim()) continue;
-    if (isProseItem(line2)) {
-      const option = proseOption(line2);
-      if (!option) return null;
-      options.push(option);
-      continue;
-    }
-    const last = options[options.length - 1];
-    if (!last || !PROSE_CONTINUATION.test(line2)) return null;
-    const more = plainLine(line2);
-    last.description = last.description ? `${last.description} ${more}` : more;
-  }
-  return options.length >= 2 && options.length <= PROSE_MAX_OPTIONS ? options : null;
-}
-function itemBlockStart(lines, end) {
-  let kind = null;
-  let i = end;
-  while (i >= 0) {
-    const line2 = lines[i] ?? "";
-    const k = proseItemKind(line2);
-    if (k) {
-      if (kind && k !== kind) break;
-      kind = k;
-      i--;
-    } else if (!line2.trim() || PROSE_CONTINUATION.test(line2)) i--;
-    else break;
-  }
-  let start = i + 1;
-  while (start <= end && !(lines[start] ?? "").trim()) start++;
-  return start;
-}
-function lineAbove(lines, index) {
-  let i = index - 1;
-  while (i >= 0 && !(lines[i] ?? "").trim()) i--;
-  return i;
-}
-var isQuestionLine = (line2) => !!line2 && !isProseItem(line2) && plainLine(line2).endsWith("?");
-var isHeaderLine = (line2) => !!line2 && !isProseItem(line2) && plainLine(line2).endsWith(":") && plainLine(line2).length <= 60;
-function liftProseAskUser(text) {
-  if (!text || ASK_USER_FENCE.test(text)) return text;
-  const lines = text.replace(/\r\n/g, "\n").split("\n");
-  let end = lines.length - 1;
-  while (end >= 0 && !(lines[end] ?? "").trim()) end--;
-  if (end < 1) return text;
-  let question;
-  let leadEnd;
-  let itemStart;
-  let itemEnd;
-  if (isQuestionLine(lines[end])) {
-    question = lines[end] ?? "";
-    itemEnd = end - 1;
-    itemStart = itemBlockStart(lines, itemEnd);
-    const above = lineAbove(lines, itemStart);
-    leadEnd = isHeaderLine(lines[above]) ? above : itemStart;
-  } else {
-    itemEnd = end;
-    itemStart = itemBlockStart(lines, itemEnd);
-    const above = lineAbove(lines, itemStart);
-    if (!isQuestionLine(lines[above])) return text;
-    question = lines[above] ?? "";
-    leadEnd = above;
-  }
-  if (itemStart > itemEnd) return text;
-  const cue = `${leadEnd < itemStart ? lines[leadEnd] ?? "" : ""} ${question}`;
-  if (!PROSE_CHOICE_CUE.test(cue)) return text;
-  const options = proseOptions(lines.slice(itemStart, itemEnd + 1));
-  if (!options) return text;
-  const payload = coerceAskUserPayload({ question: plainLine(question), options });
-  if (!payload) return text;
-  const lead = lines.slice(0, leadEnd).join("\n").trim();
-  const block = serializeAskUser(payload);
-  return lead ? `${lead}
-
-${block}` : block;
-}
-function stripAskUser(text) {
-  if (!text) return text;
-  return text.replace(ASK_USER_FENCE, "").replace(/\n{3,}/g, "\n\n").trim();
-}
-function askUserAnchorId(messageId) {
-  return `bf-ask-${messageId}`;
-}
-function selectPendingAskUser(messages) {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if (!msg) continue;
-    if (msg.role === "user") return null;
-    if (msg.role !== "assistant") continue;
-    const payload = parseAskUser(msg.content);
-    if (payload) return { payload, messageId: msg.id };
-  }
-  return null;
-}
-
-// src/steerMetadata.ts
-function steerMetadata(steer) {
-  const attachments = steer.attachments ?? [];
-  return JSON.stringify({ [MID_TURN_META_KEY]: true, ...attachments.length > 0 ? { attachments } : {} });
-}
-
-// src/pendingWords.ts
-var TTL_MS = 7 * 24 * 60 * 60 * 1e3;
-var PER_CHAT_CAP = 50;
-var START_GRACE_MS = 5e3;
-var BEAT_MS = 4e3;
-var BEAT_DEAD_MS = 15e3;
-var REPLAY_BUDGET_MS = 2e4;
-var SAVE_MS = 8e3;
-var SESSION = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Math.random());
-var PREFIX = "bf:pendingWords:";
-var BEAT_PREFIX = "bf:pendingBeat:";
-var lockName = (session) => `${PREFIX}session:${session}`;
-var owner = null;
-var startupPersistence = null;
-function setPendingWordsOwner(who) {
-  const next = who ? `${who.tenant}:${who.user}` : null;
-  const changed = next !== owner;
-  owner = next;
-  if (changed && owner && startupPersistence) void replayAllPendingWords(startupPersistence);
-}
-function registerPendingWordsReplay(persistence) {
-  startupPersistence = persistence;
-  if (persistence && owner) void replayAllPendingWords(persistence);
-}
-var keyOf = (chatId) => owner ? `${PREFIX}${owner}:${chatId}` : null;
-function onStorage(use, fallback) {
-  try {
-    return typeof localStorage === "undefined" ? fallback : use(localStorage);
-  } catch {
-    return fallback;
-  }
-}
-var keysStarting = (prefix) => onStorage((store) => {
-  const found = [];
-  for (let i = 0; i < store.length; i += 1) {
-    const key = store.key(i);
-    if (key?.startsWith(prefix)) found.push(key);
-  }
-  return found;
-}, []);
-function parse(raw) {
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return null;
-    return parsed.filter((p) => typeof p?.eventKey === "string" && typeof p?.text === "string");
-  } catch {
-    return null;
-  }
-}
-function read(key) {
-  const got = onStorage((store) => ({ raw: store.getItem(key) }), null);
-  if (!got) return null;
-  const raw = got.raw;
-  if (!raw) return [];
-  const list3 = parse(raw);
-  if (!list3) {
-    onStorage((store) => store.removeItem(key), void 0);
-    return [];
-  }
-  const now = Date.now();
-  const live2 = list3.filter((p) => typeof p.at !== "number" || now - p.at < TTL_MS);
-  if (live2.length !== list3.length) write(key, live2);
-  return live2;
-}
-function write(key, list3) {
-  return onStorage((store) => {
-    if (list3.length === 0) store.removeItem(key);
-    else store.setItem(key, JSON.stringify(list3));
-    return true;
-  }, false);
-}
-var holding = false;
-function holdSession() {
-  if (holding) return;
-  holding = true;
-  const locks = typeof navigator !== "undefined" ? navigator.locks : void 0;
-  if (locks?.request) {
-    void locks.request(lockName(SESSION), () => new Promise(() => void 0)).catch((e) => {
-      reportPendingWordsFailure("hold_session", e);
-      beatWhileAlive();
-    });
-    return;
-  }
-  beatWhileAlive();
-}
-function beatWhileAlive() {
-  const beat = () => onStorage((store) => store.setItem(`${BEAT_PREFIX}${SESSION}`, String(Date.now())), void 0);
-  beat();
-  const timer = setInterval(beat, BEAT_MS);
-  timer.unref?.();
-}
-async function sessionAlive(session) {
-  if (session === SESSION) return true;
-  const locks = typeof navigator !== "undefined" ? navigator.locks : void 0;
-  if (locks?.query) {
-    const held = await locks.query().then((state) => state.held ?? [], () => null);
-    if (held) return held.some((lock) => lock.name === lockName(session));
-  }
-  const beat = Number(onStorage((store) => store.getItem(`${BEAT_PREFIX}${session}`), null));
-  return Number.isFinite(beat) && beat > 0 && Date.now() - beat < BEAT_DEAD_MS;
-}
-function rememberPendingWords(chatId, eventKey, text) {
-  const key = keyOf(chatId);
-  const body = text.trim();
-  if (!key || !body) return false;
-  holdSession();
-  const list3 = read(key);
-  if (!list3) return false;
-  if (list3.some((p) => p.eventKey === eventKey)) return true;
-  return write(key, [...list3, { eventKey, text: body, session: SESSION, at: Date.now() }].slice(-PER_CHAT_CAP));
-}
-function forgetPendingWords(chatId, eventKeys) {
-  const key = keyOf(chatId);
-  const gone = new Set(eventKeys.filter((k) => !!k));
-  if (!key || gone.size === 0) return;
-  const list3 = read(key);
-  if (!list3) return;
-  const rest = list3.filter((p) => !gone.has(p.eventKey));
-  if (rest.length !== list3.length) write(key, rest);
-}
-function markPendingWordsRead(chatId, eventKeys) {
-  const key = keyOf(chatId);
-  const drained = new Set(eventKeys.filter((k) => !!k));
-  if (!key || drained.size === 0) return;
-  const list3 = read(key);
-  if (!list3 || !list3.some((p) => drained.has(p.eventKey) && !p.read)) return;
-  write(key, list3.map((p) => drained.has(p.eventKey) ? { ...p, read: true } : p));
-}
-function clearPendingWords() {
-  onStorage((store) => {
-    for (const key of [...keysStarting(PREFIX), ...keysStarting(BEAT_PREFIX)]) store.removeItem(key);
-  }, void 0);
-  owner = null;
-}
-function permanentRefusal(e) {
-  const status2 = e?.status;
-  return typeof status2 === "number" && status2 >= 400 && status2 < 500 && status2 !== 401 && status2 !== 408 && status2 !== 429;
-}
-async function replayOne(chatId, key, persistence) {
-  const end = Date.now() + REPLAY_BUDGET_MS;
-  let saved = 0;
-  const dead = [];
-  for (const word of read(key) ?? []) {
-    if (word.session === SESSION || Date.now() - word.at < START_GRACE_MS) continue;
-    if (await sessionAlive(word.session)) continue;
-    dead.push(word);
-  }
-  for (const word of dead) {
-    const left = end - Date.now();
-    if (left <= 0) break;
-    try {
-      const row = { role: "user", content: word.text, ...word.read ? { metadata: steerMetadata({}) } : {}, eventKey: word.eventKey };
-      await bounded(Math.min(SAVE_MS, left), persistence.sendMessages(chatId, [row]));
-      forgetPendingWords(chatId, [word.eventKey]);
-      saved += 1;
-    } catch (e) {
-      if (permanentRefusal(e)) forgetPendingWords(chatId, [word.eventKey]);
-    }
-  }
-  return saved;
-}
-var replaying = /* @__PURE__ */ new Map();
-function replayPendingWords(chatId, persistence) {
-  const key = keyOf(chatId);
-  if (!key) return Promise.resolve(0);
-  const running = replaying.get(key);
-  if (running) return running;
-  const replay = replayOne(chatId, key, persistence).catch((e) => {
-    reportPendingWordsFailure("replay", e);
-    return 0;
-  }).finally(() => replaying.delete(key));
-  replaying.set(key, replay);
-  return replay;
-}
-async function replayAllPendingWords(persistence) {
-  if (!owner) return 0;
-  const prefix = `${PREFIX}${owner}:`;
-  let saved = 0;
-  for (const key of keysStarting(prefix)) {
-    const chatId = Number(key.slice(prefix.length));
-    if (Number.isInteger(chatId)) saved += await replayPendingWords(chatId, persistence);
-  }
-  return saved;
-}
 
 // src/xmlToolCalls.ts
 var isSelfClosing = (dialect) => "closeAt" in dialect;
@@ -1546,9 +564,9 @@ var StreamIdleError = class extends Error {
 };
 async function readWithIdleWatchdog(reader, opts = {}) {
   const idleMs = opts.idleMs ?? STREAM_IDLE_MS;
-  const read2 = reader.read();
-  if (!Number.isFinite(idleMs) || idleMs <= 0) return read2;
-  read2.catch(() => void 0);
+  const read = reader.read();
+  if (!Number.isFinite(idleMs) || idleMs <= 0) return read;
+  read.catch(() => void 0);
   let timer;
   const idle = new Promise((_resolve, reject) => {
     timer = setTimeout(() => {
@@ -1565,7 +583,7 @@ async function readWithIdleWatchdog(reader, opts = {}) {
     }, idleMs);
   });
   try {
-    return await Promise.race([read2, idle]);
+    return await Promise.race([read, idle]);
   } finally {
     if (timer !== void 0) clearTimeout(timer);
   }
@@ -5198,7 +4216,7 @@ async function boundServerId(tx, clientId, destination) {
 function createLocalChatIdentity(options) {
   const { store, deviceId, port } = options;
   const inFlight = /* @__PURE__ */ new Map();
-  const read2 = (localId) => store.read(async (tx) => {
+  const read = (localId) => store.read(async (tx) => {
     const chat = await chatRecordById(tx, deviceId, localId);
     return chat ? { chat, serverId: await boundServerId(tx, chat.id, port.destination()) } : void 0;
   });
@@ -5212,7 +4230,7 @@ function createLocalChatIdentity(options) {
     });
   };
   const bindOnce = async (localId) => {
-    const found = await read2(localId);
+    const found = await read(localId);
     if (!found) return void 0;
     if (found.serverId !== void 0) return found.serverId;
     const destination = port.destination();
@@ -5221,11 +4239,11 @@ function createLocalChatIdentity(options) {
     const serverId = await port.createServerChat({ title: chat.title, projectId: chat.projectId ?? null });
     if (serverId == null) return void 0;
     await map(found.chat.id, destination, serverId);
-    return (await read2(localId))?.serverId;
+    return (await read(localId))?.serverId;
   };
   return {
-    serverIdFor: async (localId) => (await read2(localId))?.serverId,
-    clientIdFor: async (localId) => (await read2(localId))?.chat.id,
+    serverIdFor: async (localId) => (await read(localId))?.serverId,
+    clientIdFor: async (localId) => (await read(localId))?.chat.id,
     localIdFor: (serverId) => store.read(async (tx) => {
       const destination = port.destination();
       for (const chat of await liveRecords(tx, "chat", deviceId)) {
@@ -5242,7 +4260,7 @@ function createLocalChatIdentity(options) {
     },
     async adopt(localId, serverId) {
       const destination = port.destination();
-      const found = await read2(localId);
+      const found = await read(localId);
       if (!found || !destination || destination.kind !== "bound") return false;
       await map(found.chat.id, destination, serverId);
       return true;
@@ -7268,7 +6286,8 @@ var CLIENT_ENTRY_POINTS = ALL_ENTRY_POINTS.filter(
 );
 
 // ../packages/learned-routing/src/rateLimitFailure.ts
-var AVAILABILITY = /\b429\b|\b529\b|rate.?limit|too many requests|over ?capacity|capacity limit|overloaded|resource.?exhausted|\bin cooldown\b|cooldown or unavailable/i;
+var AVAILABILITY = /\b429\b|\b529\b|rate.?limit|too many requests|over ?capacity|capacity limit|overloaded|resource has been exhausted|\bin cooldown\b|cooldown or unavailable/i;
+var GRPC_RESOURCE_EXHAUSTED = /\bRESOURCE_EXHAUSTED\b/;
 var AVAILABILITY_STATUSES = /* @__PURE__ */ new Set([429, 529]);
 var TENANT_BUDGET_CODES = [
   "agent_host_token_limit_exceeded",
@@ -7296,7 +6315,7 @@ function isTenantBudgetFailure(message) {
 }
 function isRateLimitFailure(message, status2) {
   if (isTenantBudgetFailure(message)) return false;
-  return status2 != null && AVAILABILITY_STATUSES.has(status2) || !!message && AVAILABILITY.test(message);
+  return status2 != null && AVAILABILITY_STATUSES.has(status2) || !!message && (AVAILABILITY.test(message) || GRPC_RESOURCE_EXHAUSTED.test(message));
 }
 
 // ../packages/workload/src/actionClassifier.ts
@@ -8047,18 +7066,18 @@ function readFileKey(path2, file, key) {
   if (file.truncated === true) {
     return { ok: false, path: path2, key, error: "the file is too large to load whole, so `key` cannot be used \u2014 page it with offset/limit" };
   }
-  const read2 = readJsonKey(file.content ?? "", key);
-  if (!read2.ok) return { path: path2, key, ...read2 };
-  if ("tooLarge" in read2) {
+  const read = readJsonKey(file.content ?? "", key);
+  if (!read.ok) return { path: path2, key, ...read };
+  if ("tooLarge" in read) {
     return {
       ok: true,
       path: path2,
-      key: read2.key,
-      childKeys: read2.childKeys,
-      note: `"${read2.key}" is ${read2.size} characters \u2014 too large to return whole. Read one of its childKeys, e.g. key "${read2.key}.${read2.childKeys[0] ?? "\u2026"}".`
+      key: read.key,
+      childKeys: read.childKeys,
+      note: `"${read.key}" is ${read.size} characters \u2014 too large to return whole. Read one of its childKeys, e.g. key "${read.key}.${read.childKeys[0] ?? "\u2026"}".`
     };
   }
-  return { ok: true, path: path2, key: read2.key, content: read2.content };
+  return { ok: true, path: path2, key: read.key, content: read.content };
 }
 var isMarkdown = (path2) => /\.mdx?$/i.test(path2);
 async function readOneFile(path2, opts, caps) {
@@ -8867,10 +7886,10 @@ var readCompressedTool = defineTool({
     }
     const semantic = ctx.caps.semantic;
     if (!semantic?.compress) return { data: { ok: false, path: path2, error: "Compression is not available on this surface right now \u2014 use read_file." } };
-    const read2 = await ctx.caps.repoRead.readFile(path2);
-    if (!read2.ok || typeof read2.content !== "string") return { data: read2 };
+    const read = await ctx.caps.repoRead.readFile(path2);
+    if (!read.ok || typeof read.content !== "string") return { data: read };
     const rate = typeof args.rate === "number" && Number.isFinite(args.rate) ? Math.min(RATE_MAX, Math.max(RATE_MIN, args.rate)) : void 0;
-    const r = await compressProse(read2.content, kind, {
+    const r = await compressProse(read.content, kind, {
       compress: (t, k) => semantic.compress(t, k),
       minChars: READ_COMPRESSED_MIN_CHARS,
       ...rate !== void 0 ? { rate } : {}
@@ -8881,9 +7900,9 @@ var readCompressedTool = defineTool({
       data.keptTokens = r.keptTokens;
       data.note = "Compressed for reading \u2014 do not quote it as the file's exact text; read_file before editing.";
     } else {
-      data.note = read2.content.length < READ_COMPRESSED_MIN_CHARS ? "Short enough to read as-is \u2014 returned uncompressed." : "Compression did not shorten this text \u2014 returned as-is.";
+      data.note = read.content.length < READ_COMPRESSED_MIN_CHARS ? "Short enough to read as-is \u2014 returned uncompressed." : "Compression did not shorten this text \u2014 returned as-is.";
     }
-    if (read2.truncated) data.truncated = true;
+    if (read.truncated) data.truncated = true;
     if (r.compressed) ctx.emit?.({ level: "debug", message: "read_compressed: compressed (C8)", detail: { originalTokens: r.originalTokens, keptTokens: r.keptTokens } });
     return { data };
   }
@@ -9534,15 +8553,15 @@ var NOT_FOUND = /not found|no such file|enoent|does not exist|404\b/i;
 function isNotFoundReadError(error) {
   return !!error && NOT_FOUND.test(error);
 }
-function probeFromRepoRead(read2) {
-  if (!read2.ok) {
-    if (isNotFoundReadError(read2.error)) return { status: "missing" };
-    return { status: "unreadable", reason: read2.error?.trim() || "read failed" };
+function probeFromRepoRead(read) {
+  if (!read.ok) {
+    if (isNotFoundReadError(read.error)) return { status: "missing" };
+    return { status: "unreadable", reason: read.error?.trim() || "read failed" };
   }
-  const content = read2.content ?? "";
-  if (read2.truncated) {
+  const content = read.content ?? "";
+  if (read.truncated) {
     const contentLines = content === "" ? 0 : content.split(/\r?\n/).length;
-    const totalLines = typeof read2.totalLines === "number" && Number.isFinite(read2.totalLines) ? read2.totalLines : null;
+    const totalLines = typeof read.totalLines === "number" && Number.isFinite(read.totalLines) ? read.totalLines : null;
     if (totalLines != null && contentLines > 0) {
       const windowBytes = utf8ByteLength(content);
       return { status: "ok", bytes: Math.round(windowBytes * (totalLines / contentLines)), truncated: true };
@@ -9553,7 +8572,7 @@ function probeFromRepoRead(read2) {
     };
   }
   if (content === "") {
-    if (read2.totalLines === 0) return { status: "ok", bytes: 0 };
+    if (read.totalLines === 0) return { status: "ok", bytes: 0 };
     return {
       status: "unreadable",
       reason: "read returned empty contents; refusing to treat that as an empty file"
@@ -12663,8 +11682,8 @@ var ReadCoverage = class _ReadCoverage {
       });
       return;
     }
-    const read2 = this.exact.get(_ReadCoverage.exactKey(tool, args));
-    if (read2) read2.cached = cached2;
+    const read = this.exact.get(_ReadCoverage.exactKey(tool, args));
+    if (read) read.cached = cached2;
   }
   /** The cached result of an exact earlier read, or null when none is held. */
   cachedResult(tool, args) {
@@ -12714,14 +11733,14 @@ var ReadCoverage = class _ReadCoverage {
       const target = t.activityTarget(args);
       if (!target) return;
       this.visits.forget((key) => this.visitedScopeIs(key.slice(key.indexOf(":") + 1), target));
-      for (const [key, read2] of [...this.exact.entries()]) {
-        if (this.visitedScopeIs(read2.target, target) || TREE_WIDE_READ_TOOLS.has(read2.tool)) this.exact.delete(key);
+      for (const [key, read] of [...this.exact.entries()]) {
+        if (this.visitedScopeIs(read.target, target) || TREE_WIDE_READ_TOOLS.has(read.tool)) this.exact.delete(key);
       }
       return;
     }
     if (t.isLocalWorkspaceTool(tool) && !t.isRepoPublishTool(tool)) return;
-    for (const [key, read2] of [...this.exact.entries()]) {
-      if (!t.isLocalWorkspaceTool(read2.tool) || t.isRepoStateReadTool(read2.tool)) this.exact.delete(key);
+    for (const [key, read] of [...this.exact.entries()]) {
+      if (!t.isLocalWorkspaceTool(read.tool) || t.isRepoStateReadTool(read.tool)) this.exact.delete(key);
     }
   }
   /**
@@ -12736,12 +11755,12 @@ var ReadCoverage = class _ReadCoverage {
     if (!path2) return null;
     if (typeof wanted.key === "string") return null;
     const want = requestedReadWindow(wanted);
-    for (const read2 of this.exact.values()) {
-      if (read2.tool !== "read_file" || !read2.cached) continue;
-      if (typeof read2.args.key === "string") continue;
-      const earlierPath = typeof read2.args.path === "string" ? read2.args.path : "";
+    for (const read of this.exact.values()) {
+      if (read.tool !== "read_file" || !read.cached) continue;
+      if (typeof read.args.key === "string") continue;
+      const earlierPath = typeof read.args.path === "string" ? read.args.path : "";
       if (earlierPath !== path2) continue;
-      const served = servedCopy(read2.cached);
+      const served = servedCopy(read.cached);
       const got = servedReadWindow(served);
       if (!got) continue;
       const clipped = clipRequestedToEof(want, served);
@@ -12750,7 +11769,7 @@ var ReadCoverage = class _ReadCoverage {
       return {
         start: clipped.start,
         end: clipped.end,
-        cached: read2.cached,
+        cached: read.cached,
         note: `Lines ${clipped.start}\u2013${clipped.end} of this file were already returned by an earlier read_file (lines ${got.start}\u2013${got.end}). Reuse that result; if you need later lines, page forward with offset ${got.end + 1}. Do not re-open a window you already have.`
       };
     }
@@ -12769,13 +11788,13 @@ var ReadCoverage = class _ReadCoverage {
     if (!scope) return null;
     const { path: _scope, ...rest } = wanted;
     const others = stableStringify(rest);
-    for (const read2 of this.exact.values()) {
-      if (read2.tool !== "search_code" || !read2.cached) continue;
-      const { path: earlierPath, ...earlierRest } = read2.args;
+    for (const read of this.exact.values()) {
+      if (read.tool !== "search_code" || !read.cached) continue;
+      const { path: earlierPath, ...earlierRest } = read.args;
       const earlier = typeof earlierPath === "string" ? earlierPath : "";
       if (earlier === scope || !isUnderDir(scope, earlier)) continue;
       if (stableStringify(earlierRest) !== others) continue;
-      const result = resultObject(read2.cached.result);
+      const result = resultObject(read.cached.result);
       if (!result || result.ok !== true || result.truncated === true || !Array.isArray(result.matches)) continue;
       const matches = result.matches.filter(
         (m) => typeof m.path === "string" && isUnderDir(m.path, scope)
@@ -12866,22 +11885,22 @@ function parseShellFileRead(command) {
   return { path: dir ? `${dir}/${file}` : file, ...lines };
 }
 function shellReadAsFileRead(command, stdout) {
-  const read2 = parseShellFileRead(command);
-  if (!read2) return null;
+  const read = parseShellFileRead(command);
+  if (!read) return null;
   const body = stdout.replace(/\r?\n$/, "");
   if (!body) return null;
   const printed = body.split("\n").length;
-  const whole = (from) => ({ ok: true, path: read2.path, content: body, offset: from, totalLines: from + printed - 1, truncated: false });
-  if (read2.from === void 0) {
-    return read2.count !== void 0 && printed < read2.count ? { args: { path: read2.path }, result: whole(1) } : null;
+  const whole = (from) => ({ ok: true, path: read.path, content: body, offset: from, totalLines: from + printed - 1, truncated: false });
+  if (read.from === void 0) {
+    return read.count !== void 0 && printed < read.count ? { args: { path: read.path }, result: whole(1) } : null;
   }
-  if (read2.count === void 0) {
-    return { args: read2.from > 1 ? { path: read2.path, offset: read2.from } : { path: read2.path }, result: whole(read2.from) };
+  if (read.count === void 0) {
+    return { args: read.from > 1 ? { path: read.path, offset: read.from } : { path: read.path }, result: whole(read.from) };
   }
-  if (printed > read2.count) return null;
-  const args = { path: read2.path, offset: read2.from, limit: read2.count };
-  if (printed < read2.count) return { args, result: whole(read2.from) };
-  return { args, result: { ok: true, path: read2.path, content: body, offset: read2.from, truncated: true } };
+  if (printed > read.count) return null;
+  const args = { path: read.path, offset: read.from, limit: read.count };
+  if (printed < read.count) return { args, result: whole(read.from) };
+  return { args, result: { ok: true, path: read.path, content: body, offset: read.from, truncated: true } };
 }
 
 // ../packages/run-guards/src/readOnlyShell.ts
@@ -13160,10 +12179,10 @@ function shellPrintAsRead(tool, args, out, servedWhole) {
   return print ? shellReadAsFileRead(print.command, print.stdout) : null;
 }
 function recordShellFileRead(coverage, tool, args, out, servedWhole, anchor) {
-  const read2 = shellPrintAsRead(tool, args, out, servedWhole);
-  if (!read2) return false;
-  coverage.record("read_file", read2.args);
-  coverage.cacheResult("read_file", read2.args, { result: read2.result, anchor });
+  const read = shellPrintAsRead(tool, args, out, servedWhole);
+  if (!read) return false;
+  coverage.record("read_file", read.args);
+  coverage.cacheResult("read_file", read.args, { result: read.result, anchor });
   return true;
 }
 
@@ -13221,8 +12240,8 @@ var WriteLedger = class {
   /** Is this call a full-content write identical to the last one that landed on its
    *  path, with nothing touching that path since? */
   isRepeat(tool, args) {
-    const write2 = contentWriteOf(tool, args);
-    return !!write2 && this.written.get(write2.path) === write2.fingerprint;
+    const write = contentWriteOf(tool, args);
+    return !!write && this.written.get(write.path) === write.fingerprint;
   }
   /**
    * A non-read call ran. A successful full-content write is remembered; anything else
@@ -13234,9 +12253,9 @@ var WriteLedger = class {
       this.written.clear();
       return;
     }
-    const write2 = options.ok ? contentWriteOf(tool, args) : null;
-    if (write2) {
-      this.written.set(write2.path, write2.fingerprint);
+    const write = options.ok ? contentWriteOf(tool, args) : null;
+    if (write) {
+      this.written.set(write.path, write.fingerprint);
       return;
     }
     const path2 = pathArgOf(args);
@@ -15392,12 +14411,12 @@ function foldVerifyOutcomes(outcomes) {
   }
   return { ok: errors.length === 0, checked, skipped, errors };
 }
-async function verifyWrittenFiles(read2, paths) {
+async function verifyWrittenFiles(read, paths) {
   const list3 = [...paths];
   const outcomes = await Promise.all(
     list3.map(async (path2) => {
       if (!isVerifiablePath(path2)) return { path: path2, kind: "skipped" };
-      const content = await read2(path2).catch(() => null);
+      const content = await read(path2).catch(() => null);
       if (content === null) return { path: path2, kind: "skipped" };
       return { path: path2, ...checkFileContent(path2, content) };
     })
@@ -15909,10 +14928,10 @@ function verifyAfterEdit(call2, data, opts = {}) {
     const result = foldVerifyOutcomes([{ path: path2, ...checkFileContent(path2, content) }]);
     return result.checked.length || result.errors.length ? result : null;
   }
-  const read2 = opts.read;
-  if (!read2) return null;
+  const read = opts.read;
+  if (!read) return null;
   return (async () => {
-    const committed = await read2(path2).catch(() => null);
+    const committed = await read(path2).catch(() => null);
     if (committed === null) return null;
     const result = foldVerifyOutcomes([{ path: path2, ...checkFileContent(path2, committed) }]);
     return result.checked.length || result.errors.length ? result : null;
@@ -16823,84 +15842,155 @@ import { volatileTail as volatileTail2 } from "@seanhogg/builderforce-memory/han
 var CORE_REGISTRY = buildCoreToolRegistry();
 for (const tool of [...SKILL_TOOLS, ...SUBAGENT_TOOLS]) CORE_REGISTRY.register(tool);
 
-// src/runSteering.ts
-function queueRunSteering2(runKey, text, opts) {
-  const queued = queueRunSteering(runKey, text, opts);
-  if (queued?.persist && queued.eventKey) rememberPendingWords(runKey, queued.eventKey, queued.text);
+// src/directedMessage.ts
+var ADDRESSED_TO_META_KEY = "addressedTo";
+var AUTHORED_BY_META_KEY = "authoredBy";
+function asRecipient(value) {
+  const a = value;
+  if (a && typeof a.ref === "string" && typeof a.name === "string" && (a.kind === "agent" || a.kind === "human")) {
+    return { kind: a.kind, ref: a.ref, name: a.name };
+  }
+  return null;
 }
-function requeueRunSteering2(runKey, steers) {
-  requeueRunSteering(runKey, steers);
+function parseMessageAuthor(msg) {
+  if (!msg.metadata) return null;
+  try {
+    return asRecipient(JSON.parse(msg.metadata).authoredBy);
+  } catch {
+  }
+  return null;
 }
-function drainRunSteering2(runKey) {
-  return drainRunSteering(runKey);
+function withDirectedMetadata(recipient, base) {
+  const meta = { ...base ?? {} };
+  const list3 = recipient == null ? [] : "kind" in recipient ? [recipient] : recipient;
+  if (list3.length === 1) meta[ADDRESSED_TO_META_KEY] = list3[0];
+  else if (list3.length > 1) meta[ADDRESSED_TO_META_KEY] = { kind: "group", members: [...list3] };
+  return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
 }
-function steerModelContent(msg) {
-  const imageAtts = (msg.attachments ?? []).filter((a) => a.imageUrl);
-  if (imageAtts.length === 0) return msg.text;
-  return [
-    { type: "text", text: msg.text },
-    ...imageAtts.map((a) => ({ type: "image_url", image_url: { url: a.imageUrl } }))
-  ];
+function parseDirectedRecipients(msg) {
+  if (!msg.metadata) return [];
+  try {
+    const a = JSON.parse(msg.metadata).addressedTo;
+    if (!a || typeof a !== "object") return [];
+    if (a.kind !== "group") {
+      const one = asRecipient(a);
+      return one ? [one] : [];
+    }
+    if (Array.isArray(a.members)) {
+      return a.members.map(asRecipient).filter((r) => r !== null);
+    }
+    if (Array.isArray(a.refs)) {
+      return a.refs.filter((ref) => typeof ref === "string" && ref.length > 0).map((ref) => ({ kind: "agent", ref, name: ref }));
+    }
+  } catch {
+  }
+  return [];
+}
+function isDirectedToParticipant(msg) {
+  return parseDirectedRecipients(msg).length > 0;
+}
+function directedAgentRecipients(recipient) {
+  if (recipient == null) return [];
+  const one = recipient;
+  const list3 = Array.isArray(recipient) ? recipient : one.kind === "group" ? one.members ?? [] : [one];
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const r of list3) {
+    if (!r || typeof r.ref !== "string" || !r.ref || r.kind === "human") continue;
+    if (seen.has(r.ref)) continue;
+    seen.add(r.ref);
+    out.push({ kind: "agent", ref: r.ref, name: typeof r.name === "string" && r.name ? r.name : r.ref });
+  }
+  return out;
+}
+function activeMentionToken(text, caret) {
+  const at2 = text.lastIndexOf("@", Math.max(0, caret - 1));
+  if (at2 < 0 || at2 >= caret) return null;
+  if (at2 > 0 && !/\s/.test(text[at2 - 1])) return null;
+  const query = text.slice(at2 + 1, caret);
+  if (/[\s@]/.test(query)) return null;
+  return { query, start: at2, end: caret };
+}
+function filterMentionCandidates(participants, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return participants;
+  return participants.map((p) => ({ p, idx: p.name.toLowerCase().indexOf(q) })).filter((s) => s.idx >= 0).sort((a, b) => a.idx - b.idx || a.p.name.localeCompare(b.p.name)).map((s) => s.p);
+}
+function mentionRecipient(text, participants) {
+  const m = /^\s*@([^\s@]+)/.exec(text);
+  if (!m) return null;
+  const tag = m[1].toLowerCase();
+  return participants.find((p) => {
+    const name = p.name.toLowerCase();
+    return name === tag || name.split(/\s+/)[0] === tag || name.startsWith(tag);
+  }) ?? null;
+}
+function resolveRecipient(choice, mention) {
+  if (choice === "brain") return null;
+  return choice ?? mention;
+}
+var activeHashtagToken = activeTicketToken;
+function activeTicketToken(text, caret) {
+  const hash2 = text.lastIndexOf("#", Math.max(0, caret - 1));
+  if (hash2 < 0 || hash2 >= caret) return null;
+  if (hash2 > 0 && !/\s/.test(text[hash2 - 1])) return null;
+  const query = text.slice(hash2 + 1, caret);
+  if (/[\s#]/.test(query)) return null;
+  return { query, start: hash2, end: caret };
+}
+function filterTicketCandidates(tickets, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return tickets;
+  return tickets.map((t) => {
+    const titleIdx = t.title.toLowerCase().indexOf(q);
+    const keyIdx = t.key?.toLowerCase().indexOf(q) ?? -1;
+    const idx = titleIdx >= 0 ? titleIdx : keyIdx;
+    return { t, idx };
+  }).filter((s) => s.idx >= 0).sort((a, b) => a.idx - b.idx || a.t.title.localeCompare(b.t.title)).map((s) => s.t);
 }
 
-// src/runActivity.ts
-var TARGET_KEYS = ["path", "file", "filePath", "command", "cmd", "glob", "query", "q", "search", "url", "name", "title", "id"];
-var MAX_DETAIL = 72;
-function shortenTarget(value, max = MAX_DETAIL) {
-  const v = value.replace(/\s+/g, " ").trim();
-  if (v.length <= max) return v;
-  if (v.includes("/") || v.includes("\\")) return `\u2026${v.slice(v.length - (max - 1))}`;
-  return `${v.slice(0, max - 1)}\u2026`;
-}
-function activityTarget(args) {
-  if (!args || typeof args !== "object" || Array.isArray(args)) return void 0;
-  const record3 = args;
-  for (const key of TARGET_KEYS) {
-    const value = record3[key];
-    if (typeof value === "string" && value.trim()) return shortenTarget(value);
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+// src/runLineage.ts
+var savedChatOf = (runKey, lineage) => lineage?.rootChatId ?? runKey;
+var SUBAGENT_OF_META_KEY = "subagentOf";
+function lineageMetadata(lineage, metadata) {
+  let base = {};
+  if (metadata) {
+    try {
+      const parsed = JSON.parse(metadata);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) base = parsed;
+    } catch {
+    }
   }
-  if (Array.isArray(record3.paths)) {
-    const names = record3.paths.filter((p) => typeof p === "string" && p.trim() !== "");
-    if (names.length) return shortenTarget(names.join(", "));
+  return JSON.stringify({
+    ...base,
+    [MID_TURN_META_KEY]: true,
+    [AUTHORED_BY_META_KEY]: { kind: "agent", ref: lineage.agent.ref, name: lineage.agent.name },
+    [SUBAGENT_OF_META_KEY]: { handle: lineage.handle, owner: lineage.ownerName, label: lineage.label }
+  });
+}
+function parseSubagentOrigin(msg) {
+  if (!msg.metadata) return null;
+  try {
+    const o = JSON.parse(msg.metadata)[SUBAGENT_OF_META_KEY];
+    if (o && typeof o.handle === "string" && typeof o.owner === "string") {
+      return { handle: o.handle, owner: o.owner, label: typeof o.label === "string" ? o.label : "" };
+    }
+  } catch {
   }
-  return void 0;
+  return null;
 }
-var QUESTION_KEYS = ["query", "q", "search", "pattern", "glob", "key"];
-var VISIT_QUESTION_SEPARATOR = " \u220B ";
-function visitTarget(args) {
-  const scope = activityTarget(args);
-  if (!scope) return void 0;
-  const record3 = args;
-  for (const key of QUESTION_KEYS) {
-    const value = record3[key];
-    if (typeof value !== "string" || !value.trim()) continue;
-    const question = shortenTarget(value);
-    return question === scope ? scope : `${scope}${VISIT_QUESTION_SEPARATOR}${question}`;
-  }
-  return scope;
-}
-function toolActivity(label, args, step, startedAt) {
-  const detail = activityTarget(args);
-  return { phase: "tool", label, startedAt, step, ...detail ? { detail } : {} };
-}
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  return bytes < 1024 ? `${Math.round(bytes)} B` : `${(bytes / 1024).toFixed(1)} KB`;
-}
-function elapsedText(ms) {
-  if (!Number.isFinite(ms) || ms <= 0) return "0s";
-  if (ms < 6e4) return `${Math.round(ms / 1e3)}s`;
-  return `${Math.floor(ms / 6e4)}m ${Math.round(ms % 6e4 / 1e3)}s`;
-}
-function describeLiveStep(step, capturedAtMs) {
-  const elapsed = elapsedText(Number.isFinite(capturedAtMs) ? capturedAtMs - step.startedAt : 0);
-  const what = step.phase === "tool" ? `running \`${step.label}\`${step.detail ? ` on ${step.detail}` : ""}` : step.phase === "awaiting" ? `PAUSED waiting for the user to approve \`${step.label}\` \u2014 nothing advances until they answer` : step.phase === "composing" ? `composing a \`${step.label || "tool"}\` call${step.bytes != null ? ` \u2014 ${formatBytes(step.bytes)} of arguments so far` : ""}` : step.phase === "thinking" ? "waiting on the model (no token received yet)" : step.phase === "writing" ? "streaming the reply" : step.phase === "finishing" ? "doing post-run work (ticket capture / status reconciliation)" : "starting up";
-  return `${what} (${elapsed} so far${step.step > 0 ? `, loop step ${step.step}` : ""})`;
-}
-function midRunNotice(activity, capturedAtMs) {
-  const doing = activity ? ` At capture it was ${describeLiveStep(activity, capturedAtMs)}.` : " No in-flight step was recorded at capture.";
-  return `\u26A0 CAPTURED MID-RUN \u2014 the agent was STILL EXECUTING when this report was taken.${doing} Anything below that reads as "it never did X" may simply be work it had not reached yet; re-copy once the run settles to get a verdict on a finished run.`;
+function lineagePersistence(base, lineage, onPersisted) {
+  return {
+    ...base,
+    async sendMessages(chatId, messages) {
+      const saved = await base.sendMessages(
+        chatId,
+        messages.map((m) => ({ ...m, metadata: lineageMetadata(lineage, m.metadata) }))
+      );
+      for (const msg of saved) if (msg.role !== "tool") onPersisted(msg);
+      return saved;
+    }
+  };
 }
 
 // src/memorySavings.ts
@@ -17085,6 +16175,86 @@ function accrueByoUnresolved(c, raw) {
 }
 function accrueProviderCap(c, raw) {
   accrueProviders(c, "providerCap", raw);
+}
+
+// src/runSteering.ts
+function queueRunSteering2(runKey, text, opts) {
+  const queued = queueRunSteering(runKey, text, opts);
+  if (queued?.persist && queued.eventKey) rememberPendingWords(runKey, queued.eventKey, queued.text, savedChatOf(runKey, cells.get(runKey)?.lastRequest?.lineage));
+}
+function requeueRunSteering2(runKey, steers) {
+  requeueRunSteering(runKey, steers);
+}
+function drainRunSteering2(runKey) {
+  return drainRunSteering(runKey);
+}
+function steerModelContent(msg) {
+  const imageAtts = (msg.attachments ?? []).filter((a) => a.imageUrl);
+  if (imageAtts.length === 0) return msg.text;
+  return [
+    { type: "text", text: msg.text },
+    ...imageAtts.map((a) => ({ type: "image_url", image_url: { url: a.imageUrl } }))
+  ];
+}
+
+// src/runActivity.ts
+var TARGET_KEYS = ["path", "file", "filePath", "command", "cmd", "glob", "query", "q", "search", "url", "name", "title", "id"];
+var MAX_DETAIL = 72;
+function shortenTarget(value, max = MAX_DETAIL) {
+  const v = value.replace(/\s+/g, " ").trim();
+  if (v.length <= max) return v;
+  if (v.includes("/") || v.includes("\\")) return `\u2026${v.slice(v.length - (max - 1))}`;
+  return `${v.slice(0, max - 1)}\u2026`;
+}
+function activityTarget(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return void 0;
+  const record3 = args;
+  for (const key of TARGET_KEYS) {
+    const value = record3[key];
+    if (typeof value === "string" && value.trim()) return shortenTarget(value);
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  if (Array.isArray(record3.paths)) {
+    const names = record3.paths.filter((p) => typeof p === "string" && p.trim() !== "");
+    if (names.length) return shortenTarget(names.join(", "));
+  }
+  return void 0;
+}
+var QUESTION_KEYS = ["query", "q", "search", "pattern", "glob", "key"];
+var VISIT_QUESTION_SEPARATOR = " \u220B ";
+function visitTarget(args) {
+  const scope = activityTarget(args);
+  if (!scope) return void 0;
+  const record3 = args;
+  for (const key of QUESTION_KEYS) {
+    const value = record3[key];
+    if (typeof value !== "string" || !value.trim()) continue;
+    const question = shortenTarget(value);
+    return question === scope ? scope : `${scope}${VISIT_QUESTION_SEPARATOR}${question}`;
+  }
+  return scope;
+}
+function toolActivity(label, args, step, startedAt) {
+  const detail = activityTarget(args);
+  return { phase: "tool", label, startedAt, step, ...detail ? { detail } : {} };
+}
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  return bytes < 1024 ? `${Math.round(bytes)} B` : `${(bytes / 1024).toFixed(1)} KB`;
+}
+function elapsedText(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return "0s";
+  if (ms < 6e4) return `${Math.round(ms / 1e3)}s`;
+  return `${Math.floor(ms / 6e4)}m ${Math.round(ms % 6e4 / 1e3)}s`;
+}
+function describeLiveStep(step, capturedAtMs) {
+  const elapsed = elapsedText(Number.isFinite(capturedAtMs) ? capturedAtMs - step.startedAt : 0);
+  const what = step.phase === "tool" ? `running \`${step.label}\`${step.detail ? ` on ${step.detail}` : ""}` : step.phase === "awaiting" ? `PAUSED waiting for the user to approve \`${step.label}\` \u2014 nothing advances until they answer` : step.phase === "composing" ? `composing a \`${step.label || "tool"}\` call${step.bytes != null ? ` \u2014 ${formatBytes(step.bytes)} of arguments so far` : ""}` : step.phase === "thinking" ? "waiting on the model (no token received yet)" : step.phase === "writing" ? "streaming the reply" : step.phase === "finishing" ? "doing post-run work (ticket capture / status reconciliation)" : "starting up";
+  return `${what} (${elapsed} so far${step.step > 0 ? `, loop step ${step.step}` : ""})`;
+}
+function midRunNotice(activity, capturedAtMs) {
+  const doing = activity ? ` At capture it was ${describeLiveStep(activity, capturedAtMs)}.` : " No in-flight step was recorded at capture.";
+  return `\u26A0 CAPTURED MID-RUN \u2014 the agent was STILL EXECUTING when this report was taken.${doing} Anything below that reads as "it never did X" may simply be work it had not reached yet; re-copy once the run settles to get a verdict on a finished run.`;
 }
 
 // src/runStore/turnPersistence.ts
@@ -18055,7 +17225,7 @@ async function listIndexedDbOutboxPartitions(opts) {
 // src/stepOutbox.ts
 var STEP_BATCH_MAX = 25;
 var STEP_BATCH_WAIT_MS = 5e3;
-var isStepRow2 = (m) => m.role === "tool";
+var isStepRow = (m) => m.role === "tool";
 var durability = null;
 var stores2 = /* @__PURE__ */ new Map();
 var runKeys = /* @__PURE__ */ new Set();
@@ -18137,7 +17307,7 @@ function batchStepPersistence(base, opts = {}) {
     send: (chatId, rows, ctx) => base.sendMessages(chatId, withEventKeys(rows, ctx.ids), ctx.scope !== void 0 ? { scope: ctx.scope } : void 0)
   });
   const sendMessages = async (chatId, messages) => {
-    if (messages.length > 0 && messages.every(isStepRow2)) {
+    if (messages.length > 0 && messages.every(isStepRow)) {
       for (const m of messages) steps.enqueue(chatId, m);
       return [];
     }
@@ -19807,156 +18977,6 @@ function unreviewedChangeNudge() {
   return 'You changed the app in this run and ended the turn without reviewing it. In the Studio you are the reviewer \u2014 nobody else can see this preview, so an unreviewed change parks its ticket in review forever. Finish it now: call `canvas_inspect_preview` with the selectors your change targets and the widths the request is about, check the measurements against what was asked (fix and re-inspect if they fail), then record builtin_reviews_record on each ticket the change delivers \u2014 verdict "complete" quoting the measurements, or "gaps" naming what is missing. A complete review after a passing inspection closes the ticket when your turn ends. If you genuinely cannot verify \u2014 the preview is not running, or the change is unfinished \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
 }
 
-// src/directedMessage.ts
-var ADDRESSED_TO_META_KEY = "addressedTo";
-var AUTHORED_BY_META_KEY = "authoredBy";
-function asRecipient(value) {
-  const a = value;
-  if (a && typeof a.ref === "string" && typeof a.name === "string" && (a.kind === "agent" || a.kind === "human")) {
-    return { kind: a.kind, ref: a.ref, name: a.name };
-  }
-  return null;
-}
-function parseMessageAuthor(msg) {
-  if (!msg.metadata) return null;
-  try {
-    return asRecipient(JSON.parse(msg.metadata).authoredBy);
-  } catch {
-  }
-  return null;
-}
-function withDirectedMetadata(recipient, base) {
-  const meta = { ...base ?? {} };
-  const list3 = recipient == null ? [] : "kind" in recipient ? [recipient] : recipient;
-  if (list3.length === 1) meta[ADDRESSED_TO_META_KEY] = list3[0];
-  else if (list3.length > 1) meta[ADDRESSED_TO_META_KEY] = { kind: "group", members: [...list3] };
-  return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
-}
-function parseDirectedRecipients(msg) {
-  if (!msg.metadata) return [];
-  try {
-    const a = JSON.parse(msg.metadata).addressedTo;
-    if (!a || typeof a !== "object") return [];
-    if (a.kind !== "group") {
-      const one = asRecipient(a);
-      return one ? [one] : [];
-    }
-    if (Array.isArray(a.members)) {
-      return a.members.map(asRecipient).filter((r) => r !== null);
-    }
-    if (Array.isArray(a.refs)) {
-      return a.refs.filter((ref) => typeof ref === "string" && ref.length > 0).map((ref) => ({ kind: "agent", ref, name: ref }));
-    }
-  } catch {
-  }
-  return [];
-}
-function isDirectedToParticipant(msg) {
-  return parseDirectedRecipients(msg).length > 0;
-}
-function directedAgentRecipients(recipient) {
-  if (recipient == null) return [];
-  const one = recipient;
-  const list3 = Array.isArray(recipient) ? recipient : one.kind === "group" ? one.members ?? [] : [one];
-  const seen = /* @__PURE__ */ new Set();
-  const out = [];
-  for (const r of list3) {
-    if (!r || typeof r.ref !== "string" || !r.ref || r.kind === "human") continue;
-    if (seen.has(r.ref)) continue;
-    seen.add(r.ref);
-    out.push({ kind: "agent", ref: r.ref, name: typeof r.name === "string" && r.name ? r.name : r.ref });
-  }
-  return out;
-}
-function activeMentionToken(text, caret) {
-  const at2 = text.lastIndexOf("@", Math.max(0, caret - 1));
-  if (at2 < 0 || at2 >= caret) return null;
-  if (at2 > 0 && !/\s/.test(text[at2 - 1])) return null;
-  const query = text.slice(at2 + 1, caret);
-  if (/[\s@]/.test(query)) return null;
-  return { query, start: at2, end: caret };
-}
-function filterMentionCandidates(participants, query) {
-  const q = query.trim().toLowerCase();
-  if (!q) return participants;
-  return participants.map((p) => ({ p, idx: p.name.toLowerCase().indexOf(q) })).filter((s) => s.idx >= 0).sort((a, b) => a.idx - b.idx || a.p.name.localeCompare(b.p.name)).map((s) => s.p);
-}
-function mentionRecipient(text, participants) {
-  const m = /^\s*@([^\s@]+)/.exec(text);
-  if (!m) return null;
-  const tag = m[1].toLowerCase();
-  return participants.find((p) => {
-    const name = p.name.toLowerCase();
-    return name === tag || name.split(/\s+/)[0] === tag || name.startsWith(tag);
-  }) ?? null;
-}
-function resolveRecipient(choice, mention) {
-  if (choice === "brain") return null;
-  return choice ?? mention;
-}
-var activeHashtagToken = activeTicketToken;
-function activeTicketToken(text, caret) {
-  const hash2 = text.lastIndexOf("#", Math.max(0, caret - 1));
-  if (hash2 < 0 || hash2 >= caret) return null;
-  if (hash2 > 0 && !/\s/.test(text[hash2 - 1])) return null;
-  const query = text.slice(hash2 + 1, caret);
-  if (/[\s#]/.test(query)) return null;
-  return { query, start: hash2, end: caret };
-}
-function filterTicketCandidates(tickets, query) {
-  const q = query.trim().toLowerCase();
-  if (!q) return tickets;
-  return tickets.map((t) => {
-    const titleIdx = t.title.toLowerCase().indexOf(q);
-    const keyIdx = t.key?.toLowerCase().indexOf(q) ?? -1;
-    const idx = titleIdx >= 0 ? titleIdx : keyIdx;
-    return { t, idx };
-  }).filter((s) => s.idx >= 0).sort((a, b) => a.idx - b.idx || a.t.title.localeCompare(b.t.title)).map((s) => s.t);
-}
-
-// src/runLineage.ts
-var SUBAGENT_OF_META_KEY = "subagentOf";
-function lineageMetadata(lineage, metadata) {
-  let base = {};
-  if (metadata) {
-    try {
-      const parsed = JSON.parse(metadata);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) base = parsed;
-    } catch {
-    }
-  }
-  return JSON.stringify({
-    ...base,
-    [MID_TURN_META_KEY]: true,
-    [AUTHORED_BY_META_KEY]: { kind: "agent", ref: lineage.agent.ref, name: lineage.agent.name },
-    [SUBAGENT_OF_META_KEY]: { handle: lineage.handle, owner: lineage.ownerName, label: lineage.label }
-  });
-}
-function parseSubagentOrigin(msg) {
-  if (!msg.metadata) return null;
-  try {
-    const o = JSON.parse(msg.metadata)[SUBAGENT_OF_META_KEY];
-    if (o && typeof o.handle === "string" && typeof o.owner === "string") {
-      return { handle: o.handle, owner: o.owner, label: typeof o.label === "string" ? o.label : "" };
-    }
-  } catch {
-  }
-  return null;
-}
-function lineagePersistence(base, lineage, onPersisted) {
-  return {
-    ...base,
-    async sendMessages(chatId, messages) {
-      const saved = await base.sendMessages(
-        chatId,
-        messages.map((m) => ({ ...m, metadata: lineageMetadata(lineage, m.metadata) }))
-      );
-      for (const msg of saved) if (msg.role !== "tool") onPersisted(msg);
-      return saved;
-    }
-  };
-}
-
 // src/runStore/runBackstops.ts
 function settleView(c, runId) {
   return {
@@ -21449,10 +20469,10 @@ var NOTHING = { answered: false, tail: [] };
 function unrecorded(c, what, e) {
   pushTrace(c, { ts: nowIso(), category: "message", label: "prefetch.unrecorded", args: { what }, result: e instanceof Error ? e.message : String(e) });
 }
-function bestEffort(c, what, write2) {
+function bestEffort(c, what, write) {
   let pending;
   try {
-    pending = write2();
+    pending = write();
   } catch (e) {
     unrecorded(c, what, e);
     return;
@@ -21611,10 +20631,10 @@ async function applyModelPreflight(c, preflight, pinnedModel) {
 }
 
 // src/runStore/hostRunContext.ts
-async function hostPart(c, part, read2) {
-  if (!read2) return void 0;
+async function hostPart(c, part, read) {
+  if (!read) return void 0;
   try {
-    return await read2();
+    return await read();
   } catch (e) {
     pushTrace(c, {
       ts: nowIso(),
@@ -21642,12 +20662,12 @@ async function gatherHostRunContext(c, req, recall) {
   };
 }
 function recordServedReads(coverage, reads, anchor) {
-  for (const read2 of reads) {
-    if (!read2.path) continue;
-    const args = { path: read2.path };
+  for (const read of reads) {
+    if (!read.path) continue;
+    const args = { path: read.path };
     coverage.record("read_file", args);
     coverage.cacheResult("read_file", args, {
-      result: { ok: true, path: read2.path, content: read2.content, totalLines: read2.totalLines, offset: 1, truncated: false },
+      result: { ok: true, path: read.path, content: read.content, totalLines: read.totalLines, offset: 1, truncated: false },
       anchor
     });
   }
@@ -23341,7 +22361,6 @@ onStoreReset(resetContinuations);
 function takeContinueOnSettle(runKey) {
   return continuing.delete(runKey);
 }
-var chatIdOf = (request, runKey) => request.lineage?.rootChatId ?? runKey;
 async function compose(m, ports) {
   const attachments = m.attachments ?? [];
   return { ...await composeUserTurn(m.text, attachments, ports), text: m.text, attachments };
@@ -23422,7 +22441,7 @@ async function continueChat(runKey, c, steers, start, claim, left, progress = { 
     trace3(c, "steer.continue_limit", { continuations: links }, "The run was continued as often as it may be without a new message; the direction waits for your next turn.");
     return false;
   }
-  const chatId = chatIdOf(request, runKey);
+  const chatId = savedChatOf(runKey, request.lineage);
   const stopped = { c, runKey, chatId, persistence: request.persistence, claim, keys: steers.map((m) => m.eventKey) };
   const ports = binding.ports();
   const turns = [];
@@ -23489,7 +22508,7 @@ async function continueOrKeep(runKey, c, steers, start, claim) {
       const request = c.lastRequest;
       const keys = keyed.map((m) => m.eventKey);
       if (request && (progress.saving || keyed.some((m) => m.saved))) {
-        await endStopped({ c, runKey, chatId: chatIdOf(request, runKey), persistence: request.persistence, claim, keys }, left(), progress.saving);
+        await endStopped({ c, runKey, chatId: savedChatOf(runKey, request.lineage), persistence: request.persistence, claim, keys }, left(), progress.saving);
       } else {
         forgetPendingWords(runKey, keys);
       }
@@ -23532,7 +22551,7 @@ function wakeChat(runKey, turns, start) {
     eventKey: newSteerKey(),
     ...t.attachments?.length ? { attachments: [...t.attachments] } : {}
   }));
-  for (const steer of steers) rememberPendingWords(runKey, steer.eventKey, steer.text);
+  for (const steer of steers) rememberPendingWords(runKey, steer.eventKey, steer.text, savedChatOf(runKey, c.lastRequest.lineage));
   void continueOrKeep(runKey, c, steers, start, claim);
   return true;
 }
@@ -23565,7 +22584,7 @@ async function startRun(runKey, request, claim) {
     return "joined";
   }
   const lineage = request.lineage;
-  const chatId = lineage?.rootChatId ?? runKey;
+  const chatId = savedChatOf(runKey, lineage);
   const serverChatId = resolveServerChatId(chatId, request);
   const steps = batchStepPersistence(request.persistence, stepDurabilityFor(chatId, runKey));
   const runPersistence = lineage ? lineagePersistence(steps.persistence, lineage, (msg) => appendRunMessage(chatId, msg)) : steps.persistence;
@@ -23723,8 +22742,8 @@ function useRunSnapshot(key) {
     (onChange) => key == null ? () => void 0 : subscribeRun(key, onChange),
     [key]
   );
-  const read2 = () => getRunSnapshot(key);
-  return useSyncExternalStore(subscribe, read2, read2);
+  const read = () => getRunSnapshot(key);
+  return useSyncExternalStore(subscribe, read, read);
 }
 
 // src/useChatTranscript.ts
@@ -24601,10 +23620,10 @@ function withDeadline(p, ms) {
     );
   });
 }
-function fetchApiVersionVia(read2, now = Date.now, timeoutMs = API_VERSION_PROBE_TIMEOUT_MS) {
+function fetchApiVersionVia(read, now = Date.now, timeoutMs = API_VERSION_PROBE_TIMEOUT_MS) {
   if (cached && now() - cachedAt < API_VERSION_TTL_MS) return Promise.resolve(cached);
   if (inflight) return inflight;
-  inflight = withDeadline(read2(), timeoutMs).then((data) => {
+  inflight = withDeadline(read(), timeoutMs).then((data) => {
     const next = data?.version ?? null;
     if (next) {
       cached = next;
@@ -25437,10 +24456,10 @@ function formatSubagentDiagnostics(children, capturedAtMs) {
 }
 
 // src/gatherChatDiagnostics.ts
-function safely(read2, fallback) {
-  if (!read2) return Promise.resolve(fallback);
+function safely(read, fallback) {
+  if (!read) return Promise.resolve(fallback);
   try {
-    return read2().then((v) => v ?? fallback, () => fallback);
+    return read().then((v) => v ?? fallback, () => fallback);
   } catch {
     return Promise.resolve(fallback);
   }
@@ -25805,7 +24824,7 @@ import { useCallback as useCallback11, useEffect as useEffect11, useRef as useRe
 function turnBody(turn, textOf2) {
   return (typeof turn === "string" ? turn : textOf2?.(turn) ?? "").trim();
 }
-function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFlush, handOff }) {
+function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFlush, handOff, createdChatId = null }) {
   const [queued, setQueued] = useState11([]);
   const queueRef = useRef9([]);
   const update = useCallback11((change) => {
@@ -25823,6 +24842,9 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
   handOffRef.current = handOff;
   const mayFlushRef = useRef9(mayFlush);
   mayFlushRef.current = mayFlush;
+  const createdRef = useRef9(createdChatId);
+  createdRef.current = createdChatId;
+  const unconfirmed = useRef9(null);
   const runningRef = useRef9(running);
   const submit = useCallback11((value, opts) => {
     const text = turnBody(value, textOfRef.current);
@@ -25843,29 +24865,48 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
     update((current) => current.slice(1));
     return first.value;
   }, [update]);
+  const settle2 = useCallback11((created) => {
+    const wait = unconfirmed.current;
+    if (!wait) return;
+    unconfirmed.current = null;
+    if (created === wait.to) {
+      update((current) => current.map((item) => wait.ids.has(item.id) && item.preLiveFor === null ? { ...item, preLiveFor: wait.to } : item));
+      return;
+    }
+    const mine = queueRef.current.filter((item) => wait.ids.has(item.id));
+    if (mine.length === 0) return;
+    update((current) => current.filter((item) => !wait.ids.has(item.id)));
+    handOffRef.current?.(mine, null);
+  }, [update]);
+  useEffect11(() => {
+    if (createdChatId !== null) settle2(createdChatId);
+  }, [createdChatId, settle2]);
   const prev = useRef9({ key: resetKey, running });
   useEffect11(() => {
     const was = prev.current;
     prev.current = { key: resetKey, running };
+    if (!running) settle2(createdRef.current);
     if (was.key !== resetKey || !was.running || running) return;
     if (mayFlushRef.current && !mayFlushRef.current()) return;
     const next = takeFront();
     if (next !== void 0) sendRef.current(next);
-  }, [running, resetKey, takeFront]);
+  }, [running, resetKey, takeFront, settle2]);
   const heldIn = useRef9(resetKey);
   useEffect11(() => {
     const from = heldIn.current;
     if (from === resetKey) return;
     heldIn.current = resetKey;
+    settle2(createdRef.current);
     const held = queueRef.current;
     if (held.length === 0) return;
     if (from === null && typeof resetKey === "number" && runningRef.current) {
-      update((current) => current.map((item) => item.preLiveFor === null ? { ...item, preLiveFor: resetKey } : item));
+      unconfirmed.current = { to: resetKey, ids: new Set(held.map((item) => item.id)) };
+      if (createdRef.current !== null) settle2(createdRef.current);
       return;
     }
     update(() => []);
     handOffRef.current?.(held, from);
-  }, [resetKey, update]);
+  }, [resetKey, update, settle2]);
   return { items: queued, count: queued.length, submit, remove, requeue: requeue2, pushBack, takeFront, clear };
 }
 
@@ -25876,7 +24917,7 @@ function steersByDefault(turn) {
 function chatDoorLiveness(conv, extraInFlight = false) {
   return { running: conv.sending || extraInFlight, steerable: conv.runLive };
 }
-function useChatTurns({ running, steerable = running, runKey, send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf }) {
+function useChatTurns({ running, steerable = running, runKey, createdChatId, send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf }) {
   const ports = useRef10({ send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable });
   ports.current = { send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable };
   const stoppingRef = useRef10(false);
@@ -25951,6 +24992,7 @@ function useChatTurns({ running, steerable = running, runKey, send, steer, stop,
       void flush(turn);
     },
     resetKey: runKey,
+    createdChatId,
     textOf: textOf2,
     mayFlush: () => flushingIn(ports.current.runKey) === 0,
     handOff
@@ -25971,6 +25013,7 @@ function useChatTurns({ running, steerable = running, runKey, send, steer, stop,
   const heldThisRun = useCallback12(() => itemsRef.current.filter((item) => !carriedIds.current.has(item.id)).length, []);
   const steers = useCallback12((preview) => ports.current.steerable && typeof ports.current.runKey === "number" && !stoppingRef.current && steersByDefault({ ...preview, held: heldThisRun() }), [heldThisRun]);
   const { remove } = queued;
+  const dueHere = queued.items.filter((item) => item.preLiveFor === runKey).length;
   useEffect12(() => {
     if (!running || !steerable) return;
     const { steer: route, runKey: key, textOf: text, isDirected: directed, attachmentsOf: attached2 } = ports.current;
@@ -25989,7 +25032,7 @@ function useChatTurns({ running, steerable = running, runKey, send, steer, stop,
       }
       carriedIds.current = new Set([...carriedIds.current].filter((id) => id !== item.id));
     }
-  }, [running, steerable, remove, runKey]);
+  }, [running, steerable, remove, runKey, dueHere]);
   const stopTurns = useCallback12(() => {
     clear();
     stopEpoch.current += 1;
@@ -26090,7 +25133,7 @@ function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
 }
 
 // src/useChatCreation.ts
-import { useCallback as useCallback13, useEffect as useEffect14, useRef as useRef13 } from "react";
+import { useCallback as useCallback13, useEffect as useEffect14, useRef as useRef13, useState as useState14 } from "react";
 function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }) {
   const chatIdRef = useRef13(chatId);
   chatIdRef.current = chatId;
@@ -26101,15 +25144,18 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   const captureRef = useRef13(onCaptureOriginalRequest);
   captureRef.current = onCaptureOriginalRequest;
   const creating = useRef13(null);
+  const [createdChatId, setCreatedChatId] = useState14(null);
   useEffect14(() => {
     if (chatId != null) creating.current = null;
   }, [chatId]);
   const ensureChatId = useCallback13(() => {
     const open = chatIdRef.current;
     if (open != null) return Promise.resolve(open);
+    if (!creating.current) setCreatedChatId(null);
     creating.current ??= createRef.current().then(
       (id) => {
         if (id == null) creating.current = null;
+        else setCreatedChatId(id);
         return id;
       },
       (error) => {
@@ -26123,7 +25169,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
     void captureRef.current?.(id, firstUserText);
     await autoTitleRef.current?.(id, firstUserText);
   }, []);
-  return { ensureChatId, onFirstUserTurn };
+  return { ensureChatId, onFirstUserTurn, createdChatId };
 }
 export {
   ADDRESSED_TO_META_KEY,
