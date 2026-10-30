@@ -31,8 +31,25 @@ export const TENANT_BUDGET_CODES: readonly string[] = [
 
 const BUDGET_CODE = new RegExp(`\\b(?:${TENANT_BUDGET_CODES.join('|')})\\b`);
 
-/** The gateway's human wording for the same thing, for a message that arrives without its code. */
-const BUDGET_WORDING = /(?:token|generation) limit reached|allowance reached|spend cap reached|budget exhausted/i;
+/**
+ * The gateway's human wording for the same thing, for a message that arrives without its code. TENANT
+ * phrasing only: "Plan daily token limit reached (50,000 tokens)", "...allowance reached", "Daily image
+ * generation limit reached", "Monthly AI spend cap reached", "Daily premium-model budget exhausted". NOT a run
+ * stopping at its OWN per-run cap ("token limit reached (12/200000 tokens)" - no plan or window word), and NOT
+ * a bare "budget exhausted" ("401 Unauthorized ... retry budget exhausted").
+ */
+const BUDGET_WORDING = new RegExp(
+  [
+    /(?:plan|daily|monthly|agenthost)\b[^.]{0,30}\btoken limit reached/,
+    /generation limit reached/,
+    /allowance reached/,
+    /spend cap reached/,
+    /(?:premium|token|spend|credit|plan)\b[^.]{0,40}budget exhausted/,
+  ]
+    .map((re) => re.source)
+    .join('|'),
+  'i',
+);
 
 /** True when `message` says a TENANT spent its own cap or allowance (not that any model was throttled). */
 export function isTenantBudgetFailure(message: string | null | undefined): boolean {

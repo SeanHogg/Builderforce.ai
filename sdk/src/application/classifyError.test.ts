@@ -30,6 +30,19 @@ describe('classifyError', () => {
     expect(c.terminal).toBe(true);
   });
 
+  it('classifies the three newly mirrored tenant-budget codes as token_cap, honouring the gateway terminal flag', () => {
+    // member spend cap and video credits: per-tenant, terminal for the window.
+    for (const code of ['member_spend_cap_exceeded', 'video_credit_limit_exceeded']) {
+      const c = classifyError(apiError(429, code, { terminal: true, retryAfter: 600 }));
+      expect(c).toMatchObject({ kind: 'token_cap', terminal: true, retryable: false, retryAfter: 600, code });
+    }
+    // premium daily cap: only the premium PIN is spent (the gateway sends terminal:false), so the caller may drop the pin.
+    const premium = classifyError(apiError(429, 'premium_daily_cap_exceeded', { terminal: false, retryAfter: 3600 }));
+    expect(premium).toMatchObject({ kind: 'token_cap', terminal: false, retryable: false, code: 'premium_daily_cap_exceeded' });
+    // …and with no flag at all the kind-based default stays terminal, as for every other tenant cap.
+    expect(classifyError(apiError(429, 'premium_daily_cap_exceeded')).terminal).toBe(true);
+  });
+
   it('classifies token-cap codes as terminal token_cap', () => {
     for (const code of ['plan_token_limit_exceeded', 'plan_monthly_token_limit_exceeded', 'claw_token_limit_exceeded', 'image_credit_limit_exceeded']) {
       const c = classifyError(apiError(429, code, { terminal: true, retryAfter: 3600 }));

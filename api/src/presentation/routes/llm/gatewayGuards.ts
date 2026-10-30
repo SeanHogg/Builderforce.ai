@@ -259,6 +259,9 @@ export function premiumCapExceededBody(cap: number) {
         + 'Raise or remove the cap from workspace billing settings.',
       type: 'premium_daily_cap_exceeded',
       code: 'premium_daily_cap_exceeded',
+      // NOT terminal: only the premium PIN is spent. A non-premium model (the plan pool) still serves the
+      // request, so a caller that reads `terminal` must be free to drop the pin and carry on.
+      terminal: false,
       capMillicents: cap,
     },
   };

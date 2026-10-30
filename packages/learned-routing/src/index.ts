@@ -16,6 +16,9 @@
  *   • `roleModels`         — role → catalog model id from config (documented default)
  *   • `routingScope`       — `project:<id> | tenant:<id> | global` and its token
  *   • `runOutcomeContract` — the `POST /llm/v1/run-outcome` body + its parser
+ *   • `rateLimitFailure`   — `isRateLimitFailure` / `isTenantBudgetFailure`: the ONE reading of "the
+ *                            provider throttled this run" (vs a tenant spending its own allowance), and the
+ *                            explicit `TENANT_BUDGET_CODES` list behind it
  *
  * What does NOT live here: anything that touches KV, a DB, an env binding or the
  * network. The routing-table blob, its reconcile and its cache stay in the api.

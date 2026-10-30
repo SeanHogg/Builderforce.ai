@@ -62,7 +62,7 @@ describe("buildOutcomeRow — how a run ended", () => {
 
   it("a run served by a WEAKER model than it asked for reads as degraded", () => {
     const downgraded = state();
-    downgraded.downgrades = ["flash-1"];
+    downgraded.degradedBy = ["flash-1"];
     expect(buildOutcomeRow({ entryPoint: "on-prem", kind: "finished", state: downgraded })).toMatchObject({ degraded: true });
   });
 
@@ -72,7 +72,7 @@ describe("buildOutcomeRow — how a run ended", () => {
     expect(buildOutcomeRow({ entryPoint: "on-prem", kind: "finished", state: note })).not.toHaveProperty("degraded");
     // A pinned model answered by another is announced (llm.model_downgrade, "failover") but not recorded as a downgrade.
     const ctx = policyCtx();
-    expect(modelDowngrade(ctx, "sonnet", "unpriced-model")).toMatchObject({ reason: "failover" });
+    expect(modelDowngrade(ctx, "sonnet", "other-sonnet-class")).toMatchObject({ reason: "failover" });
     expect(buildOutcomeRow({ entryPoint: "on-prem", kind: "finished", state: ctx.state })).not.toHaveProperty("degraded");
   });
 });

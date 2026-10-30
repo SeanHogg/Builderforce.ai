@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import type { Capability } from "@builderforce/agent-tools";
 import { schemaForCapabilities, spawnAgentTool, spawnAgentsTool } from "@builderforce/agent-tools";
 import type { ChildControls } from "./childRunSpawner";
-import { EDITOR_DELEGATION_CAPS } from "./localCapabilities";
+import { EDITOR_DELEGATION_CAPS, LOCAL_SURFACE_CAPS } from "./localCapabilities";
 import { subagentFanOutToolDef } from "./subagentFanOutTool";
 import { subagentToolDef } from "./subagentTool";
 
@@ -12,6 +13,9 @@ import { subagentToolDef } from "./subagentTool";
  */
 const deps = { children: {} as ChildControls };
 
+/** An INDEPENDENT statement of what the editor holds, spelled out - never the expression the code under test uses. */
+const EXPECTED_CAPS: ReadonlySet<Capability> = new Set<Capability>([...LOCAL_SURFACE_CAPS, "orchestrate", "orchestrate.fanout", "orchestrate.live"]);
+
 describe("the spawn tools the editor builds", () => {
   it("describe background children, because the editor's children run live", () => {
     for (const def of [subagentToolDef(deps), subagentFanOutToolDef(deps)]) {
@@ -20,14 +24,15 @@ describe("the spawn tools the editor builds", () => {
     }
   });
 
-  it("is the description the capability path gives under the SAME set the editor holds - for both tools", () => {
-    expect(subagentToolDef(deps).description).toBe(schemaForCapabilities(spawnAgentTool, EDITOR_DELEGATION_CAPS).function.description);
-    expect(subagentFanOutToolDef(deps).description).toBe(schemaForCapabilities(spawnAgentsTool, EDITOR_DELEGATION_CAPS).function.description);
+  it("is the description the capability path gives under the capabilities the editor holds - for both tools", () => {
+    expect(subagentToolDef(deps).description).toBe(schemaForCapabilities(spawnAgentTool, EXPECTED_CAPS).function.description);
+    expect(subagentFanOutToolDef(deps).description).toBe(schemaForCapabilities(spawnAgentsTool, EXPECTED_CAPS).function.description);
   });
 
-  it("holds every capability the spawn tools require, fan-out included", () => {
+  it("holds exactly the surface's own capabilities plus delegation, fan-out and live", () => {
+    expect([...EDITOR_DELEGATION_CAPS].sort()).toEqual([...EXPECTED_CAPS].sort());
     for (const tool of [spawnAgentTool, spawnAgentsTool]) {
-      for (const needed of tool.requires) expect(EDITOR_DELEGATION_CAPS.has(needed), `${tool.name} requires ${needed}`).toBe(true);
+      for (const needed of tool.requires) expect(EXPECTED_CAPS.has(needed), `${tool.name} requires ${needed}`).toBe(true);
     }
   });
 });

@@ -34,6 +34,7 @@ export type { NormalizedRunOutcome, OutcomeSource, TerminalStatus };
 import { classifyRunFailure } from './runFailureReasons';
 import { applyOutcomeToRoutingTable } from '../llm/routingTable';
 import { isModelRole, type ModelRole } from '@builderforce/agent-tools';
+import { isWeakerModel } from '@builderforce/model-catalog';
 
 /** The role a CLOUD run's outcome scores. The primary loop is the run's coding work
  *  (`pickCloudModel` is called with role 'code'), so its merge/CI/completion outcome is
@@ -325,14 +326,34 @@ async function resolveToolCounts(db: Db, executionId: number): Promise<{ toolCal
   }
 }
 
+/**
+ * Was any turn served by a WEAKER model than the run asked for? The `coding_model_degraded` event
+ * fires whenever the served model is not a curated coder - which includes a generalist STRONGER than the
+ * coder the run wanted - so its existence is not the answer. Its detail carries the intended and the
+ * served model; the answer is the catalog's rule (`isWeakerModel`), the one the ONE agent's outcome row
+ * and the legacy runner ask too. An event with no intended model says nothing about weaker.
+ */
+export function weakerServedIn(events: ReadonlyArray<{ args: string | null }>): boolean {
+  return events.some((event) => {
+    try {
+      const detail = JSON.parse(event.args ?? 'null') as { requestedModel?: unknown; resolvedModel?: unknown } | null;
+      return typeof detail?.requestedModel === 'string' && typeof detail.resolvedModel === 'string'
+        && isWeakerModel(detail.requestedModel, detail.resolvedModel);
+    } catch (err) {
+      reportCaughtError(err, { source: "application/runtime/scoreRunOutcome.ts", operation: "weakerServedIn" });
+      return false;
+    }
+  });
+}
+
 async function runWasDegraded(db: Db, executionId: number): Promise<boolean> {
   try {
-    const [row] = await db
-      .select({ n: sql<number>`count(*)::int` })
+    const events = await db
+      .select({ args: toolAuditEvents.args })
       .from(toolAuditEvents)
       .where(and(eq(toolAuditEvents.executionId, executionId), eq(toolAuditEvents.toolName, 'coding_model_degraded')))
-      .limit(1);
-    return (Number(row?.n) || 0) > 0;
+      .limit(50);
+    return weakerServedIn(events);
   } catch {
     return false;
   }

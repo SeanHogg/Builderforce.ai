@@ -85,17 +85,17 @@ export function buildOutcomeRow(input: OutcomeRowInput): RunOutcomeRow {
 }
 
 /**
- * Served by a WEAKER model than the run asked for. `state.downgrades` records exactly that
- * (`modelDowngrade`): an auto-routed turn that landed on a model the run did not choose because a
- * connected account could not be used, or on a plan-tier model, or a PINNED model's failover onto a worse
- * catalog tier (`isWeakerModel` - the same rule the legacy embedded runner derives its `degraded` from).
- * A pinned-model failover onto a model of the same standing (or one the price book cannot rank) is
- * announced by the `llm.model_downgrade` event but NOT recorded as a downgrade, and a preflight NOTE
- * (`state.preflight` = degraded:<reason>) is a warning before turn 1, not a verdict on what served the
- * run; neither makes the run degraded.
+ * Served by a WEAKER model than the run asked for: `state.degradedBy` records exactly that
+ * (`modelDowngrade`) - an auto-routed turn that landed on a model the run did not choose because a
+ * connected account could not be used or on a plan-tier model, or a PINNED model's failover onto a worse
+ * catalog tier (`isWeakerModel`, the model catalog's rule - the same one the legacy embedded runner and the
+ * cloud scorer ask). A pinned failover onto a model of the same standing (or one the catalog cannot rank) is
+ * announced by `llm.model_downgrade` but NOT recorded, and a preflight NOTE (`state.preflight` =
+ * degraded:<reason>) is a warning before turn 1, not a verdict on what served the run; neither makes the
+ * run degraded.
  */
 function isDegraded(state: RunState): boolean {
-  return (state.downgrades?.length ?? 0) > 0;
+  return (state.degradedBy?.length ?? 0) > 0;
 }
 
 /** The A3 trips by signal, as a plain `{ signal: count }` map (empty when none tripped). */

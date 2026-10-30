@@ -95,17 +95,23 @@ const POWERSHELL_FLAG_SENSITIVE: ReadonlySet<string> = new Set([...POWERSHELL_AL
 /**
  * A flag-sensitive verb handed a unix `-flag` (`rm -rf`, `ls -la`, `cat -n`, `mv -f`, `curl -s`): the alias
  * binds the flag to a Cmdlet parameter by prefix, or not at all, so the command fails or does something
- * else. A unix flag is a lowercase letter, a digit (`kill -9`) or `--`: PowerShell's own parameters are written `-Force`,
- * `-Recurse` (capitalised) and are valid there, so they are NOT refused. No exceptions for the unix forms
- * on purpose - `cp -r` happens to bind to -Recurse, but a list of forms that bind goes stale.
+ * else. A token is a PowerShell PARAMETER only if it is a capitalised word (`-Force`, `-Recurse`, `-Path`):
+ * every other `-token` is a unix flag - `-R`, `-A`, `-Rf`, `-KILL`, `-9`, `-L`, `--long` - however it is
+ * cased, because a one- or two-letter capital is a unix flag (`ls -R`, `rm -Rf`), not a parameter name. No
+ * exceptions for the unix forms on purpose - `cp -r` happens to bind to -Recurse, but a list of forms that
+ * bind goes stale.
  */
+const POWERSHELL_PARAMETER = /^-[A-Z][a-z]{2,}[A-Za-z]*$/;
+const isUnixFlag = (token: string | undefined): boolean => !!token && token.length > 1 && token.startsWith("-") && !POWERSHELL_PARAMETER.test(token);
+
+/** Verbs whose flags may come AFTER their operands (`find . -name x`, `curl url -o f`, `wget -O f url`). */
+const FLAGS_ANYWHERE: ReadonlySet<string> = new Set(["find", "curl", "wget"]);
+
 function aliasedWithUnixFlag(bare: string): boolean {
-  const unixFlag = (token: string | undefined): boolean => !!token && /^-(?:[a-z0-9]|-)/.test(token);
   return segments(bare).some((segment) => {
     const [verb, ...args] = segment.split(/\s+/);
     if (!verb || !POWERSHELL_FLAG_SENSITIVE.has(verb)) return false;
-    // `find` takes its flags AFTER the path (`find . -name x`); the others straight after the verb.
-    return verb === "find" ? args.some(unixFlag) : unixFlag(args[0]);
+    return FLAGS_ANYWHERE.has(verb) ? args.some(isUnixFlag) : isUnixFlag(args[0]);
   });
 }
 

@@ -44,6 +44,16 @@ describe('isTenantBudgetFailure', () => {
     }
   });
 
+  it('is TENANT phrasing only: a bare "budget exhausted" and a run stopping at its OWN cap are not a tenant budget', () => {
+    expect(isTenantBudgetFailure('401 Unauthorized: gateway retry budget exhausted')).toBe(false);
+    expect(isTenantBudgetFailure('retry budget exhausted after 3 attempts')).toBe(false);
+    expect(isTenantBudgetFailure('token limit reached (250000/200000 tokens)')).toBe(false);
+    expect(isTenantBudgetFailure('spend limit reached (900000/800000 millicents)')).toBe(false);
+    expect(isTenantBudgetFailure('Plan daily token limit reached (50,000 tokens).')).toBe(true);
+    expect(isTenantBudgetFailure('Per-agentHost daily token limit reached (1,000 tokens).')).toBe(true);
+    expect(isTenantBudgetFailure('Daily premium-model budget exhausted (cap $5.00/day).')).toBe(true);
+  });
+
   it('is false for an ordinary failure, an unlisted *_exceeded code, and no message', () => {
     for (const message of ['HTTP 529: over capacity', '{"code":"rate_limit_exceeded"}', '{"code":"context_length_exceeded"}', '', null, undefined]) {
       expect(isTenantBudgetFailure(message), String(message)).toBe(false);
