@@ -49,6 +49,8 @@ export interface RunOutcomeRow {
   cancelled?: boolean;
   /** Present (true) only when the run died on a provider rate limit - an availability signal, not a quality one. */
   rateLimited?: boolean;
+  /** Present (true) only when the run failed because the TENANT ran out of quota/budget - not evidence about the model, so routing never learns from it. NOT a run stopping at its own per-run cap. */
+  quotaExhausted?: boolean;
   /** Present (true) only when the run was served by a WEAKER model than it asked for (a recorded downgrade). A failover onto a model of the same standing (or one the price book cannot rank), and a preflight note, are not recorded as a downgrade. */
   degraded?: boolean;
 }

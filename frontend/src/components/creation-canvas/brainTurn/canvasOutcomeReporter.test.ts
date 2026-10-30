@@ -71,6 +71,14 @@ describe('canvasOutcomeReporter', () => {
     expect(mocks.reportRunOutcome.mock.calls[0]?.[0]).toMatchObject({ terminalStatus: 'cancelled' });
   });
 
+  it('carries the row's quota-exhausted flag (set once by the row builder), and says nothing otherwise', () => {
+    reporter().report({ ...ROW, terminalStatus: 'failed', quotaExhausted: true });
+    reporter().report({ ...ROW, terminalStatus: 'failed' });
+
+    expect(mocks.reportRunOutcome.mock.calls[0]?.[0]).toMatchObject({ quotaExhausted: true });
+    expect(mocks.reportRunOutcome.mock.calls[1]?.[0]).not.toHaveProperty('quotaExhausted');
+  });
+
   it.each([
     ['a guest board', () => reporter({ persistence: 'local' })],
     ['no signed-in session', () => { mocks.token.mockReturnValue(null); return reporter(); }],

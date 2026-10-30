@@ -129,6 +129,7 @@ export function buildRunRowReport(row: RunOutcomeRow, scope: OutcomeScope = {}):
     // Availability and degradation are kept beside the score (never folded into it): a throttled model
     // is demoted without being called bad, and a run served off its model does not earn full credit.
     ...(row.rateLimited ? { rateLimited: true } : {}),
+    ...(row.quotaExhausted ? { quotaExhausted: true } : {}),
     ...(row.degraded ? { degraded: true } : {}),
   };
 }

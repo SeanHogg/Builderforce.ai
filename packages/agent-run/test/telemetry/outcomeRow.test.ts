@@ -60,6 +60,17 @@ describe("buildOutcomeRow — how a run ended", () => {
     expect(failed("chat completion failed with HTTP 429: Plan daily token limit reached (50,000 tokens).")).not.toHaveProperty("rateLimited");
   });
 
+  it("a run that failed because the TENANT ran out of quota reads as quota-exhausted, whoever reports it", () => {
+    for (const code of ["agent_host_token_limit_exceeded", "plan_token_limit_exceeded", "plan_monthly_token_limit_exceeded", "member_spend_cap_exceeded", "premium_daily_cap_exceeded"]) {
+      expect(failed(`chat completion failed with HTTP 429: {"code":"${code}","terminal":true}`), code).toMatchObject({ quotaExhausted: true });
+    }
+    expect(failed("chat completion failed with HTTP 429: Plan daily token limit reached (50,000 tokens).")).toMatchObject({ quotaExhausted: true });
+    // A provider throttle is availability, not quota; an ordinary failure is neither; a finished run never is.
+    expect(failed("chat completion failed with HTTP 429: Too many requests")).not.toHaveProperty("quotaExhausted");
+    expect(failed("tool calls kept failing")).not.toHaveProperty("quotaExhausted");
+    expect(buildOutcomeRow({ entryPoint: "on-prem", kind: "finished", reason: "plan_token_limit_exceeded", state: state() })).not.toHaveProperty("quotaExhausted");
+  });
+
   it("a run served by a WEAKER model than it asked for reads as degraded", () => {
     const downgraded = state();
     downgraded.degradedBy = ["flash-1"];

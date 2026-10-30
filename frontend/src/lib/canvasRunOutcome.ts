@@ -34,6 +34,8 @@ export function canvasOutcomeRequest(
     source: 'canvas',
     terminalStatus: canvasTerminalStatus(row, run.stopped),
     steps: row.steps,
+    // The row says the TENANT ran out of quota (`buildOutcomeRow` classified it once): the door stores it and never teaches it.
+    ...(row.quotaExhausted ? { quotaExhausted: true } : {}),
     ...(run.projectId != null ? { projectId: run.projectId } : {}),
     routingSignal: false,
   };

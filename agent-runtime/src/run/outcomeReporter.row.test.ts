@@ -65,6 +65,11 @@ describe("buildRunRowReport — how the run ended, and where it belongs", () => 
     expect(buildRunRowReport(row({ terminalStatus: "failed" }))).not.toHaveProperty("rateLimited");
   });
 
+  it("carries a quota-exhausted run's flag from the row (classified once, in the row), and says nothing otherwise", () => {
+    expect(buildRunRowReport(row({ terminalStatus: "failed", quotaExhausted: true }))).toMatchObject({ terminalStatus: "failed", quotaExhausted: true });
+    expect(buildRunRowReport(row({ terminalStatus: "failed" }))).not.toHaveProperty("quotaExhausted");
+  });
+
   it("marks a run served off its intended model as degraded, and says nothing otherwise", () => {
     expect(buildRunRowReport(row({ degraded: true }))).toMatchObject({ degraded: true });
     expect(buildRunRowReport(row())).not.toHaveProperty("degraded");

@@ -26,7 +26,7 @@
  * a Worker invocation and a VS Code extension host build the identical row.
  */
 
-import { isRateLimitFailure } from "@builderforce/learned-routing";
+import { isRateLimitFailure, isTenantBudgetFailure } from "@builderforce/learned-routing";
 import { RUN_CANCELLED_REASON, type RunOutcomeKind, type RunOutcomeRow, type RunState } from "../contract.js";
 import { defaultEstimateTokens } from "../policy/compaction/pack.js";
 import { turnContextBlock } from "../turnContext.js";
@@ -84,6 +84,8 @@ export function buildOutcomeRow(input: OutcomeRowInput): RunOutcomeRow {
     progressTrips: tripsBySignal(progress?.tripsBySignal),
     ...(input.reason === RUN_CANCELLED_REASON ? { cancelled: true } : {}),
     ...(input.kind === "failed" && isRateLimitFailure(input.reason) ? { rateLimited: true } : {}),
+    // The tenant spent its own allowance: stored, and never taught to routing. Classified HERE, once, so every reporter that sends the row carries it.
+    ...(input.kind === "failed" && isTenantBudgetFailure(input.reason) ? { quotaExhausted: true } : {}),
     ...(isDegraded(state) ? { degraded: true } : {}),
   };
 }
