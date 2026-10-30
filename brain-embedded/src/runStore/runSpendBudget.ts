@@ -26,8 +26,8 @@ import { volatileTail } from '@seanhogg/builderforce-memory/handoff';
 import { MILLICENTS_PER_USD, runBudgetBreach, runBudgetWarnDue, type RunBudgetCaps } from '@builderforce/spend-contract';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import type { PriceBook } from '@builderforce/model-catalog';
-import { callCostMillicents } from '../localChat/callCost';
-import { usageRouteOf } from '../localChat/usageLedger';
+import { callCostOrUnknown } from '../localChat/callCost';
+import { servedModel, usageRouteOf } from '../localChat/usageLedger';
 import type { RunCell } from './runCell';
 import { cells, emit, nowIso, pushTrace, recordAppended } from './runCells';
 import { noteBudgetContained } from './runEndOutcome';
@@ -60,6 +60,9 @@ export function budgetContainedReply(spentMc: number, capMc: number): string {
 /** One run TREE's spend — the owner and every sub-agent under it share one. */
 export interface RunSpendTree {
   spentMc: number;
+  /** Calls whose price is unknown (not on the device, no price in the book). The cap counts only what is
+   *  priced, so a tree with any of these is under-counted — it is flagged, never read as free. */
+  unpricedCalls: number;
   /** The cap the tree's root started with; a child is held to the tighter of it and its own. */
   capMc: number;
 }
@@ -76,7 +79,7 @@ export function runSpendTree(run: Pick<RunLoopContext, 'c' | 'req'>, capMc: numb
   const ownerKey = run.req.lineage?.ownerKey;
   const ownerCell = ownerKey !== undefined ? cells.get(ownerKey) : undefined;
   const owned = ownerCell && ownerCell !== run.c ? spendTrees.get(ownerCell) : undefined;
-  const tree = owned ?? { spentMc: 0, capMc };
+  const tree = owned ?? { spentMc: 0, unpricedCalls: 0, capMc };
   spendTrees.set(run.c, tree);
   return tree;
 }
@@ -94,6 +97,7 @@ export function runSpendBudget(run: RunLoopContext, book?: PriceBook): SpendHook
   const caps: RunBudgetCaps = { maxSpendMillicents: capMc };
   // Each run of the tree is told once — each is a model that must converge.
   let warned = false;
+  let unpricedNoted = false;
 
   const contain = async (): Promise<StopDecision> => {
     const { c, chatId, convo, req } = run;
@@ -104,7 +108,7 @@ export function runSpendBudget(run: RunLoopContext, book?: PriceBook): SpendHook
       ts: nowIso(),
       category: 'message',
       label: 'run.budget_contained',
-      args: { spentMillicents: spentMc, capMillicents: capMc },
+      args: { spentMillicents: spentMc, capMillicents: capMc, unpricedCalls: tree.unpricedCalls },
       result: text,
     });
     convo.push({ role: 'assistant', content: text });
@@ -135,13 +139,29 @@ export function runSpendBudget(run: RunLoopContext, book?: PriceBook): SpendHook
       const meta = turn.meta as TurnMeta | undefined;
       const usage = meta?.result.usage;
       if (!meta || !usage) return;
-      // The ONE device cost rule, by where the call ran (a local-first serve costs nothing).
-      tree.spentMc += callCostMillicents(meta.result.resolvedModel ?? meta.requested, {
+      // The ONE device cost rule, by where the call ran (a local-first serve costs nothing), pricing the SAME
+      // served model its route came from. A call with no known price is counted as unpriced, not as free.
+      const cost = callCostOrUnknown(servedModel(meta.result, meta.requested), {
         prompt: usage.prompt ?? 0,
         completion: usage.completion ?? 0,
         cacheRead: usage.cacheRead ?? 0,
         cacheCreation: usage.cacheCreation ?? 0,
       }, book, usageRouteOf(meta.result, meta.requested));
+      if (cost === undefined) {
+        tree.unpricedCalls += 1;
+        if (!unpricedNoted) {
+          unpricedNoted = true;
+          pushTrace(run.c, {
+            ts: nowIso(),
+            category: 'message',
+            label: 'run.budget_unpriced',
+            args: { model: servedModel(meta.result, meta.requested) ?? null },
+            result: 'A call had no known price, so the run cap counts only the spend that is priced.',
+          });
+        }
+      } else {
+        tree.spentMc += cost;
+      }
     },
   };
 }

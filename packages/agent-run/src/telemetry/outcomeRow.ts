@@ -51,7 +51,7 @@ export function buildOutcomeRow(input: OutcomeRowInput): RunOutcomeRow {
   const progress = state.guards?.progress;
   const preflight = state.preflight;
   // Known only when every turn was priced (a partly unpriced run has an unknown cost, never a partial sum).
-  const runCost = reportedRunCost({ sum: tally.costMc, unpriced: tally.costUnpriced });
+  const runCost = reportedRunCost(tally.costMc);
 
   return {
     entryPoint: input.entryPoint,

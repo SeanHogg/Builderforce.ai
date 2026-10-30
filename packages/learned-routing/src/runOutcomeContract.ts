@@ -68,6 +68,11 @@ export interface RunOutcomeRequest extends RunOutcomeTelemetry {
    * telemetry row is recorded, and never folded into — or rebuilt into — the ranking.
    */
   routingSignal?: boolean;
+  /**
+   * The run failed because the TENANT ran out of quota/budget. Stored, and never taught to routing: it
+   * says nothing about the model. The reporter that knows says so; absent = it did not.
+   */
+  quotaExhausted?: boolean;
 }
 
 /** A validated, fully-resolved outcome — what the scorer records. */
@@ -88,6 +93,7 @@ export interface NormalizedRunOutcome extends RunOutcomeTelemetry {
   approved?: boolean;
   rateLimited?: boolean;
   routingSignal?: boolean;
+  quotaExhausted?: boolean;
 }
 
 /**
@@ -96,18 +102,23 @@ export interface NormalizedRunOutcome extends RunOutcomeTelemetry {
  * evidence about CODING models, whatever `routingSignal` the body claimed; any other run
  * teaches unless it said it should not.
  */
-export function carriesRoutingSignal(o: { routingSignal?: boolean; entryPoint?: string; source?: string }): boolean {
+export function carriesRoutingSignal(o: Partial<Pick<NormalizedRunOutcome, 'routingSignal' | 'entryPoint' | 'source'>>): boolean {
   return o.entryPoint !== 'canvas' && o.source !== 'canvas' && o.routingSignal !== false;
 }
 
 /**
- * Whether an outcome is FOLDED into the routing table (and, equally, admitted by a rebuild of it).
- * It must carry a routing signal ({@link carriesRoutingSignal}) AND not be a run the person STOPPED:
- * a cancelled run ended because they said so, which says nothing about the model, so it is stored
- * but never taught as a failure. The ONE decision for the client door and the cloud scorer.
+ * Whether an outcome is FOLDED into the routing table — the LIVE fold gate. It must be coding-run
+ * evidence ({@link carriesRoutingSignal}) and not a run that says nothing about the model: one the
+ * person STOPPED (`cancelled`), or one that failed because the TENANT ran out of quota. Those rows are
+ * stored, and still count in the spend and effectiveness lenses (a stop rate stays computable); they
+ * are only kept out of what the routing table learns. A rebuild applies the same exclusions at READ
+ * time (`teachesRouting` in the api), so the two writers agree. The ONE gate for the client door and
+ * the cloud scorer.
  */
-export function foldsIntoRouting(o: { routingSignal?: boolean; entryPoint?: string; source?: string; terminalStatus?: string }): boolean {
-  return carriesRoutingSignal(o) && o.terminalStatus !== 'cancelled';
+export function foldsIntoRouting(
+  o: Partial<Pick<NormalizedRunOutcome, 'routingSignal' | 'entryPoint' | 'source' | 'terminalStatus' | 'quotaExhausted'>>,
+): boolean {
+  return carriesRoutingSignal(o) && o.terminalStatus !== 'cancelled' && o.quotaExhausted !== true;
 }
 
 function str(v: unknown): string {
@@ -159,6 +170,7 @@ export function parseRunOutcomeRequest(
   const approved = bool(b.approved);
   const rateLimited = bool(b.rateLimited);
   const routingSignal = bool(b.routingSignal);
+  const quotaExhausted = bool(b.quotaExhausted);
   const actionType = str(b.actionType);
   const role = str(b.role);
 
@@ -181,6 +193,7 @@ export function parseRunOutcomeRequest(
       ...(approved != null ? { approved } : {}),
       ...(rateLimited != null ? { rateLimited } : {}),
       ...(routingSignal != null ? { routingSignal } : {}),
+      ...(quotaExhausted != null ? { quotaExhausted } : {}),
       ...parseRunOutcomeTelemetry(b),
     },
   };

@@ -39,6 +39,11 @@ describe('reconcileRoutingTable — routing_signal', () => {
         expect(sql).toContain('"routing_signal" = $');
         // …bound to TRUE: the rebuild admits only rows that teach.
         expect(params).toContain(true);
+        // …and not a run the person stopped or the tenant's quota ended (the live fold's own exclusions).
+        expect(sql).toContain('"terminal_status" <> $');
+        expect(params).toContain('cancelled');
+        expect(sql).toContain('"quota_exhausted" = $');
+        expect(params).toContain(false);
       }
     });
   }

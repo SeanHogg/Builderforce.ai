@@ -81,12 +81,20 @@ export interface RunUsageValue {
   at: string;
 }
 
+/**
+ * The model that answered a call — the ONE name its route, its price and its ledger row all come from
+ * (never the model that was merely asked for, unless the result names no answer at all).
+ */
+export function servedModel(result: Pick<StreamChatResult, 'resolvedModel' | 'localFirst'>, requested?: string): string | undefined {
+  return servedRef(result) ?? requested;
+}
+
 /** Which route served a call, from what the stream reported. */
 export function usageRouteOf(result: Pick<StreamChatResult, 'resolvedModel' | 'localFirst'>, requested?: string): UsageRoute {
   // 'local' ONLY for a call the device answered (the one rule, `servedOnDevice`): a call that merely asked
   // for a local model and was answered elsewhere is not the device's free work.
   if (servedOnDevice(result)) return 'local';
-  const model = servedRef(result) ?? requested ?? '';
+  const model = servedModel(result, requested) ?? '';
   // A hosted local-grammar runtime (Kimi Code) is the person's own account: it counts against the cap
   // and books no local saving, like any other direct call.
   if (hostedDirectRef(model) !== undefined) return 'byo-direct';
@@ -226,7 +234,7 @@ export function withRunUsage(
     void ledger.record({
       chatId: context.chatId,
       runKey: context.runKey,
-      model: result.resolvedModel ?? opts.model ?? 'auto',
+      model: servedModel(result, opts.model) ?? 'auto',
       route: usageRouteOf(result, opts.model),
       usage: result.usage,
       ...(context.mode ? { mode: context.mode } : {}),

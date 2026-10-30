@@ -71,6 +71,23 @@ describe('recordClientRunOutcome — routingSignal', () => {
     expect(mocks.inserted.map((row) => row.costUsdMillicents)).toEqual([null, 830, 0]);
   });
 
+  it('stores a run the person stopped as coding evidence, but never folds it as a failure', async () => {
+    await record({ clientRunId: 'ide-stop', source: 'ide', model: 'm', terminalStatus: 'cancelled', steps: 3 });
+
+    expect(mocks.inserted[0]).toMatchObject({ terminalStatus: 'cancelled', routingSignal: true, quotaExhausted: false });
+    expect(mocks.applyOutcomeToRoutingTable).not.toHaveBeenCalled();
+    // The datasets are still stale: the row exists and counts in the lenses.
+    expect(mocks.bumpOutcomesVersion).toHaveBeenCalledTimes(1);
+  });
+
+  it('stores a run the tenant’s quota ended, and never folds it: it says nothing about the model', async () => {
+    await record({ clientRunId: 'ide-quota', source: 'ide', model: 'm', terminalStatus: 'failed', steps: 3, quotaExhausted: true });
+
+    expect(mocks.inserted[0]).toMatchObject({ terminalStatus: 'failed', routingSignal: true, quotaExhausted: true });
+    expect(mocks.applyOutcomeToRoutingTable).not.toHaveBeenCalled();
+    expect(mocks.bumpOutcomesVersion).toHaveBeenCalledTimes(1);
+  });
+
   it('a report without the flag teaches the routing table exactly as before', async () => {
     await record({ clientRunId: 'ide-1', source: 'ide', model: 'm', terminalStatus: 'completed' });
 

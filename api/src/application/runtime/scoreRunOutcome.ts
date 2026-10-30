@@ -20,6 +20,7 @@ import type { Env } from '../../env';
 import { approvals, executions, llmUsageLog, pullRequests, tasks, toolAuditEvents, runModelOutcomes } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
+  carriesRoutingSignal,
   foldsIntoRouting,
   normalizeActionType,
   type NormalizedRunOutcome,
@@ -78,9 +79,10 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
       costMc: reportedCostMc,
       approved: !!o.approved,
     });
-    // The server's call: a canvas turn never teaches coding routing, whatever the body said, and a run
-    // the person stopped teaches nothing either (stored, never folded).
-    const routingSignal = foldsIntoRouting(o);
+    // The server's call, one fact per column: `routing_signal` is whether this is CODING-RUN evidence (a canvas
+    // turn never is, whatever the body said). Whether it is also FOLDED is a separate gate below (a stopped
+    // run, or a tenant-quota failure, is stored and counted but teaches routing nothing).
+    const routingSignal = carriesRoutingSignal(o);
     const plan = await resolveTenantPlan(env, tenantId).then((p) => p.effectivePlan).catch(() => 'free' as const);
 
     const inserted = await runTelemetryDatabase(db)
@@ -108,6 +110,7 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
         // tool counts, tokens, the efficiency fields) — validated by the shared contract.
         ...runOutcomeTelemetryColumns(o),
         routingSignal,
+        quotaExhausted: o.quotaExhausted === true,
       })
       .onConflictDoNothing({ target: runModelOutcomes.clientRunId, where: isNotNull(runModelOutcomes.clientRunId) })
       .returning({ id: runModelOutcomes.id });
@@ -118,17 +121,19 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
     // A report that is not a routing signal (a Creation Canvas turn is not evidence about
     // coding models) is recorded and goes no further: not into the blob, not into the datasets.
     if (inserted.length > 0 && routingSignal) {
-      await applyOutcomeToRoutingTable(env, db, {
-        tenantId,
-        projectId: o.projectId ?? null,
-        actionType,
-        role,
-        model: o.model,
-        score,
-        ...(reportedCostMc !== null ? { costMc: reportedCostMc } : {}),
-        merged: !!o.merged,
-        rateLimited: !!o.rateLimited,
-      });
+      if (foldsIntoRouting(o)) {
+        await applyOutcomeToRoutingTable(env, db, {
+          tenantId,
+          projectId: o.projectId ?? null,
+          actionType,
+          role,
+          model: o.model,
+          score,
+          ...(reportedCostMc !== null ? { costMc: reportedCostMc } : {}),
+          merged: !!o.merged,
+          rateLimited: !!o.rateLimited,
+        });
+      }
       // A new labeled outcome means the tenant's SFT/DPO datasets + variant-eval
       // views are stale — orphan them (best-effort, same fold gate as routing).
       await bumpOutcomesVersion(env, tenantId);
@@ -328,8 +333,6 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       costUsdMillicents: costMc,
       terminalStatus,
       rateLimited,
-      // A run the person stopped is stored but is not routing evidence (the same rule as the client door).
-      routingSignal: foldsIntoRouting({ terminalStatus }),
       // The PRD 35 §8.2 telemetry label: a server-scored run is a cloud run.
       entryPoint: 'cloud',
       // Literal reinforcement signals (migration 0333).
@@ -380,18 +383,21 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
     // Fold into the routing table — but only for a run that actually ran a model.
     // A run that produced no LLM call ('unknown') carries no model attribution, so
     // learning from it would pollute the ranking.
-    if (model && foldsIntoRouting({ terminalStatus })) {
-      await applyOutcomeToRoutingTable(env, db, {
-        tenantId: exec.tenantId,
-        projectId,
-        actionType,
-        role: CLOUD_RUN_ROLE,
-        model,
-        score,
-        costMc,
-        merged: pr.merged,
-        rateLimited,
-      });
+    if (model) {
+      // A run the person stopped, or one the tenant's quota ended, is stored but teaches routing nothing.
+      if (foldsIntoRouting({ terminalStatus, quotaExhausted: classifyRunFailure(exec.errorMessage) === 'quota_exhausted' })) {
+        await applyOutcomeToRoutingTable(env, db, {
+          tenantId: exec.tenantId,
+          projectId,
+          actionType,
+          role: CLOUD_RUN_ROLE,
+          model,
+          score,
+          costMc,
+          merged: pr.merged,
+          rateLimited,
+        });
+      }
       // Orphan the tenant's SFT/DPO datasets + variant-eval views (see client path).
       await bumpOutcomesVersion(env, exec.tenantId);
     }

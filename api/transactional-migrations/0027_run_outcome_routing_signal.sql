@@ -8,6 +8,13 @@ ALTER TABLE run_model_outcomes ADD COLUMN IF NOT EXISTS routing_signal BOOLEAN N
 ALTER TABLE run_model_outcomes ALTER COLUMN cost_usd_millicents DROP NOT NULL;
 ALTER TABLE run_model_outcomes ALTER COLUMN cost_usd_millicents DROP DEFAULT;
 
+-- A run that died because the TENANT ran out of budget (quota) says nothing about the model (see
+-- migrations/1284). Additive + defaulted FALSE.
+ALTER TABLE run_model_outcomes ADD COLUMN IF NOT EXISTS quota_exhausted BOOLEAN NOT NULL DEFAULT FALSE;
+
+COMMENT ON COLUMN run_model_outcomes.quota_exhausted IS
+  'TRUE = the run failed because the tenant ran out of quota/budget: not evidence about the model, so routing never learns from it.';
+
 COMMENT ON COLUMN run_model_outcomes.cost_usd_millicents IS
   'Millicents the run cost; NULL = the run reported none (unknown, not zero). Sums and averages skip NULLs.';
 

@@ -13,7 +13,7 @@ import type { Env } from '../../env';
 import { setCached } from '../../infrastructure/cache/readThroughCache';
 import { llmActionRatings, runModelOutcomes } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
-import { codingEvidence } from '../shared/codingEvidence';
+import { teachesRouting } from '../shared/codingEvidence';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   DECAYED_WINDOW_DAYS,
@@ -163,9 +163,9 @@ export async function reconcileRoutingTable(env: Env, db: Db, scope: RoutingScop
     // merged by (action, model) in memory below.
     const outcomeAggregate = outcomeAggregateFor(decay);
     const outcomesDb = runTelemetryDatabase(db);
-    // A row recorded as NOT a routing signal (a Creation Canvas run) is telemetry only: no
-    // reconcile may re-admit it, or a rebuild would undo what the live fold declined to do.
-    const teaches = codingEvidence;
+    // A row the live fold declined (a Creation Canvas run, a run the person stopped, a tenant-quota
+    // failure) is telemetry only: no reconcile may re-admit it, or a rebuild would undo that.
+    const teaches = teachesRouting;
     const [rows, ratingRows, roleRows] = await Promise.all([
       outcomesDb
         .select({ actionType: runModelOutcomes.actionType, ...outcomeAggregate })

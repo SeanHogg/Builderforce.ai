@@ -19,7 +19,7 @@
  * A route left out is read from the model id, as the stream would (`usageRouteOf`).
  */
 
-import { hostedDirectRef, runsOnDevice } from '@builderforce/local-inference';
+import { hostedCatalogId, hostedDirectRef, runsOnDevice } from '@builderforce/local-inference';
 import { directCatalogId, listPriceOf, snapshotPriceBook, type PriceBook } from '@builderforce/model-catalog';
 import { computeCostMillicents } from '@builderforce/spend-contract';
 import type { UsageRoute } from './usageLedger';
@@ -46,20 +46,34 @@ export function isOwnKeySpend(route: UsageRoute): boolean {
   return route === 'byo-direct';
 }
 
-/** The call's cost in millicents; 0 for a local call or a model with no catalog price. */
-export function callCostMillicents(
+/**
+ * The id a call is priced under. A hosted local-grammar runtime's model (Kimi Code) is priced under the
+ * catalog id its registry alias names (`local/kimi-code/k3` → `moonshotai/kimi-k3`), else under its direct
+ * spelling (a live gateway book may know it); any other model under its own id.
+ */
+function pricedId(model: string): string {
+  return hostedCatalogId(model) ?? hostedDirectRef(model) ?? model;
+}
+
+/**
+ * The call's cost in millicents: 0 for a call on the device, the priced figure otherwise, and UNDEFINED
+ * when the call is not on the device and no price is known for it (a model the book does not carry, a
+ * hosted model with no registry alias). Unknown is not free: the spend cap flags it and the ledger
+ * reports the tokens as unpriced, rather than valuing the call at zero.
+ */
+export function callCostOrUnknown(
   model: string | undefined,
   tokens: CallTokens,
   book: PriceBook = snapshotPriceBook(),
   route?: UsageRoute,
-): number {
-  if (!model) return 0;
+): number | undefined {
+  if (!model) return undefined;
   const via = route ?? routeOfModel(model);
-  if (via === 'local' || runsOnDevice(model)) return 0;
-  // A hosted local-grammar runtime is priced under its direct spelling (`direct/kimi-code/k3`).
-  const priced = hostedDirectRef(model) ?? model;
+  // The route already says whether the device answered; the model id is not consulted again.
+  if (via === 'local') return 0;
+  const priced = pricedId(model);
   const price = isOwnKeySpend(via) ? listPriceOf(book, priced) : book.priceOf(priced);
-  if (!price) return 0;
+  if (!price) return undefined;
   const prompt = n(tokens.prompt);
   const completion = n(tokens.completion);
   return computeCostMillicents({ prompt: price.input, completion: price.output }, {
@@ -69,4 +83,15 @@ export function callCostMillicents(
     cacheReadTokens: Math.min(n(tokens.cacheRead), prompt),
     cacheCreationTokens: Math.min(n(tokens.cacheCreation), prompt),
   });
+}
+
+/** {@link callCostOrUnknown} as a plain number, for a report that prints a figure (an unknown prints as 0).
+ *  The spend cap and the ledger do NOT use this: they must see the difference. */
+export function callCostMillicents(
+  model: string | undefined,
+  tokens: CallTokens,
+  book: PriceBook = snapshotPriceBook(),
+  route?: UsageRoute,
+): number {
+  return callCostOrUnknown(model, tokens, book, route) ?? 0;
 }

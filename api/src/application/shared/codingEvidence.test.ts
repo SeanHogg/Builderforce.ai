@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
-import { codingEvidence } from './codingEvidence';
+import { codingEvidence, teachesRouting } from './codingEvidence';
 
 /**
  * `routing_signal` means "this row is coding-run evidence". A telemetry-only report (a
@@ -14,6 +14,14 @@ describe('codingEvidence', () => {
     const { sql, params } = new PgDialect().sqlToQuery(codingEvidence);
     expect(sql).toContain('"routing_signal" = $');
     expect(params).toEqual([true]);
+  });
+
+  it('teachesRouting adds the exclusions: not a stopped run, not a tenant-quota failure', () => {
+    const { sql, params } = new PgDialect().sqlToQuery(teachesRouting!);
+    expect(sql).toContain('"routing_signal" = $');
+    expect(sql).toContain('"terminal_status" <> $');
+    expect(sql).toContain('"quota_exhausted" = $');
+    expect(params).toEqual([true, 'cancelled', false]);
   });
 
   // Each of these reads run_model_outcomes to say how well agents CODE. A new lens of that kind

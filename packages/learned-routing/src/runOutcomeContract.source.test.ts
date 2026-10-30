@@ -39,6 +39,19 @@ describe('foldsIntoRouting', () => {
     expect(foldsIntoRouting({ terminalStatus: 'cancelled' })).toBe(false);
   });
 
+  it('never folds a run the tenant’s quota ended: it says nothing about the model either', () => {
+    expect(foldsIntoRouting({ source: 'ide', terminalStatus: 'failed', quotaExhausted: true })).toBe(false);
+    expect(foldsIntoRouting({ source: 'ide', terminalStatus: 'failed', quotaExhausted: false })).toBe(true);
+  });
+
+  it('reads quotaExhausted off the wire as a plain boolean', () => {
+    const quota = parseRunOutcomeRequest({ ...body, quotaExhausted: true });
+    const junk = parseRunOutcomeRequest({ ...body, quotaExhausted: 'yes' });
+
+    expect(quota.ok && quota.outcome.quotaExhausted).toBe(true);
+    expect(junk.ok && junk.outcome.quotaExhausted).toBeUndefined();
+  });
+
   it('keeps every reason carriesRoutingSignal had to refuse', () => {
     expect(foldsIntoRouting({ source: 'canvas', terminalStatus: 'completed' })).toBe(false);
     expect(foldsIntoRouting({ entryPoint: 'canvas', terminalStatus: 'completed' })).toBe(false);

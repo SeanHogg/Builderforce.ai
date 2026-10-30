@@ -6,11 +6,12 @@
  */
 
 import type { EntityDestination, LocalFirstTransaction } from '@builderforce/local-first';
+import { hostedCatalogId } from '@builderforce/local-inference';
 import { snapshotPriceBook, type PriceBook } from '@builderforce/model-catalog';
 import { foldSpendSavings, type SpendSavingsSummary, type UsageSlice } from '@builderforce/spend-contract';
 import { isImported } from './journal';
 import { liveRecords } from './records';
-import { callCostMillicents, isOwnKeySpend } from './callCost';
+import { callCostOrUnknown, isOwnKeySpend } from './callCost';
 import type { RunUsageValue } from './usageLedger';
 
 /**
@@ -25,14 +26,17 @@ function sliceOf(row: RunUsageValue, book: PriceBook): UsageSlice {
   const local = row.savingsSource === 'local_model';
   const avoided = row.savingsSource === 'deterministic';
   const ownKey = isOwnKeySpend(row.route);
-  const costMc = local || avoided || ownKey ? 0 : callCostMillicents(row.model, {
+  // An unpriced call adds no platform cost here (`?? 0` only fills the slice's number) and is reported by the
+  // fold as `unpricedTokens` — its slice's model has no price — never as a free call.
+  const costMc = local || avoided || ownKey ? 0 : callCostOrUnknown(row.model, {
     prompt: row.promptTokens,
     completion: row.completionTokens,
     cacheRead: row.cacheReadTokens,
     cacheCreation: row.cacheCreationTokens,
-  }, book, row.route);
+  }, book, row.route) ?? 0;
   return {
-    model: row.model,
+    // A hosted runtime's model is valued under the catalog id it bills as (the registry's alias).
+    model: hostedCatalogId(row.model) ?? row.model,
     byo: ownKey,
     savingsSource: row.savingsSource ?? null,
     // Both are estimates: a local call's counterfactual, an avoided call's median turn.

@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { buildOutcomeRow, freshTally, tallyTurn, type RunEvent, type RunState } from "../../src/index.js";
+import { reportedRunCost } from "../../src/telemetry/costTally.js";
 import { emptyTally, foldEvent } from "../../src/telemetry/eventTally.js";
 import { freshState } from "../../src/runState.js";
 import { TEST_POLICY, TEST_TASK } from "../support/policyContext.js";
@@ -61,10 +62,11 @@ describe("the run's reported cost", () => {
 describe("the event-trace fold agrees", () => {
   it("latches unpriced the same way", () => {
     // Unknown, never the partial sum of the priced turns.
-    expect(traceCost([0, undefined]).cost).toBeUndefined();
-    expect(traceCost([40, undefined, 60]).cost).toBeUndefined();
-    expect(traceCost([0, 0]).cost).toBe(0);
-    expect(traceCost([40, 60]).cost).toBe(100);
-    expect(traceCost([]).cost).toBeUndefined();
+    expect(reportedRunCost(traceCost([0, undefined]).cost)).toBeUndefined();
+    expect(reportedRunCost(traceCost([40, undefined, 60]).cost)).toBeUndefined();
+    expect(reportedRunCost(traceCost([undefined, 40]).cost)).toBeUndefined();
+    expect(reportedRunCost(traceCost([0, 0]).cost)).toBe(0);
+    expect(reportedRunCost(traceCost([40, 60]).cost)).toBe(100);
+    expect(reportedRunCost(traceCost([]).cost)).toBeUndefined();
   });
 });

@@ -1622,6 +1622,10 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
    *  folded into the routing blob or re-admitted by a rebuild, and excluded from every lens that
    *  ranks models or measures coding effectiveness (see application/shared/codingEvidence). */
   routingSignal:    boolean('routing_signal').notNull().default(true),
+  /** TRUE = the run failed because the TENANT ran out of quota/budget (migration 1284 / transactional 0027):
+   *  stored, but not evidence about the model, so the routing table never learns from it
+   *  (`application/shared/codingEvidence` `teachesRouting`). A separate fact from `routingSignal`. */
+  quotaExhausted:   boolean('quota_exhausted').notNull().default(false),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   // Declared with its predicate so an upsert on `clientRunId` is held to restating it

@@ -21,6 +21,7 @@ import {
   type RunState,
 } from "../../src/index.js";
 import { freshState } from "../../src/runState.js";
+import { reportedRunCost } from "../../src/telemetry/costTally.js";
 import { TEST_POLICY, TEST_TASK } from "../support/policyContext.js";
 
 function state(): RunState {
@@ -107,13 +108,14 @@ describe("the run tally — what each fact adds", () => {
     tallyTurn(t, "m-1", { inputTokens: 100, outputTokens: 20, cacheReadTokens: 60, costMc: 5 });
     tallyTurn(t, "m-2", { inputTokens: 50, outputTokens: 10 });
     tallyTurn(t, undefined, undefined);
-    expect(t).toMatchObject({ model: "m-2", tokens: 180, cacheReadTokens: 60, costMc: 5 });
+    // m-2 and the last turn were not priced: the run's cost is unknown, never the partial sum of 5.
+    expect(t).toMatchObject({ model: "m-2", tokens: 180, cacheReadTokens: 60, costMc: null });
   });
 
   it("leaves cost absent when no transport reported one", () => {
     const t = freshTally();
     tallyTurn(t, "m-1", { inputTokens: 10, outputTokens: 1 });
-    expect(t.costMc).toBeUndefined();
+    expect(reportedRunCost(t.costMc)).toBeUndefined();
   });
 
   it("counts calls and errors from the dispatch verdict", () => {

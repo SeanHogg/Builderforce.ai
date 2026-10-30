@@ -106,6 +106,13 @@ export interface LocalRuntime {
    *  the CLIENT must make the call — Kimi Code, whose edge refuses the gateway. A gateway
    *  ref on that vendor is dispatched from the user's machine (`clientPinOf`). */
   gatewayVendor?: string;
+  /**
+   * A HOSTED runtime's model ids (the part after `local/<runtime>/`) → the priced catalog id they bill as.
+   * Data, not a string rewrite: the device's price book knows `moonshotai/kimi-k3`, never `kimi-code/k3`.
+   * Required of every runtime that is not `onDevice` (a registry test holds that line); a hosted model
+   * with no entry here is UNPRICED, which the spend cap and ledger report as unknown, never as free.
+   */
+  catalogAliases?: Readonly<Record<string, string>>;
   /** The provider chooses sampling per model, so a client sends no `temperature` —
    *  Kimi K3 accepts only `1` and 400s anything else. */
   providerSampling?: true;
@@ -122,6 +129,24 @@ export interface LocalRuntime {
 export const BROWSER_ENGINE_BASE_URL = 'http://browser.local';
 export const BFI_ENGINE_BASE_URL = 'http://bfi.local';
 export const WEBLLM_ENGINE_BASE_URL = 'http://webllm.local';
+
+/** Kimi Code's model ids → the catalog ids the price book knows them under (Moonshot's `kimi-*`). Both the
+ *  short form a Kimi Code install lists (`k3`) and the full one (`kimi-k3`) resolve. */
+const KIMI_CODE_CATALOG_ALIASES: Readonly<Record<string, string>> = {
+  'k2': 'moonshotai/kimi-k2',
+  'kimi-k2': 'moonshotai/kimi-k2',
+  'kimi-k2-0905': 'moonshotai/kimi-k2-0905',
+  'kimi-k2-thinking': 'moonshotai/kimi-k2-thinking',
+  'k2.5': 'moonshotai/kimi-k2.5',
+  'kimi-k2.5': 'moonshotai/kimi-k2.5',
+  'k2.6': 'moonshotai/kimi-k2.6',
+  'kimi-k2.6': 'moonshotai/kimi-k2.6',
+  'kimi-k2.7-code': 'moonshotai/kimi-k2.7-code',
+  'k3': 'moonshotai/kimi-k3',
+  'kimi-k3': 'moonshotai/kimi-k3',
+  'kimi-k3.1-pro': 'moonshotai/kimi-k3.1-pro',
+  'kimi-latest': 'moonshotai/kimi-latest',
+};
 
 /** Runtime metadata. `automaticRank`, not array position, owns automatic preference. */
 export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
@@ -177,7 +202,7 @@ export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
     tools: 'unknown',
     reach: 'page',
   },
-  { id: 'kimi-code', automaticRank: Number.POSITIVE_INFINITY, label: 'Kimi Code', onDevice: false, catalog: 'declared', tools: 'all', reach: 'http', gatewayVendor: 'kimi-code', providerSampling: true, accountProvider: 'kimi' },
+  { id: 'kimi-code', automaticRank: Number.POSITIVE_INFINITY, label: 'Kimi Code', onDevice: false, catalog: 'declared', tools: 'all', reach: 'http', gatewayVendor: 'kimi-code', catalogAliases: KIMI_CODE_CATALOG_ALIASES, providerSampling: true, accountProvider: 'kimi' },
 ];
 
 /** The runtimes reached over HTTP — what a prober, a settings form or an endpoint
