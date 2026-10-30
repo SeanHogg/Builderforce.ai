@@ -17,7 +17,7 @@
  */
 import {
   ModelTransportError, RUN_CANCELLED_REASON, describeVerifyOutcome, runSandboxVerify, runVerifyPhase,
-  type RunOutcome, type RunState, type VerifySandbox,
+  type RunOutcome, type RunState, type RunTally, type VerifySandbox,
 } from '@builderforce/agent-run';
 import type { RunSandbox } from './sandbox/runSandbox';
 import { buildRuntimeService } from '../../buildRuntimeService';
@@ -135,8 +135,11 @@ async function commitCodeMap(host: CloudRunHost, state: RunState, why: string, s
   }).catch((error) => reportCaughtError(error, { source: 'application/runtime/cloudRunTail.ts', operation: 'commitCodeMap', context: { executionId: refs.executionId, error } }));
 }
 
-/** A steered stop is a cancel: the execution transitions to CANCELLED (so nothing restarts it) and the run lands as cancelled. */
-async function cancelOnSteeredStop(host: CloudRunHost): Promise<void> {
+/**
+ * A steered stop is a cancel: the execution transitions to CANCELLED (so nothing restarts it) and the run lands as cancelled. The cancel IS
+ * this run's terminal transition (the Durable Object stops on `cancelled` without a second one), so the run's final tally rides it.
+ */
+async function cancelOnSteeredStop(host: CloudRunHost, telemetry: RunTally | undefined): Promise<void> {
   if (host.cancel.cancelled()) return; // the row was already cancelled elsewhere — that is what stopped the run
   // The same application use case the cancel API runs (`RuntimeService.cancel`): the row flips to CANCELLED, the runner is told,
   // the audit and the lifecycle narration are written. A Worker surface has no delegation runtime, so it builds the canonical one.
@@ -145,7 +148,7 @@ async function cancelOnSteeredStop(host: CloudRunHost): Promise<void> {
   const where = { source: 'application/runtime/cloudRunTail.ts', operation: 'cancelOnSteeredStop', context: { executionId } };
   // The audit row names the PERSON whose steer stopped the run; with none on record the execution itself is the actor.
   const sender = await lastPersonSteerSender(host.db, tenantId, executionId).catch(reportedFallback<string | null>(null, { ...where, operation: 'stopSenderLookup' }));
-  await runtime.cancel(executionId, sender ?? `execution:${executionId}`).catch(reportedFallback(undefined, where));
+  await runtime.cancel(executionId, sender ?? `execution:${executionId}`, { telemetry }).catch(reportedFallback(undefined, where));
 }
 
 /** Land a run that is over: leases, the sign-off check, verify + memory, then the pull request / teardown. */
@@ -174,14 +177,16 @@ async function land(host: CloudRunHost, state: RunState, output: string, cancell
 
 /**
  * Map the agent's outcome to the cloud's result and, on a terminal one, land the run. A terminal result carries the run's final tally
- * (`RunState.telemetry`); the terminal transition hands it to the ONE outcome-row writer (`cloudOutcomeRow`), which records the row with
+ * (`RunState.telemetry`) - or, for a steered stop, the cancel carries it; the terminal transition hands it to the ONE outcome-row writer (`cloudOutcomeRow`), which records the row with
  * the status the execution LANDED with - a missing sign-off, a breaker that lands COMPLETED, a steered stop and a rehearsal that spent its
  * step budget all differ from what the agent settled on. A run that goes on (paused, a durable tick that yielded) carries none; an
  * exception the Durable Object re-arms throws before it gets here.
  */
 export async function settleCloudRun(host: CloudRunHost, outcome: RunOutcome, stash: RunStash, model: CloudModelPort): Promise<CloudLoopResult> {
   const result = await mapOutcome(host, outcome, stash, model);
-  return result.finished && outcome.state.telemetry ? { ...result, telemetry: outcome.state.telemetry } : result;
+  // A steered stop's tally already rode `RuntimeService.cancel` (it IS that run's terminal transition): only a result the caller
+  // lands itself carries it, so there is exactly one path from the tally to the outcome row.
+  return result.finished && !result.cancelled && outcome.state.telemetry ? { ...result, telemetry: outcome.state.telemetry } : result;
 }
 
 async function mapOutcome(host: CloudRunHost, outcome: RunOutcome, stash: RunStash, model: CloudModelPort): Promise<CloudLoopResult> {
@@ -191,7 +196,7 @@ async function mapOutcome(host: CloudRunHost, outcome: RunOutcome, stash: RunSta
       // the Durable Object re-arms an eviction exactly as before; the adapter hands the leases back first.
       if (outcome.cause !== undefined && !(outcome.cause instanceof ModelTransportError)) throw outcome.cause;
       if (outcome.reason === RUN_CANCELLED_REASON) {
-        await cancelOnSteeredStop(host);
+        await cancelOnSteeredStop(host, outcome.state.telemetry);
         return land(host, outcome.state, '', true, stash);
       }
       // The failure breaker or the step budget ended the run, or the stall policy gave up: it lands with its notice.

@@ -35,7 +35,8 @@ import { childBrief, parseCloudChild, settleCloudChildLineage } from '../../appl
 import type { CloudRunDelegation } from '../../application/runtime/cloudRunDelegation';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
-import { ExecutionStatus } from '../../domain/shared/types';
+import { ExecutionStatus, asExecutionId } from '../../domain/shared/types';
+import { buildExecutionRepository } from '../../buildExecutionRepository';
 import { TERMINAL_EXECUTION_STATUSES } from '../../domain/execution/Execution';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env } from '../../env';
@@ -321,22 +322,18 @@ export class CloudRunnerDO implements DurableObject {
         cursor.loop = result.state as CloudLoopState | undefined;
         await this.state.storage.put(CURSOR_KEY, cursor);
         await this.sandboxHost.park(cursor.sandbox);
-        await this.db.update(executions)
-          .set({ status: 'paused', updatedAt: new Date() })
-          .where(eq(executions.id, cursor.executionId))
-          .catch((error) => this.reportError(error, { operation: "alarm", context: { logMessage: '[cloud-runner] pause transition failed', details: {
-            executionId: cursor.executionId,
-            tenantId: cursor.tenantId,
-            error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-          } } }));
+        // The guarded non-terminal write (`ExecutionRepository.update`): a cancel / reap that landed between the tick start and here keeps the
+        // row, and the run then owes no 'paused' milestone for a run that is not paused.
+        const executionPort = buildExecutionRepository(this.db);
+        const paused = await executionPort.findById(asExecutionId(cursor.executionId))
+          .then((row) => (row ? executionPort.update(row.markPaused()) : null))
+          .then((saved) => saved?.status === ExecutionStatus.PAUSED)
+          .catch((error) => { this.reportError(error, { operation: "alarm", context: { logMessage: '[cloud-runner] pause transition failed', details: { executionId: cursor.executionId, tenantId: cursor.tenantId, error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) } } }); return false; });
         // Narrate the pause — WITH the question — into the ticket's linked Brain
         // chats, so the human driving the conversation sees what the agent needs
         // (Slack/email via approvalNotifier are the only other channels). Keyed by
         // approval id: repeat pauses each narrate once; a retried tick dedupes.
-        await this.runtimeService.postLifecycleMilestoneById(cursor.executionId, 'paused', {
-          questionText: result.awaitingInput.question,
-          eventNonce: result.awaitingInput.approvalId,
-        });
+        if (paused) await this.runtimeService.postLifecycleMilestoneById(cursor.executionId, 'paused', { questionText: result.awaitingInput.question, eventNonce: result.awaitingInput.approvalId });
         return;
       }
 

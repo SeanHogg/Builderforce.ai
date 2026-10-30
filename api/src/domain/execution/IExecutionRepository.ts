@@ -21,13 +21,16 @@ export interface IExecutionRepository {
    * THE terminal transition: conditional on a non-terminal status, so exactly one writer wins. `won: false` returns the winner's row
    * and the caller skips its side effects; the outcome owner is told only of a win.
    */
-  land(id: ExecutionId, status: TerminalStatus, fields?: LandFields, from?: readonly ExecutionStatus[], context?: LandContext): Promise<{ won: boolean; execution: Execution }>;
+  land(id: ExecutionId, status: TerminalStatus, fields?: LandFields, from?: readonly NonTerminalStatus[], context?: LandContext): Promise<{ won: boolean; execution: Execution }>;
   /** The productivity verdict of a landed run - a field write that never touches the status. */
   setProduced(id: ExecutionId, produced: boolean): Promise<Execution>;
 }
 
 /** The terminal execution statuses: reachable only through {@link IExecutionRepository.land}. */
 export type TerminalStatus = ExecutionStatus.COMPLETED | ExecutionStatus.FAILED | ExecutionStatus.CANCELLED;
+
+/** The statuses a run can still LAND from - the complement of {@link TerminalStatus}, so a `from` list can never name a terminal one. */
+export type NonTerminalStatus = Exclude<ExecutionStatus, TerminalStatus>;
 
 /** What the winner of a landing hands to the outcome owner beyond the row: the run's final tally (`RunState.telemetry`), when it has one. */
 export interface LandContext { telemetry?: object }

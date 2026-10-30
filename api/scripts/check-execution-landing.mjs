@@ -1,22 +1,26 @@
 #!/usr/bin/env node
 /**
- * Execution-landing guard - a terminal status is written ONLY through `ExecutionRepository.land` (or, for the bulk cron sweep, the
- * reaper's own conditional batch UPDATE).
+ * Execution-landing guard - the status of an execution is written ONLY by `ExecutionRepository` (`land` for a terminal status, the
+ * guarded `update` for a non-terminal one) or, for the bulk cron sweep, the reaper's own conditional batch UPDATE.
  *
- * A raw `db.update(executions).set({ status: 'completed' | 'failed' | 'cancelled' ... })`, or a raw `UPDATE executions SET status =
- * <terminal>`, is a second writer: it can overwrite a run another writer already landed, and it skips the run's one outcome row.
- * This guard fails on any such write outside ExecutionRepository and staleExecutionReaper. Not a ratchet: the baseline is EMPTY.
+ * Any other write to `executions.status` - a drizzle `update(executions).set({ status ... })` (nested, conditional or computed
+ * included) or a raw `UPDATE executions SET status =` (in a `sql` template too) - is a second writer: it can overwrite or resurrect a
+ * run another writer already landed (`'paused'` over a cancelled row is as bad as `'failed'` over a completed one), and a terminal
+ * one skips the run's one outcome row. The scan is value-agnostic (see `lib/executionLandingScan.mjs`, self-tested by
+ * `executionLandingGuard.test.ts`). Not a ratchet: the baseline is EMPTY.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { scanExecutionStatusWrites } from './lib/executionLandingScan.mjs';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'src');
-const ALLOWED = new Set(['infrastructure/repositories/ExecutionRepository.ts', 'application/runtime/staleExecutionReaper.ts']);
-const TERMINAL = String.raw`(?:'(?:completed|failed|cancelled)'|"(?:completed|failed|cancelled)"|ExecutionStatus\.(?:COMPLETED|FAILED|CANCELLED))`;
-// `.update(executions ...) ... .set({ ... status: <terminal>` (within one statement), and raw SQL.
-const DRIZZLE = new RegExp(String.raw`\.update\(\s*executions(?:Table)?\b[^;]*?\.set\(\s*\{[^}]*?\bstatus\s*:\s*` + TERMINAL, 's');
-const RAW_SQL = new RegExp(String.raw`UPDATE\s+executions\s+SET[^;]*?\bstatus\s*=\s*` + TERMINAL.replace(/\(\?:/g, '(?:'), 'is');
+const ALLOWED_FILES = new Set(['infrastructure/repositories/ExecutionRepository.ts', 'application/runtime/staleExecutionReaper.ts']);
+/**
+ * Explicit per-site exceptions for a NON-terminal raw writer that cannot go through the repository: `{ file, contains, reason }`, where
+ * `contains` is a fragment of the flagged statement. Empty: every status writer today is the repository or the reaper.
+ */
+const ALLOWED_SITES = [];
 
 function* walk(dir) {
   for (const name of readdirSync(dir)) {
@@ -28,15 +32,17 @@ function* walk(dir) {
 const violations = [];
 for (const file of walk(ROOT)) {
   const rel = relative(ROOT, file).replaceAll('\\', '/');
-  if (ALLOWED.has(rel)) continue;
-  const text = readFileSync(file, 'utf8');
-  if (DRIZZLE.test(text) || RAW_SQL.test(text)) violations.push(rel);
+  if (ALLOWED_FILES.has(rel)) continue;
+  for (const hit of scanExecutionStatusWrites(readFileSync(file, 'utf8'))) {
+    if (ALLOWED_SITES.some((site) => site.file === rel && hit.snippet.includes(site.contains))) continue;
+    violations.push(`${rel}  [${hit.kind}]  ${hit.snippet}`);
+  }
 }
 
 if (violations.length > 0) {
-  console.error('Execution-landing guard: a terminal execution status is written outside ExecutionRepository.land:\n');
+  console.error('Execution-landing guard: executions.status is written outside ExecutionRepository / the reaper:\n');
   for (const v of violations) console.error(`   ${v}`);
-  console.error('\nLand it through `landExecution` (application/runtime/executionLanding.ts) / `ExecutionRepository.land` - one winner, one outcome row.');
+  console.error('\nTerminal: `landExecution` (application/runtime/executionLanding.ts) / `ExecutionRepository.land` - one winner, one outcome row.\nNon-terminal: `ExecutionRepository.update` (guarded: never resurrects a landed run).');
   process.exit(1);
 }
-console.log('Execution-landing guard OK - no raw terminal status write outside ExecutionRepository / the reaper.');
+console.log('Execution-landing guard OK - no executions.status write outside ExecutionRepository / the reaper.');

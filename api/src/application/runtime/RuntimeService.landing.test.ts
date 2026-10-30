@@ -27,7 +27,7 @@ const task = () => Task.reconstitute({
 });
 
 /** `winner`: the row another writer already landed (the loser's land() returns it with won: false); absent => this writer wins. */
-function build(winner?: Execution) {
+function build(winner?: Execution, opts: { staleWriteRefusedBy?: Execution } = {}) {
   const land = vi.fn(async (_id: unknown, status: string, f: { result?: string | null; errorMessage?: string | null } = {}, _from?: unknown, ctx?: unknown) => {
     if (winner) return { won: false, execution: winner };
     const e = execution();
@@ -39,8 +39,11 @@ function build(winner?: Execution) {
     onCancelled: vi.fn(async () => undefined),
     onTerminalFailure: vi.fn(async () => undefined),
     onTaskStatusSync: vi.fn(async () => undefined),
+    onManagedRunStatus: vi.fn(async () => ({ managed: false, toStatus: 'in_progress' })),
+    resolveRunningStatus: vi.fn(async () => TaskStatus.IN_PROGRESS),
   };
-  const executions = { findById: async () => execution(), update: async (e: Execution) => e, land, setProduced: async () => execution() } as unknown as IExecutionRepository;
+  // A non-terminal write is guarded in SQL: when the run already landed, the repository refuses it and hands back the terminal row.
+  const executions = { findById: async () => execution(), update: async (e: Execution) => opts.staleWriteRefusedBy ?? e, land, setProduced: async () => execution() } as unknown as IExecutionRepository;
   const tasks = { findById: async () => task(), update: async (t: Task) => t } as unknown as ITaskRepository;
   const svc = new RuntimeService({ executions, tasks, agents: {} as IAgentRepository, audit: audit as unknown as IAuditRepository, ...ports });
   return { svc, land, audit, ports };
@@ -76,5 +79,35 @@ describe('RuntimeService - the loser of a terminal race does nothing', () => {
     const result = await svc.update(7, { status: ExecutionStatus.COMPLETED, result: 'done', telemetry: telemetry as never });
     expect(result.status).toBe(ExecutionStatus.COMPLETED);
     expect(land).toHaveBeenCalledWith(expect.anything(), 'completed', expect.objectContaining({ result: 'done' }), undefined, { telemetry });
+  });
+
+  it('a steered stop's cancel carries the run's final tally to the outcome owner', async () => {
+    const { svc, land } = build();
+    const telemetry = { toolCalls: 9 };
+    await svc.cancel(7, 'user-1', { telemetry: telemetry as never });
+    expect(land).toHaveBeenCalledWith(expect.anything(), 'cancelled', expect.anything(), undefined, { telemetry });
+  });
+
+  it('a cancel with no tally (an external cancel) lands with none: the row carries no counts', async () => {
+    const { svc, land } = build();
+    await svc.cancel(7, 'user-1');
+    expect(land).toHaveBeenCalledWith(expect.anything(), 'cancelled', expect.anything(), undefined, { telemetry: undefined });
+  });
+
+  it('update(RUNNING) refused because the run was cancelled meanwhile (the cloudPrepare race): returns the cancelled row, no lane move, no audit, no managed-lane callback', async () => {
+    const { svc, audit, ports } = build(undefined, { staleWriteRefusedBy: execution(ExecutionStatus.CANCELLED) });
+    const result = await svc.update(7, { status: ExecutionStatus.RUNNING });
+    expect(result.status).toBe(ExecutionStatus.CANCELLED);
+    expect(ports.onManagedRunStatus).not.toHaveBeenCalled();
+    expect(ports.resolveRunningStatus).not.toHaveBeenCalled();
+    expect(ports.onTaskStatusSync).not.toHaveBeenCalled();
+    expect(audit.save).not.toHaveBeenCalled(); // no EXECUTION_STARTED for a run that never started
+  });
+
+  it('update(RUNNING) that applies still starts the run: audit written', async () => {
+    const { svc, audit } = build();
+    const result = await svc.update(7, { status: ExecutionStatus.RUNNING });
+    expect(result.status).toBe(ExecutionStatus.RUNNING);
+    expect(audit.save).toHaveBeenCalledTimes(1);
   });
 });

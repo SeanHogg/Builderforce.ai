@@ -20,11 +20,17 @@ const h = vi.hoisted(() => ({
   loopResult: null as Record<string, unknown> | null,
 }));
 
+// A full `executions` row: the pause now goes through `ExecutionRepository` (findById -> guarded update), which maps rows to the entity.
+const executionRow = (status: string) => ({
+  id: 88, taskId: 7, agentId: null, agentRegistrationId: null, agentHostId: null, tenantId: 1, submittedBy: 'u', sessionId: null, status,
+  payload: null, source: 'agent', cloudAgentRef: null, result: null, errorMessage: null, produced: null, startedAt: null, completedAt: null,
+  createdAt: new Date(0), updatedAt: new Date(0),
+});
 vi.mock('../database/connection', () => ({
   buildDatabase: () => ({
-    select: () => ({ from: () => ({ where: () => ({ limit: async () => [{ status: 'running' }] }) }) }),
-    // `returning` for the throttled heartbeat, a bare promise for the pause write.
-    update: () => ({ set: (v: Record<string, unknown>) => ({ where: () => { h.updateCalls.push(v); return Object.assign(Promise.resolve([]), { returning: async () => [] }); } }) }),
+    select: () => ({ from: () => ({ where: () => ({ limit: async () => [executionRow('running')] }) }) }),
+    // `returning` answers the throttled heartbeat (no rows) and the guarded status write (the row as written); a bare promise for the rest.
+    update: () => ({ set: (v: Record<string, unknown>) => ({ where: () => { h.updateCalls.push(v); return Object.assign(Promise.resolve([]), { returning: async () => (v.status ? [executionRow(String(v.status))] : []) }); } }) }),
   }),
 }));
 vi.mock('../../buildRuntimeService', () => ({

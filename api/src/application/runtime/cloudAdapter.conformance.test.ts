@@ -51,7 +51,8 @@ vi.mock('./cloudAgent/cloudLlmTurn', () => ({
 
 import { cloudModelPort } from './cloudAdapterModel';
 import { durableHuman, pendingSteering, timelineSink } from './cloudAdapterPorts';
-import { recordTerminalOutcome } from './cloudOutcomeRow';
+import { buildExecutionRepository } from '../../buildExecutionRepository';
+import { ExecutionStatus, asExecutionId } from '../../domain/shared/types';
 import { containProvider, platformTools } from './cloudAdapterTools';
 
 const REFS = { tenantId: 1, projectId: 2, taskId: 3, executionId: 4, agentLabel: 'Reviewer' };
@@ -105,8 +106,10 @@ async function drive(maxSteps?: number): Promise<{ outcome: RunOutcome; trace: s
     if (tick > 50) throw new Error('never finished');
     outcome = await runAgent({ task: TASK, policy: POLICY, ports: ports(store, requests), resume: store.saved, ...step });
   }
-  // The run landed: the one outcome owner records its row (as the repository's terminal hook does).
-  await recordTerminalOutcome({} as never, { id: 4, tenantId: 1, cloudAgentRef: null, agentHostId: null, status: 'completed', errorMessage: null });
+  // The run LANDS through the repository's one terminal transition; its hook (wired in the composition root) is what records the outcome row.
+  const landedRow = { id: 4, taskId: 3, agentId: null, agentRegistrationId: null, agentHostId: null, tenantId: 1, submittedBy: 'u', sessionId: null, status: 'completed', payload: null, source: 'agent', cloudAgentRef: null, result: null, errorMessage: null, produced: null, startedAt: null, completedAt: null, createdAt: new Date(0), updatedAt: new Date(0) };
+  const landingDb = { update: () => ({ set: () => ({ where: () => ({ returning: async () => [landedRow] }) }) }) } as never;
+  await buildExecutionRepository(landingDb).land(asExecutionId(4), ExecutionStatus.COMPLETED);
   // The timeline the adapter wrote: the rows' names in order (durations are measured, so not compared).
   return { outcome, trace: h.rows.map((r) => `${String(r.toolName)}`), requests };
 }

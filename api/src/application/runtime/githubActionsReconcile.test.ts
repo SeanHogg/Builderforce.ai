@@ -8,13 +8,23 @@
  * false positive kills live work; a false negative just defers to the existing
  * 20-minute reaper.
  */
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const reported = vi.hoisted(() => vi.fn());
+vi.mock('../observability/caughtErrorReporter', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../observability/caughtErrorReporter')>()),
+  reportCaughtError: reported,
+}));
+
 import {
   ACTIONS_RUN_CLOCK_SKEW_MS,
   ACTIONS_SCHEDULE_GRACE_MS,
   classifyActionsDispatch,
   countBlockingUnattributedRuns,
+  failStrandedDispatch,
 } from './githubActionsReconcile';
+import { executions, toolAuditEvents } from '../../infrastructure/database/schema';
+import type { Db } from '../../infrastructure/database/connection';
 import {
   AGENT_WORKFLOW_REFRESH_MAX_ATTEMPTS,
   AGENT_WORKFLOW_REFRESH_MAX_PER_TICK,
@@ -189,5 +199,50 @@ describe('agent workflow refresh queue', () => {
     // not change the file, or a file that lost run-name, both break the contract.
     expect(AGENT_WORKFLOW_REVISION).toMatch(/^r\d+$/);
     expect(renderAgentWorkflow({ apiOrigin: 'https://api.builderforce.ai' })).toContain('run-name:');
+  });
+});
+
+describe('failStrandedDispatch', () => {
+  beforeEach(() => reported.mockClear());
+  const STRANDED = { id: 41, tenantId: 4, taskId: 7, payload: null, cloudAgentRef: 'bob', createdAtMs: 0 };
+  const executionRow = (status: string) => ({
+    id: 41, taskId: 7, agentId: null, agentRegistrationId: null, agentHostId: null, tenantId: 4, submittedBy: 'u1', sessionId: null, status,
+    payload: null, source: 'agent', cloudAgentRef: 'bob', result: null, errorMessage: null, produced: null, startedAt: null, completedAt: null,
+    createdAt: new Date(0), updatedAt: new Date(0),
+  });
+
+  /** The UPDATE ... WHERE status IN (pending, submitted) matches a row only when the run is still stranded; otherwise `findById` answers `current`. */
+  function fakeDb(current: string) {
+    const stranded = current === 'pending' || current === 'submitted';
+    const sets: Array<{ table: unknown; vals: Record<string, unknown> }> = [];
+    const inserts: Array<{ table: unknown; row: Record<string, unknown> }> = [];
+    const db = {
+      update: (table: unknown) => ({ set: (vals: Record<string, unknown>) => { sets.push({ table, vals }); return { where: () => ({ returning: async () => (stranded ? [executionRow(String(vals.status))] : []) }) }; } }),
+      select: () => ({ from: () => ({ where: () => ({ limit: async () => [executionRow(current)] }) }) }),
+      insert: (table: unknown) => ({
+        values: (rows: Record<string, unknown> | Array<Record<string, unknown>>) => {
+          const list = Array.isArray(rows) ? rows : [rows];
+          for (const row of list) inserts.push({ table, row });
+          return Object.assign(Promise.resolve(undefined), { onConflictDoNothing: () => ({ returning: async () => list.map((r) => ({ executionId: r.executionId })) }) });
+        },
+      }),
+    } as unknown as Db;
+    const toolRows = () => inserts.filter((i) => i.table === toolAuditEvents).map((i) => i.row);
+    return { db, sets, toolRows };
+  }
+
+  it('fails a run that is still stranded: one terminal write, its run.outcome + run.failed rows, nothing reported', async () => {
+    const { db, sets, toolRows } = fakeDb('submitted');
+    expect(await failStrandedDispatch(db, STRANDED, 'GitHub never scheduled it')).toBe(true);
+    expect(sets[0]).toMatchObject({ table: executions, vals: { status: 'failed', errorMessage: 'GitHub never scheduled it' } });
+    expect(toolRows().map((r) => r.toolName).sort()).toEqual(['run.failed', 'run.finished', 'run.outcome']);
+    expect(reported).not.toHaveBeenCalled();
+  });
+
+  it('NEVER clobbers a run that checked in (RUNNING): the landing is lost, so no run.failed and no outcome row are written', async () => {
+    const { db, toolRows } = fakeDb('running');
+    expect(await failStrandedDispatch(db, STRANDED, 'GitHub never scheduled it')).toBe(false);
+    expect(toolRows()).toEqual([]);
+    expect(reported).not.toHaveBeenCalled();
   });
 });

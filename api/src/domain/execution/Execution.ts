@@ -135,6 +135,12 @@ export class Execution {
     return this.transition(ExecutionStatus.RUNNING, { startedAt: new Date() });
   }
 
+  /** The run is parked on a human question (`ask_human`): non-terminal, so it is persisted by the guarded `update`, never `land`. */
+  markPaused(): Execution {
+    this.assertNotTerminal('pause');
+    return this.transition(ExecutionStatus.PAUSED, {});
+  }
+
   /** Called when the agent reports successful completion. */
   markCompleted(result: string): Execution {
     this.assertNotTerminal('complete');
@@ -150,19 +156,6 @@ export class Execution {
     return this.transition(ExecutionStatus.FAILED, {
       errorMessage,
       completedAt: new Date(),
-    });
-  }
-
-  /**
-   * Record that terminal lifecycle orchestration itself produced durable progress
-   * (for example, advancing the ticket to its next lane). This is intentionally
-   * monotonic: a previously recorded artifact can never be erased by a later signal.
-   */
-  markProduced(produced: boolean): Execution {
-    return new Execution({
-      ...this.props,
-      produced: this.props.produced === true || produced,
-      updatedAt: new Date(),
     });
   }
 

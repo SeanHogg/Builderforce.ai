@@ -53,7 +53,7 @@ describe('settleCloudRun', () => {
   it('a steered stop CANCELS the execution (nothing restarts it) and lands the cancel finalize', async () => {
     const runtime = { cancel: vi.fn(async () => undefined) };
     const result = await settleCloudRun(host({ runtime }), { kind: 'failed', reason: 'cancelled', state }, stash, model());
-    expect(runtime.cancel).toHaveBeenCalledWith(9, expect.any(String));
+    expect(runtime.cancel).toHaveBeenCalledWith(9, expect.any(String), { telemetry: undefined });
     expect(h.finalize).toHaveBeenCalledWith({}, {}, expect.objectContaining({ cancelled: true }));
     expect(result.cancelled).toBe(true);
   });
@@ -63,10 +63,10 @@ describe('settleCloudRun', () => {
     h.sender.mockResolvedValueOnce('user-42');
     await settleCloudRun(host({ runtime }), { kind: 'failed', reason: 'cancelled', state }, stash, model());
     expect(h.sender).toHaveBeenCalledWith({}, 1, 9);
-    expect(runtime.cancel).toHaveBeenLastCalledWith(9, 'user-42');
+    expect(runtime.cancel).toHaveBeenLastCalledWith(9, 'user-42', { telemetry: undefined });
     h.sender.mockResolvedValueOnce(null);
     await settleCloudRun(host({ runtime }), { kind: 'failed', reason: 'cancelled', state }, stash, model());
-    expect(runtime.cancel).toHaveBeenLastCalledWith(9, 'execution:9');
+    expect(runtime.cancel).toHaveBeenLastCalledWith(9, 'execution:9', { telemetry: undefined });
   });
 
   it('on a surface with no delegation runtime (the Worker fallback) the same cancel use case transitions the row', async () => {
@@ -116,14 +116,20 @@ describe('settleCloudRun', () => {
   describe("a TERMINAL result carries the run's final tally for the ONE outcome-row writer", () => {
     const tallied = { ...state, telemetry: { toolCalls: 4, toolErrors: 1, tokens: 900, cacheReadTokens: 0, shellFileReads: 0, repoErrors: 0 } } as unknown as RunState;
 
-    it('a finished run, a missing sign-off (ok:false) and a steered stop each carry the tally the transition lands with', async () => {
+    it('a finished run and a missing sign-off (ok:false) each carry the tally the transition lands with', async () => {
       const finished = await settleCloudRun(host(), { kind: 'finished', output: 'done', state: tallied }, stash, model());
       expect(finished).toMatchObject({ finished: true, telemetry: { toolCalls: 4, toolErrors: 1 } });
       const noVerdict = { ...tallied, finish: { ciVerified: false, reviewVerdictRecorded: false } } as unknown as RunState;
       const refused = await settleCloudRun(host({ opts: { requiredSignoff: { roleKey: 'qa-tester' } } }), { kind: 'finished', output: 'ok', state: noVerdict }, stash, model());
       expect(refused).toMatchObject({ ok: false, telemetry: { toolCalls: 4 } });
-      const stopped = await settleCloudRun(host(), { kind: 'failed', reason: 'cancelled', state: tallied }, stash, model());
-      expect(stopped).toMatchObject({ cancelled: true, telemetry: { toolCalls: 4 } });
+    });
+
+    it('a steered stop hands the tally to the CANCEL (its terminal transition) and its result carries none - one path, not two', async () => {
+      const runtime = { cancel: vi.fn(async () => undefined) };
+      const stopped = await settleCloudRun(host({ runtime }), { kind: 'failed', reason: 'cancelled', state: tallied }, stash, model());
+      expect(runtime.cancel).toHaveBeenCalledWith(9, expect.any(String), { telemetry: { toolCalls: 4, toolErrors: 1, tokens: 900, cacheReadTokens: 0, shellFileReads: 0, repoErrors: 0 } });
+      expect(stopped).toMatchObject({ cancelled: true });
+      expect(stopped).not.toHaveProperty('telemetry');
     });
 
     it('a rehearsal that spent its step budget (settled yielded, landed terminal) carries its tally too', async () => {

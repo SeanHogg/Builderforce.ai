@@ -252,3 +252,31 @@ describe('reapStaleExecutions — idle probe', () => {
     expect(captured.failed).toContain(7);
   });
 });
+
+describe('reapStaleExecutions - a later batch failing never loses an earlier batch's outcome rows', () => {
+  it('the cloud-running sweep's run.outcome rows are written right after ITS update, before the queued sweep throws', async () => {
+    const outcomes: Array<{ executionId: number; terminalStatus: string }> = [];
+    script = newReaperFakeDbScript({
+      probe: () => ({ host_running: false, cloud_running: true, queued: true, paused: false, park_age: false }),
+      onUpdate: (set, params) => {
+        if (set.errorMessage === 'Execution was never picked up by an agent within the dispatch window.') throw new Error('database went away mid-sweep');
+        const id = Number(params[0]);
+        return set.status === 'failed' && Number.isFinite(id)
+          ? [{ id, tenant_id: 1, agent_host_id: null, cloud_agent_ref: null, payload: null, error_message: String(set.errorMessage) }]
+          : [];
+      },
+      onInsert: (v) => {
+        if (v.toolName === 'run.outcome') outcomes.push({ executionId: Number(v.executionId), terminalStatus: String((JSON.parse(String(v.args)) as { terminalStatus: string }).terminalStatus) });
+      },
+    });
+    script.candidates = [{
+      id: 99, tenant_id: 1, agent_host_id: null, payload: '{}', error_message: null,
+      task_id: 8, task_title: 'PR task', task_description: null,
+      project_id: 3, cloud_agent_ref: null, open_pr_count: 1, updated_at: STALE_TS,
+    }];
+
+    await reapStaleExecutions(envWithRunner(true)).catch(() => undefined);
+
+    expect(outcomes).toEqual([{ executionId: 99, terminalStatus: 'failed' }]);
+  });
+});
