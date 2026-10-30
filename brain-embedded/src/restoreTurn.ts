@@ -28,9 +28,7 @@ export function joinRestorableTurns(turns: readonly RestorableTurn[]): Restorabl
   if (turns.length === 1) return turns[0]!;
   const attachments = turns.flatMap((t) => t.attachments ?? []);
   return {
-    text: turns.map((t) => t.text).join('
-
-'),
+    text: turns.map((t) => t.text).join("\n\n"),
     ...(attachments.length > 0 ? { attachments } : {}),
     recipient: turns.find((t) => t.recipient != null)?.recipient ?? null,
   };

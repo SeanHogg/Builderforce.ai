@@ -253,8 +253,8 @@ describe('reapStaleExecutions — idle probe', () => {
   });
 });
 
-describe('reapStaleExecutions - a later batch failing never loses an earlier batch's outcome rows', () => {
-  it('the cloud-running sweep's run.outcome rows are written right after ITS update, before the queued sweep throws', async () => {
+describe("reapStaleExecutions - a later batch failing never loses an earlier batch's outcome rows", () => {
+  it("the cloud-running sweep's run.outcome rows are written right after ITS update, before the queued sweep throws", async () => {
     const outcomes: Array<{ executionId: number; terminalStatus: string }> = [];
     script = newReaperFakeDbScript({
       probe: () => ({ host_running: false, cloud_running: true, queued: true, paused: false, park_age: false }),

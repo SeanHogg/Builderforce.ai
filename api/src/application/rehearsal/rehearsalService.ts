@@ -274,9 +274,7 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
         steps: recorder.steps.length,
         suppressedWrites: recorder.writeCount,
         finishedOk: result.finished === true && result.ok,
-        summary: `${missingPrdDuringReadOnlyPrep ? '[REHEARSAL GAP] This ticket had no PRD. Read-only prep could not draft the PRD that a live run would receive.
-
-' : ''}${result.output}`.slice(0, 20_000),
+        summary: `${missingPrdDuringReadOnlyPrep ? '[REHEARSAL GAP] This ticket had no PRD. Read-only prep could not draft the PRD that a live run would receive.\n\n' : ''}${result.output}`.slice(0, 20_000),
         completedAt: new Date(),
       })
       .where(scopedToTenant(rehearsals, tenantId, eq(rehearsals.id, rehearsalId)));

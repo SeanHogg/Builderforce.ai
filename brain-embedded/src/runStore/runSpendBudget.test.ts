@@ -171,7 +171,7 @@ describe('runSpendBudget', () => {
   });
 
   it('the warning and the contained reply say "at least" and count the calls once any had no known price', () => {
-    expect(budgetWarning(850_000, 1_000_000, { unpricedCalls: 2 })).toContain('at least $0.85 (2 calls had no known price)');
+    expect(budgetWarning(850_000, 1_000_000, { unpricedCalls: 2 })).toContain('at least $8.50 (2 calls had no known price)');
     expect(budgetWarning(850_000, 1_000_000, { unpricedCalls: 0 })).not.toContain('at least');
     expect(budgetContainedReply(260_000, 250_000, { unpricedCalls: 3 })).toContain('at least $2.60 spent — 3 calls had no known price');
     expect(budgetContainedReply(260_000, 250_000, { unpricedCalls: 1 })).toContain('1 call had no known price');

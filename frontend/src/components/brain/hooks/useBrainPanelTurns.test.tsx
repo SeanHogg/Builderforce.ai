@@ -161,11 +161,7 @@ describe('the web panel\'s turn door and the composer\'s attachments', () => {
       { text: 'first', addressedTo: null, attachments: [notes] },
       { text: '@dev second', addressedTo: dev, attachments: [more] },
       { text: 'third', addressedTo: null },
-    ])).toEqual({ text: 'first
-
-@dev second
-
-third', addressedTo: dev, attachments: [notes, more] });
+    ])).toEqual({ text: "first\n\n@dev second\n\nthird", addressedTo: dev, attachments: [notes, more] });
   });
 
   it('hands the door the files a steer would carry', () => {

@@ -71,7 +71,7 @@ describe('settleCloudRun', () => {
 
   it('on a surface with no delegation runtime (the Worker fallback) the same cancel use case transitions the row', async () => {
     const result = await settleCloudRun(host(), { kind: 'failed', reason: 'cancelled', state }, stash, model());
-    expect(h.workerCancel).toHaveBeenCalledWith(9, expect.any(String));
+    expect(h.workerCancel).toHaveBeenCalledWith(9, expect.any(String), { telemetry: undefined });
     expect(h.finalize).toHaveBeenCalledWith({}, {}, expect.objectContaining({ cancelled: true }));
     expect(result.cancelled).toBe(true);
   });

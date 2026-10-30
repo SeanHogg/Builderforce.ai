@@ -329,10 +329,14 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const userText = written.filter((m) => m.role === 'user' && typeof m.content === 'string' && m.content.trim());
     if (userText.length > 0) {
       c.executionCtx.waitUntil((async () => {
-        const links = await db.select({ kind: chatTicketLinks.ticketKind, ref: chatTicketLinks.ticketRef })
-          .from(chatTicketLinks)
-          .where(and(eq(chatTicketLinks.chatId, id), eq(chatTicketLinks.tenantId, tenantId)))
-          .catch(() => [] as Array<{ kind: string; ref: string }>);
+        let links: Array<{ kind: string; ref: string }> = [];
+        try {
+          links = await db.select({ kind: chatTicketLinks.ticketKind, ref: chatTicketLinks.ticketRef })
+            .from(chatTicketLinks)
+            .where(and(eq(chatTicketLinks.chatId, id), eq(chatTicketLinks.tenantId, tenantId)));
+        } catch (error) {
+          reportCaughtError(error, { source: 'presentation/routes/brainRoutes.ts', operation: 'linkedTicketLookup' });
+        }
         if (!links.length) return;
         const actor = await resolveActorFromContext(c.env as Env, db, c);
         const summary = userText[userText.length - 1]!.content.replace(/\s+/g, ' ').trim().slice(0, 200);

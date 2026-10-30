@@ -26,6 +26,7 @@
 
 import { bounded } from './runStore/deadline';
 import type { BrainRunPersistence } from './runStore/runTypes';
+import { reportPendingWordsFailure } from './pendingWordsFailure';
 import { steerMetadata } from './steerMetadata';
 
 interface Pending {
@@ -111,9 +112,14 @@ function parse(raw: string): Pending[] | null {
   }
 }
 
-/** The chat's live entries (expired ones dropped and forgotten). */
-function read(key: string): Pending[] {
-  const raw = onStorage((store) => store.getItem(key), null);
+/**
+ * The chat's live entries (expired ones dropped and forgotten). NULL: the device's storage cannot be read at all - not
+ * the same as an empty journal, because a writer that treated it as empty would overwrite entries it could not see.
+ */
+function read(key: string): Pending[] | null {
+  const got = onStorage((store) => ({ raw: store.getItem(key) }), null);
+  if (!got) return null;
+  const raw = got.raw;
   if (!raw) return [];
   const list = parse(raw);
   if (!list) {
@@ -145,10 +151,19 @@ function holdSession(): void {
   holding = true;
   const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
   if (locks?.request) {
-    // Granted and never released: the browser frees it when the page goes away, however it goes.
-    void locks.request(lockName(SESSION), () => new Promise<never>(() => undefined)).catch(() => undefined);
+    // Granted and never released: the browser frees it when the page goes away, however it goes. A lock manager that
+    // refuses is said once, and the heartbeat stands in - this load is still findable as alive.
+    void locks.request(lockName(SESSION), () => new Promise<never>(() => undefined)).catch((e: unknown) => {
+      reportPendingWordsFailure('hold_session', e);
+      beatWhileAlive();
+    });
     return;
   }
+  beatWhileAlive();
+}
+
+/** The no-Web-Locks way to be findable as alive: write a heartbeat now and every `BEAT_MS`. */
+function beatWhileAlive(): void {
   const beat = (): void => onStorage((store) => store.setItem(`${BEAT_PREFIX}${SESSION}`, String(Date.now())), undefined);
   beat();
   const timer = setInterval(beat, BEAT_MS) as unknown as { unref?: () => void };
@@ -176,6 +191,8 @@ export function rememberPendingWords(chatId: number, eventKey: string, text: str
   if (!key || !body) return false;
   holdSession();
   const list = read(key);
+  // A device whose journal cannot be read keeps none: writing blind would overwrite entries this could not see.
+  if (!list) return false;
   if (list.some((p) => p.eventKey === eventKey)) return true;
   return write(key, [...list, { eventKey, text: body, session: SESSION, at: Date.now() }].slice(-PER_CHAT_CAP));
 }
@@ -186,6 +203,7 @@ export function forgetPendingWords(chatId: number, eventKeys: ReadonlyArray<stri
   const gone = new Set(eventKeys.filter((k): k is string => !!k));
   if (!key || gone.size === 0) return;
   const list = read(key);
+  if (!list) return;
   const rest = list.filter((p) => !gone.has(p.eventKey));
   if (rest.length !== list.length) write(key, rest);
 }
@@ -196,7 +214,7 @@ export function markPendingWordsRead(chatId: number, eventKeys: ReadonlyArray<st
   const drained = new Set(eventKeys.filter((k): k is string => !!k));
   if (!key || drained.size === 0) return;
   const list = read(key);
-  if (!list.some((p) => drained.has(p.eventKey) && !p.read)) return;
+  if (!list || !list.some((p) => drained.has(p.eventKey) && !p.read)) return;
   write(key, list.map((p) => (drained.has(p.eventKey) ? { ...p, read: true as const } : p)));
 }
 
@@ -220,7 +238,7 @@ async function replayOne(chatId: number, key: string, persistence: Pick<BrainRun
   const end = Date.now() + REPLAY_BUDGET_MS;
   let saved = 0;
   const dead: Pending[] = [];
-  for (const word of read(key)) {
+  for (const word of read(key) ?? []) {
     // This load's own words are still in its inbox; a young entry's load may not have taken its lock yet.
     if (word.session === SESSION || Date.now() - word.at < START_GRACE_MS) continue;
     if (await sessionAlive(word.session)) continue;
@@ -254,7 +272,12 @@ export function replayPendingWords(chatId: number, persistence: Pick<BrainRunPer
   if (!key) return Promise.resolve(0);
   const running = replaying.get(key);
   if (running) return running;
-  const replay = replayOne(chatId, key, persistence).catch(() => 0).finally(() => replaying.delete(key));
+  const replay = replayOne(chatId, key, persistence)
+    .catch((e: unknown) => {
+      reportPendingWordsFailure('replay', e);
+      return 0;
+    })
+    .finally(() => replaying.delete(key));
   replaying.set(key, replay);
   return replay;
 }

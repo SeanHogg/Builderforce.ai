@@ -171,10 +171,17 @@ export interface ContinueProgress {
 }
 
 /** Has the person spoken in the chat since `saved` (the rows just written)? When the store cannot say, no. */
-async function userSpokeSince(persistence: BrainRunRequest['persistence'], chatId: number, saved: readonly BrainMessage[]): Promise<boolean> {
+async function userSpokeSince(c: RunCell, persistence: BrainRunRequest['persistence'], chatId: number, saved: readonly BrainMessage[]): Promise<boolean> {
   if (!persistence.getMessages || saved.length === 0) return false;
   const after = Math.max(...saved.map((m) => m.seq));
-  const rows = await persistence.getMessages(chatId).catch(() => [] as BrainMessage[]);
+  let rows: readonly BrainMessage[];
+  try {
+    rows = await persistence.getMessages(chatId);
+  } catch (e) {
+    trace(c, 'steer.history_unreadable', { error: e instanceof Error ? e.message : String(e) },
+      'The chat could not be read to see whether the person spoke again; no answer is written to a newer message.');
+    return false;
+  }
   return rows.some((m) => m.role === 'user' && m.seq > after);
 }
 
@@ -200,7 +207,7 @@ async function endStopped(end: StoppedContinuation, ms: number, saving: Promise<
   if (state === 'pending') {
     void saving!.then(
       async (rows) => {
-        if (await userSpokeSince(persistence, chatId, rows)) return;
+        if (await userSpokeSince(c, persistence, chatId, rows)) return;
         await stopBeforeStart(runKey, chatId, persistence, () => false);
       },
       () => undefined, // it failed after all: no row, so no answer

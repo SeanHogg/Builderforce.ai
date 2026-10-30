@@ -81,7 +81,7 @@ describe('RuntimeService - the loser of a terminal race does nothing', () => {
     expect(land).toHaveBeenCalledWith(expect.anything(), 'completed', expect.objectContaining({ result: 'done' }), undefined, { telemetry });
   });
 
-  it('a steered stop's cancel carries the run's final tally to the outcome owner', async () => {
+  it("a steered stop's cancel carries the run's final tally to the outcome owner", async () => {
     const { svc, land } = build();
     const telemetry = { toolCalls: 9 };
     await svc.cancel(7, 'user-1', { telemetry: telemetry as never });

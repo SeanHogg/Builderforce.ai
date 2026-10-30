@@ -108,9 +108,9 @@ function makeFakeDb(opts: FakeOpts = {}) {
       set: (vals: Record<string, unknown>) => ({
         where: () => {
           updates.push({ table, vals });
-          // A terminal write is the repository's `land`: it gets the full row back, or none when another writer landed first.
+          // A terminal write is the repository's `land`: it gets the full row back (RETURNING * - the columns the UPDATE wrote, errorMessage included), or none when another writer landed first.
           const landing = table === executions && typeof vals.status === 'string' && ['completed', 'failed', 'cancelled'].includes(vals.status);
-          const affected = landing ? (opts.alreadyLanded ? [] : [executionRow(vals.status as string)]) : [{ id: (vals.id as number | undefined) ?? 1 }];
+          const affected = landing ? (opts.alreadyLanded ? [] : [{ ...executionRow(vals.status as string), ...Object.fromEntries(Object.entries(vals).filter(([, v]) => v !== undefined)) }]) : [{ id: (vals.id as number | undefined) ?? 1 }];
           return {
             returning: () => Promise.resolve(affected),
             then: (onF: (v: unknown) => unknown, onR?: (e: unknown) => unknown) =>
