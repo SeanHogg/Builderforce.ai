@@ -5,12 +5,12 @@ import { stopRun } from './brainRunStore';
 import type { RunKey } from './brainRunStore';
 import { queueRunSteering } from './runSteering';
 import type { ChatInputAttachment } from './types';
-import { getRunDriver } from './runDriver';
 import type { DraftBinding } from './draftBinding';
-import { dropWaiting, handToChat } from './chatDelivery';
+import { handToChat } from './chatDelivery';
 import { useTurnLanding, type SendContext } from './turnLanding';
 import { turnBody, useQueuedTurns, type QueuedTurns } from './useQueuedTurns';
 import { startsRun } from './userTurnRuns';
+import { useQueueWithWaiting } from './waitingTurns';
 
 /**
  * THE ONE DOOR a user turn leaves a composer through — typed, an answered question, a
@@ -94,9 +94,9 @@ export interface ChatTurnsBase<T> {
 /**
  * A host that ADDRESSES turns (to a participant, not the run) must also say where one goes back to when
  * its send is not kept after the chat changed: the COMPOSER - text, files, addressee - never the queue now
- * showing (another chat's) and never a run. The two come as a pair; neither alone is accepted. The same
- * port takes ANY turn not kept after a chat switch when the run executes elsewhere (`installRunDriver`):
- * the webview's in-process inbox is not where that run reads.
+ * showing (another chat's) and never a run. The two come as a pair; neither alone is accepted. A turn that
+ * is not addressed goes to ITS chat's run through `chatDelivery` - the run driver's `steer` where the run
+ * executes elsewhere, the run store's inbox otherwise: one delivery rule on every host.
  */
 export type ChatTurnsOptions<T> = ChatTurnsBase<T> & (
   | { isDirected?: undefined; restore?: undefined; join?: undefined }
@@ -218,12 +218,11 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
         turn = undefined;
         if (ports.current.runKey === key) {
           requeueRef.current(sent);
-        } else if (directed?.(sent) || getRunDriver()) {
-          // Another chat is showing. A turn for a participant is not the run's to read; and where the run
-          // executes elsewhere (the editor's host) the in-process inbox is read by nobody. Back to the
-          // composer, addressee intact - never the queue now showing, never an inbox.
+        } else if (directed?.(sent) || typeof key !== 'number') {
+          // Another chat is showing. A turn for a participant is not the run's to read, and a draft's has no chat to
+          // go to: back to the composer, addressee intact - never the queue now showing.
           ports.current.restore?.(sent);
-        } else if (typeof key === 'number') {
+        } else {
           handToChat(key, [{ text: turnBody(sent, text), attachments: attached?.(sent) }]);
         }
       }
@@ -325,11 +324,9 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     stopEpoch.current += 1;
     if (ports.current.running) markStopping(true);
     const { stop: halt, runKey: key } = ports.current;
-    // What a draft's creation delivered to this chat and its run has not heard yet is held too: dropped BEFORE the run's
-    // falling edge, which would otherwise make it the chat's next turn.
-    if (typeof key === 'number') dropWaiting(key);
-    // A steer typed before the Stop is dropped with the run (the store's Stop drains the inbox and the device's
-    // journal - every entry point to Stop does) - it must not start the next one.
+    // A steer typed before the Stop is dropped with the run, and so is what a draft's creation delivered to this chat that
+    // its run has not heard yet (the store's Stop drains the inbox, the device's journal and the chat's waiting turns -
+    // every entry point to Stop does) - none of it may start the next one.
     if (halt) halt();
     else if (key != null) stopRun(key);
   }, [clear, markStopping]);
@@ -387,5 +384,6 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     return (await sendOnce(turn)) !== false;
   }, [hold, holdForDraft, sendOnce]);
 
-  return { queued, submit, queueAfter, stop: stopTurns, steers };
+  // The queue the door shows: the turns waiting for this chat's run (typed while a draft created it) in front of the held ones.
+  return { queued: useQueueWithWaiting(queued, runKey), submit, queueAfter, stop: stopTurns, steers };
 }

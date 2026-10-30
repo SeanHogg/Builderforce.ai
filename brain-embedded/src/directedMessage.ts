@@ -127,6 +127,19 @@ export function isDirectedToParticipant(msg: { metadata?: string | null }): bool
 }
 
 /**
+ * The participants a turn is addressed to, as a list: a group's members, an array itself, one recipient as `[itself]`; empty
+ * for none. A single object with a dropped `kind` is still one recipient (composer/roster bugs used to drop it).
+ */
+export function directedRecipientList(
+  recipient: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null | undefined,
+): readonly DirectedRecipient[] {
+  if (recipient == null) return [];
+  // Array.isArray is the runtime check; `readonly T[]` does not narrow, so we cast.
+  const one = recipient as DirectedRecipient | DirectedGroup;
+  return Array.isArray(recipient) ? recipient : one.kind === 'group' ? ((one as DirectedGroup).members ?? []) : [one as DirectedRecipient];
+}
+
+/**
  * The invited agents a directed turn should dispatch to. Humans are omitted —
  * they are notified out-of-band, not run. A missing `kind` still dispatches
  * (composer/roster bugs used to drop `kind` and then silently skip the reply).
@@ -134,15 +147,8 @@ export function isDirectedToParticipant(msg: { metadata?: string | null }): bool
 export function directedAgentRecipients(
   recipient: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null | undefined,
 ): DirectedRecipient[] {
-  if (recipient == null) return [];
-  // Array.isArray is the runtime check; `readonly T[]` does not narrow, so we
-  // cast. A single object with a dropped `kind` must still dispatch as an agent.
-  const one = recipient as DirectedRecipient | DirectedGroup;
-  const list: readonly { kind?: string; ref?: string; name?: string }[] = Array.isArray(recipient)
-    ? recipient
-    : one.kind === 'group'
-      ? (one.members ?? [])
-      : [one];
+  // A single object with a dropped `kind` must still dispatch as an agent (`directedRecipientList`).
+  const list: readonly { kind?: string; ref?: string; name?: string }[] = directedRecipientList(recipient);
   const seen = new Set<string>();
   const out: DirectedRecipient[] = [];
   for (const r of list) {

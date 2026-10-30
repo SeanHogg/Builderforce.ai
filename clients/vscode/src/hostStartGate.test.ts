@@ -10,6 +10,7 @@ function setup() {
     start: vi.fn(async () => void calls.push("start")),
     stop: vi.fn((key: number) => void calls.push(`stop ${key}`)),
     steer: vi.fn((key: number, text: string) => void calls.push(`steer ${key} ${text}`)),
+    steerTurns: vi.fn((key: number, turns: readonly { text: string }[]) => void calls.push(`steerTurns ${key} ${turns.map((t) => t.text).join("|")}`)),
   };
   let release!: () => void;
   const baseline = new Promise<void>((res) => (release = res));
@@ -40,6 +41,15 @@ describe("gateStarts", () => {
     release();
     await started;
     expect(calls).toEqual(["steer 7 keep going", "steer 7 Stop the run", "start", "stop 7"]);
+  });
+
+  it("holds a typed stop among SEVERAL turns the same way", async () => {
+    const { calls, gated, release } = setup();
+    const started = gated.start(payload);
+    gated.steerTurns(7, [{ text: "keep going", eventKey: "k1" }, { text: "Stop the run", eventKey: "k2" }]);
+    release();
+    await started;
+    expect(calls).toEqual(["steerTurns 7 keep going|Stop the run", "start", "stop 7"]);
   });
 
   it("does not stop a run nobody asked to stop, or another chat", async () => {

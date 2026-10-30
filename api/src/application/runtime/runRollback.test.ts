@@ -58,14 +58,9 @@ vi.mock('../repos/revertMergedPullRequest', () => ({
   revertBranchName: (taskId: number, pr: number) => `revert/task-7-pr-${pr}`,
 }));
 
-const { revertRun, teardownCrashedRunArtifacts } = await import('./runRollback');
+const { revertRun } = await import('./runRollback');
 const { revertMergedPullRequest } = await import('../repos/revertMergedPullRequest');
-const { deleteBranch, listBranchCommits } = await import('../repos/branchLifecycle');
-const { resolveTicketRepoContext } = await import('../repos/commitFileAsPendingChange');
 const revertMock = revertMergedPullRequest as unknown as ReturnType<typeof vi.fn>;
-const deleteBranchMock = deleteBranch as unknown as ReturnType<typeof vi.fn>;
-const listCommitsMock = listBranchCommits as unknown as ReturnType<typeof vi.fn>;
-const resolveRepoMock = resolveTicketRepoContext as unknown as ReturnType<typeof vi.fn>;
 
 const env = {} as Env;
 const actor = { kind: 'user' as const, id: 'u1', label: 'Ada' } as never;
@@ -88,7 +83,6 @@ const rowsFor = (prStatus: string, prNumber: number | null = 42) => [
 ];
 
 beforeEach(() => {
-  deleteBranchMock.mockClear();
   revertMock.mockClear();
   revertMock.mockResolvedValue({
     ok: true, number: 99, url: 'https://github.com/acme/app/pull/99',
@@ -207,54 +201,5 @@ describe('revertRun — the refusals that must NOT escalate', () => {
     const db = fakeDb(rowsFor('open'));
     await revertRun(env, db as unknown as Db, { tenantId: 7, executionId: 42, actor, secret: 's' });
     expect(revertMock).not.toHaveBeenCalled();
-  });
-});
-
-describe('teardownCrashedRunArtifacts - the branch of a run that landed FAILED', () => {
-  /** The rows it reads, in order: the execution, its rollback snapshot (if any), then the task's pull request. */
-  const failedRun = [{ tenantId: 7, taskId: 7, cloudAgentRef: 'agent-x' }];
-  const own = { ok: true, truncated: false, commits: [{ sha: 'aaa1111', message: 'edit a.ts — task #7 (bob)', author: 'bf' }] };
-
-  it('sweeps a branch that is provably nothing but the abandoned work of the run', async () => {
-    listCommitsMock.mockResolvedValueOnce(own);
-    const db = fakeDb([failedRun, [], []]);
-
-    const outcome = await teardownCrashedRunArtifacts(env, db as unknown as Db, { executionId: 42, secret: 's' });
-
-    expect(outcome).toEqual({ deleted: true, branch: 'bf/task-7', commits: 1 });
-    expect(deleteBranchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('leaves a run alone that recorded a rollback snapshot - its work is revertable, not residue', async () => {
-    const db = fakeDb([failedRun, [{ id: 'rb-1' }]]);
-
-    await expect(teardownCrashedRunArtifacts(env, db as unknown as Db, { executionId: 42, secret: 's' })).resolves.toBeNull();
-
-    expect(deleteBranchMock).not.toHaveBeenCalled();
-  });
-
-  it('refuses a branch that carries a commit the run did not author', async () => {
-    listCommitsMock.mockResolvedValueOnce({ ok: true, truncated: false, commits: [{ sha: 'bbb2222', message: 'a human fix', author: 'human' }] });
-    const db = fakeDb([failedRun, [], []]);
-
-    await expect(teardownCrashedRunArtifacts(env, db as unknown as Db, { executionId: 42, secret: 's' }))
-      .resolves.toMatchObject({ deleted: false, refusal: 'foreign_commits' });
-    expect(deleteBranchMock).not.toHaveBeenCalled();
-  });
-
-  it('refuses while a pull request is open against the branch', async () => {
-    listCommitsMock.mockResolvedValueOnce(own);
-    const db = fakeDb([failedRun, [], [{ id: 'pr-1', number: 5, status: 'open' }]]);
-
-    await expect(teardownCrashedRunArtifacts(env, db as unknown as Db, { executionId: 42, secret: 's' }))
-      .resolves.toMatchObject({ deleted: false, refusal: 'open_pull_request' });
-    expect(deleteBranchMock).not.toHaveBeenCalled();
-  });
-
-  it('has nothing to sweep for a ticket with no repository bound, or an execution that is gone', async () => {
-    resolveRepoMock.mockResolvedValueOnce({ ok: false });
-    await expect(teardownCrashedRunArtifacts(env, fakeDb([failedRun, []]) as unknown as Db, { executionId: 42, secret: 's' })).resolves.toBeNull();
-    await expect(teardownCrashedRunArtifacts(env, fakeDb([[]]) as unknown as Db, { executionId: 42, secret: 's' })).resolves.toBeNull();
-    expect(deleteBranchMock).not.toHaveBeenCalled();
   });
 });

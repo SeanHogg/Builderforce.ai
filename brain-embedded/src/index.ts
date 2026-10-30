@@ -361,7 +361,7 @@ export { applyRemoteRun } from './brainRunStore';
 export { codeChangesOf } from './codeChanges';
 export { placeholderAdvisory, placeholdersWritten } from './placeholderGuard';
 export type { PlaceholderHit } from './placeholderGuard';
-export { installRunDriver, getRunDriver, type BrainRunDriver } from './runDriver';
+export { installRunDriver, getRunDriver, type BrainRunDriver, type SteerTurn } from './runDriver';
 export { installStepDurability, type StepDurability, type StepOutgoingMessage } from './stepOutbox';
 export { installIndexedDbStepDurability, type IndexedDbStepDurabilityOptions } from './indexedDbStepDurability';
 // The model-visible transcript a run continues from (history minus step rows and stopped

@@ -1,15 +1,12 @@
 'use client';
 
-/**
- * Chat list + CRUD for the Brain. Persistence is injected via BrainProvider's
- * `persistence` adapter, so both the in-app Brain and external embeds share one
- * implementation.
- */
+/** Chat list + CRUD for the Brain. Persistence is injected via BrainProvider's `persistence` adapter, so both the in-app Brain and external embeds share one implementation. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useBrainConfig } from './config';
 import { NEW_CHAT_MODE, normalizeChatMode, type ChatMode } from './chatMode';
 import type { BrainChat } from './types';
+import { forgetChatDelivery } from './chatDelivery';
 
 /** The placeholder title `create()` stamps on an untitled chat. A chat still carrying
  *  it has never been named, so {@link deriveChatTitle}-based auto-titling may replace it
@@ -350,6 +347,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
   const remove = useCallback(async (id: number) => {
     try {
       await persistence.deleteChat(id);
+      forgetChatDelivery(id); // nothing will ever run in it: what waited for its run goes too
       setChats((prev) => prev.filter((c) => c.id !== id));
       if (activeIdRef.current === id) setActiveChatId(null);
     } catch (e) {

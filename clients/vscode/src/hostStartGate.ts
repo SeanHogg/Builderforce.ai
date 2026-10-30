@@ -11,7 +11,7 @@
 import { stopIntent } from "@builderforce/run-guards";
 import type { BrainRunHost } from "./brainRunHostContract";
 
-type Gated = Pick<BrainRunHost, "start" | "stop" | "steer">;
+type Gated = Pick<BrainRunHost, "start" | "stop" | "steer" | "steerTurns">;
 type StartPayload = Parameters<BrainRunHost["start"]>[0];
 
 /**
@@ -45,6 +45,10 @@ export function gateStarts(host: Gated, around: (payload: StartPayload, start: (
     steer(key, text, attachments) {
       if (stopIntent(text)) hold(key);
       host.steer(key, text, attachments);
+    },
+    steerTurns(key, turns) {
+      if (turns.some((turn) => stopIntent(turn.text))) hold(key);
+      host.steerTurns(key, turns);
     },
   };
 }

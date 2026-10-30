@@ -31,7 +31,7 @@ import {
 import { applyListDelta } from '../../src/listDelta';
 import type { RunSyncMessage } from '../../src/brainRunHostProtocol';
 import { onHostMessage, post } from './vscodeBridge';
-import { setChatChildren, steerRun, type ChildView } from './chat/chatChildren';
+import { setChatChildren, steerRunTurns, type ChildView } from './chat/chatChildren';
 
 /** What the panel knows that the host does not: its own switches and picker state. */
 export interface HostRunContext {
@@ -164,8 +164,8 @@ export function installHostRunDriver(): () => void {
     confirm: (chatId, ok) => post('run.confirm', { chatId, ok }),
     clearError: (chatId) => post('run.clearError', { chatId }),
     // Words for the chat's run, keyed by the chat - not by what this panel shows: the host hears them (live run, a run being
-    // set up) or makes them the chat's next turn (idle) - `runSteer.steer`.
-    steer: (chatId, text, attachments) => steerRun(chatId, text, attachments),
+    // set up) or makes them the chat's next turn together (idle) - `runSteer.steerTurns`.
+    steer: (chatId, turns) => steerRunTurns(chatId, turns),
   });
 
   return () => {

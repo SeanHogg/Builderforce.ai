@@ -2,10 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { chatDoorLiveness, useChatTurns, type ChatTurns, type ChatTurnsOptions } from './useChatTurns';
 import { useChatCreation } from './useChatCreation';
-import { createDraftBinding } from './draftBinding';
 import { drainRunSteering, hasRunInterrupt, resetRunSteering } from './runSteering';
 import { installRunDriver, type BrainRunDriver } from './runDriver';
-import { mirrorRun } from './test/mirrorRun';
 import { resetBrainRunStore } from './runStore/runControl';
 
 const stopRun = vi.hoisted(() => vi.fn());
@@ -645,8 +643,9 @@ describe('useChatTurns - a flush that is not kept, a Stop, and the line of waiti
 describe('useChatTurns - where a turn goes when it is not kept after a chat switch (round 8)', () => {
   beforeEach(() => { stopRun.mockClear(); resetRunSteering(); });
 
-  it('with the run executing elsewhere (a run driver), ANY such turn returns to the composer - never the webview\'s inbox', async () => {
-    installRunDriver({} as BrainRunDriver);
+  it('with the run executing elsewhere (a run driver), a turn not kept after a chat switch goes to ITS chat through the driver - never the in-page inbox, never the box showing', async () => {
+    const steer = vi.fn();
+    installRunDriver({ start: vi.fn(), stop: vi.fn(), confirm: vi.fn(), clearError: vi.fn(), steer } as unknown as BrainRunDriver);
     try {
       let settle!: (kept: boolean) => void;
       const send = vi.fn(() => new Promise<boolean>((resolve) => { settle = resolve; }));
@@ -658,7 +657,9 @@ describe('useChatTurns - where a turn goes when it is not kept after a chat swit
       await act(async () => { rerender(props(false, 71)); });
       await act(async () => { settle(false); });
 
-      expect(restore).toHaveBeenCalledWith('plain turn');
+      expect(steer).toHaveBeenCalledTimes(1);
+      expect(steer).toHaveBeenCalledWith(70, [expect.objectContaining({ text: 'plain turn', eventKey: expect.any(String) })]);
+      expect(restore).not.toHaveBeenCalled();
       expect(drainRunSteering(70)).toEqual([]);
       expect(result.current.queued.items).toEqual([]);
     } finally {
@@ -760,45 +761,6 @@ describe('useChatTurns - round 10: a held-before-live turn belongs to ITS chat; 
 
 describe('useChatTurns - a draft chat\'s first id is not a chat switch; everything left behind comes back together', () => {
   beforeEach(() => { stopRun.mockClear(); resetRunSteering(); resetBrainRunStore(); });
-
-  it('turns held while the first turn creates the chat are delivered through THAT chat run, in order - not handed off - the moment it goes live', async () => {
-    const drafts = createDraftBinding();
-    let finishFirst!: (kept: boolean) => void;
-    const send = vi.fn(() => new Promise<boolean>((resolve) => { finishFirst = resolve; }));
-    const props = (runKey: number | null, running: boolean): ChatTurnsOptions<string> => ({ running, steerable: false, runKey, drafts, send });
-    const { result, rerender } = renderHook((p: ChatTurnsOptions<string>) => useChatTurns<string>(p), { initialProps: props(null, false) });
-    await act(async () => { void result.current.submit('A'); }); // the draft's first send begins (and is minted its token)
-    rerender(props(null, true)); // ...and creates the chat
-    await act(async () => { await result.current.submit('B'); });
-    await act(async () => { await result.current.submit('C'); });
-    expect(result.current.queued.count).toBe(2);
-
-    rerender(props(77, true)); act(() => drafts.resolve(drafts.current()!, 77)); // the chat has an id now
-    expect(result.current.queued.count).toBe(0); // they left the queue for the chat's run...
-    expect(drainRunSteering(77)).toEqual([]); // ...which is not live yet
-
-    act(() => mirrorRun(77, true)); // its run goes live
-    expect(drainRunSteering(77).map((m) => m.text)).toEqual(['B', 'C']);
-    await act(async () => { finishFirst(true); });
-  });
-
-  it('a turn queued for AFTER the run (queueAfter) in a draft becomes the next turn of the new chat when its run ends', async () => {
-    const drafts = createDraftBinding();
-    let finishFirst!: (kept: boolean) => void;
-    const send = vi.fn(() => new Promise<boolean>((resolve) => { finishFirst = resolve; }));
-    const props = (runKey: number | null, running: boolean): ChatTurnsOptions<string> => ({ running, steerable: false, runKey, drafts, send });
-    const { result, rerender } = renderHook((p: ChatTurnsOptions<string>) => useChatTurns<string>(p), { initialProps: props(null, false) });
-    await act(async () => { void result.current.submit('A'); });
-    rerender(props(null, true));
-    await act(async () => { await result.current.queueAfter('for later'); });
-
-    rerender(props(78, true)); act(() => drafts.resolve(drafts.current()!, 78)); act(() => mirrorRun(78, true));
-    expect(drainRunSteering(78)).toEqual([]); // not direction for this run
-
-    act(() => mirrorRun(78, false)); // the run ended
-    expect(drainRunSteering(78).map((m) => m.text)).toEqual(['for later']);
-    await act(async () => { finishFirst(true); });
-  });
 
   type Turn = { text: string; to: string | null };
   const turnProps = (runKey: number, restore: (t: Turn) => void, join?: (t: readonly Turn[]) => Turn): ChatTurnsOptions<Turn> =>

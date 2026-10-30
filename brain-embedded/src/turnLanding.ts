@@ -1,12 +1,11 @@
 'use client';
 
 import { useCallback, useRef, type MutableRefObject } from 'react';
-import { deliverToChat, handToChat, releaseChat, type ChatDelivery } from './chatDelivery';
+import { deliverToChat, handToChat, releaseChat, takeBackWaiting, type ChatDelivery } from './chatDelivery';
 import type { DraftBinding, DraftOutcome, DraftToken } from './draftBinding';
 import type { RunKey } from './brainRunStore';
 import type { ChatInputAttachment } from './types';
 import type { HandedTurn } from './runStore/continueChat';
-import { getRunDriver } from './runDriver';
 import { turnBody, type DraftHeld, type QueuedItem } from './useQueuedTurns';
 
 /**
@@ -73,15 +72,15 @@ export function useTurnLanding<T>(ports: MutableRefObject<LandingPorts<T>>) {
   }, [ports]);
 
   // The conversation changed with turns still held: they go to THEIR OWN chat, oldest first, nothing discarded - the
-  // same path a send into that chat takes. An addressed turn (or any, where the run executes elsewhere) goes back to
-  // the composer that is showing, ALL of them in one restore; the rest are handed to that chat TOGETHER, as one
-  // continuation (`wakeChat`: one row per turn, in order), else to its inbox, saved - so there is one ordering rule.
+  // same path a send into that chat takes, wherever its run executes (`handToChat`: the run driver's steer, else the
+  // chat's next turn together, else its inbox). An addressed turn goes back to the composer that is showing, ALL of
+  // them in one restore - so there is one delivery rule and one ordering rule.
   const handOff = useCallback((held: readonly QueuedItem<T>[], from: RunKey | null) => {
     const { textOf: text, attachmentsOf: attached, isDirected: directed } = ports.current;
     const back: T[] = [];
     const chat: HandedTurn[] = [];
     for (const { value: turn } of held) {
-      if (directed?.(turn) || getRunDriver() || typeof from !== 'number') back.push(turn);
+      if (directed?.(turn) || typeof from !== 'number') back.push(turn);
       else chat.push({ text: turnBody(turn, text), attachments: attached?.(turn) });
     }
     giveBackAll(back);
@@ -118,7 +117,7 @@ export function useTurnLanding<T>(ports: MutableRefObject<LandingPorts<T>>) {
     const chat: ChatDelivery[] = [];
     for (const { value: turn, followUp } of held) {
       if (directed?.(turn)) back.push(turn);
-      else chat.push({ text: turnBody(turn, text), attachments: attached?.(turn), steer: followUp });
+      else chat.push({ text: turnBody(turn, text), attachments: attached?.(turn), steer: followUp, turn });
     }
     giveBackAll(back);
     deliverToChat(outcome, chat);
@@ -150,7 +149,17 @@ export function useTurnLanding<T>(ports: MutableRefObject<LandingPorts<T>>) {
     binding.settle(token); // may fail the token: landDraft above then sees this send as one of the failed creation's
     mine.ended = true;
     flight.flying = flight.flying.filter((send) => send !== mine);
-    const taken = !!flight.owned?.includes(mine);
+    let taken = !!flight.owned?.includes(mine);
+    // The send that was making the chat's run was NOT kept after the creation answered, and that run was never live: what waits
+    // for it has nothing to follow. It comes back with the send in ONE restore, the send first, and the send is reported kept
+    // (the host puts nothing back twice) - the same path as a creation that failed.
+    if (!taken && flight.chat !== null && (thrown !== null || result === false) && ports.current.restore) {
+      const back = takeBackWaiting(flight.chat);
+      if (back.length > 0) {
+        giveBackAll([turn, ...back.map((waited) => waited.turn as T)]);
+        taken = true;
+      }
+    }
     if (flight.owned && flight.owned.every((send) => send.ended)) restoreFailed(token, flight);
     else if (flight.flying.length === 0) {
       if (flight.chat !== null) releaseChat(flight.chat);
@@ -159,7 +168,7 @@ export function useTurnLanding<T>(ports: MutableRefObject<LandingPorts<T>>) {
     if (taken) return true;
     if (thrown) throw thrown.error;
     return result;
-  }, [ports, restoreFailed]);
+  }, [ports, restoreFailed, giveBackAll]);
 
   return { handOff, landDraft, sendOnce };
 }

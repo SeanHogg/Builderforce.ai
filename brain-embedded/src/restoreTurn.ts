@@ -8,6 +8,13 @@
  *    something newer since, the turn's words go IN FRONT of it, a blank line between (they were said first: the same order
  *    `joinRestorableTurns` keeps) - nothing a person said is dropped - and the newer draft keeps the addressee it was
  *    written for.
+ *
+ * The box is written with an UPDATER, not a string: the prepend is computed against what the box holds when the write lands,
+ * so a clear or a keystroke that happens between this call and React's commit is respected, never overwritten.
+ *
+ * ACCEPTED CONSEQUENCE of putting the older words in front rather than refusing to restore: a person who has already
+ * retyped the same words sees them twice (older, blank line, newer) and edits one away. The alternative - dropping a turn
+ * because the box was not empty - loses words, which is worse; the two are kept in the order they were said.
  */
 
 import type { ChatInputAttachment } from './types';
@@ -36,23 +43,29 @@ export function joinRestorableTurns(turns: readonly RestorableTurn[]): Restorabl
   };
 }
 
+/** The box after a turn's words are given back: alone in an empty box, else in front of what is there (a blank turn changes nothing). */
+function restoreInto(current: string, text: string): string {
+  if (!current) return text;
+  return text.trim() ? `${text}\n\n${current}` : current;
+}
+
 export function restoreTurn(
   turn: RestorableTurn,
   composer: {
-    /** The composer's text right now (read at call time - a ref, not a render-time capture). */
+    /** The composer's text right now (read at call time - a ref, not a render-time capture): decides the addressee only. */
     draft: () => string;
-    /** Write the box's whole text (`useComposerDraft().setInput`): the turn's alone, or the turn's in front of the newer draft. */
-    setInput: (text: string) => void;
+    /** Write the box through an updater (`useComposerDraft().setInput`): the turn's words alone, or in front of what the box holds then. */
+    setInput: (next: (current: string) => string) => void;
     restoreAttachments: (files: readonly ChatInputAttachment[]) => void;
     chooseRecipient: (to: DirectedRecipient | null) => void;
   },
 ): void {
   composer.restoreAttachments(turn.attachments ?? []);
-  const newer = composer.draft();
-  if (newer) {
-    if (turn.text.trim()) composer.setInput(`${turn.text}\n\n${newer}`);
+  if (composer.draft()) {
+    // A newer draft keeps its addressee; a files-only turn has no words to put in front of it.
+    if (turn.text.trim()) composer.setInput((current) => restoreInto(current, turn.text));
     return;
   }
-  composer.setInput(turn.text);
+  composer.setInput((current) => restoreInto(current, turn.text));
   composer.chooseRecipient(turn.recipient);
 }

@@ -358,8 +358,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       clearRunError(runKey);
       relay.sync(runKey);
     },
-    // The person's words at a run — steer, stop, or its next turn (`runSteer.ts`).
-    steer: (runKey, text, attachments) => steering.steer(runKey, text, attachments),
+    // The person's words at a run — steer, stop, or its next turn (`runSteer.ts`); `steerTurns`: several, one continuation.
+    steer: steering.steer, steerTurns: steering.steerTurns,
     childControls(owner, base, approve) {
       // Registered so a child can derive from it; never woken — its turns are the editor's.
       specs.set(owner.key, { ...base, chatId: owner.key, wakeable: false });

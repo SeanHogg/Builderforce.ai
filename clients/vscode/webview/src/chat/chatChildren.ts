@@ -7,7 +7,7 @@
  */
 
 import { useMemo, useSyncExternalStore } from 'react';
-import { getRunSnapshot, getRunTrace, isModelReply, type ChatInputAttachment, type DirectedRecipient, type SubagentDiagnosticsInput } from '@seanhogg/builderforce-brain-embedded';
+import { getRunSnapshot, getRunTrace, isModelReply, type ChatInputAttachment, type DirectedRecipient, type SteerTurn, type SubagentDiagnosticsInput } from '@seanhogg/builderforce-brain-embedded';
 import type { ChatSubagentVM } from '@seanhogg/builderforce-brain-ui';
 import type { ChildView } from '../../../src/childRuns';
 import { post } from '../vscodeBridge';
@@ -80,6 +80,11 @@ export function subagentDiagnosticsOf(chatId: number | null): SubagentDiagnostic
  */
 export function steerRun(runKey: number, text: string, attachments?: ChatInputAttachment[]): void {
   post('run.steer', { chatId: runKey, text, ...(attachments?.length ? { attachments } : {}) });
+}
+
+/** Several turns said to a chat's run together (the run driver's `steer`): the host hears each, and an idle chat takes them as ONE continuation. */
+export function steerRunTurns(runKey: number, turns: readonly SteerTurn[]): void {
+  post('run.steer', { chatId: runKey, turns });
 }
 
 /** How a live sub-agent is addressed in the composer's @-picker — by its run key. */

@@ -40,7 +40,11 @@ export interface DraftBinding {
   settle: (token: DraftToken) => void;
   /** A chat was opened: the draft is no longer on screen. Its tokens stay open - their creations may still answer. */
   leave: () => void;
-  /** What a token's creation answered: the chat id, null if it failed, undefined while open. */
+  /**
+   * What a token's creation answered: the chat id, null if it failed, undefined while open (or forgotten). A resolved token is
+   * kept while the draft is on screen and while a send that began with it is still in flight - until then a send naming it
+   * gets ITS chat.
+   */
   outcomeOf: (token: DraftToken) => DraftOutcome | undefined;
   /** Called whenever `current()` changes (a `useSyncExternalStore` subscription). */
   subscribe: (listener: () => void) => () => void;
@@ -79,9 +83,10 @@ export function createDraftBinding(): DraftBinding {
     entry.outcome = outcome;
     if (outcome === null && live === token) setLive(null);
     for (const listener of [...listeners]) listener(token, outcome);
-    // A resolved token still on screen keeps its answer (a turn typed before the chat is selected lands at once);
-    // every other one has delivered it.
-    if (live !== token) tokens.delete(token);
+    // A resolved token still on screen keeps its answer (a turn typed before the chat is selected lands at once), and so
+    // does one a send that `begin` counted has not ended on (it asks `ensureChatId(token)` and must get THIS chat, never a
+    // second one); every other one has delivered it.
+    if (live !== token && (outcome === null || entry.sends <= 0)) tokens.delete(token);
   };
 
   return {
@@ -102,13 +107,16 @@ export function createDraftBinding(): DraftBinding {
       const entry = tokens.get(token);
       if (!entry) return;
       entry.sends -= 1;
-      if (entry.sends <= 0 && !entry.creating && entry.outcome === undefined) finish(token, null);
+      if (entry.sends > 0) return;
+      if (!entry.creating && entry.outcome === undefined) finish(token, null);
+      else if (entry.outcome !== undefined && live !== token) tokens.delete(token);
     },
     leave: () => {
       const left = live;
       if (left === null) return;
       setLive(null);
-      if (tokens.get(left)?.outcome !== undefined) tokens.delete(left);
+      const entry = tokens.get(left);
+      if (entry?.outcome !== undefined && entry.sends <= 0) tokens.delete(left);
     },
     outcomeOf: (token) => tokens.get(token)?.outcome,
     subscribe: (listener) => {

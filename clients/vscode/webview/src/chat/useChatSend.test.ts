@@ -87,6 +87,9 @@ describe('the editor chat\'s turn door is told the run store\'s state', () => {
   });
 });
 
+/** What the box holds if it held `current` when the (single, updater) write landed - a turn is given back through an updater. */
+const boxAfter = (setInput: ReturnType<typeof vi.fn>, current: string): string => (setInput.mock.calls.at(-1)![0] as (cur: string) => string)(current);
+
 describe('an addressed turn the door could not keep', () => {
   it('returns to the composer with its text, files and addressee', () => {
     const { options, conv, setInput, chooseRecipient } = mount({ sending: false, runLive: false });
@@ -95,7 +98,7 @@ describe('an addressed turn the door could not keep', () => {
 
     (options.restore as (m: Turn) => void)({ text: '@dev look', recipient: dev, attachments: [file] });
 
-    expect(setInput).toHaveBeenCalledWith('@dev look');
+    expect(boxAfter(setInput, '')).toBe('@dev look');
     expect(conv.restoreAttachments).toHaveBeenCalledWith([file]);
     expect(chooseRecipient).toHaveBeenCalledWith(dev);
   });
@@ -114,7 +117,7 @@ describe('an addressed turn the door could not keep', () => {
 
     (options.restore as (m: Turn) => void)({ text: 'older', recipient: { kind: 'agent', ref: 'dev' }, attachments: [file] });
 
-    expect(setInput).toHaveBeenCalledWith('older' + String.fromCharCode(10, 10) + 'typed since');
+    expect(boxAfter(setInput, 'typed since')).toBe('older' + String.fromCharCode(10, 10) + 'typed since');
     expect(chooseRecipient).not.toHaveBeenCalled();
     expect(conv.restoreAttachments).toHaveBeenCalledWith([file]);
   });

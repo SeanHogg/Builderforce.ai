@@ -18,7 +18,7 @@
  * (`runSteer.test.ts`).
  */
 
-import { drainRunSteering, isRunning, queueRunSteering, savedChatOf, type ChatInputAttachment } from "@seanhogg/builderforce-brain-embedded";
+import { drainRunSteering, isRunning, queueRunSteering, savedChatOf, type ChatInputAttachment, type SteerTurn } from "@seanhogg/builderforce-brain-embedded";
 import { stopIntent } from "@builderforce/run-guards";
 import { directionText, type ChildRunHost } from "./childRunSpawner";
 
@@ -37,6 +37,12 @@ export interface RunSteerDeps {
 
 export interface RunSteer {
   steer(runKey: number, text: string, attachments?: ChatInputAttachment[]): void;
+  /**
+   * SEVERAL turns said to a chat's run together (`BrainRunDriver.steer`): each is heard as `steer` hears it, in order, and a chat
+   * that is idle takes ALL of them as ONE continuation (one wake). Idempotent by the turn's `eventKey`: a turn this host has
+   * already heard (a repeated post) is not heard again.
+   */
+  steerTurns(runKey: number, turns: readonly SteerTurn[]): void;
   /** The Stop button (or a typed stop): stop the run, and drop what waits for it. */
   stop(runKey: number): void;
   /** A run settled: what still waits for it is its next turn (a stopped run's is dropped). */
@@ -48,6 +54,17 @@ export interface RunSteer {
 export function createRunSteer(deps: RunSteerDeps): RunSteer {
   /** Runs stopped on purpose — their waiting words do not restart them. */
   const stopped = new Set<number>();
+  /** The keys of the turns already heard, per run (the newest few: a repeat arrives close behind the original). */
+  const heard = new Map<number, Set<string>>();
+  const MAX_HEARD = 256;
+  const firstHearing = (runKey: number, key: string): boolean => {
+    const keys = heard.get(runKey) ?? new Set<string>();
+    heard.set(runKey, keys);
+    if (keys.has(key)) return false;
+    keys.add(key);
+    if (keys.size > MAX_HEARD) keys.delete(keys.values().next().value as string);
+    return true;
+  };
 
   /** Show the person's words in the chat the run lives in. */
   const say = (runKey: number, text: string): void => {
@@ -63,47 +80,67 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
     deps.childHost.stop(runKey);
   };
 
+  /**
+   * Take one message: shown/queued/interrupting as the run's state says. `idle`: no run is reading, the words are queued for
+   * the chat's next turn and the caller wakes it (once, however many were taken); `stopped`: it was the Stop.
+   */
+  const take = (runKey: number, text: string, attachments?: ChatInputAttachment[]): "done" | "idle" | "stopped" => {
+    if (!text.trim()) return "done";
+    const lineage = deps.registry.lineageOf(runKey);
+    // A sub-agent hears it as direction from its owner; the chat's own run hears the person.
+    const direction = lineage ? directionText(lineage.ownerName, text) : text;
+    const running = isRunning(runKey);
+    if (stopIntent(text)) {
+      // "STOP executing" typed mid-run IS the Stop button; the words still land in the
+      // chat and the model gets no further turn. With nothing running there is nothing
+      // to stop — it is not started as a turn either.
+      if (!running && !deps.isBusy(runKey)) return "done";
+      say(runKey, text);
+      stop(runKey);
+      return "stopped";
+    }
+    if (running) {
+      // In front of the run's NEXT turn, not after it — and it INTERRUPTS the step now.
+      // Attachments the person attached ride along so a mid-run image reaches the model.
+      queueRunSteering(runKey, direction, { interrupt: true, attachments, fromPerson: true });
+      // A run sitting in `wait_agents` would otherwise hear this only once every child
+      // settled; the wait gives way and the next turn answers.
+      deps.registry.interrupt(runKey);
+      say(runKey, text);
+      return "done";
+    }
+    queueRunSteering(runKey, direction, { fromPerson: true });
+    if (deps.isSettingUp(runKey)) {
+      // Heard before the first turn as direction — shown now, as a steer always is.
+      say(runKey, text);
+      return "done";
+    }
+    // Unwinding: `settled` sends it on as a turn of its own (which persists it).
+    if (deps.isBusy(runKey)) return "done";
+    // Idle: the message is the next turn — persisted by that turn, like any other.
+    // A key this host cannot start (no spec, the native participant) keeps it queued
+    // for its next turn instead.
+    return "idle";
+  };
+
   return {
     stop,
     stopped: (runKey) => stopped.has(runKey),
 
     steer(runKey, text, attachments) {
-      if (!text.trim()) return;
-      const lineage = deps.registry.lineageOf(runKey);
-      // A sub-agent hears it as direction from its owner; the chat's own run hears the person.
-      const heard = lineage ? directionText(lineage.ownerName, text) : text;
-      const running = isRunning(runKey);
-      if (stopIntent(text)) {
-        // "STOP executing" typed mid-run IS the Stop button; the words still land in the
-        // chat and the model gets no further turn. With nothing running there is nothing
-        // to stop — it is not started as a turn either.
-        if (!running && !deps.isBusy(runKey)) return;
-        say(runKey, text);
-        stop(runKey);
-        return;
+      if (take(runKey, text, attachments) === "idle") deps.childHost.wake(runKey);
+    },
+
+    steerTurns(runKey, turns) {
+      let idle = false;
+      for (const turn of turns) {
+        if (!firstHearing(runKey, turn.eventKey)) continue;
+        const taken = take(runKey, turn.text, turn.attachments);
+        if (taken === "stopped") return;
+        idle = idle || taken === "idle";
       }
-      if (running) {
-        // In front of the run's NEXT turn, not after it — and it INTERRUPTS the step now.
-        // Attachments the person attached ride along so a mid-run image reaches the model.
-        queueRunSteering(runKey, heard, { interrupt: true, attachments, fromPerson: true });
-        // A run sitting in `wait_agents` would otherwise hear this only once every child
-        // settled; the wait gives way and the next turn answers.
-        deps.registry.interrupt(runKey);
-        say(runKey, text);
-        return;
-      }
-      queueRunSteering(runKey, heard, { fromPerson: true });
-      if (deps.isSettingUp(runKey)) {
-        // Heard before the first turn as direction — shown now, as a steer always is.
-        say(runKey, text);
-        return;
-      }
-      // Unwinding: `settled` sends it on as a turn of its own (which persists it).
-      if (deps.isBusy(runKey)) return;
-      // Idle: the message is the next turn — persisted by that turn, like any other.
-      // A key this host cannot start (no spec, the native participant) keeps it queued
-      // for its next turn instead.
-      deps.childHost.wake(runKey);
+      // Idle: everything queued is ONE new turn, oldest first (`wake` drains it).
+      if (idle) deps.childHost.wake(runKey);
     },
 
     settled(runKey) {

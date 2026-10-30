@@ -11,9 +11,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *   • {@link recordRunRollbackSnapshot} — at finalize, snapshot what the run changed
  *     (branch/base, written paths, commit shas, PR) into `execution_rollbacks`.
  *   • {@link teardownRunBranch} — a run ended failed/cancelled with no PR: sweep the
- *     branch, if and only if it is provably safe to. A CANCELLED run reaches it from
- *     the cloud finalize; a FAILED one through {@link teardownCrashedRunArtifacts},
- *     from the terminal landing hook (`failedRunSweep`).
+ *     branch, if and only if it is provably safe to. Only a CANCELLED run reaches it (from
+ *     the cloud finalize); a FAILED run's branch is NOT swept - see the note there.
  *   • {@link revertRun} — a human undoes a completed run: close the PR and delete
  *     the branch, if and only if it is provably safe to. If the run's PR already
  *     MERGED there is nothing on a branch left to undo, so this escalates to
@@ -245,8 +244,7 @@ export type TeardownOutcome =
 
 /**
  * Sweep the ticket branch of a run that ended FAILED or CANCELLED without opening
- * a PR. Called from the cloud finalize chokepoint (cancelled) and, for a failed run,
- * from {@link teardownCrashedRunArtifacts}.
+ * a PR. Called from the cloud finalize chokepoint.
  *
  * This is the conservative path by design: it deletes only when
  * {@link decideBranchTeardown} can prove the branch is nothing but this run's
@@ -322,54 +320,6 @@ export async function teardownRunBranch(
     .catch((error) => reportCaughtError(error, { source: "application/runtime/runRollback.ts", operation: "teardownRunBranch", context: { logMessage: '[run-rollback] teardown snapshot update failed', details: { tenantId: args.tenantId, executionId: args.executionId, error } } }));
 
   return { deleted: true, branch: decision.branch, commits: decision.commits.length };
-}
-
-/**
- * Terminal-state teardown for a run that landed FAILED — the path that has an execution
- * id and nothing else. Resolves the ticket's repo itself, then delegates to the
- * one {@link teardownRunBranch} above so the safety rules are applied identically
- * whether the run was cancelled cleanly or died mid-loop. Called from the terminal
- * landing hook (`failedRunSweep`, wired in `buildExecutionRepository`).
- *
- * A failed run recorded no `writtenPaths`; that is fine, because in `teardown`
- * mode the decision rests on commit AUTHORSHIP (every commit must carry this
- * task's marker), not on the path set.
- *
- * A run that DID record a rollback snapshot is left alone (null): the cloud finalize
- * made its work revertable - a human's call (`revertRun`) - and deleting that
- * branch here would undo exactly what the snapshot exists to keep.
- */
-export async function teardownCrashedRunArtifacts(
-  env: Env | undefined,
-  db: Db,
-  args: { executionId: number; secret: string },
-): Promise<TeardownOutcome | null> {
-  const [row] = await db
-    .select({ tenantId: executions.tenantId, taskId: executions.taskId, cloudAgentRef: executions.cloudAgentRef })
-    .from(executions)
-    .where(eq(executions.id, args.executionId))
-    .limit(1);
-  if (!row) return null;
-
-  const [snapshot] = await db
-    .select({ id: executionRollbacks.id })
-    .from(executionRollbacks)
-    .where(and(eq(executionRollbacks.executionId, args.executionId), eq(executionRollbacks.tenantId, row.tenantId)))
-    .limit(1);
-  if (snapshot) return null; // its work was snapshotted as revertable: not residue
-
-  const resolved = await resolveTicketRepoContext(db, args.secret, row.tenantId, row.taskId);
-  if (!resolved.ok) return null; // no repo bound → no residue to sweep
-
-  return teardownRunBranch(env, db, {
-    tenantId: row.tenantId,
-    executionId: args.executionId,
-    taskId: row.taskId,
-    repoCtx: resolved.ctx,
-    writtenPaths: [],
-    cloudAgentRef: row.cloudAgentRef ?? undefined,
-    agentLabel: 'Cloud Agent',
-  });
 }
 
 // ── 2. revert a completed run ─────────────────────────────────────────────────

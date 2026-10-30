@@ -102,6 +102,10 @@ export function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRe
   }, [chatId, drafts]);
 
   const ensureChatId = useCallback((draft?: DraftToken): Promise<number | null> => {
+    // A send naming a token whose creation already answered gets THAT chat - while the binding still knows the token - whatever
+    // chat is open now (the person may have gone elsewhere): never a second chat for a draft that already has one.
+    const answered = draft === undefined ? undefined : drafts.outcomeOf(draft);
+    if (typeof answered === 'number') return Promise.resolve(answered);
     const open = chatIdRef.current;
     if (open != null) return Promise.resolve(open);
     // This creation belongs to the token the send began with, and only it settles that token: a late send of an abandoned

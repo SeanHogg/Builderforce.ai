@@ -10,11 +10,13 @@ import { useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
  * the editor chat; none keeps its own copy.
  *
  *  - `draft()` the text right now;
- *  - `setInput(text)` write it (clear, seed, give a turn back - `restoreTurn` reads `draft()` and writes the whole text).
+ *  - `setInput(text)` write it (clear, seed), or `setInput(cur => next)` - an UPDATER, computed against what the box holds
+ *    when the write lands (`restoreTurn` gives a turn back this way, so a concurrent clear or keystroke is respected). The
+ *    ref follows the updater's result at once; the same updater goes to the state setter.
  */
 export function useComposerDraft(input: string, setInput: Dispatch<SetStateAction<string>>): {
   draft: () => string;
-  setInput: (text: string) => void;
+  setInput: (next: SetStateAction<string>) => void;
 } {
   const ref = useRef(input);
   // The render's own value wins: it already includes every write made before it.
@@ -22,9 +24,9 @@ export function useComposerDraft(input: string, setInput: Dispatch<SetStateActio
   ref.current = input;
   return useMemo(() => ({
     draft: () => ref.current,
-    setInput: (text: string) => {
-      ref.current = text;
-      setInput(text);
+    setInput: (next: SetStateAction<string>) => {
+      ref.current = typeof next === 'function' ? next(ref.current) : next;
+      setInput(next);
     },
   }), [setInput]);
 }

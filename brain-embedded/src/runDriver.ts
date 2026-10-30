@@ -15,6 +15,13 @@
 import type { BrainRunRequest } from './brainRunStore';
 import type { ChatInputAttachment } from './types';
 
+/** One turn said to a chat's run through the driver: its words, its files, and the key that makes saying it twice the same as once. */
+export interface SteerTurn {
+  text: string;
+  attachments?: ChatInputAttachment[];
+  eventKey: string;
+}
+
 export interface BrainRunDriver {
   /** Execute a run elsewhere. Resolves when that run has settled, like `startRun`. */
   start(chatId: number, req: BrainRunRequest): Promise<void>;
@@ -24,10 +31,11 @@ export interface BrainRunDriver {
   /**
    * Words for a CHAT's run, wherever that run executes - the chat-keyed twin of `queueRunSteering`, for a process whose
    * in-page inbox is read by nobody. The process that owns the run decides what they are: heard by the run when it is live
-   * or being set up, the chat's next turn when it is idle (the editor host's `runSteer.steer`: its inbox + wake). Keyed by
-   * the chat, never by the view that happens to be showing it.
+   * or being set up, the chat's next turn when it is idle (the editor host's `runSteer.steerTurns`: its inbox + wake) - SEVERAL
+   * turns together are ONE continuation, in order. Keyed by the chat, never by the view that happens to be showing it. Each
+   * turn carries its own key: the host hears a turn it has already heard (a repeated post) once.
    */
-  steer(chatId: number, text: string, attachments?: ChatInputAttachment[]): void;
+  steer(chatId: number, turns: readonly SteerTurn[]): void;
 }
 
 let installed: BrainRunDriver | null = null;

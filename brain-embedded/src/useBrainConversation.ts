@@ -41,7 +41,7 @@ import { composeUserTurn, userTurnContentOf } from './attachmentTranscript';
 import { scopeToConsolidation } from '@seanhogg/builderforce-memory/working';
 import { contextUsageOf, type ContextUsage } from './contextUsage';
 import { priorResearchDigest } from './priorResearch';
-import { withDirectedMetadata, isDirectedToParticipant, directedAgentRecipients, type DirectedRecipient, type DirectedGroup } from './directedMessage';
+import { withDirectedMetadata, isDirectedToParticipant, directedAgentRecipients, directedRecipientList, type DirectedRecipient, type DirectedGroup } from './directedMessage';
 import { buildBrainTriageReport, type BrainTraceEvent } from './brainTriage';
 import type { BrainRunActivity } from './runActivity';
 import { localRatingVerdict, ratedTurnContext, withRating } from './turnRating';
@@ -504,13 +504,6 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       composer.take(attachments);
       setLocalError('');
 
-      const addressedList = addressedTo == null
-        ? null
-        : Array.isArray(addressedTo)
-          ? addressedTo
-          : (addressedTo as DirectedRecipient | DirectedGroup).kind === 'group'
-            ? (addressedTo as DirectedGroup).members
-            : [addressedTo as DirectedRecipient];
       // Model-visible content: images as `image_url` vision parts (the gateway routes
       // these to a vision model), attachments the host can read inlined as text under
       // the mention budget, anything else a link (`attachmentContent.ts`). Resolved BEFORE
@@ -519,7 +512,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       // Persisted/display content stays text-only (the chat tables store a string): every
       // attachment shows as a link the user can click. The ONE composition (`composeUserTurn`).
       const { displayContent, turn } = await composeUserTurn(trimmed, attachments, persistence);
-      const metadata = withDirectedMetadata(addressedList, turn.meta);
+      const metadata = withDirectedMetadata(directedRecipientList(addressedTo), turn.meta);
 
       try {
         const [userMsg] = await persistence.sendMessages(id, [{ role: 'user', content: displayContent, metadata }]);

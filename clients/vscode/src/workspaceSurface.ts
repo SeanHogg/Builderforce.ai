@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { isSubscriptionSignInUrl } from "@builderforce/model-catalog";
-import { artifactRoutePath, type ChatInputAttachment } from "@seanhogg/builderforce-brain-embedded";
+import { artifactRoutePath, type ChatInputAttachment, type SteerTurn } from "@seanhogg/builderforce-brain-embedded";
+import { steerFromMessage } from "./steerMessage";
 import { getCurrentUserId } from "./bfApi";
 import type { BrainRunHost, WebviewRunStart } from "./brainRunHost";
 import { getWebBaseUrl } from "./gateway";
@@ -38,6 +39,8 @@ export interface BrainInbound extends WebviewInbound {
   /** For `run.steer`: image attachments the message was sent with, riding along as
    *  vision parts of the steered turn (a mid-run message keeps its images). */
   attachments?: ChatInputAttachment[];
+  /** For `run.steer`: SEVERAL turns said to the chat's run together (each with the key that makes a repeat harmless). */
+  turns?: SteerTurn[];
   /** For `run.autoApprove`: the panel's Auto-mode switch (with `chatId`, the chat it
    *  was flipped in — it applies to that conversation's run and no other). */
   on?: boolean;
@@ -281,14 +284,7 @@ export class WorkspaceSurface implements vscode.Disposable {
         if (typeof msg.chatId === "number") hooks.runHost?.confirm(msg.chatId, msg.ok === true);
         break;
       case "run.steer":
-        if (typeof msg.chatId === "number" && typeof msg.text === "string") {
-          const attachments = Array.isArray(msg.attachments) ? msg.attachments : undefined;
-          // A text attachment reaches the running run as its text, like a normal send;
-          // pictures stay vision parts of the steered turn. Queued at once: the texts are
-          // only FITTED (synchronously, no compressor or route lookup in front of the steer).
-          const text = hostAttachmentIngress(this.ctx.secrets).withInlined(msg.text, attachments?.filter((a) => !a.imageUrl));
-          hooks.runHost?.steer(msg.chatId, text, attachments);
-        }
+        if (typeof msg.chatId === "number") steerFromMessage(hooks.runHost, { ...msg, chatId: msg.chatId }, (text, files) => hostAttachmentIngress(this.ctx.secrets).withInlined(text, files));
         break;
       case "run.clearError":
         if (typeof msg.chatId === "number") hooks.runHost?.clearError(msg.chatId);

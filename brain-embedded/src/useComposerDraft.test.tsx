@@ -24,6 +24,17 @@ describe('useComposerDraft - the composer text as the send path sees it', () => 
     expect(setInput).toHaveBeenCalledWith('older\n\nnewer');
   });
 
+  it('an UPDATER is applied to what the box holds now, draft() reads the result at once, and the same updater goes to the state setter', () => {
+    const setInput = vi.fn();
+    const { result } = renderHook(() => useComposerDraft('newer', setInput));
+    const prepend = (cur: string) => `older\n\n${cur}`;
+
+    result.current.setInput(prepend);
+
+    expect(result.current.draft()).toBe('older\n\nnewer');
+    expect(setInput).toHaveBeenCalledWith(prepend);
+  });
+
   it('follows the render\'s own value (the person typing)', () => {
     const setInput = vi.fn();
     const { result, rerender } = renderHook(({ input }: { input: string }) => useComposerDraft(input, setInput), { initialProps: { input: '' } });

@@ -212,11 +212,13 @@ ${ciVerified
   //      the shared teardown decision, which deletes it ONLY if it can prove the
   //      branch is nothing but this run's abandoned work.
   //
-  // A run that lands FAILED does not reach (b): its branch residue is swept where a failed
-  // landing is persisted (`failedRunSweep`, from `buildExecutionRepository`'s onTerminal,
-  // through `teardownCrashedRunArtifacts` - the same teardown decision), and one that
-  // reached (a) is left alone there. All are best-effort and must never change the run's
-  // own outcome.
+  // A run that lands FAILED does not reach (b) (a failed one that wrote files is snapshotted under
+  // (a)): its branch residue is NOT swept automatically.
+  // Authorship is per TASK (`runCommitMarker(taskId)`), not per execution, so a sweep cannot tell
+  // this run's commits from a live parent run's or an earlier run's work (revertable, finished,
+  // awaiting sign-off, or the partial commits a retry builds on) and would delete them. Until
+  // commit attribution is per execution (ROADMAP Consolidated Gap Register) a failed run's
+  // branch stays. The paths above are best-effort and must never change the run's own outcome.
   if (repoCtx && writtenPaths.size > 0) {
     if (cancelled) {
       await teardownRunBranch(env, db, {

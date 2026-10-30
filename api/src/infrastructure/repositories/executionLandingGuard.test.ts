@@ -75,6 +75,16 @@ describe('check:execution-landing scanner', () => {
     ['raw SQL with an opaque target inside a tuple', 'await db.execute(sql`UPDATE executions SET (result, ${sql.identifier(col)}) = (${r}, ${s}) WHERE id = ${id}`);'],
     ['a raw upsert with an opaque interpolated target', 'await db.execute(sql`INSERT INTO executions (id) VALUES (${id}) ON CONFLICT (id) DO UPDATE SET ${sql.identifier(col)} = ${v}`);'],
     ['raw SQL whose target is sql.identifier of the status column', "await db.execute(sql`UPDATE executions SET ${sql.identifier('status')} = ${s} WHERE id = ${id}`);"],
+    // Round G: assignment / parameter destructure aliases, generic calls, a stored builder's scope, a WHERE inside a ${} hole.
+    ['an assignment-destructure alias', "let runs;\n({ executions: runs } = schema);\nawait db.update(runs).set({ status: 'failed' }).where(w);"],
+    ['a function-parameter destructure alias', "async function land({ executions: t }: Schema) { await db.update(t).set({ status: 'failed' }).where(w); }"],
+    ['an arrow-parameter destructure alias', "const land = async ({ executions: t }) => { await db.update(t).set({ status: 'failed' }).where(w); };"],
+    ['a generic update call', "await db.update<typeof executions>(executions).set({ status: 'failed' }).where(w);"],
+    ['a generic set call', "await db.update(executions).set<Patch>({ status: 'failed' }).where(w);"],
+    ['a generic update held in a variable', "const q = db.update<Row>(executions);\nawait q.set<Row>({ status: 'failed' });"],
+    ['a stored builder used inside a nested block of its scope', "const q = db.update(executions);\nif (go) {\n  await q.set({ status: 'failed' });\n}"],
+    ['a stored builder whose name is also used for another binding LATER in the file', "function a() { const q = db.update(executions); return q.set({ status: 'failed' }); }\nfunction b() { const q = db.update(tasks); return q.set({ status: 'done' }); }"],
+    ['raw SQL whose opaque target follows a WHERE inside a ${} hole', 'await db.execute(sql`UPDATE executions SET result = ${cond ? sql`WHERE a` : sql`x`}, ${sql.identifier(col)} = ${v} WHERE id = ${id}`);'],
   ])('flags %s', (_name, source) => {
     expect(flagged(source)).toBeGreaterThan(0);
   });
@@ -112,6 +122,14 @@ describe('check:execution-landing scanner', () => {
     ['raw SQL whose assignment target is a provably other column (a table column)', 'await db.execute(sql`UPDATE executions SET ${executions.updatedAt} = now(), result = ${v} WHERE id = ${id}`);'],
     ['raw SQL with interpolations only in VALUES', 'await db.execute(sql`UPDATE executions SET result = ${r}, updated_at = ${now} WHERE id = ${id}`);'],
     ['a raw upsert with only provable targets', "await db.execute(sql`INSERT INTO executions (id) VALUES (${id}) ON CONFLICT (id) DO UPDATE SET ${sql.identifier('result')} = ${v}`);"],
+    // Round G
+    ['a builder of executions in one function, a same-named builder of another table in the next', "function a() { const q = db.update(executions); return q.where(w); }\nfunction b() { const q = db.update(tasks); return q.set({ status: 'done' }); }"],
+    ['a stored builder re-bound to another table before its set', "let q = db.update(executions);\nq = db.update(tasks);\nawait q.set({ status: 'done' });"],
+    ['a stored builder used after the block it was declared in closed (another binding by then)', "{ const q = db.update(executions); await q.where(w); }\nawait q.set({ status: 'done' });"],
+    ['a destructure parameter of another table', "async function land({ tasks: t }: Schema) { await db.update(t).set({ status: 'done' }).where(w); }"],
+    ['an object literal passed to a call whose result is a block body (not a parameter list)', "if (check({ executions: runs })) { await db.update(runs).set({ status: 'x' }).where(w); }"],
+    ['a generic update of another table', "await db.update<typeof tasks>(tasks).set({ status: 'done' }).where(w);"],
+    ['raw SQL with a WHERE inside a ${} hole and only provable targets', 'await db.execute(sql`UPDATE executions SET result = ${cond ? sql`WHERE a` : sql`x`}, ${sql.identifier(\'result\')} = ${v} WHERE id = ${id}`);'],
   ])('does not flag %s', (_name, source) => {
     expect(flagged(source)).toBe(0);
   });

@@ -12,6 +12,7 @@ import type {
   BrainRunPersistence,
   BrainStreamFn,
   ChatInputAttachment,
+  SteerTurn,
   EvermindRunHooks,
   ModelFallbackEvent,
   ModelPreflightResult,
@@ -212,6 +213,9 @@ export interface BrainRunHost {
    *  running takes them as its next turn instead: a message is never dropped. Image
    *  attachments ride along as vision parts of that turn. */
   steer(runKey: number, text: string, attachments?: ChatInputAttachment[]): void;
+  /** SEVERAL turns said to a chat's run together (`BrainRunDriver.steer`): each heard as `steer` hears it, in order, and an idle chat
+   *  takes all of them as ONE continuation. Idempotent by each turn's `eventKey`: a turn already heard is not heard again. */
+  steerTurns(runKey: number, turns: readonly SteerTurn[]): void;
   /**
    * Sub-agent controls for a run this host did NOT start — the native chat participant.
    * Its children run here, as ordinary runs; it cannot be woken (its turn belongs to the

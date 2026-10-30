@@ -183,6 +183,13 @@ export async function stopBeforeStart(runKey: RunKey, chatId: number, persistenc
 function dropWaitingWords(chatId: RunKey): void {
   if (typeof chatId !== 'number') return;
   for (const dropped of drainRunSteering(chatId)) forgetPendingWords(chatId, [dropped.eventKey]);
+  for (const hook of stopHooks) hook(chatId);
+}
+
+/** What else a Stop on a chat ends: modules that hold words for a chat's run (`chatDelivery`) register to drop them. */
+const stopHooks = new Set<(chatId: number) => void>();
+export function onRunStopped(hook: (chatId: number) => void): void {
+  stopHooks.add(hook);
 }
 
 export function stopRun(chatId: RunKey): void {

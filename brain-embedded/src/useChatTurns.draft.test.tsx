@@ -1,60 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
-import { useRef, useState } from 'react';
-import { useChatTurns } from './useChatTurns';
-import { useChatCreation } from './useChatCreation';
 import { restoreTurn } from './restoreTurn';
 import { installRunDriver, type BrainRunDriver } from './runDriver';
 import { drainRunSteering, hasRunInterrupt, resetRunSteering } from './runSteering';
-import { resetBrainRunStore } from './runStore/runControl';
+import { resetBrainRunStore, stopRun as storeStopRun } from './runStore/runControl';
 import { mirrorRun } from './test/mirrorRun';
+import { deferred, held, sendViaCreation, texts, useDraftHost, type HostPorts } from './test/draftHost';
 
 const stopRun = vi.hoisted(() => vi.fn());
 vi.mock('./brainRunStore', () => ({ stopRun }));
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (error: unknown) => void;
-  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
-  return { promise, resolve, reject };
-}
-
-interface HostPorts {
-  /** Creates (and, in a real host, selects) the draft's chat. */
-  create: () => Promise<number | null>;
-  /** The host's send for one turn: `ensure` is the conversation's `ensureChatId` (called with the send's own token); `chatNow` reads the chat showing. */
-  send: (text: string, ensure: () => Promise<number | null>, chatNow: () => number | null) => Promise<boolean>;
-  restore: (turn: string) => void;
-}
-
-/** The real creation hook under the real turn door - a host in miniature. The test drives which chat is showing. */
-function useDraftHost(ports: HostPorts) {
-  const [chatId, setChatId] = useState<number | null>(null);
-  const [running, setRunning] = useState(false);
-  const [steerable, setSteerable] = useState(false);
-  const chatRef = useRef(chatId);
-  chatRef.current = chatId;
-  const { ensureChatId, drafts } = useChatCreation({ chatId, create: ports.create });
-  const turns = useChatTurns<string>({
-    running,
-    steerable,
-    runKey: chatId,
-    drafts,
-    // what `conv.send` does with `opts.draft`: the creation it triggers is THIS send's token's
-    send: (text, ctx) => { setRunning(true); return ports.send(text, () => ensureChatId(ctx?.draft), () => chatRef.current); },
-    isDirected: () => false,
-    restore: ports.restore,
-    join: (held) => held.join('\n\n'),
-  });
-  return { setChatId, setRunning, setSteerable, turns };
-}
-
-const sendViaCreation: HostPorts['send'] = async (_text, ensure) => (await ensure()) != null;
-const held = (host: { turns: { queued: { items: readonly { value: string }[] } } }) => host.turns.queued.items.map((i) => i.value);
-const texts = (chat: number) => drainRunSteering(chat).map((m) => m.text);
-
 describe('useChatTurns - turns typed while a draft creates its chat belong to THAT creation, and reach its chat\'s run', () => {
-  beforeEach(() => { stopRun.mockClear(); resetRunSteering(); resetBrainRunStore(); });
+  beforeEach(() => { stopRun.mockReset(); resetRunSteering(); resetBrainRunStore(); });
   afterEach(() => installRunDriver(null));
 
   it('draft send A, B and C typed while it creates - they wait for the created chat\'s run and steer into it, in order, when it goes live', async () => {
@@ -68,13 +25,14 @@ describe('useChatTurns - turns typed while a draft creates its chat belong to TH
 
     await act(async () => { creation.resolve(91); });
     act(() => result.current.setChatId(91));
-    expect(held(result.current)).toEqual([]); // out of every queue: the chat's run is the one place they go
+    expect(held(result.current)).toEqual(['B', 'C']); // out of the draft's queue, WAITING in chat 91's - visible there until its run is live
     expect(drainRunSteering(91)).toEqual([]); // ...and it is not live yet
 
     act(() => mirrorRun(91, true)); // A's send saved its row and the run began
 
     expect(hasRunInterrupt(91)).toBe(true);
     expect(texts(91)).toEqual(['B', 'C']);
+    expect(held(result.current)).toEqual([]); // heard by the run: no longer waiting
     await act(async () => { run.resolve(); });
   });
 
@@ -97,7 +55,10 @@ describe('useChatTurns - turns typed while a draft creates its chat belong to TH
     expect(steer).not.toHaveBeenCalled();
     act(() => mirrorRun(91, true)); // ...and the host's run mirrors in
 
-    expect(steer.mock.calls.map((c) => [c[0], c[1]])).toEqual([[91, 'B'], [91, 'C']]);
+    expect(steer).toHaveBeenCalledTimes(1); // ONE call carries both, each turn with its own key
+    expect(steer.mock.calls[0]![0]).toBe(91);
+    expect(steer.mock.calls[0]![1].map((turn: { text: string }) => turn.text)).toEqual(['B', 'C']);
+    expect(new Set(steer.mock.calls[0]![1].map((turn: { eventKey: string }) => turn.eventKey)).size).toBe(2);
     expect(restore).not.toHaveBeenCalled();
     expect(texts(91)).toEqual([]); // the webview's own inbox is read by nobody; the driver was the way
     await act(async () => { run.resolve(); });
@@ -132,7 +93,7 @@ describe('useChatTurns - turns typed while a draft creates its chat belong to TH
     await act(async () => { creation.resolve(91); });
     act(() => result.current.setChatId(91));
     await act(async () => { await result.current.turns.submit('D'); }); // typed into chat 91, whose run is still being made
-    expect(held(result.current)).toEqual(['D']);
+    expect(held(result.current)).toEqual(['B', 'C', 'D']); // the draft-held turns wait in front of D
 
     act(() => { mirrorRun(91, true); result.current.setSteerable(true); });
 
@@ -306,6 +267,7 @@ describe('useChatTurns - turns typed while a draft creates its chat belong to TH
   });
 
   it('a Stop on the created chat drops what still waited for its run: its falling edge wakes nothing', async () => {
+    stopRun.mockImplementation(storeStopRun); // the door's Stop reaches the store's Stop seam, which drops what waited
     const creation = deferred<number | null>();
     const run = deferred<void>();
     const send: HostPorts['send'] = async (_text, ensure) => { const id = await ensure(); await run.promise; return id != null; };
@@ -325,7 +287,7 @@ describe('useChatTurns - turns typed while a draft creates its chat belong to TH
 });
 
 describe('useChatTurns - a draft whose creation FAILS gives ONE joined turn back, the first send\'s included', () => {
-  beforeEach(() => { stopRun.mockClear(); resetRunSteering(); resetBrainRunStore(); });
+  beforeEach(() => { stopRun.mockReset(); resetRunSteering(); resetBrainRunStore(); });
 
   it('A and the turns held for it come back in ONE restore - A first - and the send is reported kept (the host puts nothing back twice)', async () => {
     const creation = deferred<number | null>();
@@ -375,7 +337,7 @@ describe('useChatTurns - a draft whose creation FAILS gives ONE joined turn back
   it('through the shared restore, text the person typed into the box meanwhile is NOT lost: the older turns go in front of it', async () => {
     const creation = deferred<number | null>();
     let box = 'typed meanwhile';
-    const composer = { draft: () => box, setInput: (text: string) => { box = text; }, restoreAttachments: vi.fn(), chooseRecipient: vi.fn() };
+    const composer = { draft: () => box, setInput: (next: (current: string) => string) => { box = next(box); }, restoreAttachments: vi.fn(), chooseRecipient: vi.fn() };
     const restore = vi.fn((turn: string) => restoreTurn({ text: turn, recipient: null }, composer));
     const { result } = renderHook(() => useDraftHost({ create: () => creation.promise, send: sendViaCreation, restore }));
     await act(async () => { void result.current.turns.submit('A'); });
@@ -390,7 +352,7 @@ describe('useChatTurns - a draft whose creation FAILS gives ONE joined turn back
   it('and into an empty box the joined turn comes back whole', async () => {
     const creation = deferred<number | null>();
     let box = '';
-    const composer = { draft: () => box, setInput: (text: string) => { box = text; }, restoreAttachments: vi.fn(), chooseRecipient: vi.fn() };
+    const composer = { draft: () => box, setInput: (next: (current: string) => string) => { box = next(box); }, restoreAttachments: vi.fn(), chooseRecipient: vi.fn() };
     const restore = (turn: string) => restoreTurn({ text: turn, recipient: null }, composer);
     const { result } = renderHook(() => useDraftHost({ create: () => creation.promise, send: sendViaCreation, restore }));
     await act(async () => { void result.current.turns.submit('A'); });
