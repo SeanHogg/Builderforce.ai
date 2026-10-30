@@ -47,7 +47,7 @@ export class KnowledgeBridge implements vscode.Disposable {
   private readonly rights: FactRightsCache = factRightsCache(async (rootId) => (await linkedKnowledgeClient(this.secrets)?.facts(rootId)) ?? null);
 
   constructor(private readonly host: KnowledgeBridgeHost) {
-    this.reviews = new KnowledgeReviewSessions(host.ctx.secrets, (e) => this.event(e));
+    this.reviews = new KnowledgeReviewSessions(host.ctx.secrets, (e) => this.event(e), `BuilderForce for VS Code ${host.ctx.extension.packageJSON.version as string}`);
   }
 
   private event(event: KnowledgeEvent): void {

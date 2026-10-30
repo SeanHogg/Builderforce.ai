@@ -35985,6 +35985,8 @@
     "reviewContinue": "继续",
     "reviewAborted": "审阅已停止。已写入的内容会保留。",
     "reviewFailed": "审阅失败。未再写入更多内容。",
+    "reviewFailedReason": "原因：{message}",
+    "reviewCopyDetails": "复制详情",
     "reviewProgress": "{phase} · 第 {done} / {total}",
     "phases": {
       "plan": "规划中",

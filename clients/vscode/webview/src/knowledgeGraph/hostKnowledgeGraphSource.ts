@@ -17,6 +17,7 @@
  */
 
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { ReviewFailure } from '@builderforce/knowledge-graph-view';
 import type {
   KnowledgeBaseline, KnowledgeGraphSource, KnowledgeReviewEvent, KnowledgeScopeSummary, KnowledgeSearchHit, ReviewControl,
   ReviewRequest, ReviewTarget,
@@ -81,7 +82,11 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
         const e = await events.next();
         if (e.type === 'progress') yield { type: 'progress', progress: e.progress };
         else if (e.type === 'done') { yield { type: 'done', rootId: e.rootId, report: e.report }; return; }
-        else if (e.type === 'failed') throw new Error(e.error);
+        else if (e.type === 'failed') {
+          throw new ReviewFailure(e.error, {
+            ...(e.detail ? { detail: e.detail } : {}), ...(e.host ? { host: e.host } : {}), ...(e.rootPath ? { rootPath: e.rootPath } : {}),
+          });
+        }
       }
     } finally {
       events.close();

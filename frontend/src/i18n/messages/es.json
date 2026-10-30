@@ -35985,6 +35985,8 @@
     "reviewContinue": "Continuar",
     "reviewAborted": "Revisión detenida. Lo escrito se conserva.",
     "reviewFailed": "La revisión falló. No se escribió nada más.",
+    "reviewFailedReason": "Motivo: {message}",
+    "reviewCopyDetails": "Copiar detalles",
     "reviewProgress": "{phase} · {done} de {total}",
     "phases": {
       "plan": "Planificando",

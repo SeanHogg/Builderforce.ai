@@ -80,5 +80,7 @@ export interface KnowledgeEventFrame {
 export type KnowledgeEvent =
   | { stream: string; type: "progress"; progress: ReviewProgress }
   | { stream: string; type: "done"; rootId: string; report: ReviewReport }
-  | { stream: string; type: "failed"; error: string }
+  // `error` is the reason shown to the person; the rest is the diagnostic detail the view's
+  // *Copy details* carries (the stack, the extension build, the folder) — all logged host-side too.
+  | { stream: string; type: "failed"; error: string; detail?: string; host?: string; rootPath?: string }
   | { stream: string; type: "graph"; graph: KnowledgeGraph; changed: string[] };

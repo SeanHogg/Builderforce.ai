@@ -35985,6 +35985,8 @@
     "reviewContinue": "Fortsetzen",
     "reviewAborted": "Prüfung gestoppt. Bereits Geschriebenes bleibt erhalten.",
     "reviewFailed": "Die Prüfung ist fehlgeschlagen. Es wurde nichts weiter geschrieben.",
+    "reviewFailedReason": "Grund: {message}",
+    "reviewCopyDetails": "Details kopieren",
     "reviewProgress": "{phase} · {done} von {total}",
     "phases": {
       "plan": "Planung",

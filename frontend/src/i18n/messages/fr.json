@@ -35985,6 +35985,8 @@
     "reviewContinue": "Continuer",
     "reviewAborted": "Examen arrêté. Ce qui a été écrit est conservé.",
     "reviewFailed": "L’examen a échoué. Rien de plus n’a été écrit.",
+    "reviewFailedReason": "Motif : {message}",
+    "reviewCopyDetails": "Copier les détails",
     "reviewProgress": "{phase} · {done} sur {total}",
     "phases": {
       "plan": "Planification",

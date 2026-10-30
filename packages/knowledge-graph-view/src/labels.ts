@@ -137,6 +137,10 @@ export interface KnowledgeGraphLabels {
     reviewContinue: string;
     reviewAborted: string;
     reviewFailed: string;
+    /** The failure's own reason, under the sentence. `{message}`. */
+    reviewFailedReason: string;
+    /** Copies the failure's diagnostics (phase, message, detail, host, time) as plain text. */
+    reviewCopyDetails: string;
     reviewProgress: string;
     phases: Record<'plan' | 'extract' | 'resolve' | 'judge' | 'write' | 'index' | 'done', string>;
 }
@@ -295,6 +299,8 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
     reviewContinue: 'Continue',
     reviewAborted: 'Review stopped. What was written stays.',
     reviewFailed: 'The review failed. Nothing more was written.',
+    reviewFailedReason: 'Reason: {message}',
+    reviewCopyDetails: 'Copy details',
     reviewProgress: '{phase} · {done} of {total}',
     phases: {
         plan: 'Planning', extract: 'Reading', resolve: 'Resolving', judge: 'Judging', write: 'Writing', index: 'Indexing', done: 'Done',

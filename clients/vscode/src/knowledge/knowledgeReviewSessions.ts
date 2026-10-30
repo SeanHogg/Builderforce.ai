@@ -12,6 +12,8 @@
 
 import * as vscode from "vscode";
 import type { PlanDetail } from "@seanhogg/builderforce-memory/knowledge";
+import { logLine } from "../errorReporter";
+import { logReviewFailure } from "./knowledgeFailureLog";
 import type { KnowledgeEvent, KnowledgePlanReply, KnowledgeReviewRequest } from "./knowledgeProtocol";
 import { rootById, rootForPath, type KnowledgeRoot } from "./knowledgeRoots";
 import { reviewRoot, workspaceFolders, type RootReview } from "./knowledgeService";
@@ -21,6 +23,8 @@ interface Session {
   plan: PlanDetail;
   force: boolean;
   abort?: AbortController;
+  /** The phase last reported, for the failure log. */
+  lastPhase?: string;
 }
 
 let nextReview = 0;
@@ -51,14 +55,27 @@ export class KnowledgeReviewSessions implements vscode.Disposable {
   constructor(
     private readonly secrets: vscode.SecretStorage,
     private readonly post: (event: KnowledgeEvent) => void,
+    /** The extension build the failure log and the view's Copy details name. */
+    private readonly hostLabel: string,
   ) {}
+
+  private get sink() {
+    return { log: logLine, host: this.hostLabel };
+  }
 
   async plan(req: KnowledgeReviewRequest): Promise<KnowledgePlanReply> {
     const root = await reviewRootFor(req);
     if (!root) return { cancelled: true };
-    const review = reviewRoot(this.secrets, root);
     const force = !!req.force;
-    const plan = await review.plan(force);
+    let review: RootReview;
+    let plan: PlanDetail;
+    try {
+      review = reviewRoot(this.secrets, root);
+      plan = await review.plan(force);
+    } catch (error) {
+      logReviewFailure(this.sink, { stage: "plan", rootId: root.rootId, rootPath: root.rootPath }, error);
+      throw error;
+    }
     const reviewId = `review-${++nextReview}`;
     this.sessions.set(reviewId, { review, plan, force });
     return { reviewId, rootId: root.rootId, plan: plan.plan };
@@ -70,17 +87,28 @@ export class KnowledgeReviewSessions implements vscode.Disposable {
     if (!session || session.abort) return false;
     const abort = new AbortController();
     session.abort = abort;
-    const rootId = session.review.open.root.rootId;
+    const { rootId, rootPath } = session.review.open.root;
     void session.review
       .run({
         force: session.force,
         plan: session.plan,
         signal: abort.signal,
-        onProgress: (progress) => this.post({ stream: reviewId, type: "progress", progress }),
+        onProgress: (progress) => {
+          session.lastPhase = progress.phase;
+          this.post({ stream: reviewId, type: "progress", progress });
+        },
       })
       .then(
         (report) => this.post({ stream: reviewId, type: "done", rootId, report }),
-        (error: unknown) => this.post({ stream: reviewId, type: "failed", error: error instanceof Error ? error.message : String(error) }),
+        (error: unknown) => this.post({
+          stream: reviewId,
+          type: "failed",
+          ...logReviewFailure(
+            this.sink,
+            { stage: "review", reviewId, rootId, rootPath, ...(session.lastPhase ? { lastPhase: session.lastPhase } : {}) },
+            error,
+          ),
+        }),
       )
       .finally(() => this.sessions.delete(reviewId));
     return true;

@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReviewPlan, ReviewProgress, ReviewReport } from '@seanhogg/builderforce-memory/knowledge';
+import { failureDetailOf, type ReviewFailureDetail } from './reviewFailure';
 import type { KnowledgeGraphSource, ReviewEstimate, ReviewRequest } from './types';
 
 export type ReviewState =
@@ -22,7 +23,19 @@ export type ReviewState =
     | { status: 'done'; rootId: string; report: ReviewReport }
     | { status: 'cancelled' }
     | { status: 'aborted' }
-    | { status: 'error'; message: string };
+    | ReviewErrorState;
+
+/** A failed review: the reason, plus what a report of it needs (see `reviewDiagnostics.ts`). */
+export interface ReviewErrorState extends ReviewFailureDetail {
+    status: 'error';
+    message: string;
+    /** ISO time of the failure. */
+    at: string;
+    /** The root being reviewed, when the plan had named it. */
+    rootId?: string;
+    /** The phase last reported before the failure; absent when it failed before any progress. */
+    lastPhase?: ReviewProgress['phase'];
+}
 
 export interface ReviewRun {
     state: ReviewState;
@@ -44,6 +57,7 @@ export function useReviewRun(
     const pending = useRef<((ok: boolean) => void) | null>(null);
     const running = useRef<AbortController | null>(null);
     const planRoot = useRef<string | undefined>(undefined);
+    const lastPhase = useRef<ReviewProgress['phase'] | undefined>(undefined);
     const lastReq = useRef<ReviewRequest>({});
     const onDoneRef = useRef(onDone);
     onDoneRef.current = onDone;
@@ -61,6 +75,8 @@ export function useReviewRun(
         const ctl = new AbortController();
         running.current = ctl;
         lastReq.current = req;
+        planRoot.current = undefined;
+        lastPhase.current = undefined;
         setState({ status: 'planning' });
         const live = () => running.current === ctl;
         const iterable = source.review(req, {
@@ -80,6 +96,7 @@ export function useReviewRun(
                         planRoot.current = ev.plan.rootId;
                         setState(ev.estimate ? { status: 'confirm', plan: ev.plan, estimate: ev.estimate } : { status: 'confirm', plan: ev.plan });
                     } else if (ev.type === 'progress') {
+                        lastPhase.current = ev.progress.phase;
                         setState({ status: 'running', progress: ev.progress });
                     } else if (ev.type === 'done') {
                         setState(ev.report.aborted ? { status: 'aborted' } : { status: 'done', rootId: ev.rootId, report: ev.report });
@@ -90,7 +107,16 @@ export function useReviewRun(
                 }
             } catch (err) {
                 if (!live()) return;
-                setState(ctl.signal.aborted ? { status: 'aborted' } : { status: 'error', message: err instanceof Error ? err.message : String(err) });
+                if (ctl.signal.aborted) { setState({ status: 'aborted' }); return; }
+                const rootId = planRoot.current ?? req.rootId;
+                setState({
+                    status: 'error',
+                    message: err instanceof Error ? err.message : String(err),
+                    at: new Date().toISOString(),
+                    ...(rootId ? { rootId } : {}),
+                    ...(lastPhase.current ? { lastPhase: lastPhase.current } : {}),
+                    ...failureDetailOf(err),
+                });
             }
         })();
     }, [source]);
