@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
-import { chatDoorLiveness, joinRestorableTurns, restoreTurn, useChatTurns, useComposerDraft, type ChatInputAttachment, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, joinRestorableTurns, restoreTurn, useChatTurns, useComposerDraft, type ChatInputAttachment, type DirectedRecipient, type DraftBinding } from '@seanhogg/builderforce-brain-embedded';
 import type { useBrainChats, useBrainConversation } from '@/lib/brain';
 import { useDockedComposer } from '@/lib/brain/dockedBrain';
 import { trackActivity } from '@/lib/activity/tracker';
@@ -27,11 +27,11 @@ const turnText = (turn: BrainPanelTurn) => turn.text;
  * held. Also the panel's two ways in that are not typed — a neighbouring surface handing
  * text over (`useDockedComposer`) — and the exam gate every path into a send answers to.
  */
-export function useBrainPanelTurns({ conv, chats, createdChatId, recipient, chooseRecipient, input, setInput, showChatTab, acceptsHandover }: {
+export function useBrainPanelTurns({ conv, chats, drafts, recipient, chooseRecipient, input, setInput, showChatTab, acceptsHandover }: {
   conv: ReturnType<typeof useBrainConversation>;
   chats: ReturnType<typeof useBrainChats>;
-  /** The id the draft's first send created (`useBrainChatStart().createdChatId`): held draft turns stay only with that chat. */
-  createdChatId?: number | null;
+  /** The draft's binding to its creation (`useBrainChatStart().drafts`): turns typed while the first send creates the chat land in THAT chat. */
+  drafts?: DraftBinding;
   /** Who the composer is pointed at right now (`useRecipientChoice`). */
   recipient: DirectedRecipient | null;
   /** Point the composer at a participant again (`useRecipientChoice().choose`). */
@@ -52,7 +52,7 @@ export function useBrainPanelTurns({ conv, chats, createdChatId, recipient, choo
     // In flight while a send is saving (held in order); steerable only while the run store says the run is live.
     ...chatDoorLiveness(conv),
     runKey: chats.activeChatId,
-    createdChatId,
+    drafts,
     // ALWAYS given its attachments (none included): a turn that carries its own files neither
     // takes nor clears what the composer holds now - a held turn flushed while a new file is
     // pending must leave that file where it is (`useBrainConversation.send`).

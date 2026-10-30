@@ -164,7 +164,9 @@ function holdSession(): void {
     // refuses is said once, and the heartbeat stands in - this load is still findable as alive.
     void locks.request(lockName(SESSION), () => new Promise<never>(() => undefined)).catch((e: unknown) => {
       reportPendingWordsFailure('hold_session', e);
-      beatWhileAlive();
+      // Signed out meanwhile: nobody to keep words for and no heartbeat key to write back - the next journal write holds again.
+      if (owner) beatWhileAlive();
+      else holding = false;
     });
     return;
   }

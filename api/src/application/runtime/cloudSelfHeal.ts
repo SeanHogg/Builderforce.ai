@@ -15,9 +15,12 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * Shared by every detector so recovery is identical no matter who notices first:
  *   • the cron sweep ({@link ./staleExecutionReaper})            — periodic backstop
  *   • the read-path repair ({@link ./RuntimeService})            — a viewer polled it
- *   • the container crash handlers ({@link ./cloudAgentEngine} `fail` op +
- *     {@link ../../infrastructure/relay/AgentContainerDO} `onError`) — the runtime
- *     reported its own death, WITH the error message.
+ *   • a backplane that reports a run's own death WITH the error message
+ *     ({@link handleCloudRunCrash}). NOT the sandbox container: its crash is not the run's
+ *     (the engine reopens a fresh clone on its next sandbox call), so
+ *     {@link ../../infrastructure/relay/AgentContainerDO} `onError` only reports - recovering
+ *     there would start a second engine beside the one still ticking. The durable executor
+ *     lands its own run's crash (`CloudRunnerDO` alarm); this export has no caller yet.
  *
  * Idempotent + once-only: the `reaperRequeued` flag is persisted to the payload
  * before kickoff, so a second detector finds it set and falls through to failing the

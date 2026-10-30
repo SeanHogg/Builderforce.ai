@@ -16,6 +16,7 @@ import { MID_TURN_META_KEY, subagentSystemPrompt } from "@builderforce/agent-loo
 import {
   appendRunMessage,
   drainRunSteering,
+  savedChatOf,
   stopRun,
   withDirectedMetadata,
   type BrainRunPersistence,
@@ -83,7 +84,7 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
       : joinedText;
     // The transcript is still in the store, so the wake is just the next turn of it.
     const { seed: _seed, priorResearch: _prior, ...rest } = spec;
-    void deps.start({ ...rest, userTurn: turn, autoApprove: deps.autoApproveOf(spec.child?.lineage.rootChatId ?? spec.chatId) });
+    void deps.start({ ...rest, userTurn: turn, autoApprove: deps.autoApproveOf(savedChatOf(spec.chatId, spec.child?.lineage)) });
     return true;
   };
 
@@ -153,7 +154,7 @@ export function ownerOf(spec: RunSpec, ownerName: string): ChildOwner {
   const lineage = spec.child?.lineage;
   return {
     key: spec.chatId,
-    rootChatId: lineage?.rootChatId ?? spec.chatId,
+    rootChatId: savedChatOf(spec.chatId, lineage),
     name: lineage?.agent.name ?? ownerName,
     depth: lineage?.depth ?? 0,
   };

@@ -7,19 +7,57 @@
  * predicate clobbered a cancelled row just as surely as `'failed'` would, so it is the write to the column that is flagged, not the
  * literal assigned to it.
  *
- * Two shapes are recognised (comments are blanked first, so prose that mentions them never matches - and a `//` inside a string or
- * template literal is NOT a comment):
- *   - drizzle: `update(executions)` / `update(executionsTable)` / `update(schema.executions)` / `update(alias)` (a simple const alias,
- *     import-as or destructure-rename of the table in the same file) followed by a `.set(...)` whose object (nested braces, conditional
- *     spreads and all) carries a `status` key - plain, quoted, computed, shorthand - or spreads ANYTHING that is not provably an object
- *     literal (`...patch`, `...(patch)`, `...(cond ? x : {})`, at any spread depth), or is not an object literal at all;
- *   - raw SQL, including `sql``` templates: `UPDATE [schema.]executions|${executions} [AS alias] SET ... status =`, the column plain,
- *     quoted (`"status"`) or interpolated (`${executions.status}`).
+ * Shapes recognised (comments are blanked first, so prose that mentions them never matches - and a `//` inside a string, a template
+ * literal or a regex literal is NOT a comment):
+ *   - drizzle UPDATE: `update(<table>)` followed by a `.set(...)` whose object (nested braces, conditional spreads and all) carries a
+ *     `status` key - plain, quoted, computed, shorthand - or spreads ANYTHING that is not provably an object literal (`...patch`,
+ *     `...(patch)`, `...(cond ? x : {})`, at any spread depth), or has a computed key that is not provably another column
+ *     (`[col]: v`, `[a + b]: v`), or is not an object literal at all;
+ *   - drizzle UPSERT: `insert(<table>)...onConflictDoUpdate({ ..., set: { ... } })`, the `set` held to the same rules;
+ *   - raw SQL, including `sql``` templates: `UPDATE [ONLY] [schema.]<table> [AS alias] SET ... status =`, and the upsert
+ *     `INSERT INTO <table> ... ON CONFLICT ... DO UPDATE SET ... status =`; the column plain, quoted (`"status"`), interpolated
+ *     (`${executions.status}`, `${sql.identifier('status')}`) or in a tuple (`SET (status, x) = ...`).
+ *   `<table>` is the table however its argument spells it: `executions`, `executionsTable`, `schema.executions`, `schema['executions']`,
+ *   `(executions)`, `executions as any`, `executions!`, and every simple const / import-as / destructure-rename alias of it in the same file
+ *   (the same name set drives the raw SQL patterns).
+ *
+ * KNOWN LIMIT: a table that reaches `update(table)` as a FUNCTION PARAMETER (or through any other value this lexical pass cannot resolve
+ * to the `executions` table) is invisible - it is flagged only when `table` is a resolvable alias. Pass the table by name, or write the
+ * status through `ExecutionRepository`.
  */
+
+const REGEX_KEYWORDS = new Set(['return', 'typeof', 'case', 'do', 'else', 'in', 'of', 'void', 'delete', 'throw', 'new', 'instanceof', 'yield', 'await']);
+
+/** Can a `/` at `i` open a regex literal (rather than divide)? Decided by the last significant token before it. */
+function regexMayStart(text, last) {
+  if (last < 0) return true;
+  const c = text[last];
+  if (/[\w$]/.test(c)) {
+    let from = last;
+    while (from > 0 && /[\w$]/.test(text[from - 1])) from -= 1;
+    return REGEX_KEYWORDS.has(text.slice(from, last + 1));
+  }
+  return !')]}'.includes(c) && c !== '"' && c !== "'" && c !== '`';
+}
+
+/** Index just past the regex literal opening at `i` (flags are plain code afterwards), or `i` when it does not close on its line. */
+function pastRegex(text, i) {
+  let inClass = false;
+  for (let j = i + 1; j < text.length; j++) {
+    const c = text[j];
+    if (c === '\n') return i;
+    if (c === '\\') j += 1;
+    else if (c === '[') inClass = true;
+    else if (c === ']') inClass = false;
+    else if (c === '/' && !inClass) return j + 1;
+  }
+  return i;
+}
 
 /**
  * Blank `/* *\/` and `//` comments (length-preserving, so offsets still point into the original). A real tokenizer pass: a `//` or
- * `/*` inside a '...' / "..." string or a template literal (its `${}` holes are code again) is text, not a comment.
+ * `/*` inside a '...' / "..." string, a regex literal (`/a\/\//`) or a template literal (its `${}` holes are code again) is text, not
+ * a comment.
  */
 function blankComments(text) {
   const out = text.split('');
@@ -27,23 +65,30 @@ function blankComments(text) {
   const holes = []; // brace depth at which each open `${` hole resumes its template
   let mode = 'code'; // 'code' or the quote that opened the string being read
   let depth = 0;
+  let last = -1; // the last significant code character (what decides whether a `/` opens a regex)
   for (let i = 0; i < text.length;) {
     const c = text[i];
     if (mode === 'code') {
       if (c === '/' && text[i + 1] === '/') { const end = text.indexOf('\n', i); const to = end < 0 ? text.length : end; blankTo(i, to); i = to; continue; }
       if (c === '/' && text[i + 1] === '*') { const end = text.indexOf('*/', i + 2); const to = end < 0 ? text.length : end + 2; blankTo(i, to); i = to; continue; }
+      if (c === '/' && regexMayStart(text, last)) {
+        const to = pastRegex(text, i);
+        if (to !== i) { last = to - 1; i = to; continue; }
+      }
       if (c === '"' || c === "'" || c === '`') mode = c;
       else if (c === '{') depth += 1;
       else if (c === '}') { if (holes.length > 0 && holes[holes.length - 1] === depth) { holes.pop(); mode = '`'; } else depth -= 1; }
+      if (!/\s/.test(c)) last = i;
       i += 1;
     } else if (c === '\\') {
       i += 2;
     } else if (mode === '`' && c === '$' && text[i + 1] === '{') {
       holes.push(depth);
       mode = 'code';
+      last = i + 1;
       i += 2;
     } else {
-      if (c === mode) mode = 'code';
+      if (c === mode) { mode = 'code'; last = i; }
       i += 1;
     }
   }
@@ -81,10 +126,10 @@ function walk(t, visit) {
   return -1;
 }
 
-/** The text between the balanced parens opening at `open` (exclusive of them), skipping string literals; null when unbalanced. */
-function balancedParens(text, open) {
+/** Index of the paren closing the one at `open`, skipping string literals; -1 when unbalanced. */
+function closeParen(text, open) {
   const close = walk(text.slice(open), (_i, c, d) => c === ')' && d === 0);
-  return close < 0 ? null : text.slice(open + 1, open + close);
+  return close < 0 ? -1 : open + close;
 }
 
 /** `e` without the parens that wrap all of it. */
@@ -139,6 +184,45 @@ function hasOpaqueSpread(obj) {
   return opaque;
 }
 
+/**
+ * True when an object literal has a computed key `[expr]` directly inside its braces that is not provably some OTHER column: a plain
+ * string literal that is not `status` is provably another column; `'status'` and a `.status` member are the status column itself
+ * (flagged by STATUS_KEY); anything else (`[col]`, `[a + b]`, `[k]`) could be either, so it is opaque.
+ */
+function hasOpaqueComputedKey(obj) {
+  let opaque = false;
+  walk(obj, (i, c, d) => {
+    if (d !== 1 || c !== '[') return false;
+    const before = obj.slice(0, i).trimEnd().slice(-1);
+    if (before !== '{' && before !== ',') return false; // a value (`k: [..]`) or a spread operand, not a key
+    const close = walk(obj.slice(i), (_j, ch, dd) => ch === ']' && dd === 0);
+    const expr = (close < 0 ? obj.slice(i + 1) : obj.slice(i + 1, i + close)).trim();
+    const literal = /^(['"`])([^'"`\\$]*)\1$/.exec(expr);
+    if (literal ? literal[2] !== 'status' : false) return false;
+    if (literal || /(?:^|\.)status\b/.test(expr)) return false; // the status column: STATUS_KEY flags it
+    opaque = true;
+    return true;
+  });
+  return opaque;
+}
+
+/** The value of property `name` directly inside object literal `obj` (up to the next top-level comma), or null when it has none. */
+function propertyValue(obj, name) {
+  let value = null;
+  walk(obj, (i, _c, d) => {
+    if (d !== 1 || !obj.startsWith(name, i) || /[\w$]/.test(obj[i - 1] ?? '') || /[\w$]/.test(obj[i + name.length] ?? '')) return false;
+    if (!['{', ','].includes(obj.slice(0, i).trimEnd().slice(-1))) return false;
+    const rest = obj.slice(i + name.length);
+    const colon = /^\s*:/.exec(rest);
+    if (!colon) return false;
+    const after = rest.slice(colon[0].length);
+    const end = walk(after, (_j, ch, depth) => depth < 0 || (depth === 0 && ch === ','));
+    value = end < 0 ? after.slice(0, after.lastIndexOf('}')) : after.slice(0, end);
+    return true;
+  });
+  return value;
+}
+
 /** The names the `executions` table goes by in this file: itself, its repository alias, and every simple const / import / destructure alias. */
 function executionTableNames(text) {
   const names = new Set(['executions', 'executionsTable']);
@@ -158,8 +242,48 @@ function executionTableNames(text) {
 
 // A `status` key (plain / quoted / computed) or shorthand inside the set object, at any brace depth.
 const STATUS_KEY = /(?:[{,(]\s*|\n\s*)(?:status|'status'|"status")\s*[:,}]|\[\s*(?:[\w$]+\.)*status\b|\[\s*['"`]status['"`]\s*\]|['"`]status['"`]\s*:/;
-// `UPDATE [schema.]executions|${executions} [AS alias] SET ... status =` - the column plain, quoted or interpolated.
-const RAW_SQL = /UPDATE\s+(?:"?\w+"?\.)?(?:"?executions"?|\$\{\s*(?:[\w$]+\.)*executions\s*\})(?:\s+(?:AS\s+)?"?\w+"?)?\s+SET[^;]*(?:\bstatus"?|"status"|\$\{[^}]*\.status\})\s*=/gi;
+// The status column as a SQL assignment target: plain, quoted, or interpolated (`${executions.status}`, `${sql.identifier('status')}`).
+const SQL_STATUS = '(?:\\bstatus"?|"status"|\\$\\{[^}]*\\bstatus\\b[^}]*\\})';
+
+/**
+ * The raw-SQL shapes for the table names in play: `UPDATE [ONLY] [schema.]<table> [AS alias] SET ... status =` (also
+ * `SET (status, ...) =`) and `INSERT INTO <table> ... ON CONFLICT ... DO UPDATE SET ... status =`.
+ */
+function rawSqlPatterns(names) {
+  const table = `(?:"?\\w+"?\\.)?(?:"?(?:${names})"?|\\$\\{\\s*(?:[\\w$]+\\.)*(?:${names})\\s*\\})`;
+  const assign = `(?:[^;]*${SQL_STATUS}\\s*=|\\s*\\((?=[^;]*?${SQL_STATUS}[^;]*?\\)\\s*=))`;
+  return [
+    new RegExp(`UPDATE\\s+(?:ONLY\\s+)?${table}(?:\\s+(?:AS\\s+)?"?\\w+"?)?\\s+SET${assign}`, 'gi'),
+    new RegExp(`INSERT\\s+INTO\\s+${table}[^;]*?ON\\s+CONFLICT[^;]*?DO\\s+UPDATE\\s+SET${assign}`, 'gi'),
+  ];
+}
+
+/** What a write's object argument does wrong, as scan hits: not a literal, a `status` key, an opaque computed key or spread. */
+function objectFindings(arg, where) {
+  const literals = literalObjects(arg);
+  const snippet = arg.trim().slice(0, 120);
+  if (!literals) return [{ kind: `drizzle: non-literal ${where} argument`, snippet: snippet.slice(0, 80) }];
+  if (STATUS_KEY.test(arg)) return [{ kind: `drizzle: status in ${where}`, snippet }];
+  if (literals.some(hasOpaqueComputedKey)) return [{ kind: `drizzle: opaque computed key in ${where}`, snippet }];
+  if (literals.some(hasOpaqueSpread)) return [{ kind: `drizzle: opaque spread in ${where}`, snippet }];
+  return [];
+}
+
+/** The calls chained on from index `from` (`.where(..).set(..)`), each `{ name, args }`, stopping at the first thing that is not one. */
+function chainedCalls(text, from) {
+  const calls = [];
+  const next = /\s*\??\.\s*([\w$]+)\s*\(/y;
+  for (let pos = from; ;) {
+    next.lastIndex = pos;
+    const m = next.exec(text);
+    if (!m) return calls;
+    const open = m.index + m[0].length - 1;
+    const close = closeParen(text, open);
+    if (close < 0) return calls;
+    calls.push({ name: m[1], args: text.slice(open + 1, close) });
+    pos = close + 1;
+  }
+}
 
 /**
  * Every status write to `executions` in one file's text, as `{ kind, snippet }` (snippet = the offending statement, for the per-site
@@ -168,16 +292,24 @@ const RAW_SQL = /UPDATE\s+(?:"?\w+"?\.)?(?:"?executions"?|\$\{\s*(?:[\w$]+\.)*ex
 export function scanExecutionStatusWrites(source) {
   const text = blankComments(source);
   const found = [];
-  const updateExecutions = new RegExp(`\\bupdate\\(\\s*(?:[\\w$]+\\.)*(?:${executionTableNames(text)})\\s*\\)\\s*\\.set\\(`, 'g');
-  for (const m of text.matchAll(updateExecutions)) {
-    const open = m.index + m[0].length - 1;
-    const arg = balancedParens(text, open);
-    if (arg === null) continue;
-    const literals = literalObjects(arg);
-    if (!literals) found.push({ kind: 'drizzle: non-literal .set() argument', snippet: arg.trim().slice(0, 80) });
-    else if (STATUS_KEY.test(arg)) found.push({ kind: 'drizzle: status in .set()', snippet: arg.trim().slice(0, 120) });
-    else if (literals.some(hasOpaqueSpread)) found.push({ kind: 'drizzle: opaque spread in .set()', snippet: arg.trim().slice(0, 120) });
+  const names = executionTableNames(text);
+  // `<table>` as the argument of update(...) / insert(...): the table's name anywhere in it, however it is dressed
+  // (`executions as any`, `(executions)`, `executions!`, `schema['executions']`).
+  const tableToken = new RegExp(`(?<![\\w$])(?:${names})(?![\\w$])`);
+  for (const call of text.matchAll(/\b(update|insert)\s*\(/g)) {
+    const open = call.index + call[0].length - 1;
+    const close = closeParen(text, open);
+    if (close < 0 || !tableToken.test(text.slice(open + 1, close))) continue;
+    for (const { name, args } of chainedCalls(text, close + 1)) {
+      if (call[1] === 'update' && name === 'set') found.push(...objectFindings(args, '.set()'));
+      if (call[1] === 'insert' && name === 'onConflictDoUpdate') {
+        const outer = literalObjects(args);
+        const set = outer ? propertyValue(args, 'set') : null;
+        if (!outer || set === null || outer.some(hasOpaqueSpread)) found.push({ kind: 'drizzle: non-literal onConflictDoUpdate set', snippet: args.trim().slice(0, 80) });
+        else found.push(...objectFindings(set, 'onConflictDoUpdate set'));
+      }
+    }
   }
-  for (const raw of text.matchAll(RAW_SQL)) found.push({ kind: 'raw SQL: UPDATE executions SET status', snippet: raw[0].replace(/\s+/g, ' ').slice(0, 120) });
+  for (const re of rawSqlPatterns(names)) for (const raw of text.matchAll(re)) found.push({ kind: 'raw SQL: executions status assignment', snippet: raw[0].replace(/\s+/g, ' ').slice(0, 120) });
   return found;
 }

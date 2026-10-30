@@ -10,15 +10,14 @@
  *
  *   • the Worker request handler (`buildApp` → `buildRuntimeService`),
  *   • cron sweeps (the stale-execution reaper, autonomous/manager sweeps),
- *   • the durable executor (`CloudRunnerDO`),
- *   • the container backplane (`AgentContainerDO.onError` → `handleCloudRunCrash`).
+ *   • the durable executor (`CloudRunnerDO`).
+ *   (`AgentContainerDO.onError` only reports a sandbox crash - it lands and emits nothing.)
  *
  * An isolate that emits without having registered publishes into a void, which is
  * precisely how a container hard-death recovered by the reaper produced telemetry no
  * open drawer ever saw. Calling this from {@link ../../buildRuntimeService} (which
- * every execution-driving path but the container crash handler goes through) plus the
- * container handler covers all four, and registration REPLACES rather than appends,
- * so repeating it cannot multiply deliveries.
+ * every execution-driving path goes through) covers all three, and registration REPLACES
+ * rather than appends, so repeating it cannot multiply deliveries.
  */
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';

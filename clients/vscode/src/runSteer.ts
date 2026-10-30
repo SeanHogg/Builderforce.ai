@@ -18,7 +18,7 @@
  * (`runSteer.test.ts`).
  */
 
-import { drainRunSteering, isRunning, queueRunSteering, type ChatInputAttachment } from "@seanhogg/builderforce-brain-embedded";
+import { drainRunSteering, isRunning, queueRunSteering, savedChatOf, type ChatInputAttachment } from "@seanhogg/builderforce-brain-embedded";
 import { stopIntent } from "@builderforce/run-guards";
 import { directionText, type ChildRunHost } from "./childRunSpawner";
 
@@ -52,7 +52,7 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
   /** Show the person's words in the chat the run lives in. */
   const say = (runKey: number, text: string): void => {
     const lineage = deps.registry.lineageOf(runKey);
-    deps.childHost.postDirection(lineage?.rootChatId ?? runKey, "person", lineage?.ownerName ?? deps.ownerName, lineage?.agent ?? null, text);
+    deps.childHost.postDirection(savedChatOf(runKey, lineage), "person", lineage?.ownerName ?? deps.ownerName, lineage?.agent ?? null, text);
   };
 
   const stop = (runKey: number): void => {

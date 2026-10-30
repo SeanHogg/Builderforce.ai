@@ -38,6 +38,28 @@ describe('check:execution-landing scanner', () => {
     ['an aliased table (destructure rename)', 'const { executions: runs } = schema;\nawait db.update(runs).set({ ...patch }).where(eq(runs.id, id));'],
     ['a write after a // inside a string on the same line (not a comment)', 'const url = \'https://x.io/a\'; await db.update(executions).set({ status: next }).where(w);\nconst s = "a // b"; await db.update(executions).set({ status: next }).where(w);'],
     ['a write after a // inside a template hole', 'const q = `${"//"}`; await db.update(executions).set({ status: next }).where(w);'],
+    // Round E: how the table is spelled in update(...) / insert(...), computed keys, upserts, more raw SQL, regex literals.
+    ['a cast table', "await db.update(executions as any).set({ status: 'failed' }).where(w);"],
+    ['a parenthesised table', "await db.update((executions)).set({ status: 'failed' }).where(w);"],
+    ['a non-null table', "await db.update(executions!).set({ status: 'failed' }).where(w);"],
+    ['a bracket-access table', "await db.update(schema['executions']).set({ status: 'failed' }).where(w);"],
+    ['a cast alias', "const t = executions;\nawait db.update(t as any).set({ status: 'failed' }).where(w);"],
+    ['a computed key that is a variable (opaque)', 'await db.update(executions).set({ [col]: value }).where(w);'],
+    ['a computed key that is an expression (opaque)', "await db.update(executions).set({ updatedAt: now, [prefix + 'tatus']: value }).where(w);"],
+    ['an upsert that sets status', "await db.insert(executions).values(row).onConflictDoUpdate({ target: executions.id, set: { status: 'failed' } });"],
+    ['an upsert through the repository alias with a conditional status', "await db.insert(executionsTable).values(row)\n  .onConflictDoUpdate({ target: executionsTable.id, set: { updatedAt: now, ...(done ? { status: 'completed' } : {}) } });"],
+    ['an upsert whose set is not a literal', 'await db.insert(executions).values(row).onConflictDoUpdate({ target: executions.id, set: patch });'],
+    ['an upsert whose set spreads something opaque', 'await db.insert(executions).values(row).onConflictDoUpdate({ target: executions.id, set: { ...patch } });'],
+    ['an upsert of a cast table', "await db.insert(executions as any).values(row).onConflictDoUpdate({ target: id, set: { status: 'x' } });"],
+    ['raw upsert (INSERT ... ON CONFLICT DO UPDATE SET status)', 'await db.execute(sql`INSERT INTO executions (id, status) VALUES (${id}, ${s}) ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status`);'],
+    ['raw upsert into an interpolated table', 'await db.execute(sql`INSERT INTO ${executions} (id, status) VALUES (${id}, ${s}) ON CONFLICT (id) DO UPDATE SET updated_at = now(), status = ${s}`);'],
+    ['raw UPDATE ONLY', "await db.execute(sql`UPDATE ONLY executions SET status = 'failed' WHERE id = ${id}`);"],
+    ['raw SQL with a sql.identifier status column', "await db.execute(sql`UPDATE executions SET ${sql.identifier('status')} = ${s} WHERE id = ${id}`);"],
+    ['raw SQL with a tuple assignment', "await db.execute(sql`UPDATE executions SET (status, updated_at) = ('failed', now()) WHERE id = ${id}`);"],
+    ['raw SQL on an aliased table', 'const t = executions;\nawait db.execute(sql`UPDATE ${t} SET status = ${s} WHERE id = ${id}`);'],
+    ['a write after a regex literal that ends in // on the same line', "const re = /a\\/\\//; await db.update(executions).set({ status: next }).where(w);"],
+    ['a write after a division on the same line', 'const half = total / 2; const r = a / b; await db.update(executions).set({ status: next }).where(w);'],
+    ['a write after a regex literal in a call', "const ok = /^https?:\\/\\//.test(url); await db.update(executions).set({ status: next }).where(w);"],
   ])('flags %s', (_name, source) => {
     expect(flagged(source)).toBeGreaterThan(0);
   });
@@ -56,8 +78,23 @@ describe('check:execution-landing scanner', () => {
     ['an alias of another table', "const t = tasks;\nawait db.update(t).set({ status: 'done' }).where(eq(t.id, id));"],
     ['raw SQL on a column that merely ends in status', 'await db.execute(sql`UPDATE executions SET review_status = ${s} WHERE id = ${id}`);'],
     ['raw SQL that leaves status alone', `await db.execute(sql\`UPDATE executions SET result = left(result, 10) WHERE id IN (SELECT id FROM executions WHERE status IN ('failed'))\`);`],
+    ['a computed key that is provably another column', "await db.update(executions).set({ ['payload']: p, updatedAt: now }).where(eq(executions.id, id));"],
+    ['an array value (a `[` that is not a key)', 'await db.update(executions).set({ tags: [a, b] }).where(eq(executions.id, id));'],
+    ['an upsert that leaves status alone', 'await db.insert(executions).values(row).onConflictDoUpdate({ target: executions.id, set: { updatedAt: now, payload: p } });'],
+    ['a plain insert (a new row is not a status overwrite)', "await db.insert(executions).values({ id, status: 'queued' });"],
+    ['an upsert into another table', 'await db.insert(executionPauseState).values(row).onConflictDoUpdate({ target: executionPauseState.executionId, set: values });'],
+    ['a table whose name merely starts with executions', "await db.update(executionsArchive).set({ status: 'x' }).where(w);"],
+    ['raw upsert that leaves status alone', 'await db.execute(sql`INSERT INTO executions (id, result) VALUES (${id}, ${r}) ON CONFLICT (id) DO UPDATE SET result = EXCLUDED.result`);'],
+    ['a regex literal with // inside it (not a comment) and no write', "const re = /a\\/\\//; const x = 1; // trailing comment\nawait db.update(tasks).set({ status: 'done' }).where(w);"],
   ])('does not flag %s', (_name, source) => {
     expect(flagged(source)).toBe(0);
+  });
+
+  // KNOWN LIMIT (documented in the scan's header): a table that arrives as a function parameter cannot be resolved lexically - it is
+  // flagged only when it is a resolvable alias of `executions`.
+  it('does not see a table passed in as a function parameter, but does see an alias of executions', () => {
+    expect(flagged("async function land(table: Table) { await db.update(table).set({ status: 'failed' }).where(w); }")).toBe(0);
+    expect(flagged("const table = executions;\nasync function land() { await db.update(table).set({ status: 'failed' }).where(w); }")).toBeGreaterThan(0);
   });
 
   it('reports each offending statement with a snippet the per-site allow-list can match', () => {

@@ -212,8 +212,8 @@ ${ciVerified
   //      the shared teardown decision, which deletes it ONLY if it can prove the
   //      branch is nothing but this run's abandoned work.
   //
-  // Failures do not reach here (the crash path finalizes via handleCloudRunCrash),
-  // which calls the same teardown at ITS terminal branch. Both are best-effort and
+  // Failures do not reach here; a crashed run's branch residue is `teardownCrashedRunArtifacts`'s
+  // to sweep (runRollback.ts, the same teardown decision). Both are best-effort and
   // must never change the run's own outcome.
   if (repoCtx && writtenPaths.size > 0) {
     if (cancelled) {

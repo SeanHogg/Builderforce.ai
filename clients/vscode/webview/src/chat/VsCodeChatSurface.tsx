@@ -89,7 +89,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // The conversation list — the shared `useBrainChats` plus the editor's own bindings.
   const vsChats = useVsCodeChats(init, t('app.newChat', 'New chat'));
   const {
-    chatId, setChatId, chats, chatOptions, activeChat, reloadChats, onFirstUserTurn, ensureChatId, createdChatId,
+    chatId, setChatId, chats, chatOptions, activeChat, reloadChats, onFirstUserTurn, ensureChatId, drafts,
     runStatus, titleOf, chatMode, selectMode, setMemoryEnabled: persistMemory, armMemory,
   } = vsChats;
   // The header's History lever swaps the body to the chat list; opening a chat closes it.
@@ -204,7 +204,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // A run's steps are persisted as durable step rows by the run loop the HOST drives
   // (`brainRunHost.ts`), not here: runs outlive this view.
   const { queued, submit, queueAfter, stop, answerQuestion, replayMessage, sendSteers } = useChatSend({
-    conv, chatId, createdChatId, input, setInput, recipient, chooseRecipient, liveChildren, setTurnLimbic, reloadChats,
+    conv, chatId, drafts, input, setInput, recipient, chooseRecipient, liveChildren, setTurnLimbic, reloadChats,
   });
 
   // The question this chat is BLOCKED on, restated at the composer — one shared predicate,

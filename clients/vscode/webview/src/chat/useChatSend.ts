@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { chatDoorLiveness, joinRestorableTurns, restoreTurn, useChatTurns, useComposerDraft, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, joinRestorableTurns, restoreTurn, useChatTurns, useComposerDraft, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type DraftBinding, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { request } from '../vscodeBridge';
 import { stageSend } from './stageSend';
 import { childTarget, steerRun, type useChatChildren } from './chatChildren';
@@ -30,11 +30,11 @@ async function requestLimbic(text: string): Promise<string> {
   }
 }
 
-export function useChatSend({ conv, chatId, createdChatId, input, setInput, recipient, chooseRecipient, liveChildren, setTurnLimbic, reloadChats }: {
+export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, chooseRecipient, liveChildren, setTurnLimbic, reloadChats }: {
   conv: UseBrainConversation;
   chatId: number | null;
-  /** The id the draft's first send created (`useVsCodeChats().createdChatId`) - held draft turns stay only with that chat. */
-  createdChatId?: number | null;
+  /** The draft's binding to its creation (`useVsCodeChats().drafts`): turns typed while the first send creates the chat land in THAT chat. */
+  drafts?: DraftBinding;
   input: string;
   setInput: Dispatch<SetStateAction<string>>;
   recipient: DirectedRecipient | null;
@@ -140,7 +140,7 @@ export function useChatSend({ conv, chatId, createdChatId, input, setInput, reci
       return { text: one.text, recipient: one.recipient, ...(one.attachments?.length ? { attachments: [...one.attachments] } : {}) };
     },
     runKey: chatId,
-    createdChatId,
+    drafts,
     send: dispatchSend,
     textOf: (m) => m.text,
     // A turn for a participant is a message to them — never the Brain's Stop.

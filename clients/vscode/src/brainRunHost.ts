@@ -34,6 +34,7 @@ import {
   nextFallbackModel,
   resolveRunConfirm,
   runAbortSignal,
+  savedChatOf,
   startRun,
   stopBeforeStart,
   subscribeRun,
@@ -115,7 +116,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
   };
 
   /** The server chat a run lives in — its owner's, for a sub-agent. */
-  const chatOf = (p: RunSpec): number => p.child?.lineage.rootChatId ?? p.chatId;
+  const chatOf = (p: RunSpec): number => savedChatOf(p.chatId, p.child?.lineage);
   const announce = (chatId: number): void => broadcast({ type: "run.children", chatId, children: registry.viewsIn(chatId) });
   /** Chats with a turn being set up or run by THIS host — claimed before the async setup. */
   const active = new Set<number>();

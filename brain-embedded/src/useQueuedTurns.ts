@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { NO_DRAFTS, type DraftBinding, type DraftOutcome, type DraftToken } from './draftBinding';
 
 /**
  * Turns the user typed while a run was still in flight.
@@ -32,16 +33,25 @@ export interface QueuedItem<T> {
   /** Stable per held turn, so a host can render it and let the user remove it. */
   readonly id: number;
   readonly value: T;
+  /** Held only because no run was live yet - in THIS chat's run: steered into it the moment it goes live. */
+  readonly preLiveFor?: number;
   /**
-   * Held only because no run was live yet (typed while the turn that starts it was still getting ready) - in THIS
-   * chat's run. `null`: in the run of a chat that does not exist yet (a draft whose first turn is creating it); the
-   * chat's first id re-tags it with that id - once the host CONFIRMS that id is the chat the draft's send created.
+   * Held for a DRAFT's creation (`draftBinding.ts`): typed while the first send was still creating the chat. Owned by that
+   * creation's token - not by a chat id and not by the chat showing - so switching the visible chat leaves it alone. It is
+   * in no other chat's queue (`items`), and only its own token's answer settles it. `followUp`: direction for the run being
+   * made; otherwise held for after it (`queueAfter`).
    */
-  readonly preLiveFor?: number | null;
+  readonly draft?: { readonly token: DraftToken; readonly followUp: boolean };
+}
+
+/** A turn a draft's creation answered for: the value, and whether it is direction for the run being made. */
+export interface DraftHeld<T> {
+  readonly value: T;
+  readonly followUp: boolean;
 }
 
 export interface QueuedTurns<T = string> {
-  /** The held turns, oldest first. */
+  /** The held turns this view shows, oldest first (the showing draft's included; another draft's never). */
   items: readonly QueuedItem<T>[];
   /** How many turns are waiting. */
   count: number;
@@ -50,16 +60,16 @@ export interface QueuedTurns<T = string> {
    * flight and the caller must not send), false when the caller should send it
    * now. Written this way so the host keeps ownership of how it sends.
    */
-  submit: (value: T, opts?: { preLiveFor?: number | null }) => boolean;
+  submit: (value: T, opts?: { preLiveFor?: number; draft?: QueuedItem<T>['draft'] }) => boolean;
   /** Drop one held turn (the user removed it, or steered it into the run). */
   remove: (id: number) => void;
   /** Put a turn back at the FRONT of the queue - a flushed turn the host did not keep must not be lost. */
   requeue: (value: T) => void;
   /** Add a turn at the BACK, held or not - an idle send waits behind the turns already waiting. */
-  pushBack: (value: T) => void;
-  /** Take the OLDEST waiting turn out of the queue now (undefined when none). */
+  pushBack: (value: T, opts?: { preLiveFor?: number }) => void;
+  /** Take the OLDEST waiting turn out of the queue now (undefined when none). Never one held for a draft's creation. */
   takeFront: () => T | undefined;
-  /** Drop everything waiting — a stopped run, or a switched conversation. */
+  /** Drop everything this view holds - a stopped run. Turns held for another draft's creation are not its to drop. */
   clear: () => void;
 }
 
@@ -85,19 +95,23 @@ export interface QueuedTurnsOptions<T> {
    * The conversation changed while turns were still held: every one of them, oldest first, with the key it was held
    * in. Each belongs to THAT conversation - the host hands it there (its run's inbox, or back to the composer) -
    * so nothing a person typed is discarded by a chat switch. Without it the held turns are dropped (a host with
-   * nowhere to hand them).
+   * nowhere to hand them). Turns held for a draft's creation are NOT handed off here: their token's answer settles them.
    */
   handOff?: (held: readonly QueuedItem<T>[], fromKey: string | number | null) => void;
   /**
-   * The id the DRAFT's in-flight send created, as the host learns it (`useChatCreation().createdChatId`; null while
-   * unknown). A draft's key turning into a number is that draft's own chat ONLY when this says so - otherwise the
-   * person moved to some other chat, and what they held goes back where it was typed. Without it a draft's first id
-   * is never confirmed, so held turns are handed off.
+   * The draft binding (`useChatCreation().drafts`): which creation each draft-held turn belongs to. Optional - a host
+   * without draft creation holds none.
    */
-  createdChatId?: number | null;
+  drafts?: DraftBinding;
+  /**
+   * A draft's creation answered - the chat id, or null when nothing was created: these turns, oldest first, were held for
+   * it. They have left the queue; the host lands them (in the created chat, whichever chat is showing; back to the
+   * composer when nothing was created), keeping some in the showing chat's queue with `pushBack` when that is the one.
+   */
+  landDraft?: (held: readonly DraftHeld<T>[], outcome: DraftOutcome) => void;
 }
 
-export function useQueuedTurns<T = string>({ running, send, resetKey = null, textOf, mayFlush, handOff, createdChatId = null }: QueuedTurnsOptions<T>): QueuedTurns<T> {
+export function useQueuedTurns<T = string>({ running, send, resetKey = null, textOf, mayFlush, handOff, drafts = NO_DRAFTS, landDraft }: QueuedTurnsOptions<T>): QueuedTurns<T> {
   const [queued, setQueued] = useState<QueuedItem<T>[]>([]);
   // The queue is READ synchronously too (`takeFront`, the flush): this ref is the source of
   // truth and every change goes through `update`, so two moves in one tick see each other.
@@ -123,20 +137,28 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
   const mayFlushRef = useRef(mayFlush);
   // eslint-disable-next-line react-hooks/refs
   mayFlushRef.current = mayFlush;
-  const createdRef = useRef(createdChatId);
+  const landDraftRef = useRef(landDraft);
   // eslint-disable-next-line react-hooks/refs
-  createdRef.current = createdChatId;
-  // The draft's turns whose key became `to` before the host said which chat its send created: neither steered nor
-  // handed off until it does (`settle`). `ids` are those turns; later ones belong to `to` itself.
-  const unconfirmed = useRef<{ to: number; ids: ReadonlySet<number> } | null>(null);
+  landDraftRef.current = landDraft;
+  // The draft on screen: its held turns are the ones this view shows. A chat shows none of any draft's.
+  const draftOnScreen = useSyncExternalStore(drafts.subscribe, drafts.current, drafts.current);
+  const shown = resetKey === null ? draftOnScreen : null;
+  const shownRef = useRef(shown);
+  // eslint-disable-next-line react-hooks/refs
+  shownRef.current = shown;
   const runningRef = useRef(running);
 
-  const submit = useCallback((value: T, opts?: { preLiveFor?: number | null }) => {
+  const submit = useCallback((value: T, opts?: { preLiveFor?: number; draft?: QueuedItem<T>['draft'] }) => {
     const text = turnBody(value, textOfRef.current);
     if (!text) return false;
     if (!runningRef.current) return false;
     const held = (typeof value === 'string' ? text : value) as T;
-    update((current) => [...current, { id: (nextId.current += 1), value: held, ...(opts?.preLiveFor !== undefined ? { preLiveFor: opts.preLiveFor } : {}) }]);
+    update((current) => [...current, {
+      id: (nextId.current += 1),
+      value: held,
+      ...(opts?.preLiveFor !== undefined ? { preLiveFor: opts.preLiveFor } : {}),
+      ...(opts?.draft ? { draft: opts.draft } : {}),
+    }]);
     return true;
   }, [update]);
   // Read through a ref so `submit`'s identity survives a run starting: hosts
@@ -146,32 +168,31 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
   runningRef.current = running;
 
   const remove = useCallback((id: number) => update((current) => current.filter((item) => item.id !== id)), [update]);
-  const clear = useCallback(() => update((current) => (current.length ? [] : current)), [update]);
+  // A Stop drops what THIS view holds: the chat's own turns and the showing draft's. Turns held for another draft's
+  // creation (still answering for a draft the person left) are in no view of this chat, and a Stop here is not theirs.
+  const clear = useCallback(() => update((current) => {
+    const own = (item: QueuedItem<T>): boolean => !item.draft || item.draft.token === shownRef.current;
+    return current.some(own) ? current.filter((item) => !own(item)) : current;
+  }), [update]);
   const requeue = useCallback((value: T) => update((current) => [{ id: (nextId.current += 1), value }, ...current]), [update]);
-  const pushBack = useCallback((value: T) => update((current) => [...current, { id: (nextId.current += 1), value }]), [update]);
+  const pushBack = useCallback((value: T, opts?: { preLiveFor?: number }) => update((current) => [
+    ...current,
+    { id: (nextId.current += 1), value, ...(opts?.preLiveFor !== undefined ? { preLiveFor: opts.preLiveFor } : {}) },
+  ]), [update]);
   const takeFront = useCallback((): T | undefined => {
-    const [first] = queueRef.current;
+    const first = queueRef.current.find((item) => !item.draft);
     if (!first) return undefined;
-    update((current) => current.slice(1));
+    update((current) => current.filter((item) => item !== first));
     return first.value;
   }, [update]);
 
-  // The host answered (or the run ended without it): the draft's turns are in the chat their send created - re-tagged to
-  // it - or in some other chat, a switch, and go back to the composer. Never steered into a chat they were not typed for.
-  const settle = useCallback((created: number | null) => {
-    const wait = unconfirmed.current;
-    if (!wait) return;
-    unconfirmed.current = null;
-    if (created === wait.to) {
-      update((current) => current.map((item) => (wait.ids.has(item.id) && item.preLiveFor === null ? { ...item, preLiveFor: wait.to } : item)));
-      return;
-    }
-    const mine = queueRef.current.filter((item) => wait.ids.has(item.id));
+  // A draft's creation answered: ITS turns - and only its - leave the queue for the host to land, whatever chat is showing.
+  useEffect(() => drafts.onOutcome((token, outcome) => {
+    const mine = queueRef.current.filter((item) => item.draft?.token === token);
     if (mine.length === 0) return;
-    update((current) => current.filter((item) => !wait.ids.has(item.id)));
-    handOffRef.current?.(mine, null);
-  }, [update]);
-  useEffect(() => { if (createdChatId !== null) settle(createdChatId); }, [createdChatId, settle]);
+    update((current) => current.filter((item) => item.draft?.token !== token));
+    landDraftRef.current?.(mine.map((item) => ({ value: item.value, followUp: item.draft!.followUp })), outcome);
+  }), [drafts, update]);
 
   // Flush exactly one held turn per completed run, on the running→idle edge — and
   // only when that edge happened on the SAME conversation. `running` is per
@@ -182,34 +203,26 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
   useEffect(() => {
     const was = prev.current;
     prev.current = { key: resetKey, running };
-    if (!running) settle(createdRef.current);
     if (was.key !== resetKey || !was.running || running) return;
     if (mayFlushRef.current && !mayFlushRef.current()) return;
     const next = takeFront();
     if (next !== undefined) sendRef.current(next);
-  }, [running, resetKey, takeFront, settle]);
+  }, [running, resetKey, takeFront]);
 
   // Queued text belongs to the conversation it was typed in, never the one switched to: it leaves this queue and
-  // goes to ITS conversation (`handOff`) - in order, nothing discarded.
+  // goes to ITS conversation (`handOff`) - in order, nothing discarded. Turns held for a draft's creation are not this
+  // chat's: they stay, untouched, for their own token's answer.
   const heldIn = useRef(resetKey);
   useEffect(() => {
     const from = heldIn.current;
     if (from === resetKey) return;
     heldIn.current = resetKey;
-    settle(createdRef.current); // moved on again before the host answered: the previous draft's turns are settled first
-    const held = queueRef.current;
+    const held = queueRef.current.filter((item) => !item.draft);
     if (held.length === 0) return;
-    // A draft's first id is a switch UNLESS the turn in flight created that very chat: only then do these turns stay held,
-    // and the ones that waited only for a run to exist now wait for THIS chat's (they steer into it when it is live).
-    // Until the host says which chat it created they are held in place and steered nowhere.
-    if (from === null && typeof resetKey === 'number' && runningRef.current) {
-      unconfirmed.current = { to: resetKey, ids: new Set(held.map((item) => item.id)) };
-      if (createdRef.current !== null) settle(createdRef.current);
-      return;
-    }
-    update(() => []);
+    update((current) => current.filter((item) => item.draft));
     handOffRef.current?.(held, from);
-  }, [resetKey, update, settle]);
+  }, [resetKey, update]);
 
-  return { items: queued, count: queued.length, submit, remove, requeue, pushBack, takeFront, clear };
+  const items = useMemo(() => queued.filter((item) => !item.draft || item.draft.token === shown), [queued, shown]);
+  return { items, count: items.length, submit, remove, requeue, pushBack, takeFront, clear };
 }

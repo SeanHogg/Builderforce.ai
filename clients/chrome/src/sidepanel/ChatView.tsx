@@ -107,7 +107,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   // The first message creates the chat — with the `/` choices made before it existed —
   // and names it by THE one first-message title rule (brain-embedded). A second send
   // before the device record's write lands JOINS that creation.
-  const { ensureChatId, onFirstUserTurn, createdChatId } = useChatCreation({
+  const { ensureChatId, onFirstUserTurn, drafts } = useChatCreation({
     chatId,
     create: async () => {
       const created = await onNewChat();
@@ -158,7 +158,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   const turns = useChatTurns<string>({
     ...chatDoorLiveness(conv),
     runKey: chatId,
-    createdChatId,
+    drafts,
     send: async (text) => {
       try {
         return await conv.send(text);

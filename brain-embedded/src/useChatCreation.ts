@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createDraftBinding, type DraftBinding } from './draftBinding';
 
 /**
  * "The first message creates the chat" — the ONE implementation. Extracted from the
@@ -62,11 +63,11 @@ export interface ChatCreation {
   /** Fire the `autoTitle` port for a chat's first user turn; never rejects. */
   onFirstUserTurn: (chatId: number, firstUserText: string) => Promise<void>;
   /**
-   * The id the draft's creation resolved with - null until it does, and again once a new creation begins. The turn
-   * door reads it to tell the chat a draft's first send CREATED from one the person switched to meanwhile
-   * (`useChatTurns({ createdChatId })`).
+   * The draft's binding to its creation (`draftBinding.ts`): the token a send from the draft is minted, the creation started for it
+   * resolves or fails it. The turn door reads it (`useChatTurns({ drafts })`) so what is typed while the chat is being created
+   * lands in THAT chat, whatever is showing when its id arrives. Stable identity.
    */
-  createdChatId: number | null;
+  drafts: DraftBinding;
 }
 
 export function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }: ChatCreationOptions): ChatCreation {
@@ -83,30 +84,42 @@ export function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRe
   // eslint-disable-next-line react-hooks/refs
   captureRef.current = onCaptureOriginalRequest;
 
+  /** The draft's token <-> creation binding. One per mount. */
+  const [drafts] = useState(createDraftBinding);
   /** The first message's creation while it is in flight (or resolved but not yet selected). */
   const creating = useRef<Promise<number | null> | null>(null);
-  const [createdChatId, setCreatedChatId] = useState<number | null>(null);
   useEffect(() => {
-    if (chatId != null) creating.current = null;
-  }, [chatId]);
+    if (chatId == null) return;
+    creating.current = null;
+    drafts.leave(); // the draft is gone; a creation still in flight answers its own token, nobody else's
+  }, [chatId, drafts]);
 
   const ensureChatId = useCallback((): Promise<number | null> => {
     const open = chatIdRef.current;
     if (open != null) return Promise.resolve(open);
-    if (!creating.current) setCreatedChatId(null); // a new creation: the last one's id no longer answers for it
-    creating.current ??= createRef.current().then(
-      (id) => {
-        if (id == null) creating.current = null;
-        else setCreatedChatId(id);
-        return id;
-      },
-      (error: unknown) => {
-        creating.current = null;
-        throw error;
-      },
-    );
+    if (!creating.current) {
+      // This creation belongs to the draft's token, and only it settles that token. When a later creation has replaced
+      // it (the draft was left and another begun) its late answer must not clear that one.
+      const token = drafts.adopt();
+      drafts.startCreation(token);
+      const mine: Promise<number | null> = (async () => createRef.current())().then(
+        (id) => {
+          if (id == null) {
+            if (creating.current === mine) creating.current = null;
+            drafts.fail(token);
+          } else drafts.resolve(token, id);
+          return id;
+        },
+        (error: unknown) => {
+          if (creating.current === mine) creating.current = null;
+          drafts.fail(token);
+          throw error;
+        },
+      );
+      creating.current = mine;
+    }
     return creating.current;
-  }, []);
+  }, [drafts]);
 
   const onFirstUserTurn = useCallback(async (id: number, firstUserText: string) => {
     // The origin-text capture is fired HERE, beside the auto-title, so it cannot drift
@@ -117,5 +130,5 @@ export function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRe
     await autoTitleRef.current?.(id, firstUserText);
   }, []);
 
-  return { ensureChatId, onFirstUserTurn, createdChatId };
+  return { ensureChatId, onFirstUserTurn, drafts };
 }

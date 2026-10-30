@@ -337,7 +337,7 @@ export { noteRunStep, type RunNoteStep } from './runStore/runNote';
 export { useRunSnapshot } from './useRunSnapshot';
 // A sub-agent is an ordinary run with an OWNER pointer (`runLineage.ts`), redirected
 // mid-run through the same inbox any run has (`runSteering.ts`).
-export { parseSubagentOrigin, SUBAGENT_OF_META_KEY } from './runLineage';
+export { parseSubagentOrigin, savedChatOf, SUBAGENT_OF_META_KEY } from './runLineage';
 export type { RunLineage, SubagentOrigin } from './runLineage';
 export { queueRunSteering, drainRunSteering, steerModelContent } from './runSteering';
 export type { RunSteerMessage } from './runSteering';
@@ -826,3 +826,5 @@ export { useQueuedTurns } from './useQueuedTurns';
 export type { QueuedItem, QueuedTurns, QueuedTurnsOptions } from './useQueuedTurns';
 export { useChatCreation } from './useChatCreation';
 export type { ChatCreation, ChatCreationOptions } from './useChatCreation';
+// A draft's send and its creation, bound by a token: turns typed while the chat is being created land in THAT chat.
+export { createDraftBinding, type DraftBinding, type DraftOutcome, type DraftToken } from './draftBinding';
