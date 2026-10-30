@@ -226,7 +226,7 @@ export interface UseBrainConversation {
    * and unwinds the agent loop (no error surfaced). No-op when nothing is
    * running. Pair with `sending` to drive a Stop button.
    */
-  stop(): void;
+  stop(draft?: DraftToken | null): void;
   /**
    * Rate one assistant reply (+1 / -1, or 0 to clear). Beyond flipping the thumb it
    * derives WHAT is being rated — the model that served the turn and the MCP tool it
@@ -330,7 +330,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   // server row `ensureChatId` is still creating.
   const sendingRef = useRef<ReadonlySet<number | null>>(new Set());
   const [sendingChats, setSendingChats] = useState<ReadonlySet<number | null>>(sendingRef.current);
-  const { cancelledLaunchRef, launchingRef, draftMadeRef, stopConversation } = useLaunchCancel(sendingRef);
+  const { cancelledLaunchRef, launchingRef, draftMadeRef, releaseDraftMade, stopConversation } = useLaunchCancel(sendingRef);
   const markSending = useCallback((key: number | null, on: boolean) => {
     const next = new Set(sendingRef.current);
     if (on) next.add(key);
@@ -442,13 +442,14 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         if (row) updateMessages(id, (prev) => [...prev, row]);
         return;
       }
+      releaseDraftMade(id); // the run starts: a Stop on the draft no longer cancels a launch - the door's token-scoped stop ends the run
       bindContinuation(id); // direction the run never reads becomes this chat's next turn
       await startRun(id, extra ? { ...request, ...extra } : request);
     } finally {
       launchingRef.current.delete(id);
       cancelledLaunchRef.current.delete(id);
     }
-  }, [prepareRun, persistence, updateMessages, bindContinuation]);
+  }, [prepareRun, persistence, updateMessages, bindContinuation, releaseDraftMade]);
 
   const send = useCallback(
     async (text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null; attachments?: ChatInputAttachment[]; draft?: DraftToken }): Promise<boolean> => {
@@ -464,7 +465,9 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       const origin = chatId;
       markSending(origin, true);
       let id = chatId;
+      const draft = opts?.draft;
       if (id == null) {
+        if (draft != null) draftMadeRef.current.set(draft, null); // a Stop on THIS draft reaches this send (`launchCancel.ts`)
         try {
           id = (await ensureChatId?.(opts?.draft)) ?? null;
         } catch {
@@ -473,12 +476,13 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         // A Stop while the draft's row was being created is this chat's Stop.
         const cancelled = cancelledLaunchRef.current.delete(origin);
         if (id == null) {
+          if (draft != null) draftMadeRef.current.delete(draft);
           markSending(origin, false);
           setLocalError('Could not start a chat.');
           return false;
         }
         if (cancelled) cancelledLaunchRef.current.add(id);
-        draftMadeRef.current.add(id); // a Stop on the draft view still reaches this chat's launch (`launchCancel.ts`)
+        if (draft != null) draftMadeRef.current.set(draft, id);
         markSending(id, true);
         markSending(origin, false);
       }
@@ -507,10 +511,9 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       // transcript, a retry and a reload re-send it (`attachmentTranscript.ts`). Never rejects.
       // Persisted/display content stays text-only (the chat tables store a string): every
       // attachment shows as a link the user can click. The ONE composition (`composeUserTurn`).
-      const { displayContent, turn } = await composeUserTurn(trimmed, attachments, persistence);
-      const metadata = withDirectedMetadata(directedRecipientList(addressedTo), turn.meta);
-
       try {
+        const { displayContent, turn } = await composeUserTurn(trimmed, attachments, persistence);
+        const metadata = withDirectedMetadata(directedRecipientList(addressedTo), turn.meta);
         const [userMsg] = await persistence.sendMessages(id, [{ role: 'user', content: displayContent, metadata }]);
         updateMessages(id, (prev) => [...prev, userMsg]);
         onActivity?.(id);
@@ -562,11 +565,12 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         return false;
       } finally {
         cancelledLaunchRef.current.delete(runChatId);
-        draftMadeRef.current.delete(runChatId);
+        releaseDraftMade(runChatId);
+        if (draft != null) draftMadeRef.current.delete(draft);
         markSending(runChatId, false);
       }
     },
-    [persistence, chatId, markSending, composer.take, composer.restore, pendingAttachments, messages, ensureChatId, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages],
+    [persistence, chatId, markSending, composer.take, composer.restore, pendingAttachments, messages, ensureChatId, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages, releaseDraftMade],
   );
 
   const replyToTrailingTurn = useCallback((id: number, last: BrainMessage) => {
@@ -620,7 +624,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     clearRunError(chatId);
   }, [chatId]);
 
-  const stop = useCallback(() => stopConversation(chatId), [chatId, stopConversation]);
+  const stop = useCallback((draft?: DraftToken | null) => stopConversation(chatId, draft), [chatId, stopConversation]);
 
   const buildTriageReport = useCallback(
     (agentLabel?: string, surface?: string) =>

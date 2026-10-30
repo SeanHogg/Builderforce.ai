@@ -152,9 +152,9 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
     isDirected: (m) => m.recipient != null,
     // The conversation's Stop: it also drops a launch still getting ready — and a send
     // still fetching its limbic block.
-    stop: () => {
+    stop: (draft) => {
       stopPreparingRef.current = true;
-      conv.stop();
+      conv.stop(draft);
     },
     // The editor's steer: a live sub-agent takes its message straight into its run, and
     // the chat's own RUNNING run is spoken to now (PRD 35 E10) — the message interrupts

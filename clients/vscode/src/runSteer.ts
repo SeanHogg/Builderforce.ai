@@ -18,7 +18,7 @@
  * (`runSteer.test.ts`).
  */
 
-import { drainRunSteering, isRunning, queueRunSteering, savedChatOf, type ChatInputAttachment, type SteerTurn } from "@seanhogg/builderforce-brain-embedded";
+import { drainRunSteering, isRunning, queueRunSteering, requeueRunSteering, savedChatOf, type ChatInputAttachment, type SteerTurn } from "@seanhogg/builderforce-brain-embedded";
 import { stopIntent } from "@builderforce/run-guards";
 import { directionText, type ChildRunHost } from "./childRunSpawner";
 
@@ -134,17 +134,21 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
 
     steerTurns(runKey, turns) {
       let idle = false;
+      let queued = 0; // the words THIS batch put in the chat's inbox (the newest ones: the inbox is read oldest first)
       for (const turn of turns) {
         if (!firstHearing(runKey, turn.eventKey)) continue;
         const taken = take(runKey, turn.text, turn.attachments);
         if (taken === "stopped") return;
         // A stop for a chat with nothing running ends the work this batch queued: what the batch HELD is dropped and nothing
         // is woken. Unlike sequential `steer` calls (the first wakes a run, the stop stops it, and `settled` has already
-        // persisted/said what that run heard), the dropped words are never persisted or said.
+        // persisted/said what that run heard), the dropped words are never persisted or said. Words queued EARLIER for this
+        // chat (e.g. while the host could not start it) are not the batch's: they go back, in order, at the front.
         if (taken === "stop-idle" && idle) {
-          drainRunSteering(runKey);
+          const inbox = drainRunSteering(runKey);
+          requeueRunSteering(runKey, inbox.slice(0, Math.max(0, inbox.length - queued)));
           return;
         }
+        if (taken !== "stop-idle" && turn.text.trim()) queued += 1; // "done" and "idle" each queued exactly this turn's words
         idle = idle || taken === "idle";
       }
       // Idle: everything queued is ONE new turn, oldest first (`wake` drains it).

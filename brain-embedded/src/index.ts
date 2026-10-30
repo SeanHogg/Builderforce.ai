@@ -340,7 +340,7 @@ export { useRunSnapshot } from './useRunSnapshot';
 // mid-run through the same inbox any run has (`runSteering.ts`).
 export { parseSubagentOrigin, savedChatOf, SUBAGENT_OF_META_KEY } from './runLineage';
 export type { RunLineage, SubagentOrigin } from './runLineage';
-export { queueRunSteering, drainRunSteering, steerModelContent } from './runSteering';
+export { queueRunSteering, requeueRunSteering, drainRunSteering, steerModelContent } from './runSteering';
 export type { RunSteerMessage } from './runSteering';
 export type { BrainRunOutcome } from './runOutcomeReport';
 export { isCoderReask } from '@builderforce/run-policy';

@@ -4,7 +4,7 @@ import React from 'react';
 import { chatDoorLiveness, useChatTurns } from './useChatTurns';
 import { useChatCreation } from './useChatCreation';
 import { useBrainConversation } from './useBrainConversation';
-import { resetBrainRunStore } from './brainRunStore';
+import { isRunning, resetBrainRunStore } from './brainRunStore';
 import { waitingFor } from './chatDelivery';
 import { resetRunSteering } from './runSteering';
 import { streamChatCompletion } from './streamChatCompletion';
@@ -45,7 +45,7 @@ function useDraftConversation(create: () => Promise<number | null>, prepareRun: 
     send: (text, ctx) => conv.send(text, { draft: ctx?.draft }),
     stop: conv.stop,
   });
-  return { turns };
+  return { turns, drafts };
 }
 
 describe('Stop on a draft whose first send has created its chat but is still preparing its run', () => {
@@ -81,5 +81,32 @@ describe('Stop on a draft whose first send has created its chat but is still pre
     expect(mockStream).not.toHaveBeenCalled();
     expect(vi.mocked(persistence.sendMessages).mock.calls.flatMap(([, msgs]) => msgs).filter((m) => m.role === 'user').map((m) => m.content)).toEqual(['A']);
     expect(texts(91)).toEqual([]);
+  });
+
+  it("never reaches ANOTHER chat's live run: an earlier draft's chat is running, a second draft is mid-creation - Stop cancels only the second draft's launch", async () => {
+    mockStream.mockImplementation(() => new Promise(() => {})); // chat 91's run goes on until it is stopped
+    const creation = deferred<number | null>();
+    const create = vi.fn().mockResolvedValueOnce(91).mockImplementationOnce(() => creation.promise);
+    const prepareRun = vi.fn(async () => ({}) as Record<string, never>);
+    const { result } = renderHook(() => useDraftConversation(create, prepareRun), { wrapper });
+
+    act(() => { void result.current.turns.submit('A'); }); // the first draft makes chat 91, and its run starts
+    await waitFor(() => expect(isRunning(91)).toBe(true));
+    expect(mockStream).toHaveBeenCalledTimes(1);
+
+    act(() => result.current.drafts.leave()); // the person is on a NEW draft
+    let second!: Promise<boolean>;
+    act(() => { second = result.current.turns.submit('B'); });
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(2)); // the second draft's chat is being created
+
+    act(() => result.current.turns.stop()); // Stop on the second draft
+
+    expect(isRunning(91)).toBe(true); // the first draft's chat keeps running
+    await act(async () => { creation.resolve(92); await second; }); // the second draft's chat now exists: its launch is dropped
+    expect(mockStream).toHaveBeenCalledTimes(1);
+    expect(isRunning(92)).toBe(false);
+    expect(isRunning(91)).toBe(true);
+    const rows = vi.mocked(persistence.sendMessages).mock.calls.filter(([, msgs]) => msgs.some((m) => m.role === 'user')).map(([id, msgs]) => [id, msgs[0].content]);
+    expect(rows).toEqual([[91, 'A'], [92, 'B']]);
   });
 });

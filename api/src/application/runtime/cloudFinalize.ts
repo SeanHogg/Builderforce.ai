@@ -211,7 +211,8 @@ ${ciVerified
   //  (b) The run was CANCELLED → its half-written branch is residue → hand it to
   //      the shared teardown decision, which deletes it only when its rules allow. Rule 7
   //      (authorship) is per TASK, not per execution, so it does NOT prove the branch is only
-  //      this run's work - see the ROADMAP Consolidated Gap Register entry on run-branch sweeps.
+  //      this run's work - see the ROADMAP Consolidated Gap Register entry "A FAILED cloud run's
+  //      branch residue is never swept".
   //
   // A run that lands FAILED does not reach (b) (a failed one that wrote files is snapshotted under
   // (a)): its branch residue is NOT swept automatically.

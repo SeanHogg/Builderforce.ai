@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { drainRunSteering } from "@seanhogg/builderforce-brain-embedded";
+import { drainRunSteering, queueRunSteering } from "@seanhogg/builderforce-brain-embedded";
 import { createRunSteer, type RunSteerDeps } from "./runSteer";
 
 // A stop while nothing was claimed used to leave a mark that swallowed the NEXT run's
@@ -67,6 +67,15 @@ describe("runSteer.steerTurns - several turns said to a chat's run together", ()
     s.steerTurns(25, [{ text: "a", eventKey: "k1" }, { text: "STOP executing", eventKey: "k2" }, { text: "never", eventKey: "k3" }]);
     expect(deps.childHost.wake).not.toHaveBeenCalled();
     expect(drainRunSteering(25)).toEqual([]);
+  });
+
+  it("that drop takes ONLY the batch's words: words queued earlier for the chat (one the host could not start) stay, in order", () => {
+    const { s, deps } = steer(new Set());
+    queueRunSteering(28, "earlier one", { fromPerson: true });
+    queueRunSteering(28, "earlier two", { fromPerson: true });
+    s.steerTurns(28, [{ text: "a", eventKey: "k1" }, { text: "b", eventKey: "k2" }, { text: "STOP executing", eventKey: "k3" }]);
+    expect(deps.childHost.wake).not.toHaveBeenCalled();
+    expect(drainRunSteering(28).map((m) => m.text)).toEqual(["earlier one", "earlier two"]);
   });
 
   it("a stop FIRST in a batch for an idle chat has nothing to stop: the turns behind it are still heard", () => {

@@ -5,7 +5,7 @@ import { useDoorStopMarks, stopDoorTurns } from './doorStop';
 import type { RunKey } from './brainRunStore';
 import { queueRunSteering } from './runSteering';
 import type { ChatInputAttachment } from './types';
-import type { DraftBinding } from './draftBinding';
+import type { DraftBinding, DraftToken } from './draftBinding';
 import { handToChat } from './chatDelivery';
 import { useTurnLanding, type SendContext } from './turnLanding';
 import { turnBody, useQueuedTurns, type QueuedTurns } from './useQueuedTurns';
@@ -84,7 +84,7 @@ export interface ChatTurnsBase<T> {
    */
   steer?: (turn: T) => boolean;
   /** Optional: how this host stops its run. Default `stopRun(runKey)`. */
-  stop?: () => void;
+  stop?: (draft?: DraftToken | null) => void;
   /** The text a non-string turn carries (blank check). Omit for string turns. */
   textOf?: (turn: T) => string;
   /** Optional: the attachments a non-string turn carries — they ride a steer so a mid-run image is not dropped. */

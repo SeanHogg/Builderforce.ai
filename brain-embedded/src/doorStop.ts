@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { stopRun } from './brainRunStore';
 import type { RunKey } from './brainRunStore';
-import type { DraftBinding } from './draftBinding';
+import type { DraftBinding, DraftToken } from './draftBinding';
 
 /**
  * The turn door's Stop (`useChatTurns`): what marks it leaves, and what it ends.
@@ -36,8 +36,8 @@ export interface DoorStopPorts {
   running: boolean;
   runKey: RunKey | null;
   drafts?: DraftBinding;
-  /** How this host stops its run. Default `stopRun(runKey)`. */
-  stop?: () => void;
+  /** How this host stops its run. Default `stopRun(runKey)`. Given the draft on screen, if any - the conversation's Stop (`useBrainConversation.stop`). */
+  stop?: (draft?: DraftToken | null) => void;
 }
 
 export function stopDoorTurns(ports: DoorStopPorts, marks: DoorStopMarks, clear: () => void): void {
@@ -45,14 +45,16 @@ export function stopDoorTurns(ports: DoorStopPorts, marks: DoorStopMarks, clear:
   marks.stopEpoch.current += 1;
   if (ports.running) marks.markStopping(true);
   const { stop: halt, runKey: key, drafts: binding } = ports;
+  // The draft on screen (a draft view has no run key): the Stop reaches ITS send alone, never another draft's chat.
+  const token = key === null ? binding?.current() ?? null : null;
   // A steer typed before the Stop is dropped with the run, and so is what a draft's creation delivered to this chat that
   // its run has not heard yet (the store's Stop drains the inbox, the device's journal and the chat's waiting turns -
   // every entry point to Stop does) - none of it may start the next one.
-  if (halt) halt();
+  if (halt) halt(token);
   else if (key != null) stopRun(key);
-  // On a draft whose creation already made chat N, the turns waiting for N's run are the conversation's too: the same Stop.
-  // (Its launch, still preparing, is cancelled by the conversation's Stop above - `launchCancel.ts`.)
-  const token = key === null ? binding?.current() : null;
+  // On a draft whose creation already made chat N, N's run and the turns waiting for it are the conversation's too, and
+  // THIS is the one path that stops it, once: the conversation's Stop only cancels a launch that has not started
+  // (`launchCancel.ts`) and never stops a chat's run - so a Stop on another draft cannot reach it.
   const made = token != null ? binding?.outcomeOf(token) : undefined;
   if (typeof made === 'number') stopRun(made);
 }
