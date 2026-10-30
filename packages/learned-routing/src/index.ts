@@ -44,6 +44,8 @@ export {
   type ModelQualitySignals,
 } from './modelQualityScore.js';
 
+export { costForTieBreak, hasCostMean, rankWithCostTieBreak, type CostStat, type RankKeys } from './costEvidence.js';
+
 export {
   DEFAULT_MIN_SAMPLES,
   rankModelsForAction,
@@ -89,6 +91,8 @@ export {
 export {
   MODEL_ANALYTICS_PATH,
   RUN_OUTCOME_PATH,
+  carriesRoutingSignal,
+  foldsIntoRouting,
   parseRunOutcomeRequest,
   type NormalizedRunOutcome,
   type OutcomeSource,
@@ -96,10 +100,13 @@ export {
   type TerminalStatus,
 } from './runOutcomeContract.js';
 export {
+  ALL_ENTRY_POINTS,
   CLIENT_ENTRY_POINTS,
   MODEL_PREFLIGHT_MAX,
   parseRunOutcomeTelemetry,
+  wireCost,
   type ClientEntryPoint,
+  type EntryPoint,
   type RunOutcomeTelemetry,
   type RunVerifyResult,
 } from './runOutcomeTelemetry.js';

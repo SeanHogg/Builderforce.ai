@@ -71,7 +71,9 @@ async function readRuns(db: Db, tenantId: number, days: number, projectId: numbe
   const runs: RunAnomalyRun[] = [];
   for (const o of outcomes) {
     const t = o.executionId != null ? timing.get(o.executionId) : undefined;
-    if (!t) continue;
+    // These are cloud runs (execution_id set), whose cost the scorer always writes; a NULL cost would be
+    // unknown, not free, and a run with no cost cannot be placed on the cost distribution, so it is left out.
+    if (!t || o.costUsdMillicents === null) continue;
     runs.push({
       executionId: o.executionId!,
       taskId: o.taskId,

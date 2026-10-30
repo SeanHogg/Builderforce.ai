@@ -1504,7 +1504,7 @@ export const importRuns = pgTable('import_runs', {
 // Learned Model Routing (PRD 13 / migration 0198) — the OUTCOME fact table.
 // One row per TERMINAL cloud run, joining its (action_type, resolved_model) to a
 // composite 0..1 outcome score. The durable source of truth analytics + the
-// derived `routing:<scope>` KV blob read from. Idempotent on execution_id.
+// derived `routing:v2:<scope>` KV blob read from. Idempotent on execution_id.
 // ---------------------------------------------------------------------------
 // LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0013), resolved through
 // `runTelemetryDatabase()` — agent-run telemetry is grouped with the usage ledger by
@@ -1524,8 +1524,8 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
    *  migration 0283: client/IDE/on-prem runs have no cloud execution and instead
    *  key on `clientRunId`. */
   executionId:      integer('execution_id').unique(),
-  /** Where the outcome came from: 'cloud' (default) | 'onprem' | 'ide' | 'external'
-   *  (migration 0283). Lets analytics split learned-routing quality by surface. */
+  /** Where the outcome came from: 'cloud' (default) | 'onprem' | 'ide' | 'external' | 'canvas'
+   *  (migration 0283; no CHECK, so 'canvas' needed no migration). Lets analytics split learned-routing quality by surface. */
   source:           varchar('source', { length: 16 }).notNull().default('cloud'),
   /** The client's own idempotency key for a NON-cloud run (no execution id).
    *  Partial-unique so client runs upsert on it while cloud rows (NULL) don't
@@ -1548,7 +1548,9 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
   /** A coding_model_degraded event fired during the run (floored onto a non-coder). */
   degraded:         boolean('degraded').notNull().default(false),
   steps:            integer('steps').notNull().default(0),
-  costUsdMillicents: integer('cost_usd_millicents').notNull().default(0),
+  /** Millicents the run cost. NULL = the run reported none: UNKNOWN, not free (migration 1284 / 0027).
+   *  Sums and averages skip NULLs; never read one as 0. */
+  costUsdMillicents: integer('cost_usd_millicents'),
   terminalStatus:   varchar('terminal_status', { length: 16 }).notNull(), // completed|failed|cancelled
   /** The run died on a PROVIDER RATE LIMIT (migration 0485) — `classifyRunFailure`
    *  returned `rate_limited`. An AVAILABILITY fact, never a quality one: the learned
@@ -1617,6 +1619,15 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
   tokens:           integer('tokens'),
   /** Prompt-cache reads across the run's turns. */
   cacheReadTokens:  integer('cache_read_tokens'),
+  /** TRUE = this row is CODING-RUN EVIDENCE (migration 1284 / transactional 0027). FALSE for a run
+   *  that is not (a Creation Canvas turn): recorded for the uniform telemetry row only — never
+   *  folded into the routing blob or re-admitted by a rebuild, and excluded from every lens that
+   *  ranks models or measures coding effectiveness (see application/shared/codingEvidence). */
+  routingSignal:    boolean('routing_signal').notNull().default(true),
+  /** TRUE = the run failed because the TENANT ran out of quota/budget (migration 1284 / transactional 0027):
+   *  stored, but not evidence about the model, so the routing table never learns from it
+   *  (`application/shared/codingEvidence` `teachesRouting`). A separate fact from `routingSignal`. */
+  quotaExhausted:   boolean('quota_exhausted').notNull().default(false),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   // Declared with its predicate so an upsert on `clientRunId` is held to restating it

@@ -258,9 +258,12 @@ export async function compactMessages(
       ? { messages: [...source], compacted: true, summarized: false, beforeTokens, afterTokens: maskedTokens, droppedMessages: 0, maskedObservations: mask.masked }
       : untouched();
   }
-  // The task brief is the FIRST user message; after a stall nudge or steer it is no
-  // longer the latest directive the packer protects, so it is pinned explicitly.
-  const briefIdx = opts.pinTaskBrief ? source.findIndex((m) => m.role === 'user') : -1;
+  // The task brief is the row the surface marked as the task (`RunMessage.task` — a
+  // surface that opens with a prior conversation marks the CURRENT request, not an old
+  // message), else the FIRST user message; after a stall nudge or steer it is no longer
+  // the latest directive the packer protects, so it is pinned explicitly.
+  const marked = opts.pinTaskBrief ? source.findIndex((m) => m.task === true) : -1;
+  const briefIdx = !opts.pinTaskBrief ? -1 : marked >= 0 ? marked : source.findIndex((m) => m.role === 'user');
   const brief = briefIdx >= 0 ? source[briefIdx] : undefined;
 
   const pack = await packHandoff({

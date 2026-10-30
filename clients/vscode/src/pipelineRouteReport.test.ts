@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { summarizeRouteRuns, type RouteRunRecord } from "@seanhogg/builderforce-brain-embedded";
-import { MIN_QUICK_RUNS_FOR_SUGGESTION } from "@builderforce/pipeline-route";
+import { MIN_QUICK_RUNS_FOR_SUGGESTION, summarizeRouteRuns as summarizeRoutes, type RouteRunRecord as PricedRouteRun } from "@builderforce/pipeline-route";
 
 vi.mock("vscode", () => ({}));
 vi.mock("./localFirstStore", () => ({ localBrainApplication: () => undefined }));
@@ -47,3 +47,22 @@ describe("renderRouteReport", () => {
     expect(renderRouteReport(report, 30, t)).toContain(`Lower it to ${report.suggestedThreshold!.toFixed(2)}`);
   });
 });
+
+describe("renderRouteReport — an unpriced run is unknown, never $0", () => {
+  const unpriced = (route: "full" | "quick", conversation: string, minutes: number): PricedRouteRun => ({ ...run(route, conversation, minutes, 0.5, 0), costMc: null });
+
+  it("shows a route whose runs are all unpriced as unpriced", () => {
+    const md = renderRouteReport(summarizeRoutes([unpriced("full", "a", 0)], { threshold: 0.5 }), 30, t);
+
+    expect(md).toContain("| Full pipeline | 1 | unpriced | 0.50 |");
+    // The unpriced route is never rendered as a dollar figure.
+    expect(md).not.toMatch(/\| Full pipeline \| 1 \| \$/);
+  });
+
+  it("shows the priced figure and how many runs have no price when only some do", () => {
+    const md = renderRouteReport(summarizeRoutes([run("quick", "a", 0, 0.2, 50_000), unpriced("quick", "b", 0)], { threshold: 0.5 }), 30, t);
+
+    expect(md).toContain("| Quick pass | 2 | $0.50 + 1 unpriced |");
+  });
+});
+

@@ -75,8 +75,9 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   if (!resumed) {
     // The opening rows (governance + persona, then the task as the first user turn) open
     // the transcript the kernel drives — the task reaches the model on turn 1, and every
-    // saved state carries it.
-    transcript.splice(0, transcript.length, ...openingRows(task, policy.approvalGates));
+    // saved state carries it. A surface that assembles its own prompt (system blocks, the
+    // conversation so far, the user turn) hands the rows over instead.
+    transcript.splice(0, transcript.length, ...(task.transcript ?? openingRows(task, policy.approvalGates)));
     state.messages = transcript;
     pack = await buildContextPack(input, hooks, state, offered);
     state.context = pack;
@@ -101,6 +102,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
     watch: portInterruptWatch(ports.steering),
     turnContent: "",
     stopped: false,
+    facts: { refused: false },
   };
   const isReadOnly = readOnlyPort(run);
 
@@ -124,8 +126,8 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
         }),
       },
       ports: {
-        complete: (ctx) => completeTurn(input, state, hooks, ctx, offered, transcript, pack),
-        dispatch: (call) => dispatchCall(input, state, call, run.watch),
+        complete: (ctx) => completeTurn(input, state, hooks, ctx, offered, transcript, pack, run.selection),
+        dispatch: (call) => dispatchCall(input, state, call, run.watch, run.facts),
         ...(isReadOnly ? { isReadOnly } : {}),
       },
       hooks: kernelHooks(run),

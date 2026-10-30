@@ -159,6 +159,9 @@ const nextConfig = {
       '@react-three/drei': './node_modules/@react-three/drei/index.js',
       '@seanhogg/builderforce-memory/knowledge': './node_modules/@seanhogg/builderforce-memory/dist/knowledge/index.js',
       '@seanhogg/builderforce-memory/ingest': './node_modules/@seanhogg/builderforce-memory/dist/ingest/index.js',
+      // `@builderforce/agent-run` (the canvas's one agent) binds the packer and the fold.
+      '@seanhogg/builderforce-memory/handoff': './node_modules/@seanhogg/builderforce-memory/dist/handoff/index.js',
+      '@seanhogg/builderforce-memory/working': './node_modules/@seanhogg/builderforce-memory/dist/working/index.js',
       'react-markdown': './node_modules/react-markdown/index.js',
       'remark-gfm': './node_modules/remark-gfm/index.js',
       sharp: './src/lib/turbopackEmptyModule.ts',

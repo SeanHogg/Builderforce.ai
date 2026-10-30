@@ -34,8 +34,9 @@
  *     called tools still speaks (`brain/agentReplyLoop.ts`);
  *   - the prose ask-lift on a settled final answer
  *     (`brain-embedded/.../finalAnswerHook.ts`);
- *   - the canvas escalation ladder — restate, then hand to a proven model, then stop
- *     (`frontend/.../canvasNoToolCalls.ts`), generalised to the policy's failover;
+ *   - the canvas escalation ladder — restate, then hand to a proven model, then stop —
+ *     generalised and walked in `ladder.ts` over the surface's `DeliveryLedger` (the canvas
+ *     supplies the rungs: `frontend/src/lib/canvasDelivery.ts`);
  *   - the exhausted-stall notice surfaced when nothing is left to try
  *     (`agent-runtime/.../agent-loop/stall-recovery.ts`).
  *
@@ -57,6 +58,7 @@ import {
 } from "@builderforce/agent-stall";
 import { liftProseAskUser, trimRepetitionLoop } from "@builderforce/agent-loop";
 import type { StallState } from "../../contract.js";
+import { walkLadder } from "./ladder.js";
 import type { PolicyContext, StallDecision, StallHook } from "../hooks.js";
 
 // ── The re-prompt budget (WS2b's slice of the run) ───────────────────────────
@@ -89,7 +91,12 @@ function budgetOf(ctx: PolicyContext): StallState {
 function saveBudget(ctx: PolicyContext, budget: StallState, spent = 0): void {
   const model = currentModel(ctx);
   const total = (ctx.state.stall?.recoveriesTotal ?? 0) + spent;
+  // The slot also holds the delivery ladder's counters; only the budget's own keys are rewritten.
+  const kept: Partial<StallState> = { ...ctx.state.stall };
+  delete kept.model;
+  delete kept.recoveriesTotal;
   ctx.state.stall = {
+    ...kept,
     ...(model !== undefined ? { model } : {}),
     recoveriesUsed: budget.recoveriesUsed,
     ...(total > 0 ? { recoveriesTotal: total } : {}),
@@ -119,6 +126,14 @@ export const FORCED_SYNTHESIS_PROMPT =
  */
 export const stallHook = {
   recover(ctx: PolicyContext): StallDecision | void {
+    // A surface that declares its deliverables has them enforced, rung by rung
+    // (`ladder.ts`). The narration heuristics below still run unless the ledger says its
+    // rungs ARE the stall judgement (`owns.narration`).
+    const delivery = ctx.ports?.delivery;
+    if (delivery) {
+      const owed = walkLadder(ctx, delivery);
+      if (owed || delivery.owns?.narration) return owed;
+    }
     const text = typeof ctx.content === "string" ? ctx.content : "";
     const toolNames = (ctx.tools ?? []).map((t) => t.function?.name ?? "").filter(Boolean);
 
@@ -177,7 +192,11 @@ export const stallHook = {
    * prose question with options becomes the canonical ```ask-user block the surfaces
    * render as a choice (`liftProseAskUser`, `brain-embedded/.../finalAnswerHook.ts`).
    */
-  settle(_ctx: PolicyContext, text: string): string {
+  settle(ctx: PolicyContext, text: string): string {
+    // A surface with a ledger shapes its own accepted answer (a copied speaker label, a
+    // claim the board does not back); its transport already cuts a looping stream.
+    const delivery = ctx.ports?.delivery;
+    if (delivery?.owns?.settle && delivery.accept) return delivery.accept(text);
     return liftProseAskUser(trimRepetitionLoop(text.trim()));
   },
 
@@ -191,8 +210,10 @@ export const stallHook = {
    * only called tools, a budget ran out, a breaker tripped) gets ONE bounded extra call
    * with this prompt and no tools, so the agent always answers (`brain/agentReplyLoop.ts`).
    */
-  synthesis(_ctx: PolicyContext): string {
-    return FORCED_SYNTHESIS_PROMPT;
+  synthesis(ctx: PolicyContext): string | null {
+    // The team-reply prompt is for an agent that speaks to a team. A surface with a ledger
+    // composes its closing answer from what the board holds, so it forces no extra call.
+    return ctx.ports?.delivery?.owns?.synthesis ? null : FORCED_SYNTHESIS_PROMPT;
   },
 } satisfies StallHook;
 

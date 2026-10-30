@@ -2782,6 +2782,7 @@
       "degradedSub": "vom Coder-Modell gefallen",
       "cost": "Agentenkosten",
       "costSub": "Durchläufen zugeordnet",
+      "costCoverage": "{priced} von {total} Durchläufen mit Kosten",
       "score": "Score",
       "byApproach": "Ansatz-Effektivität",
       "approach": "Ansatz",

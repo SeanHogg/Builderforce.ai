@@ -14,18 +14,19 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * blobs (Welford, no table scan) so the next run's seed reflects it.
  */
 
-import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { approvals, executions, llmUsageLog, pullRequests, tasks, toolAuditEvents, runModelOutcomes } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
+  foldsIntoRouting,
   normalizeActionType,
   type NormalizedRunOutcome,
   type OutcomeSource,
   type TerminalStatus,
 } from '@builderforce/learned-routing';
-import { clamp01 } from '../../domain/shared/numbers';
+import { computeOutcomeScore } from './outcomeScore';
 
 // The wire contract owns these two vocabularies (the on-prem host sends them, this
 // scorer records them), so they are DEFINED in `@builderforce/learned-routing` and
@@ -33,7 +34,7 @@ import { clamp01 } from '../../domain/shared/numbers';
 export type { NormalizedRunOutcome, OutcomeSource, TerminalStatus };
 import { classifyRunFailure } from './runFailureReasons';
 import { applyOutcomeToRoutingTable } from '../llm/routingTable';
-import { isModelRole, type ModelRole } from '@builderforce/agent-tools';
+import type { ModelRole } from '@builderforce/agent-tools';
 import { isWeakerModel } from '@builderforce/model-catalog';
 
 /** The role a CLOUD run's outcome scores. The primary loop is the run's coding work
@@ -46,218 +47,6 @@ import { lexicalEval } from '../eval/semanticEval';
 import { resolveUsageDatabase, usageDatabaseOf, usageRequestCount } from '../llm/usageLedger';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { EXECUTION_TERMINAL_SET } from '../../domain/shared/terminalStatus';
-import { runOutcomeTelemetryColumns } from './runOutcomeTelemetryColumns';
-
-// ── D3 score weights + efficiency normalization (named so they're tunable without a
-//    schema change — see the Gap Register note on score calibration). ────────────
-export const SCORE_WEIGHTS = {
-  merge: 0.5,
-  ci: 0.2,
-  completion: 0.15,
-  efficiency: 0.15,
-} as const;
-/** Steps at/above this count score 0 on the step half of efficiency (a run that
- *  loops forever is inefficient); 0 steps = max efficient. */
-export const EFFICIENCY_STEP_NORM = 20;
-/** Per-run cost (millicents) at/above which the cost half of efficiency hits 0
- *  ($2.00). Cheaper runs score proportionally higher. */
-export const EFFICIENCY_COST_NORM_MC = 200_000;
-
-export interface OutcomeScoreInputs {
-  terminalStatus: TerminalStatus;
-  merged: boolean;
-  ciGreen: boolean;
-  degraded: boolean;
-  steps: number;
-  costMc: number;
-  /** A human approval for this run resolved to `approve` — pins completion to full. */
-  approved: boolean;
-}
-
-export interface OutcomeScore {
-  score: number;
-  terms: { merge: number; ci: number; completion: number; efficiency: number };
-}
-
-
-/**
- * Composite 0..1 outcome score (D3). A failed/cancelled run scores exactly 0 (no
- * merge, no CI, no credit for an unfinished run). A completed run earns: merge (0.5)
- * + green CI (0.2) + finished-without-degradation (0.15, pinned full by a human
- * approve) + efficiency (0.15, inverse of steps & cost). PURE — unit-tested directly.
- */
-export function computeOutcomeScore(inputs: OutcomeScoreInputs): OutcomeScore {
-  if (inputs.terminalStatus !== 'completed') {
-    return { score: 0, terms: { merge: 0, ci: 0, completion: 0, efficiency: 0 } };
-  }
-  const merge = inputs.merged ? 1 : 0;
-  const ci = inputs.ciGreen ? 1 : 0;
-  // Completed without degradation = full; degraded run loses the term; a human
-  // approval overrides to full regardless (a person signed off on the result).
-  const completion = inputs.approved ? 1 : inputs.degraded ? 0 : 1;
-  const stepScore = clamp01(1 - inputs.steps / EFFICIENCY_STEP_NORM);
-  const costScore = clamp01(1 - inputs.costMc / EFFICIENCY_COST_NORM_MC);
-  const efficiency = (stepScore + costScore) / 2;
-
-  const score = clamp01(
-    SCORE_WEIGHTS.merge * merge +
-      SCORE_WEIGHTS.ci * ci +
-      SCORE_WEIGHTS.completion * completion +
-      SCORE_WEIGHTS.efficiency * efficiency,
-  );
-  return { score, terms: { merge, ci, completion, efficiency } };
-}
-
-/**
- * Coarse learn-contribution weight (0..1) from what's known at run FINALIZE — before
- * CI/routing outcome is scored. This is the FedAvg sample weight for the run's Evermind
- * contribution: a clean auto-merge teaches the model most, a no-op/failed run barely
- * teaches. It is DISTINCT from {@link computeOutcomeScore} (which scores a CI-known run
- * for model routing); it exists because the old learn path weighted by raw TEXT LENGTH,
- * so a long, failed run taught exactly as hard as a short, merged one. Floored at 0.2 so
- * the coordinator's `weight > 0` gate still accepts (and lightly learns from) a
- * low-quality run instead of silently snapping it back to the default weight of 1.
- */
-export function finalizeLearnWeight(s: {
-  merged: boolean;
-  prOpened: boolean;
-  autoMergeFailed: boolean;
-  producedChanges: boolean;
-}): number {
-  if (s.merged) return 1;             // shipped clean — the strongest signal
-  if (s.autoMergeFailed) return 0.3;  // opened a PR but the auto-merge broke
-  if (s.prOpened) return 0.7;         // real change, awaiting approval/CI
-  if (s.producedChanges) return 0.4;  // wrote files but no PR opened
-  return 0.2;                         // text-only / no-op
-}
-
-/** What a finished run left behind — the inputs both the learn weight and the
- *  productivity verdict are computed from, so the two can never disagree. */
-export interface RunProduct {
-  merged: boolean;
-  prOpened: boolean;
-  /** The run committed at least one file. */
-  producedChanges: boolean;
-  /** The run moved the ticket to a different lane / status. */
-  movedTicket?: boolean;
-}
-
-/**
- * Did this run leave ANYTHING behind? PURE.
- *
- * ── WHY THE PLATFORM NEEDED THIS AND DID NOT HAVE IT ─────────────────────────────
- * {@link finalizeLearnWeight} right above already answers "how good was this run?" —
- * merged > opened > wrote-files > no-op — and has since it replaced text-length as the
- * teaching weight. The platform therefore ALWAYS knew which runs accomplished nothing.
- * It spent that verdict on teaching the model and threw it away for the one decision
- * that would have stopped the burn: whether to dispatch the ticket AGAIN.
- *
- * The autonomy circuit breaker (`MAX_CONSECUTIVE_AUTORUN_FAILURES`) and its cooldown
- * were keyed on `status === 'failed'` alone. A run that COMPLETES and ships nothing
- * reset the streak to zero and owed no backoff, so it was re-dispatched on the very
- * next five-minute tick, forever. Measured on project 11, 2026-07-29: **5,931 agent
- * runs completed and 10 failed in one day; 3 tickets finished and 2 PRs merged.** One
- * agent — Bob Developer — accounted for **5,796 runs and 0 finished tickets**. The
- * breaker never armed once, because nothing ever failed.
- *
- * That burn is also why 371 tickets on the same board had NEVER run: the tenant's
- * 25-dispatches-per-tick ceiling was ~80% consumed, all day, re-running tickets that
- * had already run and produced nothing.
- *
- * This is the same lesson the manager's stall register learned and wrote down — "the
- * ceiling exists to catch a remedy that RUNS AND DOES NOT WORK" — applied to the layer
- * that actually spends the money. It is deliberately GENEROUS: any artifact at all
- * counts, so a run that writes one file, opens a PR, or advances the ticket is
- * productive. Only a run that ends with nothing to show for itself is not.
- */
-export function runProducedOutput(s: RunProduct): boolean {
-  return s.merged || s.prOpened || s.producedChanges || s.movedTicket === true;
-}
-
-
-/**
- * Record ONE outcome for a NON-cloud run (IDE-native / on-prem / external SDK) —
- * the runs that never create a cloud `executions` row and so were invisible to
- * the learner. Same 0..1 {@link computeOutcomeScore} basis and the same
- * `applyOutcomeToRoutingTable` fold as {@link scoreRunOutcome}, so a client run
- * teaches the routing table exactly like a cloud run does. Idempotent on
- * `client_run_id`. Best-effort — never throws (a reporting failure must not break
- * the caller's run). Respects the learned-routing kill switch implicitly via
- * `applyOutcomeToRoutingTable` (which no-ops when routing is disabled).
- */
-export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number, o: NormalizedRunOutcome): Promise<void> {
-  try {
-    const clientRunId = o.clientRunId?.trim();
-    if (!clientRunId || !o.model?.trim()) return;
-    const actionType = normalizeActionType(o.actionType);
-    // Only a known role is evidence; anything else is recorded as unknown (NULL).
-    const role = isModelRole(o.role) ? o.role : null;
-    const steps = Math.max(0, Math.floor(o.steps ?? 0));
-    const costMc = Math.max(0, Math.floor(o.costMc ?? 0));
-    const { score } = computeOutcomeScore({
-      terminalStatus: o.terminalStatus,
-      merged: !!o.merged,
-      ciGreen: !!o.ciGreen,
-      degraded: !!o.degraded,
-      steps,
-      costMc,
-      approved: !!o.approved,
-    });
-    const plan = await resolveTenantPlan(env, tenantId).then((p) => p.effectivePlan).catch(() => 'free' as const);
-
-    const inserted = await runTelemetryDatabase(db)
-      .insert(runModelOutcomes)
-      .values({
-        tenantId,
-        projectId: o.projectId ?? null,
-        taskId: o.taskId ?? null,
-        executionId: null,
-        source: o.source,
-        clientRunId,
-        actionType,
-        role,
-        resolvedModel: o.model,
-        plan,
-        score,
-        merged: !!o.merged,
-        ciGreen: !!o.ciGreen,
-        degraded: !!o.degraded,
-        steps,
-        costUsdMillicents: costMc,
-        terminalStatus: o.terminalStatus,
-        rateLimited: !!o.rateLimited,
-        // The PRD 35 §8.2 uniform outcome row the client's run built (entry point,
-        // tool counts, tokens, the efficiency fields) — validated by the shared contract.
-        ...runOutcomeTelemetryColumns(o),
-      })
-      .onConflictDoNothing({ target: runModelOutcomes.clientRunId, where: isNotNull(runModelOutcomes.clientRunId) })
-      .returning({ id: runModelOutcomes.id });
-
-    // Only a first-seen outcome folds into the routing blob (the fold is not
-    // idempotent; a duplicate report must not double-count). No PR/CI signal on a
-    // client run, but completion + efficiency still carry real reliability signal.
-    if (inserted.length > 0) {
-      await applyOutcomeToRoutingTable(env, db, {
-        tenantId,
-        projectId: o.projectId ?? null,
-        actionType,
-        role,
-        model: o.model,
-        score,
-        costMc,
-        merged: !!o.merged,
-        rateLimited: !!o.rateLimited,
-      });
-      // A new labeled outcome means the tenant's SFT/DPO datasets + variant-eval
-      // views are stale — orphan them (best-effort, same fold gate as routing).
-      await bumpOutcomesVersion(env, tenantId);
-    }
-  } catch (error) {
-    // Never let outcome reporting fail the caller.
-  
-    reportCaughtError(error, { source: "application/runtime/scoreRunOutcome.ts", operation: "recordClientRunOutcome" });
-  }
-}
 
 /** Most-frequent llm_usage_log.model for an execution — the model the run actually
  *  locked onto (the truth of what ran). Empty when the run produced no LLM calls. */
@@ -445,8 +234,11 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
     // "this model writes bad code". The classification is the platform's existing
     // failure taxonomy, so this records `classifyRunFailure`'s verdict rather than
     // inventing a second regex for the same question.
-    const rateLimited = terminalStatus === 'failed'
-      && classifyRunFailure(exec.errorMessage) === 'rate_limited';
+    // The failure is classified ONCE; both flags below are facts about a FAILED run only.
+    const failure = terminalStatus === 'failed' ? classifyRunFailure(exec.errorMessage) : undefined;
+    const rateLimited = failure === 'rate_limited';
+    // The TENANT ran out of quota: stored, and never taught to routing (it says nothing about the model).
+    const quotaExhausted = failure === 'quota_exhausted';
 
     const resolvedModel = model || 'unknown';
     const rowValues = {
@@ -467,6 +259,7 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       costUsdMillicents: costMc,
       terminalStatus,
       rateLimited,
+      quotaExhausted,
       // The PRD 35 §8.2 telemetry label: a server-scored run is a cloud run.
       entryPoint: 'cloud',
       // Literal reinforcement signals (migration 0333).
@@ -518,17 +311,20 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
     // A run that produced no LLM call ('unknown') carries no model attribution, so
     // learning from it would pollute the ranking.
     if (model) {
-      await applyOutcomeToRoutingTable(env, db, {
-        tenantId: exec.tenantId,
-        projectId,
-        actionType,
-        role: CLOUD_RUN_ROLE,
-        model,
-        score,
-        costMc,
-        merged: pr.merged,
-        rateLimited,
-      });
+      // A run the person stopped, or one the tenant's quota ended, is stored but teaches routing nothing.
+      if (foldsIntoRouting({ terminalStatus, quotaExhausted })) {
+        await applyOutcomeToRoutingTable(env, db, {
+          tenantId: exec.tenantId,
+          projectId,
+          actionType,
+          role: CLOUD_RUN_ROLE,
+          model,
+          score,
+          costMc,
+          merged: pr.merged,
+          rateLimited,
+        });
+      }
       // Orphan the tenant's SFT/DPO datasets + variant-eval views (see client path).
       await bumpOutcomesVersion(env, exec.tenantId);
     }

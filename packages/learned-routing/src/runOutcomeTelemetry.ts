@@ -9,10 +9,17 @@
  * report. Pure and dependency-free, like the rest of this package.
  */
 
+/** Every entry point a run can be labelled with (PRD 35 §3.2) — the ONE list. A telemetry
+ *  label only: nothing branches on it for behaviour. */
+export const ALL_ENTRY_POINTS = ['vscode', 'web', 'rovr', 'canvas', 'on-prem', 'cloud'] as const;
+export type EntryPoint = (typeof ALL_ENTRY_POINTS)[number];
+
 /** The entry points a client may label its run with. `cloud` is scored server-side and
  *  never accepted off the wire (a client claiming it would double-count). */
-export const CLIENT_ENTRY_POINTS = ['vscode', 'web', 'rovr', 'canvas', 'on-prem'] as const;
-export type ClientEntryPoint = (typeof CLIENT_ENTRY_POINTS)[number];
+export type ClientEntryPoint = Exclude<EntryPoint, 'cloud'>;
+export const CLIENT_ENTRY_POINTS: readonly ClientEntryPoint[] = ALL_ENTRY_POINTS.filter(
+  (entryPoint): entryPoint is ClientEntryPoint => entryPoint !== 'cloud',
+);
 
 /** The declared verify phase's result. */
 export type RunVerifyResult = 'passed' | 'failed' | 'not-run';
@@ -101,6 +108,16 @@ function progressTrips(v: unknown): Record<string, number> | undefined {
     out[signal] = c;
   }
   return out;
+}
+
+/**
+ * The §8.2 row names what a run was billed `cost` (millicents); the door's field is `costMc`.
+ * The ONE mapping, so a host spreads the row and adds this — and a cost nobody reported stays
+ * absent (never a reported zero).
+ */
+export function wireCost(row: { cost?: number }): { costMc?: number } {
+  const cost = row.cost;
+  return typeof cost === 'number' && Number.isInteger(cost) && cost >= 0 && cost <= COUNT_MAX ? { costMc: cost } : {};
 }
 
 /** Validate the §8.2 fields of a raw request body. PURE; never throws. */

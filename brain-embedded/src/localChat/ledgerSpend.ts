@@ -6,11 +6,12 @@
  */
 
 import type { EntityDestination, LocalFirstTransaction } from '@builderforce/local-first';
+import { pricedId } from '@builderforce/local-inference';
 import { snapshotPriceBook, type PriceBook } from '@builderforce/model-catalog';
 import { foldSpendSavings, type SpendSavingsSummary, type UsageSlice } from '@builderforce/spend-contract';
 import { isImported } from './journal';
 import { liveRecords } from './records';
-import { callCostMillicents, isOwnKeySpend } from './callCost';
+import { callCostOrUnknown, isOwnKeySpend } from './callCost';
 import type { RunUsageValue } from './usageLedger';
 
 /**
@@ -25,14 +26,21 @@ function sliceOf(row: RunUsageValue, book: PriceBook): UsageSlice {
   const local = row.savingsSource === 'local_model';
   const avoided = row.savingsSource === 'deterministic';
   const ownKey = isOwnKeySpend(row.route);
-  const costMc = local || avoided || ownKey ? 0 : callCostMillicents(row.model, {
+  // THE unpriced decision, made once by the device cost rule and carried on the slice: an unpriced call adds no
+  // platform cost (the number is only filled with 0) and the fold counts its tokens as `unpricedTokens` from the
+  // flag — it does not look the price up again. A BYO call is valued in the fold, so only its price can be absent.
+  const cost = callCostOrUnknown(row.model, {
     prompt: row.promptTokens,
     completion: row.completionTokens,
     cacheRead: row.cacheReadTokens,
     cacheCreation: row.cacheCreationTokens,
   }, book, row.route);
+  const unpriced = !(local || avoided) && cost === undefined;
+  const costMc = local || avoided || ownKey ? 0 : (cost ?? 0);
   return {
-    model: row.model,
+    // The model is the id the call is PRICED under (a hosted runtime's registry alias), for the fold's valuation.
+    model: pricedId(row.model),
+    unpriced,
     byo: ownKey,
     savingsSource: row.savingsSource ?? null,
     // Both are estimates: a local call's counterfactual, an avoided call's median turn.

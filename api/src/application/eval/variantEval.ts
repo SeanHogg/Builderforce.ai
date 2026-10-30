@@ -18,6 +18,7 @@
 import { and, eq, gte, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { runModelOutcomes } from '../../infrastructure/database/schema';
+import { teachesRouting } from '../shared/codingEvidence';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { getOrSetCached, getCacheVersion, outcomesVersionKey } from '../../infrastructure/cache/readThroughCache';
 import { mean, stdev } from './driftMonitor';
@@ -152,6 +153,8 @@ async function scoresForModel(
     eq(runModelOutcomes.resolvedModel, model),
     gte(runModelOutcomes.createdAt, since),
     isNotNull(runModelOutcomes.score),
+    // A telemetry-only report (a Creation Canvas run) is not a sample of this model's coding.
+    teachesRouting,
   ];
   if (actionType) conds.push(eq(runModelOutcomes.actionType, actionType));
   const rows = await runTelemetryDatabase(db).select({ score: runModelOutcomes.score }).from(runModelOutcomes).where(and(...conds));

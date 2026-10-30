@@ -49,6 +49,7 @@ import {
   type CompactionSummarizer,
 } from "./compact.js";
 import { priceTierBoundary } from "@builderforce/model-catalog";
+import { turnRouting } from "../model/index.js";
 import { compactionReserve } from "./reserve.js";
 import type { PackMessage } from "./pack.js";
 
@@ -91,10 +92,19 @@ function transportSummarizer(ctx: PolicyContext): CompactionSummarizer {
   return async (conversationText) => {
     const request = compactionSummaryRequest(conversationText);
     try {
-      const completion = await ctx.ports.model.complete(
-        { messages: request.messages, maxTokens: request.max_tokens },
-        ctx.signal,
-      );
+      // A surface that shows its turns to a person answers a summary on its own path.
+      const model = ctx.ports.model;
+      // The summary rides the model the run is on and the routing it asked for — its pin and
+      // how strictly, the models it routes around — never a fresh Auto pick that could land on
+      // a model the run avoids. The policy's own ask (`turnRouting`), so a pin it released stays released.
+      const routing = ctx.state.model ? turnRouting(ctx.state.model, false) : undefined;
+      const asked = {
+        messages: request.messages,
+        maxTokens: request.max_tokens,
+        ...(routing?.model ? { model: routing.model, strict: routing.strict } : {}),
+        ...(routing && routing.excludeModels.length > 0 ? { excludeModels: routing.excludeModels } : {}),
+      };
+      const completion = model.summarize ? await model.summarize(asked, ctx.signal) : await model.complete(asked, ctx.signal);
       const text = completion.content?.trim();
       return text ? text : null;
     } catch {
@@ -126,7 +136,8 @@ export function compactionOptions(ctx: PolicyContext, opts: CompactionHookOption
   const recall = opts.recall ?? capabilityRecall(ctx);
   // The reply reserve is the shared hand-off default (the run's token BUDGET is a cost
   // ceiling, not a reply size), raised to on-prem's reserve floor (20,000).
-  const reserve = compactionReserve(undefined);
+  // The host-neutral floor (on-prem parity) unless the surface bounded its replies lower.
+  const reserve = ctx.policy.budgets.reserveTokens ?? compactionReserve(undefined);
   return {
     ...CLOUD_COMPACT_DEFAULTS,
     maxTokens: opts.maxTokens ?? ctx.policy.budgets.tokens ?? CLOUD_COMPACT_DEFAULTS.maxTokens,
@@ -144,7 +155,8 @@ export function compactionOptions(ctx: PolicyContext, opts: CompactionHookOption
 
 /** Map a RunMessage row to the packer's OpenAI shape. */
 function toPackRow(m: RunMessage): PackMessage {
-  const row: PackMessage = { role: m.role, content: m.content };
+  const row: PackMessage & { task?: true } = { role: m.role, content: m.content };
+  if (m.task) row.task = true;
   if (m.toolCalls && m.toolCalls.length > 0) {
     row.tool_calls = m.toolCalls.map((tc) => ({
       id: tc.id,
@@ -158,7 +170,7 @@ function toPackRow(m: RunMessage): PackMessage {
 
 /** Map a packed OpenAI row back to the RunMessage row shape. */
 function toRunRow(m: PackMessage | Record<string, unknown>): RunMessage {
-  const src = m as PackMessage;
+  const src = m as PackMessage & { task?: unknown };
   const toolCalls = Array.isArray(src.tool_calls)
     ? (src.tool_calls as Array<{ id?: string; function?: { name?: string; arguments?: string } }>).map((tc) => ({
         id: tc.id ?? "",
@@ -172,6 +184,7 @@ function toRunRow(m: PackMessage | Record<string, unknown>): RunMessage {
   };
   if (toolCalls && toolCalls.length > 0) out.toolCalls = toolCalls;
   if (src.tool_call_id != null) out.toolCallId = src.tool_call_id;
+  if (src.task === true) out.task = true;
   return out;
 }
 

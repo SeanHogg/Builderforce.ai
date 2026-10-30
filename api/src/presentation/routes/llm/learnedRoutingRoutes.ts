@@ -13,10 +13,11 @@ import { limitParam } from '../queryParams';
 import { requestDb } from '../../../application/shared/dbHandle';
 import { getRoutingTable, parseScopeToken, scopeToken } from '../../../application/llm/routingTable';
 import { getRecallSeed } from '../../../application/llm/recallSeed';
-import { recordClientRunOutcome } from '../../../application/runtime/scoreRunOutcome';
+import { acceptClientRunOutcome } from '../../../application/runtime/acceptClientRunOutcome';
 import { projectInTenant } from '../../../application/project/projectOwnership';
 import {
   actionTypeLabel,
+  hasCostMean,
   OWN_TENANT_SCOPE_TOKEN,
   parseRunOutcomeRequest,
   type ActionType,
@@ -25,7 +26,7 @@ import { requireTenantAccess, respondToAccessError, type TenantAccess } from './
 
 export function mountLearnedRoutingRoutes(router: Hono<HonoEnv>): void {
   // The per-action-type model ranking the learned router seeds from (PRD 13 §6.5).
-  // Reads the SAME cached `routing:<scope>` KV blob the router reads (one source) — so
+  // Reads the SAME cached `routing:v2:<scope>` KV blob the router reads (one source) — so
   // it's O(1) and DB-free on a warm cache; a cold scope reconciles once from the
   // durable outcomes table. Tenant-scoped.
   router.get('/v1/model-analytics', async (c) => {
@@ -68,7 +69,11 @@ export function mountLearnedRoutingRoutes(router: Hono<HonoEnv>): void {
           samples: m.n,
           avgScore: Math.round(m.avgScore * 1000) / 1000,
           mergeRate: Math.round(m.mergeRate * 1000) / 1000,
-          avgCostMillicents: Math.round(m.avgCostMc),
+          // null = none of this model's runs reported a cost: unknown, not $0.
+          avgCostMillicents: hasCostMean(m) ? Math.round(m.avgCostMc) : null,
+          // Runs behind that mean that reported a cost (a blob folded before cost could be unknown
+          // counted every run), so a host's tie-break reads an unknown cost as no information.
+          costN: m.costN ?? m.n,
           ratedUp: m.ratedUp ?? 0,
           ratedDown: m.ratedDown ?? 0,
           rateLimitRate: Math.round((m.rateLimitRate ?? 0) * 1000) / 1000,
@@ -117,8 +122,8 @@ export function mountLearnedRoutingRoutes(router: Hono<HonoEnv>): void {
     const parsed = parseRunOutcomeRequest(body);
     if (!parsed.ok) return c.json({ error: parsed.error }, 400);
 
-    const db = requestDb(c);
-    await recordClientRunOutcome(c.env, db, access.tenantId, parsed.outcome);
+    // The use case scopes the report to the caller's tenant (a foreign project or ticket id is dropped) and records it.
+    await acceptClientRunOutcome(c.env, requestDb(c), access.tenantId, parsed.outcome);
     return c.json({ ok: true });
   });
 }

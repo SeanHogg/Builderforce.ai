@@ -18,32 +18,34 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * Losing the blob costs one reconcile, never correctness.
  */
 
-import { and, eq, gte, isNotNull, sql, type SQL } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
-import { llmActionRatings, runModelOutcomes } from '../../infrastructure/database/schema';
-import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
-import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
-  blendedQualityScore,
-  DECAYED_WINDOW_DAYS,
   DEFAULT_MIN_SAMPLES,
-  foldDecayedMean,
-  ROUTING_HALF_LIFE_DAYS,
-  isChronicallyRateLimited,
   learnedRoutingEnabled,
-  normalizeActionType,
   parseScopeToken,
   scopeHasSignal,
   scopeToken,
   type ActionType,
   type RoutingScope,
 } from '@builderforce/learned-routing';
-import { isModelRole, type ModelRole } from '@builderforce/agent-tools';
+import type { ModelRole } from '@builderforce/agent-tools';
 import { roleUsesLearnedRanking } from '@builderforce/model-router';
 import type { ArcStage } from '@builderforce/workload';
-import { isCostLeverOn } from '@builderforce/cost-levers';
+import {
+  applyObservation,
+  applyRatingObservation,
+  type ActionModelStat,
+  type FoldDecay,
+  type RoutingObservation,
+  type RoutingTable,
+} from './routingFold';
+import { reconcileRoutingTable, routingCacheKey, routingDecayOn } from './routingReconcile';
+
+// The blob's shapes live with the fold arithmetic; re-exported because this module is where its
+// readers already look for them.
+export type { ActionModelStat, RoutingTable };
 
 // The scope type + its token are the shared contract (an on-prem host reads the same
 // `?scope=` token), so they live in `@builderforce/learned-routing`. Re-exported here
@@ -57,260 +59,6 @@ export { parseScopeToken, scopeToken, type RoutingScope };
  *  eights that can drift apart. */
 export const MIN_SAMPLES = DEFAULT_MIN_SAMPLES;
 
-/** How far back the reconcile aggregates outcomes — keeps the fact scan bounded as
- *  the table grows and lets stale model preferences age out. */
-export const ROUTING_WINDOW_DAYS = 60;
-
-/**
- * Is the routing table built with RECENCY DECAY (cost PRD D3, lever
- * `d3_routing_exploration`)? Decided WITHOUT a tenant on purpose: the blob is a shared
- * artifact (the global scope serves every tenant), so a per-tenant arm would make one
- * blob flip between decayed and plain means depending on whose run folded last. The
- * table therefore decays only while the lever is fully on; request-time exploration is
- * the part that splits by tenant.
- */
-export function routingDecayOn(env: unknown): boolean {
-  return isCostLeverOn(env, 'd3_routing_exploration', null);
-}
-
-/** Per-model running stats for one action type. n/avgScore/avgCost are maintained
- *  incrementally (Welford); the array is kept sorted best-first (avgScore desc,
- *  then avgCost asc as the tie-break). */
-export interface ActionModelStat {
-  model: string;
-  n: number;
-  avgScore: number;
-  /** Running merge rate (mean of the 0/1 merged flag) — a corroborating signal. */
-  mergeRate: number;
-  /** Running mean per-run cost in millicents — the tie-break between equal scorers. */
-  avgCostMc: number;
-  /**
-   * HUMAN thumbs on this (action, model), from `llm_action_ratings` (migration 0468).
-   *
-   * Kept as raw counts rather than a pre-blended score because the blend depends on
-   * how much evidence the OTHER side has, and that is a read-time decision
-   * (`rankModelsForAction`). They are a genuinely independent signal: a chat or
-   * canvas turn has no merge and no CI, so for most model calls these are the ONLY
-   * quality evidence that exists. Optional — blobs written before 0468 have none.
-   */
-  ratedUp?: number;
-  ratedDown?: number;
-  /**
-   * Share of this bucket's runs that died on a provider 429 (migration 0485).
-   *
-   * An AVAILABILITY signal, kept strictly beside the quality score rather than inside
-   * it — see `modelQualityScore.ts` for why conflating the two poisons the ranking.
-   * Optional: blobs written before 0485 have none, and absent reads as 0 (not
-   * rate-limited), which under-reports rather than demoting on evidence nobody has.
-   */
-  rateLimitRate?: number;
-  /**
-   * Effective (recency-decayed) run count behind the means, and the epoch ms they were
-   * last folded at (cost PRD D3). Written only while the table decays; absent means the
-   * means are plain window averages, read exactly as before. `n` stays the RAW count so
-   * the evidence floor and the rate-limit minimum keep their meaning.
-   */
-  effectiveN?: number;
-  at?: number;
-}
-
-export interface RoutingTable {
-  updatedAt: string;
-  /** action_type → models ranked best-first. */
-  byAction: Partial<Record<ActionType, ActionModelStat[]>>;
-  /** model ROLE → models ranked best-first, from the outcomes that recorded which role
-   *  their model played (migration 1169). Optional: blobs written before it have none. */
-  byRole?: Partial<Record<ModelRole, ActionModelStat[]>>;
-}
-
-/** The stat for `model` under `key`, created empty when absent. Shared by every grain
- *  the reconcile folds (per action, per role). */
-function statIn<K extends string>(map: Partial<Record<K, ActionModelStat[]>>, key: K, model: string): ActionModelStat {
-  const list = (map[key] ??= []);
-  const found = list.find((s) => s.model === model);
-  if (found) return found;
-  const fresh: ActionModelStat = { model, n: 0, avgScore: 0, mergeRate: 0, avgCostMc: 0, rateLimitRate: 0 };
-  list.push(fresh);
-  return fresh;
-}
-
-/** Copy one grouped outcome aggregate onto its stat. */
-function assignOutcomeAggregate(
-  stat: ActionModelStat,
-  r: { n: unknown; avgScore: unknown; avgCost: unknown; mergeRate: unknown; rateLimitRate: unknown; effectiveN?: unknown },
-  nowMs: number,
-): void {
-  stat.n = Number(r.n) || 0;
-  stat.avgScore = Number(r.avgScore) || 0;
-  stat.mergeRate = Number(r.mergeRate) || 0;
-  stat.avgCostMc = Number(r.avgCost) || 0;
-  stat.rateLimitRate = Number(r.rateLimitRate) || 0;
-  if (r.effectiveN != null) {
-    stat.effectiveN = Number(r.effectiveN) || 0;
-    stat.at = nowMs;
-  }
-}
-
-function cacheKey(scope: RoutingScope): string {
-  return `routing:${scopeToken(scope)}`;
-}
-
-function emptyTable(): RoutingTable {
-  return { updatedAt: new Date(0).toISOString(), byAction: {} };
-}
-
-/** Re-sort a per-action stat list best-first on the BLENDED quality score (run
- *  outcomes + human thumbs, each weighted by how much evidence it has — see
- *  modelQualityScore.ts); ties break to the cheaper model (lower avgCostMc).
- *  Stable for deterministic output, and the same ordering `rankModelsForAction`
- *  applies, so the blob and the router never disagree. */
-function sortStats(stats: ActionModelStat[]): ActionModelStat[] {
-  return stats
-    .map((s, i) => ({ s, i, q: blendedQualityScore(s), rl: isChronicallyRateLimited(s) ? 1 : 0 }))
-    // Rate-limited models form a TRAILING BAND, ranked normally within it. They are not
-    // removed — "the only model left is one the provider keeps refusing" is still
-    // strictly better than returning nothing, and the cascade needs somewhere to land.
-    .sort((a, b) => a.rl - b.rl || b.q - a.q || a.s.avgCostMc - b.s.avgCostMc || a.i - b.i)
-    .map(({ s }) => s);
-}
-
-/**
- * The scope predicate is written INLINE at each statement below rather than behind a
- * `scopeWhere(scope)` helper, deliberately. `check-tenant-scope` reads the STATEMENT,
- * not the local a predicate was assigned from — and so does a reviewer. Hiding "this
- * read crosses every tenant" inside a helper is exactly how a cross-tenant read stops
- * being visible where it matters. Two statements, one branch each, both legible.
- *
- * The GLOBAL branch is a declared `platform_aggregate`: each query is a GROUP BY
- * (action_type, model) selecting only counts and averages, so a returned row names a
- * MODEL and can never identify a tenant.
- */
-
-function windowStart(decay: boolean): Date {
-  const days = decay ? DECAYED_WINDOW_DAYS : ROUTING_WINDOW_DAYS;
-  return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-}
-
-const HALF_LIFE_SECONDS = ROUTING_HALF_LIFE_DAYS * 24 * 60 * 60;
-
-/** The per-model outcome aggregate — ONE definition, selected at both outcome grains
- *  (per action, per role). Plain window means; or, while the table decays, means
- *  weighted by `0.5^(age / half-life)` plus the effective count behind them. */
-function outcomeAggregateFor(decay: boolean) {
-  const base = {
-    model: runModelOutcomes.resolvedModel,
-    n: sql<number>`count(*)::int`,
-  };
-  if (!decay) {
-    return {
-      ...base,
-      avgScore: sql<number>`avg(${runModelOutcomes.score})::float8`,
-      avgCost: sql<number>`avg(${runModelOutcomes.costUsdMillicents})::float8`,
-      mergeRate: sql<number>`(sum(case when ${runModelOutcomes.merged} then 1 else 0 end)::float8 / count(*))`,
-      rateLimitRate: sql<number>`(sum(case when ${runModelOutcomes.rateLimited} then 1 else 0 end)::float8 / count(*))`,
-      // Same row shape both ways; NULL = "not decayed", read as absent.
-      effectiveN: sql<number | null>`null::float8`,
-    };
-  }
-  const w = sql`power(0.5::float8, extract(epoch from (now() - ${runModelOutcomes.createdAt}))::float8 / ${sql.raw(String(HALF_LIFE_SECONDS))})`;
-  const weighted = (x: SQL) => sql<number>`(sum(${w} * ${x})::float8 / nullif(sum(${w}), 0)::float8)`;
-  return {
-    ...base,
-    effectiveN: sql<number | null>`sum(${w})::float8`,
-    avgScore: weighted(sql`${runModelOutcomes.score}`),
-    avgCost: weighted(sql`${runModelOutcomes.costUsdMillicents}`),
-    mergeRate: weighted(sql`(case when ${runModelOutcomes.merged} then 1 else 0 end)`),
-    rateLimitRate: weighted(sql`(case when ${runModelOutcomes.rateLimited} then 1 else 0 end)`),
-  };
-}
-
-/**
- * Rebuild a scope's blob from the durable table with a single grouped query, write
- * it to the cache, and return it. The cold-start backfill AND the drift-repair path.
- * Best-effort: on any DB error returns (and caches) an empty table so a read never
- * throws — the router then just keeps the static order.
- */
-export async function reconcileRoutingTable(env: Env, db: Db, scope: RoutingScope): Promise<RoutingTable> {
-  let table: RoutingTable;
-  try {
-    const decay = routingDecayOn(env);
-    const nowMs = Date.now();
-    const start = windowStart(decay);
-    // TWO grouped queries, not a join: a run and a human press are different grains,
-    // so joining them in SQL would multiply rows and inflate both counts. They are
-    // merged by (action, model) in memory below.
-    const outcomeAggregate = outcomeAggregateFor(decay);
-    const outcomesDb = runTelemetryDatabase(db);
-    const [rows, ratingRows, roleRows] = await Promise.all([
-      outcomesDb
-        .select({ actionType: runModelOutcomes.actionType, ...outcomeAggregate })
-        .from(runModelOutcomes)
-        .where(
-          scope.kind === 'project' ? and(eq(runModelOutcomes.projectId, scope.id), gte(runModelOutcomes.createdAt, start))
-          : scope.kind === 'tenant' ? scopedToTenant(runModelOutcomes, scope.id, gte(runModelOutcomes.createdAt, start))
-          : acrossTenants(runModelOutcomes, 'platform_aggregate', gte(runModelOutcomes.createdAt, start)),
-        )
-        .groupBy(runModelOutcomes.actionType, runModelOutcomes.resolvedModel),
-      db
-        .select({
-          actionType: llmActionRatings.actionType,
-          model: llmActionRatings.resolvedModel,
-          up: sql<number>`count(*) FILTER (WHERE ${llmActionRatings.rating} = 1)::int`,
-          down: sql<number>`count(*) FILTER (WHERE ${llmActionRatings.rating} = -1)::int`,
-        })
-        .from(llmActionRatings)
-        .where(
-          scope.kind === 'project' ? and(eq(llmActionRatings.projectId, scope.id), gte(llmActionRatings.createdAt, start))
-          : scope.kind === 'tenant' ? scopedToTenant(llmActionRatings, scope.id, gte(llmActionRatings.createdAt, start))
-          : acrossTenants(llmActionRatings, 'platform_aggregate', gte(llmActionRatings.createdAt, start)),
-        )
-        .groupBy(llmActionRatings.actionType, llmActionRatings.resolvedModel)
-        // A dead rating table must not cost the router its outcome ranking.
-        .catch(() => [] as Array<{ actionType: string; model: string; up: number; down: number }>),
-      // The same outcomes by the ROLE their model played — a third grain, and only the
-      // rows that recorded one (1169); an unknown role is not evidence about any role.
-      outcomesDb
-        .select({ role: runModelOutcomes.role, ...outcomeAggregate })
-        .from(runModelOutcomes)
-        .where(
-          scope.kind === 'project' ? and(eq(runModelOutcomes.projectId, scope.id), gte(runModelOutcomes.createdAt, start), isNotNull(runModelOutcomes.role))
-          : scope.kind === 'tenant' ? scopedToTenant(runModelOutcomes, scope.id, and(gte(runModelOutcomes.createdAt, start), isNotNull(runModelOutcomes.role)))
-          : acrossTenants(runModelOutcomes, 'platform_aggregate', and(gte(runModelOutcomes.createdAt, start), isNotNull(runModelOutcomes.role))),
-        )
-        .groupBy(runModelOutcomes.role, runModelOutcomes.resolvedModel),
-    ]);
-
-    const byAction: RoutingTable['byAction'] = {};
-    for (const r of rows) {
-      assignOutcomeAggregate(statIn(byAction, normalizeActionType(r.actionType), r.model), r, nowMs);
-    }
-    // A model rated by humans but never scored by a cloud run gets a stat row with
-    // `n: 0` — which is correct and load-bearing: for chat and canvas work there IS
-    // no run, and refusing to record the model would leave the router blind to the
-    // only evidence that exists.
-    for (const r of ratingRows) {
-      const stat = statIn(byAction, normalizeActionType(r.actionType), r.model);
-      stat.ratedUp = Number(r.up) || 0;
-      stat.ratedDown = Number(r.down) || 0;
-    }
-    const byRole: NonNullable<RoutingTable['byRole']> = {};
-    for (const r of roleRows) {
-      if (isModelRole(r.role)) assignOutcomeAggregate(statIn(byRole, r.role, r.model), r, nowMs);
-    }
-    for (const action of Object.keys(byAction) as ActionType[]) {
-      byAction[action] = sortStats(byAction[action]!);
-    }
-    for (const role of Object.keys(byRole) as ModelRole[]) {
-      byRole[role] = sortStats(byRole[role]!);
-    }
-    table = { updatedAt: new Date().toISOString(), byAction, byRole };
-  } catch {
-    table = emptyTable();
-  }
-  await setCached(env, cacheKey(scope), table, { kvTtlSeconds: 86_400, l1TtlMs: 60_000 });
-  return table;
-}
-
 /**
  * Read a scope's routing blob: L1 → L2 → (cold) reconcile. The single read path the
  * router AND the analytics endpoint share, so they never diverge.
@@ -318,7 +66,7 @@ export async function reconcileRoutingTable(env: Env, db: Db, scope: RoutingScop
 export async function getRoutingTable(env: Env, db: Db, scope: RoutingScope): Promise<RoutingTable> {
   return getOrSetCached(
     env,
-    cacheKey(scope),
+    routingCacheKey(scope),
     () => reconcileRoutingTable(env, db, scope),
     { kvTtlSeconds: 86_400, l1TtlMs: 60_000 },
   );
@@ -377,117 +125,6 @@ export async function roleRoutingStats(
   }
 }
 
-/** One terminal run, as the blob folds it. `rateLimited` rides alongside `merged`
- *  because it is the same grain — a property of THIS run — and giving it its own
- *  fold path would mean two writers racing on one bucket. */
-export interface RoutingObservation {
-  actionType: ActionType;
-  model: string;
-  score: number;
-  costMc: number;
-  merged: boolean;
-  /** The run died on a provider rate limit (`classifyRunFailure === 'rate_limited'`). */
-  rateLimited?: boolean;
-  /** The role the model played, when known — also folds into `byRole`. */
-  role?: ModelRole | null;
-}
-
-/** How one fold treats age: absent = plain Welford (today), present = decayed means. */
-export interface FoldDecay {
-  nowMs: number;
-}
-
-/** Recency-decayed fold (cost PRD D3): every running mean carries its effective weight,
- *  decayed from the stat's last fold to now, before the fresh point lands. A stat with
- *  no `at` (written before decay was on) carries its raw `n` undecayed — no age is
- *  invented for it. */
-function foldDecayed(prev: ActionModelStat, score: number, costMc: number, merged: boolean, rl: number, nowMs: number): ActionModelStat {
-  const weight = prev.effectiveN ?? prev.n;
-  const age = prev.at != null ? nowMs - prev.at : 0;
-  const fold = (mean: number, x: number) => foldDecayedMean(mean, weight, x, age);
-  const scored = fold(prev.avgScore, score);
-  return {
-    ...prev,
-    n: prev.n + 1,
-    avgScore: scored.mean,
-    mergeRate: fold(prev.mergeRate, merged ? 1 : 0).mean,
-    avgCostMc: fold(prev.avgCostMc, costMc).mean,
-    rateLimitRate: fold(prev.rateLimitRate ?? 0, rl).mean,
-    effectiveN: scored.weight,
-    at: nowMs,
-  };
-}
-
-/** Welford-style update of one model's running stats with a fresh observation — or the
- *  decayed fold when `decay` is given. */
-function foldObservation(prev: ActionModelStat | undefined, model: string, score: number, costMc: number, merged: boolean, rateLimited: boolean, decay?: FoldDecay): ActionModelStat {
-  const rl = rateLimited ? 1 : 0;
-  if (!prev) {
-    return {
-      model, n: 1, avgScore: score, mergeRate: merged ? 1 : 0, avgCostMc: costMc, rateLimitRate: rl,
-      ...(decay ? { effectiveN: 1, at: decay.nowMs } : {}),
-    };
-  }
-  if (decay) return { ...foldDecayed(prev, score, costMc, merged, rl, decay.nowMs), model };
-  const n = prev.n + 1;
-  return {
-    ...prev,
-    model,
-    n,
-    avgScore: prev.avgScore + (score - prev.avgScore) / n,
-    mergeRate: prev.mergeRate + ((merged ? 1 : 0) - prev.mergeRate) / n,
-    avgCostMc: prev.avgCostMc + (costMc - prev.avgCostMc) / n,
-    rateLimitRate: (prev.rateLimitRate ?? 0) + (rl - (prev.rateLimitRate ?? 0)) / n,
-  };
-}
-
-/** Fold an observation into one stat list (pure) — returns a NEW list, re-sorted. */
-function foldIntoList(list: ActionModelStat[] | undefined, obs: RoutingObservation, decay?: FoldDecay): ActionModelStat[] {
-  const next = (list ?? []).slice();
-  const idx = next.findIndex((s) => s.model === obs.model);
-  const updated = foldObservation(idx >= 0 ? next[idx] : undefined, obs.model, obs.score, obs.costMc, obs.merged, obs.rateLimited === true, decay);
-  if (idx >= 0) next[idx] = updated;
-  else next.push(updated);
-  return sortStats(next);
-}
-
-/** Apply one fresh observation to a blob (pure) — returns a NEW table, re-sorted. A
- *  role-bearing observation also folds into that role's list. */
-export function applyObservation(
-  table: RoutingTable,
-  obs: RoutingObservation,
-  decay?: FoldDecay,
-): RoutingTable {
-  const byAction = { ...table.byAction, [obs.actionType]: foldIntoList(table.byAction[obs.actionType], obs, decay) };
-  const byRole = obs.role
-    ? { ...table.byRole, [obs.role]: foldIntoList(table.byRole?.[obs.role], obs, decay) }
-    : table.byRole;
-  return { updatedAt: new Date().toISOString(), byAction, ...(byRole ? { byRole } : {}) };
-}
-
-/** Apply one human thumb to a blob (pure) — returns a NEW table, re-sorted. A model
- *  with no outcome row yet gets one at `n: 0`: for a chat or canvas turn there is no
- *  run to score, and the rating is the only evidence there will ever be. */
-export function applyRatingObservation(
-  table: RoutingTable,
-  obs: { actionType: ActionType; model: string; up: boolean },
-): RoutingTable {
-  const byAction = { ...table.byAction };
-  const list = (byAction[obs.actionType] ?? []).slice();
-  const idx = list.findIndex((s) => s.model === obs.model);
-  const prev = idx >= 0 ? list[idx]! : { model: obs.model, n: 0, avgScore: 0, mergeRate: 0, avgCostMc: 0, rateLimitRate: 0 };
-  const updated: ActionModelStat = {
-    ...prev,
-    ratedUp: (prev.ratedUp ?? 0) + (obs.up ? 1 : 0),
-    ratedDown: (prev.ratedDown ?? 0) + (obs.up ? 0 : 1),
-  };
-  if (idx >= 0) list[idx] = updated;
-  else list.push(updated);
-  byAction[obs.actionType] = sortStats(list);
-  // A thumb carries no role, so the per-role lists pass through untouched.
-  return { updatedAt: new Date().toISOString(), byAction, ...(table.byRole ? { byRole: table.byRole } : {}) };
-}
-
 /**
  * Fold ONE human rating into every affected scope blob (project → tenant → global),
  * exactly as {@link applyOutcomeToRoutingTable} folds a run outcome. Best-effort: a
@@ -506,13 +143,13 @@ export async function applyRatingToRoutingTable(
   await Promise.all(
     scopes.map(async (scope) => {
       try {
-        const current = await peekCached<RoutingTable>(env, cacheKey(scope));
+        const current = await peekCached<RoutingTable>(env, routingCacheKey(scope));
         if (current == null) {
           await reconcileRoutingTable(env, db, scope);
           return;
         }
         const next = applyRatingObservation(current, { actionType: obs.actionType, model: obs.model, up: obs.up });
-        await setCached(env, cacheKey(scope), next, { kvTtlSeconds: 86_400, l1TtlMs: 60_000 });
+        await setCached(env, routingCacheKey(scope), next, { kvTtlSeconds: 86_400, l1TtlMs: 60_000 });
       } catch (error) {
         reportCaughtError(error, { source: 'application/llm/routingTable.ts', operation: 'applyRatingToRoutingTable' });
       }
@@ -542,7 +179,7 @@ export async function applyOutcomeToRoutingTable(
   await Promise.all(
     scopes.map(async (scope) => {
       try {
-        const current = await peekCached<RoutingTable>(env, cacheKey(scope));
+        const current = await peekCached<RoutingTable>(env, routingCacheKey(scope));
         if (current == null) {
           // Cold blob — the inserted row is already in the table, so a fresh
           // reconcile is correct and complete; do NOT also fold the increment.
@@ -558,7 +195,7 @@ export async function applyOutcomeToRoutingTable(
           rateLimited: outcome.rateLimited === true,
           role: outcome.role ?? null,
         }, decay);
-        await setCached(env, cacheKey(scope), next, { kvTtlSeconds: 86_400, l1TtlMs: 60_000 });
+        await setCached(env, routingCacheKey(scope), next, { kvTtlSeconds: 86_400, l1TtlMs: 60_000 });
       } catch (error) {
         // Best-effort: the reconcile job repairs any dropped increment.
       

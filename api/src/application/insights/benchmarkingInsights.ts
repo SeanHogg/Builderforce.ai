@@ -268,9 +268,9 @@ export async function computeBenchmarking(
   // rolling AI out across more of its board while shaking out CI scored LOWER
   // adoption than a team with one flawless agent on one ticket. See aiAdoption.ts.
   const adoption = aiAdoption.adoptionPct;
-  // Cost per merged PR: total spend / number of merged runs.
-  const mergedRuns = eng.totals.runs * (eng.totals.mergedRatePct / 100);
-  const costPerMergedPr = mergedRuns > 0 ? eng.totals.costUsd / mergedRuns : null;
+  // Cost per merged PR: spend / merged runs, over the runs that reported a cost (an unpriced run is
+  // unknown, so it joins neither side).
+  const costPerMergedPr = eng.totals.costPerMergedPrUsd;
 
   const liveValues: Record<string, number | null> = {
     deploy_freq_per_week: dora.deploymentFrequencyPerDay * 7,

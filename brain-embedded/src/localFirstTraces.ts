@@ -14,7 +14,7 @@
  * those hold the runtime endpoint, and its bearer must never reach a persisted step.
  */
 
-import type { LocalFirstAttemptRecord } from '@builderforce/local-inference';
+import { GATEWAY_ATTEMPT_TARGET, type LocalFirstAttemptRecord } from '@builderforce/local-inference';
 import type { BrainTraceEvent } from './brainTriage';
 
 /** One attempt as a trace may record it — no endpoint, no credential. */
@@ -29,7 +29,7 @@ export interface LocalFirstAttemptSummary {
 export function summarizeLocalFirstAttempt(record: LocalFirstAttemptRecord): LocalFirstAttemptSummary {
   const { attempt } = record;
   return {
-    target: attempt.kind === 'local' ? attempt.ref : (attempt.model ?? 'gateway'),
+    target: attempt.kind === 'local' ? attempt.ref : (attempt.model ?? GATEWAY_ATTEMPT_TARGET),
     outcome: record.outcome,
     ...(record.detail ? { detail: record.detail } : {}),
   };

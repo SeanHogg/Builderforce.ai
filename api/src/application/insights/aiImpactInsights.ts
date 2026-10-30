@@ -20,27 +20,20 @@
 import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { llmUsageLog, runModelOutcomes } from '../../infrastructure/database/schema';
+import { codingEvidence } from '../shared/codingEvidence';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
-import { normalizeByoProvider, usageDatabaseOf } from '../llm/usageLedger';
-import { vendorForModel } from '../llm/vendors/registry';
+import { usageDatabaseOf } from '../llm/usageLedger';
+import {
+  summarizeModelConsumption,
+  summarizeProviderConsumption,
+  type ModelConsumption,
+  type ProviderConsumption,
+  type UsageRow,
+} from './aiConsumptionInsights';
+import { pricedCostPerMergedUsd } from './pricedCost';
 import { DAY_MS, WEEK_MS } from '../../domain/shared/time';
 import { clamp01 } from '../../domain/shared/numbers';
-
-/** A usage row, pre-projected to just what the rollup needs. */
-export interface UsageRow {
-  model: string;
-  totalTokens: number;
-  costUsdMillicents: number;
-  userId: string | null;
-  createdAt: Date;
-  /** True when the tenant's OWN connected credential served the call. */
-  byo: boolean;
-  /** Connected-integration id for BYO rows. Null on rows written before 0340 (or
-   *  by a path that didn't stamp it) — {@link providerForUsageRow} backfills those
-   *  from the model's vendor so historical BYO spend still attributes. */
-  byoProvider: string | null;
-}
 
 /** An outcome row, pre-projected to just what the rollup needs. */
 export interface ImpactOutcomeRow {
@@ -49,7 +42,8 @@ export interface ImpactOutcomeRow {
   merged: boolean;
   ciGreen: boolean;
   steps: number;
-  costUsdMillicents: number;
+  /** NULL = the run reported no cost: unknown, not free. Sums and averages skip it. */
+  costUsdMillicents: number | null;
 }
 
 /** Bucket grain for the adoption series — daily for short windows (so a 7-day
@@ -87,40 +81,6 @@ export interface ComparisonRow {
   tokens: number;
 }
 
-/** Stable id for platform-funded spend — Builderforce's own metered keys, i.e.
- *  everything that is NOT a tenant's connected integration. */
-export const PLATFORM_PROVIDER_ID = 'builderforce';
-
-/** Token/cost consumption for one model, rolled up from `llm_usage_log` — so it
- *  covers EVERY surface (web, VSIX, on-prem, cloud, SDK, Rovr), not just the scored
- *  cloud runs that {@link ComparisonRow} is limited to. */
-export interface ModelConsumption {
-  model: string;
-  requests: number;
-  tokens: number;
-  /** Platform cost. 0 for models served exclusively by a tenant credential. */
-  costUsd: number;
-  /** True when EVERY row for this model was BYO-funded. */
-  byo: boolean;
-  /** Credential ids that served this model (usually one). */
-  providers: string[];
-}
-
-/** Consumption grouped by the credential that FUNDED it — the tenant's connected
- *  BYO integration, or {@link PLATFORM_PROVIDER_ID} for Builderforce's own keys.
- *  This is the "consumption per integration / API key" view: BYO spend is real
- *  spend on the tenant's account even though it costs the platform nothing, so it
- *  must never be inferred from `costUsd` (which is 0 by design for BYO). */
-export interface ProviderConsumption {
-  provider: string;
-  byo: boolean;
-  requests: number;
-  tokens: number;
-  costUsd: number;
-  /** Models served through this credential, ranked by tokens (most first). */
-  models: string[];
-}
-
 export interface ProductivityScore {
   /** Composite 0..100. */
   score: number;
@@ -128,8 +88,9 @@ export interface ProductivityScore {
   throughput: number;
   /** Quality component 0..1 (avg score blended with CI-green rate). */
   quality: number;
-  /** Efficiency component 0..1 (inverse cost-per-merged-PR, normalized). */
-  efficiency: number;
+  /** Efficiency component 0..1 (inverse cost-per-merged-PR, normalized). null = merges exist but none
+   *  reported a cost: unknown, so the composite is scored on throughput and quality alone. */
+  efficiency: number | null;
   /** Composite 0..100 for the PREVIOUS equal-length window. */
   prevScore: number;
   /** Week-over-window % change of the composite. */
@@ -255,77 +216,6 @@ export function summarizeModelShareTrend(usage: UsageRow[], windowStart: number,
 }
 
 /**
- * Pure: which credential funded a usage row.
- *
- * BYO rows carry their connected-integration id in `byoProvider`; rows written
- * before that column existed (0340) fall back to the model's own vendor, mapped
- * through the same alias table the integrations UI uses so the id matches what
- * the tenant sees on their provider-keys page. Platform-funded rows all collapse
- * to {@link PLATFORM_PROVIDER_ID} — the platform key is one credential.
- */
-export function providerForUsageRow(row: UsageRow): string {
-  if (!row.byo) return PLATFORM_PROVIDER_ID;
-  return normalizeByoProvider(row.byoProvider ?? vendorForModel(row.model));
-}
-
-/**
- * Pure: token/cost consumption per model over the usage ledger, ranked by tokens.
- *
- * This is the answer to "which models are we actually using" — it counts every
- * logged row, so a tenant whose whole workload runs on their own key still sees
- * their models. Never filter this by cost: BYO rows are recorded with cost 0.
- */
-export function summarizeModelConsumption(usage: UsageRow[]): ModelConsumption[] {
-  const groups = new Map<string, { requests: number; tokens: number; millicents: number; byoRows: number; providers: Set<string> }>();
-  for (const r of usage) {
-    const g = groups.get(r.model) ?? { requests: 0, tokens: 0, millicents: 0, byoRows: 0, providers: new Set<string>() };
-    g.requests += 1;
-    g.tokens += r.totalTokens;
-    g.millicents += r.costUsdMillicents;
-    if (r.byo) g.byoRows += 1;
-    g.providers.add(providerForUsageRow(r));
-    groups.set(r.model, g);
-  }
-  return [...groups.entries()]
-    .map(([model, g]) => ({
-      model,
-      requests: g.requests,
-      tokens: g.tokens,
-      costUsd: g.millicents / MILLICENTS_PER_USD,
-      byo: g.byoRows === g.requests,
-      providers: [...g.providers].sort(),
-    }))
-    .sort((a, b) => b.tokens - a.tokens);
-}
-
-/**
- * Pure: consumption per funding credential (connected integration or the platform
- * key), ranked by tokens — the per-integration/API-key breakdown.
- */
-export function summarizeProviderConsumption(usage: UsageRow[]): ProviderConsumption[] {
-  const groups = new Map<string, { byo: boolean; requests: number; tokens: number; millicents: number; models: Map<string, number> }>();
-  for (const r of usage) {
-    const provider = providerForUsageRow(r);
-    const g = groups.get(provider) ?? { byo: r.byo, requests: 0, tokens: 0, millicents: 0, models: new Map<string, number>() };
-    g.requests += 1;
-    g.tokens += r.totalTokens;
-    g.millicents += r.costUsdMillicents;
-    g.models.set(r.model, (g.models.get(r.model) ?? 0) + r.totalTokens);
-    groups.set(provider, g);
-  }
-  return [...groups.entries()]
-    .map(([provider, g]) => ({
-      provider,
-      byo: g.byo,
-      requests: g.requests,
-      tokens: g.tokens,
-      costUsd: g.millicents / MILLICENTS_PER_USD,
-      models: [...g.models.entries()].sort((a, b) => b[1] - a[1]).map(([m]) => m),
-    }))
-    .sort((a, b) => b.tokens - a.tokens);
-}
-
-/**
  * Pure: head-to-head comparison matrix over outcome rows, grouped by the model
  * the run resolved onto. Sorted by run count (most-evidenced first).
  */
@@ -349,7 +239,6 @@ export function summarizeComparison(outcomes: ImpactOutcomeRow[], tokensByModel:
   for (const [model, rs] of groups) {
     const runs = rs.length;
     const merged = rs.filter((r) => r.merged).length;
-    const costUsd = rs.reduce((a, r) => a + r.costUsdMillicents, 0) / MILLICENTS_PER_USD;
     rows.push({
       model,
       runs,
@@ -357,11 +246,17 @@ export function summarizeComparison(outcomes: ImpactOutcomeRow[], tokensByModel:
       mergedRatePct: runs ? (merged / runs) * 100 : 0,
       ciGreenRatePct: runs ? (rs.filter((r) => r.ciGreen).length / runs) * 100 : 0,
       avgSteps: runs ? rs.reduce((a, r) => a + r.steps, 0) / runs : 0,
-      costPerMergedPrUsd: merged ? costUsd / merged : null,
+      costPerMergedPrUsd: pricedCostPerMergedUsd(rs),
       tokens: tokensByModel.get(canonModelKey(model)) ?? 0,
     });
   }
   return rows.sort((a, b) => b.runs - a.runs);
+}
+
+/** The 0..100 productivity composite, equal-weighted over its terms; an unknown efficiency (null) is
+ *  left out and the other two are weighted over two, never read as the worst score. */
+function composite(throughput: number, quality: number, efficiency: number | null): number {
+  return efficiency === null ? ((throughput + quality) / 2) * 100 : ((throughput + quality + efficiency) / 3) * 100;
 }
 
 /**
@@ -370,24 +265,42 @@ export function summarizeComparison(outcomes: ImpactOutcomeRow[], tokensByModel:
  * - quality:    avg score blended 50/50 with CI-green rate.
  * - efficiency: inverse cost-per-merged-PR, normalized against a $5 reference.
  * Returns all three in 0..1 plus the 0..100 composite (equal-weighted).
+ *
+ * When merges exist but none of them reported a cost, efficiency is UNKNOWN (null), not the worst
+ * score: the composite is renormalised over throughput and quality (two terms), as the run score
+ * (`computeOutcomeScore`) renormalises over steps when a run's cost is unknown. With no merge at
+ * all efficiency stays 0, as before.
  */
-export function scoreComponents(outcomes: ImpactOutcomeRow[]): { throughput: number; quality: number; efficiency: number; score: number } {
+export function scoreComponents(outcomes: ImpactOutcomeRow[]): { throughput: number; quality: number; efficiency: number | null; score: number } {
   const runs = outcomes.length;
   const merged = outcomes.filter((r) => r.merged).length;
   const avgScore = runs ? outcomes.reduce((a, r) => a + r.score, 0) / runs : 0;
   const ciGreenRate = runs ? outcomes.filter((r) => r.ciGreen).length / runs : 0;
-  const costUsd = outcomes.reduce((a, r) => a + r.costUsdMillicents, 0) / MILLICENTS_PER_USD;
 
   const throughput = clamp01(Math.log10(merged + 1) / Math.log10(11)); // 0 → 0, 10 → 1
   const quality = clamp01(0.5 * avgScore + 0.5 * ciGreenRate);
   // Cheaper merged PRs score higher; $0 → 1, $5+ → ~0 (reference cost = $5/PR).
-  const costPerMerged = merged ? costUsd / merged : null;
-  const efficiency = costPerMerged == null ? 0 : clamp01(1 - Math.min(costPerMerged, 5) / 5);
+  const costPerMerged = pricedCostPerMergedUsd(outcomes);
+  const efficiencyUnknown = merged > 0 && costPerMerged == null;
+  const efficiency = efficiencyUnknown ? null : costPerMerged == null ? 0 : clamp01(1 - Math.min(costPerMerged, 5) / 5);
 
-  const score = ((throughput + quality + efficiency) / 3) * 100;
+  const score = composite(throughput, quality, efficiency);
   return { throughput, quality, efficiency, score };
 }
 
+
+/**
+ * The two windows' composites on the SAME terms, so their delta is apples to apples. When both windows
+ * know their efficiency the three-term composites compare; when either does not (merges with no
+ * reported cost), both are scored on throughput and quality alone.
+ */
+function comparableScores(
+  cur: ReturnType<typeof scoreComponents>,
+  prev: ReturnType<typeof scoreComponents>,
+): { score: number; prevScore: number } {
+  if (cur.efficiency !== null && prev.efficiency !== null) return { score: cur.score, prevScore: prev.score };
+  return { score: composite(cur.throughput, cur.quality, null), prevScore: composite(prev.throughput, prev.quality, null) };
+}
 
 /**
  * Pure: assemble the full AiImpactInsights from already-fetched rows. `prev` is
@@ -410,7 +323,8 @@ export function summarizeAiImpact(
 
   const cur = scoreComponents(outcomes);
   const prev = scoreComponents(prevOutcomes);
-  const deltaPct = prev.score > 0 ? ((cur.score - prev.score) / prev.score) * 100 : (cur.score > 0 ? 100 : 0);
+  const { score, prevScore } = comparableScores(cur, prev);
+  const deltaPct = prevScore > 0 ? ((score - prevScore) / prevScore) * 100 : (score > 0 ? 100 : 0);
 
   const grain = adoptionGrainFor(windowDays);
   const models = summarizeModelConsumption(usage);
@@ -431,11 +345,11 @@ export function summarizeAiImpact(
       byoTokens: usage.reduce((s, r) => s + (r.byo ? r.totalTokens : 0), 0),
     },
     productivity: {
-      score: cur.score,
+      score,
       throughput: cur.throughput,
       quality: cur.quality,
       efficiency: cur.efficiency,
-      prevScore: prev.score,
+      prevScore,
       deltaPct,
     },
   };
@@ -472,7 +386,7 @@ export async function computeAiImpact(db: Db, tenantId: number, days: number): P
       costUsdMillicents: runModelOutcomes.costUsdMillicents,
     })
     .from(runModelOutcomes)
-    .where(and(eq(runModelOutcomes.tenantId, tenantId), gte(runModelOutcomes.createdAt, since)))) as ImpactOutcomeRow[];
+    .where(and(eq(runModelOutcomes.tenantId, tenantId), gte(runModelOutcomes.createdAt, since), codingEvidence))) as ImpactOutcomeRow[];
 
   // Preceding equal-length window — outcomes only (drives the productivity delta).
   const prevOutcomes = (await outcomesDb
@@ -489,6 +403,7 @@ export async function computeAiImpact(db: Db, tenantId: number, days: number): P
       eq(runModelOutcomes.tenantId, tenantId),
       gte(runModelOutcomes.createdAt, prevSince),
       sql`${runModelOutcomes.createdAt} < ${since}`,
+      codingEvidence,
     ))) as ImpactOutcomeRow[];
 
   return summarizeAiImpact(usage, outcomes, prevOutcomes, days, windowStart, now);

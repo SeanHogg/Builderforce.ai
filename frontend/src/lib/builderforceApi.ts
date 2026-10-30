@@ -4606,33 +4606,6 @@ export type LlmModelsResponse =
   | { configured: false; product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; models: string[]; freeModels?: string[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; canUsePremiumModels?: boolean; premiumInfo?: PremiumModelInfo; byo?: ByoModelInfo }
   | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; object: 'list'; data: LlmModelStatus[]; freeModels?: string[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; canUsePremiumModels?: boolean; premiumInfo?: PremiumModelInfo; byo?: ByoModelInfo };
 
-/** Learned Model Routing (PRD 13) — closed action-type taxonomy. MIRRORS
- *  `packages/learned-routing/src/actionTypes.ts` (the shared package is the source of truth). */
-export const ACTION_TYPES = [
-  'sql', 'frontend_ui', 'backend_api', 'refactor', 'bugfix',
-  'tests', 'docs', 'devops_ci', 'data_migration', 'other',
-] as const;
-export type ActionType = (typeof ACTION_TYPES)[number];
-
-/** One model's learned ranking within an action type — from `/llm/v1/model-analytics`. */
-export interface ModelAnalyticsEntry {
-  model: string;
-  samples: number;
-  avgScore: number;
-  mergeRate: number;
-  avgCostMillicents: number;
-}
-export interface ModelAnalyticsAction {
-  actionType: ActionType;
-  label: string;
-  models: ModelAnalyticsEntry[];
-}
-export interface ModelAnalyticsResponse {
-  scope: string;
-  updatedAt: string;
-  byAction: ModelAnalyticsAction[];
-}
-
 /** Card-validation state — the gate on PREMIUM (any-paid-OpenRouter) model selection.
  *  Mirrors exactly what `GET /api/tenants/:id/card-validation` returns; a field the
  *  route doesn't send has no business being declared here (a non-optional
@@ -4697,12 +4670,6 @@ export const llmApi = {
 
   models: (): Promise<LlmModelsResponse> =>
     request<LlmModelsResponse>('/llm/v1/models'),
-
-  /** Learned Model Routing analytics — the per-action-type model ranking the router
-   *  seeds from. `scope` defaults to the caller's tenant; pass `global` or
-   *  `project:<id>`. */
-  modelAnalytics: (scope: string = 'tenant'): Promise<ModelAnalyticsResponse> =>
-    request<ModelAnalyticsResponse>(`/llm/v1/model-analytics?scope=${encodeURIComponent(scope)}`),
 
   /**
    * Record this user's thumb on one AI response, filed against the model that served
@@ -8098,11 +8065,12 @@ export const personasApi = {
 export interface EffectivenessBucket {
   key: string; actionType?: string; model?: string;
   runs: number; avgScore: number; mergedRatePct: number; ciGreenRatePct: number;
-  degradedRatePct: number; avgSteps: number; costUsd: number;
+  /** null = no run in the bucket reported a cost (unknown, not $0). */
+  degradedRatePct: number; avgSteps: number; costUsd: number | null;
 }
 export interface EngineeringInsights {
   windowDays: number;
-  totals: { runs: number; avgScore: number; mergedRatePct: number; ciGreenRatePct: number; degradedRatePct: number; costUsd: number };
+  totals: { runs: number; avgScore: number; mergedRatePct: number; ciGreenRatePct: number; degradedRatePct: number; costUsd: number | null; costPerMergedPrUsd: number | null; pricedRuns: number };
   byModel: EffectivenessBucket[];
   byActionType: EffectivenessBucket[];
   byApproach: EffectivenessBucket[];

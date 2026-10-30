@@ -8,6 +8,13 @@
  */
 
 import type { RunOutcomeTelemetry } from '@builderforce/learned-routing';
+import type { runModelOutcomes } from '../../infrastructure/database/schema';
+
+/** The columns a `run_model_outcomes` insert takes. */
+type OutcomeInsert = typeof runModelOutcomes.$inferInsert;
+
+/** Every field of the §8.2 row — a field added to the contract and not mapped fails the `satisfies` below. */
+type EveryTelemetryField = { [K in keyof Required<RunOutcomeTelemetry>]: unknown };
 
 export function runOutcomeTelemetryColumns(t: RunOutcomeTelemetry) {
   return {
@@ -31,5 +38,6 @@ export function runOutcomeTelemetryColumns(t: RunOutcomeTelemetry) {
     // The row's own run id is the request's `clientRunId` (`client_run_id`, set beside these
     // columns), so only the owner a sub-agent's row points at is new.
     parentRunId:       t.parentRunId ?? null,
-  };
+    // Compile-time: each key is a `run_model_outcomes` insert column, and every contract field is here.
+  } satisfies Partial<OutcomeInsert> & EveryTelemetryField;
 }

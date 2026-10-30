@@ -25,7 +25,7 @@ import { parseRunOutcomeTelemetry, type RunOutcomeTelemetry } from './runOutcome
 export type TerminalStatus = 'completed' | 'failed' | 'cancelled';
 
 /** Where the run executed. Anything non-'cloud' has no `executions` row. */
-export type OutcomeSource = 'cloud' | 'onprem' | 'ide' | 'external';
+export type OutcomeSource = 'cloud' | 'onprem' | 'ide' | 'external' | 'canvas';
 
 /** Path of the write-back door, relative to the gateway base. */
 export const RUN_OUTCOME_PATH = '/llm/v1/run-outcome';
@@ -62,6 +62,17 @@ export interface RunOutcomeRequest extends RunOutcomeTelemetry {
   /** The run died on a provider rate limit — an AVAILABILITY signal that demotes the
    *  model without teaching the router it is low-quality. */
   rateLimited?: boolean;
+  /**
+   * Whether this outcome teaches the routing table. Default true. A run that is not
+   * evidence about CODING models (a Creation Canvas turn) reports with `false`: its
+   * telemetry row is recorded, and never folded into — or rebuilt into — the ranking.
+   */
+  routingSignal?: boolean;
+  /**
+   * The run failed because the TENANT ran out of quota/budget. Stored, and never taught to routing: it
+   * says nothing about the model. The reporter that knows says so; absent = it did not.
+   */
+  quotaExhausted?: boolean;
 }
 
 /** A validated, fully-resolved outcome — what the scorer records. */
@@ -81,6 +92,33 @@ export interface NormalizedRunOutcome extends RunOutcomeTelemetry {
   costMc?: number;
   approved?: boolean;
   rateLimited?: boolean;
+  routingSignal?: boolean;
+  quotaExhausted?: boolean;
+}
+
+/**
+ * Whether an outcome teaches the routing table — decided by the SERVER, never taken on the
+ * client's word. A Creation Canvas turn (by the row's entry point or by its source) is not
+ * evidence about CODING models, whatever `routingSignal` the body claimed; any other run
+ * teaches unless it said it should not.
+ */
+export function carriesRoutingSignal(o: Partial<Pick<NormalizedRunOutcome, 'routingSignal' | 'entryPoint' | 'source'>>): boolean {
+  return o.entryPoint !== 'canvas' && o.source !== 'canvas' && o.routingSignal !== false;
+}
+
+/**
+ * Whether an outcome is FOLDED into the routing table — the LIVE fold gate. It must be coding-run
+ * evidence ({@link carriesRoutingSignal}) and not a run that says nothing about the model: one the
+ * person STOPPED (`cancelled`), or one that failed because the TENANT ran out of quota. Those rows are
+ * stored, and still count in the spend and effectiveness lenses (a stop rate stays computable); they
+ * are only kept out of what the routing table learns. A rebuild applies the same exclusions at READ
+ * time (`teachesRouting` in the api), so the two writers agree. The ONE gate for the client door and
+ * the cloud scorer.
+ */
+export function foldsIntoRouting(
+  o: Partial<Pick<NormalizedRunOutcome, 'routingSignal' | 'entryPoint' | 'source' | 'terminalStatus' | 'quotaExhausted'>>,
+): boolean {
+  return carriesRoutingSignal(o) && o.terminalStatus !== 'cancelled' && o.quotaExhausted !== true;
 }
 
 function str(v: unknown): string {
@@ -120,7 +158,7 @@ export function parseRunOutcomeRequest(
   // 'cloud' is deliberately NOT accepted off the wire: a cloud run has an executions
   // row and is scored server-side, so a client claiming to be one would double-count.
   const source: OutcomeSource =
-    b.source === 'onprem' || b.source === 'ide' || b.source === 'external' ? b.source : 'external';
+    b.source === 'onprem' || b.source === 'ide' || b.source === 'external' || b.source === 'canvas' ? b.source : 'external';
 
   const projectId = num(b.projectId);
   const taskId = num(b.taskId);
@@ -131,6 +169,8 @@ export function parseRunOutcomeRequest(
   const costMc = num(b.costMc);
   const approved = bool(b.approved);
   const rateLimited = bool(b.rateLimited);
+  const routingSignal = bool(b.routingSignal);
+  const quotaExhausted = bool(b.quotaExhausted);
   const actionType = str(b.actionType);
   const role = str(b.role);
 
@@ -152,6 +192,8 @@ export function parseRunOutcomeRequest(
       ...(costMc != null ? { costMc } : {}),
       ...(approved != null ? { approved } : {}),
       ...(rateLimited != null ? { rateLimited } : {}),
+      ...(routingSignal != null ? { routingSignal } : {}),
+      ...(quotaExhausted != null ? { quotaExhausted } : {}),
       ...parseRunOutcomeTelemetry(b),
     },
   };

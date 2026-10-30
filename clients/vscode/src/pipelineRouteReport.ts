@@ -40,6 +40,14 @@ export type Translate = (message: string, ...args: Array<string | number>) => st
 const usd = (millicents: number): string => `$${(millicents / MILLICENTS_PER_USD).toFixed(2)}`;
 const score = (n: number | null): string => (n == null ? "—" : n.toFixed(2));
 
+/** A route's cost cell: the priced figure, and — never as a $0 — how many runs have no known price. */
+function costCell(totals: { runs: number; costMc: number; unpricedRuns?: number }, t: Translate): string {
+  const unpriced = totals.unpricedRuns ?? 0;
+  if (unpriced === 0) return usd(totals.costMc);
+  if (unpriced >= totals.runs) return t("unpriced");
+  return t("{0} + {1} unpriced", usd(totals.costMc), unpriced);
+}
+
 /** The report as Markdown. `gate` adds the PreFetch gate column. */
 export function renderRouteReport(report: RouteReport, days: number, t: Translate, gate?: GateReport): string {
   const lines: string[] = [`# ${t("Pipeline route report — last {0} days", days)}`, ""];
@@ -52,8 +60,8 @@ export function renderRouteReport(report: RouteReport, days: number, t: Translat
   lines.push(
     `| ${t("Route")} | ${t("Runs")} | ${t("Cost")} | ${t("Avg score")} |`,
     "| --- | ---: | ---: | ---: |",
-    `| ${t("Full pipeline")} | ${report.byRoute.full.runs} | ${usd(report.byRoute.full.costMc)} | ${score(report.byRoute.full.avgScore)} |`,
-    `| ${t("Quick pass")} | ${report.byRoute.quick.runs} | ${usd(report.byRoute.quick.costMc)} | ${score(report.byRoute.quick.avgScore)} |`,
+    `| ${t("Full pipeline")} | ${report.byRoute.full.runs} | ${costCell(report.byRoute.full, t)} | ${score(report.byRoute.full.avgScore)} |`,
+    `| ${t("Quick pass")} | ${report.byRoute.quick.runs} | ${costCell(report.byRoute.quick, t)} | ${score(report.byRoute.quick.avgScore)} |`,
     "",
     `## ${t("Score histogram")}`,
     "",

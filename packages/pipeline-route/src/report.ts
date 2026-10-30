@@ -17,8 +17,8 @@ export interface RouteRunRecord {
   route: PipelineRoute;
   /** The router's score; null for a run recorded without one. */
   score: number | null;
-  /** What the run's calls cost, in millicents. */
-  costMc: number;
+  /** What the run's calls cost, in millicents; null when any call's price is unknown (unknown, never a partial sum). */
+  costMc: number | null;
   /** The conversation the run belongs to — what "re-run" is grouped by. */
   conversation: string;
   /** When the run's first call was made (ISO-8601). */
@@ -29,7 +29,10 @@ export interface RouteRunRecord {
 
 export interface RouteTotals {
   runs: number;
+  /** Millicents over the runs that have a known cost; the runs that do not are counted in `unpricedRuns`. */
   costMc: number;
+  /** How many of `runs` have an unknown cost. Absent when every run is priced. */
+  unpricedRuns?: number;
   /** Mean score over the runs that carry one; null when none does. */
   avgScore: number | null;
 }
@@ -97,9 +100,12 @@ export function misroutedRuns(runs: readonly RouteRunRecord[], windowMs = RERUN_
 
 function totals(runs: readonly RouteRunRecord[]): RouteTotals {
   const scored = runs.filter((r) => typeof r.score === 'number');
+  const priced = runs.filter((r): r is RouteRunRecord & { costMc: number } => typeof r.costMc === 'number' && Number.isFinite(r.costMc));
+  const unpricedRuns = runs.length - priced.length;
   return {
     runs: runs.length,
-    costMc: runs.reduce((sum, r) => sum + (Number.isFinite(r.costMc) ? r.costMc : 0), 0),
+    costMc: priced.reduce((sum, r) => sum + r.costMc, 0),
+    ...(unpricedRuns > 0 ? { unpricedRuns } : {}),
     avgScore: scored.length ? round2(scored.reduce((s, r) => s + r.score!, 0) / scored.length) : null,
   };
 }

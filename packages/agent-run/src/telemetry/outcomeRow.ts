@@ -6,7 +6,8 @@
  *
  *   steps                      `state.step` (the driver)
  *   tool_calls / tool_errors   `state.telemetry` — the driver, from the trace's own verdict
- *   tokens / cache / cost      `state.telemetry` — every model turn's usage, summed
+ *   tokens / cache / cost      `state.telemetry` — every model turn's usage, summed; the cost only
+ *                              when EVERY turn was priced (see `costTally.ts`)
  *   model                      `state.telemetry.model` — the model the last turn was served by
  *   verify                     `state.telemetry.verify` — the run-end verify's verdict
  *   first_spawn_turn           `state.telemetry` — the step the first spawn was dispatched on
@@ -29,6 +30,7 @@ import { isRateLimitFailure } from "@builderforce/learned-routing";
 import { RUN_CANCELLED_REASON, type RunOutcomeKind, type RunOutcomeRow, type RunState } from "../contract.js";
 import { defaultEstimateTokens } from "../policy/compaction/pack.js";
 import { turnContextBlock } from "../turnContext.js";
+import { reportedRunCost } from "./costTally.js";
 import { resumeTally } from "./runTally.js";
 
 /** What settle hands the builder: the labels the adapter stamped plus the run state. */
@@ -53,6 +55,8 @@ export function buildOutcomeRow(input: OutcomeRowInput): RunOutcomeRow {
   const tally = resumeTally(state.telemetry);
   const progress = state.guards?.progress;
   const preflight = state.preflight;
+  // Known only when every turn was priced (a partly unpriced run has an unknown cost, never a partial sum).
+  const runCost = reportedRunCost(tally.costMc);
 
   return {
     entryPoint: input.entryPoint,
@@ -69,7 +73,7 @@ export function buildOutcomeRow(input: OutcomeRowInput): RunOutcomeRow {
     ...(tally.model ? { model: tally.model } : {}),
     tokens: tally.tokens,
     cacheReadTokens: tally.cacheReadTokens,
-    ...(tally.costMc !== undefined ? { cost: tally.costMc } : {}),
+    ...(runCost !== undefined ? { cost: runCost } : {}),
     firstSpawnTurn: tally.firstSpawnTurn ?? null,
     coveredReadStubs: state.reads?.stubCount ?? 0,
     shellFileReads: tally.shellFileReads,

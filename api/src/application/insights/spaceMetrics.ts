@@ -39,6 +39,7 @@ import {
   runModelOutcomes,
   tasks,
 } from '../../infrastructure/database/schema';
+import { codingEvidence } from '../shared/codingEvidence';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { clampScore as clamp } from '../../domain/shared/numbers';
 import { notSystemTask } from '../task/taskScope';
@@ -275,6 +276,7 @@ export async function computeSpaceMetrics(db: Db, tenantId: number, days: number
       eq(runModelOutcomes.tenantId, tenantId),
       ...(projectId != null ? [eq(runModelOutcomes.projectId, projectId)] : []),
       gte(runModelOutcomes.createdAt, since),
+      codingEvidence,
     ));
 
   // A — tasks completed in the window (tenant-scoped via project join).

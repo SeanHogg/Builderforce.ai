@@ -3,10 +3,10 @@ import {
   providerForUsageRow,
   summarizeModelConsumption,
   summarizeProviderConsumption,
-  summarizeAiImpact,
   PLATFORM_PROVIDER_ID,
   type UsageRow,
-} from './aiImpactInsights';
+} from './aiConsumptionInsights';
+import { summarizeAiImpact } from './aiImpactInsights';
 
 /**
  * Consumption rollups — the BYO-visibility contract.

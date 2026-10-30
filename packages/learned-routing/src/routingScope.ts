@@ -3,7 +3,7 @@
  *
  * A scope names WHOSE evidence a ranking is built from, finest-first in precedence
  * (`project:<id>` → `tenant:<id>` → `global`). The token is the cache-key suffix on
- * the Worker's `routing:<scope>` KV blob, the `?scope=` query param of the
+ * the Worker's `routing:v2:<scope>` KV blob, the `?scope=` query param of the
  * client-facing read, and the key a client caches its own copy under — so it lives
  * in ONE place and every side spells it identically. Pure; no I/O.
  */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeOutcomeScore, finalizeLearnWeight, runProducedOutput, SCORE_WEIGHTS, EFFICIENCY_STEP_NORM, type OutcomeScoreInputs } from './scoreRunOutcome';
+import { computeOutcomeScore, finalizeLearnWeight, runProducedOutput, SCORE_WEIGHTS, EFFICIENCY_STEP_NORM, type OutcomeScoreInputs } from './outcomeScore';
 
 const base: OutcomeScoreInputs = {
   terminalStatus: 'completed',

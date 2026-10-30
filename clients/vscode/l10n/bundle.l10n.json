@@ -986,6 +986,8 @@
   "Avg score": "Avg score",
   "Full pipeline": "Full pipeline",
   "Quick pass": "Quick pass",
+  "{0} + {1} unpriced": "{0} + {1} unpriced",
+  "unpriced": "unpriced",
   "Score histogram": "Score histogram",
   "Score": "Score",
   "Misroutes": "Misroutes",

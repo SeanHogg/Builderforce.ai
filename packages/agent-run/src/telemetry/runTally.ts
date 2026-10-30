@@ -15,6 +15,7 @@ import { isNotARepo, resolveToolAlias } from "@builderforce/agent-tools";
 import { parseShellFileRead } from "@builderforce/run-guards";
 import type { ModelUsage } from "../contract.js";
 import { isSpawnTool } from "../policy/subagents/delegationRequest.js";
+import { foldTurnCost } from "./costTally.js";
 
 /** What a run has spent and done so far — carried on `RunState.telemetry`. */
 export interface RunTally {
@@ -28,8 +29,12 @@ export interface RunTally {
   tokens: number;
   /** Prompt-cache reads across every turn. */
   cacheReadTokens: number;
-  /** Millicents the transport reported it was billed, summed; absent when none reported. */
-  costMc?: number;
+  /** The run's cost so far (see `costTally.ts`): the millicents billed while every turn was priced, `null` once a
+   *  turn was not (unknown, never a partial sum), absent before any turn. Read it with `reportedRunCost`. */
+  costMc?: number | null;
+  /** Marks a tally written under the cost latch. A tally persisted WITHOUT it predates the rule: its `costMc` may be
+   *  the sum of only the priced turns, so `resumeTally` resumes it cost-unknown. */
+  costLatch: true;
   /** The step the first `spawn_agent(s)` call was dispatched on; absent ⇒ nothing spawned. */
   firstSpawnTurn?: number;
   /** `cat`/`sed`/`head`/`tail` prints of one workspace file through the shell. */
@@ -42,21 +47,31 @@ export interface RunTally {
 
 /** A fresh run's tally: nothing spent, nothing done. */
 export function freshTally(): RunTally {
-  return { toolCalls: 0, toolErrors: 0, tokens: 0, cacheReadTokens: 0, shellFileReads: 0, repoErrors: 0 };
+  return { toolCalls: 0, toolErrors: 0, tokens: 0, cacheReadTokens: 0, shellFileReads: 0, repoErrors: 0, costLatch: true };
 }
 
-/** The tally a resumed state carries, with every counter present even if an older writer omitted one. */
+/**
+ * The tally a resumed state carries, with every counter present even if an older writer omitted one.
+ *
+ * A tally persisted before the cost latch existed (no `costLatch` marker) cannot say whether every turn was
+ * priced — its `costMc` may be a partial sum — so a run that already took turns resumes with its cost UNKNOWN
+ * (`null`) rather than a figure that may be missing turns. A legacy tally that took no turn has nothing to
+ * distrust.
+ */
 export function resumeTally(saved: Partial<RunTally> | undefined): RunTally {
-  return { ...freshTally(), ...(saved ?? {}) };
+  const tally: RunTally = { ...freshTally(), ...(saved ?? {}) };
+  if (saved && saved.costLatch !== true && ((saved.costMc ?? undefined) !== undefined || (saved.tokens ?? 0) > 0)) tally.costMc = null;
+  return tally;
 }
 
 /** One model turn answered: who served it and what it cost. */
 export function tallyTurn(tally: RunTally, model: string | undefined, usage: ModelUsage | undefined): void {
   if (model) tally.model = model;
+  // A turn with no usage at all is an unpriced turn too: it latches the run's cost unknown.
+  tally.costMc = foldTurnCost(tally.costMc, usage?.costMc);
   if (!usage) return;
   tally.tokens += (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
   tally.cacheReadTokens += usage.cacheReadTokens ?? 0;
-  if (usage.costMc !== undefined) tally.costMc = (tally.costMc ?? 0) + usage.costMc;
 }
 
 /** One dispatched call: counted, and read for the §8.2 efficiency facts it carries. */

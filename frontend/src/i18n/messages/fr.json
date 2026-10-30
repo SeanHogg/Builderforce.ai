@@ -2782,6 +2782,7 @@
       "degradedSub": "a quitté le modèle codeur",
       "cost": "Coût de l’agent",
       "costSub": "attribué aux exécutions",
+      "costCoverage": "{priced} exécutions sur {total} avec coût",
       "score": "Score",
       "byApproach": "Efficacité par approche",
       "approach": "Approche",

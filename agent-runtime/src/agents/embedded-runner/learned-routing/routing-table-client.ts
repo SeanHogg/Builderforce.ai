@@ -2,7 +2,7 @@
  * Learned Model Routing (PRD 13) — the host's READ of the fleet's learned ranking.
  *
  * The api's `GET /llm/v1/model-analytics?scope=<token>` serves the SAME cached
- * `routing:<scope>` blob the cloud router seeds from, shaped per action type. This is
+ * `routing:v2:<scope>` blob the cloud router seeds from, shaped per action type. This is
  * the only place in the host that calls it, and the only place a routing response is
  * cached — one cache, one TTL, one shape.
  *
@@ -46,6 +46,7 @@ interface AnalyticsRow {
   samples?: unknown;
   avgScore?: unknown;
   avgCostMillicents?: unknown;
+  costN?: unknown;
   ratedUp?: unknown;
   ratedDown?: unknown;
   rateLimitRate?: unknown;
@@ -69,6 +70,9 @@ export function toRankStat(row: AnalyticsRow): ActionModelRankStat | null {
     n: n(row.samples),
     avgScore: n(row.avgScore),
     avgCostMc: n(row.avgCostMillicents),
+    // Runs behind the cost that reported one; absent (an older table) = all of them, so the tie-break
+    // reads an unknown cost as no information exactly as the cloud router does.
+    ...(typeof row.costN === "number" && Number.isFinite(row.costN) ? { costN: row.costN } : {}),
     ratedUp: n(row.ratedUp),
     ratedDown: n(row.ratedDown),
     rateLimitRate: n(row.rateLimitRate),

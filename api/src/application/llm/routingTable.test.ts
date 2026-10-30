@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { applyObservation, applyRatingObservation } from './routingFold';
 import {
-  applyObservation,
-  applyRatingObservation,
   scopeLadder,
   scopeToken,
   parseScopeToken,

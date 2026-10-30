@@ -5,7 +5,7 @@ import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { DaysWindowSelect, KpiGrid } from './LensShell';
-import { pct, score2 } from './format';
+import { costCoverage, pct, score2 } from './format';
 import { useInsightFormat } from './format';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { RunAnomaliesCard } from './RunAnomaliesCard';
@@ -24,6 +24,7 @@ export function EngineeringLens() {
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
 
+  const coverage = costCoverage(data.totals);
   const table = (title: string, label: string, rows: EffectivenessBucket[]) => (
     <PmCard title={title}>
       {rows.length === 0 ? (
@@ -66,7 +67,7 @@ export function EngineeringLens() {
         <StatCard label={t('eng.mergeRate')} value={pct(data.totals.mergedRatePct)} sub={t('eng.mergeSub')} />
         <StatCard label={t('eng.ciGreen')} value={pct(data.totals.ciGreenRatePct)} sub={t('eng.ciSub')} />
         <StatCard label={t('eng.degraded')} value={pct(data.totals.degradedRatePct)} sub={t('eng.degradedSub')} />
-        <StatCard label={t('eng.cost')} value={usd(data.totals.costUsd)} sub={t('eng.costSub')} />
+        <StatCard label={t('eng.cost')} value={usd(data.totals.costUsd)} sub={coverage ? t('eng.costCoverage', coverage) : t('eng.costSub')} />
       </KpiGrid>
       <RunAnomaliesCard days={days} projectId={currentProjectId} />
       {table(t('eng.byApproach'), t('eng.approach'), data.byApproach)}

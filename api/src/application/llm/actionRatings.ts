@@ -32,7 +32,8 @@ import { llmActionRatings } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToNullableTenant, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { normalizeActionType, type ActionType } from '@builderforce/learned-routing';
 import { ratingScore } from '@builderforce/learned-routing';
-import { applyRatingToRoutingTable, ROUTING_WINDOW_DAYS } from './routingTable';
+import { applyRatingToRoutingTable } from './routingTable';
+import { ROUTING_WINDOW_DAYS } from './routingReconcile';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 /** Where the press happened. A canvas turn and a coding run are rated against

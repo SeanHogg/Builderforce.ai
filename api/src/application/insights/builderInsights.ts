@@ -184,7 +184,8 @@ async function computeCostPerMergedPrToday(
   projectId: number | null,
 ): Promise<number | null> {
   const { runModelOutcomes } = await import('../../infrastructure/database/schema');
-  const filters = [eq(runModelOutcomes.tenantId, tenantId), gte(runModelOutcomes.createdAt, dayStart)];
+  const { codingEvidence } = await import('../shared/codingEvidence');
+  const filters = [eq(runModelOutcomes.tenantId, tenantId), gte(runModelOutcomes.createdAt, dayStart), codingEvidence];
   if (projectId != null) filters.push(eq(runModelOutcomes.projectId, projectId));
   const [agg] = await runTelemetryDatabase(db)
     .select({

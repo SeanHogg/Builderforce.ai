@@ -8,6 +8,7 @@ export {
   DEFAULT_TOOL_OUTPUT_CHARS,
   HARD_MAX_TOOL_RESULT_CHARS,
   MIN_KEEP_CHARS,
+  PAGED_READ_TOOLS,
   READ_FILE_MAX_CHARS,
   READ_FILE_TOOL,
   SHELL_CAPTURE_CHARS,
@@ -15,6 +16,9 @@ export {
   TOOL_OUTPUT_CAPS,
   TOOL_RESULT_CHARS_PER_TOKEN,
   TOOL_RESULT_WINDOW_SHARE,
+  isPagedReadTool,
+  pagedReadOffsetsPerPath,
+  pagedReadSearchTool,
   isShellTool,
   toolOutputCap,
   windowToolResultCap,
@@ -28,7 +32,7 @@ export { projectJson } from './jsonProjection.js';
 export type { JsonProjection, ProjectionStep } from './jsonProjection.js';
 export { READ_FILE_RESULT_CHARS, isReadFileResult, isReadFilesResult, sliceReadFile, windowReadFile, windowReadFiles } from './readFileWindow.js';
 export type { AttachAdvisory, ReadFileResult, ReadFilesResult, ReadFileWindowed, ReadFileWindowOptions } from './readFileWindow.js';
-export { fitToolText, isLogLike, shapeToolResult } from './policy.js';
+export { fitToolText, isLogLike, shapeToolResult, truncatedResultNote } from './policy.js';
 export type { FitToolTextOptions, ShapeToolResultOptions, ShapedToolResult } from './policy.js';
 export { modelToolResultPolicy } from './modelPolicy.js';
 export {

@@ -36,6 +36,7 @@ import {
   runModelOutcomes,
   tasks,
 } from '../../infrastructure/database/schema';
+import { codingEvidence } from '../shared/codingEvidence';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { notSystemTask } from '../task/taskScope';
@@ -531,7 +532,7 @@ export async function computePortfolioRollup(
           merged: sql<string>`coalesce(sum(case when ${runModelOutcomes.merged} then 1 else 0 end),0)`,
         })
         .from(runModelOutcomes)
-        .where(and(eq(runModelOutcomes.tenantId, tenantId), inArray(runModelOutcomes.projectId, projectIds)))
+        .where(and(eq(runModelOutcomes.tenantId, tenantId), inArray(runModelOutcomes.projectId, projectIds), codingEvidence))
     : [{ runs: '0', avgScore: '0', merged: '0' }];
   const runs = num(outcomeAgg?.runs);
   const outcomes = {

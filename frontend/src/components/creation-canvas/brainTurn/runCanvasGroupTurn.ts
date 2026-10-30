@@ -13,6 +13,7 @@ import { safeTraceJson } from '../canvasArtifactExport';
 import type { CreationFlowNode } from '../CreationNode';
 import type { UseCanvasBrainTurnDeps } from '../hooks/useCanvasBrainTurn';
 import { canonicalTurnAgents } from './turnParticipants';
+import { canvasOutcomeReporter } from './canvasOutcomeReporter';
 
 /** What one group turn reads: the board's live deps plus the facts this turn fixed when it began. */
 export interface CanvasGroupTurnContext extends Pick<UseCanvasBrainTurnDeps,
@@ -44,6 +45,8 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
   // role/cost ordering by; undefined (never chosen) sends nothing rather than a default.
   const arcStage = readChosenCanvasPhase(sessionId);
   const { signal } = run;
+  // Each run's uniform outcome row, reported through the one write-back door (ambient telemetry).
+  const outcomeReporter = (runKey: string) => canvasOutcomeReporter({ persistence, requestMessageId, runKey, projectId: evermindProjectId, signal, trace: (event) => run.trace(event) });
   // A mutating tool asks through the run cell, so the question shows as the shared
   // approval bar on whichever Brain placement is open — and a Stop declines it.
   const confirmCanvasAction = run.confirm;
@@ -117,7 +120,7 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
           ...(arcStage ? { arcStage } : {}),
           autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
           disabledModels: brainRuntimeRef.current.disabledModels,
-          onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,
+          onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel, onOutcome: outcomeReporter(`agent:${agent.id}`),
           onModelFallback: (model) => setModelSelection({ mode: 'model', model }),
           participant: { ref, name, instructions: typeof agent.data.instructions === 'string' ? agent.data.instructions : agent.data.subtitle },
           conversation: groupConversation,
@@ -165,7 +168,7 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
     ...(arcStage ? { arcStage } : {}),
     autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
     disabledModels: brainRuntimeRef.current.disabledModels,
-    onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,
+    onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel, onOutcome: outcomeReporter('brain'),
     onModelFallback: (model) => setModelSelection({ mode: 'model', model }),
     onUnanswered: (outcome) => { turnUnansweredRef.current = outcome; },
     // The canvas runner takes recall + learn only, and deliberately NOT the
