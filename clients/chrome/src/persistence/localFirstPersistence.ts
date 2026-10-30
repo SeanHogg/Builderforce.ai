@@ -17,9 +17,9 @@ import type { SyncSink } from '../sync/runtimeMessages';
 export function createLocalFirstPersistence(records: RovrRecords, sink: SyncSink): BrainRunPersistence {
   return {
     async sendMessages(chatId: number, messages: MessageInput[]): Promise<BrainMessage[]> {
-      // Rows arriving from the step queue carry its `eventKey`; the sync outbox mints its
-      // own per entry, so only the row itself is kept.
-      const rows = messages.map(({ role, content, metadata }) => ({ role, content, ...(metadata !== undefined ? { metadata } : {}) }));
+      // A row's `eventKey` (the step queue's, a steered message's) is KEPT: the device store saves a repeated key
+      // as the same row, and the sync outbox sends the row under it, so the server upserts a late save and its retry as one.
+      const rows = messages.map(({ role, content, metadata, eventKey }) => ({ role, content, ...(metadata !== undefined ? { metadata } : {}), ...(eventKey ? { eventKey } : {}) }));
       const saved = await records.appendMessages(chatId, rows);
       sink.enqueue(chatId, rows.map((row) => ({ kind: 'message' as const, row })));
       return saved;

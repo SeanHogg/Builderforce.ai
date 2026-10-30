@@ -15,6 +15,7 @@ export function restoreTurn(
   composer: {
     /** The composer's text right now (read at call time - a ref, not a render-time capture). */
     draft: () => string;
+    /** Put the text back IF the box is still empty (`useComposerDraft().fillIfEmpty`). */
     setInput: (text: string) => void;
     restoreAttachments: (files: readonly ChatInputAttachment[]) => void;
     chooseRecipient: (to: DirectedRecipient | null) => void;

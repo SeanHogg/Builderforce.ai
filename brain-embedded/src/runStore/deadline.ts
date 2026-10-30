@@ -31,6 +31,17 @@ export async function bounded<T>(ms: number, promise: Promise<T> | T): Promise<T
   }
 }
 
+/** How a promise stands after at most `ms`: it succeeded, it failed, or it is still in flight. Never rejects. */
+export async function settledWithin(ms: number, promise: Promise<unknown>): Promise<'ok' | 'failed' | 'pending'> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<'pending'>((resolve) => { timer = setTimeout(() => resolve('pending'), ms); });
+  try {
+    return await Promise.race([promise.then(() => 'ok' as const, () => 'failed' as const), late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Run `work`, but stop WAITING for it after `ms` (`onLate` says so). The work itself cannot be cancelled and
  * finishes in the background; it only stops holding what waits on it. A failure of the work - before OR

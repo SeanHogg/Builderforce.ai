@@ -7,7 +7,8 @@ import { drainRunSteering, queueRunSteering } from './runSteering';
 import type { ChatInputAttachment } from './types';
 import { wakeChat } from './runStore/wakeChat';
 import { getRunDriver } from './runDriver';
-import { turnBody, useQueuedTurns, type QueuedTurns } from './useQueuedTurns';
+import { forgetPendingWords } from './pendingWords';
+import { turnBody, useQueuedTurns, type QueuedItem, type QueuedTurns } from './useQueuedTurns';
 import { startsRun } from './userTurnRuns';
 
 /**
@@ -209,12 +210,29 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     }
   }, []);
 
+  // The conversation changed with turns still held: each goes to ITS OWN chat, oldest first, nothing discarded -
+  // the same path a send into that chat takes. An addressed turn (or any, where the run executes elsewhere) goes
+  // back to the composer that is showing; the rest become that chat's next turns (`wakeChat`, else its inbox, saved).
+  const handOff = useCallback((held: readonly QueuedItem<T>[], from: RunKey | null) => {
+    for (const { value: turn } of held) {
+      const { textOf: text, attachmentsOf: attached, isDirected: directed, restore: giveBack } = ports.current;
+      if (directed?.(turn) || getRunDriver() || typeof from !== 'number') {
+        giveBack?.(turn);
+        continue;
+      }
+      const body = turnBody(turn, text);
+      const files = attached?.(turn);
+      if (!wakeChat(from, body, files)) queueRunSteering(from, body, { fromPerson: true, persist: true, ...(files?.length ? { attachments: files } : {}) });
+    }
+  }, []);
+
   const queued = useQueuedTurns<T>({
     running,
     send: (turn) => { void flush(turn); },
     resetKey: runKey,
     textOf,
     mayFlush: () => flushingIn(ports.current.runKey) === 0,
+    handOff,
   });
   const { submit: hold, clear, takeFront, pushBack } = queued;
   // eslint-disable-next-line react-hooks/refs
@@ -285,7 +303,7 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     if (ports.current.running) markStopping(true);
     const { stop: halt, runKey: key } = ports.current;
     // A steer typed before the Stop is dropped with the run - it must not start the next one.
-    if (typeof key === 'number') drainRunSteering(key);
+    if (typeof key === 'number') for (const dropped of drainRunSteering(key)) forgetPendingWords(key, [dropped.eventKey]);
     if (halt) halt();
     else if (key != null) stopRun(key);
   }, [clear, markStopping]);

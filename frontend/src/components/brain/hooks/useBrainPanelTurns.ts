@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
-import { chatDoorLiveness, restoreTurn, useChatTurns, type ChatInputAttachment, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, restoreTurn, useChatTurns, useComposerDraft, type ChatInputAttachment, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import type { useBrainChats, useBrainConversation } from '@/lib/brain';
 import { useDockedComposer } from '@/lib/brain/dockedBrain';
 import { trackActivity } from '@/lib/activity/tracker';
@@ -42,11 +42,9 @@ export function useBrainPanelTurns({ conv, chats, recipient, chooseRecipient, in
 }) {
   // THE one restore (`restoreTurn`): a turn that could not go returns to the box that is showing - text, files,
   // addressee - whichever way it left. The draft is read at call time.
-  const inputRef = useRef(input);
-  // eslint-disable-next-line react-hooks/refs
-  inputRef.current = input;
+  const composer = useComposerDraft(input, setInput);
   const giveBack = (turn: BrainPanelTurn) => restoreTurn({ text: turn.text, attachments: turn.attachments, recipient: turn.addressedTo }, {
-    draft: () => inputRef.current, setInput, restoreAttachments: conv.restoreAttachments, chooseRecipient,
+    draft: composer.draft, setInput: composer.fillIfEmpty, restoreAttachments: conv.restoreAttachments, chooseRecipient,
   });
   const turns = useChatTurns<BrainPanelTurn>({
     // In flight while a send is saving (held in order); steerable only while the run store says the run is live.
@@ -87,13 +85,13 @@ export function useBrainPanelTurns({ conv, chats, recipient, chooseRecipient, in
   // thing on screen, whoever the composer happens to be pointed at — through the same
   // gate and door as a typed one.
   const dockedComposer = useMemo(() => ({
-    seed: (text: string) => { setInput(text); showChatTab(); },
+    seed: (text: string) => { composer.setInput(text); showChatTab(); },
     send: (text: string) => {
       if (!assistantGate.assistantAllowed) return;
       showChatTab();
       void submitTurn({ text, addressedTo: null });
     },
-  }), [setInput, showChatTab, assistantGate.assistantAllowed, submitTurn]);
+  }), [composer, showChatTab, assistantGate.assistantAllowed, submitTurn]);
   useDockedComposer(acceptsHandover, dockedComposer);
 
   // The conversation changes identity on every token; the composer's handlers must not.
@@ -116,14 +114,14 @@ export function useBrainPanelTurns({ conv, chats, recipient, chooseRecipient, in
     if (!text || !assistantGate.assistantAllowed) return;
     const attachments = [...convRef.current.pendingAttachments];
     for (const a of attachments) convRef.current.removeAttachment(a.key);
-    setInput('');
+    composer.setInput('');
     // Audited engagement signal: interacting with the AI agent is billable activity.
     trackActivity('agent_message', { weight: 2 });
     // Restore the text if the send fails before it's persisted (e.g. an expired
     // session) so the user's message is never silently lost.
     const turn: BrainPanelTurn = { text, addressedTo: recipient, ...(attachments.length ? { attachments } : {}) };
     if (!(await offer(turn))) giveBackRef.current(turn);
-  }, [assistantGate.assistantAllowed, input, recipient, setInput]);
+  }, [assistantGate.assistantAllowed, input, recipient, composer]);
 
   const handleSend = useCallback(() => offerBox(submitTurn), [offerBox, submitTurn]);
   /** The explicit alternative to steering: hold what is in the box for after the run. */

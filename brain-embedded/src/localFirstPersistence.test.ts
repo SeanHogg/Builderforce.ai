@@ -63,8 +63,8 @@ describe('local Brain persistence - a row sent again under its key is the same r
     const chat = await persistence.createChat({ title: 'Keyed' });
     const eventKey = `steer:${crypto.randomUUID()}`;
 
-    const [first] = await persistence.sendMessages(chat.id, [{ role: 'user', content: 'said once', eventKey } as never]);
-    const [again] = await persistence.sendMessages(chat.id, [{ role: 'user', content: 'said once', eventKey } as never]);
+    const [first] = await persistence.sendMessages(chat.id, [{ role: 'user', content: 'said once', eventKey }]);
+    const [again] = await persistence.sendMessages(chat.id, [{ role: 'user', content: 'said once', eventKey }]);
 
     expect(again?.id).toBe(first?.id);
     expect(await persistence.getMessages(chat.id)).toHaveLength(1);

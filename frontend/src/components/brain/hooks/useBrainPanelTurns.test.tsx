@@ -11,19 +11,19 @@ const door = vi.hoisted(() => ({
   stop: vi.fn(),
 }));
 
-vi.mock('@seanhogg/builderforce-brain-embedded', () => ({
+vi.mock('@seanhogg/builderforce-brain-embedded', async () => {
+  // The REAL restore rule and draft hook: this file tests how the panel wires them, not a copy of them.
+  const actual = await vi.importActual<typeof import('@seanhogg/builderforce-brain-embedded')>('@seanhogg/builderforce-brain-embedded');
+  return {
+  restoreTurn: actual.restoreTurn,
+  useComposerDraft: actual.useComposerDraft,
   chatDoorLiveness: (conv: { sending: boolean; runLive: boolean }) => ({ running: conv.sending, steerable: conv.runLive }),
-  restoreTurn: (turn: { text: string; attachments?: unknown[]; recipient: unknown }, composer: { draft: () => string; setInput: (text: string) => void; restoreAttachments: (f: unknown[]) => void; chooseRecipient: (to: unknown) => void }) => {
-    composer.restoreAttachments(turn.attachments ?? []);
-    if (composer.draft()) return; // a newer draft keeps its text AND its addressee
-    composer.setInput(turn.text);
-    composer.chooseRecipient(turn.recipient);
-  },
   useChatTurns: (options: Record<string, unknown>) => {
     door.options = options;
     return { queued: { items: [], count: 0, remove: vi.fn() }, submit: door.submit, queueAfter: door.queueAfter, stop: door.stop, steers: () => true };
   },
-}));
+  };
+});
 vi.mock('@/lib/brain/dockedBrain', () => ({ useDockedComposer: vi.fn() }));
 vi.mock('@/lib/activity/tracker', () => ({ trackActivity: vi.fn() }));
 vi.mock('@/lib/academic/useAssistantGate', () => ({ useAssistantGate: () => ({ assistantAllowed: true }) }));
@@ -75,18 +75,15 @@ describe('the web panel\'s turn door and the composer\'s attachments', () => {
   });
 
   it('puts the attachments back - and the text - when the turn was not kept', async () => {
-    let finish!: (kept: boolean) => void;
-    door.submit.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+    door.submit.mockResolvedValue(false);
     const { conv, restoreAttachments } = conversation();
     const { hook, setInput } = mount(conv);
 
-    let offered!: Promise<void>;
-    act(() => { offered = hook.result.current.handleSend() as Promise<void>; });
-    hook.rerender({ conv, input: '' }); // the box was cleared as the offer started
-    await act(async () => { finish(false); await offered; });
+    await act(async () => { await hook.result.current.handleSend(); });
 
     expect(restoreAttachments).toHaveBeenCalledWith([notes]);
-    expect(setInput).toHaveBeenCalledWith('fix the build');
+    const restore = setInput.mock.calls.map((c) => c[0]).find((v) => typeof v === 'function') as ((cur: string) => string) | undefined;
+    expect(restore?.('')).toBe('fix the build');
   });
 
   it('does not repoint or overwrite a NEWER draft when a turn is given back: only its files return', async () => {
@@ -142,7 +139,8 @@ describe('the web panel\'s turn door and the composer\'s attachments', () => {
 
     restore({ text: '@dev look', addressedTo: dev, attachments: [notes] });
 
-    expect(setInput).toHaveBeenCalledWith('@dev look');
+    const put = setInput.mock.calls.map((c) => c[0]).find((v) => typeof v === 'function') as (cur: string) => string;
+    expect(put('')).toBe('@dev look');
     expect(restoreAttachments).toHaveBeenCalledWith([notes]);
     expect(chooseRecipient).toHaveBeenCalledWith(dev);
   });

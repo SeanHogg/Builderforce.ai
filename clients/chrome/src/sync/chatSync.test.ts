@@ -72,6 +72,17 @@ describe('chat sync outbox', () => {
     expect(api.calls.filter((c) => c.path === '/api/brain/chats')).toHaveLength(1);
   });
 
+  it('sends a row under ITS OWN key when it has one, so the server upserts a late save and its retry as one row', async () => {
+    const { sync, chat, api } = await setup();
+    sync.enqueue(chat.id, { kind: 'message', row: { role: 'user', content: 'keyed', eventKey: 'steer:abc' } });
+    sync.enqueue(chat.id, { kind: 'message', row: { role: 'user', content: 'unkeyed' } });
+    await sync.flush();
+
+    const rows = (api.calls.find((c) => c.path.endsWith('/messages'))!.init.json as { messages: Array<{ content: string; eventKey: string }> }).messages;
+    expect(rows.find((r) => r.content === 'keyed')?.eventKey).toBe('steer:abc');
+    expect(rows.find((r) => r.content === 'unkeyed')?.eventKey.startsWith('rovr:')).toBe(true);
+  });
+
   it('holds writes made signed out, and sends them once there is a workspace', async () => {
     const { sync, chat, api, setScope } = await setup({ scope: null });
     sync.enqueue(chat.id, { kind: 'message', row: { role: 'user', content: 'offline thought' } });

@@ -36,8 +36,10 @@ export interface RunSteerMessage {
    */
   saved?: boolean;
   /**
-   * The key the saved ROW is stored under (the server upserts on `(chat, event_key)`), minted ONCE when the words
-   * are first enqueued, so a save that is retried - after a timeout, after a requeue - never makes a second row.
+   * The key the saved ROW is stored under (the server upserts on `(chat, event_key)`), minted ONCE: when the words
+   * the run will save are first enqueued (the Brain's wrapper), or - for a steer with none (an owner's, a child's) -
+   * by the continuation just before its FIRST save attempt, and kept through every requeue. A save that is
+   * retried, after a timeout or a requeue, therefore never makes a second row.
    */
   eventKey?: string;
 }
@@ -51,6 +53,11 @@ const interruptListeners = new Map<number, Set<() => void>>();
  * Queue one message for a run's next turn. Blank text is ignored. `interrupt` also
  * aborts the run's interruptible step now and skips the rest of its turn's calls.
  */
+/** The key a steered message's row is stored under: minted once at first enqueue, kept through every requeue. */
+export function newSteerKey(): string {
+  return `steer:${crypto.randomUUID()}`;
+}
+
 export function queueRunSteering(runKey: number, text: string, opts?: { interrupt?: boolean; attachments?: unknown; fromPerson?: boolean; persist?: boolean; saved?: boolean; eventKey?: string }): void {
   const trimmed = text.trim();
   if (!trimmed) return;

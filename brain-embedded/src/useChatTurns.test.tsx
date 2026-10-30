@@ -711,6 +711,28 @@ describe('useChatTurns - round 10: a held-before-live turn belongs to ITS chat; 
 
     expect(hasRunInterrupt(91)).toBe(false);
     expect(drainRunSteering(91)).toEqual([]);
+    // ...and chat A's words went to chat A: its inbox, to be saved (under their key) and read by A's next run.
+    expect(result.current.queued.count).toBe(0);
+    const [handed] = drainRunSteering(90);
+    expect(handed).toMatchObject({ text: 'for chat A', fromPerson: true, persist: true });
+    expect(handed?.eventKey).toMatch(/^steer:/);
+  });
+
+  it('hands EVERY held turn of the chat left, oldest first - an addressed one goes back to the composer', async () => {
+    type Turn = { text: string; to: string | null };
+    const send = vi.fn();
+    const restore = vi.fn();
+    const props = (runKey: number): ChatTurnsOptions<Turn> => ({ running: true, steerable: false, runKey, send, restore, textOf: (t) => t.text, isDirected: (t) => t.to != null });
+    const { result, rerender } = renderHook((p: ChatTurnsOptions<Turn>) => useChatTurns<Turn>(p), { initialProps: props(93) });
+    await act(async () => { await result.current.queueAfter({ text: 'first', to: null }); });
+    await act(async () => { await result.current.queueAfter({ text: '@dev second', to: 'dev' }); });
+    await act(async () => { await result.current.queueAfter({ text: 'third', to: null }); });
+
+    rerender(props(94));
+
+    expect(drainRunSteering(93).map((m) => m.text)).toEqual(['first', 'third']);
+    expect(restore).toHaveBeenCalledWith({ text: '@dev second', to: 'dev' });
+    expect(result.current.queued.count).toBe(0);
   });
 
   it('a held turn a steer would drop (a file it cannot read) stays queued and is NOT jumped by the next message', async () => {

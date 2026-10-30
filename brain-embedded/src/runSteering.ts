@@ -18,11 +18,13 @@
 import {
   drainRunSteering as drainQueue,
   hasRunInterrupt,
+  newSteerKey,
   onRunInterrupt,
   queueRunSteering as queueMessage,
   resetRunSteering,
   type RunSteerMessage as QueuedSteerMessage,
 } from '@builderforce/agent-run';
+import { rememberPendingWords } from './pendingWords';
 import type { ContentPart } from './streamChatCompletion';
 import type { ChatInputAttachment } from './types';
 
@@ -47,14 +49,16 @@ export function queueRunSteering(
   text: string,
   opts?: { interrupt?: boolean; attachments?: ChatInputAttachment[]; fromPerson?: boolean; persist?: boolean; saved?: boolean; eventKey?: string },
 ): void {
-  // Words the run will save get their row's key HERE, once; a requeue passes the key it already has.
-  queueMessage(runKey, text, opts?.persist && !opts.eventKey ? { ...opts, eventKey: newSteerKey() } : opts);
+  // Words the run will save get their row's key HERE, once; a requeue passes the key it already has. (A steer with
+  // no key - an owner's, a child's - is keyed by the continuation before its first save attempt.)
+  const eventKey = opts?.eventKey ?? (opts?.persist ? newSteerKey() : undefined);
+  // Words the run will save are also written to the device's journal now (`pendingWords.ts`): a reload before
+  // they are saved still finds them, which is what makes "your message is kept" true.
+  if (opts?.persist && eventKey && text.trim()) rememberPendingWords(runKey, eventKey, text.trim());
+  queueMessage(runKey, text, eventKey ? { ...opts, eventKey } : opts);
 }
 
-/** The key a steered message's row is stored under: minted once, kept through every requeue. */
-export function newSteerKey(): string {
-  return `steer:${crypto.randomUUID()}`;
-}
+export { newSteerKey };
 
 /** Take every message queued for a run, oldest first. Empty when none are waiting. */
 export function drainRunSteering(runKey: number): RunSteerMessage[] {

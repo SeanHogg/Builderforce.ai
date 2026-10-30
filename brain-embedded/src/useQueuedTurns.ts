@@ -77,9 +77,16 @@ export interface QueuedTurnsOptions<T> {
    * the edge and that chain never both send - one path, whatever order the renders land in.
    */
   mayFlush?: () => boolean;
+  /**
+   * The conversation changed while turns were still held: every one of them, oldest first, with the key it was held
+   * in. Each belongs to THAT conversation - the host hands it there (its run's inbox, or back to the composer) -
+   * so nothing a person typed is discarded by a chat switch. Without it the held turns are dropped (a host with
+   * nowhere to hand them).
+   */
+  handOff?: (held: readonly QueuedItem<T>[], fromKey: string | number | null) => void;
 }
 
-export function useQueuedTurns<T = string>({ running, send, resetKey = null, textOf, mayFlush }: QueuedTurnsOptions<T>): QueuedTurns<T> {
+export function useQueuedTurns<T = string>({ running, send, resetKey = null, textOf, mayFlush, handOff }: QueuedTurnsOptions<T>): QueuedTurns<T> {
   const [queued, setQueued] = useState<QueuedItem<T>[]>([]);
   // The queue is READ synchronously too (`takeFront`, the flush): this ref is the source of
   // truth and every change goes through `update`, so two moves in one tick see each other.
@@ -99,6 +106,9 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
   const textOfRef = useRef(textOf);
   // eslint-disable-next-line react-hooks/refs
   textOfRef.current = textOf;
+  const handOffRef = useRef(handOff);
+  // eslint-disable-next-line react-hooks/refs
+  handOffRef.current = handOff;
   const mayFlushRef = useRef(mayFlush);
   // eslint-disable-next-line react-hooks/refs
   mayFlushRef.current = mayFlush;
@@ -144,9 +154,18 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
     if (next !== undefined) sendRef.current(next);
   }, [running, resetKey, takeFront]);
 
-  // Queued text belongs to the conversation it was typed in, never the one
-  // switched to.
-  useEffect(() => { update(() => []); }, [resetKey, update]);
+  // Queued text belongs to the conversation it was typed in, never the one switched to: it leaves this queue and
+  // goes to ITS conversation (`handOff`) - in order, nothing discarded.
+  const heldIn = useRef(resetKey);
+  useEffect(() => {
+    const from = heldIn.current;
+    if (from === resetKey) return;
+    heldIn.current = resetKey;
+    const held = queueRef.current;
+    if (held.length === 0) return;
+    update(() => []);
+    handOffRef.current?.(held, from);
+  }, [resetKey, update]);
 
   return { items: queued, count: queued.length, submit, remove, requeue, pushBack, takeFront, clear };
 }

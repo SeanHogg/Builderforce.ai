@@ -93,7 +93,8 @@ describe('an addressed turn the door could not keep', () => {
 
     (options.restore as (m: Turn) => void)({ text: '@dev look', recipient: dev, attachments: [file] });
 
-    expect(setInput).toHaveBeenCalledWith('@dev look');
+    const put = setInput.mock.calls.map((c) => c[0]).find((v) => typeof v === 'function') as (cur: string) => string;
+    expect(put('')).toBe('@dev look');
     expect(conv.restoreAttachments).toHaveBeenCalledWith([file]);
     expect(chooseRecipient).toHaveBeenCalledWith(dev);
   });

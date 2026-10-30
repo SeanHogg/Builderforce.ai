@@ -10,6 +10,7 @@ import type { PriceBook } from '@builderforce/model-catalog';
 import { summarizeTranscript, type SummaryCompletion } from '@seanhogg/builderforce-memory/working';
 import { combineSpendSavings, type SpendSavingsSummary } from '@builderforce/spend-contract';
 import type { BrainPersistenceAdapter } from './config';
+import { slotKeyedRows } from './keyedRows';
 import type { BrainChat, BrainMessage } from './types';
 import { transcriptSeedOf } from './transcriptSeed';
 import { boundServerId } from './localChat/chatIdentity';
@@ -266,19 +267,22 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
         const existing = (await messages(tx)).filter((row) => row.payload.chatId === chatId);
         const firstId = await nextId(tx);
         const stamp = now().toISOString();
-        // A row sent again under the key it was saved with is the SAME row: the saved one comes back, nothing is
-        // written (the server's upsert on (chat, event_key), kept on the device).
+        // A row sent again under the key it was saved with is the SAME row (`keyedRows.ts`): the saved one comes
+        // back, nothing is written - the server's upsert on (chat, event_key), kept on the device.
         const known = new Map(existing.map((row) => [row.payload.eventKey, row.payload.message] as const));
         const results: BrainMessage[] = [];
         const added: BrainMessage[] = [];
         const keys: string[] = [];
-        for (const message of input) {
-          const sentKey = (message as typeof message & { eventKey?: string }).eventKey;
-          const prior = sentKey ? known.get(sentKey) : undefined;
-          if (prior) {
-            results.push(prior);
+        for (const slot of slotKeyedRows(input, (key) => known.get(key))) {
+          if (slot.kind === 'known') {
+            results.push(slot.prior);
             continue;
           }
+          if (slot.kind === 'repeat') {
+            results.push(results[slot.of]!);
+            continue;
+          }
+          const message = slot.row;
           const row: BrainMessage = {
             id: firstId + added.length,
             role: message.role,
@@ -289,8 +293,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
           };
           results.push(row);
           added.push(row);
-          keys.push(sentKey ?? `message:${newId()}`);
-          if (sentKey) known.set(sentKey, row);
+          keys.push(slot.key ?? `message:${newId()}`);
         }
         for (const [index, message] of added.entries()) {
           const eventKey = keys[index]!;

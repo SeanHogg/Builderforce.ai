@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { chatDoorLiveness, restoreTurn, useChatTurns, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, restoreTurn, useChatTurns, useComposerDraft, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { request } from '../vscodeBridge';
 import { stageSend } from './stageSend';
 import { childTarget, steerRun, type useChatChildren } from './chatChildren';
@@ -56,9 +56,7 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, chooseRe
   const chatIdRef = useRef(chatId);
   // eslint-disable-next-line react-hooks/refs
   chatIdRef.current = chatId;
-  const inputRef = useRef(input);
-  // eslint-disable-next-line react-hooks/refs
-  inputRef.current = input;
+  const composer = useComposerDraft(input, setInput);
   useEffect(() => {
     if (sendNonce === 0) return;
     const queued = pendingSendRef.current;
@@ -99,7 +97,7 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, chooseRe
   const [preparing, setPreparing] = useState(false);
   const stopPreparingRef = useRef(false);
   // A turn that could not go goes back to the box: text, files and addressee - THE restore every host shares.
-  const giveBack = useCallback((m: QueuedTurn) => restoreTurn(m, { draft: () => inputRef.current, setInput, restoreAttachments, chooseRecipient }), [setInput, restoreAttachments, chooseRecipient]);
+  const giveBack = useCallback((m: QueuedTurn) => restoreTurn(m, { draft: composer.draft, setInput: composer.fillIfEmpty, restoreAttachments, chooseRecipient }), [composer, restoreAttachments, chooseRecipient]);
   const dispatchSend = useCallback(async (m: QueuedTurn): Promise<boolean> => {
     const { text, recipient: to, attachments } = m;
     stopPreparingRef.current = false;
@@ -207,21 +205,21 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, chooseRe
   const submit = useCallback(() => {
     const text = input.trim();
     if (!text) return;
-    setInput('');
+    composer.setInput('');
     sendOrQueue(text, recipient);
-  }, [input, recipient, sendOrQueue, setInput]);
+  }, [input, recipient, sendOrQueue, composer]);
 
   // The explicit "Queue for after": hold the typed message until the run finishes
   // (sent on its falling edge); with no run going it is simply sent.
   const queueAfter = useCallback(() => {
     const text = input.trim();
     if (!text) return;
-    setInput('');
+    composer.setInput('');
     // Take the snapshot ONCE — if `holdTurn` refuses (no run to wait for), the same
     // attachments go to the immediate send; taking them again would see an empty composer.
     const attachments = takeAttachments();
     if (!holdTurn({ text, recipient, attachments })) sendOrQueue(text, recipient, attachments);
-  }, [holdTurn, input, recipient, sendOrQueue, setInput, takeAttachments]);
+  }, [holdTurn, input, recipient, sendOrQueue, composer, takeAttachments]);
 
   // Answering an ask_user card posts the chosen option(s) as the user's next turn.
   const answerQuestion = useCallback((answer: string) => {

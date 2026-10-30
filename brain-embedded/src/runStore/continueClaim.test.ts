@@ -6,6 +6,7 @@ import { getCell } from './runCells';
 import { startRun } from './startRun';
 import { wakeChat } from './wakeChat';
 import { continuationLimits } from './deadline';
+import type { RunSteerMessage } from '../runSteering';
 import type { BrainRunRequest } from './runTypes';
 import { binding, chat, ports, times, until, userRows } from '../test/continueHarness';
 
@@ -250,45 +251,77 @@ describe('idempotent saves: a row is never saved twice (M1)', () => {
     }
   });
 
-  it('several unsaved steers that become one row are requeued as ONE steer with the combined content and the row\'s key', async () => {
+  it('several leftover steers are SEPARATE rows under their own keys: X lands late, is requeued with Y, and X appears ONCE, in order', async () => {
     const saved = { ...continuationLimits };
     continuationLimits.prepareMs = 40;
     try {
-      const c = chat(['Done.'], times(1, () => {
-        queueRunSteering(9371, 'first part', { fromPerson: true, persist: true });
-        queueRunSteering(9371, 'second part', { fromPerson: true, persist: true });
+      const c = chat(['Done.', 'Next.'], times(1, () => {
+        queueRunSteering(9371, 'X', { fromPerson: true, persist: true });
+        queueRunSteering(9371, 'Y', { fromPerson: true, persist: true });
       }));
       continueOnSettle(9371, binding);
-      c.gate.holdUserRows = new Promise<void>(() => {}); // the save never answers
+      let land!: () => void;
+      c.gate.holdUserRows = new Promise<void>((resolve) => { land = resolve; });
       await startRun(9371, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
-      await until(() => !isLive(9371), 1_000);
+      await until(() => !isLive(9371), 1_000); // the allowance ended the wait; the batch save is still in flight
 
+      // Requeued as they were, in order, each with its OWN key (no combined key).
       const kept = drainRunSteering(9371);
-      expect(kept).toHaveLength(1);
-      expect(kept[0]).toMatchObject({ text: 'first part\n\nsecond part', persist: true });
-      expect(kept[0]?.eventKey).toMatch(/^merged:steer:.*\|steer:/);
+      expect(kept.map((m) => m.text)).toEqual(['X', 'Y']);
+      expect(new Set(kept.map((m) => m.eventKey)).size).toBe(2);
+      expect(kept.every((m) => /^steer:/.test(m.eventKey ?? ''))).toBe(true);
+      requeueAll(9371, kept);
+
+      land(); // the late save lands
+      await new Promise((r) => setTimeout(r, 30));
+      await startRun(9371, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'next' });
+
+      // X once, Y once, in the order they were said - the retry hit the same keys.
+      expect(userRows(c).filter((row) => row === 'X' || row === 'Y')).toEqual(['X', 'Y']);
     } finally {
       Object.assign(continuationLimits, saved);
     }
   });
 
-  it('a Stop, then a save that times out: the words are NOT requeued and the stopped answer is written', async () => {
+  it('a Stop while the save is in flight: the stop rows come AFTER the user row, once it lands - and none if it never does', async () => {
     const saved = { ...continuationLimits };
     continuationLimits.prepareMs = 40;
     try {
-      const c = chat(['Done.']);
+      const landed = chat(['Done.']);
       continueOnSettle(9372, binding);
-      await startRun(9372, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
-      c.gate.holdUserRows = new Promise<void>(() => {});
+      await startRun(9372, { resolvedSystemPrompt: 'sys', stream: landed.stream, persistence: landed.persistence, userTurn: 'first' });
+      let land!: () => void;
+      landed.gate.holdUserRows = new Promise<void>((resolve) => { land = resolve; });
 
       expect(wakeChat(9372, 'stopped while saving', undefined)).toBe(true);
       stopRun(9372);
-      await until(() => !isLive(9372), 1_000);
+      await until(() => !isLive(9372), 1_000); // the claim is released first
+      expect(drainRunSteering(9372)).toEqual([]); // stopped words are never requeued
+      expect(landed.saved.some((row) => row.content === 'Stopped before it started.')).toBe(false); // no answer before the row exists
+      land();
+      await until(() => landed.saved.some((row) => row.content === 'Stopped before it started.'), 1_000);
 
-      expect(drainRunSteering(9372)).toEqual([]);
-      expect(c.saved.some((row) => row.role === 'assistant' && row.content === 'Stopped before it started.')).toBe(true);
+      const order = landed.saved.map((row) => row.content);
+      expect(order.indexOf('stopped while saving')).toBeGreaterThan(-1);
+      expect(order.indexOf('Stopped before it started.')).toBeGreaterThan(order.indexOf('stopped while saving'));
+
+      // A save that NEVER lands leaves no orphan answer.
+      const lost = chat(['Done.']);
+      continueOnSettle(9373, binding);
+      await startRun(9373, { resolvedSystemPrompt: 'sys', stream: lost.stream, persistence: lost.persistence, userTurn: 'first' });
+      lost.gate.holdUserRows = new Promise<void>(() => {});
+      expect(wakeChat(9373, 'never saved', undefined)).toBe(true);
+      stopRun(9373);
+      await until(() => !isLive(9373), 1_000);
+      await new Promise((r) => setTimeout(r, 60));
+      expect(lost.saved.some((row) => row.content === 'Stopped before it started.')).toBe(false);
     } finally {
       Object.assign(continuationLimits, saved);
     }
   });
 });
+
+/** Put steers back exactly as a requeue does: in order, each with its own flags and key. */
+function requeueAll(runKey: number, steers: readonly RunSteerMessage[]): void {
+  for (const m of steers) queueRunSteering(runKey, m.text, { ...(m.fromPerson ? { fromPerson: true } : {}), ...(m.persist ? { persist: true } : {}), ...(m.eventKey ? { eventKey: m.eventKey } : {}) });
+}

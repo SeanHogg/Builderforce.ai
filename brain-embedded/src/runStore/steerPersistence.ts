@@ -17,6 +17,7 @@
  */
 
 import { MID_TURN_META_KEY } from '@builderforce/agent-loop';
+import { forgetPendingWords } from '../pendingWords';
 import type { RunSteerMessage } from '../runSteering';
 import type { RunCell } from './runCell';
 import { emit, nowIso, pushTrace, recordAppended } from './runCells';
@@ -39,6 +40,7 @@ export async function persistSteer(c: RunCell, chatId: number, persistence: Pick
     if (!msg) return;
     recordAppended(c, msg);
     emit(c);
+    forgetPendingWords(chatId, [steer.eventKey]);
   } catch (e) {
     // The steer already reached the model; only its saved copy is lost - said on the trace
     // (a diagnostic step, like every trace result: English, read by triage, not a UI string).

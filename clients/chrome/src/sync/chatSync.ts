@@ -272,7 +272,9 @@ async function sendBatch(
   for (const [i, item] of items.entries()) {
     const entryId = ctx.ids[i] ?? `${ctx.idempotencyKey}:${i}`;
     if (item.kind === 'message') {
-      rows.push({ ...item.row, eventKey: `rovr:${entryId}` });
+      // The row's own key when it has one (the server upserts on it, so a late save and its retry are one row);
+      // otherwise the outbox entry's.
+      rows.push({ ...item.row, eventKey: item.row.eventKey ?? `rovr:${entryId}` });
       continue;
     }
     await flushRows();
