@@ -67,28 +67,28 @@
     "@neondatabase/serverless": "^0.10.4",
     "@seanhogg/builderforce-memory": "^2026.10.35",
     "@seanhogg/builderforce-memory-engine": "^2026.10.28",
-    "@seanhogg/builderforce-quality": "^2026.7.5",
+    "@seanhogg/builderforce-quality": "^2026.8.0",
     "@seanhogg/builderforce-webcontainers": "^2026.10.12",
-    "drizzle-orm": "^0.36.4",
+    "drizzle-orm": "^0.45.4",
     "fflate": "^0.8.2",
-    "hono": "^4.13.7",
-    "lib0": "^0.2.94",
+    "hono": "^4.13.14",
+    "lib0": "^0.2.119",
     "pdf-lib": "^1.17.1",
     "pptxgenjs": "^3.12.0",
-    "unpdf": "^1.8.1",
+    "unpdf": "^1.9.1",
     "y-protocols": "^1.0.6",
-    "yaml": "^2.6.1",
-    "yjs": "^13.6.30",
-    "zod": "^4.4.3"
+    "yaml": "^2.9.1",
+    "yjs": "^13.6.33",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260305.0",
-    "drizzle-kit": "0.30.6",
+    "drizzle-kit": "0.31.11",
     "fake-indexeddb": "^6.2.4",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-7": "npm:typescript@^7.0.2",
     "vitest": "^4.0.18",
-    "wrangler": "^4.120.1"
+    "wrangler": "^4.153.0"
   },
   "pnpm": {
     "overrides": {
