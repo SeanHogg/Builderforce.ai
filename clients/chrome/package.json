@@ -1,7 +1,7 @@
 {
   "name": "builderforce-rovr",
   "displayName": "Rovr — Builderforce browser assistant",
-  "version": "2026.10.33",
+  "version": "2026.10.34",
   "private": true,
   "type": "module",
   "description": "Rovr, Builderforce's own browser assistant, as a Chrome (MV3) extension: the shared Brain agent loop running in the side panel, local-first inference (Synapse/bfi, Ollama, FreeToken on this machine) with failover to the Builderforce gateway, browser tools on the active tab behind a per-site allow list and an explicit confirm for anything that submits, buys, sends or touches a sensitive field, an action ledger that syncs to the chat as steps, user-authored playbooks, tasks linked to the chat, and durable offline sync through the shared write outbox.",
