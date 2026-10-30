@@ -45,7 +45,7 @@ export {
   type PriceBook,
 } from './priceBook.js';
 export { snapshotPriceBook } from './snapshotPriceBook.js';
-export { catalogIdCandidates, isWeakerModel, tierOfModel } from './weakerModel.js';
+export { isWeakerModel } from './weakerModel.js';
 export { residencyOf, type CatalogView, type ModelResidency } from './view.js';
 export {
   LLM_PROVIDERS,

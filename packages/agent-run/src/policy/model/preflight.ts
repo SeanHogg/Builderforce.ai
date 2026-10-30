@@ -204,8 +204,8 @@ function recordWeaker(ctx: PolicyContext, served: string): void {
  *  - an AUTO-ROUTED turn (asked for nothing) while the preflight found a connected account
  *    it could not use, or a plan-phase turn (no code changed yet) that landed on a
  *    Flash-class model — said once per served model per run (`RunState.downgrades`).
- * Either that lands on a WEAKER model than asked is also recorded in `RunState.degradedBy`,
- * which is what the outcome row's `degraded` reads.
+ * Only the first - a model that was ASKED for and is weaker than the one served - is recorded in
+ * `RunState.degradedBy` (what the outcome row's `degraded` reads); an auto-routed turn asked for nothing.
  */
 export function modelDowngrade(ctx: PolicyContext, requested: string | undefined, served: string | undefined, book: PriceBook = snapshotPriceBook()): ModelDowngradeEvent | undefined {
   if (!served || served === "default") return undefined;
@@ -223,7 +223,7 @@ export function modelDowngrade(ctx: PolicyContext, requested: string | undefined
   const flash = !byo && ctx.state.writtenPaths.length === 0 ? planModelWarning(served) : null;
   if (!byo && !flash) return undefined;
   ctx.state.downgrades = [...(ctx.state.downgrades ?? []), served];
-  // An auto-routed downgrade is weaker than asked by definition (a connected account unusable, or a Flash-class plan model).
-  recordWeaker(ctx, served);
+  // Announce only. Nothing was ASKED for here, so there is no requested model to be weaker than: `degradedBy`
+  // is recorded solely where a requested model and a served one can be compared (the failover branch above).
   return { kind: "llm.model_downgrade", step: ctx.step, requestedModel: "default", model: served, reason: byo ? `byo_unresolved:${byo}` : `plan_tier:${flash!.tier}` };
 }

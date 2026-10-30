@@ -101,4 +101,10 @@ export type RunEmbeddedAgentParams = {
   streamParams?: AgentStreamParams;
   ownerNumbers?: string[];
   enforceFinalTag?: boolean;
+  /**
+   * The `provider/model` the run was ORIGINALLY asked for. `provider`/`model` above are the failover CANDIDATE this
+   * attempt was entered with; a run served by a weaker model than the original request is `degraded`, whichever
+   * candidate it landed on. Absent: the entry model is the request.
+   */
+  requestedModel?: string;
 };

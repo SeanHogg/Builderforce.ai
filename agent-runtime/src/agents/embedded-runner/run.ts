@@ -191,8 +191,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
   const isProbeSession = params.sessionId?.startsWith("probe-") ?? false;
 
   // Learned Model Routing (PRD 13): what this run will teach the fleet (see `learned-routing/run-outcome.ts`).
-  const tracker = trackRunOutcome({ runId: params.runId, isProbeSession });
-  const { outcome } = tracker;
+  const tracker = trackRunOutcome({ runId: params.runId, isProbeSession, requestedModel: params.requestedModel });
 
   const runPromise: Promise<EmbeddedRunResult> = enqueueSession(() =>
     enqueueGlobal(async () => {
@@ -281,7 +280,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
         prompt: params.prompt,
         cfg: params.config,
       });
-      outcome.actionType = learnedSeed.actionType;
+      tracker.seed(learnedSeed.actionType);
       if (
         learnedSeed.reordered &&
         (learnedSeed.provider !== provider || learnedSeed.modelId !== modelId)
@@ -291,6 +290,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
         );
         provider = learnedSeed.provider;
         modelId = learnedSeed.modelId;
+        tracker.intend({ provider, model: modelId });
         // NOT `degraded`. A learned seed IS the intent, not a fall away from it —
         // marking it degraded would dock the outcome score of the very model learned
         // routing chose, and teach the table to stop choosing it. `degraded` is
@@ -1021,10 +1021,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
           // `steps` feeds the api's EFFICIENCY half of the outcome score, which counts
           // model turns. The closest honest local proxy is the tool calls this run made
           // plus each auto-continue nudge plus the final turn.
-          outcome.steps =
-            (Array.isArray(attempt.toolMetas) ? attempt.toolMetas.length : 0) +
-            autoContinueNudges +
-            1;
+          tracker.steps((Array.isArray(attempt.toolMetas) ? attempt.toolMetas.length : 0) + autoContinueNudges + 1);
           const agentMeta: EmbeddedAgentMeta = {
             sessionId: sessionIdUsed,
             provider: lastAssistant?.provider ?? provider,

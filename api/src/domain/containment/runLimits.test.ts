@@ -1,11 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { RUN_TOKEN_CAP_BY_PLAN, checkRunLimits, resolveRunTokenCap, runBudgetUsedShare } from './runLimits';
+import { RUN_TOKEN_CAP_BY_PLAN, checkRunLimits, isRunCapMessage, runSpendLimitMessage, resolveRunTokenCap, runBudgetUsedShare } from './runLimits';
 
 describe('checkRunLimits', () => {
   const limits = { maxFiles: 2, maxRepositories: 1, maxSpendMillicents: 100 };
   it('allows usage inside every declared boundary', () => expect(checkRunLimits(limits, { files: 2, repositories: 1, spendMillicents: 99 })).toBeNull());
   it('blocks a new file beyond the boundary', () => expect(checkRunLimits(limits, { files: 3, repositories: 1, spendMillicents: 0 })).toContain('file limit'));
   it('fails closed at the spend boundary', () => expect(checkRunLimits(limits, { files: 0, repositories: 1, spendMillicents: 100 })).toContain('spend limit'));
+});
+
+describe('isRunCapMessage', () => {
+  it('reads the messages the builders write, including a fractional millicent spend', () => {
+    expect(isRunCapMessage(runSpendLimitMessage(900_000, 800_000))).toBe(true);
+    expect(isRunCapMessage(runSpendLimitMessage(12.5, 10))).toBe(true);
+    expect(isRunCapMessage(runSpendLimitMessage(1234.567, 1000.5))).toBe(true);
+    expect(isRunCapMessage('token limit reached (1000/1000 tokens)')).toBe(true);
+  });
+  it('is false for a tenant allowance (no used/cap pair) and for no message', () => {
+    expect(isRunCapMessage('Plan daily token limit reached (50,000 tokens).')).toBe(false);
+    expect(isRunCapMessage(null)).toBe(false);
+  });
 });
 
 describe('per-run token cap (A2)', () => {

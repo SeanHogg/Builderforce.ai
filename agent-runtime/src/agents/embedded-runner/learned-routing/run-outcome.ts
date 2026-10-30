@@ -20,12 +20,12 @@ import { isFailoverError } from "../../failover-error.js";
 import { completeLearnedRun, type CompleteRunInput } from "./index.js";
 
 /** A provider-qualified model, as the runner knows it. */
-export interface ModelRef {
+interface ModelRef {
   provider: string;
   model: string;
 }
 
-export interface RunOutcomeState {
+interface RunOutcomeState {
   actionType: ActionType;
   provider: string;
   model: string;
@@ -33,7 +33,13 @@ export interface RunOutcomeState {
   degraded: boolean;
 }
 
-export function trackRunOutcome(input: { runId: string; isProbeSession: boolean }) {
+/**
+ * `requestedModel` is the model the run was ORIGINALLY asked for (`provider/model`). The runner is re-entered once
+ * per failover candidate (`runWithModelFallback`), so what it was entered with is the CANDIDATE; comparing the
+ * model served against that would call a fall from opus to haiku "not degraded" the moment haiku became the
+ * candidate. Absent, the entry model is the request (a direct call).
+ */
+export function trackRunOutcome(input: { runId: string; isProbeSession: boolean; requestedModel?: string }) {
   const outcome: RunOutcomeState = {
     actionType: DEFAULT_ACTION_TYPE,
     provider: "",
@@ -42,14 +48,26 @@ export function trackRunOutcome(input: { runId: string; isProbeSession: boolean 
     degraded: false,
   };
   const qualified = (ref: ModelRef): string => `${ref.provider}/${ref.model}`;
+  let asked = input.requestedModel;
 
   return {
-    outcome,
-    /** The model the run LOCKED ONTO, and whether that is a weaker one than it asked for. */
-    lockOnto(served: ModelRef, asked: ModelRef): void {
+    /** What fleet learning labelled this work (a seed computed either way: an unlabelled run teaches the wrong bucket). */
+    seed(actionType: ActionType): void {
+      outcome.actionType = actionType;
+    },
+    /** Learned routing CHOSE this model: that is the intent, not a fall away from it, so it replaces the baseline. */
+    intend(ref: ModelRef): void {
+      asked = qualified(ref);
+    },
+    /** Model turns this run took (the api's EFFICIENCY half of the outcome score). */
+    steps(count: number): void {
+      outcome.steps = count;
+    },
+    /** The model the run LOCKED ONTO, and whether that is a weaker one than it asked for (`entered` when nothing else was). */
+    lockOnto(served: ModelRef, entered: ModelRef): void {
       outcome.provider = served.provider;
       outcome.model = served.model;
-      if (isWeakerModel(qualified(asked), qualified(served))) outcome.degraded = true;
+      if (isWeakerModel(asked ?? qualified(entered), qualified(served))) outcome.degraded = true;
     },
     /** ONE report per run, on every exit. Fire-and-forget: `completeLearnedRun` never throws. */
     report(terminalStatus: CompleteRunInput["terminalStatus"], error?: unknown): void {
@@ -59,7 +77,7 @@ export function trackRunOutcome(input: { runId: string; isProbeSession: boolean 
         model: qualified(outcome),
         actionType: outcome.actionType,
         terminalStatus,
-        rateLimited: isFailoverError(error) && isRateLimitFailure(error.message),
+        rateLimited: isFailoverError(error) && isRateLimitFailure(error.message, error.status),
         degraded: outcome.degraded,
         steps: outcome.steps,
       });

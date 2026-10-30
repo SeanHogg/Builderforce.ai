@@ -12,6 +12,12 @@ describe('isRateLimitFailure', () => {
       'provider rate limit hit',
       'rate-limited by upstream',
       'the pool is at capacity limit',
+      'The model is temporarily overloaded, please try again later',
+      '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+      'HTTP 529: Overloaded',
+      'RESOURCE_EXHAUSTED: quota for this minute',
+      'Provider anthropic is in cooldown (all profiles unavailable)',
+      'All models failed: all in cooldown or unavailable',
     ]) {
       expect(isRateLimitFailure(message), message).toBe(true);
     }
@@ -20,6 +26,14 @@ describe('isRateLimitFailure', () => {
   it("is true for OpenAI's own rate_limit_exceeded - a genuine provider throttle, not a tenant budget", () => {
     expect(isRateLimitFailure('chat completion failed with HTTP 429: {"error":{"code":"rate_limit_exceeded"}}')).toBe(true);
     expect(isTenantBudgetFailure('{"code":"rate_limit_exceeded"}')).toBe(false);
+  });
+
+  it('reads an HTTP status the caller already holds, whatever the body says', () => {
+    expect(isRateLimitFailure('upstream said no', 429)).toBe(true);
+    expect(isRateLimitFailure('upstream said no', 529)).toBe(true);
+    expect(isRateLimitFailure('upstream said no', 500)).toBe(false);
+    expect(isRateLimitFailure('upstream said no', undefined)).toBe(false);
+    expect(isRateLimitFailure('{"code":"plan_token_limit_exceeded"}', 429), 'a tenant budget wins over the status').toBe(false);
   });
 
   it("is false for each of OUR gateway's tenant-budget codes, which are also answered 429", () => {
@@ -39,7 +53,7 @@ describe('isRateLimitFailure', () => {
 describe('isTenantBudgetFailure', () => {
   it('reads our gateway codes and the wording the gateway uses without one', () => {
     for (const code of TENANT_BUDGET_CODES) expect(isTenantBudgetFailure(`{"code":"${code}"}`), code).toBe(true);
-    for (const wording of ['Daily token limit reached', 'Monthly allowance reached', 'Member spend cap reached', 'Premium budget exhausted', 'Video generation limit reached']) {
+    for (const wording of ['Daily token limit reached', 'Monthly allowance reached', 'Member spend cap reached', 'Daily premium-model budget exhausted', 'Video generation limit reached']) {
       expect(isTenantBudgetFailure(wording), wording).toBe(true);
     }
   });
@@ -47,6 +61,7 @@ describe('isTenantBudgetFailure', () => {
   it('is TENANT phrasing only: a bare "budget exhausted" and a run stopping at its OWN cap are not a tenant budget', () => {
     expect(isTenantBudgetFailure('401 Unauthorized: gateway retry budget exhausted')).toBe(false);
     expect(isTenantBudgetFailure('retry budget exhausted after 3 attempts')).toBe(false);
+    expect(isTenantBudgetFailure('401 Unauthorized: invalid token; retry budget exhausted')).toBe(false);
     expect(isTenantBudgetFailure('token limit reached (250000/200000 tokens)')).toBe(false);
     expect(isTenantBudgetFailure('spend limit reached (900000/800000 millicents)')).toBe(false);
     expect(isTenantBudgetFailure('Plan daily token limit reached (50,000 tokens).')).toBe(true);

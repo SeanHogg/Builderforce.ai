@@ -75,6 +75,21 @@ describe('run failure classification', () => {
     // budget 429s: the customer used their allowance, no model was throttled.
     expect(classifyRunFailure('HTTP 429: Plan daily token limit reached (50,000 tokens).')).toBe('quota_exhausted');
     expect(classifyRunFailure('HTTP 529: over capacity')).toBe('rate_limited');
+    // "budget exhausted" alone is not tenant wording - only the gateway's "premium-model budget exhausted" is.
+    expect(classifyRunFailure('401 Unauthorized: invalid token; retry budget exhausted')).toBe('auth_failed');
+    expect(classifyRunFailure('Daily premium-model budget exhausted (cap $5.00/day).')).toBe('quota_exhausted');
+  });
+
+  it('reads an overloaded or cooled-down provider as rate_limited, not a quality failure', () => {
+    for (const message of [
+      'The model is temporarily overloaded, please try again later',
+      '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+      'HTTP 529: Overloaded',
+      'Provider anthropic is in cooldown (all profiles unavailable)',
+      'All models failed (2): all in cooldown or unavailable',
+    ]) {
+      expect(classifyRunFailure(message), message).toBe('rate_limited');
+    }
   });
 
   it('a run that hit its OWN per-run cap is run_cap_reached - the tenant did not run out, the run looped', () => {
