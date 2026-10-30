@@ -878,8 +878,8 @@
     "description": "Chat error: this model crashed repeatedly on this device and is refused for now"
   },
   "continuationTimedOut": {
-    "message": "未能及时准备好运行。请重新发送你的消息。",
-    "description": "Chat error: continuing a run with the words typed meanwhile took too long; they are kept and the person sends again"
+    "message": "这花了太长时间。你的消息已保留，将与你的下一条消息一起被读取。",
+    "description": "Chat error: continuing a run with the words typed meanwhile took too long; the words are kept and read with the next message"
   },
   "manageLocalModels": {
     "message": "管理设备上的模型",

@@ -32,8 +32,8 @@ export interface QueuedItem<T> {
   /** Stable per held turn, so a host can render it and let the user remove it. */
   readonly id: number;
   readonly value: T;
-  /** Held only because no run was live yet (typed while the turn that starts it was still getting ready). */
-  readonly preLive?: boolean;
+  /** Held only because no run was live yet (typed while the turn that starts it was still getting ready) - in THIS chat's run. */
+  readonly preLiveFor?: number;
 }
 
 export interface QueuedTurns<T = string> {
@@ -46,7 +46,7 @@ export interface QueuedTurns<T = string> {
    * flight and the caller must not send), false when the caller should send it
    * now. Written this way so the host keeps ownership of how it sends.
    */
-  submit: (value: T, opts?: { preLive?: boolean }) => boolean;
+  submit: (value: T, opts?: { preLiveFor?: number }) => boolean;
   /** Drop one held turn (the user removed it, or steered it into the run). */
   remove: (id: number) => void;
   /** Put a turn back at the FRONT of the queue - a flushed turn the host did not keep must not be lost. */
@@ -104,12 +104,12 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
   mayFlushRef.current = mayFlush;
   const runningRef = useRef(running);
 
-  const submit = useCallback((value: T, opts?: { preLive?: boolean }) => {
+  const submit = useCallback((value: T, opts?: { preLiveFor?: number }) => {
     const text = turnBody(value, textOfRef.current);
     if (!text) return false;
     if (!runningRef.current) return false;
     const held = (typeof value === 'string' ? text : value) as T;
-    update((current) => [...current, { id: (nextId.current += 1), value: held, ...(opts?.preLive ? { preLive: true } : {}) }]);
+    update((current) => [...current, { id: (nextId.current += 1), value: held, ...(opts?.preLiveFor !== undefined ? { preLiveFor: opts.preLiveFor } : {}) }]);
     return true;
   }, [update]);
   // Read through a ref so `submit`'s identity survives a run starting: hosts

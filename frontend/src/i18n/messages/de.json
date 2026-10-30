@@ -12329,7 +12329,7 @@
     "engineCrashed": "Das Modell auf diesem Gerät ist abgestürzt. Sende die Nachricht erneut, um es neu zu starten.",
     "engineDetached": "Das Modell auf diesem Gerät hat vor dem Ende aufgehört. Sende die Nachricht erneut, um es noch einmal zu versuchen.",
     "modelKeepsCrashing": "Dieses Modell stürzt auf diesem Gerät immer wieder ab. Entferne es oder probiere ein anderes Modell.",
-    "continuationTimedOut": "Der Lauf konnte nicht rechtzeitig vorbereitet werden. Sende deine Nachricht erneut.",
+    "continuationTimedOut": "Das hat zu lange gedauert. Deine Nachricht ist gespeichert und wird mit deiner nächsten Nachricht gelesen.",
     "manageLocalModels": "Modelle auf diesem Gerät verwalten",
     "platformRefusedMode": "„Nur lokal“ hält diesen Lauf auf diesem Gerät, daher konnte er BuilderForce nicht erreichen. Wechsle im /-Menü unter „Modell“ zu Hybrid, um es zu erlauben.",
     "platformRefusedSync": "Die Kontosynchronisierung ist aus, daher konnte dies nicht in deinem Konto gespeichert werden. Schalte die Synchronisierung in deinen Plattformeinstellungen ein oder arbeite lokal weiter.",

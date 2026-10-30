@@ -27,7 +27,7 @@ import { reportRunEnd } from './runEndOutcome';
 import { beginRun } from './beginRun';
 import { continueLeftovers, takeContinueOnSettle } from './continueChat';
 import { holdClaim, releaseClaim, type RunClaim } from './runClaim';
-import { continuationLimits, within } from './deadline';
+import { budget, continuationLimits, within } from './deadline';
 import { handTurnToLiveRun, type StartOutcome } from './refusedStart';
 import { markPersonTurn } from './chatAsks';
 import type { BrainRunRequest } from './runTypes';
@@ -129,12 +129,15 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
     // message typed while the run unwinds steers (the claim counts as live) instead of racing it.
     // EVERY unwind holds it (a Stop's too): a new run cannot start under the old run's finally.
     const settleClaim = holdClaim(c);
+    // ONE allowance for the whole settle (the Stop's partial turn, the backstops, the flush), not one per step.
+    const runId = c.runId;
+    const left = budget(continuationLimits.settleMs);
     try {
       c.streamingText = '';
       c.abort = null;
       // A Stop keeps what it cut off — the partial reply and the model that was writing it.
       // Bounded: every await made while the claim is held is, so the chat can never stick.
-      if (aborted) await within(continuationLimits.settleMs, async () => { await keepStoppedTurn(chatId, c, req.persistence); }, () => undefined);
+      if (aborted) await within(left(), async () => { await keepStoppedTurn(chatId, c, req.persistence, () => c.runId === runId); }, () => undefined);
       // Guarantee a code change is tied to a ticket: if this run CHANGED code (an IDE
       // file tool succeeded) but never itself recorded/linked one, mint a ticket now
       // via from_delta, tied to this chat — so an edit is never invisible or unlinked.
@@ -149,7 +152,6 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       }
       // What the backstops decide on is read NOW, synchronously, from THIS run - never later from a cell the
       // next run may be using. Evaluated once: `shipped` gates ticket completion AND is the reported outcome's `merged`.
-      const runId = c.runId;
       const changed = c.codeChanged;
       const shipped = !aborted && changed && shippedToBaseBranch(runTrace(c), { touchedFiles: c.touchedFiles });
       const reviewedInPreview = !aborted && changed ? ticketsReviewedInPreview(runTrace(c)) : [];
@@ -158,7 +160,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       // The backstops hold the chat (the claim) - so they wait at most `settleMs`: a hung ticket call must not
       // leave the chat live forever. Late work finishes in the background on the snapshot, writing nothing
       // into a later run; a failure of it is traced (while this run is current), never unhandled.
-      await within(continuationLimits.settleMs, async () => {
+      await within(left(), async () => {
         // The ticket itself was already opened on the run's first edit (see the tool loop), so this pass ATTACHES
         // whatever was touched afterwards to that same ticket - and still mints one in the case the opening call
         // failed. It is skipped on a Stop.
@@ -227,7 +229,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       // landed AFTER the run resolved. Bounded: `flush` makes one send attempt per batch
       // (a failure stays queued for the outbox's own retry) and never throws. The live
       // view is already settled above, so nothing visible waits on it.
-      await within(continuationLimits.settleMs, async () => { await steps.flush(); }, () => undefined);
+      await within(left(), async () => { await steps.flush(); }, () => undefined);
       // Direction nobody read becomes THIS chat's next turn, whichever chat is on screen. A Stop
       // ends the conversation's work, waiting words included.
       if (continues && !aborted) await continueLeftovers(runKey, c, startRun, settleClaim);

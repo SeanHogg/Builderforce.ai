@@ -21,6 +21,7 @@ export function chat(texts: string[], onAssistantRow?: () => void) {
   const gate = { failUserRows: false, holdUserRows: null as Promise<void> | null };
   let n = 0;
   let id = 0;
+  const byKey = new Map<string, unknown>();
   const stream: BrainRunRequest['stream'] = async (opts) => {
     asked.push(JSON.parse(JSON.stringify(opts.messages)));
     const text = texts[n];
@@ -34,11 +35,21 @@ export function chat(texts: string[], onAssistantRow?: () => void) {
         if (gate.holdUserRows) await gate.holdUserRows;
         if (gate.failUserRows) throw new Error('token expired');
       }
+      const out: unknown[] = [];
       for (const row of rows) {
+        // Upsert on (chat, eventKey): a row sent again under the key it was saved with is the SAME row.
+        const prior = row.eventKey ? byKey.get(`${chatId}:${row.eventKey}`) : undefined;
+        if (prior) {
+          out.push(prior);
+          continue;
+        }
         saved.push({ chatId, role: row.role, content: row.content });
         if (row.role === 'assistant') onAssistantRow?.();
+        const made = { id: (id += 1), chatId, createdAt: '', metadata: row.metadata ?? null, seq: id, ...row };
+        if (row.eventKey) byKey.set(`${chatId}:${row.eventKey}`, made);
+        out.push(made);
       }
-      return rows.map((row) => ({ id: (id += 1), chatId, createdAt: '', metadata: row.metadata ?? null, seq: id, ...row })) as never;
+      return out as never;
     },
   };
   return { saved, asked, stream, persistence, gate };

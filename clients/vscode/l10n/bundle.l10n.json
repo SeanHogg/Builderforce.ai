@@ -936,7 +936,7 @@
   "The on-device model crashed. Send again to restart it.": "The on-device model crashed. Send again to restart it.",
   "The on-device model stopped before it finished. Send again to retry.": "The on-device model stopped before it finished. Send again to retry.",
   "This model keeps crashing on this device. Remove it, or try another model.": "This model keeps crashing on this device. Remove it, or try another model.",
-  "The run could not be prepared in time. Send your message again.": "The run could not be prepared in time. Send your message again.",
+  "That took too long. Your message is kept and will be read with your next message.": "That took too long. Your message is kept and will be read with your next message.",
   "Manage on-device models": "Manage on-device models",
   "Your pick {0} failed; answered with Auto.": "Your pick {0} failed; answered with Auto.",
   "Hybrid": "Hybrid",

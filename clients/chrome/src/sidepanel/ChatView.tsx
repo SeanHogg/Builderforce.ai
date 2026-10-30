@@ -13,7 +13,7 @@
  * chat through THE shared `useChatCreation`. Which chat is open is chosen from
  * the header's History lever (`RovrChatHistory`).
  */
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   AiSurface,
   BrainTimeline,
@@ -36,7 +36,7 @@ import {
   useModelFallback,
 } from '@seanhogg/builderforce-brain-ui';
 import catalogs from 'virtual:rovr-timeline-catalogs';
-import { chatDoorLiveness, deriveChatTitle, useBrainConversation, useChatCreation, useChatTurns } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, deriveChatTitle, restoreTurn, useBrainConversation, useChatCreation, useChatTurns } from '@seanhogg/builderforce-brain-embedded';
 import { PRICING_URL } from '../config';
 import { t, uiCatalogLocale, type MessageKey } from '../i18n/t';
 import type { LocalChat } from '../store/records';
@@ -172,9 +172,16 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   });
   // A turn the door did not keep (the send failed before it was saved - an expired session) gives its
   // words back to the box, as the web and the editor do: a message is never lost to a failed send.
+  const draftRef = useRef(draft);
+  // eslint-disable-next-line react-hooks/refs
+  draftRef.current = draft;
+  const { restoreAttachments } = conv;
+  const giveBack = useCallback((text: string) => restoreTurn({ text, recipient: null }, {
+    draft: () => draftRef.current, setInput: setDraft, restoreAttachments, chooseRecipient: () => undefined,
+  }), [restoreAttachments]);
   const offer = (text: string, door: (text: string) => Promise<boolean>) => {
     setDraft('');
-    void door(text).then((kept) => { if (!kept) setDraft((cur) => cur || text); });
+    void door(text).then((kept) => { if (!kept) giveBack(text); });
   };
   const send = () => {
     const text = draft.trim();
@@ -186,8 +193,8 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   };
   // An answered ask_user card is a turn like a typed one: a failed send gives the answer back to the box.
   const answer = useCallback((text: string) => {
-    void turns.submit(text).then((kept) => { if (!kept) setDraft((cur) => cur || text); });
-  }, [turns.submit]);
+    void turns.submit(text).then((kept) => { if (!kept) giveBack(text); });
+  }, [turns.submit, giveBack]);
 
   // The question this chat is blocked on, restated above the composer — the same
   // predicate the transcript's card uses, so banner and card never disagree.

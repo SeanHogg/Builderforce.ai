@@ -45,9 +45,15 @@ export interface RunSteerMessage extends Omit<QueuedSteerMessage, 'attachments'>
 export function queueRunSteering(
   runKey: number,
   text: string,
-  opts?: { interrupt?: boolean; attachments?: ChatInputAttachment[]; fromPerson?: boolean; persist?: boolean; saved?: boolean },
+  opts?: { interrupt?: boolean; attachments?: ChatInputAttachment[]; fromPerson?: boolean; persist?: boolean; saved?: boolean; eventKey?: string },
 ): void {
-  queueMessage(runKey, text, opts);
+  // Words the run will save get their row's key HERE, once; a requeue passes the key it already has.
+  queueMessage(runKey, text, opts?.persist && !opts.eventKey ? { ...opts, eventKey: newSteerKey() } : opts);
+}
+
+/** The key a steered message's row is stored under: minted once, kept through every requeue. */
+export function newSteerKey(): string {
+  return `steer:${crypto.randomUUID()}`;
 }
 
 /** Take every message queued for a run, oldest first. Empty when none are waiting. */

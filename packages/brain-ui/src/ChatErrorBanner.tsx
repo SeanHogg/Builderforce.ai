@@ -52,7 +52,7 @@ export interface ChatErrorBannerLabels {
   engineDetached: string;
   /** The model trapped repeatedly and is refused this session — replaces `model_keeps_crashing`. */
   modelKeepsCrashing: string;
-  /** A continuation waited too long on the host - replaces `continuation_timed_out`; the person sends again. */
+  /** A continuation took too long - replaces `continuation_timed_out`; the words are kept and read with the next message. */
   continuationTimedOut: string;
   /** Open where on-device models are managed (removed) — offered beside "Pick a model"
    *  for a model that keeps crashing. */
@@ -83,7 +83,7 @@ export const DEFAULT_CHAT_ERROR_LABELS: ChatErrorBannerLabels = {
   engineCrashed: 'The on-device model crashed. Send again to restart it.',
   engineDetached: 'The on-device model stopped before it finished. Send again to retry.',
   modelKeepsCrashing: 'This model keeps crashing on this device. Remove it, or try another model.',
-  continuationTimedOut: 'The run could not be prepared in time. Send your message again.',
+  continuationTimedOut: 'That took too long. Your message is kept and will be read with your next message.',
   manageLocalModels: 'Manage on-device models',
   platformRefusedMode: 'Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it.',
   platformRefusedSync: 'Account sync is off, so this could not be saved to your account. Turn on sync in your platform settings, or keep working locally.',

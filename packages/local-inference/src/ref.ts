@@ -79,16 +79,16 @@ export interface ServedResult {
 }
 
 /** What actually SERVED a call, as its transport reported it: the attempt marked `served` wins, else the resolved model. */
-function servedTarget(result: ServedResult): string | undefined {
+export function servedRef(result: ServedResult): string | undefined {
   return result.localFirst?.find((attempt) => attempt.outcome === 'served')?.target ?? result.resolvedModel;
 }
 
 /**
  * THE rule for "this call was free": it was served by a model ON THIS DEVICE ({@link runsOnDevice}). Judged by
- * what SERVED it; `requestedModel` is accepted for signature parity but never a fallback - what was asked for
- * is not what answered, and a call nothing identifies has an unknown cost, not a free one. A hosted runtime
+ * what SERVED it - never the model that was asked for: a call nothing identifies has an unknown cost, not a
+ * free one. A hosted runtime
  * dispatched from here (`local/kimi-code`) is not on the device: paid, counted against a cap, no saving booked.
  */
-export function servedOnDevice(result: ServedResult, _requestedModel?: string): boolean {
-  return runsOnDevice(servedTarget(result));
+export function servedOnDevice(result: ServedResult): boolean {
+  return runsOnDevice(servedRef(result));
 }

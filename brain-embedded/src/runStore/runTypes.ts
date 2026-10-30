@@ -40,7 +40,7 @@ export type BrainStreamFn = (
 export interface BrainRunPersistence {
   sendMessages(
     chatId: number,
-    messages: Array<{ role: string; content: string; metadata?: string }>,
+    messages: Array<{ role: string; content: string; metadata?: string; eventKey?: string }>,
   ): Promise<BrainMessage[]>;
 }
 

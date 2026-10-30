@@ -47,3 +47,15 @@ describe('persistSteer', () => {
     expect(meta.attachments).toEqual([image]);
   });
 });
+
+describe('persistSteer - the row is keyed', () => {
+  it('saves the steer under its eventKey, so a repeated save is the same row', async () => {
+    const c = makeCell();
+    const sendMessages = vi.fn(async (chatId: number, rows: Array<{ role: string; content: string; eventKey?: string }>) =>
+      rows.map((row, i) => ({ id: 80 + i, chatId, createdAt: '', ...row })) as never);
+
+    await persistSteer(c, 5, { sendMessages }, { text: 'once', fromPerson: true, persist: true, eventKey: 'steer:abc' });
+
+    expect(sendMessages.mock.calls[0]![1][0]).toMatchObject({ content: 'once', eventKey: 'steer:abc' });
+  });
+});

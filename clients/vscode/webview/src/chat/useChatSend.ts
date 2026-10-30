@@ -56,6 +56,9 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, chooseRe
   const chatIdRef = useRef(chatId);
   // eslint-disable-next-line react-hooks/refs
   chatIdRef.current = chatId;
+  const inputRef = useRef(input);
+  // eslint-disable-next-line react-hooks/refs
+  inputRef.current = input;
   useEffect(() => {
     if (sendNonce === 0) return;
     const queued = pendingSendRef.current;
@@ -96,10 +99,7 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, chooseRe
   const [preparing, setPreparing] = useState(false);
   const stopPreparingRef = useRef(false);
   // A turn that could not go goes back to the box: text, files and addressee - THE restore every host shares.
-  const giveBack = useCallback((m: QueuedTurn) => restoreTurn(m, { setInput, restoreAttachments, chooseRecipient }), [setInput, restoreAttachments, chooseRecipient]);
-  // Turns whose send ended because another chat was showing (not a failure after a run): only THESE are returned
-  // to whichever composer is showing; a failure that comes back late never lands in a different chat's box.
-  const switchedRef = useRef(new WeakSet<QueuedTurn>());
+  const giveBack = useCallback((m: QueuedTurn) => restoreTurn(m, { draft: () => inputRef.current, setInput, restoreAttachments, chooseRecipient }), [setInput, restoreAttachments, chooseRecipient]);
   const dispatchSend = useCallback(async (m: QueuedTurn): Promise<boolean> => {
     const { text, recipient: to, attachments } = m;
     stopPreparingRef.current = false;
@@ -114,8 +114,7 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, chooseRe
         giveBack(m);
         return true;
       }
-      switchedRef.current.add(m);
-      return false; // another chat is showing: not sent, and the caller returns it to the box
+      return false; // another chat is showing: not sent - the caller returns it to the box that is showing
     }
     setTurnLimbic(staged.block);
     return new Promise<boolean>((done) => {
@@ -200,11 +199,9 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, chooseRe
 
   const sendOrQueue = useCallback((text: string, to: DirectedRecipient | null, attachments?: ChatInputAttachment[]) => {
     const turn: QueuedTurn = { text, recipient: to, attachments: attachments ?? takeAttachments() };
-    const typedIn = chatIdRef.current;
-    // A send that was not kept (the session expired, or another chat is showing) gives the words, the
-    // files and the addressee back to the box - but never into a DIFFERENT chat's box after the fact, unless
-    // the turn itself ended because that chat was showing (a switch during the limbic fetch).
-    void submitTurn(turn).then((kept) => { if (!kept && (chatIdRef.current === typedIn || switchedRef.current.has(turn))) giveBack(turn); });
+    // A send that was not kept (the session expired, another chat is showing) goes back to the box that is
+    // showing - the one rule on every host (`restoreTurn`): never dropped, never sent into another chat.
+    void submitTurn(turn).then((kept) => { if (!kept) giveBack(turn); });
   }, [submitTurn, takeAttachments, giveBack]);
 
   const submit = useCallback(() => {

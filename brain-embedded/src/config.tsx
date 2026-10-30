@@ -56,7 +56,7 @@ export interface BrainPersistenceAdapter {
   markChatRead?(chatId: number, seq?: number): Promise<unknown>;
   sendMessages(
     chatId: number,
-    messages: Array<{ role: string; content: string; metadata?: string }>,
+    messages: Array<{ role: string; content: string; metadata?: string; eventKey?: string }>,
   ): Promise<BrainMessage[]>;
   /**
    * Record this viewer's thumb on one assistant reply (null clears it).

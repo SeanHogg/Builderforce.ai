@@ -203,7 +203,9 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
         }
       }
     } finally {
-      flushing.current.set(chat, flushingIn(chat) - 1);
+      const rest = flushingIn(chat) - 1;
+      if (rest > 0) flushing.current.set(chat, rest);
+      else flushing.current.delete(chat);
     }
   }, []);
 
@@ -258,18 +260,24 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     if (!running || !steerable) return;
     const { steer: route, runKey: key, textOf: text, isDirected: directed, attachmentsOf: attached } = ports.current;
     if (typeof key !== 'number' || stoppingRef.current) return;
+    // Only THIS chat's: a chat switch can leave another chat's items in the ref for a render.
+    let blocked = false;
     for (const item of itemsRef.current) {
-      if (!item.preLive) continue;
+      if (item.preLiveFor !== key) continue;
       const turn = item.value;
-      if (!steersByDefault({ directed: !!directed?.(turn), held: 0, attachments: attached?.(turn) })) break;
-      if (route) {
-        if (!route(turn)) break;
-      } else {
-        queueRunSteering(key, turnBody(turn, text), { interrupt: true, fromPerson: true, persist: true, attachments: attached?.(turn) });
+      if (!blocked) {
+        const carries = steersByDefault({ directed: !!directed?.(turn), held: 0, attachments: attached?.(turn) });
+        if (carries && (route ? route(turn) : (queueRunSteering(key, turnBody(turn, text), { interrupt: true, fromPerson: true, persist: true, attachments: attached?.(turn) }), true))) {
+          remove(item.id);
+          continue;
+        }
+        blocked = true;
       }
-      remove(item.id);
+      // One that cannot be steered (a file a steer would drop) stays queued, and so does everything behind it - and
+      // it is NOT carried: the next message waits behind it instead of jumping it.
+      carriedIds.current = new Set([...carriedIds.current].filter((id) => id !== item.id));
     }
-  }, [running, steerable, remove]);
+  }, [running, steerable, remove, runKey]);
 
   const stopTurns = useCallback(() => {
     clear();
@@ -307,8 +315,8 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     }
     // Held while no run is live yet (the window before the turn that starts it is running): a FOLLOW-UP to that
     // run, steered into it in order the moment it goes live (below). Not for an addressed turn or a Stop.
-    const preLive = !ports.current.steerable && typeof key === 'number' && !stoppingRef.current && !directed?.(turn);
-    if (hold(turn, preLive ? { preLive: true } : undefined)) return true;
+    const preLiveFor = !ports.current.steerable && typeof key === 'number' && !stoppingRef.current && !directed?.(turn) ? key : undefined;
+    if (hold(turn, preLiveFor !== undefined ? { preLiveFor } : undefined)) return true;
     // A turn from the queue is being sent right now (in THIS chat): this one follows it, never beside it.
     if (!live && flushingIn(key) > 0) {
       pushBack(turn);

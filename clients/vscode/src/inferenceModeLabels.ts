@@ -60,7 +60,7 @@ export function inferenceModeLabels(): Record<string, string> {
     "app.modelKeepsCrashing": t("This model keeps crashing on this device. Remove it, or try another model."),
     "app.manageLocalModels": t("Manage on-device models"),
     // A continuation (words typed while a run ended) waited too long on the host (`continuation_timed_out`).
-    "app.continuationTimedOut": t("The run could not be prepared in time. Send your message again."),
+    "app.continuationTimedOut": t("That took too long. Your message is kept and will be read with your next message."),
     // A refusal by the person's own platform policy (`platform_refused`): the mode, the
     // sync switch, or another `builderforce.platform.*` switch — never the raw code.
     "app.platformRefusedMode": t("Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it."),

@@ -40,6 +40,14 @@ export function useBrainPanelTurns({ conv, chats, recipient, chooseRecipient, in
   /** This panel IS the page's chat (docked, no close) — it takes text a neighbour hands it. */
   acceptsHandover: boolean;
 }) {
+  // THE one restore (`restoreTurn`): a turn that could not go returns to the box that is showing - text, files,
+  // addressee - whichever way it left. The draft is read at call time.
+  const inputRef = useRef(input);
+  // eslint-disable-next-line react-hooks/refs
+  inputRef.current = input;
+  const giveBack = (turn: BrainPanelTurn) => restoreTurn({ text: turn.text, attachments: turn.attachments, recipient: turn.addressedTo }, {
+    draft: () => inputRef.current, setInput, restoreAttachments: conv.restoreAttachments, chooseRecipient,
+  });
   const turns = useChatTurns<BrainPanelTurn>({
     // In flight while a send is saving (held in order); steerable only while the run store says the run is live.
     ...chatDoorLiveness(conv),
@@ -55,7 +63,7 @@ export function useBrainPanelTurns({ conv, chats, recipient, chooseRecipient, in
     // A turn for a participant is a message to them — never the Brain's Stop.
     isDirected: (turn) => turn.addressedTo != null,
     // ...and one whose send was not kept after the chat changed returns to the box, addressee intact.
-    restore: (turn) => restoreTurn({ ...turn, recipient: turn.addressedTo }, { setInput, restoreAttachments: conv.restoreAttachments, chooseRecipient }),
+    restore: (turn) => giveBack(turn),
     // The conversation's Stop: it also drops a launch still getting ready.
     stop: conv.stop,
   });
@@ -92,6 +100,9 @@ export function useBrainPanelTurns({ conv, chats, recipient, chooseRecipient, in
   const convRef = useRef(conv);
   // eslint-disable-next-line react-hooks/refs
   convRef.current = conv;
+  const giveBackRef = useRef(giveBack);
+  // eslint-disable-next-line react-hooks/refs
+  giveBackRef.current = giveBack;
 
   /**
    * Offer what is in the box through `offer` (the door's submit, or its explicit queue). The
@@ -110,11 +121,8 @@ export function useBrainPanelTurns({ conv, chats, recipient, chooseRecipient, in
     trackActivity('agent_message', { weight: 2 });
     // Restore the text if the send fails before it's persisted (e.g. an expired
     // session) so the user's message is never silently lost.
-    const ok = await offer({ text, addressedTo: recipient, ...(attachments.length ? { attachments } : {}) });
-    if (!ok) {
-      setInput((cur) => cur || text);
-      convRef.current.restoreAttachments(attachments);
-    }
+    const turn: BrainPanelTurn = { text, addressedTo: recipient, ...(attachments.length ? { attachments } : {}) };
+    if (!(await offer(turn))) giveBackRef.current(turn);
   }, [assistantGate.assistantAllowed, input, recipient, setInput]);
 
   const handleSend = useCallback(() => offerBox(submitTurn), [offerBox, submitTurn]);

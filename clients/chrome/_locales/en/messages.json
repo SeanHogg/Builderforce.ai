@@ -996,8 +996,8 @@
     "description": "Chat error: this model crashed repeatedly on this device and is refused for now"
   },
   "continuationTimedOut": {
-    "message": "The run could not be prepared in time. Send your message again.",
-    "description": "Chat error: continuing a run with the words typed meanwhile took too long; they are kept and the person sends again"
+    "message": "That took too long. Your message is kept and will be read with your next message.",
+    "description": "Chat error: continuing a run with the words typed meanwhile took too long; the words are kept and read with the next message"
   },
   "manageLocalModels": {
     "message": "Manage on-device models",

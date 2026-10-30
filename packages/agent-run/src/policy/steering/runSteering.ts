@@ -35,6 +35,11 @@ export interface RunSteerMessage {
    * (`brain-embedded/src/runStore/continueChat.ts`) saves only the words that are not `saved`.
    */
   saved?: boolean;
+  /**
+   * The key the saved ROW is stored under (the server upserts on `(chat, event_key)`), minted ONCE when the words
+   * are first enqueued, so a save that is retried - after a timeout, after a requeue - never makes a second row.
+   */
+  eventKey?: string;
 }
 
 const inboxes = new Map<number, RunSteerMessage[]>();
@@ -46,11 +51,11 @@ const interruptListeners = new Map<number, Set<() => void>>();
  * Queue one message for a run's next turn. Blank text is ignored. `interrupt` also
  * aborts the run's interruptible step now and skips the rest of its turn's calls.
  */
-export function queueRunSteering(runKey: number, text: string, opts?: { interrupt?: boolean; attachments?: unknown; fromPerson?: boolean; persist?: boolean; saved?: boolean }): void {
+export function queueRunSteering(runKey: number, text: string, opts?: { interrupt?: boolean; attachments?: unknown; fromPerson?: boolean; persist?: boolean; saved?: boolean; eventKey?: string }): void {
   const trimmed = text.trim();
   if (!trimmed) return;
   const queue = inboxes.get(runKey) ?? [];
-  queue.push({ text: trimmed, attachments: opts?.attachments, ...(opts?.fromPerson ? { fromPerson: true } : {}), ...(opts?.persist ? { persist: true } : {}), ...(opts?.saved ? { saved: true } : {}) });
+  queue.push({ text: trimmed, attachments: opts?.attachments, ...(opts?.fromPerson ? { fromPerson: true } : {}), ...(opts?.persist ? { persist: true } : {}), ...(opts?.saved ? { saved: true } : {}), ...(opts?.eventKey ? { eventKey: opts.eventKey } : {}) });
   inboxes.set(runKey, queue);
   if (!opts?.interrupt) return;
   interrupting.add(runKey);

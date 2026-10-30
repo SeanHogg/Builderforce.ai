@@ -12329,7 +12329,7 @@
     "engineCrashed": "El modelo de este dispositivo se ha bloqueado. Vuelve a enviar para reiniciarlo.",
     "engineDetached": "El modelo de este dispositivo se detuvo antes de terminar. Vuelve a enviar para reintentarlo.",
     "modelKeepsCrashing": "Este modelo se bloquea una y otra vez en este dispositivo. Quítalo o prueba otro modelo.",
-    "continuationTimedOut": "No se pudo preparar la ejecución a tiempo. Vuelve a enviar tu mensaje.",
+    "continuationTimedOut": "Esto tardó demasiado. Tu mensaje se ha guardado y se leerá junto con tu próximo mensaje.",
     "manageLocalModels": "Gestionar modelos del dispositivo",
     "platformRefusedMode": "Solo local mantiene esta ejecución en este dispositivo, así que no pudo llegar a BuilderForce. Cambia a Híbrido en el menú /, en Modelo, para permitirlo.",
     "platformRefusedSync": "La sincronización de la cuenta está desactivada, así que esto no se pudo guardar en tu cuenta. Activa la sincronización en la configuración de la plataforma o sigue trabajando en local.",

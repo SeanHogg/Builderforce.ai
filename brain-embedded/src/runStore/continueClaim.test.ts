@@ -224,3 +224,71 @@ describe('a claim cannot hold a chat forever', () => {
     expect(getCell(9330).claim).toBeNull();
   });
 });
+
+describe('idempotent saves: a row is never saved twice (M1)', () => {
+  it('a save that outlives its deadline and lands late is the SAME row as the requeued words saved again', async () => {
+    const saved = { ...continuationLimits };
+    continuationLimits.prepareMs = 40;
+    try {
+      const c = chat(['Done.', 'Next.']);
+      continueOnSettle(9370, binding);
+      await startRun(9370, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+      let land!: () => void;
+      c.gate.holdUserRows = new Promise<void>((resolve) => { land = resolve; });
+
+      expect(wakeChat(9370, 'late words', undefined)).toBe(true);
+      await until(() => !isLive(9370), 1_000); // the 40 ms bound ended the wait; the save is still in flight
+      land(); // ...and now it lands
+      await new Promise((r) => setTimeout(r, 30));
+      // The requeued words carry the row's key; the next run drains and saves them (as steered words) under it.
+      await startRun(9370, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'next' });
+
+      expect(JSON.stringify(c.asked[1])).toContain('late words');
+      expect(userRows(c).filter((row) => row === 'late words')).toHaveLength(1);
+    } finally {
+      Object.assign(continuationLimits, saved);
+    }
+  });
+
+  it('several unsaved steers that become one row are requeued as ONE steer with the combined content and the row\'s key', async () => {
+    const saved = { ...continuationLimits };
+    continuationLimits.prepareMs = 40;
+    try {
+      const c = chat(['Done.'], times(1, () => {
+        queueRunSteering(9371, 'first part', { fromPerson: true, persist: true });
+        queueRunSteering(9371, 'second part', { fromPerson: true, persist: true });
+      }));
+      continueOnSettle(9371, binding);
+      c.gate.holdUserRows = new Promise<void>(() => {}); // the save never answers
+      await startRun(9371, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+      await until(() => !isLive(9371), 1_000);
+
+      const kept = drainRunSteering(9371);
+      expect(kept).toHaveLength(1);
+      expect(kept[0]).toMatchObject({ text: 'first part\n\nsecond part', persist: true });
+      expect(kept[0]?.eventKey).toMatch(/^merged:steer:.*\|steer:/);
+    } finally {
+      Object.assign(continuationLimits, saved);
+    }
+  });
+
+  it('a Stop, then a save that times out: the words are NOT requeued and the stopped answer is written', async () => {
+    const saved = { ...continuationLimits };
+    continuationLimits.prepareMs = 40;
+    try {
+      const c = chat(['Done.']);
+      continueOnSettle(9372, binding);
+      await startRun(9372, { resolvedSystemPrompt: 'sys', stream: c.stream, persistence: c.persistence, userTurn: 'first' });
+      c.gate.holdUserRows = new Promise<void>(() => {});
+
+      expect(wakeChat(9372, 'stopped while saving', undefined)).toBe(true);
+      stopRun(9372);
+      await until(() => !isLive(9372), 1_000);
+
+      expect(drainRunSteering(9372)).toEqual([]);
+      expect(c.saved.some((row) => row.role === 'assistant' && row.content === 'Stopped before it started.')).toBe(true);
+    } finally {
+      Object.assign(continuationLimits, saved);
+    }
+  });
+});

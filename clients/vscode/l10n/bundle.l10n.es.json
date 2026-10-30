@@ -936,7 +936,7 @@
   "The on-device model crashed. Send again to restart it.": "El modelo de este dispositivo se ha bloqueado. Vuelve a enviar para reiniciarlo.",
   "The on-device model stopped before it finished. Send again to retry.": "El modelo de este dispositivo se detuvo antes de terminar. Vuelve a enviar para reintentarlo.",
   "This model keeps crashing on this device. Remove it, or try another model.": "Este modelo se bloquea una y otra vez en este dispositivo. Quítalo o prueba otro modelo.",
-  "The run could not be prepared in time. Send your message again.": "No se pudo preparar la ejecución a tiempo. Vuelve a enviar tu mensaje.",
+  "That took too long. Your message is kept and will be read with your next message.": "Esto tardó demasiado. Tu mensaje se ha guardado y se leerá junto con tu próximo mensaje.",
   "Manage on-device models": "Gestionar modelos del dispositivo",
   "Your pick {0} failed; answered with Auto.": "Su elección {0} falló; se respondió con Auto.",
   "Hybrid": "Híbrido",

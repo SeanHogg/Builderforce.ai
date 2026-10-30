@@ -13,9 +13,10 @@ const door = vi.hoisted(() => ({
 
 vi.mock('@seanhogg/builderforce-brain-embedded', () => ({
   chatDoorLiveness: (conv: { sending: boolean; runLive: boolean }) => ({ running: conv.sending, steerable: conv.runLive }),
-  restoreTurn: (turn: { text: string; attachments?: unknown[]; recipient: unknown }, composer: { setInput: (f: (cur: string) => string) => void; restoreAttachments: (f: unknown[]) => void; chooseRecipient: (to: unknown) => void }) => {
-    composer.setInput((cur) => cur || turn.text);
+  restoreTurn: (turn: { text: string; attachments?: unknown[]; recipient: unknown }, composer: { draft: () => string; setInput: (text: string) => void; restoreAttachments: (f: unknown[]) => void; chooseRecipient: (to: unknown) => void }) => {
     composer.restoreAttachments(turn.attachments ?? []);
+    if (composer.draft()) return; // a newer draft keeps its text AND its addressee
+    composer.setInput(turn.text);
     composer.chooseRecipient(turn.recipient);
   },
   useChatTurns: (options: Record<string, unknown>) => {
@@ -44,9 +45,9 @@ function mount(conv: Conv, input = 'fix the build') {
   const setInput = vi.fn();
   const chooseRecipient = vi.fn();
   const chats = { activeChatId: 7 } as unknown as Chats;
-  const hook = renderHook((props: { conv: Conv }) => useBrainPanelTurns({
-    conv: props.conv, chats, recipient: null, chooseRecipient, input, setInput, showChatTab: vi.fn(), acceptsHandover: false,
-  }), { initialProps: { conv } });
+  const hook = renderHook((props: { conv: Conv; input?: string }) => useBrainPanelTurns({
+    conv: props.conv, chats, recipient: null, chooseRecipient, input: props.input ?? input, setInput, showChatTab: vi.fn(), acceptsHandover: false,
+  }), { initialProps: { conv } as { conv: Conv; input?: string } });
   return { hook, setInput, chooseRecipient };
 }
 
@@ -74,15 +75,34 @@ describe('the web panel\'s turn door and the composer\'s attachments', () => {
   });
 
   it('puts the attachments back - and the text - when the turn was not kept', async () => {
-    door.submit.mockResolvedValue(false);
+    let finish!: (kept: boolean) => void;
+    door.submit.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve; }));
     const { conv, restoreAttachments } = conversation();
     const { hook, setInput } = mount(conv);
 
-    await act(async () => { await hook.result.current.handleSend(); });
+    let offered!: Promise<void>;
+    act(() => { offered = hook.result.current.handleSend() as Promise<void>; });
+    hook.rerender({ conv, input: '' }); // the box was cleared as the offer started
+    await act(async () => { finish(false); await offered; });
 
     expect(restoreAttachments).toHaveBeenCalledWith([notes]);
-    const restore = setInput.mock.calls.map((c) => c[0]).find((v) => typeof v === 'function') as ((cur: string) => string) | undefined;
-    expect(restore?.('')).toBe('fix the build');
+    expect(setInput).toHaveBeenCalledWith('fix the build');
+  });
+
+  it('does not repoint or overwrite a NEWER draft when a turn is given back: only its files return', async () => {
+    let finish!: (kept: boolean) => void;
+    door.submit.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+    const { conv, restoreAttachments } = conversation();
+    const { hook, setInput, chooseRecipient } = mount(conv);
+
+    let offered!: Promise<void>;
+    act(() => { offered = hook.result.current.handleSend() as Promise<void>; });
+    hook.rerender({ conv, input: 'typed since' });
+    await act(async () => { finish(false); await offered; });
+
+    expect(setInput).not.toHaveBeenCalledWith('fix the build');
+    expect(chooseRecipient).not.toHaveBeenCalled();
+    expect(restoreAttachments).toHaveBeenCalledWith([notes]);
   });
 
   it('holds the box for after the run through the explicit queue, files included', async () => {
@@ -116,14 +136,13 @@ describe('the web panel\'s turn door and the composer\'s attachments', () => {
 
   it('puts an addressed turn whose send was not kept after a chat switch back in the box: text, files, addressee', () => {
     const { conv, restoreAttachments } = conversation();
-    const { setInput, chooseRecipient } = mount(conv);
+    const { setInput, chooseRecipient } = mount(conv, '');
     const restore = door.options?.restore as (turn: BrainPanelTurn) => void;
     const dev = { kind: 'agent', ref: 'dev', label: 'dev' } as never;
 
     restore({ text: '@dev look', addressedTo: dev, attachments: [notes] });
 
-    const put = setInput.mock.calls.map((c) => c[0]).find((v) => typeof v === 'function') as (cur: string) => string;
-    expect(put('')).toBe('@dev look');
+    expect(setInput).toHaveBeenCalledWith('@dev look');
     expect(restoreAttachments).toHaveBeenCalledWith([notes]);
     expect(chooseRecipient).toHaveBeenCalledWith(dev);
   });

@@ -10,8 +10,14 @@ import { CONTINUATION_TIMED_OUT } from '../chatError';
  *  settling run's ticket backstops may hold the chat. Mutable so tests can shorten them. */
 export const continuationLimits = { prepareMs: 15_000, settleMs: 30_000 };
 
-/**
- * `promise`, or a rejection once `ms` have passed. The timer is always cleared. The rejection carries a CODE,
+/** One overall allowance for a sequence of steps: each asks how much is LEFT (never below 1 ms), so stacked
+ *  per-step bounds cannot add up to a long hold. */
+export function budget(ms: number): () => number {
+  const end = Date.now() + ms;
+  return () => Math.max(1, end - Date.now());
+}
+
+/** `promise`, or a rejection once `ms` have passed. The timer is always cleared. The rejection carries a CODE,
  * not a sentence (`CONTINUATION_TIMED_OUT`): each host renders it in the person's language
  * (`chatErrorAction` -> the banner's `continuationTimedOut`).
  */

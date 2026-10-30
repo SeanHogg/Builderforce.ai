@@ -12,7 +12,7 @@ import { getRunDriver } from '../runDriver';
 import { forgetResolvedModels } from '../lastResolvedModel';
 import { toolActivity } from '../runActivity';
 import { EMPTY_SNAPSHOT } from './runCell';
-import { cells, emit, getCell, nowIso, pushTrace, recordAppended, storeListeners } from './runCells';
+import { cells, emit, getCell, nowIso, pushTrace, recordAppended, runStoreResetHooks, storeListeners } from './runCells';
 import { STOPPED_TURN_STEP, stoppedBeforeStartRow } from '../stoppedTurn';
 import { stoppedTurnOf } from './turnPersistence';
 
@@ -151,7 +151,7 @@ export function getRunTrace(chatId: RunKey | null): BrainTraceEvent[] {
  *    chat (the auto-reply on load, Retry) would start that work after all.
  * Best-effort: the run did not start either way. Resolves to the saved row, if any.
  */
-export async function stopBeforeStart(runKey: RunKey, chatId: number, persistence: Pick<BrainRunPersistence, 'sendMessages'>): Promise<BrainMessage | undefined> {
+export async function stopBeforeStart(runKey: RunKey, chatId: number, persistence: Pick<BrainRunPersistence, 'sendMessages'>, still: () => boolean = () => true): Promise<BrainMessage | undefined> {
   const c = getCell(runKey);
   const step: BrainTraceEvent = { ts: nowIso(), category: 'message', label: STOPPED_TURN_STEP, result: 'Stopped by user before the run started.' };
   pushTrace(c, step);
@@ -161,7 +161,8 @@ export async function stopBeforeStart(runKey: RunKey, chatId: number, persistenc
     const rows = await persistence.sendMessages(chatId, [stepRow(step), stoppedBeforeStartRow()]);
     const row = rows[rows.length - 1];
     // Mirrored like every row a run persists, so a host-run panel sees it on `run.sync`.
-    if (row) {
+    // Late (the caller stopped waiting): the row is saved, but the cell may already be a newer turn's.
+    if (row && still()) {
       recordAppended(c, row);
       emit(c);
     }

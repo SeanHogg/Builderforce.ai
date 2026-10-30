@@ -144,14 +144,15 @@ export function stoppedTurnOf(c: RunCell): StoppedTurn {
  * report still names the model) and, when the model had written anything, the partial
  * reply itself — marked, so the timeline says it was stopped and no seed replays it.
  */
-export async function keepStoppedTurn(chatId: number, c: RunCell, persistence: BrainRunPersistence): Promise<void> {
+export async function keepStoppedTurn(chatId: number, c: RunCell, persistence: BrainRunPersistence, still: () => boolean = () => true): Promise<void> {
   const stopped = c.stoppedTurn;
   c.stoppedTurn = null;
   if (!stopped) return;
   const text = canonicalTurnText(stopped.text);
   if (!text) return;
   const [msg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: text, metadata: stoppedTurnMetadata(stopped.source) }]);
-  if (msg) recordAppended(c, msg);
+  // Late (the settle stopped waiting): saved, but never spliced into a newer turn's view.
+  if (msg && still()) recordAppended(c, msg);
 }
 
 /** Run one completion as the turn in flight, so a Stop mid-stream knows what it cut off. */

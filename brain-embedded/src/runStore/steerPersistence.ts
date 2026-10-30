@@ -35,7 +35,7 @@ export function steerMetadata(steer: Pick<RunSteerMessage, 'attachments'>): stri
 export async function persistSteer(c: RunCell, chatId: number, persistence: Pick<BrainRunPersistence, 'sendMessages'>, steer: RunSteerMessage): Promise<void> {
   if (!steer.persist) return;
   try {
-    const [msg] = await persistence.sendMessages(chatId, [{ role: 'user', content: steer.text, metadata: steerMetadata(steer) }]);
+    const [msg] = await persistence.sendMessages(chatId, [{ role: 'user', content: steer.text, metadata: steerMetadata(steer), ...(steer.eventKey ? { eventKey: steer.eventKey } : {}) }]);
     if (!msg) return;
     recordAppended(c, msg);
     emit(c);

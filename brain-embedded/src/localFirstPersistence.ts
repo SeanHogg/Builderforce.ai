@@ -266,17 +266,34 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
         const existing = (await messages(tx)).filter((row) => row.payload.chatId === chatId);
         const firstId = await nextId(tx);
         const stamp = now().toISOString();
-        const added = input.map((message, index): BrainMessage => ({
-          id: firstId + index,
-          role: message.role,
-          content: message.content,
-          metadata: message.metadata ?? null,
-          seq: existing.length + index + 1,
-          createdAt: stamp,
-        }));
+        // A row sent again under the key it was saved with is the SAME row: the saved one comes back, nothing is
+        // written (the server's upsert on (chat, event_key), kept on the device).
+        const known = new Map(existing.map((row) => [row.payload.eventKey, row.payload.message] as const));
+        const results: BrainMessage[] = [];
+        const added: BrainMessage[] = [];
+        const keys: string[] = [];
+        for (const message of input) {
+          const sentKey = (message as typeof message & { eventKey?: string }).eventKey;
+          const prior = sentKey ? known.get(sentKey) : undefined;
+          if (prior) {
+            results.push(prior);
+            continue;
+          }
+          const row: BrainMessage = {
+            id: firstId + added.length,
+            role: message.role,
+            content: message.content,
+            metadata: message.metadata ?? null,
+            seq: existing.length + added.length + 1,
+            createdAt: stamp,
+          };
+          results.push(row);
+          added.push(row);
+          keys.push(sentKey ?? `message:${newId()}`);
+          if (sentKey) known.set(sentKey, row);
+        }
         for (const [index, message] of added.entries()) {
-          const source = input[index] as typeof input[number] & { eventKey?: string };
-          const eventKey = source.eventKey ?? `message:${newId()}`;
+          const eventKey = keys[index]!;
           const clientId = newId();
           const record = newLocalRecord<MessageValue>({
             id: clientId,
@@ -293,7 +310,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
           const nextChat = { ...chat, version: chat.version + 1, updatedAt: stamp, payload: { ...chat.payload, chat: { ...chat.payload.chat, updatedAt: stamp } } };
           await tx.put(nextChat, chat.version);
         }
-        return added;
+        return results;
       });
     },
     async setMessageFeedback(messageId, feedback, context) {

@@ -22,14 +22,14 @@
 import { composeUserTurn, recordedModelText, type ComposedUserTurn } from '../attachmentTranscript';
 import type { BrainPersistenceAdapter } from '../config';
 import { withDirectedMetadata } from '../directedMessage';
-import { drainRunSteering, queueRunSteering, type RunSteerMessage } from '../runSteering';
+import { drainRunSteering, newSteerKey, queueRunSteering, type RunSteerMessage } from '../runSteering';
 import { chatErrorAction } from '../chatError';
 import type { ContentPart } from '../streamChatCompletion';
 import type { BrainMessage, ChatInputAttachment } from '../types';
 import type { RunCell } from './runCell';
 import { emit, getCell, nowIso, onStoreReset, pushTrace, recordAppended } from './runCells';
 import { claimRun, claimStopped, releaseClaim, type RunClaim } from './runClaim';
-import { bounded, continuationLimits, within } from './deadline';
+import { bounded, budget, continuationLimits, within } from './deadline';
 import { stopBeforeStart } from './runControl';
 import type { BrainRunRequest, RunKey } from './runTypes';
 
@@ -131,6 +131,39 @@ function keepAsSaid(runKey: number, text: string, attachments: readonly ChatInpu
   queueRunSteering(runKey, text, { fromPerson: true, saved: true, ...(pictures.length > 0 ? { attachments: pictures } : {}) });
 }
 
+/**
+ * The key the user row is stored under (the server upserts on it): a lone steer's own key; several steers that
+ * become ONE row get a key derived from theirs, so a retry of the same set is the same row. Undefined when any
+ * has none (then the save is not idempotent).
+ */
+function rowKeyOf(fresh: readonly RunSteerMessage[]): string | undefined {
+  if (fresh.length === 0 || fresh.some((m) => !m.eventKey)) return undefined;
+  return fresh.length === 1 ? fresh[0]!.eventKey : `merged:${fresh.map((m) => m.eventKey).join('|')}`;
+}
+
+/**
+ * Put steers back in the inbox with their own flags and keys. Several unsaved steers that were becoming ONE row
+ * go back as ONE steer with the combined content and the row's key - so when the save that timed out lands late
+ * and the words are saved again, it is the same row (never two).
+ */
+function requeue(runKey: number, steers: readonly RunSteerMessage[]): void {
+  const fresh = steers.filter((m) => !m.saved);
+  const key = rowKeyOf(fresh);
+  const merge = fresh.length > 1 && !!key && fresh.every((m) => m.persist);
+  const out: RunSteerMessage[] = merge
+    ? [{ text: fresh.map((m) => m.text).join('\n\n'), fromPerson: fresh.some((m) => m.fromPerson), persist: true, eventKey: key!, ...(fresh.some((m) => m.attachments?.length) ? { attachments: fresh.flatMap((m) => m.attachments ?? []) } : {}) }, ...steers.filter((m) => m.saved)]
+    : [...steers];
+  for (const m of out) {
+    queueRunSteering(runKey, m.text, {
+      ...(m.fromPerson ? { fromPerson: true } : {}),
+      ...(m.persist ? { persist: true } : {}),
+      ...(m.saved ? { saved: true } : {}),
+      ...(m.eventKey ? { eventKey: m.eventKey } : {}),
+      ...(m.attachments?.length ? { attachments: m.attachments } : {}),
+    });
+  }
+}
+
 function trace(c: RunCell, label: string, args: Record<string, unknown>, result: string): void {
   pushTrace(c, { ts: nowIso(), category: 'message', label, args, result });
 }
@@ -140,10 +173,11 @@ function trace(c: RunCell, label: string, args: Record<string, unknown>, result:
  * reopened chat (the auto-reply on load, Retry) would run it after all. So it gets the same "stopped before
  * it started" answer a launch writes (`stopBeforeStart`) - bounded, like every await a claim holder makes.
  */
-async function endStopped(c: RunCell, runKey: number, chatId: number, persistence: BrainRunRequest['persistence']): Promise<boolean> {
+async function endStopped(c: RunCell, runKey: number, chatId: number, persistence: BrainRunRequest['persistence'], claim: RunClaim, ms: number = continuationLimits.prepareMs): Promise<boolean> {
   await within(
-    continuationLimits.prepareMs,
-    async () => { await stopBeforeStart(runKey, chatId, persistence); },
+    ms,
+    // The cell is only touched while this continuation still holds the chat (a late write never lands in a newer turn's view).
+    async () => { await stopBeforeStart(runKey, chatId, persistence, () => c.claim === claim); },
     () => trace(c, 'steer.stop_unrecorded', {}, 'The stop could not be recorded in time; the saved message may run again when the chat is reopened.'),
   );
   return true;
@@ -171,9 +205,10 @@ export async function continueChat(runKey: number, c: RunCell, steers: readonly 
   // order of the chat is the order it was said in, and a reload finds it. Each set is composed once.
   const fresh = steers.filter((m) => !m.saved);
   const said = steers.filter((m) => m.saved);
-  const reading = continuationLimits.prepareMs;
-  const freshTurn = fresh.length > 0 ? await bounded(reading, compose(fresh, ports)) : null;
-  const saidTurn = said.length > 0 ? await bounded(reading, compose(said, ports)) : null;
+  // ONE allowance for the whole continuation (reading, saving, preparing) - not one per step.
+  const left = budget(continuationLimits.prepareMs);
+  const freshTurn = fresh.length > 0 ? await bounded(left(), compose(fresh, ports)) : null;
+  const saidTurn = said.length > 0 ? await bounded(left(), compose(said, ports)) : null;
   // No Stop check before the save: words already in hand are the person's message - a Stop keeps them as
   // a row (the record of what was said) and starts nothing, below.
   let row: BrainMessage | undefined;
@@ -182,28 +217,31 @@ export async function continueChat(runKey: number, c: RunCell, steers: readonly 
     const metadata = withDirectedMetadata(null, freshTurn.turn.meta);
     // Bounded like every await a claim holder makes. A save that is only SLOW may still land after the
     // timeout; the words then wait in the inbox to be saved again - at-least-once, never lost.
-    [row] = await bounded(reading, Promise.resolve(request.persistence.sendMessages(chatId, [{ role: 'user', content: freshTurn.displayContent, ...(metadata ? { metadata } : {}) }])));
+    // The row carries its key: the server (and the device store) upsert on it, so a save that timed out and
+    // lands late, then is saved again from the requeued words, is ONE row.
+    const rowKey = rowKeyOf(fresh);
+    [row] = await bounded(left(), Promise.resolve(request.persistence.sendMessages(chatId, [{ role: 'user', content: freshTurn.displayContent, ...(metadata ? { metadata } : {}), ...(rowKey ? { eventKey: rowKey } : {}) }])));
     if (row) {
       recordAppended(c, row);
       emit(c);
     }
-    if (claimStopped(c, claim)) return endStopped(c, runKey, chatId, request.persistence);
+    if (claimStopped(c, claim)) return endStopped(c, runKey, chatId, request.persistence, claim, left());
   }
   const content = saidTurn && freshTurn ? joinContent(saidTurn.turn.content, freshTurn.turn.content) : (saidTurn ?? freshTurn)!.turn.content;
   // The host's run-time parts, fresh. A host that refuses leaves the (saved) words waiting in the inbox.
   let fresher: Partial<BrainRunRequest> | undefined;
   try {
-    fresher = await bounded(continuationLimits.prepareMs, binding.prepareRun?.(runKey));
+    fresher = await bounded(left(), binding.prepareRun?.(runKey));
   } catch (e) {
     // A Stop that landed first ends it: its words are not requeued.
-    if (claimStopped(c, claim)) return endStopped(c, runKey, chatId, request.persistence);
+    if (claimStopped(c, claim)) return endStopped(c, runKey, chatId, request.persistence, claim, left());
     surface(c, e);
     trace(c, 'steer.prepare_failed', { error: e instanceof Error ? e.message : String(e) },
       'The host could not prepare a run for direction the last run never read; it waits for the chat\'s next run.');
     keepAsSaid(runKey, recordedModelText(content), [...(freshTurn?.attachments ?? []), ...(saidTurn?.attachments ?? [])]);
     return true;
   }
-  if (claimStopped(c, claim)) return endStopped(c, runKey, chatId, request.persistence);
+  if (claimStopped(c, claim)) return endStopped(c, runKey, chatId, request.persistence, claim, left());
   // The continuation keeps catching up with a person who keeps typing - to the bound above. Stop and
   // delete still end it: a stopped run continues nothing, and a deleted chat has no cell to start.
   depth.set(runKey, links + 1);
@@ -233,20 +271,21 @@ async function continueOrKeep(runKey: number, c: RunCell, steers: readonly RunSt
   try {
     if (await continueChat(runKey, c, steers, start, claim)) return true;
   } catch (e) {
+    // A Stop ends it: its words are NEVER requeued. A row may exist (a save that timed out can still land), so the
+    // stopped answer is written - a reopened chat must not run it after all.
+    if (claimStopped(c, claim)) {
+      const request = c.lastRequest;
+      if (request) await endStopped(c, runKey, request.lineage?.rootChatId ?? runKey, request.persistence, claim);
+      releaseClaim(c, claim);
+      return true;
+    }
     surface(c, e);
     trace(c, 'steer.continue_failed', { error: e instanceof Error ? e.message : String(e) },
       'Direction the run never read could not be made the next turn; it waits for the chat\'s next run.');
   } finally {
     releaseClaim(c, claim);
   }
-  for (const m of steers) {
-    queueRunSteering(runKey, m.text, {
-      ...(m.fromPerson ? { fromPerson: true } : {}),
-      ...(m.persist ? { persist: true } : {}),
-      ...(m.saved ? { saved: true } : {}),
-      ...(m.attachments?.length ? { attachments: m.attachments } : {}),
-    });
-  }
+  requeue(runKey, steers);
   return false;
 }
 
@@ -275,7 +314,7 @@ export function wakeChat(runKey: number, text: string, attachments: readonly Cha
   const claim = claimRun(runKey);
   if (!claim) return false;
   depth.set(runKey, 0); // a person's turn: the chain starts over
-  const steer: RunSteerMessage = { text, fromPerson: true, persist: true, ...(attachments?.length ? { attachments: [...attachments] } : {}) };
+  const steer: RunSteerMessage = { text, fromPerson: true, persist: true, eventKey: newSteerKey(), ...(attachments?.length ? { attachments: [...attachments] } : {}) };
   void continueOrKeep(runKey, c, [steer], start, claim);
   return true;
 }

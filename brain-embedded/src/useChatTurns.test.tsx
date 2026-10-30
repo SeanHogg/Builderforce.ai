@@ -696,3 +696,37 @@ describe('useChatTurns - where a turn goes when it is not kept after a chat swit
     await act(async () => { settleA(true); });
   });
 });
+
+describe('useChatTurns - round 10: a held-before-live turn belongs to ITS chat; one it cannot steer blocks the line', () => {
+  beforeEach(() => { stopRun.mockClear(); resetRunSteering(); });
+
+  it('never steers chat A\'s held turn into chat B\'s run after a switch', async () => {
+    const send = vi.fn();
+    const props = (runKey: number, steerable: boolean): ChatTurnsOptions<string> => ({ running: true, steerable, runKey, send });
+    const { result, rerender } = renderHook((p: ChatTurnsOptions<string>) => useChatTurns<string>(p), { initialProps: props(90, false) });
+    await act(async () => { await result.current.submit('for chat A'); });
+    expect(result.current.queued.count).toBe(1);
+
+    rerender(props(91, true)); // switched to chat B, whose run is live
+
+    expect(hasRunInterrupt(91)).toBe(false);
+    expect(drainRunSteering(91)).toEqual([]);
+  });
+
+  it('a held turn a steer would drop (a file it cannot read) stays queued and is NOT jumped by the next message', async () => {
+    type Turn = { text: string; files: Array<{ key: string; name: string; type: string; imageUrl?: string }> };
+    const send = vi.fn();
+    const notes = { key: 'n', name: 'notes.txt', type: 'text/plain' };
+    const props = (steerable: boolean): ChatTurnsOptions<Turn> => ({ running: true, steerable, runKey: 92, send, textOf: (t) => t.text, attachmentsOf: (t) => t.files });
+    const { result, rerender } = renderHook((p: ChatTurnsOptions<Turn>) => useChatTurns<Turn>(p), { initialProps: props(false) });
+    await act(async () => { await result.current.submit({ text: 'read this file', files: [notes] }); });
+
+    rerender(props(true)); // live: the file cannot ride a steer, so the turn stays queued
+    expect(result.current.queued.count).toBe(1);
+    await act(async () => { await result.current.submit({ text: 'and then this', files: [] }); });
+
+    // ...and the later message waits behind it (held), instead of jumping it.
+    expect(result.current.queued.items.map((i) => i.value.text)).toEqual(['read this file', 'and then this']);
+    expect(drainRunSteering(92)).toEqual([]);
+  });
+});

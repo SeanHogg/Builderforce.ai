@@ -33,14 +33,14 @@ type Turn = { text: string; recipient: unknown; attachments?: unknown[] };
 type Steer = (turn: Turn) => boolean;
 
 /** Renders the hook once and returns what it gives the composer, with the pieces a test pokes at. */
-function mount(flags: { sending: boolean; runLive: boolean }, chatId: number | null = 5) {
+function mount(flags: { sending: boolean; runLive: boolean }, chatId: number | null = 5, input = '') {
   const conv = { ...flags, pendingAttachments: [], removeAttachment: vi.fn(), restoreAttachments: vi.fn(), send: vi.fn(async () => true), stop: vi.fn() };
   const setInput = vi.fn();
   const chooseRecipient = vi.fn();
   let sendSteers: boolean | undefined;
   const Probe = () => {
     sendSteers = useChatSend({
-      conv: conv as never, chatId, input: '', setInput, recipient: null, chooseRecipient,
+      conv: conv as never, chatId, input, setInput, recipient: null, chooseRecipient,
       liveChildren: [] as never, setTurnLimbic: vi.fn(), reloadChats: vi.fn(),
     }).sendSteers;
     return null;
@@ -93,9 +93,7 @@ describe('an addressed turn the door could not keep', () => {
 
     (options.restore as (m: Turn) => void)({ text: '@dev look', recipient: dev, attachments: [file] });
 
-    const put = setInput.mock.calls[0]![0] as (cur: string) => string;
-    expect(put('')).toBe('@dev look');
-    expect(put('already typing')).toBe('already typing');
+    expect(setInput).toHaveBeenCalledWith('@dev look');
     expect(conv.restoreAttachments).toHaveBeenCalledWith([file]);
     expect(chooseRecipient).toHaveBeenCalledWith(dev);
   });
@@ -106,5 +104,16 @@ describe('an addressed turn the door could not keep', () => {
     (options.restore as (m: Turn) => void)({ text: 'plain', recipient: null });
 
     expect(chooseRecipient).toHaveBeenCalledWith(null);
+  });
+
+  it('a NEWER draft keeps its text and its addressee when a turn is given back: only the files return', () => {
+    const { options, conv, setInput, chooseRecipient } = mount({ sending: false, runLive: false }, 5, 'typed since');
+    const file = { key: 'k', name: 'a.txt', type: 'text/plain' };
+
+    (options.restore as (m: Turn) => void)({ text: 'older', recipient: { kind: 'agent', ref: 'dev' }, attachments: [file] });
+
+    expect(setInput).not.toHaveBeenCalled();
+    expect(chooseRecipient).not.toHaveBeenCalled();
+    expect(conv.restoreAttachments).toHaveBeenCalledWith([file]);
   });
 });

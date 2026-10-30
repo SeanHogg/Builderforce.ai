@@ -57,8 +57,8 @@ export type ChatErrorActionKind =
   | 'platform_refused'
   /**
    * A continuation (direction a run never read, made the chat's next turn) waited too long on the host or the
-   * attachments and gave up. The words are kept; the banner says so in the person's language and the person
-   * sends again.
+   * attachments and gave up. The words are KEPT (saved or waiting) and are read with the next message; the
+   * banner says so in the person's language - the person does not send them again.
    */
   | 'continuation_timed_out';
 
