@@ -80,7 +80,7 @@ describe('routeRunRecords', () => {
     const runs = routeRunRecords([
       row({ runId: 'r1', pipelineRoute: 'quick', routeScore: 0.3 }),
       row({ runId: 'r1', pipelineRoute: 'quick', routeScore: 0.3, at: '2026-10-20T10:01:00.000Z' }),
-      row({ runId: 'r2', pipelineRoute: 'full', routeScore: 0.8, clientChatId: 'chat-b', model: 'local/ollama/q' }),
+      row({ runId: 'r2', pipelineRoute: 'full', routeScore: 0.8, clientChatId: 'chat-b', model: 'local/ollama/q', route: 'local' }),
       row({}),
     ], BOOK);
     expect(runs).toEqual([

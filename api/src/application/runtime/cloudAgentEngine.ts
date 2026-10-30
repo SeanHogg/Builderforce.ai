@@ -19,6 +19,7 @@
  * Framework-free (no Hono), so it is unit-testable against a mocked gateway/DB.
  */
 import type { ArcStage } from '@builderforce/workload';
+import type { RunTally } from '@builderforce/agent-run';
 import {
   CURRENT_ENGINE_ID, type AgentEngine, type AgentExecParams, type AgentRunInput, type AgentRunResult, type CapabilityProvider,
 } from '@builderforce/agent-tools';
@@ -105,6 +106,9 @@ export type CloudEngineSurface =
   | { kind: 'durable'; maxSteps: number; limbicState?: LimbicState; sandbox?: RunSandbox }
   | { kind: 'rehearsal'; maxSteps: number; decorateProvider: (provider: CapabilityProvider) => CapabilityProvider; frozenReadRef?: string };
 
+/** The engine's result: the generic one, plus the run's final tally on a TERMINAL result (`RunState.telemetry`) for the outcome-row writer. */
+export type CloudEngineResult = AgentRunResult & { readonly telemetry?: RunTally };
+
 /**
  * The cloud agent engine behind the shared {@link AgentEngine} seam — THE current engine (V3).
  * It hands the run to the cloud adapter (the one agent) with the limbic affective layer ALWAYS
@@ -118,7 +122,7 @@ export class CloudLimbicEngine implements AgentEngine {
   readonly id = CURRENT_ENGINE_ID;
   constructor(private readonly rc: CloudEngineContext) {}
 
-  async run(input: AgentRunInput): Promise<AgentRunResult> {
+  async run(input: AgentRunInput): Promise<CloudEngineResult> {
     const rc = this.rc;
     const surface: CloudEngineSurface = rc.surface ?? { kind: 'worker' };
     // Affect: a durable tick runs under the state its cursor carries (evolved tick to tick by the DO);
@@ -146,7 +150,7 @@ export class CloudLimbicEngine implements AgentEngine {
           : {}),
       },
     );
-    return { ok: r.ok, output: r.output, cancelled: r.cancelled, finished: r.finished, awaitingInput: r.awaitingInput, state: r.state };
+    return { ok: r.ok, output: r.output, cancelled: r.cancelled, finished: r.finished, awaitingInput: r.awaitingInput, state: r.state, ...(r.telemetry ? { telemetry: r.telemetry } : {}) };
   }
 
   /** Personality = setpoints (from the assigned personas' psychometric profiles);
@@ -168,6 +172,6 @@ export class CloudLimbicEngine implements AgentEngine {
  * branch at the call sites. (Surface routing — durable DO / container / worker — is a
  * separate decision in `runtimeRoutes.ts`.)
  */
-export function resolveAgentEngine(rc: CloudEngineContext): AgentEngine {
+export function resolveAgentEngine(rc: CloudEngineContext): CloudLimbicEngine {
   return new CloudLimbicEngine(rc);
 }

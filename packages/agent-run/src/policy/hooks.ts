@@ -97,6 +97,9 @@ export interface StallHook {
   synthesis?(ctx: PolicyContext): string | null | void;
 }
 
+/** What a stall decision does: steer, escalate, pause, settle on an answer of its own, or fail the run. */
+export type StallAction = "steer" | "escalate" | "pause" | "settle" | "fail";
+
 /** What to do about a stalled turn. */
 export interface StallDecision {
   /**
@@ -104,7 +107,7 @@ export interface StallDecision {
    * (the run ends without an answer; `note` says why), or `settle` it: the turn ends the
    * run, and `note` is the answer it ends on.
    */
-  action: "steer" | "escalate" | "pause" | "settle" | "fail";
+  action: StallAction;
   /** The note the model reads on the next turn (for `settle`, the answer). */
   note?: string;
   /** The transcript rows to append, in place of the default pair (what the model said, then `note` as a user row). */

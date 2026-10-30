@@ -142,7 +142,8 @@ export function isToolWithheld(gates: readonly PolicyGate[] | undefined, toolNam
  * (`RunState.parkedCalls`). The retried identical call asks the channel for that approval's
  * STRUCTURED status — approved ⇒ it proceeds (`approvedCalls`), rejected ⇒ it is declined,
  * still pending ⇒ the run parks again on the same approval. A host with no `approve` port
- * has no approver to ask: the gate REFUSES the call. Nothing ⇒ the call is allowed.
+ * has no approver: the gate puts a plain question to the person (`human.ask`) and, parked
+ * without an approval record, the retried call proceeds after the resume. Nothing ⇒ allowed.
  */
 export async function gateCall(
   ctx: PolicyContext,
@@ -165,10 +166,15 @@ export async function gateCall(
   const gate: PolicyGate = gates.find((g) => g.id === decision.gateId) ?? { id: decision.gateId, effect: "require-approval", reason: decision.reason };
   const question = `Approve the agent's use of "${call.name}"? ${decision.reason}`;
   const human = ctx.ports.human;
-  // No approver to ask ⇒ the policy refuses the call (the model reads why and takes another path).
-  if (!human.approve) return { data: { ok: false, error: policyRefusalMessage(decision) }, isError: true };
   const parkedOn = ctx.state.parkedCalls?.[key];
-  const answer = await human.approve(gate, { tool: call.name, args: call.args, reason: decision.reason, ...(parkedOn ? { approvalId: parkedOn } : {}) });
+  // A surface WITH an approver asks it, and reads a parked call's STRUCTURED status on the retried identical call.
+  // One WITHOUT (on-prem, the IDE) puts a plain question to the person — never a refusal; an answer to it is
+  // not an approval, so only the person's resume (below) lets the call through.
+  const answer = human.approve
+    ? await human.approve(gate, { tool: call.name, args: call.args, reason: decision.reason, ...(parkedOn ? { approvalId: parkedOn } : {}) })
+    : await human.ask(question);
+  // A channel that cannot say anything at all is no approver: the policy refuses the call (the model reads why).
+  if (!answer) return { data: { ok: false, error: policyRefusalMessage(decision) }, isError: true };
   // The decision is the approval's STRUCTURED outcome, never matched out of the answer's words.
   if (answer.kind === "answered") {
     if (parkedOn) {
@@ -181,9 +187,11 @@ export async function gateCall(
     }
     return { data: { ok: false, error: `The approver declined "${call.name}" (governance gate ${decision.gateId}).${answer.answer ? ` ${answer.answer}` : ""}` }, isError: true };
   }
-  // Parked: the call is NOT approved. The person answers after the resume; the retried identical call reads that decision.
+  // Parked. With an approval record, the call is NOT approved: the retried identical call reads that record's
+  // status. With none (a plain question), the person's answer arrives with the resume, and the retried call proceeds.
   const approvalId = answer.approvalId ?? parkedOn;
   if (approvalId) ctx.state.parkedCalls = { ...(ctx.state.parkedCalls ?? {}), [key]: approvalId };
+  else ctx.state.approvedCalls = [...(ctx.state.approvedCalls ?? []), key];
   return {
     data: { ok: false, error: `Paused for human approval of "${call.name}" (governance gate ${decision.gateId}).` },
     isError: true,

@@ -303,7 +303,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       return lateSteerNote(ctx);
     },
 
-    onAskHuman: async (ctx, control, call) => {
+    onAskHuman: async (ctx, control) => {
       // The approver's channel already answered 'paused': the run parks on that record. Asking
       // again could answer in-run and report a call that never ran as done.
       if ((control as { parked?: true }).parked) return undefined;

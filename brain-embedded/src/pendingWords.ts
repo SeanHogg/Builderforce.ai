@@ -43,21 +43,24 @@ function read(chatId: number): Pending[] {
   }
 }
 
-function write(chatId: number, list: Pending[]): void {
+/** True when the journal now holds `list`. False: no storage, or a quota / blocked write - the words are still in memory only. */
+function write(chatId: number, list: Pending[]): boolean {
   const store = storage();
-  if (!store) return;
+  if (!store) return false;
   try {
     if (list.length === 0) store.removeItem(keyOf(chatId));
     else store.setItem(keyOf(chatId), JSON.stringify(list));
+    return true;
   } catch {
-    // Quota or a blocked write: no journal for these words; they are still in memory.
+    return false;
   }
 }
 
-export function rememberPendingWords(chatId: number, eventKey: string, text: string): void {
+/** Journal the words. Returns whether they are on the device: false means a reload before the save lands loses them. */
+export function rememberPendingWords(chatId: number, eventKey: string, text: string): boolean {
   const list = read(chatId);
-  if (list.some((p) => p.eventKey === eventKey)) return;
-  write(chatId, [...list, { eventKey, text, session: SESSION }]);
+  if (list.some((p) => p.eventKey === eventKey)) return true;
+  return write(chatId, [...list, { eventKey, text, session: SESSION }]);
 }
 
 export function forgetPendingWords(chatId: number, eventKeys: ReadonlyArray<string | undefined>): void {

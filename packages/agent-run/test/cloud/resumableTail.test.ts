@@ -28,7 +28,7 @@ function build(turns: Array<ModelCompletion | Error>, resumable?: (err: unknown)
 }
 
 const throwingMemory = (error: Error) => ({
-  memory: { ...defaultPolicyModules.memory, consolidate: async () => { throw error; } },
+  memory: { ...defaultPolicyModules().memory, consolidate: async () => { throw error; } },
 });
 
 describe("an exception while the run consolidates its memory", () => {

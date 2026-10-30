@@ -20,7 +20,6 @@ import {
   type RunOutcome, type RunState, type VerifySandbox,
 } from '@builderforce/agent-run';
 import type { RunSandbox } from './sandbox/runSandbox';
-import { handOffOutcomeCounts } from './cloudOutcomeRow';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { releaseAllForExecution } from '../coordination/leaseService';
 import { coordinationScopeKey } from '../../domain/coordination/resourceKey';
@@ -39,8 +38,6 @@ import type { CloudLoopState } from './cloudRunState';
 export interface RunStash {
   /** The memory the agent consolidated at run end (`store.commitMemory`). */
   consolidated?: unknown;
-  /** The outcome row the agent built when it settled; the tail writes it once the run has LANDED (see `cloudOutcomeRow`). */
-  row?: RunOutcomeRow;
 }
 
 /** Hand every path this run held back to its peers immediately rather than making them wait out the lease TTL. */

@@ -63,6 +63,9 @@ function rowFor(event: RunEvent, meta: { durationMs?: number } | undefined, serv
       if (event.action === 'escalate') {
         return { toolName: 'model.failover', category: 'llm', detail: { step: event.step, from: d.from ?? null, to: d.to, attempt: d.attempt, of: d.of, shape: d.shape }, result: String(d.notice ?? event.note ?? 'moved to another model') };
       }
+      if (event.action === 'settle') {
+        return { toolName: 'loop.stall_settled', category: 'llm', detail: { step: event.step, model: d.model ?? null, tried: d.tried, shape: d.shape }, result: String(event.note ?? 'the run ended on the answer the stall ladder settled on').slice(0, 600) };
+      }
       return { toolName: 'loop.stall_unrecovered', category: 'error', detail: { step: event.step, model: d.model ?? null, tried: d.tried, shape: d.shape }, result: String(event.note ?? 'the run stopped').slice(0, 600) };
     }
     case 'context.tools':

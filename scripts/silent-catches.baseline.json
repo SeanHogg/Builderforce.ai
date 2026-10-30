@@ -29,7 +29,7 @@
   },
   "brain-embedded/src": {
     "empty-catch": 17,
-    "empty-promise-catch": 10,
+    "empty-promise-catch": 5,
     "literal-promise-catch": 20,
     "console-only": 0,
     "durable-object-direct-report": 0

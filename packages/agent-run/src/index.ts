@@ -40,6 +40,7 @@ export {
   type CompactionResult,
   type StallHook,
   type StallDecision,
+  type StallAction,
   type SteeringHook,
   type AskHook,
   type SubagentsHook,

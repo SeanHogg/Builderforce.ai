@@ -5,7 +5,7 @@
  * allowlist, which the gate tests were written in.
  */
 
-import { isToolWithheld, offeredSchemas } from "@builderforce/agent-run";
+import { isToolWithheld, offeredSchemas, type RunPorts } from "@builderforce/agent-run";
 import type { Capability, PolicyGate } from "@builderforce/agent-tools";
 
 export const GATED_TOOL_VOCABULARY = ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "Task"] as const;
@@ -15,9 +15,21 @@ export function allowedToolsAfterGates(gates: readonly PolicyGate[] | undefined,
   return [...GATED_TOOL_VOCABULARY, ...extraTools].filter((tool) => !isToolWithheld(gates, tool));
 }
 
+/** Complete ports around the granted capabilities: the catalog only reads `capabilities`; the rest is inert. */
+function inertPorts(caps: readonly Capability[]): RunPorts {
+  return {
+    model: { complete: async () => ({ content: "" }) },
+    capabilities: { capabilities: new Set(caps) },
+    store: { load: () => undefined, save: () => undefined },
+    events: { emit: () => undefined },
+    human: { ask: async () => ({ kind: "paused" }) },
+    context: { pack: () => ({ focus: [], facts: [], recall: [] }) },
+  };
+}
+
 /** The tools a surface granting `caps` is OFFERED under `gates`: the agent's live catalog, minus what a gate withholds. */
 export function offeredTools(caps: readonly Capability[], gates?: readonly PolicyGate[]): string[] {
-  return offeredSchemas({ capabilities: { capabilities: new Set(caps) } })
+  return offeredSchemas(inertPorts(caps))
     .map((schema) => schema.function.name)
     .filter((name) => !isToolWithheld(gates, name));
 }

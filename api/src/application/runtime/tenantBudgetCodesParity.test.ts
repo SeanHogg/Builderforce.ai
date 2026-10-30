@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { TENANT_BUDGET_CODES } from '@builderforce/learned-routing';
 
@@ -9,9 +10,9 @@ import { TENANT_BUDGET_CODES } from '@builderforce/learned-routing';
  * directions: a new `*_limit_exceeded` / `*_cap_exceeded` code the gateway starts emitting, or a name left in a
  * list that nothing emits, fails here instead of silently reading as a provider throttle (or never matching).
  */
-const read = (relative: string): string => readFileSync(new URL(relative, import.meta.url), 'utf8');
+const read = (relative: string): string => readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8');
 const tsFilesIn = (relative: string): string[] =>
-  readdirSync(new URL(relative, import.meta.url), { recursive: true, encoding: 'utf8' })
+  readdirSync(fileURLToPath(new URL(relative, import.meta.url)), { recursive: true, encoding: 'utf8' })
     .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts'))
     .map((file) => `${relative}${file.replace(/\\/g, '/')}`);
 

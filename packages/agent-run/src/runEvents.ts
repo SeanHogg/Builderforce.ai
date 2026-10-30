@@ -3,6 +3,7 @@
  * task gives the same events on every surface, whether it runs continuously or one step per tick.
  */
 import type { ModelUsage, RunOutcomeKind } from "./contract.js";
+import type { StallAction } from "./policy/hooks.js";
 
 /** One event of the run's trace. The trace is what every adapter must match. */
 export type RunEvent =
@@ -14,7 +15,7 @@ export type RunEvent =
   | { kind: 'model.preflight'; step: number; status: 'ok' | 'refreshed' | 'degraded'; notices: string[] }  // once, before turn 1 (§6.10)
   | { kind: 'llm.model_downgrade'; step: number; requestedModel: string; model: string; reason: string }  // a turn answered by another model than expected (E7)
   | { kind: 'model.cascade'; step: number; from: string | null; status: number | null; released: boolean }  // the model policy routed a failed turn onto the cascade
-  | { kind: 'stall.recovered'; step: number; action: 'steer' | 'escalate' | 'pause'; note?: string; detail?: Record<string, unknown> }  // a turn that ended without acting was sent back, handed to another model, or stopped
+  | { kind: 'stall.recovered'; step: number; action: StallAction; note?: string; detail?: Record<string, unknown> }  // a turn that ended without acting was sent back, handed to another model, stopped, or settled/failed by the ladder
   | { kind: 'policy.blocked'; step: number; tool: string; gateId: string; reason: string }  // a governance gate refused a call
   | { kind: 'finish.blocked'; step: number; reason: string; block: string; detail?: Record<string, unknown> }                  // a prose end was refused (the owed sign-off)
   | { kind: 'loop.repetition'; step: number; copies: number; block: string }  // the kernel cut a looped turn back to its first copy

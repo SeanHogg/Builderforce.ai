@@ -71,7 +71,9 @@ function selectedTools(ctx: PolicyContext, offered: readonly ToolSchema[]): Tool
       });
     }
 
-    const pinned = pinnedNames(ctx);
+    // A run owing a sign-off cannot finish without the tool that records it, so it is always advertised.
+    const required = policy.signoff ? [SIGNOFF_TOOL] : [];
+    const pinned = [...pinnedNames(ctx), ...required];
 
     // A surface whose own tools are the whole catalog advertises exactly those, ranked by
     // the same selector; the shared registry's core set is a repository's catalog, not a board's.
@@ -81,9 +83,6 @@ function selectedTools(ctx: PolicyContext, offered: readonly ToolSchema[]): Tool
     // The ONE catalog strategy: role core set + tool_search + find_symbol, with the
     // pinned, required and prompt-named tools kept. The lexical selector then trims an
     // oversized catalog to the turn's fixed set (stable advertised bytes).
-    // A run owing a sign-off cannot finish without the tool that records it, so it is always advertised.
-    const required = policy.signoff ? [SIGNOFF_TOOL] : [];
-    const pinned = [...pinnedNames(ctx), ...required];
     // Tools the persona or the governance text names are advertised as well as the ones the task names.
     const prompt = [task.persona, task.prompt].filter(Boolean).join("\n");
     const catalog = selectCatalog(tools, policy.role, catalogCaps(ctx), { pinned, required, prompt });

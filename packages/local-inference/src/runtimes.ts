@@ -145,7 +145,8 @@ const KIMI_CODE_CATALOG_ALIASES: Readonly<Record<string, string>> = {
   'k3': 'moonshotai/kimi-k3',
   'kimi-k3': 'moonshotai/kimi-k3',
   'kimi-k3.1-pro': 'moonshotai/kimi-k3.1-pro',
-  'kimi-latest': 'moonshotai/kimi-latest',
+  // The book prices Kimi's moving alias under its own `~` id; there is no plain `moonshotai/kimi-latest`.
+  'kimi-latest': '~moonshotai/kimi-latest',
 };
 
 /** Runtime metadata. `automaticRank`, not array position, owns automatic preference. */

@@ -8,7 +8,8 @@
  *    participant the composer happened to hold). A newer draft keeps the addressee it was written for.
  */
 
-import type { ChatInputAttachment, DirectedRecipient } from './types';
+import type { ChatInputAttachment } from './types';
+import type { DirectedRecipient } from './directedMessage';
 
 export function restoreTurn(
   turn: { text: string; attachments?: readonly ChatInputAttachment[]; recipient: DirectedRecipient | null },

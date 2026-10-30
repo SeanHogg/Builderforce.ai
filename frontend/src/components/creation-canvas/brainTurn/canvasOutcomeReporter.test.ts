@@ -71,7 +71,7 @@ describe('canvasOutcomeReporter', () => {
     expect(mocks.reportRunOutcome.mock.calls[0]?.[0]).toMatchObject({ terminalStatus: 'cancelled' });
   });
 
-  it('carries the row's quota-exhausted flag (set once by the row builder), and says nothing otherwise', () => {
+  it("carries the row's quota-exhausted flag (set once by the row builder), and says nothing otherwise", () => {
     reporter().report({ ...ROW, terminalStatus: 'failed', quotaExhausted: true });
     reporter().report({ ...ROW, terminalStatus: 'failed' });
 
