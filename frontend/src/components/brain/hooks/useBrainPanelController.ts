@@ -212,6 +212,7 @@ export function useBrainPanelController({
     runTool,
     needsConfirm,
     ensureChatId,
+    drafts,
     onActivity: chats.touch,
     onFirstUserTurn,
     evermind: memory.gatedEvermind,

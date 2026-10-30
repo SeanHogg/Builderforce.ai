@@ -179,7 +179,7 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
                 submitLabel={t('send')}
                 disabled={!s.ready}
                 running={conv.sending}
-                onStop={conv.stop}
+                onStop={() => conv.stop()}
                 // A guest has no workspace behind the box: no plan, meters or Evermind to show.
                 account={null}
                 // The Model tab: no gateway catalogue for a guest — the models downloaded

@@ -178,6 +178,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     reasoning,
     extraSystem,
     ensureChatId,
+    drafts,
     onActivity: reloadChats,
     onFirstUserTurn,
     evermind,

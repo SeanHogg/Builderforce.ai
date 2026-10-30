@@ -67,24 +67,37 @@ const CANVAS_ACTION_FILES = fs.existsSync(CANVAS_ACTIONS_DIR)
   : [];
 
 /**
- * The modules a vocabulary entry point composes: the runtime (non-type) `@/lib/*` modules it imports.
+ * The modules a vocabulary entry point composes: the runtime (non-type) `@/lib/*` and `./*` modules it imports or
+ * re-exports - and, for the `canvasBuild*` family, THEIR imports in turn, so the vocabulary can be split again without
+ * this guard going blind.
  *
  * `canvasBuildTools.ts` assembles the build vocabulary from its parts (file actions, reads, history, the shell, the
- * preview console), and the parts move as the vocabulary is split. Following the entry's own imports keeps this guard
- * on the declarations wherever they live - a hand-kept list of the parts is how eight build tools went unseen when
- * they were split out, and the guard reported them as dropped. Modules that declare nothing contribute nothing.
+ * preview console), and the parts move as the vocabulary is split. Following the imports keeps this guard on the
+ * declarations wherever they live - a hand-kept list of the parts is how eight build tools went unseen when they were
+ * split out, and the guard reported them as dropped. Modules that declare nothing contribute nothing. A specifier that
+ * names a lib module which does not resolve (file or directory index) fails the guard: a silent skip is a blind spot.
  */
-function composedModules(entry) {
-  const source = ts.createSourceFile(entry, fs.readFileSync(entry, 'utf8'), ts.ScriptTarget.Latest, true);
+function composedModules(entry, seen = new Set([entry])) {
   const libDir = path.resolve(repoRoot, 'frontend', 'src', 'lib');
+  const source = ts.createSourceFile(entry, fs.readFileSync(entry, 'utf8'), ts.ScriptTarget.Latest, true);
   const modules = [];
   for (const node of source.statements) {
-    if (!ts.isImportDeclaration(node) || node.importClause?.isTypeOnly) continue;
+    const from = ts.isImportDeclaration(node) ? node.importClause?.isTypeOnly : ts.isExportDeclaration(node) ? node.isTypeOnly : undefined;
+    if (from === undefined || from === true || !node.moduleSpecifier) continue;
     const specifier = node.moduleSpecifier.getText().slice(1, -1);
-    if (!specifier.startsWith('@/lib/')) continue;
-    const base = path.resolve(libDir, specifier.slice('@/lib/'.length));
-    const found = ['.ts', '.tsx'].map((ext) => base + ext).find((candidate) => fs.existsSync(candidate));
-    if (found) modules.push(found);
+    const base = specifier.startsWith('@/lib/') ? path.resolve(libDir, specifier.slice('@/lib/'.length))
+      : specifier.startsWith('./') ? path.resolve(path.dirname(entry), specifier)
+        : null;
+    if (!base) continue;
+    const found = ['.ts', '.tsx', '/index.ts', '/index.tsx'].map((ext) => base + ext).find((candidate) => fs.existsSync(candidate));
+    if (!found) {
+      console.error(`check-canvas-tool-contract: ${path.relative(repoRoot, entry)} imports ${specifier}, which does not resolve to a module - the walk cannot follow it.`);
+      process.exit(1);
+    }
+    if (seen.has(found)) continue;
+    seen.add(found);
+    modules.push(found);
+    if (/^canvasBuild/.test(path.basename(found))) modules.push(...composedModules(found, seen));
   }
   return modules;
 }

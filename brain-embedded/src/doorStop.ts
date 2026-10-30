@@ -44,13 +44,14 @@ export interface DoorStopPorts {
 }
 
 export function stopDoorTurns(ports: DoorStopPorts, marks: DoorStopMarks, clear: () => void): void {
-  clear();
-  marks.stopEpoch.current += 1;
-  if (ports.running) marks.markStopping(true);
   const { stop: halt, runKey: key, drafts: binding } = ports;
   // The draft on screen (a draft view has no run key): the Stop reaches ITS sends alone, never another draft's chat. A new
   // draft with nothing sent is `null` - nothing to stop; only a host with no binding names no token (`undefined`).
   const token = key === null ? (binding ? binding.current() : undefined) : undefined;
+  if (token === null) return; // an empty new draft has nothing to stop: not the held turns, not the epoch, not another draft's send
+  clear();
+  marks.stopEpoch.current += 1;
+  if (ports.running) marks.markStopping(true);
   // A steer typed before the Stop is dropped with the run, and so is what a draft's creation delivered to this chat that
   // its run has not heard yet (the store's Stop drains the inbox, the device's journal and the chat's waiting turns -
   // every entry point to Stop does) - none of it may start the next one.

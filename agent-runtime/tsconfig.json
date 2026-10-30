@@ -53,6 +53,7 @@
       // typechecks from here, so they resolve from THIS package's install.
       "@seanhogg/builderforce-memory/working": ["./node_modules/@seanhogg/builderforce-memory/dist/working/index.d.ts"],
       "@seanhogg/builderforce-memory/ingest": ["./node_modules/@seanhogg/builderforce-memory/dist/ingest/index.d.ts"],
+      "@seanhogg/builderforce-memory/handoff": ["./node_modules/@seanhogg/builderforce-memory/dist/handoff/index.d.ts"],
       // agent-tools' symbol extractor loads `web-tree-sitter` lazily; its install lives with
       // agent-tools (a declared dependency there), so the types resolve from it.
       "web-tree-sitter": ["../packages/agent-tools/node_modules/web-tree-sitter/tree-sitter-web.d.ts"],

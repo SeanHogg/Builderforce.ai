@@ -143,6 +143,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   const conv = useBrainConversation({
     chatId,
     ensureChatId,
+    drafts,
     onFirstUserTurn: (id, text) => { void onFirstUserTurn(id, text); },
     // What only Rovr knows at run time: the browser tools bound to THIS chat, the
     // working tab's prompt, the chat's `/` choices (`host/rovrRunHost.ts`).

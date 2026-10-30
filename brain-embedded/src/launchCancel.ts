@@ -57,26 +57,26 @@ export function useLaunchCancel(sendingRef: MutableRefObject<ReadonlySet<number 
   /**
    * The Stop of the conversation showing `chatId` (null: a draft). `draft` is the draft on screen: a token, `null` for a
    * new draft with nothing sent from it (nothing to stop - another draft's launch is not this Stop's), `undefined` when
-   * the host names no token and has no binding (its one creation is the draft).
+   * the host names no token and has no binding (its one creation is the draft). Anything else (a click event handed to
+   * `onStop={conv.stop}`) is no token: it reads as `undefined`.
    */
   const stopConversation = useCallback((chatId: number | null, draft?: DraftToken | null) => {
     if (chatId != null) {
+      // A send that made this chat and is still getting ready is dropped with the Stop, whichever chat is selected now.
+      for (const sends of draftMadeRef.current.values()) for (const send of sends) if (send.chat === chatId) send.cancelled = true;
       stopChat(chatId);
       return;
     }
-    if (draft === null) return;
-    const dropCreation = () => { if (sendingRef.current.has(null)) cancelledLaunchRef.current.add(null); };
-    if (draft === undefined) {
-      dropCreation();
+    const token = typeof draft === 'number' || draft === null ? draft : undefined;
+    if (token === null) return;
+    if (token === undefined) {
+      if (sendingRef.current.has(null)) cancelledLaunchRef.current.add(null);
       return;
     }
-    // Every send under the token whose run has not started - its entry is still here (a run that starts ends its entry):
-    // still creating (dropped once the chat exists), or made and getting ready. A started run is the door's token-scoped
-    // `stopRun(made)`, never this; and another send's run on the same chat does not make this send "started".
-    for (const send of draftMadeRef.current.get(draft) ?? []) {
-      if (send.chat == null) dropCreation();
-      else send.cancelled = true;
-    }
+    // Every send under the token whose run has not started - its entry is still here (a run that starts ends its entry),
+    // creating or getting ready. A started run is the door's token-scoped `stopRun(made)`, never this; and another send's
+    // run (or its `finally`) on the same chat neither starts nor erases this send's cancel.
+    for (const send of draftMadeRef.current.get(token) ?? []) send.cancelled = true;
   }, [stopChat, sendingRef]);
 
   return { cancelledLaunchRef, launchingRef, beginDraftSend, endDraftSend, stopConversation };
