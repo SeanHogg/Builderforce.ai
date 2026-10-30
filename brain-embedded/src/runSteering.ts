@@ -21,6 +21,7 @@ import {
   newSteerKey,
   onRunInterrupt,
   queueRunSteering as queueMessage,
+  requeueRunSteering as requeueMessages,
   resetRunSteering,
   type RunSteerMessage as QueuedSteerMessage,
 } from '@builderforce/agent-run';
@@ -49,13 +50,18 @@ export function queueRunSteering(
   text: string,
   opts?: { interrupt?: boolean; attachments?: ChatInputAttachment[]; fromPerson?: boolean; persist?: boolean; saved?: boolean; eventKey?: string },
 ): void {
-  // Words the run will save get their row's key HERE, once; a requeue passes the key it already has. (A steer with
-  // no key - an owner's, a child's - is keyed by the continuation before its first save attempt.)
-  const eventKey = opts?.eventKey ?? (opts?.persist ? newSteerKey() : undefined);
-  // Words the run will save are also written to the device's journal now (`pendingWords.ts`): a reload before
-  // they are saved still finds them, which is what makes "your message is kept" true.
-  if (opts?.persist && eventKey && text.trim()) rememberPendingWords(runKey, eventKey, text.trim());
-  queueMessage(runKey, text, eventKey ? { ...opts, eventKey } : opts);
+  // The queue keys the words the run will save (`persist`) as it takes them in; a requeue passes the key it already has.
+  // (A steer with no key - an owner's, a child's - is keyed by the continuation before its first save attempt.)
+  const queued = queueMessage(runKey, text, opts);
+  // Words the run will save are also written to the device's journal - AFTER they are in the inbox, so a storage
+  // failure can never cost a steer: a reload before they are saved still finds them, which is what makes "your
+  // message is kept" true.
+  if (queued?.persist && queued.eventKey) rememberPendingWords(runKey, queued.eventKey, queued.text);
+}
+
+/** Put steers a continuation could not act on back at the FRONT of the run's inbox, in order, each with its own flags and key. */
+export function requeueRunSteering(runKey: number, steers: readonly RunSteerMessage[]): void {
+  requeueMessages(runKey, steers);
 }
 
 export { newSteerKey };

@@ -175,6 +175,7 @@ export {
   hasRunInterrupt,
   newSteerKey,
   onRunInterrupt,
+  requeueRunSteering,
   resetRunSteering,
   type RunSteerMessage,
 } from "./policy/steering/runSteering.js";

@@ -12,7 +12,7 @@ import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { markChatRead } from './chatReadState';
 import { messageColumns, type AppendMessagesDto, type MessageFeedback } from './brainChatShapes';
 import { canAccessChat, ensureMembership } from './brainChatGuards';
-import { appendRaw } from './brainMessageStore';
+import { appendRaw, appendRawOutcome } from './brainMessageStore';
 import { mergeSteps } from './chatStepStore';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -83,11 +83,13 @@ export async function appendMessages(
 
   // Contributing to a shared chat joins you to it (records the live audience).
   // Best-effort and independent of the message write, so the two run together.
-  const [, written] = await Promise.all([
+  const [, outcome] = await Promise.all([
     ensureMembership(db, chatId, tenantId, userId, (chat as unknown as { ownerId: string | null }).ownerId),
-    appendRaw(db, chatId, dto.messages),
+    appendRawOutcome(db, chatId, dto.messages),
   ]);
-  return written;
+  // `written`: the messages stored NOW. A retry of one that already committed answers its original row (`messages`)
+  // but is not in `written` - the route's effects (ticket activity, pings, agent replies, learning) run for `written` only.
+  return { messages: outcome.rows, written: outcome.written, writtenRows: outcome.writtenRows };
 }
 
 /**

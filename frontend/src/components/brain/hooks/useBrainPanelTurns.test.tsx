@@ -16,6 +16,7 @@ vi.mock('@seanhogg/builderforce-brain-embedded', async () => {
   const actual = await vi.importActual<typeof import('@seanhogg/builderforce-brain-embedded')>('@seanhogg/builderforce-brain-embedded');
   return {
   restoreTurn: actual.restoreTurn,
+  joinRestorableTurns: actual.joinRestorableTurns,
   useComposerDraft: actual.useComposerDraft,
   chatDoorLiveness: (conv: { sending: boolean; runLive: boolean }) => ({ running: conv.sending, steerable: conv.runLive }),
   useChatTurns: (options: Record<string, unknown>) => {
@@ -75,11 +76,15 @@ describe('the web panel\'s turn door and the composer\'s attachments', () => {
   });
 
   it('puts the attachments back - and the text - when the turn was not kept', async () => {
-    door.submit.mockResolvedValue(false);
+    let finish!: (kept: boolean) => void;
+    door.submit.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve; }));
     const { conv, restoreAttachments } = conversation();
     const { hook, setInput } = mount(conv);
 
-    await act(async () => { await hook.result.current.handleSend(); });
+    let offered!: Promise<void>;
+    act(() => { offered = hook.result.current.handleSend() as Promise<void>; });
+    hook.rerender({ conv, input: '' }); // the box was cleared as the offer started
+    await act(async () => { finish(false); await offered; });
 
     expect(restoreAttachments).toHaveBeenCalledWith([notes]);
     const restore = setInput.mock.calls.map((c) => c[0]).find((v) => typeof v === 'function') as ((cur: string) => string) | undefined;
@@ -143,6 +148,24 @@ describe('the web panel\'s turn door and the composer\'s attachments', () => {
     expect(put('')).toBe('@dev look');
     expect(restoreAttachments).toHaveBeenCalledWith([notes]);
     expect(chooseRecipient).toHaveBeenCalledWith(dev);
+  });
+
+  it('gives several turns back as ONE: texts in order, every file, the first addressee - the box holds one draft', () => {
+    const { conv } = conversation();
+    mount(conv);
+    const join = door.options?.join as (turns: BrainPanelTurn[]) => BrainPanelTurn;
+    const dev = { kind: 'agent', ref: 'dev', label: 'dev' } as never;
+    const more = { key: 'n2', name: 'more.txt', type: 'text/plain' };
+
+    expect(join([
+      { text: 'first', addressedTo: null, attachments: [notes] },
+      { text: '@dev second', addressedTo: dev, attachments: [more] },
+      { text: 'third', addressedTo: null },
+    ])).toEqual({ text: 'first
+
+@dev second
+
+third', addressedTo: dev, attachments: [notes, more] });
   });
 
   it('hands the door the files a steer would carry', () => {

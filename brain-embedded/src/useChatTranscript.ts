@@ -60,9 +60,8 @@ export function useChatTranscript(
     }
     setLoadingMessages(true);
     cb.current.onLoadStart();
-    // Words an EARLIER page load left unsaved are saved first (idempotent on their keys), so they are in this read.
-    replayPendingWords(chatId, persistence)
-      .then(() => persistence.getMessages(chatId))
+    persistence
+      .getMessages(chatId)
       .then((list) => {
         // MERGE, never replace: a run that persisted its reply hands it over through
         // the run store's `appended` buffer, and this fetch can resolve after that
@@ -78,6 +77,18 @@ export function useChatTranscript(
       });
     return () => { cancelled = true; };
   }, [persistence, chatId, reloadNonce]);
+
+  // Words a DEAD page load left unsaved are saved once when the chat is opened - never on a reload or a push, and never
+  // in front of the read above: the transcript shows at once, in parallel with a bounded replay, and is read again
+  // when the replay saved anything. (A read held behind the replay landed after a send's own user row and replaced it.)
+  useEffect(() => {
+    if (chatId == null) return;
+    let cancelled = false;
+    void replayPendingWords(chatId, persistence).then((saved) => {
+      if (saved > 0 && !cancelled) reloadMessages();
+    });
+    return () => { cancelled = true; };
+  }, [persistence, chatId, reloadMessages]);
 
   // Agent lifecycle messages are written outside this browser's run store. Subscribe
   // to the host's chat invalidation channel and re-read durable state on each push.

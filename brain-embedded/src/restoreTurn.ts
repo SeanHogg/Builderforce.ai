@@ -11,8 +11,33 @@
 import type { ChatInputAttachment } from './types';
 import type { DirectedRecipient } from './directedMessage';
 
+/** A turn as the composer takes it back. */
+export interface RestorableTurn {
+  text: string;
+  attachments?: readonly ChatInputAttachment[];
+  recipient: DirectedRecipient | null;
+}
+
+/**
+ * SEVERAL turns that cannot go - every turn a chat left behind when the person moved on - as the ONE turn the
+ * composer takes back (one `restoreTurn` call: the box holds one draft, so a second restore would find the first's
+ * words "a newer draft" and drop its own). Texts joined in the order they were said, files together, and the addressee
+ * of the first turn that had one. A single turn is itself.
+ */
+export function joinRestorableTurns(turns: readonly RestorableTurn[]): RestorableTurn {
+  if (turns.length === 1) return turns[0]!;
+  const attachments = turns.flatMap((t) => t.attachments ?? []);
+  return {
+    text: turns.map((t) => t.text).join('
+
+'),
+    ...(attachments.length > 0 ? { attachments } : {}),
+    recipient: turns.find((t) => t.recipient != null)?.recipient ?? null,
+  };
+}
+
 export function restoreTurn(
-  turn: { text: string; attachments?: readonly ChatInputAttachment[]; recipient: DirectedRecipient | null },
+  turn: RestorableTurn,
   composer: {
     /** The composer's text right now (read at call time - a ref, not a render-time capture). */
     draft: () => string;

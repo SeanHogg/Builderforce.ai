@@ -80,6 +80,9 @@ export interface BrainLearnOutcome {
   targets?: EvermindTargetOutcome[];
 }
 
+/** The outcome for a post that wrote nothing (a retry of a message that already committed): no pass ran, none is owed. */
+export const NOTHING_LEARNED: BrainLearnOutcome = { learned: false, version: 0, reason: null };
+
 /** The gate outcome PLUS the resolved contribution inputs, so the dispatch step can
  *  reuse them without re-reading (the gate is computed once, in the route handler). */
 export interface BrainLearnGate {

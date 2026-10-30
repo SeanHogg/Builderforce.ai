@@ -28,16 +28,22 @@ import {
   runToolInterruptibly,
   skipOnSteer,
 } from '@builderforce/agent-run';
+import { markPendingWordsRead } from '../pendingWords';
 import { drainRunSteering, type RunSteerMessage } from '../runSteering';
 import type { RunCell } from './runCell';
 import { nowIso, pushTrace } from './runCells';
 
 export { INTERRUPTED_BY_STEER, SKIPPED_BY_STEER, WAIT_INTERRUPTED_BY_STEER, isInterruptibleCall, runToolInterruptibly, skipOnSteer };
 
-/** Drain the run's waiting direction for this turn and record it as `steer.applied`. */
+/**
+ * Drain the run's waiting direction for this turn and record it as `steer.applied`. The model reads these words
+ * now, so the device's journal marks them read: lost with the page before they are saved, they replay as the
+ * mid-turn rows they became, not as a turn still awaiting an answer.
+ */
 export function takeRunSteering(c: RunCell, runKey: number, step: number): RunSteerMessage[] {
   const messages = drainRunSteering(runKey);
   if (messages.length > 0) {
+    markPendingWordsRead(runKey, messages.map((m) => m.eventKey));
     pushTrace(c, {
       ts: nowIso(),
       category: 'message',

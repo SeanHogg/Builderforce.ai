@@ -33,7 +33,7 @@ import { handleAssetSign, handleAssetUpload, handleTenantAssetRead } from './ass
 import type { Env, HonoEnv } from '../../env';
 import type { BrainService } from '../../application/brain/BrainService';
 import type { ArchivedFilter } from '../../application/brain/brainChats';
-import { learnFromPersistedTurns } from '../../application/brain/brainEvermindLearning';
+import { learnFromPersistedTurns, NOTHING_LEARNED } from '../../application/brain/brainEvermindLearning';
 import { latestChatDiagnostics, saveChatDiagnostics } from '../../application/brain/chatDiagnosticsStore';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
@@ -323,7 +323,10 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     // A human posting into a chat that's linked to a ticket IS a comment on that
     // ticket — surface it on the unified activity/audit log (verb `comment.added`),
     // fanned to each linked ticket. Off the response path; best-effort.
-    const userText = (body.messages ?? []).filter((m) => m.role === 'user' && typeof m.content === 'string' && m.content.trim());
+    // Everything below acts on what was WRITTEN now: a deduplicated keyed POST (a retry of a message that already
+    // committed) answers its original rows and fires none of it - no second ticket comment, ping, reply or learning pass.
+    const written = result.written;
+    const userText = written.filter((m) => m.role === 'user' && typeof m.content === 'string' && m.content.trim());
     if (userText.length > 0) {
       c.executionCtx.waitUntil((async () => {
         const links = await db.select({ kind: chatTicketLinks.ticketKind, ref: chatTicketLinks.ticketRef })
@@ -355,7 +358,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const mentioned = new Set<string>();
     const directedAgents: { agentRef: string; agentName: string }[] = [];
     const seenAgents = new Set<string>();
-    for (const m of body.messages ?? []) {
+    for (const m of written) {
       if (m.role && m.role !== 'user') continue;
       if (!m.metadata) continue;
       try {
@@ -445,11 +448,11 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     // `@agent` reply path) evaluates the gate synchronously (a cached head read) so the
     // response reports the TRUTHFUL outcome — the client renders its `learn` step off
     // this — and dispatches the slow coordinator contribution in the background.
-    const evermindLearn = await learnFromPersistedTurns(
-      c.env as Env, db, id, tenantId, result, (p) => c.executionCtx.waitUntil(p),
-    );
+    const evermindLearn = written.length === 0
+      ? NOTHING_LEARNED
+      : await learnFromPersistedTurns(c.env as Env, db, id, tenantId, result.writtenRows, (p) => c.executionCtx.waitUntil(p));
 
-    return c.json({ messages: result, evermindLearn, ...(dispatchThrottled ? { dispatchThrottled } : {}) }, 201);
+    return c.json({ messages: result.messages, evermindLearn, ...(dispatchThrottled ? { dispatchThrottled } : {}) }, 201);
   });
 
   // ── Captured diagnostics ────────────────────────────────────────────────────
@@ -643,7 +646,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       messages: claim.messages.map((m) => ({ role: m.role, content: m.content, metadata: m.metadata ?? undefined })),
     });
     if ('error' in result) return c.json({ error: result.error }, 400);
-    return c.json({ claimed: true, chat, messageCount: result.length }, 201);
+    return c.json({ claimed: true, chat, messageCount: result.messages.length }, 201);
   });
 
   // GET /chats/:id/agents — agents invited into this chat.

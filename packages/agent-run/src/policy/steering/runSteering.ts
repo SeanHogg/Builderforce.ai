@@ -36,8 +36,8 @@ export interface RunSteerMessage {
    */
   saved?: boolean;
   /**
-   * The key the saved ROW is stored under (the server upserts on `(chat, event_key)`), minted ONCE: when the words
-   * the run will save are first enqueued (the Brain's wrapper), or - for a steer with none (an owner's, a child's) -
+   * The key the saved ROW is stored under (the server upserts on `(chat, event_key)`), minted ONCE: by `queueRunSteering`
+   * when the words the run will save (`persist`) are first enqueued, or - for a steer with none (an owner's, a child's) -
    * by the continuation just before its FIRST save attempt, and kept through every requeue. A save that is
    * retried, after a timeout or a requeue, therefore never makes a second row.
    */
@@ -49,24 +49,40 @@ const inboxes = new Map<number, RunSteerMessage[]>();
 const interrupting = new Set<number>();
 const interruptListeners = new Map<number, Set<() => void>>();
 
-/**
- * Queue one message for a run's next turn. Blank text is ignored. `interrupt` also
- * aborts the run's interruptible step now and skips the rest of its turn's calls.
- */
 /** The key a steered message's row is stored under: minted once at first enqueue, kept through every requeue. */
 export function newSteerKey(): string {
   return `steer:${crypto.randomUUID()}`;
 }
 
-export function queueRunSteering(runKey: number, text: string, opts?: { interrupt?: boolean; attachments?: unknown; fromPerson?: boolean; persist?: boolean; saved?: boolean; eventKey?: string }): void {
+/**
+ * Queue one message for a run's next turn. Blank text is ignored. `interrupt` also
+ * aborts the run's interruptible step now and skips the rest of its turn's calls.
+ *
+ * Words the run will SAVE (`persist`) are keyed HERE, once, whoever queues them: a message that was
+ * saved, timed out and saved again from a requeue is the same row. A caller that already has the key
+ * (a requeue) passes it. Returns the message as queued - its key included - or undefined for blank text.
+ */
+export function queueRunSteering(runKey: number, text: string, opts?: { interrupt?: boolean; attachments?: unknown; fromPerson?: boolean; persist?: boolean; saved?: boolean; eventKey?: string }): RunSteerMessage | undefined {
   const trimmed = text.trim();
-  if (!trimmed) return;
+  if (!trimmed) return undefined;
+  const eventKey = opts?.eventKey ?? (opts?.persist ? newSteerKey() : undefined);
+  const message: RunSteerMessage = { text: trimmed, attachments: opts?.attachments, ...(opts?.fromPerson ? { fromPerson: true } : {}), ...(opts?.persist ? { persist: true } : {}), ...(opts?.saved ? { saved: true } : {}), ...(eventKey ? { eventKey } : {}) };
   const queue = inboxes.get(runKey) ?? [];
-  queue.push({ text: trimmed, attachments: opts?.attachments, ...(opts?.fromPerson ? { fromPerson: true } : {}), ...(opts?.persist ? { persist: true } : {}), ...(opts?.saved ? { saved: true } : {}), ...(opts?.eventKey ? { eventKey: opts.eventKey } : {}) });
+  queue.push(message);
   inboxes.set(runKey, queue);
-  if (!opts?.interrupt) return;
+  if (!opts?.interrupt) return message;
   interrupting.add(runKey);
   for (const listener of [...(interruptListeners.get(runKey) ?? [])]) listener();
+  return message;
+}
+
+/**
+ * Put messages that were drained but could not be acted on back at the FRONT of the run's inbox, in their
+ * order: they are older than anything queued since, and the inbox is read oldest first.
+ */
+export function requeueRunSteering(runKey: number, messages: readonly RunSteerMessage[]): void {
+  if (messages.length === 0) return;
+  inboxes.set(runKey, [...messages, ...(inboxes.get(runKey) ?? [])]);
 }
 
 /** Take every message queued for a run, oldest first. Empty when none are waiting. */

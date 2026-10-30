@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { chatDoorLiveness, restoreTurn, useChatTurns, useComposerDraft, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, joinRestorableTurns, restoreTurn, useChatTurns, useComposerDraft, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { request } from '../vscodeBridge';
 import { stageSend } from './stageSend';
 import { childTarget, steerRun, type useChatChildren } from './chatChildren';
@@ -132,6 +132,11 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, chooseRe
     // A turn not kept after the chat changed (addressed, or any - the run executes in the host, so the
     // webview's inbox is read by nobody) returns to the box with its addressee.
     restore: giveBack,
+    // Everything held when the person moved to another chat comes back as ONE turn (the box holds one draft).
+    join: (held) => {
+      const one = joinRestorableTurns(held);
+      return { text: one.text, recipient: one.recipient, ...(one.attachments?.length ? { attachments: [...one.attachments] } : {}) };
+    },
     runKey: chatId,
     send: dispatchSend,
     textOf: (m) => m.text,

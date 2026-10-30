@@ -7,7 +7,7 @@
  */
 import { createLocalRuntimeProber, type LocalFirstAttemptRecord, type LocalRuntimeProbe } from '@builderforce/local-inference';
 import { createOnlineSignal } from '@builderforce/write-outbox';
-import { createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, installIndexedDbStepDurability, type BrainConfig, type ModelFallbackChannel, type PageEngineSet } from '@seanhogg/builderforce-brain-embedded';
+import { clearPendingWords, createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, installIndexedDbStepDurability, setPendingWordsOwner, type BrainConfig, type ModelFallbackChannel, type PageEngineSet } from '@seanhogg/builderforce-brain-embedded';
 import { createProviderConnectionsClient, type GatewayRequest } from '@builderforce/provider-connect';
 import type { ComposerConnections } from '@seanhogg/builderforce-brain-ui';
 import { createApiClient, createAuthenticatedFetch, type ApiClient, type AuthenticatedFetch } from '../api/apiClient';
@@ -207,6 +207,14 @@ export async function createPanelServices(): Promise<PanelServices> {
   // The token belongs to the signed-in workspace; the next sign-in may be someone else's.
   session.subscribe(() => {
     if (!session.isSignedIn()) void kimi.store.clear();
+  });
+  // Words not yet saved are journaled on this device for the signed-in workspace (a Rovr profile is one person's), and
+  // gone with the sign-in: the next one may be someone else's.
+  const journalOwner = (): void => setPendingWordsOwner({ tenant: session.tenantId() ?? 'local', user: 'rovr' });
+  journalOwner();
+  session.subscribe(() => {
+    if (!session.isSignedIn()) clearPendingWords();
+    journalOwner();
   });
   const modelFallback = createModelFallbackChannel();
   const stream = createRovrStream({

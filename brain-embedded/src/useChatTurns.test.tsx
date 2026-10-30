@@ -448,7 +448,9 @@ describe('useChatTurns — direction the run never drained belongs to the run st
 
     await act(async () => { await result.current.submit('typed before the stop'); });
     act(() => result.current.stop());
-    expect(drainRunSteering(22)).toEqual([]);
+    // The inbox (and the device's journal) is dropped by the STORE's Stop - every entry point to Stop clears it, so this
+    // hook only delegates (`runStore/continueStop.test.ts` holds the drain itself; the store is mocked here).
+    expect(stopRun).toHaveBeenCalledWith(22);
 
     rerender({ running: false, runKey: 22, send });
     expect(send).not.toHaveBeenCalled();
@@ -750,5 +752,73 @@ describe('useChatTurns - round 10: a held-before-live turn belongs to ITS chat; 
     // ...and the later message waits behind it (held), instead of jumping it.
     expect(result.current.queued.items.map((i) => i.value.text)).toEqual(['read this file', 'and then this']);
     expect(drainRunSteering(92)).toEqual([]);
+  });
+});
+
+describe('useChatTurns - a draft chat\'s first id is not a chat switch; everything left behind comes back together', () => {
+  beforeEach(() => { stopRun.mockClear(); resetRunSteering(); });
+
+  it('turns held while the first turn creates the chat are STEERED into that chat\'s run, in order - not handed off', async () => {
+    const send = vi.fn();
+    const props = (runKey: number | null, steerable: boolean): ChatTurnsOptions<string> => ({ running: true, steerable, runKey, send });
+    const { result, rerender } = renderHook((p: ChatTurnsOptions<string>) => useChatTurns<string>(p), { initialProps: props(null, false) });
+    await act(async () => { await result.current.submit('B'); }); // the draft's first turn (A) is creating the chat
+    await act(async () => { await result.current.submit('C'); });
+    expect(result.current.queued.count).toBe(2);
+
+    rerender(props(77, false)); // the chat has an id now
+    expect(result.current.queued.count).toBe(2); // kept: it is the SAME conversation
+    expect(drainRunSteering(77)).toEqual([]);
+
+    rerender(props(77, true)); // its run goes live
+    expect(drainRunSteering(77).map((m) => m.text)).toEqual(['B', 'C']);
+    expect(result.current.queued.count).toBe(0);
+  });
+
+  it('a turn queued for AFTER the run (queueAfter) in a draft stays queued for the next turn of the new chat', async () => {
+    const send = vi.fn();
+    const props = (runKey: number | null, steerable: boolean): ChatTurnsOptions<string> => ({ running: true, steerable, runKey, send });
+    const { result, rerender } = renderHook((p: ChatTurnsOptions<string>) => useChatTurns<string>(p), { initialProps: props(null, false) });
+    await act(async () => { await result.current.queueAfter('for later'); });
+
+    rerender(props(78, false));
+    rerender(props(78, true));
+
+    expect(drainRunSteering(78)).toEqual([]);
+    expect(result.current.queued.items.map((i) => i.value)).toEqual(['for later']);
+  });
+
+  type Turn = { text: string; to: string | null };
+  const turnProps = (runKey: number, restore: (t: Turn) => void, join?: (t: readonly Turn[]) => Turn): ChatTurnsOptions<Turn> =>
+    ({ running: true, steerable: false, runKey, send: vi.fn(), restore, join, textOf: (t) => t.text, isDirected: (t) => t.to != null }) as ChatTurnsOptions<Turn>;
+
+  it('three held turns that go back to the composer are given back in ONE restore: texts in order, first addressee (BLOCKER)', async () => {
+    const restore = vi.fn();
+    const join = vi.fn((turns: readonly Turn[]): Turn => ({ text: turns.map((t) => t.text).join('\n\n'), to: turns.find((t) => t.to)?.to ?? null }));
+    const { result, rerender } = renderHook((p: ChatTurnsOptions<Turn>) => useChatTurns<Turn>(p), { initialProps: turnProps(95, restore, join) });
+    await act(async () => { await result.current.queueAfter({ text: '@dev one', to: 'dev' }); });
+    await act(async () => { await result.current.queueAfter({ text: '@dev two', to: 'dev' }); });
+    await act(async () => { await result.current.queueAfter({ text: '@ops three', to: 'ops' }); });
+
+    rerender(turnProps(96, restore, join));
+
+    expect(restore).toHaveBeenCalledTimes(1);
+    expect(restore).toHaveBeenCalledWith({ text: '@dev one\n\n@dev two\n\n@ops three', to: 'dev' });
+    expect(result.current.queued.count).toBe(0);
+  });
+
+  it('a single turn going back is restored as itself (no join), and the turns for the chat are handed on together, in order', async () => {
+    const restore = vi.fn();
+    const join = vi.fn();
+    const { result, rerender } = renderHook((p: ChatTurnsOptions<Turn>) => useChatTurns<Turn>(p), { initialProps: turnProps(97, restore, join) });
+    await act(async () => { await result.current.queueAfter({ text: 'first', to: null }); });
+    await act(async () => { await result.current.queueAfter({ text: '@dev second', to: 'dev' }); });
+    await act(async () => { await result.current.queueAfter({ text: 'third', to: null }); });
+
+    rerender(turnProps(98, restore, join));
+
+    expect(join).not.toHaveBeenCalled();
+    expect(restore).toHaveBeenCalledWith({ text: '@dev second', to: 'dev' });
+    expect(drainRunSteering(97).map((m) => m.text)).toEqual(['first', 'third']);
   });
 });

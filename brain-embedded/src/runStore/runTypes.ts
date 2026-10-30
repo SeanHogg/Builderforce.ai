@@ -42,6 +42,8 @@ export interface BrainRunPersistence {
     chatId: number,
     messages: Array<{ role: string; content: string; metadata?: string; eventKey?: string }>,
   ): Promise<BrainMessage[]>;
+  /** Optional read-back: lets a late write ask whether the chat has moved on (`continueChat.ts`'s stopped answer). */
+  getMessages?(chatId: number, limit?: number): Promise<BrainMessage[]>;
 }
 
 /** Everything a single run needs, captured at start time (survives navigation). */
