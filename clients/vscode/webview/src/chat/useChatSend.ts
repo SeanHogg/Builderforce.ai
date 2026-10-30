@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { chatDoorLiveness, joinRestorableTurns, restoreTurn, useChatTurns, useComposerDraft, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type DraftBinding, type DraftToken, type SendContext, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { request } from '../vscodeBridge';
-import { stageSend } from './stageSend';
+import { stageSend, stopReaches, type SendStage } from './stageSend';
 import { childTarget, steerRun, type useChatChildren } from './chatChildren';
 import type { QueuedTurn } from './VsCodeComposer';
 
@@ -52,7 +52,7 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
   const pendingSendRef = useRef<{
     text: string; recipient: DirectedRecipient | null; attachments?: ChatInputAttachment[];
     /** The chat it was typed in, how the door hears whether the send was kept, and the draft token it began with (a send from a draft). */
-    startedIn: number | null; done: (kept: boolean) => void; draft?: DraftToken;
+    startedIn: number | null; done: (kept: boolean) => void; draft?: DraftToken; stage: SendStage;
   } | null>(null);
   const [sendNonce, setSendNonce] = useState(0);
   const chatIdRef = useRef(chatId);
@@ -64,8 +64,9 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
     const queued = pendingSendRef.current;
     if (!queued) return;
     pendingSendRef.current = null;
+    stagesRef.current.delete(queued.stage);
     // A Stop that landed between staging and this commit drops the send like one during the fetch.
-    if (stopPreparingRef.current) {
+    if (queued.stage.stopped) {
       setPreparing(false);
       // A send from a draft is put back by the door (its token fails: nothing was created) - one restore with whatever was
       // held behind it; any other is put back here and reported kept.
@@ -99,16 +100,19 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
   // flight meanwhile: a Stop (button or typed) in that window drops the send.
   const { restoreAttachments } = conv;
   const [preparing, setPreparing] = useState(false);
-  const stopPreparingRef = useRef(false);
+  // The sends getting ready, each with its own mark: a Stop sets it only on the sends it reaches (`stopReaches`).
+  const stagesRef = useRef(new Set<SendStage>());
   // A turn that could not go goes back to the box: text, files and addressee - THE restore every host shares.
   const giveBack = useCallback((m: QueuedTurn) => restoreTurn(m, { draft: composer.draft, setInput: composer.setInput, restoreAttachments, chooseRecipient }), [composer, restoreAttachments, chooseRecipient]);
   const dispatchSend = useCallback(async (m: QueuedTurn, ctx?: SendContext): Promise<boolean> => {
     const { text, recipient: to, attachments } = m;
-    stopPreparingRef.current = false;
     setPreparing(true);
     const startedIn = chatIdRef.current;
-    const staged = await stageSend({ startedIn, currentChat: () => chatIdRef.current, stopped: () => stopPreparingRef.current, fetchBlock: () => requestLimbic(text) });
+    const stage: SendStage = { chat: startedIn, draft: ctx?.draft, stopped: false };
+    stagesRef.current.add(stage);
+    const staged = await stageSend({ startedIn, currentChat: () => chatIdRef.current, stopped: () => stage.stopped, fetchBlock: () => requestLimbic(text) });
     if (!staged.ready) {
+      stagesRef.current.delete(stage);
       setPreparing(false);
       if (staged.why === 'stopped') {
         // Stopped while it got ready: nothing was sent - the words and the files go back to the box, and the
@@ -123,7 +127,7 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
     }
     setTurnLimbic(staged.block);
     return new Promise<boolean>((done) => {
-      pendingSendRef.current = { text, recipient: to, attachments, startedIn, done, draft: ctx?.draft };
+      pendingSendRef.current = { text, recipient: to, attachments, startedIn, done, draft: ctx?.draft, stage };
       setSendNonce((n) => n + 1);
     });
   }, [setTurnLimbic, giveBack]);
@@ -153,8 +157,8 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
     // The conversation's Stop: it also drops a launch still getting ready — and a send
     // still fetching its limbic block.
     stop: (draft) => {
-      // `null`: a new empty draft - another draft's preparing send is not its Stop's to cancel.
-      if (draft !== null) stopPreparingRef.current = true;
+      // Only the sends this Stop reaches: the chat showing's, or the showing draft's - never another draft's.
+      for (const stage of stagesRef.current) if (stopReaches(stage, chatIdRef.current, draft)) stage.stopped = true;
       conv.stop(draft);
     },
     // The editor's steer: a live sub-agent takes its message straight into its run, and

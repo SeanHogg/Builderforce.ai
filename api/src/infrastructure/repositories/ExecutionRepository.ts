@@ -123,8 +123,8 @@ export class ExecutionRepository implements IExecutionRepository {
         status:       plain.status,
         result:       plain.result ?? undefined,
         errorMessage: plain.errorMessage ?? undefined,
-        // The productivity verdict (0385) must LAND: without it `markProduced()` round-trips through the domain and writes
-        // nothing. `?? undefined` is load-bearing - a null (not judged) never overwrites a verdict, `false` is persisted.
+        // The productivity verdict (0385) must LAND: `produced` round-trips through the domain, so a column missing from this
+        // set is a silent no-op. `?? undefined` is load-bearing - a null (not judged) never overwrites a verdict, `false` is persisted.
         produced:     plain.produced ?? undefined,
         startedAt:    plain.startedAt ?? undefined,
         updatedAt:    new Date(),

@@ -84,7 +84,7 @@ export interface ChatTurnsBase<T> {
    */
   steer?: (turn: T) => boolean;
   /** Optional: how this host stops its run. Default `stopRun(runKey)`. */
-  stop?: (draft?: DraftToken | null) => void;
+  stop?: (draft?: DraftToken) => void;
   /** The text a non-string turn carries (blank check). Omit for string turns. */
   textOf?: (turn: T) => string;
   /** Optional: the attachments a non-string turn carries — they ride a steer so a mid-run image is not dropped. */

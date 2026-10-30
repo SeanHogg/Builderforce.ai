@@ -142,27 +142,27 @@ describe('"Queue for after" goes through THE door', () => {
 
 describe('Stop reaches only the draft on screen', () => {
   const settles = (p: Promise<boolean>): Promise<boolean | 'preparing'> => Promise.race([p, new Promise<'preparing'>((resolve) => setTimeout(() => resolve('preparing'), 30))]);
-
-  it("a Stop on a new EMPTY draft (null) does not cancel another draft's send that is still preparing", async () => {
+  const ports = () => {
     const { options, conv } = mount({ sending: false, runLive: false }, null);
-    const send = options.send as (turn: Turn, ctx?: { draft?: number }) => Promise<boolean>;
-    const stop = options.stop as (draft?: number | null) => void;
+    return { conv, send: options.send as (turn: Turn, ctx?: { draft?: number }) => Promise<boolean>, stop: options.stop as (draft?: number) => void };
+  };
+
+  it("a Stop on ANOTHER draft's token does not cancel draft 1's send that is still preparing", async () => {
+    const { conv, send, stop } = ports();
 
     const d1 = send({ text: 'D1', recipient: null }, { draft: 1 }); // draft 1 is fetching its limbic block
-    stop(null); // the person opened a new empty draft and pressed Stop
+    stop(2); // the draft showing now is another one
 
     expect(await settles(d1)).toBe('preparing'); // not dropped: it staged and awaits its commit
-    expect(conv.stop).toHaveBeenCalledWith(null);
+    expect(conv.stop).toHaveBeenCalledWith(2);
   });
 
   it("a Stop on the draft's own token drops its preparing send", async () => {
-    const { options } = mount({ sending: false, runLive: false }, null);
-    const send = options.send as (turn: Turn, ctx?: { draft?: number }) => Promise<boolean>;
-    const stop = options.stop as (draft?: number | null) => void;
+    const { send, stop } = ports();
 
-    const d2 = send({ text: 'D2', recipient: null }, { draft: 2 });
-    stop(2);
+    const d1 = send({ text: 'D1', recipient: null }, { draft: 1 });
+    stop(1);
 
-    expect(await settles(d2)).toBe(false);
+    expect(await settles(d1)).toBe(false);
   });
 });

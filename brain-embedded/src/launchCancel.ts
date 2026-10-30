@@ -55,28 +55,25 @@ export function useLaunchCancel(sendingRef: MutableRefObject<ReadonlySet<number 
   }, [sendingRef]);
 
   /**
-   * The Stop of the conversation showing `chatId` (null: a draft). `draft` is the draft on screen: a token, `null` for a
-   * new draft with nothing sent from it (nothing to stop - another draft's launch is not this Stop's), `undefined` when
-   * the host names no token and has no binding (its one creation is the draft). Anything else (a click event handed to
-   * `onStop={conv.stop}`) is no token: it reads as `undefined`.
+   * The Stop of the conversation showing `chatId` (null: a draft). `draft` is the token of the draft showing;
+   * `undefined` when the host names no token and has no binding (its one creation is the draft). A new draft with
+   * nothing sent has no token, and the door never calls Stop for it.
    */
-  const stopConversation = useCallback((chatId: number | null, draft?: DraftToken | null) => {
+  const stopConversation = useCallback((chatId: number | null, draft?: DraftToken) => {
     if (chatId != null) {
       // A send that made this chat and is still getting ready is dropped with the Stop, whichever chat is selected now.
       for (const sends of draftMadeRef.current.values()) for (const send of sends) if (send.chat === chatId) send.cancelled = true;
       stopChat(chatId);
       return;
     }
-    const token = typeof draft === 'number' || draft === null ? draft : undefined;
-    if (token === null) return;
-    if (token === undefined) {
+    if (draft === undefined) {
       if (sendingRef.current.has(null)) cancelledLaunchRef.current.add(null);
       return;
     }
     // Every send under the token whose run has not started - its entry is still here (a run that starts ends its entry),
     // creating or getting ready. A started run is the door's token-scoped `stopRun(made)`, never this; and another send's
     // run (or its `finally`) on the same chat neither starts nor erases this send's cancel.
-    for (const send of draftMadeRef.current.get(token) ?? []) send.cancelled = true;
+    for (const send of draftMadeRef.current.get(draft) ?? []) send.cancelled = true;
   }, [stopChat, sendingRef]);
 
   return { cancelledLaunchRef, launchingRef, beginDraftSend, endDraftSend, stopConversation };

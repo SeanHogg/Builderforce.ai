@@ -226,10 +226,10 @@ export interface UseBrainConversation {
   /**
    * Stop the in-flight run for the active chat: aborts the streaming LLM request
    * and unwinds the agent loop (no error surfaced). No-op when nothing is
-   * running. Pair with `sending` to drive a Stop button. On a draft view `draft` is the draft on screen: its token,
-   * `null` for a new draft with nothing sent (a no-op), `undefined` for a host with no binding (its one creation).
+   * running. Pair with `sending` to drive a Stop button. On a draft view `draft` is the token of the draft showing;
+   * `undefined` for a host with no binding (its one creation is the draft).
    */
-  stop(draft?: DraftToken | null): void;
+  stop(draft?: DraftToken): void;
   /**
    * Rate one assistant reply (+1 / -1, or 0 to clear). Beyond flipping the thumb it
    * derives WHAT is being rated — the model that served the turn and the MCP tool it
@@ -471,7 +471,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       let id = chatId;
       // A tokenless send from a draft is the draft on screen's (the one `ensureChatId` would adopt); a Stop on THAT draft
       // reaches this send, and only this send's entry (`launchCancel.ts`).
-      const draft = opts?.draft ?? (id == null ? drafts?.adopt() : undefined);
+      const draft = opts?.draft ?? (id == null && chatIdRef.current == null ? drafts?.adopt() : undefined);
       const draftSend = id == null && draft != null ? beginDraftSend(draft) : null;
       if (id == null) {
         try {
@@ -630,7 +630,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     clearRunError(chatId);
   }, [chatId]);
 
-  const stop = useCallback((draft?: DraftToken | null) => stopConversation(chatId, draft), [chatId, stopConversation]);
+  const stop = useCallback((draft?: DraftToken) => stopConversation(chatId, draft), [chatId, stopConversation]);
 
   const buildTriageReport = useCallback(
     (agentLabel?: string, surface?: string) =>

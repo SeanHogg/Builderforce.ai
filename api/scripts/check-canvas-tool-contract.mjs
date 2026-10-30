@@ -82,11 +82,11 @@ function composedModules(entry, seen = new Set([entry])) {
   const source = ts.createSourceFile(entry, fs.readFileSync(entry, 'utf8'), ts.ScriptTarget.Latest, true);
   const modules = [];
   for (const node of source.statements) {
-    const from = ts.isImportDeclaration(node) ? node.importClause?.isTypeOnly : ts.isExportDeclaration(node) ? node.isTypeOnly : undefined;
-    if (from === undefined || from === true || !node.moduleSpecifier) continue;
+    const typeOnly = ts.isImportDeclaration(node) ? node.importClause?.isTypeOnly : ts.isExportDeclaration(node) ? node.isTypeOnly : undefined;
+    if (typeOnly === undefined || typeOnly === true || !node.moduleSpecifier) continue;
     const specifier = node.moduleSpecifier.getText().slice(1, -1);
     const base = specifier.startsWith('@/lib/') ? path.resolve(libDir, specifier.slice('@/lib/'.length))
-      : specifier.startsWith('./') ? path.resolve(path.dirname(entry), specifier)
+      : specifier.startsWith('.') ? path.resolve(path.dirname(entry), specifier)
         : null;
     if (!base) continue;
     const found = ['.ts', '.tsx', '/index.ts', '/index.tsx'].map((ext) => base + ext).find((candidate) => fs.existsSync(candidate));

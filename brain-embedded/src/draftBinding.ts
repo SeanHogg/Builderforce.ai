@@ -25,7 +25,7 @@ export interface DraftBinding {
    * token is not failed while another send from the same draft is still getting ready; pair every call with `settle`.
    */
   begin: () => DraftToken;
-  /** The draft on screen's token without counting a send - for a creation asked for with no token of its own (`ensureChatId()`); a send names its token. */
+  /** The draft on screen's token (minted when it has none) without counting a send: for a creation asked for with no token of its own (`ensureChatId()`), and for a tokenless `conv.send` from a draft, which adopts it so its Stop entry is under the token the door's Stop names. A send that `begin`s names its own. */
   adopt: () => DraftToken;
   /** The draft on screen's token (null: none yet, or the draft has been left). Stable between changes. */
   current: () => DraftToken | null;

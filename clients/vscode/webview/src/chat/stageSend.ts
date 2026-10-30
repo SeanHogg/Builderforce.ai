@@ -5,6 +5,23 @@
  * now showing - it is another chat's turn - so the caller returns it to the composer instead.
  */
 
+/** One send while it gets ready: where it was typed, and whether a Stop reached it. */
+export interface SendStage {
+  /** The chat it was typed in (null: a draft). */
+  readonly chat: number | null;
+  /** The draft token it began with, when it starts from a draft. */
+  readonly draft: number | undefined;
+  stopped: boolean;
+}
+
+/**
+ * Does a Stop on the view showing `shown` reach this staged send? A chat view's Stop reaches that chat's sends; a draft view's
+ * (`shown` null, `draft` its token) reaches the sends of THAT draft - never another draft's, nor a chat's.
+ */
+export function stopReaches(stage: SendStage, shown: number | null, draft: number | undefined): boolean {
+  return shown !== null ? stage.chat === shown : stage.chat === null && stage.draft === draft;
+}
+
 export type Staged =
   | { ready: true; block: string }
   | { ready: false; why: 'stopped' | 'switched' };

@@ -61,7 +61,7 @@ export function ComposerTrailingButton({ labels, canSubmit, running, disabled = 
   }
   if (action === 'stop') {
     return (
-      <button type="button" className="bf-cmp-iconbtn bf-cmp-iconbtn--stop" onClick={onStop} title={labels.stop} aria-label={labels.stop}>
+      <button type="button" className="bf-cmp-iconbtn bf-cmp-iconbtn--stop" onClick={() => onStop?.()} title={labels.stop} aria-label={labels.stop}>
         <IconStop />
       </button>
     );

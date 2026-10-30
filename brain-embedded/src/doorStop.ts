@@ -38,9 +38,10 @@ export interface DoorStopPorts {
   drafts?: DraftBinding;
   /**
    * How this host stops its run. Default `stopRun(runKey)`. Given the draft on screen - the conversation's Stop
-   * (`useBrainConversation.stop`): a token, `null` (a new draft with nothing sent), or `undefined` (no binding, or a chat).
+   * (`useBrainConversation.stop`): the token of the draft showing, or `undefined` (a chat is showing, or the host has no binding).
+   * A new draft with nothing sent has no token: the door stops no one for it.
    */
-  stop?: (draft?: DraftToken | null) => void;
+  stop?: (draft?: DraftToken) => void;
 }
 
 export function stopDoorTurns(ports: DoorStopPorts, marks: DoorStopMarks, clear: () => void): void {
@@ -48,8 +49,10 @@ export function stopDoorTurns(ports: DoorStopPorts, marks: DoorStopMarks, clear:
   // The draft on screen (a draft view has no run key): the Stop reaches ITS sends alone, never another draft's chat. A new
   // draft with nothing sent is `null` - nothing to stop; only a host with no binding names no token (`undefined`).
   const token = key === null ? (binding ? binding.current() : undefined) : undefined;
-  if (token === null) return; // an empty new draft has nothing to stop: not the held turns, not the epoch, not another draft's send
-  clear();
+  clear(); // what THIS view holds goes with the Stop, wherever it is showing (another draft's tagged turns stay)
+  // An empty new draft has no run, no send in flight and no draft to stop: it must not bump the epoch (a send in flight
+  // elsewhere would be told it was stopped) or word the Send button for a run that is not unwinding.
+  if (token === null) return;
   marks.stopEpoch.current += 1;
   if (ports.running) marks.markStopping(true);
   // A steer typed before the Stop is dropped with the run, and so is what a draft's creation delivered to this chat that

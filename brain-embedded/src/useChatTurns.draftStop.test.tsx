@@ -150,6 +150,29 @@ describe('Stop on a draft whose first send has created its chat but is still pre
     expect(signals[0].aborted).toBe(false);
   });
 
+  it("a Stop on a view with no draft token still drops the turns held on that view: one typed there never starts a chat after the Stop", async () => {
+    streamsUntilStopped();
+    const creation = deferred<number | null>();
+    const create = vi.fn().mockImplementationOnce(() => creation.promise).mockResolvedValue(92);
+    const prepareRun = vi.fn(async () => ({}) as Record<string, never>);
+    const { result } = renderHook(() => useDraftConversation(create, prepareRun), { wrapper });
+
+    act(() => { void result.current.turns.submit('D1'); }); // draft 1 sends: its chat is being created (the view is busy)
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    act(() => result.current.drafts.leave()); // a new empty draft is showing: no token
+    await act(async () => { await result.current.turns.submit('X'); }); // typed there: held behind the busy view, untagged
+    expect(result.current.turns.queued.count).toBe(1);
+
+    act(() => result.current.turns.stop());
+    expect(result.current.turns.queued.count).toBe(0); // dropped with the Stop
+
+    await act(async () => { creation.resolve(91); });
+    await waitFor(() => expect(isRunning(91)).toBe(true));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); }); // the busy view going idle would flush a surviving X
+    expect(create).toHaveBeenCalledTimes(1); // X never asked for a chat
+    expect(vi.mocked(persistence.sendMessages).mock.calls.flatMap(([, msgs]) => msgs).filter((m) => m.role === 'user').map((m) => m.content)).toEqual(['D1']);
+  });
+
   it("each send under a draft token owns its entry: a Stop while the second send prepares drops THAT launch even though the first send's run has started", async () => {
     const signals = streamsUntilStopped();
     const prepare = deferred<Record<string, never>>();
@@ -197,22 +220,18 @@ describe('Stop on a draft whose first send has created its chat but is still pre
     expect(rowsFor(91).some((m) => isStoppedBeforeStart(m))).toBe(true);
   });
 
-  it("a host with no binding: Stop with no token drops its one creation's launch, and so does a click event handed in as the token", async () => {
-    for (const stopArg of [undefined, { type: 'click' } as unknown as number]) {
-      mockStream.mockReset();
-      vi.mocked(persistence.sendMessages).mockClear();
-      streamsUntilStopped();
-      const creation = deferred<number | null>();
-      const { result } = renderHook(() => useBrainConversation({ chatId: null, toolSpecs: [], runTool: vi.fn(), ensureChatId: () => creation.promise }), { wrapper });
+  it("a host with no binding: Stop with no token drops its one creation's launch", async () => {
+    streamsUntilStopped();
+    const creation = deferred<number | null>();
+    const { result } = renderHook(() => useBrainConversation({ chatId: null, toolSpecs: [], runTool: vi.fn(), ensureChatId: () => creation.promise }), { wrapper });
 
-      let sent!: Promise<boolean>;
-      act(() => { sent = result.current.send('x'); });
-      act(() => result.current.stop(stopArg));
-      await act(async () => { creation.resolve(91); await sent; });
+    let sent!: Promise<boolean>;
+    act(() => { sent = result.current.send('x'); });
+    act(() => result.current.stop());
+    await act(async () => { creation.resolve(91); await sent; });
 
-      expect(mockStream).not.toHaveBeenCalled();
-      expect(rowsFor(91).some((m) => isStoppedBeforeStart(m))).toBe(true);
-    }
+    expect(mockStream).not.toHaveBeenCalled();
+    expect(rowsFor(91).some((m) => isStoppedBeforeStart(m))).toBe(true);
   });
 
   it("a Stop during creation is the SEND's: a second send under the token that ends first does not erase the cancel", async () => {
@@ -239,24 +258,28 @@ describe('Stop on a draft whose first send has created its chat but is still pre
     expect(rowsFor(91).some((m) => isStoppedBeforeStart(m))).toBe(true);
   });
 
-  it('a Stop on a chat that a draft send made and that is now selected still drops that send while it prepares', async () => {
-    streamsUntilStopped();
+  it("a Stop on the chat a draft made, now selected, drops the second send that is still preparing - while the first send's run is live", async () => {
+    const signals = streamsUntilStopped();
     const prepare = deferred<Record<string, never>>();
     const create = vi.fn(async () => 91);
-    const prepareRun = vi.fn(() => prepare.promise);
+    const prepareRun = vi.fn().mockResolvedValueOnce({}).mockImplementationOnce(() => prepare.promise);
     const { result, rerender } = renderHook(({ chatId }: { chatId: number | null }) => useDraftConversation(create, prepareRun, chatId), { wrapper, initialProps: { chatId: null as number | null } });
 
     let token!: number;
     act(() => { token = result.current.drafts.begin(); });
-    let sent!: Promise<boolean>;
-    act(() => { sent = result.current.conv.send('A', { draft: token }); });
-    await waitFor(() => expect(prepareRun).toHaveBeenCalled());
+    act(() => { void result.current.conv.send('A', { draft: token }); }); // the first send: chat 91, its run starts
+    await waitFor(() => expect(isRunning(91)).toBe(true));
+    let second!: Promise<boolean>;
+    act(() => { second = result.current.conv.send('B', { draft: token }); }); // a second send, getting ready
+    await waitFor(() => expect(prepareRun).toHaveBeenCalledTimes(2));
     rerender({ chatId: 91 }); // the host selected the chat the draft made
 
-    act(() => result.current.conv.stop());
-    await act(async () => { prepare.resolve({}); await sent; });
+    act(() => result.current.conv.stop()); // the chat view's Stop
+    await act(async () => { prepare.resolve({}); await second; });
 
-    expect(mockStream).not.toHaveBeenCalled();
-    expect(rowsFor(91).some((m) => isStoppedBeforeStart(m))).toBe(true);
+    expect(mockStream).toHaveBeenCalledTimes(1); // A's run only
+    expect(signals[0].aborted).toBe(true); // ...which the chat's Stop ended
+    expect(drainRunSteering(91)).toEqual([]); // B was not handed to the live run (`handTurnToLiveRun`)
+    expect(rowsFor(91).some((m) => isStoppedBeforeStart(m))).toBe(true); // B's launch was dropped before it started
   });
 });
