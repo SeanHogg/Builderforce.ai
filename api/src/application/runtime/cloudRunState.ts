@@ -74,10 +74,11 @@ function toRunMessage(row: Record<string, unknown>): RunMessage | null {
 }
 
 /**
- * The state to resume the one agent from, or undefined for a fresh run. A cursor that
- * already carries `run` resumes as it is; a legacy cursor is converted field for field.
+ * The state to resume the one agent from, or undefined for a fresh run. A cursor that already carries `run` resumes as it is; a
+ * legacy cursor is converted field for field. `trustedApprovals` are the legacy gate keys the execution's approval record confirms
+ * (see `trustedLegacyApprovals`); with none, a legacy cursor resumes with NO call pre-approved.
  */
-export function toRunState(saved: CloudLoopState | undefined): RunState | undefined {
+export function toRunState(saved: CloudLoopState | undefined, trustedApprovals: readonly string[] = []): RunState | undefined {
   if (!saved) return undefined;
   if (saved.run) return saved.run;
   if (!Array.isArray(saved.messages)) return undefined;
@@ -108,9 +109,10 @@ export function toRunState(saved: CloudLoopState | undefined): RunState | undefi
     compaction: { compactions: 0 },
     writtenPaths: saved.writtenPaths ?? [],
     askedGates: [],
-    // TRANSITIONAL: the old engine recorded the gate keys a person had answered (`policyAskedGates`); only an approval was ever
-    // answered into that list, so a cursor written before the cutover resumes them as APPROVED calls. Drop with the legacy shape.
-    approvedCalls: saved.policyAskedGates ?? [],
+    // TRANSITIONAL (drop with the legacy shape): the old engine recorded `policyAskedGates` at ASK time, so a key there does NOT mean
+    // the call was approved - a cursor parked on a still-pending approval, or on one that was rejected, holds the key too. Only the
+    // keys the execution's approval record confirms (`trustedLegacyApprovals`) resume as APPROVED calls.
+    approvedCalls: [...trustedApprovals],
     ...(saved.modelPolicy?.forceToolChoice ? { forceToolChoice: saved.modelPolicy.forceToolChoice } : {}),
     ...(saved.taskState ? { taskState: saved.taskState } : {}),
     ...(saved.loadedTools ? { loadedTools: saved.loadedTools } : {}),

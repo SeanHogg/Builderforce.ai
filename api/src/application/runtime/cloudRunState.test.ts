@@ -41,7 +41,9 @@ describe('toRunState — legacy cursors', () => {
     expect(run.messages[2]).toEqual({ role: 'assistant', content: '', toolCalls: [{ id: 'c1', name: 'read_file', arguments: '{"path":"src/a.ts"}' }] });
     expect(run.messages[3]).toEqual({ role: 'tool', content: '{"ok":true}', toolCallId: 'c1' });
     expect(run.finish).toMatchObject({ noDeliverableBlocked: true, placeholderBlocks: 1, ciPendingBlocks: 2 });
-    expect(run.approvedCalls).toEqual(['g1|run_command|deadbeef']);
+    // A key recorded at ASK time is not an approval: with no confirmation from the approval record nothing resumes pre-approved.
+    expect(run.approvedCalls).toEqual([]);
+    expect(toRunState(LEGACY, ['g1|run_command|deadbeef'])!.approvedCalls).toEqual(['g1|run_command|deadbeef']);
     expect(run.askedGates).toEqual([]);
     expect(run.taskState).toEqual({ goal: 'fix it', nextStep: 'write' });
     expect(run.loadedTools).toEqual(['deploy_site']);

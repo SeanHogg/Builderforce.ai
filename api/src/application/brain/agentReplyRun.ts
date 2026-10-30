@@ -171,8 +171,9 @@ export async function runAgentReply(input: AgentReplyRunInput): Promise<ReplyTur
     ports: {
       model,
       capabilities: { capabilities: new Set() },
-      // A reply has no cursor to resume from: any non-transport exception (a defect in a port) goes to the reply's caller, as the
-      // old loop let it, rather than being swallowed as "no reply".
+      // `isResumable` means "the HOST takes this exception over": the cloud's tail re-arms an eviction from its cursor; the reply has
+      // no cursor, so its host is the caller, which gets any non-transport exception (a defect in a port) re-thrown as the old loop
+      // let it - rather than a generic "no reply". (The same port, the second meaning: not a resume, a hand-off.)
       store: { load: () => undefined, save: () => undefined, isResumable: () => true },
       events: {
         // The reply's one outcome row rides its trace, the way its other rows do.

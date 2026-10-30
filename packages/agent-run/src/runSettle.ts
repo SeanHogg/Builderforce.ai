@@ -7,6 +7,7 @@ import type { RunMessage, RunOutcome, RunState } from "./contract.js";
 import type { PolicyHooks } from "./policy/index.js";
 import { currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
 import { newApprovalId } from "./runState.js";
+import { isResumable } from "./runTurn.js";
 import { buildOutcomeRow } from "./telemetry/outcomeRow.js";
 
 /** What a terminal outcome carries beyond the state. */
@@ -42,20 +43,21 @@ export async function settle(
   state.messages = transcript;
 
   // An exception the surface will re-throw (a platform eviction) is not the run's end: the run resumes, so nothing terminal is written.
-  const resumable = extra.cause !== undefined;
-  if ((kind === "finished" || kind === "failed") && !resumable) {
+  let cause = extra.cause;
+  if ((kind === "finished" || kind === "failed") && cause === undefined) {
     // The code map is committed on EVERY terminal outcome (a stopped or failed investigation still mapped
     // what it read); the learned facts are a finished run's alone.
     const pctx = policyContext(input, state, currentView(transcript, []), state.step, 0);
-    const consolidated = kind === "finished" ? await hooks.memory.consolidate(pctx) : await hooks.memory.codeMap?.(pctx);
-    if (consolidated !== undefined) {
-      try {
-        await input.ports.store.commitMemory?.(consolidated);
-      } catch {
-        // A failed write-back is recorded by its absence, not by failing a finished run.
-      }
+    try {
+      const consolidated = kind === "finished" ? await hooks.memory.consolidate(pctx) : await hooks.memory.codeMap?.(pctx);
+      if (consolidated !== undefined) await input.ports.store.commitMemory?.(consolidated);
+    } catch (err) {
+      // Memory is best-effort - a failed consolidation or write-back is recorded by its absence, not by failing a finished run -
+      // UNLESS the surface says the exception is a resumable interruption: then the run resumes, exactly as for any other port.
+      if (isResumable(input, err)) cause = err;
     }
   }
+  const resumable = cause !== undefined;
 
   try {
     await input.ports.store.save(state);
@@ -66,7 +68,7 @@ export async function settle(
   // A yielded tick has not finished: the next tick resumes and the trace is one run. Nor has a run that ended in an
   // exception the surface re-throws (a platform eviction): it resumes. Neither writes a row or closes the trace.
   if (kind === "yielded" || resumable) {
-    return kind === "failed" ? { kind, reason: extra.reason ?? "failed", state, cause: extra.cause } : { kind: "yielded", state };
+    return kind === "failed" || cause !== undefined ? { kind: "failed", reason: extra.reason ?? (cause instanceof Error ? cause.message : "failed"), state, cause } : { kind: "yielded", state };
   }
 
   // The uniform §8.2 outcome row, built from the run state the whole run carried (its tally is in `state.telemetry`).

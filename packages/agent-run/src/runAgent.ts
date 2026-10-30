@@ -154,7 +154,13 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   // A run that ended without an answer — a budget spent, a breaker tripped, a finish
   // with nothing to say — gets the ONE forced no-tools turn before it settles (§6.2).
   if (loopResult.exhausted || (loopResult.finished && loopResult.ok && !loopResult.output.trim())) {
-    const output = await synthesizeFinal(input, state, hooks, transcript, pack, tally);
+    let output: string | null;
+    try {
+      output = await synthesizeFinal(input, state, hooks, transcript, pack, tally);
+    } catch (err) {
+      // Only a resumable interruption escapes the synthesis turn (see `synthesizeFinal`): the run resumes, it did not end.
+      return settle(input, hooks, state, transcript, "failed", { reason: err instanceof Error ? err.message : String(err), cause: err });
+    }
     if (output) return settle(input, hooks, state, transcript, "finished", { output });
   }
   if (loopResult.exhausted) {

@@ -196,7 +196,9 @@ export async function synthesizeFinal(
       },
       input.signal,
     );
-  } catch {
+  } catch (err) {
+    // A resumable interruption (an eviction) is not "the model said nothing": it ends this tick and the host re-arms the run.
+    if (isResumable(input, err)) throw err;
     return null;
   }
   if (completion.model) state.model = { ...state.model, model: completion.model };

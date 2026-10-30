@@ -32,7 +32,7 @@ import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { ChatTicketService, ticketKindForTaskType } from '../brain/ChatTicketService';
 import { cloudOrphanReason, cloudSilenceCeilingMs, PAUSED_DEADLINE_MS, PAUSED_ORPHAN_REASON } from './orphanReasons';
-import { writePausedRunEndRow } from './cloudOutcomeRow';
+import { recordReapedOutcomes } from './cloudOutcomeRow';
 import { markReaperRequeued, parseExecutor } from './cloudDispatch';
 import { isSelfHealEligible, buildDurableStartBody, dispatchDurableStart } from './cloudSelfHeal';
 import { resolveParkAgeTimeoutMs, runParkAgeTimeoutSweep, type ParkAgeTimeoutResult } from '../maintenance/parkAgeTimeout';
@@ -100,12 +100,8 @@ export interface ReapResult {
  * rows are also the shape the read-path repair speaks.
  */
 const REAPED_RETURNING = {
-  id: executions.id,
-  tenant_id: executions.tenantId,
-  agent_host_id: executions.agentHostId,
-  payload: executions.payload,
-  error_message: executions.errorMessage,
-  task_id: executions.taskId,
+  id: executions.id, tenant_id: executions.tenantId, agent_host_id: executions.agentHostId, cloud_agent_ref: executions.cloudAgentRef,
+  payload: executions.payload, error_message: executions.errorMessage, task_id: executions.taskId,
 } as const;
 
 export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db = buildDatabase(env)): Promise<ReapResult> {
@@ -235,10 +231,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
   // terminal the ticket can never auto-run again. Measured from `updated_at` so a
   // still-active back-and-forth on the question keeps the run alive.
   const paused: ReapedRow[] = probe.paused ? await failStaleBatch(db, stale.paused, PAUSED_ORPHAN_REASON) : [];
-  // A cloud run reaped while paused never settled through the agent: each gets its one outcome row here.
-  for (const row of paused) {
-    if (row.agent_host_id == null) await writePausedRunEndRow(db, { id: row.id, tenantId: row.tenant_id, cloudAgentRef: null }, 'failed', PAUSED_ORPHAN_REASON);
-  }
+  await recordReapedOutcomes(db, [...running, ...queued, ...paused, ...cloudRunning]);
 
   // A full batch means a backlog remains: keep the next tick's gate open so it drains
   // promptly instead of waiting for the floor sweep.
@@ -372,6 +365,7 @@ interface ReapedRow {
   error_message: string | null;
   /** The ticket the run served — the chat-narration fan-out key (chat_ticket_links). */
   task_id: number | null;
+  cloud_agent_ref: string | null;
 }
 
 /**

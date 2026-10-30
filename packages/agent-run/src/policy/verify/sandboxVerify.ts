@@ -30,6 +30,8 @@ export interface VerifySandbox {
   read(path: string): Promise<string | null>;
   /** List the clone's paths matching a basename glob (the runner's lockfile probe). */
   list(glob: string): Promise<string[]>;
+  /** Told of a read or listing that failed (the verify then goes on without it: no scripts, no lockfile) - so a failure is reported, not dropped. */
+  onError?(operation: "read" | "list", error: unknown): void;
 }
 
 /** The run's sandbox shell: heartbeat + cancel around a bounded command. */
@@ -45,7 +47,7 @@ export interface SandboxVerifyResult {
 
 /** The repo's declared package.json scripts, or null (missing / unreadable / malformed). */
 async function readPackageScripts(sandbox: VerifySandbox): Promise<Record<string, string> | null> {
-  const content = await sandbox.read("package.json").catch(() => null);
+  const content = await sandbox.read("package.json").catch((error: unknown) => { sandbox.onError?.("read", error); return null; });
   if (content === null) return null;
   try {
     const scripts = (JSON.parse(content) as { scripts?: unknown }).scripts;
@@ -60,7 +62,7 @@ async function readPackageScripts(sandbox: VerifySandbox): Promise<Record<string
  *  lockfile selects the runner — a nested `packages/x/yarn.lock` does not. */
 async function detectRunner(sandbox: VerifySandbox): Promise<PackageScriptRunner> {
   const atRoot = async (name: string): Promise<boolean> => {
-    const listed = await sandbox.list(name).catch(() => [] as string[]);
+    const listed = await sandbox.list(name).catch((error: unknown) => { sandbox.onError?.("list", error); return [] as string[]; });
     return (listed ?? []).includes(name);
   };
   if (await atRoot("pnpm-lock.yaml")) return "pnpm";

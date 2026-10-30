@@ -18,7 +18,12 @@ export const TASK_EXECUTION_HISTORY_LIMIT = 500;
 const { result: _resultBlob, ...SLIM_COLUMNS } = getTableColumns(executionsTable);
 
 export class ExecutionRepository implements IExecutionRepository {
-  constructor(private readonly db: Db) {}
+  /**
+   * `hooks.onTerminal` is told of every persisted write that leaves the execution in a terminal status - the single place a
+   * terminal status lands, so the run's outcome row is recorded here and nowhere else (`cloudOutcomeRow`). Optional: a repository
+   * built without it (a read path, a test) records nothing.
+   */
+  constructor(private readonly db: Db, private readonly hooks: { onTerminal?: (saved: Execution) => Promise<void> } = {}) {}
 
   async findById(id: ExecutionId): Promise<Execution | null> {
     const [row] = await this.db
@@ -126,10 +131,22 @@ export class ExecutionRepository implements IExecutionRepository {
         completedAt:  plain.completedAt ?? undefined,
         updatedAt:    new Date(),
       })
-      .where(eq(executionsTable.id, plain.id))
+      // A terminal status lands ONCE: racing writers (a reap and a cancel, a re-run after an eviction) cannot both transition. The
+      // write applies to a run that is not yet terminal, or re-asserts the SAME status (the productivity verdict follows a landing).
+      .where(and(
+        eq(executionsTable.id, plain.id),
+        EXECUTION_NON_TERMINAL_STATUSES.includes(plain.status) ? undefined : or(inArray(executionsTable.status, [...EXECUTION_NON_TERMINAL_STATUSES]), eq(executionsTable.status, plain.status)),
+      ))
       .returning();
-    if (!updated) throw new Error('Execution update returned no rows');
-    return toDomain(updated);
+    if (!updated) {
+      // Lost the race to another terminal transition: the winner's state stands, and only the winner records the outcome.
+      const current = EXECUTION_NON_TERMINAL_STATUSES.includes(plain.status) ? null : await this.findById(plain.id);
+      if (current) return current;
+      throw new Error('Execution update returned no rows');
+    }
+    const saved = toDomain(updated);
+    await this.hooks.onTerminal?.(saved);
+    return saved;
   }
 }
 

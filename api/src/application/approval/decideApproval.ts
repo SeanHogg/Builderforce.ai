@@ -107,7 +107,9 @@ async function bridgeRoleSignoff(
  * approval of a run was dropped before the run ever saw it.
  */
 export function governanceGateDecisionText(existing: Pick<ApprovalRow, 'description'>, id: string, status: 'approved' | 'rejected', reviewNote: string | null | undefined): string {
-  const subject = existing.description?.split('\n')[0]?.trim().slice(0, 160) || 'the gated call';
+  // The gate asked `Approve the agent's use of "<tool>"? <reason>`: the decision names the tool, not the question that was asked.
+  const tool = /"([^"]+)"/.exec(existing.description ?? '')?.[1];
+  const subject = tool ? `the agent's use of "${tool}"` : 'the gated call';
   return `${status === 'approved' ? 'Approved' : 'Rejected'}: ${subject} (approval ${id}).${status === 'rejected' && reviewNote ? ` ${reviewNote}` : ''}`;
 }
 

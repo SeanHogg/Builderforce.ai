@@ -61,7 +61,7 @@ export { createVerifyHook, type VerifyPorts } from "./policy/verify/index.js";
 // The verify phase's PURE functions, for the surfaces that run it outside a hook (a cloud run's tail, an @-reply): one
 // definition, not a copy per surface. The DB-bound halves (the audit rows, the memory write) stay with the surface.
 export { applyVerifyPhase, describeVerifyOutcome, runVerifyPhase, type RunVerifyInput, type RunVerifySurface } from "./policy/verify/runEndMemory.js";
-export { inRunVerifyOutcome, packageVerifyCommands, planInRunVerify, type InRunVerifyOutcome, type InRunVerifySurface } from "./policy/verify/inRunVerify.js";
+export { inRunVerifyOutcome, planInRunVerify, type InRunVerifyOutcome, type InRunVerifySurface } from "./policy/verify/inRunVerify.js";
 export { runSandboxVerify, type SandboxVerifyResult, type VerifySandbox, type VerifyShell } from "./policy/verify/sandboxVerify.js";
 // The finish gates and the model hand-off, for the surfaces whose own modules compose them with their dependencies.
 export {

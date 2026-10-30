@@ -28,9 +28,8 @@ import { parseRunDispatch } from './runDispatch';
 import { cloudModelPort } from './cloudAdapterModel';
 import { cloudPolicyModules } from './cloudAdapterHooks';
 import { isInfrastructureEviction } from './orphanReasons';
-import { writeCloudOutcomeRow } from './cloudOutcomeRow';
 import { cloudRunId } from '../../domain/execution/cloudRunId';
-import { reportedFallback } from '../observability/caughtErrorReporter';
+import { trustedLegacyApprovals } from './cloudLegacyApprovals';
 import { durableHuman, pendingSteering, timelineSink } from './cloudAdapterPorts';
 import { containProvider, platformTools } from './cloudAdapterTools';
 import { releaseLeases, settleCloudRun, type RunStash } from './cloudRunTail';
@@ -111,18 +110,13 @@ export async function runCloudAgent(
   opts: CloudLoopOpts,
 ): Promise<CloudLoopResult> {
   const opened = await openCloudRunHost(rc, input, opts);
-  if ('stopped' in opened) {
-    // A run the platform halted or whose connected accounts none resolved never started, but it is a run that ended: its
-    // one outcome row names the refusal.
-    const { stopped } = opened;
-    await writeCloudOutcomeRow(rc.db, { tenantId: rc.tenantId, executionId: rc.executionId, cloudAgentRef: rc.cloudAgentRef }, undefined, stopped.cancelled ? 'cancelled' : 'failed', stopped.output)
-      .catch(reportedFallback(undefined, { source: 'application/runtime/cloudAdapter.ts', operation: 'stoppedRunOutcomeRow', context: { executionId: rc.executionId } }));
-    return stopped;
-  }
+  // A run the platform halted, or whose connected accounts none resolved, never started: it lands failed with the refusal as its
+  // error, and the terminal transition records its (count-less) outcome row.
+  if ('stopped' in opened) return opened.stopped;
   const { host } = opened;
   const { env, db, refs, cancel } = host;
 
-  const resume: RunState | undefined = toRunState(opts.resume);
+  const resume: RunState | undefined = toRunState(opts.resume, await trustedLegacyApprovals(db, refs.tenantId, refs.executionId, opts.resume));
   /** The run's live state, named by the guards on every hook call — the contained-run progress line reads its task state. */
   const live: { state?: RunState } = {};
   const stash: RunStash = {};

@@ -96,7 +96,7 @@ function rowFor(event: RunEvent, meta: { durationMs?: number } | undefined, serv
   }
 }
 
-/** The run timeline; the outcome row is handed to `onOutcome`. A sink that cannot write records nothing; it never fails the run. */
+/** The run timeline; the outcome row's counts are handed to `onOutcome`. A sink that cannot write records nothing; it never fails the run. */
 export function timelineSink(db: Db, run: CloudRunRefs, served: () => string | null = () => null, onOutcome?: (row: RunOutcomeRow) => void): EventSink {
   const write = (row: Row): Promise<void> =>
     recordCloudToolEvent(db, { ...base(run), ...row }).catch((error) =>
@@ -104,7 +104,8 @@ export function timelineSink(db: Db, run: CloudRunRefs, served: () => string | n
     ) as Promise<void>;
   return {
     async emit(event, meta) {
-      const row = rowFor(event, meta, served);
+      // With an outcome owner the trace closes with the LANDED status (`cloudOutcomeRow`), not the agent's.
+      const row = onOutcome && event.kind === 'run.finished' ? null : rowFor(event, meta, served);
       if (row) await write(row);
       // A successful validation / review verdict is a TYPED claim the finish evidence reads back.
       if (event.kind === 'tool.dispatched' && event.ok && CLAIM_TOOLS.has(event.tool)) {
@@ -113,8 +114,8 @@ export function timelineSink(db: Db, run: CloudRunRefs, served: () => string | n
           .catch((error) => reportCaughtError(error, { source: 'application/runtime/cloudAdapterPorts.ts', operation: 'typedClaim', context: { executionId: run.executionId, error } }));
       }
     },
-    // With an `onOutcome` owner (the cloud adapter's tail) the row is NOT written here: the cloud decides what the run LANDED as,
-    // so the tail writes the one row after the landing (`cloudOutcomeRow`). A sink with no owner records the agent's row itself.
+    // With an `onOutcome` owner (the cloud adapter's tail) the row is NOT written here: it hands the COUNTS over, and the one writer
+    // (`cloudOutcomeRow`) records the row at the terminal transition. A sink with no owner records the agent's row itself.
     outcome(outcome: RunOutcomeRow) {
       if (onOutcome) { onOutcome(outcome); return; }
       return write({ toolName: 'run.outcome', category: 'run', detail: { ...outcome }, result: `${outcome.terminalStatus} after ${outcome.steps} step(s)` });

@@ -22,6 +22,7 @@ import {
   type ActionType,
 } from '@builderforce/learned-routing';
 import { requireTenantAccess, respondToAccessError, type TenantAccess } from './access';
+import { CLOUD_RUN_ID_PREFIX, isReservedClientRunId } from '../../../domain/execution/cloudRunId';
 
 export function mountLearnedRoutingRoutes(router: Hono<HonoEnv>): void {
   // The per-action-type model ranking the learned router seeds from (PRD 13 §6.5).
@@ -116,6 +117,8 @@ export function mountLearnedRoutingRoutes(router: Hono<HonoEnv>): void {
     // client CAN report (`rateLimited`) cannot be silently dropped here.
     const parsed = parseRunOutcomeRequest(body);
     if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+    // A client may not report under the cloud's own run-id namespace: that key is the cloud scorer's (`cloudRunId`).
+    if (isReservedClientRunId(parsed.outcome.clientRunId)) return c.json({ error: `clientRunId may not start with '${CLOUD_RUN_ID_PREFIX}'` }, 400);
 
     const db = requestDb(c);
     await recordClientRunOutcome(c.env, db, access.tenantId, parsed.outcome);

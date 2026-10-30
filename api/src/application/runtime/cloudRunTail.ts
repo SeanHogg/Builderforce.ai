@@ -20,7 +20,7 @@ import {
   type RunOutcome, type RunOutcomeRow, type RunState, type VerifySandbox,
 } from '@builderforce/agent-run';
 import type { RunSandbox } from './sandbox/runSandbox';
-import { landedStatus, writeCloudOutcomeRow } from './cloudOutcomeRow';
+import { handOffOutcomeCounts } from './cloudOutcomeRow';
 import { cloudRunId } from '../../domain/execution/cloudRunId';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { releaseAllForExecution } from '../coordination/leaseService';
@@ -93,6 +93,7 @@ export function verifySandboxOf(sandbox: RunSandbox): VerifySandbox {
       return r.ok && typeof r.content === 'string' ? r.content : null;
     },
     list: async (glob) => (await sandbox.fs({ op: 'list', glob })).paths ?? [],
+    onError: (operation, error) => reportCaughtError(error, { source: 'application/runtime/cloudRunTail.ts', operation: `verifySandbox.${operation}`, level: 'warning' }),
   };
 }
 
@@ -176,17 +177,16 @@ async function land(host: CloudRunHost, state: RunState, output: string, cancell
 }
 
 /**
- * Map the agent's outcome to the cloud's result and, on a terminal one, land the run — then write the run's ONE outcome
- * row with the status it LANDED as (a missing sign-off, a breaker that lands COMPLETED, a steered stop and a rehearsal that
- * spent its step budget all differ from what the agent settled on). A run that goes on (paused, a durable tick that
- * yielded) writes none; an exception the Durable Object re-arms throws before it gets here.
+ * Map the agent's outcome to the cloud's result and, on a terminal one, land the run. The run's counts (its `RunState.telemetry`,
+ * as the outcome row) are handed to the ONE outcome-row writer (`cloudOutcomeRow`), which records the row at the terminal
+ * transition with the status the execution LANDED with — a missing sign-off, a breaker that lands COMPLETED, a steered stop and a
+ * rehearsal that spent its step budget all differ from what the agent settled on. A run that goes on (paused, a durable tick that
+ * yielded) hands over nothing; an exception the Durable Object re-arms throws before it gets here.
  */
 export async function settleCloudRun(host: CloudRunHost, outcome: RunOutcome, stash: RunStash, model: CloudModelPort): Promise<CloudLoopResult> {
   const result = await mapOutcome(host, outcome, stash, model);
   if (!result.finished) return result;
-  const row = stash.row ?? buildOutcomeRow({ entryPoint: 'cloud', runId: cloudRunId(host.refs.executionId), kind: result.ok ? 'finished' : 'failed', state: outcome.state });
-  await writeCloudOutcomeRow(host.db, host.refs, row, landedStatus(result), result.ok ? undefined : result.output)
-    .catch(reportedFallback(undefined, { source: 'application/runtime/cloudRunTail.ts', operation: 'writeOutcomeRow', context: { executionId: host.refs.executionId } }));
+  handOffOutcomeCounts(host.refs.executionId, stash.row ?? buildOutcomeRow({ entryPoint: 'cloud', runId: cloudRunId(host.refs.executionId), kind: result.ok ? 'finished' : 'failed', state: outcome.state }));
   return result;
 }
 

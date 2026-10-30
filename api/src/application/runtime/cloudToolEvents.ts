@@ -47,11 +47,13 @@ export async function recordCloudToolEvent(
      *  stamped with the host so the host-scoped Logs/Timeline shows it beside the
      *  events the host itself pushed. Omitted for cloud runs. */
     agentHostId?: number | null;
+    /** The table holds at most ONE such row (a partial unique index, e.g. `run.outcome`): a second write is dropped, not an error. */
+    once?: boolean;
   },
-): Promise<void> {
+): Promise<boolean> {
   const ts = new Date();
   try {
-    const [row] = await runTelemetryDatabase(db).insert(toolAuditEvents).values({
+    const insert = runTelemetryDatabase(db).insert(toolAuditEvents).values({
       tenantId:     args.tenantId,
       agentHostId:  args.agentHostId ?? null,
       cloudAgentRef: args.cloudAgentRef ?? null,
@@ -64,7 +66,10 @@ export async function recordCloudToolEvent(
       result:       args.result ?? null,
       durationMs:   args.durationMs ?? null,
       ts,
-    }).returning({ id: toolAuditEvents.id });
+    });
+    const [row] = await (args.once ? insert.onConflictDoNothing() : insert).returning({ id: toolAuditEvents.id });
+    // A `once` row that lost to the one already written is not published again.
+    if (args.once && !row) return false;
 
     if (args.executionId != null) {
       notifyExecutionSubscribers(args.executionId, {
@@ -79,6 +84,7 @@ export async function recordCloudToolEvent(
         ts: ts.toISOString(),
       });
     }
+    return true;
   } catch (error) {
     // Telemetry remains non-blocking, but a missing tool record can no longer be
     // silent—the correlation fields are enough to find the affected run.
@@ -90,5 +96,6 @@ export async function recordCloudToolEvent(
       toolCallId: args.toolCallId ?? null,
       error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
     } } });
+    return false;
   }
 }

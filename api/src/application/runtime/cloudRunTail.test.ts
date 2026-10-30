@@ -15,7 +15,7 @@ const h = vi.hoisted(() => ({
   row: vi.fn(async (..._a: unknown[]) => undefined),
 }));
 vi.mock('./executionSteering', () => ({ lastPersonSteerSender: h.sender }));
-vi.mock('./cloudOutcomeRow', async (orig) => ({ ...(await orig<Record<string, unknown>>()), writeCloudOutcomeRow: h.row }));
+vi.mock('./cloudOutcomeRow', async (orig) => ({ ...(await orig<Record<string, unknown>>()), handOffOutcomeCounts: h.row }));
 vi.mock('../../buildRuntimeService', () => ({ buildRuntimeService: () => ({ cancel: h.workerCancel }) }));
 vi.mock('./cloudFinalize', () => ({ finalizeCloudRun: h.finalize }));
 vi.mock('../coordination/leaseService', () => ({ releaseAllForExecution: h.release }));
@@ -115,30 +115,20 @@ describe('settleCloudRun', () => {
     expect(rehearsal).toEqual({ ok: true, output: 'last words', cancelled: false, finished: true });
   });
 
-  describe('the ONE outcome row of a run, written after the landing with the status it LANDED as', () => {
-    const rowOf = (): { terminalStatus: string; reason?: string } => (h.row.mock.calls.at(-1) as unknown as [unknown, unknown, unknown, string, string?]).slice(2, 5).reduce((acc: Record<string, unknown>, v, i) => (i === 0 ? { ...(v as object) } : i === 1 ? { ...acc, terminalStatus: v } : { ...acc, reason: v }), {}) as never;
-
-    it('a finished run lands finished; the agent\'s own row is the base', async () => {
+  describe("the agent's counts are handed to the ONE outcome-row writer at the landing", () => {
+    it("a finished run hands over the agent's own row", async () => {
       const agentRow = { entryPoint: 'cloud', steps: 3, toolCalls: 4, toolErrors: 1, terminalStatus: 'finished' };
       await settleCloudRun(host(), { kind: 'finished', output: 'done', state }, { row: agentRow as never }, model());
       expect(h.row).toHaveBeenCalledTimes(1);
-      expect(h.row).toHaveBeenCalledWith({}, expect.objectContaining({ executionId: 9 }), agentRow, 'finished', undefined);
+      expect(h.row).toHaveBeenCalledWith(9, agentRow);
     });
 
-    it('a rehearsal that spent its step budget (settled yielded, landed terminal) writes its row, built from its state', async () => {
+    it('a rehearsal that spent its step budget (settled yielded, landed terminal) hands over a row built from its state', async () => {
       await settleCloudRun(host({ opts: { suppressFinalize: true } }), { kind: 'yielded', state }, {}, model());
-      expect(h.row).toHaveBeenCalledWith({}, expect.objectContaining({ executionId: 9 }), expect.objectContaining({ entryPoint: 'cloud', runId: 'cloud:9', steps: 3 }), 'finished', undefined);
+      expect(h.row).toHaveBeenCalledWith(9, expect.objectContaining({ entryPoint: 'cloud', runId: 'cloud:9', steps: 3 }));
     });
 
-    it('a reviewer run landing ok:false, and a steered stop, write what they landed as — not what the agent settled on', async () => {
-      const noVerdict = { ...state, finish: { ciVerified: false, reviewVerdictRecorded: false } } as unknown as RunState;
-      await settleCloudRun(host({ opts: { requiredSignoff: { roleKey: 'qa-tester' } } }), { kind: 'finished', output: 'ok', state: noVerdict }, {}, model());
-      expect(h.row).toHaveBeenLastCalledWith({}, expect.anything(), expect.objectContaining({ runId: 'cloud:9' }), 'failed', expect.stringContaining('qa-tester'));
-      await settleCloudRun(host(), { kind: 'failed', reason: 'cancelled', state }, {}, model());
-      expect(h.row).toHaveBeenLastCalledWith({}, expect.anything(), expect.anything(), 'cancelled', undefined);
-    });
-
-    it('a run that goes on (paused, a durable tick that yielded) writes no row', async () => {
+    it('a run that goes on (paused, a durable tick that yielded) hands over nothing', async () => {
       await settleCloudRun(host(), { kind: 'paused', question: 'q?', approvalId: 'a1', state }, {}, model());
       await settleCloudRun(host({ opts: { deferFinalize: true } }), { kind: 'yielded', state }, {}, model());
       expect(h.row).not.toHaveBeenCalled();
