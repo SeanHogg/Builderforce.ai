@@ -71,6 +71,17 @@ describe("a pinned failover and an auto-routed downgrade on the SAME model", () 
   });
 });
 
+describe("an auto-routed downgrade (nothing requested)", () => {
+  it("is announced but never recorded as degraded: with no requested model there is nothing it is weaker than", () => {
+    const ctx = policyCtx();
+    ctx.state.preflight = "degraded:openai:expired";
+    expect(modelDowngrade(ctx, undefined, "haiku", BOOK)).toMatchObject({ requestedModel: "default", model: "haiku", reason: "byo_unresolved:openai:expired" });
+    expect(ctx.state.downgrades).toEqual(["haiku"]);
+    expect(ctx.state.degradedBy ?? []).toEqual([]);
+    expect(buildOutcomeRow({ entryPoint: "on-prem", kind: "finished", state: ctx.state })).not.toHaveProperty("degraded");
+  });
+});
+
 describe("modelDowngrade records a downgrade only when the served model is weaker", () => {
   it("a failover onto a weaker model is recorded once (the row reads it as degraded); a same-tier failover is not", () => {
     const weaker = policyCtx();

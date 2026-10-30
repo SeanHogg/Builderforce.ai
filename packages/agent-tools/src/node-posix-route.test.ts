@@ -177,6 +177,17 @@ describe("defaultInterpreter: bash (the on-prem host)", () => {
     expect(posixRoute("ls -la src")).toEqual({ error: NO_POSIX_SHELL });
   });
 
+  // A capitalised word is a PowerShell PARAMETER, never a unix flag - including the colon-bound form.
+  it("with no bash, keeps PowerShell parameters on PowerShell: -Path, -LiteralPath, -OutFile and -Param:value", () => {
+    onWindows();
+    bashAbsent();
+    for (const ok of ["ls -Path src", "rm -LiteralPath x", "curl https://x -OutFile f", "rm -Recurse:$false build", "ls -Force:$true src", "Remove-Item -Recurse:$true -Force x"]) {
+      expect(posixRoute(ok, bashDefault), ok).toEqual({ bash: null });
+    }
+    // …while a short or all-caps token with a colon is still a unix-looking flag.
+    expect(posixRoute("rm -rf:x build", bashDefault)).toEqual({ error: NO_BASH_FOR_POWERSHELL });
+  });
+
   it("leaves the editor's default alone: per-command routing, a plain command stays in the platform shell", () => {
     onWindows();
     bashFound();

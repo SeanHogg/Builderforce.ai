@@ -108,6 +108,8 @@ function runAgentAttempt(params: {
   agentDir: string;
   onAgentEvent: (evt: { stream: string; data?: Record<string, unknown> }) => void;
   primaryProvider: string;
+  /** The `provider/model` the run was originally asked for (failover re-enters with a candidate). */
+  requestedModel: string;
 }) {
   const effectivePrompt = resolveFallbackRetryPrompt({
     body: params.body,
@@ -165,6 +167,7 @@ function runAgentAttempt(params: {
     clientTools: params.opts.clientTools,
     provider: params.providerOverride,
     model: params.modelOverride,
+    requestedModel: params.requestedModel,
     authProfileId,
     authProfileIdSource: authProfileId ? params.sessionEntry?.authProfileOverrideSource : undefined,
     thinkLevel: params.resolvedThinkLevel,
@@ -568,6 +571,7 @@ export async function agentCommand(
             resolvedVerboseLevel,
             agentDir,
             primaryProvider: provider,
+            requestedModel: modelKey(provider, model),
             onAgentEvent: (evt) => {
               // Track lifecycle end for fallback emission below.
               if (

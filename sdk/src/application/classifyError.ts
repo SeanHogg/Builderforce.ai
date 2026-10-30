@@ -65,7 +65,9 @@ export interface ErrorClassification {
 }
 
 /**
- * Tenant-cap codes — all per-tenant (not per-model), so all TERMINAL for the window.
+ * Tenant-cap codes — all per-tenant (not per-model), so TERMINAL for the window BY DEFAULT. The gateway's own
+ * `error.terminal` flag wins (`terminal ?? true` below): `premium_daily_cap_exceeded` is sent `terminal: false`,
+ * because only the premium PIN is spent and the plan pool still serves the request - drop the pin and carry on.
  *
  * MIRRORS `TENANT_BUDGET_CODES` in `@builderforce/learned-routing` (the platform's own list, which the
  * cloud failure classifier and the agent's outcome row read). This package is published standalone

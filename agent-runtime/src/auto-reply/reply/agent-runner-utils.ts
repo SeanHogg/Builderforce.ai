@@ -1,4 +1,5 @@
 import { resolveAgentModelFallbacksOverride } from "../../agents/agent-scope.js";
+import { modelKey } from "../../agents/model-selection.js";
 import type { NormalizedUsage } from "../../agents/usage.js";
 import { getChannelDock } from "../../channels/dock.js";
 import type { ChannelId, ChannelThreadingToolContext } from "../../channels/plugins/types.js";
@@ -167,6 +168,7 @@ export function buildEmbeddedRunBaseParams(params: {
     enforceFinalTag: resolveEnforceFinalTag(params.run, params.provider),
     provider: params.provider,
     model: params.model,
+    requestedModel: modelKey(params.run.provider, params.run.model),
     ...params.authProfile,
     thinkLevel: params.run.thinkLevel,
     verboseLevel: params.run.verboseLevel,

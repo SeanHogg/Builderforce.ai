@@ -8,8 +8,16 @@
  * (`rateLimited`), and is dependency-free and I/O-free: compiled into the Worker, the browser and Node.
  */
 
-/** The words a provider or gateway uses when it is throttling or out of capacity. */
-const AVAILABILITY = /\b429\b|rate.?limit|too many requests|over capacity|capacity limit/i;
+/**
+ * The words a provider or gateway uses when it is throttling, overloaded or out of capacity: 429/529,
+ * Anthropic's `overloaded_error`, Google's `RESOURCE_EXHAUSTED`, and the failover chain's own
+ * "in cooldown / all in cooldown or unavailable" wording for a provider it has already seen throttle.
+ */
+const AVAILABILITY =
+  /\b429\b|\b529\b|rate.?limit|too many requests|over ?capacity|capacity limit|overloaded|resource.?exhausted|\bin cooldown\b|cooldown or unavailable/i;
+
+/** HTTP statuses that mean "throttled / overloaded" on their own, whatever the body says. */
+const AVAILABILITY_STATUSES: ReadonlySet<number> = new Set([429, 529]);
 
 /**
  * The codes OUR gateway answers 429 with when a TENANT spends its own allowance (`gatewayGuards.ts`,
@@ -44,7 +52,7 @@ const BUDGET_WORDING = new RegExp(
     /generation limit reached/,
     /allowance reached/,
     /spend cap reached/,
-    /(?:premium|token|spend|credit|plan)\b[^.]{0,40}budget exhausted/,
+    /premium-model budget exhausted/,
   ]
     .map((re) => re.source)
     .join('|'),
@@ -56,7 +64,12 @@ export function isTenantBudgetFailure(message: string | null | undefined): boole
   return !!message && (BUDGET_CODE.test(message) || BUDGET_WORDING.test(message));
 }
 
-/** True when `message` says a model or pool was throttled or at capacity (not that a tenant spent a cap). */
-export function isRateLimitFailure(message: string | null | undefined): boolean {
-  return !!message && AVAILABILITY.test(message) && !isTenantBudgetFailure(message);
+/**
+ * True when `message` says a model or pool was throttled or at capacity (not that a tenant spent a cap).
+ * `status` is the HTTP status a caller already holds (the legacy runner's FailoverError carries one): a 429/529
+ * counts even when the message body does not say so. A tenant budget answer wins first either way.
+ */
+export function isRateLimitFailure(message: string | null | undefined, status?: number | null): boolean {
+  if (isTenantBudgetFailure(message)) return false;
+  return (status != null && AVAILABILITY_STATUSES.has(status)) || (!!message && AVAILABILITY.test(message));
 }

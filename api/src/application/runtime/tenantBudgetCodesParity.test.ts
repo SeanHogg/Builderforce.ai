@@ -16,20 +16,30 @@ const tsFilesIn = (relative: string): string[] =>
     .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts'))
     .map((file) => `${relative}${file.replace(/\\/g, '/')}`);
 
-/** The emit sites: the gateway guards and the token-availability gate (llm), and the video credit gate. */
-const EMIT_FILES = [
-  ...tsFilesIn('../../presentation/routes/llm/'),
-  ...tsFilesIn('../llm/'),
-  '../../presentation/routes/videoRoutes.ts',
-];
+/**
+ * The emit sites: EVERY route and application file, not a hand-picked few - a code introduced in a new file
+ * (the video credit gate was one) must fail this test rather than silently read as a provider throttle.
+ */
+const EMIT_FILES = [...tsFilesIn('../../presentation/routes/'), ...tsFilesIn('../')];
 
-/** Every `code: '…_limit_exceeded' | '…_cap_exceeded'` LITERAL in the emit files (comment lines are not emitters). */
+/**
+ * Codes a route emits that are a tenant limit but NOT a model-call 429, so they never reach the failure classifier.
+ *  - `ingestion_limit_exceeded`: the repo-import allowance, answered 402 (upgrade required) by `repoRoutes.ts`.
+ */
+const NOT_A_MODEL_BUDGET: ReadonlySet<string> = new Set(['ingestion_limit_exceeded']);
+
+/** A `code: '…'` field, or an exported code constant (`export const X_CODE = '…'`) - the two ways a code is spelled. */
+const CODE_SITE = /\bcode:|^\s*export const \w+(?::[^=]+)?\s*=\s*'/;
+
+/** Every `'…_limit_exceeded' | '…_cap_exceeded'` LITERAL at a code site in the emit files (comment lines are not emitters). */
 function emittedBudgetCodes(): Set<string> {
   const found = new Set<string>();
   for (const file of EMIT_FILES) {
     for (const line of read(file).split('\n')) {
-      if (/^\s*(?:\/\/|\*|\/\*)/.test(line) || !/\bcode:/.test(line)) continue;
-      for (const match of line.matchAll(/'([a-z_]+_(?:limit|cap)_exceeded)'/g)) found.add(match[1]!);
+      if (/^\s*(?:\/\/|\*|\/\*)/.test(line) || !CODE_SITE.test(line)) continue;
+      for (const match of line.matchAll(/'([a-z_]+_(?:limit|cap)_exceeded)'/g)) {
+        if (!NOT_A_MODEL_BUDGET.has(match[1]!)) found.add(match[1]!);
+      }
     }
   }
   return found;

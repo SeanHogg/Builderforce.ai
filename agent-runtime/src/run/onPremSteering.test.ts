@@ -80,6 +80,10 @@ describe("runOnPremAgent steering", () => {
 
     expect(out).toEqual({ ok: true, text: "steered pass" });
     expect(s.onSteerApplied).toHaveBeenCalledWith("also add tests");
+    // The steer reached the MODEL, not just the ack: the second model call carries its text.
+    expect(requests).toHaveLength(2);
+    expect(JSON.stringify(requests[1].messages)).toContain("also add tests");
+    expect(JSON.stringify(requests[0].messages)).not.toContain("also add tests");
     expect(s.onResult).toHaveBeenCalledTimes(2);
     expect(steering.closed()).toBe(true);
   });

@@ -33,8 +33,8 @@ export function checkFootprintLimits(
 
 /** How a run that hit its OWN per-run cap reads in its failure message. ONE spelling: the builders below write
  *  it and {@link isRunCapMessage} reads it, so the classifier never holds a second copy of the text. */
-export const RUN_SPEND_LIMIT_PREFIX = 'spend limit reached';
-export const RUN_TOKEN_LIMIT_PREFIX = 'token limit reached';
+const RUN_SPEND_LIMIT_PREFIX = 'spend limit reached';
+const RUN_TOKEN_LIMIT_PREFIX = 'token limit reached';
 
 export function runSpendLimitMessage(used: number, cap: number): string {
   return `${RUN_SPEND_LIMIT_PREFIX} (${used}/${cap} millicents)`;
@@ -44,8 +44,8 @@ export function runTokenLimitMessage(used: number, cap: number): string {
   return `${RUN_TOKEN_LIMIT_PREFIX} (${used}/${cap} tokens)`;
 }
 
-/** The per-run message shape: a prefix, then `(used/cap `. A tenant's allowance reads `(N tokens)` with no slash. */
-const RUN_CAP_MESSAGE = new RegExp(`(?:${RUN_SPEND_LIMIT_PREFIX}|${RUN_TOKEN_LIMIT_PREFIX}) \\(\\d+/\\d+ `);
+/** The per-run message shape: a prefix, then `(used/cap `, where either number may be fractional (a millicent spend is not always whole). A tenant's allowance reads `(N tokens)` with no slash. */
+const RUN_CAP_MESSAGE = new RegExp(`(?:${RUN_SPEND_LIMIT_PREFIX}|${RUN_TOKEN_LIMIT_PREFIX}) \\([\\d.]+/[\\d.]+ `);
 
 /** True when `message` is a run stopping at ITS OWN per-run spend / token cap (`checkRunLimits`) - not a tenant's quota. */
 export function isRunCapMessage(message: string | null | undefined): boolean {

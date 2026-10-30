@@ -95,13 +95,14 @@ const POWERSHELL_FLAG_SENSITIVE: ReadonlySet<string> = new Set([...POWERSHELL_AL
 /**
  * A flag-sensitive verb handed a unix `-flag` (`rm -rf`, `ls -la`, `cat -n`, `mv -f`, `curl -s`): the alias
  * binds the flag to a Cmdlet parameter by prefix, or not at all, so the command fails or does something
- * else. A token is a PowerShell PARAMETER only if it is a capitalised word (`-Force`, `-Recurse`, `-Path`):
+ * else. A token is a PowerShell PARAMETER only if it is a capitalised word (`-Force`, `-Recurse`, `-Path`, `-LiteralPath`,
+ * `-OutFile`), optionally bound with a colon (`-Recurse:$false`):
  * every other `-token` is a unix flag - `-R`, `-A`, `-Rf`, `-KILL`, `-9`, `-L`, `--long` - however it is
  * cased, because a one- or two-letter capital is a unix flag (`ls -R`, `rm -Rf`), not a parameter name. No
  * exceptions for the unix forms on purpose - `cp -r` happens to bind to -Recurse, but a list of forms that
  * bind goes stale.
  */
-const POWERSHELL_PARAMETER = /^-[A-Z][a-z]{2,}[A-Za-z]*$/;
+const POWERSHELL_PARAMETER = /^-[A-Z][a-z]{2,}[A-Za-z]*(?::.*)?$/;
 const isUnixFlag = (token: string | undefined): boolean => !!token && token.length > 1 && token.startsWith("-") && !POWERSHELL_PARAMETER.test(token);
 
 /** Verbs whose flags may come AFTER their operands (`find . -name x`, `curl url -o f`, `wget -O f url`). */

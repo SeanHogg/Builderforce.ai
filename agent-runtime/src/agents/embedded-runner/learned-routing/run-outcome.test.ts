@@ -39,6 +39,52 @@ describe("trackRunOutcome — degraded", () => {
   });
 });
 
+describe("trackRunOutcome — degraded across failover candidates", () => {
+  const OPUS = { provider: "anthropic", model: "claude-opus-4-5" };
+  const HAIKU = { provider: "anthropic", model: "claude-haiku-4-5" };
+
+  it("a fallback re-entry is compared with the ORIGINAL request, not with the candidate it was entered with", () => {
+    // runWithModelFallback re-enters the runner with haiku as the candidate: entered === served, so only the
+    // threaded original request can say this was a fall from opus.
+    const t = trackRunOutcome({ runId: "run-1", isProbeSession: false, requestedModel: "anthropic/claude-opus-4-5" });
+    t.lockOnto(HAIKU, HAIKU);
+    t.report("completed");
+    expect(reported[0]).toMatchObject({ model: "anthropic/claude-haiku-4-5", degraded: true });
+  });
+
+  it("without a threaded request the entry model is the request (a direct call is never degraded by itself)", () => {
+    const t = tracker();
+    t.lockOnto(HAIKU, HAIKU);
+    t.report("completed");
+    expect(reported[0]).toMatchObject({ degraded: false });
+  });
+
+  it("a model learned routing CHOSE is the intent: serving it is not a fall from the original request", () => {
+    const t = trackRunOutcome({ runId: "run-1", isProbeSession: false, requestedModel: "anthropic/claude-opus-4-5" });
+    t.intend(HAIKU);
+    t.lockOnto(HAIKU, HAIKU);
+    t.report("completed");
+    expect(reported[0]).toMatchObject({ degraded: false });
+    // …but a later failover below the chosen one still is.
+    const free = trackRunOutcome({ runId: "run-2", isProbeSession: false, requestedModel: "anthropic/claude-haiku-4-5" });
+    free.intend(OPUS);
+    free.lockOnto(HAIKU, OPUS);
+    free.report("completed");
+    expect(reported[1]).toMatchObject({ degraded: true });
+  });
+});
+
+describe("trackRunOutcome — what the run reports", () => {
+  it("carries the action label and the step count it was told", () => {
+    const t = tracker();
+    t.seed("bugfix");
+    t.steps(7);
+    t.lockOnto({ provider: "anthropic", model: "claude-opus-4-5" }, { provider: "anthropic", model: "claude-opus-4-5" });
+    t.report("completed");
+    expect(reported[0]).toMatchObject({ actionType: "bugfix", steps: 7 });
+  });
+});
+
 describe("trackRunOutcome — rateLimited", () => {
   const failed = (message: string, reason: ConstructorParameters<typeof FailoverError>[1]["reason"] = "rate_limit") => {
     const t = tracker();
@@ -50,6 +96,26 @@ describe("trackRunOutcome — rateLimited", () => {
   it("a genuine provider throttle is rate limited", () => {
     expect(failed("429 Too Many Requests")).toMatchObject({ rateLimited: true });
     expect(failed('HTTP 429: {"error":{"code":"rate_limit_exceeded"}}')).toMatchObject({ rateLimited: true });
+  });
+
+  it("overload and cooldown wording is a throttle too: the provider could not serve, the model is not bad", () => {
+    expect(failed("The model is temporarily overloaded, please try again later")).toMatchObject({ rateLimited: true });
+    expect(failed('{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}', "unknown")).toMatchObject({ rateLimited: true });
+    expect(failed("Provider anthropic is in cooldown (all profiles unavailable)")).toMatchObject({ rateLimited: true });
+    expect(failed("All models failed (2): all in cooldown or unavailable")).toMatchObject({ rateLimited: true });
+  });
+
+  it("the failover error's HTTP status is read by the SAME rule, so a 429/529 with a bare body counts", () => {
+    const withStatus = (message: string, status: number) => {
+      const t = tracker();
+      t.lockOnto({ provider: "anthropic", model: "claude-opus-4-5" }, { provider: "anthropic", model: "claude-opus-4-5" });
+      t.report("failed", new FailoverError(message, { reason: "unknown", status }));
+      return reported.at(-1);
+    };
+    expect(withStatus("upstream said no", 529)).toMatchObject({ rateLimited: true });
+    expect(withStatus("upstream said no", 429)).toMatchObject({ rateLimited: true });
+    expect(withStatus("upstream said no", 500)).toMatchObject({ rateLimited: false });
+    expect(withStatus('{"code":"plan_token_limit_exceeded"}', 429)).toMatchObject({ rateLimited: false });
   });
 
   it("a tenant's spent quota is NOT, even though this runner classifies it as a rate_limit failover", () => {

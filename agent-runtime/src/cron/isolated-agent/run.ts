@@ -12,6 +12,7 @@ import { resolveCronStyleNow } from "../../agents/current-time.js";
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../../agents/defaults.js";
 import { loadModelCatalog } from "../../agents/model-catalog.js";
 import { runWithModelFallback } from "../../agents/model-fallback.js";
+import { modelKey } from "../../agents/model-selection.js";
 import {
   getModelRefStatus,
   isCliProvider,
@@ -486,6 +487,7 @@ export async function runCronIsolatedAgentTurn(params: {
           lane: params.lane ?? "cron",
           provider: providerOverride,
           model: modelOverride,
+          requestedModel: modelKey(provider, model),
           thinkLevel,
           verboseLevel: resolvedVerboseLevel,
           timeoutMs,

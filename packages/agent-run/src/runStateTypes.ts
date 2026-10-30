@@ -109,7 +109,7 @@ export interface RunState {
   stall?: StallState;              // WS2b: the re-prompt budget, keyed by model
   preflight?: string;              // WS2g: the model preflight's verdict — ok | refreshed | degraded:<reason> (§8.2 modelPreflight)
   downgrades?: string[];           // WS2g: auto-routed models already ANNOUNCED by llm.model_downgrade (once per served model) - the announcement dedupe, not the row's fact
-  degradedBy?: string[];           // the served models that were WEAKER than the run asked for (an auto-routed downgrade, or a pinned failover onto a worse tier): what makes the row `degraded`
+  degradedBy?: string[];           // the served models that were WEAKER than the run asked for (a failover from a requested model onto a worse tier; an auto-routed turn asked for nothing): what makes the row `degraded`
   telemetry?: RunTally;            // WS6: the per-run counters the §8.2 row reads, summed across ticks
   taskState?: TaskState;           // WS2f (C3): the agent's structured task state — kept outside the transcript so compaction cannot summarise it away
   forceToolChoice?: "required";    // WS2b: a stall recovery's one-shot tool_choice for the NEXT request
