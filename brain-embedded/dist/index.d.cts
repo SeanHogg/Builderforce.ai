@@ -4255,6 +4255,58 @@ declare function activeTicketToken(text: string, caret: number): TicketToken | n
 declare function filterTicketCandidates(tickets: ChatTicket[], query: string): ChatTicket[];
 
 /**
+ * A draft chat's first send CREATES the chat, and what the person types while it does belongs to THAT creation - not to
+ * whichever chat is showing when the id arrives.
+ *
+ * A DRAFT TOKEN is minted when a send starts from a draft (`begin`, synchronously - before any async preparation the host's
+ * send does). Every turn held while the draft is unresolved carries the token, never a chat id. The creation started for the
+ * token resolves it with its chat id, or fails it; only the creation that BELONGS to a token can settle it, so an abandoned,
+ * older creation resolving late settles its own token and no other draft's. Switching the visible chat touches no token.
+ *
+ * A creation is ASKED FOR with the token its send began with (`ensureChatId(token)`) - never with whichever token is on screen
+ * when it runs - so a late send of an abandoned draft creates, and settles, its own.
+ *
+ * Pure (no React): `useChatCreation` owns one binding and reports into it; `useChatTurns` / `useQueuedTurns` read it.
+ */
+/** Names one draft's send-and-creation. Opaque; only compare it. */
+type DraftToken = number;
+/** The id a token's creation resolved with, or null when it failed (nothing was created). */
+type DraftOutcome = number | null;
+interface DraftBinding {
+    /**
+     * A send starts from the draft: its token (the draft's current one, minted when it has none). Counts the send, so the
+     * token is not failed while another send from the same draft is still getting ready; pair every call with `settle`.
+     */
+    begin: () => DraftToken;
+    /** The draft on screen's token without counting a send - for a creation asked for with no token of its own (`ensureChatId()`); a send names its token. */
+    adopt: () => DraftToken;
+    /** The draft on screen's token (null: none yet, or the draft has been left). Stable between changes. */
+    current: () => DraftToken | null;
+    /** The creation for this token has started: it, and only it, will resolve or fail the token. */
+    startCreation: (token: DraftToken) => void;
+    resolve: (token: DraftToken, chatId: number) => void;
+    fail: (token: DraftToken) => void;
+    /**
+     * A send that `begin` counted has ended. A token whose every send ended without a creation ever starting has nothing
+     * coming: it fails (its held turns go back to the composer).
+     */
+    settle: (token: DraftToken) => void;
+    /** A chat was opened: the draft is no longer on screen. Its tokens stay open - their creations may still answer. */
+    leave: () => void;
+    /**
+     * What a token's creation answered: the chat id, null if it failed, undefined while open (or forgotten). A resolved token is
+     * kept while the draft is on screen and while a send that began with it is still in flight - until then a send naming it
+     * gets ITS chat.
+     */
+    outcomeOf: (token: DraftToken) => DraftOutcome | undefined;
+    /** Called whenever `current()` changes (a `useSyncExternalStore` subscription). */
+    subscribe: (listener: () => void) => () => void;
+    /** Called once per token, when its creation answers. */
+    onOutcome: (listener: (token: DraftToken, outcome: DraftOutcome) => void) => () => void;
+}
+declare function createDraftBinding(): DraftBinding;
+
+/**
  * Which user turns START a run — the one rule the conversation's three run doors read: a
  * send, the auto-reply to a trailing turn on load, and Retry.
  *
@@ -4325,8 +4377,11 @@ interface UseBrainConversationOptions {
         name: string;
         args: unknown;
     }) => boolean;
-    /** Create-on-demand when sending without an active chat; returns the new chat id. */
-    ensureChatId?: () => Promise<number | null>;
+    /**
+     * Create-on-demand when sending without an active chat; returns the new chat id. `draft` is the token the send began with
+     * (`send(text, { draft })`): the creation is THAT draft's, never whichever draft is on screen when this runs.
+     */
+    ensureChatId?: (draft?: DraftToken) => Promise<number | null>;
     /** Notify the host (chats hook) that this chat got new activity. */
     onActivity?: (chatId: number) => void;
     /**
@@ -4416,11 +4471,13 @@ interface UseBrainConversation {
      * so a composer can restore the text the user typed instead of dropping it.
      * `attachments` is the turn's OWN files (a held turn, a steer's leftovers): omitted, the turn
      * takes the composer's; given, exactly those leave the composer as the send starts and a
-     * failure leaves them to the caller (`restoreAttachments`).
+     * failure leaves them to the caller (`restoreAttachments`). `draft` is the token the turn door minted for a send from a
+     * draft (`useChatTurns`' `send(turn, { draft })`): the chat this send creates belongs to it (`ensureChatId(draft)`).
      */
     send(text: string, opts?: {
         addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null;
         attachments?: ChatInputAttachment[];
+        draft?: DraftToken;
     }): Promise<boolean>;
     /**
      * Answer the active chat's REFUSED turn again — the trailing user message nothing
@@ -5098,16 +5155,30 @@ declare function placeholderAdvisory(hits: readonly PlaceholderHit[]): string | 
  * into this store with {@link applyRemoteRun}, so every consumer (`useBrainConversation`,
  * the timeline, the cross-chat indicator) keeps reading the same store it always did.
  *
- * The seam is deliberately four verbs: the store's own public API for a run, minus
+ * The seam is deliberately five verbs: the store's own public API for a run (plus the words a person says to it), minus
  * reads. Reads stay local, fed by the mirror.
  */
 
+/** One turn said to a chat's run through the driver: its words, its files, and the key that makes saying it twice the same as once. */
+interface SteerTurn {
+    text: string;
+    attachments?: ChatInputAttachment[];
+    eventKey: string;
+}
 interface BrainRunDriver {
     /** Execute a run elsewhere. Resolves when that run has settled, like `startRun`. */
     start(chatId: number, req: BrainRunRequest): Promise<void>;
     stop(chatId: number): void;
     confirm(chatId: number, ok: boolean): void;
     clearError(chatId: number): void;
+    /**
+     * Words for a CHAT's run, wherever that run executes - the chat-keyed twin of `queueRunSteering`, for a process whose
+     * in-page inbox is read by nobody. The process that owns the run decides what they are: heard by the run when it is live
+     * or being set up, the chat's next turn when it is idle (the editor host's `runSteer.steerTurns`: its inbox + wake) - SEVERAL
+     * turns together are ONE continuation, in order. Keyed by the chat, never by the view that happens to be showing it. Each
+     * turn carries its own key: the host hears a turn it has already heard (a repeated post) once.
+     */
+    steer(chatId: number, turns: readonly SteerTurn[]): void;
 }
 /** Route this process's runs through `driver`; `null` restores in-process execution. */
 declare function installRunDriver(driver: BrainRunDriver | null): void;
@@ -7522,51 +7593,6 @@ type TransportFetch = (input: string, init: RequestInit) => Promise<Response>;
 /** `fetchImpl`, with every request tagged as coming from `surface`. */
 declare function withUsageSurface(fetchImpl: TransportFetch, surface: UsageSurface): TransportFetch;
 
-/**
- * A draft chat's first send CREATES the chat, and what the person types while it does belongs to THAT creation - not to
- * whichever chat is showing when the id arrives.
- *
- * A DRAFT TOKEN is minted when a send starts from a draft (`begin`, synchronously - before any async preparation the host's
- * send does). Every turn held while the draft is unresolved carries the token, never a chat id. The creation started for the
- * token resolves it with its chat id, or fails it; only the creation that BELONGS to a token can settle it, so an abandoned,
- * older creation resolving late settles its own token and no other draft's. Switching the visible chat touches no token.
- *
- * Pure (no React): `useChatCreation` owns one binding and reports into it; `useChatTurns` / `useQueuedTurns` read it.
- */
-/** Names one draft's send-and-creation. Opaque; only compare it. */
-type DraftToken = number;
-/** The id a token's creation resolved with, or null when it failed (nothing was created). */
-type DraftOutcome = number | null;
-interface DraftBinding {
-    /**
-     * A send starts from the draft: its token (the draft's current one, minted when it has none). Counts the send, so the
-     * token is not failed while another send from the same draft is still getting ready; pair every call with `settle`.
-     */
-    begin: () => DraftToken;
-    /** The same token without counting a send - the creation (`ensureChatId`) adopts the draft's token this way. */
-    adopt: () => DraftToken;
-    /** The draft on screen's token (null: none yet, or the draft has been left). Stable between changes. */
-    current: () => DraftToken | null;
-    /** The creation for this token has started: it, and only it, will resolve or fail the token. */
-    startCreation: (token: DraftToken) => void;
-    resolve: (token: DraftToken, chatId: number) => void;
-    fail: (token: DraftToken) => void;
-    /**
-     * A send that `begin` counted has ended. A token whose every send ended without a creation ever starting has nothing
-     * coming: it fails (its held turns go back to the composer).
-     */
-    settle: (token: DraftToken) => void;
-    /** A chat was opened: the draft is no longer on screen. Its tokens stay open - their creations may still answer. */
-    leave: () => void;
-    /** What a token's creation answered: the chat id, null if it failed, undefined while open. */
-    outcomeOf: (token: DraftToken) => DraftOutcome | undefined;
-    /** Called whenever `current()` changes (a `useSyncExternalStore` subscription). */
-    subscribe: (listener: () => void) => () => void;
-    /** Called once per token, when its creation answers. */
-    onOutcome: (listener: (token: DraftToken, outcome: DraftOutcome) => void) => () => void;
-}
-declare function createDraftBinding(): DraftBinding;
-
 interface QueuedItem<T> {
     /** Stable per held turn, so a host can render it and let the user remove it. */
     readonly id: number;
@@ -7608,12 +7634,13 @@ interface QueuedTurns<T = string> {
     /** Put a turn back at the FRONT of the queue - a flushed turn the host did not keep must not be lost. */
     requeue: (value: T) => void;
     /** Add a turn at the BACK, held or not - an idle send waits behind the turns already waiting. */
-    pushBack: (value: T, opts?: {
-        preLiveFor?: number;
-    }) => void;
+    pushBack: (value: T) => void;
     /** Take the OLDEST waiting turn out of the queue now (undefined when none). Never one held for a draft's creation. */
     takeFront: () => T | undefined;
-    /** Drop everything this view holds - a stopped run. Turns held for another draft's creation are not its to drop. */
+    /**
+     * Drop everything this view holds - a stopped run. A Stop on the draft itself clears that draft's own held turns (they
+     * are that conversation's queue); turns held for ANOTHER draft's creation are not its to drop.
+     */
     clear: () => void;
 }
 interface QueuedTurnsOptions<T> {
@@ -7647,13 +7674,32 @@ interface QueuedTurnsOptions<T> {
      */
     drafts?: DraftBinding;
     /**
-     * A draft's creation answered - the chat id, or null when nothing was created: these turns, oldest first, were held for
-     * it. They have left the queue; the host lands them (in the created chat, whichever chat is showing; back to the
-     * composer when nothing was created), keeping some in the showing chat's queue with `pushBack` when that is the one.
+     * A draft's creation answered - the chat id, or null when nothing was created: these turns, oldest first (possibly none),
+     * were held for it. They have left the queue; the host lands them THROUGH THE CREATED CHAT'S RUN, whichever chat is
+     * showing (back to the composer when nothing was created). Called for every answer, so the host can also settle the send
+     * that made the creation.
      */
-    landDraft?: (held: readonly DraftHeld<T>[], outcome: DraftOutcome) => void;
+    landDraft?: (held: readonly DraftHeld<T>[], outcome: DraftOutcome, token: DraftToken) => void;
 }
 declare function useQueuedTurns<T = string>({ running, send, resetKey, textOf, mayFlush, handOff, drafts, landDraft }: QueuedTurnsOptions<T>): QueuedTurns<T>;
+
+/**
+ * Where turns go when they are not sent from the composer: held turns whose conversation changed (`handOff`), and turns held
+ * for a draft's creation once it answers (`landDraft`). Extracted from `useChatTurns`, which owns the ports and the queue.
+ *
+ * A DRAFT's turns are delivered by the creation that made their chat, THROUGH THAT CHAT'S RUN (`chatDelivery.ts`) - never by
+ * asking which chat is showing, and never by restoring them to the composer because a run driver is installed. The same
+ * binding owns the send that began the creation: when the creation fails, the send's own turn and everything held behind
+ * it come back to the composer as ONE joined turn, once, and the send reports itself kept.
+ */
+/** What the host's `send` is told about the send it is asked to make. */
+interface SendContext {
+    /**
+     * The draft token this send began with (`draftBinding.begin`), when it starts from a draft: hand it to the conversation's
+     * `send` so the creation it triggers is THIS draft's (`ensureChatId(token)`), never whichever draft is on screen by then.
+     */
+    readonly draft?: DraftToken;
+}
 
 /**
  * THE ONE DOOR a user turn leaves a composer through — typed, an answered question, a
@@ -7713,8 +7759,13 @@ interface ChatTurnsBase<T> {
      * when it made none - whichever chat the person is looking at by then. Hosts that create chats from a draft pass it.
      */
     drafts?: DraftBinding;
-    /** Deliver one turn now. Resolve `false` when it failed before it was kept (restore the draft). */
-    send: (turn: T) => Promise<boolean | void> | boolean | void;
+    /**
+     * Deliver one turn now. Resolve `false` when it failed before it was kept (restore the draft). From a draft only, `ctx.draft`
+     * is the token this send began with: pass it on to the conversation's `send` (`{ draft }`), which hands it to
+     * `ensureChatId(token)` - the creation this send triggers belongs to THIS token. When that creation fails the door restores
+     * the turn itself, together with everything held behind it, and reports the send kept - the host puts nothing back twice.
+     */
+    send: (turn: T, ctx?: SendContext) => Promise<boolean | void> | boolean | void;
     /**
      * Optional: route a turn into a live run instead; return true when it was taken. To speak to the
      * chat's OWN run it asks the door - `turns.steers(...)`, the predicate the composer's Send label
@@ -7731,9 +7782,9 @@ interface ChatTurnsBase<T> {
 /**
  * A host that ADDRESSES turns (to a participant, not the run) must also say where one goes back to when
  * its send is not kept after the chat changed: the COMPOSER - text, files, addressee - never the queue now
- * showing (another chat's) and never a run. The two come as a pair; neither alone is accepted. The same
- * port takes ANY turn not kept after a chat switch when the run executes elsewhere (`installRunDriver`):
- * the webview's in-process inbox is not where that run reads.
+ * showing (another chat's) and never a run. The two come as a pair; neither alone is accepted. A turn that
+ * is not addressed goes to ITS chat's run through `chatDelivery` - the run driver's `steer` where the run
+ * executes elsewhere, the run store's inbox otherwise: one delivery rule on every host.
  */
 type ChatTurnsOptions<T> = ChatTurnsBase<T> & ({
     isDirected?: undefined;
@@ -7811,9 +7862,18 @@ declare function useChatTurns<T = string>({ running, steerable, runKey, drafts, 
  * it goes back to the composer that is SHOWING, never dropped and never auto-sent into another chat.
  *
  *  - its files come back (merged by key);
- *  - its text comes back unless the person has typed something newer since - and ONLY then does it also restore
- *    the ADDRESSEE (reset to what the turn had, so a turn for the Brain never comes back pointed at a
- *    participant the composer happened to hold). A newer draft keeps the addressee it was written for.
+ *  - its text comes back. Into an empty box it comes back alone, and with it the ADDRESSEE (reset to what the turn had, so a
+ *    turn for the Brain never comes back pointed at a participant the composer happened to hold). If the person has typed
+ *    something newer since, the turn's words go IN FRONT of it, a blank line between (they were said first: the same order
+ *    `joinRestorableTurns` keeps) - nothing a person said is dropped - and the newer draft keeps the addressee it was
+ *    written for.
+ *
+ * The box is written with an UPDATER, not a string: the prepend is computed against what the box holds when the write lands,
+ * so a clear or a keystroke that happens between this call and React's commit is respected, never overwritten.
+ *
+ * ACCEPTED CONSEQUENCE of putting the older words in front rather than refusing to restore: a person who has already
+ * retyped the same words sees them twice (older, blank line, newer) and edits one away. The alternative - dropping a turn
+ * because the box was not empty - loses words, which is worse; the two are kept in the order they were said.
  */
 
 /** A turn as the composer takes it back. */
@@ -7830,10 +7890,10 @@ interface RestorableTurn {
  */
 declare function joinRestorableTurns(turns: readonly RestorableTurn[]): RestorableTurn;
 declare function restoreTurn(turn: RestorableTurn, composer: {
-    /** The composer's text right now (read at call time - a ref, not a render-time capture). */
+    /** The composer's text right now (read at call time - a ref, not a render-time capture): decides the addressee only. */
     draft: () => string;
-    /** Put the text back IF the box is still empty (`useComposerDraft().fillIfEmpty`). */
-    setInput: (text: string) => void;
+    /** Write the box through an updater (`useComposerDraft().setInput`): the turn's words alone, or in front of what the box holds then. */
+    setInput: (next: (current: string) => string) => void;
     restoreAttachments: (files: readonly ChatInputAttachment[]) => void;
     chooseRecipient: (to: DirectedRecipient | null) => void;
 }): void;
@@ -7846,13 +7906,13 @@ declare function restoreTurn(turn: RestorableTurn, composer: {
  * the editor chat; none keeps its own copy.
  *
  *  - `draft()` the text right now;
- *  - `setInput(text)` write it (clear, seed);
- *  - `fillIfEmpty(text)` put it back only if the box is still empty - what `restoreTurn` uses.
+ *  - `setInput(text)` write it (clear, seed), or `setInput(cur => next)` - an UPDATER, computed against what the box holds
+ *    when the write lands (`restoreTurn` gives a turn back this way, so a concurrent clear or keystroke is respected). The
+ *    ref follows the updater's result at once; the same updater goes to the state setter.
  */
 declare function useComposerDraft(input: string, setInput: Dispatch<SetStateAction<string>>): {
     draft: () => string;
-    setInput: (text: string) => void;
-    fillIfEmpty: (text: string) => void;
+    setInput: (next: SetStateAction<string>) => void;
 };
 
 /**
@@ -7902,8 +7962,11 @@ declare function useRunRefreshTick(running: boolean, intervalMs?: number): numbe
  * What it guarantees:
  *  - **One create per draft.** A second send that arrives while the first message's
  *    chat is still being created JOINS that creation instead of minting a second chat
- *    (and splitting the conversation across two). The in-flight promise is dropped on
- *    failure (so a retry creates) and once the host is on a real chat.
+ *    (and splitting the conversation across two). The creation is the DRAFT TOKEN's: a send
+ *    names its token (`ensureChatId(token)`) and gets the creation of THAT token - a late send
+ *    of an abandoned draft creates its own chat, and never takes the one a newer draft made.
+ *    The in-flight promise is dropped on failure (so a retry creates) and once the host is on
+ *    a real chat.
  *  - **An open chat is never re-created.** With `chatId` set, `ensureChatId` resolves
  *    to it.
  *  - **Stable identities.** Both callbacks keep their identity across renders and read
@@ -7945,10 +8008,11 @@ interface ChatCreationOptions {
 }
 interface ChatCreation {
     /**
-     * The open chat's id, or the one the first send creates. Concurrent calls on a draft
-     * share ONE creation. Rejects when `create` throws; resolves null when it gave up.
+     * The open chat's id, or the one the first send creates. Concurrent calls with the same `draft` token share ONE creation;
+     * a call under another draft's token never joins it (and is never joined by it). Without a token (a caller outside the
+     * turn door) it is the draft on screen's. Rejects when `create` throws; resolves null when it gave up.
      */
-    ensureChatId: () => Promise<number | null>;
+    ensureChatId: (draft?: DraftToken) => Promise<number | null>;
     /** Fire the `autoTitle` port for a chat's first user turn; never rejects. */
     onFirstUserTurn: (chatId: number, firstUserText: string) => Promise<void>;
     /**
@@ -7960,4 +8024,4 @@ interface ChatCreation {
 }
 declare function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }: ChatCreationOptions): ChatCreation;
 
-export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArmedNewChat, type ArtifactKind, type AskUserMessageLike, type AskUserOption, type AskUserPayload, type AskUserToolSpec, AttachmentRefusedError, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BRAIN_UPLOAD_PATH, BRAIN_UPLOAD_SIGN_PATH, BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS, BROWSER_ENGINE_MODEL, BUILDERFORCE_PRODUCT_NAME, BfiWorkerEngineOptions, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, BrainDiagnostics, BrainMessage, BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, BrainRunActivity, type BrainRunDriver, type BrainRunEngine, BrainRunPersistence, BrainRunRequest, BrainRunSnapshot, type BrainRuntime, BrainStreamFn, BrainToolSpec, BrainTraceEvent, BrainTransport, type BriefContext, type BrowserEngineProber, type BuildChatDiagnosticsReportInput, CHAT_DIAGNOSTICS_SCHEMA_VERSION, CODE_CHANGE_TOOLS, CONNECT_RETRY_DELAYS_MS, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatBindingPort, ChatCompletionMessage, type ChatCreation, type ChatCreationOptions, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsHistory, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsProvenance, type ChatDiagnosticsReport, type ChatDiagnosticsRun, type ChatDiagnosticsRuns, type ChatDiagnosticsSources, ChatErrorAction, ChatInputAttachment, ChatMode, type ChatModelOptions, type ChatModelSelection, ChatRosterAgent, type ChatStateGet, type ChatTicket, type ChatTurns, type ChatTurnsOptions, type ComposerDirectiveOptions, type ComposingActivity, type ComposingOptions, type ComposingSink, type ConnectRetryOptions, ContentPart, type ContextUsage, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_FALLBACK_TEMPLATE, DEFAULT_MODEL_IDENTITY, DEFAULT_PERSONA, DEFAULT_ROUTE_THRESHOLD, DEFAULT_TOOL_FAILURE_STREAK, DEFAULT_TOOL_LIMIT, type DirectedGroup, type DirectedRecipient, type DraftBinding, type DraftOutcome, type DraftToken, EMPTY_GATEWAY_MODEL_OPTIONS, Effort, EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FILE_DELIVERY_RULE, FailureTally, type GateReport, type GateRouteStats, type GatewayJsonRequest, type GatewayModelOptions, type GatewayModelSurface, type GitShortStatus, GlobalRunState, HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC, type HandOffOutcome, type HandOffPlan, type HandOffPorts, type HandOffTask, type HandoffFitOptions, HfModelStore, type HostLocalPin, type HostModelStreamInput, INFERENCE_MODES, type IdleWatchdogOptions, type IdleWatchdogReader, type ImageEncodeDecision, type ImagePrepOptions, type IndexedDbStepDurabilityOptions, type InferenceMode, type InlinedAttachments, type KeyedSlot, LOCAL_PICKER_GROUPS, LOCAL_SKIP_CONFIDENCE, LOCAL_SKIP_EXPLORE, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, type LocalAttemptFit, type LocalBrainPersistenceOptions, type LocalChatIdentity, type LocalChatMessage, type LocalFetch, type LocalFirstStreamInput, type LocalModelRow, type LocalModelState, type LocalModelStore, type LocalPickerGroup, type LocalPickerView, type LocalRatingVerdict, type LocalStreamRoute, type LocalSuccessContribution, type LocalSuccessFederation, type LocalSuccessFleetHead, type LocalSuccessSnapshot, type LocalSuccessStore, MAX_INLINE_TEXT_BYTES, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, type MessageRatings, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackChannel, type ModelFallbackEvent, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, type OnDeviceStoreScope, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PREVIEW_REVIEW_TOOL, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type PackForModelInput, type PackForModelResult, PageEngine, type PageEngineSet, type PageEngineSetOptions, type PageRuntimePin, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingAskUser, type PersistedStep, type PersonaModalityId, type PlaceholderHit, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PrefetchConfirm, type PreparedImage, ProjectMemoryRequest, type PromptApiAvailability, type PromptApiFactory, type PromptApiMessage, type PromptApiSession, PromptInput, type PromptInputProps, type ProvenanceAccount, type ProviderFailureEvent, type QueuedItem, type QueuedTurns, type QueuedTurnsOptions, READ_FILE_RESULT_CHARS, REVISIT_HARD_AT, REVISIT_NUDGE_AT, RUN_REFRESH_MS, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, ReasoningIntent, type RecipientChoice, type RecordAvoidedCallInput, type RestorableTurn, type RouteReport, type RouteRunRecord, type RoutedProduct, RunEndOutcome, type RunEngineControl, RunKey, type RunMilestoneActivity, type RunMilestonePhase, type RunNoteStep, type RunOutcomeValue, RunProgress, type RunSteerMessage, type RunUsageLedger, type RunUsageValue, RunWindowSources, STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, STREAM_IDLE_MS, STUDIO_WORKSPACE_TOOLS, type ScoreBin, SpendSavingsSummary, StaffingSummary, type StepDurability, type StepOutgoingMessage, type StoppedTurnSource, StreamChatOptions, StreamChatResult, StreamHandlers, StreamIdleError, type SubagentDiagnosticsInput, type SummaryStreamFn, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TicketTag, type TicketToken, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolSelection, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNSCOPED_MUTATION_TOOLS, type UnreviewedChangeInput, type UnshippedChangeInput, type UsagePipelineRoute, UsageSurface, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, type WindowFitTrace, XmlToolCallFilter, activeHashtagToken, activeMentionToken, activeModelKey, activeTicketToken, activityIcon, activityMessageCount, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, appendRunMessage, applyRemoteRun, artifactRoutePath, asProvenanceAccount, askUserAnchorId, askUserBlock, attemptedPublish, bindChatHistoryForSync, brainPersonaAgents, brainUploadUrl, buildChatDiagnosticsReport, buildComposerDirectives, buildModelItems, byoVendorLabel, callCostOrUnknown, canChangeCodeHere, canReviewInPreview, canRunInParallel, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatDoorLiveness, chatWorkLinkingDirective, childTaskBrief, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, codeChangesOf, coerceAskUserPayload, completeLocal, completeLocalFirst, composeEvermindHooks, contextUsageOf, createBrainRestPersistence, createBrowserEngineProber, createComposingActivity, createDraftBinding, createHandoffFit, createHostModelStream, createLocalBrainPersistence, createLocalChatIdentity, createLocalFirstStream, createLocalStream, createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, createPayloadBudget, createRunUsageLedger, declinesReview, declinesShipping, defaultInferenceMode, deferredLocalModelStore, deriveChatTitle, describeNetworkError, describeTool, directedAgentRecipients, dirtyPathsOf, displayModelName, drainRunSteering, executeHandOff, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, filterTicketCandidates, findTools, forgetResolvedModels, formatAssistantTranscriptHeading, formatChatDiagnostics, formatChatDiagnosticsReportJson, formatRunProgress, formatSubagentDiagnostics, gateAcceptedSince, gatewayCanChooseModel, gatewayModelIdentity, gatewayModelWindows, gatewayPlanIsPaid, gatewayPlanModels, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasPromptApi, hasWebGPU, inferenceModeForModelPick, installIndexedDbStepDurability, installRunDriver, installStepDurability, invalidateGatewayModelOptions, isActivityMessage, isCodeChangeTool, isCoderReask, isConnectFailure, isConnectedAccountUnused, isDirectedToParticipant, isFallbackFailure, isInferenceMode, isLive, isLocalWorkspaceTool, isMalformedToolCall, isManagerRole, isModelReply, isReadOnlyShellCall, isRepoPublishTool, isRouterTool, isRunning, isStoppedBeforeStart, isStoppedTurn, isTicketRecordingTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, joinRestorableTurns, lastServedModel, leftChangeUnreviewed, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, loadGatewayModelOptions, loadOnDeviceAnswerStore, localFirstApplies, localFirstWorkload, localPickerView, localRatingVerdict, localStorageConfirmationPersistence, localToolsIn, localTransport, mcpActionsFrom, mentionRecipient, modalityPersonaChoice, modelCategoryLabel, modelFallbackText, modelInUse, nextFallbackModel, noteRunStep, onDeviceMemoryHooks, packForModel, pageEnginesFetch, pageRuntimePin, parseAskUser, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseHandOff, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, personalitySetpoints, placeholderAdvisory, placeholdersWritten, planMessage, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, prefetchConfirmOf, premiumCostLabel, prepareImageDataUrl, previewReviewDirective, probePageEngines, productForPlan, productModelName, progressDuration, promptApiAvailability, promptApiFactory, promptApiInputQuota, promptApiMeasure, promptStreamDeltas, providerFailureEvent, providerFailureTrace, queueRunSteering, ratedTurnContext, ratedTurnTool, readChatRunHistory, readChatTicketLinks, readWithIdleWatchdog, repeatedFailureAdvisory, resetApiVersionCache, resetBrainRunStore, resetOnDeviceStoresForTests, resolveBrainStream, resolveRecipient, resolveRunConfirm, restoreTurn, retryOnConnectFailure, revealsModelId, revisitAdvisory, routeRunRecords, routerToolSpecs, routingModeForSelection, routingQueryForTurn, runAbortSignal, startRun as runBrainLoop, runOutcomesSince, runProgressVerdict, savePendingPrompt, selectPendingAskUser, selectToolsForTurn, selfReviewShipDirective, serializeAskUser, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, signedBrainFileUrl, slotKeyedRows, stableStringify, startEngineRun, startRun, startsRun, steerModelContent, steersByDefault, stepRow, stepSig, stopBeforeStart, stopRun, stoppedBeforeStartRow, stoppedTurnMetadata, streamSummaryCompletion, stripAskUser, studioToolsIn, submitLocalTurnVerdict, subscribeRun, subscribeRunStore, subscribeToChatMessages, summarizeGateRuns, summarizeRouteRuns, takePendingPrompt, ticketsReviewedInPreview, toPromptApiTurn, toolCallArgBytes, toolNamesMentionedIn, toolSchemaTokens, toolSpecsFor, traceWithPersistedSteps, transcriptSeedOf, transportRetryTrace, trimToolResult, turnAffectBlock, turnInterruption, turnOptimizationDirective, unreviewedChangeNudge, unshippedChangeNudge, usageRowsSince, useArmedNewChat, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useChatCreation, useChatTurns, useComposerDraft, useMcpExtensions, useOptionalBrainContext, useQueuedTurns, useRegisterBrainActions, useRunRefreshTick, useRunSnapshot, useToolConfirmationGate, utf8ByteLength, webStorageLocalSuccessStore, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, withRating, withReadyPageModels, withRunUsage, withUsageSurface, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArmedNewChat, type ArtifactKind, type AskUserMessageLike, type AskUserOption, type AskUserPayload, type AskUserToolSpec, AttachmentRefusedError, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BRAIN_UPLOAD_PATH, BRAIN_UPLOAD_SIGN_PATH, BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS, BROWSER_ENGINE_MODEL, BUILDERFORCE_PRODUCT_NAME, BfiWorkerEngineOptions, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, BrainDiagnostics, BrainMessage, BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, BrainRunActivity, type BrainRunDriver, type BrainRunEngine, BrainRunPersistence, BrainRunRequest, BrainRunSnapshot, type BrainRuntime, BrainStreamFn, BrainToolSpec, BrainTraceEvent, BrainTransport, type BriefContext, type BrowserEngineProber, type BuildChatDiagnosticsReportInput, CHAT_DIAGNOSTICS_SCHEMA_VERSION, CODE_CHANGE_TOOLS, CONNECT_RETRY_DELAYS_MS, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatBindingPort, ChatCompletionMessage, type ChatCreation, type ChatCreationOptions, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsHistory, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsProvenance, type ChatDiagnosticsReport, type ChatDiagnosticsRun, type ChatDiagnosticsRuns, type ChatDiagnosticsSources, ChatErrorAction, ChatInputAttachment, ChatMode, type ChatModelOptions, type ChatModelSelection, ChatRosterAgent, type ChatStateGet, type ChatTicket, type ChatTurns, type ChatTurnsOptions, type ComposerDirectiveOptions, type ComposingActivity, type ComposingOptions, type ComposingSink, type ConnectRetryOptions, ContentPart, type ContextUsage, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_FALLBACK_TEMPLATE, DEFAULT_MODEL_IDENTITY, DEFAULT_PERSONA, DEFAULT_ROUTE_THRESHOLD, DEFAULT_TOOL_FAILURE_STREAK, DEFAULT_TOOL_LIMIT, type DirectedGroup, type DirectedRecipient, type DraftBinding, type DraftOutcome, type DraftToken, EMPTY_GATEWAY_MODEL_OPTIONS, Effort, EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FILE_DELIVERY_RULE, FailureTally, type GateReport, type GateRouteStats, type GatewayJsonRequest, type GatewayModelOptions, type GatewayModelSurface, type GitShortStatus, GlobalRunState, HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC, type HandOffOutcome, type HandOffPlan, type HandOffPorts, type HandOffTask, type HandoffFitOptions, HfModelStore, type HostLocalPin, type HostModelStreamInput, INFERENCE_MODES, type IdleWatchdogOptions, type IdleWatchdogReader, type ImageEncodeDecision, type ImagePrepOptions, type IndexedDbStepDurabilityOptions, type InferenceMode, type InlinedAttachments, type KeyedSlot, LOCAL_PICKER_GROUPS, LOCAL_SKIP_CONFIDENCE, LOCAL_SKIP_EXPLORE, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, type LocalAttemptFit, type LocalBrainPersistenceOptions, type LocalChatIdentity, type LocalChatMessage, type LocalFetch, type LocalFirstStreamInput, type LocalModelRow, type LocalModelState, type LocalModelStore, type LocalPickerGroup, type LocalPickerView, type LocalRatingVerdict, type LocalStreamRoute, type LocalSuccessContribution, type LocalSuccessFederation, type LocalSuccessFleetHead, type LocalSuccessSnapshot, type LocalSuccessStore, MAX_INLINE_TEXT_BYTES, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, type MessageRatings, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackChannel, type ModelFallbackEvent, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, type OnDeviceStoreScope, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PREVIEW_REVIEW_TOOL, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type PackForModelInput, type PackForModelResult, PageEngine, type PageEngineSet, type PageEngineSetOptions, type PageRuntimePin, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingAskUser, type PersistedStep, type PersonaModalityId, type PlaceholderHit, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PrefetchConfirm, type PreparedImage, ProjectMemoryRequest, type PromptApiAvailability, type PromptApiFactory, type PromptApiMessage, type PromptApiSession, PromptInput, type PromptInputProps, type ProvenanceAccount, type ProviderFailureEvent, type QueuedItem, type QueuedTurns, type QueuedTurnsOptions, READ_FILE_RESULT_CHARS, REVISIT_HARD_AT, REVISIT_NUDGE_AT, RUN_REFRESH_MS, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, ReasoningIntent, type RecipientChoice, type RecordAvoidedCallInput, type RestorableTurn, type RouteReport, type RouteRunRecord, type RoutedProduct, RunEndOutcome, type RunEngineControl, RunKey, type RunMilestoneActivity, type RunMilestonePhase, type RunNoteStep, type RunOutcomeValue, RunProgress, type RunSteerMessage, type RunUsageLedger, type RunUsageValue, RunWindowSources, STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, STREAM_IDLE_MS, STUDIO_WORKSPACE_TOOLS, type ScoreBin, type SendContext, SpendSavingsSummary, StaffingSummary, type SteerTurn, type StepDurability, type StepOutgoingMessage, type StoppedTurnSource, StreamChatOptions, StreamChatResult, StreamHandlers, StreamIdleError, type SubagentDiagnosticsInput, type SummaryStreamFn, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TicketTag, type TicketToken, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolSelection, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNSCOPED_MUTATION_TOOLS, type UnreviewedChangeInput, type UnshippedChangeInput, type UsagePipelineRoute, UsageSurface, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, type WindowFitTrace, XmlToolCallFilter, activeHashtagToken, activeMentionToken, activeModelKey, activeTicketToken, activityIcon, activityMessageCount, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, appendRunMessage, applyRemoteRun, artifactRoutePath, asProvenanceAccount, askUserAnchorId, askUserBlock, attemptedPublish, bindChatHistoryForSync, brainPersonaAgents, brainUploadUrl, buildChatDiagnosticsReport, buildComposerDirectives, buildModelItems, byoVendorLabel, callCostOrUnknown, canChangeCodeHere, canReviewInPreview, canRunInParallel, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatDoorLiveness, chatWorkLinkingDirective, childTaskBrief, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, codeChangesOf, coerceAskUserPayload, completeLocal, completeLocalFirst, composeEvermindHooks, contextUsageOf, createBrainRestPersistence, createBrowserEngineProber, createComposingActivity, createDraftBinding, createHandoffFit, createHostModelStream, createLocalBrainPersistence, createLocalChatIdentity, createLocalFirstStream, createLocalStream, createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, createPayloadBudget, createRunUsageLedger, declinesReview, declinesShipping, defaultInferenceMode, deferredLocalModelStore, deriveChatTitle, describeNetworkError, describeTool, directedAgentRecipients, dirtyPathsOf, displayModelName, drainRunSteering, executeHandOff, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, filterTicketCandidates, findTools, forgetResolvedModels, formatAssistantTranscriptHeading, formatChatDiagnostics, formatChatDiagnosticsReportJson, formatRunProgress, formatSubagentDiagnostics, gateAcceptedSince, gatewayCanChooseModel, gatewayModelIdentity, gatewayModelWindows, gatewayPlanIsPaid, gatewayPlanModels, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasPromptApi, hasWebGPU, inferenceModeForModelPick, installIndexedDbStepDurability, installRunDriver, installStepDurability, invalidateGatewayModelOptions, isActivityMessage, isCodeChangeTool, isCoderReask, isConnectFailure, isConnectedAccountUnused, isDirectedToParticipant, isFallbackFailure, isInferenceMode, isLive, isLocalWorkspaceTool, isMalformedToolCall, isManagerRole, isModelReply, isReadOnlyShellCall, isRepoPublishTool, isRouterTool, isRunning, isStoppedBeforeStart, isStoppedTurn, isTicketRecordingTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, joinRestorableTurns, lastServedModel, leftChangeUnreviewed, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, loadGatewayModelOptions, loadOnDeviceAnswerStore, localFirstApplies, localFirstWorkload, localPickerView, localRatingVerdict, localStorageConfirmationPersistence, localToolsIn, localTransport, mcpActionsFrom, mentionRecipient, modalityPersonaChoice, modelCategoryLabel, modelFallbackText, modelInUse, nextFallbackModel, noteRunStep, onDeviceMemoryHooks, packForModel, pageEnginesFetch, pageRuntimePin, parseAskUser, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseHandOff, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, personalitySetpoints, placeholderAdvisory, placeholdersWritten, planMessage, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, prefetchConfirmOf, premiumCostLabel, prepareImageDataUrl, previewReviewDirective, probePageEngines, productForPlan, productModelName, progressDuration, promptApiAvailability, promptApiFactory, promptApiInputQuota, promptApiMeasure, promptStreamDeltas, providerFailureEvent, providerFailureTrace, queueRunSteering, ratedTurnContext, ratedTurnTool, readChatRunHistory, readChatTicketLinks, readWithIdleWatchdog, repeatedFailureAdvisory, resetApiVersionCache, resetBrainRunStore, resetOnDeviceStoresForTests, resolveBrainStream, resolveRecipient, resolveRunConfirm, restoreTurn, retryOnConnectFailure, revealsModelId, revisitAdvisory, routeRunRecords, routerToolSpecs, routingModeForSelection, routingQueryForTurn, runAbortSignal, startRun as runBrainLoop, runOutcomesSince, runProgressVerdict, savePendingPrompt, selectPendingAskUser, selectToolsForTurn, selfReviewShipDirective, serializeAskUser, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, signedBrainFileUrl, slotKeyedRows, stableStringify, startEngineRun, startRun, startsRun, steerModelContent, steersByDefault, stepRow, stepSig, stopBeforeStart, stopRun, stoppedBeforeStartRow, stoppedTurnMetadata, streamSummaryCompletion, stripAskUser, studioToolsIn, submitLocalTurnVerdict, subscribeRun, subscribeRunStore, subscribeToChatMessages, summarizeGateRuns, summarizeRouteRuns, takePendingPrompt, ticketsReviewedInPreview, toPromptApiTurn, toolCallArgBytes, toolNamesMentionedIn, toolSchemaTokens, toolSpecsFor, traceWithPersistedSteps, transcriptSeedOf, transportRetryTrace, trimToolResult, turnAffectBlock, turnInterruption, turnOptimizationDirective, unreviewedChangeNudge, unshippedChangeNudge, usageRowsSince, useArmedNewChat, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useChatCreation, useChatTurns, useComposerDraft, useMcpExtensions, useOptionalBrainContext, useQueuedTurns, useRegisterBrainActions, useRunRefreshTick, useRunSnapshot, useToolConfirmationGate, utf8ByteLength, webStorageLocalSuccessStore, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, withRating, withReadyPageModels, withRunUsage, withUsageSurface, workItemLinkFromCreate };
