@@ -95,9 +95,6 @@ export interface ServedIdentity {
   onDevice: boolean;
   /** The model that answered, for pricing, routing and the ledger; undefined when the result names none. */
   name: string | undefined;
-  /** A local-first attempt was served. When true, the model that was merely asked for must never stand in
-   *  for a missing `name`: the attempt says where the turn went. */
-  viaAttempt: boolean;
 }
 
 /**
@@ -108,14 +105,17 @@ export interface ServedIdentity {
  *   - A served cloud attempt carries only the placeholder {@link GATEWAY_ATTEMPT_TARGET}, so the model
  *     comes from `resolvedModel` — else from the attempt's own target when that is a real model id, else
  *     it is unnamed (and never on the device).
- * The model ASKED FOR is never an answer: a picked local model can fall back to the cloud without a word.
+ * The model ASKED FOR (`requested`) is never an answer — a picked local model can fall back to the cloud without
+ * a word, so it never decides `onDevice` — and it stands in for the NAME only when the result says nothing of
+ * how the call was served: no served attempt AND no resolved model. Once an attempt served, an unnamed answer
+ * (a gateway placeholder with nothing resolved) stays unnamed: the request must not name a call the cloud answered.
  */
-export function servedIdentity(result: ServedResult): ServedIdentity {
+export function servedIdentity(result: ServedResult, requested?: string): ServedIdentity {
   const served = servedAttempt(result);
-  if (!served) return { onDevice: runsOnDevice(result.resolvedModel), name: result.resolvedModel, viaAttempt: false };
-  if (isLocalModelRef(served.target)) return { onDevice: runsOnDevice(served.target), name: served.target, viaAttempt: true };
+  if (!served) return { onDevice: runsOnDevice(result.resolvedModel), name: result.resolvedModel ?? requested };
+  if (isLocalModelRef(served.target)) return { onDevice: runsOnDevice(served.target), name: served.target };
   const name = result.resolvedModel ?? (served.target !== GATEWAY_ATTEMPT_TARGET ? served.target : undefined);
-  return { onDevice: false, name, viaAttempt: true };
+  return { onDevice: false, name };
 }
 
 /** Whether the completion was answered on this device (see {@link servedIdentity}). */

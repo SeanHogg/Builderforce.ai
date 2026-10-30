@@ -64,6 +64,11 @@ describe("resuming a tally written before the cost latch", () => {
     expect(resumed.costMc).toBeNull();
   });
 
+  it("resumes cost-unknown when the only trace of a turn is its served model or a dispatched call (a turn that reported no usage)", () => {
+    expect(resumeTally(legacy({ tokens: 0, toolCalls: 0, model: "m" })).costMc).toBeNull();
+    expect(resumeTally(legacy({ tokens: 0, toolCalls: 2 })).costMc).toBeNull();
+  });
+
   it("leaves a legacy tally that took no turn alone", () => {
     expect(resumeTally({ toolCalls: 0, toolErrors: 0, tokens: 0, cacheReadTokens: 0, shellFileReads: 0, repoErrors: 0 } as never).costMc).toBeUndefined();
   });

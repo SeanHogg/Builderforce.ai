@@ -123,7 +123,7 @@ describe('run usage ledger — spend on the device', () => {
       { clientEventId: 'a', clientChatId: 'c', runKey: 1, model: 'openai/gpt-x', route: 'gateway', promptTokens: 1_000_000, completionTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, at: '2026-10-24T00:00:00Z' },
       { clientEventId: 'b', clientChatId: 'c', runKey: 1, model: 'local/ollama/q', route: 'local', promptTokens: 100, completionTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, savingsSource: 'local_model', savedPrompt: 100, savedCompletion: 0, savedCostMc: 50, at: '2026-10-24T00:00:01Z' },
     ];
-    const server = foldSpendSavings([{ model: 'openai/gpt-x', byo: false, savingsSource: null, savingsEstimated: false, prompt: 1_000_000, completion: 0, cacheRead: 0, cacheCreation: 0, total: 1_000_000, costMc: 100_000, calls: 1, cacheCalls: 0, savedPrompt: 0, savedCompletion: 0, recallPrompt: 0, savedCostMc: 0, trimCalls: 0, recallCalls: 0, rows: 1 }], BOOK);
+    const server = foldSpendSavings([{ model: 'openai/gpt-x', unpriced: false, byo: false, savingsSource: null, savingsEstimated: false, prompt: 1_000_000, completion: 0, cacheRead: 0, cacheCreation: 0, total: 1_000_000, costMc: 100_000, calls: 1, cacheCalls: 0, savedPrompt: 0, savedCompletion: 0, recallPrompt: 0, savedCostMc: 0, trimCalls: 0, recallCalls: 0, rows: 1 }], BOOK);
     const local = ledgerSpend(rows, { excludeGateway: true, book: BOOK })!;
     const both = combineSpendSavings(server, local);
     expect(both.spend.totalUsd).toBeCloseTo(1);

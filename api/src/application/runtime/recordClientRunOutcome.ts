@@ -112,13 +112,13 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
           rateLimited: !!o.rateLimited,
         });
       }
-      // A new labeled outcome means the tenant's SFT/DPO datasets + variant-eval
-      // views are stale — orphan them (best-effort, same fold gate as routing).
+      // A new labeled outcome means the tenant's SFT/DPO datasets + variant-eval views are stale - orphan
+      // them (best-effort). Deliberately OUTSIDE the `foldsIntoRouting` gate above: a stopped or quota-ended
+      // run is still a stored, labeled row the datasets count, even though it teaches the routing table nothing.
       await bumpOutcomesVersion(env, tenantId);
     }
   } catch (error) {
     // Never let outcome reporting fail the caller.
-  
     reportCaughtError(error, { source: "application/runtime/recordClientRunOutcome.ts", operation: "recordClientRunOutcome" });
   }
 }

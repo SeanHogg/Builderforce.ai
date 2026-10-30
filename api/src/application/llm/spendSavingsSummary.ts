@@ -18,6 +18,7 @@ import { llmUsageLog } from '../../infrastructure/database/schema';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { EMPTY_PRICE_BOOK, loadPriceBook, type PriceBook } from './catalogView';
 import { usageDatabaseOf, usageRequestCount } from './usageLedger';
+import { listPriceOf } from '@builderforce/model-catalog';
 import { foldSpendSavings, type SpendSavingsSummary, type UsageSlice } from '@builderforce/spend-contract';
 
 // The wire contract AND its fold are declared once, in `@builderforce/spend-contract`:
@@ -59,10 +60,12 @@ const sliceColumns = {
 
 type SliceRow = { [K in keyof typeof sliceColumns]: unknown };
 
-function toSlice(r: SliceRow): UsageSlice {
+/** The platform ledger's slice — its unpriced rule: the catalog book has no list price for the model. */
+function toSlice(r: SliceRow, book: PriceBook): UsageSlice {
   const n = (v: unknown) => Number(v ?? 0);
   return {
     model: String(r.model),
+    unpriced: !listPriceOf(book, String(r.model)),
     byo: r.byo === true,
     savingsSource: (r.savingsSource as string | null) ?? null,
     savingsEstimated: r.savingsEstimated === true,
@@ -117,7 +120,7 @@ export async function chatsSpendSavings(
       for (const r of rows) {
         const id = Number(r.chatId);
         const list = byChat.get(id) ?? [];
-        list.push(toSlice(r));
+        list.push(toSlice(r, book));
         byChat.set(id, list);
       }
       return [...byChat].map(([id, slices]) => [id, foldSpendSavings(slices, book)] as const);
@@ -147,7 +150,7 @@ export function periodSpendSavings(env: Env | undefined, db: Db, tenantId: numbe
           .groupBy(llmUsageLog.model, llmUsageLog.byo, llmUsageLog.savingsSource, llmUsageLog.savingsEstimated),
         priceBookFor(env),
       ]);
-      return foldSpendSavings(rows.map(toSlice), book);
+      return foldSpendSavings(rows.map((r) => toSlice(r, book)), book);
     },
     { kvTtlSeconds: 300, l1TtlMs: 60_000 },
   );

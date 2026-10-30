@@ -58,11 +58,13 @@ export function freshTally(): RunTally {
  * A tally persisted before the cost latch existed (no `costLatch` marker) cannot say whether every turn was
  * priced — its `costMc` may be a partial sum — so a run that already took turns resumes with its cost UNKNOWN
  * (`null`) rather than a figure that may be missing turns. A legacy tally that took no turn has nothing to
- * distrust.
+ * distrust. "Took a turn" is read from any trace of one: a cost figure, tokens, a served model, or a dispatched call
+ * (a turn that reported no usage still names its model and still runs its tools).
  */
 export function resumeTally(saved: Partial<RunTally> | undefined): RunTally {
   const tally: RunTally = { ...freshTally(), ...(saved ?? {}) };
-  if (saved && saved.costLatch !== true && ((saved.costMc ?? undefined) !== undefined || (saved.tokens ?? 0) > 0)) tally.costMc = null;
+  const tookTurns = !!saved && (saved.costMc != null || (saved.tokens ?? 0) > 0 || saved.model !== undefined || (saved.toolCalls ?? 0) > 0);
+  if (saved && saved.costLatch !== true && tookTurns) tally.costMc = null;
   return tally;
 }
 

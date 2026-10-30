@@ -14,7 +14,7 @@ import {
   canvasTurnShape,
 } from '@/lib/canvasAiTurnBudget';
 import type { CanvasRun } from '@/lib/canvasAiRun';
-import { servedOnDevice } from '@builderforce/local-inference';
+import { servedOnDevice, servedRef } from '@builderforce/local-inference';
 import { cachedModelWindow } from '@/lib/llmModelWindow';
 import { toChatMessages } from '@/lib/canvasRunMessages';
 
@@ -179,10 +179,12 @@ export function canvasModelTransport(run: CanvasRun): ModelTransport {
       // The calls about to run own the turn; what the model said around them is not an answer.
       if (result.toolCalls.length > 0) run.finalText = '';
       const interrupted = turnInterruption(result.finishReason);
+      const served = servedRef(result);
       return {
         content: result.text,
         toolCalls: result.toolCalls.map((call) => ({ id: call.id, name: call.name, arguments: call.args })),
-        ...(result.resolvedModel ? { model: result.resolvedModel } : {}),
+        // The model that ANSWERED (`servedRef`: a served attempt's name outranks the stream's `resolvedModel`).
+        ...(served ? { model: served } : {}),
         // What the gateway reported, in the agent's words: the run's tally sums these into the
         // §8.2 row's tokens and cache reads, and — for a turn the on-device model served — a known cost of 0.
         ...turnUsage(result),

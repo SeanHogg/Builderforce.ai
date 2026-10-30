@@ -84,19 +84,15 @@ export interface RunUsageValue {
 
 /**
  * The model that answered a call — the ONE name its route, its price and its ledger row all come from
- * (`servedIdentity`). The model that was merely ASKED FOR stands in only when the result says nothing of how
- * the call was served: no served attempt AND no resolved model. Once an attempt served, an unnamed answer
- * (a gateway placeholder with nothing resolved) stays unnamed — the request must not name a call the
- * cloud answered.
+ * (`servedIdentity`, which also owns when the model merely ASKED FOR may stand in for it).
  */
 export function servedModel(result: Pick<StreamChatResult, 'resolvedModel' | 'localFirst'>, requested?: string): string | undefined {
-  const identity = servedIdentity(result);
-  return identity.name ?? (identity.viaAttempt ? undefined : requested);
+  return servedIdentity(result, requested).name;
 }
 
 /** Which route served a call, from what the stream reported. */
 export function usageRouteOf(result: Pick<StreamChatResult, 'resolvedModel' | 'localFirst'>, requested?: string): UsageRoute {
-  // 'local' ONLY for a call the device answered (the one rule, `servedOnDevice`): a call that merely asked
+  // 'local' ONLY for a call the device answered (the one rule, `servedIdentity`): a call that merely asked
   // for a local model and was answered elsewhere is not the device's free work.
   if (servedIdentity(result).onDevice) return 'local';
   // Off the device: a hosted local-grammar runtime (Kimi Code) or a direct id is the person's own account

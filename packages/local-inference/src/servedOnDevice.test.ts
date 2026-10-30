@@ -82,24 +82,31 @@ describe('hostedCatalogId', () => {
 
 describe('servedIdentity — who answered, in one reading', () => {
   it('reads a served on-device attempt as on-device and names it', () => {
-    expect(servedIdentity({ localFirst: [{ target: 'local/ollama/qwen', outcome: 'served' }] })).toEqual({ onDevice: true, name: 'local/ollama/qwen', viaAttempt: true });
+    expect(servedIdentity({ localFirst: [{ target: 'local/ollama/qwen', outcome: 'served' }] })).toEqual({ onDevice: true, name: 'local/ollama/qwen' });
   });
 
   it('reads a served hosted local-grammar attempt as off-device but still names it', () => {
-    expect(servedIdentity({ localFirst: [{ target: 'local/kimi-code/k3', outcome: 'served' }] })).toEqual({ onDevice: false, name: 'local/kimi-code/k3', viaAttempt: true });
+    expect(servedIdentity({ localFirst: [{ target: 'local/kimi-code/k3', outcome: 'served' }] })).toEqual({ onDevice: false, name: 'local/kimi-code/k3' });
   });
 
   it('reads a served gateway placeholder with nothing resolved as an UNNAMED cloud answer', () => {
-    expect(servedIdentity({ localFirst: [{ target: GATEWAY_ATTEMPT_TARGET, outcome: 'served' }] })).toEqual({ onDevice: false, name: undefined, viaAttempt: true });
+    expect(servedIdentity({ localFirst: [{ target: GATEWAY_ATTEMPT_TARGET, outcome: 'served' }] })).toEqual({ onDevice: false, name: undefined });
   });
 
   it('names a served cloud attempt by the resolved model', () => {
-    expect(servedIdentity({ localFirst: [{ target: GATEWAY_ATTEMPT_TARGET, outcome: 'served' }], resolvedModel: 'direct/minimax/m' })).toEqual({ onDevice: false, name: 'direct/minimax/m', viaAttempt: true });
+    expect(servedIdentity({ localFirst: [{ target: GATEWAY_ATTEMPT_TARGET, outcome: 'served' }], resolvedModel: 'direct/minimax/m' })).toEqual({ onDevice: false, name: 'direct/minimax/m' });
   });
 
   it('reads a result with no attempts from its resolved model', () => {
-    expect(servedIdentity({ resolvedModel: 'local/webllm/qwen' })).toEqual({ onDevice: true, name: 'local/webllm/qwen', viaAttempt: false });
-    expect(servedIdentity({})).toEqual({ onDevice: false, name: undefined, viaAttempt: false });
+    expect(servedIdentity({ resolvedModel: 'local/webllm/qwen' })).toEqual({ onDevice: true, name: 'local/webllm/qwen' });
+    expect(servedIdentity({})).toEqual({ onDevice: false, name: undefined });
+  });
+
+  it('lets the requested model stand in for the NAME only when nothing says how the call was served — never for onDevice', () => {
+    expect(servedIdentity({}, 'openai/gpt-x')).toEqual({ onDevice: false, name: 'openai/gpt-x' });
+    expect(servedIdentity({}, 'local/ollama/qwen')).toEqual({ onDevice: false, name: 'local/ollama/qwen' });
+    expect(servedIdentity({ resolvedModel: 'vendor/model' }, 'openai/gpt-x')).toEqual({ onDevice: false, name: 'vendor/model' });
+    expect(servedIdentity({ localFirst: [{ target: GATEWAY_ATTEMPT_TARGET, outcome: 'served' }] }, 'openai/gpt-x')).toEqual({ onDevice: false, name: undefined });
   });
 
   it('servedOnDevice and servedRef are projections of it', () => {

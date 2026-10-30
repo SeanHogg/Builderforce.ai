@@ -44,15 +44,29 @@ export function runBudgetCapMillicents(maxRunBudgetUsd: number | undefined): num
     : null;
 }
 
+/** The tree's unpriced-call count, the only part of it the wording reads. */
+type UnpricedCalls = Pick<RunSpendTree, 'unpricedCalls'>;
+
+/** What a tree with unpriced calls adds to every spend sentence — null when every call was priced. The cap counts
+ *  only priced spend, so such a tree is under-counted: its figure is a FLOOR ("at least"), never read as exact. */
+function noPriceNote(tree?: UnpricedCalls): string | null {
+  const n = tree?.unpricedCalls ?? 0;
+  return n > 0 ? `${n} ${n === 1 ? 'call' : 'calls'} had no known price` : null;
+}
+
 /** What the model reads once the run has used 80% of its budget. */
-export function budgetWarning(spentMc: number, capMc: number): string {
-  return `[Run budget] This run has spent ${usd(spentMc)} of its ${usd(capMc)} budget — over 80%. Stop exploring and converge: `
+export function budgetWarning(spentMc: number, capMc: number, tree?: UnpricedCalls): string {
+  const note = noPriceNote(tree);
+  const spent = note ? `at least ${usd(spentMc)} (${note})` : usd(spentMc);
+  return `[Run budget] This run has spent ${spent} of its ${usd(capMc)} budget — over 80%. Stop exploring and converge: `
     + 'finish the essential change now, then answer with what you did and exactly what is left.';
 }
 
 /** The reply a run stopped at its cap settles with. */
-export function budgetContainedReply(spentMc: number, capMc: number): string {
-  return `Run stopped: it reached its ${usd(capMc)} spend budget (${usd(spentMc)} spent). `
+export function budgetContainedReply(spentMc: number, capMc: number, tree?: UnpricedCalls): string {
+  const note = noPriceNote(tree);
+  const spent = note ? `at least ${usd(spentMc)} spent — ${note}` : `${usd(spentMc)} spent`;
+  return `Run stopped: it reached its ${usd(capMc)} spend budget (${spent}). `
     + 'Nothing was rolled back — the changes made so far are in place. Ask to continue to resume from here, '
     + 'or raise the "builderforce.maxRunBudgetUsd" setting (0 turns the cap off).';
 }
@@ -116,7 +130,7 @@ export function runSpendBudget(run: RunLoopContext, book?: PriceBook): SpendHook
   const contain = async (): Promise<StopDecision> => {
     const { c, chatId, convo, req } = run;
     const spentMc = tree.spentMc;
-    const text = budgetContainedReply(spentMc, capMc);
+    const text = budgetContainedReply(spentMc, capMc, tree);
     noteBudgetContained(c);
     pushTrace(c, {
       ts: nowIso(),
@@ -141,7 +155,7 @@ export function runSpendBudget(run: RunLoopContext, book?: PriceBook): SpendHook
       if (runBudgetBreach(caps, usage)) return contain();
       if (!warned && runBudgetWarnDue(caps, usage)) {
         warned = true;
-        const warning = budgetWarning(spentMc, capMc);
+        const warning = budgetWarning(spentMc, capMc, tree);
         // Tagged `<run-state>`: the packer keeps it out of "the latest user directive" and
         // the cache breakpoint lands before it, as for the turn's own volatile tail.
         run.convo.push(volatileTail([warning])!);

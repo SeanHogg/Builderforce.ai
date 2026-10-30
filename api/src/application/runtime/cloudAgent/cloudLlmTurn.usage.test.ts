@@ -15,7 +15,7 @@ vi.mock('../../llm/catalogView', async (importOriginal) => ({
 
 import { recordCloudLlmTurn, recordCloudUsage } from './cloudLlmTurn';
 import { computeCostMillicents } from '../../llm/usageLedger';
-import { llmUsageLog } from '../../../infrastructure/database/schema';
+import { llmUsageLog, toolAuditEvents } from '../../../infrastructure/database/schema';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { Env } from '../../../env';
 
@@ -30,7 +30,11 @@ function fakeDb() {
       },
     }),
   } as unknown as Db;
-  return { db, usageRows: () => rows.filter((r) => r.table === llmUsageLog).map((r) => r.row) };
+  return {
+    db,
+    usageRows: () => rows.filter((r) => r.table === llmUsageLog).map((r) => r.row),
+    auditRows: () => rows.filter((r) => r.table === toolAuditEvents).map((r) => r.row),
+  };
 }
 
 const env = {} as Env;
@@ -82,5 +86,33 @@ describe('recordCloudLlmTurn — forwards the turn result usage', () => {
     const meta = row!.metadata as Record<string, unknown>;
     expect(meta.context).toMatchObject({ system: 10, toolOutputs: 20, tools: row!.toolSchemaTokens, estimated: true });
     expect(meta.costLevers).toMatchObject({ on: expect.any(Array), off: expect.any(Array) });
+  });
+});
+
+describe('recordCloudLlmTurn — records whether THIS turn was served by a weaker model than it asked for', () => {
+  const turnFor = (requestedModel: string | undefined, resolvedModel: string) => ({
+    result: {
+      response: new Response(JSON.stringify({ choices: [{ message: { content: 'done' } }] }), { status: 200 }),
+      resolvedModel,
+    } as unknown as Parameters<typeof recordCloudLlmTurn>[0],
+    rc: { env, db: undefined as never, tenantId: 1, executionId: 9, taskId: 3, ...(requestedModel ? { requestedModel } : {}) },
+  });
+  const completeDetail = async (requestedModel: string | undefined, resolvedModel: string) => {
+    const { db, auditRows } = fakeDb();
+    const { result, rc } = turnFor(requestedModel, resolvedModel);
+    await recordCloudLlmTurn(result, { ...rc, db }, { tGen0: Date.now(), step: 0, notify: false });
+    const row = auditRows().find((r) => r.toolName === 'llm.complete');
+    return JSON.parse(String(row?.args)) as Record<string, unknown>;
+  };
+
+  it('ULTRA coder asked, STANDARD curated coder served: weaker (degraded) — with the requested model on the event', async () => {
+    const detail = await completeDetail('anthropic/claude-opus-4.5', 'anthropic/claude-haiku-4.5');
+    expect(detail).toMatchObject({ requestedModel: 'anthropic/claude-opus-4.5', model: 'anthropic/claude-haiku-4.5', weaker: true });
+  });
+
+  it('the same model, a stronger one, or no intended model: not weaker', async () => {
+    expect(await completeDetail('anthropic/claude-haiku-4.5', 'anthropic/claude-haiku-4.5')).toMatchObject({ weaker: false });
+    expect(await completeDetail('anthropic/claude-haiku-4.5', 'anthropic/claude-opus-4.5')).toMatchObject({ weaker: false });
+    expect(await completeDetail(undefined, 'anthropic/claude-haiku-4.5')).toMatchObject({ weaker: false, requestedModel: null });
   });
 });

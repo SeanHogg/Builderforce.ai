@@ -26,7 +26,7 @@ import {
   type GateReport,
   type RouteReport,
 } from "@seanhogg/builderforce-brain-embedded";
-import { MIN_QUICK_RUNS_FOR_SUGGESTION } from "@builderforce/pipeline-route";
+import { MIN_QUICK_RUNS_FOR_SUGGESTION, type RouteTotals } from "@builderforce/pipeline-route";
 import { MILLICENTS_PER_USD } from "@builderforce/spend-contract";
 import { localBrainApplication } from "./localFirstStore";
 
@@ -41,7 +41,7 @@ const usd = (millicents: number): string => `$${(millicents / MILLICENTS_PER_USD
 const score = (n: number | null): string => (n == null ? "—" : n.toFixed(2));
 
 /** A route's cost cell: the priced figure, and — never as a $0 — how many runs have no known price. */
-function costCell(totals: { runs: number; costMc: number; unpricedRuns?: number }, t: Translate): string {
+function costCell(totals: RouteTotals, t: Translate): string {
   const unpriced = totals.unpricedRuns ?? 0;
   if (unpriced === 0) return usd(totals.costMc);
   if (unpriced >= totals.runs) return t("unpriced");
