@@ -34,6 +34,9 @@ export interface UsageSlice {
   cacheCreation: number;
   total: number;
   costMc: number;
+  /** The producer could not price this call (off the device, no price known): counted as `unpricedTokens`, never
+   *  valued. Absent = derive it from the book, as the platform ledger's slices do. */
+  unpriced?: boolean;
   calls: number;
   cacheCalls: number;
   savedPrompt: number;
@@ -119,15 +122,16 @@ export function foldSpendSavings(slices: readonly UsageSlice[], book: PriceBook)
     // price for that model, not left unpriced at $0.
     const price = listPriceOf(book, g.model);
     const pricing = price ? { prompt: price.input, completion: price.output } : undefined;
-    if (!pricing) spend.unpricedTokens += g.total;
-    else if (g.byo) {
+    const unpriced = g.unpriced ?? !pricing;
+    if (unpriced) spend.unpricedTokens += g.total;
+    else if (g.byo && pricing) {
       yourKeyMc += computeCostMillicents(pricing, {
         promptTokens: g.prompt, completionTokens: g.completion, totalTokens: g.total,
         cacheReadTokens: g.cacheRead, cacheCreationTokens: g.cacheCreation,
       });
     }
     // Compaction and recall on real calls — split by the same price the writer used.
-    if (pricing) {
+    if (pricing && !unpriced) {
       addSaving(acc, 'context_trim', Math.round(g.savedPrompt * pricing.prompt * 100_000), g.savedPrompt, g.trimCalls, true);
       addSaving(acc, 'recall_overhead', -Math.round(g.recallPrompt * pricing.prompt * 100_000), -g.recallPrompt, g.recallCalls, true);
       // The provider's own prompt cache: a cache READ costs 0.1× input (saves 0.9×); a

@@ -1,12 +1,10 @@
 /**
  * What a run cost, from what each turn reported (PRD 35 §8.2). A turn the transport did not price
  * has an UNKNOWN cost, and a run with such a turn has an unknown total — never the sum of the
- * priced turns. One rule for the run tally and the event-trace fold alike.
+ * priced turns. A tally persisted before the rule existed resumes cost-unknown, not as a figure that may be missing turns.
  */
 import { describe, expect, it } from "vitest";
-import { buildOutcomeRow, freshTally, tallyTurn, type RunEvent, type RunState } from "../../src/index.js";
-import { reportedRunCost } from "../../src/telemetry/costTally.js";
-import { emptyTally, foldEvent } from "../../src/telemetry/eventTally.js";
+import { buildOutcomeRow, freshTally, resumeTally, tallyTurn, type RunState } from "../../src/index.js";
 import { freshState } from "../../src/runState.js";
 import { TEST_POLICY, TEST_TASK } from "../support/policyContext.js";
 
@@ -18,14 +16,6 @@ function rowCost(turns: Array<number | undefined>): number | undefined {
   for (const costMc of turns) tallyTurn(t, "m", usage(costMc));
   s.telemetry = t;
   return buildOutcomeRow({ entryPoint: "web", kind: "finished", state: s }).cost;
-}
-
-function traceCost(turns: Array<number | undefined>) {
-  const tally = emptyTally();
-  for (const costMc of turns) {
-    foldEvent(tally, { kind: "model.completed", step: 1, model: "m", usage: usage(costMc) } as unknown as RunEvent);
-  }
-  return tally;
 }
 
 describe("the run's reported cost", () => {
@@ -59,14 +49,28 @@ describe("the run's reported cost", () => {
   });
 });
 
-describe("the event-trace fold agrees", () => {
-  it("latches unpriced the same way", () => {
-    // Unknown, never the partial sum of the priced turns.
-    expect(reportedRunCost(traceCost([0, undefined]).cost)).toBeUndefined();
-    expect(reportedRunCost(traceCost([40, undefined, 60]).cost)).toBeUndefined();
-    expect(reportedRunCost(traceCost([undefined, 40]).cost)).toBeUndefined();
-    expect(reportedRunCost(traceCost([0, 0]).cost)).toBe(0);
-    expect(reportedRunCost(traceCost([40, 60]).cost)).toBe(100);
-    expect(reportedRunCost(traceCost([]).cost)).toBeUndefined();
+describe("resuming a tally written before the cost latch", () => {
+  const legacy = (over: Record<string, unknown>) => ({ toolCalls: 3, toolErrors: 0, tokens: 900, cacheReadTokens: 0, shellFileReads: 0, repoErrors: 0, ...over }) as never;
+
+  it("resumes cost-unknown when the legacy tally holds a figure — it may be the sum of only the priced turns", () => {
+    expect(resumeTally(legacy({ costMc: 25 })).costMc).toBeNull();
+  });
+
+  it("resumes cost-unknown when the legacy run took turns but none was priced (a later priced turn must not start a partial sum)", () => {
+    const resumed = resumeTally(legacy({}));
+
+    expect(resumed.costMc).toBeNull();
+    tallyTurn(resumed, "m", usage(40));
+    expect(resumed.costMc).toBeNull();
+  });
+
+  it("leaves a legacy tally that took no turn alone", () => {
+    expect(resumeTally({ toolCalls: 0, toolErrors: 0, tokens: 0, cacheReadTokens: 0, shellFileReads: 0, repoErrors: 0 } as never).costMc).toBeUndefined();
+  });
+
+  it("keeps a latch-era tally exactly as it was written", () => {
+    expect(resumeTally({ ...freshTally(), tokens: 900, costMc: 25 }).costMc).toBe(25);
+    expect(resumeTally({ ...freshTally(), tokens: 900, costMc: null }).costMc).toBeNull();
+    expect(resumeTally(undefined).costMc).toBeUndefined();
   });
 });

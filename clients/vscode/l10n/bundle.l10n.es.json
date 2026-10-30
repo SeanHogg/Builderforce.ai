@@ -986,6 +986,8 @@
   "Avg score": "Puntuación media",
   "Full pipeline": "Pipeline completo",
   "Quick pass": "Pasada rápida",
+  "{0} + {1} unpriced": "{0} + {1} sin precio",
+  "unpriced": "sin precio",
   "Score histogram": "Histograma de puntuaciones",
   "Score": "Puntuación",
   "Misroutes": "Rutas erróneas",

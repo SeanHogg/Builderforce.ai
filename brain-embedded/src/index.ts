@@ -22,7 +22,7 @@ export type { RecordAvoidedCallInput, RunOutcomeValue } from './localChat/gateLe
 // The pipeline route report (WS-R): the device ledger's routed runs, priced with the one
 // device cost rule, and the pure report math they feed (`@builderforce/pipeline-route`).
 export { gateAcceptedSince, routeRunRecords, runOutcomesSince, summarizeGateRuns, usageRowsSince, type GateReport, type GateRouteStats } from './localChat/routeLedger';
-export { callCostMillicents } from './localChat/callCost';
+export { callCostOrUnknown } from './localChat/callCost';
 export type { RunUsageValue, UsagePipelineRoute } from './localChat/usageLedger';
 export type { RunEndOutcome } from './runStore/runTypes';
 export { DEFAULT_ROUTE_THRESHOLD, summarizeRouteRuns } from '@builderforce/pipeline-route';

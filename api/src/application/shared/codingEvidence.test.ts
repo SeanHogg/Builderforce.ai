@@ -24,6 +24,13 @@ describe('codingEvidence', () => {
     expect(params).toEqual([true, 'cancelled', false]);
   });
 
+  /** A source file's code with its imports and comments removed, so a match is a USE, not a mention. */
+  const codeOf = (file: string): string =>
+    readFileSync(resolve(__dirname, '..', file), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '')
+      .replace(/^import[\s\S]*?;\s*$/gm, '');
+
   // Each of these reads run_model_outcomes to say how well agents CODE. A new lens of that kind
   // is added here, and fails here until it reads through the predicate.
   const LENSES = [
@@ -34,13 +41,28 @@ describe('codingEvidence', () => {
     'pmo/portfolioRollup.ts',
     'qa/QaQualityService.ts',
     'tools/toolDataProviders.ts',
-    'llm/recallSeed.ts',
-    'eval/variantEval.ts',
-    'llm/routingReconcile.ts',
   ];
 
   it.each(LENSES)('%s reads coding evidence only', (file) => {
-    const source = readFileSync(resolve(__dirname, '..', file), 'utf8');
-    expect(source).toContain('codingEvidence');
+    expect(codeOf(file)).toMatch(/codingEvidence/);
+  });
+
+  // These decide what the ROUTING TABLE learns, so they read the stricter predicate — a stopped run and a
+  // tenant-quota failure are excluded — and a rebuild admits exactly what the live fold admitted.
+  const ROUTING_READERS = [
+    'llm/routingReconcile.ts',
+    'llm/recallSeed.ts',
+    'eval/variantEval.ts',
+  ];
+
+  it.each(ROUTING_READERS)('%s calls teachesRouting', (file) => {
+    expect(codeOf(file)).toMatch(/teachesRouting/);
+  });
+
+  // The live fold gate: the same exclusions, applied to a run as it is recorded.
+  const LIVE_FOLD_GATES = ['runtime/recordClientRunOutcome.ts', 'runtime/scoreRunOutcome.ts'];
+
+  it.each(LIVE_FOLD_GATES)('%s gates the routing fold with foldsIntoRouting', (file) => {
+    expect(codeOf(file)).toMatch(/foldsIntoRouting\(/);
   });
 });

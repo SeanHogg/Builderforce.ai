@@ -17,7 +17,7 @@
 import type { LocalFirstStore } from '@builderforce/local-first';
 import type { PriceBook } from '@builderforce/model-catalog';
 import type { RouteRunRecord } from '@builderforce/pipeline-route';
-import { callCostMillicents } from './callCost';
+import { callCostOrUnknown } from './callCost';
 import { liveRecords } from './records';
 import type { RunEndOutcome } from '../runStore/runTypes';
 import type { RunOutcomeValue } from './gateLedger';
@@ -60,15 +60,16 @@ export function routeRunRecords(
   for (const row of rows) {
     if (row.pipelineRoute !== 'full' && row.pipelineRoute !== 'quick') continue;
     const key = row.runId ?? `${row.clientChatId}:${row.runKey}`;
-    const costMc = callCostMillicents(row.model, {
+    // null = this call's price is unknown; a run with any such call is unknown, never a partial figure.
+    const costMc = callCostOrUnknown(row.model, {
       prompt: row.promptTokens,
       completion: row.completionTokens,
       cacheRead: row.cacheReadTokens,
       cacheCreation: row.cacheCreationTokens,
-    }, book, row.route);
+    }, book, row.route) ?? null;
     const seen = runs.get(key);
     if (seen) {
-      seen.costMc += costMc;
+      seen.costMc = seen.costMc === null || costMc === null ? null : seen.costMc + costMc;
       if (row.at < seen.startedAt) seen.startedAt = row.at;
       continue;
     }

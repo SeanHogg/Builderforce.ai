@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GATEWAY_ATTEMPT_TARGET, hostedCatalogId, hostedDirectRef, servedOnDevice, servedRef } from './ref.js';
+import { GATEWAY_ATTEMPT_TARGET, hostedCatalogId, hostedDirectRef, pricedId, servedIdentity, servedOnDevice, servedRef } from './ref.js';
 
 describe('servedRef', () => {
   it('names a served LOCAL attempt by its target', () => {
@@ -79,3 +79,51 @@ describe('hostedCatalogId', () => {
     expect(hostedCatalogId('moonshotai/kimi-k3')).toBeUndefined();
   });
 });
+
+describe('servedIdentity — who answered, in one reading', () => {
+  it('reads a served on-device attempt as on-device and names it', () => {
+    expect(servedIdentity({ localFirst: [{ target: 'local/ollama/qwen', outcome: 'served' }] })).toEqual({ onDevice: true, name: 'local/ollama/qwen', viaAttempt: true });
+  });
+
+  it('reads a served hosted local-grammar attempt as off-device but still names it', () => {
+    expect(servedIdentity({ localFirst: [{ target: 'local/kimi-code/k3', outcome: 'served' }] })).toEqual({ onDevice: false, name: 'local/kimi-code/k3', viaAttempt: true });
+  });
+
+  it('reads a served gateway placeholder with nothing resolved as an UNNAMED cloud answer', () => {
+    expect(servedIdentity({ localFirst: [{ target: GATEWAY_ATTEMPT_TARGET, outcome: 'served' }] })).toEqual({ onDevice: false, name: undefined, viaAttempt: true });
+  });
+
+  it('names a served cloud attempt by the resolved model', () => {
+    expect(servedIdentity({ localFirst: [{ target: GATEWAY_ATTEMPT_TARGET, outcome: 'served' }], resolvedModel: 'direct/minimax/m' })).toEqual({ onDevice: false, name: 'direct/minimax/m', viaAttempt: true });
+  });
+
+  it('reads a result with no attempts from its resolved model', () => {
+    expect(servedIdentity({ resolvedModel: 'local/webllm/qwen' })).toEqual({ onDevice: true, name: 'local/webllm/qwen', viaAttempt: false });
+    expect(servedIdentity({})).toEqual({ onDevice: false, name: undefined, viaAttempt: false });
+  });
+
+  it('servedOnDevice and servedRef are projections of it', () => {
+    const result = { localFirst: [{ target: GATEWAY_ATTEMPT_TARGET, outcome: 'served' }], resolvedModel: 'local/ollama/qwen' };
+
+    expect(servedOnDevice(result)).toBe(servedIdentity(result).onDevice);
+    expect(servedRef(result)).toBe(servedIdentity(result).name);
+  });
+});
+
+describe('the hosted aliases resolve through both spellings (clientPinOf)', () => {
+  it('maps local/kimi-code/<m> and direct/kimi-code/<m> to the same catalog id and direct spelling', () => {
+    expect(hostedCatalogId('direct/kimi-code/k3')).toBe('moonshotai/kimi-k3');
+    expect(hostedCatalogId('direct/kimi-code/k3')).toBe(hostedCatalogId('local/kimi-code/k3'));
+    expect(hostedDirectRef('direct/kimi-code/k3')).toBe('direct/kimi-code/k3');
+    expect(hostedCatalogId('direct/kimi-code/not-a-model')).toBeUndefined();
+    expect(hostedCatalogId('direct/minimax/m')).toBeUndefined();
+  });
+
+  it('pricedId is the alias when there is one, the direct spelling for an unknown hosted model, else the ref', () => {
+    expect(pricedId('local/kimi-code/k3')).toBe('moonshotai/kimi-k3');
+    expect(pricedId('local/kimi-code/not-a-model')).toBe('direct/kimi-code/not-a-model');
+    expect(pricedId('openai/gpt-x')).toBe('openai/gpt-x');
+    expect(pricedId('local/ollama/qwen')).toBe('local/ollama/qwen');
+  });
+});
+

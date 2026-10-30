@@ -89,52 +89,76 @@ function servedAttempt(result: ServedResult): { target: string } | undefined {
   return result.localFirst?.find((attempt) => attempt.outcome === 'served');
 }
 
+/** Who answered a completion: whether it ran on this device, and the model that answered. */
+export interface ServedIdentity {
+  /** The completion ran ON THIS DEVICE — and so cost nothing. */
+  onDevice: boolean;
+  /** The model that answered, for pricing, routing and the ledger; undefined when the result names none. */
+  name: string | undefined;
+  /** A local-first attempt was served. When true, the model that was merely asked for must never stand in
+   *  for a missing `name`: the attempt says where the turn went. */
+  viaAttempt: boolean;
+}
+
 /**
- * Whether the completion was answered ON THIS DEVICE — and so cost nothing. THE one rule, read from the
- * registry's `onDevice` through {@link runsOnDevice}: from the SERVED attempt when there was one (a
- * gateway attempt included — it says the cloud answered), else from the model the stream resolved. A
- * hosted local-grammar runtime (Kimi Code) leaves the device; a gateway answer, even after a local
- * attempt fell over, is not on-device; the model merely ASKED FOR is never an answer; and a result that
- * names no answer is not claimed free.
+ * THE one reading of who answered a completion. The SERVED attempt decides when there is one (a gateway
+ * attempt included — it says the cloud answered); with no attempt the stream's `resolvedModel` does.
+ *   - A served LOCAL attempt names the model by its target; whether it runs on the device is the
+ *     registry's `onDevice` ({@link runsOnDevice}), so a hosted local-grammar runtime (Kimi Code) is not.
+ *   - A served cloud attempt carries only the placeholder {@link GATEWAY_ATTEMPT_TARGET}, so the model
+ *     comes from `resolvedModel` — else from the attempt's own target when that is a real model id, else
+ *     it is unnamed (and never on the device).
+ * The model ASKED FOR is never an answer: a picked local model can fall back to the cloud without a word.
  */
+export function servedIdentity(result: ServedResult): ServedIdentity {
+  const served = servedAttempt(result);
+  if (!served) return { onDevice: runsOnDevice(result.resolvedModel), name: result.resolvedModel, viaAttempt: false };
+  if (isLocalModelRef(served.target)) return { onDevice: runsOnDevice(served.target), name: served.target, viaAttempt: true };
+  const name = result.resolvedModel ?? (served.target !== GATEWAY_ATTEMPT_TARGET ? served.target : undefined);
+  return { onDevice: false, name, viaAttempt: true };
+}
+
+/** Whether the completion was answered on this device (see {@link servedIdentity}). */
 export function servedOnDevice(result: ServedResult): boolean {
-  const served = servedAttempt(result);
-  return runsOnDevice(served ? served.target : result.resolvedModel);
+  return servedIdentity(result).onDevice;
 }
 
-/**
- * The model that ANSWERED, for pricing, routing and the ledger. A served LOCAL attempt names it; a
- * served cloud attempt carries only a placeholder (see {@link GATEWAY_ATTEMPT_TARGET}), so the model
- * comes from the stream's `resolvedModel` — falling back to the attempt's own target when that is a
- * real model id. Undefined when the result names nothing; the model asked for is not an answer.
- */
+/** The model that answered (see {@link servedIdentity}). */
 export function servedRef(result: ServedResult): string | undefined {
-  const served = servedAttempt(result);
-  if (served && isLocalModelRef(served.target)) return served.target;
-  if (result.resolvedModel) return result.resolvedModel;
-  return served && served.target !== GATEWAY_ATTEMPT_TARGET ? served.target : undefined;
+  return servedIdentity(result).name;
 }
 
 /**
- * The gateway's `direct/<vendor>/<model>` spelling of a HOSTED local-grammar ref (`local/kimi-code/k3`
- * → `direct/kimi-code/k3`), or undefined for any other ref. That is the person's own account at a
- * hosted runtime: capped and booked like a direct (BYO) call, never as the device's free work.
+ * The gateway's `direct/<vendor>/<model>` spelling of a HOSTED runtime's ref — from either spelling
+ * (`local/kimi-code/k3` or `direct/kimi-code/k3`, both resolved by {@link clientPinOf}) — or undefined for
+ * any other ref. That is the person's own account at a hosted runtime: capped and booked like a direct
+ * (BYO) call, never as the device's free work.
  */
 export function hostedDirectRef(ref: string | undefined): string | undefined {
-  const parsed = parseLocalModelRef(ref);
-  if (!parsed) return undefined;
-  const runtime = localRuntime(parsed.provider);
-  return !runtime.onDevice && runtime.gatewayVendor ? `${GATEWAY_DIRECT_PREFIX}${runtime.gatewayVendor}/${parsed.model}` : undefined;
+  const pin = clientPinOf(ref);
+  if (!pin) return undefined;
+  const runtime = localRuntime(pin.provider);
+  return !runtime.onDevice && runtime.gatewayVendor ? `${GATEWAY_DIRECT_PREFIX}${runtime.gatewayVendor}/${pin.model}` : undefined;
 }
 
 /**
- * The catalog id a HOSTED runtime's model is priced under (`local/kimi-code/k3` → `moonshotai/kimi-k3`),
- * from the registry's alias DATA. Undefined for any other ref and for a hosted model the registry does
- * not know: that call is unpriced — unknown — and must be reported so, not valued at zero.
+ * The catalog id a HOSTED runtime's model is priced under (`local/kimi-code/k3` and `direct/kimi-code/k3`
+ * both → `moonshotai/kimi-k3`), from the registry's alias DATA through {@link clientPinOf}. Undefined for
+ * any other ref and for a hosted model the registry does not know: that call is unpriced — unknown — and
+ * must be reported so, not valued at zero.
  */
 export function hostedCatalogId(ref: string | undefined): string | undefined {
-  const parsed = parseLocalModelRef(ref);
-  if (!parsed) return undefined;
-  const runtime = localRuntime(parsed.provider);
-  return runtime.onDevice ? undefined : runtime.catalogAliases?.[parsed.model];
+  const pin = clientPinOf(ref);
+  if (!pin) return undefined;
+  const runtime = localRuntime(pin.provider);
+  return runtime.onDevice ? undefined : runtime.catalogAliases?.[pin.model];
+}
+
+/**
+ * The id a call is PRICED under: a hosted runtime's registry catalog alias, else its direct spelling (a live
+ * gateway book may know it), else the ref itself. The ONE place that decision is made — the cost and the
+ * ledger's valuation both use it.
+ */
+export function pricedId(ref: string): string {
+  return hostedCatalogId(ref) ?? hostedDirectRef(ref) ?? ref;
 }

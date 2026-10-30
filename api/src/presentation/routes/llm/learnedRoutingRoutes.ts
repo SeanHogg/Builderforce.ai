@@ -13,9 +13,8 @@ import { limitParam } from '../queryParams';
 import { requestDb } from '../../../application/shared/dbHandle';
 import { getRoutingTable, parseScopeToken, scopeToken } from '../../../application/llm/routingTable';
 import { getRecallSeed } from '../../../application/llm/recallSeed';
-import { recordClientRunOutcome } from '../../../application/runtime/scoreRunOutcome';
-import { projectInTenant, projectInTenantCached } from '../../../application/project/projectOwnership';
-import { taskInTenant } from '../../../infrastructure/database/tenantScope';
+import { acceptClientRunOutcome } from '../../../application/runtime/acceptClientRunOutcome';
+import { projectInTenant } from '../../../application/project/projectOwnership';
 import {
   actionTypeLabel,
   hasCostMean,
@@ -123,15 +122,8 @@ export function mountLearnedRoutingRoutes(router: Hono<HonoEnv>): void {
     const parsed = parseRunOutcomeRequest(body);
     if (!parsed.ok) return c.json({ error: parsed.error }, 400);
 
-    const db = requestDb(c);
-    // A project the caller's tenant does not own is not something it can score against: the
-    // report is still recorded (the run happened), but unscoped — never filed under, or
-    // folded into the routing scope of, another tenant's project.
-    const outcome = { ...parsed.outcome };
-    if (outcome.projectId != null && !(await projectInTenantCached(c.env, db, access.tenantId, outcome.projectId))) delete outcome.projectId;
-    // The same for a ticket: a foreign task id would file the outcome under another tenant's work.
-    if (outcome.taskId != null && !(await taskInTenant(db, outcome.taskId, access.tenantId))) delete outcome.taskId;
-    await recordClientRunOutcome(c.env, db, access.tenantId, outcome);
+    // The use case scopes the report to the caller's tenant (a foreign project or ticket id is dropped) and records it.
+    await acceptClientRunOutcome(c.env, requestDb(c), access.tenantId, parsed.outcome);
     return c.json({ ok: true });
   });
 }

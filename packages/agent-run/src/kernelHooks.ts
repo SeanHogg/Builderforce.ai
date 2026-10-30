@@ -219,8 +219,8 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       const stub = stubs.has(result);
       const ok = !result.isError && !(result.data && typeof result.data === "object" && (result.data as { ok?: unknown }).ok === false);
       if (!stub) {
-        // The trace and the tally fold the same verdict, so the outcome row and the
-        // event trace never disagree (telemetry/eventTally.ts).
+        // The trace and the tally take the same verdict, so the outcome row and the
+        // event trace never disagree.
         tallyCall(tally, ctx.step, call.name, call.args, result.data, ok);
         // `ctx.step` is the kernel's live step; `state.step` lags until the loop returns.
         await emit(ports.events, { kind: "tool.dispatched", step: ctx.step, tool: call.name, ok });

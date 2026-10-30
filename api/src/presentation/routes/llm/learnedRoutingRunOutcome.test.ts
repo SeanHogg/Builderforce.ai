@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
   projectInTenant: vi.fn(async (_db: unknown, _tenantId: number, projectId: number) => projectId === 12),
 }));
 
-vi.mock('../../../application/runtime/scoreRunOutcome', () => ({ recordClientRunOutcome: mocks.recordClientRunOutcome }));
+vi.mock('../../../application/runtime/recordClientRunOutcome', () => ({ recordClientRunOutcome: mocks.recordClientRunOutcome }));
 vi.mock('../../../application/project/projectOwnership', () => ({ projectInTenant: mocks.projectInTenant, projectInTenantCached: mocks.projectInTenantCached }));
 vi.mock('../../../infrastructure/database/tenantScope', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../infrastructure/database/tenantScope')>()),

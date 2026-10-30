@@ -9,7 +9,7 @@ import { createMemoryLocalFirstStore } from '@builderforce/local-first';
 import { priceBookFromPrices } from '@builderforce/model-catalog';
 import { createLocalBrainPersistence } from '../localFirstPersistence';
 import type { BrainStreamFn } from '../runStore/runTypes';
-import { callCostMillicents } from './callCost';
+import { callCostOrUnknown } from './callCost';
 import { routeRunRecords, runOutcomesSince, usageRowsSince } from './routeLedger';
 import { summarizeRouteRuns } from '@builderforce/pipeline-route';
 import { createRunUsageLedger, withRunUsage, type RunUsageValue } from './usageLedger';
@@ -114,27 +114,28 @@ describe("run outcomes — the misroute proxy's other half", () => {
   });
 });
 
-describe('callCostMillicents', () => {
+describe('callCostOrUnknown', () => {
   it('prices a call at list, a local call at nothing', () => {
-    expect(callCostMillicents('openai/gpt-x', { prompt: 1_000_000, completion: 500_000 }, BOOK)).toBe(200_000);
-    expect(callCostMillicents('local/ollama/q', { prompt: 1_000_000, completion: 0 }, BOOK)).toBe(0);
-    expect(callCostMillicents('unknown/model', { prompt: 1_000_000, completion: 0 }, BOOK)).toBe(0);
-    expect(callCostMillicents(undefined, { prompt: 1, completion: 1 }, BOOK)).toBe(0);
+    expect(callCostOrUnknown('openai/gpt-x', { prompt: 1_000_000, completion: 500_000 }, BOOK)).toBe(200_000);
+    expect(callCostOrUnknown('local/ollama/q', { prompt: 1_000_000, completion: 0 }, BOOK)).toBe(0);
+    // A model nothing prices, and a call that names no model, are UNKNOWN — never a free call.
+    expect(callCostOrUnknown('unknown/model', { prompt: 1_000_000, completion: 0 }, BOOK)).toBeUndefined();
+    expect(callCostOrUnknown(undefined, { prompt: 1, completion: 1 }, BOOK)).toBeUndefined();
   });
 
   it('is ONE rule by the row\'s transport route: local free, gateway billed, BYO counted at list', () => {
     const tokens = { prompt: 1_000_000, completion: 0 };
-    expect(callCostMillicents('openai/gpt-x', tokens, BOOK, 'local')).toBe(0);
-    expect(callCostMillicents('openai/gpt-x', tokens, BOOK, 'gateway')).toBe(100_000);
+    expect(callCostOrUnknown('openai/gpt-x', tokens, BOOK, 'local')).toBe(0);
+    expect(callCostOrUnknown('openai/gpt-x', tokens, BOOK, 'gateway')).toBe(100_000);
     // A direct-vendor id has no gateway price; it is the person's own money, valued at list.
-    expect(callCostMillicents('direct/openai/gpt-x', tokens, BOOK, 'byo-direct')).toBe(100_000);
-    expect(callCostMillicents('direct/openai/gpt-x', tokens, BOOK)).toBe(100_000);
+    expect(callCostOrUnknown('direct/openai/gpt-x', tokens, BOOK, 'byo-direct')).toBe(100_000);
+    expect(callCostOrUnknown('direct/openai/gpt-x', tokens, BOOK)).toBe(100_000);
   });
 
   it('the chat spend panel counts the same dollars — gateway as platform, BYO as your key', () => {
     const rows = [row({ route: 'gateway' }), row({ route: 'byo-direct', model: 'direct/openai/gpt-x' }), row({ route: 'local', model: 'local/ollama/q', savingsSource: 'local_model' })];
     const spend = ledgerSpend(rows, { excludeGateway: false, book: BOOK })!.spend;
-    const rule = (r: RunUsageValue) => callCostMillicents(r.model, { prompt: r.promptTokens, completion: r.completionTokens }, BOOK, r.route);
+    const rule = (r: RunUsageValue) => callCostOrUnknown(r.model, { prompt: r.promptTokens, completion: r.completionTokens }, BOOK, r.route) as number;
     expect(spend.platformUsd).toBeCloseTo(rule(rows[0]!) / 100_000);
     expect(spend.yourKeyUsd).toBeCloseTo(rule(rows[1]!) / 100_000);
     expect(spend.totalUsd).toBeCloseTo(rows.reduce((sum, r) => sum + rule(r), 0) / 100_000);

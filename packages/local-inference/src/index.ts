@@ -40,7 +40,7 @@ export {
   type LocalRuntimeReach,
   type LocalToolSupport,
 } from './runtimes.js';
-export { LOCAL_MODEL_PREFIX, clientPinOf, formatLocalModelRef, isLocalModelRef, parseLocalModelRef, runsOnDevice, GATEWAY_ATTEMPT_TARGET, hostedCatalogId, hostedDirectRef, servedOnDevice, servedRef, type ServedResult } from './ref.js';
+export { LOCAL_MODEL_PREFIX, clientPinOf, formatLocalModelRef, isLocalModelRef, parseLocalModelRef, runsOnDevice, GATEWAY_ATTEMPT_TARGET, hostedCatalogId, hostedDirectRef, pricedId, servedIdentity, servedOnDevice, servedRef, type ServedIdentity, type ServedResult } from './ref.js';
 export {
   GATEWAY_COMPLETIONS_PATH,
   LOCAL_COMPLETIONS_PATH,

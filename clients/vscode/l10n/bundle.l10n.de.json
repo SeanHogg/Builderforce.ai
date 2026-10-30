@@ -986,6 +986,8 @@
   "Avg score": "Ø Bewertung",
   "Full pipeline": "Vollständige Pipeline",
   "Quick pass": "Schnelldurchlauf",
+  "{0} + {1} unpriced": "{0} + {1} ohne Preis",
+  "unpriced": "ohne Preis",
   "Score histogram": "Bewertungsverteilung",
   "Score": "Bewertung",
   "Misroutes": "Fehlrouten",

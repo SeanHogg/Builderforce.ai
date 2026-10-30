@@ -99,6 +99,20 @@ export function runSpendBudget(run: RunLoopContext, book?: PriceBook): SpendHook
   let warned = false;
   let unpricedNoted = false;
 
+  /** A call the cap cannot price: counted on the tree, and said once in this run's trace. */
+  const noteUnpriced = (model: string | undefined): void => {
+    tree.unpricedCalls += 1;
+    if (unpricedNoted) return;
+    unpricedNoted = true;
+    pushTrace(run.c, {
+      ts: nowIso(),
+      category: 'message',
+      label: 'run.budget_unpriced',
+      args: { model: model ?? null },
+      result: 'A call had no known price, so the run cap counts only the spend that is priced.',
+    });
+  };
+
   const contain = async (): Promise<StopDecision> => {
     const { c, chatId, convo, req } = run;
     const spentMc = tree.spentMc;
@@ -137,31 +151,26 @@ export function runSpendBudget(run: RunLoopContext, book?: PriceBook): SpendHook
     },
     afterTurn(_ctx, turn) {
       const meta = turn.meta as TurnMeta | undefined;
-      const usage = meta?.result.usage;
-      if (!meta || !usage) return;
+      if (!meta) return;
+      const usage = meta.result.usage;
+      const route = usageRouteOf(meta.result, meta.requested);
+      const model = servedModel(meta.result, meta.requested);
+      // A turn that reported no usage cannot be priced: off the device it is an UNPRICED call (as the run tally
+      // reads it), never free; a call the device answered costs nothing whatever it reported.
+      if (!usage) {
+        if (route !== 'local') noteUnpriced(model);
+        return;
+      }
       // The ONE device cost rule, by where the call ran (a local-first serve costs nothing), pricing the SAME
       // served model its route came from. A call with no known price is counted as unpriced, not as free.
-      const cost = callCostOrUnknown(servedModel(meta.result, meta.requested), {
+      const cost = callCostOrUnknown(model, {
         prompt: usage.prompt ?? 0,
         completion: usage.completion ?? 0,
         cacheRead: usage.cacheRead ?? 0,
         cacheCreation: usage.cacheCreation ?? 0,
-      }, book, usageRouteOf(meta.result, meta.requested));
-      if (cost === undefined) {
-        tree.unpricedCalls += 1;
-        if (!unpricedNoted) {
-          unpricedNoted = true;
-          pushTrace(run.c, {
-            ts: nowIso(),
-            category: 'message',
-            label: 'run.budget_unpriced',
-            args: { model: servedModel(meta.result, meta.requested) ?? null },
-            result: 'A call had no known price, so the run cap counts only the spend that is priced.',
-          });
-        }
-      } else {
-        tree.spentMc += cost;
-      }
+      }, book, route);
+      if (cost === undefined) noteUnpriced(model);
+      else tree.spentMc += cost;
     },
   };
 }

@@ -32,7 +32,7 @@ vi.mock('../../infrastructure/cache/readThroughCache', async (importOriginal) =>
   bumpOutcomesVersion: mocks.bumpOutcomesVersion,
 }));
 
-const { recordClientRunOutcome } = await import('./scoreRunOutcome');
+const { recordClientRunOutcome } = await import('./recordClientRunOutcome');
 
 const base: NormalizedRunOutcome = { clientRunId: 'canvas:1', source: 'canvas', model: 'm', terminalStatus: 'completed', steps: 3, entryPoint: 'canvas' };
 const record = (outcome: NormalizedRunOutcome) => recordClientRunOutcome({} as never, {} as never, 7, outcome);

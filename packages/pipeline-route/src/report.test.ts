@@ -72,3 +72,20 @@ describe('suggestThreshold', () => {
     expect(suggestThreshold(many(10, 1, 0.3), 0.5).suggestedThreshold).toBeNull();
   });
 });
+
+describe('summarizeRouteRuns — a run with an unknown cost', () => {
+  it('sums only the priced runs and counts the rest, never treating an unknown cost as 0', () => {
+    const r = summarizeRouteRuns([quick('a', 0, 0.2), quick('b', 0, 0.4, { costMc: null }), full('c', 0, 0.9)], { threshold: 0.5 });
+
+    expect(r.byRoute.quick).toEqual({ runs: 2, costMc: 100, unpricedRuns: 1, avgScore: 0.3 });
+    // A route whose runs are all priced carries no unpriced count.
+    expect(r.byRoute.full).toEqual({ runs: 1, costMc: 1_000, avgScore: 0.9 });
+  });
+
+  it('counts a route with no priced run as entirely unpriced', () => {
+    const r = summarizeRouteRuns([quick('a', 0, 0.2, { costMc: null }), quick('b', 0, 0.4, { costMc: null })], { threshold: 0.5 });
+
+    expect(r.byRoute.quick).toMatchObject({ runs: 2, costMc: 0, unpricedRuns: 2 });
+  });
+});
+

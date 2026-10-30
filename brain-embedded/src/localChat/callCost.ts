@@ -19,7 +19,7 @@
  * A route left out is read from the model id, as the stream would (`usageRouteOf`).
  */
 
-import { hostedCatalogId, hostedDirectRef, runsOnDevice } from '@builderforce/local-inference';
+import { hostedDirectRef, pricedId, runsOnDevice } from '@builderforce/local-inference';
 import { directCatalogId, listPriceOf, snapshotPriceBook, type PriceBook } from '@builderforce/model-catalog';
 import { computeCostMillicents } from '@builderforce/spend-contract';
 import type { UsageRoute } from './usageLedger';
@@ -34,11 +34,19 @@ export interface CallTokens {
 
 const n = (v: number | undefined): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0);
 
-/** The route a model id alone implies — what a caller without the row's route prices by. */
-function routeOfModel(model: string): UsageRoute {
-  if (runsOnDevice(model)) return 'local';
+/**
+ * The route a model id alone implies when the call is NOT known to have run on the device: the person's own
+ * direct account (a `direct/…` id, or a hosted local-grammar runtime like Kimi Code) or the gateway. The ONE
+ * copy of that rule — `usageRouteOf` calls it for what it decided is off the device.
+ */
+export function offDeviceRouteOf(model: string): UsageRoute {
   if (hostedDirectRef(model) !== undefined) return 'byo-direct';
   return directCatalogId(model) !== undefined ? 'byo-direct' : 'gateway';
+}
+
+/** The route a model id alone implies — what a caller without the row's route prices by. */
+function routeOfModel(model: string): UsageRoute {
+  return runsOnDevice(model) ? 'local' : offDeviceRouteOf(model);
 }
 
 /** True when a call on `route` is the person's own spend (their key), not the platform's. */
@@ -47,19 +55,11 @@ export function isOwnKeySpend(route: UsageRoute): boolean {
 }
 
 /**
- * The id a call is priced under. A hosted local-grammar runtime's model (Kimi Code) is priced under the
- * catalog id its registry alias names (`local/kimi-code/k3` → `moonshotai/kimi-k3`), else under its direct
- * spelling (a live gateway book may know it); any other model under its own id.
- */
-function pricedId(model: string): string {
-  return hostedCatalogId(model) ?? hostedDirectRef(model) ?? model;
-}
-
-/**
  * The call's cost in millicents: 0 for a call on the device, the priced figure otherwise, and UNDEFINED
  * when the call is not on the device and no price is known for it (a model the book does not carry, a
- * hosted model with no registry alias). Unknown is not free: the spend cap flags it and the ledger
- * reports the tokens as unpriced, rather than valuing the call at zero.
+ * hosted model with no registry alias, a call with no model). Unknown is not free: every caller carries it
+ * as unknown — the spend cap flags it, the ledger reports the tokens as unpriced, the route report shows it
+ * as unpriced.
  */
 export function callCostOrUnknown(
   model: string | undefined,
@@ -83,15 +83,4 @@ export function callCostOrUnknown(
     cacheReadTokens: Math.min(n(tokens.cacheRead), prompt),
     cacheCreationTokens: Math.min(n(tokens.cacheCreation), prompt),
   });
-}
-
-/** {@link callCostOrUnknown} as a plain number, for a report that prints a figure (an unknown prints as 0).
- *  The spend cap and the ledger do NOT use this: they must see the difference. */
-export function callCostMillicents(
-  model: string | undefined,
-  tokens: CallTokens,
-  book: PriceBook = snapshotPriceBook(),
-  route?: UsageRoute,
-): number {
-  return callCostOrUnknown(model, tokens, book, route) ?? 0;
 }

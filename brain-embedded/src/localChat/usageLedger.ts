@@ -16,8 +16,9 @@
  */
 
 import { newLocalRecord, type LocalFirstStore } from '@builderforce/local-first';
-import { hostedDirectRef, servedOnDevice, servedRef } from '@builderforce/local-inference';
-import { directCatalogId, snapshotPriceBook, type PriceBook } from '@builderforce/model-catalog';
+import { servedIdentity } from '@builderforce/local-inference';
+import { offDeviceRouteOf } from './callCost';
+import { snapshotPriceBook, type PriceBook } from '@builderforce/model-catalog';
 import { computeCostMillicents } from '@builderforce/spend-contract';
 import type { CompletionUsage, StreamChatResult } from '../streamChatCompletion';
 import type { BrainStreamFn } from '../runStore/runTypes';
@@ -83,22 +84,24 @@ export interface RunUsageValue {
 
 /**
  * The model that answered a call — the ONE name its route, its price and its ledger row all come from
- * (never the model that was merely asked for, unless the result names no answer at all).
+ * (`servedIdentity`). The model that was merely ASKED FOR stands in only when the result says nothing of how
+ * the call was served: no served attempt AND no resolved model. Once an attempt served, an unnamed answer
+ * (a gateway placeholder with nothing resolved) stays unnamed — the request must not name a call the
+ * cloud answered.
  */
 export function servedModel(result: Pick<StreamChatResult, 'resolvedModel' | 'localFirst'>, requested?: string): string | undefined {
-  return servedRef(result) ?? requested;
+  const identity = servedIdentity(result);
+  return identity.name ?? (identity.viaAttempt ? undefined : requested);
 }
 
 /** Which route served a call, from what the stream reported. */
 export function usageRouteOf(result: Pick<StreamChatResult, 'resolvedModel' | 'localFirst'>, requested?: string): UsageRoute {
   // 'local' ONLY for a call the device answered (the one rule, `servedOnDevice`): a call that merely asked
   // for a local model and was answered elsewhere is not the device's free work.
-  if (servedOnDevice(result)) return 'local';
-  const model = servedModel(result, requested) ?? '';
-  // A hosted local-grammar runtime (Kimi Code) is the person's own account: it counts against the cap
-  // and books no local saving, like any other direct call.
-  if (hostedDirectRef(model) !== undefined) return 'byo-direct';
-  return directCatalogId(model) !== undefined ? 'byo-direct' : 'gateway';
+  if (servedIdentity(result).onDevice) return 'local';
+  // Off the device: a hosted local-grammar runtime (Kimi Code) or a direct id is the person's own account
+  // (counts against the cap, books no local saving), anything else the gateway — one rule, `offDeviceRouteOf`.
+  return offDeviceRouteOf(servedModel(result, requested) ?? '');
 }
 
 export interface RecordRunUsageInput {
