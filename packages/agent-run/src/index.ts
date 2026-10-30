@@ -15,6 +15,7 @@
 
 // The run contract — every type an adapter and the agent exchange.
 export * from "./contract.js";
+export { isWeakerModel } from "./policy/model/preflight.js";
 
 // The one agent. `RunAgentInput` is the single entry point.
 export { runAgent, type RunAgentInput } from "./runAgent.js";

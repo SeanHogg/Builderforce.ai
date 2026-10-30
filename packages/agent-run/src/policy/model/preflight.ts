@@ -16,7 +16,7 @@
  * No `node:*`, no DOM. The hook halves read their port and the run state; the rest is pure.
  */
 
-import { isAgenticTier, listPriceOf, resolveModelTier, snapshotPriceBook, type ModelTier, type PriceBook } from "@builderforce/model-catalog";
+import { isAgenticTier, listPriceOf, resolveModelTier, snapshotPriceBook, tierRank, type ModelTier, type PriceBook } from "@builderforce/model-catalog";
 import type { ModelPreflightResult, RunEvent } from "../../contract.js";
 import type { PolicyContext } from "../hooks.js";
 
@@ -139,6 +139,23 @@ export function planModelWarning(model: string | undefined, book: PriceBook = sn
   return tier && isAgenticTier(tier) === false ? { model, tier } : null;
 }
 
+/**
+ * THE rule for "served by a WEAKER model than the run asked for" - what makes a run `degraded` (§8.2),
+ * whichever entry point and whichever path reports it: the ONE agent's `modelDowngrade` records a weaker
+ * failover with it, and the legacy embedded runner derives its `degraded` from it. Weaker = a worse catalog
+ * tier (ULTRA > PREMIUM > STANDARD > FREE). A model the book does not price is UNKNOWN, not weak, and a
+ * failover to a model of the same standing is not a downgrade. Pure.
+ */
+export function isWeakerModel(requested: string | undefined, served: string | undefined, book: PriceBook = snapshotPriceBook()): boolean {
+  const tierOf = (model: string | undefined): ModelTier | undefined => {
+    const price = model && model !== "default" ? listPriceOf(book, model) : undefined;
+    return price ? resolveModelTier({ price }) : undefined;
+  };
+  const asked = tierOf(requested);
+  const got = tierOf(served);
+  return asked !== undefined && got !== undefined && tierRank(got) > tierRank(asked);
+}
+
 /** `provider:reason` entries (the gateway header's spelling) as the reasons map. */
 function reasonsOf(entries: readonly string[]): Record<string, ByoUnresolvedReason> {
   const out: Record<string, ByoUnresolvedReason> = {};
@@ -199,10 +216,14 @@ export async function runModelPreflight(ctx: PolicyContext): Promise<ModelPrefli
  *    it could not use, or a plan-phase turn (no code changed yet) that landed on a
  *    Flash-class model — said once per served model per run (`RunState.downgrades`).
  */
-export function modelDowngrade(ctx: PolicyContext, requested: string | undefined, served: string | undefined): ModelDowngradeEvent | undefined {
+export function modelDowngrade(ctx: PolicyContext, requested: string | undefined, served: string | undefined, book: PriceBook = snapshotPriceBook()): ModelDowngradeEvent | undefined {
   if (!served || served === "default") return undefined;
   if (requested && requested !== "default") {
     if (served === requested) return undefined;
+    // A failover onto a WEAKER model is a downgrade the outcome row must carry (once per served model).
+    if (isWeakerModel(requested, served, book) && !(ctx.state.downgrades ?? []).includes(served)) {
+      ctx.state.downgrades = [...(ctx.state.downgrades ?? []), served];
+    }
     return { kind: "llm.model_downgrade", step: ctx.step, requestedModel: requested, model: served, reason: "failover" };
   }
   if ((ctx.state.downgrades ?? []).includes(served)) return undefined;

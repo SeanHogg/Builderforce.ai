@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { isWeakerModel } from "@builderforce/agent-run";
 import { DEFAULT_ACTION_TYPE, type ActionType } from "@builderforce/learned-routing";
 import type { ThinkLevel } from "../../auto-reply/thinking.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
@@ -1069,7 +1070,9 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
             (Array.isArray(attempt.toolMetas) ? attempt.toolMetas.length : 0) +
             autoContinueNudges +
             1;
-          if (outcome.model !== model.id) {
+          // `degraded` is THE rule the ONE agent's outcome row uses: served by a WEAKER model than asked.
+          // A failover onto a model of the same standing (or one the price book does not know) is not.
+          if (outcome.model !== model.id && isWeakerModel(model.id, outcome.model)) {
             outcome.degraded = true;
           }
           const agentMeta: EmbeddedAgentMeta = {

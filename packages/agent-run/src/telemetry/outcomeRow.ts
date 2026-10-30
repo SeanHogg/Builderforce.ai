@@ -85,12 +85,13 @@ export function buildOutcomeRow(input: OutcomeRowInput): RunOutcomeRow {
 }
 
 /**
- * Served by a WEAKER model than the run asked for. `state.downgrades` records exactly that - an
- * auto-routed turn that landed on a model the run did not choose because a connected account could not
- * be used, or on a plan-tier model (`modelDowngrade`). A failover to another model of the same standing
- * is announced by the `llm.model_downgrade` event but is not recorded there, and a preflight NOTE
- * (`state.preflight` = degraded:<reason>) is a warning before turn 1, not a verdict on what served the
- * run; neither makes the run degraded.
+ * Served by a WEAKER model than the run asked for. `state.downgrades` records exactly that
+ * (`modelDowngrade`): an auto-routed turn that landed on a model the run did not choose because a
+ * connected account could not be used, or on a plan-tier model, or a failover onto a worse catalog tier
+ * (`isWeakerModel` - the same rule the legacy embedded runner derives its `degraded` from). A failover to
+ * a model of the same standing is announced by the `llm.model_downgrade` event but not recorded, and a
+ * preflight NOTE (`state.preflight` = degraded:<reason>) is a warning before turn 1, not a verdict on
+ * what served the run; neither makes the run degraded.
  */
 function isDegraded(state: RunState): boolean {
   return (state.downgrades?.length ?? 0) > 0;
