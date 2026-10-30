@@ -1785,6 +1785,8 @@ function chatErrorMessage(error, action, labels) {
       return engineMessage(action.engineCode, labels, error);
     case "platform_refused":
       return platformRefusedMessage(action.setting, labels);
+    case "continuation_timed_out":
+      return labels.continuationTimedOut;
     default:
       return error;
   }
@@ -1807,6 +1809,7 @@ var DEFAULT_CHAT_ERROR_LABELS = {
   engineCrashed: "The on-device model crashed. Send again to restart it.",
   engineDetached: "The on-device model stopped before it finished. Send again to retry.",
   modelKeepsCrashing: "This model keeps crashing on this device. Remove it, or try another model.",
+  continuationTimedOut: "That took too long. Your message is kept and will be read with your next message.",
   manageLocalModels: "Manage on-device models",
   platformRefusedMode: "Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it.",
   platformRefusedSync: "Account sync is off, so this could not be saved to your account. Turn on sync in your platform settings, or keep working locally.",
@@ -9496,7 +9499,7 @@ function queueShortcutKeys(nav = typeof navigator === "undefined" ? void 0 : nav
 }
 var noopGet = () => "";
 var noopSet = () => void 0;
-function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, onSend, onStop, onQueue, voice }) {
+function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, onSend, onStop, onQueue, sendSteers, voice }) {
   const dictation = useVoiceDictation(voice?.getValue ?? noopGet, voice?.setValue ?? noopSet);
   const action = promptTrailingAction({
     canSubmit,
@@ -9524,7 +9527,7 @@ function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, 
   if (action === "stop") {
     return /* @__PURE__ */ (0, import_jsx_runtime72.jsx)("button", { type: "button", className: "bf-cmp-iconbtn bf-cmp-iconbtn--stop", onClick: onStop, title: labels.stop, "aria-label": labels.stop, children: /* @__PURE__ */ (0, import_jsx_runtime72.jsx)(IconStop, {}) });
   }
-  const label = running ? labels.queueSend : labels.send;
+  const label = running ? sendSteers === false ? labels.queueHold : labels.queueSend : labels.send;
   const send = /* @__PURE__ */ (0, import_jsx_runtime72.jsx)("button", { type: "submit", className: "bf-cmp-iconbtn bf-cmp-iconbtn--send", onClick: (e) => {
     e.preventDefault();
     onSend();
@@ -9658,7 +9661,8 @@ var DEFAULT_COMPOSER_LABELS = {
   off: "Off",
   remove: "Remove",
   send: "Send",
-  queueSend: "Queue message \u2014 sends when the current run finishes",
+  queueSend: "Send into the running turn now",
+  queueHold: "Queue message \u2014 sends when the current run finishes",
   queueAfter: (keys) => `Queue for after the run (${keys})`,
   queueAfterShort: "Queue",
   stop: "Stop",
@@ -9711,6 +9715,7 @@ function BrainComposer(props) {
     running = false,
     onStop,
     onQueue,
+    sendSteers,
     disabled = false,
     blockedNotice,
     placeholder,
@@ -9923,6 +9928,7 @@ function BrainComposer(props) {
             onSend: submit,
             onStop,
             ...onQueue ? { onQueue: queue } : {},
+            ...sendSteers !== void 0 ? { sendSteers } : {},
             voice: voice ? { getValue, setValue: onChange } : void 0
           }
         )

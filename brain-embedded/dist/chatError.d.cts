@@ -64,7 +64,15 @@ type ChatErrorActionKind =
  * and {@link ChatErrorAction.setting} the switch that governs it, so the banner names
  * the mode / switch and how to change it — never the raw code.
  */
- | 'platform_refused';
+ | 'platform_refused'
+/**
+ * A continuation (direction a run never read, made the chat's next turn) waited too long on the host or the
+ * attachments and gave up. The words are KEPT (saved or waiting) and are read with the next message; the
+ * banner says so in the person's language - the person does not send them again.
+ */
+ | 'continuation_timed_out';
+/** The code a bounded continuation step rejects with (`runStore/deadline.ts`) - never shown raw. */
+declare const CONTINUATION_TIMED_OUT = "continuation_timed_out";
 /** What a `platform_refused` verdict names: a policy capability, or `send` (an outbox's
  *  administrative gate — the mode does not reach the platform). */
 type PlatformRefusedCapability = PlatformCapability | 'send';
@@ -144,4 +152,4 @@ declare function brainRequestError(status: number, body: unknown, statusText?: s
  */
 declare function chatErrorAction(err: unknown): ChatErrorAction | null;
 
-export { BrainRequestError, type ChatErrorAction, type ChatErrorActionKind, LOCAL_ENGINE_FAILURE_CODES, type LocalEngineFailureCode, NOT_SIGNED_IN, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, type PlatformRefusedCapability, brainRequestError, chatErrorAction };
+export { BrainRequestError, CONTINUATION_TIMED_OUT, type ChatErrorAction, type ChatErrorActionKind, LOCAL_ENGINE_FAILURE_CODES, type LocalEngineFailureCode, NOT_SIGNED_IN, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, type PlatformRefusedCapability, brainRequestError, chatErrorAction };

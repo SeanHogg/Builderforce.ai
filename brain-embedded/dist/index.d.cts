@@ -1,5 +1,5 @@
 import * as react from 'react';
-import { ReactNode } from 'react';
+import { ReactNode, Dispatch, SetStateAction } from 'react';
 import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel, d as LocalBackend, e as LocalModelUnfit, P as PageEngine, B as BfiWorkerEngineOptions, H as HfModelStore } from './bfiWorkerEngine-D96wAPek.cjs';
 export { f as BfiEngineInstance, g as BfiEngineStatic, h as BfiModelInfo, i as BfiModule, j as BfiWorkerEngine, C as ChatCompletionChunk, k as ChatCompletionsRequest, E as ENGINE_WORKER_FATAL, l as ENGINE_WORKER_IDLE_MS, m as ENGINE_WORKER_INVALIDATE, n as EngineWorker, o as EngineWorkerEndpoint, p as EngineWorkerEvents, q as EngineWorkerHandle, r as EngineWorkerOptions, s as PAGE_ENGINE_REPLY_TYPES, t as PAGE_ENGINE_REQUEST_TYPES, u as PageEngineClient, v as PageEngineClientOptions, w as PageEngineError, x as PageEnginePort, y as PageEngineReply, z as PageEngineRequest, A as PageEngineServerIo, W as WorkerLike, D as createBfiWorkerEngine, F as createEngineWorker, G as createPageEngineClient, I as isPageEngineReply, J as isPageEngineRequest, K as isWasmTrap, M as serveEngineWorker, N as servePageEngines } from './bfiWorkerEngine-D96wAPek.cjs';
 import { ChatErrorAction } from './chatError.cjs';
@@ -1030,6 +1030,9 @@ declare class ReadCoverage$1 {
      */
     derivedSearch(tool: string, args: unknown): Record<string, unknown> | null;
 }
+
+/** A `run_command` whose every segment only reads — `git log`, `ls`, a `for` loop of `git rev-list`. */
+declare function isReadOnlyShellCall(tool: string, args: unknown): boolean;
 
 /** Identical failures before the model is told it is repeating itself. The first retry is free. */
 declare const FAILURE_NUDGE_AT = 2;
@@ -2553,6 +2556,12 @@ interface BrainRunOutcome {
     merged: boolean;
     /** Completed model turns — the efficiency half of the score. */
     steps: number;
+    /**
+     * What the run cost in millicents. Present ONLY as 0, and only when every completed turn was served by a
+     * model on this machine (the hybrid local tier): that run was genuinely free and stays "priced at 0". An
+     * unknown cost is ABSENT - never 0 - so a gateway or BYO run is not mistaken for a free one.
+     */
+    costMc?: 0;
     projectId?: number;
 }
 
@@ -3246,6 +3255,29 @@ declare function prefetchConfirmOf(pending: {
 } | null | undefined): PrefetchConfirm | null;
 
 /**
+ * The claim on a chat's NEXT run - the one primitive that closes every window between "a run
+ * ended" (or "a turn was handed to an idle chat") and "the next run is going".
+ *
+ * A continuation (`continueChat.ts`) has to save words, wait for the host's run-time parts, and only
+ * then start - three awaits. Without a claim the chat looks idle across them: a person's message
+ * launches a second run, a Stop is outrun, two continuations start two runs, and `startRun`'s
+ * single-flight guard silently drops whichever lost. With the claim, taken SYNCHRONOUSLY before the
+ * first await:
+ *
+ *  - the cell counts as LIVE (`isLive`), so every composer steers a person's message into the
+ *    claimed run's inbox (it is read by the continuation run) instead of launching or holding it;
+ *  - no other launch can take the chat (`startRun` refuses a start that does not hold the claim);
+ *  - a Stop - on an idle cell too (`RunCell.stopEpoch`) - is seen at each await boundary
+ *    (`claimStopped`): the saved rows stay, nothing starts, the claim is released;
+ *  - a run started UNDER the claim consumes it (`beginRun`); every other exit releases it.
+ */
+
+interface RunClaim {
+    /** The chat's Stop count when the claim was taken. */
+    readonly epoch: number;
+}
+
+/**
  * MODEL PREFLIGHT (PRD 35 E7) — the run learns BEFORE turn 1 that a connected account
  * cannot serve it, instead of after a turn from `x-builderforce-byo-unresolved`.
  *
@@ -3322,6 +3354,7 @@ interface BrainRunPersistence {
         role: string;
         content: string;
         metadata?: string;
+        eventKey?: string;
     }>): Promise<BrainMessage[]>;
 }
 /** Everything a single run needs, captured at start time (survives navigation). */
@@ -3722,6 +3755,8 @@ declare function appendRunMessage(chatId: RunKey, msg: BrainMessage): void;
 /** Current snapshot (referentially stable until something changes). */
 declare function getRunSnapshot(chatId: RunKey | null): BrainRunSnapshot;
 declare function isRunning(chatId: RunKey | null): boolean;
+/** Running, or about to be (a continuation holds the claim): the chat is not free to launch another run. */
+declare function isLive(chatId: RunKey | null): boolean;
 /** The accumulated execution trace for a chat (for the capture/triage report). */
 declare function getRunTrace(chatId: RunKey | null): BrainTraceEvent[];
 /**
@@ -3748,7 +3783,7 @@ declare function getRunTrace(chatId: RunKey | null): BrainTraceEvent[];
  *    chat (the auto-reply on load, Retry) would start that work after all.
  * Best-effort: the run did not start either way. Resolves to the saved row, if any.
  */
-declare function stopBeforeStart(runKey: RunKey, chatId: number, persistence: Pick<BrainRunPersistence, 'sendMessages'>): Promise<BrainMessage | undefined>;
+declare function stopBeforeStart(runKey: RunKey, chatId: number, persistence: Pick<BrainRunPersistence, 'sendMessages'>, still?: () => boolean): Promise<BrainMessage | undefined>;
 declare function stopRun(chatId: RunKey): void;
 /**
  * Clear a chat's surfaced run error so the UI's error banner can be dismissed.
@@ -3770,6 +3805,16 @@ declare function resolveRunConfirm(chatId: RunKey, ok: boolean): void;
 declare function applyRemoteRun(chatId: number, snapshot: BrainRunSnapshot): void;
 
 /**
+ * A start the store refuses - a run is going, or a continuation holds the chat (`runClaim.ts`) - must
+ * not drop the turn it carried. The caller has already saved the person's row and cleared their
+ * composer; if nothing reads the words they vanish. So they go into the live run's inbox, which it
+ * reads at its next call (interrupting the step in flight), exactly once.
+ */
+
+/** What `startRun` resolves to: the run ran to its end, or its turn joined the run that already holds the chat. */
+type StartOutcome = 'ran' | 'joined';
+
+/**
  * Starting a run — the single-flight claim on a chat's cell, the per-run reset, the
  * loop, and what a run does once it unwinds: keep what a Stop cut off, settle its ticket
  * backstops, report its coder's outcome, and hand its last step rows to the server.
@@ -3779,9 +3824,12 @@ declare function applyRemoteRun(chatId: number, snapshot: BrainRunSnapshot): voi
  * Start (or no-op join) the agent loop for a chat. Single-flight per chat: if a
  * run is already in flight the call returns immediately, so a second mounted
  * Brain instance can never spawn a duplicate loop. The claim is synchronous
- * (set before any await), so two callers in the same tick can't both pass it.
+ * (set before any await), so two callers in the same tick can't both pass it. A start
+ * made under a `RunClaim` consumes it (`beginRun`). A start that is REFUSED (a run is going, or a
+ * continuation holds the chat) hands its turn to that run's inbox and resolves `'joined'` - the
+ * caller's words are read once, never dropped (`refusedStart.ts`).
  */
-declare function startRun(runKey: number, request: BrainRunRequest): Promise<void>;
+declare function startRun(runKey: number, request: BrainRunRequest, claim?: RunClaim): Promise<StartOutcome>;
 
 /**
  * Hosting a run that is not a chat's — the ONE run store for every agent turn in the
@@ -3960,6 +4008,7 @@ interface BrainPersistenceAdapter {
         role: string;
         content: string;
         metadata?: string;
+        eventKey?: string;
     }>): Promise<BrainMessage[]>;
     /**
      * Record this viewer's thumb on one assistant reply (null clears it).
@@ -4344,8 +4393,8 @@ interface RouteRunRecord {
     route: PipelineRoute;
     /** The router's score; null for a run recorded without one. */
     score: number | null;
-    /** What the run's calls cost, in millicents. */
-    costMc: number;
+    /** What the run's calls cost, in millicents; null when any call's price is unknown (unknown, never a partial sum). */
+    costMc: number | null;
     /** The conversation the run belongs to — what "re-run" is grouped by. */
     conversation: string;
     /** When the run's first call was made (ISO-8601). */
@@ -4355,7 +4404,10 @@ interface RouteRunRecord {
 }
 interface RouteTotals {
     runs: number;
+    /** Millicents over the runs that have a known cost; the runs that do not are counted in `unpricedRuns`. */
     costMc: number;
+    /** How many of `runs` have an unknown cost. Absent when every run is priced. */
+    unpricedRuns?: number;
     /** Mean score over the runs that carry one; null when none does. */
     avgScore: number | null;
 }
@@ -4468,8 +4520,14 @@ interface CallTokens {
     cacheRead?: number;
     cacheCreation?: number;
 }
-/** The call's cost in millicents; 0 for a local call or a model with no catalog price. */
-declare function callCostMillicents(model: string | undefined, tokens: CallTokens, book?: PriceBook, route?: UsageRoute): number;
+/**
+ * The call's cost in millicents: 0 for a call on the device, the priced figure otherwise, and UNDEFINED
+ * when the call is not on the device and no price is known for it (a model the book does not carry, a
+ * hosted model with no registry alias, a call with no model). Unknown is not free: every caller carries it
+ * as unknown — the spend cap flags it, the ledger reports the tokens as unpriced, the route report shows it
+ * as unpriced.
+ */
+declare function callCostOrUnknown(model: string | undefined, tokens: CallTokens, book?: PriceBook, route?: UsageRoute): number | undefined;
 
 /**
  * SYNC ON ENABLE, the chat slice (PRD 36 §36.4) — hand this device's local chats to the
@@ -6241,9 +6299,6 @@ interface PageRuntimePin {
  *  id, an HTTP runtime's model, nothing). */
 declare function pageRuntimePin(ref: string | undefined): PageRuntimePin | null;
 
-/** A `run_command` whose every segment only reads — `git log`, `ls`, a `for` loop of `git rev-list`. */
-declare function isReadOnlyShellCall(tool: string, args: unknown): boolean;
-
 /**
  * ONE reading of an OpenAI-compatible `finish_reason`.
  *
@@ -7302,6 +7357,8 @@ interface UseBrainConversation {
     /** Force a transcript refetch without changing the chat id (e.g. after a merge). */
     reloadMessages: () => void;
     sending: boolean;
+    /** A run is executing or being made for this chat: what a typed message can STEER (`sending` also covers a send still saving). */
+    runLive: boolean;
     error: string;
     /**
      * What the user can DO about {@link error}: reconnect an expired session, upgrade
@@ -7329,9 +7386,13 @@ interface UseBrainConversation {
      * persisted and the run has started (the message can no longer be lost), or
      * `false` if it failed before persisting (e.g. the token expired mid-send) —
      * so a composer can restore the text the user typed instead of dropping it.
+     * `attachments` is the turn's OWN files (a held turn, a steer's leftovers): omitted, the turn
+     * takes the composer's; given, exactly those leave the composer as the send starts and a
+     * failure leaves them to the caller (`restoreAttachments`).
      */
     send(text: string, opts?: {
-        addressedTo?: DirectedRecipient | null;
+        addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null;
+        attachments?: ChatInputAttachment[];
     }): Promise<boolean>;
     /**
      * Answer the active chat's REFUSED turn again — the trailing user message nothing
@@ -7356,6 +7417,12 @@ interface UseBrainConversation {
     rateMessage(msg: BrainMessage, rating: 1 | -1 | 0): Promise<void>;
     attach(file: File): Promise<void>;
     removeAttachment(key: string): void;
+    /**
+     * Put files back in the composer after a send that was not kept - merged by key, so calling it
+     * twice (or for a file already there) never duplicates. The ONE restore: the web panel and the
+     * editor's chat both use it for a turn they gave its own files.
+     */
+    restoreAttachments(files: readonly ChatInputAttachment[]): void;
     setError(msg: string): void;
     /**
      * Dismiss the current error banner. Clears BOTH the hook's local error and the
@@ -7520,6 +7587,7 @@ declare function createBrainRestPersistence(opts: BrainRestOptions): {
         role: string;
         content: string;
         metadata?: string;
+        eventKey?: string;
     }>) => Promise<BrainMessage[]>;
     /**
      * Set thumbs up/down on a message (null clears).
@@ -7606,20 +7674,204 @@ declare function noteRunStep(key: RunKey, step: RunNoteStep): void;
 declare function useRunSnapshot(key: RunKey | null): BrainRunSnapshot;
 
 /**
- * Direction for a run that is ALREADY running — redirecting it without stopping it.
+ * Consecutive failed tool dispatches after which a run is stopped, when the surface
+ * names no other number. ONE value, owned here, so every surface stops for the same
+ * reason at the same point.
  *
- * A run used to accept input only at its start: once it was going, the only lever was
- * Stop. That is wrong for a run that has an OWNER — a sub-agent its parent spawned, which
- * the parent (or the person) needs to correct mid-task ("only the API half", "Ada already
- * did the schema") — and it is wrong for a parent that needs to hear a child finished
- * while it is itself still working. Both are the same act: put a message in front of a
- * live run's next turn.
+ * ── WHY A FAILURE STREAK, AND NOT A STEP COUNT ──────────────────────────────────
+ * A run is not wrong for being long. A bulk ticket clean-up, a rename across a
+ * repository, a review of forty branches — each is a hundred honest tool calls, and a
+ * step ceiling stopped every one of them mid-task with "kept calling tools without
+ * finishing". The ceiling existed to catch a run that had stopped making progress, and
+ * that condition has a direct signal: tool calls that keep FAILING. So the only limit
+ * the kernel applies is this one — a run whose last N dispatches all failed is stuck,
+ * and stopping it is what the step cap was always trying to do by proxy. Five is past
+ * the point where the repeat-failure advisories (nudge at 2, instruct at 3) have had
+ * their say and been ignored.
+ */
+declare const DEFAULT_TOOL_FAILURE_STREAK = 5;
+
+/**
+ * The durable STEP ROW — the single stored form of a run's tool call, LLM turn or
+ * memory step. Every writer builds it here: the client run loop (brain-embedded
+ * `persistStep`) and the server's addressed-agent reply (api `BrainService.agentReply`),
+ * so the row cannot drift between them. Readers parse it back with brain-embedded's
+ * `parseStepMessage`.
  *
- * Keyed by RUN KEY (the run store's cell key), not by chat: an owner and its children
- * share one chat, and each needs its own inbox. The loop drains the queue before every
- * model turn and, when the model was about to end, re-opens the run for what arrived
- * (`brainRunStore.ts`). A message queued for a run that is not running waits for its next
- * turn — the host decides whether to start one.
+ * It is a `role:'tool'` chat message with empty content and `{ kind:'step', … }`
+ * metadata. Seed builders exclude `role:'tool'`, so a step row never re-enters a model
+ * transcript.
+ */
+/** A step as a run records it — the fields of a live trace event the row keeps. */
+interface StepRowInput {
+    category: string;
+    label: string;
+    /** When the step HAPPENED (ISO) — readers order and dedupe steps by it. */
+    ts: string;
+    args?: unknown;
+    result?: unknown;
+    isError?: boolean;
+    durationMs?: number;
+    ttftMs?: number;
+    /** `tool` steps: pre-trim byte size of the full result (the stored copy is capped). */
+    resultBytes?: number;
+    /** `tool` steps: the result the model saw was truncated. */
+    truncated?: boolean;
+    /** `llm` steps: token usage the gateway reported for the turn. */
+    usage?: unknown;
+    /** `llm` steps: OpenAI finish_reason. */
+    finishReason?: string | null;
+    /** `llm` steps: length of the assistant text the turn produced. */
+    textChars?: number;
+}
+/** The `role:'tool'` message that stores one step. */
+declare function stepRow(step: StepRowInput): {
+    role: "tool";
+    content: "";
+    metadata: string;
+};
+
+interface AskUserOption {
+    label: string;
+    description?: string;
+}
+interface AskUserPayload {
+    question: string;
+    options: AskUserOption[];
+    /** Allow more than one option to be chosen (checkboxes + submit) instead of a
+     *  single click. */
+    multiSelect?: boolean;
+}
+/** The tool name every surface advertises this question under. */
+declare const ASK_USER_TOOL = "ask_user";
+/**
+ * The `ask_user` tool as the model is shown it.
+ *
+ * NOT a platform action — an autonomous cloud agent has no live user to ask — so it
+ * is injected by the CONVERSATIONAL loops only (the api's addressed-agent reply and
+ * the Brain run store the editor/web chat drives) and intercepted as a terminal turn.
+ */
+interface AskUserToolSpec {
+    type: "function";
+    function: {
+        name: string;
+        description: string;
+        /** JSON Schema for the arguments. */
+        parameters: Record<string, unknown>;
+    };
+}
+declare const ASK_USER_TOOL_SPEC: AskUserToolSpec;
+/**
+ * Coerce anything — raw tool arguments, parsed JSON off a fenced block — into a
+ * renderable payload, or null when it isn't one.
+ *
+ * The threshold is deliberate and shared: a card is only meaningful with a prompt
+ * AND at least two choices, so a producer that cannot clear it falls back to prose
+ * (where the question at least still reads) instead of emitting a block the
+ * consumer would decline.
+ */
+declare function coerceAskUserPayload(raw: unknown): AskUserPayload | null;
+/**
+ * Serialize a payload into the canonical fenced block. Shared so the producer and
+ * {@link parseAskUser} can never drift on the format.
+ */
+declare function serializeAskUser(payload: AskUserPayload): string;
+/**
+ * The producer's ONE call: raw `ask_user` tool arguments → the block to reply with,
+ * or null when the arguments don't make a card (the caller then keeps its prose).
+ */
+declare function askUserBlock(args: unknown): string | null;
+/** Extract the payload from an assistant message, or null if none/invalid. */
+declare function parseAskUser(text: string): AskUserPayload | null;
+/** Remove the raw block so the message's prose reads cleanly beside the rendered
+ *  card. Collapses the whitespace the removed block leaves behind. */
+declare function stripAskUser(text: string): string;
+/** The DOM id of a rendered question card. ONE convention, shared by the transcript
+ *  that stamps it and any host that scrolls to it — so the two can never drift. */
+declare function askUserAnchorId(messageId: number): string;
+/** The minimal message shape {@link selectPendingAskUser} needs — structural on
+ *  purpose, so this module stays free of any transcript import. */
+interface AskUserMessageLike {
+    id: number;
+    role: string;
+    content: string;
+}
+/** An unanswered question and the message carrying it. */
+interface PendingAskUser {
+    payload: AskUserPayload;
+    /** The assistant message the question rides in (lets a host reveal its card). */
+    messageId: number;
+}
+/**
+ * The question the conversation is currently BLOCKED on, or null when there is none.
+ * Walks back from the newest turn: the last assistant `ask-user` block wins, but a
+ * user turn after it means the question was already answered (answering posts the
+ * choice as the next user turn), so nothing is pending.
+ *
+ * Shared so a host never re-derives "is there an open question" — the same predicate
+ * drives the pinned banner and any host-side pending affordance.
+ */
+declare function selectPendingAskUser(messages: readonly AskUserMessageLike[]): PendingAskUser | null;
+
+/**
+ * runSteering — direction for a run that is ALREADY running, keyed by run.
+ *
+ * Ported from `brain-embedded/src/runSteering.ts` (WS2c, PRD 35 §4 row 2c): the composer
+ * queue a surface posts mid-run messages to. Keyed by RUN KEY, not by chat — an owner and
+ * its children share one chat and each needs its own inbox. A message marked `interrupt`
+ * (the person's own words, PRD 35 E10) also aborts the run's interruptible step in flight
+ * and skips the rest of its turn; a child's report waits for the step to end.
+ *
+ * {@link runSteeringSource} binds one run's inbox to the agent's `SteeringSource` port, so
+ * a surface that keeps its queue in-process supplies the port with one call. The
+ * vision-part rendering the Brain adds on top (`steerModelContent`) stays with the Brain:
+ * attachments ride here untyped, as data.
+ *
+ * No `node:*` imports, no DOM.
+ */
+
+/** A queued direction for a run. */
+interface RunSteerMessage$1 {
+    text: string;
+    attachments?: unknown;
+    /** The person typed it — not a child's report or an owner's direction to a sub-agent. */
+    fromPerson?: boolean;
+    /**
+     * No surface has shown or saved this message yet — the run must, when it drains it. A host
+     * that shows the person's words itself as it queues them (the editor's `say`) leaves it unset.
+     */
+    persist?: boolean;
+    /**
+     * A row for these words already exists in the chat (they were said while a run was starting and
+     * saved with the send). Explicit, never inferred from the other flags: a host that queues
+     * `{ fromPerson: true }` alone (the editor's `say`) means NOT saved by this surface. A continuation
+     * (`brain-embedded/src/runStore/continueChat.ts`) saves only the words that are not `saved`.
+     */
+    saved?: boolean;
+    /**
+     * The key the saved ROW is stored under (the server upserts on `(chat, event_key)`), minted ONCE: when the words
+     * the run will save are first enqueued (the Brain's wrapper), or - for a steer with none (an owner's, a child's) -
+     * by the continuation just before its FIRST save attempt, and kept through every requeue. A save that is
+     * retried, after a timeout or a requeue, therefore never makes a second row.
+     */
+    eventKey?: string;
+}
+
+/**
+ * The Brain's face of the run steering queue (PRD 35 §6.3).
+ *
+ * The queue itself — keyed by RUN KEY, with its interrupt flag and listeners — lives ONCE, in
+ * `@builderforce/agent-run` (`policy/steering/runSteering.ts`): the agent's steering policy
+ * and every surface that drains the queue read the same inboxes. What stays here is the
+ * Brain's own: the attachment type its composer produces, and the rendering of a steered
+ * message into the vision parts a model request carries (`steerModelContent`).
+ *
+ * Direction for a run that is ALREADY running — redirecting it without stopping it — is
+ * how an owner corrects a sub-agent mid-task and how a child's report reaches a parent that
+ * is still working. The loop drains the queue before every model turn and, when the model
+ * was about to end, re-opens the run for what arrived (`brainRunStore.ts`). A message
+ * queued for a run that is not running waits for its next turn — the host decides whether
+ * to start one.
  */
 
 /**
@@ -7627,22 +7879,25 @@ declare function useRunSnapshot(key: RunKey | null): BrainRunSnapshot;
  * mid-run reaches the model with the same vision parts a normal send builds —
  * a bare string here is what dropped mid-run images.
  */
-interface RunSteerMessage {
-    text: string;
+interface RunSteerMessage extends Omit<RunSteerMessage$1, 'attachments'> {
     attachments?: ChatInputAttachment[];
-    /** The person typed it — not a child's report or an owner's direction to a sub-agent. */
-    fromPerson?: boolean;
 }
 /**
  * Queue one message for a run's next turn. Blank text is ignored. `interrupt` also
  * aborts the run's interruptible step now (a foreground command) and skips the rest of
- * its turn's calls. Attachments ride along so mid-run messages keep their images.
+ * its turn's calls. Attachments ride along so mid-run messages keep their images;
+ * `persist` asks the run to save and show the message when it drains it; `saved` says a row for
+ * it already exists (so nothing saves it again).
  */
 declare function queueRunSteering(runKey: number, text: string, opts?: {
     interrupt?: boolean;
     attachments?: ChatInputAttachment[];
     fromPerson?: boolean;
+    persist?: boolean;
+    saved?: boolean;
+    eventKey?: string;
 }): void;
+
 /** Take every message queued for a run, oldest first. Empty when none are waiting. */
 declare function drainRunSteering(runKey: number): RunSteerMessage[];
 /**
@@ -8599,146 +8854,6 @@ declare function resetApiVersionCache(): void;
 declare function fetchApiVersionVia(read: () => Promise<{
     version?: string;
 } | null>, now?: () => number, timeoutMs?: number): Promise<string | null>;
-
-/**
- * Consecutive failed tool dispatches after which a run is stopped, when the surface
- * names no other number. ONE value, owned here, so every surface stops for the same
- * reason at the same point.
- *
- * ── WHY A FAILURE STREAK, AND NOT A STEP COUNT ──────────────────────────────────
- * A run is not wrong for being long. A bulk ticket clean-up, a rename across a
- * repository, a review of forty branches — each is a hundred honest tool calls, and a
- * step ceiling stopped every one of them mid-task with "kept calling tools without
- * finishing". The ceiling existed to catch a run that had stopped making progress, and
- * that condition has a direct signal: tool calls that keep FAILING. So the only limit
- * the kernel applies is this one — a run whose last N dispatches all failed is stuck,
- * and stopping it is what the step cap was always trying to do by proxy. Five is past
- * the point where the repeat-failure advisories (nudge at 2, instruct at 3) have had
- * their say and been ignored.
- */
-declare const DEFAULT_TOOL_FAILURE_STREAK = 5;
-
-/**
- * The durable STEP ROW — the single stored form of a run's tool call, LLM turn or
- * memory step. Every writer builds it here: the client run loop (brain-embedded
- * `persistStep`) and the server's addressed-agent reply (api `BrainService.agentReply`),
- * so the row cannot drift between them. Readers parse it back with brain-embedded's
- * `parseStepMessage`.
- *
- * It is a `role:'tool'` chat message with empty content and `{ kind:'step', … }`
- * metadata. Seed builders exclude `role:'tool'`, so a step row never re-enters a model
- * transcript.
- */
-/** A step as a run records it — the fields of a live trace event the row keeps. */
-interface StepRowInput {
-    category: string;
-    label: string;
-    /** When the step HAPPENED (ISO) — readers order and dedupe steps by it. */
-    ts: string;
-    args?: unknown;
-    result?: unknown;
-    isError?: boolean;
-    durationMs?: number;
-    ttftMs?: number;
-    /** `tool` steps: pre-trim byte size of the full result (the stored copy is capped). */
-    resultBytes?: number;
-    /** `tool` steps: the result the model saw was truncated. */
-    truncated?: boolean;
-    /** `llm` steps: token usage the gateway reported for the turn. */
-    usage?: unknown;
-    /** `llm` steps: OpenAI finish_reason. */
-    finishReason?: string | null;
-    /** `llm` steps: length of the assistant text the turn produced. */
-    textChars?: number;
-}
-/** The `role:'tool'` message that stores one step. */
-declare function stepRow(step: StepRowInput): {
-    role: "tool";
-    content: "";
-    metadata: string;
-};
-
-interface AskUserOption {
-    label: string;
-    description?: string;
-}
-interface AskUserPayload {
-    question: string;
-    options: AskUserOption[];
-    /** Allow more than one option to be chosen (checkboxes + submit) instead of a
-     *  single click. */
-    multiSelect?: boolean;
-}
-/** The tool name every surface advertises this question under. */
-declare const ASK_USER_TOOL = "ask_user";
-/**
- * The `ask_user` tool as the model is shown it.
- *
- * NOT a platform action — an autonomous cloud agent has no live user to ask — so it
- * is injected by the CONVERSATIONAL loops only (the api's addressed-agent reply and
- * the Brain run store the editor/web chat drives) and intercepted as a terminal turn.
- */
-interface AskUserToolSpec {
-    type: "function";
-    function: {
-        name: string;
-        description: string;
-        /** JSON Schema for the arguments. */
-        parameters: Record<string, unknown>;
-    };
-}
-declare const ASK_USER_TOOL_SPEC: AskUserToolSpec;
-/**
- * Coerce anything — raw tool arguments, parsed JSON off a fenced block — into a
- * renderable payload, or null when it isn't one.
- *
- * The threshold is deliberate and shared: a card is only meaningful with a prompt
- * AND at least two choices, so a producer that cannot clear it falls back to prose
- * (where the question at least still reads) instead of emitting a block the
- * consumer would decline.
- */
-declare function coerceAskUserPayload(raw: unknown): AskUserPayload | null;
-/**
- * Serialize a payload into the canonical fenced block. Shared so the producer and
- * {@link parseAskUser} can never drift on the format.
- */
-declare function serializeAskUser(payload: AskUserPayload): string;
-/**
- * The producer's ONE call: raw `ask_user` tool arguments → the block to reply with,
- * or null when the arguments don't make a card (the caller then keeps its prose).
- */
-declare function askUserBlock(args: unknown): string | null;
-/** Extract the payload from an assistant message, or null if none/invalid. */
-declare function parseAskUser(text: string): AskUserPayload | null;
-/** Remove the raw block so the message's prose reads cleanly beside the rendered
- *  card. Collapses the whitespace the removed block leaves behind. */
-declare function stripAskUser(text: string): string;
-/** The DOM id of a rendered question card. ONE convention, shared by the transcript
- *  that stamps it and any host that scrolls to it — so the two can never drift. */
-declare function askUserAnchorId(messageId: number): string;
-/** The minimal message shape {@link selectPendingAskUser} needs — structural on
- *  purpose, so this module stays free of any transcript import. */
-interface AskUserMessageLike {
-    id: number;
-    role: string;
-    content: string;
-}
-/** An unanswered question and the message carrying it. */
-interface PendingAskUser {
-    payload: AskUserPayload;
-    /** The assistant message the question rides in (lets a host reveal its card). */
-    messageId: number;
-}
-/**
- * The question the conversation is currently BLOCKED on, or null when there is none.
- * Walks back from the newest turn: the last assistant `ask-user` block wins, but a
- * user turn after it means the question was already answered (answering posts the
- * choice as the next user turn), so nothing is pending.
- *
- * Shared so a host never re-derives "is there an open question" — the same predicate
- * drives the pinned banner and any host-side pending affordance.
- */
-declare function selectPendingAskUser(messages: readonly AskUserMessageLike[]): PendingAskUser | null;
 
 /**
  * Chat ⇄ work linking — the single source for (a) the system-prompt directive that
@@ -10380,31 +10495,12 @@ type TransportFetch = (input: string, init: RequestInit) => Promise<Response>;
 /** `fetchImpl`, with every request tagged as coming from `surface`. */
 declare function withUsageSurface(fetchImpl: TransportFetch, surface: UsageSurface): TransportFetch;
 
-/**
- * Turns the user typed while a run was still in flight.
- *
- * THE RULE THIS ENCODES: a composer never blocks typing because the agent is
- * busy. Disabling the input while a turn streams is what made a long run feel
- * like a hang — the user had a follow-up ready, a correction to make, or wanted
- * to queue the next step, and the product's answer was a greyed-out box.
- *
- * Instead the turn is HELD and sent on the run's falling edge, one per completed
- * run, so the transcript stays ordered and no two turns race the same chat.
- *
- * Every host that mounts a composer over a single-flight run (the web Brain panel,
- * the Creation Canvas, the VS Code chat, Rovr) needs the same queueing rule, flush
- * edge and "queued turns belong to the conversation they were typed in" reset. This
- * is the ONLY turn queue — a host whose turn carries more than text (VS Code's
- * addressed recipient) queues a richer `T`, it does not fork the rule.
- *
- * Lives in the core (moved from brain-ui, which re-exports it unchanged) because
- * `useChatTurns` — the ONE send/stop/queue door — owns it, and the core must not
- * depend on the UI package.
- */
 interface QueuedItem<T> {
     /** Stable per held turn, so a host can render it and let the user remove it. */
     readonly id: number;
     readonly value: T;
+    /** Held only because no run was live yet (typed while the turn that starts it was still getting ready) - in THIS chat's run. */
+    readonly preLiveFor?: number;
 }
 interface QueuedTurns<T = string> {
     /** The held turns, oldest first. */
@@ -10416,9 +10512,17 @@ interface QueuedTurns<T = string> {
      * flight and the caller must not send), false when the caller should send it
      * now. Written this way so the host keeps ownership of how it sends.
      */
-    submit: (value: T) => boolean;
+    submit: (value: T, opts?: {
+        preLiveFor?: number;
+    }) => boolean;
     /** Drop one held turn (the user removed it, or steered it into the run). */
     remove: (id: number) => void;
+    /** Put a turn back at the FRONT of the queue - a flushed turn the host did not keep must not be lost. */
+    requeue: (value: T) => void;
+    /** Add a turn at the BACK, held or not - an idle send waits behind the turns already waiting. */
+    pushBack: (value: T) => void;
+    /** Take the OLDEST waiting turn out of the queue now (undefined when none). */
+    takeFront: () => T | undefined;
     /** Drop everything waiting — a stopped run, or a switched conversation. */
     clear: () => void;
 }
@@ -10434,8 +10538,21 @@ interface QueuedTurnsOptions<T> {
      * trimmed and checked directly; omit this for them.
      */
     textOf?: (value: T) => string;
+    /**
+     * Asked on the running->idle edge before a held turn is taken: false leaves the queue alone. A
+     * host that is already sending a turn (and will chain on to the next when it is done) says so, so
+     * the edge and that chain never both send - one path, whatever order the renders land in.
+     */
+    mayFlush?: () => boolean;
+    /**
+     * The conversation changed while turns were still held: every one of them, oldest first, with the key it was held
+     * in. Each belongs to THAT conversation - the host hands it there (its run's inbox, or back to the composer) -
+     * so nothing a person typed is discarded by a chat switch. Without it the held turns are dropped (a host with
+     * nowhere to hand them).
+     */
+    handOff?: (held: readonly QueuedItem<T>[], fromKey: string | number | null) => void;
 }
-declare function useQueuedTurns<T = string>({ running, send, resetKey, textOf }: QueuedTurnsOptions<T>): QueuedTurns<T>;
+declare function useQueuedTurns<T = string>({ running, send, resetKey, textOf, mayFlush, handOff }: QueuedTurnsOptions<T>): QueuedTurns<T>;
 
 /**
  * THE ONE DOOR a user turn leaves a composer through — typed, an answered question, a
@@ -10448,9 +10565,19 @@ declare function useQueuedTurns<T = string>({ running, send, resetKey, textOf }:
  *  1. `steer` (optional port) — a turn the host routes INTO a live run (the editor's
  *     live sub-agent, or a run waiting on its sub-agents) is delivered there, never
  *     queued behind the chat's own run;
- *  2. the queue — while `running`, the turn is HELD and sent on the run's falling edge
- *     (`useQueuedTurns`: FIFO, one per completed run, discarded on a `runKey` switch);
- *  3. otherwise `send` now.
+ *  2. mid-run, the chat's own run is STEERED by default (PRD 35 E10) - by the door itself, or by
+ *     the host's `steer` port, which asks the door's own predicate (`turns.steers`):
+ *     the message is posted to the run's inbox, interrupts the step in flight and reaches the
+ *     next model call — it does not wait behind a run that may hold for minutes. Holding it
+ *     for after the run is the explicit alternative: `queueAfter`. Direction that arrives
+ *     after the run's last drain is made the chat's NEXT turn by the run store when the run
+ *     settles (`runStore/continueChat.ts`; the web twin of the editor's `runSteer.settled`) - not
+ *     here: this hook holds only the turns the UI itself holds. A Stop drops what is still waiting;
+ *  3. the queue — a turn that cannot steer (addressed to a participant, a canvas key, a run
+ *     being stopped, or one behind turns already held, which it must not jump) is HELD and
+ *     sent on the run's falling edge (`useQueuedTurns`: FIFO, one per completed run,
+ *     discarded on a `runKey` switch);
+ *  4. otherwise `send` now.
  *
  * A stop ("Stop the run") is the Stop: mid-run it stops the run and drops what is held
  * (nothing waits behind it); idle it is sent, kept as the answer, and starts nothing
@@ -10466,22 +10593,48 @@ declare function useQueuedTurns<T = string>({ running, send, resetKey, textOf }:
  * `running`), and call `ensureChatId` from inside `send` when the host has no
  * conversation hook to do it.
  */
-interface ChatTurnsOptions<T> {
-    /** True while a turn is in flight on this conversation. */
+interface ChatTurnsBase<T> {
+    /** True while a turn is in flight on this conversation: what a typed message is HELD behind. */
     running: boolean;
+    /**
+     * Optional: true while the chat's own run is live (executing, or being made - the run store's
+     * `isLive`) and can be spoken to now. Default `running`. A host's "in flight" can begin before any
+     * run exists (a send saving its row, the editor fetching a limbic block): in that window a message
+     * is HELD in order, never steered into an inbox no run reads. Hosts take both flags from the one
+     * store state with `chatDoorLiveness`.
+     */
+    steerable?: boolean;
     /** The run being driven (chat id, `canvasRunKey(sessionId)`, …); null for a draft. Also the queue's reset key. */
     runKey: RunKey | null;
     /** Deliver one turn now. Resolve `false` when it failed before it was kept (restore the draft). */
     send: (turn: T) => Promise<boolean | void> | boolean | void;
-    /** Optional: route a turn into a live run instead; return true when it was taken. */
+    /**
+     * Optional: route a turn into a live run instead; return true when it was taken. To speak to the
+     * chat's OWN run it asks the door - `turns.steers(...)`, the predicate the composer's Send label
+     * reads - and never recomputes it.
+     */
     steer?: (turn: T) => boolean;
     /** Optional: how this host stops its run. Default `stopRun(runKey)`. */
     stop?: () => void;
     /** The text a non-string turn carries (blank check). Omit for string turns. */
     textOf?: (turn: T) => string;
-    /** Optional: the turn is addressed to a participant, not the run — never the Stop. */
-    isDirected?: (turn: T) => boolean;
+    /** Optional: the attachments a non-string turn carries — they ride a steer so a mid-run image is not dropped. */
+    attachmentsOf?: (turn: T) => ChatInputAttachment[] | undefined;
 }
+/**
+ * A host that ADDRESSES turns (to a participant, not the run) must also say where one goes back to when
+ * its send is not kept after the chat changed: the COMPOSER - text, files, addressee - never the queue now
+ * showing (another chat's) and never a run. The two come as a pair; neither alone is accepted. The same
+ * port takes ANY turn not kept after a chat switch when the run executes elsewhere (`installRunDriver`):
+ * the webview's in-process inbox is not where that run reads.
+ */
+type ChatTurnsOptions<T> = ChatTurnsBase<T> & ({
+    isDirected?: undefined;
+    restore?: undefined;
+} | {
+    isDirected: (turn: T) => boolean;
+    restore: (turn: T) => void;
+});
 interface ChatTurns<T> {
     /** The held turns (render them; let the user remove one). `queued.submit` is the raw hold-or-not primitive. */
     queued: QueuedTurns<T>;
@@ -10491,10 +10644,120 @@ interface ChatTurns<T> {
      * Stable identity.
      */
     submit: (turn: T) => Promise<boolean>;
+    /** The explicit alternative to steering: hold the turn for after the run (sent on its falling edge). Stable identity. */
+    queueAfter: (turn: T) => Promise<boolean>;
     /** Clear the queue and stop the run. Stable identity. */
     stop: () => void;
+    /**
+     * Would a message typed NOW steer the live run, or be held? The composer words its Send button
+     * from this - the same predicate `submit` decides with, over the same state (a run being
+     * stopped, turns already held this run). `preview` is what the box holds now. Read it during render.
+     */
+    steers: (preview: {
+        directed: boolean;
+        attachments?: readonly {
+            imageUrl?: string;
+        }[];
+    }) => boolean;
 }
-declare function useChatTurns<T = string>({ running, runKey, send, steer, stop, textOf, isDirected }: ChatTurnsOptions<T>): ChatTurns<T>;
+/**
+ * Does a message typed mid-run STEER the live run (true), or is it held for after it (false)?
+ * ONE predicate - `submit` decides with it and the composer words its Send button from it, so
+ * the button never promises a steer the turn will not get. A turn addressed to a participant
+ * is a message to them, not to the run; one behind turns already held waits its turn rather
+ * than jump them; one carrying a file the model cannot read inline (anything but a picture)
+ * is held, because a steer would drop the file.
+ */
+declare function steersByDefault(turn: {
+    directed: boolean;
+    held: number;
+    attachments?: readonly {
+        imageUrl?: string;
+    }[];
+}): boolean;
+/**
+ * What a host tells the door about the chat's run, from ONE source - the run store's state for that
+ * chat (`useBrainConversation`): `running` is everything in flight (a send still saving its row
+ * included - typed messages are HELD behind it), `steerable` is the run being live (`runLive`:
+ * executing or being made - messages STEER it). `extraInFlight` is a host's own pre-send work (the
+ * editor's limbic fetch). Web, Rovr and the editor all pass this, so none computes its own.
+ */
+declare function chatDoorLiveness(conv: {
+    sending: boolean;
+    runLive: boolean;
+}, extraInFlight?: boolean): {
+    running: boolean;
+    steerable: boolean;
+};
+declare function useChatTurns<T = string>({ running, steerable, runKey, send, steer, stop, restore, textOf, isDirected, attachmentsOf }: ChatTurnsOptions<T>): ChatTurns<T>;
+
+/**
+ * THE one rule for a turn that could not go - the same on every host (web panel, Rovr, the editor chat):
+ * it goes back to the composer that is SHOWING, never dropped and never auto-sent into another chat.
+ *
+ *  - its files come back (merged by key);
+ *  - its text comes back unless the person has typed something newer since - and ONLY then does it also restore
+ *    the ADDRESSEE (reset to what the turn had, so a turn for the Brain never comes back pointed at a
+ *    participant the composer happened to hold). A newer draft keeps the addressee it was written for.
+ */
+
+declare function restoreTurn(turn: {
+    text: string;
+    attachments?: readonly ChatInputAttachment[];
+    recipient: DirectedRecipient | null;
+}, composer: {
+    /** The composer's text right now (read at call time - a ref, not a render-time capture). */
+    draft: () => string;
+    /** Put the text back IF the box is still empty (`useComposerDraft().fillIfEmpty`). */
+    setInput: (text: string) => void;
+    restoreAttachments: (files: readonly ChatInputAttachment[]) => void;
+    chooseRecipient: (to: DirectedRecipient | null) => void;
+}): void;
+
+/**
+ * The composer's text as the SEND PATH sees it. A host clears the box as an offer starts and gives the words back
+ * if the turn is not kept; "is the box empty?" must answer from what was just written, not from the last render -
+ * a read that lags the clear would take the cleared words for a newer draft and not restore them. So every write
+ * goes through here: the ref changes synchronously, before React's state does. ONE hook for the web panel, Rovr and
+ * the editor chat; none keeps its own copy.
+ *
+ *  - `draft()` the text right now;
+ *  - `setInput(text)` write it (clear, seed);
+ *  - `fillIfEmpty(text)` put it back only if the box is still empty - what `restoreTurn` uses.
+ */
+declare function useComposerDraft(input: string, setInput: Dispatch<SetStateAction<string>>): {
+    draft: () => string;
+    setInput: (text: string) => void;
+    fillIfEmpty: (text: string) => void;
+};
+
+/**
+ * THE decision every message store makes for a row that carries a key (`eventKey`): a row sent AGAIN under the key
+ * it was saved with is the SAME row - the saved one comes back and nothing is written (the server upserts on
+ * `(chat, event_key)`; the device stores do the same). Pure: the store supplies how to look a key up and how to
+ * write a row; this says which rows are known, which are new, and which repeat an earlier row of the same batch.
+ * Used by the device store (`localFirstPersistence.ts`) and both Rovr stores (memory and IndexedDB).
+ */
+type KeyedSlot<R, M> = 
+/** Saved before under this key: return `prior`, write nothing. */
+{
+    kind: 'known';
+    prior: M;
+}
+/** Not seen: write it (under `key`, when it has one). */
+ | {
+    kind: 'new';
+    row: R;
+    key: string | undefined;
+}
+/** The same key as an EARLIER row of this batch (`of` is that row's index): return that row's result. */
+ | {
+    kind: 'repeat';
+    of: number;
+};
+declare function slotKeyedRows<R extends {
+    eventKey?: string;
+}, M>(rows: readonly R[], find: (key: string) => M | undefined): Array<KeyedSlot<R, M>>;
 
 /** How often a running chat re-reads its row (the server caches a chat's spend this long). */
 declare const RUN_REFRESH_MS = 30000;
@@ -10567,4 +10830,4 @@ interface ChatCreation {
 }
 declare function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }: ChatCreationOptions): ChatCreation;
 
-export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type AnswerOriginCost, type ArmedNewChat, type ArtifactKind, type AskUserMessageLike, type AskUserOption, type AskUserPayload, type AskUserToolSpec, type AssembledToolCall, AttachmentRefusedError, type AvoidedRunCall, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BRAIN_UPLOAD_PATH, BRAIN_UPLOAD_SIGN_PATH, BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS, BROWSER_ENGINE_MODEL, BUILDERFORCE_PRODUCT_NAME, BfiWorkerEngineOptions, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, type BrainRunActivity, type BrainRunDriver, type BrainRunEngine, type BrainRunOutcome, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BriefContext, type BrowserEngineProber, type BuildBrainTriageOptions, type BuildChatDiagnosticsReportInput, type ByoUnresolvedEntry, CHAT_DIAGNOSTICS_SCHEMA_VERSION, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONNECT_RETRY_DELAYS_MS, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatBindingPort, type ChatCompletionMessage, type ChatCreation, type ChatCreationOptions, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsHistory, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsProvenance, type ChatDiagnosticsReport, type ChatDiagnosticsRun, type ChatDiagnosticsRuns, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type ChatRosterAgent, type ChatStateGet, type ChatTicket, type ChatTurns, type ChatTurnsOptions, type ChatWorkDirectiveOptions, type CompletionMetadata, type ComposerDirectiveOptions, type ComposingActivity, type ComposingOptions, type ComposingSink, type ConnectRetryOptions, type ContentPart, type ContextUsage, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_FALLBACK_TEMPLATE, DEFAULT_MODEL_IDENTITY, DEFAULT_PERSONA, DEFAULT_ROUTE_THRESHOLD, DEFAULT_TOOL_FAILURE_STREAK, DEFAULT_TOOL_LIMIT, type DirectedGroup, type DirectedRecipient, type DispatchRefusal, EMPTY_GATEWAY_MODEL_OPTIONS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FILE_DELIVERY_RULE, FailureTally, type GateReport, type GateRouteStats, type GatewayJsonRequest, type GatewayModelOptions, type GatewayModelSurface, type GitShortStatus, type GlobalRunState, HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC, type HandOffOutcome, type HandOffPlan, type HandOffPorts, type HandOffTask, type HandoffFitOptions, HfModelStore, type HostLocalPin, type HostModelStreamInput, INFERENCE_MODES, type IdleWatchdogOptions, type IdleWatchdogReader, type ImageEncodeDecision, type ImagePrepOptions, type ImageUrlContentPart, type IndexedDbStepDurabilityOptions, type InferenceMode, type InlinedAttachments, LOCAL_PICKER_GROUPS, LOCAL_SKIP_CONFIDENCE, LOCAL_SKIP_EXPLORE, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, type LocalAttemptFit, type LocalBrainPersistenceOptions, type LocalChatIdentity, type LocalChatMessage, type LocalFetch, type LocalFirstAttemptSummary, type LocalFirstStreamInput, type LocalModelRow, type LocalModelState, type LocalModelStore, type LocalPickerGroup, type LocalPickerView, type LocalRatingVerdict, type LocalStreamRoute, type LocalSuccessContribution, type LocalSuccessFederation, type LocalSuccessFleetHead, type LocalSuccessSnapshot, type LocalSuccessStore, MAX_INLINE_TEXT_BYTES, MAX_STOP_HOOK_ROUNDS, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryAnswerOptions, type MemoryFirstAnswer, type MemorySurface, type MentionToken, type MessageProvenance, type MessageRatings, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackChannel, type ModelFallbackEvent, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, type ModelPreflightResult, type ModelScore, type ModelTurn, type ModelWindowSources, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, type OnDeviceStoreScope, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PREVIEW_REVIEW_TOOL, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type PackForModelInput, type PackForModelResult, PageEngine, type PageEngineSet, type PageEngineSetOptions, type PageRuntimePin, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingAskUser, type PersistedStep, type PersonaModalityId, type PersonaSubagent, type PlaceholderHit, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PrefetchConfirm, type PrefetchResult, type PreparedImage, type ProjectMemoryRequest, type PromptApiAvailability, type PromptApiFactory, type PromptApiMessage, type PromptApiSession, PromptInput, type PromptInputProps, type ProvenanceAccount, type ProviderFailureEvent, type QueuedItem, type QueuedTurns, type QueuedTurnsOptions, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, RUN_REFRESH_MS, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RecordAvoidedCallInput, type RepeatStreak, type RepeatedTarget, RepetitionLoopError, type RouteReport, type RouteRunRecord, type RoutedProduct, type RunEndOutcome, type RunEngineControl, type RunKey, type RunLineage, type RunMilestoneActivity, type RunMilestonePhase, type RunNoteStep, type RunOutcomeReport, type RunOutcomeValue, type RunPipelineSettings, type RunProgress, type RunStageModels, type RunSteerMessage, type RunStopHook, type RunStopInput, type RunTurn, type RunUsageLedger, type RunUsageValue, type RunWindowSources, STEP_MESSAGE_ROLE, STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, STREAM_IDLE_MS, STUDIO_WORKSPACE_TOOLS, SUBAGENT_OF_META_KEY, type SavingsBreakdown, type SavingsBySource, type SavingsSourceKey, type ScoreBin, type ServedRead, type SpendBreakdown, type SpendSavingsSummary, type StaffingSummary, type StepDurability, type StepOutgoingMessage, type StoppedTurnSource, type StreamChatOptions, type StreamChatResult, type StreamHandlers, StreamIdleError, StreamInterruptedError, type SubagentDiagnosticsInput, type SubagentOrigin, type SummaryStreamFn, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type TicketTag, type TicketToken, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, TransportError, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNBACKED_TICKET_CLAIM_NOTICE, UNBACKED_WRITE_CLAIM_NOTICE, UNSCOPED_MUTATION_TOOLS, USAGE_SURFACES, USAGE_SURFACE_HEADER, type UnreviewedChangeInput, type UnshippedChangeInput, type UpstreamTurnEvidence, type UsagePipelineRoute, type UsageSurface, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, type WindowFitTrace, XmlToolCallFilter, accountUsedInTrace, activeHashtagToken, activeMentionToken, activeModelKey, activeTicketToken, activityIcon, activityMessageCount, activityTarget, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, appendRunMessage, applyRemoteRun, artifactRoutePath, asProvenanceAccount, askStopHook, askUserAnchorId, askUserBlock, attachEvermindLearn, attemptedPublish, bindChatHistoryForSync, brainPersonaAgents, brainUploadUrl, buildBrainTriageReport, buildChatDiagnosticsReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, callCostMillicents, canChangeCodeHere, canReviewInPreview, canRunInParallel, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatRosterFromParticipants, chatWorkDirective, chatWorkLinkingDirective, childTaskBrief, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, codeChangesOf, coerceAskUserPayload, completeLocal, completeLocalFirst, composeEvermindHooks, computeBrainDiagnostics, computeRunProgress, contextUsageOf, contextWindowOf, createBrainRestPersistence, createBrowserEngineProber, createComposingActivity, createHandoffFit, createHostModelStream, createLocalBrainPersistence, createLocalChatIdentity, createLocalFirstStream, createLocalStream, createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, createPayloadBudget, createRunUsageLedger, declinesReview, declinesShipping, defaultInferenceMode, deferredLocalModelStore, deriveChatTitle, describeLiveStep, describeNetworkError, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, directedAgentRecipients, dirtyPathsOf, displayModelName, drainRunSteering, effortProfile, executeHandOff, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, filterTicketCandidates, findTools, forgetResolvedModels, formatAssistantTranscriptHeading, formatBrainDiagnostics, formatBrainProvenance, formatBytes, formatChatDiagnostics, formatChatDiagnosticsReportJson, formatDispatchRefusals, formatEvermindLearnStep, formatModelScorecard, formatModelTurnLog, formatRunProgress, formatStaffingSummary, formatSubagentDiagnostics, gateAcceptedSince, gatewayCanChooseModel, gatewayModelIdentity, gatewayModelWindows, gatewayPlanIsPaid, gatewayPlanModels, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, hasPromptApi, hasWebGPU, inferenceModeForModelPick, installIndexedDbStepDurability, installRunDriver, installStepDurability, invalidateGatewayModelOptions, isActivityMessage, isChatMode, isCodeChangeTool, isCoderReask, isConnectFailure, isConnectedAccountUnused, isDirectedToParticipant, isDispatchTool, isEffort, isEvermindModel, isFailedToolResult, isFallbackFailure, isInferenceMode, isLocalWorkspaceTool, isMalformedToolCall, isManagerRole, isModelReply, isMutationTool, isReadOnlyShellCall, isRepoPublishTool, isRouterTool, isRunning, isStepMessage, isStoppedBeforeStart, isStoppedTurn, isTicketRecordingTool, isTicketWriteTool, isTruncatedTurn, isUnscopedMutationTool, isUsageSurface, isUserConfiguredModelRef, lastServedModel, leftChangeUnreviewed, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, loadGatewayModelOptions, loadOnDeviceAnswerStore, localFallbackTrace, localFirstApplies, localFirstWorkload, localPickerView, localRatingVerdict, localStorageConfirmationPersistence, localToolsIn, localTransport, mcpActionsFrom, mentionRecipient, midRunNotice, modalityPersonaChoice, modelCategoryLabel, modelFailoversInTrace, modelFallbackText, modelInUse, modelScorecard, modelTurnLog, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, noteRunStep, onDeviceMemoryHooks, packForModel, pageEnginesFetch, pageRuntimePin, parseAskUser, parseByoUnresolved, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseHandOff, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, parseSubagentOrigin, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, personalitySetpoints, placeholderAdvisory, placeholdersWritten, planMessage, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, prefetchConfirmOf, premiumCostLabel, prepareImageDataUrl, previewReviewDirective, probePageEngines, productForPlan, productModelName, progressDuration, projectMemoryHooks, promptApiAvailability, promptApiFactory, promptApiInputQuota, promptApiMeasure, promptStreamDeltas, providerFailureEvent, providerFailureTrace, queueRunSteering, ratedTurnContext, ratedTurnTool, readChatRunHistory, readChatTicketLinks, readWithIdleWatchdog, reasoningForRun, repeatedFailureAdvisory, resetApiVersionCache, resetBrainRunStore, resetOnDeviceStoresForTests, resolveBrainStream, resolveContextWindow, resolveRecipient, resolveRunConfirm, retryOnConnectFailure, revealsModelId, revisitAdvisory, routeRunRecords, routerToolSpecs, routingModeForSelection, routingQueryForTurn, runAbortSignal, startRun as runBrainLoop, runOutcomesSince, runProgressVerdict, savePendingPrompt, selectPendingAskUser, selectToolsForTurn, selfReviewShipDirective, serializeAskUser, serverChatIdOf, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, signedBrainFileUrl, stableStringify, staffingSummaryInTrace, stallRecoveriesInTrace, stallUnrecoveredInTrace, startEngineRun, startRun, startsRun, steerModelContent, stepRow, stepSig, stopBeforeStart, stopRun, stoppedBeforeStartRow, stoppedTurnMetadata, streamChatCompletion, streamSummaryCompletion, stripAskUser, studioToolsIn, submitLocalTurnVerdict, subscribeRun, subscribeRunStore, subscribeToChatMessages, summarizeGateRuns, summarizeLocalFirstAttempt, summarizeRouteRuns, takePendingPrompt, ticketsReviewedInPreview, toPromptApiTurn, toolActivity, toolCallArgBytes, toolExposureInTrace, toolNamesMentionedIn, toolSchemaTokens, toolSpecsFor, traceWithPersistedSteps, transcriptSeedOf, transportRetryTrace, trimToolResult, turnAffectBlock, turnInterruption, turnOptimizationDirective, unreviewedChangeNudge, unshippedChangeNudge, usageRowsSince, useArmedNewChat, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useChatCreation, useChatTurns, useMcpExtensions, useOptionalBrainContext, useQueuedTurns, useRegisterBrainActions, useRunRefreshTick, useRunSnapshot, useToolConfirmationGate, utf8ByteLength, webStorageLocalSuccessStore, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, withRating, withReadyPageModels, withRunUsage, withUsageSurface, workFiledNotStaffedVerdict, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type AnswerOriginCost, type ArmedNewChat, type ArtifactKind, type AskUserMessageLike, type AskUserOption, type AskUserPayload, type AskUserToolSpec, type AssembledToolCall, AttachmentRefusedError, type AvoidedRunCall, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BRAIN_UPLOAD_PATH, BRAIN_UPLOAD_SIGN_PATH, BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS, BROWSER_ENGINE_MODEL, BUILDERFORCE_PRODUCT_NAME, BfiWorkerEngineOptions, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, type BrainRunActivity, type BrainRunDriver, type BrainRunEngine, type BrainRunOutcome, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BriefContext, type BrowserEngineProber, type BuildBrainTriageOptions, type BuildChatDiagnosticsReportInput, type ByoUnresolvedEntry, CHAT_DIAGNOSTICS_SCHEMA_VERSION, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONNECT_RETRY_DELAYS_MS, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatBindingPort, type ChatCompletionMessage, type ChatCreation, type ChatCreationOptions, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsHistory, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsProvenance, type ChatDiagnosticsReport, type ChatDiagnosticsRun, type ChatDiagnosticsRuns, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type ChatRosterAgent, type ChatStateGet, type ChatTicket, type ChatTurns, type ChatTurnsOptions, type ChatWorkDirectiveOptions, type CompletionMetadata, type ComposerDirectiveOptions, type ComposingActivity, type ComposingOptions, type ComposingSink, type ConnectRetryOptions, type ContentPart, type ContextUsage, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_FALLBACK_TEMPLATE, DEFAULT_MODEL_IDENTITY, DEFAULT_PERSONA, DEFAULT_ROUTE_THRESHOLD, DEFAULT_TOOL_FAILURE_STREAK, DEFAULT_TOOL_LIMIT, type DirectedGroup, type DirectedRecipient, type DispatchRefusal, EMPTY_GATEWAY_MODEL_OPTIONS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FILE_DELIVERY_RULE, FailureTally, type GateReport, type GateRouteStats, type GatewayJsonRequest, type GatewayModelOptions, type GatewayModelSurface, type GitShortStatus, type GlobalRunState, HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC, type HandOffOutcome, type HandOffPlan, type HandOffPorts, type HandOffTask, type HandoffFitOptions, HfModelStore, type HostLocalPin, type HostModelStreamInput, INFERENCE_MODES, type IdleWatchdogOptions, type IdleWatchdogReader, type ImageEncodeDecision, type ImagePrepOptions, type ImageUrlContentPart, type IndexedDbStepDurabilityOptions, type InferenceMode, type InlinedAttachments, type KeyedSlot, LOCAL_PICKER_GROUPS, LOCAL_SKIP_CONFIDENCE, LOCAL_SKIP_EXPLORE, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, type LocalAttemptFit, type LocalBrainPersistenceOptions, type LocalChatIdentity, type LocalChatMessage, type LocalFetch, type LocalFirstAttemptSummary, type LocalFirstStreamInput, type LocalModelRow, type LocalModelState, type LocalModelStore, type LocalPickerGroup, type LocalPickerView, type LocalRatingVerdict, type LocalStreamRoute, type LocalSuccessContribution, type LocalSuccessFederation, type LocalSuccessFleetHead, type LocalSuccessSnapshot, type LocalSuccessStore, MAX_INLINE_TEXT_BYTES, MAX_STOP_HOOK_ROUNDS, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryAnswerOptions, type MemoryFirstAnswer, type MemorySurface, type MentionToken, type MessageProvenance, type MessageRatings, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackChannel, type ModelFallbackEvent, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, type ModelPreflightResult, type ModelScore, type ModelTurn, type ModelWindowSources, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, type OnDeviceStoreScope, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PREVIEW_REVIEW_TOOL, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type PackForModelInput, type PackForModelResult, PageEngine, type PageEngineSet, type PageEngineSetOptions, type PageRuntimePin, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingAskUser, type PersistedStep, type PersonaModalityId, type PersonaSubagent, type PlaceholderHit, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PrefetchConfirm, type PrefetchResult, type PreparedImage, type ProjectMemoryRequest, type PromptApiAvailability, type PromptApiFactory, type PromptApiMessage, type PromptApiSession, PromptInput, type PromptInputProps, type ProvenanceAccount, type ProviderFailureEvent, type QueuedItem, type QueuedTurns, type QueuedTurnsOptions, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, RUN_REFRESH_MS, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RecordAvoidedCallInput, type RepeatStreak, type RepeatedTarget, RepetitionLoopError, type RouteReport, type RouteRunRecord, type RoutedProduct, type RunEndOutcome, type RunEngineControl, type RunKey, type RunLineage, type RunMilestoneActivity, type RunMilestonePhase, type RunNoteStep, type RunOutcomeReport, type RunOutcomeValue, type RunPipelineSettings, type RunProgress, type RunStageModels, type RunSteerMessage, type RunStopHook, type RunStopInput, type RunTurn, type RunUsageLedger, type RunUsageValue, type RunWindowSources, STEP_MESSAGE_ROLE, STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, STREAM_IDLE_MS, STUDIO_WORKSPACE_TOOLS, SUBAGENT_OF_META_KEY, type SavingsBreakdown, type SavingsBySource, type SavingsSourceKey, type ScoreBin, type ServedRead, type SpendBreakdown, type SpendSavingsSummary, type StaffingSummary, type StepDurability, type StepOutgoingMessage, type StoppedTurnSource, type StreamChatOptions, type StreamChatResult, type StreamHandlers, StreamIdleError, StreamInterruptedError, type SubagentDiagnosticsInput, type SubagentOrigin, type SummaryStreamFn, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type TicketTag, type TicketToken, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, TransportError, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNBACKED_TICKET_CLAIM_NOTICE, UNBACKED_WRITE_CLAIM_NOTICE, UNSCOPED_MUTATION_TOOLS, USAGE_SURFACES, USAGE_SURFACE_HEADER, type UnreviewedChangeInput, type UnshippedChangeInput, type UpstreamTurnEvidence, type UsagePipelineRoute, type UsageSurface, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, type WindowFitTrace, XmlToolCallFilter, accountUsedInTrace, activeHashtagToken, activeMentionToken, activeModelKey, activeTicketToken, activityIcon, activityMessageCount, activityTarget, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, appendRunMessage, applyRemoteRun, artifactRoutePath, asProvenanceAccount, askStopHook, askUserAnchorId, askUserBlock, attachEvermindLearn, attemptedPublish, bindChatHistoryForSync, brainPersonaAgents, brainUploadUrl, buildBrainTriageReport, buildChatDiagnosticsReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, callCostOrUnknown, canChangeCodeHere, canReviewInPreview, canRunInParallel, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatDoorLiveness, chatModeDirective, chatRosterFromParticipants, chatWorkDirective, chatWorkLinkingDirective, childTaskBrief, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, codeChangesOf, coerceAskUserPayload, completeLocal, completeLocalFirst, composeEvermindHooks, computeBrainDiagnostics, computeRunProgress, contextUsageOf, contextWindowOf, createBrainRestPersistence, createBrowserEngineProber, createComposingActivity, createHandoffFit, createHostModelStream, createLocalBrainPersistence, createLocalChatIdentity, createLocalFirstStream, createLocalStream, createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, createPayloadBudget, createRunUsageLedger, declinesReview, declinesShipping, defaultInferenceMode, deferredLocalModelStore, deriveChatTitle, describeLiveStep, describeNetworkError, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, directedAgentRecipients, dirtyPathsOf, displayModelName, drainRunSteering, effortProfile, executeHandOff, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, filterTicketCandidates, findTools, forgetResolvedModels, formatAssistantTranscriptHeading, formatBrainDiagnostics, formatBrainProvenance, formatBytes, formatChatDiagnostics, formatChatDiagnosticsReportJson, formatDispatchRefusals, formatEvermindLearnStep, formatModelScorecard, formatModelTurnLog, formatRunProgress, formatStaffingSummary, formatSubagentDiagnostics, gateAcceptedSince, gatewayCanChooseModel, gatewayModelIdentity, gatewayModelWindows, gatewayPlanIsPaid, gatewayPlanModels, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, hasPromptApi, hasWebGPU, inferenceModeForModelPick, installIndexedDbStepDurability, installRunDriver, installStepDurability, invalidateGatewayModelOptions, isActivityMessage, isChatMode, isCodeChangeTool, isCoderReask, isConnectFailure, isConnectedAccountUnused, isDirectedToParticipant, isDispatchTool, isEffort, isEvermindModel, isFailedToolResult, isFallbackFailure, isInferenceMode, isLive, isLocalWorkspaceTool, isMalformedToolCall, isManagerRole, isModelReply, isMutationTool, isReadOnlyShellCall, isRepoPublishTool, isRouterTool, isRunning, isStepMessage, isStoppedBeforeStart, isStoppedTurn, isTicketRecordingTool, isTicketWriteTool, isTruncatedTurn, isUnscopedMutationTool, isUsageSurface, isUserConfiguredModelRef, lastServedModel, leftChangeUnreviewed, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, loadGatewayModelOptions, loadOnDeviceAnswerStore, localFallbackTrace, localFirstApplies, localFirstWorkload, localPickerView, localRatingVerdict, localStorageConfirmationPersistence, localToolsIn, localTransport, mcpActionsFrom, mentionRecipient, midRunNotice, modalityPersonaChoice, modelCategoryLabel, modelFailoversInTrace, modelFallbackText, modelInUse, modelScorecard, modelTurnLog, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, noteRunStep, onDeviceMemoryHooks, packForModel, pageEnginesFetch, pageRuntimePin, parseAskUser, parseByoUnresolved, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseHandOff, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, parseSubagentOrigin, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, personalitySetpoints, placeholderAdvisory, placeholdersWritten, planMessage, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, prefetchConfirmOf, premiumCostLabel, prepareImageDataUrl, previewReviewDirective, probePageEngines, productForPlan, productModelName, progressDuration, projectMemoryHooks, promptApiAvailability, promptApiFactory, promptApiInputQuota, promptApiMeasure, promptStreamDeltas, providerFailureEvent, providerFailureTrace, queueRunSteering, ratedTurnContext, ratedTurnTool, readChatRunHistory, readChatTicketLinks, readWithIdleWatchdog, reasoningForRun, repeatedFailureAdvisory, resetApiVersionCache, resetBrainRunStore, resetOnDeviceStoresForTests, resolveBrainStream, resolveContextWindow, resolveRecipient, resolveRunConfirm, restoreTurn, retryOnConnectFailure, revealsModelId, revisitAdvisory, routeRunRecords, routerToolSpecs, routingModeForSelection, routingQueryForTurn, runAbortSignal, startRun as runBrainLoop, runOutcomesSince, runProgressVerdict, savePendingPrompt, selectPendingAskUser, selectToolsForTurn, selfReviewShipDirective, serializeAskUser, serverChatIdOf, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, signedBrainFileUrl, slotKeyedRows, stableStringify, staffingSummaryInTrace, stallRecoveriesInTrace, stallUnrecoveredInTrace, startEngineRun, startRun, startsRun, steerModelContent, steersByDefault, stepRow, stepSig, stopBeforeStart, stopRun, stoppedBeforeStartRow, stoppedTurnMetadata, streamChatCompletion, streamSummaryCompletion, stripAskUser, studioToolsIn, submitLocalTurnVerdict, subscribeRun, subscribeRunStore, subscribeToChatMessages, summarizeGateRuns, summarizeLocalFirstAttempt, summarizeRouteRuns, takePendingPrompt, ticketsReviewedInPreview, toPromptApiTurn, toolActivity, toolCallArgBytes, toolExposureInTrace, toolNamesMentionedIn, toolSchemaTokens, toolSpecsFor, traceWithPersistedSteps, transcriptSeedOf, transportRetryTrace, trimToolResult, turnAffectBlock, turnInterruption, turnOptimizationDirective, unreviewedChangeNudge, unshippedChangeNudge, usageRowsSince, useArmedNewChat, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useChatCreation, useChatTurns, useComposerDraft, useMcpExtensions, useOptionalBrainContext, useQueuedTurns, useRegisterBrainActions, useRunRefreshTick, useRunSnapshot, useToolConfirmationGate, utf8ByteLength, webStorageLocalSuccessStore, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, withRating, withReadyPageModels, withRunUsage, withUsageSurface, workFiledNotStaffedVerdict, workItemLinkFromCreate };

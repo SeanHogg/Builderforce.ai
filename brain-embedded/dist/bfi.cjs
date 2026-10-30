@@ -144,6 +144,22 @@ async function webGpuSupport(gpu = pageGpu(), timeoutMs = WEBGPU_ADAPTER_TIMEOUT
 var BROWSER_ENGINE_BASE_URL = "http://browser.local";
 var BFI_ENGINE_BASE_URL = "http://bfi.local";
 var WEBLLM_ENGINE_BASE_URL = "http://webllm.local";
+var KIMI_CODE_CATALOG_ALIASES = {
+  "k2": "moonshotai/kimi-k2",
+  "kimi-k2": "moonshotai/kimi-k2",
+  "kimi-k2-0905": "moonshotai/kimi-k2-0905",
+  "kimi-k2-thinking": "moonshotai/kimi-k2-thinking",
+  "k2.5": "moonshotai/kimi-k2.5",
+  "kimi-k2.5": "moonshotai/kimi-k2.5",
+  "k2.6": "moonshotai/kimi-k2.6",
+  "kimi-k2.6": "moonshotai/kimi-k2.6",
+  "kimi-k2.7-code": "moonshotai/kimi-k2.7-code",
+  "k3": "moonshotai/kimi-k3",
+  "kimi-k3": "moonshotai/kimi-k3",
+  "kimi-k3.1-pro": "moonshotai/kimi-k3.1-pro",
+  // The book prices Kimi's moving alias under its own `~` id; there is no plain `moonshotai/kimi-latest`.
+  "kimi-latest": "~moonshotai/kimi-latest"
+};
 var LOCAL_RUNTIMES = [
   { id: "synapse", automaticRank: 30, label: "Synapse", onDevice: true, catalog: "probe", tools: "all", reach: "http", ownedBy: "bfi" },
   {
@@ -197,7 +213,7 @@ var LOCAL_RUNTIMES = [
     tools: "unknown",
     reach: "page"
   },
-  { id: "kimi-code", automaticRank: Number.POSITIVE_INFINITY, label: "Kimi Code", onDevice: false, catalog: "declared", tools: "all", reach: "http", gatewayVendor: "kimi-code", providerSampling: true, accountProvider: "kimi" }
+  { id: "kimi-code", automaticRank: Number.POSITIVE_INFINITY, label: "Kimi Code", onDevice: false, catalog: "declared", tools: "all", reach: "http", gatewayVendor: "kimi-code", catalogAliases: KIMI_CODE_CATALOG_ALIASES, providerSampling: true, accountProvider: "kimi" }
 ];
 var HTTP_LOCAL_RUNTIMES = LOCAL_RUNTIMES.filter((r) => r.reach === "http");
 var LOCAL_RUNTIME_IDS = LOCAL_RUNTIMES.map((r) => r.id);

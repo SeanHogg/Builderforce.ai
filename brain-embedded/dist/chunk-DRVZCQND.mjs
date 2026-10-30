@@ -2,6 +2,22 @@
 var BROWSER_ENGINE_BASE_URL = "http://browser.local";
 var BFI_ENGINE_BASE_URL = "http://bfi.local";
 var WEBLLM_ENGINE_BASE_URL = "http://webllm.local";
+var KIMI_CODE_CATALOG_ALIASES = {
+  "k2": "moonshotai/kimi-k2",
+  "kimi-k2": "moonshotai/kimi-k2",
+  "kimi-k2-0905": "moonshotai/kimi-k2-0905",
+  "kimi-k2-thinking": "moonshotai/kimi-k2-thinking",
+  "k2.5": "moonshotai/kimi-k2.5",
+  "kimi-k2.5": "moonshotai/kimi-k2.5",
+  "k2.6": "moonshotai/kimi-k2.6",
+  "kimi-k2.6": "moonshotai/kimi-k2.6",
+  "kimi-k2.7-code": "moonshotai/kimi-k2.7-code",
+  "k3": "moonshotai/kimi-k3",
+  "kimi-k3": "moonshotai/kimi-k3",
+  "kimi-k3.1-pro": "moonshotai/kimi-k3.1-pro",
+  // The book prices Kimi's moving alias under its own `~` id; there is no plain `moonshotai/kimi-latest`.
+  "kimi-latest": "~moonshotai/kimi-latest"
+};
 var LOCAL_RUNTIMES = [
   { id: "synapse", automaticRank: 30, label: "Synapse", onDevice: true, catalog: "probe", tools: "all", reach: "http", ownedBy: "bfi" },
   {
@@ -55,7 +71,7 @@ var LOCAL_RUNTIMES = [
     tools: "unknown",
     reach: "page"
   },
-  { id: "kimi-code", automaticRank: Number.POSITIVE_INFINITY, label: "Kimi Code", onDevice: false, catalog: "declared", tools: "all", reach: "http", gatewayVendor: "kimi-code", providerSampling: true, accountProvider: "kimi" }
+  { id: "kimi-code", automaticRank: Number.POSITIVE_INFINITY, label: "Kimi Code", onDevice: false, catalog: "declared", tools: "all", reach: "http", gatewayVendor: "kimi-code", catalogAliases: KIMI_CODE_CATALOG_ALIASES, providerSampling: true, accountProvider: "kimi" }
 ];
 var HTTP_LOCAL_RUNTIMES = LOCAL_RUNTIMES.filter((r) => r.reach === "http");
 var LOCAL_RUNTIME_IDS = LOCAL_RUNTIMES.map((r) => r.id);
@@ -100,6 +116,35 @@ function isLocalModelRef(ref) {
 function runsOnDevice(ref) {
   const parsed = parseLocalModelRef(ref);
   return !!parsed && localRuntime(parsed.provider).onDevice;
+}
+var GATEWAY_ATTEMPT_TARGET = "gateway";
+function servedAttempt(result) {
+  return result.localFirst?.find((attempt) => attempt.outcome === "served");
+}
+function servedIdentity(result) {
+  const served = servedAttempt(result);
+  if (!served) return { onDevice: runsOnDevice(result.resolvedModel), name: result.resolvedModel, viaAttempt: false };
+  if (isLocalModelRef(served.target)) return { onDevice: runsOnDevice(served.target), name: served.target, viaAttempt: true };
+  const name = result.resolvedModel ?? (served.target !== GATEWAY_ATTEMPT_TARGET ? served.target : void 0);
+  return { onDevice: false, name, viaAttempt: true };
+}
+function servedOnDevice(result) {
+  return servedIdentity(result).onDevice;
+}
+function hostedDirectRef(ref) {
+  const pin = clientPinOf(ref);
+  if (!pin) return void 0;
+  const runtime = localRuntime(pin.provider);
+  return !runtime.onDevice && runtime.gatewayVendor ? `${GATEWAY_DIRECT_PREFIX}${runtime.gatewayVendor}/${pin.model}` : void 0;
+}
+function hostedCatalogId(ref) {
+  const pin = clientPinOf(ref);
+  if (!pin) return void 0;
+  const runtime = localRuntime(pin.provider);
+  return runtime.onDevice ? void 0 : runtime.catalogAliases?.[pin.model];
+}
+function pricedId(ref) {
+  return hostedCatalogId(ref) ?? hostedDirectRef(ref) ?? ref;
 }
 
 // ../packages/local-inference/src/webllmCatalog.generated.ts
@@ -1315,6 +1360,11 @@ export {
   clientPinOf,
   isLocalModelRef,
   runsOnDevice,
+  GATEWAY_ATTEMPT_TARGET,
+  servedIdentity,
+  servedOnDevice,
+  hostedDirectRef,
+  pricedId,
   normalizeLocalBaseUrl,
   localChatCompletionsUrl,
   rewriteToLocalUrl,
@@ -1360,4 +1410,4 @@ export {
   createHfModelStore,
   catalogProbe
 };
-//# sourceMappingURL=chunk-RBL4IOUC.mjs.map
+//# sourceMappingURL=chunk-DRVZCQND.mjs.map

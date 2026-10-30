@@ -234,6 +234,8 @@ interface ChatErrorBannerLabels {
     engineDetached: string;
     /** The model trapped repeatedly and is refused this session — replaces `model_keeps_crashing`. */
     modelKeepsCrashing: string;
+    /** A continuation took too long - replaces `continuation_timed_out`; the words are kept and read with the next message. */
+    continuationTimedOut: string;
     /** Open where on-device models are managed (removed) — offered beside "Pick a model"
      *  for a model that keeps crashing. */
     manageLocalModels: string;
@@ -4467,9 +4469,13 @@ interface ComposerLabels {
     off: string;
     remove: string;
     send: string;
-    /** Send while a run streams queues the message behind it — its name says so. (A host
-     *  whose Send STEERS the run words it so; its queue is then {@link queueAfter}.) */
+    /** Send while a run streams speaks to the run now (it steers) - its name says so; the message
+     *  reaches the run's next model call. A message that would be held reads {@link queueHold}; the
+     *  explicit hold-for-after is {@link queueAfter}. */
     queueSend: string;
+    /** Send while a run streams when the message will be HELD for after it (a participant, a file a steer
+     *  would drop, turns already waiting, a run being stopped) - read when the host says Send does not steer. */
+    queueHold: string;
     /** The "Queue for after" button beside Send mid-run — `keys` is the platform's
      *  shortcut (`Alt+Enter`, `⌥+Enter` on macOS). */
     queueAfter: (keys: string) => string;
@@ -4592,6 +4598,8 @@ interface BrainComposerProps {
      * Send STEERS the running turn instead of queueing behind it. Omitted ⇒ Alt+Enter sends.
      */
     onQueue?: () => void;
+    /** Whether Send while a run streams steers it (true/absent) or holds the message (false) - words the Send button. */
+    sendSteers?: boolean;
     disabled?: boolean;
     /** Why the box is closed to input (an exam in progress, …) — shown above it. */
     blockedNotice?: ReactNode;

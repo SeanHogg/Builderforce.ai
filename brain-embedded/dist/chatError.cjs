@@ -21,6 +21,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var chatError_exports = {};
 __export(chatError_exports, {
   BrainRequestError: () => BrainRequestError,
+  CONTINUATION_TIMED_OUT: () => CONTINUATION_TIMED_OUT,
   LOCAL_ENGINE_FAILURE_CODES: () => LOCAL_ENGINE_FAILURE_CODES,
   NOT_SIGNED_IN: () => NOT_SIGNED_IN,
   NO_LOCAL_MODEL: () => NO_LOCAL_MODEL,
@@ -29,6 +30,7 @@ __export(chatError_exports, {
   chatErrorAction: () => chatErrorAction
 });
 module.exports = __toCommonJS(chatError_exports);
+var CONTINUATION_TIMED_OUT = "continuation_timed_out";
 var NOT_SIGNED_IN = "not_signed_in";
 var NO_LOCAL_MODEL = "no_local_model";
 var NO_SPECIFIC_MODEL = "no_specific_model";
@@ -115,6 +117,7 @@ function chatErrorAction(err) {
   if (message === NOT_SIGNED_IN) return { kind: "sign_in" };
   if (message === NO_LOCAL_MODEL) return { kind: "no_local_model" };
   if (message === NO_SPECIFIC_MODEL) return { kind: "no_specific_model" };
+  if (message === CONTINUATION_TIMED_OUT) return { kind: "continuation_timed_out" };
   const engineCode = localEngineCode(err instanceof BrainRequestError ? err.code : void 0, message);
   if (engineCode) return { kind: "local_engine_failed", engineCode };
   const refused = platformRefusal(err, message);
@@ -127,6 +130,7 @@ function chatErrorAction(err) {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   BrainRequestError,
+  CONTINUATION_TIMED_OUT,
   LOCAL_ENGINE_FAILURE_CODES,
   NOT_SIGNED_IN,
   NO_LOCAL_MODEL,
