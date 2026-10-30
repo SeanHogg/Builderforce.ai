@@ -63,6 +63,11 @@ export interface ChatTurnsBase<T> {
   steerable?: boolean;
   /** The run being driven (chat id, `canvasRunKey(sessionId)`, …); null for a draft. Also the queue's reset key. */
   runKey: RunKey | null;
+  /**
+   * Optional: the chat id the draft's own first send created (`useChatCreation().createdChatId`). Turns held while that
+   * send creates the chat stay with it ONLY when the draft's key becomes this id; any other first id is a switch.
+   */
+  createdChatId?: number | null;
   /** Deliver one turn now. Resolve `false` when it failed before it was kept (restore the draft). */
   send: (turn: T) => Promise<boolean | void> | boolean | void;
   /**
@@ -145,7 +150,7 @@ export function chatDoorLiveness(conv: { sending: boolean; runLive: boolean }, e
   return { running: conv.sending || extraInFlight, steerable: conv.runLive };
 }
 
-export function useChatTurns<T = string>({ running, steerable = running, runKey, send, steer, stop, restore, join, textOf, isDirected, attachmentsOf }: ChatTurnsOptions<T>): ChatTurns<T> {
+export function useChatTurns<T = string>({ running, steerable = running, runKey, createdChatId, send, steer, stop, restore, join, textOf, isDirected, attachmentsOf }: ChatTurnsOptions<T>): ChatTurns<T> {
   // Newest ports, read at call time — `submit`/`stop` keep their identity across renders
   // (hosts hand them to memoized composers and to callbacks captured at run start).
   const ports = useRef({ send, steer, stop, restore, join, textOf, isDirected, attachmentsOf, runKey, running, steerable });
@@ -245,6 +250,7 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     running,
     send: (turn) => { void flush(turn); },
     resetKey: runKey,
+    createdChatId,
     textOf,
     mayFlush: () => flushingIn(ports.current.runKey) === 0,
     handOff,
@@ -289,6 +295,8 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
   // queued for the next turn; one a steer would not carry (a file it would drop) stays too, and so does
   // everything behind it.
   const { remove } = queued;
+  // ...and again when a draft's held turns are re-tagged to this chat (the host confirmed it is the one they were typed for).
+  const dueHere = queued.items.filter((item) => item.preLiveFor === runKey).length;
   useEffect(() => {
     if (!running || !steerable) return;
     const { steer: route, runKey: key, textOf: text, isDirected: directed, attachmentsOf: attached } = ports.current;
@@ -310,7 +318,7 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
       // it is NOT carried: the next message waits behind it instead of jumping it.
       carriedIds.current = new Set([...carriedIds.current].filter((id) => id !== item.id));
     }
-  }, [running, steerable, remove, runKey]);
+  }, [running, steerable, remove, runKey, dueHere]);
 
   const stopTurns = useCallback(() => {
     clear();

@@ -15,7 +15,7 @@ import { codeRunOutcome } from '../runOutcomeReport';
 import { attemptedDelegation } from '../delegationRequest';
 import { shippedToBaseBranch } from '../shipVerification';
 import { ticketsReviewedInPreview } from '../previewReview';
-import { lineagePersistence } from '../runLineage';
+import { lineagePersistence, savedChatOf } from '../runLineage';
 import { emptyRunUsage } from '../memorySavings';
 import { emit, getCell, nowIso, recordRunFailure, runTrace } from './runCells';
 import { appendRunMessage } from './runControl';
@@ -71,7 +71,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
   // its owner's chat, so from here on `chatId` is the server chat, and every message it
   // persists is attributed to the child and spliced into the owner's live view.
   const lineage = request.lineage;
-  const chatId = lineage?.rootChatId ?? runKey;
+  const chatId = savedChatOf(runKey, lineage);
   // The SERVER chat its backstops link to (PRD 36) — null on an unbound local chat.
   const serverChatId = resolveServerChatId(chatId, request);
   // Step rows are batched (see `stepOutbox.ts`) INSIDE the lineage wrap: a row is

@@ -8,17 +8,16 @@ import { TenantRole } from '../../domain/shared/types';
  * This file maps HTTP request/response to service calls.
  */
 import { Hono } from 'hono';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { isValidRoomCode } from '../../application/guest/guestToken';
 import { isValidVisitorId } from '../../application/marketing/MarketingService';
 import { claimGuestRoom } from '../../application/guest/guestRoomClient';
 import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
-import { consumeDispatchBudget } from '../../application/ratelimit/tenantBuckets';
 import { idempotentReplay } from '../middleware/idempotentReplay';
 import { fetchWebDocumentCached } from '../../application/web/webFetch';
 import { recordOutboundFetch, enforceOutboundFetchCap } from '../../application/web/outboundFetchLedger';
-import { agentHosts, users, chatTicketLinks } from '../../infrastructure/database/schema';
+import { agentHosts, users } from '../../infrastructure/database/schema';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { ChatTicketService } from '../../application/brain/ChatTicketService';
 import { attachChatSummaries } from '../../application/brain/chatSummaries';
@@ -33,7 +32,7 @@ import { handleAssetSign, handleAssetUpload, handleTenantAssetRead } from './ass
 import type { Env, HonoEnv } from '../../env';
 import type { BrainService } from '../../application/brain/BrainService';
 import type { ArchivedFilter } from '../../application/brain/brainChats';
-import { learnFromPersistedTurns, NOTHING_LEARNED } from '../../application/brain/brainEvermindLearning';
+import { runWrittenTurnEffects } from '../../application/brain/writtenTurnEffects';
 import { latestChatDiagnostics, saveChatDiagnostics } from '../../application/brain/chatDiagnosticsStore';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
@@ -69,6 +68,9 @@ function parseId(raw: string): number | null {
   const n = Number(raw);
   return Number.isNaN(n) || n <= 0 ? null : n;
 }
+
+/** The bearer token of an `Authorization` header, or null. */
+const bearerToken = (header: string | undefined): string | null => header?.replace(/^Bearer\s+/i, '') ?? null;
 
 /** Per-chat version token for the cached diagnostics read — bumped on every capture
  *  so the next GET sees it without a per-chat cache key to purge. */
@@ -320,141 +322,15 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       return c.json({ error: result.error }, status);
     }
 
-    // A human posting into a chat that's linked to a ticket IS a comment on that
-    // ticket — surface it on the unified activity/audit log (verb `comment.added`),
-    // fanned to each linked ticket. Off the response path; best-effort.
-    // Everything below acts on what was WRITTEN now: a deduplicated keyed POST (a retry of a message that already
-    // committed) answers its original rows and fires none of it - no second ticket comment, ping, reply or learning pass.
-    const written = result.written;
-    const userText = written.filter((m) => m.role === 'user' && typeof m.content === 'string' && m.content.trim());
-    if (userText.length > 0) {
-      c.executionCtx.waitUntil((async () => {
-        let links: Array<{ kind: string; ref: string }> = [];
-        try {
-          links = await db.select({ kind: chatTicketLinks.ticketKind, ref: chatTicketLinks.ticketRef })
-            .from(chatTicketLinks)
-            .where(and(eq(chatTicketLinks.chatId, id), eq(chatTicketLinks.tenantId, tenantId)));
-        } catch (error) {
-          reportCaughtError(error, { source: 'presentation/routes/brainRoutes.ts', operation: 'linkedTicketLookup' });
-        }
-        if (!links.length) return;
-        const actor = await resolveActorFromContext(c.env as Env, db, c);
-        const summary = userText[userText.length - 1]!.content.replace(/\s+/g, ' ').trim().slice(0, 200);
-        for (const l of links) {
-          await recordActivity(c.env as Env, db, {
-            tenantId, actor, verb: 'comment.added',
-            targetType: l.kind, targetId: l.ref, summary, metadata: { chatId: id },
-          }).catch((error) => {
-            reportCaughtError(error, { source: "presentation/routes/brainRoutes.ts", operation: "createBrainRoutes" });
-          });
-        }
-      })());
-    }
-
-    // Notify any HUMAN addressed in these turns (directed @human message, or a
-    // member of a group turn) so an offline teammate learns they were pinged —
-    // in-app + optional email. `addressedTo` is one participant or
-    // `{kind:'group', members}` (brain-embedded `directedMessage.ts`).
-    // Directed @agent turns are ALSO dispatched here: the client used to skip
-    // group fan-out and silently skip a missing persistence hook, so the
-    // Worker is the source of truth. Duplicate POSTs to /agent-reply no-op
-    // via alreadyRepliedAsAgent.
-    const mentioned = new Set<string>();
-    const directedAgents: { agentRef: string; agentName: string }[] = [];
-    const seenAgents = new Set<string>();
-    for (const m of written) {
-      if (m.role && m.role !== 'user') continue;
-      if (!m.metadata) continue;
-      try {
-        type Addressee = { kind?: string; ref?: unknown; name?: unknown; members?: Addressee[]; refs?: unknown };
-        const a = (JSON.parse(m.metadata) as { addressedTo?: Addressee }).addressedTo;
-        const addressees: Addressee[] = a?.kind === 'group'
-          ? (Array.isArray(a.members)
-            ? a.members
-            : Array.isArray(a.refs)
-              ? (a.refs as unknown[]).filter((r): r is string => typeof r === 'string').map((ref) => ({ kind: 'agent', ref, name: ref }))
-              : [])
-          : a ? [a] : [];
-        for (const r of addressees) {
-          if (!r) continue;
-          if (r.kind === 'human' && typeof r.ref === 'string' && r.ref) mentioned.add(r.ref);
-          else if (r.kind !== 'human' && r.ref != null && r.ref !== '') {
-            const agentRef = String(r.ref);
-            if (seenAgents.has(agentRef)) continue;
-            seenAgents.add(agentRef);
-            directedAgents.push({
-              agentRef,
-              agentName: typeof r.name === 'string' && r.name ? r.name : agentRef,
-            });
-          }
-        }
-      } catch (error) { /* not directed */
-        reportCaughtError(error, { source: "presentation/routes/brainRoutes.ts", operation: "createBrainRoutes" });
-      }
-    }
-    // The persist above is exempt from the door limiter; the fan-out is not. One
-    // unit per directed agent (an LLM call) and per mentioned human (in-app + email)
-    // is spent against `${tenantId}:dispatch`. Over budget: the turn stays saved,
-    // the fan-out is skipped, and the response says so (never silently dropped).
-    const dispatchUnits = directedAgents.length + mentioned.size;
-    let dispatchThrottled: { retryAfterSeconds: number } | null = null;
-    if (dispatchUnits > 0) {
-      const verdict = await consumeDispatchBudget(c.env as Env, tenantId, dispatchUnits).catch((error: unknown) => {
-        // Limiter/plan lookup down — fail open like every bucket, but report it.
-        reportCaughtError(error, { source: 'presentation/routes/brainRoutes.ts', operation: 'consumeDispatchBudget' });
-        return null;
-      });
-      if (verdict && !verdict.allowed) {
-        dispatchThrottled = { retryAfterSeconds: verdict.retryAfterSeconds };
-        reportCaughtError(new Error(`chat dispatch throttled: ${dispatchUnits} units over the tenant dispatch window`), {
-          source: 'presentation/routes/brainRoutes.ts', operation: 'consumeDispatchBudget',
-        });
-        mentioned.clear();
-        directedAgents.length = 0;
-      }
-    }
-    if (mentioned.size > 0) {
-      c.executionCtx.waitUntil((async () => {
-        for (const uid of mentioned) {
-          try {
-            await notify(db, c.env as Env, {
-              userId: uid, tenantId, kind: 'chat_mention',
-              title: 'You were mentioned in a chat',
-              body: 'A teammate addressed you in a Builderforce chat.',
-              ref: String(id),
-            });
-          } catch (error) { /* best-effort */ 
-            reportCaughtError(error, { source: "presentation/routes/brainRoutes.ts", operation: "createBrainRoutes" });
-          }
-        }
-      })());
-    }
-    const userId = c.get('userId') as string;
-    for (const agent of directedAgents) {
-      c.executionCtx.waitUntil(
-        brainService.agentReply(id, tenantId, userId, agent, c.env as Env, {
-          role: c.get('role') as string | undefined,
-          authToken: c.req.header('authorization')?.replace(/^Bearer\s+/i, '') ?? null,
-          executionCtx: c.executionCtx,
-        }).then((reply) => {
-          if (reply && typeof reply === 'object' && 'error' in reply && reply.error) {
-            reportCaughtError(new Error(String(reply.error)), { source: 'presentation/routes/brainRoutes.ts', operation: 'dispatchDirectedAgentReply' });
-          }
-        }).catch((error: unknown) => {
-          reportCaughtError(error, { source: 'presentation/routes/brainRoutes.ts', operation: 'dispatchDirectedAgentReply' });
-        }),
-      );
-    }
-
-    // Train the project's Evermind FROM this conversation (not just agent runs): a
-    // persisted assistant turn in a project chat whose Evermind is seeded + connected
-    // is contributed to learning. ONE learn-on-persist entry point (shared with the
-    // `@agent` reply path) evaluates the gate synchronously (a cached head read) so the
-    // response reports the TRUTHFUL outcome — the client renders its `learn` step off
-    // this — and dispatches the slow coordinator contribution in the background.
-    const evermindLearn = written.length === 0
-      ? NOTHING_LEARNED
-      : await learnFromPersistedTurns(c.env as Env, db, id, tenantId, result.writtenRows, (p) => c.executionCtx.waitUntil(p));
+    // Everything the written turns set in motion (ticket comment, pings, addressed-agent replies, Evermind learning) - for what was
+    // WRITTEN now only: a deduplicated keyed POST answers its original rows and fires none of it.
+    const { evermindLearn, dispatchThrottled } = await runWrittenTurnEffects({
+      env: c.env as Env, db, brainService, chatId: id, tenantId, userId: c.get('userId') as string, role: c.get('role') as string | undefined,
+      authToken: bearerToken(c.req.header('authorization')),
+      waitUntil: (work) => c.executionCtx.waitUntil(work),
+      executionCtx: () => c.executionCtx,
+      resolveActor: () => resolveActorFromContext(c.env as Env, db, c),
+    }, result);
 
     return c.json({ messages: result.messages, evermindLearn, ...(dispatchThrottled ? { dispatchThrottled } : {}) }, 201);
   });
@@ -805,7 +681,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     if (!body.agentRef) return c.json({ error: 'agentRef is required' }, 400);
     // The agent runs its platform-tool loop with the TRIGGERING user's role/token,
     // so it can never exceed the human's own permissions.
-    const authToken = c.req.header('authorization')?.replace(/^Bearer\s+/i, '') ?? null;
+    const authToken = bearerToken(c.req.header('authorization'));
     const result = await brainService.agentReply(
       id,
       c.get('tenantId') as number,

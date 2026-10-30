@@ -30,9 +30,11 @@ async function requestLimbic(text: string): Promise<string> {
   }
 }
 
-export function useChatSend({ conv, chatId, input, setInput, recipient, chooseRecipient, liveChildren, setTurnLimbic, reloadChats }: {
+export function useChatSend({ conv, chatId, createdChatId, input, setInput, recipient, chooseRecipient, liveChildren, setTurnLimbic, reloadChats }: {
   conv: UseBrainConversation;
   chatId: number | null;
+  /** The id the draft's first send created (`useVsCodeChats().createdChatId`) - held draft turns stay only with that chat. */
+  createdChatId?: number | null;
   input: string;
   setInput: Dispatch<SetStateAction<string>>;
   recipient: DirectedRecipient | null;
@@ -138,6 +140,7 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, chooseRe
       return { text: one.text, recipient: one.recipient, ...(one.attachments?.length ? { attachments: [...one.attachments] } : {}) };
     },
     runKey: chatId,
+    createdChatId,
     send: dispatchSend,
     textOf: (m) => m.text,
     // A turn for a participant is a message to them — never the Brain's Stop.

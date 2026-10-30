@@ -135,6 +135,7 @@ const nextConfig = {
       '@huggingface/transformers': './node_modules/@huggingface/transformers/dist/transformers.web.js',
       '@seanhogg/builderforce-brain-embedded': '../brain-embedded/dist/index.mjs',
       '@seanhogg/builderforce-brain-embedded/bfi': '../brain-embedded/dist/bfi.mjs',
+      '@seanhogg/builderforce-brain-embedded/pendingWords': '../brain-embedded/dist/pendingWords.mjs',
       // The vendored WebGPU engine (PRD 34): its glue, and the module whose relative
       // `new URL('./bfi_web_bg.wasm', import.meta.url)` emits the binary as an asset.
       // Webpack needs neither — it follows the `link:` like any package.

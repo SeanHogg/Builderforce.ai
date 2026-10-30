@@ -672,13 +672,13 @@ export class AnalysisRunnerDO implements DurableObject {
     const now = new Date();
     let won = true; // no linked execution row: nothing to race
     if (cursor.executionId != null) {
-      // The ONE terminal transition (never overwrites a landed run); a lost race or failed landing skips the lane move below.
+      // The ONE terminal transition (never overwrites a landed run); ONLY a lost race (`won === false`: another writer landed it) skips the lane move below - a landing that ERRORED is reported and the lane still moves.
       won = await landExecution(buildExecutionRepository(this.db), cursor.executionId, execStatus === 'completed' ? ExecutionStatus.COMPLETED : ExecutionStatus.FAILED)
         .then((landed) => landed.won)
         .catch((error) => { this.reportError(error, { operation: "closeTaskAndExecution", context: { logMessage: '[analysis-runner] terminal execution transition failed', details: {
           runId: cursor.runId, executionId: cursor.executionId, tenantId: cursor.tenantId, status: execStatus,
           error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-        } } }); return false; });
+        } } }); return true; });
     }
     if (won && cursor.taskId != null) {
       await this.db

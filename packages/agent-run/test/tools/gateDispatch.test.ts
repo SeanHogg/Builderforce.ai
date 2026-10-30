@@ -154,7 +154,8 @@ describe("a require-approval gate", () => {
     expect(writes).toEqual([]);
     // Parked on the approval record, and never reported done: a parked call did not run, so it is no dispatch.
     expect(Object.values(parked.state.parkedCalls ?? {})).toEqual(["appr-9"]);
-    expect(events).not.toContainEqual(expect.objectContaining({ kind: "tool.dispatched", tool: "write_file", ok: true }));
+    expect(events).not.toContainEqual(expect.objectContaining({ kind: "tool.dispatched", tool: "write_file" }));
+    expect(parked.state.telemetry?.toolCalls ?? 0).toBe(0);
   });
 
   it("proceeds after the resume: the parked call is in approvedCalls, and the identical retried call runs", async () => {

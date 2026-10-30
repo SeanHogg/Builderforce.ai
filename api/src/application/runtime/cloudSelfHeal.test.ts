@@ -26,6 +26,7 @@ import { executions, toolAuditEvents } from '../../infrastructure/database/schem
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { notifyExecutionSubscribers } from './executionEvents';
+import { buildExecutionRepository } from '../../buildExecutionRepository';
 
 vi.mock('./executionEvents', async (importOriginal) => ({ ...(await importOriginal<typeof import('./executionEvents')>()), notifyExecutionSubscribers: vi.fn() }));
 
@@ -120,12 +121,13 @@ function makeFakeDb(opts: FakeOpts = {}) {
         },
       }),
     }),
-    // Awaitable AND `.onConflictDoNothing().returning()` (the outcome row's insert): the row "wins" unless one is already recorded.
+    // The real drizzle chain: awaitable, `.returning()` (the tool-event append), and `.onConflictDoNothing().returning()` (the outcome row's insert: the row "wins" unless one is already recorded).
     insert: (table: unknown) => ({
       values: (row: Record<string, unknown> | Array<Record<string, unknown>>) => {
         const list = Array.isArray(row) ? row : [row];
         for (const r of list) inserts.push({ table, row: r });
         return Object.assign(Promise.resolve(undefined), {
+          returning: async () => list.map((r, i) => ({ id: inserts.length - list.length + i + 1, executionId: r.executionId })),
           onConflictDoNothing: () => ({ returning: async () => list.map((r) => ({ executionId: r.executionId })) }),
         });
       },
@@ -204,14 +206,14 @@ const RUN_ROW = {
 describe('handleCloudRunCrash', () => {
   it('no-ops when the run is already terminal', async () => {
     const { db, inserts } = makeFakeDb({ runRow: { ...RUN_ROW, status: 'completed' } });
-    expect(await handleCloudRunCrash(envWithRunner(true), db, 62, 'boom')).toBe('noop');
+    expect(await handleCloudRunCrash(envWithRunner(true), db, 62, 'boom', buildExecutionRepository(db))).toBe('noop');
     expect(inserts).toHaveLength(0);
   });
 
   it('self-heals a crashed run and records a runtime.crash event', async () => {
     startMock.mockReset();
     const { db, rowsFor } = makeFakeDb({ runRow: { ...RUN_ROW }, prCount: 0 });
-    expect(await handleCloudRunCrash(envWithRunner(true), db, 62, 'Container run error: OOM')).toBe('requeued');
+    expect(await handleCloudRunCrash(envWithRunner(true), db, 62, 'Container run error: OOM', buildExecutionRepository(db))).toBe('requeued');
     expect(startMock).toHaveBeenCalledTimes(1);
     expect(rowsFor(toolAuditEvents).some((r) => r.toolName === 'runtime.crash')).toBe(true);
   });
@@ -219,7 +221,7 @@ describe('handleCloudRunCrash', () => {
   it('fails with the REAL reason when self-heal is unavailable (no runner)', async () => {
     const { db, updates, rowsFor } = makeFakeDb({ runRow: { ...RUN_ROW }, prCount: 0 });
     const reason = 'This cloud run\'s runtime crashed: disk full';
-    expect(await handleCloudRunCrash({} as Env, db, 62, reason)).toBe('ineligible');
+    expect(await handleCloudRunCrash({} as Env, db, 62, reason, buildExecutionRepository(db))).toBe('ineligible');
     // the execution row is failed carrying the crash reason
     const failUpdate = updates.find((u) => u.table === executions && u.vals.status === 'failed');
     expect(failUpdate?.vals.errorMessage).toBe(reason);
@@ -236,7 +238,7 @@ describe('handleCloudRunCrash', () => {
 
   it('LOSES to a writer that already landed the run: ineligible, no outcome row, no run.failed, no done notify', async () => {
     const { db, rowsFor } = makeFakeDb({ runRow: { ...RUN_ROW }, prCount: 0, alreadyLanded: 'completed' });
-    expect(await handleCloudRunCrash({} as Env, db, 62, 'runtime crashed')).toBe('ineligible');
+    expect(await handleCloudRunCrash({} as Env, db, 62, 'runtime crashed', buildExecutionRepository(db))).toBe('ineligible');
     expect(rowsFor(toolAuditEvents).filter((r) => ['run.outcome', 'run.finished', 'run.failed'].includes(String(r.toolName)))).toEqual([]);
     expect(vi.mocked(notifyExecutionSubscribers)).not.toHaveBeenCalled();
     expect(reported).not.toHaveBeenCalled();

@@ -7,11 +7,12 @@
  */
 import { createLocalRuntimeProber, type LocalFirstAttemptRecord, type LocalRuntimeProbe } from '@builderforce/local-inference';
 import { createOnlineSignal } from '@builderforce/write-outbox';
-import { clearPendingWords, createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, installIndexedDbStepDurability, setPendingWordsOwner, type BrainConfig, type ModelFallbackChannel, type PageEngineSet } from '@seanhogg/builderforce-brain-embedded';
+import { createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, installIndexedDbStepDurability, type BrainConfig, type ModelFallbackChannel, type PageEngineSet } from '@seanhogg/builderforce-brain-embedded';
 import { createProviderConnectionsClient, type GatewayRequest } from '@builderforce/provider-connect';
 import type { ComposerConnections } from '@seanhogg/builderforce-brain-ui';
 import { createApiClient, createAuthenticatedFetch, type ApiClient, type AuthenticatedFetch } from '../api/apiClient';
 import { portRequest } from '../api/requestPorts';
+import { bindPendingWordsOwner } from './pendingWordsOwner';
 import { createSession, type Session } from '../auth/session';
 import { BFI_WASM_FILE, BFI_WORKER_FILE, DEFAULT_BASE_URL, LOCAL_DB, STEP_OUTBOX_DB } from '../config';
 import { KIMI_API_ORIGINS, createConnectedAccount, type ConnectedAccount } from '../inference/connectedAccount';
@@ -208,14 +209,8 @@ export async function createPanelServices(): Promise<PanelServices> {
   session.subscribe(() => {
     if (!session.isSignedIn()) void kimi.store.clear();
   });
-  // Words not yet saved are journaled on this device for the signed-in workspace (a Rovr profile is one person's), and
-  // gone with the sign-in: the next one may be someone else's.
-  const journalOwner = (): void => setPendingWordsOwner({ tenant: session.tenantId() ?? 'local', user: 'rovr' });
-  journalOwner();
-  session.subscribe(() => {
-    if (!session.isSignedIn()) clearPendingWords();
-    journalOwner();
-  });
+  // Words not yet saved are journaled on this device for the signed-in workspace only, and gone with the sign-in.
+  bindPendingWordsOwner(session);
   const modelFallback = createModelFallbackChannel();
   const stream = createRovrStream({
     baseUrl,

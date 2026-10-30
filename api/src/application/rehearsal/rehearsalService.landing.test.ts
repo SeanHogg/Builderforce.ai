@@ -21,6 +21,7 @@ vi.mock('../runtime/cloudAgentEngine', () => ({
 }));
 
 import { runRehearsal } from './rehearsalService';
+import { buildExecutionRepository } from '../../buildExecutionRepository';
 import { executions, rehearsals, toolAuditEvents } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -34,8 +35,9 @@ const executionRow = (status: string) => ({
 });
 
 /** The rehearsal's database: records every write in order; `landFails` makes the execution's terminal UPDATE throw. */
-function fakeDb(opts: { landFails?: boolean } = {}) {
+function fakeDb(opts: { landFails?: boolean; completedElsewhere?: boolean } = {}) {
   const order: string[] = [];
+  let completionFailed = false;
   const rehearsalSets: Array<Record<string, unknown>> = [];
   const timeline: Array<Record<string, unknown>> = [];
   const selectChain = (rows: unknown[]) => {
@@ -45,7 +47,8 @@ function fakeDb(opts: { landFails?: boolean } = {}) {
     return chain;
   };
   const db = {
-    select: () => selectChain([{ id: 5, title: 'T', description: null, projectId: 3, assignedAgentRef: null }]),
+    // `completedElsewhere`: the run's own row reads COMPLETED (another writer landed it) - the ticket and the execution share one fake row.
+    select: () => selectChain([{ ...(opts.completedElsewhere ? { ...executionRow('completed'), result: 'landed by someone else' } : {}), id: 5, title: 'T', description: null, projectId: 3, assignedAgentRef: null }]),
     insert: (table: unknown) => ({
       values: (v: Record<string, unknown> | Array<Record<string, unknown>>) => {
         const list = Array.isArray(v) ? v : [v];
@@ -59,9 +62,15 @@ function fakeDb(opts: { landFails?: boolean } = {}) {
     update: (table: unknown) => ({
       set: (vals: Record<string, unknown>) => ({
         where: () => {
-          if (table === rehearsals) { order.push(`rehearsal:${String(vals.status ?? 'link')}`); rehearsalSets.push(vals); return Promise.resolve([]); }
+          if (table === rehearsals) {
+            order.push(`rehearsal:${String(vals.status ?? 'link')}`);
+            // The FIRST completion write fails: the run is then failed -> found already completed, and the row is written from there.
+            if (opts.completedElsewhere && vals.status === 'completed' && !completionFailed) { completionFailed = true; return Promise.reject(new Error('rehearsal write hiccup')); }
+            rehearsalSets.push(vals);
+            return Promise.resolve([]);
+          }
           order.push(`execution:${String(vals.status)}`);
-          return { returning: async () => { if (opts.landFails && vals.status === 'completed') throw new Error('db hiccup'); return [executionRow(String(vals.status))]; } };
+          return { returning: async () => { if (opts.landFails && vals.status === 'completed') throw new Error('db hiccup'); return opts.completedElsewhere ? [] : [executionRow(String(vals.status))]; } };
         },
       }),
     }),
@@ -76,7 +85,7 @@ describe('runRehearsal - the shadow execution lands first, with the run\'s tally
     h.engineResult = { ...h.engineResult, telemetry: TALLY };
     const { db, order, rehearsalSets, timeline } = fakeDb();
 
-    await runRehearsal({} as Env, db, { tenantId: 4, kind: 'dry_run', taskId: 5 });
+    await runRehearsal({} as Env, db, { tenantId: 4, kind: 'dry_run', taskId: 5 }, buildExecutionRepository(db));
 
     const outcomes = timeline.filter((r) => r.toolName === 'run.outcome');
     expect(outcomes).toHaveLength(1);
@@ -91,10 +100,19 @@ describe('runRehearsal - the shadow execution lands first, with the run\'s tally
   it('a landing that throws leaves rehearsal=failed beside execution=failed - never completed beside failed or the reverse', async () => {
     const { db, order, rehearsalSets } = fakeDb({ landFails: true });
 
-    await runRehearsal({} as Env, db, { tenantId: 4, kind: 'dry_run', taskId: 5 });
+    await runRehearsal({} as Env, db, { tenantId: 4, kind: 'dry_run', taskId: 5 }, buildExecutionRepository(db));
 
     expect(order).not.toContain('rehearsal:completed'); // the rehearsal never claimed success before the execution landed
     expect(order.indexOf('execution:failed')).toBeLessThan(order.lastIndexOf('rehearsal:failed'));
     expect(rehearsalSets.at(-1)).toMatchObject({ status: 'failed', errorMessage: 'db hiccup' });
+  });
+
+  it('a failure that finds the execution already COMPLETED writes the same completion fields as a normal finish (steps, summary, finishedOk)', async () => {
+    const { db, rehearsalSets } = fakeDb({ completedElsewhere: true });
+
+    await runRehearsal({} as Env, db, { tenantId: 4, kind: 'dry_run', taskId: 5 }, buildExecutionRepository(db));
+
+    expect(rehearsalSets.at(-1)).toMatchObject({ status: 'completed', steps: 0, suppressedWrites: 0, finishedOk: true, summary: 'rehearsed' });
+    expect(rehearsalSets.at(-1)).not.toHaveProperty('errorMessage');
   });
 });

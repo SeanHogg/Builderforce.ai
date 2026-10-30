@@ -21,8 +21,9 @@ import {
   ACTIONS_SCHEDULE_GRACE_MS,
   classifyActionsDispatch,
   countBlockingUnattributedRuns,
-  failStrandedDispatch,
 } from './githubActionsReconcile';
+import { failStrandedDispatch } from './failStrandedDispatch';
+import { buildExecutionRepository } from '../../buildExecutionRepository';
 import { executions, toolAuditEvents } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import {
@@ -233,7 +234,7 @@ describe('failStrandedDispatch', () => {
 
   it('fails a run that is still stranded: one terminal write, its run.outcome + run.failed rows, nothing reported', async () => {
     const { db, sets, toolRows } = fakeDb('submitted');
-    expect(await failStrandedDispatch(db, STRANDED, 'GitHub never scheduled it')).toBe(true);
+    expect(await failStrandedDispatch(db, STRANDED, 'GitHub never scheduled it', buildExecutionRepository(db))).toBe(true);
     expect(sets[0]).toMatchObject({ table: executions, vals: { status: 'failed', errorMessage: 'GitHub never scheduled it' } });
     expect(toolRows().map((r) => r.toolName).sort()).toEqual(['run.failed', 'run.finished', 'run.outcome']);
     expect(reported).not.toHaveBeenCalled();
@@ -241,7 +242,7 @@ describe('failStrandedDispatch', () => {
 
   it('NEVER clobbers a run that checked in (RUNNING): the landing is lost, so no run.failed and no outcome row are written', async () => {
     const { db, toolRows } = fakeDb('running');
-    expect(await failStrandedDispatch(db, STRANDED, 'GitHub never scheduled it')).toBe(false);
+    expect(await failStrandedDispatch(db, STRANDED, 'GitHub never scheduled it', buildExecutionRepository(db))).toBe(false);
     expect(toolRows()).toEqual([]);
     expect(reported).not.toHaveBeenCalled();
   });

@@ -38,6 +38,12 @@ interface Pending {
   at: number;
   /** The model already drained it: replayed, it is a mid-turn row, not a turn awaiting an answer. */
   read?: true;
+  /**
+   * The chat its words are SAVED to - the run's own, or its owner's (`lineage.rootChatId`) for a sub-agent - where a replay
+   * sends them. The journal is keyed by the RUN (a Stop and the run's drain find it there); an entry from before this field
+   * replays to its key's chat.
+   */
+  chatId?: number;
 }
 
 /** How long an unsaved word is kept: a week. */
@@ -71,6 +77,7 @@ export function setPendingWordsOwner(who: { tenant: string | number; user: strin
   const next = who ? `${who.tenant}:${who.user}` : null;
   const changed = next !== owner;
   owner = next;
+  if (!owner) stopBeating(); // nobody to keep words for: nothing may go on writing the heartbeat key
   if (changed && owner && startupPersistence) void replayAllPendingWords(startupPersistence);
 }
 
@@ -144,6 +151,8 @@ function write(key: string, list: Pending[]): boolean {
 // --- Is the page load that wrote an entry still alive? -------------------------------------------------------
 
 let holding = false;
+/** The heartbeat's timer while this load is findable by it (the no-Web-Locks way). */
+let beatTimer: ReturnType<typeof setInterval> | null = null;
 
 /** Make this page load findable as alive: hold its lock, or - without Web Locks - beat. Idempotent. */
 function holdSession(): void {
@@ -166,8 +175,19 @@ function holdSession(): void {
 function beatWhileAlive(): void {
   const beat = (): void => onStorage((store) => store.setItem(`${BEAT_PREFIX}${SESSION}`, String(Date.now())), undefined);
   beat();
-  const timer = setInterval(beat, BEAT_MS) as unknown as { unref?: () => void };
-  timer.unref?.();
+  beatTimer = setInterval(beat, BEAT_MS);
+  (beatTimer as unknown as { unref?: () => void }).unref?.();
+}
+
+/**
+ * Stop the heartbeat (sign-out, owner cleared): a timer left running would write `bf:pendingBeat:<session>` back right after
+ * sign-out removed it. The next journal write makes this load findable again (`holdSession`).
+ */
+function stopBeating(): void {
+  if (beatTimer === null) return;
+  clearInterval(beatTimer);
+  beatTimer = null;
+  holding = false;
 }
 
 async function sessionAlive(session: string): Promise<boolean> {
@@ -185,7 +205,7 @@ async function sessionAlive(session: string): Promise<boolean> {
 // --- Writing ------------------------------------------------------------------------------------------------
 
 /** Journal the words. Returns whether they are on the device: false means a reload before the save lands loses them. */
-export function rememberPendingWords(chatId: number, eventKey: string, text: string): boolean {
+export function rememberPendingWords(chatId: number, eventKey: string, text: string, savedTo: number = chatId): boolean {
   const key = keyOf(chatId);
   const body = text.trim();
   if (!key || !body) return false;
@@ -194,7 +214,7 @@ export function rememberPendingWords(chatId: number, eventKey: string, text: str
   // A device whose journal cannot be read keeps none: writing blind would overwrite entries this could not see.
   if (!list) return false;
   if (list.some((p) => p.eventKey === eventKey)) return true;
-  return write(key, [...list, { eventKey, text: body, session: SESSION, at: Date.now() }].slice(-PER_CHAT_CAP));
+  return write(key, [...list, { eventKey, text: body, session: SESSION, at: Date.now(), chatId: savedTo }].slice(-PER_CHAT_CAP));
 }
 
 /** The words with these keys were saved, or ended (a Stop): they are no longer the device's to keep. */
@@ -220,6 +240,7 @@ export function markPendingWordsRead(chatId: number, eventKeys: ReadonlyArray<st
 
 /** Sign-out: nothing a person said stays on a device they have left (every owner's journal, and the heartbeats). */
 export function clearPendingWords(): void {
+  stopBeating();
   onStorage((store) => {
     for (const key of [...keysStarting(PREFIX), ...keysStarting(BEAT_PREFIX)]) store.removeItem(key);
   }, undefined);
@@ -249,7 +270,7 @@ async function replayOne(chatId: number, key: string, persistence: Pick<BrainRun
     if (left <= 0) break; // the allowance is spent: what is left waits for the next open
     try {
       const row = { role: 'user', content: word.text, ...(word.read ? { metadata: steerMetadata({}) } : {}), eventKey: word.eventKey };
-      await bounded(Math.min(SAVE_MS, left), persistence.sendMessages(chatId, [row]));
+      await bounded(Math.min(SAVE_MS, left), persistence.sendMessages(word.chatId ?? chatId, [row]));
       forgetPendingWords(chatId, [word.eventKey]);
       saved += 1;
     } catch (e) {

@@ -88,7 +88,7 @@ import { runHostedListingSweep } from './application/marketplace/creationListing
 import { runJobAlertSweep } from './application/marketplace/jobAlerts';
 import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
 import { sweepIdlePreviews } from './application/runtime/previewSessions';
-import { reconcileGithubActionsRuns } from './application/runtime/githubActionsReconcile';
+import { runGithubActionsReconcile } from './buildGithubActionsReconcile';
 import { runAgentWorkflowRefreshSweep } from './application/runtime/agentWorkflowRefresh';
 import { runApprovalExpirySweep } from './application/approvals/runApprovalExpirySweep';
 import { runEscalationSweep } from './application/incident/runEscalationSweep';
@@ -951,7 +951,7 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     cadence: 'frequent',
     description: 'Ask GitHub whether dispatched runs exist; fail the ones it never scheduled with the real cause.',
     run: async ({ env, db }) => {
-      const r = await reconcileGithubActionsRuns(env, Date.now(), db);
+      const r = await runGithubActionsReconcile(env, Date.now(), db);
       return r.failed > 0 ? `checked=${r.checked} failed=${r.failed} stillQueued=${r.stillQueued}` : null;
     },
   },

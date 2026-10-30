@@ -760,7 +760,8 @@ describe('useChatTurns - a draft chat\'s first id is not a chat switch; everythi
 
   it('turns held while the first turn creates the chat are STEERED into that chat\'s run, in order - not handed off', async () => {
     const send = vi.fn();
-    const props = (runKey: number | null, steerable: boolean): ChatTurnsOptions<string> => ({ running: true, steerable, runKey, send });
+    // HARNESS WIRING (round D): the host now confirms which chat the draft's send created (`createdChatId`).
+    const props = (runKey: number | null, steerable: boolean): ChatTurnsOptions<string> => ({ running: true, steerable, runKey, createdChatId: runKey, send });
     const { result, rerender } = renderHook((p: ChatTurnsOptions<string>) => useChatTurns<string>(p), { initialProps: props(null, false) });
     await act(async () => { await result.current.submit('B'); }); // the draft's first turn (A) is creating the chat
     await act(async () => { await result.current.submit('C'); });
@@ -786,6 +787,58 @@ describe('useChatTurns - a draft chat\'s first id is not a chat switch; everythi
 
     expect(drainRunSteering(78)).toEqual([]);
     expect(result.current.queued.items.map((i) => i.value)).toEqual(['for later']);
+  });
+
+  it('a draft whose chat id lands BEFORE the host confirms it keeps its held turns, and steers them once it does', async () => {
+    const send = vi.fn();
+    const props = (runKey: number | null, steerable: boolean, createdChatId: number | null): ChatTurnsOptions<string> => ({ running: true, steerable, runKey, createdChatId, send });
+    const { result, rerender } = renderHook((p: ChatTurnsOptions<string>) => useChatTurns<string>(p), { initialProps: props(null, false, null) });
+    await act(async () => { await result.current.submit('B'); });
+
+    rerender(props(77, true, null)); // selected and live, the creation's answer is not in yet
+    expect(drainRunSteering(77)).toEqual([]);
+    expect(result.current.queued.count).toBe(1);
+
+    rerender(props(77, true, 77)); // the draft's send reports it created THIS chat
+    expect(drainRunSteering(77).map((m) => m.text)).toEqual(['B']);
+    expect(result.current.queued.count).toBe(0);
+  });
+
+  it('a draft switched to an EXISTING live chat before the create returns: the held turn is never steered into it - it goes back to the composer', async () => {
+    type Turn = { text: string; to: string | null };
+    const restore = vi.fn();
+    const props = (runKey: number | null, steerable: boolean, createdChatId: number | null): ChatTurnsOptions<Turn> =>
+      ({ running: true, steerable, runKey, createdChatId, send: vi.fn(), restore, textOf: (t) => t.text, isDirected: (t) => t.to != null }) as ChatTurnsOptions<Turn>;
+    const { result, rerender } = renderHook((p: ChatTurnsOptions<Turn>) => useChatTurns<Turn>(p), { initialProps: props(null, false, null) });
+    await act(async () => { await result.current.submit({ text: 'B', to: null }); }); // the draft's send A is creating a chat
+
+    rerender(props(42, true, null)); // the person clicked live chat 42; the create has not returned
+    expect(hasRunInterrupt(42)).toBe(false);
+    expect(drainRunSteering(42)).toEqual([]);
+
+    rerender(props(42, true, 57)); // the create resolves with a DIFFERENT chat: 42 was a switch
+    expect(restore).toHaveBeenCalledWith({ text: 'B', to: null });
+    expect(drainRunSteering(42)).toEqual([]);
+    expect(hasRunInterrupt(42)).toBe(false);
+    expect(result.current.queued.count).toBe(0);
+  });
+
+  it('a draft switched to another chat whose creation never answers: the held turn goes back when the run ends, never into that chat', async () => {
+    type Turn = { text: string; to: string | null };
+    const restore = vi.fn();
+    const send = vi.fn();
+    const props = (runKey: number | null, running: boolean): ChatTurnsOptions<Turn> =>
+      ({ running, steerable: running, runKey, createdChatId: null, send, restore, textOf: (t) => t.text, isDirected: (t) => t.to != null }) as ChatTurnsOptions<Turn>;
+    const { result, rerender } = renderHook((p: ChatTurnsOptions<Turn>) => useChatTurns<Turn>(p), { initialProps: { ...props(null, true), steerable: false } as ChatTurnsOptions<Turn> });
+    await act(async () => { await result.current.submit({ text: 'B', to: null }); });
+
+    rerender(props(42, true));
+    rerender(props(42, false)); // chat 42's run ended: the held turn is not flushed into it
+
+    expect(send).not.toHaveBeenCalled();
+    expect(restore).toHaveBeenCalledWith({ text: 'B', to: null });
+    expect(drainRunSteering(42)).toEqual([]);
+    expect(result.current.queued.count).toBe(0);
   });
 
   type Turn = { text: string; to: string | null };

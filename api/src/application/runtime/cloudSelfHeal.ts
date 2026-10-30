@@ -45,7 +45,7 @@ import { recordCloudToolEvent } from './cloudToolEvents';
 import { cloudRunnerStub } from './cloudRunnerStub';
 import { notifyExecutionSubscribers } from './executionEvents';
 import { landExecution } from './executionLanding';
-import { buildExecutionRepository } from '../../buildExecutionRepository';
+import type { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
 import { ExecutionStatus } from '../../domain/shared/types';
 
 /** Live (non-terminal) statuses an orphaned/crashed run can be recovered from. */
@@ -216,7 +216,7 @@ export async function loadCloudRunForSelfHeal(db: Db, executionId: number): Prom
  * fail the run carrying the actual `reason` (so the timeline says why) plus a
  * `run.failed` telemetry row. No-op when the run is already terminal. Never throws.
  */
-export async function handleCloudRunCrash(env: Env, db: Db, executionId: number, reason: string): Promise<SelfHealOutcome | 'noop'> {
+export async function handleCloudRunCrash(env: Env, db: Db, executionId: number, reason: string, executionPort: IExecutionRepository): Promise<SelfHealOutcome | 'noop'> {
   const run = await loadCloudRunForSelfHeal(db, executionId);
   if (!run || !RECOVERABLE.has(run.status ?? '')) return 'noop';
 
@@ -233,7 +233,7 @@ export async function handleCloudRunCrash(env: Env, db: Db, executionId: number,
 
   // The ONE terminal transition: it can fail only a run that is still non-terminal (a run that already COMPLETED is never
   // overwritten), and it records the run's outcome row. `won` is false when another writer landed it first.
-  const won = await landExecution(buildExecutionRepository(db), executionId, ExecutionStatus.FAILED, { errorMessage: reason })
+  const won = await landExecution(executionPort, executionId, ExecutionStatus.FAILED, { errorMessage: reason })
     .then((landed) => landed.won)
     .catch((error) => {
       reportCaughtError(error, { source: "application/runtime/cloudSelfHeal.ts", operation: "handleCloudRunCrash", context: { logMessage: '[cloud-self-heal] terminal failure transition failed', details: {

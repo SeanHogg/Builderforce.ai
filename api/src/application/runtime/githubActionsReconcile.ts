@@ -1,5 +1,4 @@
 import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
-import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * githubActionsReconcile — close the loop on a dispatch GitHub never turned into a run.
  *
@@ -64,12 +63,11 @@ import {
 } from './orphanReasons';
 import { parseExecutor } from './cloudDispatch';
 import { QUEUED_DEADLINE_MS } from './staleExecutionReaper';
-import { buildDatabase, type Db } from '../../infrastructure/database/connection';
-import { executions, toolAuditEvents } from '../../infrastructure/database/schema';
-import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
+import type { Db } from '../../infrastructure/database/connection';
+import { executions } from '../../infrastructure/database/schema';
 import { ExecutionStatus } from '../../domain/shared/types';
-import { landExecution } from './executionLanding';
-import { buildExecutionRepository } from '../../buildExecutionRepository';
+import type { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
+import { failStrandedDispatch, type StrandedRow } from './failStrandedDispatch';
 import type { Env } from '../../env';
 
 /** Just the workflow file's basename — the runs endpoint keys on it, exactly as
@@ -206,23 +204,12 @@ export interface ActionsReconcileResult {
   stillQueued: number;
 }
 
-/** A dispatched execution that has not yet reported in. */
-export interface StrandedRow {
-  id: number;
-  tenantId: number;
-  taskId: number | null;
-  payload: string | null;
-  cloudAgentRef: string | null;
-  /** When we dispatched — the floor for "a run new enough to be this one". */
-  createdAtMs: number;
-}
-
 /**
  * Reconcile every GitHub Actions dispatch that is past its grace window and still
  * has not reported in. Best-effort throughout: any failure degrades to "leave it
  * to the reaper", which is exactly the behaviour that existed before this sweep.
  */
-export async function reconcileGithubActionsRuns(env: Env, nowMs = Date.now(), db: Db = buildDatabase(env)): Promise<ActionsReconcileResult> {
+export async function reconcileGithubActionsRuns(env: Env, nowMs: number, db: Db, executionPort: IExecutionRepository): Promise<ActionsReconcileResult> {
   const result: ActionsReconcileResult = { checked: 0, failed: 0, stillQueued: 0 };
 
   const candidates = await loadStrandedDispatches(db, nowMs);
@@ -255,7 +242,7 @@ export async function reconcileGithubActionsRuns(env: Env, nowMs = Date.now(), d
       continue;
     }
 
-    if (await failStrandedDispatch(db, row, verdict.reason)) result.failed += 1;
+    if (await failStrandedDispatch(db, row, verdict.reason, executionPort)) result.failed += 1;
   }
 
   return result;
@@ -362,39 +349,4 @@ function epochMs(v: unknown): number | null {
   if (!s) return null;
   const t = Date.parse(s);
   return Number.isFinite(t) ? t : null;
-}
-
-/**
- * Fail one stranded dispatch, guarded on it still being non-terminal so a runner
- * that checked in between the GitHub read and this write is never clobbered.
- * Mirrors the failure onto the Observability timeline exactly as the reaper does —
- * without it the run simply stops with no explanation there.
- */
-export async function failStrandedDispatch(db: Db, row: StrandedRow, reason: string): Promise<boolean> {
-  // The ONE terminal transition, from the two statuses a stranded dispatch can be in (a runner that checked in is RUNNING and is never clobbered).
-  const updated = await landExecution(buildExecutionRepository(db), row.id, ExecutionStatus.FAILED, { errorMessage: reason }, [ExecutionStatus.PENDING, ExecutionStatus.SUBMITTED])
-    .then((landed) => (landed.won ? [{ id: row.id }] : []))
-    .catch((error) => {
-      reportCaughtError(error, { source: "application/runtime/githubActionsReconcile.ts", operation: "updated", context: { logMessage: '[github-actions-reconcile] stranded execution transition failed', details: { tenantId: row.tenantId, executionId: row.id, error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) } } });
-      return [];
-    });
-  if (updated.length === 0) return false;
-
-  await runTelemetryDatabase(db).insert(toolAuditEvents).values({
-    tenantId: row.tenantId,
-    agentHostId: null,
-    cloudAgentRef: row.cloudAgentRef,
-    executionId: row.id,
-    sessionKey: `exec:${row.id}`,
-    toolName: 'run.failed',
-    category: 'error',
-    result: reason,
-    ts: new Date(),
-  }).catch((error) => reportCaughtError(error, { source: "application/runtime/githubActionsReconcile.ts", operation: "failStrandedDispatch", context: { logMessage: '[github-actions-reconcile] failure telemetry append failed', details: {
-    tenantId: row.tenantId,
-    executionId: row.id,
-    error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-  } } }));
-
-  return true;
 }

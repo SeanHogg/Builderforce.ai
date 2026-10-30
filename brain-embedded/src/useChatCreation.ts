@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * "The first message creates the chat" — the ONE implementation. Extracted from the
@@ -61,6 +61,12 @@ export interface ChatCreation {
   ensureChatId: () => Promise<number | null>;
   /** Fire the `autoTitle` port for a chat's first user turn; never rejects. */
   onFirstUserTurn: (chatId: number, firstUserText: string) => Promise<void>;
+  /**
+   * The id the draft's creation resolved with - null until it does, and again once a new creation begins. The turn
+   * door reads it to tell the chat a draft's first send CREATED from one the person switched to meanwhile
+   * (`useChatTurns({ createdChatId })`).
+   */
+  createdChatId: number | null;
 }
 
 export function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }: ChatCreationOptions): ChatCreation {
@@ -79,6 +85,7 @@ export function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRe
 
   /** The first message's creation while it is in flight (or resolved but not yet selected). */
   const creating = useRef<Promise<number | null> | null>(null);
+  const [createdChatId, setCreatedChatId] = useState<number | null>(null);
   useEffect(() => {
     if (chatId != null) creating.current = null;
   }, [chatId]);
@@ -86,9 +93,11 @@ export function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRe
   const ensureChatId = useCallback((): Promise<number | null> => {
     const open = chatIdRef.current;
     if (open != null) return Promise.resolve(open);
+    if (!creating.current) setCreatedChatId(null); // a new creation: the last one's id no longer answers for it
     creating.current ??= createRef.current().then(
       (id) => {
         if (id == null) creating.current = null;
+        else setCreatedChatId(id);
         return id;
       },
       (error: unknown) => {
@@ -108,5 +117,5 @@ export function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRe
     await autoTitleRef.current?.(id, firstUserText);
   }, []);
 
-  return { ensureChatId, onFirstUserTurn };
+  return { ensureChatId, onFirstUserTurn, createdChatId };
 }

@@ -37,6 +37,9 @@ export interface RunLineage {
   depth: number;
 }
 
+/** The server chat a run's rows are saved to: its owner's for a sub-agent, its own otherwise. THE one place that says so. */
+export const savedChatOf = (runKey: number, lineage?: RunLineage | null): number => lineage?.rootChatId ?? runKey;
+
 /** Metadata key under which a child's message names its owner. */
 export const SUBAGENT_OF_META_KEY = 'subagentOf';
 

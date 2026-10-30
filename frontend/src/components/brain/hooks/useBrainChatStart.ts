@@ -51,7 +51,7 @@ export function useBrainChatStart({ chats, isPage, setDockedTab }: {
   // first user turn names the chat. Both are `useBrainConversation` options. The same
   // turn also records the prompt itself (migration 1245) — passed as a sibling port so
   // the two can never drift; the chat's original request outlives the ~60-char title.
-  const { ensureChatId, onFirstUserTurn } = useChatCreation({
+  const { ensureChatId, onFirstUserTurn, createdChatId } = useChatCreation({
     chatId: activeChatId,
     create: async () => (await startNewChat())?.id ?? null,
     autoTitle,
@@ -105,6 +105,7 @@ export function useBrainChatStart({ chats, isPage, setDockedTab }: {
     startNewChat,
     ensureChatId,
     onFirstUserTurn,
+    createdChatId,
     capabilityId,
     capabilityPrompt,
     selectCapability,

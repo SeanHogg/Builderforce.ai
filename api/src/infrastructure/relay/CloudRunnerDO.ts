@@ -326,7 +326,7 @@ export class CloudRunnerDO implements DurableObject {
         // row, and the run then owes no 'paused' milestone for a run that is not paused.
         const executionPort = buildExecutionRepository(this.db);
         const paused = await executionPort.findById(asExecutionId(cursor.executionId))
-          .then((row) => (row ? executionPort.update(row.markPaused()) : null))
+          .then((row) => (row && !row.isTerminal ? executionPort.update(row.markPaused()) : null)) // a run that concluded meanwhile is a benign race: nothing to pause or report
           .then((saved) => saved?.status === ExecutionStatus.PAUSED)
           .catch((error) => { this.reportError(error, { operation: "alarm", context: { logMessage: '[cloud-runner] pause transition failed', details: { executionId: cursor.executionId, tenantId: cursor.tenantId, error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) } } }); return false; });
         // Narrate the pause — WITH the question — into the ticket's linked Brain

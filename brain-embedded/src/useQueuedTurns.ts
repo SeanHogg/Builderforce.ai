@@ -35,7 +35,7 @@ export interface QueuedItem<T> {
   /**
    * Held only because no run was live yet (typed while the turn that starts it was still getting ready) - in THIS
    * chat's run. `null`: in the run of a chat that does not exist yet (a draft whose first turn is creating it); the
-   * chat's first id re-tags it with that id.
+   * chat's first id re-tags it with that id - once the host CONFIRMS that id is the chat the draft's send created.
    */
   readonly preLiveFor?: number | null;
 }
@@ -88,9 +88,16 @@ export interface QueuedTurnsOptions<T> {
    * nowhere to hand them).
    */
   handOff?: (held: readonly QueuedItem<T>[], fromKey: string | number | null) => void;
+  /**
+   * The id the DRAFT's in-flight send created, as the host learns it (`useChatCreation().createdChatId`; null while
+   * unknown). A draft's key turning into a number is that draft's own chat ONLY when this says so - otherwise the
+   * person moved to some other chat, and what they held goes back where it was typed. Without it a draft's first id
+   * is never confirmed, so held turns are handed off.
+   */
+  createdChatId?: number | null;
 }
 
-export function useQueuedTurns<T = string>({ running, send, resetKey = null, textOf, mayFlush, handOff }: QueuedTurnsOptions<T>): QueuedTurns<T> {
+export function useQueuedTurns<T = string>({ running, send, resetKey = null, textOf, mayFlush, handOff, createdChatId = null }: QueuedTurnsOptions<T>): QueuedTurns<T> {
   const [queued, setQueued] = useState<QueuedItem<T>[]>([]);
   // The queue is READ synchronously too (`takeFront`, the flush): this ref is the source of
   // truth and every change goes through `update`, so two moves in one tick see each other.
@@ -116,6 +123,12 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
   const mayFlushRef = useRef(mayFlush);
   // eslint-disable-next-line react-hooks/refs
   mayFlushRef.current = mayFlush;
+  const createdRef = useRef(createdChatId);
+  // eslint-disable-next-line react-hooks/refs
+  createdRef.current = createdChatId;
+  // The draft's turns whose key became `to` before the host said which chat its send created: neither steered nor
+  // handed off until it does (`settle`). `ids` are those turns; later ones belong to `to` itself.
+  const unconfirmed = useRef<{ to: number; ids: ReadonlySet<number> } | null>(null);
   const runningRef = useRef(running);
 
   const submit = useCallback((value: T, opts?: { preLiveFor?: number | null }) => {
@@ -143,6 +156,23 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
     return first.value;
   }, [update]);
 
+  // The host answered (or the run ended without it): the draft's turns are in the chat their send created - re-tagged to
+  // it - or in some other chat, a switch, and go back to the composer. Never steered into a chat they were not typed for.
+  const settle = useCallback((created: number | null) => {
+    const wait = unconfirmed.current;
+    if (!wait) return;
+    unconfirmed.current = null;
+    if (created === wait.to) {
+      update((current) => current.map((item) => (wait.ids.has(item.id) && item.preLiveFor === null ? { ...item, preLiveFor: wait.to } : item)));
+      return;
+    }
+    const mine = queueRef.current.filter((item) => wait.ids.has(item.id));
+    if (mine.length === 0) return;
+    update((current) => current.filter((item) => !wait.ids.has(item.id)));
+    handOffRef.current?.(mine, null);
+  }, [update]);
+  useEffect(() => { if (createdChatId !== null) settle(createdChatId); }, [createdChatId, settle]);
+
   // Flush exactly one held turn per completed run, on the running→idle edge — and
   // only when that edge happened on the SAME conversation. `running` is per
   // conversation, so switching away from a running chat drops it true→false in the
@@ -152,11 +182,12 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
   useEffect(() => {
     const was = prev.current;
     prev.current = { key: resetKey, running };
+    if (!running) settle(createdRef.current);
     if (was.key !== resetKey || !was.running || running) return;
     if (mayFlushRef.current && !mayFlushRef.current()) return;
     const next = takeFront();
     if (next !== undefined) sendRef.current(next);
-  }, [running, resetKey, takeFront]);
+  }, [running, resetKey, takeFront, settle]);
 
   // Queued text belongs to the conversation it was typed in, never the one switched to: it leaves this queue and
   // goes to ITS conversation (`handOff`) - in order, nothing discarded.
@@ -165,17 +196,20 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
     const from = heldIn.current;
     if (from === resetKey) return;
     heldIn.current = resetKey;
+    settle(createdRef.current); // moved on again before the host answered: the previous draft's turns are settled first
     const held = queueRef.current;
     if (held.length === 0) return;
-    // A draft's first id is NOT a switch: the turn in flight is creating the chat these turns were typed for. They stay
-    // held, and the ones that waited only for a run to exist now wait for THIS chat's (they steer into it when it is live).
+    // A draft's first id is a switch UNLESS the turn in flight created that very chat: only then do these turns stay held,
+    // and the ones that waited only for a run to exist now wait for THIS chat's (they steer into it when it is live).
+    // Until the host says which chat it created they are held in place and steered nowhere.
     if (from === null && typeof resetKey === 'number' && runningRef.current) {
-      update((current) => current.map((item) => (item.preLiveFor === null ? { ...item, preLiveFor: resetKey } : item)));
+      unconfirmed.current = { to: resetKey, ids: new Set(held.map((item) => item.id)) };
+      if (createdRef.current !== null) settle(createdRef.current);
       return;
     }
     update(() => []);
     handOffRef.current?.(held, from);
-  }, [resetKey, update]);
+  }, [resetKey, update, settle]);
 
   return { items: queued, count: queued.length, submit, remove, requeue, pushBack, takeFront, clear };
 }

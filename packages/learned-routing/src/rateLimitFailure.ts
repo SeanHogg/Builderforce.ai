@@ -14,7 +14,13 @@
  * "in cooldown / all in cooldown or unavailable" wording for a provider it has already seen throttle.
  */
 const AVAILABILITY =
-  /\b429\b|\b529\b|rate.?limit|too many requests|over ?capacity|capacity limit|overloaded|resource.?exhausted|\bin cooldown\b|cooldown or unavailable/i;
+  /\b429\b|\b529\b|rate.?limit|too many requests|over ?capacity|capacity limit|overloaded|resource has been exhausted|\bin cooldown\b|cooldown or unavailable/i;
+
+/**
+ * Google's gRPC status code, matched CASE-SENSITIVELY and anchored: a sandbox's "Resource exhausted: disk
+ * full" is not a throttle, only the provider's `RESOURCE_EXHAUSTED` status is.
+ */
+const GRPC_RESOURCE_EXHAUSTED = /\bRESOURCE_EXHAUSTED\b/;
 
 /** HTTP statuses that mean "throttled / overloaded" on their own, whatever the body says. */
 const AVAILABILITY_STATUSES: ReadonlySet<number> = new Set([429, 529]);
@@ -71,5 +77,5 @@ export function isTenantBudgetFailure(message: string | null | undefined): boole
  */
 export function isRateLimitFailure(message: string | null | undefined, status?: number | null): boolean {
   if (isTenantBudgetFailure(message)) return false;
-  return (status != null && AVAILABILITY_STATUSES.has(status)) || (!!message && AVAILABILITY.test(message));
+  return (status != null && AVAILABILITY_STATUSES.has(status)) || (!!message && (AVAILABILITY.test(message) || GRPC_RESOURCE_EXHAUSTED.test(message)));
 }

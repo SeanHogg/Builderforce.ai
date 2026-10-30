@@ -23,6 +23,13 @@ describe('isRateLimitFailure', () => {
     }
   });
 
+  it('reads the provider forms of resource exhaustion, not a sandbox "Resource exhausted: disk full"', () => {
+    expect(isRateLimitFailure('Quota failure: the resource has been exhausted (e.g. check quota).')).toBe(true);
+    expect(isRateLimitFailure('Resource exhausted: disk full')).toBe(false);
+    expect(isRateLimitFailure('resource_exhausted: sandbox out of inodes')).toBe(false);
+    expect(isRateLimitFailure('npm ERR! Resource exhausted while writing node_modules')).toBe(false);
+  });
+
   it("is true for OpenAI's own rate_limit_exceeded - a genuine provider throttle, not a tenant budget", () => {
     expect(isRateLimitFailure('chat completion failed with HTTP 429: {"error":{"code":"rate_limit_exceeded"}}')).toBe(true);
     expect(isTenantBudgetFailure('{"code":"rate_limit_exceeded"}')).toBe(false);

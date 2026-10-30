@@ -43,6 +43,11 @@
       "types": "./dist/bfi.d.ts",
       "import": "./dist/bfi.mjs",
       "require": "./dist/bfi.cjs"
+    },
+    "./pendingWords": {
+      "types": "./dist/pendingWords.d.ts",
+      "import": "./dist/pendingWords.mjs",
+      "require": "./dist/pendingWords.cjs"
     }
   },
   "files": [

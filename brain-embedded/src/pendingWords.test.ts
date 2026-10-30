@@ -11,6 +11,7 @@ import {
   setPendingWordsOwner,
 } from './pendingWords';
 import { drainRunSteering, queueRunSteering, resetRunSteering } from './runSteering';
+import { cells, getCell } from './runStore/runCells';
 
 /**
  * "Your message is kept" is true because words the run will save are on the DEVICE the moment they are queued, until
@@ -206,6 +207,66 @@ describe('replayPendingWords - after a reload', () => {
     expect(rows.map((r) => r.eventKey)).toEqual(['steer:read', 'steer:unread']);
     expect(isMidTurnMetadata(rows[0]!.metadata)).toBe(true);
     expect(rows[1]!.metadata).toBeUndefined();
+  });
+
+  it("a sub-agent's journaled words replay to its OWNER's chat (the root chat id), not to the child's own key", async () => {
+    const child = 9640;
+    getCell(child).lastRequest = { lineage: { rootChatId: 9600 } } as never;
+    try {
+      queueRunSteering(child, 'for the helper', { fromPerson: true, persist: true });
+    } finally {
+      cells.delete(child);
+    }
+    const [kept] = drainRunSteering(child);
+    // The journal stays keyed by the run (a Stop and the drain find it there); the entry names where the words are saved.
+    expect(JSON.parse(localStorage.getItem(keyOf(child))!)).toMatchObject([{ eventKey: kept!.eventKey, chatId: 9600 }]);
+
+    const raw = JSON.parse(localStorage.getItem(keyOf(child))!) as Array<Record<string, unknown>>;
+    localStorage.setItem(keyOf(child), JSON.stringify(raw.map((e) => ({ ...e, session: 'an-earlier-load', at: Date.now() - 60_000 }))));
+    const sendMessages = vi.fn(async () => [] as never);
+
+    await expect(replayPendingWords(child, { sendMessages })).resolves.toBe(1);
+
+    expect(sendMessages.mock.calls.map((c) => (c as unknown as [number])[0])).toEqual([9600]);
+    expect(journal(child)).toEqual([]);
+  });
+
+  it("a top-level run's words, and an entry written before the field existed, replay to the run's own chat", async () => {
+    queueRunSteering(9641, 'top level', { fromPerson: true, persist: true });
+    expect(JSON.parse(localStorage.getItem(keyOf(9641))!)).toMatchObject([{ chatId: 9641 }]);
+    leave(9642, [{ eventKey: 'steer:old-shape', text: 'before the field' }]);
+    const sendMessages = vi.fn(async () => [] as never);
+
+    await replayPendingWords(9642, { sendMessages });
+
+    expect(sendMessages.mock.calls.map((c) => (c as unknown as [number])[0])).toEqual([9642]);
+  });
+
+  it('sign-out (or an owner cleared) stops the heartbeat: nothing recreates the beat key afterwards (no Web Locks)', async () => {
+    vi.resetModules(); // the heartbeat is per page load: a fresh module is a fresh load
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined });
+    vi.useFakeTimers();
+    const words = await import('./pendingWords');
+    const beats = () => Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!).filter((k) => k.startsWith('bf:pendingBeat:'));
+
+    words.setPendingWordsOwner(ME);
+    words.rememberPendingWords(9650, 'k1', 'mine');
+    expect(beats()).toHaveLength(1);
+
+    words.clearPendingWords();
+    expect(beats()).toEqual([]);
+    vi.advanceTimersByTime(60_000);
+    expect(beats()).toEqual([]);
+
+    // Signed in again, then the owner is cleared without a sign-out: the beat stops there too.
+    words.setPendingWordsOwner(ME);
+    words.rememberPendingWords(9650, 'k2', 'again');
+    expect(beats()).toHaveLength(1);
+    words.setPendingWordsOwner(null);
+    for (const key of beats()) localStorage.removeItem(key);
+    vi.advanceTimersByTime(60_000);
+    expect(beats()).toEqual([]);
+    words.setPendingWordsOwner(null);
   });
 
   it('a row the server already has comes back as the same row: the entry is forgotten, nothing doubles', async () => {

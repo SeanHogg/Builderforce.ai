@@ -26,6 +26,8 @@ import {
   type RunSteerMessage as QueuedSteerMessage,
 } from '@builderforce/agent-run';
 import { rememberPendingWords } from './pendingWords';
+import { savedChatOf } from './runLineage';
+import { cells } from './runStore/runCells';
 import type { ContentPart } from './streamChatCompletion';
 import type { ChatInputAttachment } from './types';
 
@@ -56,7 +58,8 @@ export function queueRunSteering(
   // Words the run will save are also written to the device's journal - AFTER they are in the inbox, so a storage
   // failure can never cost a steer: a reload before they are saved still finds them, which is what makes "your
   // message is kept" true.
-  if (queued?.persist && queued.eventKey) rememberPendingWords(runKey, queued.eventKey, queued.text);
+  // The entry also names the chat the words are SAVED to (a sub-agent's are saved into its owner's chat), where a replay sends them.
+  if (queued?.persist && queued.eventKey) rememberPendingWords(runKey, queued.eventKey, queued.text, savedChatOf(runKey, cells.get(runKey)?.lastRequest?.lineage));
 }
 
 /** Put steers a continuation could not act on back at the FRONT of the run's inbox, in order, each with its own flags and key. */

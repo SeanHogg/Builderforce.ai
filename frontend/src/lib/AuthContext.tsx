@@ -8,7 +8,7 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import { clearPendingWords, setPendingWordsOwner } from '@seanhogg/builderforce-brain-embedded';
+import { clearPendingWords, setPendingWordsOwner } from '@seanhogg/builderforce-brain-embedded/pendingWords';
 import type { AuthUser, Tenant } from './types';
 import {
   clearSession,

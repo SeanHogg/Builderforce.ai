@@ -28,6 +28,7 @@ import { composeUserTurn, recordedModelText, type ComposedUserTurn } from '../at
 import type { BrainPersistenceAdapter } from '../config';
 import { withDirectedMetadata } from '../directedMessage';
 import { forgetPendingWords, rememberPendingWords } from '../pendingWords';
+import { savedChatOf } from '../runLineage';
 import { drainRunSteering, newSteerKey, requeueRunSteering, type RunSteerMessage } from '../runSteering';
 import { chatErrorAction } from '../chatError';
 import type { ContentPart } from '../streamChatCompletion';
@@ -101,9 +102,6 @@ export function takeContinueOnSettle(runKey: RunKey): boolean {
 type StartRun = (runKey: number, request: BrainRunRequest, claim?: RunClaim) => Promise<unknown>;
 
 type Composed = ComposedUserTurn & { text: string; attachments: ChatInputAttachment[] };
-
-/** The chat a run's rows live in: its owner's for a sub-agent, its own otherwise. THE one place that says so here. */
-const chatIdOf = (request: BrainRunRequest, runKey: number): number => request.lineage?.rootChatId ?? runKey;
 
 /** The composition of one steer: ONE path, the same as a typed send (`composeUserTurn`). */
 async function compose(m: RunSteerMessage, ports: AttachmentPorts): Promise<Composed> {
@@ -240,7 +238,7 @@ export async function continueChat(runKey: number, c: RunCell, steers: readonly 
     trace(c, 'steer.continue_limit', { continuations: links }, 'The run was continued as often as it may be without a new message; the direction waits for your next turn.');
     return false;
   }
-  const chatId = chatIdOf(request, runKey);
+  const chatId = savedChatOf(runKey, request.lineage);
   const stopped: StoppedContinuation = { c, runKey, chatId, persistence: request.persistence, claim, keys: steers.map((m) => m.eventKey) };
   const ports = binding.ports();
   // Each steer is composed ONCE, in the order it was said: its own row (when it has none yet) and its share of the
@@ -325,7 +323,7 @@ async function continueOrKeep(runKey: number, c: RunCell, steers: readonly RunSt
       const request = c.lastRequest;
       const keys = keyed.map((m) => m.eventKey);
       if (request && (progress.saving || keyed.some((m) => m.saved))) {
-        await endStopped({ c, runKey, chatId: chatIdOf(request, runKey), persistence: request.persistence, claim, keys }, left(), progress.saving);
+        await endStopped({ c, runKey, chatId: savedChatOf(runKey, request.lineage), persistence: request.persistence, claim, keys }, left(), progress.saving);
       } else {
         forgetPendingWords(runKey, keys);
       }
@@ -385,7 +383,7 @@ export function wakeChat(runKey: number, turns: readonly HandedTurn[], start: St
     eventKey: newSteerKey(),
     ...(t.attachments?.length ? { attachments: [...t.attachments] } : {}),
   }));
-  for (const steer of steers) rememberPendingWords(runKey, steer.eventKey!, steer.text);
+  for (const steer of steers) rememberPendingWords(runKey, steer.eventKey!, steer.text, savedChatOf(runKey, c.lastRequest.lineage));
   void continueOrKeep(runKey, c, steers, start, claim);
   return true;
 }

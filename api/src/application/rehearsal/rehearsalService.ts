@@ -31,7 +31,7 @@ import { agentDefinitionVersions, executions, ideAgents, projects, rehearsalStep
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { ExecutionStatus } from '../../domain/shared/types';
 import { landExecution } from '../runtime/executionLanding';
-import { buildExecutionRepository } from '../../buildExecutionRepository';
+import type { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
 import { ShadowRecorder, shadowProvider } from './shadowProvider';
 import { prepareCloudRun, resolveAgentEngine } from '../runtime/cloudAgentEngine';
 import type { Db } from '../../infrastructure/database/connection';
@@ -107,6 +107,11 @@ export interface RehearsalComparison {
 }
 
 const iso = (d: Date | string | null): string | null => (d == null ? null : new Date(d).toISOString());
+/** What a rehearsal row says once its execution COMPLETED: ONE writer for the normal finish and for a failure that found the run already completed. */
+const completedRehearsal = (recorder: ShadowRecorder, ran: { finished?: boolean; ok?: boolean } | null, summary: string) => ({
+  status: 'completed' as const, steps: recorder.steps.length, suppressedWrites: recorder.writeCount,
+  finishedOk: ran ? ran.finished === true && ran.ok === true : null, summary: summary.slice(0, 20_000), completedAt: new Date(),
+});
 
 /**
  * Run ONE rehearsal end-to-end and return its id. Synchronous by design: a rehearsal is
@@ -114,7 +119,7 @@ const iso = (d: Date | string | null): string | null => (d == null ? null : new 
  * The row is written first and always completed (success or failure), so a crashed
  * rehearsal is visible as `failed` rather than stuck at `queued` forever.
  */
-export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput): Promise<string> {
+export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput, executionPort: IExecutionRepository): Promise<string> {
   const { tenantId } = input;
 
   // ── Resolve what we are rehearsing ────────────────────────────────────────────
@@ -218,10 +223,10 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
   const executionId = exec.id;
   await db.update(rehearsals).set({ executionId }).where(scopedToTenant(rehearsals, tenantId, eq(rehearsals.id, rehearsalId)));
 
-  const executionPort = buildExecutionRepository(db);
   const recorder = new ShadowRecorder();
+  let ran: { output: string; finished?: boolean; ok?: boolean } | null = null;
+  const gap = missingPrdDuringReadOnlyPrep ? '[REHEARSAL GAP] This ticket had no PRD. Read-only prep could not draft the PRD that a live run would receive.\n\n' : '';
   const taskRow = { id: task.id, title: task.title, description: task.description };
-
   try {
     // `readOnly` is load-bearing, not a nicety: prep runs BEFORE the shadow provider
     // wraps anything, and by default it drafts a PRD, commits it to the real ticket
@@ -252,6 +257,7 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
       model: runModel,
     });
 
+    ran = result;
     if (recorder.steps.length > 0) {
       await db.insert(rehearsalSteps).values(
         recorder.steps.map((s, i) => ({
@@ -269,14 +275,7 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
     await landExecution(executionPort, executionId, ExecutionStatus.COMPLETED, { result: result.output.slice(0, 20_000) }, undefined, { telemetry: result.telemetry });
     await db
       .update(rehearsals)
-      .set({
-        status: 'completed',
-        steps: recorder.steps.length,
-        suppressedWrites: recorder.writeCount,
-        finishedOk: result.finished === true && result.ok,
-        summary: `${missingPrdDuringReadOnlyPrep ? '[REHEARSAL GAP] This ticket had no PRD. Read-only prep could not draft the PRD that a live run would receive.\n\n' : ''}${result.output}`.slice(0, 20_000),
-        completedAt: new Date(),
-      })
+      .set(completedRehearsal(recorder, result, `${gap}${result.output}`))
       .where(scopedToTenant(rehearsals, tenantId, eq(rehearsals.id, rehearsalId)));
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -285,7 +284,7 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
       .catch(reportedFallback(null, { source: 'application/rehearsal/rehearsalService.ts', operation: 'runRehearsal', context: { logMessage: '[rehearsal] execution failure transition failed', details: { rehearsalId, executionId, tenantId, originalError: message } } }));
     const alreadyCompleted = landed?.execution.status === ExecutionStatus.COMPLETED;
     await db.update(rehearsals)
-      .set(alreadyCompleted ? { status: 'completed', completedAt: new Date() } : { status: 'failed', errorMessage: message.slice(0, 2000), completedAt: new Date() })
+      .set(alreadyCompleted ? completedRehearsal(recorder, ran, `${gap}${ran?.output ?? landed?.execution.toPlain().result ?? ''}`) : { status: 'failed', errorMessage: message.slice(0, 2000), completedAt: new Date() })
       .where(scopedToTenant(rehearsals, tenantId, eq(rehearsals.id, rehearsalId)));
   }
 
@@ -302,6 +301,7 @@ export async function runTrial(
   env: Env,
   db: Db,
   input: { tenantId: number; projectId?: number | null; agentRef: string; model?: string; ticketCount?: number; createdBy?: string | null },
+  executionPort: IExecutionRepository,
 ): Promise<string[]> {
   const limit = Math.min(Math.max(1, Math.trunc(input.ticketCount ?? 3)), TRIAL_MAX_TICKETS);
   const candidates = await db
@@ -327,7 +327,7 @@ export async function runTrial(
         agentRef: input.agentRef,
         ...(input.model ? { model: input.model } : {}),
         createdBy: input.createdBy ?? null,
-      }).catch(() => ''),
+      }, executionPort).catch(() => ''),
     );
   }
   return ids.filter(Boolean);

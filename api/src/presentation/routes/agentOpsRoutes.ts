@@ -44,6 +44,7 @@ import {
   runTrial,
 } from '../../application/rehearsal/rehearsalService';
 import type { DbHandle } from '../../application/shared/dbHandle';
+import { buildExecutionRepository } from '../../buildExecutionRepository';
 import type { HonoEnv } from '../../env';
 import { getReconciliationDiagnostics, listReconciliationRuns, reconciliationRequesterId, runPrTicketReconciliation } from '../../application/reconciliation/prReconciliationService';
 import { prReconciliationLastCheckedAt } from '../../application/reconciliation/runPrReconciliationSweep';
@@ -247,7 +248,7 @@ export function createAgentOpsRoutes(db: DbHandle) {
           ...(model ? { model } : {}),
           ticketCount: Number.isFinite(Number(body.ticketCount)) ? Number(body.ticketCount) : undefined,
           createdBy,
-        });
+        }, buildExecutionRepository(db));
         return json({ ids, max: TRIAL_MAX_TICKETS });
       }
 
@@ -259,7 +260,7 @@ export function createAgentOpsRoutes(db: DbHandle) {
         ...(agentRef ? { agentRef } : {}),
         ...(model ? { model } : {}),
         createdBy,
-      });
+      }, buildExecutionRepository(db));
       return json({ id });
     } catch (e) {
       return json({ error: e instanceof Error ? e.message : String(e) }, 400);
