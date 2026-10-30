@@ -57,384 +57,62 @@ import {
   servedIdentity,
   servedOnDevice,
   webGpuSupport
-} from "./chunk-DRVZCQND.mjs";
+} from "./chunk-FLHJS4U5.mjs";
 
 // src/config.tsx
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useEffect, useMemo } from "react";
 
-// src/xmlToolCalls.ts
-var isSelfClosing = (dialect) => "closeAt" in dialect;
-function skipSpace(text, i) {
-  while (i < text.length && /\s/.test(text[i])) i += 1;
-  return i;
+// src/runStore/deadline.ts
+var continuationLimits = { prepareMs: 15e3, settleMs: 3e4 };
+function budget(ms) {
+  const end = Date.now() + ms;
+  return () => Math.max(1, end - Date.now());
 }
-function objectEnd(text, i) {
-  let depth2 = 0;
-  let inString = false;
-  for (let j = i; j < text.length; j += 1) {
-    const c = text[j];
-    if (inString) {
-      if (c === "\\") j += 1;
-      else if (c === '"') inString = false;
-    } else if (c === '"') inString = true;
-    else if (c === "{") depth2 += 1;
-    else if (c === "}") {
-      depth2 -= 1;
-      if (depth2 === 0) return j + 1;
-    }
-  }
-  return -1;
-}
-var PARTIAL_MAP_KEY = /^(?:"\d*"?\s*:?\s*)?$/;
-var MAP_KEY = /^"\d+"\s*:\s*/;
-var MAP_TERMINATOR = /^\}?\s*\??\s*\|?>?/;
-function callMapEnd(buf, final) {
-  const unfinished = (at2) => final ? { at: at2, length: buf.length - at2 } : null;
-  let i = skipSpace(buf, 0);
-  if (buf[i] === "{") i = skipSpace(buf, i + 1);
-  for (; ; ) {
-    const entryStart = i;
-    const rest2 = buf.slice(i);
-    const key = MAP_KEY.exec(rest2);
-    if (!key) return PARTIAL_MAP_KEY.test(rest2) ? unfinished(entryStart) : { at: i, length: 0 };
-    i += key[0].length;
-    if (i >= buf.length) return unfinished(entryStart);
-    if (buf[i] !== "{") return { at: entryStart, length: 0 };
-    const end = objectEnd(buf, i);
-    if (end < 0) return unfinished(entryStart);
-    i = skipSpace(buf, end);
-    if (i >= buf.length) return unfinished(end);
-    if (buf[i] !== ",") break;
-    i = skipSpace(buf, i + 1);
-  }
-  const rest = buf.slice(i);
-  const terminator = MAP_TERMINATOR.exec(rest)[0];
-  if (!final && terminator.length === rest.length && !terminator.endsWith(">")) return null;
-  return { at: i, length: terminator.length };
-}
-function parseCallMap(body, seq) {
-  const entries = body.trim().replace(/^\{/, "").replace(/,\s*$/, "");
-  let map;
-  try {
-    map = JSON.parse(`{${entries}}`);
-  } catch {
-    return [];
-  }
-  return Object.values(map).flatMap((raw, index) => {
-    const entry = raw;
-    if (!entry || typeof entry.name !== "string" || !entry.name) return [];
-    const args = entry.arguments ?? {};
-    return [{ id: `xmltc_${seq}_${index}`, name: entry.name, args: typeof args === "string" ? args : JSON.stringify(args) }];
+async function bounded(ms, promise) {
+  let timer;
+  const late = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(CONTINUATION_TIMED_OUT)), ms);
   });
-}
-var DIALECTS = [
-  { prefix: "<tool_call>", open: /<tool_call>/, close: "</tool_call>", namedInOpenTag: false },
-  { prefix: "<function_call>", open: /<function_call>/, close: "</function_call>", namedInOpenTag: false },
-  { prefix: "<tool_use>", open: /<tool_use>/, close: "</tool_use>", namedInOpenTag: false },
-  { prefix: "<invoke", open: /<invoke\s+name\s*=\s*"([^"]*)"\s*>/, close: "</invoke>", namedInOpenTag: true },
-  { prefix: "<function=", open: /<function\s*=\s*([^>]+)>/, close: "</function>", namedInOpenTag: true },
-  // Grok's own dialect, written when it drops out of native function calling:
-  // `<xai:function_call name="read_file"><parameter name="path">…</parameter></xai:function_call>`.
-  // `<function_call>` above needs the bare tag, so nothing matched it: the calls never
-  // ran, the markup reached the transcript as "narration", and Grok, seeing its own
-  // calls with no results, concluded the tools were not returning. The name is optional
-  // in the pattern so a body carrying `{"name":…}` JSON is lifted too.
-  { prefix: "<xai:function_call", open: /<xai:function_call(?:\s+name\s*=\s*"([^"]*)")?\s*>/, close: "</xai:function_call>", namedInOpenTag: true },
-  // Grok's numbered call map (chat #106, grok-4.6): `<|"0":{"name":…,"arguments":{…}}, "1":{…} ?>`,
-  // with or without the outer braces and never with a closing tag. Four calls written
-  // this way ran nothing, and the turn decayed into counting.
-  { prefix: "<|", open: /<\|\s*(?=\{?\s*"\d+"\s*:\s*\{)/, closeAt: callMapEnd, parseBody: parseCallMap }
-];
-var CALL_MAP_OPEN_TAIL = /<\|\s*\{?\s*(?:"\d*"?\s*:?\s*)?$/;
-var CONTROL_TOKEN = /<+\|[a-z][a-z0-9_]{0,31}\|>/gi;
-var CONTROL_TOKEN_TAIL = /<+(?:\|[a-z0-9_]{0,32}\|?)?$/i;
-function stripControlTokens(text) {
-  return text.replace(CONTROL_TOKEN, "");
-}
-function partialTailPrefix(buf, tag) {
-  const max = Math.min(buf.length, tag.length - 1);
-  for (let L = max; L > 0; L--) {
-    if (buf.slice(buf.length - L) === tag.slice(0, L)) return L;
-  }
-  return 0;
-}
-function holdLength(buf) {
-  let hold = 0;
-  for (const d of DIALECTS) {
-    hold = Math.max(hold, partialTailPrefix(buf, d.prefix));
-    if (!isSelfClosing(d) && d.namedInOpenTag) {
-      const idx = buf.lastIndexOf(d.prefix);
-      if (idx >= 0 && !buf.slice(idx).includes(">")) hold = Math.max(hold, buf.length - idx);
-    }
-  }
-  for (const tailPattern of [CALL_MAP_OPEN_TAIL, CONTROL_TOKEN_TAIL]) {
-    const tail = tailPattern.exec(buf);
-    if (tail) hold = Math.max(hold, tail[0].length);
-  }
-  return Math.min(hold, buf.length);
-}
-function findOpen(buf) {
-  let best = null;
-  for (const dialect of DIALECTS) {
-    const m = dialect.open.exec(buf);
-    if (!m) continue;
-    if (best && m.index >= best.index) continue;
-    best = { dialect, index: m.index, length: m[0].length, ...m[1] ? { name: m[1].trim() } : {} };
-  }
-  return best;
-}
-function callEnd(dialect, buf) {
-  if (isSelfClosing(dialect)) return dialect.closeAt(buf, false);
-  const at2 = buf.indexOf(dialect.close);
-  return at2 >= 0 ? { at: at2, length: dialect.close.length } : null;
-}
-function coerceArg(raw) {
-  const v = raw.trim();
-  if (v === "") return "";
   try {
-    return JSON.parse(v);
-  } catch {
-    return v;
+    return await Promise.race([Promise.resolve(promise), late]);
+  } finally {
+    clearTimeout(timer);
   }
 }
-function qwenText(raw) {
-  return raw.replace(/^\r?\n/, "").replace(/\r?\n$/, "");
-}
-function qwenArg(raw) {
-  const v = qwenText(raw);
-  if (/^(?:true|false|null)$/.test(v) || /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(v)) return JSON.parse(v);
-  return v;
-}
-var ARG_KEY_VALUE = /<arg_key>([\s\S]*?)<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/g;
-var PARAMETER_TAG = /<(?:xai:)?parameter(?:\s+name\s*=\s*"([^"]*)"|\s*=\s*([^>]+?))\s*>([\s\S]*?)<\/(?:xai:)?parameter>/g;
-function argsFromTags(body) {
-  const args = {};
-  const rawArgs = {};
-  let found = false;
-  for (const re of [ARG_KEY_VALUE, PARAMETER_TAG]) {
-    re.lastIndex = 0;
-    let m;
-    while ((m = re.exec(body)) !== null) {
-      const key = (m.slice(1, -1).find((g) => g !== void 0) ?? "").trim();
-      if (!key) continue;
-      const value = m[m.length - 1];
-      const qwen = re === PARAMETER_TAG && m[2] !== void 0;
-      rawArgs[key] = qwen ? qwenText(value) : value.trim();
-      args[key] = qwen ? qwenArg(value) : coerceArg(value);
-      found = true;
-    }
+async function settledWithin(ms, promise) {
+  let timer;
+  const late = new Promise((resolve) => {
+    timer = setTimeout(() => resolve("pending"), ms);
+  });
+  try {
+    return await Promise.race([promise.then(() => "ok", () => "failed"), late]);
+  } finally {
+    clearTimeout(timer);
   }
-  return found ? { args, rawArgs } : null;
 }
-function taggedCall(id, name, tagged) {
-  return { id, name, args: JSON.stringify(tagged.args), rawArgs: tagged.rawArgs };
-}
-function parseNamedBody(name, body, seq) {
-  if (!name) return null;
-  const tagged = argsFromTags(body);
-  if (tagged) return taggedCall(`xmltc_${seq}`, name, tagged);
-  const jsonStart = body.indexOf("{");
-  if (jsonStart >= 0) {
+async function within(ms, work, onLate, onError = () => void 0) {
+  let timer;
+  const late = new Promise((resolve) => {
+    timer = setTimeout(() => resolve("late"), ms);
+  });
+  const settled2 = (async () => {
     try {
-      const obj = JSON.parse(body.slice(jsonStart));
-      return { id: `xmltc_${seq}`, name, args: JSON.stringify(obj ?? {}) };
-    } catch {
+      await work();
+    } catch (e) {
+      onError(e);
     }
+    return "done";
+  })();
+  try {
+    if (await Promise.race([settled2, late]) === "late") onLate();
+  } finally {
+    clearTimeout(timer);
   }
-  return { id: `xmltc_${seq}`, name, args: "{}" };
-}
-function parseWrappedNamed(trimmed, seq) {
-  for (const dialect of DIALECTS) {
-    if (isSelfClosing(dialect) || !dialect.namedInOpenTag) continue;
-    const m = dialect.open.exec(trimmed);
-    if (!m || m.index !== 0 || !m[1]) continue;
-    const rest = trimmed.slice(m[0].length);
-    const end = rest.lastIndexOf(dialect.close);
-    return parseNamedBody(m[1].trim(), end >= 0 ? rest.slice(0, end) : rest, seq);
-  }
-  return null;
-}
-function parseInner(inner, seq) {
-  const trimmed = inner.trim();
-  if (!trimmed) return null;
-  const wrapped = parseWrappedNamed(trimmed, seq);
-  if (wrapped) return wrapped;
-  const firstArg = trimmed.search(/<arg_key>|<(?:xai:)?parameter[\s=]/);
-  if (firstArg >= 0) {
-    const name = trimmed.slice(0, firstArg).trim();
-    if (!name) return null;
-    const tagged = argsFromTags(trimmed);
-    return tagged ? taggedCall(`xmltc_${seq}`, name, tagged) : { id: `xmltc_${seq}`, name, args: "{}" };
-  }
-  const jsonStart = trimmed.indexOf("{");
-  if (jsonStart >= 0) {
-    const maybeName = trimmed.slice(0, jsonStart).trim();
-    try {
-      const obj = JSON.parse(trimmed.slice(jsonStart));
-      if (maybeName) {
-        return { id: `xmltc_${seq}`, name: maybeName, args: JSON.stringify(obj ?? {}) };
-      }
-      if (obj && typeof obj === "object" && typeof obj.name === "string") {
-        const a = obj.arguments ?? obj.parameters ?? obj.input ?? {};
-        const argsStr = typeof a === "string" ? a : JSON.stringify(a ?? {});
-        return { id: `xmltc_${seq}`, name: obj.name, args: argsStr };
-      }
-    } catch {
-      if (maybeName) return { id: `xmltc_${seq}`, name: maybeName, args: "{}" };
-    }
-    return null;
-  }
-  return { id: `xmltc_${seq}`, name: trimmed, args: "{}" };
-}
-var CALL_MARKUP = /<\/?(?:[\w-]+:)?(?:function_call|tool_call|tool_use|invoke)\b/i;
-function hasCallMarkup(text) {
-  return CALL_MARKUP.test(text);
-}
-var XmlToolCallFilter = class {
-  buf = "";
-  inside = null;
-  insideName;
-  innerBuf = "";
-  clean = "";
-  calls = [];
-  seq = 0;
-  /** Close the call currently being accumulated and record it. A dialect whose name
-   *  is optional in the open tag falls back to reading the name from the body. */
-  commit() {
-    const dialect = this.inside;
-    const seq = this.seq++;
-    if (dialect && isSelfClosing(dialect)) {
-      this.calls.push(...dialect.parseBody(this.innerBuf, seq));
-    } else {
-      const parsed = dialect?.namedInOpenTag && this.insideName !== void 0 ? parseNamedBody(this.insideName, this.innerBuf, seq) : parseInner(this.innerBuf, seq);
-      if (parsed) this.calls.push(parsed);
-    }
-    this.innerBuf = "";
-    this.inside = null;
-    this.insideName = void 0;
-  }
-  /** Feed a content delta; returns clean (markup-free) text to emit now. */
-  push(delta) {
-    this.buf += delta;
-    let emit3 = "";
-    for (; ; ) {
-      if (!this.inside) {
-        const open = findOpen(this.buf);
-        if (open) {
-          emit3 += this.buf.slice(0, open.index);
-          this.buf = this.buf.slice(open.index + open.length);
-          this.inside = open.dialect;
-          this.insideName = open.name;
-          this.innerBuf = "";
-          continue;
-        }
-        const hold2 = holdLength(this.buf);
-        emit3 += this.buf.slice(0, this.buf.length - hold2);
-        this.buf = hold2 ? this.buf.slice(this.buf.length - hold2) : "";
-        break;
-      }
-      const end = callEnd(this.inside, this.buf);
-      if (end) {
-        this.innerBuf += this.buf.slice(0, end.at);
-        this.buf = this.buf.slice(end.at + end.length);
-        this.commit();
-        continue;
-      }
-      const hold = isSelfClosing(this.inside) ? this.buf.length : partialTailPrefix(this.buf, this.inside.close);
-      this.innerBuf += this.buf.slice(0, this.buf.length - hold);
-      this.buf = hold ? this.buf.slice(this.buf.length - hold) : "";
-      break;
-    }
-    emit3 = stripControlTokens(emit3);
-    this.clean += emit3;
-    return emit3;
-  }
-  /** End of stream: flush held-back text and close any unterminated call. */
-  flush() {
-    let emit3 = "";
-    if (this.inside && isSelfClosing(this.inside)) {
-      const end = this.inside.closeAt(this.buf, true) ?? { at: this.buf.length, length: 0 };
-      this.innerBuf += this.buf.slice(0, end.at);
-      emit3 = stripControlTokens(this.buf.slice(end.at + end.length));
-      this.commit();
-    } else if (this.inside) {
-      this.innerBuf += this.buf;
-      this.commit();
-    } else {
-      emit3 = stripControlTokens(this.buf);
-    }
-    this.buf = "";
-    this.innerBuf = "";
-    this.clean += emit3;
-    return emit3;
-  }
-  /** The full clean text accumulated so far. */
-  cleanText() {
-    return this.clean;
-  }
-  /** Tool calls lifted out of the text. */
-  toolCalls() {
-    return this.calls;
-  }
-};
-function extractXmlToolCalls(raw) {
-  const f = new XmlToolCallFilter();
-  f.push(raw);
-  f.flush();
-  return { text: f.cleanText(), toolCalls: f.toolCalls() };
 }
 
-// src/xmlToolArgTypes.ts
-function asType(value, type) {
-  const types = Array.isArray(type) ? type : [type];
-  const text = value.trim();
-  for (const t of types) {
-    if (t === "string") return void 0;
-    if ((t === "object" || t === "array") && /^[[{]/.test(text)) {
-      let parsed;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        parsed = void 0;
-      }
-      if (t === "array" ? Array.isArray(parsed) : parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
-    }
-    if ((t === "number" || t === "integer") && /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(text)) {
-      const n2 = Number(text);
-      if (t === "number" || Number.isInteger(n2)) return n2;
-    }
-    if (t === "boolean" && (text === "true" || text === "false")) return text === "true";
-  }
-  return void 0;
-}
-var plain = ({ id, name, args }) => ({ id, name, args });
-function typeXmlToolArgs(calls, tools) {
-  const schemas = new Map((tools ?? []).map((t) => [t.function.name, t.function.parameters]));
-  return calls.map((call2) => plain(typed(call2, schemas)));
-}
-function typed(call2, schemas) {
-  const props = schemas.get(call2.name)?.properties ?? void 0;
-  if (!props) return call2;
-  let args;
-  try {
-    const parsed = JSON.parse(call2.args);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return call2;
-    args = parsed;
-  } catch {
-    return call2;
-  }
-  let changed = false;
-  for (const [key, value] of Object.entries(args)) {
-    const type = props[key]?.type;
-    if (type === void 0) continue;
-    const text = call2.rawArgs?.[key] ?? (typeof value === "string" ? value : void 0);
-    if (text === void 0) continue;
-    const next = type === "string" || Array.isArray(type) && type[0] === "string" ? text : asType(text, type);
-    if (next === void 0 || next === value) continue;
-    args[key] = next;
-    changed = true;
-  }
-  return changed ? { ...call2, args: JSON.stringify(args) } : call2;
+// src/pendingWordsFailure.ts
+function reportPendingWordsFailure(stage, error) {
+  console.warn(`BuilderForce pending words: ${stage} failed (${errorMessage(error)})`);
 }
 
 // ../packages/agent-loop/src/types.ts
@@ -1219,6 +897,572 @@ function selectPendingAskUser(messages) {
   return null;
 }
 
+// src/steerMetadata.ts
+function steerMetadata(steer) {
+  const attachments = steer.attachments ?? [];
+  return JSON.stringify({ [MID_TURN_META_KEY]: true, ...attachments.length > 0 ? { attachments } : {} });
+}
+
+// src/pendingWords.ts
+var TTL_MS = 7 * 24 * 60 * 60 * 1e3;
+var PER_CHAT_CAP = 50;
+var START_GRACE_MS = 5e3;
+var BEAT_MS = 4e3;
+var BEAT_DEAD_MS = 15e3;
+var REPLAY_BUDGET_MS = 2e4;
+var SAVE_MS = 8e3;
+var SESSION = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Math.random());
+var PREFIX = "bf:pendingWords:";
+var BEAT_PREFIX = "bf:pendingBeat:";
+var lockName = (session) => `${PREFIX}session:${session}`;
+var owner = null;
+var startupPersistence = null;
+function setPendingWordsOwner(who) {
+  const next = who ? `${who.tenant}:${who.user}` : null;
+  const changed = next !== owner;
+  owner = next;
+  if (changed && owner && startupPersistence) void replayAllPendingWords(startupPersistence);
+}
+function registerPendingWordsReplay(persistence) {
+  startupPersistence = persistence;
+  if (persistence && owner) void replayAllPendingWords(persistence);
+}
+var keyOf = (chatId) => owner ? `${PREFIX}${owner}:${chatId}` : null;
+function onStorage(use, fallback) {
+  try {
+    return typeof localStorage === "undefined" ? fallback : use(localStorage);
+  } catch {
+    return fallback;
+  }
+}
+var keysStarting = (prefix) => onStorage((store) => {
+  const found = [];
+  for (let i = 0; i < store.length; i += 1) {
+    const key = store.key(i);
+    if (key?.startsWith(prefix)) found.push(key);
+  }
+  return found;
+}, []);
+function parse(raw) {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter((p) => typeof p?.eventKey === "string" && typeof p?.text === "string");
+  } catch {
+    return null;
+  }
+}
+function read(key) {
+  const got = onStorage((store) => ({ raw: store.getItem(key) }), null);
+  if (!got) return null;
+  const raw = got.raw;
+  if (!raw) return [];
+  const list3 = parse(raw);
+  if (!list3) {
+    onStorage((store) => store.removeItem(key), void 0);
+    return [];
+  }
+  const now = Date.now();
+  const live2 = list3.filter((p) => typeof p.at !== "number" || now - p.at < TTL_MS);
+  if (live2.length !== list3.length) write(key, live2);
+  return live2;
+}
+function write(key, list3) {
+  return onStorage((store) => {
+    if (list3.length === 0) store.removeItem(key);
+    else store.setItem(key, JSON.stringify(list3));
+    return true;
+  }, false);
+}
+var holding = false;
+function holdSession() {
+  if (holding) return;
+  holding = true;
+  const locks = typeof navigator !== "undefined" ? navigator.locks : void 0;
+  if (locks?.request) {
+    void locks.request(lockName(SESSION), () => new Promise(() => void 0)).catch((e) => {
+      reportPendingWordsFailure("hold_session", e);
+      beatWhileAlive();
+    });
+    return;
+  }
+  beatWhileAlive();
+}
+function beatWhileAlive() {
+  const beat = () => onStorage((store) => store.setItem(`${BEAT_PREFIX}${SESSION}`, String(Date.now())), void 0);
+  beat();
+  const timer = setInterval(beat, BEAT_MS);
+  timer.unref?.();
+}
+async function sessionAlive(session) {
+  if (session === SESSION) return true;
+  const locks = typeof navigator !== "undefined" ? navigator.locks : void 0;
+  if (locks?.query) {
+    const held = await locks.query().then((state) => state.held ?? [], () => null);
+    if (held) return held.some((lock) => lock.name === lockName(session));
+  }
+  const beat = Number(onStorage((store) => store.getItem(`${BEAT_PREFIX}${session}`), null));
+  return Number.isFinite(beat) && beat > 0 && Date.now() - beat < BEAT_DEAD_MS;
+}
+function rememberPendingWords(chatId, eventKey, text) {
+  const key = keyOf(chatId);
+  const body = text.trim();
+  if (!key || !body) return false;
+  holdSession();
+  const list3 = read(key);
+  if (!list3) return false;
+  if (list3.some((p) => p.eventKey === eventKey)) return true;
+  return write(key, [...list3, { eventKey, text: body, session: SESSION, at: Date.now() }].slice(-PER_CHAT_CAP));
+}
+function forgetPendingWords(chatId, eventKeys) {
+  const key = keyOf(chatId);
+  const gone = new Set(eventKeys.filter((k) => !!k));
+  if (!key || gone.size === 0) return;
+  const list3 = read(key);
+  if (!list3) return;
+  const rest = list3.filter((p) => !gone.has(p.eventKey));
+  if (rest.length !== list3.length) write(key, rest);
+}
+function markPendingWordsRead(chatId, eventKeys) {
+  const key = keyOf(chatId);
+  const drained = new Set(eventKeys.filter((k) => !!k));
+  if (!key || drained.size === 0) return;
+  const list3 = read(key);
+  if (!list3 || !list3.some((p) => drained.has(p.eventKey) && !p.read)) return;
+  write(key, list3.map((p) => drained.has(p.eventKey) ? { ...p, read: true } : p));
+}
+function clearPendingWords() {
+  onStorage((store) => {
+    for (const key of [...keysStarting(PREFIX), ...keysStarting(BEAT_PREFIX)]) store.removeItem(key);
+  }, void 0);
+  owner = null;
+}
+function permanentRefusal(e) {
+  const status2 = e?.status;
+  return typeof status2 === "number" && status2 >= 400 && status2 < 500 && status2 !== 401 && status2 !== 408 && status2 !== 429;
+}
+async function replayOne(chatId, key, persistence) {
+  const end = Date.now() + REPLAY_BUDGET_MS;
+  let saved = 0;
+  const dead = [];
+  for (const word of read(key) ?? []) {
+    if (word.session === SESSION || Date.now() - word.at < START_GRACE_MS) continue;
+    if (await sessionAlive(word.session)) continue;
+    dead.push(word);
+  }
+  for (const word of dead) {
+    const left = end - Date.now();
+    if (left <= 0) break;
+    try {
+      const row = { role: "user", content: word.text, ...word.read ? { metadata: steerMetadata({}) } : {}, eventKey: word.eventKey };
+      await bounded(Math.min(SAVE_MS, left), persistence.sendMessages(chatId, [row]));
+      forgetPendingWords(chatId, [word.eventKey]);
+      saved += 1;
+    } catch (e) {
+      if (permanentRefusal(e)) forgetPendingWords(chatId, [word.eventKey]);
+    }
+  }
+  return saved;
+}
+var replaying = /* @__PURE__ */ new Map();
+function replayPendingWords(chatId, persistence) {
+  const key = keyOf(chatId);
+  if (!key) return Promise.resolve(0);
+  const running = replaying.get(key);
+  if (running) return running;
+  const replay = replayOne(chatId, key, persistence).catch((e) => {
+    reportPendingWordsFailure("replay", e);
+    return 0;
+  }).finally(() => replaying.delete(key));
+  replaying.set(key, replay);
+  return replay;
+}
+async function replayAllPendingWords(persistence) {
+  if (!owner) return 0;
+  const prefix = `${PREFIX}${owner}:`;
+  let saved = 0;
+  for (const key of keysStarting(prefix)) {
+    const chatId = Number(key.slice(prefix.length));
+    if (Number.isInteger(chatId)) saved += await replayPendingWords(chatId, persistence);
+  }
+  return saved;
+}
+
+// src/xmlToolCalls.ts
+var isSelfClosing = (dialect) => "closeAt" in dialect;
+function skipSpace(text, i) {
+  while (i < text.length && /\s/.test(text[i])) i += 1;
+  return i;
+}
+function objectEnd(text, i) {
+  let depth2 = 0;
+  let inString = false;
+  for (let j = i; j < text.length; j += 1) {
+    const c = text[j];
+    if (inString) {
+      if (c === "\\") j += 1;
+      else if (c === '"') inString = false;
+    } else if (c === '"') inString = true;
+    else if (c === "{") depth2 += 1;
+    else if (c === "}") {
+      depth2 -= 1;
+      if (depth2 === 0) return j + 1;
+    }
+  }
+  return -1;
+}
+var PARTIAL_MAP_KEY = /^(?:"\d*"?\s*:?\s*)?$/;
+var MAP_KEY = /^"\d+"\s*:\s*/;
+var MAP_TERMINATOR = /^\}?\s*\??\s*\|?>?/;
+function callMapEnd(buf, final) {
+  const unfinished = (at2) => final ? { at: at2, length: buf.length - at2 } : null;
+  let i = skipSpace(buf, 0);
+  if (buf[i] === "{") i = skipSpace(buf, i + 1);
+  for (; ; ) {
+    const entryStart = i;
+    const rest2 = buf.slice(i);
+    const key = MAP_KEY.exec(rest2);
+    if (!key) return PARTIAL_MAP_KEY.test(rest2) ? unfinished(entryStart) : { at: i, length: 0 };
+    i += key[0].length;
+    if (i >= buf.length) return unfinished(entryStart);
+    if (buf[i] !== "{") return { at: entryStart, length: 0 };
+    const end = objectEnd(buf, i);
+    if (end < 0) return unfinished(entryStart);
+    i = skipSpace(buf, end);
+    if (i >= buf.length) return unfinished(end);
+    if (buf[i] !== ",") break;
+    i = skipSpace(buf, i + 1);
+  }
+  const rest = buf.slice(i);
+  const terminator = MAP_TERMINATOR.exec(rest)[0];
+  if (!final && terminator.length === rest.length && !terminator.endsWith(">")) return null;
+  return { at: i, length: terminator.length };
+}
+function parseCallMap(body, seq) {
+  const entries = body.trim().replace(/^\{/, "").replace(/,\s*$/, "");
+  let map;
+  try {
+    map = JSON.parse(`{${entries}}`);
+  } catch {
+    return [];
+  }
+  return Object.values(map).flatMap((raw, index) => {
+    const entry = raw;
+    if (!entry || typeof entry.name !== "string" || !entry.name) return [];
+    const args = entry.arguments ?? {};
+    return [{ id: `xmltc_${seq}_${index}`, name: entry.name, args: typeof args === "string" ? args : JSON.stringify(args) }];
+  });
+}
+var DIALECTS = [
+  { prefix: "<tool_call>", open: /<tool_call>/, close: "</tool_call>", namedInOpenTag: false },
+  { prefix: "<function_call>", open: /<function_call>/, close: "</function_call>", namedInOpenTag: false },
+  { prefix: "<tool_use>", open: /<tool_use>/, close: "</tool_use>", namedInOpenTag: false },
+  { prefix: "<invoke", open: /<invoke\s+name\s*=\s*"([^"]*)"\s*>/, close: "</invoke>", namedInOpenTag: true },
+  { prefix: "<function=", open: /<function\s*=\s*([^>]+)>/, close: "</function>", namedInOpenTag: true },
+  // Grok's own dialect, written when it drops out of native function calling:
+  // `<xai:function_call name="read_file"><parameter name="path">…</parameter></xai:function_call>`.
+  // `<function_call>` above needs the bare tag, so nothing matched it: the calls never
+  // ran, the markup reached the transcript as "narration", and Grok, seeing its own
+  // calls with no results, concluded the tools were not returning. The name is optional
+  // in the pattern so a body carrying `{"name":…}` JSON is lifted too.
+  { prefix: "<xai:function_call", open: /<xai:function_call(?:\s+name\s*=\s*"([^"]*)")?\s*>/, close: "</xai:function_call>", namedInOpenTag: true },
+  // Grok's numbered call map (chat #106, grok-4.6): `<|"0":{"name":…,"arguments":{…}}, "1":{…} ?>`,
+  // with or without the outer braces and never with a closing tag. Four calls written
+  // this way ran nothing, and the turn decayed into counting.
+  { prefix: "<|", open: /<\|\s*(?=\{?\s*"\d+"\s*:\s*\{)/, closeAt: callMapEnd, parseBody: parseCallMap }
+];
+var CALL_MAP_OPEN_TAIL = /<\|\s*\{?\s*(?:"\d*"?\s*:?\s*)?$/;
+var CONTROL_TOKEN = /<+\|[a-z][a-z0-9_]{0,31}\|>/gi;
+var CONTROL_TOKEN_TAIL = /<+(?:\|[a-z0-9_]{0,32}\|?)?$/i;
+function stripControlTokens(text) {
+  return text.replace(CONTROL_TOKEN, "");
+}
+function partialTailPrefix(buf, tag) {
+  const max = Math.min(buf.length, tag.length - 1);
+  for (let L = max; L > 0; L--) {
+    if (buf.slice(buf.length - L) === tag.slice(0, L)) return L;
+  }
+  return 0;
+}
+function holdLength(buf) {
+  let hold = 0;
+  for (const d of DIALECTS) {
+    hold = Math.max(hold, partialTailPrefix(buf, d.prefix));
+    if (!isSelfClosing(d) && d.namedInOpenTag) {
+      const idx = buf.lastIndexOf(d.prefix);
+      if (idx >= 0 && !buf.slice(idx).includes(">")) hold = Math.max(hold, buf.length - idx);
+    }
+  }
+  for (const tailPattern of [CALL_MAP_OPEN_TAIL, CONTROL_TOKEN_TAIL]) {
+    const tail = tailPattern.exec(buf);
+    if (tail) hold = Math.max(hold, tail[0].length);
+  }
+  return Math.min(hold, buf.length);
+}
+function findOpen(buf) {
+  let best = null;
+  for (const dialect of DIALECTS) {
+    const m = dialect.open.exec(buf);
+    if (!m) continue;
+    if (best && m.index >= best.index) continue;
+    best = { dialect, index: m.index, length: m[0].length, ...m[1] ? { name: m[1].trim() } : {} };
+  }
+  return best;
+}
+function callEnd(dialect, buf) {
+  if (isSelfClosing(dialect)) return dialect.closeAt(buf, false);
+  const at2 = buf.indexOf(dialect.close);
+  return at2 >= 0 ? { at: at2, length: dialect.close.length } : null;
+}
+function coerceArg(raw) {
+  const v = raw.trim();
+  if (v === "") return "";
+  try {
+    return JSON.parse(v);
+  } catch {
+    return v;
+  }
+}
+function qwenText(raw) {
+  return raw.replace(/^\r?\n/, "").replace(/\r?\n$/, "");
+}
+function qwenArg(raw) {
+  const v = qwenText(raw);
+  if (/^(?:true|false|null)$/.test(v) || /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(v)) return JSON.parse(v);
+  return v;
+}
+var ARG_KEY_VALUE = /<arg_key>([\s\S]*?)<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/g;
+var PARAMETER_TAG = /<(?:xai:)?parameter(?:\s+name\s*=\s*"([^"]*)"|\s*=\s*([^>]+?))\s*>([\s\S]*?)<\/(?:xai:)?parameter>/g;
+function argsFromTags(body) {
+  const args = {};
+  const rawArgs = {};
+  let found = false;
+  for (const re of [ARG_KEY_VALUE, PARAMETER_TAG]) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(body)) !== null) {
+      const key = (m.slice(1, -1).find((g) => g !== void 0) ?? "").trim();
+      if (!key) continue;
+      const value = m[m.length - 1];
+      const qwen = re === PARAMETER_TAG && m[2] !== void 0;
+      rawArgs[key] = qwen ? qwenText(value) : value.trim();
+      args[key] = qwen ? qwenArg(value) : coerceArg(value);
+      found = true;
+    }
+  }
+  return found ? { args, rawArgs } : null;
+}
+function taggedCall(id, name, tagged) {
+  return { id, name, args: JSON.stringify(tagged.args), rawArgs: tagged.rawArgs };
+}
+function parseNamedBody(name, body, seq) {
+  if (!name) return null;
+  const tagged = argsFromTags(body);
+  if (tagged) return taggedCall(`xmltc_${seq}`, name, tagged);
+  const jsonStart = body.indexOf("{");
+  if (jsonStart >= 0) {
+    try {
+      const obj = JSON.parse(body.slice(jsonStart));
+      return { id: `xmltc_${seq}`, name, args: JSON.stringify(obj ?? {}) };
+    } catch {
+    }
+  }
+  return { id: `xmltc_${seq}`, name, args: "{}" };
+}
+function parseWrappedNamed(trimmed, seq) {
+  for (const dialect of DIALECTS) {
+    if (isSelfClosing(dialect) || !dialect.namedInOpenTag) continue;
+    const m = dialect.open.exec(trimmed);
+    if (!m || m.index !== 0 || !m[1]) continue;
+    const rest = trimmed.slice(m[0].length);
+    const end = rest.lastIndexOf(dialect.close);
+    return parseNamedBody(m[1].trim(), end >= 0 ? rest.slice(0, end) : rest, seq);
+  }
+  return null;
+}
+function parseInner(inner, seq) {
+  const trimmed = inner.trim();
+  if (!trimmed) return null;
+  const wrapped = parseWrappedNamed(trimmed, seq);
+  if (wrapped) return wrapped;
+  const firstArg = trimmed.search(/<arg_key>|<(?:xai:)?parameter[\s=]/);
+  if (firstArg >= 0) {
+    const name = trimmed.slice(0, firstArg).trim();
+    if (!name) return null;
+    const tagged = argsFromTags(trimmed);
+    return tagged ? taggedCall(`xmltc_${seq}`, name, tagged) : { id: `xmltc_${seq}`, name, args: "{}" };
+  }
+  const jsonStart = trimmed.indexOf("{");
+  if (jsonStart >= 0) {
+    const maybeName = trimmed.slice(0, jsonStart).trim();
+    try {
+      const obj = JSON.parse(trimmed.slice(jsonStart));
+      if (maybeName) {
+        return { id: `xmltc_${seq}`, name: maybeName, args: JSON.stringify(obj ?? {}) };
+      }
+      if (obj && typeof obj === "object" && typeof obj.name === "string") {
+        const a = obj.arguments ?? obj.parameters ?? obj.input ?? {};
+        const argsStr = typeof a === "string" ? a : JSON.stringify(a ?? {});
+        return { id: `xmltc_${seq}`, name: obj.name, args: argsStr };
+      }
+    } catch {
+      if (maybeName) return { id: `xmltc_${seq}`, name: maybeName, args: "{}" };
+    }
+    return null;
+  }
+  return { id: `xmltc_${seq}`, name: trimmed, args: "{}" };
+}
+var CALL_MARKUP = /<\/?(?:[\w-]+:)?(?:function_call|tool_call|tool_use|invoke)\b/i;
+function hasCallMarkup(text) {
+  return CALL_MARKUP.test(text);
+}
+var XmlToolCallFilter = class {
+  buf = "";
+  inside = null;
+  insideName;
+  innerBuf = "";
+  clean = "";
+  calls = [];
+  seq = 0;
+  /** Close the call currently being accumulated and record it. A dialect whose name
+   *  is optional in the open tag falls back to reading the name from the body. */
+  commit() {
+    const dialect = this.inside;
+    const seq = this.seq++;
+    if (dialect && isSelfClosing(dialect)) {
+      this.calls.push(...dialect.parseBody(this.innerBuf, seq));
+    } else {
+      const parsed = dialect?.namedInOpenTag && this.insideName !== void 0 ? parseNamedBody(this.insideName, this.innerBuf, seq) : parseInner(this.innerBuf, seq);
+      if (parsed) this.calls.push(parsed);
+    }
+    this.innerBuf = "";
+    this.inside = null;
+    this.insideName = void 0;
+  }
+  /** Feed a content delta; returns clean (markup-free) text to emit now. */
+  push(delta) {
+    this.buf += delta;
+    let emit3 = "";
+    for (; ; ) {
+      if (!this.inside) {
+        const open = findOpen(this.buf);
+        if (open) {
+          emit3 += this.buf.slice(0, open.index);
+          this.buf = this.buf.slice(open.index + open.length);
+          this.inside = open.dialect;
+          this.insideName = open.name;
+          this.innerBuf = "";
+          continue;
+        }
+        const hold2 = holdLength(this.buf);
+        emit3 += this.buf.slice(0, this.buf.length - hold2);
+        this.buf = hold2 ? this.buf.slice(this.buf.length - hold2) : "";
+        break;
+      }
+      const end = callEnd(this.inside, this.buf);
+      if (end) {
+        this.innerBuf += this.buf.slice(0, end.at);
+        this.buf = this.buf.slice(end.at + end.length);
+        this.commit();
+        continue;
+      }
+      const hold = isSelfClosing(this.inside) ? this.buf.length : partialTailPrefix(this.buf, this.inside.close);
+      this.innerBuf += this.buf.slice(0, this.buf.length - hold);
+      this.buf = hold ? this.buf.slice(this.buf.length - hold) : "";
+      break;
+    }
+    emit3 = stripControlTokens(emit3);
+    this.clean += emit3;
+    return emit3;
+  }
+  /** End of stream: flush held-back text and close any unterminated call. */
+  flush() {
+    let emit3 = "";
+    if (this.inside && isSelfClosing(this.inside)) {
+      const end = this.inside.closeAt(this.buf, true) ?? { at: this.buf.length, length: 0 };
+      this.innerBuf += this.buf.slice(0, end.at);
+      emit3 = stripControlTokens(this.buf.slice(end.at + end.length));
+      this.commit();
+    } else if (this.inside) {
+      this.innerBuf += this.buf;
+      this.commit();
+    } else {
+      emit3 = stripControlTokens(this.buf);
+    }
+    this.buf = "";
+    this.innerBuf = "";
+    this.clean += emit3;
+    return emit3;
+  }
+  /** The full clean text accumulated so far. */
+  cleanText() {
+    return this.clean;
+  }
+  /** Tool calls lifted out of the text. */
+  toolCalls() {
+    return this.calls;
+  }
+};
+function extractXmlToolCalls(raw) {
+  const f = new XmlToolCallFilter();
+  f.push(raw);
+  f.flush();
+  return { text: f.cleanText(), toolCalls: f.toolCalls() };
+}
+
+// src/xmlToolArgTypes.ts
+function asType(value, type) {
+  const types = Array.isArray(type) ? type : [type];
+  const text = value.trim();
+  for (const t of types) {
+    if (t === "string") return void 0;
+    if ((t === "object" || t === "array") && /^[[{]/.test(text)) {
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        parsed = void 0;
+      }
+      if (t === "array" ? Array.isArray(parsed) : parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+    }
+    if ((t === "number" || t === "integer") && /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(text)) {
+      const n2 = Number(text);
+      if (t === "number" || Number.isInteger(n2)) return n2;
+    }
+    if (t === "boolean" && (text === "true" || text === "false")) return text === "true";
+  }
+  return void 0;
+}
+var plain = ({ id, name, args }) => ({ id, name, args });
+function typeXmlToolArgs(calls, tools) {
+  const schemas = new Map((tools ?? []).map((t) => [t.function.name, t.function.parameters]));
+  return calls.map((call2) => plain(typed(call2, schemas)));
+}
+function typed(call2, schemas) {
+  const props = schemas.get(call2.name)?.properties ?? void 0;
+  if (!props) return call2;
+  let args;
+  try {
+    const parsed = JSON.parse(call2.args);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return call2;
+    args = parsed;
+  } catch {
+    return call2;
+  }
+  let changed = false;
+  for (const [key, value] of Object.entries(args)) {
+    const type = props[key]?.type;
+    if (type === void 0) continue;
+    const text = call2.rawArgs?.[key] ?? (typeof value === "string" ? value : void 0);
+    if (text === void 0) continue;
+    const next = type === "string" || Array.isArray(type) && type[0] === "string" ? text : asType(text, type);
+    if (next === void 0 || next === value) continue;
+    args[key] = next;
+    changed = true;
+  }
+  return changed ? { ...call2, args: JSON.stringify(args) } : call2;
+}
+
 // src/networkErrorDetail.ts
 var MAX_DEPTH = 4;
 function causeChain(e) {
@@ -1719,6 +1963,10 @@ function BrainProvider({
     }),
     [config]
   );
+  useEffect(() => {
+    registerPendingWordsReplay(runtime.persistence);
+    return () => registerPendingWordsReplay(null);
+  }, [runtime.persistence]);
   return /* @__PURE__ */ jsx(BrainConfigContext.Provider, { value: runtime, children });
 }
 function useBrainConfig() {
@@ -2566,8 +2814,7 @@ function foldSpendSavings(slices, book2) {
     platformMc += g.costMc;
     const price = listPriceOf(book2, g.model);
     const pricing = price ? { prompt: price.input, completion: price.output } : void 0;
-    const unpriced = g.unpriced ?? !pricing;
-    if (unpriced) spend.unpricedTokens += g.total;
+    if (g.unpriced) spend.unpricedTokens += g.total;
     else if (g.byo && pricing) {
       yourKeyMc += computeCostMillicents(pricing, {
         promptTokens: g.prompt,
@@ -2577,7 +2824,7 @@ function foldSpendSavings(slices, book2) {
         cacheCreationTokens: g.cacheCreation
       });
     }
-    if (pricing && !unpriced) {
+    if (pricing && !g.unpriced) {
       addSaving(acc, "context_trim", Math.round(g.savedPrompt * pricing.prompt * 1e5), g.savedPrompt, g.trimCalls, true);
       addSaving(acc, "recall_overhead", -Math.round(g.recallPrompt * pricing.prompt * 1e5), -g.recallPrompt, g.recallCalls, true);
       const net = (g.cacheRead * (1 - CACHE_READ_MULTIPLIER) - g.cacheCreation * (CACHE_CREATION_MULTIPLIER - 1)) * pricing.prompt;
@@ -5448,8 +5695,7 @@ async function recordRunOutcome(ctx, input) {
 
 // src/localChat/usageLedger.ts
 function servedModel(result, requested) {
-  const identity = servedIdentity(result);
-  return identity.name ?? (identity.viaAttempt ? void 0 : requested);
+  return servedIdentity(result, requested).name;
 }
 function usageRouteOf(result, requested) {
   if (servedIdentity(result).onDevice) return "local";
@@ -7022,6 +7268,8 @@ var CLIENT_ENTRY_POINTS = ALL_ENTRY_POINTS.filter(
 );
 
 // ../packages/learned-routing/src/rateLimitFailure.ts
+var AVAILABILITY = /\b429\b|\b529\b|rate.?limit|too many requests|over ?capacity|capacity limit|overloaded|resource.?exhausted|\bin cooldown\b|cooldown or unavailable/i;
+var AVAILABILITY_STATUSES = /* @__PURE__ */ new Set([429, 529]);
 var TENANT_BUDGET_CODES = [
   "agent_host_token_limit_exceeded",
   "plan_token_limit_exceeded",
@@ -7039,10 +7287,17 @@ var BUDGET_WORDING = new RegExp(
     /generation limit reached/,
     /allowance reached/,
     /spend cap reached/,
-    /(?:premium|token|spend|credit|plan)\b[^.]{0,40}budget exhausted/
+    /premium-model budget exhausted/
   ].map((re) => re.source).join("|"),
   "i"
 );
+function isTenantBudgetFailure(message) {
+  return !!message && (BUDGET_CODE.test(message) || BUDGET_WORDING.test(message));
+}
+function isRateLimitFailure(message, status2) {
+  if (isTenantBudgetFailure(message)) return false;
+  return status2 != null && AVAILABILITY_STATUSES.has(status2) || !!message && AVAILABILITY.test(message);
+}
 
 // ../packages/workload/src/actionClassifier.ts
 var MIN_CONFIDENCE = 0.45;
@@ -12092,8 +12347,8 @@ function createWebLlmEngine(options = {}) {
     await engine.reload(modelId);
   });
   const cached2 = async (modelId) => {
-    const storage2 = options.caches ?? globalThis.caches;
-    if (storage2 && !await storage2.has(WEBLLM_MODEL_CACHE)) return false;
+    const storage = options.caches ?? globalThis.caches;
+    if (storage && !await storage.has(WEBLLM_MODEL_CACHE)) return false;
     return (await webllm()).hasModelInCache(modelId);
   };
   const prober = memoizedProbe(
@@ -13485,14 +13740,14 @@ function buildComposerDirectives(o) {
 }
 
 // src/useToolConfirmationGate.ts
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect as useEffect2, useRef, useState } from "react";
 function useToolConfirmationGate(options) {
   const { isMutating, persistence, defaultOn = false } = options;
   const [autoApprove, setAutoApproveState] = useState(defaultOn);
   const autoApproveRef = useRef(defaultOn);
   const persistenceRef = useRef(persistence);
   persistenceRef.current = persistence;
-  useEffect(() => {
+  useEffect2(() => {
     const stored = persistenceRef.current?.read();
     const initial = stored ?? defaultOn;
     autoApproveRef.current = initial;
@@ -13699,7 +13954,7 @@ function resetOnDeviceStoresForTests() {
 }
 
 // src/BrainActionsContext.tsx
-import { createContext as createContext2, useCallback as useCallback2, useContext as useContext2, useEffect as useEffect2, useMemo as useMemo2, useRef as useRef2, useState as useState2 } from "react";
+import { createContext as createContext2, useCallback as useCallback2, useContext as useContext2, useEffect as useEffect3, useMemo as useMemo2, useRef as useRef2, useState as useState2 } from "react";
 
 // src/toolSpecs.ts
 function toolSpecsFor(actions) {
@@ -13807,19 +14062,19 @@ function liveAction(name, latest) {
 function useRegisterBrainActions(actions) {
   const register = useContext2(BrainRegistrarContext);
   const latest = useRef2(actions);
-  useEffect2(() => {
+  useEffect3(() => {
     latest.current = actions;
   }, [actions]);
   const signature = declarationSignature(actions);
   const names = actions.map((a) => a.name).join(",");
-  useEffect2(() => {
+  useEffect3(() => {
     if (!register || names === "") return;
     return register(names.split(",").map((name) => liveAction(name, latest)));
   }, [register, signature]);
 }
 
 // src/useMcpExtensions.ts
-import { useEffect as useEffect3, useMemo as useMemo3, useRef as useRef3, useState as useState3 } from "react";
+import { useEffect as useEffect4, useMemo as useMemo3, useRef as useRef3, useState as useState3 } from "react";
 
 // src/mcpToolStatus.ts
 var status = { count: 0, error: null, loading: true };
@@ -13911,7 +14166,7 @@ function useMcpExtensions(options) {
   const skipKey = (options?.skipExtensionIds ?? []).join(",");
   const onToolResultRef = useRef3(options?.onToolResult);
   onToolResultRef.current = options?.onToolResult;
-  useEffect3(() => {
+  useEffect4(() => {
     let cancelled = false;
     fetchMcpToolEntries(transport, skipKey ? skipKey.split(",") : []).then((tools) => {
       if (cancelled) return;
@@ -13933,14 +14188,14 @@ function useMcpExtensions(options) {
     [entries, transport]
   );
   useRegisterBrainActions(actions);
-  useEffect3(() => {
+  useEffect4(() => {
     setMcpToolStatus({ count: actions.length, error, loading });
   }, [actions.length, error, loading]);
   return { loading, toolCount: actions.length, error };
 }
 
 // src/BrainContext.tsx
-import { createContext as createContext3, useCallback as useCallback3, useContext as useContext3, useEffect as useEffect4, useMemo as useMemo4, useState as useState4 } from "react";
+import { createContext as createContext3, useCallback as useCallback3, useContext as useContext3, useEffect as useEffect5, useMemo as useMemo4, useState as useState4 } from "react";
 import { jsx as jsx3 } from "react/jsx-runtime";
 var OPEN_KEY = "brain.drawer.open";
 var CHAT_KEY = "brain.drawer.activeChatId";
@@ -13972,7 +14227,7 @@ function BrainContextProvider({ children }) {
   const [open, setOpen] = useState4(false);
   const [pageContext, setPageContext] = useState4(DEFAULT_CONTEXT);
   const [activeChatId, setActiveChatId] = useState4(null);
-  useEffect4(() => {
+  useEffect5(() => {
     if (readSession(OPEN_KEY) === "1") setOpen(true);
     const savedChat = readSession(CHAT_KEY);
     if (savedChat != null) {
@@ -13980,10 +14235,10 @@ function BrainContextProvider({ children }) {
       if (Number.isFinite(n2)) setActiveChatId(n2);
     }
   }, []);
-  useEffect4(() => {
+  useEffect5(() => {
     writeSession(OPEN_KEY, open ? "1" : "0");
   }, [open]);
-  useEffect4(() => {
+  useEffect5(() => {
     writeSession(CHAT_KEY, activeChatId == null ? null : String(activeChatId));
   }, [activeChatId]);
   const setContext = useCallback3((patch) => {
@@ -14011,7 +14266,7 @@ function useOptionalBrainContext() {
 }
 
 // src/useBrainChats.ts
-import { useCallback as useCallback4, useEffect as useEffect5, useMemo as useMemo5, useRef as useRef4, useState as useState5 } from "react";
+import { useCallback as useCallback4, useEffect as useEffect6, useMemo as useMemo5, useRef as useRef4, useState as useState5 } from "react";
 
 // src/chatWorkLinking.ts
 var TICKET_RECORDING_TOOLS = /* @__PURE__ */ new Set([
@@ -14273,7 +14528,7 @@ function useBrainChats(options = {}) {
       setLoading(false);
     }
   }, [persistence, filterProjectId, pinnedProjectId]);
-  useEffect5(() => {
+  useEffect6(() => {
     reload();
   }, [reload]);
   const select = useCallback4(async (id) => {
@@ -14488,7 +14743,7 @@ function useArmedNewChat(chats) {
 }
 
 // src/useBrainConversation.ts
-import { useCallback as useCallback10, useEffect as useEffect9, useMemo as useMemo6, useRef as useRef8, useState as useState9 } from "react";
+import { useCallback as useCallback10, useEffect as useEffect10, useMemo as useMemo6, useRef as useRef8, useState as useState9 } from "react";
 
 // src/useRunSnapshot.ts
 import { useCallback as useCallback6, useSyncExternalStore } from "react";
@@ -14529,1311 +14784,6 @@ function withObservedModel(chatId, tool, args) {
   const supplied = args ?? {};
   if (typeof supplied.model === "string" && supplied.model.trim()) return args;
   return { ...supplied, model: observed };
-}
-
-// src/runActivity.ts
-var TARGET_KEYS = ["path", "file", "filePath", "command", "cmd", "glob", "query", "q", "search", "url", "name", "title", "id"];
-var MAX_DETAIL = 72;
-function shortenTarget(value, max = MAX_DETAIL) {
-  const v = value.replace(/\s+/g, " ").trim();
-  if (v.length <= max) return v;
-  if (v.includes("/") || v.includes("\\")) return `\u2026${v.slice(v.length - (max - 1))}`;
-  return `${v.slice(0, max - 1)}\u2026`;
-}
-function activityTarget(args) {
-  if (!args || typeof args !== "object" || Array.isArray(args)) return void 0;
-  const record3 = args;
-  for (const key of TARGET_KEYS) {
-    const value = record3[key];
-    if (typeof value === "string" && value.trim()) return shortenTarget(value);
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  }
-  if (Array.isArray(record3.paths)) {
-    const names = record3.paths.filter((p) => typeof p === "string" && p.trim() !== "");
-    if (names.length) return shortenTarget(names.join(", "));
-  }
-  return void 0;
-}
-var QUESTION_KEYS = ["query", "q", "search", "pattern", "glob", "key"];
-var VISIT_QUESTION_SEPARATOR = " \u220B ";
-function visitTarget(args) {
-  const scope = activityTarget(args);
-  if (!scope) return void 0;
-  const record3 = args;
-  for (const key of QUESTION_KEYS) {
-    const value = record3[key];
-    if (typeof value !== "string" || !value.trim()) continue;
-    const question = shortenTarget(value);
-    return question === scope ? scope : `${scope}${VISIT_QUESTION_SEPARATOR}${question}`;
-  }
-  return scope;
-}
-function toolActivity(label, args, step, startedAt) {
-  const detail = activityTarget(args);
-  return { phase: "tool", label, startedAt, step, ...detail ? { detail } : {} };
-}
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  return bytes < 1024 ? `${Math.round(bytes)} B` : `${(bytes / 1024).toFixed(1)} KB`;
-}
-function elapsedText(ms) {
-  if (!Number.isFinite(ms) || ms <= 0) return "0s";
-  if (ms < 6e4) return `${Math.round(ms / 1e3)}s`;
-  return `${Math.floor(ms / 6e4)}m ${Math.round(ms % 6e4 / 1e3)}s`;
-}
-function describeLiveStep(step, capturedAtMs) {
-  const elapsed = elapsedText(Number.isFinite(capturedAtMs) ? capturedAtMs - step.startedAt : 0);
-  const what = step.phase === "tool" ? `running \`${step.label}\`${step.detail ? ` on ${step.detail}` : ""}` : step.phase === "awaiting" ? `PAUSED waiting for the user to approve \`${step.label}\` \u2014 nothing advances until they answer` : step.phase === "composing" ? `composing a \`${step.label || "tool"}\` call${step.bytes != null ? ` \u2014 ${formatBytes(step.bytes)} of arguments so far` : ""}` : step.phase === "thinking" ? "waiting on the model (no token received yet)" : step.phase === "writing" ? "streaming the reply" : step.phase === "finishing" ? "doing post-run work (ticket capture / status reconciliation)" : "starting up";
-  return `${what} (${elapsed} so far${step.step > 0 ? `, loop step ${step.step}` : ""})`;
-}
-function midRunNotice(activity, capturedAtMs) {
-  const doing = activity ? ` At capture it was ${describeLiveStep(activity, capturedAtMs)}.` : " No in-flight step was recorded at capture.";
-  return `\u26A0 CAPTURED MID-RUN \u2014 the agent was STILL EXECUTING when this report was taken.${doing} Anything below that reads as "it never did X" may simply be work it had not reached yet; re-copy once the run settles to get a verdict on a finished run.`;
-}
-
-// src/memorySavings.ts
-function callMemoryEffect(trimmedTokens, recallTokens) {
-  const t = Math.max(0, Math.round(trimmedTokens));
-  const r = Math.max(0, Math.round(recallTokens));
-  return t > 0 || r > 0 ? { trimmedTokens: t, recallTokens: r } : void 0;
-}
-function emptyRunUsage() {
-  return { promptTokens: 0, completionTokens: 0, model: null };
-}
-
-// src/runStore/runCell.ts
-var EMPTY_SNAPSHOT = {
-  running: false,
-  streamingText: "",
-  error: "",
-  errorAction: null,
-  pendingConfirm: null,
-  messagesEpoch: 0,
-  appended: [],
-  hasTrace: false,
-  trace: [],
-  activity: null,
-  byoUnresolved: [],
-  providerCap: [],
-  turn: null
-};
-function makeCell() {
-  return {
-    transcript: [],
-    priorResearch: null,
-    trace: [],
-    running: false,
-    streamingText: "",
-    error: "",
-    errorAction: null,
-    pendingConfirm: null,
-    confirmResolver: null,
-    appended: [],
-    messagesEpoch: 0,
-    listeners: /* @__PURE__ */ new Set(),
-    emitTimer: null,
-    abort: null,
-    activity: null,
-    byoUnresolved: [],
-    providerCap: [],
-    turn: null,
-    codeChanged: false,
-    codeModel: null,
-    runId: "",
-    ticketRecorded: false,
-    touchedFiles: [],
-    deltaTicketId: null,
-    deltaRecordedFiles: [],
-    runTraceFrom: 0,
-    persistStep: null,
-    compactMemo: null,
-    transcriptAnchors: [],
-    unseenFromId: void 0,
-    runUsage: emptyRunUsage(),
-    lastServedModel: null,
-    pendingGate: null,
-    liveTurn: null,
-    lastRequest: null,
-    stopEpoch: 0,
-    claim: null,
-    stoppedTurn: null,
-    snapshot: EMPTY_SNAPSHOT
-  };
-}
-
-// src/runStore/runCells.ts
-var cells = /* @__PURE__ */ new Map();
-var resetHooks = /* @__PURE__ */ new Set();
-function onStoreReset(hook) {
-  resetHooks.add(hook);
-}
-function runStoreResetHooks() {
-  for (const hook of resetHooks) hook();
-}
-var storeListeners = /* @__PURE__ */ new Set();
-var MAX_CELLS = 50;
-var MAX_TRACE_EVENTS = 500;
-var MAX_APPENDED = 50;
-function getCell(key) {
-  const existing = cells.get(key);
-  if (existing) {
-    cells.delete(key);
-    cells.set(key, existing);
-    return existing;
-  }
-  const c = makeCell();
-  cells.set(key, c);
-  evictIdleCells(key);
-  return c;
-}
-function evictIdleCells(protectId) {
-  if (cells.size <= MAX_CELLS) return;
-  for (const [id, cell] of cells) {
-    if (cells.size <= MAX_CELLS) break;
-    if (id === protectId || cell.running || cell.listeners.size > 0) continue;
-    cells.delete(id);
-  }
-}
-var STREAM_EMIT_MS = 32;
-function emitStreaming(c) {
-  if (c.emitTimer) return;
-  c.emitTimer = setTimeout(() => {
-    c.emitTimer = null;
-    emit(c);
-  }, STREAM_EMIT_MS);
-}
-function emit(c) {
-  if (c.emitTimer) {
-    clearTimeout(c.emitTimer);
-    c.emitTimer = null;
-  }
-  c.snapshot = {
-    running: c.running,
-    streamingText: c.streamingText,
-    error: c.error,
-    errorAction: c.errorAction,
-    pendingConfirm: c.pendingConfirm,
-    messagesEpoch: c.messagesEpoch,
-    appended: c.appended,
-    hasTrace: c.trace.length > 0,
-    trace: c.trace,
-    activity: c.activity,
-    byoUnresolved: c.byoUnresolved,
-    providerCap: c.providerCap,
-    turn: c.turn
-  };
-  for (const l of c.listeners) l();
-  for (const l of storeListeners) l();
-}
-function setActivity(c, activity) {
-  c.activity = activity;
-  emit(c);
-}
-function pushTrace(c, ev) {
-  const dropped = Math.max(0, c.trace.length + 1 - MAX_TRACE_EVENTS);
-  c.trace = [...dropped ? c.trace.slice(dropped) : c.trace, ev];
-  if (dropped) c.runTraceFrom = Math.max(0, c.runTraceFrom - dropped);
-  c.persistStep?.(ev);
-  emit(c);
-}
-function runTrace(c) {
-  return c.trace.slice(c.runTraceFrom);
-}
-function recordRunFailure(c, label, message) {
-  const last = runTrace(c).at(-1);
-  if (last?.isError && typeof last.result === "string" && last.result.endsWith(message)) return;
-  pushTrace(c, {
-    ts: nowIso(),
-    category: "error",
-    label,
-    result: message,
-    isError: true
-  });
-}
-function recordAppended(c, msg) {
-  const next = [...c.appended, msg];
-  c.appended = next.length > MAX_APPENDED ? next.slice(next.length - MAX_APPENDED) : next;
-  c.messagesEpoch += 1;
-}
-function nowMs2() {
-  return typeof Date !== "undefined" ? Date.now() : 0;
-}
-function nowIso() {
-  return typeof Date !== "undefined" ? (/* @__PURE__ */ new Date()).toISOString() : "";
-}
-function accrueProviders(c, field, raw) {
-  if (!raw) return;
-  const before = c[field].length;
-  const next = new Set(c[field]);
-  for (const p of raw.split(",").map((s) => s.trim()).filter(Boolean)) next.add(p);
-  if (next.size !== before) c[field] = [...next];
-}
-function accrueByoUnresolved(c, raw) {
-  accrueProviders(c, "byoUnresolved", raw);
-}
-function accrueProviderCap(c, raw) {
-  accrueProviders(c, "providerCap", raw);
-}
-
-// src/runStore/turnPersistence.ts
-function provenanceMetadata(result, requested, base) {
-  const model = result.resolvedModel;
-  if (!model) return withProvenanceMetadata(null, base);
-  const account = asProvenanceAccount(result.account);
-  const asked = requested && requested !== "default" && requested !== model ? requested : void 0;
-  return withProvenanceMetadata({
-    model,
-    ...account ? { account } : {},
-    ...asked ? { requestedModel: asked } : {}
-  }, base);
-}
-async function persistMidTurnText(chatId, c, persistence, result, requested) {
-  const text = canonicalTurnText(result.text);
-  if (!text) return;
-  const metadata = provenanceMetadata(result, requested, { [MID_TURN_META_KEY]: true });
-  const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, ...metadata ? { metadata } : {} }]);
-  recordAppended(c, msg);
-}
-function canonicalTurnText(text) {
-  const { content, reasoning } = splitVendorReasoning({ content: text });
-  return canonicalReasoningText(content, reasoning);
-}
-function persistStep(chatId, persistence, ev) {
-  void persistence.sendMessages(chatId, [stepRow(ev)]).catch(() => {
-  });
-}
-function stoppedTurnOf(c) {
-  const live2 = c.liveTurn;
-  const text = live2 ? c.streamingText : "";
-  const model = live2?.model;
-  const result = !live2 ? "Stopped by user." : model ? `Stopped by user while ${model} was streaming (${text.length} chars kept).` : `Stopped by user before the gateway named the model (${text.length} chars kept).`;
-  return {
-    text,
-    source: { ...live2 },
-    event: {
-      ts: nowIso(),
-      category: "message",
-      label: STOPPED_TURN_STEP,
-      ...model ? { args: { model } } : {},
-      ...live2 ? { textChars: text.length } : {},
-      result
-    }
-  };
-}
-async function keepStoppedTurn(chatId, c, persistence, still = () => true) {
-  const stopped = c.stoppedTurn;
-  c.stoppedTurn = null;
-  if (!stopped) return;
-  const text = canonicalTurnText(stopped.text);
-  if (!text) return;
-  const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, metadata: stoppedTurnMetadata(stopped.source) }]);
-  if (msg && still()) recordAppended(c, msg);
-}
-async function asLiveTurn(c, complete) {
-  c.liveTurn = {};
-  try {
-    return await complete();
-  } finally {
-    c.liveTurn = null;
-  }
-}
-function liveTurnModel(c) {
-  return (model, account) => {
-    if (c.liveTurn) c.liveTurn = { model, account };
-  };
-}
-function connectRetryStep(c, step) {
-  return (attempt, delayMs, reason) => {
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "llm.connect_retry",
-      args: { step, attempt },
-      result: `Could not reach BuilderForce (${reason}). Trying again in ${Math.round(delayMs / 1e3)}s \u2014 nothing was sent, so nothing is repeated.`
-    });
-  };
-}
-
-// src/runStore/runControl.ts
-function driverFor(key) {
-  return typeof key === "number" ? getRunDriver() : null;
-}
-function resetBrainRunStore() {
-  cells.clear();
-  runStoreResetHooks();
-  forgetResolvedModels();
-}
-function subscribeRunStore(listener) {
-  storeListeners.add(listener);
-  return () => {
-    storeListeners.delete(listener);
-  };
-}
-function getGlobalRunState() {
-  const running = [];
-  const awaiting = [];
-  for (const [id, cell] of cells) {
-    if (typeof id !== "number") continue;
-    if (cell.pendingConfirm) awaiting.push(id);
-    else if (cell.running) running.push(id);
-  }
-  return { running, awaiting };
-}
-function subscribeRun(chatId, listener) {
-  const c = getCell(chatId);
-  c.listeners.add(listener);
-  return () => {
-    c.listeners.delete(listener);
-  };
-}
-function runAbortSignal(chatId) {
-  return cells.get(chatId)?.abort?.signal;
-}
-function appendRunMessage(chatId, msg) {
-  const c = cells.get(chatId);
-  if (!c) return;
-  recordAppended(c, msg);
-  emit(c);
-}
-function getRunSnapshot(chatId) {
-  if (chatId == null) return EMPTY_SNAPSHOT;
-  return cells.get(chatId)?.snapshot ?? EMPTY_SNAPSHOT;
-}
-function isRunning(chatId) {
-  return chatId != null && (cells.get(chatId)?.running ?? false);
-}
-function isLive(chatId) {
-  const c = chatId == null ? void 0 : cells.get(chatId);
-  return !!c && (c.running || c.claim !== null);
-}
-function getRunTrace(chatId) {
-  if (chatId == null) return [];
-  return cells.get(chatId)?.trace ?? [];
-}
-async function stopBeforeStart(runKey, chatId, persistence, still = () => true) {
-  const c = getCell(runKey);
-  const step = { ts: nowIso(), category: "message", label: STOPPED_TURN_STEP, result: "Stopped by user before the run started." };
-  pushTrace(c, step);
-  try {
-    const rows = await persistence.sendMessages(chatId, [stepRow(step), stoppedBeforeStartRow()]);
-    const row = rows[rows.length - 1];
-    if (row && still()) {
-      recordAppended(c, row);
-      emit(c);
-    }
-    return row;
-  } catch {
-    return void 0;
-  }
-}
-function stopRun(chatId) {
-  const driver = driverFor(chatId);
-  if (driver) return driver.stop(chatId);
-  const c = cells.get(chatId);
-  if (c) {
-    c.stopEpoch += 1;
-    if (c.claim) emit(c);
-  }
-  if (!c || !c.running || c.abort?.signal.aborted) return;
-  const stopped = stoppedTurnOf(c);
-  c.stoppedTurn = stopped;
-  c.abort?.abort();
-  if (c.confirmResolver) {
-    const resolve = c.confirmResolver;
-    c.confirmResolver = null;
-    c.pendingConfirm = null;
-    resolve(false);
-  }
-  c.streamingText = "";
-  c.activity = null;
-  c.turn = null;
-  pushTrace(c, stopped.event);
-}
-function clearRunError(chatId) {
-  if (chatId == null) return;
-  const driver = driverFor(chatId);
-  if (driver) return driver.clearError(chatId);
-  const c = cells.get(chatId);
-  if (!c || !c.error) return;
-  c.error = "";
-  c.errorAction = null;
-  emit(c);
-}
-function requestRunConfirm(chatId, req, opts) {
-  if (driverFor(chatId)) return Promise.resolve(false);
-  const c = getCell(chatId);
-  return new Promise((resolve) => {
-    c.pendingConfirm = { name: req.name, args: req.args };
-    c.confirmResolver = resolve;
-    c.activity = {
-      ...toolActivity(req.name, req.args, opts?.step ?? c.activity?.step ?? 0, Date.now()),
-      phase: "awaiting"
-    };
-    emit(c);
-  });
-}
-function resolveRunConfirm(chatId, ok) {
-  const driver = driverFor(chatId);
-  if (driver) return driver.confirm(chatId, ok);
-  const c = cells.get(chatId);
-  if (!c || !c.confirmResolver) return;
-  const resolve = c.confirmResolver;
-  c.confirmResolver = null;
-  c.pendingConfirm = null;
-  emit(c);
-  resolve(ok);
-}
-function applyRemoteRun(chatId, snapshot) {
-  const c = getCell(chatId);
-  if (c.abort) return;
-  c.running = snapshot.running;
-  c.streamingText = snapshot.streamingText;
-  c.error = snapshot.error;
-  c.errorAction = snapshot.errorAction;
-  c.pendingConfirm = snapshot.pendingConfirm;
-  c.messagesEpoch = snapshot.messagesEpoch;
-  c.appended = snapshot.appended;
-  c.trace = snapshot.trace;
-  c.runTraceFrom = 0;
-  c.activity = snapshot.activity;
-  c.byoUnresolved = snapshot.byoUnresolved;
-  c.providerCap = snapshot.providerCap;
-  c.turn = snapshot.turn ?? null;
-  emit(c);
-}
-
-// ../packages/write-outbox/src/classification.ts
-var RETENTION_BY_WORK = {
-  history: "durable",
-  histories: "durable",
-  ticket: "durable",
-  tickets: "durable",
-  audit: "durable",
-  audits: "durable",
-  fact: "durable",
-  facts: "durable",
-  telemetry: "best-effort"
-};
-function classifyOutboxWork(work) {
-  if (typeof work !== "string") return void 0;
-  const key = work.trim().toLowerCase();
-  if (!key) return void 0;
-  return RETENTION_BY_WORK[key];
-}
-
-// ../packages/write-outbox/src/queueClass.ts
-var UNCLASSIFIED_USER_WORK_QUEUES = Object.freeze({
-  "host-persist": {
-    carries: "user work (mixed with host telemetry)",
-    reason: "One queue mixes chat messages with host telemetry, so a single retention is wrong for part of the payload on every delivery. Splitting the queue or stamping per entry belongs to the queue's owner, not to a row in this table."
-  }
-});
-var CLASS_BY_QUEUE = {
-  "audit-close": { queue: "audit-close", retention: "durable", onFailure: "retain-until-acked" },
-  "run-checkpoint": { queue: "run-checkpoint", retention: "durable", onFailure: "retain-until-acked" },
-  "fact-publish": { queue: "fact-publish", retention: "durable", onFailure: "retain-until-acked" },
-  "ticket-mutation": { queue: "ticket-mutation", retention: "durable", onFailure: "retain-until-acked" },
-  "brain-turns": { queue: "brain-turns", retention: "durable", onFailure: "retain-until-acked" },
-  steps: { queue: "steps", retention: "durable", onFailure: "retain-until-acked" },
-  "chat-sync": { queue: "chat-sync", retention: "durable", onFailure: "retain-until-acked" },
-  "diagnostics-telemetry": {
-    queue: "diagnostics-telemetry",
-    retention: "best-effort",
-    onFailure: "drop-on-failure"
-  },
-  "session-refresh": { queue: "session-refresh", retention: "best-effort", onFailure: "drop-on-failure" },
-  "qa-capture": { queue: "qa-capture", retention: "best-effort", onFailure: "drop-on-failure" },
-  "visitor-journey": { queue: "visitor-journey", retention: "best-effort", onFailure: "drop-on-failure" },
-  "session-replay": { queue: "session-replay", retention: "best-effort", onFailure: "drop-on-failure" },
-  "tool-audit": { queue: "tool-audit", retention: "best-effort", onFailure: "drop-on-failure" },
-  "usage-snapshot": { queue: "usage-snapshot", retention: "best-effort", onFailure: "drop-on-failure" },
-  "file-change": { queue: "file-change", retention: "best-effort", onFailure: "drop-on-failure" },
-  "remote-chunks": { queue: "remote-chunks", retention: "best-effort", onFailure: "drop-on-failure" },
-  activity: { queue: "activity", retention: "durable", onFailure: "retain-until-acked" },
-  "run-outcomes": { queue: "run-outcomes", retention: "durable", onFailure: "retain-until-acked" }
-};
-var ALIAS_TO_QUEUE = {
-  "audit-close": "audit-close",
-  "close-audit": "audit-close",
-  "run-checkpoint": "run-checkpoint",
-  "fact-publish": "fact-publish",
-  "ticket-mutation": "ticket-mutation",
-  "brain-turns": "brain-turns",
-  "brain-turn": "brain-turns",
-  "pending-turns": "brain-turns",
-  steps: "steps",
-  step: "steps",
-  "run-steps": "steps",
-  "brain-steps": "steps",
-  "chat-sync": "chat-sync",
-  "rovr-chat": "chat-sync",
-  "builderforce-outbox:rovr": "chat-sync",
-  "builderforce-outbox:rovr-steps": "steps",
-  "diagnostics-telemetry": "diagnostics-telemetry",
-  "diagnostic-telemetry": "diagnostics-telemetry",
-  "error-reports": "diagnostics-telemetry",
-  "error-report": "diagnostics-telemetry",
-  "client-report": "diagnostics-telemetry",
-  "client-reports": "diagnostics-telemetry",
-  "builderforce-outbox:rovr-errors": "diagnostics-telemetry",
-  "session-refresh": "session-refresh",
-  "refresh-session": "session-refresh",
-  "refresh-sessions": "session-refresh",
-  "sessions-refresh": "session-refresh",
-  "qa-capture": "qa-capture",
-  "qa-telemetry": "qa-capture",
-  "visitor-journey": "visitor-journey",
-  "visitor-events": "visitor-journey",
-  journey: "visitor-journey",
-  "session-replay": "session-replay",
-  replay: "session-replay",
-  "replay-chunks": "session-replay",
-  "tool-audit": "tool-audit",
-  "tool-audits": "tool-audit",
-  "usage-snapshot": "usage-snapshot",
-  "usage-snapshots": "usage-snapshot",
-  "file-change": "file-change",
-  "file-changes": "file-change",
-  "remote-chunks": "remote-chunks",
-  "remote-chunk": "remote-chunks",
-  // Live VS Code names that are their own canonical ids. The retention column is
-  // decided here, not by whichever mode happened to build the queue.
-  activity: "activity",
-  "run-outcomes": "run-outcomes"
-};
-var STORAGE_PREFIX = "builderforce.outbox.";
-function normalizeQueueName(name) {
-  return name.trim().toLowerCase().replace(/[\s_]+/g, "-").replace(/-+/g, "-");
-}
-function canonicalQueue(name) {
-  let key = normalizeQueueName(name);
-  if (!key) return void 0;
-  if (key.startsWith(STORAGE_PREFIX)) key = key.slice(STORAGE_PREFIX.length);
-  if (key === "steps" || key.startsWith("steps:")) return "steps";
-  return ALIAS_TO_QUEUE[key];
-}
-function classifyUserWorkQueue(name) {
-  if (typeof name !== "string") return void 0;
-  const queue = canonicalQueue(name);
-  if (!queue) return void 0;
-  return CLASS_BY_QUEUE[queue];
-}
-
-// ../packages/write-outbox/src/classifyQueue.ts
-var EXTRA_TELEMETRY = {
-  "qa-captures": "qa-capture",
-  "visitor-journeys": "visitor-journey"
-};
-var WORK_CANONICAL = {
-  history: "history",
-  histories: "history",
-  ticket: "tickets",
-  tickets: "tickets",
-  audit: "audits",
-  audits: "audits",
-  fact: "facts",
-  facts: "facts",
-  telemetry: "telemetry"
-};
-function normalizeQueueName2(name) {
-  return name.trim().toLowerCase().replace(/[\s_]+/g, "-").replace(/-+/g, "-");
-}
-function classified(queue, retention, kind) {
-  return {
-    queue,
-    retention,
-    onFailure: retention === "durable" ? "retain-until-acked" : "drop-on-failure",
-    kind
-  };
-}
-function classifyQueue(name) {
-  const fromQueue = classifyUserWorkQueue(name);
-  if (fromQueue) {
-    return classified(
-      fromQueue.queue,
-      fromQueue.retention,
-      fromQueue.retention === "durable" ? "user-work" : "telemetry"
-    );
-  }
-  const fromWork = classifyOutboxWork(name);
-  if (fromWork && typeof name === "string") {
-    const key2 = normalizeQueueName2(name);
-    const queue = WORK_CANONICAL[key2];
-    if (queue) return classified(queue, fromWork, fromWork === "durable" ? "user-work" : "telemetry");
-  }
-  if (typeof name !== "string") return void 0;
-  const key = normalizeQueueName2(name);
-  if (!key) return void 0;
-  const extra = EXTRA_TELEMETRY[key];
-  if (extra) return classified(extra, "best-effort", "telemetry");
-  return void 0;
-}
-
-// ../packages/write-outbox/src/deadLetter.ts
-function exportDeadLetters(entries) {
-  return entries.filter((entry) => entry.deadLetter).map((entry) => ({ ...entry, deadLetter: { ...entry.deadLetter } })).sort((a, b) => a.seq - b.seq);
-}
-function repairDeadLetter(entries, id) {
-  if (typeof id !== "string" || id.trim() === "") return null;
-  const entry = entries.find((candidate) => candidate.id === id && candidate.deadLetter);
-  if (!entry) return null;
-  delete entry.deadLetter;
-  delete entry.batch;
-  entry.retention = "durable";
-  return entry;
-}
-
-// ../packages/write-outbox/src/idempotency.ts
-var fallbackCounter = 0;
-function defaultId() {
-  const c = globalThis.crypto;
-  if (c?.randomUUID) return c.randomUUID();
-  fallbackCounter += 1;
-  return `ob-${Date.now().toString(36)}-${fallbackCounter.toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-function batchIdempotencyKey(batch) {
-  const head = batch[0];
-  return head ? head.batch ?? head.id : void 0;
-}
-
-// ../packages/write-outbox/src/policy.ts
-var OUTBOX_MAX_ITEMS = 25;
-var OUTBOX_MAX_WAIT_MS = 5e3;
-var OUTBOX_RETRY_BASE_MS = 1e3;
-var OUTBOX_RETRY_MAX_MS = 5 * 6e4;
-function isPermanentHttpFailure(error) {
-  const status2 = error?.status;
-  if (typeof status2 !== "number") return false;
-  return status2 >= 400 && status2 < 500 && ![401, 408, 409, 425, 429].includes(status2);
-}
-
-// ../packages/write-outbox/src/sealedBatch.ts
-var bySeq = (a, b) => a.seq - b.seq;
-function sendable(e, scope) {
-  return !e.deadLetter && (scope === void 0 || e.scope === void 0 || e.scope === scope);
-}
-function takeBatch(l, scope, upTo, maxItems) {
-  const due = (e) => e.seq <= upTo && sendable(e, scope);
-  const start = l.entries.findIndex(due);
-  if (start < 0) return null;
-  const head = l.entries[start];
-  let n2 = 0;
-  const at2 = (i) => l.entries[start + i];
-  if (head.batch) {
-    while (at2(n2) && at2(n2).batch === head.batch) n2 += 1;
-  } else {
-    while (at2(n2) && n2 < maxItems && !at2(n2).batch && due(at2(n2))) n2 += 1;
-  }
-  const batch = l.entries.splice(start, n2);
-  const sealed = !head.batch;
-  if (sealed) {
-    for (const e of batch) {
-      e.batch = head.id;
-      if (scope !== void 0) e.scope = scope;
-    }
-  }
-  return { batch, sealed };
-}
-function sendContext(batch) {
-  const head = batch[0];
-  return {
-    idempotencyKey: batchIdempotencyKey(batch),
-    ids: batch.map((e) => e.id),
-    ...head.scope !== void 0 ? { scope: head.scope } : {}
-  };
-}
-function drainContext(taken, scope, newId) {
-  return {
-    idempotencyKey: batchIdempotencyKey(taken) ?? newId(),
-    ids: taken.map((e) => e.id),
-    ...scope ? { scope } : {}
-  };
-}
-
-// ../packages/write-outbox/src/outbox.ts
-function createOutbox(opts) {
-  const maxItems = Math.max(1, opts.maxItems ?? OUTBOX_MAX_ITEMS);
-  const maxWaitMs = opts.maxWaitMs ?? OUTBOX_MAX_WAIT_MS;
-  const retry = opts.retry ? {
-    baseMs: opts.retry.baseMs ?? OUTBOX_RETRY_BASE_MS,
-    maxMs: opts.retry.maxMs ?? OUTBOX_RETRY_MAX_MS,
-    isPermanent: opts.retry.isPermanent ?? isPermanentHttpFailure
-  } : null;
-  const retryPolicy = retry ?? {
-    baseMs: OUTBOX_RETRY_BASE_MS,
-    maxMs: OUTBOX_RETRY_MAX_MS,
-    isPermanent: isPermanentHttpFailure
-  };
-  const store = opts.store ?? null;
-  const durable = Boolean(retry || store);
-  const maxEntries = Math.max(maxItems, opts.maxEntries ?? Number.POSITIVE_INFINITY);
-  const newId = opts.newId ?? defaultId;
-  const lanes = /* @__PURE__ */ new Map();
-  const inFlightControllers = /* @__PURE__ */ new Set();
-  let lastSeq = 0;
-  let dropped = 0;
-  let closed = false;
-  let storeFailure;
-  const isOnline = () => opts.online?.isOnline() ?? true;
-  const maySend = () => !closed && (opts.sendPermission?.isAllowed() ?? true);
-  const lane = (key) => {
-    let l = lanes.get(key);
-    if (!l) {
-      l = { entries: [], timer: null, retryTimer: null, attempt: 0, inFlight: 0, tail: Promise.resolve() };
-      lanes.set(key, l);
-    }
-    return l;
-  };
-  const nextSeq = () => {
-    lastSeq = Math.max(lastSeq + 1, Date.now() * 1e3);
-    return lastSeq;
-  };
-  const loaded = store ? Promise.resolve().then(() => store.load()).then(
-    (entries) => {
-      for (const e of entries) {
-        lane(e.key).entries.push(e);
-        lastSeq = Math.max(lastSeq, e.seq);
-      }
-      for (const l of lanes.values()) l.entries.sort(bySeq);
-    },
-    (error) => {
-      storeFailure ??= error;
-      opts.onStoreError?.(error);
-    }
-  ) : Promise.resolve();
-  let writes = loaded;
-  const persist = (op) => {
-    if (!store) return Promise.resolve();
-    writes = writes.then(() => op(store)).catch((error) => {
-      storeFailure ??= error;
-      opts.onStoreError?.(error);
-    });
-    return writes;
-  };
-  const drop = (key, entries, reason) => {
-    if (entries.length === 0) return;
-    dropped += entries.length;
-    const ids2 = entries.map((e) => e.id);
-    void persist((s) => s.remove(ids2));
-    opts.onDrop?.({ key, count: entries.length, reason });
-  };
-  const retentionOf = (entry) => {
-    if (entry.retention) return entry.retention;
-    return durable ? "durable" : "best-effort";
-  };
-  const resolveRetention = (work, path2) => {
-    const classified2 = classifyQueue(work) ?? classifyQueue(opts.work);
-    if (classified2) return classified2.retention;
-    if (path2 === "enqueueDurable" || durable) return "durable";
-    return "best-effort";
-  };
-  const totalQueued = () => {
-    let total = 0;
-    for (const l of lanes.values()) total += l.entries.length;
-    return total;
-  };
-  const durableQueued = () => {
-    let n2 = 0;
-    for (const l of lanes.values()) for (const entry of l.entries) if (retentionOf(entry) === "durable") n2 += 1;
-    return n2;
-  };
-  const evictBestEffortWhileOver = (limit) => {
-    let total = totalQueued();
-    while (total > limit) {
-      let oldestKey;
-      let oldestLane;
-      let oldestIndex = -1;
-      let oldestSeq = Number.POSITIVE_INFINITY;
-      for (const [k, l] of lanes) {
-        for (let i = 0; i < l.entries.length; i += 1) {
-          const entry = l.entries[i];
-          if (retentionOf(entry) !== "best-effort" || entry.seq >= oldestSeq) continue;
-          oldestSeq = entry.seq;
-          oldestKey = k;
-          oldestLane = l;
-          oldestIndex = i;
-        }
-      }
-      if (!oldestLane || oldestIndex < 0) {
-        if (total > maxEntries) opts.onCapacity?.(total, maxEntries);
-        return;
-      }
-      drop(oldestKey, oldestLane.entries.splice(oldestIndex, 1), "overflow");
-      total -= 1;
-    }
-  };
-  const enforceBound = () => {
-    evictBestEffortWhileOver(maxEntries);
-  };
-  const currentScope = () => opts.scope ? opts.scope() : void 0;
-  const take = (l, scope, upTo) => {
-    const next = takeBatch(l, scope, upTo, maxItems);
-    if (!next) return null;
-    if (next.sealed) persist((s) => s.put(next.batch));
-    return next.batch;
-  };
-  const clearTimer = (l) => {
-    if (l.timer !== null) clearTimeout(l.timer);
-    l.timer = null;
-  };
-  const clearRetry = (l) => {
-    if (l.retryTimer !== null) clearTimeout(l.retryTimer);
-    l.retryTimer = null;
-  };
-  const scheduleRetry = (key, l, force = false) => {
-    if (!retry && !force || !maySend() || l.retryTimer !== null) return;
-    const policy = retry ?? retryPolicy;
-    l.attempt += 1;
-    const delay = Math.min(policy.maxMs, policy.baseMs * 2 ** (l.attempt - 1));
-    const jittered = Math.round(delay * (0.8 + Math.random() * 0.4));
-    l.retryTimer = setTimeout(() => {
-      l.retryTimer = null;
-      void flushKey(key, { final: false, probe: true });
-    }, jittered);
-  };
-  const armTimer = (key, l) => {
-    if (l.timer !== null || maxWaitMs <= 0 || !maySend()) return;
-    l.timer = setTimeout(() => {
-      l.timer = null;
-      void flushKey(key, { final: false, auto: true });
-    }, maxWaitMs);
-  };
-  const requeue2 = (l, entries) => {
-    l.entries.unshift(...entries);
-    l.entries.sort(bySeq);
-  };
-  const sendBatch = async (key, l, batch, final) => {
-    if (!maySend()) {
-      requeue2(l, batch);
-      return false;
-    }
-    const items = batch.map((e) => e.item);
-    const ctx = sendContext(batch);
-    const ids2 = ctx.ids;
-    const controller = new AbortController();
-    inFlightControllers.add(controller);
-    l.inFlight += batch.length;
-    try {
-      await opts.send(key, opts.coalesce ? opts.coalesce(items) : items, { final, ...ctx, signal: controller.signal });
-      l.inFlight -= batch.length;
-      if (controller.signal.aborted || !maySend()) {
-        requeue2(l, batch);
-        return false;
-      }
-      l.attempt = 0;
-      void persist((s) => s.remove(ids2));
-      return true;
-    } catch (error) {
-      l.inFlight -= batch.length;
-      opts.onError?.(error, key);
-      const settled2 = settleFailure(key, l, batch, error);
-      return settled2;
-    } finally {
-      inFlightControllers.delete(controller);
-    }
-  };
-  const flushKey = (key, mode) => {
-    const l = lanes.get(key);
-    if (!l || !maySend()) return Promise.resolve();
-    const upTo = mode.probe ? Number.POSITIVE_INFINITY : lastSeq;
-    if (mode.final) {
-      const scope = currentScope();
-      if (!isOnline() || scope === null) return Promise.resolve();
-      clearTimer(l);
-      const batches = [];
-      for (let b = take(l, scope, upTo); b; b = take(l, scope, upTo)) batches.push(b);
-      return Promise.all(batches.map((b) => sendBatch(key, l, b, true))).then(() => void 0);
-    }
-    const run = l.tail.then(async () => {
-      await loaded;
-      if (!maySend()) {
-        clearTimer(l);
-        clearRetry(l);
-        return;
-      }
-      if (mode.auto && l.retryTimer !== null) return;
-      if (mode.auto && !isOnline()) {
-        scheduleRetry(key, l);
-        return;
-      }
-      if (!mode.auto && l.retryTimer !== null) clearRetry(l);
-      const scope = currentScope();
-      if (scope === null) {
-        scheduleRetry(key, l);
-        return;
-      }
-      clearTimer(l);
-      for (let batch = take(l, scope, upTo); batch; batch = take(l, scope, upTo)) {
-        if (!await sendBatch(key, l, batch, false)) return;
-      }
-      if (l.entries.some((entry) => !entry.deadLetter)) armTimer(key, l);
-    });
-    l.tail = run;
-    return run;
-  };
-  const flushAll = (final) => Promise.all([...lanes.keys()].map((k) => flushKey(k, { final }))).then(() => void 0);
-  const unsubscribeOnline = opts.online?.subscribe((online) => {
-    if (!online || !maySend()) return;
-    for (const l of lanes.values()) {
-      clearRetry(l);
-      l.attempt = 0;
-    }
-    void flushAll(false);
-  });
-  const unsubscribePermission = opts.sendPermission?.subscribe((allowed) => {
-    if (!allowed) {
-      for (const l of lanes.values()) {
-        clearTimer(l);
-        clearRetry(l);
-      }
-      for (const controller of inFlightControllers) controller.abort();
-      return;
-    }
-    for (const l of lanes.values()) l.attempt = 0;
-    void flushAll(false);
-  });
-  if (store) {
-    void loaded.then(() => {
-      enforceBound();
-      for (const [k, l] of lanes) if (l.entries.length > 0) void flushKey(k, { final: false, auto: true });
-    });
-  }
-  const settleFailure = (key, l, batch, error) => {
-    const permanent = retryPolicy.isPermanent(error);
-    const dead = [];
-    const keep = [];
-    const discarded = [];
-    for (const entry of batch) {
-      const userWork = retentionOf(entry) === "durable";
-      if (permanent && userWork) dead.push(entry);
-      else if (!permanent && (userWork || retry)) keep.push(entry);
-      else discarded.push(entry);
-    }
-    if (dead.length) {
-      const at2 = (/* @__PURE__ */ new Date()).toISOString();
-      const reason = error instanceof Error ? error.message : String(error);
-      for (const entry of dead) {
-        entry.deadLetter = { reason, at: at2 };
-        entry.retention = "durable";
-      }
-      requeue2(l, dead);
-      void persist((s) => s.put(dead));
-      opts.onDeadLetter?.(key, dead, error);
-    }
-    if (keep.length) {
-      requeue2(l, keep);
-      scheduleRetry(key, l, !retry && keep.some((entry) => retentionOf(entry) === "durable"));
-    }
-    if (discarded.length) drop(key, discarded, permanent ? "rejected" : "failed");
-    return keep.length === 0;
-  };
-  const enqueueEntry = (key, item, work, path2) => {
-    const retention = resolveRetention(work, path2);
-    if (retention === "durable") {
-      evictBestEffortWhileOver(Math.max(0, maxEntries - 1));
-      if (durableQueued() >= maxEntries) {
-        opts.onCapacity?.(durableQueued(), maxEntries);
-        throw Object.assign(new Error("outbox_capacity"), { code: "OUTBOX_CAPACITY" });
-      }
-    }
-    const l = lane(key);
-    const scope = currentScope();
-    const entry = {
-      id: newId(),
-      key,
-      item,
-      seq: nextSeq(),
-      retention,
-      ...scope ? { scope } : {}
-    };
-    l.entries.push(entry);
-    const persisted = persist((s) => s.put([entry]));
-    if (retention === "best-effort") enforceBound();
-    const unsealed = l.entries.reduce((n2, e) => e.batch || e.deadLetter ? n2 : n2 + 1, 0);
-    if (unsealed >= maxItems) void flushKey(key, { final: false, auto: true });
-    else armTimer(key, l);
-    return { id: entry.id, persisted };
-  };
-  return {
-    enqueue(key, item, work) {
-      return enqueueEntry(key, item, work, "enqueue").id;
-    },
-    async enqueueDurable(key, item, work) {
-      const enqueued = enqueueEntry(key, item, work, "enqueueDurable");
-      await enqueued.persisted;
-      if (storeFailure) throw storeFailure;
-      return enqueued.id;
-    },
-    async flush(key, flushOpts) {
-      const final = flushOpts?.final ?? false;
-      if (key === void 0) return flushAll(final);
-      return flushKey(key, { final });
-    },
-    drainWith(key, request) {
-      const l = lane(key);
-      const run = l.tail.then(async () => {
-        await loaded;
-        if (!maySend()) throw Object.assign(new Error("platform_send_disabled"), { code: "PLATFORM_SEND_DISABLED" });
-        clearTimer(l);
-        const scope = currentScope();
-        const taken = [];
-        if (scope !== null) {
-          const parked = [];
-          for (const e of l.entries) (sendable(e, scope) ? taken : parked).push(e);
-          l.entries = parked;
-        }
-        const items = taken.map((e) => e.item);
-        const controller = new AbortController();
-        inFlightControllers.add(controller);
-        const ctx = { ...drainContext(taken, scope, newId), signal: controller.signal };
-        const ids2 = ctx.ids;
-        l.inFlight += taken.length;
-        try {
-          if (!maySend()) throw Object.assign(new Error("platform_send_disabled"), { code: "PLATFORM_SEND_DISABLED" });
-          const result = await request(opts.coalesce && items.length ? opts.coalesce(items) : items, ctx);
-          l.inFlight -= taken.length;
-          if (taken.length) void persist((s) => s.remove(ids2));
-          return result;
-        } catch (error) {
-          l.inFlight -= taken.length;
-          settleFailure(key, l, taken, error);
-          throw error;
-        } finally {
-          inFlightControllers.delete(controller);
-        }
-      });
-      l.tail = run.catch(() => void 0);
-      return run;
-    },
-    async retryDeadLetters() {
-      const retained = [];
-      for (const l of lanes.values()) {
-        for (const entry of l.entries) {
-          if (!entry.deadLetter) continue;
-          delete entry.deadLetter;
-          retained.push(entry);
-        }
-      }
-      if (retained.length) await persist((s) => s.put(retained));
-      await flushAll(false);
-    },
-    exportDeadLetters() {
-      const all = [];
-      for (const l of lanes.values()) all.push(...l.entries);
-      return exportDeadLetters(all);
-    },
-    async repairDeadLetter(id) {
-      if (typeof id !== "string" || id.trim() === "") return false;
-      let target;
-      for (const l of lanes.values()) {
-        target = l.entries.find((entry) => entry.id === id && entry.deadLetter);
-        if (target) break;
-      }
-      if (!target?.deadLetter) return false;
-      const previousLetter = target.deadLetter;
-      const previousBatch = target.batch;
-      const repaired = repairDeadLetter([target], id);
-      if (!repaired) return false;
-      const failureBefore = storeFailure;
-      await persist((s) => s.put([repaired]));
-      if (storeFailure !== failureBefore) {
-        repaired.deadLetter = previousLetter;
-        if (previousBatch !== void 0) repaired.batch = previousBatch;
-        else delete repaired.batch;
-        throw storeFailure;
-      }
-      return true;
-    },
-    size(key) {
-      if (key !== void 0) return lanes.get(key)?.entries.length ?? 0;
-      let n2 = 0;
-      for (const l of lanes.values()) n2 += l.entries.length;
-      return n2;
-    },
-    stats() {
-      let queued = 0;
-      let inFlight = 0;
-      let deadLetters = 0;
-      for (const l of lanes.values()) {
-        queued += l.entries.length;
-        inFlight += l.inFlight;
-        deadLetters += l.entries.filter((entry) => entry.deadLetter).length;
-      }
-      return { queued, inFlight, dropped, deadLetters };
-    },
-    async ready() {
-      await loaded;
-      await writes;
-      if (storeFailure) throw storeFailure;
-    },
-    close() {
-      closed = true;
-      unsubscribeOnline?.();
-      unsubscribePermission?.();
-      for (const controller of inFlightControllers) controller.abort();
-      for (const l of lanes.values()) {
-        clearTimer(l);
-        clearRetry(l);
-      }
-    }
-  };
-}
-
-// ../packages/write-outbox/src/stores.ts
-var isEntry = (v) => typeof v === "object" && v !== null && typeof v.id === "string" && typeof v.seq === "number";
-function idbRunner(opts) {
-  const storeName = opts.storeName ?? "entries";
-  let db = null;
-  const open = () => {
-    db ??= new Promise((resolve, reject) => {
-      const req = opts.indexedDB.open(opts.dbName, 1);
-      req.onupgradeneeded = () => {
-        const created = req.result;
-        if (!created.objectStoreNames.contains(storeName)) created.createObjectStore(storeName, { keyPath: "id" });
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    }).catch((error) => {
-      db = null;
-      throw error;
-    });
-    return db;
-  };
-  return async (mode, body) => {
-    const handle = await open();
-    return new Promise((resolve, reject) => {
-      const tx = handle.transaction(storeName, mode);
-      const req = body(tx.objectStore(storeName));
-      tx.oncomplete = () => resolve(req ? req.result : void 0);
-      tx.onerror = () => reject(tx.error);
-      tx.onabort = () => reject(tx.error);
-    });
-  };
-}
-var readAll = async (run) => (await run("readonly", (s) => s.getAll()) ?? []).filter(isEntry);
-function createIndexedDbOutboxStore(opts) {
-  const run = idbRunner(opts);
-  return {
-    async load() {
-      return (await readAll(run)).filter((r) => r.partition === opts.partition).map(({ partition: _p, ...entry }) => entry);
-    },
-    async put(entries) {
-      await run("readwrite", (s) => {
-        for (const e of entries) s.put(opts.partition === void 0 ? e : { ...e, partition: opts.partition });
-      });
-    },
-    async remove(ids2) {
-      await run("readwrite", (s) => {
-        for (const id of ids2) s.delete(id);
-      });
-    }
-  };
-}
-async function listIndexedDbOutboxPartitions(opts) {
-  const partitions = /* @__PURE__ */ new Set();
-  for (const r of await readAll(idbRunner(opts))) if (typeof r.partition === "string") partitions.add(r.partition);
-  return [...partitions];
-}
-
-// src/stepOutbox.ts
-var STEP_BATCH_MAX = 25;
-var STEP_BATCH_WAIT_MS = 5e3;
-var isStepRow2 = (m) => m.role === "tool";
-var durability = null;
-var stores2 = /* @__PURE__ */ new Map();
-var runKeys = /* @__PURE__ */ new Set();
-var replays = /* @__PURE__ */ new Map();
-var stopListening = null;
-function installStepDurability(next) {
-  stopListening?.();
-  stopListening = null;
-  durability = next;
-  stores2.clear();
-  runKeys.clear();
-  replays.clear();
-  if (!next) return;
-  const stopOnline = next.online?.subscribe((online) => {
-    if (online) void drainStoredSteps();
-  });
-  const stopPermission = next.sendPermission?.subscribe((allowed) => {
-    if (allowed) void drainStoredSteps();
-  });
-  stopListening = () => {
-    stopOnline?.();
-    stopPermission?.();
-  };
-  void drainStoredSteps();
-}
-var optionsFor = (d, key) => {
-  let store = stores2.get(key);
-  if (!store) {
-    store = d.storeFor(key);
-    stores2.set(key, store);
-  }
-  return {
-    store,
-    ...d.online ? { online: d.online } : {},
-    ...d.scope ? { scope: d.scope } : {},
-    ...d.sendPermission ? { sendPermission: d.sendPermission } : {}
-  };
-};
-function stepDurabilityFor(chatId, runKey) {
-  if (!durability) return {};
-  const key = runKey === chatId ? `chat:${chatId}` : `chat:${chatId}:run:${runKey}`;
-  runKeys.add(key);
-  return optionsFor(durability, key);
-}
-async function drainStoredSteps() {
-  const d = durability;
-  if (!d?.sendRows || !d.storedKeys || d.sendPermission?.isAllowed() === false) return;
-  const sendRows = d.sendRows;
-  let keys;
-  try {
-    keys = await d.storedKeys();
-  } catch {
-    return;
-  }
-  await Promise.all(keys.filter((key) => !runKeys.has(key)).map((key) => {
-    let replay = replays.get(key);
-    if (!replay) {
-      replay = batchStepPersistence({
-        async sendMessages(chatId, rows, opts) {
-          await sendRows(chatId, rows, opts?.scope);
-          return [];
-        }
-      }, optionsFor(d, key));
-      replays.set(key, replay);
-    }
-    return replay.flush();
-  }));
-}
-var withEventKeys = (rows, ids2) => rows.map((m, i) => m.eventKey || !ids2[i] ? m : { ...m, eventKey: `step:${ids2[i]}` });
-function batchStepPersistence(base, opts = {}) {
-  const steps = createOutbox({
-    maxItems: opts.maxRows ?? STEP_BATCH_MAX,
-    maxWaitMs: opts.waitMs ?? STEP_BATCH_WAIT_MS,
-    retry: {},
-    ...opts.store ? { store: opts.store } : {},
-    ...opts.online ? { online: opts.online } : {},
-    ...opts.scope ? { scope: opts.scope } : {},
-    ...opts.sendPermission ? { sendPermission: opts.sendPermission } : {},
-    send: (chatId, rows, ctx) => base.sendMessages(chatId, withEventKeys(rows, ctx.ids), ctx.scope !== void 0 ? { scope: ctx.scope } : void 0)
-  });
-  const sendMessages = async (chatId, messages) => {
-    if (messages.length > 0 && messages.every(isStepRow2)) {
-      for (const m of messages) steps.enqueue(chatId, m);
-      return [];
-    }
-    return steps.drainWith(chatId, async (pending, ctx) => {
-      if (pending.length === 0) return base.sendMessages(chatId, messages);
-      const saved = await base.sendMessages(chatId, [...withEventKeys(pending, ctx.ids), ...messages]);
-      return saved.slice(pending.length);
-    });
-  };
-  return {
-    persistence: { ...base, sendMessages },
-    flush: () => steps.flush()
-  };
 }
 
 // ../packages/agent-run/src/policy/compaction/pack.ts
@@ -16157,13 +15107,20 @@ function newSteerKey() {
 }
 function queueRunSteering(runKey, text, opts) {
   const trimmed = text.trim();
-  if (!trimmed) return;
+  if (!trimmed) return void 0;
+  const eventKey = opts?.eventKey ?? (opts?.persist ? newSteerKey() : void 0);
+  const message = { text: trimmed, attachments: opts?.attachments, ...opts?.fromPerson ? { fromPerson: true } : {}, ...opts?.persist ? { persist: true } : {}, ...opts?.saved ? { saved: true } : {}, ...eventKey ? { eventKey } : {} };
   const queue = inboxes.get(runKey) ?? [];
-  queue.push({ text: trimmed, attachments: opts?.attachments, ...opts?.fromPerson ? { fromPerson: true } : {}, ...opts?.persist ? { persist: true } : {}, ...opts?.saved ? { saved: true } : {}, ...opts?.eventKey ? { eventKey: opts.eventKey } : {} });
+  queue.push(message);
   inboxes.set(runKey, queue);
-  if (!opts?.interrupt) return;
+  if (!opts?.interrupt) return message;
   interrupting.add(runKey);
   for (const listener of [...interruptListeners.get(runKey) ?? []]) listener();
+  return message;
+}
+function requeueRunSteering(runKey, messages) {
+  if (messages.length === 0) return;
+  inboxes.set(runKey, [...messages, ...inboxes.get(runKey) ?? []]);
 }
 function drainRunSteering(runKey) {
   interrupting.delete(runKey);
@@ -17866,6 +16823,1336 @@ import { volatileTail as volatileTail2 } from "@seanhogg/builderforce-memory/han
 var CORE_REGISTRY = buildCoreToolRegistry();
 for (const tool of [...SKILL_TOOLS, ...SUBAGENT_TOOLS]) CORE_REGISTRY.register(tool);
 
+// src/runSteering.ts
+function queueRunSteering2(runKey, text, opts) {
+  const queued = queueRunSteering(runKey, text, opts);
+  if (queued?.persist && queued.eventKey) rememberPendingWords(runKey, queued.eventKey, queued.text);
+}
+function requeueRunSteering2(runKey, steers) {
+  requeueRunSteering(runKey, steers);
+}
+function drainRunSteering2(runKey) {
+  return drainRunSteering(runKey);
+}
+function steerModelContent(msg) {
+  const imageAtts = (msg.attachments ?? []).filter((a) => a.imageUrl);
+  if (imageAtts.length === 0) return msg.text;
+  return [
+    { type: "text", text: msg.text },
+    ...imageAtts.map((a) => ({ type: "image_url", image_url: { url: a.imageUrl } }))
+  ];
+}
+
+// src/runActivity.ts
+var TARGET_KEYS = ["path", "file", "filePath", "command", "cmd", "glob", "query", "q", "search", "url", "name", "title", "id"];
+var MAX_DETAIL = 72;
+function shortenTarget(value, max = MAX_DETAIL) {
+  const v = value.replace(/\s+/g, " ").trim();
+  if (v.length <= max) return v;
+  if (v.includes("/") || v.includes("\\")) return `\u2026${v.slice(v.length - (max - 1))}`;
+  return `${v.slice(0, max - 1)}\u2026`;
+}
+function activityTarget(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return void 0;
+  const record3 = args;
+  for (const key of TARGET_KEYS) {
+    const value = record3[key];
+    if (typeof value === "string" && value.trim()) return shortenTarget(value);
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  if (Array.isArray(record3.paths)) {
+    const names = record3.paths.filter((p) => typeof p === "string" && p.trim() !== "");
+    if (names.length) return shortenTarget(names.join(", "));
+  }
+  return void 0;
+}
+var QUESTION_KEYS = ["query", "q", "search", "pattern", "glob", "key"];
+var VISIT_QUESTION_SEPARATOR = " \u220B ";
+function visitTarget(args) {
+  const scope = activityTarget(args);
+  if (!scope) return void 0;
+  const record3 = args;
+  for (const key of QUESTION_KEYS) {
+    const value = record3[key];
+    if (typeof value !== "string" || !value.trim()) continue;
+    const question = shortenTarget(value);
+    return question === scope ? scope : `${scope}${VISIT_QUESTION_SEPARATOR}${question}`;
+  }
+  return scope;
+}
+function toolActivity(label, args, step, startedAt) {
+  const detail = activityTarget(args);
+  return { phase: "tool", label, startedAt, step, ...detail ? { detail } : {} };
+}
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  return bytes < 1024 ? `${Math.round(bytes)} B` : `${(bytes / 1024).toFixed(1)} KB`;
+}
+function elapsedText(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return "0s";
+  if (ms < 6e4) return `${Math.round(ms / 1e3)}s`;
+  return `${Math.floor(ms / 6e4)}m ${Math.round(ms % 6e4 / 1e3)}s`;
+}
+function describeLiveStep(step, capturedAtMs) {
+  const elapsed = elapsedText(Number.isFinite(capturedAtMs) ? capturedAtMs - step.startedAt : 0);
+  const what = step.phase === "tool" ? `running \`${step.label}\`${step.detail ? ` on ${step.detail}` : ""}` : step.phase === "awaiting" ? `PAUSED waiting for the user to approve \`${step.label}\` \u2014 nothing advances until they answer` : step.phase === "composing" ? `composing a \`${step.label || "tool"}\` call${step.bytes != null ? ` \u2014 ${formatBytes(step.bytes)} of arguments so far` : ""}` : step.phase === "thinking" ? "waiting on the model (no token received yet)" : step.phase === "writing" ? "streaming the reply" : step.phase === "finishing" ? "doing post-run work (ticket capture / status reconciliation)" : "starting up";
+  return `${what} (${elapsed} so far${step.step > 0 ? `, loop step ${step.step}` : ""})`;
+}
+function midRunNotice(activity, capturedAtMs) {
+  const doing = activity ? ` At capture it was ${describeLiveStep(activity, capturedAtMs)}.` : " No in-flight step was recorded at capture.";
+  return `\u26A0 CAPTURED MID-RUN \u2014 the agent was STILL EXECUTING when this report was taken.${doing} Anything below that reads as "it never did X" may simply be work it had not reached yet; re-copy once the run settles to get a verdict on a finished run.`;
+}
+
+// src/memorySavings.ts
+function callMemoryEffect(trimmedTokens, recallTokens) {
+  const t = Math.max(0, Math.round(trimmedTokens));
+  const r = Math.max(0, Math.round(recallTokens));
+  return t > 0 || r > 0 ? { trimmedTokens: t, recallTokens: r } : void 0;
+}
+function emptyRunUsage() {
+  return { promptTokens: 0, completionTokens: 0, model: null };
+}
+
+// src/runStore/runCell.ts
+var EMPTY_SNAPSHOT = {
+  running: false,
+  streamingText: "",
+  error: "",
+  errorAction: null,
+  pendingConfirm: null,
+  messagesEpoch: 0,
+  appended: [],
+  hasTrace: false,
+  trace: [],
+  activity: null,
+  byoUnresolved: [],
+  providerCap: [],
+  turn: null
+};
+function makeCell() {
+  return {
+    transcript: [],
+    priorResearch: null,
+    trace: [],
+    running: false,
+    streamingText: "",
+    error: "",
+    errorAction: null,
+    pendingConfirm: null,
+    confirmResolver: null,
+    appended: [],
+    messagesEpoch: 0,
+    listeners: /* @__PURE__ */ new Set(),
+    emitTimer: null,
+    abort: null,
+    activity: null,
+    byoUnresolved: [],
+    providerCap: [],
+    turn: null,
+    codeChanged: false,
+    codeModel: null,
+    runId: "",
+    ticketRecorded: false,
+    touchedFiles: [],
+    deltaTicketId: null,
+    deltaRecordedFiles: [],
+    runTraceFrom: 0,
+    persistStep: null,
+    compactMemo: null,
+    transcriptAnchors: [],
+    unseenFromId: void 0,
+    runUsage: emptyRunUsage(),
+    lastServedModel: null,
+    pendingGate: null,
+    liveTurn: null,
+    lastRequest: null,
+    stopEpoch: 0,
+    claim: null,
+    stoppedTurn: null,
+    snapshot: EMPTY_SNAPSHOT
+  };
+}
+
+// src/runStore/runCells.ts
+var cells = /* @__PURE__ */ new Map();
+var resetHooks = /* @__PURE__ */ new Set();
+function onStoreReset(hook) {
+  resetHooks.add(hook);
+}
+function runStoreResetHooks() {
+  for (const hook of resetHooks) hook();
+}
+var storeListeners = /* @__PURE__ */ new Set();
+var MAX_CELLS = 50;
+var MAX_TRACE_EVENTS = 500;
+var MAX_APPENDED = 50;
+function getCell(key) {
+  const existing = cells.get(key);
+  if (existing) {
+    cells.delete(key);
+    cells.set(key, existing);
+    return existing;
+  }
+  const c = makeCell();
+  cells.set(key, c);
+  evictIdleCells(key);
+  return c;
+}
+function evictIdleCells(protectId) {
+  if (cells.size <= MAX_CELLS) return;
+  for (const [id, cell] of cells) {
+    if (cells.size <= MAX_CELLS) break;
+    if (id === protectId || cell.running || cell.listeners.size > 0) continue;
+    cells.delete(id);
+  }
+}
+var STREAM_EMIT_MS = 32;
+function emitStreaming(c) {
+  if (c.emitTimer) return;
+  c.emitTimer = setTimeout(() => {
+    c.emitTimer = null;
+    emit2(c);
+  }, STREAM_EMIT_MS);
+}
+function emit2(c) {
+  if (c.emitTimer) {
+    clearTimeout(c.emitTimer);
+    c.emitTimer = null;
+  }
+  c.snapshot = {
+    running: c.running,
+    streamingText: c.streamingText,
+    error: c.error,
+    errorAction: c.errorAction,
+    pendingConfirm: c.pendingConfirm,
+    messagesEpoch: c.messagesEpoch,
+    appended: c.appended,
+    hasTrace: c.trace.length > 0,
+    trace: c.trace,
+    activity: c.activity,
+    byoUnresolved: c.byoUnresolved,
+    providerCap: c.providerCap,
+    turn: c.turn
+  };
+  for (const l of c.listeners) l();
+  for (const l of storeListeners) l();
+}
+function setActivity(c, activity) {
+  c.activity = activity;
+  emit2(c);
+}
+function pushTrace(c, ev) {
+  const dropped = Math.max(0, c.trace.length + 1 - MAX_TRACE_EVENTS);
+  c.trace = [...dropped ? c.trace.slice(dropped) : c.trace, ev];
+  if (dropped) c.runTraceFrom = Math.max(0, c.runTraceFrom - dropped);
+  c.persistStep?.(ev);
+  emit2(c);
+}
+function runTrace(c) {
+  return c.trace.slice(c.runTraceFrom);
+}
+function recordRunFailure(c, label, message) {
+  const last = runTrace(c).at(-1);
+  if (last?.isError && typeof last.result === "string" && last.result.endsWith(message)) return;
+  pushTrace(c, {
+    ts: nowIso(),
+    category: "error",
+    label,
+    result: message,
+    isError: true
+  });
+}
+function recordAppended(c, msg) {
+  const next = [...c.appended, msg];
+  c.appended = next.length > MAX_APPENDED ? next.slice(next.length - MAX_APPENDED) : next;
+  c.messagesEpoch += 1;
+}
+function nowMs2() {
+  return typeof Date !== "undefined" ? Date.now() : 0;
+}
+function nowIso() {
+  return typeof Date !== "undefined" ? (/* @__PURE__ */ new Date()).toISOString() : "";
+}
+function accrueProviders(c, field, raw) {
+  if (!raw) return;
+  const before = c[field].length;
+  const next = new Set(c[field]);
+  for (const p of raw.split(",").map((s) => s.trim()).filter(Boolean)) next.add(p);
+  if (next.size !== before) c[field] = [...next];
+}
+function accrueByoUnresolved(c, raw) {
+  accrueProviders(c, "byoUnresolved", raw);
+}
+function accrueProviderCap(c, raw) {
+  accrueProviders(c, "providerCap", raw);
+}
+
+// src/runStore/turnPersistence.ts
+function provenanceMetadata(result, requested, base) {
+  const model = result.resolvedModel;
+  if (!model) return withProvenanceMetadata(null, base);
+  const account = asProvenanceAccount(result.account);
+  const asked = requested && requested !== "default" && requested !== model ? requested : void 0;
+  return withProvenanceMetadata({
+    model,
+    ...account ? { account } : {},
+    ...asked ? { requestedModel: asked } : {}
+  }, base);
+}
+async function persistMidTurnText(chatId, c, persistence, result, requested) {
+  const text = canonicalTurnText(result.text);
+  if (!text) return;
+  const metadata = provenanceMetadata(result, requested, { [MID_TURN_META_KEY]: true });
+  const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, ...metadata ? { metadata } : {} }]);
+  recordAppended(c, msg);
+}
+function canonicalTurnText(text) {
+  const { content, reasoning } = splitVendorReasoning({ content: text });
+  return canonicalReasoningText(content, reasoning);
+}
+function persistStep(chatId, persistence, ev) {
+  void persistence.sendMessages(chatId, [stepRow(ev)]).catch(() => {
+  });
+}
+function stoppedTurnOf(c) {
+  const live2 = c.liveTurn;
+  const text = live2 ? c.streamingText : "";
+  const model = live2?.model;
+  const result = !live2 ? "Stopped by user." : model ? `Stopped by user while ${model} was streaming (${text.length} chars kept).` : `Stopped by user before the gateway named the model (${text.length} chars kept).`;
+  return {
+    text,
+    source: { ...live2 },
+    event: {
+      ts: nowIso(),
+      category: "message",
+      label: STOPPED_TURN_STEP,
+      ...model ? { args: { model } } : {},
+      ...live2 ? { textChars: text.length } : {},
+      result
+    }
+  };
+}
+async function keepStoppedTurn(chatId, c, persistence, still = () => true) {
+  const stopped = c.stoppedTurn;
+  c.stoppedTurn = null;
+  if (!stopped) return;
+  const text = canonicalTurnText(stopped.text);
+  if (!text) return;
+  const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, metadata: stoppedTurnMetadata(stopped.source) }]);
+  if (msg && still()) recordAppended(c, msg);
+}
+async function asLiveTurn(c, complete) {
+  c.liveTurn = {};
+  try {
+    return await complete();
+  } finally {
+    c.liveTurn = null;
+  }
+}
+function liveTurnModel(c) {
+  return (model, account) => {
+    if (c.liveTurn) c.liveTurn = { model, account };
+  };
+}
+function connectRetryStep(c, step) {
+  return (attempt, delayMs, reason) => {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "llm.connect_retry",
+      args: { step, attempt },
+      result: `Could not reach BuilderForce (${reason}). Trying again in ${Math.round(delayMs / 1e3)}s \u2014 nothing was sent, so nothing is repeated.`
+    });
+  };
+}
+
+// src/runStore/runControl.ts
+function driverFor(key) {
+  return typeof key === "number" ? getRunDriver() : null;
+}
+function resetBrainRunStore() {
+  cells.clear();
+  runStoreResetHooks();
+  forgetResolvedModels();
+}
+function subscribeRunStore(listener) {
+  storeListeners.add(listener);
+  return () => {
+    storeListeners.delete(listener);
+  };
+}
+function getGlobalRunState() {
+  const running = [];
+  const awaiting = [];
+  for (const [id, cell] of cells) {
+    if (typeof id !== "number") continue;
+    if (cell.pendingConfirm) awaiting.push(id);
+    else if (cell.running) running.push(id);
+  }
+  return { running, awaiting };
+}
+function subscribeRun(chatId, listener) {
+  const c = getCell(chatId);
+  c.listeners.add(listener);
+  return () => {
+    c.listeners.delete(listener);
+  };
+}
+function runAbortSignal(chatId) {
+  return cells.get(chatId)?.abort?.signal;
+}
+function appendRunMessage(chatId, msg) {
+  const c = cells.get(chatId);
+  if (!c) return;
+  recordAppended(c, msg);
+  emit2(c);
+}
+function getRunSnapshot(chatId) {
+  if (chatId == null) return EMPTY_SNAPSHOT;
+  return cells.get(chatId)?.snapshot ?? EMPTY_SNAPSHOT;
+}
+function isRunning(chatId) {
+  return chatId != null && (cells.get(chatId)?.running ?? false);
+}
+function isLive(chatId) {
+  const c = chatId == null ? void 0 : cells.get(chatId);
+  return !!c && (c.running || c.claim !== null);
+}
+function getRunTrace(chatId) {
+  if (chatId == null) return [];
+  return cells.get(chatId)?.trace ?? [];
+}
+async function stopBeforeStart(runKey, chatId, persistence, still = () => true) {
+  const c = getCell(runKey);
+  const step = { ts: nowIso(), category: "message", label: STOPPED_TURN_STEP, result: "Stopped by user before the run started." };
+  pushTrace(c, step);
+  try {
+    const rows = await persistence.sendMessages(chatId, [stepRow(step), stoppedBeforeStartRow()]);
+    const row = rows[rows.length - 1];
+    if (row && still()) {
+      recordAppended(c, row);
+      emit2(c);
+    }
+    return row;
+  } catch {
+    return void 0;
+  }
+}
+function dropWaitingWords(chatId) {
+  if (typeof chatId !== "number") return;
+  for (const dropped of drainRunSteering2(chatId)) forgetPendingWords(chatId, [dropped.eventKey]);
+}
+function stopRun(chatId) {
+  dropWaitingWords(chatId);
+  const driver = driverFor(chatId);
+  if (driver) return driver.stop(chatId);
+  const c = cells.get(chatId);
+  if (c) {
+    c.stopEpoch += 1;
+    if (c.claim) emit2(c);
+  }
+  if (!c || !c.running || c.abort?.signal.aborted) return;
+  const stopped = stoppedTurnOf(c);
+  c.stoppedTurn = stopped;
+  c.abort?.abort();
+  if (c.confirmResolver) {
+    const resolve = c.confirmResolver;
+    c.confirmResolver = null;
+    c.pendingConfirm = null;
+    resolve(false);
+  }
+  c.streamingText = "";
+  c.activity = null;
+  c.turn = null;
+  pushTrace(c, stopped.event);
+}
+function clearRunError(chatId) {
+  if (chatId == null) return;
+  const driver = driverFor(chatId);
+  if (driver) return driver.clearError(chatId);
+  const c = cells.get(chatId);
+  if (!c || !c.error) return;
+  c.error = "";
+  c.errorAction = null;
+  emit2(c);
+}
+function requestRunConfirm(chatId, req, opts) {
+  if (driverFor(chatId)) return Promise.resolve(false);
+  const c = getCell(chatId);
+  return new Promise((resolve) => {
+    c.pendingConfirm = { name: req.name, args: req.args };
+    c.confirmResolver = resolve;
+    c.activity = {
+      ...toolActivity(req.name, req.args, opts?.step ?? c.activity?.step ?? 0, Date.now()),
+      phase: "awaiting"
+    };
+    emit2(c);
+  });
+}
+function resolveRunConfirm(chatId, ok) {
+  const driver = driverFor(chatId);
+  if (driver) return driver.confirm(chatId, ok);
+  const c = cells.get(chatId);
+  if (!c || !c.confirmResolver) return;
+  const resolve = c.confirmResolver;
+  c.confirmResolver = null;
+  c.pendingConfirm = null;
+  emit2(c);
+  resolve(ok);
+}
+function applyRemoteRun(chatId, snapshot) {
+  const c = getCell(chatId);
+  if (c.abort) return;
+  c.running = snapshot.running;
+  c.streamingText = snapshot.streamingText;
+  c.error = snapshot.error;
+  c.errorAction = snapshot.errorAction;
+  c.pendingConfirm = snapshot.pendingConfirm;
+  c.messagesEpoch = snapshot.messagesEpoch;
+  c.appended = snapshot.appended;
+  c.trace = snapshot.trace;
+  c.runTraceFrom = 0;
+  c.activity = snapshot.activity;
+  c.byoUnresolved = snapshot.byoUnresolved;
+  c.providerCap = snapshot.providerCap;
+  c.turn = snapshot.turn ?? null;
+  emit2(c);
+}
+
+// ../packages/write-outbox/src/classification.ts
+var RETENTION_BY_WORK = {
+  history: "durable",
+  histories: "durable",
+  ticket: "durable",
+  tickets: "durable",
+  audit: "durable",
+  audits: "durable",
+  fact: "durable",
+  facts: "durable",
+  telemetry: "best-effort"
+};
+function classifyOutboxWork(work) {
+  if (typeof work !== "string") return void 0;
+  const key = work.trim().toLowerCase();
+  if (!key) return void 0;
+  return RETENTION_BY_WORK[key];
+}
+
+// ../packages/write-outbox/src/queueClass.ts
+var UNCLASSIFIED_USER_WORK_QUEUES = Object.freeze({
+  "host-persist": {
+    carries: "user work (mixed with host telemetry)",
+    reason: "One queue mixes chat messages with host telemetry, so a single retention is wrong for part of the payload on every delivery. Splitting the queue or stamping per entry belongs to the queue's owner, not to a row in this table."
+  }
+});
+var CLASS_BY_QUEUE = {
+  "audit-close": { queue: "audit-close", retention: "durable", onFailure: "retain-until-acked" },
+  "run-checkpoint": { queue: "run-checkpoint", retention: "durable", onFailure: "retain-until-acked" },
+  "fact-publish": { queue: "fact-publish", retention: "durable", onFailure: "retain-until-acked" },
+  "ticket-mutation": { queue: "ticket-mutation", retention: "durable", onFailure: "retain-until-acked" },
+  "brain-turns": { queue: "brain-turns", retention: "durable", onFailure: "retain-until-acked" },
+  steps: { queue: "steps", retention: "durable", onFailure: "retain-until-acked" },
+  "chat-sync": { queue: "chat-sync", retention: "durable", onFailure: "retain-until-acked" },
+  "diagnostics-telemetry": {
+    queue: "diagnostics-telemetry",
+    retention: "best-effort",
+    onFailure: "drop-on-failure"
+  },
+  "session-refresh": { queue: "session-refresh", retention: "best-effort", onFailure: "drop-on-failure" },
+  "qa-capture": { queue: "qa-capture", retention: "best-effort", onFailure: "drop-on-failure" },
+  "visitor-journey": { queue: "visitor-journey", retention: "best-effort", onFailure: "drop-on-failure" },
+  "session-replay": { queue: "session-replay", retention: "best-effort", onFailure: "drop-on-failure" },
+  "tool-audit": { queue: "tool-audit", retention: "best-effort", onFailure: "drop-on-failure" },
+  "usage-snapshot": { queue: "usage-snapshot", retention: "best-effort", onFailure: "drop-on-failure" },
+  "file-change": { queue: "file-change", retention: "best-effort", onFailure: "drop-on-failure" },
+  "remote-chunks": { queue: "remote-chunks", retention: "best-effort", onFailure: "drop-on-failure" },
+  activity: { queue: "activity", retention: "durable", onFailure: "retain-until-acked" },
+  "run-outcomes": { queue: "run-outcomes", retention: "durable", onFailure: "retain-until-acked" }
+};
+var ALIAS_TO_QUEUE = {
+  "audit-close": "audit-close",
+  "close-audit": "audit-close",
+  "run-checkpoint": "run-checkpoint",
+  "fact-publish": "fact-publish",
+  "ticket-mutation": "ticket-mutation",
+  "brain-turns": "brain-turns",
+  "brain-turn": "brain-turns",
+  "pending-turns": "brain-turns",
+  steps: "steps",
+  step: "steps",
+  "run-steps": "steps",
+  "brain-steps": "steps",
+  "chat-sync": "chat-sync",
+  "rovr-chat": "chat-sync",
+  "builderforce-outbox:rovr": "chat-sync",
+  "builderforce-outbox:rovr-steps": "steps",
+  "diagnostics-telemetry": "diagnostics-telemetry",
+  "diagnostic-telemetry": "diagnostics-telemetry",
+  "error-reports": "diagnostics-telemetry",
+  "error-report": "diagnostics-telemetry",
+  "client-report": "diagnostics-telemetry",
+  "client-reports": "diagnostics-telemetry",
+  "builderforce-outbox:rovr-errors": "diagnostics-telemetry",
+  "session-refresh": "session-refresh",
+  "refresh-session": "session-refresh",
+  "refresh-sessions": "session-refresh",
+  "sessions-refresh": "session-refresh",
+  "qa-capture": "qa-capture",
+  "qa-telemetry": "qa-capture",
+  "visitor-journey": "visitor-journey",
+  "visitor-events": "visitor-journey",
+  journey: "visitor-journey",
+  "session-replay": "session-replay",
+  replay: "session-replay",
+  "replay-chunks": "session-replay",
+  "tool-audit": "tool-audit",
+  "tool-audits": "tool-audit",
+  "usage-snapshot": "usage-snapshot",
+  "usage-snapshots": "usage-snapshot",
+  "file-change": "file-change",
+  "file-changes": "file-change",
+  "remote-chunks": "remote-chunks",
+  "remote-chunk": "remote-chunks",
+  // Live VS Code names that are their own canonical ids. The retention column is
+  // decided here, not by whichever mode happened to build the queue.
+  activity: "activity",
+  "run-outcomes": "run-outcomes"
+};
+var STORAGE_PREFIX = "builderforce.outbox.";
+function normalizeQueueName(name) {
+  return name.trim().toLowerCase().replace(/[\s_]+/g, "-").replace(/-+/g, "-");
+}
+function canonicalQueue(name) {
+  let key = normalizeQueueName(name);
+  if (!key) return void 0;
+  if (key.startsWith(STORAGE_PREFIX)) key = key.slice(STORAGE_PREFIX.length);
+  if (key === "steps" || key.startsWith("steps:")) return "steps";
+  return ALIAS_TO_QUEUE[key];
+}
+function classifyUserWorkQueue(name) {
+  if (typeof name !== "string") return void 0;
+  const queue = canonicalQueue(name);
+  if (!queue) return void 0;
+  return CLASS_BY_QUEUE[queue];
+}
+
+// ../packages/write-outbox/src/classifyQueue.ts
+var EXTRA_TELEMETRY = {
+  "qa-captures": "qa-capture",
+  "visitor-journeys": "visitor-journey"
+};
+var WORK_CANONICAL = {
+  history: "history",
+  histories: "history",
+  ticket: "tickets",
+  tickets: "tickets",
+  audit: "audits",
+  audits: "audits",
+  fact: "facts",
+  facts: "facts",
+  telemetry: "telemetry"
+};
+function normalizeQueueName2(name) {
+  return name.trim().toLowerCase().replace(/[\s_]+/g, "-").replace(/-+/g, "-");
+}
+function classified(queue, retention, kind) {
+  return {
+    queue,
+    retention,
+    onFailure: retention === "durable" ? "retain-until-acked" : "drop-on-failure",
+    kind
+  };
+}
+function classifyQueue(name) {
+  const fromQueue = classifyUserWorkQueue(name);
+  if (fromQueue) {
+    return classified(
+      fromQueue.queue,
+      fromQueue.retention,
+      fromQueue.retention === "durable" ? "user-work" : "telemetry"
+    );
+  }
+  const fromWork = classifyOutboxWork(name);
+  if (fromWork && typeof name === "string") {
+    const key2 = normalizeQueueName2(name);
+    const queue = WORK_CANONICAL[key2];
+    if (queue) return classified(queue, fromWork, fromWork === "durable" ? "user-work" : "telemetry");
+  }
+  if (typeof name !== "string") return void 0;
+  const key = normalizeQueueName2(name);
+  if (!key) return void 0;
+  const extra = EXTRA_TELEMETRY[key];
+  if (extra) return classified(extra, "best-effort", "telemetry");
+  return void 0;
+}
+
+// ../packages/write-outbox/src/deadLetter.ts
+function exportDeadLetters(entries) {
+  return entries.filter((entry) => entry.deadLetter).map((entry) => ({ ...entry, deadLetter: { ...entry.deadLetter } })).sort((a, b) => a.seq - b.seq);
+}
+function repairDeadLetter(entries, id) {
+  if (typeof id !== "string" || id.trim() === "") return null;
+  const entry = entries.find((candidate) => candidate.id === id && candidate.deadLetter);
+  if (!entry) return null;
+  delete entry.deadLetter;
+  delete entry.batch;
+  entry.retention = "durable";
+  return entry;
+}
+
+// ../packages/write-outbox/src/idempotency.ts
+var fallbackCounter = 0;
+function defaultId() {
+  const c = globalThis.crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  fallbackCounter += 1;
+  return `ob-${Date.now().toString(36)}-${fallbackCounter.toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+function batchIdempotencyKey(batch) {
+  const head = batch[0];
+  return head ? head.batch ?? head.id : void 0;
+}
+
+// ../packages/write-outbox/src/policy.ts
+var OUTBOX_MAX_ITEMS = 25;
+var OUTBOX_MAX_WAIT_MS = 5e3;
+var OUTBOX_RETRY_BASE_MS = 1e3;
+var OUTBOX_RETRY_MAX_MS = 5 * 6e4;
+function isPermanentHttpFailure(error) {
+  const status2 = error?.status;
+  if (typeof status2 !== "number") return false;
+  return status2 >= 400 && status2 < 500 && ![401, 408, 409, 425, 429].includes(status2);
+}
+
+// ../packages/write-outbox/src/sealedBatch.ts
+var bySeq = (a, b) => a.seq - b.seq;
+function sendable(e, scope) {
+  return !e.deadLetter && (scope === void 0 || e.scope === void 0 || e.scope === scope);
+}
+function takeBatch(l, scope, upTo, maxItems) {
+  const due = (e) => e.seq <= upTo && sendable(e, scope);
+  const start = l.entries.findIndex(due);
+  if (start < 0) return null;
+  const head = l.entries[start];
+  let n2 = 0;
+  const at2 = (i) => l.entries[start + i];
+  if (head.batch) {
+    while (at2(n2) && at2(n2).batch === head.batch) n2 += 1;
+  } else {
+    while (at2(n2) && n2 < maxItems && !at2(n2).batch && due(at2(n2))) n2 += 1;
+  }
+  const batch = l.entries.splice(start, n2);
+  const sealed = !head.batch;
+  if (sealed) {
+    for (const e of batch) {
+      e.batch = head.id;
+      if (scope !== void 0) e.scope = scope;
+    }
+  }
+  return { batch, sealed };
+}
+function sendContext(batch) {
+  const head = batch[0];
+  return {
+    idempotencyKey: batchIdempotencyKey(batch),
+    ids: batch.map((e) => e.id),
+    ...head.scope !== void 0 ? { scope: head.scope } : {}
+  };
+}
+function drainContext(taken, scope, newId) {
+  return {
+    idempotencyKey: batchIdempotencyKey(taken) ?? newId(),
+    ids: taken.map((e) => e.id),
+    ...scope ? { scope } : {}
+  };
+}
+
+// ../packages/write-outbox/src/outbox.ts
+function createOutbox(opts) {
+  const maxItems = Math.max(1, opts.maxItems ?? OUTBOX_MAX_ITEMS);
+  const maxWaitMs = opts.maxWaitMs ?? OUTBOX_MAX_WAIT_MS;
+  const retry = opts.retry ? {
+    baseMs: opts.retry.baseMs ?? OUTBOX_RETRY_BASE_MS,
+    maxMs: opts.retry.maxMs ?? OUTBOX_RETRY_MAX_MS,
+    isPermanent: opts.retry.isPermanent ?? isPermanentHttpFailure
+  } : null;
+  const retryPolicy = retry ?? {
+    baseMs: OUTBOX_RETRY_BASE_MS,
+    maxMs: OUTBOX_RETRY_MAX_MS,
+    isPermanent: isPermanentHttpFailure
+  };
+  const store = opts.store ?? null;
+  const durable = Boolean(retry || store);
+  const maxEntries = Math.max(maxItems, opts.maxEntries ?? Number.POSITIVE_INFINITY);
+  const newId = opts.newId ?? defaultId;
+  const lanes = /* @__PURE__ */ new Map();
+  const inFlightControllers = /* @__PURE__ */ new Set();
+  let lastSeq = 0;
+  let dropped = 0;
+  let closed = false;
+  let storeFailure;
+  const isOnline = () => opts.online?.isOnline() ?? true;
+  const maySend = () => !closed && (opts.sendPermission?.isAllowed() ?? true);
+  const lane = (key) => {
+    let l = lanes.get(key);
+    if (!l) {
+      l = { entries: [], timer: null, retryTimer: null, attempt: 0, inFlight: 0, tail: Promise.resolve() };
+      lanes.set(key, l);
+    }
+    return l;
+  };
+  const nextSeq = () => {
+    lastSeq = Math.max(lastSeq + 1, Date.now() * 1e3);
+    return lastSeq;
+  };
+  const loaded = store ? Promise.resolve().then(() => store.load()).then(
+    (entries) => {
+      for (const e of entries) {
+        lane(e.key).entries.push(e);
+        lastSeq = Math.max(lastSeq, e.seq);
+      }
+      for (const l of lanes.values()) l.entries.sort(bySeq);
+    },
+    (error) => {
+      storeFailure ??= error;
+      opts.onStoreError?.(error);
+    }
+  ) : Promise.resolve();
+  let writes = loaded;
+  const persist = (op) => {
+    if (!store) return Promise.resolve();
+    writes = writes.then(() => op(store)).catch((error) => {
+      storeFailure ??= error;
+      opts.onStoreError?.(error);
+    });
+    return writes;
+  };
+  const drop = (key, entries, reason) => {
+    if (entries.length === 0) return;
+    dropped += entries.length;
+    const ids2 = entries.map((e) => e.id);
+    void persist((s) => s.remove(ids2));
+    opts.onDrop?.({ key, count: entries.length, reason });
+  };
+  const retentionOf = (entry) => {
+    if (entry.retention) return entry.retention;
+    return durable ? "durable" : "best-effort";
+  };
+  const resolveRetention = (work, path2) => {
+    const classified2 = classifyQueue(work) ?? classifyQueue(opts.work);
+    if (classified2) return classified2.retention;
+    if (path2 === "enqueueDurable" || durable) return "durable";
+    return "best-effort";
+  };
+  const totalQueued = () => {
+    let total = 0;
+    for (const l of lanes.values()) total += l.entries.length;
+    return total;
+  };
+  const durableQueued = () => {
+    let n2 = 0;
+    for (const l of lanes.values()) for (const entry of l.entries) if (retentionOf(entry) === "durable") n2 += 1;
+    return n2;
+  };
+  const evictBestEffortWhileOver = (limit) => {
+    let total = totalQueued();
+    while (total > limit) {
+      let oldestKey;
+      let oldestLane;
+      let oldestIndex = -1;
+      let oldestSeq = Number.POSITIVE_INFINITY;
+      for (const [k, l] of lanes) {
+        for (let i = 0; i < l.entries.length; i += 1) {
+          const entry = l.entries[i];
+          if (retentionOf(entry) !== "best-effort" || entry.seq >= oldestSeq) continue;
+          oldestSeq = entry.seq;
+          oldestKey = k;
+          oldestLane = l;
+          oldestIndex = i;
+        }
+      }
+      if (!oldestLane || oldestIndex < 0) {
+        if (total > maxEntries) opts.onCapacity?.(total, maxEntries);
+        return;
+      }
+      drop(oldestKey, oldestLane.entries.splice(oldestIndex, 1), "overflow");
+      total -= 1;
+    }
+  };
+  const enforceBound = () => {
+    evictBestEffortWhileOver(maxEntries);
+  };
+  const currentScope = () => opts.scope ? opts.scope() : void 0;
+  const take = (l, scope, upTo) => {
+    const next = takeBatch(l, scope, upTo, maxItems);
+    if (!next) return null;
+    if (next.sealed) persist((s) => s.put(next.batch));
+    return next.batch;
+  };
+  const clearTimer = (l) => {
+    if (l.timer !== null) clearTimeout(l.timer);
+    l.timer = null;
+  };
+  const clearRetry = (l) => {
+    if (l.retryTimer !== null) clearTimeout(l.retryTimer);
+    l.retryTimer = null;
+  };
+  const scheduleRetry = (key, l, force = false) => {
+    if (!retry && !force || !maySend() || l.retryTimer !== null) return;
+    const policy = retry ?? retryPolicy;
+    l.attempt += 1;
+    const delay = Math.min(policy.maxMs, policy.baseMs * 2 ** (l.attempt - 1));
+    const jittered = Math.round(delay * (0.8 + Math.random() * 0.4));
+    l.retryTimer = setTimeout(() => {
+      l.retryTimer = null;
+      void flushKey(key, { final: false, probe: true });
+    }, jittered);
+  };
+  const armTimer = (key, l) => {
+    if (l.timer !== null || maxWaitMs <= 0 || !maySend()) return;
+    l.timer = setTimeout(() => {
+      l.timer = null;
+      void flushKey(key, { final: false, auto: true });
+    }, maxWaitMs);
+  };
+  const requeue2 = (l, entries) => {
+    l.entries.unshift(...entries);
+    l.entries.sort(bySeq);
+  };
+  const sendBatch = async (key, l, batch, final) => {
+    if (!maySend()) {
+      requeue2(l, batch);
+      return false;
+    }
+    const items = batch.map((e) => e.item);
+    const ctx = sendContext(batch);
+    const ids2 = ctx.ids;
+    const controller = new AbortController();
+    inFlightControllers.add(controller);
+    l.inFlight += batch.length;
+    try {
+      await opts.send(key, opts.coalesce ? opts.coalesce(items) : items, { final, ...ctx, signal: controller.signal });
+      l.inFlight -= batch.length;
+      if (controller.signal.aborted || !maySend()) {
+        requeue2(l, batch);
+        return false;
+      }
+      l.attempt = 0;
+      void persist((s) => s.remove(ids2));
+      return true;
+    } catch (error) {
+      l.inFlight -= batch.length;
+      opts.onError?.(error, key);
+      const settled2 = settleFailure(key, l, batch, error);
+      return settled2;
+    } finally {
+      inFlightControllers.delete(controller);
+    }
+  };
+  const flushKey = (key, mode) => {
+    const l = lanes.get(key);
+    if (!l || !maySend()) return Promise.resolve();
+    const upTo = mode.probe ? Number.POSITIVE_INFINITY : lastSeq;
+    if (mode.final) {
+      const scope = currentScope();
+      if (!isOnline() || scope === null) return Promise.resolve();
+      clearTimer(l);
+      const batches = [];
+      for (let b = take(l, scope, upTo); b; b = take(l, scope, upTo)) batches.push(b);
+      return Promise.all(batches.map((b) => sendBatch(key, l, b, true))).then(() => void 0);
+    }
+    const run = l.tail.then(async () => {
+      await loaded;
+      if (!maySend()) {
+        clearTimer(l);
+        clearRetry(l);
+        return;
+      }
+      if (mode.auto && l.retryTimer !== null) return;
+      if (mode.auto && !isOnline()) {
+        scheduleRetry(key, l);
+        return;
+      }
+      if (!mode.auto && l.retryTimer !== null) clearRetry(l);
+      const scope = currentScope();
+      if (scope === null) {
+        scheduleRetry(key, l);
+        return;
+      }
+      clearTimer(l);
+      for (let batch = take(l, scope, upTo); batch; batch = take(l, scope, upTo)) {
+        if (!await sendBatch(key, l, batch, false)) return;
+      }
+      if (l.entries.some((entry) => !entry.deadLetter)) armTimer(key, l);
+    });
+    l.tail = run;
+    return run;
+  };
+  const flushAll = (final) => Promise.all([...lanes.keys()].map((k) => flushKey(k, { final }))).then(() => void 0);
+  const unsubscribeOnline = opts.online?.subscribe((online) => {
+    if (!online || !maySend()) return;
+    for (const l of lanes.values()) {
+      clearRetry(l);
+      l.attempt = 0;
+    }
+    void flushAll(false);
+  });
+  const unsubscribePermission = opts.sendPermission?.subscribe((allowed) => {
+    if (!allowed) {
+      for (const l of lanes.values()) {
+        clearTimer(l);
+        clearRetry(l);
+      }
+      for (const controller of inFlightControllers) controller.abort();
+      return;
+    }
+    for (const l of lanes.values()) l.attempt = 0;
+    void flushAll(false);
+  });
+  if (store) {
+    void loaded.then(() => {
+      enforceBound();
+      for (const [k, l] of lanes) if (l.entries.length > 0) void flushKey(k, { final: false, auto: true });
+    });
+  }
+  const settleFailure = (key, l, batch, error) => {
+    const permanent = retryPolicy.isPermanent(error);
+    const dead = [];
+    const keep = [];
+    const discarded = [];
+    for (const entry of batch) {
+      const userWork = retentionOf(entry) === "durable";
+      if (permanent && userWork) dead.push(entry);
+      else if (!permanent && (userWork || retry)) keep.push(entry);
+      else discarded.push(entry);
+    }
+    if (dead.length) {
+      const at2 = (/* @__PURE__ */ new Date()).toISOString();
+      const reason = error instanceof Error ? error.message : String(error);
+      for (const entry of dead) {
+        entry.deadLetter = { reason, at: at2 };
+        entry.retention = "durable";
+      }
+      requeue2(l, dead);
+      void persist((s) => s.put(dead));
+      opts.onDeadLetter?.(key, dead, error);
+    }
+    if (keep.length) {
+      requeue2(l, keep);
+      scheduleRetry(key, l, !retry && keep.some((entry) => retentionOf(entry) === "durable"));
+    }
+    if (discarded.length) drop(key, discarded, permanent ? "rejected" : "failed");
+    return keep.length === 0;
+  };
+  const enqueueEntry = (key, item, work, path2) => {
+    const retention = resolveRetention(work, path2);
+    if (retention === "durable") {
+      evictBestEffortWhileOver(Math.max(0, maxEntries - 1));
+      if (durableQueued() >= maxEntries) {
+        opts.onCapacity?.(durableQueued(), maxEntries);
+        throw Object.assign(new Error("outbox_capacity"), { code: "OUTBOX_CAPACITY" });
+      }
+    }
+    const l = lane(key);
+    const scope = currentScope();
+    const entry = {
+      id: newId(),
+      key,
+      item,
+      seq: nextSeq(),
+      retention,
+      ...scope ? { scope } : {}
+    };
+    l.entries.push(entry);
+    const persisted = persist((s) => s.put([entry]));
+    if (retention === "best-effort") enforceBound();
+    const unsealed = l.entries.reduce((n2, e) => e.batch || e.deadLetter ? n2 : n2 + 1, 0);
+    if (unsealed >= maxItems) void flushKey(key, { final: false, auto: true });
+    else armTimer(key, l);
+    return { id: entry.id, persisted };
+  };
+  return {
+    enqueue(key, item, work) {
+      return enqueueEntry(key, item, work, "enqueue").id;
+    },
+    async enqueueDurable(key, item, work) {
+      const enqueued = enqueueEntry(key, item, work, "enqueueDurable");
+      await enqueued.persisted;
+      if (storeFailure) throw storeFailure;
+      return enqueued.id;
+    },
+    async flush(key, flushOpts) {
+      const final = flushOpts?.final ?? false;
+      if (key === void 0) return flushAll(final);
+      return flushKey(key, { final });
+    },
+    drainWith(key, request) {
+      const l = lane(key);
+      const run = l.tail.then(async () => {
+        await loaded;
+        if (!maySend()) throw Object.assign(new Error("platform_send_disabled"), { code: "PLATFORM_SEND_DISABLED" });
+        clearTimer(l);
+        const scope = currentScope();
+        const taken = [];
+        if (scope !== null) {
+          const parked = [];
+          for (const e of l.entries) (sendable(e, scope) ? taken : parked).push(e);
+          l.entries = parked;
+        }
+        const items = taken.map((e) => e.item);
+        const controller = new AbortController();
+        inFlightControllers.add(controller);
+        const ctx = { ...drainContext(taken, scope, newId), signal: controller.signal };
+        const ids2 = ctx.ids;
+        l.inFlight += taken.length;
+        try {
+          if (!maySend()) throw Object.assign(new Error("platform_send_disabled"), { code: "PLATFORM_SEND_DISABLED" });
+          const result = await request(opts.coalesce && items.length ? opts.coalesce(items) : items, ctx);
+          l.inFlight -= taken.length;
+          if (taken.length) void persist((s) => s.remove(ids2));
+          return result;
+        } catch (error) {
+          l.inFlight -= taken.length;
+          settleFailure(key, l, taken, error);
+          throw error;
+        } finally {
+          inFlightControllers.delete(controller);
+        }
+      });
+      l.tail = run.catch(() => void 0);
+      return run;
+    },
+    async retryDeadLetters() {
+      const retained = [];
+      for (const l of lanes.values()) {
+        for (const entry of l.entries) {
+          if (!entry.deadLetter) continue;
+          delete entry.deadLetter;
+          retained.push(entry);
+        }
+      }
+      if (retained.length) await persist((s) => s.put(retained));
+      await flushAll(false);
+    },
+    exportDeadLetters() {
+      const all = [];
+      for (const l of lanes.values()) all.push(...l.entries);
+      return exportDeadLetters(all);
+    },
+    async repairDeadLetter(id) {
+      if (typeof id !== "string" || id.trim() === "") return false;
+      let target;
+      for (const l of lanes.values()) {
+        target = l.entries.find((entry) => entry.id === id && entry.deadLetter);
+        if (target) break;
+      }
+      if (!target?.deadLetter) return false;
+      const previousLetter = target.deadLetter;
+      const previousBatch = target.batch;
+      const repaired = repairDeadLetter([target], id);
+      if (!repaired) return false;
+      const failureBefore = storeFailure;
+      await persist((s) => s.put([repaired]));
+      if (storeFailure !== failureBefore) {
+        repaired.deadLetter = previousLetter;
+        if (previousBatch !== void 0) repaired.batch = previousBatch;
+        else delete repaired.batch;
+        throw storeFailure;
+      }
+      return true;
+    },
+    size(key) {
+      if (key !== void 0) return lanes.get(key)?.entries.length ?? 0;
+      let n2 = 0;
+      for (const l of lanes.values()) n2 += l.entries.length;
+      return n2;
+    },
+    stats() {
+      let queued = 0;
+      let inFlight = 0;
+      let deadLetters = 0;
+      for (const l of lanes.values()) {
+        queued += l.entries.length;
+        inFlight += l.inFlight;
+        deadLetters += l.entries.filter((entry) => entry.deadLetter).length;
+      }
+      return { queued, inFlight, dropped, deadLetters };
+    },
+    async ready() {
+      await loaded;
+      await writes;
+      if (storeFailure) throw storeFailure;
+    },
+    close() {
+      closed = true;
+      unsubscribeOnline?.();
+      unsubscribePermission?.();
+      for (const controller of inFlightControllers) controller.abort();
+      for (const l of lanes.values()) {
+        clearTimer(l);
+        clearRetry(l);
+      }
+    }
+  };
+}
+
+// ../packages/write-outbox/src/stores.ts
+var isEntry = (v) => typeof v === "object" && v !== null && typeof v.id === "string" && typeof v.seq === "number";
+function idbRunner(opts) {
+  const storeName = opts.storeName ?? "entries";
+  let db = null;
+  const open = () => {
+    db ??= new Promise((resolve, reject) => {
+      const req = opts.indexedDB.open(opts.dbName, 1);
+      req.onupgradeneeded = () => {
+        const created = req.result;
+        if (!created.objectStoreNames.contains(storeName)) created.createObjectStore(storeName, { keyPath: "id" });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    }).catch((error) => {
+      db = null;
+      throw error;
+    });
+    return db;
+  };
+  return async (mode, body) => {
+    const handle = await open();
+    return new Promise((resolve, reject) => {
+      const tx = handle.transaction(storeName, mode);
+      const req = body(tx.objectStore(storeName));
+      tx.oncomplete = () => resolve(req ? req.result : void 0);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  };
+}
+var readAll = async (run) => (await run("readonly", (s) => s.getAll()) ?? []).filter(isEntry);
+function createIndexedDbOutboxStore(opts) {
+  const run = idbRunner(opts);
+  return {
+    async load() {
+      return (await readAll(run)).filter((r) => r.partition === opts.partition).map(({ partition: _p, ...entry }) => entry);
+    },
+    async put(entries) {
+      await run("readwrite", (s) => {
+        for (const e of entries) s.put(opts.partition === void 0 ? e : { ...e, partition: opts.partition });
+      });
+    },
+    async remove(ids2) {
+      await run("readwrite", (s) => {
+        for (const id of ids2) s.delete(id);
+      });
+    }
+  };
+}
+async function listIndexedDbOutboxPartitions(opts) {
+  const partitions = /* @__PURE__ */ new Set();
+  for (const r of await readAll(idbRunner(opts))) if (typeof r.partition === "string") partitions.add(r.partition);
+  return [...partitions];
+}
+
+// src/stepOutbox.ts
+var STEP_BATCH_MAX = 25;
+var STEP_BATCH_WAIT_MS = 5e3;
+var isStepRow2 = (m) => m.role === "tool";
+var durability = null;
+var stores2 = /* @__PURE__ */ new Map();
+var runKeys = /* @__PURE__ */ new Set();
+var replays = /* @__PURE__ */ new Map();
+var stopListening = null;
+function installStepDurability(next) {
+  stopListening?.();
+  stopListening = null;
+  durability = next;
+  stores2.clear();
+  runKeys.clear();
+  replays.clear();
+  if (!next) return;
+  const stopOnline = next.online?.subscribe((online) => {
+    if (online) void drainStoredSteps();
+  });
+  const stopPermission = next.sendPermission?.subscribe((allowed) => {
+    if (allowed) void drainStoredSteps();
+  });
+  stopListening = () => {
+    stopOnline?.();
+    stopPermission?.();
+  };
+  void drainStoredSteps();
+}
+var optionsFor = (d, key) => {
+  let store = stores2.get(key);
+  if (!store) {
+    store = d.storeFor(key);
+    stores2.set(key, store);
+  }
+  return {
+    store,
+    ...d.online ? { online: d.online } : {},
+    ...d.scope ? { scope: d.scope } : {},
+    ...d.sendPermission ? { sendPermission: d.sendPermission } : {}
+  };
+};
+function stepDurabilityFor(chatId, runKey) {
+  if (!durability) return {};
+  const key = runKey === chatId ? `chat:${chatId}` : `chat:${chatId}:run:${runKey}`;
+  runKeys.add(key);
+  return optionsFor(durability, key);
+}
+async function drainStoredSteps() {
+  const d = durability;
+  if (!d?.sendRows || !d.storedKeys || d.sendPermission?.isAllowed() === false) return;
+  const sendRows = d.sendRows;
+  let keys;
+  try {
+    keys = await d.storedKeys();
+  } catch {
+    return;
+  }
+  await Promise.all(keys.filter((key) => !runKeys.has(key)).map((key) => {
+    let replay = replays.get(key);
+    if (!replay) {
+      replay = batchStepPersistence({
+        async sendMessages(chatId, rows, opts) {
+          await sendRows(chatId, rows, opts?.scope);
+          return [];
+        }
+      }, optionsFor(d, key));
+      replays.set(key, replay);
+    }
+    return replay.flush();
+  }));
+}
+var withEventKeys = (rows, ids2) => rows.map((m, i) => m.eventKey || !ids2[i] ? m : { ...m, eventKey: `step:${ids2[i]}` });
+function batchStepPersistence(base, opts = {}) {
+  const steps = createOutbox({
+    maxItems: opts.maxRows ?? STEP_BATCH_MAX,
+    maxWaitMs: opts.waitMs ?? STEP_BATCH_WAIT_MS,
+    retry: {},
+    ...opts.store ? { store: opts.store } : {},
+    ...opts.online ? { online: opts.online } : {},
+    ...opts.scope ? { scope: opts.scope } : {},
+    ...opts.sendPermission ? { sendPermission: opts.sendPermission } : {},
+    send: (chatId, rows, ctx) => base.sendMessages(chatId, withEventKeys(rows, ctx.ids), ctx.scope !== void 0 ? { scope: ctx.scope } : void 0)
+  });
+  const sendMessages = async (chatId, messages) => {
+    if (messages.length > 0 && messages.every(isStepRow2)) {
+      for (const m of messages) steps.enqueue(chatId, m);
+      return [];
+    }
+    return steps.drainWith(chatId, async (pending, ctx) => {
+      if (pending.length === 0) return base.sendMessages(chatId, messages);
+      const saved = await base.sendMessages(chatId, [...withEventKeys(pending, ctx.ids), ...messages]);
+      return saved.slice(pending.length);
+    });
+  };
+  return {
+    persistence: { ...base, sendMessages },
+    flush: () => steps.flush()
+  };
+}
+
 // src/modelScorecard.ts
 var SILENT_TURNS_AT = 3;
 function modelOf(ev) {
@@ -18035,14 +18322,20 @@ function codeRunOutcome(args) {
   const steps = turns.length;
   const allLocal = steps > 0 && turns.every(reportedFree);
   const base = { clientRunId: args.runId, role: "code", source: "ide", steps, ...allLocal ? { costMc: 0 } : {}, ...args.projectId != null ? { projectId: args.projectId } : {} };
+  const why = args.failed ? failureFlags(args.error) : {};
   if (args.codeChanged) {
     if (args.aborted || !args.codeModel) return null;
-    return { ...base, model: args.codeModel, terminalStatus: args.failed ? "failed" : "completed", merged: args.shipped };
+    return { ...base, ...why, model: args.codeModel, terminalStatus: args.failed ? "failed" : "completed", merged: args.shipped };
   }
   const emptyHanded = args.askedForChange && steps >= NO_DELIVERABLE_MIN_STEPS && !attemptedDelegation(args.trace);
   const model = emptyHanded ? busiestModel(args.trace) : null;
   if (!model) return null;
-  return { ...base, model, terminalStatus: "failed", merged: false };
+  return { ...base, ...why, model, terminalStatus: "failed", merged: false };
+}
+function failureFlags(error) {
+  if (isTenantBudgetFailure(error)) return { quotaExhausted: true };
+  if (isRateLimitFailure(error)) return { rateLimited: true };
+  return {};
 }
 function busiestModel(trace4) {
   let best = null;
@@ -19861,7 +20154,7 @@ async function adoptAnswerWithoutModel(chatId, c, req, text, step) {
   c.streamingText = "";
   recordAppended(c, assistantMsg);
   pushTrace(c, { ts: nowIso(), category: "recall", label: step.label, args: step.args, result: { ...step.result, skippedLlm: true } });
-  emit(c);
+  emit2(c);
   req.onActivity?.(chatId);
   return true;
 }
@@ -21040,7 +21333,7 @@ async function persistFoldMarker(c, chatId, persistence, fold) {
     }]);
     if (msg) {
       recordAppended(c, msg);
-      emit(c);
+      emit2(c);
     }
   } catch (error) {
     pushTrace(c, {
@@ -21314,7 +21607,7 @@ async function applyModelPreflight(c, preflight, pinnedModel) {
   if (!event) return;
   if (result?.byoUnresolved.length) accrueByoUnresolved(c, result.byoUnresolved.join(","));
   pushTrace(c, event);
-  emit(c);
+  emit2(c);
 }
 
 // src/runStore/hostRunContext.ts
@@ -21699,87 +21992,11 @@ function createComposingActivity(sink, opts) {
   };
 }
 
-// src/pendingWords.ts
-var SESSION = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Math.random());
-var keyOf = (chatId) => `bf:pendingWords:${chatId}`;
-function storage() {
-  try {
-    return typeof localStorage === "undefined" ? null : localStorage;
-  } catch {
-    return null;
-  }
-}
-function read(chatId) {
-  const raw = storage()?.getItem(keyOf(chatId));
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((p) => typeof p?.eventKey === "string" && typeof p?.text === "string") : [];
-  } catch {
-    storage()?.removeItem(keyOf(chatId));
-    return [];
-  }
-}
-function write(chatId, list3) {
-  const store = storage();
-  if (!store) return false;
-  try {
-    if (list3.length === 0) store.removeItem(keyOf(chatId));
-    else store.setItem(keyOf(chatId), JSON.stringify(list3));
-    return true;
-  } catch {
-    return false;
-  }
-}
-function rememberPendingWords(chatId, eventKey, text) {
-  const list3 = read(chatId);
-  if (list3.some((p) => p.eventKey === eventKey)) return true;
-  return write(chatId, [...list3, { eventKey, text, session: SESSION }]);
-}
-function forgetPendingWords(chatId, eventKeys) {
-  const gone = new Set(eventKeys.filter((k) => !!k));
-  if (gone.size === 0) return;
-  const list3 = read(chatId);
-  const rest = list3.filter((p) => !gone.has(p.eventKey));
-  if (rest.length !== list3.length) write(chatId, rest);
-}
-async function replayPendingWords(chatId, persistence) {
-  const old = read(chatId).filter((p) => p.session !== SESSION);
-  let saved = 0;
-  for (const word of old) {
-    try {
-      await persistence.sendMessages(chatId, [{ role: "user", content: word.text, eventKey: word.eventKey }]);
-      forgetPendingWords(chatId, [word.eventKey]);
-      saved += 1;
-    } catch {
-      break;
-    }
-  }
-  return saved;
-}
-
-// src/runSteering.ts
-function queueRunSteering2(runKey, text, opts) {
-  const eventKey = opts?.eventKey ?? (opts?.persist ? newSteerKey() : void 0);
-  if (opts?.persist && eventKey && text.trim()) rememberPendingWords(runKey, eventKey, text.trim());
-  queueRunSteering(runKey, text, eventKey ? { ...opts, eventKey } : opts);
-}
-function drainRunSteering2(runKey) {
-  return drainRunSteering(runKey);
-}
-function steerModelContent(msg) {
-  const imageAtts = (msg.attachments ?? []).filter((a) => a.imageUrl);
-  if (imageAtts.length === 0) return msg.text;
-  return [
-    { type: "text", text: msg.text },
-    ...imageAtts.map((a) => ({ type: "image_url", image_url: { url: a.imageUrl } }))
-  ];
-}
-
 // src/runStore/steerInterrupt.ts
 function takeRunSteering(c, runKey, step) {
   const messages = drainRunSteering2(runKey);
   if (messages.length > 0) {
+    markPendingWordsRead(runKey, messages.map((m) => m.eventKey));
     pushTrace(c, {
       ts: nowIso(),
       category: "message",
@@ -21792,18 +22009,14 @@ function takeRunSteering(c, runKey, step) {
 }
 
 // src/runStore/steerPersistence.ts
-function steerMetadata(steer) {
-  const attachments = steer.attachments ?? [];
-  return JSON.stringify({ [MID_TURN_META_KEY]: true, ...attachments.length > 0 ? { attachments } : {} });
-}
-async function persistSteer(c, chatId, persistence, steer) {
+async function persistSteer(c, chatId, persistence, steer, runKey = chatId) {
   if (!steer.persist) return;
   try {
     const [msg] = await persistence.sendMessages(chatId, [{ role: "user", content: steer.text, metadata: steerMetadata(steer), ...steer.eventKey ? { eventKey: steer.eventKey } : {} }]);
     if (!msg) return;
     recordAppended(c, msg);
-    emit(c);
-    forgetPendingWords(chatId, [steer.eventKey]);
+    emit2(c);
+    forgetPendingWords(runKey, [steer.eventKey]);
   } catch (e) {
     pushTrace(c, {
       ts: nowIso(),
@@ -21991,11 +22204,11 @@ function completeTurnPort(run) {
   return async (ctx) => {
     const iter = ctx.step;
     c.streamingText = "";
-    emit(c);
+    emit2(c);
     for (const steer of takeRunSteering(c, runKey, iter)) {
       const msg = { role: "user", content: steerModelContent(steer) };
       convo.push(steer.fromPerson ? markPersonTurn(msg) : msg);
-      await persistSteer(c, chatId, req.persistence, steer);
+      await persistSteer(c, chatId, req.persistence, steer, runKey);
     }
     const working = await buildWorkingTranscript(
       c,
@@ -22009,7 +22222,7 @@ function completeTurnPort(run) {
           args: { droppedMessages: fold.droppedMessages },
           result: `Compressed ${fold.droppedMessages} earlier step(s) into a memory to stay within the context window.`
         });
-        emit(c);
+        emit2(c);
         void persistFoldMarker(c, chatId, run.req.persistence, fold);
       }
     );
@@ -22026,7 +22239,7 @@ function completeTurnPort(run) {
     const composing = createComposingActivity(
       { set: (a) => {
         c.activity = a;
-      }, repaint: () => emit(c), coalescedRepaint: () => emitStreaming(c) },
+      }, repaint: () => emit2(c), coalescedRepaint: () => emitStreaming(c) },
       { step: iter }
     );
     const handlers = {
@@ -22037,7 +22250,7 @@ function completeTurnPort(run) {
         if (firstTokenAt === void 0) {
           firstTokenAt = nowMs2();
           c.activity = { phase: "writing", startedAt: Date.now(), step: iter };
-          emit(c);
+          emit2(c);
           return;
         }
         emitStreaming(c);
@@ -22091,7 +22304,7 @@ function completeTurnPort(run) {
       c.streamingText = "";
       firstTokenAt = void 0;
       composing.reset();
-      emit(c);
+      emit2(c);
     };
     try {
       result = await request([], opening);
@@ -22431,7 +22644,7 @@ function beforeDispatchHook(run) {
           const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, metadata: JSON.stringify({ [MID_TURN_META_KEY]: true }) }]);
           if (!msg) return;
           recordAppended(c, msg);
-          emit(c);
+          emit2(c);
         },
         now: nowMs2
       });
@@ -22580,7 +22793,7 @@ function beforeToolCallsHook(run) {
 ${block}` : block : lead;
       if (reply) {
         const assistantMsg = await settleReply(run, reply, result, requested);
-        emit(c);
+        emit2(c);
         emitEvermindLearnReconcile(run, assistantMsg, reply);
         onActivity?.(chatId);
         return { action: "stop", ok: true, output: reply };
@@ -22588,7 +22801,7 @@ ${block}` : block : lead;
     }
     await persistMidTurnText(chatId, c, persistence, result, requested);
     c.streamingText = "";
-    emit(c);
+    emit2(c);
     return void 0;
   };
 }
@@ -22672,7 +22885,7 @@ function finalAnswerHook(run) {
     };
     const steering = takeRunSteering(c, runKey, iter);
     if (steering.length > 0) {
-      for (const steer of steering) await persistSteer(c, chatId, persistence, steer);
+      for (const steer of steering) await persistSteer(c, chatId, persistence, steer, runKey);
       const joinedText = steering.map((m) => m.text).join("\n\n");
       const imageAtts = steering.flatMap((m) => (m.attachments ?? []).filter((a) => a.imageUrl));
       const nudge = imageAtts.length > 0 ? [
@@ -22681,7 +22894,7 @@ function finalAnswerHook(run) {
       ] : joinedText;
       await requeueWithNudge(nudge);
       c.streamingText = "";
-      emit(c);
+      emit2(c);
       return { action: "continue" };
     }
     if (runTool && shouldRecoverStalledTurn(stallInput)) {
@@ -22697,7 +22910,7 @@ function finalAnswerHook(run) {
         result: shape === "handed-off" ? `Model ended by telling the user to run the commands itself holds tools for \u2014 re-prompted to run them (${run.announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).` : `Model announced a tool call without making one \u2014 re-prompted (${run.announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
       });
       c.streamingText = "";
-      emit(c);
+      emit2(c);
       return { action: "continue" };
     }
     const stopNudge = runTool ? await askStopHook(req.onStop, { codeChanged: c.codeChanged, touchedFiles: c.touchedFiles, requestText: userRequest, round: run.stopHookRounds }) : null;
@@ -22712,7 +22925,7 @@ function finalAnswerHook(run) {
         result: `A workspace stop hook held the run for another turn: ${stopNudge.slice(0, 200)}`
       });
       c.streamingText = "";
-      emit(c);
+      emit2(c);
       enterVerifyIfChanged(run);
       return { action: "continue" };
     }
@@ -22732,7 +22945,7 @@ function finalAnswerHook(run) {
         result: "Run changed code and ended without committing or pushing it \u2014 re-prompted to verify, self-review and ship (this local session is the change's only reviewer)."
       });
       c.streamingText = "";
-      emit(c);
+      emit2(c);
       enterVerifyIfChanged(run);
       return { action: "continue" };
     }
@@ -22752,7 +22965,7 @@ function finalAnswerHook(run) {
         result: "Run changed the app and ended without inspecting the preview and recording a review \u2014 re-prompted to verify and review (this Studio session is the change's only reviewer)."
       });
       c.streamingText = "";
-      emit(c);
+      emit2(c);
       enterVerifyIfChanged(run);
       return { action: "continue" };
     }
@@ -22767,7 +22980,7 @@ function finalAnswerHook(run) {
         result: "The user asked for sub-agents and the run ended without starting one \u2014 re-prompted to spawn them locally."
       });
       c.streamingText = "";
-      emit(c);
+      emit2(c);
       return { action: "continue" };
     }
     if (runTool && !run.restateRecoveryUsed && isRestatedReply(result.text, priorReply)) {
@@ -22781,7 +22994,7 @@ function finalAnswerHook(run) {
         result: "Final reply repeated the previous turn's answer \u2014 re-prompted to act on the next unfinished item instead of restating it."
       });
       c.streamingText = "";
-      emit(c);
+      emit2(c);
       return { action: "continue" };
     }
     const settledText = result.text.trim();
@@ -22795,7 +23008,7 @@ function finalAnswerHook(run) {
         run.forceToolChoice = stallRecoveryToolChoice(stallInput);
         convo.push({ role: "user", content: stallRecoveryNudge(false, shape, stallInput) });
         c.streamingText = "";
-        emit(c);
+        emit2(c);
         return { action: "continue" };
       }
       const notice = stallExhaustedNotice(resolved, run.policy.tried, shape);
@@ -22809,7 +23022,7 @@ function finalAnswerHook(run) {
       });
       c.error = notice;
     }
-    emit(c);
+    emit2(c);
     emitEvermindLearnReconcile(run, assistantMsg, finalText);
     onActivity?.(chatId);
     return { action: "stop", ok: true, output: finalText };
@@ -22852,11 +23065,19 @@ var usd = (millicents) => `$${(millicents / MILLICENTS_PER_USD).toFixed(2)}`;
 function runBudgetCapMillicents(maxRunBudgetUsd) {
   return typeof maxRunBudgetUsd === "number" && Number.isFinite(maxRunBudgetUsd) && maxRunBudgetUsd > 0 ? Math.round(maxRunBudgetUsd * MILLICENTS_PER_USD) : null;
 }
-function budgetWarning(spentMc, capMc) {
-  return `[Run budget] This run has spent ${usd(spentMc)} of its ${usd(capMc)} budget \u2014 over 80%. Stop exploring and converge: finish the essential change now, then answer with what you did and exactly what is left.`;
+function noPriceNote(tree) {
+  const n2 = tree?.unpricedCalls ?? 0;
+  return n2 > 0 ? `${n2} ${n2 === 1 ? "call" : "calls"} had no known price` : null;
 }
-function budgetContainedReply(spentMc, capMc) {
-  return `Run stopped: it reached its ${usd(capMc)} spend budget (${usd(spentMc)} spent). Nothing was rolled back \u2014 the changes made so far are in place. Ask to continue to resume from here, or raise the "builderforce.maxRunBudgetUsd" setting (0 turns the cap off).`;
+function budgetWarning(spentMc, capMc, tree) {
+  const note = noPriceNote(tree);
+  const spent = note ? `at least ${usd(spentMc)} (${note})` : usd(spentMc);
+  return `[Run budget] This run has spent ${spent} of its ${usd(capMc)} budget \u2014 over 80%. Stop exploring and converge: finish the essential change now, then answer with what you did and exactly what is left.`;
+}
+function budgetContainedReply(spentMc, capMc, tree) {
+  const note = noPriceNote(tree);
+  const spent = note ? `at least ${usd(spentMc)} spent \u2014 ${note}` : `${usd(spentMc)} spent`;
+  return `Run stopped: it reached its ${usd(capMc)} spend budget (${spent}). Nothing was rolled back \u2014 the changes made so far are in place. Ask to continue to resume from here, or raise the "builderforce.maxRunBudgetUsd" setting (0 turns the cap off).`;
 }
 var spendTrees = /* @__PURE__ */ new WeakMap();
 function runSpendTree(run, capMc) {
@@ -22893,7 +23114,7 @@ function runSpendBudget(run, book2) {
   const contain = async () => {
     const { c, chatId, convo, req } = run;
     const spentMc = tree.spentMc;
-    const text = budgetContainedReply(spentMc, capMc);
+    const text = budgetContainedReply(spentMc, capMc, tree);
     noteBudgetContained(c);
     pushTrace(c, {
       ts: nowIso(),
@@ -22906,7 +23127,7 @@ function runSpendBudget(run, book2) {
     const [msg] = await req.persistence.sendMessages(chatId, [{ role: "assistant", content: text }]);
     c.streamingText = "";
     if (msg) recordAppended(c, msg);
-    emit(c);
+    emit2(c);
     req.onActivity?.(chatId);
     return { action: "stop", ok: true, finished: true, output: text };
   };
@@ -22917,7 +23138,7 @@ function runSpendBudget(run, book2) {
       if (runBudgetBreach(caps, usage)) return contain();
       if (!warned && runBudgetWarnDue(caps, usage)) {
         warned = true;
-        const warning = budgetWarning(spentMc, capMc);
+        const warning = budgetWarning(spentMc, capMc, tree);
         run.convo.push(volatileTail4([warning]));
         pushTrace(run.c, { ts: nowIso(), category: "message", label: "run.budget_warning", args: { spentMillicents: spentMc, capMillicents: capMc }, result: warning });
       }
@@ -23000,7 +23221,7 @@ async function runLoop(chatId, c, req, runKey) {
             c.streamingText += d;
             if (closeFirstTokenAt === void 0) {
               closeFirstTokenAt = nowMs2();
-              emit(c);
+              emit2(c);
               return;
             }
             emitStreaming(c);
@@ -23030,7 +23251,7 @@ async function runLoop(chatId, c, req, runKey) {
         const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: closingText, ...meta ? { metadata: meta } : {} }]);
         c.streamingText = "";
         recordAppended(c, assistantMsg);
-        emit(c);
+        emit2(c);
         emitEvermindLearnReconcile(run, assistantMsg, closingText);
         onActivity?.(chatId);
         return;
@@ -23047,7 +23268,7 @@ async function runLoop(chatId, c, req, runKey) {
     `Stopped after ${streak} consecutive failed tool calls over ${loop.step} steps (a forced final answer without tools also came back empty)`
   );
   c.error = `The assistant's last ${streak} tool calls all failed and it gave no answer. Read the failing steps above, then try again with what they ask for.`;
-  emit(c);
+  emit2(c);
 }
 
 // src/runStore/beginRun.ts
@@ -23084,7 +23305,7 @@ function claimRun(runKey) {
   const c = getCell(runKey);
   if (c.running || c.claim) return null;
   const claim = holdClaim(c);
-  emit(c);
+  emit2(c);
   return claim;
 }
 function claimStopped(c, claim) {
@@ -23093,55 +23314,7 @@ function claimStopped(c, claim) {
 function releaseClaim(c, claim) {
   if (c.claim !== claim) return;
   c.claim = null;
-  emit(c);
-}
-
-// src/runStore/deadline.ts
-var continuationLimits = { prepareMs: 15e3, settleMs: 3e4 };
-function budget(ms) {
-  const end = Date.now() + ms;
-  return () => Math.max(1, end - Date.now());
-}
-async function bounded(ms, promise) {
-  let timer;
-  const late = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(CONTINUATION_TIMED_OUT)), ms);
-  });
-  try {
-    return await Promise.race([Promise.resolve(promise), late]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-async function settledWithin(ms, promise) {
-  let timer;
-  const late = new Promise((resolve) => {
-    timer = setTimeout(() => resolve("pending"), ms);
-  });
-  try {
-    return await Promise.race([promise.then(() => "ok", () => "failed"), late]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-async function within(ms, work, onLate, onError = () => void 0) {
-  let timer;
-  const late = new Promise((resolve) => {
-    timer = setTimeout(() => resolve("late"), ms);
-  });
-  const settled2 = (async () => {
-    try {
-      await work();
-    } catch (e) {
-      onError(e);
-    }
-    return "done";
-  })();
-  try {
-    if (await Promise.race([settled2, late]) === "late") onLate();
-  } finally {
-    clearTimeout(timer);
-  }
+  emit2(c);
 }
 
 // src/runStore/continueChat.ts
@@ -23183,32 +23356,48 @@ ${recordedModelText(b)}`;
 function surface(c, e) {
   c.error = e instanceof Error ? e.message : String(e);
   c.errorAction = chatErrorAction(e);
-  emit(c);
+  emit2(c);
 }
 function keepAsSaid(runKey, text, attachments) {
   const pictures = attachments.filter((a) => a.imageUrl);
-  queueRunSteering2(runKey, text, { fromPerson: true, saved: true, ...pictures.length > 0 ? { attachments: pictures } : {} });
+  const words3 = text.trim();
+  if (!words3) return;
+  requeueRunSteering2(runKey, [{ text: words3, fromPerson: true, saved: true, ...pictures.length > 0 ? { attachments: pictures } : {} }]);
 }
 function requeue(runKey, steers) {
-  for (const m of steers) {
-    queueRunSteering2(runKey, m.text, {
-      ...m.fromPerson ? { fromPerson: true } : {},
-      ...m.persist ? { persist: true } : {},
-      ...m.saved ? { saved: true } : {},
-      ...m.eventKey ? { eventKey: m.eventKey } : {},
-      ...m.attachments?.length ? { attachments: m.attachments } : {}
-    });
-  }
+  requeueRunSteering2(runKey, steers);
 }
 function trace3(c, label, args, result) {
   pushTrace(c, { ts: nowIso(), category: "message", label, args, result });
 }
-async function endStopped(c, runKey, chatId, persistence, claim, ms, saving) {
+async function userSpokeSince(c, persistence, chatId, saved) {
+  if (!persistence.getMessages || saved.length === 0) return false;
+  const after = Math.max(...saved.map((m) => m.seq));
+  let rows;
+  try {
+    rows = await persistence.getMessages(chatId);
+  } catch (e) {
+    trace3(
+      c,
+      "steer.history_unreadable",
+      { error: e instanceof Error ? e.message : String(e) },
+      "The chat could not be read to see whether the person spoke again; no answer is written to a newer message."
+    );
+    return false;
+  }
+  return rows.some((m) => m.role === "user" && m.seq > after);
+}
+async function endStopped(end, ms, saving) {
+  const { c, runKey, chatId, persistence, claim, keys } = end;
+  forgetPendingWords(runKey, keys);
   const state = saving ? await settledWithin(ms, saving) : "ok";
   if (state === "failed") return true;
   if (state === "pending") {
     void saving.then(
-      () => stopBeforeStart(runKey, chatId, persistence, () => false),
+      async (rows) => {
+        if (await userSpokeSince(c, persistence, chatId, rows)) return;
+        await stopBeforeStart(runKey, chatId, persistence, () => false);
+      },
       () => void 0
       // it failed after all: no row, so no answer
     );
@@ -23224,7 +23413,7 @@ async function endStopped(c, runKey, chatId, persistence, claim, ms, saving) {
   );
   return true;
 }
-async function continueChat(runKey, c, steers, start, claim, left) {
+async function continueChat(runKey, c, steers, start, claim, left, progress = { saving: null }) {
   const request = c.lastRequest;
   const binding = bindings.get(runKey);
   if (!request || !binding || steers.length === 0) return false;
@@ -23234,6 +23423,7 @@ async function continueChat(runKey, c, steers, start, claim, left) {
     return false;
   }
   const chatId = chatIdOf(request, runKey);
+  const stopped = { c, runKey, chatId, persistence: request.persistence, claim, keys: steers.map((m) => m.eventKey) };
   const ports = binding.ports();
   const turns = [];
   for (const steer of steers) turns.push({ steer, composed: await bounded(left(), compose(steer, ports)) });
@@ -23244,23 +23434,24 @@ async function continueChat(runKey, c, steers, start, claim, left) {
       const metadata = withDirectedMetadata(null, composed.turn.meta);
       return { role: "user", content: composed.displayContent, ...metadata ? { metadata } : {}, ...steer.eventKey ? { eventKey: steer.eventKey } : {} };
     })));
+    progress.saving = saving;
     try {
       rows = await bounded(left(), saving);
     } catch (e) {
-      if (claimStopped(c, claim)) return endStopped(c, runKey, chatId, request.persistence, claim, left(), saving);
+      if (claimStopped(c, claim)) return endStopped(stopped, left(), saving);
       throw e;
     }
     for (const row2 of rows) recordAppended(c, row2);
-    emit(c);
+    emit2(c);
     forgetPendingWords(runKey, fresh.map((t) => t.steer.eventKey));
-    if (claimStopped(c, claim)) return endStopped(c, runKey, chatId, request.persistence, claim, left(), null);
+    if (claimStopped(c, claim)) return endStopped(stopped, left(), null);
   }
   const content = turns.map((t) => t.composed.turn.content).reduce((all, next) => joinContent(all, next));
   let fresher;
   try {
     fresher = await bounded(left(), binding.prepareRun?.(runKey));
   } catch (e) {
-    if (claimStopped(c, claim)) return endStopped(c, runKey, chatId, request.persistence, claim, left(), null);
+    if (claimStopped(c, claim)) return endStopped(stopped, left(), null);
     surface(c, e);
     trace3(
       c,
@@ -23271,7 +23462,7 @@ async function continueChat(runKey, c, steers, start, claim, left) {
     keepAsSaid(runKey, recordedModelText(content), turns.flatMap((t) => t.composed.attachments));
     return true;
   }
-  if (claimStopped(c, claim)) return endStopped(c, runKey, chatId, request.persistence, claim, left(), null);
+  if (claimStopped(c, claim)) return endStopped(stopped, left(), null);
   depth.set(runKey, links + 1);
   continuing.add(runKey);
   const row = rows[rows.length - 1];
@@ -23290,12 +23481,18 @@ async function continueChat(runKey, c, steers, start, claim, left) {
 async function continueOrKeep(runKey, c, steers, start, claim) {
   const keyed = steers.map((m) => m.saved || m.eventKey ? m : { ...m, eventKey: newSteerKey() });
   const left = budget(continuationLimits.prepareMs);
+  const progress = { saving: null };
   try {
-    if (await continueChat(runKey, c, keyed, start, claim, left)) return true;
+    if (await continueChat(runKey, c, keyed, start, claim, left, progress)) return true;
   } catch (e) {
     if (claimStopped(c, claim)) {
       const request = c.lastRequest;
-      if (request) await endStopped(c, runKey, chatIdOf(request, runKey), request.persistence, claim, left(), null);
+      const keys = keyed.map((m) => m.eventKey);
+      if (request && (progress.saving || keyed.some((m) => m.saved))) {
+        await endStopped({ c, runKey, chatId: chatIdOf(request, runKey), persistence: request.persistence, claim, keys }, left(), progress.saving);
+      } else {
+        forgetPendingWords(runKey, keys);
+      }
       releaseClaim(c, claim);
       return true;
     }
@@ -23320,16 +23517,23 @@ async function continueLeftovers(runKey, c, start, claim) {
   }
   await continueOrKeep(runKey, c, left, start, claim);
 }
-function wakeChat(runKey, text, attachments, start) {
+function wakeChat(runKey, turns, start) {
   const c = getCell(runKey);
   if (!c.lastRequest || !bindings.has(runKey)) return false;
+  const words3 = turns.filter((t) => t.text.trim());
+  if (words3.length === 0) return false;
   const claim = claimRun(runKey);
   if (!claim) return false;
   depth.set(runKey, 0);
-  const eventKey = newSteerKey();
-  rememberPendingWords(runKey, eventKey, text.trim());
-  const steer = { text, fromPerson: true, persist: true, eventKey, ...attachments?.length ? { attachments: [...attachments] } : {} };
-  void continueOrKeep(runKey, c, [steer], start, claim);
+  const steers = words3.map((t) => ({
+    text: t.text.trim(),
+    fromPerson: true,
+    persist: true,
+    eventKey: newSteerKey(),
+    ...t.attachments?.length ? { attachments: [...t.attachments] } : {}
+  }));
+  for (const steer of steers) rememberPendingWords(runKey, steer.eventKey, steer.text);
+  void continueOrKeep(runKey, c, steers, start, claim);
   return true;
 }
 
@@ -23375,7 +23579,7 @@ async function startRun(runKey, request, claim) {
     c.priorResearch = req.priorResearch ?? null;
   }
   if (req.userTurn !== void 0) c.transcript.push(markPersonTurn({ role: "user", content: req.userTurn }));
-  emit(c);
+  emit2(c);
   c.runUsage = emptyRunUsage();
   try {
     await runLoop(chatId, c, req, runKey);
@@ -23400,7 +23604,7 @@ async function startRun(runKey, request, claim) {
       }, () => void 0);
       if (!aborted && c.codeChanged && req.projectId != null && req.runTool) {
         c.activity = { phase: "finishing", startedAt: Date.now(), step: 0 };
-        emit(c);
+        emit2(c);
       }
       const changed = c.codeChanged;
       const shipped = !aborted && changed && shippedToBaseBranch(runTrace(c), { touchedFiles: c.touchedFiles });
@@ -23450,6 +23654,7 @@ async function startRun(runKey, request, claim) {
         codeChanged: c.codeChanged,
         aborted,
         failed: c.error !== "",
+        error: c.error,
         shipped,
         trace: trace4,
         projectId: req.projectId,
@@ -23459,7 +23664,7 @@ async function startRun(runKey, request, claim) {
       reportRunEnd(c, req, { aborted, failed: c.error !== "" });
       c.persistStep = null;
       c.activity = null;
-      emit(c);
+      emit2(c);
       await within(left(), async () => {
         await steps.flush();
       }, () => void 0);
@@ -23478,7 +23683,7 @@ async function startEngineRun(key, engine) {
   c.trace = [];
   beginRun(c);
   c.turn = { id: null, startedAt: Date.now() };
-  emit(c);
+  emit2(c);
   const signal = c.abort.signal;
   const control = {
     signal,
@@ -23487,7 +23692,7 @@ async function startEngineRun(key, engine) {
     correlate: (id) => {
       if (c.turn && !signal.aborted) {
         c.turn = { ...c.turn, id };
-        emit(c);
+        emit2(c);
       }
     }
   };
@@ -23507,7 +23712,7 @@ async function startEngineRun(key, engine) {
     c.turn = null;
     c.pendingConfirm = null;
     c.confirmResolver = null;
-    emit(c);
+    emit2(c);
   }
   return true;
 }
@@ -23523,7 +23728,7 @@ function useRunSnapshot(key) {
 }
 
 // src/useChatTranscript.ts
-import { useCallback as useCallback7, useEffect as useEffect6, useRef as useRef6, useState as useState7 } from "react";
+import { useCallback as useCallback7, useEffect as useEffect7, useRef as useRef6, useState as useState7 } from "react";
 
 // src/mergeTranscript.ts
 function mergeTranscript(base, extra) {
@@ -23547,7 +23752,7 @@ function useChatTranscript(persistence, chatId, snapshot, callbacks) {
   const [loadingMessages, setLoadingMessages] = useState7(false);
   const [reloadNonce, setReloadNonce] = useState7(0);
   const reloadMessages = useCallback7(() => setReloadNonce((n2) => n2 + 1), []);
-  useEffect6(() => {
+  useEffect7(() => {
     let cancelled = false;
     if (chatId == null) {
       setHeld({ chatId: null, list: [] });
@@ -23555,7 +23760,7 @@ function useChatTranscript(persistence, chatId, snapshot, callbacks) {
     }
     setLoadingMessages(true);
     cb.current.onLoadStart();
-    replayPendingWords(chatId, persistence).then(() => persistence.getMessages(chatId)).then((list3) => {
+    persistence.getMessages(chatId).then((list3) => {
       if (!cancelled) setHeld({ chatId, list: mergeTranscript(list3, getRunSnapshot(chatId).appended) });
     }).catch((e) => {
       if (!cancelled) cb.current.onLoadError(e instanceof Error ? e.message : "Failed to load messages");
@@ -23566,12 +23771,22 @@ function useChatTranscript(persistence, chatId, snapshot, callbacks) {
       cancelled = true;
     };
   }, [persistence, chatId, reloadNonce]);
-  useEffect6(() => {
+  useEffect7(() => {
+    if (chatId == null) return;
+    let cancelled = false;
+    void replayPendingWords(chatId, persistence).then((saved) => {
+      if (saved > 0 && !cancelled) reloadMessages();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [persistence, chatId, reloadMessages]);
+  useEffect7(() => {
     if (chatId == null || !persistence.subscribeMessages) return;
     return persistence.subscribeMessages(chatId, reloadMessages);
   }, [persistence, chatId, reloadMessages]);
   const lastMarkedRef = useRef6(null);
-  useEffect6(() => {
+  useEffect7(() => {
     if (chatId == null || !persistence.markChatRead || messages.length === 0) return;
     let maxSeq = 0;
     for (const m of messages) if (m.seq > maxSeq) maxSeq = m.seq;
@@ -23583,7 +23798,7 @@ function useChatTranscript(persistence, chatId, snapshot, callbacks) {
       if (lastMarkedRef.current?.chatId === chatId) lastMarkedRef.current = prev;
     });
   }, [persistence, chatId, messages]);
-  useEffect6(() => {
+  useEffect7(() => {
     const appended = snapshot.appended;
     if (appended.length === 0) return;
     updateMessages(chatId, (prev) => mergeTranscript(prev, appended));
@@ -23592,7 +23807,7 @@ function useChatTranscript(persistence, chatId, snapshot, callbacks) {
 }
 
 // src/useAutoReplyTrailingTurn.ts
-import { useEffect as useEffect7 } from "react";
+import { useEffect as useEffect8 } from "react";
 
 // src/userTurnRuns.ts
 import { isConsolidationMarker as isConsolidationMarker2 } from "@seanhogg/builderforce-memory/working";
@@ -23610,7 +23825,7 @@ function unansweredTurnIndex(messages) {
 
 // src/useAutoReplyTrailingTurn.ts
 function useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending, messages, repliedRef, reply }) {
-  useEffect7(() => {
+  useEffect8(() => {
     if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
     if (isLive(chatId)) return;
     const last = messages[messages.length - 1];
@@ -23660,12 +23875,12 @@ function useComposerAttachments(persistence, imagePrep, onError) {
 }
 
 // src/useContinuation.ts
-import { useCallback as useCallback9, useEffect as useEffect8, useRef as useRef7 } from "react";
+import { useCallback as useCallback9, useEffect as useEffect9, useRef as useRef7 } from "react";
 function useContinuation(persistence, prepareRun) {
   const latest = useRef7({ persistence, prepareRun });
   latest.current = { persistence, prepareRun };
   const bound = useRef7(/* @__PURE__ */ new Map());
-  useEffect8(() => {
+  useEffect9(() => {
     const mine = bound.current;
     return () => {
       for (const [chatId, binding] of mine) releaseContinuation(chatId, binding);
@@ -23858,7 +24073,7 @@ function useBrainConversation(options) {
   });
   const messagesRef = useRef8(messages);
   messagesRef.current = messages;
-  useEffect9(() => {
+  useEffect10(() => {
     const map = {};
     for (const msg of messages) {
       if (!msg.metadata) continue;
@@ -24266,7 +24481,7 @@ function noteRunStep(key, step) {
   const c = cells.get(key);
   if (!c) return;
   pushTrace(c, { ts: nowIso(), category: "message", label: step.label, ...step.args ? { args: step.args } : {}, result: step.result });
-  emit(c);
+  emit2(c);
 }
 
 // src/indexedDbStepDurability.ts
@@ -25578,15 +25793,15 @@ function withUsageSurface(fetchImpl, surface2) {
 }
 
 // src/useChatTurns.ts
-import { useCallback as useCallback12, useEffect as useEffect11, useRef as useRef10, useState as useState12 } from "react";
+import { useCallback as useCallback12, useEffect as useEffect12, useRef as useRef10, useState as useState12 } from "react";
 
 // src/runStore/wakeChat.ts
-function wakeChat2(runKey, text, attachments) {
-  return wakeChat(runKey, text, attachments, startRun);
+function wakeChat2(runKey, turns, attachments) {
+  return wakeChat(runKey, typeof turns === "string" ? [{ text: turns, ...attachments ? { attachments } : {} }] : turns, startRun);
 }
 
 // src/useQueuedTurns.ts
-import { useCallback as useCallback11, useEffect as useEffect10, useRef as useRef9, useState as useState11 } from "react";
+import { useCallback as useCallback11, useEffect as useEffect11, useRef as useRef9, useState as useState11 } from "react";
 function turnBody(turn, textOf2) {
   return (typeof turn === "string" ? turn : textOf2?.(turn) ?? "").trim();
 }
@@ -25629,7 +25844,7 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
     return first.value;
   }, [update]);
   const prev = useRef9({ key: resetKey, running });
-  useEffect10(() => {
+  useEffect11(() => {
     const was = prev.current;
     prev.current = { key: resetKey, running };
     if (was.key !== resetKey || !was.running || running) return;
@@ -25638,12 +25853,16 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
     if (next !== void 0) sendRef.current(next);
   }, [running, resetKey, takeFront]);
   const heldIn = useRef9(resetKey);
-  useEffect10(() => {
+  useEffect11(() => {
     const from = heldIn.current;
     if (from === resetKey) return;
     heldIn.current = resetKey;
     const held = queueRef.current;
     if (held.length === 0) return;
+    if (from === null && typeof resetKey === "number" && runningRef.current) {
+      update((current) => current.map((item) => item.preLiveFor === null ? { ...item, preLiveFor: resetKey } : item));
+      return;
+    }
     update(() => []);
     handOffRef.current?.(held, from);
   }, [resetKey, update]);
@@ -25657,16 +25876,16 @@ function steersByDefault(turn) {
 function chatDoorLiveness(conv, extraInFlight = false) {
   return { running: conv.sending || extraInFlight, steerable: conv.runLive };
 }
-function useChatTurns({ running, steerable = running, runKey, send, steer, stop, restore, textOf: textOf2, isDirected, attachmentsOf }) {
-  const ports = useRef10({ send, steer, stop, restore, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable });
-  ports.current = { send, steer, stop, restore, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable };
+function useChatTurns({ running, steerable = running, runKey, send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf }) {
+  const ports = useRef10({ send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable });
+  ports.current = { send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable };
   const stoppingRef = useRef10(false);
   const [, repaint] = useState12(false);
   const markStopping = useCallback12((on) => {
     stoppingRef.current = on;
     repaint(on);
   }, []);
-  useEffect11(() => {
+  useEffect12(() => {
     if (!running && stoppingRef.current) markStopping(false);
   }, [running, markStopping]);
   const stopEpoch = useRef10(0);
@@ -25711,15 +25930,19 @@ function useChatTurns({ running, steerable = running, runKey, send, steer, stop,
     }
   }, []);
   const handOff = useCallback12((held, from) => {
+    const { textOf: text, attachmentsOf: attached2, isDirected: directed, restore: giveBack, join: join2 } = ports.current;
+    const back = [];
+    const chat = [];
     for (const { value: turn } of held) {
-      const { textOf: text, attachmentsOf: attached2, isDirected: directed, restore: giveBack } = ports.current;
-      if (directed?.(turn) || getRunDriver() || typeof from !== "number") {
-        giveBack?.(turn);
-        continue;
-      }
-      const body = turnBody(turn, text);
-      const files = attached2?.(turn);
-      if (!wakeChat2(from, body, files)) queueRunSteering2(from, body, { fromPerson: true, persist: true, ...files?.length ? { attachments: files } : {} });
+      if (directed?.(turn) || getRunDriver() || typeof from !== "number") back.push(turn);
+      else chat.push({ text: turnBody(turn, text), attachments: attached2?.(turn) });
+    }
+    if (giveBack && back.length > 0) {
+      if (join2 && back.length > 1) giveBack(join2(back));
+      else for (const turn of back) giveBack(turn);
+    }
+    if (chat.length > 0 && typeof from === "number" && !wakeChat2(from, chat)) {
+      for (const turn of chat) queueRunSteering2(from, turn.text, { fromPerson: true, persist: true, ...turn.attachments?.length ? { attachments: [...turn.attachments] } : {} });
     }
   }, []);
   const queued = useQueuedTurns({
@@ -25748,7 +25971,7 @@ function useChatTurns({ running, steerable = running, runKey, send, steer, stop,
   const heldThisRun = useCallback12(() => itemsRef.current.filter((item) => !carriedIds.current.has(item.id)).length, []);
   const steers = useCallback12((preview) => ports.current.steerable && typeof ports.current.runKey === "number" && !stoppingRef.current && steersByDefault({ ...preview, held: heldThisRun() }), [heldThisRun]);
   const { remove } = queued;
-  useEffect11(() => {
+  useEffect12(() => {
     if (!running || !steerable) return;
     const { steer: route, runKey: key, textOf: text, isDirected: directed, attachmentsOf: attached2 } = ports.current;
     if (typeof key !== "number" || stoppingRef.current) return;
@@ -25772,7 +25995,6 @@ function useChatTurns({ running, steerable = running, runKey, send, steer, stop,
     stopEpoch.current += 1;
     if (ports.current.running) markStopping(true);
     const { stop: halt, runKey: key } = ports.current;
-    if (typeof key === "number") for (const dropped of drainRunSteering2(key)) forgetPendingWords(key, [dropped.eventKey]);
     if (halt) halt();
     else if (key != null) stopRun(key);
   }, [clear, markStopping]);
@@ -25793,7 +26015,7 @@ function useChatTurns({ running, steerable = running, runKey, send, steer, stop,
       queueRunSteering2(key, body, { interrupt: true, fromPerson: true, persist: true, attachments: attached2?.(turn) });
       return true;
     }
-    const preLiveFor = !ports.current.steerable && typeof key === "number" && !stoppingRef.current && !directed?.(turn) ? key : void 0;
+    const preLiveFor = !ports.current.steerable && (typeof key === "number" || key === null) && !stoppingRef.current && !directed?.(turn) ? key : void 0;
     if (hold(turn, preLiveFor !== void 0 ? { preLiveFor } : void 0)) return true;
     if (!live2 && flushingIn(key) > 0) {
       pushBack(turn);
@@ -25817,6 +26039,15 @@ function useChatTurns({ running, steerable = running, runKey, send, steer, stop,
 }
 
 // src/restoreTurn.ts
+function joinRestorableTurns(turns) {
+  if (turns.length === 1) return turns[0];
+  const attachments = turns.flatMap((t) => t.attachments ?? []);
+  return {
+    text: turns.map((t) => t.text).join("\n\n"),
+    ...attachments.length > 0 ? { attachments } : {},
+    recipient: turns.find((t) => t.recipient != null)?.recipient ?? null
+  };
+}
 function restoreTurn(turn, composer) {
   composer.restoreAttachments(turn.attachments ?? []);
   if (composer.draft()) return;
@@ -25843,12 +26074,12 @@ function useComposerDraft(input, setInput) {
 }
 
 // src/useRunRefreshTick.ts
-import { useEffect as useEffect12, useRef as useRef12, useState as useState13 } from "react";
+import { useEffect as useEffect13, useRef as useRef12, useState as useState13 } from "react";
 var RUN_REFRESH_MS = 3e4;
 function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
   const [tick, setTick] = useState13(0);
   const wasRunning = useRef12(running);
-  useEffect12(() => {
+  useEffect13(() => {
     if (wasRunning.current && !running) setTick((n2) => n2 + 1);
     wasRunning.current = running;
     if (!running) return;
@@ -25859,7 +26090,7 @@ function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
 }
 
 // src/useChatCreation.ts
-import { useCallback as useCallback13, useEffect as useEffect13, useRef as useRef13 } from "react";
+import { useCallback as useCallback13, useEffect as useEffect14, useRef as useRef13 } from "react";
 function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }) {
   const chatIdRef = useRef13(chatId);
   chatIdRef.current = chatId;
@@ -25870,7 +26101,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   const captureRef = useRef13(onCaptureOriginalRequest);
   captureRef.current = onCaptureOriginalRequest;
   const creating = useRef13(null);
-  useEffect13(() => {
+  useEffect14(() => {
     if (chatId != null) creating.current = null;
   }, [chatId]);
   const ensureChatId = useCallback13(() => {
@@ -26047,6 +26278,7 @@ export {
   childTaskBrief,
   claimsMissingToolData,
   classifyModelFunding,
+  clearPendingWords,
   clearRunError,
   codeChangeFile,
   codeChangesOf,
@@ -26177,6 +26409,7 @@ export {
   isUsageSurface,
   isUserConfiguredModelRef,
   isWasmTrap,
+  joinRestorableTurns,
   lastConsolidationIndex,
   lastServedModel,
   leftChangeUnreviewed,
@@ -26292,6 +26525,7 @@ export {
   serverChatIdOf,
   setLastResolvedModel,
   setMcpToolStatus,
+  setPendingWordsOwner,
   shippedToBaseBranch,
   shortenTarget,
   signedBrainFileUrl,

@@ -1,3 +1,44 @@
+// src/pageEngines/engineFailure.ts
+function reportPageEngineFailure(runtime, stage, error) {
+  console.warn(`BuilderForce page engine: ${runtime} ${stage} failed (${errorMessage(error)})`);
+}
+
+// src/pageEngines/types.ts
+var PageEngineError = class extends Error {
+  status;
+  code;
+  constructor(status, code, message2 = code) {
+    super(message2);
+    this.name = "PageEngineError";
+    this.status = status;
+    this.code = code;
+  }
+};
+var abortReason = (signal) => signal.reason ?? new DOMException("Aborted", "AbortError");
+var errorMessage = (e) => e instanceof Error ? e.message : String(e);
+var hasTools = (body) => Array.isArray(body.tools) && body.tools.length > 0;
+function memoizedProbe(runtime, run, config = {}) {
+  const ttlMs = config.ttlMs ?? PAGE_ENGINE_PROBE_TTL_MS;
+  const now = config.now ?? (() => Date.now());
+  let memo;
+  return {
+    probe(options = {}) {
+      const at = now();
+      if (!options.fresh && memo && at - memo.at < ttlMs) return memo.value;
+      const value = run().catch((e) => {
+        reportPageEngineFailure(runtime, "probe", e);
+        return null;
+      });
+      memo = { at, value };
+      return value;
+    },
+    invalidate() {
+      memo = void 0;
+    }
+  };
+}
+var PAGE_ENGINE_PROBE_TTL_MS = 3e4;
+
 // ../packages/local-inference/src/runtimes.ts
 var BROWSER_ENGINE_BASE_URL = "http://browser.local";
 var BFI_ENGINE_BASE_URL = "http://bfi.local";
@@ -121,12 +162,12 @@ var GATEWAY_ATTEMPT_TARGET = "gateway";
 function servedAttempt(result) {
   return result.localFirst?.find((attempt) => attempt.outcome === "served");
 }
-function servedIdentity(result) {
+function servedIdentity(result, requested) {
   const served = servedAttempt(result);
-  if (!served) return { onDevice: runsOnDevice(result.resolvedModel), name: result.resolvedModel, viaAttempt: false };
-  if (isLocalModelRef(served.target)) return { onDevice: runsOnDevice(served.target), name: served.target, viaAttempt: true };
+  if (!served) return { onDevice: runsOnDevice(result.resolvedModel), name: result.resolvedModel ?? requested };
+  if (isLocalModelRef(served.target)) return { onDevice: runsOnDevice(served.target), name: served.target };
   const name = result.resolvedModel ?? (served.target !== GATEWAY_ATTEMPT_TARGET ? served.target : void 0);
-  return { onDevice: false, name, viaAttempt: true };
+  return { onDevice: false, name };
 }
 function servedOnDevice(result) {
   return servedIdentity(result).onDevice;
@@ -484,47 +525,6 @@ async function runLocalFirst(plan, run, options = {}) {
   }
   throw new LocalFirstUnavailableError();
 }
-
-// src/pageEngines/engineFailure.ts
-function reportPageEngineFailure(runtime, stage, error) {
-  console.warn(`BuilderForce page engine: ${runtime} ${stage} failed (${errorMessage(error)})`);
-}
-
-// src/pageEngines/types.ts
-var PageEngineError = class extends Error {
-  status;
-  code;
-  constructor(status, code, message2 = code) {
-    super(message2);
-    this.name = "PageEngineError";
-    this.status = status;
-    this.code = code;
-  }
-};
-var abortReason = (signal) => signal.reason ?? new DOMException("Aborted", "AbortError");
-var errorMessage = (e) => e instanceof Error ? e.message : String(e);
-var hasTools = (body) => Array.isArray(body.tools) && body.tools.length > 0;
-function memoizedProbe(runtime, run, config = {}) {
-  const ttlMs = config.ttlMs ?? PAGE_ENGINE_PROBE_TTL_MS;
-  const now = config.now ?? (() => Date.now());
-  let memo;
-  return {
-    probe(options = {}) {
-      const at = now();
-      if (!options.fresh && memo && at - memo.at < ttlMs) return memo.value;
-      const value = run().catch((e) => {
-        reportPageEngineFailure(runtime, "probe", e);
-        return null;
-      });
-      memo = { at, value };
-      return value;
-    },
-    invalidate() {
-      memo = void 0;
-    }
-  };
-}
-var PAGE_ENGINE_PROBE_TTL_MS = 3e4;
 
 // src/pageEngines/remote/protocol.ts
 var PAGE_ENGINE_REQUEST_TYPES = ["pageEngine.probe", "pageEngine.chat", "pageEngine.abort"];
@@ -1351,6 +1351,12 @@ async function catalogProbe(runtime, baseUrl, support, isReady, contextOf = (row
 }
 
 export {
+  reportPageEngineFailure,
+  PageEngineError,
+  abortReason,
+  errorMessage,
+  hasTools,
+  memoizedProbe,
   BROWSER_ENGINE_BASE_URL,
   BFI_ENGINE_BASE_URL,
   WEBLLM_ENGINE_BASE_URL,
@@ -1379,12 +1385,6 @@ export {
   localModelFit,
   localFirstPlan,
   runLocalFirst,
-  reportPageEngineFailure,
-  PageEngineError,
-  abortReason,
-  errorMessage,
-  hasTools,
-  memoizedProbe,
   PAGE_ENGINE_REQUEST_TYPES,
   PAGE_ENGINE_REPLY_TYPES,
   isPageEngineReply,
@@ -1410,4 +1410,4 @@ export {
   createHfModelStore,
   catalogProbe
 };
-//# sourceMappingURL=chunk-DRVZCQND.mjs.map
+//# sourceMappingURL=chunk-FLHJS4U5.mjs.map
