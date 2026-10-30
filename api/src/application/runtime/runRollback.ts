@@ -252,9 +252,8 @@ export type TeardownOutcome =
  * (`runCommitMarker(taskId)`), not per execution, so it does NOT prove the branch is only
  * THIS run's output - a cancelled retry or child run can still reach an earlier run's or a
  * live parent's commits (ROADMAP Consolidated Gap Register: "A FAILED cloud run's branch
- * residue is never swept" - run-branch sweeps need per-execution commit attribution).
- * Every other outcome leaves the branch in place and records WHY, because residue is
- * recoverable and a wrong delete is not.
+ * residue is never swept" - run-branch sweeps need per-execution commit attribution). Every other
+ * outcome leaves the branch in place and records WHY: residue is recoverable, a wrong delete is not.
  */
 export async function teardownRunBranch(
   env: Env | undefined,

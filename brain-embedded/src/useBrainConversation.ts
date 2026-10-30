@@ -48,7 +48,7 @@ import { localRatingVerdict, ratedTurnContext, withRating } from './turnRating';
 import { submitLocalTurnVerdict } from './localSuccess/verifiedLocalLabel';
 import type { ChatErrorAction } from './chatError';
 import type { DraftToken } from './draftBinding';
-import { useLaunchCancel } from './launchCancel';
+import { useLaunchCancel, type DraftSend } from './launchCancel';
 import type { ChatMode, ChatRosterAgent } from './chatMode';
 import {
   startRun,
@@ -224,7 +224,8 @@ export interface UseBrainConversation {
   /**
    * Stop the in-flight run for the active chat: aborts the streaming LLM request
    * and unwinds the agent loop (no error surfaced). No-op when nothing is
-   * running. Pair with `sending` to drive a Stop button.
+   * running. Pair with `sending` to drive a Stop button. On a draft view `draft` is the draft on screen: its token,
+   * `null` for a new draft with nothing sent (a no-op), `undefined` for a host with no binding (its one creation).
    */
   stop(draft?: DraftToken | null): void;
   /**
@@ -330,7 +331,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   // server row `ensureChatId` is still creating.
   const sendingRef = useRef<ReadonlySet<number | null>>(new Set());
   const [sendingChats, setSendingChats] = useState<ReadonlySet<number | null>>(sendingRef.current);
-  const { cancelledLaunchRef, launchingRef, draftMadeRef, releaseDraftMade, stopConversation } = useLaunchCancel(sendingRef);
+  const { cancelledLaunchRef, launchingRef, beginDraftSend, endDraftSend, stopConversation } = useLaunchCancel(sendingRef);
   const markSending = useCallback((key: number | null, on: boolean) => {
     const next = new Set(sendingRef.current);
     if (on) next.add(key);
@@ -423,7 +424,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
    * (`prepareRun`) laid over it. Resolves when the run settles, or at once when
    * `prepareRun` refuses (its message becomes the conversation's error).
    */
-  const launch = useCallback(async (id: number, request: BrainRunRequest): Promise<void> => {
+  const launch = useCallback(async (id: number, request: BrainRunRequest, draftSend?: DraftSend): Promise<void> => {
     launchingRef.current.add(id);
     try {
       let extra: Partial<BrainRunRequest> | null = null;
@@ -437,19 +438,19 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       }
       // A Stop while this run got ready (its send persisting, the host preparing): it never
       // starts, and an answer row says so — or a reopened chat would start it after all.
-      if (cancelledLaunchRef.current.delete(id)) {
+      if (cancelledLaunchRef.current.delete(id) || draftSend?.cancelled) {
         const row = await stopBeforeStart(id, id, persistence);
         if (row) updateMessages(id, (prev) => [...prev, row]);
         return;
       }
-      releaseDraftMade(id); // the run starts: a Stop on the draft no longer cancels a launch - the door's token-scoped stop ends the run
+      if (draftSend) endDraftSend(draftSend); // the run starts: a Stop on the draft no longer cancels this send's launch - the door's token-scoped stop ends the run
       bindContinuation(id); // direction the run never reads becomes this chat's next turn
       await startRun(id, extra ? { ...request, ...extra } : request);
     } finally {
       launchingRef.current.delete(id);
       cancelledLaunchRef.current.delete(id);
     }
-  }, [prepareRun, persistence, updateMessages, bindContinuation, releaseDraftMade]);
+  }, [prepareRun, persistence, updateMessages, bindContinuation, endDraftSend]);
 
   const send = useCallback(
     async (text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null; attachments?: ChatInputAttachment[]; draft?: DraftToken }): Promise<boolean> => {
@@ -466,8 +467,9 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       markSending(origin, true);
       let id = chatId;
       const draft = opts?.draft;
+      // A Stop on THIS draft reaches this send, and only this send's entry (`launchCancel.ts`).
+      const draftSend = id == null && draft != null ? beginDraftSend(draft) : null;
       if (id == null) {
-        if (draft != null) draftMadeRef.current.set(draft, null); // a Stop on THIS draft reaches this send (`launchCancel.ts`)
         try {
           id = (await ensureChatId?.(opts?.draft)) ?? null;
         } catch {
@@ -476,13 +478,13 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         // A Stop while the draft's row was being created is this chat's Stop.
         const cancelled = cancelledLaunchRef.current.delete(origin);
         if (id == null) {
-          if (draft != null) draftMadeRef.current.delete(draft);
+          if (draftSend) endDraftSend(draftSend);
           markSending(origin, false);
           setLocalError('Could not start a chat.');
           return false;
         }
         if (cancelled) cancelledLaunchRef.current.add(id);
-        if (draft != null) draftMadeRef.current.set(draft, id);
+        if (draftSend) draftSend.chat = id;
         markSending(id, true);
         markSending(origin, false);
       }
@@ -500,9 +502,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       // it took from the composer itself; a turn GIVEN its files is restored by whoever gave
       // them (`restoreAttachments`), which may instead keep the turn for later.
       const given = opts?.attachments !== undefined;
-      const attachments = [...(opts?.attachments ?? pendingAttachments)];
-      composer.take(attachments);
-      setLocalError('');
+      let attachments: ChatInputAttachment[] = [];
 
       // Model-visible content: images as `image_url` vision parts (the gateway routes
       // these to a vision model), attachments the host can read inlined as text under
@@ -512,6 +512,9 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       // Persisted/display content stays text-only (the chat tables store a string): every
       // attachment shows as a link the user can click. The ONE composition (`composeUserTurn`).
       try {
+        attachments = [...(opts?.attachments ?? pendingAttachments)];
+        composer.take(attachments);
+        setLocalError('');
         const { displayContent, turn } = await composeUserTurn(trimmed, attachments, persistence);
         const metadata = withDirectedMetadata(directedRecipientList(addressedTo), turn.meta);
         const [userMsg] = await persistence.sendMessages(id, [{ role: 'user', content: displayContent, metadata }]);
@@ -556,7 +559,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         // Stop pressed while this send got ready drops the launch.
         const runs = attachments.length > 0 || startsRun(trimmed);
         // The row IS saved: a run that fails to start/finish (a host's run.failed) shows its error - never restores the text, which would send a second row.
-        if (runs) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id)).catch((err: unknown) => { if (stillOpen()) setLocalError(err instanceof Error ? err.message : 'Run failed'); });
+        if (runs) await launch(id, buildRequest(messages, messages, turn.content, userMsg?.id), draftSend ?? undefined).catch((err: unknown) => { if (stillOpen()) setLocalError(err instanceof Error ? err.message : 'Run failed'); });
         return true;
       } catch (e) {
         // Saving the turn failed (an expired token): NOT saved. Files go back to the SHOWING composer, like the text.
@@ -565,12 +568,11 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         return false;
       } finally {
         cancelledLaunchRef.current.delete(runChatId);
-        releaseDraftMade(runChatId);
-        if (draft != null) draftMadeRef.current.delete(draft);
+        if (draftSend) endDraftSend(draftSend);
         markSending(runChatId, false);
       }
     },
-    [persistence, chatId, markSending, composer.take, composer.restore, pendingAttachments, messages, ensureChatId, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages, releaseDraftMade],
+    [persistence, chatId, markSending, composer.take, composer.restore, pendingAttachments, messages, ensureChatId, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages, beginDraftSend, endDraftSend],
   );
 
   const replyToTrailingTurn = useCallback((id: number, last: BrainMessage) => {

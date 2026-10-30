@@ -34,6 +34,20 @@ const config: BrainConfig = {
 const wrapper = ({ children }: { children: React.ReactNode }) => <BrainProvider config={config}>{children}</BrainProvider>;
 const mockStream = vi.mocked(streamChatCompletion);
 
+/**
+ * A model stream that answers only when told to and, like the real one, REJECTS when its run is stopped. Every run's signal is
+ * kept: a run that was stopped has an aborted signal, so "this chat was not stopped" is asserted on the signal itself.
+ */
+function streamsUntilStopped(): AbortSignal[] {
+  const signals: AbortSignal[] = [];
+  mockStream.mockImplementation((opts) => new Promise<never>((_, reject) => {
+    if (!opts.signal) return;
+    signals.push(opts.signal);
+    opts.signal.addEventListener('abort', () => reject(new Error('aborted')));
+  }));
+  return signals;
+}
+
 /** The REAL stack a host mounts: creation -> conversation -> the turn door, the person staying on the DRAFT view. */
 function useDraftConversation(create: () => Promise<number | null>, prepareRun: (id: number) => Promise<Record<string, never>>) {
   const { ensureChatId, drafts } = useChatCreation({ chatId: null, create });
@@ -45,7 +59,7 @@ function useDraftConversation(create: () => Promise<number | null>, prepareRun: 
     send: (text, ctx) => conv.send(text, { draft: ctx?.draft }),
     stop: conv.stop,
   });
-  return { turns, drafts };
+  return { turns, drafts, conv };
 }
 
 describe('Stop on a draft whose first send has created its chat but is still preparing its run', () => {
@@ -84,7 +98,7 @@ describe('Stop on a draft whose first send has created its chat but is still pre
   });
 
   it("never reaches ANOTHER chat's live run: an earlier draft's chat is running, a second draft is mid-creation - Stop cancels only the second draft's launch", async () => {
-    mockStream.mockImplementation(() => new Promise(() => {})); // chat 91's run goes on until it is stopped
+    const signals = streamsUntilStopped(); // chat 91's run goes on until it is stopped
     const creation = deferred<number | null>();
     const create = vi.fn().mockResolvedValueOnce(91).mockImplementationOnce(() => creation.promise);
     const prepareRun = vi.fn(async () => ({}) as Record<string, never>);
@@ -102,11 +116,57 @@ describe('Stop on a draft whose first send has created its chat but is still pre
     act(() => result.current.turns.stop()); // Stop on the second draft
 
     expect(isRunning(91)).toBe(true); // the first draft's chat keeps running
+    expect(signals).toHaveLength(1);
+    expect(signals[0].aborted).toBe(false); // ...because it was never stopped (a stream that ignored its signal would hide it)
     await act(async () => { creation.resolve(92); await second; }); // the second draft's chat now exists: its launch is dropped
     expect(mockStream).toHaveBeenCalledTimes(1);
     expect(isRunning(92)).toBe(false);
     expect(isRunning(91)).toBe(true);
+    expect(signals[0].aborted).toBe(false);
     const rows = vi.mocked(persistence.sendMessages).mock.calls.filter(([, msgs]) => msgs.some((m) => m.role === 'user')).map(([id, msgs]) => [id, msgs[0].content]);
     expect(rows).toEqual([[91, 'A'], [92, 'B']]);
+  });
+
+  it("a Stop on a NEW draft with nothing in it is a no-op: another draft's creation still in flight launches", async () => {
+    const signals = streamsUntilStopped();
+    const creation = deferred<number | null>();
+    const create = vi.fn(() => creation.promise);
+    const prepareRun = vi.fn(async () => ({}) as Record<string, never>);
+    const { result } = renderHook(() => useDraftConversation(create, prepareRun), { wrapper });
+
+    act(() => { void result.current.turns.submit('D1'); }); // draft 1 sends: its chat is being created
+    await waitFor(() => expect(create).toHaveBeenCalled());
+    act(() => result.current.drafts.leave()); // the person opened chat 50, then pressed New chat: an empty draft is on screen
+    expect(result.current.drafts.current()).toBeNull();
+
+    act(() => result.current.turns.stop()); // Stop on the empty draft
+
+    await act(async () => { creation.resolve(91); });
+    await waitFor(() => expect(isRunning(91)).toBe(true)); // D1's launch was not dropped
+    expect(mockStream).toHaveBeenCalledTimes(1);
+    expect(signals[0].aborted).toBe(false);
+  });
+
+  it("each send under a draft token owns its entry: a Stop while the second send prepares drops THAT launch even though the first send's run has started", async () => {
+    const signals = streamsUntilStopped();
+    const prepare = deferred<Record<string, never>>();
+    const create = vi.fn(async () => 91);
+    const prepareRun = vi.fn().mockResolvedValueOnce({}).mockImplementationOnce(() => prepare.promise);
+    const { result } = renderHook(() => useDraftConversation(create, prepareRun), { wrapper });
+
+    let token!: number;
+    act(() => { token = result.current.drafts.begin(); });
+    act(() => { void result.current.conv.send('A', { draft: token }); }); // the first send: chat 91, its run starts
+    await waitFor(() => expect(isRunning(91)).toBe(true));
+    let second!: Promise<boolean>;
+    act(() => { second = result.current.conv.send('B', { draft: token }); }); // a second send under the same token, getting ready
+    await waitFor(() => expect(prepareRun).toHaveBeenCalledTimes(2));
+
+    act(() => result.current.conv.stop(token)); // the conversation's Stop on that draft
+    await act(async () => { prepare.resolve({}); await second; });
+
+    expect(mockStream).toHaveBeenCalledTimes(1); // the second send's launch was dropped
+    expect(signals[0].aborted).toBe(false); // the conversation's Stop never stops a started run - the door's token-scoped stop does
+    expect(isRunning(91)).toBe(true);
   });
 });

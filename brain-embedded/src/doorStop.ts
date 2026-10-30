@@ -36,7 +36,10 @@ export interface DoorStopPorts {
   running: boolean;
   runKey: RunKey | null;
   drafts?: DraftBinding;
-  /** How this host stops its run. Default `stopRun(runKey)`. Given the draft on screen, if any - the conversation's Stop (`useBrainConversation.stop`). */
+  /**
+   * How this host stops its run. Default `stopRun(runKey)`. Given the draft on screen - the conversation's Stop
+   * (`useBrainConversation.stop`): a token, `null` (a new draft with nothing sent), or `undefined` (no binding, or a chat).
+   */
   stop?: (draft?: DraftToken | null) => void;
 }
 
@@ -45,8 +48,9 @@ export function stopDoorTurns(ports: DoorStopPorts, marks: DoorStopMarks, clear:
   marks.stopEpoch.current += 1;
   if (ports.running) marks.markStopping(true);
   const { stop: halt, runKey: key, drafts: binding } = ports;
-  // The draft on screen (a draft view has no run key): the Stop reaches ITS send alone, never another draft's chat.
-  const token = key === null ? binding?.current() ?? null : null;
+  // The draft on screen (a draft view has no run key): the Stop reaches ITS sends alone, never another draft's chat. A new
+  // draft with nothing sent is `null` - nothing to stop; only a host with no binding names no token (`undefined`).
+  const token = key === null ? (binding ? binding.current() : undefined) : undefined;
   // A steer typed before the Stop is dropped with the run, and so is what a draft's creation delivered to this chat that
   // its run has not heard yet (the store's Stop drains the inbox, the device's journal and the chat's waiting turns -
   // every entry point to Stop does) - none of it may start the next one.

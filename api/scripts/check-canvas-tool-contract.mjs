@@ -66,10 +66,35 @@ const CANVAS_ACTION_FILES = fs.existsSync(CANVAS_ACTIONS_DIR)
     .map((f) => path.join(CANVAS_ACTIONS_DIR, f))
   : [];
 
-const CANVAS_FILES = [
+/**
+ * The modules a vocabulary entry point composes: the runtime (non-type) `@/lib/*` modules it imports.
+ *
+ * `canvasBuildTools.ts` assembles the build vocabulary from its parts (file actions, reads, history, the shell, the
+ * preview console), and the parts move as the vocabulary is split. Following the entry's own imports keeps this guard
+ * on the declarations wherever they live - a hand-kept list of the parts is how eight build tools went unseen when
+ * they were split out, and the guard reported them as dropped. Modules that declare nothing contribute nothing.
+ */
+function composedModules(entry) {
+  const source = ts.createSourceFile(entry, fs.readFileSync(entry, 'utf8'), ts.ScriptTarget.Latest, true);
+  const libDir = path.resolve(repoRoot, 'frontend', 'src', 'lib');
+  const modules = [];
+  for (const node of source.statements) {
+    if (!ts.isImportDeclaration(node) || node.importClause?.isTypeOnly) continue;
+    const specifier = node.moduleSpecifier.getText().slice(1, -1);
+    if (!specifier.startsWith('@/lib/')) continue;
+    const base = path.resolve(libDir, specifier.slice('@/lib/'.length));
+    const found = ['.ts', '.tsx'].map((ext) => base + ext).find((candidate) => fs.existsSync(candidate));
+    if (found) modules.push(found);
+  }
+  return modules;
+}
+const CANVAS_BUILD_ENTRY = path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasBuildTools.ts');
+
+const CANVAS_FILES = [...new Set([
   path.resolve(repoRoot, 'frontend', 'src', 'components', 'creation-canvas', 'CreationCanvas.tsx'),
   ...CANVAS_ACTION_FILES,
-  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasBuildTools.ts'),
+  CANVAS_BUILD_ENTRY,
+  ...(fs.existsSync(CANVAS_BUILD_ENTRY) ? composedModules(CANVAS_BUILD_ENTRY) : []),
   path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasFounderOpsTools.ts'),
   path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasEquityTools.ts'),
   // These three were declaring canvas tools that this guard never saw, which is the
@@ -98,13 +123,9 @@ const CANVAS_FILES = [
   // The Studio's live-preview review probe (`canvas_inspect_preview`). Listed the same
   // day it was written, for the reason the note above `canvasLegalRecordTools.ts` gives.
   path.resolve(repoRoot, 'frontend', 'src', 'lib', 'previewProbe', 'inspectPreviewAction.ts'),
-  // The build vocabulary's shell (`canvas_run_build_command`), its own module beside
-  // `canvasBuildTools.ts`. Listed the same day it was written, for the same reason.
-  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasBuildCommandAction.ts'),
-  // The preview console reader (`canvas_read_preview_console`), its own module for the
-  // same reason. Listed the same day it was written.
-  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasPreviewConsoleAction.ts'),
-];
+  // The build vocabulary's own parts (file actions, reads, history, the shell `canvas_run_build_command`, the preview
+  // console reader) are followed from `canvasBuildTools.ts`'s imports above, not listed.
+])];
 const CONTRACT_FILE = path.resolve(repoRoot, 'packages', 'creation-canvas-contract', 'src', 'canvasTools.ts');
 
 for (const file of [...CANVAS_FILES, CONTRACT_FILE]) {
