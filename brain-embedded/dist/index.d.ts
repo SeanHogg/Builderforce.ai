@@ -3951,18 +3951,6 @@ declare function useBrainContext(): BrainContextValue;
  */
 declare function useOptionalBrainContext(): BrainContextValue | null;
 
-/** The placeholder title `create()` stamps on an untitled chat. A chat still carrying
- *  it has never been named, so {@link deriveChatTitle}-based auto-titling may replace it
- *  (a user/seed-provided title never matches this and is left alone). */
-declare const DEFAULT_CHAT_TITLE = "New chat";
-/**
- * Derive a short, human chat title from the first user message — "what the chat is
- * about" — so a conversation stops showing as "New chat" the moment it starts. Pure and
- * LLM-free (no cost, instant, deterministic): first non-empty line, whitespace
- * collapsed, trimmed to ~60 chars on a word boundary. Returns '' when there's nothing
- * usable (so the caller leaves the placeholder in place).
- */
-declare function deriveChatTitle(text: string): string;
 interface UseBrainChatsOptions {
     /** Dropdown filter — id string, 'none', or null (all). Ignored when `pinnedProjectId` is set. */
     filterProjectId?: string | null;
@@ -4043,6 +4031,23 @@ interface UseBrainChats {
     touch(id: number): Promise<void>;
 }
 declare function useBrainChats(options?: UseBrainChatsOptions): UseBrainChats;
+
+/**
+ * The Brain's chat titles: the placeholder an untitled chat carries and the pure, LLM-free derivation of a real one from the first
+ * user message. Extracted from `useBrainChats` (the chat list + CRUD hook), which only needs to ask whether a chat is still untitled.
+ */
+/** The placeholder title `create()` stamps on an untitled chat. A chat still carrying
+ *  it has never been named, so {@link deriveChatTitle}-based auto-titling may replace it
+ *  (a user/seed-provided title never matches this and is left alone). */
+declare const DEFAULT_CHAT_TITLE = "New chat";
+/**
+ * Derive a short, human chat title from the first user message — "what the chat is
+ * about" — so a conversation stops showing as "New chat" the moment it starts. Pure and
+ * LLM-free (no cost, instant, deterministic): first non-empty line, whitespace
+ * collapsed, trimmed to ~60 chars on a word boundary. Returns '' when there's nothing
+ * usable (so the caller leaves the placeholder in place).
+ */
+declare function deriveChatTitle(text: string): string;
 
 /**
  * The choices a person makes BEFORE a conversation exists — its Chat|Work mode and its
@@ -4299,6 +4304,8 @@ interface DraftBinding {
      * gets ITS chat.
      */
     outcomeOf: (token: DraftToken) => DraftOutcome | undefined;
+    /** A chat was deleted: every token that resolved to it is forgotten (a late send naming one must create anew, never be handed the deleted chat). Returns them. */
+    forgetChat: (chat: number) => DraftToken[];
     /** Called whenever `current()` changes (a `useSyncExternalStore` subscription). */
     subscribe: (listener: () => void) => () => void;
     /** Called once per token, when its creation answers. */

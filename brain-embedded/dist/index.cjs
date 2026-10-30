@@ -25266,6 +25266,9 @@ function wakeChat2(runKey, turns, attachments) {
 }
 
 // src/chatDelivery.ts
+function waitedTurn(delivery) {
+  return delivery.turn ?? delivery.text;
+}
 function handToChat(chat, turns) {
   if (turns.length === 0) return;
   const driver = getRunDriver();
@@ -25369,15 +25372,23 @@ function subscribeWaiting(listener) {
 function waitingVersion() {
   return version;
 }
+var deletedListeners = /* @__PURE__ */ new Set();
+function onChatDeleted(listener) {
+  deletedListeners.add(listener);
+  return () => {
+    deletedListeners.delete(listener);
+  };
+}
 function forgetChatDelivery(chat) {
   forget(chat);
+  for (const listener of [...deletedListeners]) listener(chat);
 }
 onRunStopped(forget);
 onStoreReset(() => {
   for (const chat of [...waiting.keys()]) forget(chat);
 });
 
-// src/useBrainChats.ts
+// src/chatTitle.ts
 var DEFAULT_CHAT_TITLE = "New chat";
 function deriveChatTitle(text) {
   const firstLine = (text.split("\n").find((l) => l.trim()) ?? "").replace(/\s+/g, " ").trim();
@@ -25387,6 +25398,8 @@ function deriveChatTitle(text) {
   const lastSpace = cut.lastIndexOf(" ");
   return `${(lastSpace > 30 ? cut.slice(0, lastSpace) : cut).trim()}\u2026`;
 }
+
+// src/useBrainChats.ts
 function useBrainChats(options = {}) {
   const { persistence } = useBrainConfig();
   const { filterProjectId, pinnedProjectId, activeChatId: controlledActiveId, onActiveChatChange, placeholderTitles } = options;
@@ -27822,6 +27835,12 @@ function createDraftBinding() {
       if (entry?.outcome !== void 0 && entry.sends <= 0) tokens2.delete(left);
     },
     outcomeOf: (token) => tokens2.get(token)?.outcome,
+    forgetChat: (chat) => {
+      const gone = [...tokens2].filter(([, entry]) => entry.outcome === chat).map(([token]) => token);
+      for (const token of gone) tokens2.delete(token);
+      if (live2 !== null && gone.includes(live2)) setLive(null);
+      return gone;
+    },
     subscribe: (listener) => {
       watchers2.add(listener);
       return () => {
@@ -27992,10 +28011,10 @@ function useTurnLanding(ports) {
     mine.ended = true;
     flight.flying = flight.flying.filter((send) => send !== mine);
     let taken = !!flight.owned?.includes(mine);
-    if (!taken && flight.chat !== null && (thrown !== null || result === false) && ports.current.restore) {
+    if (!taken && flight.chat !== null && flight.flying.length === 0 && (thrown !== null || result === false) && ports.current.restore) {
       const back = takeBackWaiting(flight.chat);
       if (back.length > 0) {
-        giveBackAll([turn, ...back.map((waited) => waited.turn)]);
+        giveBackAll([turn, ...back.map((waited) => waitedTurn(waited))]);
         taken = true;
       }
     }
@@ -28015,7 +28034,7 @@ function useTurnLanding(ports) {
 var import_react17 = require("react");
 function useQueueWithWaiting(queued, runKey) {
   (0, import_react17.useSyncExternalStore)(subscribeWaiting, waitingVersion, waitingVersion);
-  const waiting2 = typeof runKey === "number" ? waitingFor(runKey).map((turn) => ({ id: turn.id, value: turn.turn ?? turn.text })) : [];
+  const waiting2 = typeof runKey === "number" ? waitingFor(runKey).map((turn) => ({ id: turn.id, value: waitedTurn(turn) })) : [];
   if (waiting2.length === 0) return queued;
   return {
     ...queued,
@@ -28096,6 +28115,7 @@ function useChatTurns({ running, steerable = running, runKey, drafts, send, stee
     handOff,
     landDraft
   });
+  const shown = useQueueWithWaiting(queued, runKey);
   const { submit: hold, clear, takeFront, pushBack } = queued;
   const holdForDraft = (0, import_react18.useCallback)((turn, followUp) => {
     const { runKey: key, drafts: binding, running: live2 } = ports.current;
@@ -28110,13 +28130,13 @@ function useChatTurns({ running, steerable = running, runKey, drafts, send, stee
   }, [hold, landDraft]);
   requeueRef.current = queued.requeue;
   takeFrontRef.current = takeFront;
-  const itemsRef = (0, import_react18.useRef)(queued.items);
-  itemsRef.current = queued.items;
+  const itemsRef = (0, import_react18.useRef)(shown.items);
+  itemsRef.current = shown.items;
   const carriedIds = (0, import_react18.useRef)(/* @__PURE__ */ new Set());
   const wasRunning = (0, import_react18.useRef)(false);
   const wasSteerable = (0, import_react18.useRef)(false);
   if (running !== wasRunning.current || steerable !== wasSteerable.current) {
-    if (running && !wasRunning.current || steerable && !wasSteerable.current) carriedIds.current = new Set(queued.items.map((item) => item.id));
+    if (running && !wasRunning.current || steerable && !wasSteerable.current) carriedIds.current = new Set(shown.items.map((item) => item.id));
     wasRunning.current = running;
     wasSteerable.current = steerable;
   }
@@ -28146,9 +28166,12 @@ function useChatTurns({ running, steerable = running, runKey, drafts, send, stee
     clear();
     stopEpoch.current += 1;
     if (ports.current.running) markStopping(true);
-    const { stop: halt, runKey: key } = ports.current;
+    const { stop: halt, runKey: key, drafts: binding } = ports.current;
     if (halt) halt();
     else if (key != null) stopRun(key);
+    const token = key === null ? binding?.current() : null;
+    const made = token != null ? binding?.outcomeOf(token) : void 0;
+    if (typeof made === "number") stopRun(made);
   }, [clear, markStopping]);
   const submit = (0, import_react18.useCallback)(async (turn) => {
     const { steer: route, textOf: text, isDirected: directed, attachmentsOf: attached2, runKey: key, running: live2 } = ports.current;
@@ -28188,7 +28211,7 @@ function useChatTurns({ running, steerable = running, runKey, drafts, send, stee
     if (holdForDraft(turn, false) || hold(turn)) return true;
     return await sendOnce(turn) !== false;
   }, [hold, holdForDraft, sendOnce]);
-  return { queued: useQueueWithWaiting(queued, runKey), submit, queueAfter, stop: stopTurns, steers };
+  return { queued: shown, submit, queueAfter, stop: stopTurns, steers };
 }
 
 // src/restoreTurn.ts
@@ -28267,6 +28290,12 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
     resolved.current.clear();
     drafts.leave();
   }, [chatId, drafts]);
+  (0, import_react21.useEffect)(() => onChatDeleted((chat) => {
+    for (const token of drafts.forgetChat(chat)) {
+      creations.current.delete(token);
+      resolved.current.delete(token);
+    }
+  }), [drafts]);
   const ensureChatId = (0, import_react21.useCallback)((draft) => {
     const answered2 = draft === void 0 ? void 0 : drafts.outcomeOf(draft);
     if (typeof answered2 === "number") return Promise.resolve(answered2);
