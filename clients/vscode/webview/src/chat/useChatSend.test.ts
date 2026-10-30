@@ -11,7 +11,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const steerRun = vi.hoisted(() => vi.fn());
-const door = vi.hoisted(() => ({ options: undefined as Record<string, unknown> | undefined }));
+const door = vi.hoisted(() => ({ options: undefined as Record<string, unknown> | undefined, queueAfter: undefined as ReturnType<typeof vi.fn> | undefined }));
 
 vi.mock('../vscodeBridge', () => ({ request: vi.fn(async () => ({ block: '' })) }));
 vi.mock('./chatChildren', () => ({ childTarget: () => null, steerRun }));
@@ -22,7 +22,9 @@ vi.mock('@seanhogg/builderforce-brain-embedded', async (importOriginal) => {
     useRunRefreshTick: () => 0,
     useChatTurns: (options: Record<string, unknown>) => {
       door.options = options;
-      return real.useChatTurns(options as never);
+      const turns = real.useChatTurns(options as never);
+      door.queueAfter = vi.fn(async () => true); // observed, not run: this render is never mounted
+      return { ...turns, queueAfter: door.queueAfter } as never;
     },
   };
 });
@@ -37,16 +39,16 @@ function mount(flags: { sending: boolean; runLive: boolean }, chatId: number | n
   const conv = { ...flags, pendingAttachments: [], removeAttachment: vi.fn(), restoreAttachments: vi.fn(), send: vi.fn(async () => true), stop: vi.fn() };
   const setInput = vi.fn();
   const chooseRecipient = vi.fn();
-  let sendSteers: boolean | undefined;
+  let api: ReturnType<typeof useChatSend> | undefined;
   const Probe = () => {
-    sendSteers = useChatSend({
+    api = useChatSend({
       conv: conv as never, chatId, input, setInput, recipient: null, chooseRecipient,
       liveChildren: [] as never, setTurnLimbic: vi.fn(), reloadChats: vi.fn(),
-    }).sendSteers;
+    });
     return null;
   };
   renderToStaticMarkup(createElement(Probe));
-  return { conv, setInput, chooseRecipient, sendSteers: sendSteers as boolean, steer: door.options!.steer as Steer, options: door.options! };
+  return { conv, setInput, chooseRecipient, api: api!, sendSteers: api!.sendSteers, steer: door.options!.steer as Steer, options: door.options! };
 }
 
 beforeEach(() => steerRun.mockClear());
@@ -93,8 +95,7 @@ describe('an addressed turn the door could not keep', () => {
 
     (options.restore as (m: Turn) => void)({ text: '@dev look', recipient: dev, attachments: [file] });
 
-    const put = setInput.mock.calls.map((c) => c[0]).find((v) => typeof v === 'function') as (cur: string) => string;
-    expect(put('')).toBe('@dev look');
+    expect(setInput).toHaveBeenCalledWith('@dev look');
     expect(conv.restoreAttachments).toHaveBeenCalledWith([file]);
     expect(chooseRecipient).toHaveBeenCalledWith(dev);
   });
@@ -107,14 +108,31 @@ describe('an addressed turn the door could not keep', () => {
     expect(chooseRecipient).toHaveBeenCalledWith(null);
   });
 
-  it('a NEWER draft keeps its text and its addressee when a turn is given back: only the files return', () => {
+  it('a NEWER draft keeps its addressee and its words when a turn is given back: the older words go in front of them, and the files return', () => {
     const { options, conv, setInput, chooseRecipient } = mount({ sending: false, runLive: false }, 5, 'typed since');
     const file = { key: 'k', name: 'a.txt', type: 'text/plain' };
 
     (options.restore as (m: Turn) => void)({ text: 'older', recipient: { kind: 'agent', ref: 'dev' }, attachments: [file] });
 
-    expect(setInput).not.toHaveBeenCalled();
+    expect(setInput).toHaveBeenCalledWith('older' + String.fromCharCode(10, 10) + 'typed since');
     expect(chooseRecipient).not.toHaveBeenCalled();
     expect(conv.restoreAttachments).toHaveBeenCalledWith([file]);
+  });
+});
+
+describe('"Queue for after" goes through THE door', () => {
+  it('holds the typed message with the queueAfter of the door - the one that knows about a draft creation - never the raw queue', () => {
+    const { api } = mount({ sending: true, runLive: true }, null, 'do this after');
+
+    api.queueAfter();
+
+    expect(door.queueAfter).toHaveBeenCalledTimes(1);
+    expect(door.queueAfter).toHaveBeenCalledWith({ text: 'do this after', recipient: null, attachments: [] });
+  });
+
+  it('a blank box offers nothing', () => {
+    const { api } = mount({ sending: true, runLive: true }, null, '   ');
+    api.queueAfter();
+    expect(door.queueAfter).not.toHaveBeenCalled();
   });
 });

@@ -36,7 +36,7 @@ import {
   useModelFallback,
 } from '@seanhogg/builderforce-brain-ui';
 import catalogs from 'virtual:rovr-timeline-catalogs';
-import { chatDoorLiveness, deriveChatTitle, restoreTurn, useBrainConversation, useChatCreation, useChatTurns, useComposerDraft } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, deriveChatTitle, joinRestorableTurns, restoreTurn, useBrainConversation, useChatCreation, useChatTurns, useComposerDraft } from '@seanhogg/builderforce-brain-embedded';
 import { PRICING_URL } from '../config';
 import { t, uiCatalogLocale, type MessageKey } from '../i18n/t';
 import type { LocalChat } from '../store/records';
@@ -151,6 +151,15 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   });
   const messages = conv.messages;
 
+  // A turn the door did not keep (the send failed before it was saved - an expired session, or the draft's creation failed)
+  // gives its words back to the box, as the web and the editor do: a message is never lost to a failed send. Several at once -
+  // the first send and everything held behind it when the creation failed - come back as ONE (`joinRestorableTurns`).
+  const composer = useComposerDraft(draft, setDraft);
+  const { restoreAttachments } = conv;
+  const giveBack = useCallback((text: string) => restoreTurn({ text, recipient: null }, {
+    draft: composer.draft, setInput: composer.setInput, restoreAttachments, chooseRecipient: () => undefined,
+  }), [composer, restoreAttachments]);
+
   // THE one door a turn leaves through: a turn typed while a run streams STEERS it (the
   // composer's Send says so) - it interrupts the step in flight and reaches the next model
   // call; what the run never drained is sent as the next turn. The explicit "Queue for
@@ -159,9 +168,10 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
     ...chatDoorLiveness(conv),
     runKey: chatId,
     drafts,
-    send: async (text) => {
+    // From a draft, `draft` is the token this send began with: the chat it creates is THAT draft's (`ensureChatId(draft)`).
+    send: async (text, ctx) => {
       try {
-        return await conv.send(text);
+        return await (ctx?.draft !== undefined ? conv.send(text, { draft: ctx.draft }) : conv.send(text));
       } catch (error) {
         services.reportError(error, 'chat.send');
         return false;
@@ -169,15 +179,11 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
         onChatsChanged();
       }
     },
+    isDirected: () => false,
+    restore: giveBack,
+    join: (held) => joinRestorableTurns(held.map((text) => ({ text, recipient: null }))).text,
     stop: conv.stop,
   });
-  // A turn the door did not keep (the send failed before it was saved - an expired session) gives its
-  // words back to the box, as the web and the editor do: a message is never lost to a failed send.
-  const composer = useComposerDraft(draft, setDraft);
-  const { restoreAttachments } = conv;
-  const giveBack = useCallback((text: string) => restoreTurn({ text, recipient: null }, {
-    draft: composer.draft, setInput: composer.fillIfEmpty, restoreAttachments, chooseRecipient: () => undefined,
-  }), [composer, restoreAttachments]);
   const offer = (text: string, door: (text: string) => Promise<boolean>) => {
     composer.setInput('');
     void door(text).then((kept) => { if (!kept) giveBack(text); });

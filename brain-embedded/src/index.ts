@@ -821,6 +821,7 @@ export { useComposerDraft } from './useComposerDraft';
 export { slotKeyedRows, type KeyedSlot } from './keyedRows';
 export { startsRun } from './userTurnRuns';
 export type { ChatTurns, ChatTurnsOptions } from './useChatTurns';
+export type { SendContext } from './turnLanding';
 export { useRunRefreshTick, RUN_REFRESH_MS } from './useRunRefreshTick';
 export { useQueuedTurns } from './useQueuedTurns';
 export type { QueuedItem, QueuedTurns, QueuedTurnsOptions } from './useQueuedTurns';

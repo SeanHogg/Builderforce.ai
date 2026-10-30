@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { chatDoorLiveness, joinRestorableTurns, restoreTurn, useChatTurns, useComposerDraft, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type DraftBinding, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, joinRestorableTurns, restoreTurn, useChatTurns, useComposerDraft, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type DirectedRecipient, type DraftBinding, type DraftToken, type SendContext, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { request } from '../vscodeBridge';
 import { stageSend } from './stageSend';
 import { childTarget, steerRun, type useChatChildren } from './chatChildren';
@@ -51,8 +51,8 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
   // already reflects the new system prompt. This is the webview's per-turn limbic seam.
   const pendingSendRef = useRef<{
     text: string; recipient: DirectedRecipient | null; attachments?: ChatInputAttachment[];
-    /** The chat it was typed in, and how the door hears whether the send was kept. */
-    startedIn: number | null; done: (kept: boolean) => void;
+    /** The chat it was typed in, how the door hears whether the send was kept, and the draft token it began with (a send from a draft). */
+    startedIn: number | null; done: (kept: boolean) => void; draft?: DraftToken;
   } | null>(null);
   const [sendNonce, setSendNonce] = useState(0);
   const chatIdRef = useRef(chatId);
@@ -67,8 +67,10 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
     // A Stop that landed between staging and this commit drops the send like one during the fetch.
     if (stopPreparingRef.current) {
       setPreparing(false);
-      giveBack({ text: queued.text, recipient: queued.recipient, attachments: queued.attachments });
-      queued.done(true);
+      // A send from a draft is put back by the door (its token fails: nothing was created) - one restore with whatever was
+      // held behind it; any other is put back here and reported kept.
+      if (queued.draft === undefined) giveBack({ text: queued.text, recipient: queued.recipient, attachments: queued.attachments });
+      queued.done(queued.draft === undefined);
       return;
     }
     // `addressedTo` routes the turn: a participant is talked to (no BRAIN run); null (default)
@@ -76,7 +78,7 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
     // when the turn queued), passed explicitly so the images survive the wait. Never into a chat the
     // person has since switched to: that is another chat's turn.
     const sending = chatIdRef.current === queued.startedIn
-      ? conv.send(queued.text, { addressedTo: queued.recipient, ...(queued.attachments ? { attachments: queued.attachments } : {}) })
+      ? conv.send(queued.text, { addressedTo: queued.recipient, ...(queued.attachments ? { attachments: queued.attachments } : {}), ...(queued.draft !== undefined ? { draft: queued.draft } : {}) })
       : Promise.resolve(false);
     // Cleared only now, in the same commit as `conv.sending`, so the turn door never sees
     // a gap between staging and sending (its queue would flush a held turn into it).
@@ -99,8 +101,8 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
   const [preparing, setPreparing] = useState(false);
   const stopPreparingRef = useRef(false);
   // A turn that could not go goes back to the box: text, files and addressee - THE restore every host shares.
-  const giveBack = useCallback((m: QueuedTurn) => restoreTurn(m, { draft: composer.draft, setInput: composer.fillIfEmpty, restoreAttachments, chooseRecipient }), [composer, restoreAttachments, chooseRecipient]);
-  const dispatchSend = useCallback(async (m: QueuedTurn): Promise<boolean> => {
+  const giveBack = useCallback((m: QueuedTurn) => restoreTurn(m, { draft: composer.draft, setInput: composer.setInput, restoreAttachments, chooseRecipient }), [composer, restoreAttachments, chooseRecipient]);
+  const dispatchSend = useCallback(async (m: QueuedTurn, ctx?: SendContext): Promise<boolean> => {
     const { text, recipient: to, attachments } = m;
     stopPreparingRef.current = false;
     setPreparing(true);
@@ -110,15 +112,18 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
       setPreparing(false);
       if (staged.why === 'stopped') {
         // Stopped while it got ready: nothing was sent - the words and the files go back to the box, and the
-        // Stop has already dropped the queue, so this is the turn's one restore.
+        // Stop has already dropped the queue, so this is the turn's one restore. (From a draft the door does it: below.)
+        if (ctx?.draft !== undefined) return false;
         giveBack(m);
         return true;
       }
-      return false; // another chat is showing: not sent - the caller returns it to the box that is showing
+      // Another chat is showing: not sent. A send from a draft is the door's to put back, with what was held behind it, in ONE
+      // restore; any other, the caller returns to the box that is showing.
+      return false;
     }
     setTurnLimbic(staged.block);
     return new Promise<boolean>((done) => {
-      pendingSendRef.current = { text, recipient: to, attachments, startedIn, done };
+      pendingSendRef.current = { text, recipient: to, attachments, startedIn, done, draft: ctx?.draft };
       setSendNonce((n) => n + 1);
     });
   }, [setTurnLimbic, giveBack]);
@@ -177,8 +182,7 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
       return true;
     },
   });
-  const { submit: submitTurn } = turns;
-  const { submit: holdTurn } = turns.queued;
+  const { submit: submitTurn, queueAfter: queueTurnAfter } = turns;
 
   // A run moves what the chat row reports (its spend & savings, ticket counts), and the
   // host drives the run, so the in-page loop's `onActivity` never sees it: re-read the row
@@ -203,12 +207,13 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
     return attachments;
   }, [pendingAttachments, removeAttachment]);
 
-  const sendOrQueue = useCallback((text: string, to: DirectedRecipient | null, attachments?: ChatInputAttachment[]) => {
+  const offer = useCallback((door: (turn: QueuedTurn) => Promise<boolean>, text: string, to: DirectedRecipient | null, attachments?: ChatInputAttachment[]) => {
     const turn: QueuedTurn = { text, recipient: to, attachments: attachments ?? takeAttachments() };
     // A send that was not kept (the session expired, another chat is showing) goes back to the box that is
     // showing - the one rule on every host (`restoreTurn`): never dropped, never sent into another chat.
-    void submitTurn(turn).then((kept) => { if (!kept) giveBack(turn); });
-  }, [submitTurn, takeAttachments, giveBack]);
+    void door(turn).then((kept) => { if (!kept) giveBack(turn); });
+  }, [takeAttachments, giveBack]);
+  const sendOrQueue = useCallback((text: string, to: DirectedRecipient | null, attachments?: ChatInputAttachment[]) => offer(submitTurn, text, to, attachments), [offer, submitTurn]);
 
   const submit = useCallback(() => {
     const text = input.trim();
@@ -217,17 +222,15 @@ export function useChatSend({ conv, chatId, drafts, input, setInput, recipient, 
     sendOrQueue(text, recipient);
   }, [input, recipient, sendOrQueue, composer]);
 
-  // The explicit "Queue for after": hold the typed message until the run finishes
-  // (sent on its falling edge); with no run going it is simply sent.
+  // The explicit "Queue for after": hold the typed message until the run finishes (sent on its falling edge); with no run
+  // going it is simply sent. Through THE door (`turns.queueAfter`), never the raw queue: from a draft it is held for the
+  // creation of the chat it is typed in, like every other turn.
   const queueAfter = useCallback(() => {
     const text = input.trim();
     if (!text) return;
     composer.setInput('');
-    // Take the snapshot ONCE — if `holdTurn` refuses (no run to wait for), the same
-    // attachments go to the immediate send; taking them again would see an empty composer.
-    const attachments = takeAttachments();
-    if (!holdTurn({ text, recipient, attachments })) sendOrQueue(text, recipient, attachments);
-  }, [holdTurn, input, recipient, sendOrQueue, composer, takeAttachments]);
+    offer(queueTurnAfter, text, recipient);
+  }, [queueTurnAfter, input, recipient, offer, composer]);
 
   // Answering an ask_user card posts the chosen option(s) as the user's next turn.
   const answerQuestion = useCallback((answer: string) => {

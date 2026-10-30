@@ -47,6 +47,7 @@ import type { BrainRunActivity } from './runActivity';
 import { localRatingVerdict, ratedTurnContext, withRating } from './turnRating';
 import { submitLocalTurnVerdict } from './localSuccess/verifiedLocalLabel';
 import type { ChatErrorAction } from './chatError';
+import type { DraftToken } from './draftBinding';
 import type { ChatMode, ChatRosterAgent } from './chatMode';
 import {
   startRun,
@@ -114,8 +115,11 @@ export interface UseBrainConversationOptions {
    * Omit to run every requested tool immediately.
    */
   needsConfirm?: (req: { name: string; args: unknown }) => boolean;
-  /** Create-on-demand when sending without an active chat; returns the new chat id. */
-  ensureChatId?: () => Promise<number | null>;
+  /**
+   * Create-on-demand when sending without an active chat; returns the new chat id. `draft` is the token the send began with
+   * (`send(text, { draft })`): the creation is THAT draft's, never whichever draft is on screen when this runs.
+   */
+  ensureChatId?: (draft?: DraftToken) => Promise<number | null>;
   /** Notify the host (chats hook) that this chat got new activity. */
   onActivity?: (chatId: number) => void;
   /**
@@ -206,9 +210,10 @@ export interface UseBrainConversation {
    * so a composer can restore the text the user typed instead of dropping it.
    * `attachments` is the turn's OWN files (a held turn, a steer's leftovers): omitted, the turn
    * takes the composer's; given, exactly those leave the composer as the send starts and a
-   * failure leaves them to the caller (`restoreAttachments`).
+   * failure leaves them to the caller (`restoreAttachments`). `draft` is the token the turn door minted for a send from a
+   * draft (`useChatTurns`' `send(turn, { draft })`): the chat this send creates belongs to it (`ensureChatId(draft)`).
    */
-  send(text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null; attachments?: ChatInputAttachment[] }): Promise<boolean>;
+  send(text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null; attachments?: ChatInputAttachment[]; draft?: DraftToken }): Promise<boolean>;
   /**
    * Answer the active chat's REFUSED turn again — the trailing user message nothing
    * replied to (only step rows after it), e.g. a turn a `no_local_model` verdict stopped.
@@ -451,7 +456,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   }, [prepareRun, persistence, updateMessages, bindContinuation]);
 
   const send = useCallback(
-    async (text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null; attachments?: ChatInputAttachment[] }): Promise<boolean> => {
+    async (text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null; attachments?: ChatInputAttachment[]; draft?: DraftToken }): Promise<boolean> => {
       const trimmed = text.trim();
       // Busy only for THIS chat: a run in flight elsewhere never blocks this one.
       if (!trimmed || sendingRef.current.has(chatId) || isLive(chatId)) return false;
@@ -466,7 +471,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       let id = chatId;
       if (id == null) {
         try {
-          id = (await ensureChatId?.()) ?? null;
+          id = (await ensureChatId?.(opts?.draft)) ?? null;
         } catch {
           id = null;
         }

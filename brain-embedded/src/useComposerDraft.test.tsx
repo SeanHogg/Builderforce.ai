@@ -14,23 +14,14 @@ describe('useComposerDraft - the composer text as the send path sees it', () => 
     expect(setInput).toHaveBeenCalledWith('');
   });
 
-  it('fillIfEmpty puts text back only into an empty box, and says so through the updater', () => {
-    const setInput = vi.fn();
-    const { result } = renderHook(() => useComposerDraft('', setInput));
-
-    result.current.fillIfEmpty('given back');
-
-    expect(result.current.draft()).toBe('given back');
-    const updater = setInput.mock.calls[0]![0] as (cur: string) => string;
-    expect(updater('')).toBe('given back');
-    expect(updater('something newer')).toBe('something newer');
-  });
-
-  it('a newer draft is never overwritten by fillIfEmpty', () => {
+  it('a turn given back in front of a newer draft is written whole, and draft() reads it at once', () => {
     const setInput = vi.fn();
     const { result } = renderHook(() => useComposerDraft('newer', setInput));
-    result.current.fillIfEmpty('older');
-    expect(result.current.draft()).toBe('newer');
+
+    result.current.setInput('older\n\nnewer');
+
+    expect(result.current.draft()).toBe('older\n\nnewer');
+    expect(setInput).toHaveBeenCalledWith('older\n\nnewer');
   });
 
   it('follows the render\'s own value (the person typing)', () => {

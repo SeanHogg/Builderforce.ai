@@ -7,7 +7,8 @@
  * (`src/brainRunHost.ts`), and this module is the panel's end of that contract:
  *
  *   - `startRun` / `stopRun` / `resolveRunConfirm` / `clearRunError` — the four verbs
- *     the shared store routes through an installed driver — become `run.*` posts.
+ *     the shared store routes through an installed driver — and the words said to a chat's
+ *     run (`steer`) become `run.*` posts.
  *   - Every `run.sync` the host relays is applied to the LOCAL store with
  *     `applyRemoteRun`, so `useBrainConversation`, the timeline and the cross-chat
  *     indicator read exactly what they always read. A reopened panel is brought up to
@@ -30,7 +31,7 @@ import {
 import { applyListDelta } from '../../src/listDelta';
 import type { RunSyncMessage } from '../../src/brainRunHostProtocol';
 import { onHostMessage, post } from './vscodeBridge';
-import { setChatChildren, type ChildView } from './chat/chatChildren';
+import { setChatChildren, steerRun, type ChildView } from './chat/chatChildren';
 
 /** What the panel knows that the host does not: its own switches and picker state. */
 export interface HostRunContext {
@@ -162,6 +163,9 @@ export function installHostRunDriver(): () => void {
     stop: (chatId) => post('run.stop', { chatId }),
     confirm: (chatId, ok) => post('run.confirm', { chatId, ok }),
     clearError: (chatId) => post('run.clearError', { chatId }),
+    // Words for the chat's run, keyed by the chat - not by what this panel shows: the host hears them (live run, a run being
+    // set up) or makes them the chat's next turn (idle) - `runSteer.steer`.
+    steer: (chatId, text, attachments) => steerRun(chatId, text, attachments),
   });
 
   return () => {

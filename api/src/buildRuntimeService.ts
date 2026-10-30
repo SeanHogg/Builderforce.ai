@@ -47,7 +47,7 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
   // instance it belongs to; it is only ever invoked after construction completes.
   let runtimeService: RuntimeService;
   runtimeService = new RuntimeService({
-    executions: buildExecutionRepository(db),
+    executions: buildExecutionRepository(db, env),
     tasks: new TaskRepository(db),
     agents: new AgentRepository(db),
     audit: new AuditRepository(db, env),

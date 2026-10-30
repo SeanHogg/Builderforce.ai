@@ -60,6 +60,21 @@ describe('check:execution-landing scanner', () => {
     ['a write after a regex literal that ends in // on the same line', "const re = /a\\/\\//; await db.update(executions).set({ status: next }).where(w);"],
     ['a write after a division on the same line', 'const half = total / 2; const r = a / b; await db.update(executions).set({ status: next }).where(w);'],
     ['a write after a regex literal in a call', "const ok = /^https?:\\/\\//.test(url); await db.update(executions).set({ status: next }).where(w);"],
+    // Round F: builders held in a variable, bracket access, bracket-access aliases, and opaque interpolated SET targets.
+    ['a builder held in a variable', "const q = db.update(executions);\nawait q.set({ status: 'failed' }).where(w);"],
+    ['a builder held in a variable, filtered before the set', 'const q = this.db.update(executions).where(w);\nawait q.set({ status });'],
+    ['a builder held in a variable whose set is opaque', 'let q = db.update(executions);\nawait q.set(patch);'],
+    ['a bracket-access alias of the table', "const t = schema['executions'];\nawait db.update(t).set({ status: 'failed' }).where(w);"],
+    ['bracket-access update', "await db['update'](executions).set({ status: 'failed' }).where(w);"],
+    ['bracket-access set', "await db.update(executions)['set']({ status: 'failed' }).where(w);"],
+    ['bracket-access update held in a variable', "const q = db['update'](executions);\nawait q.set({ status: 'failed' });"],
+    ['raw SQL whose assignment target is sql.identifier of a variable', 'await db.execute(sql`UPDATE executions SET ${sql.identifier(col)} = ${s} WHERE id = ${id}`);'],
+    ['raw SQL whose assignment target is sql.raw of a variable', 'await db.execute(sql`UPDATE executions SET ${sql.raw(col)} = ${s} WHERE id = ${id}`);'],
+    ['raw SQL whose whole SET list is interpolated', 'await db.execute(sql`UPDATE executions SET ${setClause} WHERE id = ${id}`);'],
+    ['raw SQL with an opaque target after a plain one', 'await db.execute(sql`UPDATE executions SET result = ${r}, ${sql.identifier(col)} = ${s} WHERE id = ${id}`);'],
+    ['raw SQL with an opaque target inside a tuple', 'await db.execute(sql`UPDATE executions SET (result, ${sql.identifier(col)}) = (${r}, ${s}) WHERE id = ${id}`);'],
+    ['a raw upsert with an opaque interpolated target', 'await db.execute(sql`INSERT INTO executions (id) VALUES (${id}) ON CONFLICT (id) DO UPDATE SET ${sql.identifier(col)} = ${v}`);'],
+    ['raw SQL whose target is sql.identifier of the status column', "await db.execute(sql`UPDATE executions SET ${sql.identifier('status')} = ${s} WHERE id = ${id}`);"],
   ])('flags %s', (_name, source) => {
     expect(flagged(source)).toBeGreaterThan(0);
   });
@@ -86,6 +101,17 @@ describe('check:execution-landing scanner', () => {
     ['a table whose name merely starts with executions', "await db.update(executionsArchive).set({ status: 'x' }).where(w);"],
     ['raw upsert that leaves status alone', 'await db.execute(sql`INSERT INTO executions (id, result) VALUES (${id}, ${r}) ON CONFLICT (id) DO UPDATE SET result = EXCLUDED.result`);'],
     ['a regex literal with // inside it (not a comment) and no write', "const re = /a\\/\\//; const x = 1; // trailing comment\nawait db.update(tasks).set({ status: 'done' }).where(w);"],
+    // Round F
+    ['an object literal { executions: X } is not an alias (only a destructure is)', "const o = { executions: runs };\nawait db.update(runs).set({ status: 'x' }).where(w);"],
+    ['an object-literal property in a call is not an alias', "register({ executions: runs });\nawait db.update(runs).set({ status: 'x' }).where(w);"],
+    ['a builder held in a variable for another table', "const q = db.update(tasks);\nawait q.set({ status: 'x' }).where(w);"],
+    ['a builder held in a variable whose set leaves status alone', 'const q = db.update(executions);\nawait q.set({ updatedAt: now }).where(w);'],
+    ['a bracket-access alias of another table', "const t = schema['tasks'];\nawait db.update(t).set({ status: 'done' }).where(w);"],
+    ['raw SQL whose assignment target is a provably other column (sql.identifier of a literal)', "await db.execute(sql`UPDATE executions SET ${sql.identifier('result')} = ${v} WHERE id = ${id}`);"],
+    ['raw SQL whose assignment target is a provably other column (sql.raw of a literal)', "await db.execute(sql`UPDATE executions SET ${sql.raw('result')} = ${v} WHERE id = ${id}`);"],
+    ['raw SQL whose assignment target is a provably other column (a table column)', 'await db.execute(sql`UPDATE executions SET ${executions.updatedAt} = now(), result = ${v} WHERE id = ${id}`);'],
+    ['raw SQL with interpolations only in VALUES', 'await db.execute(sql`UPDATE executions SET result = ${r}, updated_at = ${now} WHERE id = ${id}`);'],
+    ['a raw upsert with only provable targets', "await db.execute(sql`INSERT INTO executions (id) VALUES (${id}) ON CONFLICT (id) DO UPDATE SET ${sql.identifier('result')} = ${v}`);"],
   ])('does not flag %s', (_name, source) => {
     expect(flagged(source)).toBe(0);
   });
@@ -95,6 +121,18 @@ describe('check:execution-landing scanner', () => {
   it('does not see a table passed in as a function parameter, but does see an alias of executions', () => {
     expect(flagged("async function land(table: Table) { await db.update(table).set({ status: 'failed' }).where(w); }")).toBe(0);
     expect(flagged("const table = executions;\nasync function land() { await db.update(table).set({ status: 'failed' }).where(w); }")).toBeGreaterThan(0);
+  });
+
+  // KNOWN LIMITS (documented in the scan's header): a lexical pass cannot see these. Pinned here so a change that closes one is a
+  // deliberate edit of this test and of the header, not an accident.
+  it.each([
+    ['raw SQL assembled by string concatenation', "await db.execute(sql.raw('UPDATE exec' + 'utions SET sta' + 'tus = 1'));"],
+    ['a ; inside a SQL string literal before the status assignment', "await db.execute(sql`UPDATE executions SET note = 'a;b', status = 'x' WHERE id = ${id}`);"],
+    ['a getter key', "await db.update(executions).set({ get status() { return 'x'; } }).where(w);"],
+    ['a builder held in a field, not a variable', "this.q = db.update(executions);\nawait this.q.set({ status: 'failed' });"],
+    ['a builder passed through a function', "run(db.update(executions));\nfunction run(q) { return q.set({ status: 'failed' }); }"],
+  ])('documented limit, not flagged: %s', (_name, source) => {
+    expect(flagged(source)).toBe(0);
   });
 
   it('reports each offending statement with a snippet the per-site allow-list can match', () => {

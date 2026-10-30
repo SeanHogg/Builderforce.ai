@@ -5,6 +5,8 @@ import { useChatCreation } from './useChatCreation';
 import { createDraftBinding } from './draftBinding';
 import { drainRunSteering, hasRunInterrupt, resetRunSteering } from './runSteering';
 import { installRunDriver, type BrainRunDriver } from './runDriver';
+import { mirrorRun } from './test/mirrorRun';
+import { resetBrainRunStore } from './runStore/runControl';
 
 const stopRun = vi.hoisted(() => vi.fn());
 vi.mock('./brainRunStore', () => ({ stopRun }));
@@ -757,35 +759,45 @@ describe('useChatTurns - round 10: a held-before-live turn belongs to ITS chat; 
 });
 
 describe('useChatTurns - a draft chat\'s first id is not a chat switch; everything left behind comes back together', () => {
-  beforeEach(() => { stopRun.mockClear(); resetRunSteering(); });
+  beforeEach(() => { stopRun.mockClear(); resetRunSteering(); resetBrainRunStore(); });
 
-  it('turns held while the first turn creates the chat are STEERED into that chat\'s run, in order - not handed off', async () => {
-    const drafts = createDraftBinding(), token = drafts.begin(); // HARNESS (round E): the draft's first send (A) is minted a token; its creation answers below
-    const props = (runKey: number | null, steerable: boolean): ChatTurnsOptions<string> => ({ running: true, steerable, runKey, drafts, send: vi.fn() });
+  it('turns held while the first turn creates the chat are delivered through THAT chat run, in order - not handed off - the moment it goes live', async () => {
+    const drafts = createDraftBinding();
+    let finishFirst!: (kept: boolean) => void;
+    const send = vi.fn(() => new Promise<boolean>((resolve) => { finishFirst = resolve; }));
+    const props = (runKey: number | null, running: boolean): ChatTurnsOptions<string> => ({ running, steerable: false, runKey, drafts, send });
     const { result, rerender } = renderHook((p: ChatTurnsOptions<string>) => useChatTurns<string>(p), { initialProps: props(null, false) });
-    await act(async () => { await result.current.submit('B'); }); // the draft's first turn (A) is creating the chat
+    await act(async () => { void result.current.submit('A'); }); // the draft's first send begins (and is minted its token)
+    rerender(props(null, true)); // ...and creates the chat
+    await act(async () => { await result.current.submit('B'); });
     await act(async () => { await result.current.submit('C'); });
     expect(result.current.queued.count).toBe(2);
 
-    rerender(props(77, false)); act(() => drafts.resolve(token, 77)); // the chat has an id now
-    expect(result.current.queued.count).toBe(2); // kept: it is the SAME conversation
-    expect(drainRunSteering(77)).toEqual([]);
+    rerender(props(77, true)); act(() => drafts.resolve(drafts.current()!, 77)); // the chat has an id now
+    expect(result.current.queued.count).toBe(0); // they left the queue for the chat's run...
+    expect(drainRunSteering(77)).toEqual([]); // ...which is not live yet
 
-    rerender(props(77, true)); // its run goes live
+    act(() => mirrorRun(77, true)); // its run goes live
     expect(drainRunSteering(77).map((m) => m.text)).toEqual(['B', 'C']);
-    expect(result.current.queued.count).toBe(0);
+    await act(async () => { finishFirst(true); });
   });
 
-  it('a turn queued for AFTER the run (queueAfter) in a draft stays queued for the next turn of the new chat', async () => {
-    const drafts = createDraftBinding(), token = drafts.begin(); // HARNESS (round E): see above
-    const props = (runKey: number | null, steerable: boolean): ChatTurnsOptions<string> => ({ running: true, steerable, runKey, drafts, send: vi.fn() });
+  it('a turn queued for AFTER the run (queueAfter) in a draft becomes the next turn of the new chat when its run ends', async () => {
+    const drafts = createDraftBinding();
+    let finishFirst!: (kept: boolean) => void;
+    const send = vi.fn(() => new Promise<boolean>((resolve) => { finishFirst = resolve; }));
+    const props = (runKey: number | null, running: boolean): ChatTurnsOptions<string> => ({ running, steerable: false, runKey, drafts, send });
     const { result, rerender } = renderHook((p: ChatTurnsOptions<string>) => useChatTurns<string>(p), { initialProps: props(null, false) });
+    await act(async () => { void result.current.submit('A'); });
+    rerender(props(null, true));
     await act(async () => { await result.current.queueAfter('for later'); });
 
-    rerender(props(78, false)); act(() => drafts.resolve(token, 78)); rerender(props(78, true));
+    rerender(props(78, true)); act(() => drafts.resolve(drafts.current()!, 78)); act(() => mirrorRun(78, true));
+    expect(drainRunSteering(78)).toEqual([]); // not direction for this run
 
-    expect(drainRunSteering(78)).toEqual([]);
-    expect(result.current.queued.items.map((i) => i.value)).toEqual(['for later']);
+    act(() => mirrorRun(78, false)); // the run ended
+    expect(drainRunSteering(78).map((m) => m.text)).toEqual(['for later']);
+    await act(async () => { finishFirst(true); });
   });
 
   type Turn = { text: string; to: string | null };

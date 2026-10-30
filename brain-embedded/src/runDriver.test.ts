@@ -46,7 +46,7 @@ afterEach(() => {
 
 describe('the run-driver seam', () => {
   it('routes start / stop / confirm / clearError to the installed driver instead of the local loop', async () => {
-    const driver = { start: vi.fn(async () => {}), stop: vi.fn(), confirm: vi.fn(), clearError: vi.fn() };
+    const driver = { start: vi.fn(async () => {}), stop: vi.fn(), confirm: vi.fn(), clearError: vi.fn(), steer: vi.fn() };
     installRunDriver(driver);
     const r = req();
     await startRun(7, r);

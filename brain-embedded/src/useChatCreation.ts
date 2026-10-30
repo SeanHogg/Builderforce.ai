@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createDraftBinding, type DraftBinding } from './draftBinding';
+import { createDraftBinding, type DraftBinding, type DraftToken } from './draftBinding';
 
 /**
  * "The first message creates the chat" — the ONE implementation. Extracted from the
@@ -12,8 +12,11 @@ import { createDraftBinding, type DraftBinding } from './draftBinding';
  * What it guarantees:
  *  - **One create per draft.** A second send that arrives while the first message's
  *    chat is still being created JOINS that creation instead of minting a second chat
- *    (and splitting the conversation across two). The in-flight promise is dropped on
- *    failure (so a retry creates) and once the host is on a real chat.
+ *    (and splitting the conversation across two). The creation is the DRAFT TOKEN's: a send
+ *    names its token (`ensureChatId(token)`) and gets the creation of THAT token - a late send
+ *    of an abandoned draft creates its own chat, and never takes the one a newer draft made.
+ *    The in-flight promise is dropped on failure (so a retry creates) and once the host is on
+ *    a real chat.
  *  - **An open chat is never re-created.** With `chatId` set, `ensureChatId` resolves
  *    to it.
  *  - **Stable identities.** Both callbacks keep their identity across renders and read
@@ -56,10 +59,11 @@ export interface ChatCreationOptions {
 
 export interface ChatCreation {
   /**
-   * The open chat's id, or the one the first send creates. Concurrent calls on a draft
-   * share ONE creation. Rejects when `create` throws; resolves null when it gave up.
+   * The open chat's id, or the one the first send creates. Concurrent calls with the same `draft` token share ONE creation;
+   * a call under another draft's token never joins it (and is never joined by it). Without a token (a caller outside the
+   * turn door) it is the draft on screen's. Rejects when `create` throws; resolves null when it gave up.
    */
-  ensureChatId: () => Promise<number | null>;
+  ensureChatId: (draft?: DraftToken) => Promise<number | null>;
   /** Fire the `autoTitle` port for a chat's first user turn; never rejects. */
   onFirstUserTurn: (chatId: number, firstUserText: string) => Promise<void>;
   /**
@@ -86,39 +90,48 @@ export function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRe
 
   /** The draft's token <-> creation binding. One per mount. */
   const [drafts] = useState(createDraftBinding);
-  /** The first message's creation while it is in flight (or resolved but not yet selected). */
-  const creating = useRef<Promise<number | null> | null>(null);
+  /** Each draft token's creation while it is in flight (or resolved but not yet selected). */
+  const creations = useRef(new Map<DraftToken, Promise<number | null>>());
+  /** Tokens whose creation resolved: their entry goes once the host is on a real chat. */
+  const resolved = useRef(new Set<DraftToken>());
   useEffect(() => {
     if (chatId == null) return;
-    creating.current = null;
+    for (const token of resolved.current) creations.current.delete(token);
+    resolved.current.clear();
     drafts.leave(); // the draft is gone; a creation still in flight answers its own token, nobody else's
   }, [chatId, drafts]);
 
-  const ensureChatId = useCallback((): Promise<number | null> => {
+  const ensureChatId = useCallback((draft?: DraftToken): Promise<number | null> => {
     const open = chatIdRef.current;
     if (open != null) return Promise.resolve(open);
-    if (!creating.current) {
-      // This creation belongs to the draft's token, and only it settles that token. When a later creation has replaced
-      // it (the draft was left and another begun) its late answer must not clear that one.
-      const token = drafts.adopt();
-      drafts.startCreation(token);
-      const mine: Promise<number | null> = (async () => createRef.current())().then(
-        (id) => {
-          if (id == null) {
-            if (creating.current === mine) creating.current = null;
-            drafts.fail(token);
-          } else drafts.resolve(token, id);
-          return id;
-        },
-        (error: unknown) => {
-          if (creating.current === mine) creating.current = null;
+    // This creation belongs to the token the send began with, and only it settles that token: a late send of an abandoned
+    // draft creates for ITS token, and its answer never clears (or becomes) the chat a newer draft made.
+    const token = draft ?? drafts.adopt();
+    const existing = creations.current.get(token);
+    if (existing) return existing;
+    drafts.startCreation(token);
+    const mine: Promise<number | null> = (async () => createRef.current())().then(
+      (id) => {
+        if (id == null) {
+          creations.current.delete(token);
           drafts.fail(token);
-          throw error;
-        },
-      );
-      creating.current = mine;
-    }
-    return creating.current;
+        } else if (chatIdRef.current != null) {
+          creations.current.delete(token);
+          drafts.resolve(token, id);
+        } else {
+          resolved.current.add(token);
+          drafts.resolve(token, id);
+        }
+        return id;
+      },
+      (error: unknown) => {
+        creations.current.delete(token);
+        drafts.fail(token);
+        throw error;
+      },
+    );
+    creations.current.set(token, mine);
+    return mine;
   }, [drafts]);
 
   const onFirstUserTurn = useCallback(async (id: number, firstUserText: string) => {

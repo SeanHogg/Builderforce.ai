@@ -66,10 +66,13 @@ export interface QueuedTurns<T = string> {
   /** Put a turn back at the FRONT of the queue - a flushed turn the host did not keep must not be lost. */
   requeue: (value: T) => void;
   /** Add a turn at the BACK, held or not - an idle send waits behind the turns already waiting. */
-  pushBack: (value: T, opts?: { preLiveFor?: number }) => void;
+  pushBack: (value: T) => void;
   /** Take the OLDEST waiting turn out of the queue now (undefined when none). Never one held for a draft's creation. */
   takeFront: () => T | undefined;
-  /** Drop everything this view holds - a stopped run. Turns held for another draft's creation are not its to drop. */
+  /**
+   * Drop everything this view holds - a stopped run. A Stop on the draft itself clears that draft's own held turns (they
+   * are that conversation's queue); turns held for ANOTHER draft's creation are not its to drop.
+   */
   clear: () => void;
 }
 
@@ -104,11 +107,12 @@ export interface QueuedTurnsOptions<T> {
    */
   drafts?: DraftBinding;
   /**
-   * A draft's creation answered - the chat id, or null when nothing was created: these turns, oldest first, were held for
-   * it. They have left the queue; the host lands them (in the created chat, whichever chat is showing; back to the
-   * composer when nothing was created), keeping some in the showing chat's queue with `pushBack` when that is the one.
+   * A draft's creation answered - the chat id, or null when nothing was created: these turns, oldest first (possibly none),
+   * were held for it. They have left the queue; the host lands them THROUGH THE CREATED CHAT'S RUN, whichever chat is
+   * showing (back to the composer when nothing was created). Called for every answer, so the host can also settle the send
+   * that made the creation.
    */
-  landDraft?: (held: readonly DraftHeld<T>[], outcome: DraftOutcome) => void;
+  landDraft?: (held: readonly DraftHeld<T>[], outcome: DraftOutcome, token: DraftToken) => void;
 }
 
 export function useQueuedTurns<T = string>({ running, send, resetKey = null, textOf, mayFlush, handOff, drafts = NO_DRAFTS, landDraft }: QueuedTurnsOptions<T>): QueuedTurns<T> {
@@ -168,17 +172,15 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
   runningRef.current = running;
 
   const remove = useCallback((id: number) => update((current) => current.filter((item) => item.id !== id)), [update]);
-  // A Stop drops what THIS view holds: the chat's own turns and the showing draft's. Turns held for another draft's
-  // creation (still answering for a draft the person left) are in no view of this chat, and a Stop here is not theirs.
+  // A Stop drops what THIS view holds: the chat's own turns and the showing draft's - a Stop on the draft itself clears the
+  // draft's own held turns, because they ARE that conversation's queue. Turns held for another draft's creation (still
+  // answering for a draft the person left) are in no view of this chat, and a Stop here is not theirs.
   const clear = useCallback(() => update((current) => {
     const own = (item: QueuedItem<T>): boolean => !item.draft || item.draft.token === shownRef.current;
     return current.some(own) ? current.filter((item) => !own(item)) : current;
   }), [update]);
   const requeue = useCallback((value: T) => update((current) => [{ id: (nextId.current += 1), value }, ...current]), [update]);
-  const pushBack = useCallback((value: T, opts?: { preLiveFor?: number }) => update((current) => [
-    ...current,
-    { id: (nextId.current += 1), value, ...(opts?.preLiveFor !== undefined ? { preLiveFor: opts.preLiveFor } : {}) },
-  ]), [update]);
+  const pushBack = useCallback((value: T) => update((current) => [...current, { id: (nextId.current += 1), value }]), [update]);
   const takeFront = useCallback((): T | undefined => {
     const first = queueRef.current.find((item) => !item.draft);
     if (!first) return undefined;
@@ -189,9 +191,8 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
   // A draft's creation answered: ITS turns - and only its - leave the queue for the host to land, whatever chat is showing.
   useEffect(() => drafts.onOutcome((token, outcome) => {
     const mine = queueRef.current.filter((item) => item.draft?.token === token);
-    if (mine.length === 0) return;
-    update((current) => current.filter((item) => item.draft?.token !== token));
-    landDraftRef.current?.(mine.map((item) => ({ value: item.value, followUp: item.draft!.followUp })), outcome);
+    if (mine.length > 0) update((current) => current.filter((item) => item.draft?.token !== token));
+    landDraftRef.current?.(mine.map((item) => ({ value: item.value, followUp: item.draft!.followUp })), outcome, token);
   }), [drafts, update]);
 
   // Flush exactly one held turn per completed run, on the running→idle edge — and

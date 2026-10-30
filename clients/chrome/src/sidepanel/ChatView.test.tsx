@@ -95,7 +95,7 @@ async function panel(stream: BrainStreamFn) {
   return { services, records, otherWindow };
 }
 
-function Harness({ services }: { services: PanelServices }) {
+function Harness({ services, newChat }: { services: PanelServices; newChat?: () => Promise<number> }) {
   const [chatId, setChatId] = useState<number | null>(null);
   const [chats, setChats] = useState<LocalChat[]>([]);
   const reload = useCallback(() => { void services.records.listChats().then(setChats); }, [services]);
@@ -108,7 +108,7 @@ function Harness({ services }: { services: PanelServices }) {
   return (
     <ServicesContext.Provider value={services}>
       <BrainProvider config={services.brainConfig}>
-        <ChatView chats={chats} chatId={chatId} onNewChat={onNewChat} onChatsChanged={reload} onOpenSettings={() => undefined} />
+        <ChatView chats={chats} chatId={chatId} onNewChat={newChat ?? onNewChat} onChatsChanged={reload} onOpenSettings={() => undefined} />
       </BrainProvider>
     </ServicesContext.Provider>
   );
@@ -169,5 +169,21 @@ describe('Rovr ChatView on the shared conversation hook', () => {
     await act(async () => { await otherWindow.sendMessages(chat!.id, [{ role: 'assistant', content: 'Synced from the other window.' }]); });
 
     await waitFor(() => expect(screen.getByText('Synced from the other window.')).toBeTruthy());
+  });
+
+  it('a creation that FAILS gives the first turn and the turn typed while it was creating back to the box - ONE joined turn, in order', async () => {
+    const stream = vi.fn<BrainStreamFn>(async () => answer('never asked'));
+    const { services } = await panel(stream);
+    let fail!: (error: unknown) => void;
+    const creation = new Promise<number>((_resolve, reject) => { fail = reject; });
+    render(<Harness services={services} newChat={() => creation} />);
+
+    await type('first');
+    await type('second'); // typed while the first send is still creating the chat: held for that creation
+    await act(async () => { fail(new Error('offline')); });
+
+    const box = screen.getByRole('textbox', { name: 'composerLabel' }) as HTMLTextAreaElement;
+    await waitFor(() => expect(box.value).toBe('first' + String.fromCharCode(10, 10) + 'second'));
+    expect(stream).not.toHaveBeenCalled();
   });
 });

@@ -14,16 +14,30 @@
  *     `...(patch)`, `...(cond ? x : {})`, at any spread depth), or has a computed key that is not provably another column
  *     (`[col]: v`, `[a + b]: v`), or is not an object literal at all;
  *   - drizzle UPSERT: `insert(<table>)...onConflictDoUpdate({ ..., set: { ... } })`, the `set` held to the same rules;
+ *   - a drizzle builder HELD IN A VARIABLE: `const q = db.update(executions); await q.set({ status })` - every later `.set(...)` on a
+ *     variable bound to an `update(<table>)` that has not been `.set()` yet is held to the same rules;
  *   - raw SQL, including `sql``` templates: `UPDATE [ONLY] [schema.]<table> [AS alias] SET ... status =`, and the upsert
  *     `INSERT INTO <table> ... ON CONFLICT ... DO UPDATE SET ... status =`; the column plain, quoted (`"status"`), interpolated
- *     (`${executions.status}`, `${sql.identifier('status')}`) or in a tuple (`SET (status, x) = ...`).
+ *     (`${executions.status}`, `${sql.identifier('status')}`) or in a tuple (`SET (status, x) = ...`). In the SET list, any
+ *     INTERPOLATED assignment target that is not provably another column is flagged too: `${sql.identifier(col)}`, `${sql.raw(x)}`,
+ *     `${setClause}` - only `${executions.<col>}` and `${sql.identifier('<col>')}` / `${sql.raw('<col>')}` with a literal column that
+ *     is not `status` pass.
  *   `<table>` is the table however its argument spells it: `executions`, `executionsTable`, `schema.executions`, `schema['executions']`,
  *   `(executions)`, `executions as any`, `executions!`, and every simple const / import-as / destructure-rename alias of it in the same file
- *   (the same name set drives the raw SQL patterns).
+ *   (`const t = executions`, `= schema.executions`, `= schema['executions']`, `import { executions as runs }`, and a DESTRUCTURE
+ *   `const { executions: runs } = schema` - an object literal `{ executions: counts }` is not an alias); the same name set drives the
+ *   raw SQL patterns. `update` / `insert` / `set` may be spelled with bracket access (`db['update'](executions)`, `['set']({...})`).
  *
- * KNOWN LIMIT: a table that reaches `update(table)` as a FUNCTION PARAMETER (or through any other value this lexical pass cannot resolve
- * to the `executions` table) is invisible - it is flagged only when `table` is a resolvable alias. Pass the table by name, or write the
- * status through `ExecutionRepository`.
+ * KNOWN LIMITS (lexical scan; each is pinned in `executionLandingGuard.test.ts` as documented-unflagged):
+ *   - a table that reaches `update(table)` as a FUNCTION PARAMETER (or through any other value this pass cannot resolve to the
+ *     `executions` table) is invisible - it is flagged only when `table` is a resolvable alias;
+ *   - raw SQL assembled by STRING CONCATENATION (`'UPDATE exec' + 'utions SET sta' + 'tus = 1'`): the statement never appears whole;
+ *   - a `;` INSIDE a SQL string literal ends the statement for the raw patterns (`SET note = 'a;b', status = 'x'`): what follows it
+ *     is not seen;
+ *   - a GETTER key (`set({ get status() { ... } })`) is not a `status` key to the key patterns;
+ *   - a builder passed through a function or a field (`this.q = db.update(executions)`, `run(db.update(executions))`) is only followed
+ *     when it is bound to a plain variable.
+ * Pass the table by name and write the status through `ExecutionRepository`: the guard is a net, not a proof.
  */
 
 const REGEX_KEYWORDS = new Set(['return', 'typeof', 'case', 'do', 'else', 'in', 'of', 'void', 'delete', 'throw', 'new', 'instanceof', 'yield', 'await']);
@@ -231,9 +245,11 @@ function executionTableNames(text) {
     grew = false;
     const target = escaped();
     const aliases = [
-      new RegExp(`\\b(?:const|let|var)\\s+([\\w$]+)\\s*=\\s*(?:[\\w$]+\\.)*(?:${target})\\s*(?=[;,\\n)]|$)`, 'g'),
+      // `const t = executions` / `= schema.executions` / `= schema['executions']`
+      new RegExp(`\\b(?:const|let|var)\\s+([\\w$]+)\\s*=\\s*(?:[\\w$]+\\.)*(?:${target}|[\\w$]+\\s*\\[\\s*['"\`](?:${target})['"\`]\\s*\\])\\s*(?=[;,\\n)]|$)`, 'g'),
       new RegExp(`\\b(?:${target})\\s+as\\s+([\\w$]+)`, 'g'),
-      new RegExp(`\\b(?:${target})\\s*:\\s*([\\w$]+)\\s*[,}]`, 'g'),
+      // a DESTRUCTURE rename (`const { executions: runs } = schema`) - an object literal `{ executions: counts }` is not an alias
+      new RegExp(`\\b(?:const|let|var)\\s*\\{[^}]*?\\b(?:${target})\\s*:\\s*([\\w$]+)\\s*(?=[,}])`, 'g'),
     ];
     for (const re of aliases) for (const m of text.matchAll(re)) if (!names.has(m[1])) { names.add(m[1]); grew = true; }
   }
@@ -249,13 +265,84 @@ const SQL_STATUS = '(?:\\bstatus"?|"status"|\\$\\{[^}]*\\bstatus\\b[^}]*\\})';
  * The raw-SQL shapes for the table names in play: `UPDATE [ONLY] [schema.]<table> [AS alias] SET ... status =` (also
  * `SET (status, ...) =`) and `INSERT INTO <table> ... ON CONFLICT ... DO UPDATE SET ... status =`.
  */
+function rawSqlTable(names) {
+  return `(?:"?\\w+"?\\.)?(?:"?(?:${names})"?|\\$\\{\\s*(?:[\\w$]+\\.)*(?:${names})\\s*\\})`;
+}
+
 function rawSqlPatterns(names) {
-  const table = `(?:"?\\w+"?\\.)?(?:"?(?:${names})"?|\\$\\{\\s*(?:[\\w$]+\\.)*(?:${names})\\s*\\})`;
+  const table = rawSqlTable(names);
   const assign = `(?:[^;]*${SQL_STATUS}\\s*=|\\s*\\((?=[^;]*?${SQL_STATUS}[^;]*?\\)\\s*=))`;
   return [
     new RegExp(`UPDATE\\s+(?:ONLY\\s+)?${table}(?:\\s+(?:AS\\s+)?"?\\w+"?)?\\s+SET${assign}`, 'gi'),
     new RegExp(`INSERT\\s+INTO\\s+${table}[^;]*?ON\\s+CONFLICT[^;]*?DO\\s+UPDATE\\s+SET${assign}`, 'gi'),
   ];
+}
+
+/** The same two statements up to and including `SET`: where the assignment list begins. */
+function rawSetHeads(names) {
+  const table = rawSqlTable(names);
+  return [
+    new RegExp(`UPDATE\\s+(?:ONLY\\s+)?${table}(?:\\s+(?:AS\\s+)?"?\\w+"?)?\\s+SET\\b`, 'gi'),
+    new RegExp(`INSERT\\s+INTO\\s+${table}[^;]*?ON\\s+CONFLICT[^;]*?DO\\s+UPDATE\\s+SET\\b`, 'gi'),
+  ];
+}
+
+/** The items of a SQL assignment list: split at the commas outside parentheses, `${}` holes and SQL string literals. */
+function splitAssignments(list) {
+  const items = [];
+  let depth = 0;
+  let quote = '';
+  let from = 0;
+  for (let i = 0; i < list.length; i++) {
+    const c = list[i];
+    if (quote) { if (c === quote) quote = ''; continue; }
+    if (c === "'") quote = c;
+    else if (c === '(' || c === '{') depth += 1;
+    else if (c === ')' || c === '}') depth -= 1;
+    else if (c === ',' && depth === 0) { items.push(list.slice(from, i)); from = i + 1; }
+  }
+  items.push(list.slice(from));
+  return items;
+}
+
+/**
+ * Is one `${...}` hole, standing where a column name goes, PROVABLY a column other than `status`? Only `${executions.<col>}` (any
+ * name the table goes by) and `${sql.identifier('<col>')}` / `${sql.raw('<col>')}` with a string-literal column qualify; `status`
+ * itself is the status column (the status pattern flags it), and everything else (`${sql.identifier(col)}`, `${sql.raw(x)}`,
+ * `${setClause}`) could be either, so it is opaque.
+ */
+function provablyOtherColumn(hole, names) {
+  const member = new RegExp(`^\\$\\{\\s*(?:[\\w$]+\\.)*(?:${names})\\.([\\w$]+)\\s*\\}$`).exec(hole);
+  if (member) return member[1] !== 'status';
+  const literal = /^\$\{\s*sql\.(?:identifier|raw)\(\s*(['"`])([^'"`\\$]*)\1\s*\)\s*\}$/.exec(hole);
+  return literal ? literal[2] !== 'status' : false;
+}
+
+/**
+ * The raw-SQL assignment targets that are interpolated and not provably another column: `SET ${sql.identifier(col)} = ...`,
+ * `SET ${sql.raw(x)} = ...`, `SET ${setClause}`, `SET (${a}, b) = ...`. They can be the status column, so they are writes to it as
+ * far as this scan can tell. Returns the offending list items.
+ */
+function opaqueSetTargets(text, names) {
+  const found = [];
+  for (const head of rawSetHeads(names)) {
+    for (const m of text.matchAll(head)) {
+      const rest = text.slice(m.index + m[0].length);
+      const end = rest.search(/\bWHERE\b|\bFROM\b|\bRETURNING\b|`|;/i);
+      const list = end < 0 ? rest : rest.slice(0, end);
+      for (const item of splitAssignments(list)) {
+        const eq = item.indexOf('=');
+        const target = (eq < 0 ? item : item.slice(0, eq)).trim();
+        if (!target.includes('${')) continue;
+        const close = target.lastIndexOf(')');
+        const holes = target.startsWith('(') ? splitAssignments(target.slice(1, close < 0 ? undefined : close)) : [target];
+        if (holes.some((hole) => hole.includes('${') && !provablyOtherColumn(hole.trim(), names))) {
+          found.push({ kind: 'raw SQL: opaque interpolated assignment target', snippet: `${m[0]} ${item}`.replace(/\s+/g, ' ').trim().slice(0, 120) });
+        }
+      }
+    }
+  }
+  return found;
 }
 
 /** What a write's object argument does wrong, as scan hits: not a literal, a `status` key, an opaque computed key or spread. */
@@ -272,7 +359,8 @@ function objectFindings(arg, where) {
 /** The calls chained on from index `from` (`.where(..).set(..)`), each `{ name, args }`, stopping at the first thing that is not one. */
 function chainedCalls(text, from) {
   const calls = [];
-  const next = /\s*\??\.\s*([\w$]+)\s*\(/y;
+  // `.set(` and `['set'](`
+  const next = /\s*(?:\??\.\s*([\w$]+)|\[\s*['"`]([\w$]+)['"`]\s*\])\s*\(/y;
   for (let pos = from; ;) {
     next.lastIndex = pos;
     const m = next.exec(text);
@@ -280,9 +368,19 @@ function chainedCalls(text, from) {
     const open = m.index + m[0].length - 1;
     const close = closeParen(text, open);
     if (close < 0) return calls;
-    calls.push({ name: m[1], args: text.slice(open + 1, close) });
+    calls.push({ name: m[1] ?? m[2], args: text.slice(open + 1, close) });
     pos = close + 1;
   }
+}
+
+/**
+ * The variable a drizzle builder is STORED in: `const q = db.update(executions);` / `q = this.db.update(executions).where(w);` - the
+ * text just before the `update` of the call at `at` is `<name> =` after an optional receiver chain. null when the call is not
+ * the right-hand side of an assignment.
+ */
+function storedBuilder(text, at) {
+  const before = text.slice(Math.max(0, at - 160), at).replace(/(?:[\w$]+(?:\s*!)?\s*\??\.\s*)*[\w$]*$/, '');
+  return /(?:^|[\s;{}(])([\w$]+)\s*(?::[^=;]+)?=\s*$/.exec(before)?.[1] ?? null;
 }
 
 /**
@@ -296,20 +394,35 @@ export function scanExecutionStatusWrites(source) {
   // `<table>` as the argument of update(...) / insert(...): the table's name anywhere in it, however it is dressed
   // (`executions as any`, `(executions)`, `executions!`, `schema['executions']`).
   const tableToken = new RegExp(`(?<![\\w$])(?:${names})(?![\\w$])`);
-  for (const call of text.matchAll(/\b(update|insert)\s*\(/g)) {
+  const builders = []; // `{ name, from }`: a variable bound to an update(<executions>) whose .set() is called later
+  // `update(` / `insert(`, and the bracket-access spelling `db['update'](`.
+  for (const call of text.matchAll(/(?:\[\s*['"`](update|insert)['"`]\s*\]|\b(update|insert))\s*\(/g)) {
+    const kind = call[1] ?? call[2];
     const open = call.index + call[0].length - 1;
     const close = closeParen(text, open);
     if (close < 0 || !tableToken.test(text.slice(open + 1, close))) continue;
-    for (const { name, args } of chainedCalls(text, close + 1)) {
-      if (call[1] === 'update' && name === 'set') found.push(...objectFindings(args, '.set()'));
-      if (call[1] === 'insert' && name === 'onConflictDoUpdate') {
+    const chain = chainedCalls(text, close + 1);
+    for (const { name, args } of chain) {
+      if (kind === 'update' && name === 'set') found.push(...objectFindings(args, '.set()'));
+      if (kind === 'insert' && name === 'onConflictDoUpdate') {
         const outer = literalObjects(args);
         const set = outer ? propertyValue(args, 'set') : null;
         if (!outer || set === null || outer.some(hasOpaqueSpread)) found.push({ kind: 'drizzle: non-literal onConflictDoUpdate set', snippet: args.trim().slice(0, 80) });
         else found.push(...objectFindings(set, 'onConflictDoUpdate set'));
       }
     }
+    // A builder held in a variable (`const q = db.update(executions); await q.set({ status })`): every later `.set(...)` on that
+    // variable is the write.
+    const holder = kind === 'update' && !chain.some((c) => c.name === 'set') ? storedBuilder(text, call.index) : null;
+    if (holder) builders.push({ name: holder, from: close + 1 });
+  }
+  for (const { name, from } of builders) {
+    for (const use of text.slice(from).matchAll(new RegExp(`(?<![\\w$.])${name.replace(/\$/g, '\\$')}(?![\\w$])`, 'g'))) {
+      const set = chainedCalls(text, from + use.index + use[0].length).find((c) => c.name === 'set');
+      if (set) found.push(...objectFindings(set.args, '.set()'));
+    }
   }
   for (const re of rawSqlPatterns(names)) for (const raw of text.matchAll(re)) found.push({ kind: 'raw SQL: executions status assignment', snippet: raw[0].replace(/\s+/g, ' ').slice(0, 120) });
+  found.push(...opaqueSetTargets(text, names));
   return found;
 }

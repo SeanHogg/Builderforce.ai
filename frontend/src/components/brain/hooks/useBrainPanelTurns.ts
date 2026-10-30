@@ -46,7 +46,7 @@ export function useBrainPanelTurns({ conv, chats, drafts, recipient, chooseRecip
   // addressee - whichever way it left. The draft is read at call time.
   const composer = useComposerDraft(input, setInput);
   const giveBack = (turn: BrainPanelTurn) => restoreTurn({ text: turn.text, attachments: turn.attachments, recipient: turn.addressedTo }, {
-    draft: composer.draft, setInput: composer.fillIfEmpty, restoreAttachments: conv.restoreAttachments, chooseRecipient,
+    draft: composer.draft, setInput: composer.setInput, restoreAttachments: conv.restoreAttachments, chooseRecipient,
   });
   const turns = useChatTurns<BrainPanelTurn>({
     // In flight while a send is saving (held in order); steerable only while the run store says the run is live.
@@ -56,7 +56,8 @@ export function useBrainPanelTurns({ conv, chats, drafts, recipient, chooseRecip
     // ALWAYS given its attachments (none included): a turn that carries its own files neither
     // takes nor clears what the composer holds now - a held turn flushed while a new file is
     // pending must leave that file where it is (`useBrainConversation.send`).
-    send: ({ text, addressedTo, attachments }) => conv.send(text, { addressedTo, attachments: attachments ?? [] }),
+    // From a draft, `draft` is the token this send began with: the chat it creates is THAT draft's (`ensureChatId(draft)`).
+    send: ({ text, addressedTo, attachments }, ctx) => conv.send(text, { addressedTo, attachments: attachments ?? [], ...(ctx?.draft !== undefined ? { draft: ctx.draft } : {}) }),
     textOf: turnText,
     // A message typed mid-run STEERS the run (the shared door's default): its attachments
     // ride along, and what the run leaves in its inbox the run store makes the chat's next turn.

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { restoreTurn } from './restoreTurn';
+import { joinRestorableTurns, restoreTurn } from './restoreTurn';
 
 const dev = { kind: 'agent', ref: 'dev', label: 'dev' } as never;
 const file = { key: 'k', name: 'a.txt', type: 'text/plain' };
@@ -23,11 +23,25 @@ describe('restoreTurn - THE one rule for a turn that could not go', () => {
     expect(c.chooseRecipient).toHaveBeenCalledWith(null);
   });
 
-  it('a NEWER draft keeps its text and its addressee: only the files come back', () => {
+  it('a NEWER draft keeps its addressee and its words - the older turn goes IN FRONT of them, nothing is dropped, the files come back', () => {
     const c = composer('something newer');
     restoreTurn({ text: 'older', attachments: [file], recipient: dev }, c);
-    expect(c.setInput).not.toHaveBeenCalled();
+    expect(c.setInput).toHaveBeenCalledWith('older\n\nsomething newer');
     expect(c.chooseRecipient).not.toHaveBeenCalled();
+    expect(c.restoreAttachments).toHaveBeenCalledWith([file]);
+  });
+
+  it('a joined turn (several restored at once) lands in front of a newer draft in the order it was said', () => {
+    const c = composer('typed meanwhile');
+    restoreTurn(joinRestorableTurns([{ text: 'A', recipient: null }, { text: 'B', recipient: null }, { text: 'C', recipient: null }]), c);
+    expect(c.setInput).toHaveBeenCalledTimes(1);
+    expect(c.setInput).toHaveBeenCalledWith('A\n\nB\n\nC\n\ntyped meanwhile');
+  });
+
+  it('a files-only turn (no words) leaves a newer draft untouched', () => {
+    const c = composer('newer');
+    restoreTurn({ text: '  ', attachments: [file], recipient: null }, c);
+    expect(c.setInput).not.toHaveBeenCalled();
     expect(c.restoreAttachments).toHaveBeenCalledWith([file]);
   });
 });

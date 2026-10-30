@@ -1,26 +1,23 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * cloudSelfHeal — ONE implementation of "a cloud run died/crashed before reporting
- * a terminal status → recover it". Two outcomes, in priority order:
+ * a terminal status → recover it": SELF-HEAL — re-queue the run ONCE on the durable
+ * executor (CloudRunnerDO), which alarm-ticks one step at a time and survives long
+ * multi-step runs. This is the right move for a run killed by infrastructure (a
+ * container that OOM'd / was evicted, the Worker `waitUntil` wall, a lost heartbeat).
+ * When self-heal isn't possible (no durable runner bound, the run already used its one
+ * retry, or an open PR a re-run would double) the detector fails the run with the real
+ * reason itself.
  *
- *   1. SELF-HEAL — re-queue the run ONCE on the durable executor (CloudRunnerDO),
- *      which alarm-ticks one step at a time and survives long multi-step runs. This
- *      is the right move for a run killed by infrastructure (a container that
- *      OOM'd / was evicted, the Worker `waitUntil` wall, a lost heartbeat).
- *   2. FAIL with the real reason — when self-heal isn't possible (no durable runner
- *      bound, the run already used its one retry, or an open PR a re-run would
- *      double), mark the run failed carrying the ACTUAL crash reason so the timeline
- *      explains *why* instead of a generic "went silent" guess.
- *
- * Shared by every detector so recovery is identical no matter who notices first:
+ * Shared by the detectors so recovery is identical no matter who notices first:
  *   • the cron sweep ({@link ./staleExecutionReaper})            — periodic backstop
  *   • the read-path repair ({@link ./RuntimeService})            — a viewer polled it
- *   • a backplane that reports a run's own death WITH the error message
- *     ({@link handleCloudRunCrash}). NOT the sandbox container: its crash is not the run's
- *     (the engine reopens a fresh clone on its next sandbox call), so
- *     {@link ../../infrastructure/relay/AgentContainerDO} `onError` only reports - recovering
- *     there would start a second engine beside the one still ticking. The durable executor
- *     lands its own run's crash (`CloudRunnerDO` alarm); this export has no caller yet.
+ *   • the durable executor lands its own run's crash (`CloudRunnerDO` alarm).
+ * NOT the sandbox container: its crash is not the run's (the engine reopens a fresh
+ * clone on its next sandbox call), so {@link ../../infrastructure/relay/AgentContainerDO}
+ * `onError` only reports - recovering there would start a second engine beside the one
+ * still ticking. (A backplane "this run crashed" handler existed and had no caller; it
+ * is retired - those three are its live twin.)
  *
  * Idempotent + once-only: the `reaperRequeued` flag is persisted to the payload
  * before kickoff, so a second detector finds it set and falls through to failing the
@@ -32,11 +29,11 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * live push the real writer now performs.
  *
  * ── IT PUSHES, IT DOES NOT ONLY RECORD ──────────────────────────────────────
- * A hard death recovered here used to be invisible until something polled: the
- * detector runs in whichever isolate noticed (a cron sweep, a container error
- * handler), never the one holding the viewer's socket. Events now go through the
- * execution hub, whose relay sink publishes into the run's Durable Object room, so
- * "the container died and here is why" reaches an open drawer live.
+ * A requeue recovered here used to be invisible until something polled: the
+ * detector runs in whichever isolate noticed (a cron sweep, a read), never the one
+ * holding the viewer's socket. Its timeline row goes through the single writer,
+ * whose relay sink publishes into the run's Durable Object room, so "the run died
+ * and was re-queued" reaches an open drawer live.
  */
 import { and, eq, ne } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
@@ -46,13 +43,6 @@ import type { Env } from '../../env';
 import { markReaperRequeued, wasReaperRequeued, parseCloudAgentRef } from './cloudDispatch';
 import { recordCloudToolEvent } from './cloudToolEvents';
 import { cloudRunnerStub } from './cloudRunnerStub';
-import { notifyExecutionSubscribers } from './executionEvents';
-import { landExecution } from './executionLanding';
-import type { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
-import { ExecutionStatus } from '../../domain/shared/types';
-
-/** Live (non-terminal) statuses an orphaned/crashed run can be recovered from. */
-const RECOVERABLE = new Set(['running', 'submitted', 'pending']);
 
 export type SelfHealOutcome = 'requeued' | 'ineligible';
 
@@ -211,60 +201,4 @@ export async function loadCloudRunForSelfHeal(db: Db, executionId: number): Prom
     } } });
     return null;
   }
-}
-
-/**
- * A cloud backplane (container / DO / worker loop) reported that a run crashed,
- * WITH the real reason. Recover it: self-heal once on the durable executor, else
- * fail the run carrying the actual `reason` (so the timeline says why) plus a
- * `run.failed` telemetry row. No-op when the run is already terminal. Never throws.
- */
-export async function handleCloudRunCrash(env: Env, db: Db, executionId: number, reason: string, executionPort: IExecutionRepository): Promise<SelfHealOutcome | 'noop'> {
-  const run = await loadCloudRunForSelfHeal(db, executionId);
-  if (!run || !RECOVERABLE.has(run.status ?? '')) return 'noop';
-
-  const outcome = await selfHealCloudRun(env, db, run);
-  if (outcome === 'requeued') {
-    await recordCloudToolEvent(db, {
-      tenantId: run.tenantId, ...(run.cloudAgentRef ? { cloudAgentRef: run.cloudAgentRef } : {}),
-      executionId,
-      toolName: 'runtime.crash', category: 'planning', detail: { reason },
-      result: `Runtime crashed (${reason}) — re-queued once on the durable executor to run to completion.`,
-    });
-    return 'requeued';
-  }
-
-  // The ONE terminal transition: it can fail only a run that is still non-terminal (a run that already COMPLETED is never
-  // overwritten), and it records the run's outcome row. `won` is false when another writer landed it first.
-  const won = await landExecution(executionPort, executionId, ExecutionStatus.FAILED, { errorMessage: reason })
-    .then((landed) => landed.won)
-    .catch((error) => {
-      reportCaughtError(error, { source: "application/runtime/cloudSelfHeal.ts", operation: "handleCloudRunCrash", context: { logMessage: '[cloud-self-heal] terminal failure transition failed', details: {
-        tenantId: run.tenantId,
-        executionId,
-        reason,
-        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      } } });
-      return false;
-    });
-  // A run something else already landed has nothing more to say here: no failure row, no `done`.
-  if (!won) return 'ineligible';
-  await recordCloudToolEvent(db, {
-    tenantId: run.tenantId, ...(run.cloudAgentRef ? { cloudAgentRef: run.cloudAgentRef } : {}),
-    executionId,
-    toolName: 'run.failed', category: 'error', result: reason,
-  });
-  // Only announce a transition that actually happened — the guarded UPDATE is a
-  // no-op for a run something else already terminated, and a `done` for a run that
-  // did not just die would overwrite a truthful terminal state in every open view.
-  // `taskId` is carried because this module holds raw columns, not a hydrated
-  // Execution; the board sink resolves the project room from it.
-  notifyExecutionSubscribers(executionId, {
-    type: 'done',
-    executionId,
-    status: 'failed',
-    taskId: run.taskId,
-    ts: new Date().toISOString(),
-  });
-  return 'ineligible';
 }

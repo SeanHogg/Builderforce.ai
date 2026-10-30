@@ -7,6 +7,9 @@
  * token resolves it with its chat id, or fails it; only the creation that BELONGS to a token can settle it, so an abandoned,
  * older creation resolving late settles its own token and no other draft's. Switching the visible chat touches no token.
  *
+ * A creation is ASKED FOR with the token its send began with (`ensureChatId(token)`) - never with whichever token is on screen
+ * when it runs - so a late send of an abandoned draft creates, and settles, its own.
+ *
  * Pure (no React): `useChatCreation` owns one binding and reports into it; `useChatTurns` / `useQueuedTurns` read it.
  */
 
@@ -22,7 +25,7 @@ export interface DraftBinding {
    * token is not failed while another send from the same draft is still getting ready; pair every call with `settle`.
    */
   begin: () => DraftToken;
-  /** The same token without counting a send - the creation (`ensureChatId`) adopts the draft's token this way. */
+  /** The draft on screen's token without counting a send - for a creation asked for with no token of its own (`ensureChatId()`); a send names its token. */
   adopt: () => DraftToken;
   /** The draft on screen's token (null: none yet, or the draft has been left). Stable between changes. */
   current: () => DraftToken | null;

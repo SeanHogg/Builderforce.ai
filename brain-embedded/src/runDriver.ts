@@ -9,10 +9,11 @@
  * into this store with {@link applyRemoteRun}, so every consumer (`useBrainConversation`,
  * the timeline, the cross-chat indicator) keeps reading the same store it always did.
  *
- * The seam is deliberately four verbs: the store's own public API for a run, minus
+ * The seam is deliberately five verbs: the store's own public API for a run (plus the words a person says to it), minus
  * reads. Reads stay local, fed by the mirror.
  */
 import type { BrainRunRequest } from './brainRunStore';
+import type { ChatInputAttachment } from './types';
 
 export interface BrainRunDriver {
   /** Execute a run elsewhere. Resolves when that run has settled, like `startRun`. */
@@ -20,6 +21,13 @@ export interface BrainRunDriver {
   stop(chatId: number): void;
   confirm(chatId: number, ok: boolean): void;
   clearError(chatId: number): void;
+  /**
+   * Words for a CHAT's run, wherever that run executes - the chat-keyed twin of `queueRunSteering`, for a process whose
+   * in-page inbox is read by nobody. The process that owns the run decides what they are: heard by the run when it is live
+   * or being set up, the chat's next turn when it is idle (the editor host's `runSteer.steer`: its inbox + wake). Keyed by
+   * the chat, never by the view that happens to be showing it.
+   */
+  steer(chatId: number, text: string, attachments?: ChatInputAttachment[]): void;
 }
 
 let installed: BrainRunDriver | null = null;

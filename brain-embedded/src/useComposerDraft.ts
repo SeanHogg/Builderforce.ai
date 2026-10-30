@@ -10,13 +10,11 @@ import { useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
  * the editor chat; none keeps its own copy.
  *
  *  - `draft()` the text right now;
- *  - `setInput(text)` write it (clear, seed);
- *  - `fillIfEmpty(text)` put it back only if the box is still empty - what `restoreTurn` uses.
+ *  - `setInput(text)` write it (clear, seed, give a turn back - `restoreTurn` reads `draft()` and writes the whole text).
  */
 export function useComposerDraft(input: string, setInput: Dispatch<SetStateAction<string>>): {
   draft: () => string;
   setInput: (text: string) => void;
-  fillIfEmpty: (text: string) => void;
 } {
   const ref = useRef(input);
   // The render's own value wins: it already includes every write made before it.
@@ -27,10 +25,6 @@ export function useComposerDraft(input: string, setInput: Dispatch<SetStateActio
     setInput: (text: string) => {
       ref.current = text;
       setInput(text);
-    },
-    fillIfEmpty: (text: string) => {
-      ref.current = ref.current || text;
-      setInput((cur) => cur || text);
     },
   }), [setInput]);
 }

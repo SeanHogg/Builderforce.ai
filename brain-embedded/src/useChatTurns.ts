@@ -7,7 +7,8 @@ import { queueRunSteering } from './runSteering';
 import type { ChatInputAttachment } from './types';
 import { getRunDriver } from './runDriver';
 import type { DraftBinding } from './draftBinding';
-import { handToChat, useTurnLanding } from './turnLanding';
+import { dropWaiting, handToChat } from './chatDelivery';
+import { useTurnLanding, type SendContext } from './turnLanding';
 import { turnBody, useQueuedTurns, type QueuedTurns } from './useQueuedTurns';
 import { startsRun } from './userTurnRuns';
 
@@ -69,8 +70,13 @@ export interface ChatTurnsBase<T> {
    * when it made none - whichever chat the person is looking at by then. Hosts that create chats from a draft pass it.
    */
   drafts?: DraftBinding;
-  /** Deliver one turn now. Resolve `false` when it failed before it was kept (restore the draft). */
-  send: (turn: T) => Promise<boolean | void> | boolean | void;
+  /**
+   * Deliver one turn now. Resolve `false` when it failed before it was kept (restore the draft). From a draft only, `ctx.draft`
+   * is the token this send began with: pass it on to the conversation's `send` (`{ draft }`), which hands it to
+   * `ensureChatId(token)` - the creation this send triggers belongs to THIS token. When that creation fails the door restores
+   * the turn itself, together with everything held behind it, and reports the send kept - the host puts nothing back twice.
+   */
+  send: (turn: T, ctx?: SendContext) => Promise<boolean | void> | boolean | void;
   /**
    * Optional: route a turn into a live run instead; return true when it was taken. To speak to the
    * chat's OWN run it asks the door - `turns.steers(...)`, the predicate the composer's Send label
@@ -180,24 +186,15 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
   // after a chat switch it goes back to the composer (`restore`), addressee intact.
   const requeueRef = useRef<(turn: T) => void>(() => undefined);
   const takeFrontRef = useRef<() => T | undefined>(() => undefined);
-  const pushBackRef = useRef<(turn: T, opts?: { preLiveFor?: number }) => void>(() => undefined);
   // Turns being sent from the queue right now. ONE path sends them: the falling edge starts it
   // (`mayFlush`), a turn typed meanwhile joins the line, and the loop below carries on to the next.
   // Counted PER CHAT: a turn sent from chat A's queue (awaiting its run) must not line up a turn typed in B.
   const flushing = useRef(new Map<RunKey | null, number>());
   const flushingIn = (key: RunKey | null): number => flushing.current.get(key) ?? 0;
-  // The host's send, for one turn. FROM A DRAFT the send is what creates the chat: its token is minted here, synchronously,
-  // before the send does any async preparation (the editor's limbic fetch), and settled when the send returns - a send that
-  // ended without ever creating a chat has nothing coming for the turns held under it.
-  const sendOnce = useCallback(async (turn: T): Promise<unknown> => {
-    const { send: deliver, runKey: key, drafts: binding } = ports.current;
-    const token = key === null ? binding?.begin() : undefined;
-    try {
-      return await deliver(turn);
-    } finally {
-      if (token !== undefined) binding?.settle(token);
-    }
-  }, []);
+  // Where held turns go when their conversation changes, or their draft's creation answers - and the host's send, which
+  // makes a draft's creation (`turnLanding.ts`).
+  const { handOff, landDraft, sendOnce } = useTurnLanding<T>(ports);
+
   const flush = useCallback(async (first: T): Promise<void> => {
     const chat = ports.current.runKey;
     flushing.current.set(chat, flushingIn(chat) + 1);
@@ -237,9 +234,6 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     }
   }, [sendOnce]);
 
-  // Where held turns go when their conversation changes, or their draft's creation answers (`turnLanding.ts`).
-  const { handOff, landDraft } = useTurnLanding<T>(ports, pushBackRef);
-
   const queued = useQueuedTurns<T>({
     running,
     send: (turn) => { void flush(turn); },
@@ -259,7 +253,7 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     if (token == null || !binding) return false;
     const answered = binding.outcomeOf(token);
     if (typeof answered === 'number') {
-      landDraft([{ value: turn, followUp }], answered);
+      landDraft([{ value: turn, followUp }], answered, token);
       return true;
     }
     return hold(turn, { draft: { token, followUp } });
@@ -268,8 +262,6 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
   requeueRef.current = queued.requeue;
   // eslint-disable-next-line react-hooks/refs
   takeFrontRef.current = takeFront;
-  // eslint-disable-next-line react-hooks/refs
-  pushBackRef.current = pushBack;
   // Turns already held: a message typed behind them waits its turn (it must not jump ahead).
   // Only those held THIS run count: a turn put back while idle (a failed flush) is carried into
   // the next run and must not force-hold everything typed during it. Tracked by turn ID - a
@@ -305,8 +297,6 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
   // queued for the next turn; one a steer would not carry (a file it would drop) stays too, and so does
   // everything behind it.
   const { remove } = queued;
-  // ...and again when a draft's creation lands turns in this (already live) chat, held here to be steered.
-  const dueHere = queued.items.filter((item) => item.preLiveFor === runKey).length;
   useEffect(() => {
     if (!running || !steerable) return;
     const { steer: route, runKey: key, textOf: text, isDirected: directed, attachmentsOf: attached } = ports.current;
@@ -328,13 +318,16 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
       // it is NOT carried: the next message waits behind it instead of jumping it.
       carriedIds.current = new Set([...carriedIds.current].filter((id) => id !== item.id));
     }
-  }, [running, steerable, remove, runKey, dueHere]);
+  }, [running, steerable, remove, runKey]);
 
   const stopTurns = useCallback(() => {
     clear();
     stopEpoch.current += 1;
     if (ports.current.running) markStopping(true);
     const { stop: halt, runKey: key } = ports.current;
+    // What a draft's creation delivered to this chat and its run has not heard yet is held too: dropped BEFORE the run's
+    // falling edge, which would otherwise make it the chat's next turn.
+    if (typeof key === 'number') dropWaiting(key);
     // A steer typed before the Stop is dropped with the run (the store's Stop drains the inbox and the device's
     // journal - every entry point to Stop does) - it must not start the next one.
     if (halt) halt();

@@ -14,7 +14,7 @@
  * fetch, create, rename), which had drifted from the web's.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { DEFAULT_CHAT_TITLE, useArmedNewChat, useBrainChats, useChatCreation, type BrainChat, type ChatMode, type DraftBinding } from '@seanhogg/builderforce-brain-embedded';
+import { DEFAULT_CHAT_TITLE, useArmedNewChat, useBrainChats, useChatCreation, type BrainChat, type ChatMode, type DraftBinding, type DraftToken } from '@seanhogg/builderforce-brain-embedded';
 import { onHostMessage, onRefresh, post, request, type InitData } from '../vscodeBridge';
 import { useGlobalRunState } from './useGlobalRunState';
 
@@ -30,8 +30,8 @@ export interface VsCodeChats {
   reloadChats: () => void;
   /** Name a still-untitled chat from its first user turn (the conversation's `onFirstUserTurn`). */
   onFirstUserTurn: (id: number, firstUserText: string) => Promise<void>;
-  /** The open chat, or the one the first send creates (shared single-flight `useChatCreation`); throws when it cannot. */
-  ensureChatId: () => Promise<number>;
+  /** The open chat, or the one the first send creates (shared single-flight `useChatCreation`, under the send's own draft token); throws when it cannot. */
+  ensureChatId: (draft?: DraftToken) => Promise<number>;
   /** The draft's binding to its creation - the turn door lands what is typed meanwhile in the chat it created (`useChatTurns({ drafts })`). */
   drafts: DraftBinding;
   /** Whether a chat's run is waiting on an answer, running, or idle (null) — drawn as a marker. */
@@ -137,8 +137,8 @@ export function useVsCodeChats(init: InitData, newChatLabel: string): VsCodeChat
     autoTitle,
     onCaptureOriginalRequest: captureOriginalRequest,
   });
-  const ensureChatId = useCallback(async () => {
-    const id = await ensureCreated();
+  const ensureChatId = useCallback(async (draft?: DraftToken) => {
+    const id = await ensureCreated(draft);
     // The send cannot proceed without a conversation — surface why, as the old path did.
     if (id == null) throw new Error(brainChats.error || 'Could not create the chat');
     return id;

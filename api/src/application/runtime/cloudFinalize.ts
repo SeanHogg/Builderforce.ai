@@ -212,9 +212,11 @@ ${ciVerified
   //      the shared teardown decision, which deletes it ONLY if it can prove the
   //      branch is nothing but this run's abandoned work.
   //
-  // Failures do not reach here; a crashed run's branch residue is `teardownCrashedRunArtifacts`'s
-  // to sweep (runRollback.ts, the same teardown decision). Both are best-effort and
-  // must never change the run's own outcome.
+  // A run that lands FAILED does not reach (b): its branch residue is swept where a failed
+  // landing is persisted (`failedRunSweep`, from `buildExecutionRepository`'s onTerminal,
+  // through `teardownCrashedRunArtifacts` - the same teardown decision), and one that
+  // reached (a) is left alone there. All are best-effort and must never change the run's
+  // own outcome.
   if (repoCtx && writtenPaths.size > 0) {
     if (cancelled) {
       await teardownRunBranch(env, db, {
