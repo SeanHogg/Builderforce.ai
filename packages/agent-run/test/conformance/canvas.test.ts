@@ -156,7 +156,10 @@ describe("conformance — canvas: the board's tools on the same run", () => {
     expect(outcome).toMatchObject({ kind: "finished", output: "Added the note." });
     expect(board.calls).toEqual([{ name: "canvas_add_object", args: { kind: "note" } }]);
     expect(namesOf(requests[0])).toEqual(["canvas_add_object", "canvas_note"]);
-    expect(events.filter((event) => event.kind === "tool.dispatched")).toEqual([{ kind: "tool.dispatched", step: 0, tool: "canvas_add_object", ok: true }]);
+    // The surface's tool ran through the surface (the board saw it), and the merged event contract carries the call's id, arguments and result.
+    expect(events.filter((event) => event.kind === "tool.dispatched")).toEqual([
+      { kind: "tool.dispatched", step: 0, tool: "canvas_add_object", ok: true, callId: "c1", args: { kind: "note" }, result: { ok: true, proposed: true } },
+    ]);
   });
 
   it("opens with the surface's own transcript, and hands analysis to code on the first working call", async () => {

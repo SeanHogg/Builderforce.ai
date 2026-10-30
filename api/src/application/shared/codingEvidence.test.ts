@@ -44,7 +44,7 @@ describe('codingEvidence', () => {
   ];
 
   it.each(LENSES)('%s reads coding evidence only', (file) => {
-    expect(codeOf(file)).toMatch(/codingEvidence/);
+    expect(codeOf(file)).toMatch(/\bcodingEvidence\b/);
   });
 
   // These decide what the ROUTING TABLE learns, so they read the stricter predicate — a stopped run and a
@@ -56,13 +56,13 @@ describe('codingEvidence', () => {
   ];
 
   it.each(ROUTING_READERS)('%s calls teachesRouting', (file) => {
-    expect(codeOf(file)).toMatch(/teachesRouting/);
+    expect(codeOf(file)).toMatch(/\bteachesRouting\b/);
   });
 
   // The live fold gate: the same exclusions, applied to a run as it is recorded.
   const LIVE_FOLD_GATES = ['runtime/recordClientRunOutcome.ts', 'runtime/scoreRunOutcome.ts'];
 
   it.each(LIVE_FOLD_GATES)('%s gates the routing fold with foldsIntoRouting', (file) => {
-    expect(codeOf(file)).toMatch(/foldsIntoRouting\(/);
+    expect(codeOf(file)).toMatch(/\bfoldsIntoRouting\(/);
   });
 });

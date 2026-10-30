@@ -13,7 +13,7 @@
  * `@builderforce/learned-routing`); the host owns the transport. Pure.
  */
 
-import { isTenantBudgetFailure } from '@builderforce/learned-routing';
+import { isRateLimitFailure, isTenantBudgetFailure } from '@builderforce/learned-routing';
 import type { BrainTraceEvent } from './brainTriage';
 import { attemptedDelegation } from './delegationRequest';
 import { modelScorecard } from './modelScorecard';
@@ -40,6 +40,9 @@ export interface BrainRunOutcome {
   /** The run failed because the TENANT ran out of quota/budget (the platform's one reading of that failure,
    *  `isTenantBudgetFailure`): stored, never taught to routing - it says nothing about the model. Present only when true. */
   quotaExhausted?: true;
+  /** The run died on a provider rate limit / capacity ceiling (`isRateLimitFailure`, which already excludes a tenant
+   *  budget): an AVAILABILITY fact that demotes the model without calling it a bad coder. Present only when true. */
+  rateLimited?: true;
 }
 
 /** A turn that reported its own cost as exactly 0 (served on this device - `servedOnDevice`). */
@@ -93,16 +96,24 @@ export function codeRunOutcome(args: {
   // Free only when EVERY turn reported 0 (served on this machine); one turn with no cost leaves the run's unknown.
   const allLocal = steps > 0 && turns.every(reportedFree);
   const base = { clientRunId: args.runId, role: 'code' as const, source: 'ide' as const, steps, ...(allLocal ? { costMc: 0 as const } : {}), ...(args.projectId != null ? { projectId: args.projectId } : {}) };
-  // Classified ONCE, here, by the shared taxonomy; a run that did not fail never carries it.
-  const quota = args.failed && isTenantBudgetFailure(args.error) ? { quotaExhausted: true as const } : {};
+  // Classified ONCE, here, by the shared taxonomy (never a local copy): the tenant's own budget first, else a
+  // provider throttle - mutually exclusive by the rule itself. A run that did not fail carries neither.
+  const why = args.failed ? failureFlags(args.error) : {};
   if (args.codeChanged) {
     if (args.aborted || !args.codeModel) return null;
-    return { ...base, ...quota, model: args.codeModel, terminalStatus: args.failed ? 'failed' : 'completed', merged: args.shipped };
+    return { ...base, ...why, model: args.codeModel, terminalStatus: args.failed ? 'failed' : 'completed', merged: args.shipped };
   }
   const emptyHanded = args.askedForChange && steps >= NO_DELIVERABLE_MIN_STEPS && !attemptedDelegation(args.trace);
   const model = emptyHanded ? busiestModel(args.trace) : null;
   if (!model) return null;
-  return { ...base, ...quota, model, terminalStatus: 'failed', merged: false };
+  return { ...base, ...why, model, terminalStatus: 'failed', merged: false };
+}
+
+/** Why a failed run failed, in the wire's two availability-vs-allowance flags. */
+function failureFlags(error: string | undefined): Pick<BrainRunOutcome, 'quotaExhausted' | 'rateLimited'> {
+  if (isTenantBudgetFailure(error)) return { quotaExhausted: true };
+  if (isRateLimitFailure(error)) return { rateLimited: true };
+  return {};
 }
 
 /** The model that served the most completed turns — not merely the last one, which may be
