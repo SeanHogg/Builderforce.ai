@@ -488,11 +488,14 @@ var BuilderforceClient = class {
 
 // src/application/classifyError.ts
 var TOKEN_CAP_CODES = /* @__PURE__ */ new Set([
+  "agent_host_token_limit_exceeded",
   "plan_token_limit_exceeded",
   "plan_monthly_token_limit_exceeded",
-  "agent_host_token_limit_exceeded",
-  "claw_token_limit_exceeded",
-  "image_credit_limit_exceeded"
+  "member_spend_cap_exceeded",
+  "premium_daily_cap_exceeded",
+  "image_credit_limit_exceeded",
+  "video_credit_limit_exceeded",
+  "claw_token_limit_exceeded"
 ]);
 function classifyError(err) {
   if (!(err instanceof BuilderforceApiError)) {

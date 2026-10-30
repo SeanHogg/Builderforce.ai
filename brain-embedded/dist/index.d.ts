@@ -4283,7 +4283,7 @@ interface DraftBinding {
      * token is not failed while another send from the same draft is still getting ready; pair every call with `settle`.
      */
     begin: () => DraftToken;
-    /** The draft on screen's token without counting a send - for a creation asked for with no token of its own (`ensureChatId()`); a send names its token. */
+    /** The draft on screen's token (minted when it has none) without counting a send: for a creation asked for with no token of its own (`ensureChatId()`), and for a tokenless `conv.send` from a draft, which adopts it so its Stop entry is under the token the door's Stop names. A send that `begin`s names its own. */
     adopt: () => DraftToken;
     /** The draft on screen's token (null: none yet, or the draft has been left). Stable between changes. */
     current: () => DraftToken | null;
@@ -4389,6 +4389,8 @@ interface UseBrainConversationOptions {
      * (`send(text, { draft })`): the creation is THAT draft's, never whichever draft is on screen when this runs.
      */
     ensureChatId?: (draft?: DraftToken) => Promise<number | null>;
+    /** The draft's binding (`useChatCreation().drafts`): a send from a draft that names no token adopts the one on screen, so every send owns a Stop entry. */
+    drafts?: DraftBinding;
     /** Notify the host (chats hook) that this chat got new activity. */
     onActivity?: (chatId: number) => void;
     /**
@@ -4497,9 +4499,10 @@ interface UseBrainConversation {
     /**
      * Stop the in-flight run for the active chat: aborts the streaming LLM request
      * and unwinds the agent loop (no error surfaced). No-op when nothing is
-     * running. Pair with `sending` to drive a Stop button.
+     * running. Pair with `sending` to drive a Stop button. On a draft view `draft` is the token of the draft showing;
+     * `undefined` for a host with no binding (its one creation is the draft).
      */
-    stop(draft?: DraftToken | null): void;
+    stop(draft?: DraftToken): void;
     /**
      * Rate one assistant reply (+1 / -1, or 0 to clear). Beyond flipping the thumb it
      * derives WHAT is being rated — the model that served the turn and the MCP tool it
@@ -7783,7 +7786,7 @@ interface ChatTurnsBase<T> {
      */
     steer?: (turn: T) => boolean;
     /** Optional: how this host stops its run. Default `stopRun(runKey)`. */
-    stop?: (draft?: DraftToken | null) => void;
+    stop?: (draft?: DraftToken) => void;
     /** The text a non-string turn carries (blank check). Omit for string turns. */
     textOf?: (turn: T) => string;
     /** Optional: the attachments a non-string turn carries — they ride a steer so a mid-run image is not dropped. */
