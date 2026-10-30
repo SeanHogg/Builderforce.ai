@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
-import { chatDoorLiveness, restoreTurn, useChatTurns, useComposerDraft, type ChatInputAttachment, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
+import { chatDoorLiveness, joinRestorableTurns, restoreTurn, useChatTurns, useComposerDraft, type ChatInputAttachment, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import type { useBrainChats, useBrainConversation } from '@/lib/brain';
 import { useDockedComposer } from '@/lib/brain/dockedBrain';
 import { trackActivity } from '@/lib/activity/tracker';
@@ -62,6 +62,11 @@ export function useBrainPanelTurns({ conv, chats, recipient, chooseRecipient, in
     isDirected: (turn) => turn.addressedTo != null,
     // ...and one whose send was not kept after the chat changed returns to the box, addressee intact.
     restore: (turn) => giveBack(turn),
+    // ...all of them together, when several were held (the box holds one draft): texts in order, files, first addressee.
+    join: (held) => {
+      const one = joinRestorableTurns(held.map((t) => ({ text: t.text, attachments: t.attachments, recipient: t.addressedTo })));
+      return { text: one.text, addressedTo: one.recipient, ...(one.attachments?.length ? { attachments: [...one.attachments] } : {}) };
+    },
     // The conversation's Stop: it also drops a launch still getting ready.
     stop: conv.stop,
   });

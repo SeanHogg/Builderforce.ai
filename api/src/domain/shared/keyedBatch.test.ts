@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reconcileKeyedBatch, unwrittenKeys } from './keyedBatch';
+import { freshRequests, reconcileKeyedBatch, unwrittenKeys } from './keyedBatch';
 
 const row = (id: number, eventKey: string | null) => ({ id, eventKey, content: `m${id}` });
 const req = (eventKey?: string | null) => ({ eventKey: eventKey ?? null });
@@ -69,5 +69,21 @@ describe('reconcileKeyedBatch', () => {
   it('prefers the freshly written row when a key somehow appears in both', () => {
     const got = reconcileKeyedBatch([req('a')], [row(1, 'a')], [row(99, 'a')]);
     expect(got.map((r) => r.id)).toEqual([1]);
+  });
+});
+
+describe('freshRequests', () => {
+  const written = (...keys: Array<string | null>) => keys.map((eventKey) => ({ eventKey }));
+
+  it('marks keyless entries and written keys fresh, and a retry of a committed key not', () => {
+    expect(freshRequests([req('a'), req(), req('b')], written('a', null))).toEqual([true, true, false]);
+  });
+
+  it('a retry that wrote nothing is not fresh at all', () => {
+    expect(freshRequests([req('a'), req('b')], [])).toEqual([false, false]);
+  });
+
+  it('a key repeated inside one batch is fresh once - the insert skipped the second', () => {
+    expect(freshRequests([req('a'), req('a')], written('a'))).toEqual([true, false]);
   });
 });

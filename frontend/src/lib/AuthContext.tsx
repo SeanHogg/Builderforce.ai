@@ -8,6 +8,7 @@ import React, {
   useMemo,
   useState,
 } from 'react';
+import { clearPendingWords, setPendingWordsOwner } from '@seanhogg/builderforce-brain-embedded';
 import type { AuthUser, Tenant } from './types';
 import {
   clearSession,
@@ -250,7 +251,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [adoptSession],
   );
 
+  // Words the Brain journaled on this device (a message not yet saved) belong to the signed-in person in this workspace:
+  // named here as the identity changes, and gone with the session.
+  useEffect(() => {
+    setPendingWordsOwner(user && tenant ? { tenant: tenant.id, user: user.id } : null);
+  }, [user, tenant]);
+
   const logout = useCallback(() => {
+    clearPendingWords();
     clearSession();
     setWebToken(null);
     setTenantToken(null);

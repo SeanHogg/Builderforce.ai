@@ -16,31 +16,26 @@
  * it prompted.
  */
 
-import { MID_TURN_META_KEY } from '@builderforce/agent-loop';
 import { forgetPendingWords } from '../pendingWords';
 import type { RunSteerMessage } from '../runSteering';
+import { steerMetadata } from '../steerMetadata';
 import type { RunCell } from './runCell';
 import { emit, nowIso, pushTrace, recordAppended } from './runCells';
 import type { BrainRunPersistence } from './runTypes';
 
-/** The metadata of a steered row: mid-turn, plus the attachments the message carried. */
-export function steerMetadata(steer: Pick<RunSteerMessage, 'attachments'>): string {
-  const attachments = steer.attachments ?? [];
-  return JSON.stringify({ [MID_TURN_META_KEY]: true, ...(attachments.length > 0 ? { attachments } : {}) });
-}
-
 /**
  * Save one drained steer the run was asked to save, and splice it into the live view.
- * Resolves once it is saved (or the save failed, which is said on the trace); never rejects.
+ * Resolves once it is saved (or the save failed, which is said on the trace); never rejects. The journal is keyed by the
+ * RUN the words were queued for (`runKey`), which is the chat's own key unless the run is a sub-agent's.
  */
-export async function persistSteer(c: RunCell, chatId: number, persistence: Pick<BrainRunPersistence, 'sendMessages'>, steer: RunSteerMessage): Promise<void> {
+export async function persistSteer(c: RunCell, chatId: number, persistence: Pick<BrainRunPersistence, 'sendMessages'>, steer: RunSteerMessage, runKey: number = chatId): Promise<void> {
   if (!steer.persist) return;
   try {
     const [msg] = await persistence.sendMessages(chatId, [{ role: 'user', content: steer.text, metadata: steerMetadata(steer), ...(steer.eventKey ? { eventKey: steer.eventKey } : {}) }]);
     if (!msg) return;
     recordAppended(c, msg);
     emit(c);
-    forgetPendingWords(chatId, [steer.eventKey]);
+    forgetPendingWords(runKey, [steer.eventKey]);
   } catch (e) {
     // The steer already reached the model; only its saved copy is lost - said on the trace
     // (a diagnostic step, like every trace result: English, read by triage, not a UI string).

@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { drainRunSteering, hasRunInterrupt, queueRunSteering, resetRunSteering } from '../../src/policy/steering/index.js';
 import { INTERRUPTED_BY_STEER, SKIPPED_BY_STEER, WAIT_INTERRUPTED_BY_STEER, isInterruptibleCall, runToolInterruptibly, skipOnSteer } from '../../src/policy/steering/index.js';
 import { isStopSteer, steeringHook } from '../../src/policy/steering/index.js';
+import { requeueRunSteering } from '../../src/policy/steering/index.js';
 
 /** A tool that runs until its signal aborts, then reports it was stopped. */
 function longTool() {
@@ -150,5 +151,46 @@ describe("isStopSteer — a steered message that IS a stop command", () => {
     expect(isStopSteer(["write the update now"])).toBe(false);
     expect(isStopSteer(["Ada finished the schema"])).toBe(false);
     expect(isStopSteer([])).toBe(false);
+  });
+});
+
+describe('queueRunSteering - keys the words the run will save, whoever queues them', () => {
+  it('mints the row key at the first enqueue of words the run will save, so no direct caller can leave them keyless', () => {
+    const queued = queueRunSteering(31, 'save these', { fromPerson: true, persist: true });
+
+    expect(queued?.eventKey).toMatch(/^steer:/);
+    expect(drainRunSteering(31)[0]?.eventKey).toBe(queued?.eventKey);
+  });
+
+  it('keeps a key it is given (a requeue), and does not key words nobody will save', () => {
+    queueRunSteering(32, 'again', { fromPerson: true, persist: true, eventKey: 'steer:kept' });
+    queueRunSteering(32, 'owner direction', {});
+
+    const [again, owner] = drainRunSteering(32);
+    expect(again?.eventKey).toBe('steer:kept');
+    expect(owner?.eventKey).toBeUndefined();
+  });
+
+  it('reports nothing for blank words', () => {
+    expect(queueRunSteering(33, '   ', { persist: true })).toBeUndefined();
+    expect(drainRunSteering(33)).toEqual([]);
+  });
+});
+
+describe('requeueRunSteering - handed-back steers go to the FRONT, in their order', () => {
+  it('puts them ahead of what was queued meanwhile', () => {
+    queueRunSteering(34, 'said meanwhile', { fromPerson: true });
+
+    requeueRunSteering(34, [{ text: 'first', eventKey: 'steer:1' }, { text: 'second', eventKey: 'steer:2' }]);
+
+    expect(drainRunSteering(34).map((m) => m.text)).toEqual(['first', 'second', 'said meanwhile']);
+  });
+
+  it('is a no-op for nothing, and makes an inbox of its own for a run with none', () => {
+    requeueRunSteering(35, []);
+    expect(drainRunSteering(35)).toEqual([]);
+
+    requeueRunSteering(35, [{ text: 'alone' }]);
+    expect(drainRunSteering(35).map((m) => m.text)).toEqual(['alone']);
   });
 });

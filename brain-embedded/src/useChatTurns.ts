@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { stopRun } from './brainRunStore';
 import type { RunKey } from './brainRunStore';
-import { drainRunSteering, queueRunSteering } from './runSteering';
+import { queueRunSteering } from './runSteering';
 import type { ChatInputAttachment } from './types';
+import type { HandedTurn } from './runStore/continueChat';
 import { wakeChat } from './runStore/wakeChat';
 import { getRunDriver } from './runDriver';
-import { forgetPendingWords } from './pendingWords';
 import { turnBody, useQueuedTurns, type QueuedItem, type QueuedTurns } from './useQueuedTurns';
 import { startsRun } from './userTurnRuns';
 
@@ -87,8 +87,18 @@ export interface ChatTurnsBase<T> {
  * the webview's in-process inbox is not where that run reads.
  */
 export type ChatTurnsOptions<T> = ChatTurnsBase<T> & (
-  | { isDirected?: undefined; restore?: undefined }
-  | { isDirected: (turn: T) => boolean; restore: (turn: T) => void }
+  | { isDirected?: undefined; restore?: undefined; join?: undefined }
+  | {
+      isDirected: (turn: T) => boolean;
+      restore: (turn: T) => void;
+      /**
+       * Several turns given back at once (everything held when the person moved to another chat) as the ONE turn the
+       * composer takes back - texts in order, files together, the first addressee (`joinRestorableTurns`). The box
+       * holds one draft: restoring them one by one would drop every text after the first. Without it they are
+       * restored one by one.
+       */
+      join?: (turns: readonly T[]) => T;
+    }
 );
 
 export interface ChatTurns<T> {
@@ -135,12 +145,12 @@ export function chatDoorLiveness(conv: { sending: boolean; runLive: boolean }, e
   return { running: conv.sending || extraInFlight, steerable: conv.runLive };
 }
 
-export function useChatTurns<T = string>({ running, steerable = running, runKey, send, steer, stop, restore, textOf, isDirected, attachmentsOf }: ChatTurnsOptions<T>): ChatTurns<T> {
+export function useChatTurns<T = string>({ running, steerable = running, runKey, send, steer, stop, restore, join, textOf, isDirected, attachmentsOf }: ChatTurnsOptions<T>): ChatTurns<T> {
   // Newest ports, read at call time — `submit`/`stop` keep their identity across renders
   // (hosts hand them to memoized composers and to callbacks captured at run start).
-  const ports = useRef({ send, steer, stop, restore, textOf, isDirected, attachmentsOf, runKey, running, steerable });
+  const ports = useRef({ send, steer, stop, restore, join, textOf, isDirected, attachmentsOf, runKey, running, steerable });
   // eslint-disable-next-line react-hooks/refs
-  ports.current = { send, steer, stop, restore, textOf, isDirected, attachmentsOf, runKey, running, steerable };
+  ports.current = { send, steer, stop, restore, join, textOf, isDirected, attachmentsOf, runKey, running, steerable };
   // A stopped run is unwinding: a message typed meanwhile cannot steer it (the model gets no
   // further turn), so it is held for after - until the run's falling edge clears the mark. The ref is
   // what is read; the state exists only to repaint, because the composer words its Send button from it.
@@ -210,19 +220,24 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     }
   }, []);
 
-  // The conversation changed with turns still held: each goes to ITS OWN chat, oldest first, nothing discarded -
-  // the same path a send into that chat takes. An addressed turn (or any, where the run executes elsewhere) goes
-  // back to the composer that is showing; the rest become that chat's next turns (`wakeChat`, else its inbox, saved).
+  // The conversation changed with turns still held: they go to THEIR OWN chat, oldest first, nothing discarded - the
+  // same path a send into that chat takes. An addressed turn (or any, where the run executes elsewhere) goes back to
+  // the composer that is showing, ALL of them in one restore; the rest are handed to that chat TOGETHER, as one
+  // continuation (`wakeChat`: one row per turn, in order), else to its inbox, saved - so there is one ordering rule.
   const handOff = useCallback((held: readonly QueuedItem<T>[], from: RunKey | null) => {
+    const { textOf: text, attachmentsOf: attached, isDirected: directed, restore: giveBack, join } = ports.current;
+    const back: T[] = [];
+    const chat: HandedTurn[] = [];
     for (const { value: turn } of held) {
-      const { textOf: text, attachmentsOf: attached, isDirected: directed, restore: giveBack } = ports.current;
-      if (directed?.(turn) || getRunDriver() || typeof from !== 'number') {
-        giveBack?.(turn);
-        continue;
-      }
-      const body = turnBody(turn, text);
-      const files = attached?.(turn);
-      if (!wakeChat(from, body, files)) queueRunSteering(from, body, { fromPerson: true, persist: true, ...(files?.length ? { attachments: files } : {}) });
+      if (directed?.(turn) || getRunDriver() || typeof from !== 'number') back.push(turn);
+      else chat.push({ text: turnBody(turn, text), attachments: attached?.(turn) });
+    }
+    if (giveBack && back.length > 0) {
+      if (join && back.length > 1) giveBack(join(back));
+      else for (const turn of back) giveBack(turn);
+    }
+    if (chat.length > 0 && typeof from === 'number' && !wakeChat(from, chat)) {
+      for (const turn of chat) queueRunSteering(from, turn.text, { fromPerson: true, persist: true, ...(turn.attachments?.length ? { attachments: [...turn.attachments] } : {}) });
     }
   }, []);
 
@@ -302,8 +317,8 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     stopEpoch.current += 1;
     if (ports.current.running) markStopping(true);
     const { stop: halt, runKey: key } = ports.current;
-    // A steer typed before the Stop is dropped with the run - it must not start the next one.
-    if (typeof key === 'number') for (const dropped of drainRunSteering(key)) forgetPendingWords(key, [dropped.eventKey]);
+    // A steer typed before the Stop is dropped with the run (the store's Stop drains the inbox and the device's
+    // journal - every entry point to Stop does) - it must not start the next one.
     if (halt) halt();
     else if (key != null) stopRun(key);
   }, [clear, markStopping]);
@@ -333,7 +348,8 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     }
     // Held while no run is live yet (the window before the turn that starts it is running): a FOLLOW-UP to that
     // run, steered into it in order the moment it goes live (below). Not for an addressed turn or a Stop.
-    const preLiveFor = !ports.current.steerable && typeof key === 'number' && !stoppingRef.current && !directed?.(turn) ? key : undefined;
+    // A draft (no chat yet) is held for the run its first turn is creating: `null` until the chat's first id arrives.
+    const preLiveFor = !ports.current.steerable && (typeof key === 'number' || key === null) && !stoppingRef.current && !directed?.(turn) ? key : undefined;
     if (hold(turn, preLiveFor !== undefined ? { preLiveFor } : undefined)) return true;
     // A turn from the queue is being sent right now (in THIS chat): this one follows it, never beside it.
     if (!live && flushingIn(key) > 0) {

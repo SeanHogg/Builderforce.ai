@@ -53,7 +53,7 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
       const msg: ChatCompletionMessage = { role: 'user', content: steerModelContent(steer) };
       convo.push(steer.fromPerson ? markPersonTurn(msg) : msg);
       // A steer no surface has shown yet (the web composer's) is saved as the run reads it.
-      await persistSteer(c, chatId, req.persistence, steer);
+      await persistSteer(c, chatId, req.persistence, steer, runKey);
     }
     // Auto-compact BEFORE the turn: summarize the older middle into a memory note
     // when the transcript exceeds the token budget (instead of silently dropping it

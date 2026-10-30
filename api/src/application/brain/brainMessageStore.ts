@@ -6,23 +6,37 @@
 
 import { eq, and, inArray, isNotNull, sql } from 'drizzle-orm';
 import { brainChats, brainChatMessages } from '../../infrastructure/database/schema';
-import { reconcileKeyedBatch, unwrittenKeys } from '../../domain/shared/keyedBatch';
+import { freshRequests, reconcileKeyedBatch, unwrittenKeys } from '../../domain/shared/keyedBatch';
 import { messageColumns, type BrainChatMessageRow } from './brainChatShapes';
 import type { Db } from '../../infrastructure/database/connection';
 import { bumpChatMessages, bumpUnreadForChatAudience } from './chatCacheVersions';
 import { isStepRow } from '@builderforce/agent-loop';
 import { anchorStepSeqs, appendSteps } from './chatStepStore';
 
+type AppendInput = { role: string; content: string; metadata?: string | null; eventKey?: string | null };
+
 /** Append messages to a chat (seq-managed insert + touch), NO access check —
  *  callers must have already verified access. Shared by `appendMessages`
  *  and `agentReply` so the write path lives once. */
-export async function appendRaw(
-  db: Db,
-  chatId: number,
-  messages: Array<{ role: string; content: string; metadata?: string | null; eventKey?: string | null }>,
-) {
+export async function appendRaw(db: Db, chatId: number, messages: AppendInput[]) {
+  return (await appendRawOutcome(db, chatId, messages)).rows;
+}
+
+/** What an append did, for a caller that acts on it: the rows as answered (request order), and the requested
+ *  messages that were actually WRITTEN now. A retry of a message that already committed answers its original row but
+ *  is not in `written` - so the effects of a first attempt (a comment on a ticket, a ping, an agent's reply, a
+ *  learning pass, an unread badge) are not run a second time. */
+export interface AppendOutcome<M extends AppendInput> {
+  rows: BrainChatMessageRow[];
+  written: M[];
+  /** The conversation rows inserted now (not steps): what a learning pass may read. */
+  writtenRows: BrainChatMessageRow[];
+}
+
+/** {@link appendRaw}, reporting what was written. */
+export async function appendRawOutcome<M extends AppendInput>(db: Db, chatId: number, messages: M[]): Promise<AppendOutcome<M>> {
   const valid = messages.filter((m) => m.role && typeof m.content === 'string');
-  if (valid.length === 0) return [];
+  if (valid.length === 0) return { rows: [], written: [], writtenRows: [] };
 
   // Step rows are run telemetry and go to the operational store, not this table; the
   // rest is the conversation. The chat is touched FIRST because the steps carry its tenant.
@@ -44,29 +58,39 @@ export async function appendRaw(
       // The seq a trailing step anchors to (see anchorStepSeqs), read in the same trip.
       lastSeq: sql<number>`(SELECT COALESCE(MAX(${brainChatMessages.seq}), 0) FROM ${brainChatMessages} WHERE ${brainChatMessages.chatId} = ${chatId})`,
     });
-  const [turnRows, stepRows] = await Promise.all([
+  const [turn, stepRows] = await Promise.all([
     insertTurns(db, chatId, turns),
     touched
       ? appendSteps(db, touched.tenantId, chatId, steps.map((s) => ({ metadata: s.metadata as string, eventKey: s.eventKey ?? null, createdAt: s.createdAt })))
       : Promise.resolve([] as BrainChatMessageRow[]),
   ]);
+  const turnRows = turn.rows;
   // Orphan the cached transcript reads (`chatPolledReads.ts`) and the unread maps of
   // users who have actually read this chat (tenant-wide bump kept the unread cache
-  // cold in busy tenants).
-  await Promise.all([
-    bumpChatMessages(chatId),
-    touched ? bumpUnreadForChatAudience(db, touched.tenantId, chatId) : undefined,
-  ]);
+  // cold in busy tenants). Only when something was written: a retry that found its
+  // rows already there changed nothing a reader or an unread badge could show.
+  // (A step is run telemetry that carries no effect of its own: a retried step batch at worst re-orphans a cache.)
+  const wroteSomething = turn.fresh.some(Boolean) || stepRows.length > 0;
+  if (wroteSomething) {
+    await Promise.all([
+      bumpChatMessages(chatId),
+      touched ? bumpUnreadForChatAudience(db, touched.tenantId, chatId) : undefined,
+    ]);
+  }
 
   // Answer in the order asked, each half having kept its own order.
   let t = 0;
   let s = 0;
   const out: BrainChatMessageRow[] = [];
+  const written: M[] = [];
   for (const m of valid) {
-    const row = isStepRow(m) ? stepRows[s++] : turnRows[t++];
+    const isStep = isStepRow(m);
+    const fresh = isStep ? true : turn.fresh[t];
+    const row = isStep ? stepRows[s++] : turnRows[t++];
     if (row) out.push(row);
+    if (fresh) written.push(m);
   }
-  return anchorStepSeqs(out, Number(touched?.lastSeq ?? 0));
+  return { rows: anchorStepSeqs(out, Number(touched?.lastSeq ?? 0)), written, writtenRows: turn.written };
 }
 
 /** The conversation half of {@link appendRaw}: one seq-managed, idempotent insert. */
@@ -74,8 +98,8 @@ async function insertTurns(
   db: Db,
   chatId: number,
   valid: Array<{ role: string; content: string; metadata?: string | null; eventKey?: string | null; createdAt: Date }>,
-): Promise<BrainChatMessageRow[]> {
-  if (valid.length === 0) return [];
+): Promise<{ rows: BrainChatMessageRow[]; fresh: boolean[]; written: BrainChatMessageRow[] }> {
+  if (valid.length === 0) return { rows: [], fresh: [], written: [] };
 
   // ONE insert for the whole batch, not one per message. This used to be two
   // round-trips per turn in a loop, which is invisible on a 2-message append and
@@ -113,9 +137,11 @@ async function insertTurns(
   // RETURNING already carries it — no follow-up UPDATE round trip.
 
   const written = rows;
+  const stripped = written.map(({ eventKey: _k, ...row }) => row);
+  const fresh = freshRequests(valid, written);
   // Nothing was skipped: every message is new, so the batch IS the answer.
-  if (written.length === valid.length) return written.map(({ eventKey: _k, ...row }) => row);
-  return keyedRows(db, chatId, valid, written);
+  if (written.length === valid.length) return { rows: stripped, fresh, written: stripped };
+  return { rows: await keyedRows(db, chatId, valid, written), fresh, written: stripped };
 }
 
 /**

@@ -20,8 +20,10 @@ export function createLocalFirstPersistence(records: RovrRecords, sink: SyncSink
       // A row's `eventKey` (the step queue's, a steered message's) is KEPT: the device store saves a repeated key
       // as the same row, and the sync outbox sends the row under it, so the server upserts a late save and its retry as one.
       const rows = messages.map(({ role, content, metadata, eventKey }) => ({ role, content, ...(metadata !== undefined ? { metadata } : {}), ...(eventKey ? { eventKey } : {}) }));
-      const saved = await records.appendMessages(chatId, rows);
-      sink.enqueue(chatId, rows.map((row) => ({ kind: 'message' as const, row })));
+      const { messages: saved, written } = await records.appendMessages(chatId, rows);
+      // Only the rows STORED now go to the outbox: a row that came back as a known one (saved before under its key) is
+      // already there, and a second entry for it is a second send of the same message.
+      if (written.length > 0) sink.enqueue(chatId, written.map((row) => ({ kind: 'message' as const, row })));
       return saved;
     },
   };

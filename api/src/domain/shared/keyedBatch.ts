@@ -70,3 +70,23 @@ export function unwrittenKeys(
   }
   return [...missing];
 }
+
+/**
+ * Which of the REQUESTED entries the insert actually wrote, in request order: a keyless entry always was; a keyed one
+ * was if its key is among `written` - and only its FIRST occurrence in the batch (a repeat inside one batch is skipped
+ * by the same `ON CONFLICT DO NOTHING`). A request the caller made twice, or a retry of one that committed, is not
+ * fresh: it must trigger nothing a first attempt does (activity, notifications, replies, cache bumps).
+ */
+export function freshRequests(
+  requested: ReadonlyArray<{ eventKey?: string | null }>,
+  written: ReadonlyArray<{ eventKey: string | null }>,
+): boolean[] {
+  const writtenKeys = new Set(written.map((r) => r.eventKey).filter((k): k is string => !!k));
+  const seen = new Set<string>();
+  return requested.map((req) => {
+    if (!req.eventKey) return true;
+    if (!writtenKeys.has(req.eventKey) || seen.has(req.eventKey)) return false;
+    seen.add(req.eventKey);
+    return true;
+  });
+}

@@ -32,8 +32,12 @@ export interface QueuedItem<T> {
   /** Stable per held turn, so a host can render it and let the user remove it. */
   readonly id: number;
   readonly value: T;
-  /** Held only because no run was live yet (typed while the turn that starts it was still getting ready) - in THIS chat's run. */
-  readonly preLiveFor?: number;
+  /**
+   * Held only because no run was live yet (typed while the turn that starts it was still getting ready) - in THIS
+   * chat's run. `null`: in the run of a chat that does not exist yet (a draft whose first turn is creating it); the
+   * chat's first id re-tags it with that id.
+   */
+  readonly preLiveFor?: number | null;
 }
 
 export interface QueuedTurns<T = string> {
@@ -46,7 +50,7 @@ export interface QueuedTurns<T = string> {
    * flight and the caller must not send), false when the caller should send it
    * now. Written this way so the host keeps ownership of how it sends.
    */
-  submit: (value: T, opts?: { preLiveFor?: number }) => boolean;
+  submit: (value: T, opts?: { preLiveFor?: number | null }) => boolean;
   /** Drop one held turn (the user removed it, or steered it into the run). */
   remove: (id: number) => void;
   /** Put a turn back at the FRONT of the queue - a flushed turn the host did not keep must not be lost. */
@@ -114,7 +118,7 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
   mayFlushRef.current = mayFlush;
   const runningRef = useRef(running);
 
-  const submit = useCallback((value: T, opts?: { preLiveFor?: number }) => {
+  const submit = useCallback((value: T, opts?: { preLiveFor?: number | null }) => {
     const text = turnBody(value, textOfRef.current);
     if (!text) return false;
     if (!runningRef.current) return false;
@@ -163,6 +167,12 @@ export function useQueuedTurns<T = string>({ running, send, resetKey = null, tex
     heldIn.current = resetKey;
     const held = queueRef.current;
     if (held.length === 0) return;
+    // A draft's first id is NOT a switch: the turn in flight is creating the chat these turns were typed for. They stay
+    // held, and the ones that waited only for a run to exist now wait for THIS chat's (they steer into it when it is live).
+    if (from === null && typeof resetKey === 'number' && runningRef.current) {
+      update((current) => current.map((item) => (item.preLiveFor === null ? { ...item, preLiveFor: resetKey } : item)));
+      return;
+    }
     update(() => []);
     handOffRef.current?.(held, from);
   }, [resetKey, update]);

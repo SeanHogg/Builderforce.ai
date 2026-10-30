@@ -10,6 +10,8 @@ import type { BrainMessage } from '../types';
 import type { BrainTraceEvent } from '../brainTriage';
 import { getRunDriver } from '../runDriver';
 import { forgetResolvedModels } from '../lastResolvedModel';
+import { forgetPendingWords } from '../pendingWords';
+import { drainRunSteering } from '../runSteering';
 import { toolActivity } from '../runActivity';
 import { EMPTY_SNAPSHOT } from './runCell';
 import { cells, emit, getCell, nowIso, pushTrace, recordAppended, runStoreResetHooks, storeListeners } from './runCells';
@@ -172,7 +174,19 @@ export async function stopBeforeStart(runKey: RunKey, chatId: number, persistenc
   }
 }
 
+/**
+ * The Stop ends the conversation's work, waiting words included: what was steered and not yet read is dropped with
+ * the run - from the inbox, and from the device's journal (a dropped word must not come back on the next open and
+ * start what the person stopped). Here, in the store, so EVERY entry point to Stop clears it: the composer's button,
+ * a typed stop, the conversation's own `stop`.
+ */
+function dropWaitingWords(chatId: RunKey): void {
+  if (typeof chatId !== 'number') return;
+  for (const dropped of drainRunSteering(chatId)) forgetPendingWords(chatId, [dropped.eventKey]);
+}
+
 export function stopRun(chatId: RunKey): void {
+  dropWaitingWords(chatId);
   const driver = driverFor(chatId);
   if (driver) return driver.stop(chatId as number);
   const c = cells.get(chatId);

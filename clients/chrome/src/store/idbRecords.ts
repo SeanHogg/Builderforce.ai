@@ -35,13 +35,16 @@ import {
   type MessageInput,
   type RovrRecords,
 } from './records';
+import { assembleAppend, publicMessage } from './storedMessage';
 
-const VERSION = 1;
+/** 2: the messages store gains the [chatId, eventKey] index, so a keyed append looks its key up instead of reading the chat. */
+const VERSION = 2;
 const CHATS = 'chats';
 const MESSAGES = 'messages';
 const TASKS = 'tasks';
 const LEDGER = 'ledger';
 const BY_CHAT = 'byChat';
+const BY_CHAT_KEY = 'byChatKey';
 
 type StoredMessage = Omit<BrainMessage, 'id' | 'seq'> & { id?: number; chatId: number; eventKey?: string };
 
@@ -68,9 +71,13 @@ export function createIdbRecords(factory: IDBFactory, dbName: string): RovrRecor
       req.onupgradeneeded = () => {
         const d = req.result;
         if (!d.objectStoreNames.contains(CHATS)) d.createObjectStore(CHATS, { keyPath: 'id' });
-        if (!d.objectStoreNames.contains(MESSAGES)) {
-          d.createObjectStore(MESSAGES, { keyPath: 'id', autoIncrement: true }).createIndex(BY_CHAT, 'chatId');
-        }
+        const messages = d.objectStoreNames.contains(MESSAGES)
+          ? req.transaction!.objectStore(MESSAGES)
+          : d.createObjectStore(MESSAGES, { keyPath: 'id', autoIncrement: true });
+        if (!messages.indexNames.contains(BY_CHAT)) messages.createIndex(BY_CHAT, 'chatId');
+        // Rows saved without a key have no entry in this index (an index skips a row whose key path is missing), and
+        // rows written before version 2 are indexed by the upgrade itself - no migration of the data.
+        if (!messages.indexNames.contains(BY_CHAT_KEY)) messages.createIndex(BY_CHAT_KEY, ['chatId', 'eventKey']);
         if (!d.objectStoreNames.contains(TASKS)) d.createObjectStore(TASKS, { keyPath: 'id' }).createIndex(BY_CHAT, 'chatId');
         if (!d.objectStoreNames.contains(LEDGER)) d.createObjectStore(LEDGER, { keyPath: 'id' }).createIndex(BY_CHAT, 'chatId');
       };
@@ -129,15 +136,19 @@ export function createIdbRecords(factory: IDBFactory, dbName: string): RovrRecor
       // Validate while `chatId` is still on the row, then strip it for the caller.
       // Dropping one bad row would silently shorten the only copy of the transcript.
       readStoredMessages(rows, chatId);
-      return rows.sort((a, b) => a.id - b.id).map(({ chatId: _c, eventKey: _k, ...m }) => ({ ...m, seq: m.id }));
+      return rows.sort((a, b) => a.id - b.id).map((m) => publicMessage({ ...m, seq: m.id }));
     },
     async appendMessages(chatId: number, rows: readonly MessageInput[]) {
       const createdAt = new Date().toISOString();
       const tx = (await open()).transaction([MESSAGES, CHATS], 'readwrite');
       const store = tx.objectStore(MESSAGES);
       // A row sent again under the key it was saved with is the same row: the saved one comes back (`slotKeyedRows`).
-      const saved = await promised(store.index(BY_CHAT).getAll(IDBKeyRange.only(chatId)) as IDBRequest<Array<StoredMessage & { id: number }>>);
-      const slots = slotKeyedRows(rows, (key) => saved.find((m) => m.eventKey === key));
+      // Looked up by key (`[chatId, eventKey]`), not by reading the chat: a long transcript costs the same as a short one.
+      // A readwrite transaction on this store is serialised by IndexedDB itself, so two appends of one key cannot both miss it.
+      const keys = [...new Set(rows.flatMap((row) => (row.eventKey ? [row.eventKey] : [])))];
+      const found = await Promise.all(keys.map((key) => promised(store.index(BY_CHAT_KEY).get([chatId, key]) as IDBRequest<(StoredMessage & { id: number }) | undefined>)));
+      const saved = new Map(found.flatMap((m, i) => (m ? [[keys[i]!, m] as const] : [])));
+      const slots = slotKeyedRows(rows, (key) => saved.get(key));
       const inserts = slots.flatMap((slot) => (slot.kind === 'new' ? [slot] : []));
       const ids = await Promise.all(
         inserts.map(({ row, key }) => {
@@ -151,20 +162,15 @@ export function createIdbRecords(factory: IDBFactory, dbName: string): RovrRecor
         if (chat) chats.put({ ...chat, updatedAt: createdAt });
       }
       await done(tx);
-      const out: BrainMessage[] = [];
       let next = 0;
-      for (const slot of slots) {
-        if (slot.kind === 'known') {
-          const m = slot.prior;
-          out.push({ id: m.id, seq: m.id, role: m.role, content: m.content, metadata: m.metadata ?? null, createdAt: m.createdAt });
-        } else if (slot.kind === 'repeat') {
-          out.push(out[slot.of]!);
-        } else {
+      return assembleAppend(
+        slots,
+        (m) => publicMessage({ ...m, seq: m.id, metadata: m.metadata ?? null }),
+        (row) => {
           const id = Number(ids[next++]);
-          out.push({ id, seq: id, role: slot.row.role, content: slot.row.content, metadata: slot.row.metadata ?? null, createdAt });
-        }
-      }
-      return out;
+          return { id, seq: id, role: row.role, content: row.content, metadata: row.metadata ?? null, createdAt };
+        },
+      );
     },
     listTasks: (chatId) => byChat<LocalTask>(TASKS, chatId),
     async getTask(id) {

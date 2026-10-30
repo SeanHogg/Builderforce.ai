@@ -88,6 +88,7 @@ export {
   newSteerKey,
   onRunInterrupt,
   queueRunSteering,
+  requeueRunSteering,
   resetRunSteering,
   runSteeringSource,
   type RunSteerMessage,

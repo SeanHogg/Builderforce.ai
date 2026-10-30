@@ -20,7 +20,7 @@
  * they come from `packages/local-first`, the contract both hosts share.
  */
 import { slotKeyedRows, type BrainMessage, type ChatMode, type Effort } from '@seanhogg/builderforce-brain-embedded';
-import { publicMessage } from './storedMessage';
+import { assembleAppend, publicMessage, type AppendResult } from './storedMessage';
 // G26: the durability rules are NOT restated here. `durabilityContract` has no
 // subpath export and is not re-exported from the package entry (owned elsewhere),
 // so it is imported by path — the same way `clients/vscode/src/localFirstStore.ts`
@@ -122,7 +122,7 @@ export interface RovrRecords {
   createChat(title: string): Promise<LocalChat>;
   updateChat(id: number, patch: Partial<Omit<LocalChat, 'id'>>): Promise<void>;
   listMessages(chatId: number): Promise<BrainMessage[]>;
-  appendMessages(chatId: number, rows: readonly MessageInput[]): Promise<BrainMessage[]>;
+  appendMessages(chatId: number, rows: readonly MessageInput[]): Promise<AppendResult>;
   listTasks(chatId: number): Promise<LocalTask[]>;
   getTask(id: string): Promise<LocalTask | undefined>;
   putTask(task: LocalTask): Promise<void>;
@@ -357,19 +357,14 @@ export function createMemoryRecords(): RovrRecords {
     },
     async appendMessages(chatId, rows) {
       const createdAt = new Date().toISOString();
-      const out: BrainMessage[] = [];
       // A row sent again under the key it was saved with is the same row: the saved one comes back (`slotKeyedRows`).
-      for (const slot of slotKeyedRows(rows, (key) => messages.find((m) => m.chatId === chatId && m.eventKey === key))) {
-        if (slot.kind === 'known') out.push(publicMessage(slot.prior));
-        else if (slot.kind === 'repeat') out.push(out[slot.of]!);
-        else {
-          seq += 1;
-          const msg = { id: seq, chatId, role: slot.row.role, content: slot.row.content, metadata: slot.row.metadata ?? null, seq, createdAt, ...(slot.key ? { eventKey: slot.key } : {}) };
-          messages.push(msg);
-          out.push(publicMessage(msg));
-        }
-      }
-      return out;
+      const slots = slotKeyedRows(rows, (key) => messages.find((m) => m.chatId === chatId && m.eventKey === key));
+      return assembleAppend(slots, publicMessage, (row, key) => {
+        seq += 1;
+        const msg = { id: seq, chatId, role: row.role, content: row.content, metadata: row.metadata ?? null, seq, createdAt, ...(key ? { eventKey: key } : {}) };
+        messages.push(msg);
+        return publicMessage(msg);
+      });
     },
     async listTasks(chatId) {
       return [...tasks.values()].filter((t) => t.chatId === chatId);

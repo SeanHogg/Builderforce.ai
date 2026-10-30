@@ -11,7 +11,8 @@
  * persistence. The core code never changes.
  */
 
-import { createContext, useContext, useMemo } from 'react';
+import { createContext, useContext, useEffect, useMemo } from 'react';
+import { registerPendingWordsReplay } from './pendingWords';
 import type { BrainChat, BrainMessage, ChatInputAttachment } from './types';
 import type { ImagePrepOptions } from './imagePrep';
 import { streamChatCompletion, type BrainTransport } from './streamChatCompletion';
@@ -182,6 +183,11 @@ export function BrainProvider({
     }),
     [config],
   );
+  // The app started: words a dead page load left unsaved are saved for every chat, not only the one that gets opened.
+  useEffect(() => {
+    registerPendingWordsReplay(runtime.persistence);
+    return () => registerPendingWordsReplay(null);
+  }, [runtime.persistence]);
   return <BrainConfigContext.Provider value={runtime}>{children}</BrainConfigContext.Provider>;
 }
 
