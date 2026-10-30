@@ -25658,7 +25658,7 @@ function useArmedNewChat(chats) {
 }
 
 // src/useBrainConversation.ts
-var import_react13 = require("react");
+var import_react14 = require("react");
 
 // src/useRunSnapshot.ts
 var import_react8 = require("react");
@@ -26006,6 +26006,27 @@ function withRating(ratings, messageId, rating) {
   return next;
 }
 
+// src/launchCancel.ts
+var import_react13 = require("react");
+function useLaunchCancel(sendingRef) {
+  const cancelledLaunchRef = (0, import_react13.useRef)(/* @__PURE__ */ new Set());
+  const launchingRef = (0, import_react13.useRef)(/* @__PURE__ */ new Set());
+  const draftMadeRef = (0, import_react13.useRef)(/* @__PURE__ */ new Set());
+  const stopChat = (0, import_react13.useCallback)((id) => {
+    if ((sendingRef.current.has(id) || launchingRef.current.has(id)) && !isRunning(id)) cancelledLaunchRef.current.add(id);
+    stopRun(id);
+  }, [sendingRef]);
+  const stopConversation = (0, import_react13.useCallback)((chatId) => {
+    if (chatId != null) {
+      stopChat(chatId);
+      return;
+    }
+    if (sendingRef.current.has(null)) cancelledLaunchRef.current.add(null);
+    for (const made of draftMadeRef.current) stopChat(made);
+  }, [stopChat, sendingRef]);
+  return { cancelledLaunchRef, launchingRef, draftMadeRef, stopConversation };
+}
+
 // src/useBrainConversation.ts
 function useBrainConversation(options) {
   const { persistence, resolveSystemPrompt, stream, imagePrep } = useBrainConfig();
@@ -26034,11 +26055,10 @@ function useBrainConversation(options) {
     chatRoster,
     prepareRun
   } = options;
-  const sendingRef = (0, import_react13.useRef)(/* @__PURE__ */ new Set());
-  const [sendingChats, setSendingChats] = (0, import_react13.useState)(sendingRef.current);
-  const cancelledLaunchRef = (0, import_react13.useRef)(/* @__PURE__ */ new Set());
-  const launchingRef = (0, import_react13.useRef)(/* @__PURE__ */ new Set());
-  const markSending = (0, import_react13.useCallback)((key, on) => {
+  const sendingRef = (0, import_react14.useRef)(/* @__PURE__ */ new Set());
+  const [sendingChats, setSendingChats] = (0, import_react14.useState)(sendingRef.current);
+  const { cancelledLaunchRef, launchingRef, draftMadeRef, stopConversation } = useLaunchCancel(sendingRef);
+  const markSending = (0, import_react14.useCallback)((key, on) => {
     const next = new Set(sendingRef.current);
     if (on) next.add(key);
     else next.delete(key);
@@ -26046,21 +26066,21 @@ function useBrainConversation(options) {
     setSendingChats(next);
   }, []);
   const localSending = sendingChats.has(chatId);
-  const chatIdRef = (0, import_react13.useRef)(chatId);
+  const chatIdRef = (0, import_react14.useRef)(chatId);
   chatIdRef.current = chatId;
-  const [localError, setLocalError] = (0, import_react13.useState)("");
-  const [ratings, setRatings] = (0, import_react13.useState)({});
+  const [localError, setLocalError] = (0, import_react14.useState)("");
+  const [ratings, setRatings] = (0, import_react14.useState)({});
   const composer = useComposerAttachments(persistence, imagePrep, setLocalError);
   const { pending: pendingAttachments, uploading } = composer;
-  const autoRepliedChatIdRef = (0, import_react13.useRef)(null);
+  const autoRepliedChatIdRef = (0, import_react14.useRef)(null);
   const snapshot = useRunSnapshot(chatId);
   const { messages, updateMessages, loadingMessages, reloadMessages } = useChatTranscript(persistence, chatId, snapshot, {
     onLoadStart: () => setLocalError(""),
     onLoadError: setLocalError
   });
-  const messagesRef = (0, import_react13.useRef)(messages);
+  const messagesRef = (0, import_react14.useRef)(messages);
   messagesRef.current = messages;
-  (0, import_react13.useEffect)(() => {
+  (0, import_react14.useEffect)(() => {
     const map = {};
     for (const msg of messages) {
       if (!msg.metadata) continue;
@@ -26076,7 +26096,7 @@ function useBrainConversation(options) {
   const resolvedSystemPrompt = systemPrompt ?? resolveSystemPrompt(modality);
   const fullSystemPrompt = extraSystem ? `${resolvedSystemPrompt}
 ${extraSystem}` : resolvedSystemPrompt;
-  const buildRequest = (0, import_react13.useCallback)(
+  const buildRequest = (0, import_react14.useCallback)(
     (history, researchFrom, userTurn, userTurnMessageId) => {
       const seed = transcriptSeedOf(history);
       return {
@@ -26109,7 +26129,7 @@ ${extraSystem}` : resolvedSystemPrompt;
     [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
   );
   const bindContinuation = useContinuation(persistence, prepareRun);
-  const launch = (0, import_react13.useCallback)(async (id, request) => {
+  const launch = (0, import_react14.useCallback)(async (id, request) => {
     launchingRef.current.add(id);
     try {
       let extra = null;
@@ -26133,7 +26153,7 @@ ${extraSystem}` : resolvedSystemPrompt;
       cancelledLaunchRef.current.delete(id);
     }
   }, [prepareRun, persistence, updateMessages, bindContinuation]);
-  const send = (0, import_react13.useCallback)(
+  const send = (0, import_react14.useCallback)(
     async (text, opts) => {
       const trimmed = text.trim();
       if (!trimmed || sendingRef.current.has(chatId) || isLive(chatId)) return false;
@@ -26154,6 +26174,7 @@ ${extraSystem}` : resolvedSystemPrompt;
           return false;
         }
         if (cancelled) cancelledLaunchRef.current.add(id);
+        draftMadeRef.current.add(id);
         markSending(id, true);
         markSending(origin, false);
       }
@@ -26203,17 +26224,18 @@ ${extraSystem}` : resolvedSystemPrompt;
         return false;
       } finally {
         cancelledLaunchRef.current.delete(runChatId);
+        draftMadeRef.current.delete(runChatId);
         markSending(runChatId, false);
       }
     },
     [persistence, chatId, markSending, composer.take, composer.restore, pendingAttachments, messages, ensureChatId, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages]
   );
-  const replyToTrailingTurn = (0, import_react13.useCallback)((id, last) => {
+  const replyToTrailingTurn = (0, import_react14.useCallback)((id, last) => {
     setLocalError("");
     void launch(id, buildRequest(messages.slice(0, -1), messages, userTurnContentOf(last), last.id));
   }, [messages, buildRequest, launch]);
   useAutoReplyTrailingTurn({ chatId, loadingMessages, localSending, messages, repliedRef: autoRepliedChatIdRef, reply: replyToTrailingTurn });
-  const retryLastTurn = (0, import_react13.useCallback)(() => {
+  const retryLastTurn = (0, import_react14.useCallback)(() => {
     if (chatId == null || sendingRef.current.has(chatId) || isLive(chatId)) return false;
     const index = unansweredTurnIndex(messages);
     if (index < 0) return false;
@@ -26225,7 +26247,7 @@ ${extraSystem}` : resolvedSystemPrompt;
     void launch(chatId, buildRequest(messages.slice(0, index), messages, userTurnContentOf(turn), turn.id));
     return true;
   }, [chatId, messages, buildRequest, launch]);
-  const rateMessage = (0, import_react13.useCallback)(async (msg, rating) => {
+  const rateMessage = (0, import_react14.useCallback)(async (msg, rating) => {
     setRatings((prev) => withRating(prev, msg.id, rating));
     const context = ratedTurnContext(messagesRef.current, msg.id);
     const localVerdict = localRatingVerdict(messagesRef.current, msg.id, rating, chatId);
@@ -26239,22 +26261,15 @@ ${extraSystem}` : resolvedSystemPrompt;
     } catch {
     }
   }, [persistence, chatId]);
-  const resolveConfirm = (0, import_react13.useCallback)((ok) => {
+  const resolveConfirm = (0, import_react14.useCallback)((ok) => {
     if (chatId != null) resolveRunConfirm(chatId, ok);
   }, [chatId]);
-  const clearError = (0, import_react13.useCallback)(() => {
+  const clearError = (0, import_react14.useCallback)(() => {
     setLocalError("");
     clearRunError(chatId);
   }, [chatId]);
-  const stop = (0, import_react13.useCallback)(() => {
-    if (chatId == null) {
-      if (sendingRef.current.has(null)) cancelledLaunchRef.current.add(null);
-      return;
-    }
-    if ((sendingRef.current.has(chatId) || launchingRef.current.has(chatId)) && !isRunning(chatId)) cancelledLaunchRef.current.add(chatId);
-    stopRun(chatId);
-  }, [chatId]);
-  const buildTriageReport = (0, import_react13.useCallback)(
+  const stop = (0, import_react14.useCallback)(() => stopConversation(chatId), [chatId, stopConversation]);
+  const buildTriageReport = (0, import_react14.useCallback)(
     (agentLabel, surface2) => buildBrainTriageReport({
       capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
       events: getRunTrace(chatId),
@@ -26267,7 +26282,7 @@ ${extraSystem}` : resolvedSystemPrompt;
     }),
     [chatId, messages, localError, snapshot.error, model]
   );
-  const contextUsage = (0, import_react13.useMemo)(() => contextUsageOf(messages, snapshot.trace), [messages, snapshot.trace]);
+  const contextUsage = (0, import_react14.useMemo)(() => contextUsageOf(messages, snapshot.trace), [messages, snapshot.trace]);
   return {
     messages,
     loadingMessages,
@@ -27659,7 +27674,7 @@ function isManagerRole(role) {
 }
 
 // src/ui/PromptInput.tsx
-var import_react14 = require("react");
+var import_react15 = require("react");
 var import_jsx_runtime4 = require("react/jsx-runtime");
 var boxStyle = (active) => ({
   display: "flex",
@@ -27724,7 +27739,7 @@ function PromptInput({
   className,
   submitOnEnter = true
 }) {
-  const [focused, setFocused] = (0, import_react14.useState)(false);
+  const [focused, setFocused] = (0, import_react15.useState)(false);
   const empty = value.trim().length === 0;
   const canSubmit = !empty && !disabled && !busy;
   const showStop = busy && empty && !!onStop && !!stopLabel;
@@ -27770,13 +27785,40 @@ function withUsageSurface(fetchImpl, surface2) {
 }
 
 // src/useChatTurns.ts
-var import_react18 = require("react");
+var import_react20 = require("react");
+
+// src/doorStop.ts
+var import_react16 = require("react");
+function useDoorStopMarks(running) {
+  const stoppingRef = (0, import_react16.useRef)(false);
+  const [, repaint] = (0, import_react16.useState)(false);
+  const markStopping = (0, import_react16.useCallback)((on) => {
+    stoppingRef.current = on;
+    repaint(on);
+  }, []);
+  (0, import_react16.useEffect)(() => {
+    if (!running && stoppingRef.current) markStopping(false);
+  }, [running, markStopping]);
+  const stopEpoch = (0, import_react16.useRef)(0);
+  return (0, import_react16.useMemo)(() => ({ stoppingRef, markStopping, stopEpoch }), [markStopping]);
+}
+function stopDoorTurns(ports, marks, clear) {
+  clear();
+  marks.stopEpoch.current += 1;
+  if (ports.running) marks.markStopping(true);
+  const { stop: halt, runKey: key, drafts: binding } = ports;
+  if (halt) halt();
+  else if (key != null) stopRun(key);
+  const token = key === null ? binding?.current() : null;
+  const made = token != null ? binding?.outcomeOf(token) : void 0;
+  if (typeof made === "number") stopRun(made);
+}
 
 // src/turnLanding.ts
-var import_react16 = require("react");
+var import_react18 = require("react");
 
 // src/useQueuedTurns.ts
-var import_react15 = require("react");
+var import_react17 = require("react");
 
 // src/draftBinding.ts
 function createDraftBinding() {
@@ -27862,31 +27904,31 @@ function turnBody(turn, textOf2) {
   return (typeof turn === "string" ? turn : textOf2?.(turn) ?? "").trim();
 }
 function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFlush, handOff, drafts = NO_DRAFTS, landDraft }) {
-  const [queued, setQueued] = (0, import_react15.useState)([]);
-  const queueRef = (0, import_react15.useRef)([]);
-  const update = (0, import_react15.useCallback)((change) => {
+  const [queued, setQueued] = (0, import_react17.useState)([]);
+  const queueRef = (0, import_react17.useRef)([]);
+  const update = (0, import_react17.useCallback)((change) => {
     const next = change(queueRef.current);
     if (next === queueRef.current) return;
     queueRef.current = next;
     setQueued(next);
   }, []);
-  const nextId = (0, import_react15.useRef)(0);
-  const sendRef = (0, import_react15.useRef)(send);
+  const nextId = (0, import_react17.useRef)(0);
+  const sendRef = (0, import_react17.useRef)(send);
   sendRef.current = send;
-  const textOfRef = (0, import_react15.useRef)(textOf2);
+  const textOfRef = (0, import_react17.useRef)(textOf2);
   textOfRef.current = textOf2;
-  const handOffRef = (0, import_react15.useRef)(handOff);
+  const handOffRef = (0, import_react17.useRef)(handOff);
   handOffRef.current = handOff;
-  const mayFlushRef = (0, import_react15.useRef)(mayFlush);
+  const mayFlushRef = (0, import_react17.useRef)(mayFlush);
   mayFlushRef.current = mayFlush;
-  const landDraftRef = (0, import_react15.useRef)(landDraft);
+  const landDraftRef = (0, import_react17.useRef)(landDraft);
   landDraftRef.current = landDraft;
-  const draftOnScreen = (0, import_react15.useSyncExternalStore)(drafts.subscribe, drafts.current, drafts.current);
+  const draftOnScreen = (0, import_react17.useSyncExternalStore)(drafts.subscribe, drafts.current, drafts.current);
   const shown = resetKey === null ? draftOnScreen : null;
-  const shownRef = (0, import_react15.useRef)(shown);
+  const shownRef = (0, import_react17.useRef)(shown);
   shownRef.current = shown;
-  const runningRef = (0, import_react15.useRef)(running);
-  const submit = (0, import_react15.useCallback)((value, opts) => {
+  const runningRef = (0, import_react17.useRef)(running);
+  const submit = (0, import_react17.useCallback)((value, opts) => {
     const text = turnBody(value, textOfRef.current);
     if (!text) return false;
     if (!runningRef.current) return false;
@@ -27900,26 +27942,26 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
     return true;
   }, [update]);
   runningRef.current = running;
-  const remove = (0, import_react15.useCallback)((id) => update((current) => current.filter((item) => item.id !== id)), [update]);
-  const clear = (0, import_react15.useCallback)(() => update((current) => {
+  const remove = (0, import_react17.useCallback)((id) => update((current) => current.filter((item) => item.id !== id)), [update]);
+  const clear = (0, import_react17.useCallback)(() => update((current) => {
     const own = (item) => !item.draft || item.draft.token === shownRef.current;
     return current.some(own) ? current.filter((item) => !own(item)) : current;
   }), [update]);
-  const requeue2 = (0, import_react15.useCallback)((value) => update((current) => [{ id: nextId.current += 1, value }, ...current]), [update]);
-  const pushBack = (0, import_react15.useCallback)((value) => update((current) => [...current, { id: nextId.current += 1, value }]), [update]);
-  const takeFront = (0, import_react15.useCallback)(() => {
+  const requeue2 = (0, import_react17.useCallback)((value) => update((current) => [{ id: nextId.current += 1, value }, ...current]), [update]);
+  const pushBack = (0, import_react17.useCallback)((value) => update((current) => [...current, { id: nextId.current += 1, value }]), [update]);
+  const takeFront = (0, import_react17.useCallback)(() => {
     const first = queueRef.current.find((item) => !item.draft);
     if (!first) return void 0;
     update((current) => current.filter((item) => item !== first));
     return first.value;
   }, [update]);
-  (0, import_react15.useEffect)(() => drafts.onOutcome((token, outcome) => {
+  (0, import_react17.useEffect)(() => drafts.onOutcome((token, outcome) => {
     const mine = queueRef.current.filter((item) => item.draft?.token === token);
     if (mine.length > 0) update((current) => current.filter((item) => item.draft?.token !== token));
     landDraftRef.current?.(mine.map((item) => ({ value: item.value, followUp: item.draft.followUp })), outcome, token);
   }), [drafts, update]);
-  const prev = (0, import_react15.useRef)({ key: resetKey, running });
-  (0, import_react15.useEffect)(() => {
+  const prev = (0, import_react17.useRef)({ key: resetKey, running });
+  (0, import_react17.useEffect)(() => {
     const was = prev.current;
     prev.current = { key: resetKey, running };
     if (was.key !== resetKey || !was.running || running) return;
@@ -27927,8 +27969,8 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
     const next = takeFront();
     if (next !== void 0) sendRef.current(next);
   }, [running, resetKey, takeFront]);
-  const heldIn = (0, import_react15.useRef)(resetKey);
-  (0, import_react15.useEffect)(() => {
+  const heldIn = (0, import_react17.useRef)(resetKey);
+  (0, import_react17.useEffect)(() => {
     const from = heldIn.current;
     if (from === resetKey) return;
     heldIn.current = resetKey;
@@ -27937,20 +27979,20 @@ function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2, mayFl
     update((current) => current.filter((item) => item.draft));
     handOffRef.current?.(held, from);
   }, [resetKey, update]);
-  const items = (0, import_react15.useMemo)(() => queued.filter((item) => !item.draft || item.draft.token === shown), [queued, shown]);
+  const items = (0, import_react17.useMemo)(() => queued.filter((item) => !item.draft || item.draft.token === shown), [queued, shown]);
   return { items, count: items.length, submit, remove, requeue: requeue2, pushBack, takeFront, clear };
 }
 
 // src/turnLanding.ts
 function useTurnLanding(ports) {
-  const flights = (0, import_react16.useRef)(/* @__PURE__ */ new Map());
-  const giveBackAll = (0, import_react16.useCallback)((turns) => {
+  const flights = (0, import_react18.useRef)(/* @__PURE__ */ new Map());
+  const giveBackAll = (0, import_react18.useCallback)((turns) => {
     const { restore: giveBack, join } = ports.current;
     if (!giveBack || turns.length === 0) return;
     if (join && turns.length > 1) giveBack(join(turns));
     else for (const turn of turns) giveBack(turn);
   }, [ports]);
-  const handOff = (0, import_react16.useCallback)((held, from) => {
+  const handOff = (0, import_react18.useCallback)((held, from) => {
     const { textOf: text, attachmentsOf: attached2, isDirected: directed } = ports.current;
     const back = [];
     const chat = [];
@@ -27961,12 +28003,12 @@ function useTurnLanding(ports) {
     giveBackAll(back);
     if (chat.length > 0 && typeof from === "number") handToChat(from, chat);
   }, [giveBackAll, ports]);
-  const restoreFailed = (0, import_react16.useCallback)((token, flight) => {
+  const restoreFailed = (0, import_react18.useCallback)((token, flight) => {
     const turns = [...(flight.owned ?? []).map((send) => send.turn), ...flight.held];
     flights.current.delete(token);
     giveBackAll(turns);
   }, [giveBackAll]);
-  const landDraft = (0, import_react16.useCallback)((held, outcome, token) => {
+  const landDraft = (0, import_react18.useCallback)((held, outcome, token) => {
     const flight = flights.current.get(token);
     if (outcome === null) {
       if (!ports.current.restore) return;
@@ -27992,7 +28034,7 @@ function useTurnLanding(ports) {
     if (flight && flight.flying.length > 0) flight.chat = outcome;
     else releaseChat(outcome);
   }, [giveBackAll, ports]);
-  const sendOnce = (0, import_react16.useCallback)(async (turn) => {
+  const sendOnce = (0, import_react18.useCallback)(async (turn) => {
     const { send: deliver, runKey: key, drafts: binding } = ports.current;
     if (key !== null || !binding) return deliver(turn);
     const token = binding.begin();
@@ -28031,9 +28073,9 @@ function useTurnLanding(ports) {
 }
 
 // src/waitingTurns.ts
-var import_react17 = require("react");
+var import_react19 = require("react");
 function useQueueWithWaiting(queued, runKey) {
-  (0, import_react17.useSyncExternalStore)(subscribeWaiting, waitingVersion, waitingVersion);
+  (0, import_react19.useSyncExternalStore)(subscribeWaiting, waitingVersion, waitingVersion);
   const waiting2 = typeof runKey === "number" ? waitingFor(runKey).map((turn) => ({ id: turn.id, value: waitedTurn(turn) })) : [];
   if (waiting2.length === 0) return queued;
   return {
@@ -28052,24 +28094,16 @@ function chatDoorLiveness(conv, extraInFlight = false) {
   return { running: conv.sending || extraInFlight, steerable: conv.runLive };
 }
 function useChatTurns({ running, steerable = running, runKey, drafts, send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf }) {
-  const ports = (0, import_react18.useRef)({ send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable, drafts });
+  const ports = (0, import_react20.useRef)({ send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable, drafts });
   ports.current = { send, steer, stop, restore, join, textOf: textOf2, isDirected, attachmentsOf, runKey, running, steerable, drafts };
-  const stoppingRef = (0, import_react18.useRef)(false);
-  const [, repaint] = (0, import_react18.useState)(false);
-  const markStopping = (0, import_react18.useCallback)((on) => {
-    stoppingRef.current = on;
-    repaint(on);
-  }, []);
-  (0, import_react18.useEffect)(() => {
-    if (!running && stoppingRef.current) markStopping(false);
-  }, [running, markStopping]);
-  const stopEpoch = (0, import_react18.useRef)(0);
-  const requeueRef = (0, import_react18.useRef)(() => void 0);
-  const takeFrontRef = (0, import_react18.useRef)(() => void 0);
-  const flushing = (0, import_react18.useRef)(/* @__PURE__ */ new Map());
+  const marks = useDoorStopMarks(running);
+  const { stoppingRef, stopEpoch } = marks;
+  const requeueRef = (0, import_react20.useRef)(() => void 0);
+  const takeFrontRef = (0, import_react20.useRef)(() => void 0);
+  const flushing = (0, import_react20.useRef)(/* @__PURE__ */ new Map());
   const flushingIn = (key) => flushing.current.get(key) ?? 0;
   const { handOff, landDraft, sendOnce } = useTurnLanding(ports);
-  const flush = (0, import_react18.useCallback)(async (first) => {
+  const flush = (0, import_react20.useCallback)(async (first) => {
     const chat = ports.current.runKey;
     flushing.current.set(chat, flushingIn(chat) + 1);
     try {
@@ -28117,7 +28151,7 @@ function useChatTurns({ running, steerable = running, runKey, drafts, send, stee
   });
   const shown = useQueueWithWaiting(queued, runKey);
   const { submit: hold, clear, takeFront, pushBack } = queued;
-  const holdForDraft = (0, import_react18.useCallback)((turn, followUp) => {
+  const holdForDraft = (0, import_react20.useCallback)((turn, followUp) => {
     const { runKey: key, drafts: binding, running: live2 } = ports.current;
     const token = key === null && live2 ? binding?.current() : null;
     if (token == null || !binding) return false;
@@ -28130,20 +28164,20 @@ function useChatTurns({ running, steerable = running, runKey, drafts, send, stee
   }, [hold, landDraft]);
   requeueRef.current = queued.requeue;
   takeFrontRef.current = takeFront;
-  const itemsRef = (0, import_react18.useRef)(shown.items);
+  const itemsRef = (0, import_react20.useRef)(shown.items);
   itemsRef.current = shown.items;
-  const carriedIds = (0, import_react18.useRef)(/* @__PURE__ */ new Set());
-  const wasRunning = (0, import_react18.useRef)(false);
-  const wasSteerable = (0, import_react18.useRef)(false);
+  const carriedIds = (0, import_react20.useRef)(/* @__PURE__ */ new Set());
+  const wasRunning = (0, import_react20.useRef)(false);
+  const wasSteerable = (0, import_react20.useRef)(false);
   if (running !== wasRunning.current || steerable !== wasSteerable.current) {
     if (running && !wasRunning.current || steerable && !wasSteerable.current) carriedIds.current = new Set(shown.items.map((item) => item.id));
     wasRunning.current = running;
     wasSteerable.current = steerable;
   }
-  const heldThisRun = (0, import_react18.useCallback)(() => itemsRef.current.filter((item) => !carriedIds.current.has(item.id)).length, []);
-  const steers = (0, import_react18.useCallback)((preview) => ports.current.steerable && typeof ports.current.runKey === "number" && !stoppingRef.current && steersByDefault({ ...preview, held: heldThisRun() }), [heldThisRun]);
+  const heldThisRun = (0, import_react20.useCallback)(() => itemsRef.current.filter((item) => !carriedIds.current.has(item.id)).length, []);
+  const steers = (0, import_react20.useCallback)((preview) => ports.current.steerable && typeof ports.current.runKey === "number" && !stoppingRef.current && steersByDefault({ ...preview, held: heldThisRun() }), [heldThisRun]);
   const { remove } = queued;
-  (0, import_react18.useEffect)(() => {
+  (0, import_react20.useEffect)(() => {
     if (!running || !steerable) return;
     const { steer: route, runKey: key, textOf: text, isDirected: directed, attachmentsOf: attached2 } = ports.current;
     if (typeof key !== "number" || stoppingRef.current) return;
@@ -28162,18 +28196,8 @@ function useChatTurns({ running, steerable = running, runKey, drafts, send, stee
       carriedIds.current = new Set([...carriedIds.current].filter((id) => id !== item.id));
     }
   }, [running, steerable, remove, runKey]);
-  const stopTurns = (0, import_react18.useCallback)(() => {
-    clear();
-    stopEpoch.current += 1;
-    if (ports.current.running) markStopping(true);
-    const { stop: halt, runKey: key, drafts: binding } = ports.current;
-    if (halt) halt();
-    else if (key != null) stopRun(key);
-    const token = key === null ? binding?.current() : null;
-    const made = token != null ? binding?.outcomeOf(token) : void 0;
-    if (typeof made === "number") stopRun(made);
-  }, [clear, markStopping]);
-  const submit = (0, import_react18.useCallback)(async (turn) => {
+  const stopTurns = (0, import_react20.useCallback)(() => stopDoorTurns(ports.current, marks, clear), [clear, marks]);
+  const submit = (0, import_react20.useCallback)(async (turn) => {
     const { steer: route, textOf: text, isDirected: directed, attachmentsOf: attached2, runKey: key, running: live2 } = ports.current;
     const body = turnBody(turn, text);
     if (!body) return false;
@@ -28205,7 +28229,7 @@ function useChatTurns({ running, steerable = running, runKey, drafts, send, stee
     }
     return await sendOnce(turn) !== false;
   }, [hold, holdForDraft, stopTurns, takeFront, pushBack, flush, steers, sendOnce]);
-  const queueAfter = (0, import_react18.useCallback)(async (turn) => {
+  const queueAfter = (0, import_react20.useCallback)(async (turn) => {
     const { textOf: text } = ports.current;
     if (!turnBody(turn, text)) return false;
     if (holdForDraft(turn, false) || hold(turn)) return true;
@@ -28241,11 +28265,11 @@ function restoreTurn(turn, composer) {
 }
 
 // src/useComposerDraft.ts
-var import_react19 = require("react");
+var import_react21 = require("react");
 function useComposerDraft(input, setInput) {
-  const ref = (0, import_react19.useRef)(input);
+  const ref = (0, import_react21.useRef)(input);
   ref.current = input;
-  return (0, import_react19.useMemo)(() => ({
+  return (0, import_react21.useMemo)(() => ({
     draft: () => ref.current,
     setInput: (next) => {
       ref.current = typeof next === "function" ? next(ref.current) : next;
@@ -28255,12 +28279,12 @@ function useComposerDraft(input, setInput) {
 }
 
 // src/useRunRefreshTick.ts
-var import_react20 = require("react");
+var import_react22 = require("react");
 var RUN_REFRESH_MS = 3e4;
 function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
-  const [tick, setTick] = (0, import_react20.useState)(0);
-  const wasRunning = (0, import_react20.useRef)(running);
-  (0, import_react20.useEffect)(() => {
+  const [tick, setTick] = (0, import_react22.useState)(0);
+  const wasRunning = (0, import_react22.useRef)(running);
+  (0, import_react22.useEffect)(() => {
     if (wasRunning.current && !running) setTick((n2) => n2 + 1);
     wasRunning.current = running;
     if (!running) return;
@@ -28271,32 +28295,32 @@ function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
 }
 
 // src/useChatCreation.ts
-var import_react21 = require("react");
+var import_react23 = require("react");
 function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }) {
-  const chatIdRef = (0, import_react21.useRef)(chatId);
+  const chatIdRef = (0, import_react23.useRef)(chatId);
   chatIdRef.current = chatId;
-  const createRef = (0, import_react21.useRef)(create);
+  const createRef = (0, import_react23.useRef)(create);
   createRef.current = create;
-  const autoTitleRef = (0, import_react21.useRef)(autoTitle);
+  const autoTitleRef = (0, import_react23.useRef)(autoTitle);
   autoTitleRef.current = autoTitle;
-  const captureRef = (0, import_react21.useRef)(onCaptureOriginalRequest);
+  const captureRef = (0, import_react23.useRef)(onCaptureOriginalRequest);
   captureRef.current = onCaptureOriginalRequest;
-  const [drafts] = (0, import_react21.useState)(createDraftBinding);
-  const creations = (0, import_react21.useRef)(/* @__PURE__ */ new Map());
-  const resolved = (0, import_react21.useRef)(/* @__PURE__ */ new Set());
-  (0, import_react21.useEffect)(() => {
+  const [drafts] = (0, import_react23.useState)(createDraftBinding);
+  const creations = (0, import_react23.useRef)(/* @__PURE__ */ new Map());
+  const resolved = (0, import_react23.useRef)(/* @__PURE__ */ new Set());
+  (0, import_react23.useEffect)(() => {
     if (chatId == null) return;
     for (const token of resolved.current) creations.current.delete(token);
     resolved.current.clear();
     drafts.leave();
   }, [chatId, drafts]);
-  (0, import_react21.useEffect)(() => onChatDeleted((chat) => {
+  (0, import_react23.useEffect)(() => onChatDeleted((chat) => {
     for (const token of drafts.forgetChat(chat)) {
       creations.current.delete(token);
       resolved.current.delete(token);
     }
   }), [drafts]);
-  const ensureChatId = (0, import_react21.useCallback)((draft) => {
+  const ensureChatId = (0, import_react23.useCallback)((draft) => {
     const answered2 = draft === void 0 ? void 0 : drafts.outcomeOf(draft);
     if (typeof answered2 === "number") return Promise.resolve(answered2);
     const open = chatIdRef.current;
@@ -28328,7 +28352,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
     creations.current.set(token, mine);
     return mine;
   }, [drafts]);
-  const onFirstUserTurn = (0, import_react21.useCallback)(async (id, firstUserText) => {
+  const onFirstUserTurn = (0, import_react23.useCallback)(async (id, firstUserText) => {
     void captureRef.current?.(id, firstUserText);
     await autoTitleRef.current?.(id, firstUserText);
   }, []);
