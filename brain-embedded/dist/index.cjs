@@ -400,6 +400,7 @@ __export(src_exports, {
   readWithIdleWatchdog: () => readWithIdleWatchdog,
   reasoningForRun: () => reasoningForRun,
   repeatedFailureAdvisory: () => repeatedFailureAdvisory,
+  requeueRunSteering: () => requeueRunSteering2,
   resetApiVersionCache: () => resetApiVersionCache,
   resetBrainRunStore: () => resetBrainRunStore,
   resetOnDeviceStoresForTests: () => resetOnDeviceStoresForTests,
@@ -26011,20 +26012,32 @@ var import_react13 = require("react");
 function useLaunchCancel(sendingRef) {
   const cancelledLaunchRef = (0, import_react13.useRef)(/* @__PURE__ */ new Set());
   const launchingRef = (0, import_react13.useRef)(/* @__PURE__ */ new Set());
-  const draftMadeRef = (0, import_react13.useRef)(/* @__PURE__ */ new Set());
+  const draftMadeRef = (0, import_react13.useRef)(/* @__PURE__ */ new Map());
+  const releaseDraftMade = (0, import_react13.useCallback)((chat) => {
+    for (const [token, made] of draftMadeRef.current) if (made === chat) draftMadeRef.current.delete(token);
+  }, []);
   const stopChat = (0, import_react13.useCallback)((id) => {
     if ((sendingRef.current.has(id) || launchingRef.current.has(id)) && !isRunning(id)) cancelledLaunchRef.current.add(id);
     stopRun(id);
   }, [sendingRef]);
-  const stopConversation = (0, import_react13.useCallback)((chatId) => {
+  const stopConversation = (0, import_react13.useCallback)((chatId, draft) => {
     if (chatId != null) {
       stopChat(chatId);
       return;
     }
-    if (sendingRef.current.has(null)) cancelledLaunchRef.current.add(null);
-    for (const made of draftMadeRef.current) stopChat(made);
+    if (draft == null) {
+      if (sendingRef.current.has(null)) cancelledLaunchRef.current.add(null);
+      return;
+    }
+    if (!draftMadeRef.current.has(draft)) return;
+    const made = draftMadeRef.current.get(draft);
+    if (made == null) {
+      if (sendingRef.current.has(null)) cancelledLaunchRef.current.add(null);
+      return;
+    }
+    if ((sendingRef.current.has(made) || launchingRef.current.has(made)) && !isRunning(made)) cancelledLaunchRef.current.add(made);
   }, [stopChat, sendingRef]);
-  return { cancelledLaunchRef, launchingRef, draftMadeRef, stopConversation };
+  return { cancelledLaunchRef, launchingRef, draftMadeRef, releaseDraftMade, stopConversation };
 }
 
 // src/useBrainConversation.ts
@@ -26057,7 +26070,7 @@ function useBrainConversation(options) {
   } = options;
   const sendingRef = (0, import_react14.useRef)(/* @__PURE__ */ new Set());
   const [sendingChats, setSendingChats] = (0, import_react14.useState)(sendingRef.current);
-  const { cancelledLaunchRef, launchingRef, draftMadeRef, stopConversation } = useLaunchCancel(sendingRef);
+  const { cancelledLaunchRef, launchingRef, draftMadeRef, releaseDraftMade, stopConversation } = useLaunchCancel(sendingRef);
   const markSending = (0, import_react14.useCallback)((key, on) => {
     const next = new Set(sendingRef.current);
     if (on) next.add(key);
@@ -26146,13 +26159,14 @@ ${extraSystem}` : resolvedSystemPrompt;
         if (row) updateMessages(id, (prev) => [...prev, row]);
         return;
       }
+      releaseDraftMade(id);
       bindContinuation(id);
       await startRun(id, extra ? { ...request, ...extra } : request);
     } finally {
       launchingRef.current.delete(id);
       cancelledLaunchRef.current.delete(id);
     }
-  }, [prepareRun, persistence, updateMessages, bindContinuation]);
+  }, [prepareRun, persistence, updateMessages, bindContinuation, releaseDraftMade]);
   const send = (0, import_react14.useCallback)(
     async (text, opts) => {
       const trimmed = text.trim();
@@ -26161,7 +26175,9 @@ ${extraSystem}` : resolvedSystemPrompt;
       const origin = chatId;
       markSending(origin, true);
       let id = chatId;
+      const draft = opts?.draft;
       if (id == null) {
+        if (draft != null) draftMadeRef.current.set(draft, null);
         try {
           id = await ensureChatId?.(opts?.draft) ?? null;
         } catch {
@@ -26169,12 +26185,13 @@ ${extraSystem}` : resolvedSystemPrompt;
         }
         const cancelled = cancelledLaunchRef.current.delete(origin);
         if (id == null) {
+          if (draft != null) draftMadeRef.current.delete(draft);
           markSending(origin, false);
           setLocalError("Could not start a chat.");
           return false;
         }
         if (cancelled) cancelledLaunchRef.current.add(id);
-        draftMadeRef.current.add(id);
+        if (draft != null) draftMadeRef.current.set(draft, id);
         markSending(id, true);
         markSending(origin, false);
       }
@@ -26185,9 +26202,9 @@ ${extraSystem}` : resolvedSystemPrompt;
       const attachments = [...opts?.attachments ?? pendingAttachments];
       composer.take(attachments);
       setLocalError("");
-      const { displayContent, turn } = await composeUserTurn(trimmed, attachments, persistence);
-      const metadata = withDirectedMetadata(directedRecipientList(addressedTo), turn.meta);
       try {
+        const { displayContent, turn } = await composeUserTurn(trimmed, attachments, persistence);
+        const metadata = withDirectedMetadata(directedRecipientList(addressedTo), turn.meta);
         const [userMsg] = await persistence.sendMessages(id, [{ role: "user", content: displayContent, metadata }]);
         updateMessages(id, (prev) => [...prev, userMsg]);
         onActivity?.(id);
@@ -26224,11 +26241,12 @@ ${extraSystem}` : resolvedSystemPrompt;
         return false;
       } finally {
         cancelledLaunchRef.current.delete(runChatId);
-        draftMadeRef.current.delete(runChatId);
+        releaseDraftMade(runChatId);
+        if (draft != null) draftMadeRef.current.delete(draft);
         markSending(runChatId, false);
       }
     },
-    [persistence, chatId, markSending, composer.take, composer.restore, pendingAttachments, messages, ensureChatId, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages]
+    [persistence, chatId, markSending, composer.take, composer.restore, pendingAttachments, messages, ensureChatId, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages, releaseDraftMade]
   );
   const replyToTrailingTurn = (0, import_react14.useCallback)((id, last) => {
     setLocalError("");
@@ -26268,7 +26286,7 @@ ${extraSystem}` : resolvedSystemPrompt;
     setLocalError("");
     clearRunError(chatId);
   }, [chatId]);
-  const stop = (0, import_react14.useCallback)(() => stopConversation(chatId), [chatId, stopConversation]);
+  const stop = (0, import_react14.useCallback)((draft) => stopConversation(chatId, draft), [chatId, stopConversation]);
   const buildTriageReport = (0, import_react14.useCallback)(
     (agentLabel, surface2) => buildBrainTriageReport({
       capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -27807,9 +27825,9 @@ function stopDoorTurns(ports, marks, clear) {
   marks.stopEpoch.current += 1;
   if (ports.running) marks.markStopping(true);
   const { stop: halt, runKey: key, drafts: binding } = ports;
-  if (halt) halt();
+  const token = key === null ? binding?.current() ?? null : null;
+  if (halt) halt(token);
   else if (key != null) stopRun(key);
-  const token = key === null ? binding?.current() : null;
   const made = token != null ? binding?.outcomeOf(token) : void 0;
   if (typeof made === "number") stopRun(made);
 }
@@ -28730,6 +28748,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   readWithIdleWatchdog,
   reasoningForRun,
   repeatedFailureAdvisory,
+  requeueRunSteering,
   resetApiVersionCache,
   resetBrainRunStore,
   resetOnDeviceStoresForTests,
