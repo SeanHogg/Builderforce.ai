@@ -56,7 +56,7 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
   const stopped = new Set<number>();
   /** The keys of the turns already heard, per run (the newest few: a repeat arrives close behind the original). */
   const heard = new Map<number, Set<string>>();
-  const MAX_HEARD = 256;
+  const MAX_HEARD = 256; // a backstop: a run's keys are cleared when it is stopped or settles
   const firstHearing = (runKey: number, key: string): boolean => {
     const keys = heard.get(runKey) ?? new Set<string>();
     heard.set(runKey, keys);
@@ -73,6 +73,7 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
   };
 
   const stop = (runKey: number): void => {
+    heard.delete(runKey);
     // Nothing claimed: nothing to stop, and no mark left to swallow the NEXT run's words.
     if (!deps.isBusy(runKey)) return;
     deps.dropParked?.(runKey);
@@ -82,9 +83,10 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
 
   /**
    * Take one message: shown/queued/interrupting as the run's state says. `idle`: no run is reading, the words are queued for
-   * the chat's next turn and the caller wakes it (once, however many were taken); `stopped`: it was the Stop.
+   * the chat's next turn and the caller wakes it (once, however many were taken); `stopped`: it was the Stop; `stop-idle`: a
+   * typed stop with nothing to stop (a batch drops what it queued before it).
    */
-  const take = (runKey: number, text: string, attachments?: ChatInputAttachment[]): "done" | "idle" | "stopped" => {
+  const take = (runKey: number, text: string, attachments?: ChatInputAttachment[]): "done" | "idle" | "stopped" | "stop-idle" => {
     if (!text.trim()) return "done";
     const lineage = deps.registry.lineageOf(runKey);
     // A sub-agent hears it as direction from its owner; the chat's own run hears the person.
@@ -94,7 +96,7 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
       // "STOP executing" typed mid-run IS the Stop button; the words still land in the
       // chat and the model gets no further turn. With nothing running there is nothing
       // to stop — it is not started as a turn either.
-      if (!running && !deps.isBusy(runKey)) return "done";
+      if (!running && !deps.isBusy(runKey)) return "stop-idle";
       say(runKey, text);
       stop(runKey);
       return "stopped";
@@ -137,6 +139,12 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
         if (!firstHearing(runKey, turn.eventKey)) continue;
         const taken = take(runKey, turn.text, turn.attachments);
         if (taken === "stopped") return;
+        // A stop for a chat with nothing running ends the work this batch queued - as sequential `steer` calls would (the
+        // first wakes a run, the stop stops it): what it queued is dropped, nothing is woken.
+        if (taken === "stop-idle" && idle) {
+          drainRunSteering(runKey);
+          return;
+        }
         idle = idle || taken === "idle";
       }
       // Idle: everything queued is ONE new turn, oldest first (`wake` drains it).
@@ -144,6 +152,7 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
     },
 
     settled(runKey) {
+      heard.delete(runKey);
       if (stopped.delete(runKey)) {
         drainRunSteering(runKey);
         return;

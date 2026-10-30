@@ -3,7 +3,7 @@
  * autonomous run's artifacts live.
  *
  * Two callers, one rulebook (deliberately not two copies):
- *   • terminal-state teardown — a run ended failed/cancelled without opening a PR,
+ *   • terminal-state teardown — a run ended CANCELLED without opening a PR (a failed run is never swept: see the ROADMAP gap entry),
  *     so its `builderforce/task-<id>` branch is residue to sweep;
  *   • revert — a human undoes a COMPLETED run: close its PR and delete its branch.
  *

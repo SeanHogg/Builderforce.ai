@@ -46,6 +46,8 @@ export interface DraftBinding {
    * gets ITS chat.
    */
   outcomeOf: (token: DraftToken) => DraftOutcome | undefined;
+  /** A chat was deleted: every token that resolved to it is forgotten (a late send naming one must create anew, never be handed the deleted chat). Returns them. */
+  forgetChat: (chat: number) => DraftToken[];
   /** Called whenever `current()` changes (a `useSyncExternalStore` subscription). */
   subscribe: (listener: () => void) => () => void;
   /** Called once per token, when its creation answers. */
@@ -119,6 +121,12 @@ export function createDraftBinding(): DraftBinding {
       if (entry?.outcome !== undefined && entry.sends <= 0) tokens.delete(left);
     },
     outcomeOf: (token) => tokens.get(token)?.outcome,
+    forgetChat: (chat) => {
+      const gone = [...tokens].filter(([, entry]) => entry.outcome === chat).map(([token]) => token);
+      for (const token of gone) tokens.delete(token);
+      if (live !== null && gone.includes(live)) setLive(null);
+      return gone;
+    },
     subscribe: (listener) => {
       watchers.add(listener);
       return () => { watchers.delete(listener); };

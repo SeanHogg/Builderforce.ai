@@ -277,7 +277,8 @@ export {
 export type { BrainContextValue, BrainPageContext } from './BrainContext';
 
 // Conversation + chat-list hooks
-export { useBrainChats, deriveChatTitle, DEFAULT_CHAT_TITLE } from './useBrainChats';
+export { useBrainChats } from './useBrainChats';
+export { deriveChatTitle, DEFAULT_CHAT_TITLE } from './chatTitle';
 export type { UseBrainChats, UseBrainChatsOptions } from './useBrainChats';
 // The pre-chat choices (mode, memory) and the ONE creation path that carries them.
 export { useArmedNewChat } from './useArmedNewChat';

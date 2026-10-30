@@ -3,7 +3,7 @@ import { act, renderHook } from '@testing-library/react';
 import { useChatTurns, type ChatTurnsOptions } from './useChatTurns';
 import { useChatCreation } from './useChatCreation';
 import { createDraftBinding } from './draftBinding';
-import { removeWaiting } from './chatDelivery';
+import { deliverToChat, forgetChatDelivery, removeWaiting, waitingFor } from './chatDelivery';
 import { installRunDriver, type BrainRunDriver } from './runDriver';
 import { drainRunSteering, resetRunSteering } from './runSteering';
 import { resetBrainRunStore, stopRun as storeStopRun } from './runStore/runControl';
@@ -63,7 +63,7 @@ describe('useChatTurns - waiting turns are VISIBLE and REMOVABLE; a Stop from an
   afterEach(() => installRunDriver(null));
 
   /** A draft whose first send (A) created chat 91 and is held open (`run`), with B and C typed meanwhile - waiting in chat 91. */
-  async function waitingInChat91() {
+  async function waitingInChat91(select = true) {
     const creation = deferred<number | null>();
     const run = deferred<void>();
     const send: HostPorts['send'] = async (_text, ensure) => { const id = await ensure(); await run.promise; return id != null; };
@@ -71,7 +71,7 @@ describe('useChatTurns - waiting turns are VISIBLE and REMOVABLE; a Stop from an
     await act(async () => { void hook.result.current.turns.submit('A'); });
     await act(async () => { await hook.result.current.turns.submit('B'); await hook.result.current.turns.submit('C'); });
     await act(async () => { creation.resolve(91); });
-    act(() => hook.result.current.setChatId(91));
+    if (select) act(() => hook.result.current.setChatId(91));
     return { ...hook, run };
   }
 
@@ -106,6 +106,21 @@ describe('useChatTurns - waiting turns are VISIBLE and REMOVABLE; a Stop from an
     act(() => mirrorRun(91, false));
 
     expect(held(result.current)).toEqual([]);
+    expect(texts(91)).toEqual([]);
+    await act(async () => { run.resolve(); });
+  });
+
+  it('a Stop on the DRAFT view, after its creation made chat 91 (not selected yet), drops the turns waiting for 91 too: nothing wakes it', async () => {
+    stopRun.mockImplementation(storeStopRun); // the door's Stop goes through the store's seam, which ends what waits
+    const { result, run } = await waitingInChat91(false);
+    expect(waitingFor(91).map((w) => w.text)).toEqual(['B', 'C']);
+
+    act(() => result.current.turns.stop());
+
+    expect(stopRun).toHaveBeenCalledWith(91);
+    expect(waitingFor(91)).toEqual([]);
+    act(() => mirrorRun(91, true));
+    act(() => mirrorRun(91, false));
     expect(texts(91)).toEqual([]);
     await act(async () => { run.resolve(); });
   });
@@ -161,6 +176,25 @@ describe('useChatTurns - waiting turns are VISIBLE and REMOVABLE; a Stop from an
   });
 });
 
+describe('useChatTurns - the Send rule counts the turns waiting in the chat like held ones', () => {
+  beforeEach(() => { stopRun.mockReset(); resetRunSteering(); resetBrainRunStore(); });
+
+  it('a message typed while turns WAIT for the chat holds behind them, in order - it does not steer the run past them', async () => {
+    mirrorRun(92, true);
+    const send = vi.fn();
+    const { result } = renderHook(() => useChatTurns<string>({ running: true, steerable: true, runKey: 92, send }));
+    expect(result.current.steers({ directed: false })).toBe(true); // nothing is waiting: a message steers
+
+    act(() => deliverToChat(92, [{ text: 'for later', steer: false, turn: 'for later' }])); // held for after the run, in front of the queue
+    expect(result.current.steers({ directed: false })).toBe(false);
+    await act(async () => { await result.current.submit('next'); });
+
+    expect(drainRunSteering(92)).toEqual([]);
+    expect(result.current.queued.items.map((i) => i.value)).toEqual(['for later', 'next']);
+    expect(send).not.toHaveBeenCalled();
+  });
+});
+
 describe('useChatCreation - a draft that already has a chat never makes a second', () => {
   it('a late send naming a token whose creation answered gets THAT chat, even after the person went to another chat; the token is forgotten once no send is pending', async () => {
     const create = vi.fn(() => Promise.resolve(91));
@@ -177,5 +211,19 @@ describe('useChatCreation - a draft that already has a chat never makes a second
     expect(result.current.drafts.outcomeOf(token)).toBe(91); // one send is still pending
     result.current.drafts.settle(token);
     expect(result.current.drafts.outcomeOf(token)).toBeUndefined(); // none: forgotten
+  });
+
+  it('a chat that is deleted is not handed to a late send: the token that resolved to it is forgotten, and the send creates anew', async () => {
+    const create = vi.fn().mockResolvedValueOnce(91).mockResolvedValueOnce(92);
+    const { result } = renderHook(() => useChatCreation({ chatId: null, create }));
+    const token = result.current.drafts.begin();
+    await act(async () => { await result.current.ensureChatId(token); });
+    expect(result.current.drafts.outcomeOf(token)).toBe(91);
+
+    act(() => forgetChatDelivery(91)); // the chat list deleted chat 91
+
+    expect(result.current.drafts.outcomeOf(token)).toBeUndefined();
+    await expect(result.current.ensureChatId(token)).resolves.toBe(92);
+    expect(create).toHaveBeenCalledTimes(2);
   });
 });

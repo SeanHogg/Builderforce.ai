@@ -62,6 +62,34 @@ describe("runSteer.steerTurns - several turns said to a chat's run together", ()
     expect(drainRunSteering(23).map((m) => m.text)).toEqual(["a", "b"]);
   });
 
+  it("a stop after turns for an IDLE chat drops what the batch queued and wakes nothing - as steering them one by one would stop the run they woke", () => {
+    const { s, deps } = steer(new Set());
+    s.steerTurns(25, [{ text: "a", eventKey: "k1" }, { text: "STOP executing", eventKey: "k2" }, { text: "never", eventKey: "k3" }]);
+    expect(deps.childHost.wake).not.toHaveBeenCalled();
+    expect(drainRunSteering(25)).toEqual([]);
+  });
+
+  it("a stop FIRST in a batch for an idle chat has nothing to stop: the turns behind it are still heard", () => {
+    const { s, deps } = steer(new Set());
+    s.steerTurns(26, [{ text: "STOP executing", eventKey: "k1" }, { text: "go", eventKey: "k2" }]);
+    expect(deps.childHost.wake).toHaveBeenCalledWith(26);
+    expect(drainRunSteering(26).map((m) => m.text)).toEqual(["go"]);
+  });
+
+  it("a run's heard keys are forgotten when it settles or is stopped: the same key on its next run is heard", () => {
+    const { s } = steer(new Set([27]));
+    s.steerTurns(27, [{ text: "x", eventKey: "k1" }]);
+    expect(drainRunSteering(27).map((m) => m.text)).toEqual(["x"]);
+    s.settled(27);
+    drainRunSteering(27);
+    s.steerTurns(27, [{ text: "x", eventKey: "k1" }]);
+    expect(drainRunSteering(27).map((m) => m.text)).toEqual(["x"]);
+    s.stop(27);
+    drainRunSteering(27);
+    s.steerTurns(27, [{ text: "x", eventKey: "k1" }]);
+    expect(drainRunSteering(27).map((m) => m.text)).toEqual(["x"]);
+  });
+
   it("a typed stop among them is the Stop: the turns behind it are not heard", () => {
     const { s, deps } = steer(new Set([24]));
     s.steerTurns(24, [{ text: "STOP executing", eventKey: "k1" }, { text: "never", eventKey: "k2" }]);

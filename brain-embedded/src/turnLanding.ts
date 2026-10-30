@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useRef, type MutableRefObject } from 'react';
-import { deliverToChat, handToChat, releaseChat, takeBackWaiting, type ChatDelivery } from './chatDelivery';
+import { deliverToChat, handToChat, releaseChat, takeBackWaiting, waitedTurn, type ChatDelivery } from './chatDelivery';
 import type { DraftBinding, DraftOutcome, DraftToken } from './draftBinding';
 import type { RunKey } from './brainRunStore';
 import type { ChatInputAttachment } from './types';
@@ -150,13 +150,14 @@ export function useTurnLanding<T>(ports: MutableRefObject<LandingPorts<T>>) {
     mine.ended = true;
     flight.flying = flight.flying.filter((send) => send !== mine);
     let taken = !!flight.owned?.includes(mine);
-    // The send that was making the chat's run was NOT kept after the creation answered, and that run was never live: what waits
-    // for it has nothing to follow. It comes back with the send in ONE restore, the send first, and the send is reported kept
-    // (the host puts nothing back twice) - the same path as a creation that failed.
-    if (!taken && flight.chat !== null && (thrown !== null || result === false) && ports.current.restore) {
+    // The LAST send that was making the chat's run was NOT kept after the creation answered, and that run was never live: what
+    // waits for it has nothing to follow (another send from the draft still in flight may yet start it). It comes back with the
+    // send in ONE restore, the send first, and the send is reported kept (the host puts nothing back twice) - the same path as
+    // a creation that failed.
+    if (!taken && flight.chat !== null && flight.flying.length === 0 && (thrown !== null || result === false) && ports.current.restore) {
       const back = takeBackWaiting(flight.chat);
       if (back.length > 0) {
-        giveBackAll([turn, ...back.map((waited) => waited.turn as T)]);
+        giveBackAll([turn, ...back.map((waited) => waitedTurn<T>(waited))]);
         taken = true;
       }
     }

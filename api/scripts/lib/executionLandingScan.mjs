@@ -47,7 +47,7 @@
 
 import { scanRawSql } from './executionLandingRawSql.mjs';
 
-const REGEX_KEYWORDS =new Set(['return', 'typeof', 'case', 'do', 'else', 'in', 'of', 'void', 'delete', 'throw', 'new', 'instanceof', 'yield', 'await']);
+const REGEX_KEYWORDS = new Set(['return', 'typeof', 'case', 'do', 'else', 'in', 'of', 'void', 'delete', 'throw', 'new', 'instanceof', 'yield', 'await']);
 
 /** Can a `/` at `i` open a regex literal (rather than divide)? Decided by the last significant token before it. */
 function regexMayStart(text, last) {
@@ -322,14 +322,21 @@ function storedBuilder(text, at) {
 
 /**
  * The text a stored builder `name` (regex-escaped) is the update builder in: from `from` to the close of the block it was declared in,
- * or to the next re-declaration / reassignment of the same name (which binds it to something else) - whichever comes first. A second
- * variable of the same name elsewhere in the file is a different binding and is not this builder.
+ * or to the next re-declaration / reassignment of the same name (which binds it to something else) - whichever comes first. Only a
+ * rebind at depth 0 of that block counts: the same name inside a nested function / arrow body or a `{..}` / `[..]` destructure
+ * pattern is another binding (or a default value), not this one. A second variable of the same name elsewhere in the file is a
+ * different binding and is not this builder.
  */
 function builderScope(text, from, name) {
   const blockEnd = walk(text.slice(from), (_i, c, d) => d < 0 && CLOSE.includes(c));
   const block = blockEnd < 0 ? text.slice(from) : text.slice(from, from + blockEnd);
-  const rebound = new RegExp(`\\b(?:const|let|var)\\s+${name}(?![\\w$])|(?<![\\w$.])${name}\\s*=(?![=>])`).exec(block);
-  return rebound ? block.slice(0, rebound.index) : block;
+  const rebind = new RegExp(`\\b(?:const|let|var)\\s+${name}(?![\\w$])|(?<![\\w$.])${name}\\s*=(?![=>])`, 'y');
+  const at = walk(block, (i, _c, d) => {
+    if (d !== 0) return false;
+    rebind.lastIndex = i;
+    return rebind.test(block);
+  });
+  return at < 0 ? block : block.slice(0, at);
 }
 
 /**

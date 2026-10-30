@@ -170,7 +170,7 @@ export async function gatherTeardownFacts(
   }));
 
   // The file-level diff is only consulted by the revert rules, so don't pay for it
-  // on the automatic teardown sweep (which runs on every failed run).
+  // on the automatic teardown sweep (which runs on every cancelled run; see the ROADMAP gap entry on run-branch residue for its per-task-attribution hazard).
   let changedPaths: string[] | null = null;
   if (args.mode === 'revert') {
     const diff = await listBranchDiff({ ...target, ref: repoCtx.branch }, repoCtx.base, repoCtx.branch).catch(() => null);
@@ -243,7 +243,7 @@ export type TeardownOutcome =
   | { deleted: false; refusal: TeardownRefusal | 'delete_failed'; reason: string };
 
 /**
- * Sweep the ticket branch of a run that ended FAILED or CANCELLED without opening
+ * Sweep the ticket branch of a run that ended CANCELLED without opening
  * a PR. Called from the cloud finalize chokepoint.
  *
  * This is the conservative path by design: it deletes only when

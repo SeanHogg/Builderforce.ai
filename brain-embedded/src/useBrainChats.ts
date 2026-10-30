@@ -1,33 +1,19 @@
 'use client';
 
-/** Chat list + CRUD for the Brain. Persistence is injected via BrainProvider's `persistence` adapter, so both the in-app Brain and external embeds share one implementation. */
+/**
+ * Chat list + CRUD for the Brain.
+ *
+ * Persistence is injected through BrainProvider's `persistence` adapter, so both the in-app Brain and external embeds share
+ * this one implementation. The chat's title (`chatTitle.ts`) is derived from its first message; a chat that is deleted is also
+ * forgotten by everything keyed by it (`forgetChatDelivery`: what waited for its run, the draft tokens that resolved to it).
+ */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useBrainConfig } from './config';
 import { NEW_CHAT_MODE, normalizeChatMode, type ChatMode } from './chatMode';
 import type { BrainChat } from './types';
 import { forgetChatDelivery } from './chatDelivery';
-
-/** The placeholder title `create()` stamps on an untitled chat. A chat still carrying
- *  it has never been named, so {@link deriveChatTitle}-based auto-titling may replace it
- *  (a user/seed-provided title never matches this and is left alone). */
-export const DEFAULT_CHAT_TITLE = 'New chat';
-
-/**
- * Derive a short, human chat title from the first user message — "what the chat is
- * about" — so a conversation stops showing as "New chat" the moment it starts. Pure and
- * LLM-free (no cost, instant, deterministic): first non-empty line, whitespace
- * collapsed, trimmed to ~60 chars on a word boundary. Returns '' when there's nothing
- * usable (so the caller leaves the placeholder in place).
- */
-export function deriveChatTitle(text: string): string {
-  const firstLine = (text.split('\n').find((l) => l.trim()) ?? '').replace(/\s+/g, ' ').trim();
-  if (!firstLine) return '';
-  if (firstLine.length <= 60) return firstLine;
-  const cut = firstLine.slice(0, 60);
-  const lastSpace = cut.lastIndexOf(' ');
-  return `${(lastSpace > 30 ? cut.slice(0, lastSpace) : cut).trim()}…`;
-}
+import { DEFAULT_CHAT_TITLE, deriveChatTitle } from './chatTitle';
 
 export interface UseBrainChatsOptions {
   /** Dropdown filter — id string, 'none', or null (all). Ignored when `pinnedProjectId` is set. */

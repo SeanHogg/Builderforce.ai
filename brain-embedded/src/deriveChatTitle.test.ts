@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveChatTitle, DEFAULT_CHAT_TITLE } from './useBrainChats';
+import { deriveChatTitle, DEFAULT_CHAT_TITLE } from './chatTitle';
 
 describe('deriveChatTitle', () => {
   it('uses the first non-empty line of the user message', () => {

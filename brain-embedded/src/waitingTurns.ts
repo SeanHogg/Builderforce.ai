@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from 'react';
 import type { RunKey } from './brainRunStore';
-import { removeWaiting, subscribeWaiting, waitingFor, waitingVersion } from './chatDelivery';
+import { removeWaiting, subscribeWaiting, waitedTurn, waitingFor, waitingVersion } from './chatDelivery';
 import type { QueuedItem, QueuedTurns } from './useQueuedTurns';
 
 /**
@@ -14,7 +14,7 @@ import type { QueuedItem, QueuedTurns } from './useQueuedTurns';
 export function useQueueWithWaiting<T>(queued: QueuedTurns<T>, runKey: RunKey | null): QueuedTurns<T> {
   useSyncExternalStore(subscribeWaiting, waitingVersion, waitingVersion);
   const waiting: readonly QueuedItem<T>[] = typeof runKey === 'number'
-    ? waitingFor(runKey).map((turn) => ({ id: turn.id, value: (turn.turn ?? turn.text) as T }))
+    ? waitingFor(runKey).map((turn) => ({ id: turn.id, value: waitedTurn<T>(turn) }))
     : [];
   if (waiting.length === 0) return queued;
   return {

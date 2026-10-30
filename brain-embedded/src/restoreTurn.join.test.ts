@@ -23,7 +23,7 @@ describe('joinRestorableTurns - several turns that cannot go come back as ONE', 
     let box = '';
     const composer = {
       draft: () => box,
-      setInput: (text: string) => { box = box || text; },
+      setInput: (next: (current: string) => string) => { box = next(box); },
       restoreAttachments: vi.fn(),
       chooseRecipient: vi.fn(),
     };

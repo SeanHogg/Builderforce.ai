@@ -243,6 +243,9 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     handOff,
     landDraft,
   });
+  // The queue the door SHOWS: the turns waiting for this chat's run (typed while a draft created it) in front of the held ones.
+  // The Send rule reads it too - a waiting turn is held like any other, and a new message waits behind it.
+  const shown = useQueueWithWaiting(queued, runKey);
   const { submit: hold, clear, takeFront, pushBack } = queued;
   // Hold a turn for the creation of the draft showing (true), or land it at once when that creation has already answered but
   // the chat is not selected yet. False: not a draft held by a creation - the ordinary queue's to decide.
@@ -268,9 +271,9 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
   // render, on the run's rising edge, so the very render that goes live already words Send right.
   // The rule: a message typed mid-run is direction for THAT run - it steers it, and does not start a
   // turn ahead of the ones queued behind it, which wait for their run's falling edge.
-  const itemsRef = useRef(queued.items);
+  const itemsRef = useRef(shown.items);
   // eslint-disable-next-line react-hooks/refs
-  itemsRef.current = queued.items;
+  itemsRef.current = shown.items;
   const carriedIds = useRef<ReadonlySet<number>>(new Set());
   const wasRunning = useRef(false);
   const wasSteerable = useRef(false);
@@ -278,7 +281,7 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
   if (running !== wasRunning.current || steerable !== wasSteerable.current) {
     // Whatever waits when the send starts, AND when the run goes live, is carried: a turn held in the
     // window before the run existed (the editor's limbic fetch) must not stop later messages steering it.
-    if ((running && !wasRunning.current) || (steerable && !wasSteerable.current)) carriedIds.current = new Set(queued.items.map((item) => item.id));
+    if ((running && !wasRunning.current) || (steerable && !wasSteerable.current)) carriedIds.current = new Set(shown.items.map((item) => item.id));
     wasRunning.current = running;
     wasSteerable.current = steerable;
   }
@@ -323,12 +326,16 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     clear();
     stopEpoch.current += 1;
     if (ports.current.running) markStopping(true);
-    const { stop: halt, runKey: key } = ports.current;
+    const { stop: halt, runKey: key, drafts: binding } = ports.current;
     // A steer typed before the Stop is dropped with the run, and so is what a draft's creation delivered to this chat that
     // its run has not heard yet (the store's Stop drains the inbox, the device's journal and the chat's waiting turns -
     // every entry point to Stop does) - none of it may start the next one.
     if (halt) halt();
     else if (key != null) stopRun(key);
+    // On a draft whose creation already made chat N, the turns waiting for N's run are the conversation's too: the same Stop.
+    const token = key === null ? binding?.current() : null;
+    const made = token != null ? binding?.outcomeOf(token) : undefined;
+    if (typeof made === 'number') stopRun(made);
   }, [clear, markStopping]);
 
   const submit = useCallback(async (turn: T): Promise<boolean> => {
@@ -384,6 +391,5 @@ export function useChatTurns<T = string>({ running, steerable = running, runKey,
     return (await sendOnce(turn)) !== false;
   }, [hold, holdForDraft, sendOnce]);
 
-  // The queue the door shows: the turns waiting for this chat's run (typed while a draft created it) in front of the held ones.
-  return { queued: useQueueWithWaiting(queued, runKey), submit, queueAfter, stop: stopTurns, steers };
+  return { queued: shown, submit, queueAfter, stop: stopTurns, steers };
 }

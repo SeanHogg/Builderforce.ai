@@ -84,6 +84,8 @@ describe('check:execution-landing scanner', () => {
     ['a generic update held in a variable', "const q = db.update<Row>(executions);\nawait q.set<Row>({ status: 'failed' });"],
     ['a stored builder used inside a nested block of its scope', "const q = db.update(executions);\nif (go) {\n  await q.set({ status: 'failed' });\n}"],
     ['a stored builder whose name is also used for another binding LATER in the file', "function a() { const q = db.update(executions); return q.set({ status: 'failed' }); }\nfunction b() { const q = db.update(tasks); return q.set({ status: 'done' }); }"],
+    ['a stored builder whose name is re-declared inside a nested arrow body', "const q = db.update(executions);\nconst h = () => { const q = db.select(); return q; };\nawait q.set({ status: 'failed' });"],
+    ['a stored builder whose name appears in a destructure pattern default', "const q = db.update(executions);\nconst { q = 1 } = o;\nawait q.set({ status: 'failed' });"],
     ['raw SQL whose opaque target follows a WHERE inside a ${} hole', 'await db.execute(sql`UPDATE executions SET result = ${cond ? sql`WHERE a` : sql`x`}, ${sql.identifier(col)} = ${v} WHERE id = ${id}`);'],
   ])('flags %s', (_name, source) => {
     expect(flagged(source)).toBeGreaterThan(0);

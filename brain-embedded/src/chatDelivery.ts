@@ -32,6 +32,11 @@ export interface ChatDelivery extends HandedTurn {
   readonly turn?: unknown;
 }
 
+/** The host's own turn a delivery was made from, or - when it carried none - its text (the shape of a plain string turn): ONE rule for showing a waiting turn and for giving it back. */
+export function waitedTurn<T>(delivery: ChatDelivery): T {
+  return (delivery.turn ?? delivery.text) as T;
+}
+
 /** A turn waiting for its chat's run, as the queue shows it. `id` is negative: never the id of a turn the queue itself holds. */
 export interface WaitingTurn extends ChatDelivery {
   readonly id: number;
@@ -187,9 +192,17 @@ export function waitingVersion(): number {
   return version;
 }
 
-/** The chat is gone (deleted): nothing will ever run in it - what waited for it, and its subscription, go too. */
+const deletedListeners = new Set<(chat: number) => void>();
+/** Called when a chat is deleted (`forgetChatDelivery`): whoever keeps something keyed by a chat id (a draft's resolved token) lets go of it. */
+export function onChatDeleted(listener: (chat: number) => void): () => void {
+  deletedListeners.add(listener);
+  return () => { deletedListeners.delete(listener); };
+}
+
+/** The chat is gone (deleted): nothing will ever run in it - what waited for it, and its subscription, go too, and so does every draft token that resolved to it. */
 export function forgetChatDelivery(chat: number): void {
   forget(chat);
+  for (const listener of [...deletedListeners]) listener(chat);
 }
 
 // A Stop on a chat - from the composer, a typed stop, the conversation's own `stop`, anywhere - ends the work waiting for its

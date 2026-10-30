@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createDraftBinding, type DraftBinding, type DraftToken } from './draftBinding';
+import { onChatDeleted } from './chatDelivery';
 
 /**
  * "The first message creates the chat" — the ONE implementation. Extracted from the
@@ -100,6 +101,14 @@ export function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRe
     resolved.current.clear();
     drafts.leave(); // the draft is gone; a creation still in flight answers its own token, nobody else's
   }, [chatId, drafts]);
+
+  // A deleted chat is nobody's answer: a draft token that resolved to it, and the creation kept for that token, are forgotten.
+  useEffect(() => onChatDeleted((chat) => {
+    for (const token of drafts.forgetChat(chat)) {
+      creations.current.delete(token);
+      resolved.current.delete(token);
+    }
+  }), [drafts]);
 
   const ensureChatId = useCallback((draft?: DraftToken): Promise<number | null> => {
     // A send naming a token whose creation already answered gets THAT chat - while the binding still knows the token - whatever
