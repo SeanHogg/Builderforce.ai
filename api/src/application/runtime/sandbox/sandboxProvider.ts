@@ -8,7 +8,10 @@
  *
  *   • `shell` — `run_command` and the git tools run in the clone. A long command beats
  *     the run's heartbeat so the reaper never takes a build for a silent run, and the
- *     run's cancel signal kills it. The shell names the ticket branch it mirrors
+ *     run's cancel signal kills it. A sandbox with jobs (`shell.jobs`) also starts,
+ *     polls and kills BACKGROUND commands (`run_command` background / `yieldMs`,
+ *     `command_status`, `command_stop`) — the job table is the sandbox's, so a job
+ *     started on one tick is pollable on the next. The shell names the ticket branch it mirrors
  *     (`trackedBranch`), so `git_sync_latest` / `git_undo` / `git_redo` publish to it.
  *   • `repoRead.listFiles` / `readFile` — the working tree, so a file a command generated
  *     is readable; the provider's own (git API) read when the sandbox cannot answer.
@@ -21,7 +24,7 @@
  *     stale clone can never revert another commit to that file, applies the shared edit
  *     core and commits the result via `writeFile`.
  */
-import { applyStringEdit, editFacts, posixCommandIn, type Capability, type CapabilityProvider, type RepoEditResult, type ShellCapability } from '@builderforce/agent-tools';
+import { applyStringEdit, editFacts, posixCommandIn, type Capability, type CapabilityProvider, type RepoEditResult, type ShellCapability, type ShellRunOptions } from '@builderforce/agent-tools';
 import type { RunSandbox } from './runSandbox';
 import { SANDBOX_COMMAND_HEARTBEAT_MS } from '../cloudAgent/runContext';
 import { reportedFallback } from '../../observability/caughtErrorReporter';
@@ -36,19 +39,22 @@ export interface SandboxProviderOptions {
 }
 
 /**
- * The sandbox's shell as the run sees it: a long command beats the heartbeat, the run's
- * cancel kills it, and `timeoutMs` bounds it. Shared by the tools (`withSandbox`) and the
- * run-end verify, so neither can run a command the reaper takes for a silent run.
+ * The sandbox's shell as the run sees it: a long command (or a wait on a job) beats the
+ * heartbeat, the run's cancel kills it, and `timeoutMs` bounds it. Shared by the tools
+ * (`withSandbox`) and the run-end verify, so neither can run a command the reaper takes
+ * for a silent run.
  */
 export function sandboxShell(sandbox: RunSandbox, opts: SandboxProviderOptions): ShellCapability & { runFor(command: string, timeoutMs: number): ReturnType<ShellCapability['run']> } {
-  const runFor = async (command: string, timeoutMs?: number) => {
+  const beating = async <T>(work: () => Promise<T>): Promise<T> => {
     const beat = setInterval(() => { void opts.heartbeat().catch(reportedFallback(undefined, { source: 'application/runtime/sandbox/sandboxProvider.ts', operation: 'commandHeartbeat' })); }, SANDBOX_COMMAND_HEARTBEAT_MS);
     try {
-      return await sandbox.run(command, opts.signal, timeoutMs);
+      return await work();
     } finally {
       clearInterval(beat);
     }
   };
+  const runFor = (command: string, timeoutMs?: number) => beating(() => sandbox.run(command, opts.signal, timeoutMs));
+  const jobs = sandbox.jobs;
   return {
     // The sandbox's exec API takes only a command line (a remote POSIX sh), so the working
     // directory the shared tools hand over (`ShellRunOptions.cwd`) is written in by the ONE
@@ -58,12 +64,21 @@ export function sandboxShell(sandbox: RunSandbox, opts: SandboxProviderOptions):
       return scoped === null ? { ok: false, error: `'${runOpts?.cwd}' is not a directory inside the workspace, so no command was run there` } : runFor(scoped);
     },
     runFor,
+    // A background job is the RUN's, not the call's: the sandbox keeps it across ticks and
+    // kills it when the run closes, so only a wait (never the job) follows the call's signal.
+    ...(jobs ? {
+      start: (command: string, runOpts?: ShellRunOptions) => jobs.start(command, runOpts?.cwd),
+      poll: (id: string, pollOpts?: { waitMs?: number; signal?: AbortSignal }) => beating(() => jobs.poll(id, pollOpts)),
+      kill: (id: string) => jobs.kill(id),
+    } : {}),
     ...(opts.trackedBranch ? { trackedBranch: opts.trackedBranch } : {}),
   };
 }
 
 /** The capability the sandbox adds to a run's set. */
 export const SANDBOX_CAPABILITIES: readonly Capability[] = ['shell'];
+/** What a sandbox with a job table adds on top (`command_status` / `command_stop`). */
+export const SANDBOX_JOB_CAPABILITIES: readonly Capability[] = ['shell.jobs'];
 
 export function withSandbox(base: CapabilityProvider, sandbox: RunSandbox, opts: SandboxProviderOptions): CapabilityProvider {
   const mirror = (req: Parameters<RunSandbox['fs']>[0]) => sandbox.fs(req).catch(reportedFallback(undefined, { source: 'application/runtime/sandbox/sandboxProvider.ts', operation: 'mirrorToWorkingTree', context: { op: req.op } }));
@@ -79,7 +94,7 @@ export function withSandbox(base: CapabilityProvider, sandbox: RunSandbox, opts:
   };
   return {
     ...base,
-    capabilities: new Set<Capability>([...base.capabilities, ...SANDBOX_CAPABILITIES]),
+    capabilities: new Set<Capability>([...base.capabilities, ...SANDBOX_CAPABILITIES, ...(sandbox.jobs ? SANDBOX_JOB_CAPABILITIES : [])]),
     shell: sandboxShell(sandbox, opts),
     ...(repoRead ? {
       repoRead: {

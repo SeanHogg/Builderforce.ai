@@ -7,7 +7,7 @@
  * Cloudflare Container imports the file directly. The GitHub Actions runner cannot: it is
  * a single file served over HTTP into a bare checkout with no `npm install`, rendered by
  * a Worker that has no filesystem to read the module from at request time. So the module
- * — with the two generated siblings it imports — is baked into the Worker bundle as a
+ * — with the siblings it imports — is baked into the Worker bundle as a
  * string, and the runner inlines it.
  *
  * That makes the generated file a COPY, so `--check` runs in the api check chain and
@@ -24,8 +24,8 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const API_ROOT = resolve(HERE, '..');
 const CONTAINER = join(API_ROOT, 'container');
-/** In dependency order: the core imports the two before it. */
-const MODULES = ['toolOutputPolicy.mjs', 'postEditChecks.mjs', 'sandboxCore.mjs'];
+/** In dependency order: the core imports the three before it. */
+const MODULES = ['toolOutputPolicy.mjs', 'postEditChecks.mjs', 'sandboxJobs.mjs', 'sandboxCore.mjs'];
 const OUT = join(API_ROOT, 'src', 'application', 'runtime', 'generated', 'sandboxCoreSource.ts');
 
 /**
@@ -65,8 +65,8 @@ function render(sources) {
   return `/**
  * GENERATED FILE — do not edit by hand.
  *
- * The inlinable form of \`api/container/sandboxCore.mjs\` (with \`toolOutputPolicy.mjs\`
- * and \`postEditChecks.mjs\`), baked into the Worker bundle so \`githubActionsRunner.ts\`
+ * The inlinable form of \`api/container/sandboxCore.mjs\` (with \`toolOutputPolicy.mjs\`,
+ * \`postEditChecks.mjs\` and \`sandboxJobs.mjs\`), baked into the Worker bundle so \`githubActionsRunner.ts\`
  * can emit it inside the single-file runner script it serves. \`SANDBOX_CORE_IMPORTS\`
  * is the node builtins the code needs, which the runner places at its top.
  *

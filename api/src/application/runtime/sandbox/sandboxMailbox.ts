@@ -13,12 +13,12 @@
  * instance (`exec:<id>`). An eviction drops both the waiting tick and the queue; the
  * tick then re-runs from the persisted cursor and re-issues its request.
  */
-import { toCheckVerdict, toShellResult, type RunSandbox, type SandboxFsRequest, type SandboxFsResult, type SandboxRunReply } from './runSandbox';
+import { sandboxJobsOver, toCheckVerdict, toShellResult, type RunSandbox, type SandboxJobPath, type SandboxFsRequest, type SandboxFsResult, type SandboxRunReply } from './runSandbox';
 
 /** One request the runner serves: the same paths the container's HTTP transport answers. */
 export interface SandboxMailRequest {
   id: string;
-  path: '/sandbox/fs' | '/sandbox/run' | '/sandbox/checks';
+  path: '/sandbox/fs' | '/sandbox/run' | '/sandbox/checks' | SandboxJobPath;
   body: Record<string, unknown>;
 }
 
@@ -98,8 +98,9 @@ export class SandboxMailbox {
 export function createMailboxSandbox(mailbox: SandboxMailbox): RunSandbox {
   return {
     fs: (req: SandboxFsRequest) => mailbox.request<SandboxFsResult>('/sandbox/fs', { ...req }),
-    run: async (command: string, signal?: AbortSignal, timeoutMs?: number) =>
-      toShellResult(await mailbox.request<SandboxRunReply>('/sandbox/run', { command, ...(timeoutMs ? { timeoutMs } : {}) }, signal)),
+    run: async (command: string, signal?: AbortSignal, timeoutMs?: number, cwd?: string) =>
+      toShellResult(await mailbox.request<SandboxRunReply>('/sandbox/run', { command, ...(timeoutMs ? { timeoutMs } : {}), ...(cwd ? { cwd } : {}) }, signal)),
+    jobs: sandboxJobsOver(<T>(path: SandboxJobPath, body: Record<string, unknown>, signal?: AbortSignal) => mailbox.request<T>(path, body, signal)),
     checks: async () => toCheckVerdict(await mailbox.request<unknown>('/sandbox/checks', {})),
     close: async () => { mailbox.close(); },
   };

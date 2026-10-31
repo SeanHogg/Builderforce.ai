@@ -14,7 +14,7 @@
  * re-opens and retries once: the ticket branch already carries every committed write, so
  * a fresh clone IS the run's working tree.
  */
-import type { ShellResult } from '@builderforce/agent-tools';
+import type { ShellJobStart, ShellJobStatus, ShellResult } from '@builderforce/agent-tools';
 import type { SandboxOpenSpec } from './sandboxOpenSpec';
 import { reportedFallback } from '../../observability/caughtErrorReporter';
 
@@ -45,11 +45,28 @@ export interface SandboxCheckVerdict {
   steer?: string;
 }
 
+/**
+ * The sandbox's BACKGROUND jobs. The job table lives in the sandbox itself (never in a
+ * Worker isolate): a cloud run spans ticks, so a job started on one must be pollable on
+ * the next, and the sandbox's close kills every job the run left.
+ */
+export interface SandboxJobs {
+  /** Start `command` in `cwd` (repo-relative; absent = the clone's root). */
+  start(command: string, cwd?: string): Promise<ShellJobStart>;
+  /** The job's state, after waiting up to `waitMs` for it to end. `signal` aborting ends
+   *  the WAIT early with the status so far; the job runs on. */
+  poll(id: string, opts?: { waitMs?: number; signal?: AbortSignal }): Promise<ShellJobStatus>;
+  /** Kill the job and everything it started. */
+  kill(id: string): Promise<ShellJobStatus>;
+}
+
 export interface RunSandbox {
   fs(req: SandboxFsRequest): Promise<SandboxFsResult>;
-  /** A shell command in the clone. `signal` aborting kills it; `timeoutMs` (bounded by the
-   *  sandbox's own ceiling) stops it sooner. */
-  run(command: string, signal?: AbortSignal, timeoutMs?: number): Promise<ShellResult>;
+  /** A shell command in the clone (`cwd`: a repo-relative directory, absent = the root).
+   *  `signal` aborting kills it; `timeoutMs` (bounded by the sandbox's own ceiling) stops it sooner. */
+  run(command: string, signal?: AbortSignal, timeoutMs?: number, cwd?: string): Promise<ShellResult>;
+  /** Background jobs; absent ⇒ the sandbox runs everything in the foreground. */
+  jobs?: SandboxJobs;
   /** The project's fast checks over the edits since the last drain — null when nothing
    *  was judged (or the run's levers do not run them). */
   checks(): Promise<SandboxCheckVerdict | null>;
@@ -66,6 +83,54 @@ export function toShellResult(r: SandboxRunReply | { ok: false; error: string })
     return { ok: r.ok, exitCode: r.exitCode, stdout: r.output ?? '', ...(r.timedOut ? { error: 'the command timed out and was stopped' } : {}) };
   }
   return { ok: false, error: r.error ?? 'the command did not run' };
+}
+
+/** The `/sandbox/job/*` paths, on either transport. */
+export type SandboxJobPath = '/sandbox/job/start' | '/sandbox/job/poll' | '/sandbox/job/kill';
+
+/** One request to the sandbox — a transport's own way of asking (HTTP call, mailbox post). */
+export type SandboxRequest = <T>(path: SandboxJobPath, body: Record<string, unknown>, signal?: AbortSignal) => Promise<T | { ok: false; error: string }>;
+
+/** How long one poll request holds the sandbox: a longer wait is several slices, so an
+ *  interrupted wait frees the sandbox (a pull-driven runner serves one request at a time)
+ *  within a slice, and no single request is held for the foreground ceiling. */
+export const SANDBOX_POLL_SLICE_MS = 20_000;
+
+/** A `/sandbox/job/start` reply as the shared tools read it — ONE mapping for both transports. */
+export function toJobStart(r: { ok: boolean; id?: string; error?: string }): ShellJobStart {
+  return r.ok && typeof r.id === 'string' ? { ok: true, id: r.id } : { ok: false, error: r.error ?? 'the background job did not start' };
+}
+
+/** A `/sandbox/job/poll` or `/kill` reply as the shared tools read it. A reply with no job
+ *  status (the sandbox was unreachable or recycled) is `unknown`, never a guess. */
+export function toJobStatus(id: string, r: Partial<ShellJobStatus>): ShellJobStatus {
+  if (typeof r.status === 'string') return { ...r, ok: r.ok === true, id: r.id ?? id, status: r.status };
+  return { ok: false, id, status: 'unknown', error: r.error === 'not_open' ? `no background job "${id}" in this run (the sandbox was recycled)` : (r.error ?? 'the sandbox did not answer') };
+}
+
+/**
+ * {@link SandboxJobs} over any transport — ONE mapping and ONE wait loop for both. A wait
+ * is asked in slices of {@link SANDBOX_POLL_SLICE_MS}; an aborted wait answers with the
+ * job's current state (a zero-wait poll), exactly as the editor's shell does.
+ */
+export function sandboxJobsOver(request: SandboxRequest): SandboxJobs {
+  const ask = async (path: SandboxJobPath, id: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<ShellJobStatus> =>
+    toJobStatus(id, await request<Partial<ShellJobStatus>>(path, { id, ...body }, signal));
+  return {
+    start: async (command, cwd) => toJobStart(await request<{ ok: boolean; id?: string; error?: string }>('/sandbox/job/start', { command, ...(cwd ? { cwd } : {}) })),
+    poll: async (id, opts = {}) => {
+      let remaining = Math.max(0, opts.waitMs ?? 0);
+      for (;;) {
+        const slice = Math.min(remaining, SANDBOX_POLL_SLICE_MS);
+        const st = await ask('/sandbox/job/poll', id, { waitMs: slice }, opts.signal);
+        // The aborted request answers nothing usable: read the job as it stands instead.
+        if (opts.signal?.aborted) return st.status === 'unknown' ? ask('/sandbox/job/poll', id, { waitMs: 0 }) : st;
+        remaining -= slice;
+        if (st.status !== 'running' || remaining <= 0) return st;
+      }
+    },
+    kill: (id) => ask('/sandbox/job/kill', id, {}),
+  };
 }
 
 /** A `/sandbox/checks` reply's verdict, or null when nothing was judged — ONE parse for both transports. */
@@ -125,8 +190,11 @@ export function createContainerSandbox(args: {
 
   return {
     fs: (req) => call<SandboxFsResult>('/sandbox/fs', { ...req }).catch(failed),
-    run: async (command, signal, timeoutMs) =>
-      toShellResult(await call<SandboxRunReply>('/sandbox/run', { command, ...(timeoutMs ? { timeoutMs } : {}) }, signal).catch(failed)),
+    run: async (command, signal, timeoutMs, cwd) =>
+      toShellResult(await call<SandboxRunReply>('/sandbox/run', { command, ...(timeoutMs ? { timeoutMs } : {}), ...(cwd ? { cwd } : {}) }, signal).catch(failed)),
+    // A recycled instance has lost its jobs, so only a START re-opens it; a poll or kill
+    // there answers `unknown` rather than cloning a repo to look for a job that is gone.
+    jobs: sandboxJobsOver(<T>(path: SandboxJobPath, body: Record<string, unknown>, signal?: AbortSignal) => call<T>(path, body, signal, path === '/sandbox/job/start').catch(failed)),
     // A recycled instance has drained nothing: a fresh clone has no edits to judge.
     checks: async () => toCheckVerdict(await call<unknown>('/sandbox/checks', {}, undefined, false).catch(failed)),
     close: async () => {
