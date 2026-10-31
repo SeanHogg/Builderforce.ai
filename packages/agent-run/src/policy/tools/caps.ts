@@ -1,6 +1,5 @@
 /**
- * caps — the ONE window-sized result cap (PRD 35 §6.10), and the cloud surface's
- * capability set.
+ * caps — the ONE window-sized result cap (PRD 35 §6.10).
  *
  * THE CAP is `@builderforce/tool-output-policy`'s `windowedCap` / `toolOutputCap`, reused,
  * never re-derived (this package's tsconfig maps the source package, and `truncation.ts`
@@ -13,18 +12,10 @@
  * {@link resultCapFor} is the one call a dispatch site makes: the table row for the tool,
  * sized by the serving model's window (`ModelTransport.window()`, PRD 35 §3.2).
  *
- * THE CAPABILITY SET. The cloud surface's tool list derives from ONE capability set
- * (`cloudAgentTools.ts` `CLOUD_SURFACE_CAPS`), plus the sandbox's `shell` when the run
- * has one (`runSurfaceCaps.ts` `prepSurfaceCaps`). Ported here so the policy owns the
- * same derivation. Levers are applied by the caller through `withCostLeverCaps` shapes;
- * the C5 `repo.semantic` backing (`durableRepoSemantic`) is cloud-only and is NOT
- * portable — it stays in the cloud adapter (WS3).
- *
  * No `node:*` imports, no DOM: this file is compiled into the Worker, the browser
  * and Node.
  */
 
-import type { Capability, ToolSchema } from "@builderforce/agent-tools";
 import { shapeToolResult, toolOutputCap, truncatedResultNote, windowedCap } from "@builderforce/tool-output-policy";
 
 export { toolOutputCap, windowedCap };
@@ -90,95 +81,4 @@ export function capToolResult(tool: string, data: unknown, maxChars: number): un
     return { ...(parsed as Record<string, unknown>), ok: false };
   }
   return failed ? fittedText(shaped.content, failed, maxChars, shaped.bytes) : parsed;
-}
-
-// ── The cloud surface capability set (cloudAgentTools.ts + runSurfaceCaps.ts) ───
-
-/**
- * The durable/Worker surface's capability set (`cloudAgentTools.ts` `CLOUD_SURFACE_CAPS`).
- * The comment block in the source is authoritative; this is the same set, verbatim.
- */
-export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
-  "repo.read", "repo.search", "repo.write", "repo.edit", "repo.delete", "static-check", "human", "memory", "memory.forget",
-  "coordinate", "prd.write", "web", "web.search",
-  "skill.author",
-  "orchestrate", "orchestrate.fanout", "orchestrate.live",
-]);
-
-/** The capabilities a sandbox adds — exactly `shell` (sandboxProvider). */
-export const SANDBOX_CAPABILITIES: readonly Capability[] = ["shell"];
-
-/** The cost-lever → capabilities rows (C5 adds `repo.semantic`). */
-export interface CostLeverCapsRow {
-  lever: string;
-  caps: readonly Capability[];
-}
-
-/** `base` plus every capability an ON lever adds for this tenant. */
-export function withCostLeverCaps(
-  base: ReadonlySet<Capability>,
-  rows: readonly CostLeverCapsRow[],
-  isLeverOn: (lever: string) => boolean,
-): ReadonlySet<Capability> {
-  const added = rows.filter((row) => isLeverOn(row.lever)).flatMap((row) => row.caps);
-  return added.length === 0 ? base : new Set<Capability>([...base, ...added]);
-}
-
-/** A cloud run's capability set for a tenant (levers applied) — `cloudSurfaceCapsFor`. */
-export function cloudSurfaceCapsFor(
-  env: unknown,
-  tenantId: number | string | null | undefined,
-  isLeverOn: (lever: string) => boolean,
-  leverRows: readonly CostLeverCapsRow[] = [{ lever: "c5_cloud_repo_map", caps: ["repo.semantic"] }],
-): ReadonlySet<Capability> {
-  void env;
-  void tenantId;
-  return withCostLeverCaps(CLOUD_SURFACE_CAPS, leverRows, isLeverOn);
-}
-
-/**
- * The capability set prep issues the run identity with (`prepSurfaceCaps`): the cloud
- * set with levers applied, plus the sandbox's `shell` for a sandboxed run.
- */
-export function prepSurfaceCaps(
-  env: unknown,
-  tenantId: number | string | null | undefined,
-  sandboxed: boolean,
-  isLeverOn: (lever: string) => boolean,
-): ReadonlySet<Capability> {
-  const base = cloudSurfaceCapsFor(env, tenantId, isLeverOn);
-  return sandboxed ? new Set<Capability>([...base, ...SANDBOX_CAPABILITIES]) : base;
-}
-
-/**
- * `durableRunCaps`' pure core: `repo.semantic` only while the run holds it AND a
- * repository backs it (never advertise a tool that is certain to fail), then narrowed
- * by its place in a delegation tree. The repo-map BACKING (`createCloudRepoSemantic`)
- * is cloud-only and stays in the adapter; this is the set-level rule only.
- */
-export function durableRunCaps(
-  prepCaps: ReadonlySet<Capability>,
-  hasRepo: boolean,
-  hasDelegationPlace: boolean,
-): ReadonlySet<Capability> {
-  let caps = prepCaps;
-  if (!hasRepo && caps.has("repo.semantic")) {
-    caps = new Set([...caps].filter((c) => c !== "repo.semantic"));
-  }
-  // delegationCaps: a run with no place in a tree (a rehearsal) holds no delegation.
-  if (!hasDelegationPlace) {
-    caps = new Set([...caps].filter((c) => c !== "orchestrate" && c !== "orchestrate.fanout" && c !== "orchestrate.live"));
-  }
-  return caps;
-}
-
-/** The schema names a capability set advertises (identity over a registry's derivation). */
-export function advertisedToolNames(
-  caps: ReadonlySet<Capability>,
-  schemasForCapabilities: (caps: ReadonlySet<Capability>) => readonly ToolSchema[],
-): string[] {
-  return schemasForCapabilities(caps)
-    .map((t) => t.function?.name ?? "")
-    .filter(Boolean)
-    .sort();
 }
