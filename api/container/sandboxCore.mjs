@@ -68,16 +68,20 @@ function runShell(command, cwd, proc, timeoutMs = COMMAND_TIMEOUT_MS) {
       child.stderr.destroy();
       resolve({ ...result, timedOut });
     };
+    // The shell has ended (its own exit, or the kill): give the pipes a moment to drain, then
+    // answer with its real exit code even if a descendant (`sleep 900 &`) still holds them.
+    let exitCode = -1;
+    const settleSoon = () => { settleTimer ??= setTimeout(() => done({ exitCode, output: out }), SHELL_SETTLE_MS); };
     const stop = () => {
       killTree(child);
-      settleTimer ??= setTimeout(() => done({ exitCode: -1, output: out }), SHELL_SETTLE_MS);
+      settleSoon();
     };
     const handle = { kill: stop };
     if (proc) proc.current = handle;
     const timer = setTimeout(() => { timedOut = true; stop(); }, timeoutMs);
+    child.on('exit', (code) => { exitCode = code ?? -1; settleSoon(); });
     child.on('close', (code) => done({ exitCode: code ?? -1, output: out }));
-    child.on('error', (e) => done({ exitCode: -1, output: `${out}
-${e.message}` }));
+    child.on('error', (e) => done({ exitCode: -1, output: `${out}\n${e.message}` }));
   });
 }
 
@@ -302,17 +306,17 @@ async function commandDir(box, cwd) {
   return isDir ? { dir: abs } : { error: `cwd '${cwd}' is not a directory in the repository` };
 }
 
+/** A foreground command runs in the clone's root: the engine writes any directory into the
+ *  command itself (`posixCommandIn`). Only background jobs take a `cwd` (`sandboxJobStart`). */
 async function sandboxRun(box, body, onAbort) {
   const command = typeof body.command === 'string' ? body.command : '';
   if (!command) return { ok: false, error: 'command is required' };
-  const where = await commandDir(box, body.cwd);
-  if (where.error) return { ok: false, error: where.error };
   // The engine giving up on the command (a cancel) kills it.
   const proc = { current: null };
   const release = onAbort(() => { if (proc.current) proc.current.kill('SIGKILL'); });
   // The engine may bound a command below the ceiling (the run-end verify's budget).
   const timeoutMs = Number.isFinite(body.timeoutMs) && body.timeoutMs > 0 ? Math.min(body.timeoutMs, COMMAND_TIMEOUT_MS) : COMMAND_TIMEOUT_MS;
-  const r = await runShell(command, where.dir, proc, timeoutMs);
+  const r = await runShell(command, box.workdir, proc, timeoutMs);
   if (typeof release === 'function') release();
   return { ok: r.exitCode === 0, exitCode: r.exitCode, timedOut: r.timedOut, output: commandOutput(box.spec, 'run_command', r.output) };
 }

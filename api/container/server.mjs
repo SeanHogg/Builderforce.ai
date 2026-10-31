@@ -17,7 +17,7 @@
  *   • `POST /sandbox/fs`    — list / read / write / delete in the clone. A write the
  *     engine already COMMITTED is absorbed by fast-forwarding the clone to the ticket
  *     branch, so the shell builds against it and the git tools see it as history.
- *   • `POST /sandbox/run`   — a shell command in the clone (`cwd`: a directory inside it).
+ *   • `POST /sandbox/run`   — a shell command in the clone's root.
  *     Closing the request (the engine's cancel aborts its fetch) kills the command.
  *   • `POST /sandbox/job/{start,poll,kill,active}` — BACKGROUND commands (`sandboxJobs.mjs`): the
  *     job table lives here, so a job outlives the request that started it and is

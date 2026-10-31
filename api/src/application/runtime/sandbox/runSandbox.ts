@@ -62,9 +62,10 @@ export interface SandboxJobs {
 
 export interface RunSandbox {
   fs(req: SandboxFsRequest): Promise<SandboxFsResult>;
-  /** A shell command in the clone (`cwd`: a repo-relative directory, absent = the root).
-   *  `signal` aborting kills it; `timeoutMs` (bounded by the sandbox's own ceiling) stops it sooner. */
-  run(command: string, signal?: AbortSignal, timeoutMs?: number, cwd?: string): Promise<ShellResult>;
+  /** A shell command in the clone's root. A directory is written into the command by the
+   *  provider (`posixCommandIn`), never passed here. `signal` aborting kills it; `timeoutMs`
+   *  (bounded by the sandbox's own ceiling) stops it sooner. */
+  run(command: string, signal?: AbortSignal, timeoutMs?: number): Promise<ShellResult>;
   /** Background jobs; absent ⇒ the sandbox runs everything in the foreground. */
   jobs?: SandboxJobs;
   /** The project's fast checks over the edits since the last drain — null when nothing
@@ -190,8 +191,8 @@ export function createContainerSandbox(args: {
 
   return {
     fs: (req) => call<SandboxFsResult>('/sandbox/fs', { ...req }).catch(failed),
-    run: async (command, signal, timeoutMs, cwd) =>
-      toShellResult(await call<SandboxRunReply>('/sandbox/run', { command, ...(timeoutMs ? { timeoutMs } : {}), ...(cwd ? { cwd } : {}) }, signal).catch(failed)),
+    run: async (command, signal, timeoutMs) =>
+      toShellResult(await call<SandboxRunReply>('/sandbox/run', { command, ...(timeoutMs ? { timeoutMs } : {}) }, signal).catch(failed)),
     // A recycled instance has lost its jobs, so only a START re-opens it; a poll or kill
     // there answers `unknown` rather than cloning a repo to look for a job that is gone.
     jobs: sandboxJobsOver(<T>(path: SandboxJobPath, body: Record<string, unknown>, signal?: AbortSignal) => call<T>(path, body, signal, path === '/sandbox/job/start').catch(failed)),

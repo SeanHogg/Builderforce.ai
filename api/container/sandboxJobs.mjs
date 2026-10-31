@@ -137,7 +137,8 @@ export function createJobTable({ maxWaitMs, idPrefix = '' }) {
     if (!job) return unknownJob(id);
     const wasRunning = job.status === 'running';
     if (wasRunning) job.status = 'killed';
-    killTree(job.child);
+    // Only a group still tracked: `close` drops one that emptied, and its pid may be reused.
+    if (groups.has(job.child)) killTree(job.child);
     groups.delete(job.child);
     if (wasRunning) {
       let timer;

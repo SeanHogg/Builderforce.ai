@@ -21,6 +21,9 @@ import type { Env } from '../../env';
 const EXEC_KEY = 'executionId';
 /** When the current job keep-alive began (see `jobKeepAlive.ts`); absent = none in effect. */
 const KEEPALIVE_SINCE_KEY = 'jobKeepAliveSince';
+/** How long the "is a job running?" probe may take. A wedged container process that never answers
+ *  must read as "no job", not hold the idle handler open (and renew the timer) forever. */
+export const JOB_PROBE_TIMEOUT_MS = 10_000;
 
 export class AgentContainerDO extends Container<Env> {
   /** Bound once here so no call site can forget the runtime override. */
@@ -81,6 +84,9 @@ export class AgentContainerDO extends Container<Env> {
     } catch (error) { /* attribution is best-effort */
       this.reportError(error, { operation: "fetch" });
     }
+    // Any request forwarded to the container is real activity: the job keep-alive clock restarts.
+    // (The idle probe goes through `containerFetch`, not this method, so it never resets it.)
+    await this.ctx.storage.delete(KEEPALIVE_SINCE_KEY).catch((error) => this.reportError(error, { operation: 'fetch', level: 'warning' }));
     return super.fetch(request);
   }
 
@@ -119,13 +125,23 @@ export class AgentContainerDO extends Container<Env> {
     try {
       const executionId = await this.ctx.storage.get<number>(EXEC_KEY);
       if (typeof executionId !== 'number') return false;
-      const res = await this.containerFetch('http://agent-container/sandbox/job/active', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ executionId }),
-      });
-      const body = (await res.json().catch(() => null)) as { active?: unknown } | null;
-      return body?.active === true;
+      const probe = (async () => {
+        const res = await this.containerFetch('http://agent-container/sandbox/job/active', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ executionId }),
+          signal: AbortSignal.timeout(JOB_PROBE_TIMEOUT_MS),
+        });
+        const body = (await res.json().catch(() => null)) as { active?: unknown } | null;
+        return body?.active === true;
+      })();
+      probe.catch(() => { /* its verdict was already taken, or it timed out */ });
+      // The signal alone cannot be trusted to unblock a proxied fetch, so the wait is raced too.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      return await Promise.race([
+        probe,
+        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('job probe timed out')), JOB_PROBE_TIMEOUT_MS); }),
+      ]).finally(() => clearTimeout(timer));
     } catch (error) {
       this.reportError(error, { operation: 'jobRunning', level: 'warning' });
       return false;

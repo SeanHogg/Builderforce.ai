@@ -6,7 +6,7 @@
  * probe sees a running job. Linux only (bash, process groups, `setsid`): skipped elsewhere,
  * run in CI.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -78,7 +78,30 @@ describe.skipIf(!posix)('a foreground command that hangs', () => {
   }, 20_000);
 });
 
+describe.skipIf(!posix)('a foreground command whose shell exits while a descendant holds the pipes', () => {
+  it('answers with the real exit code shortly after it exits, not at the 10-minute timeout', async () => {
+    const pidFile = join(workdir, 'bg.pid');
+    const t0 = Date.now();
+    const r = await serve('/sandbox/run', { command: `sleep 900 & echo $! > "${pidFile}"; echo started; exit 3` });
+    expect(r).toMatchObject({ ok: false, exitCode: 3, timedOut: false, output: expect.stringContaining('started') });
+    expect(Date.now() - t0).toBeLessThan(10_000);
+    process.kill(await readPid(pidFile), 'SIGKILL');
+  }, 20_000);
+});
+
 describe.skipIf(!posix)('a background job that leaves a daemon behind', () => {
+  it('kill does not signal a group the table stopped tracking (its pid may be reused)', async () => {
+    const quick = (await serve('/sandbox/job/start', { command: 'true' })) as { id: string };
+    await serve('/sandbox/job/poll', { id: quick.id, waitMs: 10_000 });
+    const spy = vi.spyOn(process, 'kill');
+    try {
+      expect(await serve('/sandbox/job/kill', { id: quick.id })).toMatchObject({ status: 'exited' });
+      expect(spy.mock.calls.filter(([pid, sig]) => (pid as number) < 0 && sig === 'SIGKILL')).toEqual([]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   const daemon = (pidFile: string) => `nohup sleep 300 >/dev/null 2>&1 & echo $! > "${pidFile}"`;
   const start = async (command: string) => (await serve('/sandbox/job/start', { command })) as { ok: boolean; id: string };
 

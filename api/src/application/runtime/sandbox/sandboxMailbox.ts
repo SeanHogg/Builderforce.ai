@@ -101,8 +101,8 @@ export class SandboxMailbox {
 export function createMailboxSandbox(mailbox: SandboxMailbox): RunSandbox {
   return {
     fs: (req: SandboxFsRequest) => mailbox.request<SandboxFsResult>('/sandbox/fs', { ...req }),
-    run: async (command: string, signal?: AbortSignal, timeoutMs?: number, cwd?: string) =>
-      toShellResult(await mailbox.request<SandboxRunReply>('/sandbox/run', { command, ...(timeoutMs ? { timeoutMs } : {}), ...(cwd ? { cwd } : {}) }, signal)),
+    run: async (command: string, signal?: AbortSignal, timeoutMs?: number) =>
+      toShellResult(await mailbox.request<SandboxRunReply>('/sandbox/run', { command, ...(timeoutMs ? { timeoutMs } : {}) }, signal)),
     jobs: sandboxJobsOver(<T>(path: SandboxJobPath, body: Record<string, unknown>, signal?: AbortSignal) => mailbox.request<T>(path, body, signal)),
     checks: async () => toCheckVerdict(await mailbox.request<unknown>('/sandbox/checks', {})),
     close: async () => { mailbox.close(); },

@@ -167,7 +167,13 @@ export class CloudRunnerDO implements DurableObject {
     // tick — and the in-flight step's cancel poll — stop without reading the row. A DO
     // with no run (container/host executions, or already cleaned up) records nothing.
     if (request.method === 'POST' && url.pathname.endsWith('/concluded')) {
-      if (await this.state.storage.get<Cursor>(CURSOR_KEY)) await this.state.storage.put(CONCLUDED_KEY, true);
+      if (await this.state.storage.get<Cursor>(CURSOR_KEY)) {
+        await this.state.storage.put(CONCLUDED_KEY, true);
+        // A run parked on a question has no alarm: arm one, so the next tick sees the flag and
+        // cleans up (releasing its sandbox and deleting the cursor). Cleanup also clears the
+        // alarm, and a tick already running just finishes into the same cleanup.
+        await this.state.storage.setAlarm(Date.now());
+      }
       return new Response(null, { status: 204 });
     }
     return new Response('not found', { status: 404 });
