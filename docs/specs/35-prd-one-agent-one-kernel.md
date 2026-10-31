@@ -28,31 +28,38 @@ The container shell is built and merged (DONE.md 2026-10-31). Its 43 new tests p
 
 ### WS4 — VS Code + Rovr / Web chat adapters (highest-traffic, telemetry-gated)
 
-- **Start from.** The `ws4-ports` branch (bb35bad66, 79 commits behind main on 2026-10-31) holds 924 lines of unwired work:
-  - the ports over the run store;
-  - `webAdapter.ts`, `runViaAgent.ts` and `vscodeAdapter.ts`;
-  - a conformance suite on the real ports.
+VS Code, web and Rovr all build a `BrainRunRequest` and call `startRun`, so one seam moves all three. The canvas already proves the shape: a host that runs its own tools sits on `runAgent` through closed `PlatformTools` and a `DeliveryLedger`.
 
-  What it waited on, `RunTask.transcript` and `RunPorts.platform` / `extensions`, is now on main.
-- **The real cost.** `runLoop.ts` itself is small. The work is moving what its hooks do into `runAgent`, or into ports, without losing any of it:
-  - `beforeDispatch.ts`: the tool router, `ask_user`, `hand_off`, the one-ticket attach, the confirm gate, and read and write dedupe with replay;
-  - `finalAnswerHook.ts`: the stop hook, the ship and review gates, the delegation and restated-reply recoveries, and the stall failover;
-  - `completeTurn.ts`, `dispatchTool.ts`, `runSpendBudget.ts`, `progressGuard.ts`, `toolCallHooks.ts` and `runPreamble.ts`.
+- **The seam.** `startRun` drives the run through one engine choice: `runLoop` (today) or `runViaAgent`. `prepareRunLoop` stays and runs for both: it assembles what the canvas assembles for itself (system prompt, transcript, catalog, recall, the deterministic and memory answers). Its output becomes `RunTask.transcript`, `RunPolicy` and the ports.
+- **The opt-in, until the ship gate.** The default stays `runLoop`. A device opts in: the VS Code setting `builderforce.agent.engine`, and `builderforce.runEngine` in `localStorage` (or `?runEngine=agent`, which stores it) on web and Rovr. The choice is read once at the host's request site and carried on `BrainRunRequest`. It selects the engine and nothing else. The ship gate flips the default, and the same workstream deletes `runLoop` and the switch.
+- **The parity oracle.** 20 test files drive `startRun`. With `BRAIN_RUN_ENGINE=agent` they run unchanged against the agent, and what fails is the list of real gaps. It starts as a baseline in the hand-off note and burns down to zero. A failure that cannot be closed goes to the planning model by name.
+- **Start from.** The `ws4-ports` branch (bb35bad66): `modelTransport`, `eventSink`, `runStorePort`, `humanChannel`, `contextSource`, `webAdapter`, `runViaAgent`, `vscodeAdapter`, conformance on the real ports. It covers the plain seams only. The rows below are the rest.
+
+| What the Brain's hooks do | Where it lives on the agent |
+|---|---|
+| The streamed turn: live deltas, activity, the `llm.complete` step, window packing, usage, BYO banners, the local-first trace | `ModelTransport`, sharing one extracted turn recorder with `completeTurn.ts`, never a copy |
+| Steers in front of a turn, saved as they are read | `SteeringSource`, over `takeRunSteering` and `persistSteer` |
+| Compaction and the durable fold marker | `policy/compaction`; the note reaches the sink on `context.compacted` so `persistFoldMarker` still runs |
+| Tool selection, pins, the forced menu | Closed `PlatformTools`: `schemas` withdraws `hand_off` when it closes, `selection` carries the request query and the pinned names |
+| Router, alias, confirm gate, one-ticket attach, `hand_off`, ticket on first edit, auto-link, placeholder, completion and failure advisories, ledgers | `PlatformTools.execute`, by extracting those steps out of `beforeDispatch.ts` and `dispatchTool.ts` so both engines call the same code |
+| Read and write dedupe with replay | `policy/tools` read coverage. `CacheServedStreak` is missing from the agent and is ported |
+| A terminal `ask_user`, narration kept as its own block | `ToolExtension.terminalTurn`; narration is saved when the transport sees a turn with calls |
+| Stop hook, ship gate, review gate, restated reply | `DeliveryLedger` rungs. `rungs` may become async (the stop hook awaits). A rung may enter the verify phase |
+| The delegation recovery, stall nudges and failover | `policy/subagents` and `policy/stall`, with `pickFallbackModel` behind `fallbackSurface` |
+| **Coder re-ask** on the first edit of an analysis turn | **Missing from the agent.** Ported into `policy/model`, switched by `RunPolicy` data, so the canvas is unchanged |
+| **The run's USD cap** (warn at 80%, contained stop) | **Missing from the agent.** Ported as agent policy from `runSpendBudget.ts`, as `RunPolicy.budgets.usd` |
+| Image attachments on a turn | `RunMessage.content` is text only. Gains additive `parts`, which the on-prem contract also needs |
+| The settled reply, Evermind learn and reconcile, `onActivity`, a thrown error's actionable verdict, the forced final answer | The adapter, after `runAgent` returns. A failed outcome rethrows the transport's own error so `chatErrorAction` still reads it |
+
 - **Owns.**
-  - `brain-embedded/src/run/webAdapter.ts`.
-  - The `brain-embedded/src/runStore/runLoop.ts` policy (moved, then deleted).
-  - `clients/vscode/src/run/vscodeAdapter.ts` and the `brainRunHost.ts` call site.
-- **Do:**
-  - The run store becomes `RunStore` + `HumanChannel` + `EventSink`. That keeps single-flight,
-    Stop, the confirm gate and the live trace.
-  - The local-first transport and `xmlToolCalls` become `ModelTransport`.
-  - Send the entry-point label (`vscode` / `web` / `rovr`).
+  - `brain-embedded/src/run/*`.
+  - The `brain-embedded/src/runStore/runLoop.ts` policy (moved, then deleted after the ship gate).
+  - `clients/vscode/src/run/vscodeAdapter.ts`, `rovrRunHost.ts`, `useBrainConversation.ts` and the `brainRunHost.ts` call site.
 - **Accept.**
   - Conformance passes.
-  - The brain-embedded, VS Code and frontend tests pass unchanged.
+  - The brain-embedded, VS Code and frontend tests pass unchanged on both engines.
   - The VSIX is packaged and installed.
-  - **Ship gate:** a week of VS Code telemetry is at or better than §8.1. If it regresses,
-    revert to the previous VSIX and route the failure back to the planning model.
+  - **Ship gate:** a week of VS Code telemetry on the agent is at or better than §8.1. If it regresses, the device goes back to `runLoop` and the failure goes to the planning model.
 
 ### WS5 — On-prem channels
 
