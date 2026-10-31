@@ -91,6 +91,11 @@ export interface PlatformTools {
    * Nothing back ⇒ the policy's selection stands.
    */
   turn?(env: TurnEnv): Promise<TurnMenu | void> | TurnMenu | void;
+  /**
+   * A turn's calls have all run (additive): the surface folds the turn into its own progress detectors. Asked once per turn that
+   * called tools, after the guards policy has folded it, before the next step's {@link turn}.
+   */
+  turnEnded?(env: { step: number }): Promise<void> | void;
   /** The relevance selection the tools policy applies to {@link schemas}. */
   selection: PlatformSelection;
   /** Run one call. A refusal is a result the model reads, never a throw. */

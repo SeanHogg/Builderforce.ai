@@ -21,6 +21,7 @@ import { DEFAULT_TOOL_LIMIT } from '../selectTools';
 import { beforeDispatchHook } from '../runStore/beforeDispatch';
 import { dispatchToolPort } from '../runStore/dispatchTool';
 import { afterDispatchHook } from '../runStore/toolCallHooks';
+import { progressAfterToolCalls } from '../runStore/progressGuard';
 import type { RunLoopContext } from '../runStore/runLoopContext';
 import { loopTurnMenu } from './loopTurnMenu';
 
@@ -65,6 +66,8 @@ export function brainPlatformTools(run: RunLoopContext): BrainPlatform {
       // No `handsOff`: `hand_off` reports itself to the model policy inside `beforeDispatchHook` (through the run's view), and a
       // call the agent hands off first would find the plan already closed.
       turn: (env) => loopTurnMenu(run, env, run.allTools?.length ?? 0),
+      // A3's detector is the Brain's own (`progressGuard.ts`): the turn is judged when its calls have all run, as the loop does.
+      turnEnded: progressAfterToolCalls(run),
       async execute(name, args): Promise<PlatformToolResult> {
         step += 1;
         const ctx = { step, messages: run.convo } as unknown as TurnContext<ChatCompletionMessage>;

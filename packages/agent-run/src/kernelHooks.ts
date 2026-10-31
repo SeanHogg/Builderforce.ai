@@ -372,6 +372,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       const pctx = contextAt(ctx.step, ctx.stepInCall);
       await hooks.guards.endTurn?.(pctx, run.turnContent);
       hooks.stall.acted?.(pctx);
+      await ports.platform?.turnEnded?.({ step: ctx.step });
       // A round in which a call was declined says, ONCE, how to stop it recurring — after
       // the complete calls ran and the declined one got its own result.
       if (run.facts.refused) {

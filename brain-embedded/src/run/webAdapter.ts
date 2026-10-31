@@ -29,10 +29,8 @@ import {
   type RunPorts,
   type RunTask,
 } from '@builderforce/agent-run';
-import type { CostLeverId } from '@builderforce/cost-levers';
 import type { RunPolicyOptions } from '@builderforce/run-policy';
 import { CODE_CHANGE_TOOLS } from '../localWorkspaceTools';
-import { deviceLeverOn } from '../runStore/deviceLevers';
 import type { RunCell } from '../runStore/runCell';
 import type { BrainRunRequest } from '../runStore/runTypes';
 import { brainContextSource, type GatherContextPack } from './contextSource';
@@ -47,9 +45,6 @@ export type BrainEntryPoint = 'web' | 'rovr' | 'vscode';
 
 /** The delegation nudge fires after this many reads with no spawn (PRD 35 §3.2). */
 const READS_BEFORE_NUDGE = 6;
-
-/** The guard levers a Brain run reads on the device (`COST_LEVER_<ID>=off` turns one off). */
-const GUARD_LEVERS: readonly CostLeverId[] = ['a3_progress_detector'];
 
 /** Everything an adapter needs to build the ports of ONE Brain run. */
 export interface BrainRunBinding {
@@ -151,7 +146,9 @@ export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | '
     entryPoint: b.entryPoint,
     toolScope: req.lineage ? 'subagent' : req.chatMode === 'chat' ? 'chat-reply' : 'chat-work',
     role: 'general',
-    levers: GUARD_LEVERS.filter((id) => deviceLeverOn(id)),
+    // No guard lever is switched on in the agent's own policy: A3's detector (and its device lever) is the Brain's
+    // `RunProgressGuard`, which the platform tools run, so the run has ONE detector (`brainPlatformTools.ts`).
+    levers: [],
     // A Brain run has NO tool-iteration ceiling: the kernel's consecutive-failure breaker
     // is its only limit (`runStore/runLoop.ts`).
     budgets: req.maxRunBudgetUsd && req.maxRunBudgetUsd > 0 ? { usd: req.maxRunBudgetUsd } : {},
