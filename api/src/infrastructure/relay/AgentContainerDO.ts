@@ -15,9 +15,12 @@ import { createDurableErrorReporter, type DurableErrorReporter } from '../../app
  */
 import { Container } from '@cloudflare/containers';
 import { PREVIEW_CONTROL_STOP_PATH } from '../../application/runtime/previewSessions';
+import { decideJobKeepAlive } from '../../application/runtime/sandbox/jobKeepAlive';
 import type { Env } from '../../env';
 
 const EXEC_KEY = 'executionId';
+/** When the current job keep-alive began (see `jobKeepAlive.ts`); absent = none in effect. */
+const KEEPALIVE_SINCE_KEY = 'jobKeepAliveSince';
 
 export class AgentContainerDO extends Container<Env> {
   /** Bound once here so no call site can forget the runtime override. */
@@ -56,6 +59,8 @@ export class AgentContainerDO extends Container<Env> {
       // never reaches the image: the point is to release the INSTANCE, and a request
       // forwarded into the container would only keep it alive.
       if (request.method === 'POST' && url.pathname === PREVIEW_CONTROL_STOP_PATH) {
+        // A preview stop wins over any job keep-alive: the instance goes, and so does the clock.
+        await this.ctx.storage.delete(KEEPALIVE_SINCE_KEY);
         await this.stop();
         return new Response(null, { status: 204 });
       }
@@ -89,5 +94,41 @@ export class AgentContainerDO extends Container<Env> {
     const executionId = await this.ctx.storage.get<number>(EXEC_KEY).catch(() => undefined);
     this.reportError(error, { operation: "onError", context: { logMessage: '[AgentContainerDO] sandbox container error', details: { executionId } } });
     return error;
+  }
+
+  /**
+   * The idle timer expired. The default is to stop; this keeps the container for a running
+   * BACKGROUND job (a request-less stretch is normal for one), up to the cap in
+   * {@link decideJobKeepAlive}. The library renews the timer after this returns, so a
+   * kept container is asked again one `sleepAfter` later.
+   */
+  override async onActivityExpired(): Promise<void> {
+    if (!this.ctx.container?.running) return;
+    const now = Date.now();
+    const since = await this.ctx.storage.get<number>(KEEPALIVE_SINCE_KEY).catch(() => undefined);
+    const decision = decideJobKeepAlive(await this.jobRunning(), since, now);
+    if (decision.since === null) await this.ctx.storage.delete(KEEPALIVE_SINCE_KEY);
+    else if (decision.since !== since) await this.ctx.storage.put(KEEPALIVE_SINCE_KEY, decision.since);
+    if (decision.keep) { this.renewActivityTimeout(); return; }
+    await this.stop();
+  }
+
+  /** Whether the container reports a running background job. Any failure reads "none":
+   *  an unreachable container is not one to keep warm. */
+  private async jobRunning(): Promise<boolean> {
+    try {
+      const executionId = await this.ctx.storage.get<number>(EXEC_KEY);
+      if (typeof executionId !== 'number') return false;
+      const res = await this.containerFetch('http://agent-container/sandbox/job/active', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ executionId }),
+      });
+      const body = (await res.json().catch(() => null)) as { active?: unknown } | null;
+      return body?.active === true;
+    } catch (error) {
+      this.reportError(error, { operation: 'jobRunning', level: 'warning' });
+      return false;
+    }
   }
 }

@@ -43,7 +43,7 @@ function statusOf(job) {
 
 /** SIGKILL the job's whole process group (it was spawned detached, so it leads one): a
  *  `bash -lc` child killed alone would leave its grandchildren running. */
-function killTree(child) {
+export function killTree(child) {
   try {
     process.kill(-child.pid, 'SIGKILL');
   } catch {
@@ -51,11 +51,27 @@ function killTree(child) {
   }
 }
 
+/** Whether anything in the child's process group is still alive (signal 0 delivers nothing). */
+function groupAlive(child) {
+  try { process.kill(-child.pid, 0); return true; } catch { return false; }
+}
+
+/** A prefix for one sandbox boot's job ids. Ids restart at `job-1` in a fresh table, so a
+ *  poll from before a restart would otherwise read a DIFFERENT job under the same id. */
+export function bootJobIdPrefix() {
+  return `${Math.random().toString(36).slice(2, 8)}-`;
+}
+
 /**
- * One run's job table. `maxWaitMs` bounds a poll's wait (the foreground command ceiling).
+ * One run's job table. `maxWaitMs` bounds a poll's wait (the foreground command ceiling);
+ * `idPrefix` (default none) is put before `job-N` in every id.
  */
-export function createJobTable({ maxWaitMs }) {
+export function createJobTable({ maxWaitMs, idPrefix = '' }) {
   const table = new Map();
+  /** Every job's process group leader, for the life of the table. NOT evicted with the
+   *  job record, and kept after the job reads `exited`: `nohup srv &` ends its bash while
+   *  `srv` runs on, and `kill` / `closeAll` must still reach it. */
+  const groups = new Set();
   let seq = 0;
 
   function evictFinished() {
@@ -69,7 +85,7 @@ export function createJobTable({ maxWaitMs }) {
   function start(command, cwd) {
     evictFinished();
     if (table.size >= MAX_JOBS) return { ok: false, error: `too many running background jobs (${MAX_JOBS}); stop one with command_stop first` };
-    const id = `job-${++seq}`;
+    const id = `${idPrefix}job-${++seq}`;
     const child = spawn('bash', ['-lc', command], { cwd, env: process.env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let settle;
     const job = { id, child, status: 'running', output: '', truncated: false, done: new Promise((r) => { settle = r; }) };
@@ -85,9 +101,14 @@ export function createJobTable({ maxWaitMs }) {
       job.exitCode = code ?? -1;
       settle();
     };
-    child.on('close', finish);
+    child.on('close', (code) => {
+      finish(code);
+      // Nothing left in the group ⇒ stop tracking it, so a recycled pid is never signalled.
+      if (!groupAlive(child)) groups.delete(child);
+    });
     child.on('error', (e) => { cap(`\n${e.message}`); finish(null); });
     table.set(id, job);
+    groups.add(child);
     return { ok: true, id };
   }
 
@@ -108,13 +129,17 @@ export function createJobTable({ maxWaitMs }) {
     return statusOf(job);
   }
 
-  /** Kill a job's process tree and report how it ended (waits briefly for the exit). */
+  /** Kill a job's process tree and report how it ended (waits briefly for the exit). A job
+   *  that already read `exited` is still signalled: its group may hold a daemon it left
+   *  behind. Its status stays `exited` — only a job that was running reads `killed`. */
   async function kill(id) {
     const job = table.get(id);
     if (!job) return unknownJob(id);
-    if (job.status === 'running') {
-      job.status = 'killed';
-      killTree(job.child);
+    const wasRunning = job.status === 'running';
+    if (wasRunning) job.status = 'killed';
+    killTree(job.child);
+    groups.delete(job.child);
+    if (wasRunning) {
       let timer;
       await Promise.race([job.done, new Promise((r) => { timer = setTimeout(r, KILL_SETTLE_MS); })]);
       clearTimeout(timer);
@@ -122,10 +147,18 @@ export function createJobTable({ maxWaitMs }) {
     return { ...statusOf(job), ...(job.status === 'killed' ? { error: 'stopped' } : {}) };
   }
 
-  /** Kill every running job — the run is over. */
+  /** Kill every job and every group a job left behind — the run is over. */
   async function closeAll() {
     await Promise.all([...table.values()].filter((j) => j.status === 'running').map((j) => kill(j.id)));
+    for (const child of groups) killTree(child);
+    groups.clear();
   }
 
-  return { start, poll, kill, closeAll };
+  /** Whether any job is still running — what keeps an idle container alive. */
+  function hasRunning() {
+    for (const job of table.values()) if (job.status === 'running') return true;
+    return false;
+  }
+
+  return { start, poll, kill, closeAll, hasRunning };
 }

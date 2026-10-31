@@ -19,9 +19,9 @@
  *     branch, so the shell builds against it and the git tools see it as history.
  *   • `POST /sandbox/run`   — a shell command in the clone (`cwd`: a directory inside it).
  *     Closing the request (the engine's cancel aborts its fetch) kills the command.
- *   • `POST /sandbox/job/{start,poll,kill}` — BACKGROUND commands (`sandboxJobs.mjs`): the
+ *   • `POST /sandbox/job/{start,poll,kill,active}` — BACKGROUND commands (`sandboxJobs.mjs`): the
  *     job table lives here, so a job outlives the request that started it and is
- *     pollable on a later tick. `/sandbox/close` kills every job the run left.
+ *     pollable on a later tick. `/sandbox/close` kills every job the run left; `active` tells AgentContainerDO whether to keep an idle container.
  *   • `POST /sandbox/checks` — drain the post-edit checks for the edits since the last
  *     drain: the verdict the engine's loop guards fold (D1) and show the model (D7).
  *   • `POST /sandbox/close` — dispose the clone at run end.
@@ -49,7 +49,7 @@ import { gzip } from 'node:zlib';
 import { promisify } from 'node:util';
 // THE sandbox primitives (shell, working tree, post-edit checks) — the same module the
 // GitHub Actions runner inlines, so both transports serve one implementation.
-import { closeSandboxBox, createSandboxBox, runShell, serveSandbox } from './sandboxCore.mjs';
+import { bootJobIdPrefix, closeSandboxBox, createSandboxBox, runShell, serveSandbox } from './sandboxCore.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
 // Live-preview passthrough: when a run starts a dev server on PREVIEW_PORT, the
@@ -304,7 +304,7 @@ async function openSandbox(spec) {
     localServiceEvent(spec, 'runtime.clone', { phase: 'failed' }, `clone failed: ${cloned.output.slice(0, 200)}`);
     return { ok: false, error: `clone failed: ${cloned.output.slice(-300)}` };
   }
-  const box = createSandboxBox({ spec, workdir, branch: cloned.branch, emit: (toolName, detail, result) => localServiceEvent(spec, toolName, detail, result) });
+  const box = createSandboxBox({ spec, workdir, branch: cloned.branch, jobIdPrefix: bootJobIdPrefix(), emit: (toolName, detail, result) => localServiceEvent(spec, toolName, detail, result) });
   box.previewStarted = false;
   sandboxes.set(spec.executionId, box);
   localServiceEvent(spec, 'runtime.clone', { branch: cloned.branch, requestedHead: spec.repo.headBranch ?? null, base: spec.repo.baseBranch ?? null },
@@ -347,7 +347,7 @@ async function handleSandbox(path, body, res) {
   if (path === '/sandbox/close') return [200, await closeSandbox(body.executionId)];
   const box = sandboxes.get(body.executionId);
   if (!box) return [409, { ok: false, error: 'not_open' }];
-  if (!['/sandbox/fs', '/sandbox/run', '/sandbox/checks', '/sandbox/job/start', '/sandbox/job/poll', '/sandbox/job/kill'].includes(path)) return [404, { ok: false, error: 'not found' }];
+  if (!['/sandbox/fs', '/sandbox/run', '/sandbox/checks', '/sandbox/job/start', '/sandbox/job/poll', '/sandbox/job/kill', '/sandbox/job/active'].includes(path)) return [404, { ok: false, error: 'not found' }];
   // The engine aborting its fetch (a cancel) closes the connection: kill the command. The
   // RESPONSE's 'close' — the request's has already fired once its body was read, so a
   // listener on it would never hear the cancel.

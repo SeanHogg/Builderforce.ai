@@ -21,7 +21,7 @@ import { access, mkdir, writeFile, readFile, readdir, rm, stat } from 'node:fs/p
 import { join, dirname, relative, resolve as resolvePath, sep } from 'node:path';
 import { SHELL_CAPTURE_CHARS, fitToolText, keepTail, toolOutputCap } from './toolOutputPolicy.mjs';
 import { cloneCheckIo, createPostEditChecks } from './postEditChecks.mjs';
-import { createJobTable } from './sandboxJobs.mjs';
+import { bootJobIdPrefix, createJobTable, killTree } from './sandboxJobs.mjs';
 
 const MAX_LIST_ENTRIES = 500;
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000; // a build/test step may legitimately take minutes
@@ -38,22 +38,46 @@ function commandOutput(spec, tool, output) {
   return fitToolText(output, toolOutputCap(tool), { tool, summarize: toolOutputPolicyOn(spec) });
 }
 
-/** Run a shell command in `cwd`, capturing combined stdout/stderr and the exit code.
- *  `proc` (optional) is a holder whose `.current` is set to the live child so a closed
- *  `/sandbox/run` request (the engine's cancel) can SIGKILL it. */
+/** After a kill, how long `runShell` waits for the shell to report its exit before it
+ *  answers anyway: a descendant that escaped the process group (`setsid`) keeps the output
+ *  pipes open, and without this the request would hang on it. */
+const SHELL_SETTLE_MS = 2_000;
+
+/** Run a shell command in `cwd`, capturing combined stdout/stderr and the exit code. The
+ *  shell leads its own process group, so a timeout or cancel kills the WHOLE tree (a hung
+ *  `npm test` is a grandchild of `bash`), and the call always settles shortly after.
+ *  `proc` (optional) is a holder whose `.current` is set to a handle (`kill`) so a closed
+ *  `/sandbox/run` request (the engine's cancel) can stop it. */
 function runShell(command, cwd, proc, timeoutMs = COMMAND_TIMEOUT_MS) {
   return new Promise((resolve) => {
-    const child = spawn('bash', ['-lc', command], { cwd, env: process.env });
-    if (proc) proc.current = child;
+    const child = spawn('bash', ['-lc', command], { cwd, env: process.env, detached: true });
     let out = '';
     const cap = (chunk) => { out = keepTail(out + chunk, SHELL_CAPTURE_CHARS.container); };
     child.stdout.on('data', cap);
     child.stderr.on('data', cap);
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, timeoutMs);
-    const done = (result) => { clearTimeout(timer); if (proc && proc.current === child) proc.current = null; resolve({ ...result, timedOut }); };
+    let settled = false;
+    let settleTimer;
+    const done = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(settleTimer);
+      if (proc && proc.current === handle) proc.current = null;
+      child.stdout.destroy();
+      child.stderr.destroy();
+      resolve({ ...result, timedOut });
+    };
+    const stop = () => {
+      killTree(child);
+      settleTimer ??= setTimeout(() => done({ exitCode: -1, output: out }), SHELL_SETTLE_MS);
+    };
+    const handle = { kill: stop };
+    if (proc) proc.current = handle;
+    const timer = setTimeout(() => { timedOut = true; stop(); }, timeoutMs);
     child.on('close', (code) => done({ exitCode: code ?? -1, output: out }));
-    child.on('error', (e) => done({ exitCode: -1, output: `${out}\n${e.message}` }));
+    child.on('error', (e) => done({ exitCode: -1, output: `${out}
+${e.message}` }));
   });
 }
 
@@ -319,8 +343,8 @@ async function sandboxChecks(box) {
  * One run's sandbox over `workdir`. `emit(toolName, detail, result)` reports a local
  * service's event to the run's timeline (each transport posts it its own way).
  */
-export function createSandboxBox({ spec, workdir, branch = null, emit = () => {} }) {
-  const box = { spec, workdir, branch, emit, checks: null, jobs: createJobTable({ maxWaitMs: COMMAND_TIMEOUT_MS }) };
+export function createSandboxBox({ spec, workdir, branch = null, emit = () => {}, jobIdPrefix = '' }) {
+  const box = { spec, workdir, branch, emit, checks: null, jobs: createJobTable({ maxWaitMs: COMMAND_TIMEOUT_MS, idPrefix: jobIdPrefix }) };
   if (spec.postEditChecks === true) box.checks = startPostEditChecks(box);
   return box;
 }
@@ -329,6 +353,12 @@ export function createSandboxBox({ spec, workdir, branch = null, emit = () => {}
  *  from its close path, so no job outlives its run. */
 export async function closeSandboxBox(box) {
   await box.jobs.closeAll();
+}
+
+/** A job reply's `output` fitted like a foreground command's, so the verdict (printed last)
+ *  survives the model's cap instead of being cut with the head of a 60K tail. */
+function fitJobOutput(box, reply) {
+  return typeof reply.output === 'string' && reply.output ? { ...reply, output: commandOutput(box.spec, 'run_command', reply.output) } : reply;
 }
 
 /**
@@ -341,9 +371,10 @@ export async function serveSandbox(box, path, body, onAbort = () => {}) {
   if (path === '/sandbox/run') return sandboxRun(box, body, onAbort);
   if (path === '/sandbox/checks') return sandboxChecks(box);
   if (path === '/sandbox/job/start') return sandboxJobStart(box, body);
-  if (path === '/sandbox/job/poll') return box.jobs.poll(String(body.id ?? ''), body.waitMs, onAbort);
-  if (path === '/sandbox/job/kill') return box.jobs.kill(String(body.id ?? ''));
+  if (path === '/sandbox/job/poll') return fitJobOutput(box, await box.jobs.poll(String(body.id ?? ''), body.waitMs, onAbort));
+  if (path === '/sandbox/job/active') return { ok: true, active: box.jobs.hasRunning() };
+  if (path === '/sandbox/job/kill') return fitJobOutput(box, await box.jobs.kill(String(body.id ?? '')));
   return { ok: false, error: `unknown sandbox request '${path}'` };
 }
 
-export { runShell };
+export { runShell, bootJobIdPrefix };

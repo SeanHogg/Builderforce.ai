@@ -15,7 +15,9 @@
  *
  *  2. OIDC, not HMAC. A tenant repo holds no secret of ours, so the runner authenticates
  *     with the short-lived GitHub OIDC token the workflow minted — `Authorization:
- *     Bearer` on every op, verified against GitHub's JWKS (`githubOidc.ts`).
+ *     Bearer` on every op, verified against GitHub's JWKS (`githubOidc.ts`). That token
+ *     expires (the verifier enforces `exp`), so a long run re-mints it from the Actions
+ *     token endpoint before it lapses, and once more on a 401.
  *
  *  3. NO CLONE. `actions/checkout` already ran, so the working tree exists before we do.
  *     The engine's commits land on the ticket branch through the Worker's git provider;
@@ -28,6 +30,7 @@
  */
 
 import { SANDBOX_CORE_IMPORTS, SANDBOX_CORE_INLINE } from './generated/sandboxCoreSource';
+import { BUILDERFORCE_AGENT_OIDC_AUDIENCE } from './githubActionsWorkflow';
 
 /**
  * Render the runner script served at `/api/runtime/github-actions/runner.mjs`.
@@ -47,7 +50,7 @@ export function renderAgentRunnerScript(): string {
 ${SANDBOX_CORE_IMPORTS}
 
 const API = String(process.env.BUILDERFORCE_API || '').replace(/\\/$/, '');
-const TOKEN = process.env.BUILDERFORCE_TOKEN || '';
+let TOKEN = process.env.BUILDERFORCE_TOKEN || '';
 const EXECUTION_ID = Number(process.env.BUILDERFORCE_EXECUTION_ID || 0);
 
 /** The checkout actions/checkout produced. We never clone; this already exists. */
@@ -60,13 +63,57 @@ if (!API || !TOKEN || !EXECUTION_ID) {
   process.exit(1);
 }
 
-/** POST an op back to the Worker; returns the parsed JSON body. */
-async function op(name, args) {
-  const res = await fetch(API + '/api/runtime/github-actions/op', {
+/** Where the Actions runtime mints a fresh OIDC token (set when the job has id-token: write). */
+const ID_TOKEN_URL = process.env.ACTIONS_ID_TOKEN_REQUEST_URL || '';
+const ID_TOKEN_REQUEST_TOKEN = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN || '';
+/** The audience /op demands (a deploy token must not drive a run). */
+const AUDIENCE = '${BUILDERFORCE_AGENT_OIDC_AUDIENCE}';
+/** Re-mint this long before the token's \`exp\`; /op tolerates only 60s past it. */
+const TOKEN_REFRESH_SKEW_MS = 2 * 60 * 1000;
+
+/** A JWT's expiry in epoch ms (0 when it cannot be read). */
+function tokenExpiryMs(jwt) {
+  try { return Number(JSON.parse(Buffer.from(String(jwt).split('.')[1], 'base64url').toString('utf8')).exp) * 1000 || 0; } catch { return 0; }
+}
+let tokenExpiresAt = tokenExpiryMs(TOKEN);
+let refreshing = null;
+
+/** Mint a fresh OIDC token. One request at a time: concurrent ops share it. False when
+ *  the runner has no way to mint one or the mint failed. */
+function refreshToken() {
+  if (!ID_TOKEN_URL || !ID_TOKEN_REQUEST_TOKEN) return Promise.resolve(false);
+  refreshing ??= (async () => {
+    try {
+      const res = await fetch(ID_TOKEN_URL + '&audience=' + encodeURIComponent(AUDIENCE), { headers: { Authorization: 'bearer ' + ID_TOKEN_REQUEST_TOKEN } });
+      const body = res.ok ? await res.json() : null;
+      if (!body || typeof body.value !== 'string' || !body.value) return false;
+      TOKEN = body.value;
+      tokenExpiresAt = tokenExpiryMs(TOKEN);
+      return true;
+    } catch (error) {
+      console.error('[bf-runner] token refresh failed', error);
+      return false;
+    } finally {
+      refreshing = null;
+    }
+  })();
+  return refreshing;
+}
+
+function post(name, args) {
+  return fetch(API + '/api/runtime/github-actions/op', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
     body: JSON.stringify({ executionId: EXECUTION_ID, op: name, args: args || {} }),
   });
+}
+
+/** POST an op back to the Worker; returns the parsed JSON body. The token is renewed
+ *  ahead of its expiry, and once on a 401 (a clock-skewed or already-lapsed one). */
+async function op(name, args) {
+  if (tokenExpiresAt && Date.now() > tokenExpiresAt - TOKEN_REFRESH_SKEW_MS) await refreshToken();
+  let res = await post(name, args);
+  if (res.status === 401 && await refreshToken()) res = await post(name, args);
   if (!res.ok) throw new Error('op ' + name + ' -> ' + res.status);
   return res.json();
 }
@@ -95,6 +142,7 @@ async function serve() {
     spec,
     workdir: WORKDIR,
     branch: (spec.repo && spec.repo.headBranch) || null,
+    jobIdPrefix: bootJobIdPrefix(),
     emit: (toolName, detail, result) => {
       op('event', { toolName, category: 'tool', detail, result: String(result).slice(0, 300) })
         .catch((error) => console.error('[bf-runner] ' + toolName + ' event not recorded', error));
@@ -129,6 +177,9 @@ async function serve() {
 
 try {
   await serve();
+  // A daemon that escaped its process group (setsid) would keep Node alive after the run:
+  // the run is over, so end the process and let the job finish.
+  process.exit(0);
 } catch (e) {
   // A sandbox that could not serve reports nothing terminal: the engine owns the run and
   // will say what it could not do. Fail the job so the Actions UI shows it too.
