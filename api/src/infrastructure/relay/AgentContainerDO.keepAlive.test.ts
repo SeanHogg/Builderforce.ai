@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
   stopped: 0,
   renewed: 0,
   forwarded: 0,
+  deletes: 0,
   probes: [] as Array<{ url: string; init?: RequestInit }>,
   probe: (async () => Response.json({ active: false })) as () => Promise<Response>,
 }));
@@ -40,7 +41,7 @@ function makeDo(opts: { running?: boolean; executionId?: number | null } = {}) {
     storage: {
       get: async (k: string) => storage.get(k),
       put: async (k: string, v: unknown) => { storage.set(k, v); },
-      delete: async (k: string) => storage.delete(k),
+      delete: async (k: string) => { h.deletes += 1; return storage.delete(k); },
     },
     container: { running: opts.running ?? true },
   };
@@ -52,7 +53,7 @@ const post = (path: string) => new Request(`https://agent-container${path}`, { m
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(NOW);
-  h.stopped = 0; h.renewed = 0; h.forwarded = 0; h.probes.length = 0;
+  h.stopped = 0; h.renewed = 0; h.forwarded = 0; h.deletes = 0; h.probes.length = 0;
   h.probe = async () => Response.json({ active: false });
 });
 afterEach(() => { vi.useRealTimers(); });
@@ -137,6 +138,13 @@ describe('AgentContainerDO.fetch and the keep-alive clock', () => {
     expect(await res.text()).toBe('proxied');
     expect(h.forwarded).toBe(1);
     expect(storage.has('jobKeepAliveSince')).toBe(false);
+  });
+
+  it('writes nothing for a forwarded request when no clock is set', async () => {
+    const { container } = makeDo();
+    await container.fetch(post('/__preview__/asset.js'));
+    expect(h.forwarded).toBe(1);
+    expect(h.deletes).toBe(0);
   });
 
   it('the idle probe is not activity: the clock survives it', async () => {

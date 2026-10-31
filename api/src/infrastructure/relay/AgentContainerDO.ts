@@ -86,7 +86,11 @@ export class AgentContainerDO extends Container<Env> {
     }
     // Any request forwarded to the container is real activity: the job keep-alive clock restarts.
     // (The idle probe goes through `containerFetch`, not this method, so it never resets it.)
-    await this.ctx.storage.delete(KEEPALIVE_SINCE_KEY).catch((error) => this.reportError(error, { operation: 'fetch', level: 'warning' }));
+    // Read first: the clock is almost never set, and a storage write ahead of every proxied
+    // request (preview asset traffic included) is not free.
+    try {
+      if ((await this.ctx.storage.get<number>(KEEPALIVE_SINCE_KEY)) !== undefined) await this.ctx.storage.delete(KEEPALIVE_SINCE_KEY);
+    } catch (error) { this.reportError(error, { operation: 'fetch', level: 'warning' }); }
     return super.fetch(request);
   }
 
