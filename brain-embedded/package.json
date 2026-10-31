@@ -69,8 +69,8 @@
   },
   "dependencies": {
     "@mlc-ai/web-llm": "0.2.84",
-    "@seanhogg/builderforce-memory": "^2026.10.35",
-    "@seanhogg/builderforce-memory-engine": "^2026.10.28"
+    "@seanhogg/builderforce-memory": "^2026.10.36",
+    "@seanhogg/builderforce-memory-engine": "^2026.10.36"
   },
   "peerDependencies": {
     "react": ">=18",
