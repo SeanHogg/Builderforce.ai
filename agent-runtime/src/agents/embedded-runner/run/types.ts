@@ -1,3 +1,4 @@
+import type { PolicyGate } from "@builderforce/agent-tools";
 import type { AgentMessage } from "../../../builderforce/model/agent-types.js";
 import type { Api, AssistantMessage, Model } from "../../../builderforce/model/types.js";
 import type { ThinkLevel } from "../../../auto-reply/thinking.js";
@@ -20,6 +21,8 @@ export type EmbeddedRunAttemptParams = EmbeddedRunAttemptBase & {
   authStorage: AuthStorage;
   modelRegistry: ModelRegistry;
   thinkLevel: ThinkLevel;
+  /** The governance gates the run is held to (the seam in `run.ts` resolves them; blocked tools leave the catalog, matching calls are refused or ask an approver). */
+  policyGates?: readonly PolicyGate[];
 };
 
 export type EmbeddedRunAttemptResult = {

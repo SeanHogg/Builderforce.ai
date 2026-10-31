@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import type { PolicyGate } from "@builderforce/agent-tools";
 import type { ThinkLevel } from "../../auto-reply/thinking.js";
-import { resolveHostPolicyGates } from "../../infra/host-policy-gates.js";
+import { forUnattendedRun, resolveHostPolicyGates } from "../../infra/host-policy-gates.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { enqueueCommandInLane } from "../../process/command-queue.js";
 import { isMarkdownCapableMessageChannel } from "../../utils/message-channel.js";
@@ -213,11 +213,14 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
           `[workspace-fallback] caller=runEmbeddedAgent reason=${workspaceResolution.fallbackReason} run=${params.runId} session=${redactedSessionId} sessionKey=${redactedSessionKey} agent=${workspaceResolution.agentId} workspace=${redactedWorkspace}`,
         );
       }
-      // Governance gates. A caller that names its own (a dispatched run) wins; every other run
-      // (a channel reply, a cron job, the CLI) is held to the TENANT's gates, fetched once here
-      // — the one place those runs converge — so no caller has to remember to feed them.
-      const policyGates: readonly PolicyGate[] =
-        params.policyGates ?? (isProbeSession ? [] : await resolveHostPolicyGates());
+      // Governance gates: every embedded run served here (a channel reply, a cron job, a command) is
+      // held to the TENANT's gates, resolved at this one seam so no caller has to remember to feed
+      // them. A ticket is dispatched through the relay with its own gates and does not run here, so
+      // this never overrides a payload. Model probes are not governed runs. A run nobody can approve
+      // in time (`unattended`) has its approval gates turned into refusals.
+      const policyGates: readonly PolicyGate[] = isProbeSession
+        ? []
+        : forUnattendedRun(await resolveHostPolicyGates(), params.unattended === true);
       const prevCwd = process.cwd();
 
       let provider = (params.provider ?? DEFAULT_PROVIDER).trim() || DEFAULT_PROVIDER;

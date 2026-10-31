@@ -121,6 +121,8 @@ export async function runMemoryFlushIfNeeded(params: {
             cfg: params.cfg,
           }),
           extraSystemPrompt: flushSystemPrompt,
+          // Runs between turns: no person can approve a gated tool in time, so approval gates refuse at once.
+          unattended: true,
           onAgentEvent: (evt) => {
             if (evt.stream === "compaction") {
               const phase = typeof evt.data.phase === "string" ? evt.data.phase : "";

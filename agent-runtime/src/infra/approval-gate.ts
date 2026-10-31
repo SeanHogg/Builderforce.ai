@@ -56,6 +56,11 @@ export interface HumanInputRequest {
    * standalone default.
    */
   failClosed?: boolean;
+  /**
+   * The run's cancel signal. The wait for an answer ends the moment it fires, refused, so a stopped run does not sit behind an
+   * approver (and the lane behind it) for the rest of the timeout.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -65,6 +70,8 @@ export interface HumanInputRequest {
  */
 /** What a refusal says when no approver could be reached. */
 const UNREACHABLE = "No approver could be reached, so the action was not approved.";
+/** What a refusal says when the run was stopped while it waited. */
+const RUN_STOPPED = "The run was stopped before an approver answered, so the action was not approved.";
 
 export class ApprovalGate {
   private baseUrl: string | null = null;
@@ -89,14 +96,13 @@ export class ApprovalGate {
    * re-resolving the credentials.
    */
   link(): { baseUrl: string; agentNodeId: string; apiKey: string } | null {
-    return this.baseUrl && this.agentNodeId && this.apiKey
-      ? { baseUrl: this.baseUrl, agentNodeId: this.agentNodeId, apiKey: this.apiKey }
-      : null;
+    const { baseUrl, agentNodeId, apiKey } = this;
+    return baseUrl && agentNodeId && apiKey ? { baseUrl, agentNodeId, apiKey } : null;
   }
 
   /** True once init() has wired up a Builderforce connection. */
   isConfigured(): boolean {
-    return !!(this.baseUrl && this.agentNodeId && this.apiKey);
+    return this.link() !== null;
   }
 
   /**
@@ -178,13 +184,32 @@ export class ApprovalGate {
       `[approval-gate] waiting for ${kind} ${approvalId} (${opts.actionType}): ${opts.description}`,
     );
 
+    const { signal } = opts;
     return new Promise<HumanInputResult>((resolve) => {
+      const onAbort = (): void => {
+        const entry = this.pending.get(approvalId);
+        if (!entry) {
+          return;
+        }
+        this.pending.delete(approvalId);
+        clearTimeout(entry.timer);
+        entry.resolve({ decision: "rejected", responseText: RUN_STOPPED });
+      };
+      const settle = (result: HumanInputResult): void => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve(result);
+      };
       const timer = setTimeout(() => {
         this.pending.delete(approvalId);
         logWarn(`[approval-gate] ${kind} ${approvalId} timed out after ${timeoutMs / 1000}s`);
-        resolve({ decision: "timeout" });
+        settle({ decision: "timeout" });
       }, timeoutMs);
-      this.pending.set(approvalId, { resolve, timer });
+      this.pending.set(approvalId, { resolve: settle, timer });
+      if (signal?.aborted) {
+        onAbort();
+      } else {
+        signal?.addEventListener("abort", onAbort, { once: true });
+      }
     });
   }
 }

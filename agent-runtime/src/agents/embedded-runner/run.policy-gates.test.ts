@@ -1,13 +1,16 @@
 /**
- * The one seam: `runEmbeddedAgent` — where channel, cron and CLI runs converge — holds a
- * run to the tenant's governance gates unless its caller named its own.
+ * The one seam: `runEmbeddedAgent` — where channel, cron and command runs converge — holds
+ * every run to the tenant's governance gates.
  */
 import "./run.overflow-compaction.mocks.shared.js";
 import type { PolicyGate } from "@builderforce/agent-tools";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ resolveGates: vi.fn() }));
-vi.mock("../../infra/host-policy-gates.js", () => ({ resolveHostPolicyGates: mocks.resolveGates }));
+vi.mock("../../infra/host-policy-gates.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../infra/host-policy-gates.js")>()),
+  resolveHostPolicyGates: mocks.resolveGates,
+}));
 
 import { runEmbeddedAgent } from "./run.js";
 import { runEmbeddedAttempt } from "./run/attempt.js";
@@ -15,7 +18,7 @@ import { runEmbeddedAttempt } from "./run/attempt.js";
 const mockedAttempt = vi.mocked(runEmbeddedAttempt);
 
 const tenantGates: PolicyGate[] = [{ id: "no-shell", tool: "exec", effect: "block", reason: "off" }];
-const ownGates: PolicyGate[] = [{ id: "dispatch-gate", tool: "write", effect: "block" }];
+const approvalGates: PolicyGate[] = [{ id: "ask-first", tool: "exec", effect: "require-approval", reason: "needs a person" }];
 
 function finishedAttempt() {
   mockedAttempt.mockResolvedValue({
@@ -52,11 +55,20 @@ describe("runEmbeddedAgent governance gates", () => {
     expect(mockedAttempt.mock.calls[0]![0]).toMatchObject({ policyGates: tenantGates });
   });
 
-  it("a caller that names its own gates keeps them, and no fetch is made", async () => {
-    await runEmbeddedAgent({ ...base, sessionId: "dispatch-1", runId: "r2", policyGates: ownGates });
+  it("an attended run keeps an approval gate as it is", async () => {
+    mocks.resolveGates.mockResolvedValue(approvalGates);
+    await runEmbeddedAgent({ ...base, sessionId: "channel-3", runId: "r2" });
 
-    expect(mocks.resolveGates).not.toHaveBeenCalled();
-    expect(mockedAttempt.mock.calls[0]![0]).toMatchObject({ policyGates: ownGates });
+    expect(mockedAttempt.mock.calls[0]![0]).toMatchObject({ policyGates: approvalGates });
+  });
+
+  it("a memory flush (unattended) has its approval gate refuse at once, and a block gate unchanged", async () => {
+    mocks.resolveGates.mockResolvedValue([...approvalGates, ...tenantGates]);
+    await runEmbeddedAgent({ ...base, sessionId: "flush-1", runId: "r5", unattended: true });
+
+    expect(mockedAttempt.mock.calls[0]![0]).toMatchObject({
+      policyGates: [{ id: "ask-first", tool: "exec", effect: "block", reason: "needs a person" }, tenantGates[0]],
+    });
   });
 
   it("a host with no gates passes none (the session is not handed an empty list)", async () => {

@@ -2,11 +2,12 @@
  * host-policy-gates — the tenant's governance gates, for the runs that have no
  * dispatch payload.
  *
- * A ticket run is handed its gates inside the relay dispatch (`builderforce-relay.ts`).
- * A channel reply or a cron job is not dispatched by the platform, so nothing carried a
- * gate to it: a tenant `block` gate stopped a tool on a ticket and not on a chat reply.
- * `runEmbeddedAgent` — where channel, cron and CLI runs all converge — asks here when
- * its caller named no gates of its own.
+ * A ticket run is handed its gates inside the relay dispatch (`builderforce-relay.ts`)
+ * and never reaches this module. A channel reply or a cron job is not dispatched by the
+ * platform, so nothing carried a gate to it: a tenant `block` gate stopped a tool on a
+ * ticket and not on a chat reply. Two entries ask here, so no caller has to feed them:
+ *   - `runEmbeddedAgent` (the embedded runner: channel replies, cron, commands);
+ *   - `runCliAgent` (a CLI-backend model, which cannot be gated at the tool seam).
  *
  * The api owns the gates (`GET /api/agent/governance/policy-gates`, the host-key door
  * over the same cached resolver dispatch uses) and answers with the wire shape
@@ -17,6 +18,10 @@
  * Credentials are the host's ONE Builderforce link (`hostLink()`, set at gateway
  * startup) — the same one an approval request uses, so a gate that asks an approver and
  * the fetch that produced the gate share a credential and cannot disagree about linking.
+ *
+ * Freshness: a policy edit reaches a run after the api's version token turns over (up to
+ * 30s of isolate cache plus KV propagation, which is eventual) and then this host's
+ * {@link POLICY_GATES_TTL_MS}. It is bounded by minutes, not instant.
  *
  * Failure behaviour, decided:
  *   - an unlinked host (no key / no host id) has no gates: it runs normally, no call, no
@@ -30,12 +35,12 @@ import { coercePolicyGates, type PolicyGate } from "@builderforce/agent-tools";
 import { logWarn } from "../logger.js";
 import { hostLink } from "./approval-gate.js";
 
-/** How long an answer is trusted. A policy edit reaches a channel within this window. */
+/** How long an answer is trusted before this host asks again. */
 export const POLICY_GATES_TTL_MS = 60_000;
 /** After a failed fetch, how long before the next attempt (so a down api costs one wait, not one per message). */
 export const POLICY_GATES_RETRY_MS = 15_000;
 /** The longest a run waits for the answer before proceeding on what it holds. */
-const FETCH_TIMEOUT_MS = 4_000;
+export const POLICY_GATES_FETCH_TIMEOUT_MS = 4_000;
 
 const POLICY_GATES_PATH = "/api/agent/governance/policy-gates";
 
@@ -62,7 +67,7 @@ async function fetchGates(link: NonNullable<ReturnType<typeof hostLink>>): Promi
       Authorization: `Bearer ${link.apiKey}`,
       "X-AgentHost-Id": link.agentNodeId,
     },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    signal: AbortSignal.timeout(POLICY_GATES_FETCH_TIMEOUT_MS),
   });
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`);
@@ -76,9 +81,9 @@ async function fetchGates(link: NonNullable<ReturnType<typeof hostLink>>): Promi
 
 /**
  * The gates a channel / cron run is held to. Never throws.
- * `now` is injectable so the TTL is testable without fake timers.
+ * Times are read from the clock when each step finishes (a slow fetch must not make its own answer look older than it is).
  */
-export async function resolveHostPolicyGates(now: number = Date.now()): Promise<PolicyGate[]> {
+export async function resolveHostPolicyGates(): Promise<PolicyGate[]> {
   const link = hostLink();
   if (!link) {
     return [];
@@ -89,6 +94,7 @@ export async function resolveHostPolicyGates(now: number = Date.now()): Promise<
   }
   const state = held;
 
+  const now = Date.now();
   if (state.gates && now - state.fetchedAt < POLICY_GATES_TTL_MS) {
     return state.gates;
   }
@@ -102,12 +108,12 @@ export async function resolveHostPolicyGates(now: number = Date.now()): Promise<
   state.inflight = fetchGates(link)
     .then((gates) => {
       state.gates = gates;
-      state.fetchedAt = now;
+      state.fetchedAt = Date.now();
       state.retryAt = 0;
       return gates;
     })
     .catch((err: unknown) => {
-      state.retryAt = now + POLICY_GATES_RETRY_MS;
+      state.retryAt = Date.now() + POLICY_GATES_RETRY_MS;
       const reason = err instanceof Error ? err.message : String(err);
       logWarn(
         `[policy-gates] could not fetch the tenant's governance gates (${reason}); ` +
@@ -121,4 +127,20 @@ export async function resolveHostPolicyGates(now: number = Date.now()): Promise<
       state.inflight = null;
     });
   return state.inflight;
+}
+
+/**
+ * The gates for a run nobody can approve in time (a memory flush runs between turns): an
+ * approval gate becomes a refusal on the same tool, at once, instead of a wait for an
+ * approver who is not there. `block` and directive gates are unchanged.
+ */
+export function forUnattendedRun(gates: readonly PolicyGate[], unattended: boolean): readonly PolicyGate[] {
+  if (!unattended) {
+    return gates;
+  }
+  return gates.map((g) =>
+    g.effect === "require-approval"
+      ? { ...g, effect: "block" as const, reason: g.reason ?? "this action needs a person's approval, and none is available during this run" }
+      : g,
+  );
 }

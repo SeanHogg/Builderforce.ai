@@ -10,8 +10,10 @@ vi.mock("./approval-gate.js", () => ({ hostLink: mocks.link }));
 vi.mock("../logger.js", () => ({ logWarn: mocks.warn }));
 
 import {
+  POLICY_GATES_FETCH_TIMEOUT_MS,
   POLICY_GATES_RETRY_MS,
   POLICY_GATES_TTL_MS,
+  forUnattendedRun,
   resetHostPolicyGates,
   resolveHostPolicyGates,
 } from "./host-policy-gates.js";
@@ -30,18 +32,29 @@ const answer = (gates: unknown, init: { ok?: boolean; status?: number } = {}) =>
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
+/** The run starts at this clock reading (only Date is faked, so the abort timer and microtasks stay real). */
+const resolveAt = (ms: number) => {
+  vi.setSystemTime(ms);
+  return resolveHostPolicyGates();
+};
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
   resetHostPolicyGates();
   vi.clearAllMocks();
   mocks.link.mockReturnValue(LINK);
   fetchMock = vi.fn(async () => answer(WIRE));
   vi.stubGlobal("fetch", fetchMock);
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("resolveHostPolicyGates", () => {
   it("fetches the tenant's gates with the host's key and id, and parses them with coercePolicyGates", async () => {
-    const gates = await resolveHostPolicyGates(1_000);
+    const gates = await resolveAt(1_000);
 
     expect(gates).toEqual([
       { id: "no-shell", tool: "exec", effect: "block", reason: "shell is off" },
@@ -56,43 +69,43 @@ describe("resolveHostPolicyGates", () => {
 
   it("drops a hand-edited gate with an unknown effect rather than enforcing a guess", async () => {
     fetchMock.mockResolvedValue(answer([...WIRE, { id: "bogus", effect: "explode", tool: "x" }]));
-    const gates = await resolveHostPolicyGates(1_000);
+    const gates = await resolveAt(1_000);
     expect(gates.map((g) => g.id)).toEqual(["no-shell", "careful"]);
   });
 
   it("an unlinked host has no gates, makes no call and says nothing", async () => {
     mocks.link.mockReturnValue(null);
-    expect(await resolveHostPolicyGates(1_000)).toEqual([]);
+    expect(await resolveAt(1_000)).toEqual([]);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(mocks.warn).not.toHaveBeenCalled();
   });
 
   it("serves a second run inside the TTL from memory", async () => {
-    await resolveHostPolicyGates(1_000);
-    const again = await resolveHostPolicyGates(1_000 + POLICY_GATES_TTL_MS - 1);
+    await resolveAt(1_000);
+    const again = await resolveAt(1_000 + POLICY_GATES_TTL_MS - 1);
     expect(again).toHaveLength(2);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("reads again once the TTL has passed, so a policy edit reaches the channel", async () => {
-    await resolveHostPolicyGates(1_000);
+    await resolveAt(1_000);
     fetchMock.mockResolvedValue(answer([{ id: "only", effect: "block", tool: "write" }]));
-    const gates = await resolveHostPolicyGates(1_000 + POLICY_GATES_TTL_MS);
+    const gates = await resolveAt(1_000 + POLICY_GATES_TTL_MS);
     expect(gates.map((g) => g.id)).toEqual(["only"]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("a policy that was emptied really is empty (an empty answer is not a failure)", async () => {
-    await resolveHostPolicyGates(1_000);
+    await resolveAt(1_000);
     fetchMock.mockResolvedValue(answer([]));
-    expect(await resolveHostPolicyGates(1_000 + POLICY_GATES_TTL_MS)).toEqual([]);
+    expect(await resolveAt(1_000 + POLICY_GATES_TTL_MS)).toEqual([]);
   });
 
   it("shares one request between runs that start together", async () => {
     const [a, b, c] = await Promise.all([
-      resolveHostPolicyGates(1_000),
-      resolveHostPolicyGates(1_000),
-      resolveHostPolicyGates(1_000),
+      resolveAt(1_000),
+      resolveAt(1_000),
+      resolveAt(1_000),
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(a).toEqual(b);
@@ -101,10 +114,10 @@ describe("resolveHostPolicyGates", () => {
 
   describe("when the fetch fails", () => {
     it("keeps the last good gates and warns naming the failure", async () => {
-      await resolveHostPolicyGates(1_000);
+      await resolveAt(1_000);
       fetchMock.mockRejectedValue(new Error("connect ECONNREFUSED"));
 
-      const gates = await resolveHostPolicyGates(1_000 + POLICY_GATES_TTL_MS);
+      const gates = await resolveAt(1_000 + POLICY_GATES_TTL_MS);
 
       expect(gates.map((g) => g.id)).toEqual(["no-shell", "careful"]);
       expect(mocks.warn).toHaveBeenCalledTimes(1);
@@ -115,7 +128,7 @@ describe("resolveHostPolicyGates", () => {
     it("with none held, runs with none and warns naming the failure", async () => {
       fetchMock.mockResolvedValue(answer(null, { ok: false, status: 503 }));
 
-      expect(await resolveHostPolicyGates(1_000)).toEqual([]);
+      expect(await resolveAt(1_000)).toEqual([]);
       expect(mocks.warn).toHaveBeenCalledTimes(1);
       expect(mocks.warn.mock.calls[0]![0]).toContain("HTTP 503");
       expect(mocks.warn.mock.calls[0]![0]).toContain("running with none");
@@ -123,31 +136,82 @@ describe("resolveHostPolicyGates", () => {
 
     it("does not retry on every message: one wait per retry window, one warning", async () => {
       fetchMock.mockRejectedValue(new Error("timeout"));
-      await resolveHostPolicyGates(1_000);
-      await resolveHostPolicyGates(1_500);
-      await resolveHostPolicyGates(1_000 + POLICY_GATES_RETRY_MS - 1);
+      await resolveAt(1_000);
+      await resolveAt(1_500);
+      await resolveAt(1_000 + POLICY_GATES_RETRY_MS - 1);
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(mocks.warn).toHaveBeenCalledTimes(1);
 
       fetchMock.mockResolvedValue(answer(WIRE));
-      const recovered = await resolveHostPolicyGates(1_000 + POLICY_GATES_RETRY_MS);
+      const recovered = await resolveAt(1_000 + POLICY_GATES_RETRY_MS);
       expect(recovered).toHaveLength(2);
       expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
     it("a malformed answer never replaces a good set with an empty one", async () => {
-      await resolveHostPolicyGates(1_000);
+      await resolveAt(1_000);
       fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ nope: true }) });
-      const gates = await resolveHostPolicyGates(1_000 + POLICY_GATES_TTL_MS);
+      const gates = await resolveAt(1_000 + POLICY_GATES_TTL_MS);
       expect(gates).toHaveLength(2);
       expect(mocks.warn.mock.calls[0]![0]).toContain("malformed");
     });
   });
 
+  it("a hung fetch is bounded by the abort timeout: the run proceeds on what it holds and warns", async () => {
+    const abort = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(abort.signal);
+    // a server that accepts the connection and never answers; it settles only when the signal fires
+    fetchMock.mockImplementation(
+      (_url: string, init: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          init.signal.addEventListener("abort", () => reject(new Error("The operation was aborted due to timeout")));
+        }),
+    );
+
+    const pending = resolveAt(1_000);
+    expect(timeout).toHaveBeenCalledWith(POLICY_GATES_FETCH_TIMEOUT_MS);
+    abort.abort();
+
+    expect(await pending).toEqual([]);
+    expect(mocks.warn).toHaveBeenCalledTimes(1);
+    expect(mocks.warn.mock.calls[0]![0]).toContain("aborted due to timeout");
+  });
+
+  it("times a slow answer from when it arrived, not from when the request left", async () => {
+    fetchMock.mockImplementation(async () => {
+      vi.setSystemTime(1_000 + 50_000); // the answer takes 50s
+      return answer(WIRE);
+    });
+    await resolveAt(1_000);
+    fetchMock.mockClear();
+
+    await resolveAt(1_000 + 70_000); // 20s after it arrived, 70s after the request left
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("a re-linked host does not inherit the previous tenant's gates", async () => {
-    await resolveHostPolicyGates(1_000);
+    await resolveAt(1_000);
     mocks.link.mockReturnValue({ ...LINK, apiKey: "bfk_other_tenant" });
     fetchMock.mockRejectedValue(new Error("down"));
-    expect(await resolveHostPolicyGates(1_000 + 1)).toEqual([]);
+    expect(await resolveAt(1_000 + 1)).toEqual([]);
+  });
+});
+
+describe("forUnattendedRun", () => {
+  const gates = [
+    { id: "ask-first", effect: "require-approval" as const, tool: "exec", reason: "needs a person" },
+    { id: "no-write", effect: "block" as const, tool: "write" },
+    { id: "careful", effect: "inject-directive" as const, directive: "Be careful." },
+  ];
+
+  it("turns an approval gate into a refusal on the same tool and leaves the rest alone", () => {
+    const out = forUnattendedRun(gates, true);
+    expect(out[0]).toEqual({ id: "ask-first", effect: "block", tool: "exec", reason: "needs a person" });
+    expect(out[1]).toBe(gates[1]);
+    expect(out[2]).toBe(gates[2]);
+  });
+
+  it("is the identity for an attended run", () => {
+    expect(forUnattendedRun(gates, false)).toBe(gates);
   });
 });
