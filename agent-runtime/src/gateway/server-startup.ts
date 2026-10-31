@@ -305,6 +305,32 @@ function startLocalKnowledgeLoop(
 }
 
 /**
+ * Link this host to its Builderforce workspace: the process-wide connection (`infra/approval-gate.ts`) that an approval request AND
+ * the tenant's governance gates (`infra/host-policy-gates.ts`) read. It is set ONCE, here, and the gateway calls it before anything
+ * that can run an agent turn (cron with its catch-up jobs, the heartbeat, the message channels, plugins, the restart wake). A host that
+ * linked later ran those first turns with no gates. No-ops for a standalone or offline host, which have no tenant to govern them.
+ */
+export async function linkHostToBuilderforce(params: Pick<SidecarParams, "defaultWorkspaceDir" | "log">): Promise<void> {
+  if (isOfflineMode()) {
+    return;
+  }
+  const apiKey = readSharedEnvVar("BUILDERFORCE_API_KEY");
+  if (!apiKey) {
+    return;
+  }
+  const baseUrl = readSharedEnvVar("BUILDERFORCE_URL") ?? "https://api.builderforce.ai";
+  try {
+    const ctx = await loadProjectContext(params.defaultWorkspaceDir);
+    const agentNodeId = ctx?.builderforce?.instanceId;
+    if (agentNodeId) {
+      initApprovalGate({ baseUrl, agentNodeId: String(agentNodeId), apiKey });
+    }
+  } catch (err) {
+    params.log.warn(`[builderforce] could not link this host (${String(err)}); governance gates and approvals are unavailable until restart`);
+  }
+}
+
+/**
  * Start Builderforce upstream relay, knowledge loop, cron poller, and all
  * cloud-connected services. No-ops gracefully when BUILDERFORCE_API_KEY is absent.
  *
@@ -359,7 +385,6 @@ async function startBuilderforceServices(
         baseUrl,
         apiKey,
       );
-      initApprovalGate({ baseUrl, agentNodeId: String(agentNodeId), apiKey });
 
       // Local Ollama egress carve-out: only when THIS machine's own config already
       // named an Ollama provider (set via `builderforce onboard` custom-provider, or

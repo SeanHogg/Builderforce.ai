@@ -86,7 +86,7 @@ import { resolveGatewayRuntimeConfig } from "./server-runtime-config.js";
 import { createGatewayRuntimeState } from "./server-runtime-state.js";
 import { resolveSessionKeyForRun } from "./server-session-key.js";
 import { logGatewayStartup } from "./server-startup-log.js";
-import { startGatewaySidecars } from "./server-startup.js";
+import { linkHostToBuilderforce, startGatewaySidecars } from "./server-startup.js";
 import { startGatewayTailscaleExposure } from "./server-tailscale.js";
 import { createWizardSessionTracker } from "./server-wizard-sessions.js";
 import { attachGatewayWsHandlers } from "./server-ws-runtime.js";
@@ -297,6 +297,11 @@ export async function startGatewayServer(
 
   const defaultAgentId = resolveDefaultAgentId(cfgAtStart);
   const defaultWorkspaceDir = resolveAgentWorkspaceDir(cfgAtStart, defaultAgentId);
+  // The host's Builderforce link (the tenant's governance gates and approvals read it) is set before ANYTHING below can run an agent
+  // turn: the heartbeat, cron with its catch-up jobs, the channels, the plugins and the restart wake all start after this line.
+  if (!minimalTestGateway) {
+    await linkHostToBuilderforce({ defaultWorkspaceDir, log });
+  }
   const baseMethods = listGatewayMethods();
   const emptyPluginRegistry = createEmptyPluginRegistry();
   const { pluginRegistry, gatewayMethods: baseGatewayMethods } = minimalTestGateway
