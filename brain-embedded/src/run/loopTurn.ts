@@ -13,11 +13,13 @@ import { StreamInterruptedError } from '../streamChatCompletion';
 import { turnMaxTokens } from '../effort';
 import { coderReaskTrace, providerFailureTrace } from '../runPolicyTraces';
 import { emit, nowIso, nowMs, pushTrace } from '../runStore/runCells';
+import type { BrainTraceEvent } from '../brainTriage';
 import type { RunLoopContext } from '../runStore/runLoopContext';
 import { asLiveTurn } from '../runStore/turnPersistence';
 import { recordTurn } from '../runStore/turnRecorder';
 import { commitTurnNarration, terminalAskReply, type TurnCall } from '../runStore/turnToolCalls';
 import { openLiveTurn } from '../runStore/turnStream';
+import { providerFailureEvent } from '../providerFailure';
 import type { TurnObserver, TurnSession } from './modelTransport';
 
 /** What the tail of the run reads about its last turn: the result (for the reply's provenance) and the model asked for. */
@@ -30,6 +32,11 @@ export interface LastTurn {
   traceFrom?: number;
   /** The number of the turn in flight (the steering port stamps `steer.applied` with it). */
   step: number;
+  /**
+   * The error step of a failed completion the model policy may still route around: recorded only if the turn is abandoned
+   * (`brainDelivery.ts`), as the Brain's loop records a failure only when the retry fails too.
+   */
+  failure?: BrainTraceEvent;
 }
 
 /** A call's arguments as the agent parses them: a string that is not a JSON object is a malformed call. */
@@ -88,7 +95,9 @@ export function loopTurnObserver(run: RunLoopContext): { observer: TurnObserver;
           // A user Stop rejects the stream: that is not a failed turn, and it leaves no error step.
           if (!c.abort?.signal.aborted) {
             const broke = (error instanceof StreamInterruptedError && error.model) || request.model;
-            pushTrace(c, providerFailureTrace(nowIso(), step, broke, error, nowMs() - llmStart));
+            const entry = providerFailureTrace(nowIso(), step, broke, error, nowMs() - llmStart);
+            if (providerFailureEvent(error)) last.failure = entry;
+            else pushTrace(c, entry);
           }
           return error;
         },

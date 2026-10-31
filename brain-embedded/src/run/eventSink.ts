@@ -14,6 +14,7 @@ import type { EventSink, RunEvent, RunOutcomeRow } from '@builderforce/agent-run
 import type { BrainTraceEvent } from '../brainTriage';
 import type { RunCell } from '../runStore/runCell';
 import { emit, nowIso, pushTrace } from '../runStore/runCells';
+import { stallTraceStep } from './stallTrace';
 
 /** The trace step for an event, or null when the event has no step of its own. Pure. */
 export function traceStepFor(event: RunEvent, ts: string): BrainTraceEvent | null {
@@ -43,6 +44,8 @@ export function traceStepFor(event: RunEvent, ts: string): BrainTraceEvent | nul
         args: { step: event.step, messages: 1 },
         result: 'The person sent direction while the run was working; it reached the next model call.',
       };
+    case 'stall.recovered':
+      return stallTraceStep(event, ts);
     default:
       return null;
   }

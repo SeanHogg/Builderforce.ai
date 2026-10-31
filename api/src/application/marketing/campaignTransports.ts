@@ -50,6 +50,7 @@ import { sendRawEmail } from '../../infrastructure/email/EmailService';
 import { executeConnectorAction, ConnectorCallError } from '../connectors/connectorRuntime';
 import { sendFromMailbox } from '../mailbox/mailboxService';
 import { htmlToPreviewText } from '../mailbox/mailboxProviders';
+import { isE164 } from '../shared/contactAddress';
 
 export const CAMPAIGN_TRANSPORTS = ['platform', 'mailbox', 'sendgrid', 'twilio'] as const;
 export type CampaignTransport = typeof CAMPAIGN_TRANSPORTS[number];
@@ -156,12 +157,9 @@ export type TransportResult =
   | { ok: true; sender: CampaignSender }
   | { ok: false; error: string };
 
-/** A number Twilio will accept: E.164, `+` then 8–15 digits. Checked before a
- *  campaign starts rather than per recipient, because a malformed FROM fails
- *  every message identically and should never reach the loop. */
-export function isE164(value: string | null | undefined): boolean {
-  return typeof value === 'string' && /^\+[1-9]\d{7,14}$/.test(value.trim());
-}
+// `isE164` lives in `shared/contactAddress` (the do-not-contact check parses numbers too);
+// re-exported here because this module is where campaign code has always imported it from.
+export { isE164 } from '../shared/contactAddress';
 
 /**
  * Resolve the SMS sender — the tenant's own Twilio connection.

@@ -188,6 +188,7 @@ export async function startCampaign(
     .update(marketingCampaigns)
     .set({
       status: 'sending',
+      scheduleRefusedAt: null,
       startedAt: sql`NOW()`,
       recipients: deliverable.length,
       suppressed: blocked.size,

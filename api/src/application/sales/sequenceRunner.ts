@@ -27,13 +27,20 @@
  * engine already documents for `sendFromMailbox`, applied here rather than re-invented.
  *
  * ── WHY A DO-NOT-CONTACT RECIPIENT STOPS, AND IS NOT RETRIED ────────────────────
- * A sequence email goes straight through `sendFromMailbox`, not through campaign
- * materialisation, so it does not inherit the campaign path's suppression. The runner
- * therefore asks `suppressedEmails` itself — ONCE per cadence for every email recipient
- * due this tick, never per person — and a hit is a terminal stop: no send, no retry, the
- * enrolment gets `stoppedAtISO` exactly like any other permanent failure, and the reason
- * lands in the `sequence.send_failed` activity row. Retrying would only re-ask a question
- * whose answer a person already gave.
+ * A sequence send does not go through campaign materialisation, so it does not inherit
+ * the campaign path's suppression. The runner therefore asks `suppressedEmails` itself —
+ * ONCE per cadence for every due step whose contact is an address or an E.164 number, on
+ * EVERY channel (a call, text or task step reaches the same person and must stop for them
+ * too, with no follow-up card created) — and a hit is a terminal stop: no send, no card,
+ * no retry. The enrolment gets `stoppedAtISO` exactly like any other permanent failure.
+ * Retrying would only re-ask a question whose answer a person already gave.
+ *
+ * The contact is compared, and mailed, as its PARSED address (`bareAddress`), so
+ * `Jane <a@x.com>` matches the list and is sent to as `a@x.com`.
+ *
+ * The `sequence.send_failed` row for a stop does NOT carry the address: a person on the
+ * list may be there because they asked to be erased, and the activity log is not a store
+ * the erasure reaches. It names the sequence instead, which is enough to find the enrolment.
  */
 
 import { asJsonRecord } from '../../domain/shared/json';
@@ -48,7 +55,8 @@ import {
   creationSessionObjects, creationSessions, mailboxConnections,
 } from '../../infrastructure/database/schema';
 import { sendFromMailbox } from '../mailbox/mailboxService';
-import { suppressedEmails } from '../marketing/suppression';
+import { suppressedEmails, suppressionKey } from '../marketing/suppression';
+import { bareAddress } from '../shared/contactAddress';
 import { publishSocialPost, resolvePublishableAccounts } from '../social/socialService';
 import { recordActivity, SYSTEM_ACTOR } from '../activity/activityLog';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
@@ -88,6 +96,8 @@ interface DispatchResult {
   ok: boolean;
   retryable: boolean;
   detail: string;
+  /** The contact is on a do-not-contact list — a stop, whose log row must not name them. */
+  suppressed?: true;
 }
 
 /** Substitute the two placeholders a cadence step may carry. Deliberately two and not a
@@ -125,7 +135,7 @@ async function dispatch(
     tenantId: number; sessionId: string; sequenceTitle: string;
     mailboxId: number | null; socialConnectionIds: string[];
     taskX: number; taskY: number;
-    /** Lower-cased do-not-contact addresses among this tick's email recipients. */
+    /** {@link suppressionKey}s of the do-not-contact contacts among this tick's recipients. */
     suppressed: ReadonlySet<string>;
   },
   step: { channel: SequenceChannel; subject: string; body: string },
@@ -134,17 +144,19 @@ async function dispatch(
   const subject = render(step.subject, enrolment);
   const body = render(step.body, enrolment);
 
+  // Before ANY channel: a suppressed person is not contacted whatever the step is, and the
+  // stop must not wait for a mailbox to be connected or a card to be created.
+  const contact = suppressionKey(enrolment.contactRef);
+  if (contact !== null && context.suppressed.has(contact)) {
+    return { ok: false, retryable: false, suppressed: true, detail: 'Contact is on a do-not-contact list; the sequence stopped for this contact.' };
+  }
+
   if (step.channel === 'email') {
-    // Checked before the mailbox: a suppressed person is not contacted whatever the
-    // mailbox state, and the stop must not wait for one to be connected.
-    if (context.suppressed.has(enrolment.contactRef.trim().toLowerCase())) {
-      return { ok: false, retryable: false, detail: 'Recipient is on a do-not-contact list; the sequence stopped for this contact.' };
-    }
     if (!context.mailboxId) {
       return { ok: false, retryable: false, detail: 'No mailbox is connected to send from.' };
     }
     const result = await sendFromMailbox(db, env, context.tenantId, context.mailboxId, {
-      to: enrolment.contactRef,
+      to: bareAddress(enrolment.contactRef),
       subject: subject || context.sequenceTitle,
       html: toHtml(body),
       text: body,
@@ -268,14 +280,14 @@ export async function runSequenceSweep(env: Env, now = new Date(), db: Db = buil
     const baseX = Number(geometry.x ?? 0);
     const baseY = Number(geometry.y ?? 0) + Number(geometry.h ?? 220) + 40;
 
-    // One statement for every email recipient due this tick (see the header). If the
-    // check itself fails nothing is sent: fail closed, and the cadence stays due so the
-    // next tick asks again.
+    // One statement for every due contact this tick, whatever the step's channel (see the
+    // header). If the check itself fails nothing is sent: fail closed, and the cadence stays
+    // due so the next tick asks again.
     let suppressed: ReadonlySet<string> = new Set();
-    const emailRecipients = due.filter((item) => item.step.channel === 'email').map((item) => item.enrolment.contactRef);
-    if (emailRecipients.length > 0) {
+    const contacts = due.map((item) => item.enrolment.contactRef).filter((ref) => suppressionKey(ref) !== null);
+    if (contacts.length > 0) {
       try {
-        suppressed = await suppressedEmails(db, row.tenantId, emailRecipients);
+        suppressed = await suppressedEmails(db, row.tenantId, contacts);
       } catch (error) {
         reportCaughtError(error, { source: SOURCE, operation: 'runSequenceSweep:suppression', context: { sequenceId: row.id } });
         continue;
@@ -330,8 +342,11 @@ export async function runSequenceSweep(env: Env, now = new Date(), db: Db = buil
         targetType: 'canvas_object',
         targetId: row.id,
         targetLabel: context.sequenceTitle,
-        summary: `${item.step.channel} step ${item.stepIndex + 1} → ${item.enrolment.contactRef}${outcome.ok ? '' : `: ${outcome.detail}`}`,
-        metadata: { channel: item.step.channel, stepIndex: item.stepIndex, retryable: outcome.retryable },
+        // A stop for a do-not-contact person names the sequence, never the address.
+        summary: outcome.suppressed
+          ? `${item.step.channel} step ${item.stepIndex + 1} → not sent, sequence ${row.id}: ${outcome.detail}`
+          : `${item.step.channel} step ${item.stepIndex + 1} → ${item.enrolment.contactRef}${outcome.ok ? '' : `: ${outcome.detail}`}`,
+        metadata: { channel: item.step.channel, stepIndex: item.stepIndex, retryable: outcome.retryable, sequenceId: row.id },
       });
     }
 

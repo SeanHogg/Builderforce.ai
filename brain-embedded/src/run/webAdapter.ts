@@ -14,7 +14,6 @@
  */
 
 import {
-  asksForSubagents,
   runSteeringSource,
   type CapabilityProvider,
   type DeliveryLedger,
@@ -42,9 +41,6 @@ import type { TurnObserver } from './modelTransport';
 
 /** The telemetry label of the surface the run came in through. */
 export type BrainEntryPoint = 'web' | 'rovr' | 'vscode';
-
-/** The delegation nudge fires after this many reads with no spawn (PRD 35 §3.2). */
-const READS_BEFORE_NUDGE = 6;
 
 /** Everything an adapter needs to build the ports of ONE Brain run. */
 export interface BrainRunBinding {
@@ -159,6 +155,8 @@ export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | '
     inference: 'hybrid',
     verify: 'none',
     approvalGates: [...(b.approvalGates ?? [])],
-    delegation: { requested: asksForSubagents(b.request), readsBeforeNudge: READS_BEFORE_NUDGE },
+    // The Brain's delegation gate (`earlyDelegation.ts` on the read result, the delivery ledger's rung at the end) is the run's ONE
+    // gate: the agent's own early nudge and backstop stay off, or each read and each prose answer would be judged twice.
+    delegation: { requested: false, readsBeforeNudge: 0 },
   };
 }

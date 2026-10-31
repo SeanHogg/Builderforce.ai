@@ -4,13 +4,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * publishNextDue's stall detection — the half of the bounded `due` window that turns
  * "the gate declines to act on this" into "an operator can see it is jammed".
  *
- * The five `MIN(next_run_at)` probes are the only DB contact, so the connection is
- * stubbed and each probe is fed a per-table answer in SCHEDULE_SOURCES order:
- * workflow_triggers, ceremony_schedules, report_schedules, qa_schedules, marketing_campaigns,
- * social_campaigns. (`cron_jobs` is deliberately absent: its poller, not a server sweep,
- * executes those rows.)
+ * The `MIN(next_run_at)` probes are the only DB contact, so the connection is stubbed. Each of the
+ * six schedule tables answers two columns, in SCHEDULE_SOURCES order: workflow_triggers,
+ * ceremony_schedules, report_schedules, qa_schedules, marketing_campaigns, social_campaigns.
+ * (`cron_jobs` is deliberately absent: its poller, not a server sweep, executes those rows.)
+ *
+ *   m<i>  the earliest armed row, stuck ones included — what the stall report reads
+ *   f<i>  the earliest armed row that is NOT stuck — what the gate is given
+ *
+ * `armProbes` feeds the m column. The f column is derived from it the way the SQL derives it
+ * (a row due no longer ago than one floor interval), unless a test overrides it with
+ * `armFresh` to put a stuck row and a later row in the same table.
  */
 const probeResults: Array<Date | null> = [];
+const freshOverrides: Array<Date | null | undefined> = [];
 const SCHEDULE_PROBE_COLUMNS = ['m0', 'm1', 'm2', 'm3', 'm4', 'm5'];
 let statements = 0;
 let lastStatement: unknown;
@@ -24,6 +31,12 @@ vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
       lastStatement = statement;
       const row: Record<string, Date | null> = {};
       SCHEDULE_PROBE_COLUMNS.forEach((c) => { row[c] = probeResults.shift() ?? null; });
+      SCHEDULE_PROBE_COLUMNS.forEach((_, i) => {
+        const plain = row[`m${i}`] ?? null;
+        const override = freshOverrides[i];
+        // Not stuck = due no longer ago than one floor interval (or not due yet).
+        row[`f${i}`] = override !== undefined ? override : plain && NOW - plain.getTime() <= FLOOR_INTERVAL_MS ? plain : null;
+      });
       return { rows: [row] };
     },
   }),
@@ -60,12 +73,18 @@ function armProbes(...values: Array<Date | null>) {
   probeResults.push(...values);
 }
 
+/** Override the not-stuck answer of one table: a stuck row AND a later row in the same table. */
+function armFresh(index: number, value: Date | null) {
+  freshOverrides[index] = value;
+}
+
 const NOW = 10 * FLOOR_INTERVAL_MS;
 const at = (ms: number) => new Date(ms);
 
 beforeEach(() => {
   reported.length = 0;
   probeResults.length = 0;
+  freshOverrides.length = 0;
   statements = 0;
 });
 
@@ -119,6 +138,58 @@ describe('publishNextDue', () => {
       expect(text).toMatch(/FROM "marketing_campaigns"\s+WHERE "marketing_campaigns"\."status" in \(\$\d+\) AND "marketing_campaigns"\."scheduled_at" IS NOT NULL/i);
       expect(text).toMatch(/FROM "social_campaigns"\s+WHERE "social_campaigns"\."status" in \(\$\d+\) AND "social_campaigns"\."scheduled_at" IS NOT NULL/i);
       expect(params).toEqual(expect.arrayContaining(['draft', 'scheduled']));
+    });
+  });
+
+  describe('a stuck row does not shadow the rest of the platform', () => {
+    /**
+     * A refused scheduled campaign keeps its past `scheduled_at` by design, so it reads `stuck`
+     * for as long as nobody fixes it. The gate looks at ONE stamp: published as the plain MIN,
+     * that one row would hide every later due time on the platform.
+     */
+    it('stamps the later, not-stuck row when a stuck row and a future row share a table', async () => {
+      const { kv, store } = fakeKv();
+      const stuck = at(NOW - 4 * FLOOR_INTERVAL_MS);
+      const future = at(NOW + 90_000);
+      armProbes(null, null, null, null, stuck, null);
+      armFresh(4, future);
+      const result = await publishNextDue(envWith(kv), NOW);
+      expect(result.earliestMs).toBe(NOW + 90_000);
+      expect(store.get('cron:next-due')).toBe(String(NOW + 90_000));
+      // The stuck row is still REPORTED, from the plain minimum.
+      expect(result.perTable).toEqual([{ table: 'marketing_campaigns', nextDueMs: stuck.getTime() }]);
+      expect(result.stall?.tables.map((t) => t.table)).toEqual(['marketing_campaigns']);
+    });
+
+    it('stamps a future row in one table over a stuck row in another', async () => {
+      const { kv, store } = fakeKv();
+      armProbes(null, null, at(NOW + 45_000), null, at(NOW - 4 * FLOOR_INTERVAL_MS), null);
+      const result = await publishNextDue(envWith(kv), NOW);
+      expect(store.get('cron:next-due')).toBe(String(NOW + 45_000));
+      expect(result.stall?.tables.map((t) => t.table)).toEqual(['marketing_campaigns']);
+    });
+
+    it('publishes "none" when every armed row is stuck, and still reports the jam', async () => {
+      const { kv, store } = fakeKv();
+      armProbes(at(NOW - 3 * FLOOR_INTERVAL_MS), null, null, null, at(NOW - 2 * FLOOR_INTERVAL_MS), null);
+      const result = await publishNextDue(envWith(kv), NOW);
+      expect(result.earliestMs).toBeNull();
+      expect(store.get('cron:next-due')).toBe('none');
+      expect(result.stall?.tables.map((t) => t.table)).toEqual(['workflow_triggers', 'marketing_campaigns']);
+    });
+
+    it('asks the database for the not-stuck minimum with the SAME window classifyDueTime uses', async () => {
+      const { kv } = fakeKv();
+      armProbes();
+      await publishNextDue(envWith(kv), NOW);
+      const { sql: text, params } = new PgDialect().sqlToQuery(lastStatement as Parameters<PgDialect['sqlToQuery']>[0]);
+      for (const i of [0, 1, 2, 3, 4, 5]) {
+        expect(text).toContain(`AS m${i}`);
+        expect(text).toContain(`AS f${i}`);
+      }
+      expect(text.match(/>= NOW\(\) - /g)).toHaveLength(6);
+      // The window is the floor interval, in seconds — the classifier's own bound.
+      expect(params.filter((p) => p === FLOOR_INTERVAL_MS / 1000)).toHaveLength(6);
     });
   });
 

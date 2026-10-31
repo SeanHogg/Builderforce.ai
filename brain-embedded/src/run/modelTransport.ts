@@ -18,6 +18,7 @@
 import type { ModelCompletion, ModelPreflightResult, ModelRequest, ModelTransport, RunMessage } from '@builderforce/agent-run';
 import type { ChatCompletionMessage, CompletionMetadata, StreamChatOptions, StreamChatResult, StreamHandlers } from '../streamChatCompletion';
 import { turnInterruption } from '../finishReason';
+import { providerFailureEvent } from '../providerFailure';
 import type { BrainStreamFn } from '../runStore/runTypes';
 import { contextWindowOf, type RunWindowSources } from '../windowFit/modelWindow';
 
@@ -102,6 +103,16 @@ export function toCompletion(result: StreamChatResult): ModelCompletion {
   };
 }
 
+/**
+ * The transport knows its own errors: a failure the model policy routes around (a model that broke mid-answer, a reset, a 429)
+ * leaves carrying the policy's event, so the agent re-asks the turn on another model instead of ending the run
+ * (`providerFailure.ts` is the ONE classifier, the Brain's loop asks it too). Any other error leaves as it is.
+ */
+function classified(error: unknown): unknown {
+  const failure = providerFailureEvent(error);
+  return failure && error instanceof Error ? Object.assign(error, { failure }) : error;
+}
+
 /** Build the Brain's `ModelTransport` over its streaming function. */
 export function brainModelTransport(deps: BrainModelTransportDeps): ModelTransport {
   const { stream, handlers, call, windows, preflight } = deps;
@@ -131,7 +142,7 @@ export function brainModelTransport(deps: BrainModelTransportDeps): ModelTranspo
         );
         result = await (session?.around ? session.around(ask) : ask());
       } catch (e) {
-        throw session ? session.failed(e) : e;
+        throw classified(session ? session.failed(e) : e);
       }
       await session?.completed(result);
       return toCompletion(result);

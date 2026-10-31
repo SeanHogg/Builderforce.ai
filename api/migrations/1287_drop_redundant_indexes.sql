@@ -1,7 +1,10 @@
 -- 1287 · Retire a dead table and drop prefix-redundant indexes on the non-hot tables.
 --
--- Operator-approved (2026-10-31) from the 2026-10-17 architecture review's held items. Split across three files so no single
--- transaction holds locks on many tables while the OLD Worker is live:
+-- Operator-approved (2026-10-31) from the 2026-10-17 architecture review's held items. Split across three files so the hot
+-- tables (1288) and the rebuilt index (1289) are not locked in the same transaction as this file's many drops. THIS file
+-- still runs 57 locking statements in ONE transaction (the table drop and the 56 index drops, each taking ACCESS EXCLUSIVE on
+-- its table), every lock held until COMMIT, while the OLD Worker is live. `SET LOCAL lock_timeout` below bounds each lock WAIT,
+-- not how long the locks already taken are held:
 --   1287 (this file)  A. the table drop + B. 56 prefix-redundant index drops on non-hot tables    1 table + 56 indexes
 --   1288              B. 5 prefix-redundant index drops on the hot tables (tasks, objects, llm_usage_log,
 --                     agent_memory, brain_chats; `executions` has no drop)                          5 indexes

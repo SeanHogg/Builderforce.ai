@@ -273,6 +273,7 @@ import { createStudioRoutes }          from './presentation/routes/studioWeightR
 import { createEvermindModelRoutes }   from './presentation/routes/evermindModelRoutes';
 import { createProjectEvermindRoutes }  from './presentation/routes/projectEvermindRoutes';
 import { createProjectFactsRoutes }  from './presentation/routes/projectFactsRoutes';
+import { createAgentGovernanceRoutes } from './presentation/routes/agentGovernanceRoutes';
 import { createProjectKnowledgeRoutes } from './presentation/routes/projectKnowledgeRoutes';
 import { agentHostDoor } from './presentation/middleware/frontDoor';
 import { createProjectMediaRoutes } from './presentation/routes/projectMediaRoutes';
@@ -1229,6 +1230,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // the two callers' path conventions do not need two handlers.
   app.route('/api/projects',  createRunContextRoutes(db));
   app.route('/api/agent/projects', createRunContextRoutes(db));
+  // Tenant-level governance gates for the on-prem runs that have no dispatch payload
+  // (channel replies, cron jobs): host-key door, the same cached resolver dispatch uses.
+  app.route('/api/agent/governance', createAgentGovernanceRoutes(db));
   app.route('/api/studio',    createStudioRoutes());
 
   // Owner-side control of a published site: custom domain, form collections and

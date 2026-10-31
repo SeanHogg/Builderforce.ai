@@ -4,6 +4,7 @@ import { drizzle as drizzlePool, type NeonDatabase } from 'drizzle-orm/neon-serv
 import * as schema from './schema';
 import { asDatabaseUnavailable, withDatabaseAvailability } from './neonAvailability';
 import type { Env } from '../../env';
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 
 export type Db = NeonHttpDatabase<typeof schema>;
 
@@ -209,7 +210,14 @@ export async function inTransaction<T>(db: Db, work: (tx: Tx) => Promise<T>): Pr
     throw asDatabaseUnavailable(error);
   } finally {
     // A failed close must not replace the outcome: the transaction already committed
-    // (or already failed with the error the caller needs).
-    await pool.end().catch(() => undefined);
+    // (or already failed with the error the caller needs). It is recorded, not swallowed:
+    // a socket that will not close is a leak worth seeing.
+    await pool.end().catch((error: unknown) => {
+      reportCaughtError(error, {
+        source: 'infrastructure/database/connection.ts',
+        operation: 'inTransaction:poolEnd',
+        level: 'warning',
+      });
+    });
   }
 }

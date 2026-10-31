@@ -4,8 +4,10 @@
 -- every active tick: `SELECT MIN(scheduled_at) FROM social_campaigns WHERE status IN ('scheduled') AND scheduled_at IS NOT NULL`.
 -- The only existing index is (tenant_id, status, updated_at), which cannot serve a cross-tenant MIN over send time, so the probe
 -- would scan the table. This partial index (mirroring idx_marketing_campaigns_due, 0940) holds exactly the armed rows, so the
--- probe is a top-of-index read and socialCampaignsDue's scheduled branch can use it too. The probe's WHERE implies the predicate
--- (status 'scheduled' comes from campaignLifecycle's social `dueStatuses`; the probe adds scheduled_at IS NOT NULL).
+-- probe is a top-of-index read. The probe's WHERE implies the predicate (status 'scheduled' comes from campaignLifecycle's social
+-- `dueStatuses`; the probe adds scheduled_at IS NOT NULL). socialCampaignsDue does NOT use it: that read ORs the scheduled-and-due
+-- arm with an in-flight arm (`publishing` campaigns with queued posts), and no index serves the in-flight arm across tenants, so
+-- the planner scans the table for the OR as a whole. The index is for the gate probe only.
 -- Adds an index only: nothing the old Worker runs depends on it. A plain CREATE INDEX takes a SHARE lock on social_campaigns
 -- (blocking writes) while it builds; migrate.mjs runs the file as one transaction, so `SET LOCAL lock_timeout` bounds the wait for
 -- that lock and a timeout rolls the file back and fails the deploy cleanly (re-run it). Reversible by DROP INDEX.

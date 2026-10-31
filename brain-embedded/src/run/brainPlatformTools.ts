@@ -63,6 +63,9 @@ export function brainPlatformTools(run: RunLoopContext): BrainPlatform {
       get selection() {
         return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, required: new Set(offersHandOff(run.policy) && run.canAskUser ? [...run.alwaysAdvertised, HAND_OFF_TOOL] : run.alwaysAdvertised) };
       },
+      // ONE cap on a result: the Brain's own, applied inside `dispatchToolPort` (`trimToolResult`, by LINE, sized to the serving
+      // model's window). The agent's per-tool cap would cut the already budgeted text a second time and drop its paging fields.
+      resultCap: () => Number.MAX_SAFE_INTEGER,
       // No `handsOff`: `hand_off` reports itself to the model policy inside `beforeDispatchHook` (through the run's view), and a
       // call the agent hands off first would find the plan already closed.
       turn: (env) => loopTurnMenu(run, env, run.allTools?.length ?? 0),

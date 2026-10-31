@@ -68,7 +68,13 @@ export {
   type CampaignView,
 } from './campaign/campaigns';
 export { startCampaign, type StartResult } from './campaign/start';
-export { runCampaignBatch, CAMPAIGN_SEND_MAX_ATTEMPTS, SEND_BATCH_SIZE, type BatchResult } from './campaign/send';
+export {
+  runCampaignBatch,
+  CAMPAIGN_SEND_MAX_ATTEMPTS,
+  SEND_BATCH_SIZE,
+  STALE_CLAIM_AFTER_MS,
+  type BatchResult,
+} from './campaign/send';
 export {
   recordClick,
   recordOpen,
@@ -81,6 +87,7 @@ export {
 } from './campaign/tracking';
 export {
   campaignsInFlight,
+  reapStaleClaims,
   runCampaignSendSweep,
   startDueCampaigns,
   type DueSweepResult,

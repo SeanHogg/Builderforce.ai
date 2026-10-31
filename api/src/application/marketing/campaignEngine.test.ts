@@ -6,8 +6,10 @@ import {
   recordSmsDeliveryStatus,
   renderCampaignEmail,
   renderCampaignSms,
+  reapStaleClaims,
   resolveTrackingOrigin,
   runCampaignBatch,
+  runCampaignSendSweep,
   smsStatusUrl,
   startCampaign,
   startDueCampaigns,
@@ -16,11 +18,13 @@ import {
   updateCampaign,
   verifySender,
   SMS_OPT_OUT_NOTICE,
+  STALE_CLAIM_AFTER_MS,
   TRACKING_PIXEL,
 } from './campaignEngine';
 import { fakeDb, fakeFetch } from '../../../test/fakeDb';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { PgDialect } from 'drizzle-orm/pg-core';
 
 const ORIGIN = 'https://builderforce.ai/gateway';
 const ctx = { trackingOrigin: ORIGIN, trackToken: 'tok123' };
@@ -395,6 +399,19 @@ describe('runCampaignBatch', () => {
     expect(claim!.payload).toHaveProperty('attempts');
   });
 
+  it('stamps claimed_at at the claim, so a dead runner row can be told from a live one', async () => {
+    sendMock.mockClear();
+    const db = fakeDb([
+      [sending], noLogo,
+      [{ id: 1, email: 'a@x.com', trackToken: 't1', attempts: 0, name: '', attributes: {} }],
+      [{ id: 1 }], [],
+      [{ remaining: 0, queuedLeft: 0 }], [],
+    ]);
+    await runCampaignBatch(env, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
+    const claim = db.calls.find((c) => c.kind === 'update' && (c.payload as { status?: string })?.status === 'sending');
+    expect(claim!.payload).toHaveProperty('claimedAt');
+  });
+
   it('SKIPS a recipient another runner already claimed', async () => {
     sendMock.mockClear();
     const db = fakeDb([
@@ -457,19 +474,45 @@ describe('runCampaignBatch', () => {
     };
     const oneRecipient = { id: 1, email: 'a@x.com', trackToken: 't1', attempts: 0, name: '', attributes: {} };
 
-    it('signals pending work when recipients remain after the batch', async () => {
+    it('signals pending work when a batch sent and recipients are still queued', async () => {
       sendMock.mockClear();
       const { env: gated, puts } = kvEnv();
-      const db = fakeDb([[sending], noLogo, [oneRecipient], [{ id: 1 }], [], [{ remaining: 4 }], []]);
+      const db = fakeDb([[sending], noLogo, [oneRecipient], [{ id: 1 }], [], [{ remaining: 4, queuedLeft: 4 }], []]);
       const result = await runCampaignBatch(gated, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
-      expect(result).toMatchObject({ remaining: 4, status: 'sending' });
+      expect(result).toMatchObject({ sent: 1, remaining: 4, status: 'sending' });
       expect(puts).toEqual(['cron:work-pending']);
+    });
+
+    /**
+     * `remaining` counts `sending` rows too, and nothing advances a `sending` row whose runner
+     * died. Signalling on it re-fired the gate every tick, so Neon never suspended.
+     */
+    it('does NOT signal when what remains is only claimed (`sending`) rows nobody will advance', async () => {
+      sendMock.mockClear();
+      const { env: gated, puts } = kvEnv();
+      const db = fakeDb([[sending], noLogo, [oneRecipient], [{ id: 1 }], [], [{ remaining: 1 }], []]);
+      const result = await runCampaignBatch(gated, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
+      // `remaining` keeps its meaning for callers: everything not yet settled.
+      expect(result).toMatchObject({ sent: 1, remaining: 1, status: 'sending' });
+      expect(puts).toEqual([]);
+    });
+
+    it('does NOT signal when the batch sent nothing, even with recipients queued (a revoked credential)', async () => {
+      sendMock.mockClear();
+      sendMock.mockRejectedValueOnce(new Error('invalid_grant'));
+      const { env: gated, puts } = kvEnv();
+      // At the attempt ceiling, so the failure is terminal rather than requeued.
+      const db = fakeDb([[sending], noLogo, [{ ...oneRecipient, attempts: 2 }], [{ id: 1 }], [], [{ remaining: 9, queuedLeft: 9 }], []]);
+      const result = await runCampaignBatch(gated, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
+      expect(result.sent).toBe(0);
+      expect(result.status).toBe('sending');
+      expect(puts).toEqual([]);
     });
 
     it('does not signal once the queue has drained', async () => {
       sendMock.mockClear();
       const { env: gated, puts } = kvEnv();
-      const db = fakeDb([[sending], noLogo, [oneRecipient], [{ id: 1 }], [], [{ remaining: 0 }], []]);
+      const db = fakeDb([[sending], noLogo, [oneRecipient], [{ id: 1 }], [], [{ remaining: 0, queuedLeft: 0 }], []]);
       await runCampaignBatch(gated, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
       expect(puts).toEqual([]);
     });
@@ -663,8 +706,102 @@ describe('startDueCampaigns — the step `scheduled_at` never had', () => {
       [{ ...draftRow, senderStatus: 'pending' }],
     ]);
     await startDueCampaigns(env, db as unknown as Db);
-    // No UPDATE at all — the schedule is untouched, so nothing has to re-schedule it.
-    expect(db.calls.filter((c) => c.kind === 'update')).toHaveLength(0);
+    // The schedule is untouched — only the refusal is stamped — so nothing has to re-schedule it.
+    const updates = db.calls.filter((c) => c.kind === 'update');
+    expect(updates).toHaveLength(1);
+    expect(Object.keys(updates[0]!.payload as object)).toEqual(['scheduleRefusedAt']);
+  });
+
+  it('stamps schedule_refused_at on a refusal, and not on a start', async () => {
+    const refused = fakeDb([[{ id: 1, tenantId: 7 }], [{ ...draftRow, senderStatus: 'pending' }]]);
+    await startDueCampaigns(env, refused as unknown as Db);
+    expect(refused.calls.filter((c) => c.kind === 'update')).toHaveLength(1);
+
+    const started = fakeDb([
+      [{ id: 1, tenantId: 7 }], [draftRow],
+      [{ email: 'a@x.com', phone: null, phoneStatus: 'subscribed' }], [], [],
+      [{ ...draftRow, status: 'sending', recipients: 1 }],
+    ]);
+    await startDueCampaigns(env, started as unknown as Db);
+    const writes = started.calls.filter((c) => c.kind === 'update');
+    expect(writes).toHaveLength(1);
+    // Starting CLEARS the stamp rather than setting it.
+    expect((writes[0]!.payload as { scheduleRefusedAt: unknown }).scheduleRefusedAt).toBeNull();
+  });
+
+  /**
+   * Five drafts that stay refused would otherwise fill the whole per-tick limit (oldest
+   * scheduled first, and a refused draft keeps its past time), starving every other
+   * scheduled send. A never-refused campaign must come first.
+   */
+  it('orders the due read never-refused first, then by scheduled time', async () => {
+    const orderings: unknown[][] = [];
+    const chain: Record<string, unknown> = {};
+    for (const method of ['from', 'where', 'limit']) chain[method] = () => chain;
+    chain.orderBy = (...args: unknown[]) => { orderings.push(args); return chain; };
+    chain.then = (resolve: (rows: unknown[]) => unknown) => Promise.resolve([]).then(resolve);
+    await startDueCampaigns(env, { select: () => chain } as unknown as Db);
+
+    expect(orderings).toHaveLength(1);
+    const dialect = new PgDialect();
+    const [first, second] = orderings[0]!.map((o) => dialect.sqlToQuery(o as Parameters<PgDialect['sqlToQuery']>[0]).sql);
+    expect(first).toMatch(/"schedule_refused_at" ASC NULLS FIRST/i);
+    expect(second).toMatch(/"scheduled_at" asc/i);
+  });
+
+  it('editing a draft clears schedule_refused_at, so the fix puts it back ahead of the refused', async () => {
+    const db = fakeDb([[{ ...draftRow }]]);
+    await updateCampaign(db as unknown as Db, 7, 1, { subject: 'Fixed' });
+    const write = db.calls.find((c) => c.kind === 'update')!;
+    expect(write.payload).toHaveProperty('scheduleRefusedAt', null);
+  });
+});
+
+describe('reapStaleClaims — the `sending` rows a dead runner leaves', () => {
+  it('fails them (never requeues: the message may have been delivered) and counts them on the campaign', async () => {
+    const db = fakeDb([[{ id: 11 }, { id: 12 }], []]);
+    await expect(reapStaleClaims(db as unknown as Db, 7, 1)).resolves.toBe(2);
+    const [sendsWrite, campaignWrite] = db.calls.filter((c) => c.kind === 'update');
+    expect(sendsWrite!.payload).toMatchObject({ status: 'failed' });
+    expect((sendsWrite!.payload as { error: string }).error).toContain('may or may not have been delivered');
+    expect(Object.keys(campaignWrite!.payload as object)).toEqual(expect.arrayContaining(['failed', 'updatedAt']));
+  });
+
+  it('reaps a row older than the bound OR with no claim time at all, only while `sending`', () => {
+    const db = fakeDb([[]]);
+    void reapStaleClaims(db as unknown as Db, 7, 1);
+    const where = db.calls.find((c) => c.kind === 'update')!.where as Parameters<PgDialect['sqlToQuery']>[0];
+    const { sql: text, params } = new PgDialect().sqlToQuery(where);
+    expect(text).toContain('"claimed_at" IS NULL');
+    expect(text).toMatch(/"claimed_at" < NOW\(\) - /);
+    expect(text).toContain('"campaign_id" = $');
+    expect(text).toContain('"tenant_id" = $');
+    expect(params).toEqual(expect.arrayContaining(['sending', STALE_CLAIM_AFTER_MS / 1000]));
+  });
+
+  it('touches nothing else when nothing is stale', async () => {
+    const db = fakeDb([[]]);
+    await expect(reapStaleClaims(db as unknown as Db, 7, 1)).resolves.toBe(0);
+    expect(db.calls.filter((c) => c.kind === 'update')).toHaveLength(1);
+  });
+
+  /** The sweep reaps BEFORE the batch, so a campaign left with only dead claims completes on that tick. */
+  it('the sweep reaps first, so a campaign whose only outstanding rows were dead completes', async () => {
+    const env = {} as Env;
+    const db = fakeDb([
+      [],                                  // no due scheduled campaigns
+      [{ id: 1, tenantId: 7 }],            // in flight
+      [{ id: 11 }], [],                    // reap: one dead claim, counted on the campaign
+      [{ ...draftRow, status: 'sending' }], // batch: load binding
+      [],                                  // logo
+      [],                                  // no queued rows
+      [{ remaining: 0, queuedLeft: 0 }],   // the reaped row is gone from the count
+      [],                                  // campaign marked sent
+    ]);
+    const result = await runCampaignSendSweep(env, db as unknown as Db);
+    expect(result.campaigns).toBe(1);
+    const completion = db.calls.filter((c) => c.kind === 'update').at(-1)!.payload as { status?: string };
+    expect(completion.status).toBe('sent');
   });
 });
 

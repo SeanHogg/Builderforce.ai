@@ -28,6 +28,10 @@
  *     `DEFAULT_HANDOFF_RESERVE_TOKENS` / `handoffReserveTokens`) and ports on-prem's
  *     reserve floor (`agent-settings.ts`, 20,000) with its ensure/resolve pair.
  *
+ *   • `modelHandOff.ts` packs the context for the incoming model's window when a stall fails
+ *     the run over onto another model; `rows.ts` maps the transcript row to the packers'
+ *     shape and back; `handoff.ts` is the packer's host-neutral binding.
+ *
  * The hook below is the ONE export the composition in `policy/index.ts` calls:
  * `compactionHook`. It reads the run's `PolicyContext`, returns the compacted
  * `RunMessage[]` and how many rows it dropped, and reports the reserve tokens it held
@@ -50,9 +54,10 @@ import {
 } from "./compact.js";
 import { priceTierBoundary } from "@builderforce/model-catalog";
 import { turnRouting } from "../model/index.js";
-import { compactionReserve } from "./reserve.js";
-import { packForModelHandoff } from "./handoff.js";
+import { handOff } from "./modelHandOff.js";
 import type { PackMessage } from "./pack.js";
+import { replyReserve, servingModel } from "./reserve.js";
+import { toPackRow, toRunRow } from "./rows.js";
 
 /** Cost lever C2 — mask stale tool-result observations before packing. */
 const C2_MASK_LEVER: CostLeverId = "c2_observation_masking";
@@ -132,13 +137,13 @@ function capabilityRecall(ctx: PolicyContext): ((query: string, budgetChars: num
 export function compactionOptions(ctx: PolicyContext, opts: CompactionHookOptions = {}) {
   // The model about to serve: what the model policy last settled on (a failover moves
   // it), else the pin. Its window caps the budget.
-  const model = ctx.state.model?.model ?? ctx.policy.pinnedModel ?? "";
+  const model = servingModel(ctx);
   const window = ctx.ports.model.window?.(model);
   const recall = opts.recall ?? capabilityRecall(ctx);
-  // The reply reserve is the shared hand-off default (the run's token BUDGET is a cost
-  // ceiling, not a reply size), raised to on-prem's reserve floor (20,000).
-  // The host-neutral floor (on-prem parity) unless the surface bounded its replies lower.
-  const reserve = ctx.policy.budgets.reserveTokens ?? compactionReserve(undefined);
+  // The run's ONE reply reserve (`replyReserve`): the host-neutral floor unless the surface bounded its replies lower, or - for a run
+  // that hands off between models - the turn's own reply ceiling within a quarter of the serving window. The run's token BUDGET is
+  // a cost ceiling, not a reply size.
+  const reserve = replyReserve(ctx);
   return {
     ...CLOUD_COMPACT_DEFAULTS,
     maxTokens: opts.maxTokens ?? ctx.policy.budgets.tokens ?? CLOUD_COMPACT_DEFAULTS.maxTokens,
@@ -152,45 +157,6 @@ export function compactionOptions(ctx: PolicyContext, opts: CompactionHookOption
     pinTaskBrief: opts.pinTaskBrief ?? true,
     timeoutMs: CLOUD_COMPACT_DEFAULTS.timeoutMs,
   };
-}
-
-/** Map a RunMessage row to the packer's OpenAI shape. */
-function toPackRow(m: RunMessage): PackMessage {
-  const row: PackMessage & { task?: true; parts?: RunMessage["parts"]; meta?: RunMessage["meta"] } = { role: m.role, content: m.content };
-  if (m.task) row.task = true;
-  if (m.parts && m.parts.length > 0) row.parts = m.parts;
-  if (m.meta) row.meta = m.meta;
-  if (m.toolCalls && m.toolCalls.length > 0) {
-    row.tool_calls = m.toolCalls.map((tc) => ({
-      id: tc.id,
-      type: "function",
-      function: { name: tc.name, arguments: tc.arguments },
-    }));
-  }
-  if (m.toolCallId != null) row.tool_call_id = m.toolCallId;
-  return row;
-}
-
-/** Map a packed OpenAI row back to the RunMessage row shape. */
-function toRunRow(m: PackMessage | Record<string, unknown>): RunMessage {
-  const src = m as PackMessage & { task?: unknown; parts?: RunMessage["parts"]; meta?: RunMessage["meta"] };
-  const toolCalls = Array.isArray(src.tool_calls)
-    ? (src.tool_calls as Array<{ id?: string; function?: { name?: string; arguments?: string } }>).map((tc) => ({
-        id: tc.id ?? "",
-        name: tc.function?.name ?? "",
-        arguments: tc.function?.arguments ?? "",
-      }))
-    : undefined;
-  const out: RunMessage = {
-    role: src.role as RunMessage["role"],
-    content: typeof src.content === "string" ? src.content : JSON.stringify(src.content ?? ""),
-  };
-  if (toolCalls && toolCalls.length > 0) out.toolCalls = toolCalls;
-  if (src.tool_call_id != null) out.toolCallId = src.tool_call_id;
-  if (src.task === true) out.task = true;
-  if (Array.isArray(src.parts) && src.parts.length > 0) out.parts = src.parts;
-  if (src.meta) out.meta = src.meta;
-  return out;
 }
 
 /**
@@ -215,59 +181,9 @@ function foldOf(before: readonly PackMessage[], after: readonly PackMessage[]): 
  * The compaction hook, as WS2a lands it. Compacts the run's transcript when it
  * outgrows the budget, never dropping the system prompt or the current task, and
  * returns the compacted rows with what it dropped and the reserve it held back.
- * Returns nothing when the transcript already fits.
+ * Returns nothing when the transcript already fits. A run that moved onto another
+ * model is packed for it first (`./modelHandOff`).
  */
-/**
- * The run moved onto another model (a stall failover): the context it inherits is packed for THE INCOMING model's window, and the
- * incoming model is told it took over (`policy/compaction/handoff`). Nothing when the model did not change, the window is unknown,
- * or the context already fits.
- */
-async function handOff(ctx: PolicyContext): Promise<CompactionResult | void> {
-  const handoff = ctx.policy.modelHandoff;
-  if (!handoff) return undefined;
-  const to = ctx.state.model?.model ?? ctx.policy.pinnedModel;
-  const from = ctx.state.preparedFor;
-  ctx.state.preparedFor = to;
-  if (!from || !to || from === to) return undefined;
-  const contextWindow = ctx.ports.model.window?.(to);
-  if (!contextWindow) return undefined;
-  const lead = ctx.messages.findIndex((m) => m.role !== "system");
-  const split = lead < 0 ? ctx.messages.length : lead;
-  const system = ctx.messages.slice(0, split);
-  const reserve = ctx.policy.budgets.reserveTokens;
-  // The task the run was given survives the cut: a stall's note is the latest directive now, so the packer's own rule would let it go.
-  const task = ctx.messages.find((m) => m.task === true) ?? ctx.messages.find((m) => m.role === "user");
-  let note = "";
-  const packed = await packForModelHandoff<RunMessage>(
-    {
-      messages: ctx.messages.slice(split),
-      systemPrompt: system.map((m) => m.content).join("\n\n"),
-      tools: ctx.tools.map((t) => ({ name: t.function.name, description: t.function.description, parameters: t.function.parameters })),
-      from,
-      to,
-      contextWindow,
-      ...(handoff.maxTokens !== undefined ? { maxTokens: handoff.maxTokens } : {}),
-      ...(task ? { pinned: (row: RunMessage) => row === task } : {}),
-      ...(leverOn(ctx, C9_TIER_LEVER) ? { priceTierBoundary: priceTierBoundary(to) } : {}),
-    },
-    {
-      toHandoff: (row) => toPackRow(row) as never,
-      summary: (text) => {
-        note = text;
-        return { role: "user", content: text };
-      },
-    },
-  );
-  if (packed.dropped === 0) return undefined;
-  return {
-    messages: [...system, ...packed.messages],
-    dropped: packed.dropped,
-    ...(reserve !== undefined ? { reserveTokens: reserve } : {}),
-    summarized: false,
-    ...(note ? { note, covered: packed.dropped } : {}),
-  };
-}
-
 export function createCompactionHook(hookOptions: CompactionHookOptions = {}): CompactionHook {
   return {
     async compact(ctx: PolicyContext): Promise<CompactionResult | void> {

@@ -1,13 +1,18 @@
 /**
  * `inTransaction`'s WebSocket-pool path — the one the HTTP client's availability
- * wrapper does not cover. The driver is mocked at the module boundary: no socket
- * opens and no query runs. Pinned here:
+ * wrapper does not cover. The seam is Drizzle's pool adapter (`drizzle-orm/neon-serverless`),
+ * mocked at the module boundary: the pool object `connection.ts` builds is real but
+ * never connects (a pool opens its socket on the first query), and the adapter that
+ * would run a query on it is replaced, so no socket opens and no query runs. The test
+ * names no database driver: only `connection.ts` may (`npm run check:db-access`).
+ * Pinned here:
  *
  *   • a Neon quota refusal (the bare Postgres-error text the WebSocket proxy sends)
  *     answers as the `database_unavailable` outage, not an unknown 500;
  *   • an error thrown by the transaction BODY passes through by identity;
  *   • a `pool.end()` that rejects replaces neither the result of a committed
- *     transaction nor the error of a failed one.
+ *     transaction nor the error of a failed one, and is reported rather than swallowed;
+ *   • the pool is closed after every outcome.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DomainError, ServiceUnavailableError } from '../../domain/shared/errors';
@@ -15,18 +20,23 @@ import type { Env } from '../../env';
 
 const driver = vi.hoisted(() => ({
   endImpl: (): Promise<void> => Promise.resolve(),
+  endCalls: 0,
   transactionImpl: (work: (tx: unknown) => Promise<unknown>): Promise<unknown> => work({}),
-}));
-
-vi.mock('@neondatabase/serverless', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@neondatabase/serverless')>()),
-  Pool: class {
-    end() { return driver.endImpl(); }
-  },
+  reported: [] as Array<{ operation: string; level?: string }>,
 }));
 
 vi.mock('drizzle-orm/neon-serverless', () => ({
-  drizzle: () => ({ transaction: (work: (tx: unknown) => Promise<unknown>) => driver.transactionImpl(work) }),
+  // Receives the pool `inTransaction` built; swap its close for a controllable one.
+  drizzle: (pool: { end: () => Promise<void> }) => {
+    pool.end = () => { driver.endCalls += 1; return driver.endImpl(); };
+    return { transaction: (work: (tx: unknown) => Promise<unknown>) => driver.transactionImpl(work) };
+  },
+}));
+
+vi.mock('../../application/observability/caughtErrorReporter', () => ({
+  reportCaughtError: (_error: unknown, details: { operation: string; level?: string }) => {
+    driver.reported.push({ operation: details.operation, level: details.level });
+  },
 }));
 
 import { DATABASE_UNAVAILABLE_CODE } from './neonAvailability';
@@ -45,11 +55,21 @@ const quotaAtConnect = () => new Error(
 describe('inTransaction (pool path)', () => {
   beforeEach(() => {
     driver.endImpl = () => Promise.resolve();
+    driver.endCalls = 0;
+    driver.reported.length = 0;
     driver.transactionImpl = (work) => work({});
   });
 
   it('returns the body result', async () => {
     await expect(inTransaction(buildDatabase(env), async () => 42)).resolves.toBe(42);
+  });
+
+  it('closes the pool after a commit and after a failure', async () => {
+    await inTransaction(buildDatabase(env), async () => 1);
+    expect(driver.endCalls).toBe(1);
+    await inTransaction(buildDatabase(env), async () => { throw new DomainError('nope'); }).catch(() => undefined);
+    expect(driver.endCalls).toBe(2);
+    expect(driver.reported).toEqual([]);
   });
 
   it('answers a quota refusal at connect as the database_unavailable outage', async () => {
@@ -83,6 +103,8 @@ describe('inTransaction (pool path)', () => {
   it('still returns the committed result when pool.end() rejects', async () => {
     driver.endImpl = () => Promise.reject(new Error('socket already closed'));
     await expect(inTransaction(buildDatabase(env), async () => 'committed')).resolves.toBe('committed');
+    // Reported, not swallowed: a socket that will not close is a leak worth seeing.
+    expect(driver.reported).toEqual([{ operation: 'inTransaction:poolEnd', level: 'warning' }]);
   });
 
   it('a handle with no connection string keeps using its own transaction()', async () => {

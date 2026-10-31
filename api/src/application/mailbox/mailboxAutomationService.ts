@@ -13,7 +13,9 @@ import { notifyApprovalRequested } from '../approval/approvalNotifier';
 import { completeForTenant } from '../llm/tenantProxy';
 import { readProxyChoice } from '../llm/LlmProxyService';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { bareAddress } from '../shared/contactAddress';
 import { signalPendingWork } from '../runtime/cronWorkSignal';
+import { suppressedEmails, suppressionKey } from '../marketing/suppression';
 import { createTickDispatchBudget, type TickDispatchBudget } from '../runtime/tickDispatchBudget';
 import { getMailboxConnection, readMailbox, sendFromMailbox, setMailboxMessageRead } from './mailboxService';
 import type { MailboxMessage } from './mailboxProviders';
@@ -107,10 +109,6 @@ function matches(rule: typeof mailboxAutomationRules.$inferSelect, message: Mail
     && (!rule.subjectContains || message.subject.toLowerCase().includes(rule.subjectContains.toLowerCase()));
 }
 
-function addressOf(from: string): string {
-  return from.match(/<([^<>]+)>/)?.[1]?.trim() || from.trim();
-}
-
 function replySubject(subject: string): string {
   return /^re:/i.test(subject) ? subject : `Re: ${subject || '(no subject)'}`;
 }
@@ -144,6 +142,16 @@ async function generateAgentReply(
   const { content } = await readProxyChoice(result);
   if (!content) throw new Error('The AI agent returned an empty reply.');
   return content;
+}
+
+/** Recorded on the execution when the do-not-contact check vetoes an automatic reply. The
+ *  inbox shows an execution's `error` beside its status, so this is what the owner reads. */
+export const AUTOMATIC_REPLY_SUPPRESSED = 'The sender is on a do-not-contact list; no automatic reply was sent.';
+
+/** Whether `from` (a mailbox value, `Jane <a@x.com>` or a bare address) may not be contacted. */
+async function isDoNotContact(db: Db, tenantId: number, from: string): Promise<boolean> {
+  const key = suppressionKey(from);
+  return key !== null && (await suppressedEmails(db, tenantId, [key])).has(key);
 }
 
 async function claimMessage(
@@ -226,6 +234,14 @@ export async function runMailboxAutomationSweep(
         if (!execution) { dispatchBudget.release(rule.tenantId); continue; }
         summary.matched += 1;
         try {
+          // An `automatic` rule sends with nobody reviewing the reply, so the do-not-contact
+          // check is its only gate. Asked BEFORE the reply is drafted: no model spend on a
+          // reply that must not go out, and a failed check (thrown, caught below) sends nothing.
+          // `draft` and `approval` put a human in front of the send and are not checked.
+          if (rule.responseMode === 'automatic' && await isDoNotContact(db, rule.tenantId, message.from)) {
+            await updateExecution(db, rule.tenantId, execution.id, { status: 'rejected', error: AUTOMATIC_REPLY_SUPPRESSED });
+            continue;
+          }
           const draftText = await generateAgentReply(env, rule.tenantId, rule, message);
           if (rule.responseMode === 'draft') {
             await updateExecution(db, rule.tenantId, execution.id, { status: 'draft', draftText });
@@ -236,14 +252,14 @@ export async function runMailboxAutomationSweep(
             const approvalId = crypto.randomUUID();
             await db.insert(approvals).values({
               id: approvalId, tenantId: rule.tenantId, kind: 'approval', actionType: 'mailbox.reply',
-              description: `Send AI reply to ${addressOf(message.from)} — ${message.subject || '(no subject)'}\n\nDraft reply:\n${draftText.slice(0, 3000)}`,
+              description: `Send AI reply to ${bareAddress(message.from)} — ${message.subject || '(no subject)'}\n\nDraft reply:\n${draftText.slice(0, 3000)}`,
               requestedBy: `agent:${rule.agentRef}`, cloudAgentRef: rule.agentRef,
               metadata: JSON.stringify({ mailboxAutomationExecutionId: execution.id }),
             });
             await updateExecution(db, rule.tenantId, execution.id, { status: 'pending_approval', draftText, approvalId });
             await notifyApprovalRequested(env, db, {
               tenantId: rule.tenantId, approvalId, kind: 'approval', actionType: 'mailbox.reply',
-              description: `Review AI reply to ${addressOf(message.from)} — ${message.subject || '(no subject)'}`,
+              description: `Review AI reply to ${bareAddress(message.from)} — ${message.subject || '(no subject)'}`,
             });
             summary.approvals += 1;
             continue;
@@ -286,7 +302,7 @@ export async function sendMailboxAutomationExecution(
   if (!connection || connection.status !== 'connected') return { ok: false, error: 'This mailbox needs to be reconnected.' };
   if (!connection.allowSending) return { ok: false, error: 'Sending is disabled for this mailbox.' };
   const sent = await sendFromMailbox(db, env, tenantId, execution.connectionId, {
-    to: addressOf(execution.sender), subject: replySubject(execution.subject),
+    to: bareAddress(execution.sender), subject: replySubject(execution.subject),
     text: execution.draftText, html: htmlFromText(execution.draftText),
   });
   if (!sent.ok) {

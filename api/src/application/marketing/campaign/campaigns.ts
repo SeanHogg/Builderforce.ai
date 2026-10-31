@@ -169,7 +169,9 @@ export async function updateCampaign(
     fromNumber?: string | null; scheduledAt?: Date | null;
   },
 ): Promise<CampaignResult> {
-  const set: Record<string, unknown> = { updatedAt: sql`NOW()` };
+  // Any edit may be the fix for whatever made the scheduled start refuse, so the campaign
+  // rejoins the never-refused end of the sweep's order (see `startDueCampaigns`).
+  const set: Record<string, unknown> = { updatedAt: sql`NOW()`, scheduleRefusedAt: null };
   if (typeof patch.name === 'string') set.name = patch.name.trim().slice(0, 255);
   if (typeof patch.subject === 'string') set.subject = patch.subject.slice(0, 500);
   if (typeof patch.bodyHtml === 'string') set.bodyHtml = patch.bodyHtml;

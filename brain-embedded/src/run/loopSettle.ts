@@ -5,9 +5,11 @@
  * `emitEvermindLearnReconcile`). A failed outcome re-throws the transport's own error so `chatErrorAction` still reads it.
  */
 
+import { DEFAULT_TOOL_FAILURE_STREAK } from '@builderforce/agent-loop';
 import { RUN_CANCELLED_REASON, type RunOutcome } from '@builderforce/agent-run';
 import type { StreamChatResult } from '../streamChatCompletion';
-import { emit, recordRunFailure } from '../runStore/runCells';
+import { emit } from '../runStore/runCells';
+import { closeAfterFailureStreak } from '../runStore/failureClose';
 import { emitEvermindLearnReconcile } from '../runStore/runMemory';
 import { settleReply, type RunLoopContext } from '../runStore/runLoopContext';
 import type { LastTurn } from './loopTurn';
@@ -19,13 +21,8 @@ export async function settleBrainRun(run: RunLoopContext, outcome: RunOutcome, l
     // A Stop settles quietly; a port's exception is re-thrown as it was thrown.
     if (outcome.reason === RUN_CANCELLED_REASON || c.abort?.signal.aborted) return;
     if (outcome.cause !== undefined) throw outcome.cause;
-    if (outcome.exhausted) {
-      c.streamingText = '';
-      recordRunFailure(c, 'agent.loop', outcome.reason);
-      c.error = `The assistant's last tool calls all failed and it gave no answer. Read the failing steps above, then try again with what they ask for.`;
-      emit(c);
-      return;
-    }
+    // The breaker stopped the run: the forced tools-free closing answer is the Brain's own, shared with its loop (`failureClose.ts`).
+    if (outcome.exhausted) return closeAfterFailureStreak(run, DEFAULT_TOOL_FAILURE_STREAK, outcome.state.step);
     throw new Error(outcome.reason);
   }
   const text = outcome.kind === 'paused' ? outcome.question : outcome.output;

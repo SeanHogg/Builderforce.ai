@@ -42,8 +42,11 @@ const WORK_SIGNAL_KEY = 'cron:work-pending';
 /** KV key: epoch-ms of the last floor (unconditional) fan-out. */
 const FLOOR_TS_KEY = 'cron:last-floor-sweep';
 /**
- * KV key: epoch-ms of the EARLIEST `next_run_at` across every schedule table, as
- * observed at the end of the last active tick (see {@link publishNextDue}).
+ * KV key: epoch-ms of the EARLIEST `next_run_at` across every schedule table, among rows
+ * that are not yet `stuck` (see {@link classifyDueTime}), as observed at the end of the last
+ * active tick (see {@link publishNextDue}). A stuck row is left out on purpose: the gate reads
+ * this one stamp, and a row that has been overdue for hours would otherwise shadow every later
+ * due time on the platform. Stuck rows are published separately, as the stall report.
  *
  * This is what makes a TIME-scheduled sweep precise on an idle platform. The
  * work-pending signal only covers WRITE-driven work (a ticket entering a runnable
@@ -351,7 +354,8 @@ const flagged = (flag: AnyColumn): SQL => sql`${flag} = true`;
  * social: `scheduled`, both from `campaignLifecycle`). The probe adds `<send time> IS NOT
  * NULL` for every source, so together they are the exact "due" predicate the campaign's
  * sweep applies (`startDueCampaigns`, `socialCampaignsDue`) minus its `<= NOW()` clause —
- * and, for email, the predicate of the partial index `idx_marketing_campaigns_due`.
+ * and the predicate of the partial index each channel has for this probe
+ * (`idx_marketing_campaigns_due` for email, `idx_social_campaigns_due` for social, 1290).
  */
 const campaignArmed = (kind: CampaignKind, status: AnyColumn): SQL => inArray(status, dueStatuses(kind));
 
@@ -395,7 +399,7 @@ const SCHEDULE_SOURCES = [
  * an active tick the endpoint is already awake and the sweeps have just re-armed their
  * `next_run_at` values, so this reads the freshest possible answer for free.
  *
- * One statement carrying a scalar `MIN()` subquery per schedule table, one row back. Best-effort throughout: a failure leaves the previous stamp (or none) in
+ * One statement carrying two scalar `MIN()` subqueries per schedule table (see below), one row back. Best-effort throughout: a failure leaves the previous stamp (or none) in
  * place and the floor sweep still backstops every schedule, so this can never strand
  * work — it can only fail to make it prompt.
  *
@@ -407,9 +411,11 @@ const SCHEDULE_SOURCES = [
  * interval is written to the stall report and logged (rate-limited).
  */
 export interface NextDuePublication {
-  /** Earliest armed `next_run_at` across every schedule table, epoch-ms. */
+  /** The due time handed to the gate, epoch-ms: the earliest armed `next_run_at` across every
+   *  schedule table among rows NOT yet stuck (see {@link classifyDueTime}). */
   earliestMs: number | null;
-  /** Per-table earliest armed due time — the raw observation the stall check reads. */
+  /** Per-table earliest armed due time, stuck rows included — the raw observation the stall
+   *  check reads. */
   perTable: Array<{ table: string; nextDueMs: number }>;
   /** The jam, if any, after merging with what previous ticks observed. */
   stall: ScheduleStallReport | null;
@@ -421,23 +427,40 @@ export async function publishNextDue(env: Env, nowMs: number): Promise<NextDuePu
   if (!store) return empty;
   try {
     const db = buildDatabase(env);
-    // ONE statement: a scalar `MIN(next_run_at)` subquery per schedule table, each a
-    // cheap top-of-index probe. The per-table minimums stay separate columns because
-    // the stall check needs to name WHICH table is jammed; the overall earliest is
-    // taken below (LEAST in JS — the same NULL-ignoring semantics).
-    const probes = SCHEDULE_SOURCES.map((source, i) => sql`(
-      SELECT MIN(${source.nextRunAt}) FROM ${source.table}
-      WHERE ${source.armed} AND ${source.nextRunAt} IS NOT NULL
-    ) AS ${sql.raw(`m${i}`)}`);
+    const intervalSeconds = floorIntervalMs(env) / 1000;
+    // ONE statement carrying two cheap index probes per schedule table:
+    //   • `m<i>` = MIN(next_run_at) over every armed row, stuck ones included. Kept separate
+    //     per table because the stall check needs to name WHICH table is jammed.
+    //   • `f<i>` = the same MIN over armed rows that are NOT stuck, i.e. due no longer ago than
+    //     one floor interval (`>=` is the complement of classifyDueTime's `stuck`, whose
+    //     window is the same floor interval). THIS is what the gate is given.
+    // The gate looks at one stamp. A refused scheduled campaign keeps its past `scheduled_at`
+    // by design, so it reads `stuck` for as long as nobody fixes it — and if the stamp were the
+    // plain MIN, that one row would shadow every later due time on the platform and leave the
+    // gate on floor cadence for everything. The overall earliest is taken below (in JS — the
+    // same NULL-ignoring semantics as LEAST).
+    const probes = SCHEDULE_SOURCES.flatMap((source, i) => [
+      sql`(
+        SELECT MIN(${source.nextRunAt}) FROM ${source.table}
+        WHERE ${source.armed} AND ${source.nextRunAt} IS NOT NULL
+      ) AS ${sql.raw(`m${i}`)}`,
+      sql`(
+        SELECT MIN(${source.nextRunAt}) FROM ${source.table}
+        WHERE ${source.armed} AND ${source.nextRunAt} IS NOT NULL
+          AND ${source.nextRunAt} >= NOW() - (${intervalSeconds}::float8 * INTERVAL '1 second')
+      ) AS ${sql.raw(`f${i}`)}`,
+    ]);
     const result = await db.execute(sql`SELECT ${sql.join(probes, sql`, `)}`);
     const row = (result.rows[0] ?? {}) as Record<string, Date | string | null>;
     const mins = SCHEDULE_SOURCES.map((source, i) => ({
       table: source.name as string,
       nextDueMs: toEpochMs(row[`m${i}`] ?? null),
+      notStuckMs: toEpochMs(row[`f${i}`] ?? null),
     }));
 
     const perTable = mins.flatMap((m) => (m.nextDueMs == null ? [] : [{ table: m.table, nextDueMs: m.nextDueMs }]));
-    const earliest = perTable.length > 0 ? Math.min(...perTable.map((m) => m.nextDueMs)) : null;
+    const notStuck = mins.flatMap((m) => (m.notStuckMs == null ? [] : [m.notStuckMs]));
+    const earliest = notStuck.length > 0 ? Math.min(...notStuck) : null;
     await store.put(NEXT_DUE_KEY, earliest == null ? NO_SCHEDULES : String(earliest), {
       expirationTtl: NEXT_DUE_TTL_SECONDS,
     });

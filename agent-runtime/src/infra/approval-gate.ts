@@ -82,6 +82,18 @@ export class ApprovalGate {
     this.apiKey = opts.apiKey;
   }
 
+  /**
+   * The connection this gate was configured with, or null for a standalone host. It is the host's ONE
+   * process-wide Builderforce link (set once at gateway startup), so a host-to-api read that has no
+   * workspace of its own (governance gates for a channel or cron run) reads it here instead of
+   * re-resolving the credentials.
+   */
+  link(): { baseUrl: string; agentNodeId: string; apiKey: string } | null {
+    return this.baseUrl && this.agentNodeId && this.apiKey
+      ? { baseUrl: this.baseUrl, agentNodeId: this.agentNodeId, apiKey: this.apiKey }
+      : null;
+  }
+
   /** True once init() has wired up a Builderforce connection. */
   isConfigured(): boolean {
     return !!(this.baseUrl && this.agentNodeId && this.apiKey);
@@ -184,6 +196,11 @@ export const approvalGate = new ApprovalGate();
 
 export function initApprovalGate(opts: { baseUrl: string; agentNodeId: string; apiKey: string }): void {
   approvalGate.init(opts);
+}
+
+/** The host's Builderforce link (see {@link ApprovalGate.link}), or null when standalone. */
+export function hostLink(): ReturnType<ApprovalGate["link"]> {
+  return approvalGate.link();
 }
 
 export function resolveApproval(approvalId: string, decision: HumanDecision, responseText?: string): void {

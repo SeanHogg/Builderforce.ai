@@ -36,6 +36,24 @@ export const SEND_BATCH_SIZE = 25;
  */
 export const CAMPAIGN_SEND_MAX_ATTEMPTS = CAMPAIGN_DELIVERY_MAX_ATTEMPTS;
 
+/**
+ * How long a recipient may sit in `sending` before the sweep writes it off as `failed`.
+ *
+ * A row is `sending` only between its claim and the write-back that follows the transport
+ * call, so it should leave that state within one batch: at most `SEND_BATCH_SIZE` (25)
+ * sequential sends, each bounded by a transport's own HTTP timeout of well under a minute —
+ * a few minutes in the worst case, and a Worker invocation is cut off long before an hour.
+ * One hour is far above that, so no live runner's claim is ever reaped, and still short
+ * enough that a campaign whose runner was evicted finishes the same day.
+ */
+export const STALE_CLAIM_AFTER_MS = 60 * 60 * 1000;
+
+/** What a reaped row says. `failed`, not `queued`: the transport call may have succeeded
+ *  before the runner died, and sending again could deliver the same message twice. */
+export const STALE_CLAIM_ERROR =
+  'Delivery state unknown: the sender stopped after claiming this message and before recording the outcome, '
+  + 'so it may or may not have been delivered. It was not retried, to avoid sending it twice.';
+
 export interface BatchResult {
   sent: number;
   failed: number;
@@ -130,7 +148,7 @@ export async function runCampaignBatch(
     // forever with its counter untouched.
     const claimed = await db
       .update(marketingCampaignSends)
-      .set({ status: 'sending', attempts: sql`${marketingCampaignSends.attempts} + 1` })
+      .set({ status: 'sending', attempts: sql`${marketingCampaignSends.attempts} + 1`, claimedAt: sql`NOW()` })
       .where(and(
         eq(marketingCampaignSends.id, row.id),
         eq(marketingCampaignSends.tenantId, tenantId),
@@ -214,8 +232,14 @@ export async function runCampaignBatch(
     }
   }
 
-  const [{ remaining } = { remaining: 0 }] = await db
-    .select({ remaining: sql<number>`count(*)::int` })
+  // `remaining` counts everything not yet settled (a `sending` row included) and is what decides
+  // whether the campaign is done. `queuedLeft` counts only what a later batch can still CLAIM:
+  // a `sending` row is another runner's, or a dead one's, and no batch advances it.
+  const [{ remaining, queuedLeft } = { remaining: 0, queuedLeft: 0 }] = await db
+    .select({
+      remaining: sql<number>`count(*)::int`,
+      queuedLeft: sql<number>`(count(*) FILTER (WHERE ${marketingCampaignSends.status} = 'queued'))::int`,
+    })
     .from(marketingCampaignSends)
     .where(and(
       eq(marketingCampaignSends.campaignId, campaignId),
@@ -237,7 +261,13 @@ export async function runCampaignBatch(
   // Only the first batch runs inline; the rest is finished by the gated cron sweep. The
   // frequent tick skips Postgres entirely unless work was signalled, so without this a
   // send larger than one batch would advance one batch per FLOOR tick.
-  if (!done) await signalPendingWork(env);
+  //
+  // Signalled only when this batch made progress AND a later one has something to claim.
+  // Both halves keep the gate from pinning open: a `sending` row nobody will advance (an
+  // evicted Worker) must not re-signal every tick forever, and a batch that sent nothing
+  // — a revoked credential failing every recipient — has no reason to expect the next
+  // batch to do better, so it falls back to the floor cadence and lets Neon suspend.
+  if (!done && sent > 0 && Number(queuedLeft ?? 0) > 0) await signalPendingWork(env);
 
   return { sent, failed, remaining: Number(remaining), status: done ? 'sent' : 'sending' };
 }

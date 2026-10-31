@@ -11,6 +11,7 @@ import type { DeliveryLedger, DeliveryTurn, LadderRung } from '@builderforce/age
 import { askStopHook, MAX_STOP_HOOK_ROUNDS } from '../stopHooks';
 import { deliveryGates } from '../runStore/deliveryGates';
 import { skipsVerifyStage } from '../runStore/pipelineRoute';
+import { transportRetryTrace } from '../runPolicyTraces';
 import { nowIso, pushTrace } from '../runStore/runCells';
 import type { RunLoopContext } from '../runStore/runLoopContext';
 import type { LastTurn } from './loopTurn';
@@ -25,7 +26,23 @@ export function brainDeliveryLedger(run: RunLoopContext, last: LastTurn): Delive
     pushTrace(c, { ts: nowIso(), category: 'message', label, args: { step: last.step, ...args }, result });
   };
   return {
-    owns: { settle: true },
+    // The closing answer after a failure streak is the Brain's own (`runStore/failureClose.ts`, run by the adapter tail).
+    owns: { settle: true, synthesis: true },
+    // A provider that broke is routed around by the agent's model policy; the Brain says nothing to the model about it (its loop never
+    // did) and records the re-ask, or - when no model is left - the failed completion, the way its loop does.
+    handedOff: () => { last.failure = undefined; },
+    providerFailure: {
+      handoff: () => '',
+      reroute: '',
+      rerouted: (failure) => {
+        last.failure = undefined;
+        pushTrace(c, transportRetryTrace(nowIso(), failure.step, failure.outcome, failure.message));
+      },
+      abandoned: () => {
+        if (last.failure) pushTrace(c, last.failure);
+        last.failure = undefined;
+      },
+    },
     // A model that asked its question in prose instead of calling `ask_user` still gets the clickable card.
     accept: (content) => ((canAskUser ? liftProseAskUser(content.trim()) : content.trim()) || 'No response.'),
     async rungs(turn: DeliveryTurn): Promise<readonly LadderRung[]> {

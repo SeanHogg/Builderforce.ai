@@ -1,5 +1,7 @@
 import fs from "node:fs/promises";
+import type { PolicyGate } from "@builderforce/agent-tools";
 import type { ThinkLevel } from "../../auto-reply/thinking.js";
+import { resolveHostPolicyGates } from "../../infra/host-policy-gates.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { enqueueCommandInLane } from "../../process/command-queue.js";
 import { isMarkdownCapableMessageChannel } from "../../utils/message-channel.js";
@@ -211,6 +213,11 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
           `[workspace-fallback] caller=runEmbeddedAgent reason=${workspaceResolution.fallbackReason} run=${params.runId} session=${redactedSessionId} sessionKey=${redactedSessionKey} agent=${workspaceResolution.agentId} workspace=${redactedWorkspace}`,
         );
       }
+      // Governance gates. A caller that names its own (a dispatched run) wins; every other run
+      // (a channel reply, a cron job, the CLI) is held to the TENANT's gates, fetched once here
+      // — the one place those runs converge — so no caller has to remember to feed them.
+      const policyGates: readonly PolicyGate[] =
+        params.policyGates ?? (isProbeSession ? [] : await resolveHostPolicyGates());
       const prevCwd = process.cwd();
 
       let provider = (params.provider ?? DEFAULT_PROVIDER).trim() || DEFAULT_PROVIDER;
@@ -545,7 +552,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
             prompt,
             images: params.images,
             disableTools: params.disableTools,
-            ...(params.policyGates?.length ? { policyGates: params.policyGates } : {}),
+            ...(policyGates.length ? { policyGates } : {}),
             provider,
             modelId,
             model,

@@ -18,7 +18,7 @@
  * `agent-loop.ts`'s `agentLoop` always returned, so the Agent, the session and the runner are unchanged.
  */
 
-import { RUN_CANCELLED_REASON, asksForSubagents, compactionReserve, runAgent } from "@builderforce/agent-run";
+import { RUN_CANCELLED_REASON, asksForSubagents, runAgent } from "@builderforce/agent-run";
 import type { ContextSource, RunPolicy, RunPorts, RunTask, SteeringSource, SteerInput } from "@builderforce/agent-run";
 import { RunKnowledgeRecorder, type CapabilityProvider } from "@builderforce/agent-tools";
 import { randomUUID } from "node:crypto";
@@ -55,23 +55,19 @@ function steered(messages: readonly AgentMessage[]): SteerInput[] {
   });
 }
 
-/** The reply reserve: on-prem's (its floor, or the turn's max_tokens), never more than a quarter of the window, so a small window keeps room for its history. */
-function reserveFor(config: AgentLoopConfig): number {
-  return Math.min(compactionReserve(config.maxTokens), Math.floor(resolveContextWindowTokens(config.model) / 4));
-}
-
 /** The policy DATA of a channel run. How the run behaves is the agent's. */
-function policyOf(config: AgentLoopConfig, request: string): RunPolicy {
+export function policyOf(config: AgentLoopConfig, request: string): RunPolicy {
   return {
     entryPoint: "on-prem",
     toolScope: "chat-work",
     role: "code",
     // Cost lever C9 (compaction under a long-context price tier) is read the on-device way: a partial rollout buckets by install.
     levers: onDeviceCostLeverOn("c9_price_tier_budget") ? ["c9_price_tier_budget"] : [],
-    // The history is cut at the model's WINDOW, not the cloud's cost cap, and the reply reserve is on-prem's (its floor, or the turn's max_tokens).
-    budgets: { tokens: resolveContextWindowTokens(config.model), reserveTokens: reserveFor(config) },
+    // The history is cut at the model's WINDOW, not the cloud's cost cap.
+    budgets: { tokens: resolveContextWindowTokens(config.model) },
     // A stall that fails the run over onto a model with a smaller window re-packs the context for it, and the model is told it took over.
-    modelHandoff: { ...(config.maxTokens !== undefined ? { maxTokens: config.maxTokens } : {}) },
+    // The reply reserve follows whichever model is serving (the agent's, from the turn's own reply ceiling), so a failover onto a small window keeps its history.
+    modelHandoff: {},
     pinnedModel: modelRef(config.model),
     inference: "hybrid",
     verify: "none",

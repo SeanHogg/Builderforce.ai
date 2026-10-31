@@ -51,6 +51,7 @@ import {
 import { isModelRole } from "@builderforce/agent-tools";
 import type { ModelHook } from "../hooks.js";
 import { recoverProviderFailure } from "./failure.js";
+import { replyReserve } from "../compaction/reserve.js";
 
 export type { RunPolicyEvent, RunPolicyState, StallStep, TurnRequest };
 
@@ -336,7 +337,9 @@ export const modelHook: ModelHook = {
   resolve(ctx) {
     // The model slice already IS the run-policy state; drive it, never redefine it.
     const routing = turnRouting(ctx.state.model, ctx.tools.length > 0);
-    const maxTokens = cappedMaxTokens(routing.role, undefined);
+    // A run that hands off between models asks for the reserve compaction holds back (the role cap, within a quarter of the serving
+    // window), so the input that fits plus this reply always fit. Any other run asks for the role cap.
+    const maxTokens = ctx.policy.modelHandoff ? replyReserve(ctx) : cappedMaxTokens(routing.role, undefined);
     return {
       role: routing.role,
       strict: routing.strict,

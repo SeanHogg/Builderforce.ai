@@ -34,7 +34,7 @@ export interface ModelHandoffInput<M> {
   contextWindow: number;
   /** The lowest long-context price boundary of the incoming model, when cost lever C9 is on for this run. */
   priceTierBoundary?: number;
-  /** The hard cap for the incoming turn's answer; sizes the reply reserve. */
+  /** The hard cap for the incoming turn's answer; sizes the reply reserve. A run passes the reserve it holds back (`replyReserve`), so the packer and the compaction never disagree. */
   maxTokens?: number;
   /** Rows that survive the cut whole even when they fall in the dropped middle (the task the run was given). */
   pinned?: (row: M) => boolean;
@@ -44,7 +44,11 @@ export interface ModelHandoffResult<M> {
   messages: M[];
   /** Rows dropped from the context (0 = it already fit; `messages` is the input). */
   dropped: number;
+  /** False when the system prompt and the rows that must stay whole (the latest directive, a pinned row) alone exceed the window. */
   fits: boolean;
+  /** What the whole context (system prompt included) cost before the cut, and after it - the packer's own estimate. */
+  beforeTokens: number;
+  afterTokens: number;
 }
 
 /**
@@ -67,6 +71,7 @@ export async function packForModelHandoff<M>(input: ModelHandoffInput<M>, access
     return view;
   });
   const all = [system, ...mapped];
+  const beforeTokens = tokensOf(all, defaultEstimateTokens);
   const reserve = handoffReserveTokens(input.maxTokens);
   const pack = await packHandoff({
     messages: all,
@@ -77,7 +82,7 @@ export async function packForModelHandoff<M>(input: ModelHandoffInput<M>, access
     to: input.to,
     ...(input.pinned ? { pinned: (view: HandoffMessage) => { const row = back.get(view); return row !== undefined && input.pinned!(row); } } : {}),
   });
-  if (pack.dropped === 0) return { messages: [...input.messages], dropped: 0, fits: pack.fits };
+  if (pack.dropped === 0) return { messages: [...input.messages], dropped: 0, fits: pack.fits, beforeTokens, afterTokens: beforeTokens };
   const messages: M[] = [];
   for (const view of pack.messages) {
     if (view === system) continue;
@@ -86,7 +91,7 @@ export async function packForModelHandoff<M>(input: ModelHandoffInput<M>, access
       messages.push(original);
       continue;
     }
-    messages.push(access.summary(typeof view.content === "string" ? view.content : JSON.stringify(view.content), tokensOf(all, defaultEstimateTokens)));
+    messages.push(access.summary(typeof view.content === "string" ? view.content : JSON.stringify(view.content), beforeTokens));
   }
-  return { messages, dropped: pack.dropped, fits: pack.fits };
+  return { messages, dropped: pack.dropped, fits: pack.fits, beforeTokens, afterTokens: pack.estimatedTokens };
 }

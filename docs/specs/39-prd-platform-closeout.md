@@ -20,7 +20,7 @@ Each program below states the end state, what is deleted, the rollout, how we pr
 
 **Why.** Every `/llm` and `/v1` call boots the whole API: about 21 MB of code (4.7 MB gzipped), 280 `app.route` mounts and every Durable Object class. The `$0 platform` plan also cannot leave Workers Paid with a bundle this size, because Workers Free caps compressed script size well below it.
 
-**What `/v1` is.** LLM completions live under `/llm/v1/...`. The top-level `/v1/*` surface is the seam routes plus the semantic cache, so step 1 below must also decide whether `createSeamRoutes(db)` belongs in the gateway at all. It has not been assessed.
+**What `/v1` is.** LLM completions live under `/llm/v1/...`. The top-level `/v1/*` surface is the seam routes plus the semantic cache. The diagram and codemap below assume all of it moves, but `createSeamRoutes(db)` has not been assessed. Step 1 decides that; if the seam routes stay on the API, only `/v1/semantic-cache` moves and the route list narrows to match.
 
 **End state.**
 
@@ -95,7 +95,7 @@ Deleted from `index.ts` in push 2: the `/llm`, `/llm/v1/videos` and `/v1/*` moun
 
 **End state.** `application/canvas/canvasComments.ts` owns all reads and writes, and the routes become thin. The response shape does not change, so existing route tests run unchanged as the parity oracle.
 
-**Required access change, before any row moves.** Moving comments alone would open private sessions. `objectRelationGate.ts` gates relations, but `registry.annotations` and `addAnnotation` are ungated (`ObjectRegistry.ts:659-661`), and `objectRoutes.ts:137,147` scope only by tenant. Any tenant member could read and post on a private session's comments through `/api/objects/:id/annotations`. Push 1 must gate annotations for `DOMAIN_GATED_RELATION_KINDS` in the registry facade, with a test proving a non-member is refused on both read and write.
+**Required access change, before any row moves.** Moving comments alone would open private sessions. `objectRelationGate.ts` gates relations, but `registry.annotations` and `addAnnotation` are ungated (`ObjectRegistry.ts:659-661`), and `objectRoutes.ts:137,147` scope only by tenant. Any tenant member could read and post on a private session's comments through `/api/objects/:id/annotations`. Push 1 must gate annotations for `DOMAIN_GATED_RELATION_KINDS` in the registry facade, which means the facade's `annotations` read must take a `viewerRef`. The existing gate refuses all generic writes, so comments are written only through `canvasComments.ts`. Tests prove a non-member is refused on read and that generic writes are refused for everyone. `activity` at `ObjectRegistry.ts:657` is also ungated; check in the same push whether comment activity is reachable through it.
 
 **Sequence (expand/contract).**
 
@@ -144,12 +144,12 @@ Deleted from `index.ts` in push 2: the `/llm`, `/llm/v1/videos` and `/v1/*` moun
 **End state.** Extend the existing exporter. No new destination table and no second destination model.
 
 - Add `signals` to `otel_exporters`: `traces`, `audit`, or both. It defaults to `traces`, so nothing changes for existing rows.
-- Add an export sweep that sends audit events as OTLP logs to the collector's logs path. Derive that path the way `tracesUrl` does (`otelSpans.ts:104-108`), because an endpoint may already carry a signal-specific suffix, and a plain `${endpoint}/v1/logs` would build `/v1/traces/v1/logs`.
+- Add an export sweep that sends audit events as OTLP logs to the collector's logs path. Add a `logsUrl` beside `tracesUrl` (`otelSpans.ts:102-107`). It must swap a `/v1/traces` suffix for `/v1/logs` rather than use a signal-suffixed base as given, or logs would be posted to the traces endpoint, and a plain `${endpoint}/v1/logs` would build `/v1/traces/v1/logs`.
 - Delivery is at-least-once, with each event's id as the dedup key. Add a per-exporter, per-source cursor; this needs a new column or a small cursor table.
 - Reuse the exporter's encrypted headers and health columns.
+- Extend the existing settings panel, localized in all five catalogs and working in both themes and at narrow widths.
 
 **Open design point.** There is no single audit store to read. The events are scattered across core and operational tables, and `tool_audit_events` is on the operational database. Answering the event-set decision below also fixes the list of sources, so the sweep must be written against that list, one reader per source through the right database handle.
-- Extend the existing settings panel, localized in all five catalogs and working in both themes and at narrow widths.
 
 **Scope line.** Tenant export carries only that tenant's events. `admin_audit_log` is the cross-tenant operator trail and is never exported to a tenant.
 
@@ -171,8 +171,17 @@ Deleted from `index.ts` in push 2: the `/llm`, `/llm/v1/videos` and `/v1/*` moun
 - Absence proves nothing. Host audit events wait in an in-memory outbox with a 1.5 s batch (`builderforce-relay-outboxes.ts:19`), so a killed host can lose exactly its last call, and `executionId` is optional on the wire.
 - `tool_audit_events` is on the operational database, so the reaper needs the sibling handle.
 
-So the rule inverts. Declare an allowlist of tools that are safe to re-run. Re-dispatch only if the run's audit is complete and every recorded call is on that list. Require `executionId` on host audit events, and add a marker the host sends with each batch so completeness can be judged. Anything else fails and asks a human, with the reason recorded.
+A completeness marker would not fix this. A per-batch marker cannot reveal a batch the dead host never sent, a terminal marker never arrives from a dead host, and the outbox also drops its oldest events past 500 entries (`TOOL_AUDIT_MAX_ENTRIES`).
 
-**Done when.** Killing a host mid-run after only allowlisted calls moves the run to a second host and completes it. Killing one after any other call, or with an incomplete audit, fails it with the reason shown. No run re-dispatches twice.
+So the rule inverts and becomes write-ahead:
 
-**Decision:** approve the allowlist rule, under which a run is re-dispatched automatically only when its audit proves every call was safe to repeat.
+- Declare an allowlist of tools that are safe to re-run.
+- Before any tool off that list runs, the host must hold a server acknowledgement of its intent for that execution, carrying a per-run sequence number. No acknowledgement means the tool does not run.
+- `executionId` becomes required on those intents.
+- A run may re-dispatch only if the server holds no intent for a non-allowlisted tool and the sequence has no gap. Anything else fails and asks a human, with the reason recorded.
+
+**Cost.** Every non-allowlisted tool call gains one server round trip before it runs. The allowlist keeps reads off that path.
+
+**Done when.** Killing a host mid-run after only allowlisted calls moves the run to a second host and completes it. Killing one after an acknowledged non-allowlisted intent fails it with the reason shown, even if the tool never ran. No run re-dispatches twice.
+
+**Decision:** approve the write-ahead rule and its added round trip, under which a run is re-dispatched automatically only when the server can prove nothing unsafe was attempted.

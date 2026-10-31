@@ -14,7 +14,8 @@
  * and Node.
  */
 
-import { DEFAULT_HANDOFF_RESERVE_TOKENS, handoffReserveTokens } from "@builderforce/run-policy";
+import { DEFAULT_HANDOFF_RESERVE_TOKENS, cappedMaxTokens, handoffReserveTokens, nextTurn } from "@builderforce/run-policy";
+import type { PolicyContext } from "../hooks.js";
 
 /** Tokens held back for the reply when a request names no `max_tokens` — the shared hand-off default. */
 export const DEFAULT_COMPACT_RESERVE_TOKENS = DEFAULT_HANDOFF_RESERVE_TOKENS;
@@ -80,4 +81,24 @@ export function compactionReserve(maxTokens: number | undefined, cfg?: Compactio
     },
     minReserveTokens: resolveCompactionReserveTokensFloor(cfg),
   }).reserveTokens;
+}
+
+/** The model that serves the turn about to be asked: what the model policy last settled on (a failover moves it), else the pin. */
+export function servingModel(ctx: PolicyContext): string {
+  return ctx.state.model?.model ?? ctx.policy.pinnedModel ?? "";
+}
+
+/**
+ * THE reply reserve of the turn about to be asked - the one number compaction, the model hand-off and the request's own `maxTokens` all read.
+ *
+ * A run that never hands off between models holds back what its policy states, else the host-neutral floor (`compactionReserve`).
+ * A run that does (`RunPolicy.modelHandoff`) can land on ANY window, so the reserve follows the model now serving: the reply ceiling the
+ * turn really asks (its role's cap, `cappedMaxTokens`) but never more than a quarter of that window. The model policy clamps the
+ * request's `maxTokens` to this same number, so the input that fits plus the reply asked for always fit the window.
+ */
+export function replyReserve(ctx: PolicyContext): number {
+  if (!ctx.policy.modelHandoff) return ctx.policy.budgets.reserveTokens ?? compactionReserve(undefined);
+  const ceiling = compactReserveTokens(cappedMaxTokens(nextTurn(ctx.state.model, { hasTools: ctx.tools.length > 0 }).role, undefined));
+  const window = ctx.ports.model.window?.(servingModel(ctx));
+  return window && window > 0 ? Math.max(1, Math.min(ceiling, Math.floor(window / 4))) : ceiling;
 }

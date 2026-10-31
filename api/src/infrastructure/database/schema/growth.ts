@@ -562,6 +562,10 @@ export const marketingCampaigns = pgTable('marketing_campaigns', {
    *  cron sweep, which re-checks every send precondition at the moment it starts
    *  rather than trusting the ones that held when it was scheduled. */
   scheduledAt:      timestamp('scheduled_at'),
+  /** When the scheduled-start sweep last REFUSED this draft (1291). A refused draft keeps its
+   *  past `scheduled_at`, so it stays due; the sweep orders never-refused campaigns first so
+   *  refused ones cannot starve the rest. Cleared on edit and on start. */
+  scheduleRefusedAt: timestamp('schedule_refused_at'),
   startedAt:        timestamp('started_at'),
   completedAt:      timestamp('completed_at'),
   recipients:       integer('recipients').notNull().default(0),
@@ -613,6 +617,9 @@ export const marketingCampaignSends = pgTable('marketing_campaign_sends', {
    *  returns the row to `queued`, so without a bound an error we misclassified as
    *  retryable would requeue forever and the campaign would never complete. */
   attempts:   integer('attempts').notNull().default(0),
+  /** When a runner claimed this row (`queued` → `sending`, 1291). NULL on a row claimed before
+   *  the column existed. The sweep fails a row `sending` for longer than `STALE_CLAIM_AFTER_MS`. */
+  claimedAt:  timestamp('claimed_at'),
   openedAt:   timestamp('opened_at'),
   clickedAt:  timestamp('clicked_at'),
   sentAt:     timestamp('sent_at'),
@@ -663,8 +670,9 @@ export const socialCampaigns = pgTable('social_campaigns', {
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   index('idx_social_campaigns_tenant_status').on(t.tenantId, t.status, t.updatedAt),
-  // The cron gate's "earliest armed send time" probe (cronWorkSignal SCHEDULE_SOURCES) and
-  // the social sweep's due read both ask for scheduled rows by send time, across tenants.
+  // The cron gate's "earliest armed send time" probe (cronWorkSignal SCHEDULE_SOURCES) asks for
+  // scheduled rows by send time, across tenants. The social sweep's due read (`socialCampaignsDue`)
+  // does not use this index: it ORs the scheduled arm with an in-flight arm that nothing indexes.
   index('idx_social_campaigns_due').on(t.scheduledAt).where(sql`status = 'scheduled' AND scheduled_at IS NOT NULL`),
 ]);
 

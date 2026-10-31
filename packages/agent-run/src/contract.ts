@@ -86,7 +86,7 @@ export interface RunPolicy {
   budgets: {
     steps?: number;
     tokens?: number;
-    /** Tokens held back for the reply when compaction sizes the transcript. Absent ⇒ the host-neutral floor (`compactionReserve`). A surface whose replies are bounded far below it says so here (≤ about a quarter of its smallest window). */
+    /** Tokens held back for the reply when compaction sizes the transcript. Absent ⇒ the host-neutral floor (`compactionReserve`). A surface whose replies are bounded far below it says so here (≤ about a quarter of its smallest window). A run with `modelHandoff` ignores it: its reserve follows the serving model's window. */
     reserveTokens?: number;
     /** The run's spend cap in USD (priced turns only, `ModelUsage.pricedMc`): the model is told once at 80% to converge, and the run stops with a contained answer at the cap. Absent or 0 ⇒ no cap. */
     usd?: number;
@@ -116,10 +116,11 @@ export interface RunPolicy {
   stallExhausted?: "finish" | "fail" | "note";
   /**
    * Re-pack the run's context for the incoming model's window when a stall fails it over onto another model, and tell the model
-   * it took over (additive; absent ⇒ no hand-off packing, and the compaction is what it always was). `maxTokens` is the reply
-   * ceiling the incoming turn is asked with: it sizes the reply reserve the packer holds back.
+   * it took over (additive; absent => no hand-off packing, and the compaction is what it always was). Present, the run can land on
+   * ANY window, so its reply reserve follows the model now serving: the turn's own reply ceiling within a quarter of that window,
+   * and the request's `maxTokens` is held to it (`replyReserve`, policy/compaction/reserve). Nothing to configure.
    */
-  modelHandoff?: { maxTokens?: number };
+  modelHandoff?: Record<string, never>;
   modelStart?: {
     strict?: boolean; delegatedRole?: string; phaseModels?: RunPolicyOptions["phaseModels"];
     /** The run-start model when it is a soft seed rather than `pinnedModel`. */
