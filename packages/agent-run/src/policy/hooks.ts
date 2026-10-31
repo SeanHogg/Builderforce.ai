@@ -79,12 +79,17 @@ export interface CompactionResult {
   afterTokens?: number;
   summarized?: boolean;
   masked?: number;
+  /** The memory note that stands for the dropped middle, and how many rows it covers (see the `context.compacted` event). */
+  note?: string;
+  covered?: number;
 }
 
 /** WS2b — stall recovery: narration, repetition, forced synthesis, prose ask-lift. */
 export interface StallHook {
   /** Judge a turn that ended without a tool call. Returns what to do about it, or nothing to accept it. */
   recover(ctx: PolicyContext): Promise<StallDecision | void> | StallDecision | void;
+  /** `recover` for a surface whose delivery ledger answers with a promise. The kernel prefers it when present. */
+  recoverAsync?(ctx: PolicyContext): Promise<StallDecision | void>;
   /** Shape the answer `recover` accepted (repetition trim, prose ask-lift). Absent ⇒ the text as-is. */
   settle?(ctx: PolicyContext, text: string): string;
   /** A turn called a tool — it was not a stall, so the re-prompt budget starts full again. */

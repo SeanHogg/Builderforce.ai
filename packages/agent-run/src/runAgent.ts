@@ -36,17 +36,20 @@
  */
 
 import { runAgentLoop, type LoopResult } from "@builderforce/agent-loop";
+import { reduceRunPolicy } from "@builderforce/run-policy";
 
 import { RUN_CANCELLED_REASON, type ContextPack, type RunMessage, type RunOutcome } from "./contract.js";
 import { composePolicyHooks } from "./policy/index.js";
 import { portInterruptWatch } from "./policy/steering/index.js";
-import { currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
+import { announceRow, currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
 import { asMessages, freshState, newApprovalId, resumeState } from "./runState.js";
 import { causeOf, completeTurn, dispatchCall, isResumable, offeredSchemas, synthesizeFinal } from "./runTurn.js";
 import { settle } from "./runSettle.js";
 import { kernelHooks, readOnlyPort, type KernelRun } from "./kernelHooks.js";
 import { EMPTY_PACK, buildContextPack, openingRows } from "./turnContext.js";
 import { freshTally, type RunTally } from "./telemetry/runTally.js";
+import { localSpendMeter, usdBudget } from "./policy/budget/usd.js";
+import { CacheServedStreak } from "./policy/tools/cacheServedStreak.js";
 
 export type { RunAgentInput } from "./runContext.js";
 
@@ -83,6 +86,12 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
     state.context = pack;
   }
 
+  // The surface may read the model policy from the live run (and advance it) - handed over once, before the first turn.
+  ports.attach?.({
+    policy: () => state.model,
+    report: (event) => (state.model = reduceRunPolicy(state.model, event)),
+  });
+
   // The opening events of a run, emitted exactly once — when the run actually starts. A
   // resumed tick is not a start: it continues from the saved state and the trace must
   // read as one run, not as one run per tick. The model preflight answers before turn 1.
@@ -95,6 +104,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
     if (seeded) state.model = seeded;
   }
 
+  const budget = usdBudget(policy.budgets.usd, ports.spend ?? localSpendMeter());
   const run: KernelRun = {
     input,
     state,
@@ -106,6 +116,8 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
     turnContent: "",
     stopped: false,
     facts: { refused: false },
+    cache: new CacheServedStreak(state.reads.servedStreak),
+    ...(budget ? { budget } : {}),
   };
   const isReadOnly = readOnlyPort(run);
 
@@ -117,12 +129,12 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
       // answered ask and a steer push — so a saved and resumed transcript reads exactly
       // like a continuous one.
       codec: {
-        assistant: (turn) => ({
+        assistant: (turn) => announceRow(input, {
           role: "assistant",
           content: turn.content ?? "",
           toolCalls: turn.toolCalls.map((call) => ({ id: call.id, name: call.name, arguments: call.arguments })),
         }),
-        tool: (call, result) => ({
+        tool: (call, result) => announceRow(input, {
           role: "tool",
           toolCallId: call.id,
           content: JSON.stringify(result.data ?? null),
@@ -144,6 +156,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
 
   state.step = loopResult.step;
   state.messages = transcript;
+  state.reads = { ...state.reads, servedStreak: run.cache.state() };
 
   // A Stop, or a steered stop command: the run settles cancelled, with no further turn.
   if (run.stopped || loopResult.cancelled || signal?.aborted) {

@@ -20,6 +20,11 @@ export type RunEvent =
   | { kind: 'finish.blocked'; step: number; reason: string; block: string; detail?: Record<string, unknown> }                  // a prose end was refused (the owed sign-off)
   | { kind: 'loop.repetition'; step: number; copies: number; block: string }  // the kernel cut a looped turn back to its first copy
   | { kind: 'context.tools'; step: number; advertised: number; catalog: number; toolsTokens: number; loaded: string[] }  // the advertised tool set and what its schemas cost, whenever it changes
-  | { kind: 'context.compacted'; step: number; dropped: number; beforeTokens?: number; afterTokens?: number; summarized?: boolean; masked?: number }
+  | { kind: 'context.compacted'; step: number; dropped: number; beforeTokens?: number; afterTokens?: number; summarized?: boolean; masked?: number; note?: string; covered?: number }  // note: the memory note that stands for the dropped middle; covered: how many rows, counted from the first non-system row of the transcript before the fold, it stands for (a surface making the fold durable keeps from there)
+  | { kind: 'model.coder_reask'; step: number; model?: string }  // the analysis model's first code change was re-asked of the coding model (the model that planned it, when the gateway named it)
+  | { kind: 'budget.warning'; step: number; spentMc: number; capMc: number; unpricedCalls: number; text: string }  // the run passed 80% of its USD cap: text is what the model reads
+  | { kind: 'budget.contained'; step: number; spentMc: number; capMc: number; unpricedCalls: number; text: string }  // the run reached its USD cap and stopped with this answer
+  | { kind: 'budget.unpriced'; step: number; model?: string }  // a turn had no known price (said once per run)
+  | { kind: 'loop.no_progress'; step: number; streak: number; forced: string }  // the run circled its own read cache: this turn is forced
   | { kind: 'turn.finished'; step: number }
   | { kind: 'run.finished'; step: number; outcome: RunOutcomeKind };

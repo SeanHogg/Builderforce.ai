@@ -12,10 +12,11 @@ import { ModelTransportError, type ContextPack, type ModelCompletion, type Model
 import { isTransportFailure } from "./surface.js";
 import type { PolicyHooks } from "./policy/index.js";
 import { routeAround, turnSucceeded, type TurnAsk } from "./policy/model/handoff.js";
+import { reaskAsCoder } from "./policy/model/reask.js";
 import { runToolWithWatch, type InterruptWatch } from "./policy/steering/index.js";
 import { toolsTokensOf } from "./policy/compaction/compact.js";
 import { capToolResult, resultCapFor } from "./policy/tools/index.js";
-import { currentView, emit, policyContext, type RunAgentInput, type TurnFacts } from "./runContext.js";
+import { appendRows, currentView, emit, policyContext, type RunAgentInput, type TurnFacts } from "./runContext.js";
 import { tallyTurn, type RunTally } from "./telemetry/runTally.js";
 import { withVolatileTail } from "./turnContext.js";
 
@@ -42,6 +43,19 @@ function registryOf(ports: RunPorts): ToolRegistry {
   }
   return registry;
 }
+
+/**
+ * What the step decided about its menu before the request is built: the schemas the policy selected, and - when the surface forced the
+ * turn (`PlatformTools.turn`) - the tool choice it requires and the brief sections that ride the request's volatile tail.
+ */
+export interface TurnSelection {
+  tools: readonly ToolSchema[] | void;
+  toolChoice?: "required";
+  tail?: readonly string[];
+}
+
+/** What a surface's own tool answered, for the no-progress count: from its read cache, or only conversational. */
+export const callKinds = new WeakMap<object, "cached" | "neutral">();
 
 /** Non-transport exceptions that failed a turn, per run: the surface decides whether they are a failure or an eviction. */
 const causes = new WeakMap<object, unknown>();
@@ -116,8 +130,8 @@ export async function completeTurn(
   offered: ToolSchema[],
   transcript: RunMessage[],
   pack: ContextPack,
-  /** The step's tool selection when `beforeTurn` already made it (compaction charged those schemas). */
-  made?: { tools: readonly ToolSchema[] | void },
+  /** The step's tool selection when `beforeTurn` already made it (compaction charged those schemas), and what the surface forced on the turn. */
+  made?: TurnSelection,
 ): Promise<LoopTurnResult> {
   const view = currentView(transcript, offered);
   const pctx = policyContext(input, state, view, ctx.step, ctx.stepInCall);
@@ -139,7 +153,7 @@ export async function completeTurn(
   // which would read every later turn as a downgrade from it.
   const model = decision ? decision.model : input.policy.pinnedModel;
   const brief = await hooks.memory.brief(pctx);
-  const messages = withVolatileTail(transcript, pack, brief ?? null, input.ports.context.turnSections?.() ?? []);
+  const sections = [...(input.ports.context.turnSections?.() ?? []), ...(made?.tail ?? [])];
   const fields = hooks.model.turnFields?.(mctx);
   const reasoning = hooks.guards.reasoning?.(pctx);
 
@@ -151,12 +165,14 @@ export async function completeTurn(
     ...(decision?.excludeModels && decision.excludeModels.length > 0 ? { excludeModels: [...decision.excludeModels] } : {}),
     ...(fields ?? {}),
   };
-  const requestFor = (askedModel: string | undefined, ask: Partial<TurnAsk> | undefined): ModelRequest => ({
-    messages,
+  // `extra` rides the request as untagged rows before the volatile tail (the coder's hand-off brief): never in the transcript.
+  const requestFor = (askedModel: string | undefined, ask: Partial<TurnAsk> | undefined, extra: RunMessage[] = []): ModelRequest => ({
+    messages: withVolatileTail(extra.length > 0 ? [...transcript, ...extra] : transcript, pack, brief ?? null, sections),
     ...(askedModel ? { model: askedModel, strict: ask?.strict ?? false } : {}),
     ...(tools.length > 0 ? { tools } : {}),
     ...(decision?.maxTokens !== undefined ? { maxTokens: decision.maxTokens } : {}),
     ...askFields(ask),
+    ...(made?.toolChoice && !ask?.toolChoice ? { toolChoice: made.toolChoice } : {}),
     ...(reasoning ? { reasoning } : {}),
   });
 
@@ -173,7 +189,7 @@ export async function completeTurn(
     if (isTransportFailure(err) && hooks.model.recoverFailure) {
       const route = hooks.model.recoverFailure(pctx, err.failure, err.failure.model ?? model, reason);
       if (route.kind === "retry") {
-        if (route.note) transcript.push({ role: "system", content: route.note });
+        if (route.note) appendRows(input, transcript, { role: "system", content: route.note });
         return { skip: true };
       }
       return { failed: `provider failed: ${reason}` };
@@ -188,6 +204,20 @@ export async function completeTurn(
       if (input.signal?.aborted) throw retryErr;
       if (isResumable(input, retryErr)) causes.set(state, retryErr);
       return { failed: retryErr instanceof Error ? retryErr.message : String(retryErr) };
+    }
+  }
+
+  // ANALYSIS -> CODE, at the exact turn it matters (`policy/model/reask.ts`): the planner's first code change is re-asked of the coder.
+  const reask = reaskAsCoder(state, input.policy, completion, { role: firstAsk.role, hasTools: tools.length > 0 });
+  if (reask) {
+    await emit(input.ports.events, { kind: "model.coder_reask", step: ctx.step, ...(completion.model ? { model: completion.model } : {}) });
+    asked = reask.ask.model;
+    try {
+      completion = await input.ports.model.complete(requestFor(reask.ask.model, reask.ask, [reask.brief]), input.signal);
+    } catch (err) {
+      if (input.signal?.aborted) throw err;
+      if (isResumable(input, err)) causes.set(state, err);
+      return { failed: err instanceof Error ? err.message : String(err) };
     }
   }
 
@@ -262,7 +292,7 @@ export async function synthesizeFinal(
   const raw = completion.content ?? "";
   const output = hooks.stall.settle ? hooks.stall.settle(pctx, raw) : raw.trim();
   if (!output) return null;
-  transcript.push(ask, { role: "assistant", content: output });
+  appendRows(input, transcript, ask, { role: "assistant", content: output });
   return output;
 }
 
@@ -293,7 +323,7 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
     state.model = reduceRunPolicy(state.model, { type: "hand_off" });
   }
   try {
-    const box: { control?: LoopDispatchResult["control"]; failed?: boolean } = {};
+    const box: { control?: LoopDispatchResult["control"]; failed?: boolean; kind?: "cached" | "neutral" } = {};
     const data = await runToolWithWatch(
       async (name, args, stepSignal) => {
         const run = stepSignal ?? signal;
@@ -307,6 +337,8 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
         if (platform && own) {
           const result = await platform.execute(name, args as Record<string, unknown>, { ...(run ? { signal: run } : {}), progress: { rungs: state.stall?.rungs ?? {} } });
           box.failed = result.isError === true;
+          if (result.cached) box.kind = "cached";
+          else if (result.neutral) box.kind = "neutral";
           return result.data;
         }
         const result = await registryOf(ports).dispatch(name, args as Record<string, unknown>, { caps: ports.capabilities, ...(run ? { signal: run } : {}) });
@@ -321,7 +353,9 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
     const capped = capToolResult(call.name, data, resultCapFor(call.name, ports.model, state.model.model));
     // A surface's own tool says for itself whether it failed; a registry tool says so with `ok: false`.
     const failed = box.failed === true || (!own && !!capped && (capped as { ok?: unknown }).ok === false);
-    return { data: capped, ...(box.control ? { control: box.control } : {}), ...(failed ? { isError: true } : {}) };
+    const dispatched: LoopDispatchResult = { data: capped, ...(box.control ? { control: box.control } : {}), ...(failed ? { isError: true } : {}) };
+    if (box.kind) callKinds.set(dispatched, box.kind);
+    return dispatched;
   } catch (err) {
     // A resumable interruption (a platform eviction) is not the tool's failure to hand the model: it ends this tick and the host re-arms.
     if (signal?.aborted || isResumable(input, err)) throw err;

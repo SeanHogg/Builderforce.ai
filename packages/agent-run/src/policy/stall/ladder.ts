@@ -85,18 +85,37 @@ function restatement(ctx: PolicyContext, rung: LadderRung, attempt: number): Run
   return rows;
 }
 
-/**
- * Walk the ledger's rungs for a turn that ended without a tool call. Returns what the
- * kernel should do about it, or nothing when every rung is cleared and the turn is the
- * answer.
- */
-export function walkLadder(ctx: PolicyContext, ledger: DeliveryLedger): StallDecision | undefined {
-  const turn = {
+/** The turn a ledger judges, as the stall hook's context describes it. */
+function deliveryTurn(ctx: PolicyContext) {
+  return {
     content: ctx.content ?? "",
     ...(ctx.served?.interruption ? { interruption: ctx.served.interruption } : {}),
     ...(ctx.served?.model ? { model: ctx.served.model } : {}),
   };
-  for (const rung of ledger.rungs(turn)) {
+}
+
+/**
+ * Walk the ledger's rungs for a turn that ended without a tool call. Returns what the
+ * kernel should do about it, or nothing when every rung is cleared and the turn is the
+ * answer. A ledger whose rungs come back as a promise is walked with {@link walkLadderAsync}.
+ */
+export function walkLadder(ctx: PolicyContext, ledger: DeliveryLedger): StallDecision | undefined {
+  const rungs = ledger.rungs(deliveryTurn(ctx));
+  if (isPromise(rungs)) throw new Error("This ledger answers its rungs with a promise: walk it with walkLadderAsync.");
+  return walkRungs(ctx, ledger, rungs);
+}
+
+/** {@link walkLadder} for a ledger that must ask something (a workspace's stop hook) before it can say which rungs hold. */
+export async function walkLadderAsync(ctx: PolicyContext, ledger: DeliveryLedger): Promise<StallDecision | undefined> {
+  return walkRungs(ctx, ledger, await ledger.rungs(deliveryTurn(ctx)));
+}
+
+function isPromise<T>(value: T | Promise<T>): value is Promise<T> {
+  return typeof (value as { then?: unknown } | null)?.then === "function";
+}
+
+function walkRungs(ctx: PolicyContext, ledger: DeliveryLedger, rungs: readonly LadderRung[]): StallDecision | undefined {
+  for (const rung of rungs) {
     rung.reached?.();
     if (!rung.applies) continue;
 
@@ -107,6 +126,8 @@ export function walkLadder(ctx: PolicyContext, ledger: DeliveryLedger): StallDec
       counters[rung.id] = used + 1;
       save(ctx.state, { rungs: counters, spent: 1 });
       rung.onRestate?.(used + 1);
+      // The review model takes the run from here (a no-op when it already has it).
+      if (rung.entersVerify && ctx.state.model.phase !== "verify") ctx.state.model = reduceRunPolicy(ctx.state.model, { type: "verify_started" });
       return { action: "steer", rows: restatement(ctx, rung, used + 1) };
     };
 

@@ -14,13 +14,14 @@
 
 import * as fs from "node:fs/promises";
 import type * as vscode from "vscode";
-import type { ServedRead } from "@seanhogg/builderforce-brain-embedded";
+import type { ContextPack, ServedRead } from "@seanhogg/builderforce-brain-embedded";
 import { extractSymbols, type RepoSymbolsCapability } from "@builderforce/agent-tools";
 import { recallProjectFacts } from "../bfApi";
 import { readChatState } from "./chatStateReads";
 import { readCheckoutState } from "./checkoutState";
 import { workspaceSymbolIndex } from "../workspaceSymbols";
 import { codemapFactsForRequest } from "./requestAreas";
+import { contractContextPack } from "./contractPack";
 import { withinMs } from "./withinMs";
 import { extractFocusPaths, isRelativePath, resolveUnderRoot, workspaceRelative } from "./focusPaths";
 import {
@@ -63,6 +64,8 @@ export interface ContextPackResult {
   dropped: string[];
   /** The focus files the block carries whole — recorded as the run's reads (E2 ↔ E1). */
   servedReads: ServedRead[];
+  /** The same parts in the one agent's `ContextPack` shape (`contractPack.ts`). */
+  structured: ContextPack;
 }
 
 /** One named file: whole when small, otherwise its outline. undefined = not a readable file. */
@@ -129,5 +132,5 @@ export async function buildContextPack(
     f.content !== undefined && rendered.inlined.includes(f.path) ? [{ path: f.path, content: f.content, totalLines: f.totalLines }] : []);
   // The relative code paths the focus files name (§6.10 recall query).
   const named = loaded.flatMap((f) => extractFocusPaths(f.text, MAX_HINT_NAMED_PATHS)).filter(isRelativePath).slice(0, MAX_HINT_NAMED_PATHS);
-  return { block: rendered.block, recallHint: contextPackRecallHint(parts, undefined, named), dropped: rendered.dropped, servedReads };
+  return { block: rendered.block, recallHint: contextPackRecallHint(parts, undefined, named), dropped: rendered.dropped, servedReads, structured: contractContextPack(parts) };
 }

@@ -30,7 +30,7 @@ import type {
 } from "@builderforce/agent-tools";
 import type { ModelFallbackSurface } from "@builderforce/agent-stall";
 import type { CostLeverId } from "@builderforce/cost-levers";
-import type { RunPolicyOptions } from "@builderforce/run-policy";
+import type { RunPolicyEvent, RunPolicyOptions, RunPolicyState } from "@builderforce/run-policy";
 import type { EntryPoint } from "@builderforce/learned-routing";
 import type { DeliveryLedger, PlatformTools, TurnInterruption } from "./surface.js";
 import type { RunEvent } from "./runEvents.js";
@@ -88,7 +88,14 @@ export interface RunPolicy {
     tokens?: number;
     /** Tokens held back for the reply when compaction sizes the transcript. Absent ⇒ the host-neutral floor (`compactionReserve`). A surface whose replies are bounded far below it says so here (≤ about a quarter of its smallest window). */
     reserveTokens?: number;
+    /** The run's spend cap in USD (priced turns only, `ModelUsage.pricedMc`): the model is told once at 80% to converge, and the run stops with a contained answer at the cap. Absent or 0 ⇒ no cap. */
+    usd?: number;
   };
+  /**
+   * The tools that CHANGE code. The first call to one in an analysis (`plan`) turn is re-asked of the coding model with a brief
+   * naming the change the planner was about to make, unless the model policy declines (a pin, a lock). Absent ⇒ no re-ask.
+   */
+  codeChangeTools?: readonly string[];
   pinnedModel?: string;
   inference: 'local-only' | 'hybrid' | 'specific';
   verify: 'declared-checks' | 'branch-ci' | 'none';
@@ -128,7 +135,16 @@ export interface RunMessage {
   toolCallId?: string;
   /** This row carries the TASK the run was given: compaction pins it, whatever else the transcript holds before it (a prior conversation). Absent ⇒ the first user row. */
   task?: true;
+  /**
+   * The row's non-text content (a picture the person attached), beside `content`, which stays the row's TEXT. The transport
+   * puts the parts on the wire; token counting reads `content` alone, as it always has, so a picture costs what the
+   * existing estimates say it does.
+   */
+  parts?: RunPart[];
 }
+
+/** One non-text part of a row. Plain data, so a saved transcript round-trips as JSON. */
+export type RunPart = { type: 'image'; url: string };
 
 /** What the agent asks the model for. The transport translates it to its own wire shape. */
 export interface ModelRequest {
@@ -167,6 +183,12 @@ export interface ModelUsage {
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;
+  /**
+   * What the turn is WORTH at the surface's own price book, in millicents (additive). Distinct from `costMc`, which is what the gateway BILLED:
+   * a surface that bills nothing per call but prices its spend (the editor's run cap) reports it here, and only the run's USD cap reads it.
+   * Absent ⇒ the turn has no known price.
+   */
+  pricedMc?: number;
 }
 
 /** What the model answered. */
@@ -243,6 +265,12 @@ export interface RunStore {
   /** The run-end write-back: the consolidated memory the run produced. */
   commitMemory?(consolidated: unknown): Promise<void> | void;
   /**
+   * A row joined the transcript, the moment it did (the model's answer, a tool result, a nudge, a steer). A surface whose
+   * conversation outlives the run keeps its own log from these: unlike the transcript, which compaction rewrites, the log is
+   * append-only. Rows the compaction wrote are not announced.
+   */
+  appended?(row: RunMessage): void;
+  /**
    * Whether an exception a port threw is a RESUMABLE interruption (a platform eviction the host re-arms the run after)
    * rather than the run's failure. Absent ⇒ never: the run fails terminal with its row, `run.finished` and code map. A
    * resumable one writes nothing terminal and the failed outcome carries it as `cause` for the host to re-throw.
@@ -281,6 +309,8 @@ export interface SteerInput {
   interrupt?: boolean;
   /** Attachments the message carried, as data. */
   attachments?: unknown;
+  /** The pictures the message carried, as the parts of the row it becomes. */
+  parts?: RunPart[];
 }
 
 /** What the user steered in since the last step. */
@@ -338,6 +368,28 @@ export interface RunPorts {
   delivery?: DeliveryLedger;       // what the task still owes when a turn ends in prose — the stall ladder's rungs
   extensions?: ToolExtension;      // tools the surface runs itself beside the registry's (the platform tools)
   tools?: readonly ToolDefinition[]; // registry tools only THIS entry point has (skill authoring, delegation)
+  spend?: SpendMeter;              // the run's spend, when a surface shares one across runs (a sub-agent accrues into its owner's cap); absent ⇒ the run keeps its own
+  attach?(run: RunView): void;     // called once, before turn 1: the live run a surface may read the model policy from
+}
+
+/** The run's spend, as the USD cap reads and feeds it (`RunPolicy.budgets.usd`). */
+export interface SpendMeter {
+  /** Millicents spent so far, across every run that shares the meter. */
+  spentMc(): number;
+  /** Calls that had no known price, so the spend is a floor. */
+  unpricedCalls(): number;
+  /** The tightest cap any run on the meter was started with, when one is tighter than this run's own. */
+  capMc?(): number | undefined;
+  /** One turn answered: its price, or undefined when it has none. */
+  add(pricedMc: number | undefined): void;
+}
+
+/** The live run, handed to the surface once (`RunPorts.attach`): the one place it reads the model policy and advances it. */
+export interface RunView {
+  /** The model hand-off policy's state as it stands NOW. */
+  policy(): RunPolicyState;
+  /** Report an event to the model hand-off policy; the new state is the run's. */
+  report(event: RunPolicyEvent): RunPolicyState;
 }
 
 // ── The context pack ──────────────────────────────────────────────────────────

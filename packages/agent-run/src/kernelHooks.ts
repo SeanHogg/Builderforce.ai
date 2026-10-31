@@ -11,9 +11,12 @@ import type { LoopControl, LoopDispatchResult, LoopHooks, ParsedToolCall } from 
 import { RUN_CANCELLED_REASON, type ModelUsage, type RunMessage, type RunState } from "./contract.js";
 import type { GuardControl, PolicyContext, PolicyHooks } from "./policy/index.js";
 import { isStopSteer, steerInput, steerSkip, type InterruptWatch } from "./policy/steering/index.js";
-import { applyCompaction, currentView, emit, policyContext, toPolicyCall, type RunAgentInput, type TurnFacts } from "./runContext.js";
+import { appendRows, applyCompaction, currentView, emit, policyContext, toPolicyCall, type RunAgentInput, type TurnFacts } from "./runContext.js";
 import { rememberWrite } from "./runState.js";
-import { ownsCall } from "./runTurn.js";
+import { callKinds, ownsCall, type TurnSelection } from "./runTurn.js";
+import { volatileTail } from "./policy/compaction/pack.js";
+import type { UsdBudget } from "./policy/budget/usd.js";
+import type { CacheServedStreak } from "./policy/tools/cacheServedStreak.js";
 import { lastFinishReason } from "./policy/finish/index.js";
 import { tallyCall, tallyTurn, tallyVerify, type RunTally } from "./telemetry/runTally.js";
 import type { ToolSchema } from "@builderforce/agent-tools";
@@ -39,7 +42,11 @@ export interface KernelRun {
   /** How the turn that just ended was served, for the hooks and dispatch that follow it. */
   facts: TurnFacts;
   /** The tools policy's selection for THIS step, made once in `beforeTurn` and reused by the request. */
-  selection?: { tools: readonly ToolSchema[] | void };
+  selection?: TurnSelection;
+  /** The calls in a row the read cache answered (the no-progress breaker's count). */
+  cache: CacheServedStreak;
+  /** The run's hold on its USD cap (`RunPolicy.budgets.usd`); absent when the run has none. */
+  budget?: UsdBudget;
 }
 
 /** A guard's control as the kernel's control: the options ride along for the ask hook. */
@@ -64,6 +71,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
   const { ports, policy } = input;
 
   const contextAt = (step: number, turn: number): PolicyContext => policyContext(input, state, currentView(transcript, offered), step, turn);
+  const append = (...rows: RunMessage[]): void => appendRows(input, transcript, ...rows);
 
   /**
    * Send a turn back instead of accepting it: what the model said stays in the
@@ -71,8 +79,8 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
    * two user rows in a row with the model's words lost.
    */
   const requeue = (said: string, note: string): void => {
-    if (said.trim()) transcript.push({ role: "assistant", content: said });
-    transcript.push({ role: "user", content: note });
+    if (said.trim()) append({ role: "assistant", content: said });
+    append({ role: "user", content: note });
   };
 
   /** The verify a finish waits on (`RunPolicy.verify`): a failing verdict refuses it. */
@@ -107,7 +115,8 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
     }
     const injected = await hooks.steering.inject(contextAt(ctx.step, ctx.stepInCall), texts);
     const rows = injected ?? texts.map((text): RunMessage => ({ role: "user", content: text }));
-    for (const row of rows) transcript.push(row);
+    // A picture the person attached rides the row it becomes (rows and messages line up one to one).
+    append(...rows.map((row, i) => (rows.length === steered.length && steered[i]?.parts?.length && !row.parts ? { ...row, parts: steered[i]!.parts } : row)));
     for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
     return "applied";
   };
@@ -136,6 +145,19 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
 
   return {
     beforeTurn: async (ctx) => {
+      // The run's USD cap is held first: at the cap the run stops with a contained answer before any other work of the step;
+      // at 80% the model is told once to converge, in the volatile tail's own tagged row.
+      const verdict = run.budget?.beforeTurn();
+      if (verdict?.kind === "contain") {
+        append({ role: "assistant", content: verdict.text });
+        await emit(ports.events, { kind: "budget.contained", step: ctx.step, spentMc: verdict.spentMc, capMc: verdict.capMc, unpricedCalls: verdict.unpricedCalls, text: verdict.text });
+        return { action: "stop", ok: true, finished: true, output: verdict.text };
+      }
+      if (verdict?.kind === "warn") {
+        const tail = volatileTail([verdict.text]);
+        if (tail) append({ role: tail.role as RunMessage["role"], content: String(tail.content) });
+        await emit(ports.events, { kind: "budget.warning", step: ctx.step, spentMc: verdict.spentMc, capMc: verdict.capMc, unpricedCalls: verdict.unpricedCalls, text: verdict.text });
+      }
       // Steering is drained BEFORE the model is asked, so a message typed mid-run reaches
       // the next call rather than the one after it.
       if ((await takeSteers(ctx)) === "stop") return { action: "stop", ok: false, output: RUN_CANCELLED_REASON, finished: true };
@@ -143,8 +165,20 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       // Compaction charges the schemas the model will be SHOWN, not every tool the surface
       // could run: a board with hundreds of tools advertises a fixed, ranked set.
       const base = currentView(transcript, offered);
-      const advertised = await hooks.tools.select(policyContext(input, state, base, ctx.step, ctx.stepInCall), offered);
-      run.selection = { tools: advertised };
+      const selectNow = async (): Promise<readonly ToolSchema[] | void> => hooks.tools.select(policyContext(input, state, base, ctx.step, ctx.stepInCall), offered);
+      // The surface may shape the turn (force it, add to the menu); it is asked once per step, and the policy's selection is its input.
+      const menu = await ports.platform?.turn?.({
+        step: ctx.step,
+        select: async () => (await selectNow()) ?? offered,
+        progress: { rungs: state.stall?.rungs ?? {} },
+        cache: run.cache,
+      });
+      const advertised = menu?.tools ?? (await selectNow());
+      run.selection = {
+        tools: advertised,
+        ...(menu?.toolChoice ? { toolChoice: menu.toolChoice } : {}),
+        ...(menu?.tail && menu.tail.length > 0 ? { tail: menu.tail } : {}),
+      };
       const view = advertised ? { ...base, tools: [...advertised] } : base;
       const compacted = await hooks.compaction.compact(policyContext(input, state, view, ctx.step, ctx.stepInCall));
       if (compacted) {
@@ -155,6 +189,8 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
           ...(compacted.afterTokens !== undefined ? { afterTokens: compacted.afterTokens } : {}),
           ...(compacted.summarized !== undefined ? { summarized: compacted.summarized } : {}),
           ...(compacted.masked ? { masked: compacted.masked } : {}),
+          ...(compacted.note ? { note: compacted.note } : {}),
+          ...(compacted.covered !== undefined ? { covered: compacted.covered } : {}),
         });
       }
 
@@ -175,6 +211,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       run.facts.model = meta?.model;
       run.facts.interruption = meta?.interrupted;
       tallyTurn(tally, model, usage);
+      if (run.budget?.afterTurn(usage)) await emit(ports.events, { kind: "budget.unpriced", step: ctx.step, ...(model ? { model } : {}) });
       await emit(ports.events, { kind: "model.completed", step: ctx.step, ...(model ? { model } : {}), ...(usage ? { usage } : {}) });
     },
 
@@ -190,7 +227,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         requeue(turn.content, children);
         return { action: "continue" };
       }
-      const stalled = await hooks.stall.recover(pctx);
+      const stalled = await (hooks.stall.recoverAsync ? hooks.stall.recoverAsync(pctx) : hooks.stall.recover(pctx));
       if (stalled) await emit(ports.events, { kind: "stall.recovered", step: ctx.step, action: stalled.action, ...(stalled.note ? { note: stalled.note } : {}), ...(stalled.detail ? { detail: stalled.detail } : {}) });
       if (stalled && stalled.action === "pause") {
         const notice = stalled.note ?? "paused";
@@ -205,11 +242,11 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       if (stalled && stalled.action === "settle") {
         // The ladder ended the run on an answer of its own (a shortfall, a build never written).
         const answer = stalled.note ?? "";
-        if (answer.trim()) transcript.push({ role: "assistant", content: answer });
+        if (answer.trim()) append({ role: "assistant", content: answer });
         return { action: "finish", output: answer };
       }
       if (stalled) {
-        if (stalled.rows) transcript.push(...stalled.rows);
+        if (stalled.rows) append(...stalled.rows);
         else requeue(turn.content, stalled.note ?? "Continue: do the work, do not describe it.");
         return { action: "continue" };
       }
@@ -223,7 +260,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         return { action: "continue" };
       }
       const output = hooks.stall.settle ? hooks.stall.settle(pctx, turn.content) : turn.content;
-      if (output.trim()) transcript.push({ role: "assistant", content: output });
+      if (output.trim()) append({ role: "assistant", content: output });
       // A message steered in while this last turn was in flight is never lost (§6.3): the
       // run takes one more turn for it instead of finishing past it.
       const late = await takeSteers(ctx);
@@ -276,6 +313,8 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       if (covered) {
         const stub: LoopDispatchResult = { data: covered.data };
         stubs.add(stub);
+        // The run asked for what it already holds: the cache answered, and a run that does little else is circling.
+        run.cache.served(ctx.step);
         return { result: stub };
       }
       return undefined;
@@ -316,6 +355,12 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
 
     afterDispatch: async (call, result, message, ctx) => {
       const stub = stubs.has(result) || held.has(result);
+      // What the call was, for the no-progress count: a surface's cached or conversational answer is not a run of the host.
+      const kind = callKinds.get(result);
+      if (!stub) {
+        if (kind === "cached") run.cache.served(ctx.step);
+        else if (kind !== "neutral") run.cache.ran();
+      }
       const ok = !result.isError && !(result.data && typeof result.data === "object" && (result.data as { ok?: unknown }).ok === false);
       if (!stub) {
         // The trace and the tally take the same verdict, so the outcome row and the
@@ -362,7 +407,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       if (run.facts.refused) {
         run.facts.refused = false;
         const directive = ports.platform?.malformed?.roundDirective(run.facts.interruption === "truncated");
-        if (directive) transcript.push({ role: "system", content: directive });
+        if (directive) append({ role: "system", content: directive });
       }
       await emit(ports.events, { kind: "turn.finished", step: ctx.step });
       return undefined;

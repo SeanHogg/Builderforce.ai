@@ -91,6 +91,27 @@ export function toPolicyCall(call: ParsedToolCall): PolicyToolCall {
   return { id: call.id, name: call.name, args: call.args };
 }
 
+/**
+ * Add rows to the transcript the kernel drives, and tell the store they joined (`RunStore.appended`): the ONE way a row
+ * enters it after the run opens, so a surface keeping an append-only log of the conversation sees every one.
+ */
+export function appendRows(input: RunAgentInput, transcript: RunMessage[], ...rows: RunMessage[]): void {
+  for (const row of rows) {
+    transcript.push(row);
+    announceRow(input, row);
+  }
+}
+
+/** Tell the store a row joined the transcript (the kernel pushes its own rows; the codec announces them). Returns the row. */
+export function announceRow(input: RunAgentInput, row: RunMessage): RunMessage {
+  try {
+    input.ports.store.appended?.(row);
+  } catch {
+    // The log is the surface's; a store that cannot keep it must not sink the run.
+  }
+  return row;
+}
+
 /** Emit one trace event. A sink that throws must not sink the run. */
 export async function emit(events: EventSink, event: RunEvent, meta?: { durationMs?: number }): Promise<void> {
   try {

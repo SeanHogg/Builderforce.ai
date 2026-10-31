@@ -11,6 +11,7 @@ import type { CoveredRead, ProgressDetectorState, ReadsWithoutSpawnState } from 
 import type { ContextPack } from "./contract.js";
 import type { FinishGateState } from "./policy/finish/gates.js";
 import type { TaskState } from "./policy/tools/taskState.js";
+import type { ServedStreakState } from "./policy/tools/cacheServedStreak.js";
 import type { RunTally } from "./telemetry/runTally.js";
 
 /**
@@ -77,6 +78,7 @@ export interface ReadCoverageState {
   /** Read calls made while no spawn had been attempted — the delegation nudge's counter. */
   readsWithoutSpawn: ReadsWithoutSpawnState;
   stubCount?: number;  // reads answered from coverage (a stub or a replay), never dispatched — §8.2 coveredReadStubs
+  servedStreak?: ServedStreakState;  // the no-progress breaker's count: consecutive calls the cache answered (`policy/tools/cacheServedStreak`)
 }
 
 /**

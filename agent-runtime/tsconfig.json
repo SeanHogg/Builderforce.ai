@@ -58,6 +58,7 @@
       // agent-tools (a declared dependency there), so the types resolve from it.
       "web-tree-sitter": ["../packages/agent-tools/node_modules/web-tree-sitter/tree-sitter-web.d.ts"],
       "@builderforce/run-policy": ["../packages/run-policy/src/index.ts"],
+      "@builderforce/spend-contract": ["../packages/spend-contract/src/index.ts"],
       "@builderforce/run-context": ["../packages/run-context/src/index.ts"],
       "@builderforce/run-guards": ["../packages/run-guards/src/index.ts"],
       "@builderforce/cost-levers": ["../packages/cost-levers/src/index.ts"],
