@@ -20,11 +20,10 @@
  *                  is still queued when the run settles goes back to the host as a late steer;
  *   context      — the host's pack (empty when it builds none).
  *
- * Only the relay's ticket path calls {@link runOnPremAgent} today. Channels, cron and the
- * CLI still run on the embedded runner's native loop (`builderforce/agent-loop/agent-loop.ts`,
- * which keeps its place on the `check:one-execution` baseline) until the contract carries
- * what that loop needs (native message blocks, provider-contributed tools, a model-fallback
- * port); they are NOT routed through this adapter.
+ * Only the relay's ticket path calls {@link runOnPremAgent}. Channels, cron and the CLI
+ * run on the same agent through `channelAdapter.ts` (their own ports: the embedded runner's
+ * provider stream and tools, over the contract's native message blocks, closed tool catalog
+ * and host-chosen failover); neither adapter has a loop or any policy.
  */
 
 import { randomUUID } from "node:crypto";
