@@ -8,7 +8,7 @@
 import { SKILL_TOOLS, SUBAGENT_TOOLS, buildCoreToolRegistry, type ToolRegistry, type ToolSchema } from "@builderforce/agent-tools";
 import { malformedCallOutcome, type LoopDispatchResult, type LoopTurnResult, type ParsedToolCall, type TurnContext } from "@builderforce/agent-loop";
 import { reduceRunPolicy } from "@builderforce/run-policy";
-import { ModelTransportError, type ContextPack, type ModelCompletion, type ModelRequest, type RunMessage, type RunPorts, type RunState } from "./contract.js";
+import { ModelTransportError, type ContextPack, type RunPolicy, type ModelCompletion, type ModelRequest, type RunMessage, type RunPorts, type RunState } from "./contract.js";
 import { nativeResults, type NativeResult } from "./runRows.js";
 import { isTransportFailure } from "./surface.js";
 import type { PolicyHooks } from "./policy/index.js";
@@ -97,7 +97,10 @@ export function offeredSchemas(ports: RunPorts): ToolSchema[] {
  * auto label, not a model) and under a strict pin, which the policy keeps. The ONE write of
  * the served model, for the turn and for the closing synthesis alike.
  */
-function adoptServedModel(state: RunState, served: string | undefined): void {
+function adoptServedModel(policy: RunPolicy, state: RunState, served: string | undefined): void {
+  // A plain model policy (`RunPolicy.modelStart.plain`: the Brain's) holds no model of its own between turns, as its own loop never
+  // did: a held model would also close the analysis -> code re-ask, which only a run holding none earns.
+  if (policy.modelStart?.plain) return;
   if (served && served !== "default" && !state.model.strictPin) state.model = { ...state.model, model: served };
 }
 
@@ -226,7 +229,7 @@ export async function completeTurn(
   // proven when it acted - the hand-off a later stall or failure draws on; the served model is
   // then the run's current one.
   turnSucceeded(state, { acted: (completion.toolCalls ?? []).length > 0, ...(completion.model ? { model: completion.model } : {}) });
-  adoptServedModel(state, completion.model);
+  adoptServedModel(input.policy, state, completion.model);
   // A turn answered by another model than it asked for — or an auto-routed turn that
   // landed on a degraded one — is said, never silent (E7).
   const downgrade = hooks.model.downgrade?.(pctx, asked, completion.model);
@@ -281,7 +284,7 @@ export async function synthesizeFinal(
     if (isResumable(input, err)) throw err;
     return null;
   }
-  adoptServedModel(state, completion.model);
+  adoptServedModel(input.policy, state, completion.model);
   tallyTurn(tally, completion.model, completion.usage);
   await emit(input.ports.events, {
     kind: "model.completed",

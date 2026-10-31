@@ -10,6 +10,7 @@ import type { RunLoopContext } from '../runStore/runLoopContext';
 import { pipelinePolicyOptions } from '../runStore/pipelineRoute';
 import { brainDeliveryLedger } from './brainDelivery';
 import { brainPlatformTools } from './brainPlatformTools';
+import { loopFoldReaction } from './loopFold';
 import { loopRunStore } from './loopStore';
 import { loopSteeringSource } from './loopSteering';
 import { settleBrainRun } from './loopSettle';
@@ -33,7 +34,7 @@ export async function runPrepared(run: RunLoopContext): Promise<void> {
     turn: observer,
     platform: platform.tools,
     delivery: brainDeliveryLedger(run, last),
-    events: brainEventSink(c, req.reportRunRow, { coderReask: (e) => retractLastTurn(run, last, e.step, e.model) }),
+    events: brainEventSink(c, req.reportRunRow, { coderReask: (e) => retractLastTurn(run, last, e.step, e.model), compacted: loopFoldReaction(run), recorded: new Set(['llm.model_downgrade'] as const) }),
     start: pipelinePolicyOptions(req, run.pipeline),
     // From here the model policy is the AGENT's: the Brain's guards read `run.policy` and report to it through the view.
     attach: (view) => {

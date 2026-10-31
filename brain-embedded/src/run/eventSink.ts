@@ -54,6 +54,10 @@ export function traceStepFor(event: RunEvent, ts: string): BrainTraceEvent | nul
 /** What a surface does on an event beyond rendering it: the coder re-ask discards the turn it replaces (`loopTurn.ts`). */
 export interface SinkReactions {
   coderReask?: (event: Extract<RunEvent, { kind: 'model.coder_reask' }>) => void;
+  /** The agent folded its transcript: the cell learns it too and the fold is made durable (`loopFold.ts`). */
+  compacted?: (event: Extract<RunEvent, { kind: 'context.compacted' }>) => void;
+  /** Events the surface already records itself (the Brain's turn recorder writes the model downgrade): not rendered a second time. */
+  recorded?: ReadonlySet<RunEvent['kind']>;
 }
 
 /** Where the run's outcome row goes — the host's usage ledger / learned-routing report. */
@@ -66,7 +70,9 @@ export type OutcomeReport = (row: RunOutcomeRow) => Promise<unknown> | void;
 export function brainEventSink(c: RunCell, outcome?: OutcomeReport, on: SinkReactions = {}): EventSink {
   return {
     emit(event: RunEvent): void {
+      if (on.recorded?.has(event.kind)) return;
       if (event.kind === 'model.coder_reask' && on.coderReask) return on.coderReask(event);
+      if (event.kind === 'context.compacted' && on.compacted) return on.compacted(event);
       const step = traceStepFor(event, nowIso());
       if (step) {
         pushTrace(c, step);

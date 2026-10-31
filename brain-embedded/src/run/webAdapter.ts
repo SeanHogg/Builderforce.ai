@@ -104,7 +104,9 @@ export function buildBrainRunPorts(b: BrainRunBinding): RunPorts {
         ...(req.reasoning ? { reasoning: req.reasoning } : {}),
         ...b.call,
       },
-      ...(req.windowSources ? { windows: req.windowSources } : {}),
+      // A surface with its own turn fit (`b.turn`) packs the request for the serving model's window itself (`windowFit.prepare`, its
+      // `llm.handoff` step); the agent's compaction would otherwise fold the same history first, on the same window.
+      ...(req.windowSources && !b.turn ? { windows: req.windowSources } : {}),
       ...(req.modelPreflight ? { preflight: req.modelPreflight } : {}),
     }),
     capabilities: b.capabilities,
