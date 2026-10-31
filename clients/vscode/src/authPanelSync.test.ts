@@ -109,7 +109,7 @@ describe("post-login auth surface sync", () => {
   });
 
   it("treats a refused editor key as signed out, not a dead signed-in session", () => {
-    const api = src("bfApi.ts");
+    const api = src("bfApi/session.ts");
     const guard = src("editorKeyGuard.ts");
     // 401/400 is a verdict on the KEY and is announced; other failures are not.
     expect(api).toMatch(/res\.status === 401 \|\| res\.status === 400/);

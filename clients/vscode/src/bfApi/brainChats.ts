@@ -1,6 +1,6 @@
 import type * as vscode from "vscode";
 import type { SpendSavingsSummary } from "@seanhogg/builderforce-brain-embedded";
-import { authed } from "./transport";
+import { authed, authedRaw } from "./transport";
 
 /** A server-side Brain conversation (GET /api/brain/chats). The SAME unified chat
  *  store the web app and the in-editor Brain webview share. */
@@ -101,4 +101,32 @@ export async function renameBrainChat(
 /** Delete a Brain conversation (DELETE /api/brain/chats/:id). */
 export async function deleteBrainChat(secrets: vscode.SecretStorage, id: number): Promise<void> {
   await authed(secrets, `/api/brain/chats/${id}`, { method: "DELETE" });
+}
+
+/**
+ * Adopt a project onto a Brain chat (PATCH /api/brain/chats/:id) — used by the native
+ * participant's self-heal (`nativeChatProject.ts`): when the chat it runs on has no
+ * project but the IDE has one SELECTED, bind it so the NEXT turn trains that project's
+ * Evermind (parity with the webview's adopt-on-open — see `adoptedProjectRef` in
+ * `webview/src/chat/useChatMemory.ts`). Both are gated on the IDE having a project
+ * SELECTED: with no selection there is nothing to adopt and the chat stays global by
+ * design.
+ *
+ * Never throws; answers whether the server took the bind, so the caller can release its
+ * one-shot guard on a failure and retry on a later turn.
+ */
+export async function updateBrainChatProject(
+  secrets: vscode.SecretStorage,
+  chatId: number,
+  projectId: number,
+): Promise<boolean> {
+  try {
+    const r = await authedRaw(secrets, `/api/brain/chats/${chatId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ projectId }),
+    });
+    return r.status >= 200 && r.status < 300;
+  } catch {
+    return false; // signed out or unreachable — the chat stays unscoped until next time
+  }
 }

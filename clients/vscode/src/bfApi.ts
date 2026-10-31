@@ -71,6 +71,7 @@ export {
   listAgentPool,
   listBrainChats,
   renameBrainChat,
+  updateBrainChatProject,
 } from "./bfApi/brainChats";
 export type { BfBrainChat } from "./bfApi/brainChats";
 // Side effect only: registers the "brain-turns" durable outbox with the dead-letter queue.

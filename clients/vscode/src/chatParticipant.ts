@@ -9,7 +9,8 @@ import { resolveModelRoute, routeNeedsLocalModel, routeNeedsSpecificModel, route
 import { streamNoLocalModel } from "./noLocalModelPrompt";
 import { OWNER_NAME, type BrainRunHost } from "./brainRunHost";
 import { permissionMode as resolvePermissionMode } from "./permissionMode";
-import { getCurrentUserId, fetchRunContextSection, projectEvermindHooks } from "./bfApi";
+import { getCurrentUserId, fetchRunContextSection, projectEvermindHooks, updateBrainChatProject } from "./bfApi";
+import { createNativeProjectAdopter } from "./nativeChatProject";
 import { localBrainApplication } from "./localFirstStore";
 import { formatChatErrorVerdict } from "./upgradeAction";
 import { getGroundingWithHistory } from "./grounding";
@@ -47,6 +48,7 @@ const ALREADY_RUNNING = (): string =>
  * with this turn as its owner (`childRunHost.ts`) — there is no second child loop here.
  */
 export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?: BrainRunHost): vscode.ChatRequestHandler {
+  const adoptSelectedProject = createNativeProjectAdopter();
   return async (request, context, stream, token) => {
     const key = await ctx.secrets.get(SECRET_KEY);
     // Resolve per turn so an explicit pick, the active project's Evermind, or the
@@ -121,6 +123,15 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
       local.identity.bind(brainChatId).catch(() => undefined),
       local.identity.clientIdFor(brainChatId),
     ]);
+    // A chat with no project trains no Evermind: bind the IDE's selected project onto it
+    // (once per chat, best-effort) so the NEXT turn does. No selection leaves it global.
+    await adoptSelectedProject({
+      persistence: localPersistence,
+      bindServerProject: (id, projectId) => updateBrainChatProject(ctx.secrets, id, projectId),
+      chatId: brainChatId,
+      serverChatId,
+      projectId: activeProject?.id,
+    }).catch(() => undefined);
     const platformContext = selectedProject
       ? await fetchRunContextSection(ctx.secrets, selectedProject.id, {
           ...(serverChatId != null ? { scope: `chat:${serverChatId}` } : {}),
