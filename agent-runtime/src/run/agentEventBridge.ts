@@ -48,6 +48,10 @@ export class AgentEventBridge {
   private readonly started = new Set<string>();
   private readonly ended = new Set<string>();
   private turnOpen = false;
+  /** The run's last message is an errored or aborted turn. */
+  private terminal = false;
+  /** The agent ended the run by its own policy (a stall with nothing left to try): the conversation says why, and it is not a failed turn. */
+  private settledByPolicy = false;
   private lastAssistant: AssistantMessage | undefined;
   private turnResults: ToolResultMessage[] = [];
 
@@ -80,7 +84,10 @@ export class AgentEventBridge {
   modelEnd(message: AssistantMessage): void {
     this.lastAssistant = message;
     this.stream.push({ type: "message_end", message });
-    if (message.stopReason === "error" || message.stopReason === "aborted") this.record.push(message);
+    if (message.stopReason === "error" || message.stopReason === "aborted") {
+      this.terminal = true;
+      this.record.push(message);
+    }
   }
 
   // ── the tool port ───────────────────────────────────────────────────────────
@@ -124,6 +131,7 @@ export class AgentEventBridge {
         break;
       case "stall.recovered":
         if (event.action === "escalate") this.swapped(event.detail);
+        if (event.action === "pause" || event.action === "fail") this.settledByPolicy = true;
         break;
       default:
         break;
@@ -158,6 +166,31 @@ export class AgentEventBridge {
   };
 
   // ── the end ─────────────────────────────────────────────────────────────────
+
+  /**
+   * The run failed with no model turn behind the failure (the provider stream threw, the context transform threw, the run was
+   * stopped between turns): the failure is told as the errored (or aborted) assistant message the runner reads at the end of a
+   * run. A failure that already ended on one, or that the agent ended by its own policy, adds nothing.
+   */
+  fail(reason: string, stopReason: "error" | "aborted"): void {
+    if (this.terminal || this.settledByPolicy) return;
+    const model = this.options.activeModel();
+    const message: AssistantMessage = {
+      role: "assistant",
+      content: [],
+      api: model.api,
+      provider: model.provider,
+      model: model.id,
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      stopReason,
+      errorMessage: reason,
+      timestamp: Date.now(),
+    };
+    this.terminal = true;
+    this.record.push(message);
+    this.stream.push({ type: "message_start", message });
+    this.stream.push({ type: "message_end", message });
+  }
 
   /** The messages of the run, in order. */
   messages(): AgentMessage[] {

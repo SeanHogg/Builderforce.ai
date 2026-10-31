@@ -45,7 +45,13 @@ function initialModelState(policy: RunPolicy): RunPolicyState {
   const model = start.model ?? policy.pinnedModel ?? "";
   if (start.plain) {
     const verify = start.phaseModels?.verify;
-    return initialRunPolicy({ pinnedModel: model, ...(policy.modelOptions ?? {}), ...(verify ? { phaseModels: { verify }, reviewModel: verify } : {}) });
+    return initialRunPolicy({
+      pinnedModel: model,
+      ...(start.strict ? { strictPin: true } : {}),
+      ...(start.startPhase ? { startPhase: start.startPhase } : {}),
+      ...(policy.modelOptions ?? {}),
+      ...(start.phaseModels ? { phaseModels: start.phaseModels, ...(verify ? { reviewModel: verify } : {}) } : {}),
+    });
   }
   return initialModelRunState({
     pick: { model, strict: start.strict ?? false },

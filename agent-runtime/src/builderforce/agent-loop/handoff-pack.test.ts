@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentMessage } from "../model/agent-types.js";
 import type { AssistantMessage, Model, ToolResultMessage } from "../model/types.js";
-import { packContextForModel } from "./handoff-pack.js";
+import { packContextForModel } from "../../run/channelHandoff.js";
 
 const model = (id: string, contextWindow: number): Model =>
   ({ id, provider: "ollama", contextWindow, maxTokens: 1_024 }) as unknown as Model;

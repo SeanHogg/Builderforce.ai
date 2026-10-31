@@ -9,6 +9,7 @@
  */
 
 import type { AgentEvent, AgentMessage, AgentTool, ThinkingLevel } from "../model/agent-types.js";
+import type { PolicyGate } from "@builderforce/agent-tools";
 import type { ImageContent, Message, Model } from "../model/types.js";
 import { Agent } from "./agent.js";
 import { type CompactionResult, estimateTokens, generateSummary } from "./compaction.js";
@@ -43,6 +44,8 @@ export interface CreateAgentSessionOptions {
   /** Notified when the session swaps models mid-run (the agent's own `state.model` is
    *  updated for you; this is the seam for logging/telemetry). */
   onModelFallback?: (from: Model, to: Model, notice: string) => void;
+  /** Compiled governance gates the session's runs are held to (see {@link AgentLoopConfig.policyGates}). */
+  policyGates?: readonly PolicyGate[];
   /** Default stream fn; the embedded runner overrides `session.agent.streamFn` per route. */
   streamFn?: StreamFn;
   /** Accepted for call-site compatibility with pi's `createAgentSession`, but unused —
@@ -83,6 +86,7 @@ export class AgentSession {
       getApiKey: opts.getApiKey,
       ...(opts.pickFallbackModel ? { pickFallbackModel: opts.pickFallbackModel } : {}),
       ...(opts.onModelFallback ? { onModelFallback: opts.onModelFallback } : {}),
+      ...(opts.policyGates?.length ? { policyGates: opts.policyGates } : {}),
     });
     this.agent.sessionId = this.sessionManager.getSessionId();
     if (opts.streamFn) this.agent.streamFn = opts.streamFn;

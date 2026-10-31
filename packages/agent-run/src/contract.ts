@@ -115,11 +115,13 @@ export interface RunPolicy {
    */
   stallExhausted?: "finish" | "fail" | "note";
   modelStart?: {
-    strict?: boolean; delegatedRole?: string; phaseModels?: { verify?: string };
+    strict?: boolean; delegatedRole?: string; phaseModels?: RunPolicyOptions["phaseModels"];
     /** The run-start model when it is a soft seed rather than `pinnedModel`. */
     model?: string;
     /** Start the hand-off as the plain policy (no lock after first success, no releasable pin) — an addressed reply's. */
     plain?: boolean;
+    /** The phase a PLAIN start begins in: a delegated slice or a quick run starts coding, everything else plans. Absent ⇒ the policy's own. */
+    startPhase?: RunPolicyOptions["startPhase"];
   };
 }
 

@@ -112,6 +112,8 @@ export {
 export { openingRows } from "./turnContext.js";
 export { RUN_CANCELLED_NOTICE } from "./policy/steering/index.js";
 export { createCompactionHook, type CompactionHookOptions } from "./policy/compaction/index.js";
+export { compactionReserve } from "./policy/compaction/reserve.js";
+export { packForModelHandoff, type HandoffAccessor, type ModelHandoffInput, type ModelHandoffResult } from "./policy/compaction/handoff.js";
 // The compaction primitives a surface sizes its own budgets with (the cost-loop session, the gateway summarizer).
 export {
   OBSERVATION_MASK_TURNS,

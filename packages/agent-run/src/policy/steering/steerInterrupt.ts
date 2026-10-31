@@ -111,8 +111,10 @@ export async function runToolWithWatch(
   runSignal: AbortSignal | undefined,
   name: string,
   args: unknown,
+  /** The surface's own foreground commands (`PlatformTools.interruptible`), beside the shared registry's. */
+  surfaceInterruptible?: (name: string, args: Record<string, unknown>) => boolean,
 ): Promise<unknown> {
-  if (!isInterruptibleCall(name, args)) return runTool(name, args);
+  if (!isInterruptibleCall(name, args) && !surfaceInterruptible?.(name, argsOf(args))) return runTool(name, args);
   // The person's message is already waiting: the command it would interrupt never starts.
   if (watch.hasInterrupt()) return interruptedResult(undefined);
   const wait = isWaitCall(name, argsOf(args));

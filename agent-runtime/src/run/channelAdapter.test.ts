@@ -101,7 +101,7 @@ describe("the channel entry point — conformance", () => {
         events: { emit: () => undefined },
         human: { ask: async () => ({ kind: "paused" }) },
         context: { pack: () => ({ focus: [], facts: [], recall: [] }) },
-        platform: channelTools({ tools: [echo], bridge, query: "go" }),
+        platform: channelTools({ tools: [echo], bridge, query: "go", window: () => 100_000 }),
       },
     });
 

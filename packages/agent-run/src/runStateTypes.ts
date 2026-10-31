@@ -109,6 +109,7 @@ export interface RunState {
   reads: ReadCoverageState;        // the windows the model was SERVED (post-trim), plus the read-without-spawn count
   context?: ContextPack;           // the pack built once before turn 1 (§6.10); a resumed tick renders the same turn-context tail from it
   stall?: StallState;              // WS2b: the re-prompt budget, keyed by model
+  preparedFor?: string;            // WS2a: the model the last turn's context was prepared for - a change of model is a hand-off
   preflight?: string;              // WS2g: the model preflight's verdict — ok | refreshed | degraded:<reason> (§8.2 modelPreflight)
   downgrades?: string[];           // WS2g: auto-routed models already ANNOUNCED by llm.model_downgrade (once per served model) - the announcement dedupe, not the row's fact
   degradedBy?: string[];           // the served models that were WEAKER than the run asked for (a failover from a requested model onto a worse tier; an auto-routed turn asked for nothing): what makes the row `degraded`

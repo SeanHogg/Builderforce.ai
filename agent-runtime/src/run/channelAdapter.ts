@@ -18,7 +18,7 @@
  * `agent-loop.ts`'s `agentLoop` always returned, so the Agent, the session and the runner are unchanged.
  */
 
-import { asksForSubagents, runAgent } from "@builderforce/agent-run";
+import { RUN_CANCELLED_REASON, asksForSubagents, compactionReserve, runAgent } from "@builderforce/agent-run";
 import type { ContextSource, RunPolicy, RunPorts, RunTask, SteeringSource, SteerInput } from "@builderforce/agent-run";
 import { RunKnowledgeRecorder, type CapabilityProvider } from "@builderforce/agent-tools";
 import { randomUUID } from "node:crypto";
@@ -28,6 +28,9 @@ import { promptText, runPrefetchPreamble, type PrefetchPreamble } from "../build
 import { modelRef } from "../builderforce/agent-loop/stall-recovery.js";
 import type { StreamFn } from "../builderforce/agent-loop/stream.js";
 import type { AgentContext, AgentEvent, AgentMessage } from "../builderforce/model/agent-types.js";
+import { resolveContextWindowTokens } from "../agents/context-window.js";
+import { requestHumanInput } from "../infra/approval-gate.js";
+import { onDeviceCostLeverOn } from "../infra/cost-levers.js";
 import { logWarn } from "../logger.js";
 import { AgentEventBridge } from "./agentEventBridge.js";
 import { textOf, toRunRow } from "./channelMessages.js";
@@ -58,8 +61,10 @@ function policyOf(config: AgentLoopConfig, request: string): RunPolicy {
     entryPoint: "on-prem",
     toolScope: "chat-work",
     role: "code",
-    levers: [],
-    budgets: {},
+    // Cost lever C9 (compaction under a long-context price tier) is read the on-device way: a partial rollout buckets by install.
+    levers: onDeviceCostLeverOn("c9_price_tier_budget") ? ["c9_price_tier_budget"] : [],
+    // The history is cut at the model's WINDOW, not the cloud's cost cap, and the reply reserve is on-prem's (its floor, or the turn's max_tokens).
+    budgets: { tokens: resolveContextWindowTokens(config.model), reserveTokens: compactionReserve(config.maxTokens) },
     pinnedModel: modelRef(config.model),
     inference: "hybrid",
     verify: "none",
@@ -76,6 +81,7 @@ function steeringOf(config: AgentLoopConfig): SteeringSource {
     drain: async () => steered((await config.getSteeringMessages?.()) ?? []),
     followUp: async () => steered((await config.getFollowUpMessages?.()) ?? []),
     ...(config.hasSteeringMessages ? { hasInterrupt: config.hasSteeringMessages } : {}),
+    ...(config.onSteeringMessage ? { onInterrupt: config.onSteeringMessage } : {}),
   };
 }
 
@@ -123,10 +129,13 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
         // The run's uniform outcome row (§8.2), written once at its end. A channel run has no execution id: the row is keyed by the
         // run's own id (`task.runId`) and carries the model that served it; nothing else is claimed.
         events: { emit: bridge.emit, outcome: (row) => reportRunRow(row) },
-        human: onPremHuman(() => capabilities),
+        // A governance gate guards an act: with no approver to reach, the call is refused (the ticket path keeps its standalone default).
+        human: onPremHuman(() => capabilities, (request) => requestHumanInput({ ...request, failClosed: true })),
+        // The channel's runs close with what the model said: no forced no-tools turn after a tripped breaker (the runner never had one).
+        delivery: { rungs: () => [], owns: { synthesis: true } },
         steering: steeringOf(config),
         context: contextOf(config, prompts, signal, knowledge),
-        platform: channelTools({ tools, bridge, knowledge: config.knowledge ?? knowledge, query: request }),
+        platform: channelTools({ tools, bridge, knowledge: config.knowledge ?? knowledge, query: request, window: (ref) => resolveContextWindowTokens(models.resolve(ref)) }),
       };
       // The opening rows are the conversation so far: the system prompt, the session's history, then the prompts (the last is the task).
       const rows = [
@@ -137,7 +146,10 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
       const last = rows.at(-1);
       if (last) last.task = true;
       const task: RunTask = { runId: randomUUID(), prompt: request, request, dispatch: { source: "chat" }, transcript: rows };
-      await runAgent({ task, policy: policyOf(config, request), ports, ...(signal ? { signal } : {}) });
+      const outcome = await runAgent({ task, policy: policyOf(config, request), ports, ...(signal ? { signal } : {}) });
+      // A failure with no model turn behind it must still reach the runner as the errored message it reads (it fails over on it).
+      // A run stopped by a breaker or a budget ended as the runner always saw it: on its last tool result.
+      if (outcome.kind === "failed" && !outcome.exhausted) bridge.fail(outcome.reason, outcome.reason === RUN_CANCELLED_REASON ? "aborted" : "error");
     } catch (err) {
       logWarn(`[on-prem] channel run failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {

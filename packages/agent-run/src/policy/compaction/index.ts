@@ -51,6 +51,7 @@ import {
 import { priceTierBoundary } from "@builderforce/model-catalog";
 import { turnRouting } from "../model/index.js";
 import { compactionReserve } from "./reserve.js";
+import { packForModelHandoff } from "./handoff.js";
 import type { PackMessage } from "./pack.js";
 
 /** Cost lever C2 — mask stale tool-result observations before packing. */
@@ -216,9 +217,46 @@ function foldOf(before: readonly PackMessage[], after: readonly PackMessage[]): 
  * returns the compacted rows with what it dropped and the reserve it held back.
  * Returns nothing when the transcript already fits.
  */
+/**
+ * The run moved onto another model (a stall failover): the context it inherits is packed for THE INCOMING model's window, and the
+ * incoming model is told it took over (`policy/compaction/handoff`). Nothing when the model did not change, the window is unknown,
+ * or the context already fits.
+ */
+async function handOff(ctx: PolicyContext): Promise<CompactionResult | void> {
+  const to = ctx.state.model?.model ?? ctx.policy.pinnedModel;
+  const from = ctx.state.preparedFor;
+  ctx.state.preparedFor = to;
+  if (!from || !to || from === to) return undefined;
+  const contextWindow = ctx.ports.model.window?.(to);
+  if (!contextWindow) return undefined;
+  const lead = ctx.messages.findIndex((m) => m.role !== "system");
+  const split = lead < 0 ? ctx.messages.length : lead;
+  const system = ctx.messages.slice(0, split);
+  const reserve = ctx.policy.budgets.reserveTokens;
+  const packed = await packForModelHandoff<RunMessage>(
+    {
+      messages: ctx.messages.slice(split),
+      systemPrompt: system.map((m) => m.content).join("\n\n"),
+      tools: ctx.tools.map((t) => ({ name: t.function.name, description: t.function.description, parameters: t.function.parameters })),
+      from,
+      to,
+      contextWindow,
+      ...(leverOn(ctx, C9_TIER_LEVER) ? { priceTierBoundary: priceTierBoundary(to) } : {}),
+    },
+    {
+      toHandoff: (row) => toPackRow(row) as never,
+      summary: (text) => ({ role: "user", content: text }),
+    },
+  );
+  if (packed.dropped === 0) return undefined;
+  return { messages: [...system, ...packed.messages], dropped: packed.dropped, ...(reserve !== undefined ? { reserveTokens: reserve } : {}), summarized: false };
+}
+
 export function createCompactionHook(hookOptions: CompactionHookOptions = {}): CompactionHook {
   return {
     async compact(ctx: PolicyContext): Promise<CompactionResult | void> {
+      const handed = await handOff(ctx);
+      if (handed) return handed;
       const options = compactionOptions(ctx, hookOptions);
       const rows = (ctx.messages as readonly Row[]).map(toPackRow);
       const result = await compactMessages(rows as unknown as Array<Record<string, unknown>>, options, options.summarize);

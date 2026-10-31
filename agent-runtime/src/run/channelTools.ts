@@ -14,7 +14,11 @@ import type { PlatformTools } from "@builderforce/agent-run";
 import type { RunKnowledgeLog, ToolSchema } from "@builderforce/agent-tools";
 import type { AgentTool } from "../builderforce/model/agent-types.js";
 import type { AgentEventBridge } from "./agentEventBridge.js";
+import { singleToolResultCapChars } from "../agents/embedded-runner/tool-result-context-guard.js";
 import { resultParts, textOf } from "./channelMessages.js";
+
+/** The runner's foreground command tools: a steered message aborts one that is running, and the model reads the message that follows. */
+const FOREGROUND_COMMAND_TOOLS: ReadonlySet<string> = new Set(["exec"]);
 
 // biome-ignore lint/suspicious/noExplicitAny: the runner's tools carry their own parameter schemas
 type AnyTool = AgentTool<any>;
@@ -26,6 +30,8 @@ export interface ChannelToolsOptions {
   knowledge?: RunKnowledgeLog;
   /** The request the run was given: the text the catalog is ranked against. */
   query: string;
+  /** The context window, in tokens, of the model a name refers to. */
+  window: (model: string | undefined) => number;
 }
 
 export function channelTools(options: ChannelToolsOptions): PlatformTools {
@@ -41,6 +47,9 @@ export function channelTools(options: ChannelToolsOptions): PlatformTools {
     // The tool's own words, not a JSON-quoted copy of them.
     verbatimText: true,
     schemas: () => schemas,
+    // The runner guards its own context: one result may hold its share of the serving model's window, as the runner's guard cuts it.
+    resultCap: (model) => singleToolResultCapChars(options.window(model)),
+    interruptible: (name, args) => FOREGROUND_COMMAND_TOOLS.has(name) && args.background !== true,
     // Every tool the runner gave the run is advertised: the runner decided what this channel may use.
     selection: { query: options.query, limit: Math.max(1, schemas.length), required: new Set<string>() },
     async execute(name, args, env) {

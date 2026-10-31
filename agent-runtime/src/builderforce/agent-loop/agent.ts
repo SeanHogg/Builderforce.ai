@@ -63,6 +63,7 @@ export class Agent {
     signal?: AbortSignal,
   ) => AgentMessage[] | Promise<AgentMessage[]>;
   private steeringQueue: AgentMessage[] = [];
+  private steerListeners = new Set<() => void>();
   private followUpQueue: AgentMessage[] = [];
   getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
   sessionId?: string;
@@ -125,6 +126,7 @@ export class Agent {
   /** Queue a steering message to interrupt the agent mid-run. */
   steer(m: AgentMessage): void {
     this.steeringQueue.push(m);
+    for (const listener of this.steerListeners) listener();
   }
   /** Queue a follow-up message processed after the current run would stop. */
   followUp(m: AgentMessage): void {
@@ -154,6 +156,10 @@ export class Agent {
         return q;
       },
       hasSteeringMessages: () => this.steeringQueue.length > 0,
+      onSteeringMessage: (listener: () => void) => {
+        this.steerListeners.add(listener);
+        return () => void this.steerListeners.delete(listener);
+      },
       getFollowUpMessages: () => {
         const q = this.followUpQueue;
         this.followUpQueue = [];

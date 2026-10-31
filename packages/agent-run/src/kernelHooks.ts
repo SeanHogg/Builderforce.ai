@@ -10,7 +10,8 @@ import type { LoopControl, LoopDispatchResult, LoopHooks, ParsedToolCall } from 
 
 import { RUN_CANCELLED_REASON, type ModelUsage, type RunMessage, type RunState } from "./contract.js";
 import type { GuardControl, PolicyContext, PolicyHooks } from "./policy/index.js";
-import { isStopSteer, steerInput, steerSkip, type InterruptWatch } from "./policy/steering/index.js";
+import { steerSkip, type InterruptWatch } from "./policy/steering/index.js";
+import { steeringTakers } from "./kernelSteering.js";
 import { appendRows, applyCompaction, currentView, emit, policyContext, toPolicyCall, type RunAgentInput, type TurnFacts } from "./runContext.js";
 import { rememberWrite } from "./runState.js";
 import { callKinds, nativeOfTurn, ownsCall, type TurnSelection } from "./runTurn.js";
@@ -102,48 +103,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
   /** When each call started, so a call's duration is MEASURED, not inferred from the events around it. */
   const starts = new Map<string, number>();
 
-  /**
-   * Take what the user steered in: a stop command ends the run (the model never gets
-   * another turn after a stop, §6.3); anything else becomes the next user turn, each
-   * acknowledged with `steer.applied` before the turn it reaches.
-   */
-  const takeSteers = async (ctx: { step: number; stepInCall: number }): Promise<"none" | "stop" | "applied"> => {
-    const steered = ((await ports.steering?.drain()) ?? []).map(steerInput);
-    if (steered.length === 0) return "none";
-    const texts = steered.map((s) => s.text);
-    if (isStopSteer(texts)) {
-      run.stopped = true;
-      return "stop";
-    }
-    const injected = await hooks.steering.inject(contextAt(ctx.step, ctx.stepInCall), texts);
-    const rows = injected ?? texts.map((text): RunMessage => ({ role: "user", content: text }));
-    // A picture the person attached rides the row it becomes (rows and messages line up one to one).
-    append(...rows.map((row, i) => (rows.length === steered.length && steered[i]?.parts?.length && !row.parts ? { ...row, parts: steered[i]!.parts } : row)));
-    for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
-    return "applied";
-  };
-
-  /**
-   * What the user steered in while a `finish` call was in flight, as the note the finish is
-   * answered with; null when nothing was steered (the finish stands). A stop command lets
-   * the finish stand and settles the run cancelled, as it does anywhere else.
-   */
-  const lateSteerNote = async (ctx: { step: number }): Promise<{ note: string } | null> => {
-    const steered = ((await ports.steering?.drain()) ?? []).map(steerInput);
-    if (steered.length === 0) return null;
-    const texts = steered.map((s) => s.text);
-    if (isStopSteer(texts)) {
-      run.stopped = true;
-      return null;
-    }
-    for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
-    const many = texts.length > 1;
-    return {
-      note:
-        `The user sent ${many ? "messages" : "a message"} while you were finishing, so do not finish yet:\n` +
-        `${texts.map((t) => `- ${t}`).join("\n")}\nAddress ${many ? "them" : "it"}, then finish.`,
-    };
-  };
+  const { takeSteers, lateSteerNote, takeFollowUps } = steeringTakers(run, contextAt);
 
   return {
     beforeTurn: async (ctx) => {
@@ -230,7 +190,9 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         requeue(turn.content, children);
         return { action: "continue" };
       }
-      const stalled = await (hooks.stall.recoverAsync ? hooks.stall.recoverAsync(pctx) : hooks.stall.recover(pctx));
+      // A turn the person interrupted is not judged: what they steered in is taken first (below), so a steer is never lost to a stall
+      // that ends the run, and never spends a re-prompt.
+      const stalled = run.watch.hasInterrupt() ? undefined : await (hooks.stall.recoverAsync ? hooks.stall.recoverAsync(pctx) : hooks.stall.recover(pctx));
       if (stalled) await emit(ports.events, { kind: "stall.recovered", step: ctx.step, action: stalled.action, ...(stalled.note ? { note: stalled.note } : {}), ...(stalled.detail ? { detail: stalled.detail } : {}) });
       if (stalled && stalled.action === "pause") {
         const notice = stalled.note ?? "paused";
@@ -272,12 +234,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       if (late === "stop") return { action: "stop", ok: false, output: "cancelled", finished: true };
       if (late === "applied") return { action: "continue" };
       // What the person queued to be taken once the run would stop: the run continues on it instead of finishing.
-      const followUps = ((await ports.steering?.followUp?.()) ?? []).map(steerInput);
-      if (followUps.length > 0) {
-        append(...followUps.map((f): RunMessage => ({ role: "user", content: f.text, ...(f.parts?.length ? { parts: f.parts } : {}) })));
-        for (let i = 0; i < followUps.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
-        return { action: "continue" };
-      }
+      if (await takeFollowUps(ctx)) return { action: "continue" };
       return { action: "finish", output };
     },
 

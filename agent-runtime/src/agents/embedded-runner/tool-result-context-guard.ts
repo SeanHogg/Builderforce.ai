@@ -296,6 +296,11 @@ function enforceToolResultContextBudgetInPlace(params: {
   });
 }
 
+/** The most characters ONE tool result may hold in a context of this many tokens: its share of the window. The surface says this to the agent too (`PlatformTools.resultCap`), so the two cut at the same place. */
+export function singleToolResultCapChars(contextWindowTokens: number): number {
+  return Math.max(1_024, Math.floor(Math.max(1, Math.floor(contextWindowTokens)) * TOOL_RESULT_CHARS_PER_TOKEN * SINGLE_TOOL_RESULT_CONTEXT_SHARE));
+}
+
 export function installToolResultContextGuard(params: {
   agent: GuardableAgent;
   contextWindowTokens: number;
@@ -305,12 +310,7 @@ export function installToolResultContextGuard(params: {
     1_024,
     Math.floor(contextWindowTokens * CHARS_PER_TOKEN * CONTEXT_INPUT_HEADROOM_RATIO),
   );
-  const maxSingleToolResultChars = Math.max(
-    1_024,
-    Math.floor(
-      contextWindowTokens * TOOL_RESULT_CHARS_PER_TOKEN * SINGLE_TOOL_RESULT_CONTEXT_SHARE,
-    ),
-  );
+  const maxSingleToolResultChars = singleToolResultCapChars(contextWindowTokens);
 
   // Agent.transformContext is private in pi-coding-agent, so access it via a
   // narrow runtime view to keep callsites type-safe while preserving behavior.

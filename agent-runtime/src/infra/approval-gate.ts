@@ -50,6 +50,12 @@ export interface HumanInputRequest {
   description: string;
   metadata?: unknown;
   timeoutMs?: number;
+  /**
+   * Refuse instead of auto-approving when no approver can be reached (the gate is not configured, or the request failed). For a
+   * caller whose approval guards an act (a governance gate on a tool call); a caller that only wants a human's input keeps the
+   * standalone default.
+   */
+  failClosed?: boolean;
 }
 
 /**
@@ -57,6 +63,9 @@ export interface HumanInputRequest {
  * Using a class rather than module-level `let` variables makes the state
  * explicit and the service replaceable with a test double.
  */
+/** What a refusal says when no approver could be reached. */
+const UNREACHABLE = "No approver could be reached, so the action was not approved.";
+
 export class ApprovalGate {
   private baseUrl: string | null = null;
   private agentNodeId: string | null = null;
@@ -106,6 +115,10 @@ export class ApprovalGate {
     const kind: RequestKind = opts.kind ?? "approval";
 
     if (!this.isConfigured()) {
+      if (opts.failClosed) {
+        logWarn("[approval-gate] not configured — refusing (fail closed)");
+        return { decision: "rejected", responseText: UNREACHABLE };
+      }
       logWarn("[approval-gate] not configured — standalone mode; auto-approving");
       return { decision: "approved" };
     }
@@ -131,12 +144,20 @@ export class ApprovalGate {
         signal: AbortSignal.timeout(10_000),
       });
       if (!res.ok) {
+        if (opts.failClosed) {
+          logWarn(`[approval-gate] request failed (${res.status}) — refusing (fail closed)`);
+          return { decision: "rejected", responseText: UNREACHABLE };
+        }
         logWarn(`[approval-gate] request failed (${res.status}) — auto-approving`);
         return { decision: "approved" };
       }
       const data = (await res.json()) as { approvalId: string };
       approvalId = data.approvalId;
     } catch (err) {
+      if (opts.failClosed) {
+        logWarn(`[approval-gate] request error — refusing (fail closed): ${String(err)}`);
+        return { decision: "rejected", responseText: UNREACHABLE };
+      }
       logWarn(`[approval-gate] request error — auto-approving: ${String(err)}`);
       return { decision: "approved" };
     }

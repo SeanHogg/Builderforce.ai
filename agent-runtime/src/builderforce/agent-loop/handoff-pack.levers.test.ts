@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentMessage } from "../model/agent-types.js";
 import type { AssistantMessage, Model, ToolResultMessage } from "../model/types.js";
-import { packContextForModel } from "./handoff-pack.js";
+import { packContextForModel } from "../../run/channelHandoff.js";
 
 // C9 is read through the on-device gate (install-id bucketing), not a null-tenant check.
 const { leverOn } = vi.hoisted(() => ({ leverOn: vi.fn((_id: string) => false) }));

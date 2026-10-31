@@ -381,8 +381,11 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
       signal,
       call.name,
       call.args,
+      own ? platform?.interruptible : undefined,
     );
-    const capped = capToolResult(call.name, data, resultCapFor(call.name, ports.model, state.model.model));
+    // A surface that guards its own context says its share; any other result is capped by the tool's table row, sized by the window.
+    const surfaceCap = own ? platform?.resultCap?.(state.model.model) : undefined;
+    const capped = capToolResult(call.name, data, surfaceCap ?? resultCapFor(call.name, ports.model, state.model.model));
     // A surface's own tool says for itself whether it failed; a registry tool says so with `ok: false`.
     const failed = box.failed === true || (!own && !!capped && (capped as { ok?: unknown }).ok === false);
     const dispatched: LoopDispatchResult = { data: capped, ...(box.control ? { control: box.control } : {}), ...(failed ? { isError: true } : {}) };

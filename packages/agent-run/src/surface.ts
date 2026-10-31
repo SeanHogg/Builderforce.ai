@@ -100,6 +100,17 @@ export interface PlatformTools {
    * not JSON-quoted. Absent ⇒ every result is serialised as JSON, as the canvas's are.
    */
   verbatimText?: boolean;
+  /**
+   * The most characters one result of this surface's tools may hand the model, for the serving model (additive). A surface that
+   * guards its own context (the embedded runner's window-share guard) says its share here; absent ⇒ the agent's per-tool table,
+   * sized by the window.
+   */
+  resultCap?(model: string | undefined): number | undefined;
+  /**
+   * Whether this call is a foreground command a steered message aborts (additive): the tool is stopped through its signal, so the
+   * model reads the message that follows. The names are the surface's own; absent ⇒ the shared registry's commands only.
+   */
+  interruptible?(name: string, args: Record<string, unknown>): boolean;
   /** How a call whose arguments never parsed is declined. Absent ⇒ the shared wording, no hint. */
   malformed?: MalformedCallPolicy;
 }

@@ -46,6 +46,8 @@ export interface AgentLoopConfig {
   getSteeringMessages?: () => AgentMessage[] | Promise<AgentMessage[]>;
   /** True while a steering message waits: the rest of the turn's calls are skipped so it reaches the next model call. */
   hasSteeringMessages?: () => boolean;
+  /** Be told the moment a steering message arrives (it aborts a foreground command running at that time); returns the unsubscribe. */
+  onSteeringMessage?: (listener: () => void) => () => void;
   getFollowUpMessages?: () => AgentMessage[] | Promise<AgentMessage[]>;
   getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
   apiKey?: string;

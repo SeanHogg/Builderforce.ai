@@ -56,7 +56,8 @@ describe("a channel run's outcome row", () => {
     await agent.prompt([{ role: "user", content: "go", timestamp: 0 }]);
     await vi.waitFor(() => expect(posts).toHaveLength(1));
 
-    expect(posts[0]).toMatchObject({ source: "onprem", model: "p/m", terminalStatus: "completed", steps: expect.any(Number) });
+    // `steps` counts the turns that ACTED (a tool round); the turn that finishes the run is not a step. This is the one count every entry point's row carries.
+    expect(posts[0]).toMatchObject({ source: "onprem", model: "p/m", terminalStatus: "completed", steps: 1 });
     expect(String(posts[0]!.clientRunId)).toMatch(/^onprem:.+/);
   });
 });
