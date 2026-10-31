@@ -1,3 +1,1522 @@
+## ✅ RESOLVED 2026-10-31 — PRD 35: everything finished, moved out of the spec (WS0, WS1, WS2, WS3, WS4 canvas, WS5 tickets, WS6, WS8a–p; the contract, behaviours and telemetry as built)
+
+Moved word for word from [PRD 35](./docs/specs/35-prd-one-agent-one-kernel.md), which now holds only what is left to complete. Section numbers are kept, so a `PRD 35 §x` or `PRD 35 WSx` citation in the code resolves here unless the PRD still has that section. What shipped, and when, is in the dated entries further down (2026-10-30, 2026-10-28, 2026-10-27, 2026-10-25). The workstream state was checked against the code on 2026-10-31.
+
+**Still open, in the PRD:** the WS2f container shell, the WS4 chat cutover, WS5 channels, the `bfApi.ts` split and WS7. The WS2f, WS4 and WS5 text below is the original full workstream, so read it with those parts in mind.
+
+### Header at the time of the move
+
+| | |
+|---|---|
+| Status | Approved design, in progress. **WS0 landed** (clean tree, `main` = `origin/main` at `6b1a1469e`, 2026-10-25). **WS8a–h shipped 2026-10-25 in VSIX 2026.10.76** (DONE.md); its leftovers are in ROADMAP. **WS8i–o shipped 2026-10-25** (api 2026.10.81, brain-embedded 2026.10.52, agent-tools 2026.10.14, model-router 2026.10.18, tool-output-policy 2026.10.2; DONE.md), after the overnight WS1 run (VS Code chat #6) delivered 5 files in 6.5 hours. **WS1 merged** (#878: contract, package skeleton, conformance harness, report-mode guards). **WS2a–g merged** (#880: all twelve policy modules under `packages/agent-run/src/policy/`). **WS8p shipped 2026-10-27** in VSIX 2026.10.104 (DONE.md). A3 gains `unkept_ready` in every binding, and VS Code binds A3. agent-run's guards now run their end-of-turn step, which they never did before, so A3 and D7 could not trip there. `runAgent.ts` (649 lines) is split into `runContext`, `runState`, `turnContext`, `runTurn` and `runSettle`, with no logic change. **WS3, WS4 canvas and WS5 tickets merged 2026-10-30** (DONE.md): cloud, @-replies, canvas and on-prem tickets run on `runAgent`, and the SDK runner is deleted. **Not done:** the WS4 chat cutover (no `webAdapter` or `vscodeAdapter` exists, and `runLoop.ts` still calls the kernel) and WS5 channels (`agent-loop.ts` still calls the kernel). **Next:** those two, then WS7. Status checked 2026-10-30. Board: epic 5979, one ticket per workstream. Revised 2026-10-25: adds run efficiency (§2.1, WS8, §6.10, §8.4). Evidence: one VS Code run took 79 turns to update this PRD and never updated it. |
+| Owner | Agents program (planning: the session model; implementation: Opus agents; verify: Sonnet agents) |
+| Entry points | VS Code · Rovr / Web / canvas · On-prem agent · Cloud / container |
+
+### 1. The rule
+
+**Many entry points → ONE agent → ONE kernel.** An entry point decides *where* a run gets its
+model, files, shell, storage and people. It never decides *how* the run behaves. If two
+entry points behave differently on the same task with the same model and the same files,
+that is a bug in the agent, never a feature of an entry point.
+
+**Above the entry points, the board and governance layer stays as it is** (§6.9).
+Autonomous execution from the board and approvals by approver type have one owner each in
+the cloud/web API. They decide *whether and by whom* a run starts and finishes. They then
+dispatch into the one agent. What they require of a run reaches the agent as `RunPolicy`
+data.
+
+**No loss of functionality.** Every capability any runner has today is kept. §7 is the
+ledger, and each row is moved before its old home is deleted.
+
+### 2. Why
+
+There are six executions under four entry points today. Each rebuilds the run policy around
+the shared kernel: compaction, stall recovery, steering, finish gates, guards, verify, memory,
+tool selection, model choice, ask-a-human and sub-agents. A fix lands on one entry point
+only.
+
+| Execution today | Entry point | Telemetry (30 days to 2026-10-25) |
+|---|---|---|
+| brain-embedded `runLoop` | VS Code | 452 runs, ≈33.5k model calls, ≈1.9B tokens; 4.4% failed; ≈43 steps/run; 23% cache hit |
+| brain-embedded `runLoop` | Web Brain | ≈230 calls |
+| brain-embedded `runLoop` | Rovr | 0 identifiable |
+| `creationCanvasAi` | Canvas | not attributable (no label) |
+| `cloudAgentEngine` | Cloud tickets | 4 runs (1 failed, rate-limited) |
+| `agentReplyLoop` | Cloud @-replies | 0 |
+| `agent-loop.ts` | On-prem channels / cron | 0 |
+| Claude Agent SDK runner | On-prem tickets | 0 (90 days) |
+| Container loop / Actions loop | Cloud | 0 (90 days); removed by WS0 |
+
+Consequences for this program:
+- **VS Code is the reference behaviour.** Its runs set the telemetry baseline (§8).
+- **The agent's policy comes from `cloudAgentEngine`,** which has the most complete policy.
+  It is proven against VS Code behaviour.
+- The zero-traffic paths carry little migration risk, but their capabilities are still kept (§7).
+
+#### 2.1 Why, part two: the agent is slow on the reference entry point
+
+On 2026-10-25 a VS Code chat ran "Review this PRD and implement it using subagents". It was
+captured mid-run:
+- 79 turns, 174 tool calls, 11 errors and 77 minutes.
+- It filed 5 tickets and dispatched none: 0 sub-agents and 0 persona children.
+- It never edited this PRD.
+- Its prompts averaged ≈58k tokens, with a 23% cache hit rate.
+- It ran entirely on `MiniMax-M3.1-Flash-Preview`. The tenant's Anthropic token had expired and
+  the refresh failed, so the planning phase quietly fell back to that model.
+
+The root causes below were checked against the code on 2026-10-25. Each one is a run-policy
+defect, so each has a home in §4.
+
+| # | Defect (verified) | Where today | Turns lost on that run | Fixed by |
+|---|---|---|---|---|
+| E1 | **Read coverage claims lines the model never saw.** The model sees the trimmed result, but the cache stores the untrimmed one. `afterDispatchHook` (`brain-embedded/src/runStore/toolCallHooks.ts:89,104`) caches `ran.out`. The trim happens in `dispatchTool.ts:177`, and its result (`windowReadFile`'s last kept line) is thrown away. `servedReadWindow` (`packages/run-guards/src/readCoverage.ts:125`) trusts the untrimmed copy's `truncated:false` + `totalLines` and extends coverage to EOF. A second defect: a covered-read replay (`beforeDispatch.ts:197`) re-trims the cached result from offset 1, so a request for offset 251 is served lines 1–~250 again. The model worked around both with `sed` through `run_command`, which coverage never tracks. | brain-embedded (VS Code, Web, canvas) | ≈4 + the shell workaround | WS8a now; WS2f ports it |
+| E2 | **No task context at turn 1.** Evermind recall searches with the raw user sentence (`runMemory.ts:40` `latestUserText`). `runContextFor` (`clients/vscode/src/brainRunHost.ts:441`) adds only the run-context envelope and recent session notes. The run does not get the file the user named, the chat's linked tickets and runs, git state per repo, or the `codemap:` facts for the areas the file names. `gatherChatDiagnostics` already reads tickets and runs, but it has no host readers and no git reader. | every entry point; cloud tickets get PRD + ticket + facts | ≈6–10 | WS2e |
+| E3 | **The multi-repo workspace root errors on every git and shell call.** `runGitTool` (`packages/agent-tools/src/git-tools.ts:265`) infers a repo only from a path argument. `runPublishTool` (:611) doesn't infer one at all. `run_command` runs at `workspaceFolders[0]` and has no `cwd`. `ToolContext` carries no project or request, and the VS Code client never fetches `project_repositories`. | VS Code | 2–3 per run, plus a `cd X &&` on every command | WS8b now; WS2f ports it |
+| E4 | **Reads are expensive.** `read_file` takes one path. The markdown outline exists as a separate tool (`file_outline`), but nothing points a large-doc read at it. Every execution sizes the result cap differently: VS Code fixed 16k/6k; cloud C7-off **uncapped**; @-reply an 8k slice; canvas **uncapped**; on-prem 30% of window plus a second guard with different constants. VS Code already resolves the window (`resolveContextWindow`) but only window-fit uses it. | all | ≈3 per large file | WS2f |
+| E5 | **Delegation is checked only at the end.** `leftDelegationUndone` (`brain-embedded/src/delegationRequest.ts:78`) fires from `finalAnswerHook` (prose end) or on `ask_user`. A run that keeps reading never reaches either, so it never delegates. | brain-embedded only; no other entry point checks | the whole run (0 dispatched) | WS8c now; WS2c ports it |
+| E6 | **Long shell commands block the run.** `run_command` takes `{command}` only, with a 10-minute timeout (`localShell.ts:23`, `sandboxCore.mjs:25`). Background exec with `yieldMs`/`background` and a `process` poll tool exists **only on-prem**. | VS Code, cloud | one 10-minute stall | WS2f |
+| E7 | **The planning model degrades silently.** An expired BYO token (`tenantProviderKeyService.ts:458`) drops that vendor from routing. The client learns about it only after a turn, from `x-builderforce-byo-unresolved`. `llm.model_downgrade` fires only when the requested model is not `default`, so an auto-routed planning turn that lands on a Flash-class model leaves no trace. | all | quality of the whole run | WS2g |
+| E8 | **Write-back is uneven.** The VS Code client *does* write `codemap:` facts (`memoryCommit.ts:261`). It writes them only behind the Memory switch and only after ≥3 changed files (`MIN_CONSOLIDATED_FILES`), with no `tags:['codemap']`, no `chatId` (so it skips the memory-off gate) and no `fileAnchors`. A read-only review run writes nothing. @-reply and canvas write nothing. | VS Code partial, @-reply/canvas none | the next run starts cold | WS8d now; WS2e ports it |
+| E9 | **Tool catalogs differ per execution.** VS Code ranks 64 of ~476 lexically, plus 3 router tools. Cloud tickets use ≤20 core tools plus `tool_search`, but only behind lever `c1_deferred_tools` (10% rollout). @-reply advertises ~160 every turn and on-prem advertises all of them. `find_symbol` isn't registered on cloud. | all | prompt size every turn (≈58k average) | WS2f |
+| E10 | **Stop doesn't stop, and the user can't redirect the run.** Four separate failures:<br>1. A message typed mid-run is **held until the run ends** (`useChatSend.ts:86-97` → `useQueuedTurns.ts:93-106`). It reaches the model only if the user clicks "Steer now", and even then only at the next step (`completeTurn.ts:42` `drainRunSteering`), so a 5–10-minute command delays it that long. The VS Code path emits no `steer.applied` event.<br>2. No entry point reads stop intent in the text ("STOP executing", "stop now"). On-prem matches only the bare words (`auto-reply/reply/abort.ts` `ABORT_TRIGGERS`).<br>3. **The Stop button doesn't kill the running command.** `runControl.ts:136` aborts the model call, but `runTool(name, args)` (`dispatchTool.ts:64`) → `createNativeRunTool` → `fileTools.ts` builds a `ToolContext` with no `signal`. `ShellCapability.run(command)` takes none, and `localShell.ts` `execOnce` passes none to `exec`. The child process runs to its 10-minute timeout. The cmd→bash retry can then start it again.<br>4. The kernel (`agent-loop/src/loop.ts`) awaits the dispatch that's already running before it checks `isCancelled()`. The UI shows "stopped" while the loop is still waiting. On-prem already does this right: it passes the signal into `tool.execute`, `bash-tools.exec.ts` kills on abort, and a queued user message skips the turn's remaining calls. Cloud passes `ctx.signal`, but `run_command` ignores it. | VS Code (all 4), cloud (3, 4), on-prem partly | the user's control of the run: "write the update now" and "STOP" were both ignored | WS8e now; WS2c ports it |
+
+Corrections to the first-pass analysis:
+- The VS Code client already writes `codemap:` facts (E8). The gap is the gate and the missing fields, not a missing writer.
+- `gatherChatDiagnostics` collects no git status (E2).
+- The diagnostics' "6 KB per-result budget" is the default cap for non-read tools; `read_file`'s cap is 16k.
+
+### 3. End state
+
+#### 3.1 Codemap
+
+```
+Board + governance (api, unchanged owners) ──dispatch──┐
+                                                        ▼
+VS Code adapter ─┐   Rovr/Web adapter ─┐   On-prem adapter ─┐   Cloud adapter ─┐
+                 └────────────────────┴────────────────────┴──────────────────┴──► packages/agent-run  (ONE agent)
+                                                                                         │ policy/*
+                                                                                         ▼
+                                                                                   packages/agent-loop (ONE kernel)
+   uses: packages/agent-tools · @seanhogg/builderforce-memory (/working, /handoff) · run-policy · model-router · cost-levers · agent-stall · run-guards
+```
+
+- **Split by layer (operator decision, 2026-10-25).** Pure brain logic does not live in `packages/agent-run`. It lives in tested builderforce-memory packages, and `agent-run` imports it:
+  - **`@seanhogg/builderforce-memory`** (`/working`, `/handoff`): the context fold and compaction (`buildWorkingTranscript`, budgets, tail sizing), the summarizer prompt, consolidation markers, and window fit.
+  - **`@seanhogg/builderforce-memory-engine`**: the stall, finish and verify decision functions.
+  - **`agent-run`** keeps only the stateful run store, the ports and the adapters' composition. A WS2 policy module is a thin binding over these pure functions, never a second copy.
+  - **First slice landed 2026-10-25.** The fold and the consolidation markers moved out of `brain-embedded/src/workingTranscript.ts` and `consolidation.ts`.
+- `packages/agent-run` is the **only** place run policy is composed, and the only importer of `runAgentLoop`.
+- An adapter only **builds ports**. It has no loop, no policy, no branches on behaviour, and stays under ~300 lines.
+- Proposed adapter homes:
+  - `clients/vscode/src/run/vscodeAdapter.ts`
+  - `brain-embedded/src/run/webAdapter.ts` (Web, Rovr, canvas)
+  - `agent-runtime/src/run/onPremAdapter.ts` (tickets, channels, cron)
+  - `api/src/application/runtime/cloudAdapter.ts` (CloudRunnerDO tick, tickets, @-replies)
+
+#### 3.2 The contract (`packages/agent-run/src/contract.ts`; WS1 owns it)
+
+```ts
+export function runAgent(input: {
+  task: RunTask;
+  policy: RunPolicy;
+  ports: RunPorts;
+  resume?: RunState;
+  maxSteps?: number;               // 1 on the cloud tick; unbounded elsewhere
+}): Promise<RunOutcome>;
+
+export interface RunTask {
+  prompt: string;
+  ticketId?: number; chatId?: number | string; projectId?: number;
+  persona?: string;                // compiled persona brief
+  attachments?: RunAttachment[];
+  dispatch: { source: 'board-sweep' | 'lane-entry' | 'chat' | 'manual' | 'ceremony' | 'subagent'; approvalId?: string; parentRunId?: string };
+  workspace?: { defaultRepo?: string; focusPaths?: string[] };  // resolved by the adapter (§6.10); git + shell default to defaultRepo
+}
+
+export interface RunPolicy {
+  entryPoint: 'vscode' | 'web' | 'rovr' | 'canvas' | 'on-prem' | 'cloud';  // telemetry label only — NEVER branched on for behaviour
+  toolScope: 'ticket' | 'chat-reply' | 'chat-work' | 'canvas' | 'subagent';
+  role: string;                    // tier ladder, verify phase
+  levers: readonly CostLeverId[];   // @builderforce/cost-levers owns the ids — A3, C5, C7, D1, D7, D8 …
+  budgets: { steps?: number; tokens?: number };
+  pinnedModel?: string;
+  inference: 'local-only' | 'hybrid' | 'specific';
+  verify: 'declared-checks' | 'branch-ci' | 'none';
+  signoff?: { roleKey: string; laneKey?: string };   // finish blocked until signed off
+  approvalGates: PolicyGate[];                        // in-run acts needing an approver — reuse @builderforce/agent-tools spec.ts:118
+  delegation: { requested: boolean; readsBeforeNudge: number };  // requested = asksForSubagents(prompt) unless declined; default nudge after 6 reads
+}
+
+export interface RunPorts {
+  model: ModelTransport;           // complete(request, signal) → completion
+  capabilities: CapabilityProvider;// @builderforce/agent-tools contract (files, shell, git, platform, memory, human)
+  store: RunStore;                 // load/save RunState; commitMemory(consolidated)
+  events: EventSink;               // typed RunEvent stream + the uniform outcome row (§8.2)
+  human: HumanChannel;             // ask(question, options) | approve(gate) → answer | 'paused'
+  steering?: SteeringSource;       // drain(): user messages since the last step
+  context: ContextSource;          // pack(task) → ContextPack, built once before turn 1 with NO model call (§6.10)
+}
+
+/** Volatile per-run context. It goes in the turn-context block, never in the cached prefix. */
+export interface ContextPack {
+  focus: Array<{ path: string; outline?: Array<{ heading: string; line: number }>; content?: string }>; // named files: whole when under the read cap, else outline
+  chat?: { tickets: unknown[]; runs: unknown[] };   // what gatherChatDiagnostics reads
+  repos?: Array<{ repo: string; branch: string; dirty: string[] }>;
+  facts: Array<{ key: string; content: string }>;   // codemap:<area> facts for the areas the focus files name
+  recall: string[];                                  // Evermind recall, queried with prompt + focus-file terms
+}
+// ModelTransport also exposes window(model) → number | undefined, which the tools policy uses
+// to size the result cap (§6.10). The policy falls back to today's fixed caps when it is undefined.
+
+export type RunOutcome =
+  | { kind: 'finished'; output: string; state: RunState }
+  | { kind: 'paused'; question: string; approvalId: string; state: RunState }
+  | { kind: 'yielded'; state: RunState }          // maxSteps reached; resume later
+  | { kind: 'failed'; reason: string; state: RunState };
+
+/** Plain JSON. Everything any policy needs across a step boundary. */
+export interface RunState {
+  messages: unknown[]; step: number;
+  guards: LoopGuardState;          // progress, cascade, pendingPause, checksNote — WS1 names this type; today's guard state lives in costLoop/loopGuards.ts
+  finish: FinishGateState;         // placeholder / CI-pending / no-deliverable counters, signoff recorded — reuse cloudAgent/finishGates.ts:55, do not redefine
+  model: RunPolicyState;           // @builderforce/run-policy — pins, tried/broken/proven models, failovers, turnRetries
+  memory: RunKnowledgeState;       // working memory + tool tally — reuse @builderforce/agent-tools run-knowledge.ts:96, do not redefine
+  compaction: CompactionState;
+  writtenPaths: string[];
+  askedGates: string[];
+  reads: ReadCoverageState;        // the windows the model was SERVED (post-trim), plus the read-without-spawn count
+}
+```
+
+Contract changes go through WS1 only. Another workstream that needs a field files the request
+in its hand-off note and keeps working against a local type until WS1 merges the change.
+
+
+### 4. Workstreams
+
+Workstreams run in parallel wherever the dependency graph allows. **File ownership is
+exclusive.** You edit only the paths your workstream owns. If you need a change elsewhere,
+write it in your hand-off note for that path's owner.
+
+```
+WS0 ──┬─► WS8 efficiency fixes on today's homes (a–h, parallel; ships to VS Code now)
+      │
+      └─► WS1 ──┬─► WS2a compaction ─┐
+              ├─► WS2b stall ──────┤
+              ├─► WS2c steer/ask/sub┤
+              ├─► WS2d finish/guards/verify ─┤
+              ├─► WS2e memory ─────┤
+              ├─► WS2f tools ──────┤
+              ├─► WS2g model ──────┤
+              └─► WS6 telemetry ───┤
+                                   ├─► WS3 cloud adapter ──┐
+                                   ├─► WS4 VS Code + Web/Rovr/canvas adapters ─┤
+                                   └─► WS5 on-prem adapter ┤
+                                                           └─► WS7 enforce + delete + done
+```
+
+#### WS0 — Finish the in-flight cloud-runtime change (sequential, first)
+
+- **Goal.** Land the uncommitted "one cloud runtime, container is a sandbox" change cleanly,
+  so every later workstream branches from a green main.
+- **Owns.** The current working tree under `api/`, `agent-runtime/`, `brain-embedded/`,
+  `packages/agent-tools/`, `clients/vscode/`, `frontend/` touched by that change.
+- **Do:**
+  1. Restore every test file the earlier pass rewrote to its committed version
+     (`git checkout HEAD -- <file>`). Retarget only imports of deleted modules. Run the tests
+     unchanged and fix the source where they fail.
+  2. Fix the open review findings:
+     - git verbs publish to the ticket branch (`ShellCapability.trackedBranch`);
+     - the D7 note persists across ticks;
+     - Actions runner poll retry, plus host liveness / `lastPollAt` fail-fast;
+     - a stray runner gets `{close:true}`, and `runnerSpec` refuses any terminal status;
+     - the run-end verify gets a heartbeat, cancel and a time budget;
+     - the container cancel uses `res.on('close')`;
+     - `RunKnowledgeState` persists across ticks;
+     - the legacy 409 concludes the row and does not restore the lane;
+     - sandbox read/edit fallback, with edits reading the branch first;
+     - mailbox redelivery for unacknowledged requests;
+     - a legacy running-container op answers "retired" and fails the run with that reason;
+     - dead comments and exports cleaned up.
+  3. Fix the verify failures:
+     - `peekCached` / `setCached` imports in `runContext.ts`;
+     - the `gatewayChatSupport.ts` role type;
+     - `check:tenant-scope` (scope the new `executions` queries);
+     - `check:silent-catches` (+7 new `.catch(() => …)` calls).
+- **Accept.** API typecheck green; guards green; targeted tests green with unchanged
+  assertions; fresh Opus review clean; committed and pushed.
+- **Already in the tree (unverified).** `trackedBranch`, `checksNote`, `sandboxShell` /
+  `VerifyShell`, `toShellResult` / `toCheckVerdict`, `RunKnowledgeRecorder.restore`,
+  `cloudAgent/runProvider.ts` and `cloudAgent/runVerifyThenRemember.ts`.
+
+#### WS1 — Contract, package skeleton, conformance harness, guard (sequential, blocks WS2–WS6)
+
+- **Owns.** `packages/agent-run/**` (package.json, tsconfig, `src/contract.ts`, `src/runAgent.ts` and its split `src/{runContext,runState,turnContext,runTurn,runSettle}.ts`,
+  `src/policy/index.ts` composition, `test/conformance/**`), `scripts/check-one-execution.mjs`,
+  and its entry in `api/scripts/checks.manifest.mjs`.
+- **Do:**
+  - Write the §3.2 types.
+  - Write `runAgent` driving the kernel with the policy hooks composed from `policy/*`
+    (each one a no-op until its workstream lands).
+  - Build the conformance harness: a fake `ModelTransport` that replays a script, an
+    in-memory `CapabilityProvider`, a trace-recording `EventSink`, and a memory `RunStore`.
+    It must run once continuously and once at `maxSteps: 1`, resuming each step from saved
+    `RunState`.
+  - Add `check:one-execution` in **report mode**, with a baseline allowlist naming today's
+    five importers. WS7 flips it to enforce.
+  - Add `check:tests-unchanged` in report mode (§5.1).
+  - Fill the "Proven by" column of the full §7 ledger. For each capability, name its existing
+    test files, or mark it **needs characterization test**. The WS that owns that row writes
+    the test first (§5.1 step 2).
+  - Make the package Worker-, browser- and Node-safe: no `node:*` and no DOM.
+- **Accept.** The package builds; the harness runs a trivial script through `runAgent`;
+  the guard reports the current five importers; every §7 row has a "Proven by" entry.
+
+#### WS8 — Efficiency fixes on today's homes (parallel with WS1; after WS0)
+
+VS Code carries ≈all the traffic and is months from its WS4 cut-over, so four defects from §2.1
+are fixed where they live today. Each one lands with a test on the old home first (§5.1 step 2).
+The WS2 module that later ports that home brings the test along unchanged. This is not a
+parallel copy: the WS2 port moves this code, and it never rewrites it.
+
+| WS | Owns | Do | Accept |
+|---|---|---|---|
+| 8a | `packages/run-guards/src/readCoverage.ts`, `brain-embedded/src/readCoverage.ts`, `brain-embedded/src/runStore/{dispatchTool,toolCallHooks,beforeDispatch}.ts`, `packages/tool-output-policy/src/readFileWindow.ts` | **E1.** Cache what the model was served: the windowed `read_file` value (before the advisory is attached). Keep the untrimmed copy only for the replay. `servedReadWindow` and `clipRequestedToEof` read the served copy's `offset`/`truncated`/`totalLines`. A covered-read replay serves the *requested* window from the cached full result, not offset 1. A read-only `run_command` that prints a workspace file (`cat`/`sed -n`/`head`/`tail` on one path) records coverage of the lines it printed, so the same window is not read twice. | Characterization test first: a 534-line file trimmed to ~250 lines; the read at offset 251 is **not** stubbed; the replay at offset 251 returns line 251. The existing `readCoverage.test` cases pass unchanged. |
+| 8b | `packages/agent-tools/src/{git-tools,capabilities,tool,core-tools}.ts` (pure resolver + `ShellCapability.defaultRepo` + `run_command` `cwd`); `clients/vscode/src/{localShell,localCapabilities,nativeBrainRun,brainRunHost,bfApi}.ts` (resolution); `clients/vscode/src/ticketBranchTool.ts` (reuse) | **E3.** One pure `resolveDefaultRepo({ candidates, paths, projectRepos })` in agent-tools, next to `inferRepoFromPath`. It resolves in this order: explicit `repo` → a repo-relative path in the request or args → the chat's project repo (`GET /api/repos/projects/:id/repositories`, matched to a checkout's origin with `parseRemoteUrl`) → the only candidate. If none of those decides it, return today's candidate error. `runGitTool` and `runPublishTool` both use it. `run_command` runs in the default repo (with an optional `cwd` arg inside the workspace). `ticketBranchTool`'s own `checkoutsUnder`/candidate message is migrated onto it (no second copy). | Characterization tests for today's candidate error first (`git-repo-scope.test`). New cases: a path in the request picks the repo; the project repo picks it; a single checkout picks it; explicit `repo` wins. |
+| 8c | `brain-embedded/src/delegationRequest.ts`, `brain-embedded/src/runStore/dispatchTool.ts`, `packages/run-guards/src/` (a pure reads-without-spawn counter) | **E5.** When `leftDelegationUndone` holds and the run has made `readsBeforeNudge` (6) read calls with no spawn, the next read result carries the undelegated-request nudge as its advisory. It fires once per run, and the end-of-run recovery stays as the backstop. The nudge names the expected shape: the parent reads only the request's named document, then spawns research children with briefs. | Test: a scripted run that asks for sub-agents and reads 6 times gets the nudge on read 6, not at the final answer. A run that spawns before read 6 gets no nudge. The existing `delegationRequest` / `finalAnswerHook` tests pass unchanged. |
+| 8d | `clients/vscode/src/{memoryCommit,editorRunEnd,bfApi}.ts` | **E8.** Send `chatId` and `fileAnchors` on the codemap write; the route accepts both. There is no `tags` field or column, and the `codemap:` key prefix is what every reader filters on. Read-only runs are already consolidated, because `consolidate` counts reads toward its 3-file minimum. When the Memory switch is off, put one line in the run trace saying no facts were written, so diagnostics don't read "0 writes" as a fault. | `memoryCommit.test` passes unchanged, plus new cases for the read-only consolidation and the sent fields. |
+| 8e | `packages/agent-tools/src/{capabilities,core-tools}.ts` (`ShellCapability.run(command, { signal })`; `runCommandTool` passes `ctx.signal`); `packages/agent-loop/src/loop.ts` (race the dispatch against cancel); `clients/vscode/src/{localShell,fileTools,nativeBrainRun}.ts` (signal → `exec` `signal` + kill the process tree on Windows); `brain-embedded/src/runStore/{dispatchTool,runControl}.ts` (`runTool(name, args, signal)`); `brain-embedded/src/useChatTurns.ts` + `clients/vscode/webview/src/chat/useChatSend.ts` (mid-run routing); a pure `stopIntent(text)` in `packages/run-guards` (shared with on-prem's `ABORT_TRIGGERS`, which moves onto it) | **E10.**<br>1. **Stop kills the work.** The run's abort signal reaches every tool through `ToolContext.signal`. The VS Code shell kills the child process tree on abort and doesn't run the cmd→bash retry after an abort. The kernel races the in-flight dispatch against cancel, so the run settles `cancelled` within 2 s of Stop and the late tool result is dropped.<br>2. **A mid-run message steers by default.** While a run is active, a typed message goes to `run.steer`, not the hold queue; "Queue for after" becomes the explicit chip, the reverse of today. The steer interrupts the running step: it aborts a foreground `run_command` (the steer tells the model it was interrupted) and skips the remaining calls of that turn, as on-prem does. It is drained before the next model call and recorded as `steer.applied`.<br>3. **Stop intent in text equals the Stop button.** A message that `stopIntent` matches ("stop", "STOP executing", "stop now", "halt", "cancel the run", `/stop`; not "don't stop" and not "stop the server") stops the run like the button does. The text still lands in the chat. | Characterization tests first, against today's code:<br>• Stop during a long `run_command` leaves the child alive. This test flips when the fix lands, and is the planning model's one sanctioned behaviour change.<br>• A mid-run message is held.<br>New tests:<br>• Stop kills a `sleep 600` child in under 2 s on Windows and POSIX.<br>• The kernel returns `cancelled` with a dispatch still in flight.<br>• A typed "STOP executing" stops the run.<br>• A typed "write the update now" reaches the model on the next call, and the command it interrupted is reported as aborted.<br>The `useChatTurns`, `brainRunStore`, `engineRun`, `loop.test` and `abort.test` cases pass unchanged, except the held-message case named above. |
+
+Added 2026-10-25, when the operator asked for every item that improves VS Code execution to
+ship now. Each of these is built on today's VS Code home. WS2e/f/g port it to the other
+entry points, carrying the tests unchanged.
+
+| WS | Covers | Do (VS Code) |
+|---|---|---|
+| 8f | **E2 context pack** + recall query | `brainRunHost.ts` `runContextFor` gains a third part, the pack (§3.2 `ContextPack`). It is built once per run with no model call, time-boxed and failure-tolerant:<br>• focus files: inlined if ≤16k chars, otherwise their outline;<br>• the chat's linked tickets and runs;<br>• git state for each checkout;<br>• matching `codemap:` facts.<br>The pack renders as the volatile turn-context block. Recall queries with the prompt plus a host hint built from the focus paths and headings. |
+| 8g | **E4 reads** + **E6 background shell** | `windowedCap` with the run's resolved window, threaded into `trimToolResult`. `read_file` `paths[]` (≤8) and a markdown outline when a file is over the cap. `run_command` `background` / `yieldMs` plus `command_status` / `command_stop` on a `ShellCapability.start/poll/kill` job API. Jobs die with the run. |
+| 8h | **E7 model preflight** | Before turn 1, check BYO health (refreshing first where the API supports it). An expired, revoked or unresolved provider is announced in the run before any work. `llm.model_downgrade` fires for auto-routed turns too. |
+
+Added 2026-10-25 (evening), after the overnight run of VS Code chat #6 ("implement the PRD
+using subagents", 857 turns, ~6.5 hours, 11 children, 5 files written). Diagnosed from the
+chat's local journal and the ops DB. Each item ships on today's home now; the WS2 module that
+owns the area ports it, tests unchanged.
+
+| WS | Defect (verified) | Fix on today's home | Ported by |
+|---|---|---|---|
+| 8i | **A mention of sub-agents was read as a request for them.** Every PRD 35 brief names the sub-agent policy, so the WS1 coder was told "STOP READING AND DELEGATE" at step 2, spawned four researchers and waited 90 minutes before its first write; a research child fanned out four more. | `asksForSubagents` matches an ask ("use / via / delegate to / run … sub-agents", "spawn agents"), never a mention; one `runLeftDelegationUndone(run)` (`brain-embedded/src/runStore/earlyDelegation.ts`) behind all three gates. A sub-agent runs the same gate as its owner, on its own brief: no lineage branch. | WS2c (`RunPolicy.delegation` is set from the user's request only, never from `RunTask.dispatch.source: 'subagent'`) |
+| 8j | **Child reports were cut twice.** 4K per report in VS Code, then the 6K default cap on `wait_agents`; owners re-asked finished children and re-spawned researchers. | `SUBAGENT_REPORT_CHARS` (8K) + `clipChildOutput` in agent-tools, used by the VS Code and cloud report builders; `wait_agents: 34_000` in `tool-output-policy` (four 8K reports plus headers; `subagentReportBudget.test` holds the two together). | WS2c / WS2f |
+| 8k | **Learned routing sealed out stronger coders.** Any model with ≥8 samples ranked ahead of every cold one, so a STANDARD model with history led `code` turns over a never-tried ULTRA coder indefinitely. | `liftUntriedStronger` (`packages/model-router`), quality-first roles only, on both the connected-account and plan-pool paths. | WS2g |
+| 8l | **Empty-handed runs taught the router nothing.** IDE outcomes were reported only when code changed. | `codeRunOutcome` grades `failed` for a change request that ran ≥20 turns and changed and delegated nothing (stopped or not), for the model that served most turns. One rule for every run, sub-agents included; a research brief reads as a question (`asksForChange`), and an owner's wake turn is not a request. | WS2g + WS6 |
+| 8m | **Dead OpenRouter connection led every request** (~1,770 401s in one night): only the daily probe alerted a connection and the seed never read connection alerts. | Live-failover connection alerts (keyed connections) + `demoteAlertedConnections` in the credential resolver. | WS2g |
+| 8n | **No consumption awareness.** An account was demoted only after it refused a turn. | `providerHeadroom.ts`: provider rate-limit headers (Anthropic unified/API, OpenAI-style, Codex) observed per attempt; an owner account ≥90% used is demoted until its window resets. | WS2g |
+| 8o | **A dead Claude refresh token read as transient** ("expired — retry") for the whole night: Anthropic/OpenAI resolvers treated 400 `invalid_grant` as transient, xAI/Kimi as revoked. | One `isRevokedRefresh` (400/401/403) for all four subscription resolvers. | WS2g |
+
+Not code: that night every frontier account the tenant had was refused — Anthropic (refresh
+token dead), Grok (403 "out of credits or need a Grok subscription"), Codex (403), Kimi (429)
+and the OpenRouter connection (401). With 8k–8o the router routes and reports this honestly,
+but a coder can only be used once the owner reconnects or tops up an account.
+
+Added 2026-10-27, after VS Code chat #6 kept saying it was ready and kept reading. Run #562
+went 105 turns and was flagged `⚠ SPUN` after 78 changes. The chat as a whole ran 2,067 turns,
+almost all of them on MiniMax Flash and local Kimi. The phrase is any of "Now I have everything
+I need", "one final check, then I write" or "let me now implement", and each one is followed
+by one more read.
+
+| WS | Defect (verified 2026-10-27) | Fix on today's home | Ported by |
+|---|---|---|---|
+| 8p | **A run that says it is ready and keeps reading trips no guard, on any entry point.** Three gaps:<br>1. **VS Code has no progress detector.** The A3 `ProgressDetector` (`packages/run-guards/src/progressDetector.ts`) is bound in the cloud's `costLoop/loopGuards.ts` and in `packages/agent-run/src/policy/guards` (WS2d). Nothing in brain-embedded or `clients/vscode` uses either.<br>2. **A3 would not catch this loop even where it is bound.** Its `no_progress` window counts a call that names a path the run has not touched before as progress (`noProgress.ts`: "exploring new files IS progress"). So "I have everything I need" followed by one more new file resets the window every turn.<br>3. **The VS Code breaker misses it.** `cacheServedStreak` counts only repeats the read cache answered, and a new file is new ground. It also switches off once the run has changed code, and it fires at most twice a run. The announced-call re-prompt fires only when no call is made. | **1. A new A3 signal, `unkept_ready`, in `run-guards`, so every binding gets it.**<br>• A pure `claimsReady(text)` matches the model's own declaration that it is done gathering or about to write: "I have everything I need", "I now have enough", "one final check, then I write", "now I'll implement / write / make the change", "let me write the update now". It does not match text inside code fences or quotes, or a negated claim ("I don't have enough yet").<br>• A turn whose text `claimsReady` and whose calls are all read-only is an **unkept claim**. Read-only means no write or edit, no `spawn_agent(s)`, no `hand_off` and no `ask_user`.<br>• A turn that changes a file, spawns, hands off or asks clears the count.<br>• The second unkept claim of a run is a trip. New paths do not reset it.<br>• `ProgressDetector` composes it as a fifth signal, ranked between `circling_read` and `no_progress`. Its state is plain JSON, so the cloud's one-turn ticks carry it.<br>**2. VS Code binds the detector now.** It binds the one `ProgressDetector`; it does not copy it. Every brain-embedded run gets it: parent and sub-agent, before and after edits, planning and coding (lever `a3_progress_detector`, already at 100%, read on the device through `runStore/deviceLevers.ts`'s `deviceLeverOn`, which `stablePrefixOn` also uses now). The run store calls `observe` on every dispatched call and `endTurn` on every model turn. The detector's ladder maps onto what the editor already has:<br>• **steer:** the note goes in the next turn-context block;<br>• **escalate:** a forced change turn through `progressBudget.ts`'s `forcedProgressTurn` (`hand_off` alone while planning). The cache breaker's `noProgressTurn` uses the same function, so the two do not keep separate copies;<br>• **pause:** `ask_user` with `progressPauseQuestion`.<br>Trace: `loop.progress_check`. The binding lives in its own `runStore/progressGuard.ts`, so no run-store file grows past its limit. | WS2d: `policy/guards` gets the signal through `run-guards`, so there is nothing to copy. `GuardsHook.endTurn(ctx, content)` passes the turn's text to `noteTurnText`. `runAgent` calls it from `afterToolCalls`; before WS8p it was never called. At WS4 the VS Code binding is deleted for `policy/guards`, and its tests move over unchanged. |
+
+**8p accept.**
+- **Characterization test first, on today's code.** A fake model's turns each say "Now I have everything I need" and read one new file. Today no guard fires in 20 turns. This test flips when the fix lands, and it is the planning model's sanctioned behaviour change for 8p.
+- **New tests:**
+  - Trips follow A3's ladder, and each trip starts the count over:
+    - the second unkept claim **steers**: the note opens the next turn;
+    - the fourth **forces**: that turn offers only the change tools, or `hand_off` while planning;
+    - the sixth **asks**: `ask_user` alone, with "Continue with guidance" / "Stop the run".
+  - A question run is steered and never forced to change anything. A sub-agent, which cannot ask, is steered instead of asked.
+  - A trip that a budget's forced turn pre-empts stays due until a later turn takes it.
+  - Lever `a3_progress_detector` turns it off on the device.
+  - A review run that reads 30 new files and makes no readiness claim does not trip.
+  - A claim followed by a write, a spawn or a hand-off clears the count.
+  - `claimsReady` ignores a question ("Do I have everything I need?"), "make sure", and a claim made conditional ("when / if / once I have…"). A negation after the claim does not cancel it.
+  - A sub-agent follows the same rule.
+  - `claimsReady` cases: the matches above; a quoted or fenced phrase, a negated claim and the user's own words do not match.
+- **Unchanged:** the existing `progressDetector`, `noProgress`, `cacheServedStreak`, `loopGuards` and agent-run `guards` tests pass unchanged.
+- **Budget:** §8.4's "turns from a readiness claim to a change" row holds.
+
+E9, one catalog strategy across executions, stays in WS2f. VS Code's lexical ranking works as
+it is. The fix is to unify the other executions onto one strategy, and it needs WS6's
+telemetry to compare.
+
+WS8 ships in the next VSIX and api releases. Each item bumps the versions of the packages it
+touches.
+
+#### WS2a–g — Policy modules (parallel after WS1)
+
+Each WS2 workstream owns **one folder** `packages/agent-run/src/policy/<name>/**` plus its
+tests. Each module:
+- **Ports** the listed sources' behaviour. It doesn't rewrite it, and it extracts the
+  existing code where it can (no second copy).
+- **Brings the sources' existing tests along unchanged**, with imports retargeted only.
+- **Exposes** a hook / port wrapper the WS1 composition calls, plus its slice of `RunState`.
+- Leaves the source files alone. Adapters (WS3–5) delete them when they switch over.
+- Stays under ~400 lines per file; split if larger.
+
+| WS | Module | Ports from (all of these, nothing dropped) | Tests that must pass unchanged |
+|---|---|---|---|
+| 2a | `compaction` | `api/src/application/llm/compactMessages.ts` (cloud + @-reply wiring); on-prem `agents/embedded-runner/compact.ts` + reserve tokens; SDK auto-compact behaviour | `compactMessages` tests; on-prem compaction / overflow tests |
+| 2b | `stall` | `cloudAgent/cloudRunModelPolicy.ts` (`cloudStallStep`, stall budget); `brain/agentReplyLoop.ts` (forced no-tools synthesis, `trimRepetitionLoop`); `brain-embedded/src/runStore/finalAnswerHook.ts` (prose ask-lift); `frontend/src/lib/canvasDelivery.ts` (the canvas's `DeliveryLedger`, walked by `policy/stall/ladder.ts`); `agent-runtime/src/builderforce/agent-loop/stall-recovery.ts` (exhausted notice) | each source's stall tests; `packages/run-policy` stallStep tests |
+| 2c | `steering`, `ask`, `subagents` | `runtime/cloudLoopControl.ts` + `lateSteerStore.ts`; composer queue (`brain-embedded` run store); on-prem `steeringQueue`; SDK `SteeringChannel` semantics · kernel `ask_human`, `ASK_USER_TOOL` (options + pending), on-prem `askHumanTool` · `runtime/cloudSubagent.ts`, `cloudChildRuns.ts`, `clients/vscode/src/subagentTool.ts`, SDK `Task` · `brain-embedded/src/delegationRequest.ts` + the WS8c in-run nudge → `RunPolicy.delegation` on every entry point · stop and interrupt: WS8e `stopIntent`, signal-to-tool, the steer that interrupts a step; on-prem `agent-loop.ts` skip-remaining-calls + `bash-tools.exec.ts` kill-on-abort | steering relay, human-in-loop, sub-agent tests, `delegationRequest` tests, WS8e stop tests, on-prem `abort.test` + exec abort tests |
+| 2d | `finish`, `guards`, `verify` | `cloudAgent/finishGates.ts` (placeholder, no-deliverable, CI-pending, review verdict, **signoff**); @-reply verify pin; `costLoop/loopGuards.ts` (A3, D1, D7, D8; A3 gains `unkept_ready` through `run-guards`, WS8p); `cloudAgent/inRunVerify.ts`, `sandbox/sandboxVerify.ts`, `cloudAgent/runVerifyThenRemember.ts` | `loopGuards.test`, finish-gate tests, `inRunVerify.test`, `runEndMemory.test` |
+| 2e | `memory` + `context` | `costLoop/volatileTail.ts`; `brain-embedded/src/runStore/completeTurn.ts` + `runPreamble.ts` + `runMemory.ts` (recall) + `turnContext.ts`; `clients/vscode/src/brainRunHost.ts` `runContextFor`; on-prem `agent-loop.ts` brief + `infra/knowledge-loop.ts`; `cloudAgent/runEndMemory.ts`; `clients/vscode/src/memoryCommit.ts`, `editorRunEnd.ts`, `sessionNotes.ts`; `agents/sdk-memory-server.ts` (→ memory tools); `brain-embedded/src/gatherChatDiagnostics.ts` readers (→ `ContextSource`). **Also builds (§6.10):** the `ContextPack`; the recall query from prompt + focus-file terms; the per-turn brief on @-reply and canvas (missing today); codemap write-back on every entry point with WS8d's fields. | `run-knowledge.test`, `knowledge-loop.test`, `runEndMemory*.test`, `memoryCommit.test`; new: context-pack conformance case |
+| 2f | `tools` | capability gate (`cloudAgent/runSurfaceCaps.ts`, `cloudAgentTools.ts`); `brain-embedded/src/selectTools.ts` (lexical rank, synonyms, pinning); `costLoop/deferredTools.ts` (core set + `tool_search`); `llm/cloudAgentToolset.ts` `CHAT_SCOPED_AGENT_TOOLS` → `toolScope: 'chat-reply'` data; canvas tool port; `SDK_TOOLS` + `allowedToolsAfterGates` → policy gates; read coverage (`packages/run-guards/src/readCoverage.ts` + brain-embedded binding, after WS8a); result caps (`tool-output-policy`, on-prem `tool-result-truncation.ts` + `tool-result-context-guard.ts`, @-reply 8k slice); on-prem `bash-tools.exec-runtime.ts` background exec + `process` poll; default repo (after WS8b). **Also (§6.10):** one catalog strategy, a core set plus `tool_search` with no lever; `find_symbol` on cloud; `read_file` `paths[]` and a large-markdown outline pointer; one window-sized cap. | `cloudSurfaceCaps.test`, `selectTools` tests, `claude-agent-sdk-runner.test` (gate cases), `readCoverage.test` (both), `tool-output-policy` tests, on-prem truncation / context-guard / exec tests, `git-repo-scope.test` |
+| 2g | `model` | `cloudAgent/cloudRunModelPolicy.ts`, cascade, learned routing, limbic state; @-reply cascade; `clients/vscode/src/modelRouting.ts` policy half (Local only / Hybrid / Specific); `frontend/src/lib/canvasModelPort.ts` policy half; on-prem gateway model config; BYO resolution signal (`tenantProviderKeyService.ts` `unresolvedReasons`, `byoCredentialHealth.ts`). **Also (§6.10):** a preflight before turn 1; `llm.model_downgrade` for auto-routed turns too. | `cloudRunModelPolicy.test`, `modelRouting` tests, routing package tests, `byoCredentialHealth` tests |
+
+#### WS6 — Telemetry (parallel with WS2)
+
+- **Owns.**
+  - `packages/agent-run/src/telemetry/**`: the outcome row builder and the `RunEvent` → row mapping.
+  - An API migration pair (expand now, contract in a later push):
+    - `llm_usage_log.entry_point` and `run_model_outcomes.entry_point`;
+    - fill `turn_index` and `tool_schema_tokens`;
+    - `run_model_outcomes.compactions` and `run_model_outcomes.verify`;
+    - the §8.2 efficiency fields: `first_spawn_turn`, `covered_read_stubs`, `shell_file_reads`, `repo_errors`, `context_pack_tokens`, `model_preflight`, `unkept_ready_claims`, `progress_trips`.
+  - The ingest route changes that accept them.
+  - `scripts/telemetry-baseline.cjs`: read-only, prints §8.1 per entry point.
+- **Accept.**
+  - The migration is in both tracks (`llm_usage_log` lives in two migration tracks).
+  - The baseline script reproduces §8.1 from the live ops DB.
+  - The core emits one row per run with every §8.2 field.
+
+#### WS3 — Cloud adapter (after WS2 + WS6)
+
+- **Owns.**
+  - `api/src/application/runtime/cloudAdapter.ts`.
+  - The policy halves of `cloudAgentEngine.ts` (moved out, then deleted).
+  - `brain/agentReplyLoop.ts` (deleted).
+  - `CloudRunnerDO.ts` call site.
+  - `brain/agentReply.ts` call site.
+- **Do:**
+  - CloudRunnerDO calls `runAgent({ …, maxSteps: 1, resume })` each tick.
+  - Ports:
+    - provider = `cloudAgent/runProvider.ts` (git API + sandbox + IDE workspace, rehearsal as a decorator);
+    - store = DO cursor;
+    - events = run timeline;
+    - human = pause/resume;
+    - steering = steer relay.
+  - @-replies run through the same adapter with `toolScope: 'chat-reply'`.
+  - Board dispatch passes `RunTask.dispatch` and `RunPolicy.signoff` / `approvalGates` (§6.9).
+- **Accept.**
+  - Conformance passes on the cloud adapter at `maxSteps: 1`.
+  - Every cloud test passes unchanged.
+  - `cloudAgentEngine.ts` is gone or is the adapter (<300 lines).
+
+#### WS4 — VS Code + Rovr / Web / canvas adapters (after WS2 + WS6; highest-traffic, telemetry-gated)
+
+- **Owns.**
+  - `brain-embedded/src/run/webAdapter.ts`.
+  - The `brain-embedded/src/runStore/runLoop.ts` policy (moved, then deleted).
+  - `clients/vscode/src/run/vscodeAdapter.ts` and the `brainRunHost.ts` call site.
+  - `frontend/src/lib/creationCanvasAi.ts` (becomes a canvas capability provider + call site).
+- **Do:**
+  - The run store becomes `RunStore` + `HumanChannel` + `EventSink`. That keeps single-flight,
+    Stop, the confirm gate and the live trace.
+  - The local-first transport and `xmlToolCalls` become `ModelTransport`.
+  - Canvas board tools become a capability provider on the same run.
+  - Send the entry-point label (`vscode` / `web` / `rovr` / `canvas`).
+- **Accept.**
+  - Conformance passes.
+  - The brain-embedded, VS Code and frontend tests pass unchanged.
+  - The VSIX is packaged and installed.
+  - **Ship gate:** a week of VS Code telemetry is at or better than §8.1. If it regresses,
+    revert to the previous VSIX and route the failure back to the planning model.
+
+#### WS5 — On-prem adapter (after WS2 + WS6)
+
+- **Owns.**
+  - `agent-runtime/src/run/onPremAdapter.ts`.
+  - `builderforce/agent-loop/agent-loop.ts` policy (moved).
+  - `infra/sdk-agent-engine.ts`, `agents/claude-agent-sdk-runner.ts`, `agents/sdk-memory-server.ts` (deleted).
+  - The `infra/builderforce-relay.ts` call site.
+- **Do:**
+  - Tickets, channels and cron all call `runAgent`.
+  - The provider is node fs + shell plus the native `AgentTool`s:
+    - shared definitions move into `packages/agent-tools`;
+    - machine-only tools stay provider capabilities.
+  - The store is the session file. Events go out as relay frames.
+- **Accept.**
+  - Conformance passes.
+  - The agent-runtime tests pass unchanged. Each SDK runner test case is retargeted to the
+    public seam that carries the same behaviour, with the same inputs and expected values
+    (§5.1).
+  - Every §7 SDK row is covered.
+
+
+#### 5.2 Running this PRD from the BuilderForce VS Code extension
+
+The program can be driven from the BuilderForce chat in VS Code as well as from Claude Code.
+The rules above are the same. Only the names change:
+
+| Rule (§5) | In Claude Code | In the BuilderForce extension |
+|---|---|---|
+| Plan, sequence workstreams, edit ROADMAP / DONE / this PRD | the session model | the chat's own run (the parent) |
+| Write code | Opus | `spawn_agent` with `role: "code"` (a Developer when `as_agent` names one) |
+| Compile, typecheck, targeted tests, package | Sonnet subagent | `spawn_agent` with `role: "verify"` (QA). It reports pass/fail and the per-file test counts (§5.1). It does not judge design. |
+| Review the diff before a commit | Opus or Fable | `spawn_agent` with `role: "plan"`, handed the diff and §5.1's test-file rules, not the coder's conclusions |
+| Parallel workstreams | parallel agents | `spawn_agents`, one child per workstream, within one phase of the §4 graph |
+
+The account's model routing picks each role's model. It is not chosen in the task text.
+
+Children share the parent's working tree. So workstreams that run in parallel each work in
+their own git worktree on their own branch:
+
+```
+git worktree add .builderforce/worktrees/ws<N> -b feat/agent-run-ws<N>
+```
+
+`.builderforce/` is gitignored, so a worktree never shows as a change in the parent's tree.
+The child's task names its worktree path as its root for every file and shell call.
+`search_code` and `list_files` take that path as their scope: a repo-wide search skips
+ignored folders, so an unscoped search would read the parent's tree instead. The parent
+removes the worktree after the branch merges.
+
+Each child's task carries:
+- its workstream section of §4, verbatim;
+- §5, §5.1 and this table;
+- the path of this PRD and of the design reference, so it can read them itself.
+
+A child sees none of the parent's conversation.
+
+##### How the parent works (hard rule, from the 2026-10-25 run, §2.1)
+
+The parent plans. It does not research. Research means reading code, searching, or tracing
+callers, and it always goes to children.
+
+1. **Turns 1–2.** Read this PRD (one `read_file`, or its outline and then the sections in
+   question) and the chat's state, which the context pack supplies (§6.10). Do not call
+   `chats_list_tickets` or `chats_runs` for state the pack already holds. Do not read source
+   files.
+2. **By turn 5.** Spawn research children with `spawn_agents`: one per question or per
+   workstream, each with `role: "explore"` and a brief. A brief states:
+   - the question;
+   - the files or folders to start from (§4's "Ports from" column);
+   - what is already known, and what is ruled out;
+   - the answer's shape: paths with line numbers, short excerpts, a word cap.
+3. **While children run.** Draft the PRD / ROADMAP edits that don't depend on their answers.
+   Run long shell work in the background (§6.10). Never run it in the foreground.
+4. **When children report.** Write the PRD / ROADMAP / DONE edits **in the same turn** that
+   the last answer arrives. Filing tickets is not the deliverable. A run that files tickets
+   and leaves them undispatched, or that ends without the requested doc edit, has failed.
+5. **Budget.** A planning or PRD-update request finishes within 15 parent turns (§8.4). If it
+   is going over, stop reading and spawn.
+
+The same rule holds in Claude Code: the planner reads the PRD and delegates code research to
+Explore subagents in parallel.
+
+### 6. Behaviour each policy module must keep (summary; sources in §4)
+
+1. **Compaction.** Trigger on window pressure with reserve tokens. Summary-replace older
+   turns. Never drop the system prompt or the current task.
+2. **Stall.** Detect narration, announced-but-untaken calls and repetition. Re-prompt.
+   Force a final synthesis without tools when exhausted. Lift a prose question into ask.
+3. **Steering and stop.** Drain user messages between steps and acknowledge each as
+   `steer.applied`. A late steer is never lost. In addition, on every entry point (WS8e, E10):
+   - A message typed during a run steers it by default.
+   - A steer interrupts the step that's running. It aborts a foreground tool and skips that
+     turn's remaining calls.
+   - Stop, or a message `stopIntent` matches, aborts the tool in flight through
+     `ToolContext.signal` and kills its process. The run settles `cancelled` within 2 s.
+   - The model never gets another turn after a stop.
+4. **Finish.** Placeholder and no-deliverable blocks, the CI-pending wait, the review-verdict
+   requirement and the **sign-off requirement**, with counters persisted across steps. The
+   verify pin.
+5. **Guards.** A3 progress detector (steer → escalate → pause), on every run of every entry
+   point: parent and sub-agent, before and after edits. Its five signals are edit-revert,
+   repeated failure, circling read, unkept readiness claims and no progress. An unkept claim is
+   a turn that says the run is ready ("I have everything I need") and then only reads (WS8p).
+   New files reset the no-progress window, but they never excuse an unkept claim. D1 cascade
+   with escalation events. D7 post-edit checks, with the note shown on the next turn. D8 parallel reads.
+6. **Verify.** Declared checks in a shell, or branch CI, with honest exit codes. A command
+   that doesn't finish counts as not finished, never as a pass. Heartbeat and cancel.
+7. **Memory.** The per-turn brief in the volatile tail. Consolidation into `codemap:<area>`
+   facts at run end. Recall/remember tools.
+8. **Model.** Role ladder, cascade, learned routing, pins, limbic state, the free tier first,
+   Local only / Hybrid / Specific.
+9. **Governance (above the agent; retained as is).** These keep their single owners in
+   `api/`. WS3 retargets their dispatch at `runAgent` and changes nothing else.
+   - **Autonomous board execution:**
+     - `swimlane/laneEntryTrigger` and `runtime/autonomousExecutionSweep`;
+     - `swimlane/evaluateAutoRun`, including the circuit breaker;
+     - `runtime/autoRunSkipLedger`;
+     - `runtime/dispatchCloudRun`;
+     - `kanban/managedExecutionGuard` (audited override, never a refusal);
+     - `manager/coordinateTicket`.
+   - **Approvals by approver type:**
+     - `approval/approvalGate` and `runtime/executionApprovalGate`;
+     - `approval/autoApprovalRules`;
+     - `approval/approvalChain` (sequential steps; a rejection ends the chain);
+     - `swimlane/laneApprover` (requirements → capable staffed lane agents → fail-closed);
+     - `kanban/signoffGate`.
+   - **Contract with the agent.**
+     - The approval id rides `RunTask.dispatch`.
+     - The required sign-off role rides `RunPolicy.signoff`; the agent's finish policy
+       blocks until it is recorded, on every entry point.
+     - In-run approvals ride `RunPolicy.approvalGates`, and the HumanChannel routes them
+       to the approvals queue.
+10. **Context and efficiency (§2.1; WS8 first, then WS2c/e/f/g).** These are the same on
+    every entry point:
+    - **Context pack before turn 1.** The adapter's `ContextSource` builds the
+      `ContextPack` in one parallel fan-out, with no model call. It is attached as the
+      volatile turn-context block, so the cached system prefix doesn't change.
+      - Focus files are the paths named in the prompt or attachments. A focus file under the
+        read cap is inlined whole; otherwise the pack carries its heading/symbol outline with
+        line numbers (`file_outline`'s extractor).
+      - Chat state comes from the `gatherChatDiagnostics` readers.
+      - Git state is read per repo.
+      - The `codemap:` facts are those for the areas the focus files name.
+      - The pack is capped at 8k tokens. It drops the oldest or largest parts first and says
+        what it dropped.
+    - **Recall query.** It is built from the prompt plus the focus files' headings and the code
+      paths they name, never the bare sentence.
+    - **Read coverage.** It records what the model was *served* (post-trim) and covers
+      `read_file` plus read-only shell prints of a file. A replay serves the requested window.
+      It applies on every entry point; today only brain-embedded has it.
+    - **One result cap.** It comes from `windowedCap(tool, tableCap, window)` in
+      `tool-output-policy`, with the window from `ModelTransport.window()`:
+      - `read_file`: `clamp(windowToolResultCap(window), 16k, 64k)`;
+      - every other tool: `min(tableCap, windowToolResultCap(window))`;
+      - unknown window: the table cap. This replaces the cloud C7-off uncapped path, the @-reply 8k slice, canvas's
+      missing cap and on-prem's second guard, whose constants disagree with the package.
+    - **Reading tools.**
+      - `read_file` accepts `paths: string[]`, up to 8, with each file windowed and capped on
+        its own.
+      - A read of a markdown file larger than the cap returns its outline first, with a note
+        to page by heading line.
+    - **One catalog strategy.** A role core set (≤20) plus `tool_search`, with no lever. The
+      pinned, required and named-in-prompt tools stay advertised. `find_symbol` is registered
+      wherever `repo.symbols` exists, cloud included.
+    - **Default repo.** It is resolved by WS8b's resolver into `RunTask.workspace.defaultRepo`,
+      and git tools and the shell use it.
+    - **Background shell.** `run_command` gains `background` / `yieldMs`, plus a `process`-style
+      poll that returns a job handle. This ports on-prem's exec runtime to the shared tool. A
+      foreground command keeps the 10-minute ceiling.
+    - **Delegation.** When `RunPolicy.delegation.requested` is set, the nudge fires after
+      `readsBeforeNudge` reads with no spawn (WS8c), and the end-of-run check stays as the
+      backstop.
+    - **Model preflight.** Before turn 1 the model policy checks BYO resolution for the
+      vendors the role ladder would use.
+      - An `expired` token gets one refresh attempt.
+      - If the token is still unresolved, or the plan phase would land on a Flash-class
+        (non-`agentic` tier) model, the run emits `model.preflight` with the reason. The
+        HumanChannel shows it before any work starts.
+      - `llm.model_downgrade` also fires for auto-routed turns.
+    - **Write-back.** Every entry point that reads ≥3 files commits a `codemap:` consolidation
+      at run end, with `chatId` and `fileAnchors` (the anchors are derived server-side for
+      every writer). There is no `tags` field: the `codemap:` key prefix is what readers
+      filter on (WS8d). Read-only runs count.
+
+### 7. Retention ledger (nothing is lost)
+
+The full ledger, grouped by the parts of the one agent, is in the design reference
+("Every capability, and where it lives at the end"). WS1 delivered the filled copy, with a
+"Proven by" entry per row, at [`packages/agent-run/docs/retention-ledger.md`](./packages/agent-run/docs/retention-ledger.md).
+That file is the working ledger. 19 of its rows are marked **needs characterization test**;
+the WS that owns each one writes it first (§5.1 step 2). The rows most at risk:
+
+| Capability | Lives in, at the end | Found today in | Proven by |
+|---|---|---|---|
+| Read / Write / Edit / Bash / Glob / Grep | `agent-tools` `read_file` / `write_file` / `edit_file` / `run_command` / `list_files` / `search_code` on the node provider | Claude SDK built-ins | `claude-agent-sdk-runner.test` + agent-tools tool tests; conformance case per tool |
+| Sub-agents | `policy/subagents` | SDK `Task`, cloud child runs, editor `spawn_agent` | sub-agent / child-run tests; editor `subagentTool` tests |
+| Recall / remember during a run | memory tools on the `memory` capability | `sdk-memory-server` | WS1 to name; else characterization test (WS2e) |
+| ~40 machine tools (process, browser, orchestrate, fleet, MCP/plugins, channel actions) | `agent-tools` (shared) + on-prem provider (machine-only) | on-prem native `AgentTool`s | each tool's agent-runtime tests; WS1 lists any without |
+| Single-flight, Stop, confirm gate, live trace | RunStore / HumanChannel / EventSink ports | brain-embedded run store | brain-embedded run-store tests |
+| Local-first inference, XML tool-call lifting, served window | ModelTransport | `localFirstTransport`, `xmlToolCalls` | `xmlToolCalls` + local-first transport tests |
+| Durable ticks, sandbox, rehearsal, IDE workspace | cloud adapter + `cloudAgent/runProvider.ts` | `cloudAgentEngine`, CloudRunnerDO | cloud engine / DO / sandbox tests; conformance at `maxSteps: 1` |
+| Board autonomous execution; approvals by approver type; sign-off | governance layer (unchanged) + `RunPolicy.signoff` / `approvalGates` | §6.9 sources | existing governance tests (untouched) + board-dispatched conformance case with `signoff` |
+| Read de-dup / covered-read replay | `policy/tools` + `RunState.reads` | brain-embedded `readCoverage` + `beforeDispatch` (VS Code / Web / canvas only) | both `readCoverage.test` files + the WS8a characterization test |
+| Background exec + poll | `agent-tools` `run_command` + shell capability | on-prem `bash-tools.exec-runtime.ts`, `bash-tools.process.ts` | on-prem exec / process tests |
+| Window-sized result cap | `policy/tools` via `tool-output-policy` | on-prem `tool-result-truncation.ts`, `tool-result-context-guard.ts` | on-prem truncation + context-guard tests; `tool-output-policy` tests |
+| Deferred catalog + `tool_search` | `policy/tools` | `costLoop/deferredTools.ts` (behind `c1_deferred_tools`) | `deferredTools` tests |
+| Lexical tool ranking + router tools | `policy/tools` | `brain-embedded/src/selectTools.ts`, `toolRouter.ts` | `selectTools` tests |
+| Delegation nudge | `policy/subagents` | `brain-embedded/src/delegationRequest.ts`, `finalAnswerHook.ts` | `delegationRequest` tests + WS8c test |
+| Codemap write-back | `policy/memory` via `RunStore.commitMemory` | `cloudAgent/runEndMemory.ts`, `clients/vscode/src/memoryCommit.ts` | `runEndMemory*.test`, `memoryCommit.test` |
+| Stop kills the running tool; a steer interrupts a step; stop words in text | `policy/steering` + `ToolContext.signal` on every capability | on-prem `agent-loop.ts` (steer skips remaining calls), `bash-tools.exec.ts` (kill on abort), `auto-reply/reply/abort.ts` (`ABORT_TRIGGERS`) | on-prem `abort.test` + exec tests; WS8e tests; a stop conformance case on every adapter |
+| Default repo for git + shell | `agent-tools` resolver + adapter-built `RunTask.workspace` | `git-tools.ts` `inferRepoFromPath`, `ticketBranchTool.ts` `checkoutsUnder` | `git-repo-scope.test`, `ticketBranchReview.test` + WS8b cases |
+
+
+#### 8.2 The uniform outcome row (every run, every entry point)
+
+`entry_point`, `run id`, `steps`, `tool_calls`, `tool_errors`, `compactions`, `stall_recoveries`,
+`escalations`, `verify` (`passed` | `failed` | `not-run`), `terminal_status`, `model`, tokens,
+`cache_read_tokens`, `cost`, plus these efficiency fields:
+- `first_spawn_turn`: null when nothing was spawned;
+- `covered_read_stubs`;
+- `shell_file_reads`: `cat`/`sed`/`head`/`tail` of a workspace file;
+- `repo_errors`: not-a-repo results;
+- `context_pack_tokens`;
+- `model_preflight`: `ok` | `refreshed` | `degraded:<reason>`;
+- `unkept_ready_claims`: turns that claimed readiness and then only read (WS8p);
+- `progress_trips`: the A3 trips, by signal.
+
+Today VS Code rows lack tool counts, `turn_index` and `tool_schema_tokens` are always null,
+and compaction is unrecorded; WS6 closes those gaps.
+
+#### 8.3 Separate findings (not in scope; logged in ROADMAP)
+
+- 19,608 `auto_run_skipped` and 282 `auto_run_error` events in 30 days.
+- 2,093 auth-401 model failovers.
+- The builderforce-memory Claude Code hook recalls entries marked `[absorbed→Evermind v511] … (content lost)`: the absorb step kept the key but dropped the body, so recall returns empty stubs. That is builderforce-memory's absorb path, not this program.
+
+
+### 9. Out of scope
+
+- New capabilities, except the §6.10 efficiency items. Most of those port a capability that one
+  entry point already has to all of them. The genuinely new pieces are the `ContextPack`,
+  `read_file` `paths[]`, `model.preflight` and the read-only codemap consolidation.
+- UI redesign. The VS Code / web surfaces keep their UI; only the run underneath changes.
+- Changes to the board and governance behaviour itself (§6.9 retargets dispatch only).
+
+
+
+## ✅ RESOLVED 2026-10-31 — PRD 38: everything finished, moved out of the spec (rules, model, API, hosts, views, WS1–WS6, decisions)
+
+Moved word for word from [PRD 38](./docs/specs/38-prd-knowledge-graph.md), which now holds only what is left to complete. Section numbers are kept, so a `PRD 38 §x` citation in the code resolves here. What shipped is in the entries for 2026-10-29 and 2026-10-28.
+
+**Still open, in the PRD:** a review of the `agentic` workspace fails, and the §7 measures have not been read yet.
+
+### Header at the time of the move
+
+| | |
+|---|---|
+| Status | **Rev 3, approved 2026-10-28. Built 2026-10-29**: the audit gaps are closed (DONE.md, 2026-10-29). |
+| History | **Rev 1** (2026-10-25): a 2D code graph. <br>**Rev 2** (2026-10-28): 3D, layers, duplication. <br>**Rev 3** (2026-10-28, operator): <br>• **The knowledge graph is a structure of memory.** Facts on their own are recollections; facts connected by edges are knowledge. The engine moves into builderforce-memory, and there is no Builderforce `knowledge-graph` package. <br>• **A person can ask any host to review a directory**, code or not, and get a knowledge graph of it. <br>• **The first release ships two packs: code and docs.** Data (json/yaml/csv) is a later pack. |
+| Owner | Agents program. Planning is done by the session model, implementation by Sonnet agents, review by Opus agents, and compile, test and packaging by Haiku agents. |
+| Entry points | Web · Canvas/Studio · VS Code · Rovr · on-prem/cloud container |
+| Builds on | builderforce-memory `ingest` (`ParserRegistry`, the parsers, the content-hash `IngestManifest`), `retrieval`, `/working` codemap. `project_facts` + `file_anchors`. `@builderforce/repo-map`. `agent-tools/codeAnalysis.ts`. [deterministic-prefetch.md](./docs/design/deterministic-prefetch.md). [deterministic-knowledge-index.md](./docs/design/deterministic-knowledge-index.md). |
+| Roadmap | `ROADMAP.md` › Agent runtime, desktop (Synapse) and VS Code › "The knowledge graph…" |
+
+### 1. The rules
+
+1. **Knowledge is memory.**
+   - A fact is a memory. A fact connected to other facts, and to the sources it came from,
+     is knowledge.
+   - The graph's model, its joins, its traversal and its stored relations live in
+     builderforce-memory (`@seanhogg/builderforce-memory/knowledge`), beside `ingest`,
+     `retrieval` and `/working`.
+   - Builderforce supplies ports and packs. It never re-implements the graph.
+2. **Store judgement; compute perception.** Every node and edge has an `origin`:
+
+   | Origin | Means | Kept |
+   |---|---|---|
+   | `extracted` | a deterministic extractor read it from a source: an import, a heading, a link, a clone pair | **computed**, cached by the source's content hash, and never written as memory. Re-reading the source reproduces it exactly. |
+   | `model` | a model judged it: a claim, a merged entity, "contradicts" | **stored** as memory, with its confidence and the content hash it was judged from. It goes **stale** when the source changes. |
+   | `human` / `agent` | a person or a run asserted it: Add fact, a codemap, run-end facts, co-change | **stored** as memory, with provenance |
+
+   Re-reviewing a directory re-reads only changed files. Only judgement costs model calls.
+3. **One walk, one registry.** Reviewing a directory resolves every file through ONE
+   `ParserRegistry`, composed from the packs by `composePacks`. A file kind is a registry row
+   (a pack's parser), never a branch. Packs add what the kind needs: an extractor, partitions,
+   lenses and findings.
+4. **One graph, one view, many hosts.** A host decides only where files come from and where
+   memory is persisted. It never decides what the graph contains or how it is drawn.
+5. **Deterministic first.** Deterministic extraction, entity resolution and search run before
+   any model. A model is called only for judgement the person asked for (a review), within a
+   budget the person saw.
+
+### 2. Why
+
+- **People no longer read the files; agents write them.** People need to judge *shape*:
+  - is it layered;
+  - is it duplicated;
+  - what does it say;
+  - what contradicts what;
+  - what did this run change.
+
+  Nothing shows shape today:
+  - The Visualization panel draws only a run's changed files (`diffModel.ts`).
+  - `CodeAuditVisualizer` is a 2D SVG of one tool result.
+- **Not all of a person's work is code.** Specs, contracts, research notes and policy folders
+  are reviewed by reading every file. An agent asked about them re-reads them every time,
+  because nothing durable is built.
+- **The pieces exist but are not joined:**
+  - `ingest` parses markdown, HTML and plain text, and tracks content hashes;
+  - `repo-map` ranks code references;
+  - `codeAnalysis.ts` runs dependency-cruiser, jscpd and knip;
+  - `project_facts` holds what the team knows.
+
+  All four are flat or isolated. Rev 1 §5 decided memory would hold no relations, and that
+  decision is reversed here.
+
+### 3. What a person can do
+
+1. **Review a directory.** From any host, the person asks the agent to review a folder: they
+   type "review ./contracts", use `/review <dir>`, or use **Review with BuilderForce** on a
+   folder in the VS Code explorer.
+   - A confirm chip states the scope: files by pack, files unchanged since the last review,
+     and **≈ model calls and cost** for the judgement pass.
+   - The graph builds as the review runs, and opens when the review finishes.
+2. **See it in 3D.**
+   - **Planes** are the pack's partitions: code layers, or doc folders and sections.
+   - **Clusters** are areas.
+   - **Node size** is importance (PageRank over the graph).
+   - **Edges are vectors** from user to used, or from citing to cited. Edges that break the
+     rules and cycles are highlighted.
+   - Orbit, zoom and fly-to work by mouse and touch.
+3. **Switch lenses.** Lenses are registry rows. Each one declares the packs it applies to:
+
+   | Lens | Packs | Shows |
+   |---|---|---|
+   | Structure | all | extracted edges and importance |
+   | Partitions | code (layers) | rule-breaking arcs and the partition matrix |
+   | Duplication | all | exact clones (jscpd, code), and near-duplicates (sections or files) from the index |
+   | Claims | docs | model-extracted claims, with **contradiction** and **agreement** edges |
+   | Links | docs | link and reference edges, with broken links as findings |
+   | Unused | code | knip's unused files, exports and dependencies |
+   | Knowledge | all | facts and entities attached to their sources, with stale ones marked |
+   | Live | code | the run's changed files, with co-change edges |
+   | Compare | all | before and after of two reviews or analysis snapshots: what got better or worse |
+
+4. **Trace a path.** The person picks a node:
+   - In **code** they see a **layer sequence**: lanes are layers, messages are references,
+     and skipped or climbed layers are marked.
+   - In **docs** they see how one document reaches another through links and citations.
+
+   *Copy as Mermaid* exports the trace.
+5. **Act.** Every finding has **Fix with agent**, which routes a fixed, prefilled request into
+   the ONE composer:
+   - "Consolidate clone group #3";
+   - "Move the db import behind a port";
+   - "Reconcile §4.2 of a.md with §2 of b.md";
+   - "Repair 3 broken links".
+
+   The requests are a fixed list, never a model call.
+6. **Ask.** Questions about a reviewed directory are answered from memory, without re-reading
+   the files:
+   - "what does the lease say about termination";
+   - "where is billing handled".
+
+   Recall returns the hits plus their graph neighbours, through the deterministic knowledge
+   index and graph expansion. The prefetch row `knowledge.ask` answers with no model when the
+   graph alone is confident.
+7. **Remember.** **Add fact** on a node writes a `human` fact, anchored to its source, that
+   every host and agent sees.
+
+Non-goals for this release:
+- the data pack (json/yaml/csv);
+- OCR or image understanding (pdf and office files contribute only the text that can be
+  extracted deterministically);
+- editing sources from the graph;
+- graphs across tenants.
+
+### 4. End state
+
+```
+ hosts supply a DirectorySource + a KnowledgeStore (ports only)
+ ┌────────────────────┬──────────────────────┬──────────────────────┬──────────────────────┐
+ │ VS Code            │ on-prem / container  │ Web·Canvas·Studio    │ Rovr                 │
+ │ workspace folders  │ container fs         │ webcontainer VFS ·   │ File System Access   │
+ │                    │                      │ Cloud Drive · upload │ directory picker     │
+ └─────────┬──────────┴──────────┬───────────┴──────────┬───────────┴──────────┬───────────┘
+           ▼                     ▼                      ▼                      ▼
+  builderforce-memory  /knowledge
+    reviewDirectory()  ─▶ parse: the ONE ParserRegistry, composed from the packs (docs builtin, code registered)
+                       ─▶ extract (deterministic) ─▶ resolveEntities (deterministic keys)
+                       ─▶ JudgementPort (model, budgeted, cached by content hash)  [review only]
+                       ─▶ KnowledgeStore.write(model/human facts + relations)
+    buildGraph(scope)  ─▶ join extracted (computed) + stored (memory) ─▶ KnowledgeGraph
+    partitions · traceGraph · findings · toCards ─▶ knowledge index (retrieval)
+           │
+           ▼
+  @builderforce/knowledge-graph-view  (source-only React; three + @react-three/fiber)
+           │
+  canvas surface · VS Code Visualization panel tab · Rovr side panel · web project page
+```
+
+#### 4.1 Memory: `@seanhogg/builderforce-memory/knowledge` (new subpath)
+
+The model is generic. It knows sources, entities, facts and relations, and nothing about
+imports or headings.
+
+```ts
+export type NodeRef = `src:${string}` | `ent:${string}` | `fact:${string}`;   // src: `${rootId}::${path}`
+export type Origin = 'extracted' | 'model' | 'human' | 'agent';
+
+export interface KNode {
+  ref: NodeRef; kind: string;                 // pack-defined: 'file' | 'section' | 'symbol' | 'party' | 'claim' | 'area' …
+  label: string; pack: string; partition?: string; area?: NodeRef;
+  importance: number;                         // PageRank over the joined graph, 0–1
+  origin: Origin; sourceHash?: string; stale?: boolean;
+  badges?: Record<string, number | string>;   // pack data: { added, removed }, { unused: 'file' }, …
+}
+export interface KEdge {
+  from: NodeRef; to: NodeRef; kind: string;   // 'references' | 'links' | 'contains' | 'mentions' | 'duplicate'
+                                              // | 'near-duplicate' | 'contradicts' | 'agrees' | 'supersedes'
+                                              // | 'about' | 'co-changed'
+                                              // 'supersedes' is reserved: no review or host emits it.
+                                              // A person supersedes a fact by deleting it and adding
+                                              // the new one (§8, decision 3).
+  weight: number; origin: Origin; confidence?: number;
+  verdict?: 'allowed' | 'same' | 'skips' | 'upward';   // set by partitions (§4.4)
+  cycle?: boolean;
+  stale?: boolean;                            // a stored relation whose source changed since it was judged (§5.2)
+  byName?: string;                            // extracted edges only: the `[[Name]]` the link was written with.
+                                              // buildGraph re-points it to the one present file of that name;
+                                              // never emitted in the graph
+}
+export interface KnowledgeGraph {
+  scope: { rootId: string; packs: string[]; digest: string };
+  nodes: KNode[]; edges: KEdge[]; findings: Finding[];
+  stats: { sources: number; nodes: number; edges: number; stale: number; truncated: boolean };
+}
+
+// pack contract: parsers are rows of the ONE ParserRegistry, composed from the packs (composePacks)
+export interface DocumentParser {            // the ingest contract, extended
+  id: string; accepts(s: SourceDocument): boolean; parse(s: SourceDocument): ParsedSection[];
+  extract?(s: SourceDocument, sections: ParsedSection[], ctx: ExtractContext): Extracted;   // optional, pure
+}
+export interface Extracted {
+  sourceRef: NodeRef; sourceHash: string;
+  extractorVersion?: number;                 // EXTRACTOR_VERSION that produced it; a cached entry of another version is ignored
+  nodes: KNode[]; edges: KEdge[]; keys: Array<{ ref: NodeRef; key: string }>;
+}
+
+export interface KnowledgePack {
+  id: string;                                // 'docs' | 'code'
+  parsers: KnowledgeParser[];                // a DocumentParser; composePacks registers them
+  partitions?: PartitionRegistry;            // §4.4
+  findings?: FindingRule[];                  // pure: (graph) => Finding[]
+  judgement?: JudgementSpec;                 // what the model is asked, per section kind (schema-validated)
+  analyzers?: AnalyzerPort;                  // host-run tools (code: codeAnalysis) → Extracted
+}
+
+export interface KnowledgeStore {            // port: platform API adapter or local snapshot adapter
+  scopes(): Promise<ScopeRecord[]>;                      // { rootId, title, packs, lastDigest?, lastReviewedAt? }
+  facts(scope: Scope): Promise<StoredFact[]>;            // project_facts rows (+ file_anchors)
+  relations(scope: Scope): Promise<StoredRelation[]>;    // §4.2
+  write(batch: { scope: ScopeRecord; facts: StoredFact[]; relations: StoredRelation[] }): Promise<void>;
+  markStale(scope: Scope, sourceRef: NodeRef, currentHash: string): Promise<void>;
+  getExtracted?(hash: string): Promise<Extracted[] | undefined>;      // extracted cache, by content hash
+  putExtracted?(hash: string, extracted: Extracted[]): Promise<void>;
+}
+export interface DirectorySource {           // port: one adapter per host
+  rootId: string; title: string; list(): AsyncIterable<{ path: string; hash: string; size: number }>;
+  read(path: string): Promise<SourceDocument>; watch?(cb: (paths: string[]) => void): () => void;
+}
+export interface JudgementPort { judge(req: JudgementRequest): Promise<JudgementResult> }   // routed model call
+
+export interface ReviewArgs {
+  source: DirectorySource; store: KnowledgeStore; packs: KnowledgePack[]; manifest: IngestManifest;
+  judgement?: JudgementPort;
+  similar?: (ids: string[], texts?: ReadonlyMap<string, string>) => Promise<SimilarPair[]>;   // near-duplicate claim pairs (§4.3)
+  budget: { modelCalls: number; ms: number };
+  plan?: PlanDetail;                         // Continue: the confirmed plan, refreshed against the manifest, not re-walked
+  force?: boolean;                           // Re-review all; ignored with `plan`
+  signal?: AbortSignal; onProgress?(p: ReviewProgress): void;
+}
+export interface ReviewReport {
+  rootId: string; digest: string; extracted: number; judged: number;
+  unjudged: number;                          // sections and compare pairs left for Continue
+  invalidJudgements: number; factsWritten: number; relationsWritten: number; staleMarked: number;
+  readErrors: number;                        // files whose read threw: skipped, never retired (§4.3)
+  aborted: boolean; durationMs: number;
+}
+export function reviewDirectory(args: ReviewArgs): Promise<ReviewReport>;
+
+export interface PlanOptions {
+  maxFileBytes?: number;                     // default 2 MB
+  force?: boolean;                           // every file is `changed`; `removed` still comes from the real manifest
+  compare?: boolean;                         // default true. A host that will not pass `similar` MUST pass false (§4.3)
+}
+export interface PlannedFile { path: string; hash: string; size: number; pack: string; changed: boolean; owed: boolean }
+export interface PlanDetail {
+  plan: ReviewPlan;
+  files: PlannedFile[];                      // every included file, sorted by path
+  prior: Map<string, string>;                // the manifest's path → hash
+  extractor: ExtractorState;                 // the `:extractor` entry the plan was made against (§4.3)
+  carried: string[];                         // owed paths the manifest holds that `files` does not list
+}
+export function planReview(source: DirectorySource, manifest: IngestManifest, packs: KnowledgePack[], opts?: PlanOptions): Promise<ReviewPlan>;   // the confirm chip's numbers
+export function planDetail(source: DirectorySource, manifest: IngestManifest, packs: readonly KnowledgePack[], opts?: PlanOptions): Promise<PlanDetail>;
+export function refreshPlan(detail: PlanDetail, manifest: IngestManifest): Promise<PlanDetail>;   // Continue, without a re-walk
+
+export function extractFile(a: ExtractFileArgs): Promise<Extracted | undefined>;   // ONE file, cached by content hash (§4.3)
+export function buildGraph(input: { rootId: string; extracted: Extracted[]; facts: StoredFact[]; relations: StoredRelation[];
+  packs: KnowledgePack[]; live?: LiveOverlay; nearDuplicates?: SimilarPair[] }, opts?: { maxNodes?: number; focus?: NodeRef[] }): KnowledgeGraph;
+export function traceGraph(g: KnowledgeGraph, from: NodeRef, opts?: { edgeKinds?: string[]; maxDepth?: number; maxSteps?: number; registry?: PartitionRegistry }): LanedTrace;
+export function toMermaid(t: Trace, label: (r: NodeRef) => string): string;
+export function toCards(g: KnowledgeGraph): IndexDoc[];   // feeds the knowledge index
+```
+
+`ScopeRecord.title` is a string in memory. The platform's `knowledge_scopes.title` column is
+nullable, and the API reads a missing title as the root id (§4.2).
+
+Files are under `packages/memory/src/knowledge/`:
+
+| Area | Files |
+|---|---|
+| Model and ports | `model.ts`, `reviewModel.ts` (`DirectorySource`, `ReviewPlan`, `ReviewProgress`, `ReviewReport`, `ReviewArgs`) |
+| Graph | `build.ts`, `truncate.ts`, `importance.ts`, `resolve.ts`, `refs.ts`, `partitions.ts`, `trace.ts`, `findings.ts`, `cards.ts` |
+| Review | `plan.ts`, `owedFiles.ts`, `review.ts`, `reviewCompare.ts`, `reviewStored.ts`, `extractFile.ts`, `judge.ts`, `sources.ts` |
+| Adapters and packs | `stores/localSnapshotStore.ts`, `packs/docs.ts` |
+
+Each is at most 300 lines. `ingest/types.ts` carries the optional `extract` on
+`DocumentParser`; `markdownParser`, `htmlParser` and `plainTextParser` implement it (in
+`ingest/textParsers.ts`, over `ingest/docsExtract.ts`), and the existing ingest tests run unchanged.
+
+#### 4.2 Stored relations: one table, single writer
+
+There is no new entity table:
+
+- Judgement nodes (claims and merged entities) are **`project_facts` rows**, in key
+  namespaces `ent:<pack>:<normalized-name>` and `claim:<hash>`.
+- They are anchored by `file_anchors`, which already carry `{path, line?, contentHash?}`. The
+  `contentHash` is what marks them stale.
+- A new kind is a key namespace, never a new table.
+
+New tables, shipped as an expand/contract migration (the add goes in push 1):
+
+```sql
+-- 1278_knowledge_relations.sql
+CREATE TABLE IF NOT EXISTS project_fact_relations (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id   integer NOT NULL REFERENCES tenants(id)  ON DELETE CASCADE,
+  project_id  integer NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  from_ref    varchar(512) NOT NULL,          -- NodeRef
+  to_ref      varchar(512) NOT NULL,          -- NodeRef
+  kind        varchar(32)  NOT NULL,          -- edge kind (§4.1); a new kind is a value
+  weight      real NOT NULL DEFAULT 1,
+  origin      varchar(8)   NOT NULL CHECK (origin IN ('model','human','agent')),  -- 'extracted' is never stored
+  confidence  real,
+  source_hash varchar(64),                    -- content hash judged from; null for human
+  stale_at    timestamp,
+  created_by  varchar(36) REFERENCES users(id) ON DELETE SET NULL,   -- users.id is varchar(36)
+  created_at  timestamp NOT NULL DEFAULT now(),
+  CONSTRAINT uq_fact_relation UNIQUE (tenant_id, project_id, from_ref, to_ref, kind)
+);
+CREATE INDEX IF NOT EXISTS idx_fact_relations_from ON project_fact_relations (tenant_id, project_id, from_ref);
+CREATE INDEX IF NOT EXISTS idx_fact_relations_to   ON project_fact_relations (tenant_id, project_id, to_ref);
+
+CREATE TABLE IF NOT EXISTS knowledge_scopes (            -- one row per reviewed root
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id   integer NOT NULL REFERENCES tenants(id)  ON DELETE CASCADE,
+  project_id  integer NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  root_id     varchar(512) NOT NULL,          -- `${host}:${repoId or folder id}:${path}`
+  packs       varchar(64)[] NOT NULL,
+  title       varchar(255),                   -- nullable; the API reads a missing title as the root id
+  last_digest varchar(64), last_reviewed_at timestamp,
+  CONSTRAINT uq_knowledge_scope UNIQUE (tenant_id, project_id, root_id)
+);
+
+-- 1279_knowledge_scope_previous_digest.sql
+ALTER TABLE knowledge_scopes ADD COLUMN IF NOT EXISTS previous_digest varchar(64);   -- the digest before last_digest; Compare's baseline
+```
+
+- **3NF.** A scope's membership is derived from the anchor path prefix and is not stored. A
+  relation's endpoints are refs, never copied text.
+- **Origin is checked server-side, not trusted.** The writer accepts:
+  - `human` only from a person, who becomes the author (`created_by`);
+  - `agent` only from a machine caller (the agent-host door);
+  - `model` from either, with no author, because a review a person starts runs the judgement under their session.
+
+  Any other combination is rejected with `400 origin_mismatch`. When a row carries no origin,
+  it defaults to the writer's kind: a person writes `human`, a machine writes `agent`.
+- **A machine never overwrites what a person wrote.** A machine fact whose key a person
+  authored is skipped. The key is listed in `factsSkipped` in the write result, and the rest
+  of the batch still lands. A `codemap:` key is the one exception: a machine may merge into
+  it, and it keeps its origin and author. The Evermind learning transfer writes through the
+  same rule, so transferring a learning whose fact key a person authored answers
+  `409 fact_owned_by_person` (§4.8).
+- **Single writer.** The application use case `writeKnowledge` is the only writer. The facts
+  routes and run-end memory route through it.
+- **Other write rules.**
+  - A `model` relation that touches a source (`src:`) must name the `sourceHash` it was
+    judged from, or the write is refused with `400 missing_source_hash`. Without the hash
+    nothing could ever mark the edge stale.
+  - `origin: 'extracted'` is refused with `400 extracted_not_stored`.
+  - A call carries at most 500 rows (facts, relations and stale marks together), or the
+    write is refused with `413 too_many_rows`.
+  - A `model` fact's content passes through `clampClaim` (§5.2).
+  - The knowledge version is bumped once per call.
+- **`project_facts` gains two columns** in the same migration: `created_by varchar(36)` (the
+  author, which the delete rule needs) and `origin` (`model` | `human` | `agent`).
+  - Facts written before 1278, and agent-written facts with no author, stay deletable by any
+    project member. That keeps `memory_forget` working.
+  - Ticket-scoped run outcomes live in `agent_memory`, which has no anchors, so they do not
+    join the graph. Project-scoped outcomes and codemaps do.
+- **Extracted cache layout.** One R2 object per source path
+  (`knowledge/{tenant}/{project}/{rootId}/src/{sha256(path)}.json`, holding `{path, hash}`) plus
+  the extracted output by content hash (`knowledge/{tenant}/{project}/extracted/{hash}.json`).
+  The graph lists the root by prefix, so concurrent reviews never read-modify-write a shared
+  manifest. Two more objects per root:
+  - `…/{rootId}/reviews/{digest}.json`, the root's sources when a review recorded `digest`,
+    written once and never rewritten (Compare's baseline);
+  - `…/{rootId}/code-analysis/{sha}.json`, the code pack's analyzer snapshot of one commit,
+    stored per `(root, sha)`.
+- **Local, with no project linked.** `localSnapshotStore` persists the same shapes beside the
+  memory MCP snapshot (`shared-json-file.ts`), and uploads when the folder is linked to a
+  project.
+
+#### 4.3 Review: the sequence
+
+```
+review request ─▶ planReview (walk + manifest diff; no reads of unchanged files) ─▶ confirm chip (files·packs·≈calls·≈cost)
+   ─▶ per changed file (extractFileDetailed): read ─▶ parse (the composed ParserRegistry) ─▶ extract (pure) ─▶ cache extracted by content hash
+   ─▶ resolveEntities: exact normalized keys merge; near-duplicates (knowledge index) become 'possible-same' findings, never auto-merged
+   ─▶ judgement (only sections the pack marks, only changed hashes, ≤ budget; routed: local engines → cheap tier):
+        claims · entities
+   ─▶ KnowledgeStore.write · markStale(changed sources)
+   ─▶ analyzers ─▶ compare near-duplicate claim pairs (contradicts/agrees; needs `judgement` and `similar`)
+   ─▶ manifest (files · judged · compare · extractor) · knowledge_scopes.last_digest
+   ─▶ host side: knowledge index upsert(toCards) ─▶ view opens on the graph
+```
+
+The host owns the last step. `reviewDirectory` does not write the knowledge index: the
+on-prem host upserts `toCards(graph)` into its index after the review, and the server
+builds its index per graph digest on first search (§4.8).
+
+Rules:
+
+- **Writes need confirmation.** Review writes memory, so the confirm chip is mandatory
+  whatever the gate's confidence (the deterministic-prefetch write rule).
+- **The budget is enforced.** Past the budget (`budget.modelCalls`, default 200, or the
+  `budget.ms` deadline), the remaining sections stay extracted-only and the report says how
+  many (`unjudged`). The person can continue, and continuing reuses the plan.
+- **Stop aborts the review.** Facts already written stay, and are consistent per file.
+- **Deterministic.** The same files at the same hashes give the same extracted graph and
+  digest. Model output is never re-requested for an unchanged hash.
+- **Respect ignores.** `.builderforce/ignore` and every `.gitignore` apply; a nested
+  `.gitignore` applies to its own folder. So do binary detection (by extension, and again on
+  read) and a size cap (2 MB per file, configurable with `PlanOptions.maxFileBytes`). A skipped
+  file is reported with a reason: `ignored`, `binary`, `too-large` or `no-pack`. PDF and
+  Office files are reviewed only when a host parser claims their media type; otherwise they
+  are skipped as `binary`.
+- **A read error never retires a file.** A file whose read throws is skipped, and
+  `ReviewReport.readErrors` counts it. Its knowledge and manifest hash stay as they were, and
+  the next review tries it again. Only a file the fresh plan no longer lists is removed
+  (`removed`).
+- **Extractor upgrades are tracked per file.** The `knowledge:<root>:extractor` manifest entry
+  holds the extractor version (`EXTRACTOR_VERSION`) plus the files still owed a re-extraction,
+  as `owed:<path>` rows whose value is the calls each still costs.
+  - A file is owed when the stored version differs from `EXTRACTOR_VERSION` (every file, once),
+    or when an earlier run left it unfinished: cut by the budget, a failed judge call, a read
+    error, or an abort before it. Owed does not depend on the file's content.
+  - Every run writes the entry, including a run that aborts. A permanently unreadable file is
+    the only file re-read; the rest of the root is not re-processed.
+  - Unchanged sections re-anchor for free after an upgrade. Only new sections, such as the
+    text before the first heading, cost a call.
+  - A host stores these rows as opaque `{ id, hash }` values (the manifest contract is
+    `IngestManifest.get/set/delete` of `ChunkFingerprint[]`).
+- **The manifest keys per root** are `knowledge:<root>` (`{ id: path, hash }`),
+  `knowledge:<root>:judged` (`{ id: sectionRef, hash: textHash }`), `knowledge:<root>:compare`
+  (the awaiting backlog, below) and `knowledge:<root>:extractor`.
+- **Near-duplicate claims are compared after judgement.**
+  - The phase runs only when a pack asks for contradictions (`judgement.contradictions`) and
+    the run has both a `judgement` port and a `similar` port.
+  - `similar(ids, texts?)` receives the pending claim refs, sorted, and optionally each ref's
+    claim text (`subject predicate object`), so a host need not re-read facts to embed them.
+    A port that takes only `ids` keeps working.
+  - Claims whose pairs could not all be compared (budget, a failed call, an abort) wait in the
+    `:compare` entry, so *Continue* picks them up. The awaiting backlog is capped at 2000
+    claims, and the oldest are dropped first. It is trimmed only after a compare actually ran;
+    a run without the ports leaves it as it found it. Each row stores its age
+    (`<age>:<fileHash>`, 0 the oldest), so the order survives a manifest that returns rows
+    sorted by id. Only packs whose `judgement.contradictions` is true queue claims.
+- **The estimate tracks what a run spends** (`estimatedModelCalls`):
+  - one call per judged section of each file whose content changed, at
+    `AVG_SECTION_BYTES` (1500) bytes per section, for packs that ask for claims or entities;
+  - for an unchanged owed file, the calls it is still owed, plus one while an extractor
+    upgrade is pending;
+  - when compare is on and a pack asks for contradictions, one compare call per 10 of those
+    sections, including the claims already waiting in the backlog.
+
+  `PlanOptions.compare` (default `true`) says whether the run will compare. **A host that will
+  not pass `similar` must pass `compare: false`**, or the estimate counts compare calls the run
+  never spends. `reviewDirectory` plans with `compare` set to whether it was given both
+  `similar` and `judgement`. The shared host runner (`planKnowledgeReviewDetail`) does the
+  same. The browser hosts pass no `similar`, so they plan no compare calls.
+- **Re-review all and Continue.**
+  - `PlanOptions.force` (`ReviewArgs.force`) plans every file as changed whatever its hash.
+    `removed` still comes from the real manifest, which a fake empty manifest would lose along
+    with the compare backlog. The estimate still counts only files whose content changed
+    (sections judged before are re-anchored, not judged again), plus the calls files are owed.
+    A forced run cut short is forced again; *Continue* re-derives what is left from content
+    hashes.
+  - *Continue* passes the confirmed `PlanDetail` back as `ReviewArgs.plan`. `refreshPlan`
+    re-reads `changed` against the manifest and owed list as the last run left them, without
+    re-walking the directory.
+- **One file, outside a review.** `extractFile` / `extractFileDetailed` re-extract a single
+  file the way a review does (compose the packs, parse, extract with the known entity keys,
+  stamp `EXTRACTOR_VERSION`, read and write the extracted cache by content hash). A host
+  watching edits calls it. `knownKeysOfEntities` builds the entity keys from fact keys.
+
+#### 4.4 Partitions: ordered groups and who may use whom (generic)
+
+```ts
+export interface PartitionRule { id: string; order: number; match: string[] }           // globs
+export interface PartitionRegistry { partitions: PartitionRule[]; allow?: Record<string, string[]> }
+export function loadPartitions(pack: KnowledgePack, override?: unknown): PartitionRegistry;  // `.builderforce/partitions.json`
+```
+
+Each edge gets a verdict: `same`, `allowed`, `upward` (to a lower order) or `skips`
+(anything else). The verdict is set only when the pack defines `allow`.
+
+- **The code pack's default** is the N-layer rule:
+
+  | Layer | Default globs | May use |
+  |---|---|---|
+  | presentation | `**/routes/**`, `**/components/**`, `**/app/**`, `**/pages/**`, `**/webview/**` | application, domain |
+  | application | `**/application/**`, `**/use-cases/**` | domain |
+  | domain | `**/domain/**` | (nothing) |
+  | infrastructure | `**/infrastructure/**`, `**/db/**`, `**/adapters/**` | domain, application |
+
+  The code pack also generates the dependency-cruiser `forbidden` rules from the same
+  registry (`toDependencyCruiserRules`), so the gate and the view never disagree.
+- **The docs pack's default** partitions by top-level folder, with no `allow`, so planes
+  without verdicts.
+
+#### 4.5 Packs in this release
+
+**docs** is built into memory:
+- **Parsers:** markdown, HTML and plain text. PDF and office files are reviewed only when a
+  host registers a parser that claims their media type; the built-in text parsers decline
+  those types inside `composePacks`, so without a host parser they are skipped as `binary`.
+- **Extracted:** `file`, `section` (the heading breadcrumb), `contains`, `links`, `mentions`
+  (exact normalized match against known entity keys) and front-matter keys.
+  - `links` cover inline links, reference-style links (`[text][id]` with an `[id]: target`
+    definition) and `[[wiki]]` links, resolved to `src:` refs.
+  - A `[[wiki]]` link resolves by name to the one file of that name anywhere in the root.
+    `buildGraph` does the re-pointing over the files present now, so a cached extract never
+    depends on which other files exist (the edge carries `byName`).
+  - A link that points outside the root stays as a broken link (a `missing` node).
+  - The text before the first heading, or all of a file that has none, is a section under the
+    reserved ref `#~preamble`, so it is judged and anchored like any other. A preamble that is only front matter belongs to the
+    file, not to a section.
+- **Judgement:** for each section, `claims[]` (subject, predicate, object, quote span) and
+  `entities[]` (name, type). For near-duplicate claim pairs, `contradicts` or `agrees`. The
+  output is schema-validated, and invalid output is dropped and counted.
+- **Findings:** broken link, orphan document (no inbound links), near-duplicate sections,
+  contradiction (it names both sections), stale claim. The docs pack supplies the broken-link,
+  orphan-document and contradiction rules; near-duplicate and stale come from the generic
+  rules. Relations and model facts on a deleted or changed source show as stale.
+
+**code** is registered by Builderforce from `packages/agent-tools/src/knowledge/codePack.ts`:
+- **Parser and extractor:** a `repo-map` extractor gives `references`, weighted by shared
+  identifiers. Symbols come from `WorkspaceSymbolIndex` or tree-sitter, and areas from the
+  `/working` `areaOfPath`.
+- **Analyzers:** the existing `codeAnalysis.ts` produces `duplicate` edges (jscpd), cycles
+  (dependency-cruiser) and unused badges (knip), and is cached per sha. On web hosts the
+  analyzer output is the last uploaded snapshot (`PUT …/code-analysis/:sha?root=`, stored per root and sha).
+- **Partitions:** the N-layer default.
+- **Findings:** layer violation, cycle, clone group, near-duplicate, unused, unlayered share.
+- **Judgement:** none by default. Code review stays the agent's job, and Fix with agent
+  routes to it.
+- **Live:** `pendingChanges` and diffs (VS Code), or VFS watch (web).
+
+#### 4.6 The view: `@builderforce/knowledge-graph-view` (source-only React)
+
+It lives in a package rather than `frontend/src` because Rovr can import only source-only
+packages. The package is pack-agnostic: lenses, legends and finding actions come from
+registries.
+
+| File | Responsibility |
+|---|---|
+| `KnowledgeGraphView.tsx` | Root. Props: `{ source: KnowledgeGraphSource; labels?: Partial<KnowledgeGraphLabels>; onCompose?(text: string): void; initialFocus?: string[]; initialLens?: LensId; openReview?: boolean; renderPanel?; confirm?; lenses?: LensId[]; lensControl?: 'chips' \| 'tabs'; onOpenSource?(location) }`. Shows an explained empty state when there is no scope, with **Review a folder** as the call to action. |
+| `useKnowledgeGraph.ts` | load, live updates, lens, focus, search and review progress. A finished review is the only event that re-subscribes Live (a review can make the open root watchable), and it also reloads the root and its baseline. |
+| `lenses.ts` | `LENSES: Record<LensId, { packs; nodeStyle; edgeFilter; legend; insights }>`. A lens is a row. |
+| `scene/GraphScene.tsx` | r3f; instanced nodes; one `LineSegments` buffer per edge kind; OrbitControls (touch); fly-to |
+| `scene/layout3d.ts` | Deterministic. Partition → plane; areas → seeded spiral by importance; nodes → fixed-iteration relaxation with the seed from the root id. Equal input gives equal coordinates. |
+| `scene/themeColors.ts` | `--kg-*` tokens via `getComputedStyle`, re-read on theme change; no literals |
+| `tokens.css` | The ONE definition of every `--kg-*` token (the colours below). Exported as `@builderforce/knowledge-graph-view/tokens.css`. |
+| `TracePanel.tsx` | SVG lanes and arrows from `Trace`; *Copy as Mermaid* |
+| `PartitionMatrix.tsx` · `FindingsPanel.tsx` · `NodePanel.tsx` · `ReviewProgress.tsx` | Insights; findings with *Fix with agent*; the node's facts, claims and *Add fact*; live review progress. Side panels use SlideOutPanel semantics. |
+| `ComparePanel.tsx` · `EvidenceList.tsx` | The Compare lens's before/after; where a finding was seen (line ranges, an excerpt) |
+| `ReviewLauncher.tsx` · `useReviewRun.ts` | The review entry (targets, picker) and the confirm handshake state. `ReviewProgress.tsx` shows the confirm chip's cost (below). |
+| `Toolbar.tsx` · `Sheet.tsx` | Lens control (chips or tabs), search and mode; the package's own side sheet when a host passes no `renderPanel` |
+| `ListFallback.tsx` | No WebGL, or reduced motion: the same data grouped by partition, with every lens's findings |
+
+Standards that apply in full:
+
+- **Labels.** Typed `KnowledgeGraphLabels` with English defaults (the brain-ui pattern).
+  Hosts pass `knowledgeGraph.*` from all five catalogs; Rovr uses `_locales` in five
+  languages. The package hardcodes no strings.
+- **Theme.** Tokens only; both themes checked.
+  - Every `--kg-*` token is defined ONCE, in `packages/knowledge-graph-view/src/tokens.css`.
+    A host imports it from its entry
+    (`import '@builderforce/knowledge-graph-view/tokens.css'`), and the bundler folds it into
+    the host's one stylesheet.
+  - The package's rules have zero specificity (`:where`), so a host's plain
+    `:root { --kg-x: … }` wins wherever it sits in the cascade. The neutrals alias the shared
+    `--bf-*` bridge. Dark is the default; `html[data-theme='light']` selects the darker twin of
+    each hue.
+  - Each host maps only what it must. The web and Rovr map nothing (Rovr mirrors its colour
+    scheme onto `html[data-theme]`). The VS Code webview re-points the node, edge and finding
+    hues at the editor's own theme colours (`webview/src/knowledgeGraph/hostTokens.css`).
+  - Contrast targets: **3:1 for graphics** (node, edge and plane hues) and **4.5:1 for text**
+    (muted, stale, error and violation tones used as text), against the host's surface in
+    both themes. `tokens.css` records the computed ratios for the web palette.
+- **360px.** The view opens focused (top 60 nodes), lenses sit in a deliberate horizontal
+  scroller, panels are sheets, and tap targets are at least 40px.
+- **Performance.** Up to 2000 nodes and 8000 edges as instanced geometry. Layout runs on idle
+  (`requestIdleCallback`). The 3D chunk is lazy, and the first paint is the list.
+
+```ts
+export interface KnowledgeGraphSource {
+  scopes(): Promise<Array<{ rootId: string; title: string; packs: string[]; lastReviewedAt?: string }>>;
+  load(rootId: string, opts?: { focus?: string[]; maxNodes?: number }): Promise<KnowledgeGraph | null>;
+  targets?(): Promise<ReviewTarget[]>;                                  // where this host can review
+  review?(req: ReviewRequest, ctl: ReviewControl): AsyncIterable<KnowledgeReviewEvent>;   // plan → confirm → run
+  search?(rootId: string, q: string): Promise<Array<{ ref: string; score: number; tier: string }>>;
+  subscribeLive?(rootId: string, cb: (g: KnowledgeGraph) => void): () => void;
+  rememberFact?(fact: { content: string; ref: string; rootId: string }): Promise<void>;
+  factActions?(ref: string): Promise<{ delete?(): Promise<void> } | undefined>;   // Delete only for the author or an admin
+  baseline?(rootId: string): Promise<{ graph: KnowledgeGraph; comparable?: boolean } | null>;   // Compare's "before"
+  snapshot?: KnowledgeSnapshot;                                          // a source that already holds its graph
+  evidence?(finding: Finding, side: 'current' | 'baseline'): FindingEvidence[];
+}
+```
+
+The confirm chip states the plan's numbers. `ReviewEstimate` is
+`{ modelCalls: number; costUsd?: number; local?: boolean }`: the cost in USD when the host
+can price the judgement pass, or `local: true` when the pass runs on the person's own local
+model, in which case the chip says "Runs on your local model — no cost." and shows no
+amount. When the host cannot say, the chip states the calls and "Cost is shown after
+routing."
+
+#### 4.7 Hosts
+
+| Host | DirectorySource | KnowledgeStore | Review runs | Graph built |
+|---|---|---|---|---|
+| VS Code | workspace folder (`vscode.workspace.fs`), with an explorer context menu | the platform API when the workspace is linked to a project, else `localSnapshotStore` | extension host | extension host |
+| On-prem / container | container fs | platform API | agent runtime | agent runtime; it uploads its code-analysis snapshot |
+| Web · Canvas · Studio | the webcontainer VFS (`list`/`readFile`/`watch`), a Cloud Drive connection, or a folder upload (`webkitdirectory`) | platform API | browser worker. Docs and code extraction are pure TS. Judgement goes through the API's routed model call. | `GET …/knowledge-graph` (server-built, cached) |
+| Rovr | File System Access `showDirectoryPicker` | platform API | side-panel worker | same API as the web |
+
+The adapters live beside their hosts:
+- `clients/vscode/src/knowledge/*`
+- `agent-runtime/src/agents/knowledge/*`
+- `frontend/src/lib/knowledge/*`
+- `clients/chrome/src/sidepanel/knowledge/*`
+
+The two browser hosts share one host package, `packages/knowledge-browser`
+(`@builderforce/knowledge-browser`): the `KnowledgeGraphSource` over the client, the Web
+Worker review runner, the IndexedDB manifest, the upload and File System Access directory
+sources, the Live overlay and the catalog → labels mapper. The web keeps only its VFS and
+Cloud Drive sources, its fetch and its next-intl feed; Rovr keeps its fetch, its worker URL
+and its catalog feed.
+
+The view imports none of them.
+
+**Review cost on the confirm chip.** Every host shows the review's cost beside the model
+calls, from one price model:
+
+- `GET …/knowledge/judge/estimate` (§4.8) is the price of ONE judged section. The typed
+  client exposes it as `judgeEstimate()`.
+- `reviewCostOf(modelCalls, price)` (`@builderforce/agent-tools/knowledge`) multiplies calls
+  by that price and is the one place that validates it. A `ReviewCallPrice` is
+  `{ perCallUsd: number | null; local: boolean }`, and a `JudgeEstimate` satisfies it. The
+  result is `local`, `usd` or `unknown`; a missing, non-finite or negative price is
+  `unknown`, never NaN or 0.
+- `createKnowledgeSource` (`knowledge-browser`) takes a `callPrice` port and turns the cost
+  into the view's `ReviewEstimate` (`estimateReview`). The web and Rovr pass
+  `() => client.judgeEstimate()`. With no `callPrice`, or when it fails, the chip shows the
+  calls only.
+- VS Code and on-prem have no view of their own on the chat row. They append the cost to the
+  `/review` confirm text (`reviewCostSuffix`: ` · ≈ $0.12`). On-prem passes
+  `judgeEstimate()` as its price. The editor resolves it in the order it judges in: an
+  on-device engine first (`{ perCallUsd: 0, local: true }`), then, when the inference mode
+  is not local-only, the linked project's `judgeEstimate()`. An unlinked workspace with no
+  local engine cannot price the call and shows the calls only.
+- A judgement that runs on a local model shows "runs on your local model — no cost" (the
+  chat row) or "Runs on your local model — no cost." (the web and Rovr chip), and no amount.
+
+**Live.** Live is the directory's `watch`, drawn as an overlay on the graph. A reload
+re-queries the root with the query the view last loaded it by (`focus`, `maxNodes`), so the
+overlay never narrows or widens the graph. A finished review is the only event that
+re-subscribes Live, because the review may have opened a root the host could not watch
+before. A host re-opens a root reviewed in an earlier session through its provider's
+`reopen` (the workspace VFS, a drive). A picked folder (an upload, a File System Access
+folder) has no `watch`, so it is never subscribed.
+
+**Prefetch rows.** `/review`, `/graph` and the code rows are the shared rows of §4.9. A browser host reviews in its view, so its `/review` opens the view's launcher; VS Code and on-prem review in their own process.
+
+#### 4.8 API
+
+One router (`api/src/presentation/routes/projectKnowledgeRoutes.ts`) is mounted at two front
+doors. People and VS Code use `/api/projects/:projectId/…` with a tenant JWT. On-prem agents
+use `/api/agent/projects/:projectId/…` with their agent-host key. The paths below are
+relative to either prefix. A request from the agent-host door acts for a machine, not a
+person (§4.2: it can write `agent` and `model` origins, never `human`).
+
+| Route | Does |
+|---|---|
+| `GET …/knowledge/scopes` | `{scopes}`: the reviewed roots, each `{rootId, title, packs, lastDigest?, lastReviewedAt?, previousDigest?}` |
+| `GET …/knowledge/facts?root=` | `{facts, viewer}`: the root's stored facts with `createdBy` and `origin`, and `viewer` = `{userId, canAdmin}`, the delete rule stated for the reader so a host offers Delete exactly where `DELETE …/facts/:key` would allow it |
+| `GET …/knowledge-graph?root=&focus=&maxNodes=&at=` | `{graph}`: the use case `getKnowledgeGraph` calls ports `KnowledgeStorePort`, `ExtractedCachePort` (R2, by content hash), `RepoGraphPort` (code pack) and `AnalysisSnapshotPort`, then `buildGraph`. `focus` repeats. `maxNodes` is clamped to 1–2000 (default 400). `at` = a past review digest (Compare's baseline, a scope's `previousDigest`): built from that review's immutable snapshot `knowledge/{t}/{p}/{root}/reviews/{digest}.json` with the current facts and relations |
+| `POST …/knowledge/write` | the `writeKnowledge` use case, the single writer: `{scope?, facts, relations, stale}`, batched and bounded (≤ 500 rows per call, body ≤ 4 MB). Answers `{ok, factsWritten, factsSkipped?, relationsWritten, staleMarked}` |
+| `GET …/knowledge/extracted/:hash` | `{extracted}`: extracted output by content hash |
+| `PUT …/knowledge/extracted/:hash` | extracted output by content hash (≤ 1 MB). Extracted output is immutable per hash, so web hosts can build without re-uploading the source. Every entry must be at `:hash`. Answers `{ok, hash}`. |
+| `PUT …/code-analysis/:sha?root=` | the code pack's analyzer snapshot (≤ 2 MB, schema-validated, R2), stored per `(root, sha)`: a root's paths are its own. Without `root`, the project's linked repository is the root. Answers `{ok, sha, rootId}` |
+| `POST …/knowledge/judge` | the judgement port for browser hosts: `{kind: 'extract' \| 'compare', items}` (1–8 items, each ref ≤ 512 chars and text ≤ 20,000, body ≤ 256 KB). It is a routed model call through the existing gateway and usage rows (use case `knowledge_judge`), so savings and spend are attributed as for any call. Answers a `JudgementResult` |
+| `GET …/knowledge/judge/estimate` | ≈ cost of ONE judged section, for the confirm chip (§3.1). See below. |
+| `GET …/knowledge/search?root=&q=&k=` | knowledge index search: `{hits, tiers, digest}`. `k` defaults to 10 and caps at 50 |
+
+Two routes outside the knowledge router complete the surface:
+
+| Route | Does |
+|---|---|
+| `DELETE /api/projects/:id/facts/:key` (and the agent-door twin) | retires one fact AND every relation that names it (§8.3). Allowed to the fact's author, to a project admin (tenant role manager or above, or a superadmin), and, for a fact with no recorded author, to any caller. Otherwise `403`. Answers `{ok, removed, relationsRemoved, key}` |
+| `POST /api/projects/:id/evermind/learning/candidates/:candidateId/transfer` | promotes an approved Evermind learning to a project fact through the single writer. A machine never overwrites a fact a person authored, so it answers `409` with `code: 'fact_owned_by_person'` (the manager edits or retires that fact, or rejects the learning). A candidate that is not approved is a plain `409` with no code |
+
+**Errors.** Every body is `{error}`, plus `code` where the caller can act on it.
+
+| Status | When |
+|---|---|
+| 400 | `root is required` (graph, facts, search, and the analysis `PUT` when the project has no linked repository), `root and q are required` (search), `invalid digest` (`at`), `invalid hash`, `invalid sha`; a body that fails its schema answers `{error, issues}`. Writer codes: `origin_mismatch`, `extracted_not_stored`, `missing_source_hash`. Upload code: `source_hash_mismatch` |
+| 401 | no valid credential for the door |
+| 404 | `project not found` (the project is not the tenant's), `unknown knowledge root` (graph, facts, search; also a graph `at` a digest with no snapshot), `not found` (an `extracted` hash that was never uploaded) |
+| 409 | `fact_owned_by_person` on the Evermind transfer (above) |
+| 413 | `payload_too_large` (a body over its limit, checked by declared length and again after parsing), `too_many_rows` (more than 500 write rows) |
+
+**The judge estimate.** The server is the only party that knows where a judgement routes, so
+it resolves the route the real judge call takes (the gateway's own seed + candidate chain, no
+model call) and prices the head of that chain with the price book. Response
+`{perCallUsd, model, local}`:
+
+- `perCallUsd` is a number (0 for a free model or a local engine) or `null` when the price is
+  unknown.
+- `model` is the routed head, or `null` when nothing is routable.
+- `local` is true only for a model that runs on the tenant's own hardware (vendor
+  `runsOnDevice`: a self-hosted Ollama or FreeToken), which means on-device only. A cloud model
+  that merely refuses the Worker's egress (Kimi) is priced and `local: false`.
+
+The typed client method is `judgeEstimate()` (`@builderforce/knowledge-client`). It is an
+estimate (≈), never a bill.
+
+- **Layering.** Routes take application ports. No route imports a table or R2.
+- **Caching** goes through `getOrSetCached`. New data changes the key; no read waits on a TTL
+  to see a write.
+  - The graph's key is `kg:v3:${tenant}:${project}:${root}:${scopeDigest}:${knowledgeVersion}:${focusHash}:${maxNodes}`.
+    `scopeDigest` is the review digest plus, for the linked repository, the commit sha; for an
+    `at` read it is `@${at}`, since that snapshot is immutable.
+  - `GET …/knowledge/scopes` is keyed `ks:v1:${tenant}:${project}:${knowledgeVersion}`.
+    `GET …/knowledge/facts` is keyed `kf:v1:${tenant}:${project}:${root}:${scopeDigest}:${knowledgeVersion}`.
+  - `knowledgeVersion` is the project's fact-store version token. `writeKnowledge`, every
+    fact write and delete, and each perception upload (extracted output, analysis snapshot)
+    bump it, so a cached graph keyed on the old token is never served again.
+  - Search builds on the widest graph the server builds (`maxNodes` capped at 2000), through
+    the same cache. Its index is built from the graph's cards on first use and stored in R2
+    per graph digest (`knowledge-index/{tenant}/{project}/{root}/{digest}.bin`).
+  - A cached value lives at most a day in KV (`GRAPH_KV_TTL_SECONDS`, 86,400 s); its key
+    already changes with every write.
+- **The judge estimate's cache** is the one exception to "no TTL": `getOrSetCached` keyed
+  `kjc:v2:${tenant}:${routingInputsVersion}` with a **300 s TTL**. There is no stored version for a
+  tenant's routing settings, so `routingInputsVersion` is derived from what the gateway routes by:
+  the provider rows (`id`, auth type, precedence), the effective plan and premium override, and each
+  provider's selected models. A key connected, rotated or removed, a precedence change, a plan change
+  or a new model selection is a new key. The token cannot see key health, cooldowns or the price
+  book, which move the head of the chain or its price without any settings change, so the TTL bounds
+  how long a stale estimate can be shown. It is an estimate (≈), never a bill. The key is per
+  tenant, not per project: routing is per tenant.
+- **Tenancy.** The door authenticates (a tenant JWT resolved through `resolveMembership`, or
+  the host key), and every handler checks the project is the tenant's before a port exists.
+- **Privacy.** Stored knowledge is a judgement about a source, never the source.
+  - Paths, fact text and quote spans are bounded: a `model` fact's content passes through
+    `clampClaim` (claim text ≤ 602 characters, quote ≤ 3 lines and 300 characters).
+  - Extracted node labels are reduced to one bounded line before they are stored.
+  - Never whole files.
+
+#### 4.9 Prefetch rows
+
+These rows are added to the deterministic-prefetch registry:
+
+| id | kind | Does |
+|---|---|---|
+| `knowledge.review-dir` | answer (**write**, so always confirmed) | `/review <dir>`; "review / map / build a knowledge graph of <dir>". In VS Code and on-prem it runs `planReview`, shows the confirm chip with the cost (§4.7), then runs `reviewDirectory` on the same plan. In a browser host it answers with a chip that opens the view's review launcher, whose own confirm chip is the confirmation. |
+| `knowledge.ask` | answer (read) | Questions about a reviewed root. Knowledge index + graph expansion. It settles with no model only above its threshold; otherwise the hits ride into the turn as PREFETCH context. |
+| `knowledge.graph` | answer (read) | `/graph`; "show me the graph / the layers / the dependency graph". Opens the view focused on the files named in the text. Duplicates, clones and cycles are the `dup.check` and `deps.cycles` rows, which answer with their own Open in graph chip. |
+| `dup.check` · `deps.cycles` · `deadcode.check` · `arch.boundaries` (`/boundaries`) | as specified there | The executors call the code pack's analyzers. The summary is rendered from `buildGraph(...).findings` and carries an **Open in graph** chip. `arch.boundaries` counts only layer violations that are real imports and narrows to the files the person is working in; an analyzer that failed answers nothing, never "clean". |
+
+#### 4.10 Consolidation
+
+- **`CodeAuditVisualizer` becomes `KnowledgeGraphView`.**
+  - Its tabs map to the Structure, Duplication, Unused and Compare lenses.
+  - The file becomes an adapter, a source built from the tool's `CodeAnalysisComparison`.
+  - Its **existing test file runs unchanged** as the parity oracle. The old SVG code is then
+    deleted, after a grep across frontend, webview and packages.
+- **`buildChangeGraph`** (`diffModel.ts`) adopts `NodeRef` ids (`src:${rootId}::${path}`).
+  This fixes the multi-root `package.json` merge.
+- **Run-end durable facts populate `file_anchors`** (including `contentHash`), using the
+  `contextPack/focusPaths.ts` extractor, so they join the graph and can go stale.
+
+### 5. Edge cases
+
+1. **Not linked to a project.** The graph builds and persists locally. Linking uploads it
+   through `writeKnowledge`, with idempotent upserts on the unique keys.
+2. **A source changes after judgement.** Its `model` facts and relations get `stale_at`.
+   They stay visible, marked stale, until the next review re-judges or drops them. They are
+   never silently treated as current.
+3. **A huge directory.**
+   - `planReview` is a walk plus a manifest diff only.
+   - The confirm chip shows the file count and the ≈ budget.
+   - The graph opens bounded: by default the top 400 by importance, plus every finding's
+     nodes and their one-hop neighbours, with the rest folded into areas.
+   - Search reaches everything through the index.
+4. **No model available or allowed.** The review runs extracted-only. Lenses that need
+   judgement (Claims) show an explained empty state. Everything else works.
+5. **Mixed folders.** Packs compose: a repository's `docs/` is docs-pack nodes beside
+   code-pack nodes in one graph. `mentions` links a doc section to a code symbol by exact key.
+6. **No WebGL, or reduced motion:** `ListFallback`.
+7. **`mentions` freshness.** A file's `mentions` are extracted against the entity keys known
+   when that file was extracted, and cached with its content hash. A newly judged entity is
+   linked from unchanged files at their next change. This is intended: recomputing mentions
+   on every build would re-extract every source per request, which the caching rule
+   forbids. A full re-review (*Re-review all*) refreshes them.
+8. **Re-review granularity is the section.** Inside a changed file, sections whose hash is
+   unchanged keep their claims: they are re-anchored to the new file hash, not re-judged.
+   A file the budget cut short stays "changed", so *Continue* judges only what's left.
+
+### 6. Workstreams
+
+| WS | Repo | Scope | Acceptance |
+|---|---|---|---|
+| WS1 | memory | `/knowledge`: model, `buildGraph`, `resolveEntities`, partitions, `traceGraph`, `toMermaid`, findings, importance, `toCards`; the optional `ingest` `extract` and the docs pack; `planReview` / `reviewDirectory` with ports; `localSnapshotStore`. Released via tag. | Pure tests: <br>• equal input gives a byte-identical graph and digest; <br>• extracted edges are never written to the store; <br>• a changed hash marks only that source's model facts stale; <br>• the budget stops judgement and the report counts the rest; <br>• existing ingest tests run unchanged. |
+| WS2 | api | Migration 1278 (expand); `writeKnowledge` as the single writer; the knowledge routes (§4.8); `knowledgeVersion`; caching; the facts routes and run-end memory routed through the writer; run-end anchors. | Route tests: <br>• tenancy; <br>• a cache hit, then a miss after a write; <br>• the batch and size bounds; <br>• `origin: 'extracted'` is rejected; <br>• a run-end fact naming a path stores an anchor with its hash. |
+| WS3 | Builderforce | `@builderforce/knowledge-graph-view` + the web host (VFS, Cloud Drive, upload); a canvas surface row; `knowledgeGraph.*` in five catalogs. | Component tests on fixture graphs (code, docs and mixed): <br>• every lens; <br>• search; <br>• trace; <br>• Fix with agent goes to `onCompose`; <br>• review progress; <br>• list fallback parity; <br>• the empty state. <br>Both themes and 360px checked. |
+| WS4 | Builderforce | The code pack (`agent-tools/knowledge/codePack.ts`): the repo-map extractor, analyzers and partitions with dependency-cruiser rule generation; the prefetch analyzer executors and `knowledge.graph`. | The code fixture graph shows violations, cycles and clone groups that match `codeAnalysis` output. `/dup` answers with `skippedLlm` and an Open in graph chip. |
+| WS5 | Builderforce | VS Code: the explorer menu, `/review`, `knowledge.review-dir` and `knowledge.ask`, the confirm chip, the extension-host review, a tab in the Visualization panel, live updates. On-prem host. | Panel test: <br>• review a fixture folder, and the graph renders; <br>• editing one doc marks its claims stale; <br>• `knowledge.ask` answers from the graph. <br>A Haiku agent packages and installs the VSIX. |
+| WS6 | Builderforce | Rovr (directory picker, view, lazy three chunk, `_locales` × 5); the `CodeAuditVisualizer` consolidation; `buildChangeGraph` `NodeRef`; Add fact. | Rovr renders the WS3 fixtures identically. `CodeAuditVisualizer.test.tsx` passes unchanged, then the old code is deleted. A fact added in VS Code shows on the web. |
+
+Ordering:
+- WS1 comes first, released before any Builderforce WS imports it.
+- WS2 and WS3 run in parallel after it.
+- WS4, WS5 and WS6 come after those.
+- The knowledge index ([deterministic-knowledge-index.md](./docs/design/deterministic-knowledge-index.md))
+  WS1–2 run beside WS1–2 here. Search and near-duplicates are optional ports until they land.
+
+This is a new capability. WS5's release carries a `release_notes` row (category `new`) and an
+Idea-to-Real blog post, "Point it at a folder and see what it knows". It sits in **Idea →
+Read** for docs (understand what you have) and **Make → Build** for code (judge the shape,
+not the lines).
+
+
+### 8. Decisions (operator, 2026-10-28)
+
+1. **The canvas surface name** is `knowledge`.
+2. **The default review budget** is 200 judged sections per review before the chip asks
+   again, routed to local engines first.
+3. **Deleting or superseding a fact from the node panel** is allowed for its author or a
+   project admin only, through `DELETE …/facts/:key`, which also removes its relations.
+4. **Unlinked VS Code folders** stay local-only (`localSnapshotStore`) until linked; linking
+   uploads them.
+
+Knowledge index decisions (taken as proposed):
+- the cloud embedder stays bge-m3;
+- `bf-index` gets the shared comparator only;
+- there are no per-symbol cards.
+
+
+
 ## ✅ RESOLVED 2026-10-30 — PRD 35 WS3/WS4/WS5: cloud, canvas and on-prem tickets run on the one agent; VS Code, web and Rovr chat hardened on the kernel (VS Code 2026.10.116 · api 2026.10.94 · frontend 2026.10.99 · agent-runtime 2026.10.23 · sdk 2026.10.2 · brain-embedded 2026.10.72 · brain-ui 2026.10.30 · Rovr 2026.10.34)
 
 Four workstreams of [PRD 35](./docs/specs/35-prd-one-agent-one-kernel.md) merged into `main` and hardened over fourteen post-merge rounds (Sonnet implements → Haiku verifies → Opus reviews). Verified by builds, every typecheck project, the api/frontend guards, frontend lint, the targeted tests of every touched package plus every test file the failed Release run listed (about 3,800 tests), and a clean-checkout rehearsal of the Verify jobs with CI's Node and pnpm. The merge commit 7f5141999 reached `origin/main` before these rounds finished, and its Release run failed at Verify, so no API, frontend or VS Code release went out from it; a fix for one CI-only failure (`agent-runtime` had no path for `@seanhogg/builderforce-memory/handoff`) came from that run's log.
