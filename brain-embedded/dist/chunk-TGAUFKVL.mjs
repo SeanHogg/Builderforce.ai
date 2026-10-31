@@ -153,6 +153,9 @@ function detectRepetitionLoop(text) {
   }
   return null;
 }
+function trimRepetitionLoop(text) {
+  return detectRepetitionLoop(text)?.kept ?? text;
+}
 
 // ../packages/agent-loop/src/loop.ts
 var Ctx = class {
@@ -1050,6 +1053,7 @@ export {
   DEFAULT_TOOL_FAILURE_STREAK,
   asToolArgs,
   detectRepetitionLoop,
+  trimRepetitionLoop,
   runAgentLoop,
   MALFORMED_CALL_RESULT,
   TRUNCATED_CALL_RESULT,
@@ -1085,4 +1089,4 @@ export {
   replayPendingWords,
   replayAllPendingWords
 };
-//# sourceMappingURL=chunk-4ZNPGB6D.mjs.map
+//# sourceMappingURL=chunk-TGAUFKVL.mjs.map

@@ -29,11 +29,9 @@ import { runAgentLoop, openAiChatCodec, replayTextOf } from '@builderforce/agent
 import { nextTurn } from '@builderforce/run-policy';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { windowed } from '@seanhogg/builderforce-memory/working';
-import type { RunCell } from './runCell';
 import { accrueByoUnresolved, accrueProviderCap, emit, emitStreaming, nowIso, nowMs, pushTrace, recordAppended, recordRunFailure } from './runCells';
 import { asLiveTurn, canonicalTurnText, connectRetryStep, liveTurnModel, provenanceMetadata } from './turnPersistence';
 import { emitEvermindLearnReconcile } from './runMemory';
-import { prepareRunLoop } from './runPreamble';
 import { completeTurnPort } from './completeTurn';
 import { dispatchToolPort } from './dispatchTool';
 import { beforeDispatchHook } from './beforeDispatch';
@@ -42,8 +40,7 @@ import { skipOnSteer } from './steerInterrupt';
 import { finalAnswerHook } from './finalAnswerHook';
 import { progressAfterToolCalls } from './progressGuard';
 import { runSpendBudget } from './runSpendBudget';
-import { noteRunId } from './runEndOutcome';
-import type { BrainRunRequest } from './runTypes';
+import type { RunLoopContext } from './runLoopContext';
 import { servedOnDevice } from '@builderforce/local-inference';
 
 /** The tool row's content: a STRING payload was already budgeted by `trimToolResult` in
@@ -51,13 +48,8 @@ import { servedOnDevice } from '@builderforce/local-inference';
  *  object the model should read whole. */
 const runCodec = openAiChatCodec<ChatCompletionMessage>((r) => (typeof r.data === 'string' ? r.data : JSON.stringify(r.data)));
 
-export async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey: number): Promise<void> {
-  const run = await prepareRunLoop(chatId, c, req, runKey);
-  // Memory answered: the run is over before a model was asked.
-  if (!run) return;
-  // The id this run's calls carry — what its end is reported under (`runEndOutcome.ts`).
-  noteRunId(c, run.metadata.guestTurnId);
-  const { convo, systemPrompt, metadata } = run;
+export async function runLoop(run: RunLoopContext): Promise<void> {
+  const { c, chatId, req, convo, systemPrompt, metadata } = run;
   const { routingMode, stream, persistence, onActivity, maxTokens, reasoning } = req;
   const loop = await runAgentLoop<ChatCompletionMessage>({
     messages: convo,

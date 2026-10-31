@@ -19,6 +19,7 @@ import type { RunKnowledgeLog } from '@builderforce/agent-tools';
 import type { ModelPreflightResult } from './modelPreflight';
 import type { ServedRead } from './hostRunContext';
 import type { PrefetchPort } from '@builderforce/prefetch';
+import type { RunOutcomeRow } from '@builderforce/agent-run';
 
 /**
  * What a run cell is keyed by. A CHAT's run is keyed by its chat id (a number — the
@@ -29,6 +30,12 @@ import type { PrefetchPort } from '@builderforce/prefetch';
  * for a chat.
  */
 export type RunKey = number | string;
+
+/** The engines a run can be driven by (`runEngine.ts`). */
+export type RunEngineId = 'loop' | 'agent';
+
+/** The surfaces a run comes in through - a telemetry label. */
+export type RunEntryPoint = 'vscode' | 'web' | 'rovr';
 
 /** Streaming fn shape (matches BrainRuntime.stream). */
 export type BrainStreamFn = (
@@ -262,6 +269,22 @@ export interface BrainRunRequest {
    * the cap and the model is warned at 80%. Absent or 0 = no cap.
    */
   maxRunBudgetUsd?: number;
+  /**
+   * Which engine drives this run (PRD 35 WS4): the Brain's own loop, or THE one agent
+   * (`@builderforce/agent-run`). Absent ⇒ the device's `BRAIN_RUN_ENGINE`, else `loop`. It selects the
+   * engine and nothing else; the switch goes away when the default flips.
+   */
+  engine?: RunEngineId;
+  /**
+   * The surface the run came in through - the label its uniform outcome row carries. Telemetry only:
+   * nothing branches on it.
+   */
+  entryPoint?: RunEntryPoint;
+  /**
+   * Told the run's uniform outcome row (PRD 35 §8.2) once, when an agent-engine run ends. The host
+   * posts it to the one write-back door; the run does no network I/O of its own. Best-effort.
+   */
+  reportRunRow?: (row: RunOutcomeRow) => Promise<unknown> | void;
   /**
    * Told once, at run end, how the run ended and under which run id its calls were
    * recorded (`runEndOutcome.ts`) — the host stores it beside its usage ledger for the

@@ -17,6 +17,7 @@
 
 import type { ModelCompletion, ModelPreflightResult, ModelRequest, ModelTransport, RunMessage } from '@builderforce/agent-run';
 import type { ChatCompletionMessage, CompletionMetadata, StreamChatOptions, StreamChatResult, StreamHandlers } from '../streamChatCompletion';
+import { turnInterruption } from '../finishReason';
 import type { BrainStreamFn } from '../runStore/runTypes';
 import { contextWindowOf, type RunWindowSources } from '../windowFit/modelWindow';
 
@@ -25,7 +26,32 @@ export type BrainCallDefaults = Partial<
   Pick<StreamChatOptions, 'routingMode' | 'modelStrict' | 'reasoning' | 'metadata' | 'role' | 'excludeModels' | 'prompt_cache_key' | 'conversationKey'>
 >;
 
+/**
+ * One turn's session with the surface's live view and record: the stream's handlers, the call's extra metadata, the window
+ * fit the request passes through, and what the turn leaves when it completes or fails. The surface builds it per request
+ * (`loopTurn.ts` over the run cell); the transport only calls it.
+ */
+export interface TurnSession {
+  handlers: StreamHandlers;
+  metadata?: CompletionMetadata;
+  /** Pack the wire messages for the model's window. */
+  fit?(messages: ChatCompletionMessage[]): Promise<ChatCompletionMessage[]>;
+  /** The call's per-conversation routing keys. */
+  call?: BrainCallDefaults;
+  /** Run the stream inside the surface's live-turn window (the serving model is recorded while it is open). */
+  around?<T>(stream: () => Promise<T>): Promise<T>;
+  completed(result: StreamChatResult): Promise<void> | void;
+  /** The turn failed: record it and hand back the error to throw. */
+  failed(error: unknown): unknown;
+}
+
+export interface TurnObserver {
+  open(request: ModelRequest): TurnSession;
+}
+
 export interface BrainModelTransportDeps {
+  /** The surface's live view and record of each turn. Absent ⇒ the stream runs bare. */
+  turn?: TurnObserver;
   /** The surface's streaming completion — gateway, local-first and XML lifting behind it. */
   stream: BrainStreamFn;
   /** Where a turn's streamed deltas, serving model and connect retries go (the live view). */
@@ -55,6 +81,7 @@ export function toStreamMessage(message: RunMessage): ChatCompletionMessage {
 
 /** The stream's result in the agent's completion shape. */
 export function toCompletion(result: StreamChatResult): ModelCompletion {
+  const interruption = turnInterruption(result.finishReason);
   return {
     content: result.text,
     // The call's arguments stay the RAW JSON string — the kernel parses them, and a
@@ -70,6 +97,8 @@ export function toCompletion(result: StreamChatResult): ModelCompletion {
         }
       : {}),
     ...(result.resolvedModel ? { model: result.resolvedModel } : {}),
+    // A cut-off turn is told apart from a finished one by the vendor's own finish reason (`finishReason.ts`).
+    ...(interruption ? { interrupted: interruption } : {}),
   };
 }
 
@@ -79,17 +108,32 @@ export function brainModelTransport(deps: BrainModelTransportDeps): ModelTranspo
   return {
     async complete(request: ModelRequest, signal?: AbortSignal): Promise<ModelCompletion> {
       const tools = request.tools && request.tools.length > 0 ? request.tools : undefined;
-      const result = await stream(
-        {
-          ...call,
-          messages: request.messages.map(toStreamMessage),
-          ...(tools ? { tools, tool_choice: 'auto' as const } : {}),
-          ...(request.model ? { model: request.model } : {}),
-          ...(request.maxTokens !== undefined ? { maxTokens: request.maxTokens } : {}),
-          ...(signal ? { signal } : {}),
-        },
-        handlers?.(),
-      );
+      const session = deps.turn?.open(request);
+      const wire = request.messages.map(toStreamMessage);
+      const messages = session?.fit ? await session.fit(wire) : wire;
+      let result: StreamChatResult;
+      try {
+        const ask = () => stream(
+          {
+            ...call,
+            ...session?.call,
+            messages,
+            ...(session?.metadata ? { metadata: session.metadata } : {}),
+            ...(tools ? { tools, tool_choice: request.toolChoice ?? ('auto' as const) } : {}),
+            ...(request.model ? { model: request.model } : {}),
+            ...(request.strict !== undefined ? { modelStrict: request.strict } : {}),
+            ...(request.role ? { role: request.role } : {}),
+            ...(request.excludeModels && request.excludeModels.length > 0 ? { excludeModels: [...request.excludeModels] } : {}),
+            ...(request.maxTokens !== undefined ? { maxTokens: request.maxTokens } : {}),
+            ...(signal ? { signal } : {}),
+          },
+          session?.handlers ?? handlers?.(),
+        );
+        result = await (session?.around ? session.around(ask) : ask());
+      } catch (e) {
+        throw session ? session.failed(e) : e;
+      }
+      await session?.completed(result);
       return toCompletion(result);
     },
     window: (model) => contextWindowOf(model, windows?.cloud ? { cloud: windows.cloud } : {}),

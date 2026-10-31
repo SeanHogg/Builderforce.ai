@@ -18,5 +18,6 @@ export async function editorRunSettings(secrets: vscode.SecretStorage): Promise<
     routing: config.get<string>("pipeline.routing"),
     routeThreshold: config.get<number>("pipeline.routeThreshold"),
     maxRunBudgetUsd: config.get<number>("maxRunBudgetUsd"),
+    agentEngine: config.get<string>("agent.engine"),
   });
 }

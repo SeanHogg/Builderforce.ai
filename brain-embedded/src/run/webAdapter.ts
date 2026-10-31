@@ -17,12 +17,16 @@ import {
   asksForSubagents,
   runSteeringSource,
   type CapabilityProvider,
+  type PlatformTools,
   type PolicyGate,
+  type RunStore,
+  type SteeringSource,
   type RunPolicy,
   type RunPorts,
   type RunTask,
 } from '@builderforce/agent-run';
 import type { CostLeverId } from '@builderforce/cost-levers';
+import { CODE_CHANGE_TOOLS } from '../localWorkspaceTools';
 import { deviceLeverOn } from '../runStore/deviceLevers';
 import type { RunCell } from '../runStore/runCell';
 import type { BrainRunRequest } from '../runStore/runTypes';
@@ -31,6 +35,7 @@ import { brainEventSink, type OutcomeReport } from './eventSink';
 import { brainHumanChannel } from './humanChannel';
 import { brainModelTransport, type BrainCallDefaults } from './modelTransport';
 import { cellRunStore } from './runStorePort';
+import type { TurnObserver } from './modelTransport';
 
 /** The telemetry label of the surface the run came in through. */
 export type BrainEntryPoint = 'web' | 'rovr' | 'vscode';
@@ -69,6 +74,14 @@ export interface BrainRunBinding {
   reportOutcome?: OutcomeReport;
   /** Governance gates compiled for this run — the human channel's approvals. */
   approvalGates?: readonly PolicyGate[];
+  /** The surface's live view and record of each turn (`loopTurn.ts`). */
+  turn?: TurnObserver;
+  /** The surface's own tools, when it runs them itself (`brainPlatformTools.ts`). */
+  platform?: PlatformTools;
+  /** Where the run's steered direction comes from, when the surface records it as it is read (`loopSteering.ts`). */
+  steering?: SteeringSource;
+  /** Where the run's state lives, when the surface keeps its own log (`loopStore.ts`). */
+  store?: RunStore;
 }
 
 /** The ports of one Brain run — built from the request, deciding nothing. */
@@ -77,6 +90,7 @@ export function buildBrainRunPorts(b: BrainRunBinding): RunPorts {
   return {
     model: brainModelTransport({
       stream: req.stream,
+      ...(b.turn ? { turn: b.turn } : {}),
       ...(b.handlers ? { handlers: b.handlers } : {}),
       call: {
         ...(req.routingMode ? { routingMode: req.routingMode } : {}),
@@ -88,10 +102,11 @@ export function buildBrainRunPorts(b: BrainRunBinding): RunPorts {
       ...(req.modelPreflight ? { preflight: req.modelPreflight } : {}),
     }),
     capabilities: b.capabilities,
-    store: cellRunStore(cell, { ...(b.seeded !== undefined ? { seeded: b.seeded } : {}), ...(b.commitMemory ? { commitMemory: b.commitMemory } : {}) }),
+    store: b.store ?? cellRunStore(cell, { ...(b.seeded !== undefined ? { seeded: b.seeded } : {}), ...(b.commitMemory ? { commitMemory: b.commitMemory } : {}) }),
+    ...(b.platform ? { platform: b.platform } : {}),
     events: brainEventSink(cell, b.reportOutcome),
     human: brainHumanChannel(runKey),
-    steering: runSteeringSource(runKey),
+    steering: b.steering ?? runSteeringSource(runKey),
     context: brainContextSource(req, b.gatherContext),
   };
 }
@@ -121,7 +136,8 @@ export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | '
     levers: GUARD_LEVERS.filter((id) => deviceLeverOn(id)),
     // A Brain run has NO tool-iteration ceiling: the kernel's consecutive-failure breaker
     // is its only limit (`runStore/runLoop.ts`).
-    budgets: {},
+    budgets: req.maxRunBudgetUsd && req.maxRunBudgetUsd > 0 ? { usd: req.maxRunBudgetUsd } : {},
+    codeChangeTools: [...CODE_CHANGE_TOOLS],
     ...(req.model && req.modelStrict ? { pinnedModel: req.model } : {}),
     inference: 'hybrid',
     verify: 'none',

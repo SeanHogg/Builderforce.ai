@@ -156,7 +156,10 @@ __export(src_exports, {
   bindChatHistoryForSync: () => bindChatHistoryForSync,
   brainPersonaAgents: () => brainPersonaAgents,
   brainRequestError: () => brainRequestError,
+  brainRunPolicy: () => brainRunPolicy,
+  brainRunTask: () => brainRunTask,
   brainUploadUrl: () => brainUploadUrl,
+  buildBrainRunPorts: () => buildBrainRunPorts,
   buildBrainTriageReport: () => buildBrainTriageReport,
   buildChatDiagnosticsReport: () => buildChatDiagnosticsReport,
   buildComposerDirectives: () => buildComposerDirectives,
@@ -420,6 +423,7 @@ __export(src_exports, {
   runBrainLoop: () => startRun,
   runOutcomesSince: () => runOutcomesSince,
   runProgressVerdict: () => runProgressVerdict,
+  runViaAgent: () => runViaAgent,
   savePendingPrompt: () => savePendingPrompt,
   savedChatOf: () => savedChatOf,
   scopeToConsolidation: () => import_working19.scopeToConsolidation,
@@ -452,6 +456,8 @@ __export(src_exports, {
   stopRun: () => stopRun,
   stoppedBeforeStartRow: () => stoppedBeforeStartRow,
   stoppedTurnMetadata: () => stoppedTurnMetadata,
+  storedRunEngine: () => storedRunEngine,
+  storedRunEngineField: () => storedRunEngineField,
   streamChatCompletion: () => streamChatCompletion,
   streamSummaryCompletion: () => streamSummaryCompletion,
   stripAskUser: () => stripAskUser,
@@ -803,6 +809,9 @@ function detectRepetitionLoop(text) {
     return { block, copies: Math.floor((length - start) / p), kept: text.slice(0, start + p) };
   }
   return null;
+}
+function trimRepetitionLoop(text) {
+  return detectRepetitionLoop(text)?.kept ?? text;
 }
 
 // ../packages/agent-loop/src/loop.ts
@@ -2744,8 +2753,8 @@ function computeCostMillicents(pricing, usage) {
   const cacheRead = usage.cacheReadTokens ?? 0;
   const cacheCreation = usage.cacheCreationTokens ?? 0;
   const fullPrompt = Math.max(0, usage.promptTokens - cacheRead - cacheCreation);
-  const usd3 = fullPrompt * pricing.prompt + cacheRead * pricing.prompt * CACHE_READ_MULTIPLIER + cacheCreation * pricing.prompt * CACHE_CREATION_MULTIPLIER + usage.completionTokens * pricing.completion;
-  return Math.round(usd3 * 1e5);
+  const usd4 = fullPrompt * pricing.prompt + cacheRead * pricing.prompt * CACHE_READ_MULTIPLIER + cacheCreation * pricing.prompt * CACHE_CREATION_MULTIPLIER + usage.completionTokens * pricing.completion;
+  return Math.round(usd4 * 1e5);
 }
 
 // ../packages/model-catalog/src/price.ts
@@ -2759,6 +2768,16 @@ function perTokenToPerMillion(usdPerToken) {
 var ZERO_PRICE = Object.freeze({ input: 0, output: 0 });
 
 // ../packages/model-catalog/src/tier.ts
+var UNKNOWN_TIER_RANK = 4;
+var STRONGEST_FIRST = {
+  ULTRA: 0,
+  PREMIUM: 1,
+  STANDARD: 2,
+  FREE: 3
+};
+function tierRank(tier2) {
+  return tier2 && tier2 in STRONGEST_FIRST ? STRONGEST_FIRST[tier2] : UNKNOWN_TIER_RANK;
+}
 var STANDARD_MAX_OUTPUT_PER_MILLION = 8;
 var PREMIUM_MAX_OUTPUT_PER_MILLION = 20;
 function tierForPrice(price) {
@@ -3315,6 +3334,44 @@ var ANTHROPIC_RELEASES = {
   haiku: ["5.5", "4.5"],
   fable: ["5.1", "5"]
 };
+var CLAUDE_ID = /^claude-(opus|sonnet|haiku|fable)-(\d+)(?:([-.])(\d{1,2})(?=-|$))?(-.*)?$/;
+function parseAnthropicModelId(id) {
+  const match = CLAUDE_ID.exec(id.trim().toLowerCase());
+  if (!match) {
+    return void 0;
+  }
+  return {
+    family: match[1],
+    version: [Number(match[2]), Number(match[4] ?? 0)],
+    separator: match[3] === "." ? "." : "-",
+    suffix: match[5] ?? ""
+  };
+}
+
+// ../packages/model-catalog/src/weakerModel.ts
+function catalogIdCandidates(model) {
+  const ids2 = [model];
+  const claude = parseAnthropicModelId(model.slice(model.lastIndexOf("/") + 1));
+  if (claude) {
+    const [major, minor] = claude.version;
+    ids2.push(`anthropic/claude-${claude.family}-${major}.${minor}`);
+    if (minor === 0) ids2.push(`anthropic/claude-${claude.family}-${major}`);
+  }
+  return ids2;
+}
+function tierOfModel(model, book2 = snapshotPriceBook()) {
+  if (!model || model === "default") return void 0;
+  for (const id of catalogIdCandidates(model)) {
+    const price = listPriceOf(book2, id);
+    if (price) return resolveModelTier({ price });
+  }
+  return void 0;
+}
+function isWeakerModel(requested, served, book2 = snapshotPriceBook()) {
+  const asked = tierOfModel(requested, book2);
+  const got = tierOfModel(served, book2);
+  return asked !== void 0 && got !== void 0 && tierRank(got) > tierRank(asked);
+}
 
 // ../packages/model-catalog/src/providers.ts
 var LLM_PROVIDER_INFO = [
@@ -8170,6 +8227,63 @@ function coderHandoffBrief(plannerText, calls) {
   return brief.length > MAX_BRIEF_CHARS ? `${brief.slice(0, MAX_BRIEF_CHARS)}\u2026` : brief;
 }
 
+// ../packages/run-policy/src/stallStep.ts
+function resolveStallStep(policy, turn, recoveriesUsed, source = {}) {
+  const input = {
+    text: turn.text,
+    toolCallCount: turn.toolCallCount,
+    availableToolCount: turn.availableToolNames.length,
+    recoveriesUsed,
+    availableToolNames: turn.availableToolNames,
+    ...turn.requestText !== void 0 ? { requestText: turn.requestText } : {}
+  };
+  const shape = stallShape(input);
+  const toolChoice = stallRecoveryToolChoice(input);
+  if (shouldRecoverStalledTurn(input)) {
+    const used = recoveriesUsed + 1;
+    return {
+      policy,
+      step: {
+        kind: "nudge",
+        nudge: stallRecoveryNudge(used >= MAX_ANNOUNCEMENT_RECOVERIES, shape, input),
+        ...toolChoice ? { toolChoice } : {},
+        recoveriesUsed: used,
+        shape
+      }
+    };
+  }
+  if (!isExhaustedStall(input)) return { policy, step: { kind: "none" } };
+  const next = reduceRunPolicy(policy, {
+    type: "stalled",
+    ...turn.resolvedModel ? { resolvedModel: turn.resolvedModel } : {},
+    ...source.surface !== void 0 ? { surface: source.surface } : {},
+    ...source.pick ? { pick: source.pick } : {}
+  });
+  const outcome = next.outcome;
+  if (outcome.kind === "failed_over") {
+    return {
+      policy: next,
+      step: {
+        kind: "failover",
+        // The incoming model gets the FIRST nudge, not the last-chance one: the outgoing
+        // model's failures say nothing about it.
+        nudge: stallRecoveryNudge(false, shape, input),
+        ...toolChoice ? { toolChoice } : {},
+        notice: modelFailoverNotice(outcome.from, outcome.to, shape),
+        from: outcome.from,
+        to: outcome.to,
+        attempt: outcome.attempt,
+        of: outcome.of,
+        recoveriesUsed: 0,
+        shape
+      }
+    };
+  }
+  const tried = outcome.kind === "failover_exhausted" ? outcome.tried : next.tried;
+  const spent = turn.resolvedModel ?? policy.model;
+  return { policy: next, step: { kind: "exhausted", notice: stallExhaustedNotice(spent, tried, shape), tried, shape } };
+}
+
 // ../packages/run-policy/src/handoffBudget.ts
 var DEFAULT_HANDOFF_RESERVE_TOKENS = 4096;
 function toolSchemaTokens(schemas, estimate) {
@@ -8186,6 +8300,24 @@ function handoffTokenBudget(input) {
   if (input.priceTierBoundary && input.priceTierBoundary > 0) bounds.push(input.priceTierBoundary);
   if (bounds.length === 0) return void 0;
   return Math.max(1, Math.min(...bounds));
+}
+
+// ../packages/run-policy/src/outputCaps.ts
+var ROLE_OUTPUT_CAPS = {
+  explore: 2048,
+  utility: 2048,
+  verify: 2048,
+  chat: 4096,
+  plan: 4096,
+  code: 8192
+};
+function roleOutputCap(role) {
+  return role && role in ROLE_OUTPUT_CAPS ? ROLE_OUTPUT_CAPS[role] : void 0;
+}
+function cappedMaxTokens(role, callerMaxTokens) {
+  const cap2 = roleOutputCap(role);
+  if (cap2 === void 0) return callerMaxTokens;
+  return callerMaxTokens && callerMaxTokens > 0 ? Math.min(cap2, callerMaxTokens) : cap2;
 }
 
 // ../packages/run-policy/src/cascade.ts
@@ -8655,6 +8787,39 @@ function readJsonKey(text, key) {
 }
 
 // ../packages/agent-tools/src/glob.ts
+var REGEX_SPECIALS = /* @__PURE__ */ new Set([".", "+", "^", "$", "{", "}", "(", ")", "|", "[", "]", "\\", "/"]);
+function globToRegExp(pattern) {
+  let re = "";
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i];
+    if (c === "*") {
+      if (pattern[i + 1] === "*") {
+        if (pattern[i + 2] === "/") {
+          re += "(?:.*/)?";
+          i += 2;
+        } else {
+          re += ".*";
+          i++;
+        }
+      } else {
+        re += "[^/]*";
+      }
+    } else if (c === "?") {
+      re += "[^/]";
+    } else {
+      re += REGEX_SPECIALS.has(c) ? "\\" + c : c;
+    }
+  }
+  return new RegExp("^" + re + "$", "i");
+}
+function matchGlob(pathPosix, pattern) {
+  const re = globToRegExp(pattern);
+  if (!pattern.includes("/")) {
+    const base = pathPosix.slice(pathPosix.lastIndexOf("/") + 1);
+    return re.test(base);
+  }
+  return re.test(pathPosix);
+}
 function normalizeScopeDir(raw) {
   return (raw ?? "").split("\\").join("/").trim().replace(/^\.\/+/, "").replace(/^\/+|\/+$/g, "");
 }
@@ -8805,6 +8970,48 @@ function toolCallPaths(args) {
   }
   return out;
 }
+function pathHitsPattern(path2, pattern) {
+  return matchGlob(path2, pattern) || inScope(path2, [pattern]);
+}
+function gateMatchesPath(g, callPath) {
+  const patterns = g.paths;
+  if (!patterns || patterns.length === 0) return true;
+  const callPaths = (Array.isArray(callPath) ? callPath : callPath ? [callPath] : []).map((p) => p.trim()).filter(Boolean);
+  if (callPaths.length === 0) return false;
+  return callPaths.some((p) => patterns.some((pat) => pathHitsPattern(p, pat)));
+}
+function bulletBlock(header, items) {
+  return [header, ...items.map((x) => `- ${x}`)].join("\n");
+}
+function policyGateDirective(g) {
+  const scope = !g.tool || g.tool === "*" ? "any tool" : `the \`${g.tool}\` tool`;
+  const pathScope = g.paths?.length ? ` on ${g.paths.map((p) => `\`${p}\``).join(", ")}` : "";
+  switch (g.effect) {
+    case "inject-directive":
+      return (g.directive ?? "").trim();
+    case "require-approval":
+      return `Before using ${scope}${pathScope}, pause and request explicit human approval${g.reason ? ` (${g.reason})` : ""}.`;
+    case "block":
+      return `Never use ${scope}${pathScope}${g.reason ? ` \u2014 ${g.reason}` : ""}. Refuse and explain instead.`;
+  }
+}
+function renderPolicyDirectives(gates) {
+  const lines = (gates ?? []).map(policyGateDirective).filter(Boolean);
+  if (lines.length === 0) return "";
+  return bulletBlock("Governance (these gates are binding):", lines);
+}
+function evaluatePolicyGate(gates, toolName, path2) {
+  const matches = (gates ?? []).filter(
+    (g) => (!g.tool || g.tool === "*" || g.tool === toolName) && gateMatchesPath(g, path2)
+  );
+  const blocked = matches.find((g) => g.effect === "block");
+  if (blocked) return { action: "block", gateId: blocked.id, reason: blocked.reason ?? "blocked by policy" };
+  const approval = matches.find((g) => g.effect === "require-approval");
+  if (approval) {
+    return { action: "require-approval", gateId: approval.id, reason: approval.reason ?? "approval required by policy" };
+  }
+  return { action: "allow" };
+}
 
 // ../packages/agent-tools/src/stableStringify.ts
 function stableStringify(value) {
@@ -8822,6 +9029,19 @@ function stableStringify(value) {
   const record3 = value;
   const keys = Object.keys(record3).filter((k) => record3[k] !== void 0).sort();
   return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record3[k])}`).join(",")}}`;
+}
+
+// ../packages/agent-tools/src/policyGateCallKey.ts
+function hash32(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+function policyGateCallKey(gateId, toolName, args) {
+  return `${gateId}|${toolName}|${hash32(stableStringify(args))}`;
 }
 
 // ../packages/agent-tools/src/fileWindow.ts
@@ -9423,12 +9643,17 @@ async function runShellCommand(args, ctx) {
         return { data: { ok: true, background: true, id, status: "running", output: st.output ?? "", note: `${why}, so it moved to the background. ${jobNote(id)}`, ...where } };
       }
       const r2 = await compressShellResult(finishedJob(st), ctx);
-      return { data: { ...r2, ...where } };
+      return { data: { ...r2, ...st.status === "unknown" ? { id } : {}, ...where } };
     }
     note = "This surface has no background shell, so the command ran in the foreground.";
   }
   const r = await compressShellResult(await shellRunWithStop(ctx, command, dir), ctx);
   return { data: { ...r, ...where, ...note ? { note } : {} } };
+}
+async function compressedJobStatus(st, ctx) {
+  if (st.status === "running" || typeof st.output !== "string") return st;
+  const r = await compressShellResult(finishedJob(st), ctx);
+  return r.compressed && typeof r.stdout === "string" ? { ...st, output: r.stdout } : st;
 }
 function jobId(args) {
   return typeof args.id === "string" ? args.id.trim() : "";
@@ -9452,7 +9677,7 @@ var commandStatusTool = defineTool({
     if (!poll) return { data: { ok: false, error: "background commands are not available on this surface" } };
     const waitMs = waitArg(args.waitMs);
     const st = await poll.call(ctx.caps.shell, id, { ...waitMs !== void 0 ? { waitMs } : {}, ...ctx.signal ? { signal: ctx.signal } : {} });
-    return { data: st };
+    return { data: await compressedJobStatus(st, ctx) };
   }
 });
 var commandStopTool = defineTool({
@@ -9470,7 +9695,7 @@ var commandStopTool = defineTool({
     const kill = ctx.caps.shell?.kill;
     if (!kill) return { data: { ok: false, error: "background commands are not available on this surface" } };
     const st = await kill.call(ctx.caps.shell, id);
-    return { data: st };
+    return { data: await compressedJobStatus(st, ctx) };
   }
 });
 var SHELL_JOB_TOOLS = [commandStatusTool, commandStopTool];
@@ -11771,6 +11996,31 @@ function rankLexically(items, query, fieldsOf, limit) {
   if (queryStems.size === 0 || limit <= 0) return [];
   return items.map((item, index) => ({ item, index, score: lexicalScore(queryStems, fieldsOf(item)) })).filter((e) => e.score > 0).sort((a, b) => b.score - a.score || a.index - b.index).slice(0, limit).map((e) => e.item);
 }
+function toolSchemaFields(tool) {
+  return [
+    { text: tool.function.name.replace(/^builtin_/, ""), weight: LEXICAL_WEIGHTS.name },
+    { text: tool.function.description ?? "", weight: LEXICAL_WEIGHTS.description }
+  ];
+}
+function searchToolSchemas(catalog, query, limit) {
+  return rankLexically(catalog, query, toolSchemaFields, limit);
+}
+var TOOL_SEARCH_TOOL = "tool_search";
+var TOOL_SEARCH_SCHEMA = {
+  type: "function",
+  function: {
+    name: TOOL_SEARCH_TOOL,
+    description: "Only a core set of tools is loaded. When you need a capability that is not in your tool list (project tasks, OKRs, specs, incidents, knowledge base, marketing, executions, \u2026) call this with a few keywords. Returns the best-matching tools with their full schemas; they stay callable for the rest of the run.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: 'Keywords for the capability, e.g. "create task" or "update key result".' },
+        limit: { type: "number", description: "Max tools to return (default 8, max 15)." }
+      },
+      required: ["query"]
+    }
+  }
+};
 
 // ../packages/workload/src/profile.ts
 var TYPICAL_OUTPUT_TOKENS = {
@@ -13465,14 +13715,14 @@ function createEngineWorker(options) {
   const now = options.now ?? (() => Date.now());
   let live2;
   const crashes = /* @__PURE__ */ new Map();
-  const failed = /* @__PURE__ */ new Set();
+  const failed3 = /* @__PURE__ */ new Set();
   const recordCrash = (key) => {
     const at2 = now();
     const recent = (crashes.get(key) ?? []).filter((t) => at2 - t < ENGINE_WORKER_CRASH_WINDOW_MS);
     recent.push(at2);
     crashes.set(key, recent);
-    if (recent.length >= ENGINE_WORKER_CRASH_LIMIT && !failed.has(key)) {
-      failed.add(key);
+    if (recent.length >= ENGINE_WORKER_CRASH_LIMIT && !failed3.has(key)) {
+      failed3.add(key);
       warn(`engine worker: ${key} crashed ${recent.length}\xD7 in ${ENGINE_WORKER_CRASH_WINDOW_MS / 6e4} min; not loading it again this session`);
     }
   };
@@ -13491,8 +13741,8 @@ function createEngineWorker(options) {
   };
   const withoutFailed = (message2) => {
     const probe = message2.probe;
-    if (!probe || failed.size === 0) return message2;
-    const models = probe.models.filter((m) => !failed.has(modelKey(probe.provider, m.model)));
+    if (!probe || failed3.size === 0) return message2;
+    const models = probe.models.filter((m) => !failed3.has(modelKey(probe.provider, m.model)));
     if (models.length === probe.models.length) return message2;
     return { ...message2, probe: models.length > 0 ? { ...probe, models } : null };
   };
@@ -13527,7 +13777,7 @@ function createEngineWorker(options) {
         const m = message2;
         if (m.type === "pageEngine.chat" && typeof m.id === "string") {
           const key = modelKey(m.runtime, m.body?.model);
-          if (failed.has(key)) {
+          if (failed3.has(key)) {
             const id = m.id;
             queueMicrotask(
               () => options.onMessage({
@@ -13837,10 +14087,10 @@ function createBfiWorkerEngine(options) {
     ...options.idleMs !== void 0 ? { idleMs: options.idleMs } : {}
   });
   const anyDownloaded = () => options.store ? anyBfiModelDownloaded(options.store) : Promise.resolve(true);
-  const onceMore = async (ask, failed) => {
+  const onceMore = async (ask, failed3) => {
     const before = threadRestarts;
     const value = await ask();
-    return failed(value) && threadRestarts !== before ? ask() : value;
+    return failed3(value) && threadRestarts !== before ? ask() : value;
   };
   const ownSupport = () => {
     const id = `s${++seq}`;
@@ -16344,6 +16594,26 @@ function getRunDriver() {
   return installed;
 }
 
+// ../packages/agent-run/src/contract.ts
+var ModelTransportError = class extends Error {
+  status;
+  /** Whether the model policy may route around this failure. A containment stop is never routable. */
+  routable;
+  constructor(message2, status2, opts = {}) {
+    super(message2);
+    this.name = "ModelTransportError";
+    this.status = status2;
+    this.routable = opts.routable ?? (status2 !== void 0 && status2 >= 400);
+  }
+};
+var RUN_CANCELLED_REASON = "cancelled";
+
+// ../packages/agent-run/src/surface.ts
+function isTransportFailure(err) {
+  const failure = err?.failure;
+  return err instanceof Error && !!failure && typeof failure === "object" && failure.type === "transport_failed";
+}
+
 // ../packages/agent-run/src/policy/compaction/pack.ts
 var import_handoff8 = require("@seanhogg/builderforce-memory/handoff");
 
@@ -16499,10 +16769,281 @@ function compactionSummaryRequest(conversationText) {
   };
 }
 
+// ../packages/agent-run/src/policy/stall/ladder.ts
+function spentOf(state) {
+  return { ...state.stall?.rungs ?? {} };
+}
+function save(state, patch) {
+  const total = (state.stall?.recoveriesTotal ?? 0) + (patch.spent ?? 0);
+  state.stall = {
+    ...state.stall ?? { recoveriesUsed: 0 },
+    ...patch.rungs ? { rungs: patch.rungs } : {},
+    ...patch.said ? { said: patch.said } : {},
+    ...total > 0 ? { recoveriesTotal: total } : {}
+  };
+}
+function resetRungs(state, keep = []) {
+  const spent = state.stall?.rungs;
+  if (!spent || Object.keys(spent).length === 0) return;
+  save(state, { rungs: Object.fromEntries(Object.entries(spent).filter(([id]) => keep.includes(id))) });
+}
+function handOffToProven(ctx, ledger, failed3) {
+  const next = reduceRunPolicy(ctx.state.model, { type: "stalled", ...failed3 ? { resolvedModel: failed3 } : {} });
+  ctx.state.model = next;
+  if (next.outcome.kind !== "failed_over") return void 0;
+  resetRungs(ctx.state, ledger?.sticky);
+  ledger?.handedOff?.(failed3, next.outcome.to);
+  return next.outcome.to;
+}
+function restatement(ctx, rung, attempt) {
+  const rows = [];
+  const said = ctx.content?.trim() ? ctx.content : "";
+  if (rung.quote && said) rows.push({ role: "assistant", content: said });
+  rows.push({ role: "system", content: rung.restate[attempt - 1] ?? "" });
+  const notes2 = ctx.state.stall?.said ?? [];
+  if (rung.once && !notes2.includes(rung.id)) {
+    rows.push({ role: "system", content: rung.once });
+    save(ctx.state, { said: [...notes2, rung.id] });
+  }
+  return rows;
+}
+function deliveryTurn(ctx) {
+  return {
+    content: ctx.content ?? "",
+    ...ctx.served?.interruption ? { interruption: ctx.served.interruption } : {},
+    ...ctx.served?.model ? { model: ctx.served.model } : {}
+  };
+}
+function walkLadder(ctx, ledger) {
+  const rungs = ledger.rungs(deliveryTurn(ctx));
+  if (isPromise(rungs)) throw new Error("This ledger answers its rungs with a promise: walk it with walkLadderAsync.");
+  return walkRungs(ctx, ledger, rungs);
+}
+async function walkLadderAsync(ctx, ledger) {
+  return walkRungs(ctx, ledger, await ledger.rungs(deliveryTurn(ctx)));
+}
+function isPromise(value) {
+  return typeof value?.then === "function";
+}
+function walkRungs(ctx, ledger, rungs) {
+  for (const rung of rungs) {
+    rung.reached?.();
+    if (!rung.applies) continue;
+    const counters2 = spentOf(ctx.state);
+    const used = counters2[rung.id] ?? 0;
+    const max = rung.restate.length;
+    const restate = () => {
+      counters2[rung.id] = used + 1;
+      save(ctx.state, { rungs: counters2, spent: 1 });
+      rung.onRestate?.(used + 1);
+      if (rung.entersVerify && ctx.state.model.phase !== "verify") ctx.state.model = reduceRunPolicy(ctx.state.model, { type: "verify_started" });
+      return { action: "steer", rows: restatement(ctx, rung, used + 1) };
+    };
+    if (used < Math.min(rung.free ?? 1, max)) return restate();
+    if (rung.handoff) {
+      const to = handOffToProven(ctx, ledger, ctx.served?.model);
+      if (to) {
+        save(ctx.state, { spent: 1 });
+        return { action: "escalate", rows: [{ role: "system", content: rung.handoff(to) }] };
+      }
+    }
+    if (used < max) return restate();
+    if (rung.spent === "fall") continue;
+    if (rung.spent === "fail") return { action: "fail", note: rung.id };
+    return { action: "settle", note: rung.spent.settle };
+  }
+  return void 0;
+}
+
+// ../packages/agent-run/src/policy/model/failure.ts
+function recoverProviderFailure(ctx, failure, failedModel, message2) {
+  const ledger = ctx.ports.delivery;
+  const wording = ledger?.providerFailure;
+  const to = handOffToProven(ctx, ledger, failedModel);
+  if (to) return { kind: "retry", ...wording ? { note: wording.handoff(to) } : {} };
+  const next = reduceRunPolicy(ctx.state.model, failure);
+  ctx.state.model = next;
+  if (next.outcome.kind === "retry_turn") {
+    wording?.rerouted?.({ ...failedModel ? { model: failedModel } : {}, message: message2, step: ctx.step, outcome: next.outcome });
+    return { kind: "retry", ...wording ? { note: wording.reroute } : {} };
+  }
+  wording?.abandoned?.({ ...failedModel ? { model: failedModel } : {}, message: message2 });
+  return { kind: "fail" };
+}
+
+// ../packages/agent-run/src/policy/model/preflight.ts
+function classifyPreflight(input) {
+  const notices = [];
+  let refreshExpired = false;
+  if (input.byoSelected) {
+    for (const [provider, reason] of Object.entries(input.unresolvedReasons)) {
+      if (!reason) continue;
+      if (reason === "expired") {
+        if (input.unresolvedAfterRefresh) {
+          notices.push(`${provider}: credential ${input.unresolvedAfterRefresh} \u2014 reconnect it in Settings \u25B8 Integrations.`);
+        } else {
+          refreshExpired = true;
+        }
+      } else {
+        notices.push(`${provider}: credential ${reason} \u2014 reconnect it in Settings \u25B8 Integrations.`);
+      }
+    }
+  }
+  if (input.planModelAgentic === false) {
+    notices.push("plan phase would land on a Flash-class model \u2014 routing around it for the run's quality.");
+  }
+  return { notices, refreshExpired };
+}
+function planModelWarning(model, book2 = snapshotPriceBook()) {
+  if (!model || model === "default") return null;
+  const price = listPriceOf(book2, model);
+  const tier2 = price ? resolveModelTier({ price }) : void 0;
+  return tier2 && isAgenticTier(tier2) === false ? { model, tier: tier2 } : null;
+}
+function reasonsOf(entries) {
+  const out = {};
+  for (const entry of entries) {
+    const [provider = "", reason = ""] = entry.split(":").map((part) => part.trim());
+    if (provider) out[provider] = reason || "not_connected";
+  }
+  return out;
+}
+function modelPreflightEvent(step, result, planModel) {
+  const plan = planModelWarning(planModel);
+  const { notices } = classifyPreflight({
+    byoSelected: true,
+    unresolvedReasons: reasonsOf(result?.byoUnresolved ?? []),
+    ...plan ? { planModelAgentic: false } : {},
+    unresolvedAfterRefresh: "expired"
+  });
+  if (notices.length > 0 && result?.fallback && (result.byoUnresolved.length ?? 0) > 0) {
+    notices.push(`This run will use ${result.fallback} instead.`);
+  }
+  const status2 = notices.length > 0 ? "degraded" : (result?.refreshed?.length ?? 0) > 0 ? "refreshed" : "ok";
+  return { kind: "model.preflight", step, status: status2, notices };
+}
+function preflightVerdict(event, result) {
+  if (event.status !== "degraded") return event.status;
+  const reasons = (result?.byoUnresolved ?? []).join(",");
+  return `degraded:${reasons || "plan_flash"}`;
+}
+async function runModelPreflight(ctx) {
+  const model = ctx.state.model.model ?? ctx.policy.pinnedModel;
+  let result;
+  try {
+    result = await ctx.ports.model.preflight?.(model);
+  } catch {
+    result = void 0;
+  }
+  const event = modelPreflightEvent(ctx.step, result, ctx.state.writtenPaths.length === 0 ? model : void 0);
+  ctx.state.preflight = preflightVerdict(event, result);
+  return event;
+}
+function recordWeaker(ctx, served) {
+  const recorded = ctx.state.degradedBy ?? [];
+  if (!recorded.includes(served)) ctx.state.degradedBy = [...recorded, served];
+}
+function modelDowngrade(ctx, requested, served, book2 = snapshotPriceBook()) {
+  if (!served || served === "default") return void 0;
+  if (requested && requested !== "default") {
+    if (served === requested) return void 0;
+    if (isWeakerModel(requested, served, book2)) recordWeaker(ctx, served);
+    return { kind: "llm.model_downgrade", step: ctx.step, requestedModel: requested, model: served, reason: "failover" };
+  }
+  if ((ctx.state.downgrades ?? []).includes(served)) return void 0;
+  const degraded = ctx.state.preflight?.startsWith("degraded:") ? ctx.state.preflight.slice("degraded:".length) : "";
+  const byo = degraded && degraded !== "plan_flash" ? degraded : "";
+  const flash = !byo && ctx.state.writtenPaths.length === 0 ? planModelWarning(served) : null;
+  if (!byo && !flash) return void 0;
+  ctx.state.downgrades = [...ctx.state.downgrades ?? [], served];
+  return { kind: "llm.model_downgrade", step: ctx.step, requestedModel: "default", model: served, reason: byo ? `byo_unresolved:${byo}` : `plan_tier:${flash.tier}` };
+}
+
 // ../packages/agent-run/src/policy/model/index.ts
+var RUN_PHASES = /* @__PURE__ */ new Set(["plan", "code", "verify"]);
+function policyRole(delegatedRole) {
+  const role = typeof delegatedRole === "string" ? delegatedRole.trim() : "";
+  if (RUN_PHASES.has(role)) return { startPhase: role };
+  if (isModelRole(role)) return { startPhase: "code", fixedRole: role };
+  return { startPhase: "code" };
+}
+var DECLINING_MODEL_PREFIXES = ["evermind/"];
+function startOptions(pick2, delegatedRole, phaseModels) {
+  const verify = phaseModels?.verify;
+  const reviewModel = typeof verify === "string" && verify.trim() ? verify.trim() : null;
+  return {
+    pinnedModel: pick2.model,
+    strictPin: pick2.strict,
+    pinReleasable: true,
+    lockAfterFirstSuccess: true,
+    decliningModelPrefixes: DECLINING_MODEL_PREFIXES,
+    ...policyRole(delegatedRole),
+    ...phaseModels ? { phaseModels } : {},
+    reviewModel
+  };
+}
+function initialModelRunState(input) {
+  return {
+    policy: initialRunPolicy(startOptions(input.pick, input.delegatedRole, input.phaseModels)),
+    stallRecoveries: input.stallRecoveries ?? 0,
+    ...input.forceToolChoice ? { forceToolChoice: input.forceToolChoice } : {},
+    preflightNotices: [...input.preflightNotices ?? []]
+  };
+}
+function requestForTurn(state, hasTools2) {
+  return { ...turnRouting(state.policy, hasTools2), ...state.forceToolChoice ? { toolChoice: state.forceToolChoice } : {} };
+}
+function routeAroundFailure(state, request, failure) {
+  const policy = reduceRunPolicy(state.policy, {
+    type: "transport_failed",
+    kind: failure.kind,
+    ...failure.status !== void 0 ? { status: failure.status } : {},
+    ...request.model ? { model: request.model } : {}
+  });
+  const next = { ...state, policy };
+  return policy.outcome.kind === "retry_turn" ? { state: next, retry: requestForTurn(next, true) } : { state: next, retry: null };
+}
+function retryOutcome(state) {
+  return state.policy.outcome.kind === "retry_turn" ? state.policy.outcome : null;
+}
+function recordSuccess(state, served) {
+  const policy = reduceRunPolicy(state.policy, {
+    type: "turn_succeeded",
+    ...served.model ? { model: served.model } : {},
+    ...served.acted ? { acted: true } : {}
+  });
+  return { ...state, policy, forceToolChoice: void 0 };
+}
 function turnRouting(state, hasTools2) {
   return nextTurn(state, { hasTools: hasTools2 });
 }
+var modelHook = {
+  resolve(ctx) {
+    const routing = turnRouting(ctx.state.model, ctx.tools.length > 0);
+    const maxTokens = cappedMaxTokens(routing.role, void 0);
+    return {
+      role: routing.role,
+      strict: routing.strict,
+      excludeModels: routing.excludeModels,
+      ...routing.model ? { model: routing.model } : {},
+      ...maxTokens !== void 0 ? { maxTokens } : {}
+    };
+  },
+  turnFields(ctx) {
+    const ask = nextTurn(ctx.state.model, { hasTools: ctx.tools.length > 0 });
+    return {
+      role: ask.role,
+      phase: ctx.state.model.phase,
+      ...ask.strict ? { strict: true } : {},
+      ...ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {},
+      // A stall recovery's one-shot forced tool call, spent by the next request.
+      ...ctx.state.forceToolChoice ? { toolChoice: ctx.state.forceToolChoice } : {}
+    };
+  },
+  preflight: runModelPreflight,
+  downgrade: modelDowngrade,
+  recoverFailure: recoverProviderFailure
+};
 
 // ../packages/agent-run/src/policy/compaction/reserve.ts
 var compactReserveTokens = handoffReserveTokens;
@@ -16596,6 +17137,8 @@ function compactionOptions(ctx, opts = {}) {
 function toPackRow(m) {
   const row = { role: m.role, content: m.content };
   if (m.task) row.task = true;
+  if (m.parts && m.parts.length > 0) row.parts = m.parts;
+  if (m.meta) row.meta = m.meta;
   if (m.toolCalls && m.toolCalls.length > 0) {
     row.tool_calls = m.toolCalls.map((tc) => ({
       id: tc.id,
@@ -16620,18 +17163,29 @@ function toRunRow(m) {
   if (toolCalls && toolCalls.length > 0) out.toolCalls = toolCalls;
   if (src.tool_call_id != null) out.toolCallId = src.tool_call_id;
   if (src.task === true) out.task = true;
+  if (Array.isArray(src.parts) && src.parts.length > 0) out.parts = src.parts;
+  if (src.meta) out.meta = src.meta;
   return out;
+}
+function foldOf(before, after) {
+  const members = new Set(before);
+  const noteAt = after.findIndex((m) => !members.has(m) && m.role !== "tool" && !m.tool_calls && typeof m.content === "string");
+  if (noteAt < 0) return void 0;
+  let tail = 0;
+  while (tail < after.length - 1 - noteAt && tail < before.length && after[after.length - 1 - tail] === before[before.length - 1 - tail]) tail += 1;
+  for (let i = noteAt + 1; i < after.length - tail; i += 1) if (!members.has(after[i])) return void 0;
+  const lead = before.findIndex((m) => m.role !== "system");
+  const covered = before.length - tail - (lead < 0 ? 0 : lead);
+  return covered > 0 ? { note: after[noteAt].content, covered } : void 0;
 }
 function createCompactionHook(hookOptions = {}) {
   return {
     async compact(ctx) {
       const options = compactionOptions(ctx, hookOptions);
-      const result = await compactMessages(
-        ctx.messages.map(toPackRow),
-        options,
-        options.summarize
-      );
+      const rows = ctx.messages.map(toPackRow);
+      const result = await compactMessages(rows, options, options.summarize);
       if (!result.compacted) return void 0;
+      const fold = result.droppedMessages > 0 ? foldOf(rows, result.messages) : void 0;
       return {
         messages: result.messages.map(toRunRow),
         dropped: result.droppedMessages,
@@ -16639,12 +17193,134 @@ function createCompactionHook(hookOptions = {}) {
         beforeTokens: result.beforeTokens,
         afterTokens: result.afterTokens,
         summarized: result.summarized,
-        ...result.maskedObservations ? { masked: result.maskedObservations } : {}
+        ...result.maskedObservations ? { masked: result.maskedObservations } : {},
+        ...fold ? { note: fold.note, covered: fold.covered } : {}
       };
     }
   };
 }
 var compactionHook = createCompactionHook();
+
+// ../packages/agent-run/src/policy/stall/index.ts
+function currentModel(ctx) {
+  return ctx.state.model?.model ?? void 0;
+}
+function budgetOf(ctx) {
+  const slot = ctx.state.stall;
+  const model = currentModel(ctx);
+  if (slot && typeof slot.recoveriesUsed === "number" && slot.model === model) return { ...slot };
+  return model !== void 0 ? { model, recoveriesUsed: 0 } : { recoveriesUsed: 0 };
+}
+function saveBudget(ctx, budget2, spent = 0) {
+  const model = currentModel(ctx);
+  const total = (ctx.state.stall?.recoveriesTotal ?? 0) + spent;
+  const kept = { ...ctx.state.stall };
+  delete kept.model;
+  delete kept.recoveriesTotal;
+  ctx.state.stall = {
+    ...kept,
+    ...model !== void 0 ? { model } : {},
+    recoveriesUsed: budget2.recoveriesUsed,
+    ...total > 0 ? { recoveriesTotal: total } : {}
+  };
+}
+var FORCED_SYNTHESIS_PROMPT = "Now write your reply to the team AS the agent: plain prose, first person, no tool calls. Summarise what you found or did.";
+var stallHook = {
+  recover(ctx) {
+    const delivery = ctx.ports?.delivery;
+    if (delivery) {
+      const owed = walkLadder(ctx, delivery);
+      if (owed || delivery.owns?.narration) return owed;
+    }
+    return narrationRecover(ctx);
+  },
+  /** {@link recover} for a ledger whose rungs need a promise to say which hold; the kernel calls this one. */
+  async recoverAsync(ctx) {
+    const delivery = ctx.ports?.delivery;
+    if (delivery) {
+      const owed = await walkLadderAsync(ctx, delivery);
+      if (owed || delivery.owns?.narration) return owed;
+    }
+    return narrationRecover(ctx);
+  },
+  /**
+   * The settled answer, shaped the way every source shapes it: a reply stuck on one
+   * block posts that block once (`trimRepetitionLoop`, `brain/agentReplyLoop.ts`), and a
+   * prose question with options becomes the canonical ```ask-user block the surfaces
+   * render as a choice (`liftProseAskUser`, `brain-embedded/.../finalAnswerHook.ts`).
+   */
+  settle(ctx, text) {
+    const delivery = ctx.ports?.delivery;
+    if (delivery?.owns?.settle && delivery.accept) return delivery.accept(text);
+    return liftProseAskUser(trimRepetitionLoop(text.trim()));
+  },
+  /** A turn that called a tool is never a stall: the current model's budget starts full again. */
+  acted(ctx) {
+    if (ctx.state.stall && ctx.state.stall.recoveriesUsed > 0) saveBudget(ctx, { recoveriesUsed: 0 });
+  },
+  /**
+   * The forced no-tools final synthesis: a run that ended without speaking (every turn
+   * only called tools, a budget ran out, a breaker tripped) gets ONE bounded extra call
+   * with this prompt and no tools, so the agent always answers (`brain/agentReplyLoop.ts`).
+   */
+  synthesis(ctx) {
+    if (ctx.ports?.delivery?.owns?.synthesis) return null;
+    return ctx.task.agentName ? FORCED_SYNTHESIS_PROMPT.replace("AS the agent", `AS ${ctx.task.agentName}`) : FORCED_SYNTHESIS_PROMPT;
+  }
+};
+function narrationRecover(ctx) {
+  const text = typeof ctx.content === "string" ? ctx.content : "";
+  const toolNames = (ctx.tools ?? []).map((t) => t.function?.name ?? "").filter(Boolean);
+  const budget2 = budgetOf(ctx);
+  const { policy, step } = resolveStallStep(
+    ctx.state.model,
+    {
+      text,
+      toolCallCount: 0,
+      availableToolNames: toolNames,
+      // Whether the user asked for a change decides what handing the work back means.
+      requestText: ctx.task.request ?? ctx.task.prompt,
+      ...ctx.state.model.model && ctx.state.model.model !== "default" ? { resolvedModel: ctx.state.model.model } : {}
+    },
+    budget2.recoveriesUsed,
+    // The failover source rides the run policy's proven/tried set; the transport names
+    // the models a failover may land on (the tenant's connected flagships, the coding
+    // pool). Without one the default never returns the model that just failed, never
+    // more than MAX_MODEL_FAILOVERS deep.
+    {
+      surface: ctx.ports.model?.fallbackSurface?.() ?? void 0,
+      // A host whose successor is a function of what was already tried (an operator's declared chain) names it here; it wins over the surface.
+      ...ctx.ports.model?.pickFallback ? { pick: (tried) => ctx.ports.model.pickFallback(tried) } : {}
+    }
+  );
+  switch (step.kind) {
+    case "none":
+      return void 0;
+    case "nudge": {
+      budget2.recoveriesUsed = step.recoveriesUsed;
+      saveBudget(ctx, budget2, 1);
+      if (step.toolChoice) ctx.state.forceToolChoice = step.toolChoice;
+      return { action: "steer", note: step.nudge, detail: { model: ctx.state.model.model ?? null, attempt: step.recoveriesUsed, shape: step.shape ?? null } };
+    }
+    case "failover": {
+      budget2.recoveriesUsed = step.recoveriesUsed;
+      saveBudget(ctx, budget2, 1);
+      ctx.state.model = policy;
+      if (step.toolChoice) ctx.state.forceToolChoice = step.toolChoice;
+      return {
+        action: "escalate",
+        note: `${step.notice}
+
+${step.nudge}`,
+        detail: { from: step.from ?? null, to: step.to, attempt: step.attempt, of: step.of, shape: step.shape ?? null, notice: step.notice }
+      };
+    }
+    case "exhausted": {
+      saveBudget(ctx, budget2);
+      return { action: "pause", note: step.notice, detail: { model: ctx.state.model.model ?? null, tried: step.tried, shape: step.shape ?? null } };
+    }
+  }
+}
 
 // ../packages/agent-run/src/policy/steering/runSteering.ts
 var inboxes = /* @__PURE__ */ new Map();
@@ -16687,6 +17363,20 @@ function onRunInterrupt(runKey, listener) {
   return () => {
     set.delete(listener);
     if (set.size === 0) interruptListeners.delete(runKey);
+  };
+}
+function runSteeringSource(runKey) {
+  return {
+    drain: () => {
+      const interrupt = hasRunInterrupt(runKey);
+      return drainRunSteering(runKey).map((m) => ({
+        text: m.text,
+        ...m.attachments !== void 0 ? { attachments: m.attachments } : {},
+        ...interrupt ? { interrupt: true } : {}
+      }));
+    },
+    hasInterrupt: () => hasRunInterrupt(runKey),
+    onInterrupt: (listener) => onRunInterrupt(runKey, listener)
   };
 }
 
@@ -16759,6 +17449,36 @@ function skipOnSteer(runKey, inner) {
   };
 }
 
+// ../packages/agent-run/src/policy/steering/index.ts
+function steerInput(raw) {
+  return typeof raw === "string" ? { text: raw } : raw;
+}
+function portInterruptWatch(source) {
+  return {
+    hasInterrupt: () => source?.hasInterrupt?.() ?? false,
+    onInterrupt: (listener) => source?.onInterrupt?.(listener) ?? (() => void 0)
+  };
+}
+function isStopSteer(steered) {
+  return steered.some((text) => stopIntent(text));
+}
+var steeringHook = {
+  inject(_ctx, steered) {
+    if (steered.length === 0) return void 0;
+    return steered.map((text) => ({ role: "user", content: text }));
+  }
+};
+
+// ../packages/agent-run/src/policy/ask/index.ts
+var askHook = {
+  async answer(ctx, question, options) {
+    if (!ctx.ports.human || typeof ctx.ports.human.ask !== "function") {
+      return { kind: "paused" };
+    }
+    return ctx.ports.human.ask(question, options);
+  }
+};
+
 // ../packages/agent-run/src/policy/guards/readOnly.ts
 var READ_ONLY_CLOUD_TOOLS = /* @__PURE__ */ new Set([
   "read_file",
@@ -16818,6 +17538,51 @@ function delegationShape(spawnTool) {
 function earlyDelegationNudge(toolNames, reads) {
   return `STOP READING AND DELEGATE. This run has made ${reads} read calls and started no sub-agent. ${undelegatedRequestNudge(toolNames)}`;
 }
+
+// ../packages/agent-run/src/policy/subagents/index.ts
+function toolNamesOf(ctx) {
+  return ctx.tools.map((tool) => tool.function?.name).filter((name) => !!name);
+}
+function delegationCallKind(name) {
+  if (isSpawnTool(name)) return "spawn";
+  return isReadOnlyCloudTool(name) ? "read" : "other";
+}
+function readsWithoutSpawnOf(ctx) {
+  const counter = new ReadsWithoutSpawn();
+  for (const message2 of ctx.messages) {
+    for (const call2 of message2.toolCalls ?? []) counter.record(delegationCallKind(call2.name));
+  }
+  const counted = counter.snapshot();
+  const saved = ctx.state.reads.readsWithoutSpawn;
+  const spawned = saved.spawned || counted.spawned;
+  return { reads: Math.max(saved.reads, counted.reads), spawned, nudged: saved.nudged };
+}
+function delegationLeftUndone(ctx) {
+  return ctx.policy.delegation.requested && canSpawnHere(toolNamesOf(ctx)) && !readsWithoutSpawnOf(ctx).spawned;
+}
+function delegationNudge(ctx) {
+  const counted = readsWithoutSpawnOf(ctx);
+  ctx.state.reads = { ...ctx.state.reads, readsWithoutSpawn: counted };
+  const counter = new ReadsWithoutSpawn(counted);
+  if (!counter.due(ctx.policy.delegation.readsBeforeNudge) || !delegationLeftUndone(ctx)) return null;
+  counter.markNudged();
+  ctx.state.reads = { ...ctx.state.reads, readsWithoutSpawn: counter.snapshot() };
+  return earlyDelegationNudge(toolNamesOf(ctx), counted.reads);
+}
+function delegationBackstop(ctx) {
+  return delegationLeftUndone(ctx) ? undelegatedRequestNudge(toolNamesOf(ctx)) : null;
+}
+function withDelegationAdvisory(result, nudge) {
+  return result && typeof result === "object" && !Array.isArray(result) ? { ...result, advisory: nudge } : { output: result, advisory: nudge };
+}
+var subagentsHook = {
+  backstop: delegationBackstop,
+  nudge(ctx, call2, result) {
+    if (delegationCallKind(call2.name) !== "read") return void 0;
+    const nudge = delegationNudge(ctx);
+    return nudge ? { data: withDelegationAdvisory(result, nudge) } : void 0;
+  }
+};
 
 // ../packages/agent-run/src/policy/guards/sourcePolicy.ts
 var JSON_EXT = /\.json$/i;
@@ -16995,6 +17760,17 @@ function matchesRequiredReviewSignoff(required, toolName, args, succeeded6) {
 function missingReviewVerdictMessage(required) {
   const lane = required.laneKey ? ` and laneKey='${required.laneKey}'` : "";
   return `Cannot finish this reviewer assignment until you call builtin_kanban_signoff with roleKey='${required.roleKey}'${lane} and an explicit approved or changes_requested verdict. A narrative summary is not acceptance evidence.`;
+}
+function initialFinishGateState(resume, isChild) {
+  return {
+    noDeliverableBlocked: resume?.noDeliverableBlocked ?? isChild,
+    reviewVerdictRecorded: resume?.reviewVerdictRecorded ?? false,
+    placeholderBlocks: resume?.placeholderBlocks ?? 0,
+    ciPendingBlocks: resume?.ciPendingBlocks ?? 0,
+    ciFailureBlocks: resume?.ciFailureBlocks ?? 0,
+    ciVerified: false,
+    finishBlockedOnce: false
+  };
 }
 async function evaluateFinishGates(a) {
   const { requiredSignoff, summary, gates } = a;
@@ -17227,6 +18003,9 @@ function applyVerifyPhase(state) {
 
 // ../packages/agent-run/src/policy/finish/index.ts
 var lastReasons = /* @__PURE__ */ new WeakMap();
+function lastFinishReason(state) {
+  return lastReasons.get(state);
+}
 function writtenPathsOf(ctx) {
   return ctx.state.writtenPaths ?? [];
 }
@@ -17663,6 +18442,10 @@ function sessionOf(ctx, ports) {
   }
   return s;
 }
+function guardsTurnNote(ctx) {
+  const s = sessions.get(ctx.state) ?? new RunGuards(guardLeversOf(ctx.policy.levers), ctx.state.guards);
+  return s.tailSections().filter((part) => part.trim().length > 0).join("\n\n");
+}
 function createGuardsHook(ports = {}) {
   return {
     async beforeDispatch(ctx, _call) {
@@ -17782,8 +18565,8 @@ function recordVerifyEvents(outcome) {
 function describeVerifyResult(outcome) {
   if (outcome.kind === "skipped") return `verify skipped (${outcome.reason})`;
   if (outcome.commands.length === 0) return `verify ${outcome.kind}, no commands`;
-  const failed = outcome.failedCommands.length;
-  return `verify ${outcome.kind}: ${outcome.commands.join("; ")}${failed > 0 ? ` \u2014 ${failed} failed` : ""}`;
+  const failed3 = outcome.failedCommands.length;
+  return `verify ${outcome.kind}: ${outcome.commands.join("; ")}${failed3 > 0 ? ` \u2014 ${failed3} failed` : ""}`;
 }
 
 // ../packages/agent-run/src/policy/verify/index.ts
@@ -17825,6 +18608,9 @@ var verifyHook = createVerifyHook();
 
 // ../packages/agent-run/src/policy/tools/taskState.ts
 var UPDATE_TASK_STATE_TOOL = "update_task_state";
+var TASK_STATE_MAX_TOKENS = 600;
+var LIST_FIELDS = ["constraints", "decisions", "filesTouched", "openQuestions"];
+var TEXT_FIELDS = ["goal", "nextStep"];
 var list2 = (description) => ({ type: "array", items: { type: "string" }, description });
 var UPDATE_TASK_STATE_SCHEMA = {
   type: "function",
@@ -17844,8 +18630,66 @@ var UPDATE_TASK_STATE_SCHEMA = {
     }
   }
 };
+var LABELS = {
+  goal: "Goal",
+  constraints: "Constraints",
+  decisions: "Decisions",
+  filesTouched: "Files touched",
+  openQuestions: "Open questions",
+  nextStep: "Next step"
+};
+function renderTaskState(state) {
+  if (!state) return "";
+  const lines = [];
+  for (const key of ["goal", ...LIST_FIELDS, "nextStep"]) {
+    const value = state[key];
+    if (typeof value === "string" && value.trim()) lines.push(`${LABELS[key]}: ${value.trim()}`);
+    else if (Array.isArray(value) && value.length) lines.push(`${LABELS[key]}:
+${value.map((v) => `- ${v}`).join("\n")}`);
+  }
+  return lines.length ? `### Task state
+${lines.join("\n")}` : "";
+}
+function applyTaskStateUpdate(current, args) {
+  const next = { ...current ?? {} };
+  for (const key of TEXT_FIELDS) {
+    if (typeof args[key] === "string") next[key] = args[key].trim();
+  }
+  for (const key of LIST_FIELDS) {
+    const value = args[key];
+    if (Array.isArray(value)) next[key] = value.filter((v) => typeof v === "string" && v.trim() !== "").map((v) => v.trim());
+  }
+  const tokens2 = (0, import_handoff8.defaultEstimateTokens)(renderTaskState(next));
+  if (tokens2 > TASK_STATE_MAX_TOKENS) {
+    return { ok: false, error: `task state would be ~${tokens2} tokens (limit ${TASK_STATE_MAX_TOKENS}) \u2014 summarise it more tightly and retry` };
+  }
+  return { ok: true, state: next };
+}
+
+// ../packages/agent-run/src/policy/memory/knowledge.ts
+function knowledgeRecorderFor(memory) {
+  return RunKnowledgeRecorder.restore(memory ?? null);
+}
+function knowledgeState(recorder) {
+  const log = recorder;
+  return typeof log.snapshot === "function" ? log.snapshot() : recorder;
+}
+var recorders = /* @__PURE__ */ new WeakMap();
+function recorderForState(state) {
+  const key = state;
+  let recorder = recorders.get(key);
+  if (!recorder) {
+    recorder = knowledgeRecorderFor(state.memory);
+    recorders.set(key, recorder);
+  }
+  return recorder;
+}
 
 // ../packages/agent-run/src/policy/memory/learnedFacts.ts
+var MIN_FACT_CHARS = 24;
+var MAX_FACTS = 6;
+var KEY_PREFIX = "learned:";
+var KINDS = /* @__PURE__ */ new Set(["decision", "root_cause", "convention"]);
 var MEMORY_COMMIT_SYSTEM = [
   "You extract durable project facts from a finished coding run.",
   "Return a JSON array and nothing else. Each item is {key, kind, content}.",
@@ -17855,6 +18699,277 @@ var MEMORY_COMMIT_SYSTEM = [
   "Only emit a fact the excerpt actually supports. Do not invent, and do not restate the file list.",
   "Return [] when the run learned nothing durable."
 ].join(" ");
+function changedPaths(input) {
+  return [...new Set(input.changed.map((p) => p.trim()).filter(Boolean))];
+}
+function memoryCommitPrompt(input) {
+  const changed2 = changedPaths(input);
+  const asked = (input.prompt ?? "").replace(/\s+/g, " ").trim().slice(0, 400);
+  const tools = [...new Set((input.tools ?? []).map((t) => t.trim()).filter(Boolean))].slice(0, 24);
+  const excerpt2 = (input.excerpt ?? "").trim().slice(0, 6e3);
+  return [
+    asked ? `Asked: ${asked}` : "",
+    `Changed files:
+${changed2.map((p) => `- ${p}`).join("\n")}`,
+    tools.length ? `Tools: ${tools.join(", ")}` : "",
+    excerpt2 ? `Evidence:
+${excerpt2}` : "Evidence: (none recorded \u2014 return [] rather than guess)"
+  ].filter(Boolean).join("\n\n");
+}
+function kebab(raw) {
+  return raw.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+}
+function factKey(raw) {
+  const body = kebab(raw.replace(/^learned:/i, "").replace(/^workspace:/i, ""));
+  return body ? `${KEY_PREFIX}${body}` : "";
+}
+function parseLearnedFacts(raw) {
+  const start = raw.indexOf("[");
+  const end = raw.lastIndexOf("]");
+  if (start < 0 || end <= start) return [];
+  let parsed;
+  try {
+    parsed = JSON.parse(raw.slice(start, end + 1));
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const item of parsed) {
+    if (out.length >= MAX_FACTS) break;
+    if (!item || typeof item !== "object") continue;
+    const row = item;
+    if (typeof row.kind !== "string" || !KINDS.has(row.kind)) continue;
+    if (typeof row.key !== "string" || typeof row.content !== "string") continue;
+    if (/^workspace:/i.test(row.key.trim())) continue;
+    const key = factKey(row.key);
+    const content = row.content.replace(/\s+/g, " ").trim();
+    if (!key || content.length < MIN_FACT_CHARS || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ key, content, kind: row.kind });
+  }
+  return out;
+}
+async function commitLearnedFacts(input, deps) {
+  const changed2 = changedPaths(input);
+  if (changed2.length === 0) return [];
+  let raw = "";
+  try {
+    raw = await deps.complete(memoryCommitPrompt({ ...input, changed: changed2 }));
+  } catch {
+    return [];
+  }
+  const facts = parseLearnedFacts(raw);
+  const landed = [];
+  for (const fact of facts) {
+    try {
+      if (await deps.remember(fact.key, fact.content)) landed.push(fact);
+    } catch {
+    }
+  }
+  return landed;
+}
+function learnedFactsRequest(evidence) {
+  const changed2 = [...evidence.activity.created ?? [], ...evidence.activity.edited ?? []];
+  return {
+    changed: changed2,
+    ...evidence.activity.tools ? { tools: evidence.activity.tools } : {},
+    ...evidence.excerpt ? { excerpt: evidence.excerpt } : {},
+    ...evidence.activity.prompt ? { prompt: evidence.activity.prompt } : {}
+  };
+}
+var learnedFactDeps = null;
+async function extractAndWriteLearnedFacts(evidence) {
+  const deps = learnedFactDeps;
+  if (!deps) return null;
+  return commitLearnedFacts(learnedFactsRequest(evidence), deps);
+}
+
+// ../packages/agent-run/src/policy/memory/index.ts
+var SECTION_BREAK = "\n\n";
+function failed(result) {
+  return !!result && typeof result === "object" && result.ok === false;
+}
+function codeMapOf(ctx) {
+  const recorder = recorderForState(ctx.state);
+  ctx.state.memory = knowledgeState(recorder);
+  const map = recorder.consolidate({ root: ctx.task.workspace?.defaultRepo });
+  return map ? { ...map, ...ctx.task.chatId !== void 0 ? { chatId: ctx.task.chatId } : {} } : void 0;
+}
+var memoryHook = {
+  /** Record one dispatched call into the run's memory — successful calls only. */
+  observe(ctx, call2, result, isError) {
+    if (isError || failed(result)) return;
+    const recorder = recorderForState(ctx.state);
+    recorder.record(call2.name, call2.args);
+    ctx.state.memory = knowledgeState(recorder);
+  },
+  /**
+   * The volatile tail for this turn, or null when there is nothing worth saying: the
+   * run's own record (the recorder is restored from `state.memory` once per state object,
+   * so a resumed run's brief continues the SAME record a continuous run holds), then the
+   * guards' A3 / D1 / D7 notes — the sections `costLoop/volatileTail.ts` assembled, in
+   * front of THIS turn only. (The delegation nudge rides the read result that earns it.)
+   */
+  brief(ctx) {
+    const recorder = recorderForState(ctx.state);
+    if (!recorder.activity.prompt && ctx.task.prompt) recorder.setPrompt(ctx.task.prompt);
+    ctx.state.memory = knowledgeState(recorder);
+    const taskState = ctx.policy.levers.includes("c3_task_state") ? renderTaskState(ctx.state.taskState) : "";
+    const sections = [recorder.brief() ?? "", taskState, guardsTurnNote(ctx)].filter((part) => part.trim().length > 0);
+    return sections.length > 0 ? sections.join(SECTION_BREAK) : null;
+  },
+  /**
+   * The consolidated memory the run produced, written back through `store.commitMemory`.
+   * The code map (the `codemap:` write-back fields) is returned for the store; the
+   * learned-facts step runs behind the injected `learnedFacts` port when the run
+   * changed files. A read-only investigation still maps (PRD 35 E8): `consolidate`
+   * maps ≥3 files READ as readily as ≥3 changed, so the next run asked about this area
+   * starts warm. The map is written on EVERY terminal outcome (a failed or cancelled run
+   * still read and changed what it did); the model-extracted learned facts are a judgement
+   * of a completed run, so a caller that is settling a failure passes `learn: false`.
+   */
+  async consolidate(ctx, opts) {
+    const map = codeMapOf(ctx);
+    const facts = opts?.learn === false ? null : await extractAndWriteLearnedFacts({
+      activity: recorderForState(ctx.state).activity
+    });
+    if (map) return map;
+    const chat = ctx.task.chatId !== void 0 ? { chatId: ctx.task.chatId } : {};
+    return facts !== null && facts.length > 0 ? { facts, ...chat } : void 0;
+  }
+};
+
+// ../packages/agent-run/src/policy/context/recall.ts
+var MAX_RECALL_HINT_CHARS = 600;
+function recallQuery(userText, hint) {
+  const extra = (hint ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_RECALL_HINT_CHARS);
+  if (!extra || !userText.trim()) return userText;
+  return `${userText.trim()}
+
+${extra}`;
+}
+function focusTerms(entry) {
+  const path2 = entry.path;
+  const heads = (entry.outline ?? []).map((h) => h.heading).filter(Boolean);
+  return [path2, ...heads].join(" ");
+}
+function focusHint(pack) {
+  return pack.focus.map(focusTerms).filter(Boolean).join("\n");
+}
+
+// ../packages/agent-run/src/policy/context/index.ts
+var RECALL_LIMIT2 = 8;
+var contextHook = {
+  /**
+   * The recall lines the run should carry: the entries the surface's memory
+   * (`CapabilityProvider.memory.recall`) returns for the prompt plus the focus terms, as
+   * `key: content` lines. Nothing when the surface has no memory, the recall fails, or
+   * there is no request to ground it on (a hint alone is not a question) — recall is
+   * best-effort and never fails a run.
+   */
+  async recall(ctx) {
+    const memory = ctx.ports.capabilities?.memory;
+    if (!memory || !ctx.task.prompt.trim()) return void 0;
+    let hint = "";
+    try {
+      hint = focusHint(await ctx.ports.context.pack(ctx.task));
+    } catch {
+      hint = "";
+    }
+    const query = recallQuery(ctx.task.prompt, hint);
+    try {
+      const recalled = await memory.recall(query, RECALL_LIMIT2);
+      const lines = (recalled.ok ? recalled.entries ?? [] : []).map((entry) => `${entry.key}: ${entry.content}`);
+      return lines.length > 0 ? lines : void 0;
+    } catch {
+      return void 0;
+    }
+  }
+};
+
+// ../packages/agent-run/src/policy/tools/searchHelpers.ts
+var TOOL_SEARCH_MAX = 15;
+var TOOL_SEARCH_DEFAULT_LIMIT = 8;
+function promptNamedTools(text) {
+  const out = /* @__PURE__ */ new Set();
+  for (const match of text.toLowerCase().matchAll(/\b[a-z][a-z0-9_]{2,}\b/g)) {
+    out.add(match[0]);
+  }
+  return [...out];
+}
+function runToolSearch(catalog, advertised, args) {
+  const query = typeof args.query === "string" ? args.query.trim() : "";
+  if (!query) return { data: { ok: false, error: "query is required" }, load: [] };
+  const limit = Math.max(1, Math.min(TOOL_SEARCH_MAX, typeof args.limit === "number" ? Math.trunc(args.limit) : TOOL_SEARCH_DEFAULT_LIMIT));
+  const matches = searchToolSchemas(catalog.filter((t) => !advertised.has(t.function.name)), query, limit);
+  return {
+    data: {
+      ok: true,
+      query,
+      matches: matches.map((t) => t.function),
+      note: matches.length ? "These tools are now loaded and callable for the rest of the run." : "No unloaded tool matched \u2014 try other keywords, or use the tools you already have."
+    },
+    load: matches.map((t) => t.function.name)
+  };
+}
+
+// ../packages/agent-run/src/policy/tools/catalog.ts
+var ALWAYS_CORE_TOOLS = [
+  "read_file",
+  "search_code",
+  "list_files",
+  "edit_file",
+  "run_checks",
+  "run_command",
+  "finish",
+  "ask_human",
+  "spawn_agent"
+];
+var ROLE_CORE_TOOLS = {
+  explore: ["repo_map", "memory_recall", "workspace_read", "web_search", "web_fetch"],
+  code: ["repo_map", "write_file", "delete_file", "update_prd", "memory_recall", "memory_remember", "claim_resource", "release_resource", "workspace_note"],
+  verify: ["memory_recall", "workspace_read"],
+  plan: ["spawn_agents", "wait_agents", "message_agent", "update_prd", "memory_recall", "memory_remember", "workspace_note", "workspace_read"]
+};
+function deferredToolRole(role) {
+  return role === "explore" || role === "verify" || role === "plan" ? role : "code";
+}
+function coreToolNames(role) {
+  return [.../* @__PURE__ */ new Set([...ALWAYS_CORE_TOOLS, ...ROLE_CORE_TOOLS[deferredToolRole(role)]])].slice(0, 20);
+}
+function hasSymbolsCapability(caps) {
+  return caps.has("repo.symbols");
+}
+function selectCatalog(catalog, role, caps, opts = {}) {
+  const byName = /* @__PURE__ */ new Map();
+  for (const tool of catalog) {
+    const name = tool.function?.name;
+    if (name && !byName.has(name)) byName.set(name, tool);
+  }
+  const core = new Set(coreToolNames(role));
+  if (hasSymbolsCapability(caps)) core.add("find_symbol");
+  core.add(TOOL_SEARCH_TOOL);
+  for (const name of opts.pinned ?? []) core.add(name);
+  for (const name of opts.required ?? []) core.add(name);
+  for (const name of promptNamedTools(opts.prompt ?? "")) {
+    if (byName.has(name)) core.add(name);
+  }
+  const out = [];
+  for (const tool of catalog) {
+    const name = tool.function?.name;
+    if (name && core.has(name)) {
+      out.push(tool);
+      core.delete(name);
+    }
+  }
+  if (core.has(TOOL_SEARCH_TOOL)) {
+    out.push(TOOL_SEARCH_SCHEMA);
+    core.delete(TOOL_SEARCH_TOOL);
+  }
+  return out;
+}
 
 // ../packages/agent-run/src/policy/tools/toolVocabulary.ts
 var EQUIVALENCE_CLASSES = [
@@ -17903,8 +19018,108 @@ function expandWithSynonyms(stems) {
 }
 
 // ../packages/agent-run/src/policy/tools/selectTools.ts
+var DEFAULT_TOOL_LIMIT = 64;
+var PINNED_OVERFLOW = 16;
 var NAME_HIT = LEXICAL_WEIGHTS.name;
+var NAME_SYNONYM_HIT = 7;
 var DESCRIPTION_HIT = LEXICAL_WEIGHTS.description;
+function scoreTool(toolName, description, stems, synonyms) {
+  let score2 = 0;
+  for (const token of lexicalStems(toolName)) {
+    if (stems.has(token)) score2 += NAME_HIT;
+    else if (synonyms.has(token)) score2 += NAME_SYNONYM_HIT;
+  }
+  for (const token of lexicalStems(description)) {
+    if (stems.has(token)) score2 += DESCRIPTION_HIT;
+    else if (synonyms.has(token)) score2 += Math.ceil(DESCRIPTION_HIT / 2);
+  }
+  return score2;
+}
+function selectToolsForTurn(tools, options = {}) {
+  const catalog = tools ?? [];
+  const available = catalog.length;
+  if (available === 0) return { tools: [], trimmed: false, available: 0 };
+  const limit = Math.max(1, Math.floor(options.limit ?? DEFAULT_TOOL_LIMIT));
+  if (available <= limit) {
+    return { tools: [...catalog], trimmed: false, available };
+  }
+  const byName = /* @__PURE__ */ new Map();
+  for (const tool of catalog) {
+    const name = tool.function?.name;
+    if (name && !byName.has(name)) byName.set(name, tool);
+  }
+  const query = (options.query ?? "").toLowerCase();
+  const stems = lexicalStems(query);
+  const synonyms = expandWithSynonyms(stems);
+  const wanted = [];
+  const seen = /* @__PURE__ */ new Set();
+  const push = (tool) => {
+    const name = tool?.function?.name;
+    if (!tool || !name || seen.has(name)) return;
+    seen.add(name);
+    wanted.push(tool);
+  };
+  for (const name of options.required ?? []) push(byName.get(name));
+  const roomAfterRequired = Math.max(0, limit - wanted.length);
+  const rest = catalog.filter((t) => t.function?.name && !seen.has(t.function.name));
+  const ranked2 = [...rest].map((tool) => ({
+    tool,
+    score: scoreTool(tool.function?.name ?? "", tool.function?.description ?? "", stems, synonyms)
+  })).sort((a, b) => b.score - a.score || (a.tool.function?.name ?? "").localeCompare(b.tool.function?.name ?? ""));
+  for (const { tool } of ranked2.slice(0, roomAfterRequired)) push(tool);
+  const inFixed = new Set(wanted.map((t) => t.function?.name));
+  for (const tool of catalog) {
+    const name = tool.function?.name;
+    if (name && !inFixed.has(name) && wanted.length < limit) push(tool);
+  }
+  const fixed = [];
+  const fixedNames = new Set(wanted.map((t) => t.function?.name));
+  for (const tool of catalog) {
+    const name = tool.function?.name;
+    if (name && fixedNames.has(name)) fixed.push(tool);
+  }
+  const overflowCap = limit + PINNED_OVERFLOW;
+  const pinnedOut = [];
+  for (const name of options.pinned ?? []) {
+    if (pinnedOut.length >= Math.max(0, overflowCap - fixed.length)) break;
+    const tool = byName.get(name);
+    const toolName = tool?.function?.name;
+    if (!tool || !toolName || fixedNames.has(toolName)) continue;
+    if (pinnedOut.some((t) => t.function?.name === toolName)) continue;
+    pinnedOut.push(tool);
+  }
+  return { tools: [...fixed, ...pinnedOut], trimmed: true, available };
+}
+
+// ../packages/agent-run/src/policy/tools/platform.ts
+function selectPlatformCatalog(ctx, pinned) {
+  const platform = ctx.ports.platform;
+  if (!platform?.closed) return void 0;
+  const catalog = platform.schemas({ rungs: ctx.state.stall?.rungs ?? {} });
+  const { query, limit, required } = platform.selection;
+  return selectToolsForTurn(catalog, { query, limit, pinned, required: [...required] }).tools;
+}
+
+// ../packages/agent-run/src/policy/tools/toolset.ts
+var CHAT_REPLY_SCOPED_TOOLS = [
+  "chats.get_messages",
+  "chats.list_tickets",
+  "chats.link_ticket",
+  "chats.unlink_ticket",
+  "chats.ticket_lineage",
+  "chats.list_agents",
+  // Why the LAST run on this chat did not finish — read-only, consulted BEFORE the
+  // failed attempt is repeated.
+  "chats.diagnostics",
+  // What has already RUN on this chat's tickets and who started it.
+  "chats.runs",
+  // The addressed agent's hands: steer/resume the agent's OWN run on a linked ticket or
+  // start a follow-up on the same branch. NOT the unattended executions.post_message.
+  "chats.execute_as_agent"
+];
+function isChatReplyScope(toolScope) {
+  return toolScope === "chat-reply";
+}
 
 // ../packages/tool-output-policy/src/caps.ts
 var DEFAULT_TOOL_OUTPUT_CHARS = 6e3;
@@ -18205,8 +19420,8 @@ function isReadFileResult(out) {
 function windowReadFile(out, opts = {}) {
   const maxChars = opts.maxChars ?? READ_FILE_RESULT_CHARS;
   const tool = opts.tool ?? "read_file";
-  const withNote = (result) => opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(result, opts.advisory) : result;
-  const done = (served2, truncated) => ({ value: withNote(served2), served: served2, truncated });
+  const withNote2 = (result) => opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(result, opts.advisory) : result;
+  const done = (served2, truncated) => ({ value: withNote2(served2), served: served2, truncated });
   const lines = out.content.split("\n");
   const offset = typeof out.offset === "number" && out.offset > 0 ? Math.floor(out.offset) : 1;
   const totalLines = typeof out.totalLines === "number" && out.totalLines > 0 ? Math.floor(out.totalLines) : offset + lines.length - 1;
@@ -18215,9 +19430,9 @@ function windowReadFile(out, opts = {}) {
     const lastLine = offset + kept.length - 1;
     return { ...out, content: kept.join("\n"), offset, totalLines, truncated: lastLine < totalLines || alreadyPartial, note };
   };
-  const build = (kept, note) => withNote(served(kept, note));
+  const build = (kept, note) => withNote2(served(kept, note));
   const fits = (value) => JSON.stringify(value).length <= maxChars;
-  if (fits(withNote({ ...out }))) return done({ ...out }, false);
+  if (fits(withNote2({ ...out }))) return done({ ...out }, false);
   const how = (next) => opts.alone !== void 0 ? `call ${tool} again with ONLY the path ${JSON.stringify(opts.alone)} (offset applies to a single file) and offset ${next}` : `call ${tool} again with offset ${next}`;
   const continuation = (lastLine) => `Showing lines ${offset}\u2013${lastLine} of ${totalLines}. This surface returns at most ~${maxChars.toLocaleString("en-US")} chars per read, so a large file arrives in several windows \u2014 ${how(lastLine + 1)} to continue from exactly where this one stopped. Do not re-request lines you already have.`;
   let lo = 1;
@@ -18322,6 +19537,10 @@ function shrinkLogFields(tool, out, cap2, overhead) {
   }
   return shrunk;
 }
+function truncatedResultNote(originalChars, maxChars) {
+  if (maxChars < 600) return "Truncated: NOT the whole result \u2014 do not treat it as complete.";
+  return `Truncated: the full result was ${originalChars.toLocaleString("en-US")} chars and this surface returns at most ~${maxChars.toLocaleString("en-US")}. \`output\` is only a cut of it, NOT the whole \u2014 never treat it as complete or write it back as if it were. Re-call with a narrower query, id or filter to see the rest.`;
+}
 function shapeToolResult(tool, out, opts = {}) {
   const bytes = JSON.stringify(out ?? null).length;
   if (isPagedReadTool(tool) && (isReadFileResult(out) || isReadFilesResult(out))) {
@@ -18364,12 +19583,1497 @@ ${opts.advisory}` : ""}`;
   return { content, bytes, truncated: true };
 }
 
+// ../packages/agent-run/src/policy/tools/readCoverage.ts
+var DEDUPABLE_READS = /* @__PURE__ */ new Set(["read_file", "list_files", "search_code", "find_symbol", "file_outline"]);
+var UNSCOPED_MUTATIONS = /* @__PURE__ */ new Set(["run_command", "git_checkout", "git_merge", "git_rebase", "git_reset", "git_stash", "git_pull", "apply_patch"]);
+var CODE_CHANGES = /* @__PURE__ */ new Set(["write_file", "edit_file", "delete_file", "create_file", "move_file"]);
+var PUBLISHES = /* @__PURE__ */ new Set(["git_commit", "git_push", "create_pull_request"]);
+var REPO_STATE_READS = /* @__PURE__ */ new Set(["git_status", "git_log", "git_branch"]);
+var SEPARATOR = " \u220B ";
+function pathOf(args) {
+  const a = args && typeof args === "object" ? args : {};
+  const path2 = typeof a.path === "string" ? a.path : typeof a.scope === "string" ? a.scope : void 0;
+  return path2?.trim() || void 0;
+}
+var AGENT_READ_TRAITS = {
+  visitTarget: (args) => {
+    const path2 = pathOf(args) ?? "";
+    const query = args && typeof args === "object" ? args.query : void 0;
+    return typeof query === "string" && query.trim() ? `${path2}${SEPARATOR}${query.trim()}` : path2 || void 0;
+  },
+  activityTarget: pathOf,
+  questionSeparator: SEPARATOR,
+  // A shell command that provably only reads changes no file: it forgets no read.
+  isUnscopedMutation: (tool, args) => UNSCOPED_MUTATIONS.has(tool) && !isReadOnlyShellCall(tool, args),
+  isCodeChangeTool: (tool) => CODE_CHANGES.has(tool),
+  isLocalWorkspaceTool: (tool) => DEDUPABLE_READS.has(tool) || CODE_CHANGES.has(tool) || UNSCOPED_MUTATIONS.has(tool) || tool.startsWith("git_"),
+  isRepoPublishTool: (tool) => PUBLISHES.has(tool),
+  isRepoStateReadTool: (tool) => REPO_STATE_READS.has(tool)
+};
+function servedKey(tool, args) {
+  return `${tool}\0${JSON.stringify(canonicalReadArgs(tool, args))}`;
+}
+function parseKey(key) {
+  const at2 = key.indexOf("\0");
+  if (at2 < 0) return null;
+  try {
+    return { tool: key.slice(0, at2), args: JSON.parse(key.slice(at2 + 1)) };
+  } catch {
+    return null;
+  }
+}
+var sessions2 = /* @__PURE__ */ new WeakMap();
+function coverageOf(state) {
+  let coverage = sessions2.get(state);
+  if (coverage) return coverage;
+  coverage = new ReadCoverage(AGENT_READ_TRAITS);
+  for (const [key, entry] of Object.entries(state.reads.served)) {
+    const read2 = parseKey(key);
+    if (!read2) continue;
+    coverage.record(read2.tool, read2.args);
+    if (entry.cached) coverage.cacheResult(read2.tool, read2.args, entry.cached);
+  }
+  sessions2.set(state, coverage);
+  return coverage;
+}
+function stillServed(ctx, anchor) {
+  return ctx.messages.some((m) => m.role === "tool" && m.toolCallId === anchor);
+}
+function coveredReadAnswer(ctx, call2) {
+  if (!DEDUPABLE_READS.has(call2.name)) return void 0;
+  const answer2 = coveredAnswer(ctx, call2);
+  if (answer2) ctx.state.reads = { ...ctx.state.reads, stubCount: (ctx.state.reads.stubCount ?? 0) + 1 };
+  return answer2;
+}
+function coveredAnswer(ctx, call2) {
+  const coverage = coverageOf(ctx.state);
+  if (coverage.isRepeat(call2.name, call2.args)) {
+    const cached2 = coverage.cachedResult(call2.name, call2.args);
+    if (cached2 && !stillServed(ctx, cached2.anchor)) {
+      const note = `Replayed from this run's read cache: this exact ${call2.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
+      return { data: withNote(cached2.served ?? cached2.result, note) };
+    }
+    return {
+      data: {
+        note: `Duplicate ${call2.name} call \u2014 identical arguments to an earlier call this run, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it.`
+      }
+    };
+  }
+  const covered = coverage.coveredRead(call2.name, call2.args);
+  if (!covered) return void 0;
+  coverage.record(call2.name, call2.args);
+  if (covered.cached && !stillServed(ctx, covered.cached.anchor)) {
+    const served = covered.cached.served ?? covered.cached.result;
+    const requested = isReadFileResult(served) ? sliceReadFile(served, covered.start, covered.end) : served;
+    return { data: withNote(requested, covered.note) };
+  }
+  return { data: { note: covered.note } };
+}
+function withNote(result, note) {
+  return result && typeof result === "object" && !Array.isArray(result) ? { ...result, note } : { output: result, note };
+}
+function servedSpan(served) {
+  if (!isReadFileResult(served)) return { start: 0, end: 0 };
+  const start = typeof served.offset === "number" && served.offset > 0 ? Math.floor(served.offset) : 1;
+  return { start, end: start + served.content.split("\n").length - 1 };
+}
+function failed2(result) {
+  return !!result && typeof result === "object" && result.ok === false;
+}
+function cutToCap(result) {
+  return !!result && typeof result === "object" && result.truncated === true;
+}
+function recordShellPrint(ctx, coverage, call2, served) {
+  const read2 = shellPrintAsRead(call2.name, call2.args, served, !cutToCap(served));
+  if (!read2) return;
+  coverage.record("read_file", read2.args);
+  const cached2 = { result: read2.result, served: read2.result, anchor: call2.id };
+  coverage.cacheResult("read_file", read2.args, cached2);
+  const entry = { ...servedSpan(read2.result), cached: cached2, note: "" };
+  const reads = ctx.state.reads;
+  ctx.state.reads = { ...reads, served: { ...reads.served, [servedKey("read_file", read2.args)]: entry } };
+}
+function recordServedRead(ctx, call2, served, isError) {
+  const coverage = coverageOf(ctx.state);
+  const reads = ctx.state.reads;
+  if (DEDUPABLE_READS.has(call2.name)) {
+    if (isError || failed2(served)) return;
+    coverage.record(call2.name, call2.args);
+    const cached2 = { result: served, served, anchor: call2.id };
+    coverage.cacheResult(call2.name, call2.args, cached2);
+    const entry = { ...servedSpan(served), cached: cached2, note: "" };
+    ctx.state.reads = { ...reads, served: { ...reads.served, [servedKey(call2.name, call2.args)]: entry } };
+    return;
+  }
+  coverage.invalidate(call2.name, call2.args);
+  const kept = {};
+  for (const [key, entry] of Object.entries(reads.served)) {
+    const read2 = parseKey(key);
+    if (read2 && coverage.isRepeat(read2.tool, read2.args)) kept[key] = entry;
+  }
+  ctx.state.reads = { ...reads, served: kept };
+  if (!isError && !failed2(served)) recordShellPrint(ctx, coverage, call2, served);
+}
+
+// ../packages/agent-run/src/runContext.ts
+function policyContext(input, state, view, step, turn) {
+  return {
+    task: input.task,
+    policy: input.policy,
+    state,
+    ports: input.ports,
+    step,
+    turn,
+    messages: view.messages,
+    tools: view.tools,
+    signal: input.signal
+  };
+}
+function applyCompaction(state, view, result, step) {
+  view.messages.splice(0, view.messages.length, ...result.messages);
+  state.messages = view.messages;
+  state.compaction = {
+    compactions: state.compaction.compactions + 1,
+    lastCompactedStep: step,
+    ...result.reserveTokens !== void 0 ? { reserveTokens: result.reserveTokens } : {},
+    droppedMessages: result.dropped
+  };
+}
+function currentView(transcript, offered) {
+  return { messages: transcript, tools: offered };
+}
+function toPolicyCall(call2) {
+  return { id: call2.id, name: call2.name, args: call2.args };
+}
+function appendRows(input, transcript, ...rows) {
+  for (const row of rows) {
+    transcript.push(row);
+    announceRow(input, row);
+  }
+}
+function announceRow(input, row) {
+  try {
+    input.ports.store.appended?.(row);
+  } catch {
+  }
+  return row;
+}
+async function emit(events, event, meta) {
+  try {
+    await events.emit(event, meta);
+  } catch {
+  }
+}
+
+// ../packages/agent-run/src/policy/tools/gates.ts
+var TOOL_NAME_SYNONYMS = {
+  write: ["write_file", "Write"],
+  write_file: ["write", "Write"],
+  Write: ["write", "write_file"],
+  delete_file: ["write_file", "write", "Write"],
+  edit: ["edit_file", "Edit"],
+  edit_file: ["edit", "Edit"],
+  Edit: ["edit", "edit_file"],
+  exec: ["run_command", "Bash", "bash"],
+  Bash: ["run_command", "exec", "bash"],
+  bash: ["run_command", "exec", "Bash"],
+  run_command: ["exec", "Bash", "bash"],
+  read: ["read_file", "Read"],
+  Read: ["read", "read_file"],
+  read_file: ["read", "Read"],
+  Task: ["spawn_agent", "spawn_agents"],
+  spawn_agent: ["Task", "spawn_agents"],
+  spawn_agents: ["Task", "spawn_agent"],
+  Glob: ["list_files"],
+  list_files: ["Glob"],
+  Grep: ["search_code"],
+  search_code: ["Grep"]
+};
+var CONTROL_TOOLS = /* @__PURE__ */ new Set(["finish", "ask_human", "ask_user"]);
+function policyRefusalMessage(d) {
+  if (d.action === "block") {
+    return `Policy gate ${d.gateId} blocked this tool call: ${d.reason}`;
+  }
+  return `Policy gate ${d.gateId} requires human approval before this tool call (${d.reason}). No approver is available on this host (no approval pause), so the call was refused.`;
+}
+function candidateToolNames(toolName) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const n2 of [toolName, ...TOOL_NAME_SYNONYMS[toolName] ?? []]) {
+    if (!n2 || seen.has(n2)) continue;
+    seen.add(n2);
+    out.push(n2);
+  }
+  return out;
+}
+function gatesFor(gates, toolName) {
+  const all = gates ?? [];
+  return CONTROL_TOOLS.has(toolName) ? all.filter((g) => g.tool && g.tool !== "*") : all;
+}
+function evaluatePolicyGateSeam(gates, toolName, args) {
+  const applicable = gatesFor(gates, toolName);
+  const paths = toolCallPaths(args);
+  const pathArg = paths.length ? paths : void 0;
+  let approval;
+  for (const name of candidateToolNames(toolName)) {
+    const d = evaluatePolicyGate(applicable, name, pathArg);
+    if (d.action === "block") return d;
+    if (d.action === "require-approval") approval = d;
+  }
+  return approval ?? { action: "allow" };
+}
+function isToolWithheld(gates, toolName) {
+  const blocking = gatesFor(gates, toolName).filter((g) => g.effect === "block" && !(g.paths && g.paths.length));
+  if (blocking.length === 0) return false;
+  if (blocking.some((g) => !g.tool || g.tool === "*")) return true;
+  const blocked = new Set(blocking.map((g) => (g.tool ?? "").toLowerCase()));
+  return candidateToolNames(toolName).some((n2) => blocked.has(n2.toLowerCase()));
+}
+async function gateCall(ctx, call2) {
+  const gates = ctx.policy.approvalGates;
+  if (!gates || gates.length === 0) return void 0;
+  const decision = evaluatePolicyGateSeam(gates, call2.name, call2.args);
+  if (decision.action === "block") {
+    await emit(ctx.ports.events, { kind: "policy.blocked", step: ctx.step, tool: call2.name, gateId: decision.gateId, reason: decision.reason });
+    return {
+      data: { ok: false, gate: decision.gateId, error: `Blocked by governance policy: ${decision.reason}. Do not retry this tool \u2014 accomplish the task another way, or finish and explain why it cannot proceed.` },
+      isError: true
+    };
+  }
+  if (decision.action !== "require-approval") return void 0;
+  const key = policyGateCallKey(decision.gateId, call2.name, call2.args);
+  if ((ctx.state.approvedCalls ?? []).includes(key)) return void 0;
+  const gate = gates.find((g) => g.id === decision.gateId) ?? { id: decision.gateId, effect: "require-approval", reason: decision.reason };
+  const question = `Approve the agent's use of "${call2.name}"? ${decision.reason}`;
+  const human = ctx.ports.human;
+  const parkedOn = ctx.state.parkedCalls?.[key];
+  const answer2 = human.approve ? await human.approve(gate, { tool: call2.name, args: call2.args, reason: decision.reason, ...parkedOn ? { approvalId: parkedOn } : {} }) : await human.ask(question);
+  if (!answer2) return { data: { ok: false, error: policyRefusalMessage(decision) }, isError: true };
+  if (answer2.kind === "answered") {
+    if (parkedOn) {
+      const { [key]: _settled, ...rest } = ctx.state.parkedCalls ?? {};
+      ctx.state.parkedCalls = rest;
+    }
+    if (answer2.approved === true) {
+      ctx.state.approvedCalls = [...ctx.state.approvedCalls ?? [], key];
+      return void 0;
+    }
+    return { data: { ok: false, error: `The approver declined "${call2.name}" (governance gate ${decision.gateId}).${answer2.answer ? ` ${answer2.answer}` : ""}` }, isError: true };
+  }
+  const approvalId = answer2.approvalId ?? parkedOn;
+  if (approvalId) ctx.state.parkedCalls = { ...ctx.state.parkedCalls ?? {}, [key]: approvalId };
+  else ctx.state.approvedCalls = [...ctx.state.approvedCalls ?? [], key];
+  return {
+    data: { ok: false, error: `Paused for human approval of "${call2.name}" (governance gate ${decision.gateId}).` },
+    isError: true,
+    // `parked`: the approver's channel already parked the run — the kernel settles `paused`, it never asks a second time.
+    control: { kind: "ask_human", question, parked: true, ...approvalId ? { approvalId } : {} }
+  };
+}
+
+// ../packages/agent-run/src/policy/tools/caps.ts
+function resultCapFor(tool, model, servingModel) {
+  const window2 = servingModel && typeof model.window === "function" ? model.window(servingModel) : void 0;
+  return windowedCap(tool, toolOutputCap(tool), window2);
+}
+var ERROR_CHARS = 500;
+function failedResult(data) {
+  if (!data || typeof data !== "object" || data.ok !== false) return null;
+  const error = data.error;
+  return typeof error === "string" ? { error: error.slice(0, ERROR_CHARS) } : {};
+}
+function fittedText(text, failed3, maxChars, originalChars) {
+  const note = truncatedResultNote(originalChars, maxChars);
+  const head = failed3 ? { ok: false, ...failed3 } : {};
+  let body = text;
+  for (; ; ) {
+    const result = { ...head, truncated: true, note, output: body };
+    const over = JSON.stringify(result).length - maxChars;
+    if (over <= 0 || body.length === 0) return result;
+    body = body.slice(0, Math.max(0, body.length - over - 1));
+  }
+}
+function capToolResult(tool, data, maxChars) {
+  const shaped = shapeToolResult(tool, data, { maxChars });
+  if (!shaped.truncated) return data;
+  const failed3 = failedResult(data);
+  let parsed;
+  try {
+    parsed = JSON.parse(shaped.content);
+  } catch {
+    return fittedText(shaped.content, failed3, maxChars, shaped.bytes);
+  }
+  if (failed3 && parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    return { ...parsed, ok: false };
+  }
+  return failed3 ? fittedText(shaped.content, failed3, maxChars, shaped.bytes) : parsed;
+}
+
+// ../packages/agent-run/src/policy/tools/index.ts
+var SIGNOFF_TOOL = "builtin_kanban_signoff";
+function selectedTools(ctx, offered) {
+  const { policy, task } = ctx;
+  const tools = offered.filter((t) => !isToolWithheld(policy.approvalGates, t.function?.name ?? ""));
+  if (isChatReplyScope(policy.toolScope)) {
+    const allowed = new Set(CHAT_REPLY_SCOPED_TOOLS);
+    const extension = ctx.ports.extensions;
+    return tools.filter((t) => {
+      const name = t.function?.name;
+      return name ? allowed.has(name) || Boolean(extension?.handles(name)) : false;
+    });
+  }
+  const required = policy.signoff ? [SIGNOFF_TOOL] : [];
+  const pinned = [...pinnedNames(ctx), ...required];
+  const own = selectPlatformCatalog(ctx, pinned);
+  if (own) return [...own];
+  const prompt = [task.persona, task.prompt].filter(Boolean).join("\n");
+  const catalog = selectCatalog(tools, policy.role, catalogCaps(ctx), { pinned, required, prompt });
+  const selected = selectToolsForTurn(catalog, { query: task.prompt, pinned });
+  return policy.levers.includes("c3_task_state") ? [...selected.tools, UPDATE_TASK_STATE_SCHEMA] : selected.tools;
+}
+function toolSearchAnswer(ctx, call2) {
+  if (call2.name === UPDATE_TASK_STATE_TOOL && ctx.policy.levers.includes("c3_task_state")) {
+    const updated = applyTaskStateUpdate(ctx.state.taskState, call2.args);
+    if (!updated.ok) return { data: { ok: false, error: updated.error } };
+    ctx.state.taskState = updated.state;
+    return { data: { ok: true, note: "Task state saved \u2014 it is shown to you every turn and kept through compaction." } };
+  }
+  if (call2.name !== TOOL_SEARCH_TOOL) return void 0;
+  const advertised = new Set(selectedTools(ctx, ctx.tools).map((t) => t.function.name));
+  const found = runToolSearch(ctx.tools, advertised, call2.args);
+  if (found.load.length > 0) ctx.state.loadedTools = [.../* @__PURE__ */ new Set([...ctx.state.loadedTools ?? [], ...found.load])];
+  return { data: found.data };
+}
+function loadCalledDeferredTool(ctx, call2) {
+  if (call2.name === TOOL_SEARCH_TOOL || call2.name === UPDATE_TASK_STATE_TOOL) return;
+  if ((ctx.state.loadedTools ?? []).includes(call2.name)) return;
+  if (!ctx.tools.some((t) => t.function?.name === call2.name)) return;
+  if (selectedTools(ctx, ctx.tools).some((t) => t.function?.name === call2.name)) return;
+  ctx.state.loadedTools = [...ctx.state.loadedTools ?? [], call2.name];
+}
+var toolsHook = {
+  select: selectedTools,
+  beforeDispatch: (ctx, call2) => {
+    loadCalledDeferredTool(ctx, call2);
+    return coveredReadAnswer(ctx, call2);
+  },
+  meta: toolSearchAnswer,
+  observe: recordServedRead,
+  gate: gateCall
+};
+function catalogCaps(ctx) {
+  return ctx.ports.capabilities?.capabilities ?? /* @__PURE__ */ new Set();
+}
+function pinnedNames(ctx) {
+  const names = new Set(ctx.state.loadedTools ?? []);
+  for (const message2 of ctx.messages) {
+    for (const call2 of message2.toolCalls ?? []) if (call2.name) names.add(call2.name);
+  }
+  return [...names];
+}
+
+// ../packages/agent-run/src/policy/index.ts
+function defaultPolicyModules() {
+  return {
+    compaction: compactionHook,
+    stall: stallHook,
+    steering: steeringHook,
+    ask: askHook,
+    subagents: subagentsHook,
+    finish: finishHook,
+    guards: guardsHook,
+    verify: verifyHook,
+    memory: memoryHook,
+    context: contextHook,
+    tools: toolsHook,
+    model: modelHook
+  };
+}
+function composePolicyHooks(overrides = {}) {
+  const modules = { ...defaultPolicyModules(), ...overrides };
+  return {
+    compaction: modules.compaction,
+    stall: modules.stall,
+    steering: modules.steering,
+    ask: modules.ask,
+    subagents: modules.subagents,
+    finish: modules.finish,
+    guards: modules.guards,
+    verify: modules.verify,
+    memory: modules.memory,
+    context: modules.context,
+    tools: modules.tools,
+    model: modules.model
+  };
+}
+
+// ../packages/agent-run/src/telemetry/costTally.ts
+function foldTurnCost(running, turnCostMc) {
+  if (running === null || turnCostMc === void 0) return null;
+  return (running ?? 0) + turnCostMc;
+}
+function reportedRunCost(running) {
+  return running ?? void 0;
+}
+
+// ../packages/agent-run/src/telemetry/runTally.ts
+function freshTally() {
+  return { toolCalls: 0, toolErrors: 0, tokens: 0, cacheReadTokens: 0, shellFileReads: 0, repoErrors: 0, costLatch: true };
+}
+function resumeTally(saved) {
+  const tally = { ...freshTally(), ...saved ?? {} };
+  const tookTurns = !!saved && (saved.costMc != null || (saved.tokens ?? 0) > 0 || saved.model !== void 0 || (saved.toolCalls ?? 0) > 0);
+  if (saved && saved.costLatch !== true && tookTurns) tally.costMc = null;
+  return tally;
+}
+function tallyTurn(tally, model, usage) {
+  if (model) tally.model = model;
+  tally.costMc = foldTurnCost(tally.costMc, usage?.costMc);
+  if (!usage) return;
+  tally.tokens += (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
+  tally.cacheReadTokens += usage.cacheReadTokens ?? 0;
+}
+function tallyCall(tally, step, name, args, data, ok) {
+  tally.toolCalls += 1;
+  if (!ok) tally.toolErrors += 1;
+  if (isSpawnTool(name) && tally.firstSpawnTurn === void 0) tally.firstSpawnTurn = step;
+  if (resolveToolAlias(name) === "run_command" && typeof args.command === "string" && parseShellFileRead(args.command)) {
+    tally.shellFileReads += 1;
+  }
+  if (!ok && isNotARepo(errorText(data))) tally.repoErrors += 1;
+}
+function tallyVerify(tally, ok) {
+  tally.verify = ok ? "passed" : "failed";
+}
+function errorText(data) {
+  if (typeof data === "string") return { error: data };
+  if (!data || typeof data !== "object") return {};
+  const d = data;
+  const str4 = (v) => typeof v === "string" ? v : "";
+  return { stdout: `${str4(d.stdout)} ${str4(d.stderr)}`, error: str4(d.error) };
+}
+
+// ../packages/agent-run/src/runState.ts
+function freshState(policy, task) {
+  return {
+    messages: [],
+    step: 0,
+    guards: {},
+    finish: initialFinishGateState(void 0, task.dispatch.parentRunId !== void 0),
+    model: initialModelState(policy),
+    memory: { memory: { created: [], edited: [], deleted: [], read: [], searched: [] }, tools: [] },
+    compaction: { compactions: 0 },
+    writtenPaths: [],
+    askedGates: [],
+    reads: freshReads(),
+    telemetry: freshTally()
+  };
+}
+function initialModelState(policy) {
+  const start = policy.modelStart;
+  if (!start) return initialRunPolicy({ pinnedModel: policy.pinnedModel, ...policy.modelOptions ?? {} });
+  const model = start.model ?? policy.pinnedModel ?? "";
+  if (start.plain) {
+    const verify = start.phaseModels?.verify;
+    return initialRunPolicy({ pinnedModel: model, ...policy.modelOptions ?? {}, ...verify ? { phaseModels: { verify }, reviewModel: verify } : {} });
+  }
+  return initialModelRunState({
+    pick: { model, strict: start.strict ?? false },
+    delegatedRole: start.delegatedRole,
+    ...start.phaseModels ? { phaseModels: start.phaseModels } : {}
+  }).policy;
+}
+function freshReads() {
+  return { served: {}, readsWithoutSpawn: { reads: 0, spawned: false, nudged: false } };
+}
+function resumeState(saved, policy, task) {
+  const fresh = freshState(policy, task);
+  return {
+    ...fresh,
+    ...saved,
+    guards: saved.guards ?? fresh.guards,
+    finish: saved.finish ?? fresh.finish,
+    model: saved.model ?? fresh.model,
+    memory: saved.memory ?? fresh.memory,
+    compaction: saved.compaction ?? fresh.compaction,
+    writtenPaths: saved.writtenPaths ?? [],
+    askedGates: saved.askedGates ?? [],
+    reads: saved.reads ?? fresh.reads,
+    telemetry: resumeTally(saved.telemetry),
+    messages: Array.isArray(saved.messages) ? saved.messages : []
+  };
+}
+function asMessages(raw) {
+  const out = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const r = row;
+    if (r.role !== "system" && r.role !== "user" && r.role !== "assistant" && r.role !== "tool") continue;
+    out.push({
+      role: r.role,
+      content: typeof r.content === "string" ? r.content : "",
+      ...Array.isArray(r.toolCalls) ? { toolCalls: r.toolCalls } : {},
+      ...typeof r.toolCallId === "string" ? { toolCallId: r.toolCallId } : {},
+      ...Array.isArray(r.parts) ? { parts: r.parts } : {},
+      ...r.meta && typeof r.meta === "object" ? { meta: r.meta } : {},
+      ...r.isError ? { isError: true } : {}
+    });
+  }
+  return out;
+}
+function rememberWrite(state, call2, ok) {
+  if (!ok) return;
+  if (call2.name === "delete_file") {
+    const gone = typeof call2.args.path === "string" ? call2.args.path : void 0;
+    if (gone) state.writtenPaths = state.writtenPaths.filter((p) => p !== gone);
+    return;
+  }
+  if (call2.name !== "write_file" && call2.name !== "edit_file") return;
+  const path2 = typeof call2.args.path === "string" ? call2.args.path : void 0;
+  if (path2 && !state.writtenPaths.includes(path2)) state.writtenPaths = [...state.writtenPaths, path2];
+}
+function newApprovalId(state) {
+  return `approval-${state.askedGates.length + 1}`;
+}
+
+// ../packages/agent-run/src/policy/model/handoff.ts
+function asModelRunState(state) {
+  return { policy: state.model, stallRecoveries: 0, preflightNotices: [] };
+}
+function askOf(req, phase) {
+  return {
+    ...req.model ? { model: req.model } : {},
+    role: req.role,
+    phase,
+    ...req.strict ? { strict: true } : {},
+    ...req.excludeModels.length > 0 ? { excludeModels: req.excludeModels } : {},
+    ...req.toolChoice ? { toolChoice: req.toolChoice } : {}
+  };
+}
+function routeAround(state, status2) {
+  const request = nextTurn(state.model, { hasTools: true });
+  const routed = routeAroundFailure(asModelRunState(state), request, { kind: "transport", ...status2 !== void 0 ? { status: status2 } : {} });
+  state.model = routed.state.policy;
+  const outcome = retryOutcome(routed.state);
+  if (!routed.retry || !outcome) return null;
+  const released = outcome.released;
+  return {
+    retry: askOf(routed.retry, state.model.phase),
+    from: typeof released === "string" ? released : null,
+    released: Boolean(released)
+  };
+}
+function turnSucceeded(state, served) {
+  state.model = recordSuccess(asModelRunState(state), { ...served.model ? { model: served.model } : {}, acted: served.acted }).policy;
+  delete state.forceToolChoice;
+}
+
+// ../packages/agent-run/src/policy/model/reask.ts
+function changedCode(policy, completion) {
+  const tools = policy.codeChangeTools;
+  return !!tools && tools.length > 0 && (completion.toolCalls ?? []).some((call2) => tools.includes(call2.name));
+}
+function reaskAsCoder(state, policy, completion, asked) {
+  if (asked.role !== "plan" || !changedCode(policy, completion)) return void 0;
+  state.model = reduceRunPolicy(state.model, { type: "code_change_attempted" });
+  if (state.model.outcome.kind !== "reask_as_coder") return void 0;
+  const next = nextTurn(state.model, { hasTools: asked.hasTools });
+  const calls = (completion.toolCalls ?? []).map((call2) => ({ name: call2.name, args: call2.arguments }));
+  return {
+    ask: {
+      ...next.model ? { model: next.model } : {},
+      role: next.role,
+      phase: state.model.phase,
+      ...next.strict ? { strict: true } : {},
+      ...next.excludeModels.length > 0 ? { excludeModels: next.excludeModels } : {}
+    },
+    brief: { role: "user", content: coderHandoffBrief(completion.content ?? "", calls) }
+  };
+}
+
 // ../packages/agent-run/src/turnContext.ts
 var import_handoff9 = require("@seanhogg/builderforce-memory/handoff");
+var EMPTY_PACK = { focus: [], facts: [], recall: [] };
+async function buildContextPack(input, hooks, state, offered) {
+  let pack;
+  try {
+    pack = await input.ports.context.pack(input.task);
+  } catch {
+    pack = EMPTY_PACK;
+  }
+  const built = pack;
+  const once = { ...input, ports: { ...input.ports, context: { pack: () => built } } };
+  let recalled = void 0;
+  try {
+    recalled = await hooks.context.recall(policyContext(once, state, { messages: [], tools: offered }, state.step, 0));
+  } catch {
+    recalled = void 0;
+  }
+  return recalled && recalled.length > 0 ? { ...pack, recall: [...pack.recall, ...recalled] } : pack;
+}
+function openingRows(task, gates) {
+  const system = [];
+  const governance = renderPolicyDirectives(gates);
+  if (governance) system.push(governance);
+  if (task.persona && task.persona.trim()) system.push(task.persona.trim());
+  return [
+    ...system.length > 0 ? [{ role: "system", content: system.join("\n\n") }] : [],
+    { role: "user", content: task.prompt }
+  ];
+}
+function turnContextBlock(pack, brief, sections = []) {
+  const lines = [];
+  for (const file of pack.focus) {
+    if (file.content !== void 0) {
+      lines.push(`## ${file.path}`, file.content);
+    } else if (file.outline && file.outline.length > 0) {
+      lines.push(`## ${file.path} (outline)`);
+      for (const entry of file.outline) lines.push(`- ${entry.heading} (line ${entry.line})`);
+    }
+  }
+  if (pack.chat) {
+    lines.push(`## chat`, `${pack.chat.tickets.length} linked tickets, ${pack.chat.runs.length} runs`);
+  }
+  for (const repo of pack.repos ?? []) {
+    lines.push(`## repo ${repo.repo}`, `branch ${repo.branch}`, repo.dirty.length > 0 ? `dirty: ${repo.dirty.join(", ")}` : "clean");
+  }
+  for (const fact of pack.facts) lines.push(`## ${fact.key}`, fact.content);
+  if (pack.recall.length > 0) lines.push("## recall", ...pack.recall);
+  if (brief && brief.trim()) lines.push("## brief", brief.trim());
+  for (const section of sections) if (section.trim()) lines.push(section.trim());
+  if (lines.length === 0) return null;
+  return lines.join("\n");
+}
+function withVolatileTail(transcript, pack, brief, sections = []) {
+  const tail = (0, import_handoff9.volatileTail)([turnContextBlock(pack, brief, sections)]);
+  return tail ? [...transcript, tail] : [...transcript];
+}
 
 // ../packages/agent-run/src/runTurn.ts
 var CORE_REGISTRY = buildCoreToolRegistry();
 for (const tool of [...SKILL_TOOLS, ...SUBAGENT_TOOLS]) CORE_REGISTRY.register(tool);
+var REGISTRIES = /* @__PURE__ */ new WeakMap();
+function registryOf(ports) {
+  const extra = ports.tools;
+  if (!extra || extra.length === 0) return CORE_REGISTRY;
+  let registry2 = REGISTRIES.get(extra);
+  if (!registry2) {
+    registry2 = buildCoreToolRegistry();
+    for (const tool of extra) registry2.register(tool);
+    REGISTRIES.set(extra, registry2);
+  }
+  return registry2;
+}
+var nativeResults = /* @__PURE__ */ new WeakMap();
+function nativeOfTurn(meta) {
+  const m = meta && typeof meta === "object" ? meta : void 0;
+  return { ...m?.parts ? { parts: m.parts } : {}, ...m?.native ? { meta: m.native } : {} };
+}
+function toolRow(callId, result, verbatim = false) {
+  const native = nativeResults.get(result);
+  return {
+    role: "tool",
+    toolCallId: callId,
+    content: (native || verbatim) && typeof result.data === "string" ? result.data : JSON.stringify(result.data ?? null),
+    ...native?.parts ? { parts: native.parts } : {},
+    ...native?.meta ? { meta: native.meta } : {},
+    ...result.isError ? { isError: true } : {}
+  };
+}
+var callKinds = /* @__PURE__ */ new WeakMap();
+var causes = /* @__PURE__ */ new WeakMap();
+function isResumable(input, err) {
+  return !(err instanceof ModelTransportError) && input.ports.store.isResumable?.(err) === true;
+}
+function causeOf(state) {
+  return causes.get(state);
+}
+var SYNTHESIS_MAX_TOKENS = 1e3;
+function ownsCall(ports, name) {
+  const platform = ports.platform;
+  return platform !== void 0 && (platform.closed === true || !registryOf(ports).has(name));
+}
+function offeredSchemas(ports) {
+  const seen = /* @__PURE__ */ new Set();
+  return [...registryOf(ports).schemasFor(ports.capabilities), ...ports.extensions?.schemas() ?? [], ...ports.platform?.schemas({ rungs: {} }) ?? []].filter((schema) => {
+    const name = schema.function?.name;
+    if (!name || seen.has(name)) return false;
+    seen.add(name);
+    return true;
+  });
+}
+function adoptServedModel(state, served) {
+  if (served && served !== "default" && !state.model.strictPin) state.model = { ...state.model, model: served };
+}
+function askFields(ask) {
+  if (!ask) return {};
+  return {
+    ...ask.role ? { role: ask.role } : {},
+    ...ask.phase ? { phase: ask.phase } : {},
+    ...ask.toolChoice ? { toolChoice: ask.toolChoice } : {},
+    ...ask.strict ? { strict: true } : {},
+    ...ask.excludeModels && ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {}
+  };
+}
+async function completeTurn(input, state, hooks, ctx, offered, transcript, pack, made) {
+  const view = currentView(transcript, offered);
+  const pctx = policyContext(input, state, view, ctx.step, ctx.stepInCall);
+  const selected = made ? made.tools : await hooks.tools.select(pctx, offered);
+  const tools = selected ? [...selected] : offered;
+  const advertisedSet = tools.map((t) => t.function?.name ?? "").join(",");
+  if (state.advertisedSignature !== advertisedSet) {
+    state.advertisedSignature = advertisedSet;
+    await emit(input.ports.events, { kind: "context.tools", step: ctx.step, advertised: tools.length, catalog: offered.length, toolsTokens: toolsTokensOf(tools), loaded: state.loadedTools ?? [] });
+  }
+  const mctx = { ...pctx, tools };
+  const decision = await hooks.model.resolve(mctx);
+  const model = decision ? decision.model : input.policy.pinnedModel;
+  const brief = await hooks.memory.brief(pctx);
+  const sections = [...input.ports.context.turnSections?.() ?? [], ...made?.tail ?? []];
+  const fields = hooks.model.turnFields?.(mctx);
+  const reasoning = hooks.guards.reasoning?.(pctx);
+  const firstAsk = {
+    ...decision?.role ? { role: decision.role } : {},
+    ...decision?.strict ? { strict: true } : {},
+    ...decision?.excludeModels && decision.excludeModels.length > 0 ? { excludeModels: [...decision.excludeModels] } : {},
+    ...fields ?? {}
+  };
+  const requestFor = (askedModel, ask, extra = []) => ({
+    messages: withVolatileTail(extra.length > 0 ? [...transcript, ...extra] : transcript, pack, brief ?? null, sections),
+    ...askedModel ? { model: askedModel, strict: ask?.strict ?? false } : {},
+    ...tools.length > 0 ? { tools } : {},
+    ...decision?.maxTokens !== void 0 ? { maxTokens: decision.maxTokens } : {},
+    ...askFields(ask),
+    ...made?.toolChoice && !ask?.toolChoice ? { toolChoice: made.toolChoice } : {},
+    ...reasoning ? { reasoning } : {}
+  });
+  let asked = model;
+  let completion;
+  try {
+    completion = await input.ports.model.complete(requestFor(model, firstAsk), input.signal);
+  } catch (err) {
+    if (input.signal?.aborted) throw err;
+    const reason = err instanceof Error ? err.message : String(err);
+    if (isResumable(input, err)) causes.set(state, err);
+    if (isTransportFailure(err) && hooks.model.recoverFailure) {
+      const route = hooks.model.recoverFailure(pctx, err.failure, err.failure.model ?? model, reason);
+      if (route.kind === "retry") {
+        if (route.note) appendRows(input, transcript, { role: "system", content: route.note });
+        return { skip: true };
+      }
+      return { failed: `provider failed: ${reason}` };
+    }
+    const routed = err instanceof ModelTransportError && err.routable ? routeAround(state, err.status) : null;
+    if (!routed) return { failed: reason };
+    await emit(input.ports.events, { kind: "model.cascade", step: ctx.step, from: routed.from, status: err instanceof ModelTransportError ? err.status ?? null : null, released: routed.released });
+    asked = routed.retry.model;
+    try {
+      completion = await input.ports.model.complete(requestFor(routed.retry.model, routed.retry), input.signal);
+    } catch (retryErr) {
+      if (input.signal?.aborted) throw retryErr;
+      if (isResumable(input, retryErr)) causes.set(state, retryErr);
+      return { failed: retryErr instanceof Error ? retryErr.message : String(retryErr) };
+    }
+  }
+  const reask = reaskAsCoder(state, input.policy, completion, { role: firstAsk.role, hasTools: tools.length > 0 });
+  if (reask) {
+    await emit(input.ports.events, { kind: "model.coder_reask", step: ctx.step, ...completion.model ? { model: completion.model } : {} });
+    asked = reask.ask.model;
+    try {
+      completion = await input.ports.model.complete(requestFor(reask.ask.model, reask.ask, [reask.brief]), input.signal);
+    } catch (err) {
+      if (input.signal?.aborted) throw err;
+      if (isResumable(input, err)) causes.set(state, err);
+      return { failed: err instanceof Error ? err.message : String(err) };
+    }
+  }
+  turnSucceeded(state, { acted: (completion.toolCalls ?? []).length > 0, ...completion.model ? { model: completion.model } : {} });
+  adoptServedModel(state, completion.model);
+  const downgrade = hooks.model.downgrade?.(pctx, asked, completion.model);
+  if (downgrade) await emit(input.ports.events, downgrade);
+  return {
+    content: completion.content ?? "",
+    toolCalls: (completion.toolCalls ?? []).map((call2) => ({ id: call2.id, name: call2.name, arguments: call2.arguments })),
+    meta: { model: completion.model, usage: completion.usage, interrupted: completion.interrupted, ...completion.parts ? { parts: completion.parts } : {}, ...completion.meta ? { native: completion.meta } : {} }
+  };
+}
+async function synthesizeFinal(input, state, hooks, transcript, pack, tally) {
+  if (input.signal?.aborted) return null;
+  const pctx = policyContext(input, state, currentView(transcript, []), state.step, 0);
+  const prompt = hooks.stall.synthesis?.(pctx);
+  if (!prompt) return null;
+  const decision = await hooks.model.resolve(pctx);
+  const model = decision ? decision.model : input.policy.pinnedModel;
+  const fields = hooks.model.turnFields?.(pctx);
+  const ask = { role: "user", content: prompt };
+  let completion;
+  try {
+    completion = await input.ports.model.complete(
+      {
+        messages: [...withVolatileTail(transcript, pack, null, input.ports.context.turnSections?.() ?? []), ask],
+        ...model ? { model, strict: decision?.strict ?? false } : {},
+        maxTokens: SYNTHESIS_MAX_TOKENS,
+        ...askFields(fields)
+      },
+      input.signal
+    );
+  } catch (err) {
+    if (isResumable(input, err)) throw err;
+    return null;
+  }
+  adoptServedModel(state, completion.model);
+  tallyTurn(tally, completion.model, completion.usage);
+  await emit(input.ports.events, {
+    kind: "model.completed",
+    step: state.step,
+    ...completion.model ? { model: completion.model } : {},
+    ...completion.usage ? { usage: completion.usage } : {}
+  });
+  const raw = completion.content ?? "";
+  const output = hooks.stall.settle ? hooks.stall.settle(pctx, raw) : raw.trim();
+  if (!output) return null;
+  appendRows(input, transcript, ask, { role: "assistant", content: output });
+  return output;
+}
+async function dispatchCall(input, state, call2, watch, facts = { refused: false }) {
+  const { ports, signal } = input;
+  if (call2.malformed) return declineMalformedCall(ports, call2, facts);
+  const platform = ports.platform;
+  const own = ownsCall(ports, call2.name);
+  if (platform && own && platform.handsOff?.(call2.name) && state.model.phase === "plan") {
+    state.model = reduceRunPolicy(state.model, { type: "hand_off" });
+  }
+  try {
+    const box = {};
+    const data = await runToolWithWatch(
+      async (name, args, stepSignal) => {
+        const run = stepSignal ?? signal;
+        const extension = ports.extensions;
+        if (extension?.handles(name)) {
+          const ran = await extension.dispatch(name, args, run);
+          if (ran.isError) box.failed = true;
+          if (ran.control) box.control = ran.control;
+          return ran.data;
+        }
+        if (platform && own) {
+          const result2 = await platform.execute(name, args, { ...run ? { signal: run } : {}, progress: { rungs: state.stall?.rungs ?? {} }, callId: call2.id });
+          box.failed = result2.isError === true;
+          if (result2.parts || result2.meta) box.native = { ...result2.parts ? { parts: result2.parts } : {}, ...result2.meta ? { meta: result2.meta } : {} };
+          if (result2.cached) box.kind = "cached";
+          else if (result2.neutral) box.kind = "neutral";
+          return result2.data;
+        }
+        const result = await registryOf(ports).dispatch(name, args, { caps: ports.capabilities, ...run ? { signal: run } : {} });
+        box.control = result.control;
+        return extension?.shape ? extension.shape(name, result.data) : result.data;
+      },
+      watch,
+      signal,
+      call2.name,
+      call2.args
+    );
+    const capped2 = capToolResult(call2.name, data, resultCapFor(call2.name, ports.model, state.model.model));
+    const failed3 = box.failed === true || !own && !!capped2 && capped2.ok === false;
+    const dispatched = { data: capped2, ...box.control ? { control: box.control } : {}, ...failed3 ? { isError: true } : {} };
+    if (box.kind) callKinds.set(dispatched, box.kind);
+    if (box.native) nativeResults.set(dispatched, box.native);
+    return dispatched;
+  } catch (err) {
+    if (signal?.aborted || isResumable(input, err)) throw err;
+    const reason = err instanceof Error ? err.message : String(err);
+    return { data: { ok: false, error: reason }, isError: true };
+  }
+}
+function declineMalformedCall(ports, call2, facts) {
+  const truncated = facts.interruption === "truncated";
+  const policy = ports.platform?.malformed;
+  const outcome = malformedCallOutcome(call2, truncated, truncated ? policy?.retryHint : void 0);
+  facts.refused = true;
+  policy?.refused?.({ name: call2.name, arguments: call2.raw.arguments }, truncated, outcome);
+  return { data: outcome, isError: true };
+}
+
+// ../packages/agent-run/src/telemetry/outcomeRow.ts
+function buildOutcomeRow(input) {
+  const { state } = input;
+  const tally = resumeTally(state.telemetry);
+  const progress = state.guards?.progress;
+  const preflight = state.preflight;
+  const runCost = reportedRunCost(tally.costMc);
+  return {
+    entryPoint: input.entryPoint,
+    ...input.runId ? { runId: input.runId } : {},
+    ...input.parentRunId ? { parentRunId: input.parentRunId } : {},
+    steps: state.step,
+    toolCalls: tally.toolCalls,
+    toolErrors: tally.toolErrors,
+    compactions: state.compaction?.compactions ?? 0,
+    stallRecoveries: state.stall?.recoveriesTotal ?? 0,
+    escalations: state.guards?.escalations ?? 0,
+    verify: tally.verify ?? "not-run",
+    terminalStatus: input.kind,
+    ...tally.model ? { model: tally.model } : {},
+    tokens: tally.tokens,
+    cacheReadTokens: tally.cacheReadTokens,
+    ...runCost !== void 0 ? { cost: runCost } : {},
+    firstSpawnTurn: tally.firstSpawnTurn ?? null,
+    coveredReadStubs: state.reads?.stubCount ?? 0,
+    shellFileReads: tally.shellFileReads,
+    repoErrors: tally.repoErrors,
+    contextPackTokens: contextPackTokens(state),
+    ...preflight ? { modelPreflight: preflight } : {},
+    unkeptReadyClaims: progress?.unkeptTurns ?? 0,
+    progressTrips: tripsBySignal(progress?.tripsBySignal),
+    ...input.reason === RUN_CANCELLED_REASON ? { cancelled: true } : {},
+    ...input.kind === "failed" && isRateLimitFailure(input.reason) ? { rateLimited: true } : {},
+    // The tenant spent its own allowance: stored, and never taught to routing. Classified HERE, once, so every reporter that sends the row carries it.
+    ...input.kind === "failed" && isTenantBudgetFailure(input.reason) ? { quotaExhausted: true } : {},
+    ...isDegraded(state) ? { degraded: true } : {}
+  };
+}
+function isDegraded(state) {
+  return (state.degradedBy?.length ?? 0) > 0;
+}
+function tripsBySignal(bySignal) {
+  const out = {};
+  for (const [signal, n2] of Object.entries(bySignal ?? {})) if (n2) out[signal] = n2;
+  return out;
+}
+function contextPackTokens(state) {
+  if (!state.context) return 0;
+  const block = turnContextBlock(state.context, null);
+  return block ? (0, import_handoff8.defaultEstimateTokens)(block) : 0;
+}
+
+// ../packages/agent-run/src/runSettle.ts
+async function settle(input, hooks, state, transcript, kind, extra) {
+  state.messages = transcript;
+  let cause = extra.cause;
+  if ((kind === "finished" || kind === "failed") && cause === void 0) {
+    try {
+      const consolidated = await hooks.memory.consolidate(
+        policyContext(input, state, currentView(transcript, []), state.step, 0),
+        { learn: kind === "finished" }
+      );
+      if (consolidated !== void 0) await input.ports.store.commitMemory?.(consolidated);
+    } catch (err) {
+      if (isResumable(input, err)) cause = err;
+    }
+  }
+  const resumable = cause !== void 0;
+  try {
+    await input.ports.store.save(state);
+  } catch {
+  }
+  if (kind === "yielded" || resumable) {
+    return kind === "failed" || cause !== void 0 ? { kind: "failed", reason: extra.reason ?? (cause instanceof Error ? cause.message : "failed"), state, cause } : { kind: "yielded", state };
+  }
+  if (kind === "finished" || kind === "failed") {
+    const row = buildOutcomeRow({ entryPoint: input.policy.entryPoint, runId: input.task.runId, parentRunId: input.task.dispatch.parentRunId, kind, ...extra.reason !== void 0 ? { reason: extra.reason } : {}, state });
+    try {
+      await input.ports.events.outcome?.(row);
+    } catch {
+    }
+    await emit(input.ports.events, { kind: "run.finished", step: state.step, outcome: kind });
+  }
+  if (kind === "finished") return { kind, output: extra.output ?? "", state };
+  if (kind === "paused") return { kind, question: extra.question ?? "", approvalId: extra.approvalId ?? newApprovalId(state), state };
+  return { kind, reason: extra.reason ?? "failed", state, ...extra.cause !== void 0 ? { cause: extra.cause } : {}, ...extra.exhausted ? { exhausted: true } : {} };
+}
+
+// ../packages/agent-run/src/kernelHooks.ts
+var ASK_TOOLS = /* @__PURE__ */ new Set(["ask_human", "ask_user"]);
+function asLoopControl(control) {
+  return control;
+}
+function optionsOf(control) {
+  const options = control.options;
+  return Array.isArray(options) ? options.filter((o) => typeof o === "string") : void 0;
+}
+function rewriteRow(row, data, verbatim) {
+  row.content = verbatim && typeof data === "string" ? data : JSON.stringify(data ?? null);
+}
+function kernelHooks(run) {
+  const { input, state, hooks, transcript, offered, tally } = run;
+  const { ports, policy } = input;
+  const contextAt = (step, turn) => policyContext(input, state, currentView(transcript, offered), step, turn);
+  const append = (...rows) => appendRows(input, transcript, ...rows);
+  const requeue2 = (said, note) => {
+    if (said.trim()) append({ role: "assistant", content: said, ...run.turnNative });
+    append({ role: "user", content: note });
+  };
+  const verifyBlock = async (pctx) => {
+    if (policy.verify === "none") return null;
+    const verdict = await hooks.verify.verify(pctx);
+    if (verdict) tallyVerify(tally, verdict.ok);
+    return verdict && !verdict.ok ? verdict.note ?? "Verification failed: fix it before finishing." : null;
+  };
+  const stubs = /* @__PURE__ */ new WeakSet();
+  const held = /* @__PURE__ */ new WeakSet();
+  const starts = /* @__PURE__ */ new Map();
+  const takeSteers = async (ctx) => {
+    const steered = (await ports.steering?.drain() ?? []).map(steerInput);
+    if (steered.length === 0) return "none";
+    const texts = steered.map((s) => s.text);
+    if (isStopSteer(texts)) {
+      run.stopped = true;
+      return "stop";
+    }
+    const injected = await hooks.steering.inject(contextAt(ctx.step, ctx.stepInCall), texts);
+    const rows = injected ?? texts.map((text) => ({ role: "user", content: text }));
+    append(...rows.map((row, i) => rows.length === steered.length && steered[i]?.parts?.length && !row.parts ? { ...row, parts: steered[i].parts } : row));
+    for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
+    return "applied";
+  };
+  const lateSteerNote = async (ctx) => {
+    const steered = (await ports.steering?.drain() ?? []).map(steerInput);
+    if (steered.length === 0) return null;
+    const texts = steered.map((s) => s.text);
+    if (isStopSteer(texts)) {
+      run.stopped = true;
+      return null;
+    }
+    for (let i = 0; i < steered.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
+    const many = texts.length > 1;
+    return {
+      note: `The user sent ${many ? "messages" : "a message"} while you were finishing, so do not finish yet:
+${texts.map((t) => `- ${t}`).join("\n")}
+Address ${many ? "them" : "it"}, then finish.`
+    };
+  };
+  return {
+    beforeTurn: async (ctx) => {
+      const verdict = run.budget?.beforeTurn();
+      if (verdict?.kind === "contain") {
+        append({ role: "assistant", content: verdict.text });
+        await emit(ports.events, { kind: "budget.contained", step: ctx.step, spentMc: verdict.spentMc, capMc: verdict.capMc, unpricedCalls: verdict.unpricedCalls, text: verdict.text });
+        return { action: "stop", ok: true, finished: true, output: verdict.text };
+      }
+      if (verdict?.kind === "warn") {
+        const tail = (0, import_handoff8.volatileTail)([verdict.text]);
+        if (tail) append({ role: tail.role, content: String(tail.content) });
+        await emit(ports.events, { kind: "budget.warning", step: ctx.step, spentMc: verdict.spentMc, capMc: verdict.capMc, unpricedCalls: verdict.unpricedCalls, text: verdict.text });
+      }
+      if (await takeSteers(ctx) === "stop") return { action: "stop", ok: false, output: RUN_CANCELLED_REASON, finished: true };
+      const base = currentView(transcript, offered);
+      const selectNow = async () => hooks.tools.select(policyContext(input, state, base, ctx.step, ctx.stepInCall), offered);
+      const menu = await ports.platform?.turn?.({
+        step: ctx.step,
+        select: async () => await selectNow() ?? offered,
+        progress: { rungs: state.stall?.rungs ?? {} },
+        cache: run.cache
+      });
+      const advertised = menu?.tools ?? await selectNow();
+      run.selection = {
+        tools: advertised,
+        ...menu?.toolChoice ? { toolChoice: menu.toolChoice } : {},
+        ...menu?.tail && menu.tail.length > 0 ? { tail: menu.tail } : {}
+      };
+      const view = advertised ? { ...base, tools: [...advertised] } : base;
+      const compacted = await hooks.compaction.compact(policyContext(input, state, view, ctx.step, ctx.stepInCall));
+      if (compacted) {
+        applyCompaction(state, view, compacted, ctx.step);
+        await emit(ports.events, {
+          kind: "context.compacted",
+          step: ctx.step,
+          dropped: compacted.dropped,
+          ...compacted.beforeTokens !== void 0 ? { beforeTokens: compacted.beforeTokens } : {},
+          ...compacted.afterTokens !== void 0 ? { afterTokens: compacted.afterTokens } : {},
+          ...compacted.summarized !== void 0 ? { summarized: compacted.summarized } : {},
+          ...compacted.masked ? { masked: compacted.masked } : {},
+          ...compacted.note ? { note: compacted.note } : {},
+          ...compacted.covered !== void 0 ? { covered: compacted.covered } : {}
+        });
+      }
+      run.facts.model = void 0;
+      run.facts.interruption = void 0;
+      await emit(ports.events, { kind: "turn.started", step: ctx.step });
+      return void 0;
+    },
+    afterTurn: async (ctx, turn) => {
+      run.turnContent = turn.content ?? "";
+      run.turnNative = nativeOfTurn(turn.meta);
+      const meta = turn.meta && typeof turn.meta === "object" ? turn.meta : void 0;
+      const model = meta ? meta.model : tally.model;
+      const usage = meta?.usage;
+      run.facts.model = meta?.model;
+      run.facts.interruption = meta?.interrupted;
+      tallyTurn(tally, model, usage);
+      if (run.budget?.afterTurn(usage)) await emit(ports.events, { kind: "budget.unpriced", step: ctx.step, ...model ? { model } : {} });
+      await emit(ports.events, { kind: "model.completed", step: ctx.step, ...model ? { model } : {}, ...usage ? { usage } : {} });
+    },
+    onNoToolCalls: async (ctx, turn) => {
+      const pctx = contextAt(ctx.step, ctx.stepInCall);
+      pctx.content = turn.content;
+      pctx.served = { ...run.facts.model ? { model: run.facts.model } : {}, ...run.facts.interruption ? { interruption: run.facts.interruption } : {} };
+      const children = await hooks.finish.liveChildren?.(pctx);
+      if (children) {
+        requeue2(turn.content, children);
+        return { action: "continue" };
+      }
+      const stalled2 = await (hooks.stall.recoverAsync ? hooks.stall.recoverAsync(pctx) : hooks.stall.recover(pctx));
+      if (stalled2) await emit(ports.events, { kind: "stall.recovered", step: ctx.step, action: stalled2.action, ...stalled2.note ? { note: stalled2.note } : {}, ...stalled2.detail ? { detail: stalled2.detail } : {} });
+      if (stalled2 && stalled2.action === "pause") {
+        const notice = stalled2.note ?? "paused";
+        if (policy.stallExhausted === "finish") return { action: "finish", output: turn.content.trim() ? `${turn.content}
+
+${notice}` : notice };
+        if (policy.stallExhausted === "note") append({ role: "user", content: notice });
+        return { action: "stop", ok: false, output: notice, finished: true };
+      }
+      if (stalled2 && stalled2.action === "fail") {
+        return { action: "stop", ok: false, output: stalled2.note ?? "failed", finished: true };
+      }
+      if (stalled2 && stalled2.action === "settle") {
+        const answer2 = stalled2.note ?? "";
+        if (answer2.trim()) append({ role: "assistant", content: answer2 });
+        return { action: "finish", output: answer2 };
+      }
+      if (stalled2) {
+        if (stalled2.rows) append(...stalled2.rows);
+        else requeue2(turn.content, stalled2.note ?? "Continue: do the work, do not describe it.");
+        return { action: "continue" };
+      }
+      const owed = hooks.finish.settleBlock(pctx);
+      if (owed) await emit(ports.events, { kind: "finish.blocked", step: ctx.step, reason: "review_verdict_missing", block: owed, detail: { ...policy.signoff } });
+      const block = owed ?? hooks.subagents.backstop(pctx);
+      if (block) {
+        requeue2(turn.content, block);
+        return { action: "continue" };
+      }
+      const output = hooks.stall.settle ? hooks.stall.settle(pctx, turn.content) : turn.content;
+      if (output.trim()) append({ role: "assistant", content: output, ...run.turnNative });
+      const late = await takeSteers(ctx);
+      if (late === "stop") return { action: "stop", ok: false, output: "cancelled", finished: true };
+      if (late === "applied") return { action: "continue" };
+      const followUps = (await ports.steering?.followUp?.() ?? []).map(steerInput);
+      if (followUps.length > 0) {
+        append(...followUps.map((f) => ({ role: "user", content: f.text, ...f.parts?.length ? { parts: f.parts } : {} })));
+        for (let i = 0; i < followUps.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
+        return { action: "continue" };
+      }
+      return { action: "finish", output };
+    },
+    onRepetitionLoop: async (ctx, loop) => {
+      await emit(ports.events, { kind: "loop.repetition", step: ctx.step, copies: loop.copies, block: loop.block });
+    },
+    beforeToolCalls: (_ctx, turn, calls) => {
+      const output = ports.extensions?.terminalTurn?.({ content: turn.content ?? "" }, calls.map((c) => ({ name: c.name, args: c.args, malformed: c.malformed })));
+      return output === void 0 ? void 0 : { action: "stop", ok: true, output, finished: true };
+    },
+    beforeDispatch: async (call2, ctx) => {
+      starts.set(call2.id, Date.now());
+      const pctx = contextAt(ctx.step, ctx.stepInCall);
+      const pcall = toPolicyCall(call2);
+      const gated = await hooks.tools.gate?.(pctx, pcall);
+      if (gated) {
+        const refused = { data: gated.data, isError: true, ...gated.control ? { control: asLoopControl(gated.control) } : {} };
+        if (gated.control) held.add(refused);
+        return { result: refused };
+      }
+      const decision = await hooks.guards.beforeDispatch(pctx, pcall);
+      if (decision?.skip) {
+        const { data, isError, control } = decision.skip;
+        const skipped = { data, isError: isError ?? true, ...control ? { control: asLoopControl(control) } : {} };
+        if (control) held.add(skipped);
+        return { result: skipped };
+      }
+      if (ASK_TOOLS.has(call2.name)) {
+        const note = hooks.subagents.backstop(pctx);
+        if (note) return { result: { data: { ok: false, error: note }, isError: true } };
+      }
+      const meta = hooks.tools.meta?.(pctx, pcall);
+      if (meta) return { result: { data: meta.data } };
+      const covered = hooks.tools.beforeDispatch?.(pctx, pcall);
+      if (covered) {
+        const stub = { data: covered.data };
+        stubs.add(stub);
+        run.cache.served(ctx.step);
+        return { result: stub };
+      }
+      return void 0;
+    },
+    onFinish: async (ctx, summary, call2) => {
+      const pctx = contextAt(ctx.step, ctx.stepInCall);
+      pctx.content = summary;
+      pctx.toolCalls = [toPolicyCall(call2)];
+      const verifyRefused = await verifyBlock(pctx);
+      const gated = verifyRefused ?? await hooks.finish.gate(pctx);
+      const judged = hooks.guards.finish ? await hooks.guards.finish(pctx, { block: gated, reason: verifyRefused ? "verify" : lastFinishReason(state) }) : gated;
+      const block = judged ?? hooks.subagents.backstop(pctx);
+      if (block) {
+        state.finish = { ...state.finish, finishBlockedOnce: true };
+        return block;
+      }
+      return lateSteerNote(ctx);
+    },
+    onAskHuman: async (ctx, control) => {
+      if (control.parked) return void 0;
+      const answer2 = await hooks.ask.answer(contextAt(ctx.step, ctx.stepInCall), control.question, optionsOf(control));
+      if (answer2.kind === "answered") return { data: { ok: true, answer: answer2.answer } };
+      return void 0;
+    },
+    afterDispatch: async (call2, result, message2, ctx) => {
+      const stub = stubs.has(result) || held.has(result);
+      const kind = callKinds.get(result);
+      if (!stub) {
+        if (kind === "cached") run.cache.served(ctx.step);
+        else if (kind !== "neutral") run.cache.ran();
+      }
+      const ok = !result.isError && !(result.data && typeof result.data === "object" && result.data.ok === false);
+      if (!stub) {
+        tallyCall(tally, ctx.step, call2.name, call2.args, result.data, ok);
+        await emit(ports.events, { kind: "tool.dispatched", step: ctx.step, tool: call2.name, ok, callId: call2.id, args: call2.args, result: result.data }, { durationMs: Date.now() - (starts.get(call2.id) ?? Date.now()) });
+        starts.delete(call2.id);
+      }
+      const pctx = contextAt(ctx.step, ctx.stepInCall);
+      const pcall = toPolicyCall(call2);
+      let data = result.data;
+      const noted = await hooks.guards.observe(pctx, pcall, data);
+      if (noted) data = noted.data;
+      const nudged = hooks.subagents.nudge(pctx, pcall, data);
+      if (nudged) data = nudged.data;
+      if (data !== result.data) rewriteRow(message2, data, message2.parts !== void 0 || ports.platform?.verbatimText === true);
+      if (!stub) {
+        hooks.tools.observe?.(pctx, pcall, data, result.isError === true);
+        if (!ownsCall(ports, call2.name)) await hooks.memory.observe?.(pctx, pcall, result.data, result.isError);
+        rememberWrite(state, call2, ok);
+      }
+      if (held.has(result) && result.control?.parked) {
+        return { skipRemaining: { data: { ok: false, skipped: true, error: "Not run: the run is parked on an approval." }, isError: false } };
+      }
+      return steerSkip(run.watch);
+    },
+    afterToolCalls: async (ctx) => {
+      const pctx = contextAt(ctx.step, ctx.stepInCall);
+      await hooks.guards.endTurn?.(pctx, run.turnContent);
+      hooks.stall.acted?.(pctx);
+      if (run.facts.refused) {
+        run.facts.refused = false;
+        const directive = ports.platform?.malformed?.roundDirective(run.facts.interruption === "truncated");
+        if (directive) append({ role: "system", content: directive });
+      }
+      await emit(ports.events, { kind: "turn.finished", step: ctx.step });
+      return void 0;
+    }
+  };
+}
+function readOnlyPort(run) {
+  const guards = run.hooks.guards;
+  if (!guards.isReadOnly) return void 0;
+  return (call2) => guards.isReadOnly?.(policyContext(run.input, run.state, currentView(run.transcript, run.offered), run.state.step, 0), call2.name) ?? false;
+}
+
+// ../packages/agent-run/src/policy/budget/usd.ts
+var usd = (millicents) => `$${(millicents / MILLICENTS_PER_USD).toFixed(2)}`;
+function runBudgetCapMillicents(maxRunBudgetUsd) {
+  return typeof maxRunBudgetUsd === "number" && Number.isFinite(maxRunBudgetUsd) && maxRunBudgetUsd > 0 ? Math.round(maxRunBudgetUsd * MILLICENTS_PER_USD) : null;
+}
+function noPriceNote(unpricedCalls) {
+  return unpricedCalls > 0 ? `${unpricedCalls} ${unpricedCalls === 1 ? "call" : "calls"} had no known price` : null;
+}
+function budgetWarning(spentMc, capMc, unpricedCalls = 0) {
+  const note = noPriceNote(unpricedCalls);
+  const spent = note ? `at least ${usd(spentMc)} (${note})` : usd(spentMc);
+  return `[Run budget] This run has spent ${spent} of its ${usd(capMc)} budget \u2014 over 80%. Stop exploring and converge: finish the essential change now, then answer with what you did and exactly what is left.`;
+}
+function budgetContainedReply(spentMc, capMc, unpricedCalls = 0) {
+  const note = noPriceNote(unpricedCalls);
+  const spent = note ? `at least ${usd(spentMc)} spent \u2014 ${note}` : `${usd(spentMc)} spent`;
+  return `Run stopped: it reached its ${usd(capMc)} spend budget (${spent}). Nothing was rolled back \u2014 the changes made so far are in place. Ask to continue to resume from here, or raise the "builderforce.maxRunBudgetUsd" setting (0 turns the cap off).`;
+}
+function localSpendMeter() {
+  let spent = 0;
+  let unpriced = 0;
+  return {
+    spentMc: () => spent,
+    unpricedCalls: () => unpriced,
+    add: (pricedMc) => {
+      if (pricedMc === void 0) unpriced += 1;
+      else spent += pricedMc;
+    }
+  };
+}
+function usdBudget(usdCap, meter) {
+  const own = runBudgetCapMillicents(usdCap);
+  if (own == null) return void 0;
+  const inherited = meter.capMc?.();
+  const capMc = inherited !== void 0 ? Math.min(own, inherited) : own;
+  const caps = { maxSpendMillicents: capMc };
+  let warned = false;
+  let unpricedSaid = false;
+  return {
+    beforeTurn() {
+      const spentMc = meter.spentMc();
+      const unpricedCalls = meter.unpricedCalls();
+      const usage = { spendMillicents: spentMc };
+      if (runBudgetBreach(caps, usage)) return { kind: "contain", text: budgetContainedReply(spentMc, capMc, unpricedCalls), spentMc, capMc, unpricedCalls };
+      if (!warned && runBudgetWarnDue(caps, usage)) {
+        warned = true;
+        return { kind: "warn", text: budgetWarning(spentMc, capMc, unpricedCalls), spentMc, capMc, unpricedCalls };
+      }
+      return void 0;
+    },
+    afterTurn(usage) {
+      const priced = usage?.pricedMc;
+      meter.add(priced);
+      if (priced !== void 0 || unpricedSaid) return false;
+      unpricedSaid = true;
+      return true;
+    }
+  };
+}
+
+// ../packages/agent-run/src/policy/tools/cacheServedStreak.ts
+var CACHE_SERVED_STREAK = 6;
+var MIN_STREAK_TURNS = 2;
+var MAX_NO_PROGRESS_TURNS = 2;
+var CacheServedStreak = class {
+  streak;
+  turns;
+  fired;
+  constructor(saved) {
+    this.streak = saved?.streak ?? 0;
+    this.turns = new Set(saved?.turns ?? []);
+    this.fired = saved?.fired ?? 0;
+  }
+  /** A repeat the read cache answered (stub, covered window, replay, repeated write), on `step`. */
+  served(step) {
+    this.streak += 1;
+    this.turns.add(step);
+  }
+  /** A call the host actually ran - the run touched the world again. */
+  ran() {
+    this.streak = 0;
+    this.turns.clear();
+  }
+  get count() {
+    return this.streak;
+  }
+  /** Whether the streak is due a forced turn. */
+  due() {
+    return this.streak >= CACHE_SERVED_STREAK && this.turns.size >= MIN_STREAK_TURNS && this.fired < MAX_NO_PROGRESS_TURNS;
+  }
+  /** A forced turn was spent on the streak: the count starts over. */
+  consume() {
+    this.ran();
+    this.fired += 1;
+  }
+  /** The counter as plain data. */
+  state() {
+    return { streak: this.streak, turns: [...this.turns], fired: this.fired };
+  }
+};
+
+// ../packages/agent-run/src/runAgent.ts
+async function runAgent(input) {
+  const { task, policy, ports, signal } = input;
+  const hooks = composePolicyHooks(input.modules);
+  const state = input.resume ? resumeState(input.resume, policy, task) : freshState(policy, task);
+  const resumed = Boolean(input.resume);
+  const tally = state.telemetry ??= freshTally();
+  const offered = offeredSchemas(ports);
+  const transcript = asMessages(state.messages);
+  let pack = state.context ?? EMPTY_PACK;
+  if (!resumed) {
+    transcript.splice(0, transcript.length, ...task.transcript ?? openingRows(task, policy.approvalGates));
+    state.messages = transcript;
+    pack = await buildContextPack(input, hooks, state, offered);
+    state.context = pack;
+  }
+  ports.attach?.({
+    policy: () => state.model,
+    report: (event) => state.model = reduceRunPolicy(state.model, event)
+  });
+  if (!resumed) {
+    await emit(ports.events, { kind: "run.started", step: state.step });
+    if (pack.answer) {
+      appendRows(input, transcript, { role: "assistant", content: pack.answer });
+      state.messages = transcript;
+      return settle(input, hooks, state, transcript, "finished", { output: pack.answer });
+    }
+    const preflight = await hooks.model.preflight?.(policyContext(input, state, currentView(transcript, offered), state.step, 0));
+    if (preflight) await emit(ports.events, preflight);
+    const seeded = await hooks.guards.seed?.(policyContext(input, state, currentView(transcript, offered), state.step, 0));
+    if (seeded) state.model = seeded;
+  }
+  const budget2 = usdBudget(policy.budgets.usd, ports.spend ?? localSpendMeter());
+  const run = {
+    input,
+    state,
+    hooks,
+    transcript,
+    offered,
+    tally,
+    watch: portInterruptWatch(ports.steering),
+    turnContent: "",
+    stopped: false,
+    facts: { refused: false },
+    cache: new CacheServedStreak(state.reads.servedStreak),
+    ...budget2 ? { budget: budget2 } : {}
+  };
+  const isReadOnly = readOnlyPort(run);
+  let loopResult;
+  try {
+    loopResult = await runAgentLoop({
+      messages: transcript,
+      // The kernel pushes rows in the agent's own shape — the SAME shape a requeue, an
+      // answered ask and a steer push — so a saved and resumed transcript reads exactly
+      // like a continuous one.
+      codec: {
+        assistant: (turn) => announceRow(input, {
+          role: "assistant",
+          content: turn.content ?? "",
+          toolCalls: turn.toolCalls.map((call2) => ({ id: call2.id, name: call2.name, arguments: call2.arguments })),
+          ...nativeOfTurn(turn.meta)
+        }),
+        tool: (call2, result) => announceRow(input, toolRow(call2.id, result, ports.platform?.verbatimText === true))
+      },
+      ports: {
+        complete: (ctx) => completeTurn(input, state, hooks, ctx, offered, transcript, pack, run.selection),
+        dispatch: (call2) => dispatchCall(input, state, call2, run.watch, run.facts),
+        ...isReadOnly ? { isReadOnly } : {}
+      },
+      hooks: kernelHooks(run),
+      budget: { startStep: state.step, ...input.maxSteps !== void 0 ? { maxSteps: input.maxSteps } : {}, ...policy.budgets.steps !== void 0 ? { stepCap: policy.budgets.steps } : {} },
+      ...signal ? { signal } : {}
+    });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return settle(input, hooks, state, transcript, "failed", { reason, ...signal?.aborted || !isResumable(input, err) ? {} : { cause: err } });
+  }
+  state.step = loopResult.step;
+  state.messages = transcript;
+  state.reads = { ...state.reads, servedStreak: run.cache.state() };
+  if (run.stopped || loopResult.cancelled || signal?.aborted) {
+    return settle(input, hooks, state, transcript, "failed", { reason: RUN_CANCELLED_REASON });
+  }
+  if (loopResult.awaitingInput) {
+    const approvalId = loopResult.awaitingInput.approvalId ?? newApprovalId(state);
+    state.askedGates = [...state.askedGates, approvalId];
+    return settle(input, hooks, state, transcript, "paused", { question: loopResult.awaitingInput.question, approvalId });
+  }
+  if (loopResult.exhausted || loopResult.finished && loopResult.ok && !loopResult.output.trim()) {
+    let output;
+    try {
+      output = await synthesizeFinal(input, state, hooks, transcript, pack, tally);
+    } catch (err) {
+      return settle(input, hooks, state, transcript, "failed", { reason: err instanceof Error ? err.message : String(err), ...isResumable(input, err) ? { cause: err } : {} });
+    }
+    if (output) return settle(input, hooks, state, transcript, "finished", { output });
+  }
+  if (loopResult.exhausted) {
+    return settle(input, hooks, state, transcript, "failed", { reason: loopResult.exhaustedBy === "failures" ? "tool calls kept failing" : "step budget spent", exhausted: true });
+  }
+  if (!loopResult.finished) {
+    return settle(input, hooks, state, transcript, "yielded", {});
+  }
+  if (!loopResult.ok) {
+    const cause = causeOf(state);
+    return settle(input, hooks, state, transcript, "failed", { reason: loopResult.output || "the run stopped", ...cause !== void 0 ? { cause } : {} });
+  }
+  return settle(input, hooks, state, transcript, "finished", { output: loopResult.output });
+}
 
 // src/directedMessage.ts
 var ADDRESSED_TO_META_KEY = "addressedTo";
@@ -20761,14 +23465,14 @@ function progressOf(events, editIntent) {
     else seenCalls.set(sig2, subject);
     const cached2 = isCacheAnswered(ev);
     if (cached2) cacheAnswered += 1;
-    const failed = Boolean(ev.isError) || isFailedToolResult(ev.result);
+    const failed3 = Boolean(ev.isError) || isFailedToolResult(ev.result);
     if (current && current.sig === sig2) {
       current.streak.count += 1;
-      if (failed) current.streak.failed += 1;
+      if (failed3) current.streak.failed += 1;
       if (current.streak.count === 2) streaks += 1;
       if (!longestStreak || current.streak.count > longestStreak.count) longestStreak = current.streak;
     } else {
-      current = { sig: sig2, streak: { label: ev.label, count: 1, failed: failed ? 1 : 0 } };
+      current = { sig: sig2, streak: { label: ev.label, count: 1, failed: failed3 ? 1 : 0 } };
     }
     const target = targetSignature(ev);
     if (target) {
@@ -21908,204 +24612,6 @@ function resolveServerChatId(chatId, req) {
   return req.serverChatId === void 0 ? chatId : req.serverChatId;
 }
 
-// src/runStore/runLoop.ts
-var import_working15 = require("@seanhogg/builderforce-memory/working");
-
-// src/runStore/runMemory.ts
-var import_evermind2 = require("@seanhogg/builderforce-memory/evermind");
-var import_working9 = require("@seanhogg/builderforce-memory/working");
-
-// src/runStore/answerAnchors.ts
-var FILE_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "view_file", "open_file", "read_files"]);
-var PATH_KEYS = ["path", "file", "filePath"];
-var MAX_ANSWER_ANCHORS = 16;
-function normalizePath2(p) {
-  return p.trim().split("\\").join("/").replace(/^\.\/+/, "");
-}
-function readFileAnchors(trace4) {
-  const seen = /* @__PURE__ */ new Set();
-  const out = [];
-  for (const ev of trace4) {
-    if (ev.category !== "tool" || ev.isError || !FILE_READ_TOOLS.has(ev.label)) continue;
-    const args = ev.args ?? {};
-    const paths = Array.isArray(args.paths) ? args.paths : PATH_KEYS.map((k) => args[k]);
-    for (const raw of paths) {
-      if (typeof raw !== "string") continue;
-      const path2 = normalizePath2(raw);
-      if (!path2 || seen.has(path2)) continue;
-      seen.add(path2);
-      out.push({ path: path2 });
-      if (out.length >= MAX_ANSWER_ANCHORS) return out;
-    }
-  }
-  return out;
-}
-
-// src/runStore/convoText.ts
-function latestUserText(convo) {
-  for (let i = convo.length - 1; i >= 0; i--) {
-    const m = convo[i];
-    if (m.role === "user") return userTextOf(m);
-  }
-  return "";
-}
-function userTextOf(m) {
-  if (typeof m.content === "string") return m.content.trim();
-  if (Array.isArray(m.content)) {
-    return m.content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ").trim();
-  }
-  return "";
-}
-function isFollowUpTurn(convo) {
-  let users = 0;
-  for (const m of convo) {
-    if (m.role === "assistant") return true;
-    if (m.role === "user") users += 1;
-  }
-  return users > 1;
-}
-function lastAssistantText(convo) {
-  for (let i = convo.length - 1; i >= 0; i -= 1) {
-    const m = convo[i];
-    if (m.role === "assistant") return typeof m.content === "string" ? m.content.trim() : "";
-  }
-  return "";
-}
-
-// src/runStore/adoptAnswer.ts
-async function adoptAnswerWithoutModel(chatId, c, req, text, step) {
-  const finalText = canonicalTurnText(text);
-  if (!finalText) return false;
-  c.transcript.push({ role: "assistant", content: replayTextOf(finalText) });
-  const [assistantMsg] = await req.persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
-  c.streamingText = "";
-  recordAppended(c, assistantMsg);
-  pushTrace(c, { ts: nowIso(), category: "recall", label: step.label, args: step.args, result: { ...step.result, skippedLlm: true } });
-  emit2(c);
-  req.onActivity?.(chatId);
-  return true;
-}
-
-// src/runStore/runMemory.ts
-var MAX_RECALL_HINT_CHARS = 600;
-function recallQuery2(userText, hint) {
-  const extra = (hint ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_RECALL_HINT_CHARS);
-  if (!extra || !userText.trim()) return userText;
-  return `${userText.trim()}
-
-${extra}`;
-}
-async function recallForRun(c, convo, evermind, hint) {
-  let recalled = null;
-  if (!evermind?.recall) return { recalled, block: null, blockTokens: 0 };
-  const query = recallQuery2(latestUserText(convo), hint);
-  if (!query) return { recalled, block: null, blockTokens: 0 };
-  try {
-    recalled = await evermind.recall(query);
-  } catch {
-    recalled = null;
-  }
-  if (recalled?.seeded && recalled.items.length > 0) {
-    const block = (0, import_evermind2.formatEvermindMemoryBlock)(recalled.items);
-    if (block) {
-      const blockTokens = (0, import_working9.transcriptTokens)([{ role: "system", content: block }]);
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "recall",
-        label: "evermind.recall",
-        args: { query, version: recalled.version },
-        result: {
-          count: recalled.items.length,
-          version: recalled.version,
-          mode: recalled.mode,
-          blockTokens,
-          items: recalled.items
-        }
-      });
-      return { recalled, block, blockTokens };
-    }
-  }
-  return { recalled, block: null, blockTokens: 0 };
-}
-async function answerFromMemory(chatId, c, req, allTools, memoryReplay) {
-  const { evermind, model } = req;
-  const convo = c.transcript;
-  if (!(evermind?.answer && memoryReplay && !c.abort?.signal.aborted)) return false;
-  const query = latestUserText(convo);
-  if (!query) return false;
-  let memAnswer = null;
-  try {
-    memAnswer = await evermind.answer(query, {
-      toolsAvailable: !!allTools && allTools.length > 0,
-      // What this turn would have run on — the saving a hit records is priced at it.
-      model: model || c.lastServedModel || void 0
-    });
-  } catch {
-    memAnswer = null;
-  }
-  if (!memAnswer) return false;
-  return adoptAnswerWithoutModel(chatId, c, req, memAnswer.text ?? "", {
-    label: memAnswer.source === "evermind" ? "evermind.answer" : "memory.answer",
-    args: { query },
-    result: {
-      source: memAnswer.source,
-      ...memAnswer.evermindVersion != null ? { version: memAnswer.evermindVersion } : {},
-      // WHICH head served it — a project can target several, so without this a
-      // memory hit from a sibling IDE build's Evermind is indistinguishable from
-      // the chat project's own.
-      ...memAnswer.evermindProjectId != null ? { evermindProjectId: memAnswer.evermindProjectId } : {}
-    }
-  });
-}
-function emitEvermindLearnReconcile(run, assistantMsg, finalText) {
-  const { c, recalled } = run;
-  const evermind = run.req.evermind;
-  const learn = assistantMsg?.evermindLearn;
-  if (learn?.learned) {
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "learn",
-      label: "evermind.learn",
-      // `targets` carries the per-Evermind breakdown (a project can fan out to many)
-      // so the timeline can name each by id; the renderer falls back to `version` alone.
-      result: { version: learn.version, queued: true, ...learn.targets ? { targets: learn.targets } : {} }
-    });
-    const reconciled = recalled?.items ? (0, import_evermind2.countReconciledMemories)(recalled.items, finalText) : 0;
-    if (reconciled > 0) {
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "reconcile",
-        label: "evermind.reconcile",
-        result: { count: reconciled, version: learn.version }
-      });
-    }
-  } else if (learn && learn.reason && learn.reason !== "too-short") {
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "learn",
-      label: "evermind.learn",
-      result: { version: learn.version, skipped: true, reason: learn.reason, ...learn.targets ? { targets: learn.targets } : {} }
-    });
-  }
-  if (evermind?.cacheAnswer && run.memoryReplay) {
-    const q = run.userRequest;
-    const spent = c.runUsage;
-    const origin = spent.model && spent.promptTokens + spent.completionTokens > 0 ? { model: spent.model, promptTokens: spent.promptTokens, completionTokens: spent.completionTokens } : void 0;
-    if (q) {
-      const anchors = readFileAnchors(runTrace(c));
-      const cached2 = anchors.length ? evermind.cacheAnswer(q, finalText, origin, anchors) : origin ? evermind.cacheAnswer(q, finalText, origin) : evermind.cacheAnswer(q, finalText);
-      void Promise.resolve(cached2).catch(() => {
-      });
-    }
-  }
-}
-
-// src/runStore/deviceLevers.ts
-function deviceLeverOn(id) {
-  const env = globalThis.process?.env;
-  return isCostLeverOn(env, id, null);
-}
-
 // src/planHandoff.ts
 var HAND_OFF_TOOL = "hand_off";
 var FAN_OUT_TOOL = "spawn_agents";
@@ -22328,6 +24834,1746 @@ ${childTaskBrief(t, briefContext, ids2[i])}`).join("\n\n")}`
   };
 }
 
+// src/selectTools.ts
+var DEFAULT_TOOL_LIMIT2 = 64;
+var PINNED_OVERFLOW2 = 16;
+var NAME_HIT2 = LEXICAL_WEIGHTS.name;
+var NAME_SYNONYM_HIT2 = 7;
+var DESCRIPTION_HIT2 = LEXICAL_WEIGHTS.description;
+function synonymText(text) {
+  return [...expandWithSynonyms(lexicalStems(text))].join(" ");
+}
+function toolFields(tool) {
+  const name = tool.function?.name ?? "";
+  if (!name) return [];
+  const description = tool.function?.description ?? "";
+  return [
+    { text: name, weight: NAME_HIT2 },
+    { text: synonymText(name), weight: NAME_SYNONYM_HIT2 },
+    { text: description, weight: DESCRIPTION_HIT2 },
+    { text: synonymText(description), weight: DESCRIPTION_HIT2 }
+  ];
+}
+function selectToolsForTurn2(tools, options) {
+  const available = tools?.length ?? 0;
+  const limit = options.limit ?? DEFAULT_TOOL_LIMIT2;
+  if (!tools || available <= limit) {
+    return { tools: tools ?? [], trimmed: false, available };
+  }
+  const required = new Set(options.required ?? []);
+  const pinned = new Set(options.pinned ?? []);
+  const chosen = [];
+  const taken = /* @__PURE__ */ new Set();
+  const take = (tool) => {
+    const name = tool.function?.name;
+    if (!name || taken.has(name)) return;
+    taken.add(name);
+    chosen.push(tool);
+  };
+  for (const tool of tools) {
+    if (chosen.length >= limit) break;
+    if (required.has(tool.function?.name ?? "")) take(tool);
+  }
+  for (const tool of rankLexically(tools, options.query, toolFields, tools.length)) {
+    if (chosen.length >= limit) break;
+    take(tool);
+  }
+  for (const tool of tools) {
+    if (chosen.length >= limit) break;
+    take(tool);
+  }
+  const position = new Map(tools.map((t, i) => [t, i]));
+  chosen.sort((a, b) => (position.get(a) ?? 0) - (position.get(b) ?? 0));
+  const ceiling = limit + PINNED_OVERFLOW2;
+  const byName = new Map(tools.map((t) => [t.function?.name ?? "", t]));
+  for (const name of pinned) {
+    if (chosen.length >= ceiling) break;
+    const tool = byName.get(name);
+    if (tool) take(tool);
+  }
+  return { tools: chosen, trimmed: true, available };
+}
+
+// src/toolRouter.ts
+var TOOL_ROUTER_FIND = "builtin_tools_find";
+var TOOL_ROUTER_DESCRIBE = "builtin_tools_describe";
+var TOOL_ROUTER_INVOKE = "builtin_tools_invoke";
+function isRouterTool(name) {
+  return name === TOOL_ROUTER_FIND || name === TOOL_ROUTER_DESCRIBE || name === TOOL_ROUTER_INVOKE;
+}
+var FIND_LIMIT = 25;
+function routerToolSpecs(catalogSize) {
+  const preamble = `This conversation has ${catalogSize} platform tools available in total, but only the most relevant ones are listed directly on each turn.`;
+  return [
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_FIND,
+        description: `${preamble} Search ALL of them by keyword and get back their names and descriptions. Use this FIRST whenever the tool you want is not in your visible list \u2014 do NOT assume a capability is missing, and never write a tool call as plain text.`,
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: 'Keywords, e.g. "tickets backlog status" or "pull request".' }
+          },
+          required: ["query"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_DESCRIBE,
+        description: `${preamble} Get the exact parameter schema for one tool by name, so you can build its arguments before calling it with ${TOOL_ROUTER_INVOKE}.`,
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: `Exact tool name, e.g. "builtin_chats_list_tickets".` }
+          },
+          required: ["name"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_INVOKE,
+        description: `${preamble} Call ANY of them by name, including ones not listed on this turn. This is a real call and it really executes \u2014 use it instead of describing what you would call.`,
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Exact tool name to call." },
+            args: { type: "object", description: "Arguments object for that tool." }
+          },
+          required: ["name"]
+        }
+      }
+    }
+  ];
+}
+function words2(text) {
+  return text.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
+}
+function findTools(catalog, query, limit = FIND_LIMIT) {
+  const terms = words2(query);
+  if (terms.length === 0) return [];
+  const scored = [];
+  catalog.forEach((tool, index) => {
+    const name = tool.function?.name ?? "";
+    if (!name) return;
+    const description = tool.function?.description ?? "";
+    const haystackName = name.toLowerCase();
+    const haystackDesc = description.toLowerCase();
+    let score2 = 0;
+    for (const t of terms) {
+      if (haystackName.includes(t)) score2 += 10;
+      else if (haystackDesc.includes(t)) score2 += 1;
+    }
+    if (score2 > 0) scored.push({ m: { name, description }, score: score2, index });
+  });
+  return scored.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, limit).map((e) => e.m);
+}
+function describeTool(catalog, name) {
+  return catalog.find((t) => t.function?.name === name) ?? null;
+}
+function handleRouterCall(catalog, name, args) {
+  const a = args ?? {};
+  if (name === TOOL_ROUTER_FIND) {
+    const query = typeof a.query === "string" ? a.query : "";
+    const matches = findTools(catalog, query);
+    return {
+      result: matches.length ? { matches, note: `Call one with ${TOOL_ROUTER_INVOKE}, or ${TOOL_ROUTER_DESCRIBE} first for its arguments.` } : { matches: [], note: `No tool matches "${query}". Try broader keywords; ${catalog.length} tools exist.` }
+    };
+  }
+  if (name === TOOL_ROUTER_DESCRIBE) {
+    const target2 = typeof a.name === "string" ? a.name : "";
+    const spec = describeTool(catalog, target2);
+    return {
+      result: spec ? { name: target2, description: spec.function?.description ?? "", parameters: spec.function?.parameters ?? {} } : { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
+    };
+  }
+  const target = typeof a.name === "string" ? a.name : "";
+  if (!target) return { result: { error: `${TOOL_ROUTER_INVOKE} requires a "name".` } };
+  if (isRouterTool(target)) {
+    return { result: { error: `${target} cannot be invoked through the router.` } };
+  }
+  if (!describeTool(catalog, target)) {
+    return { result: { error: `Unknown tool "${target}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
+  }
+  return { dispatch: { name: target, args: asToolArgs(a.args) ?? {} } };
+}
+
+// src/codeChanges.ts
+var DELEGATION_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents", "wait_agents", HAND_OFF_TOOL]);
+function isDelegationTool(name) {
+  return DELEGATION_TOOLS.has(name);
+}
+function codeChangesOf(name, args, out) {
+  if (isCodeChangeTool(name)) {
+    if (isFailedToolResult(out)) return null;
+    const file = codeChangeFile(args);
+    return file ? [file] : [];
+  }
+  if (isDelegationTool(name)) {
+    const files = out?.changedFiles;
+    if (!Array.isArray(files)) return null;
+    const named = files.filter((f) => typeof f === "string" && f.trim().length > 0);
+    return named.length ? named : null;
+  }
+  return null;
+}
+
+// src/placeholderGuard.ts
+var PLACEHOLDER_GUARD_LABEL = "tools.placeholder_guard";
+var SOURCE_FILE = /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|swift|cs|rb|php|sql|sh|ps1|vue|svelte)$/i;
+var COMMENT_MARKERS = [
+  /\bTODO\b/,
+  /\bFIXME\b/,
+  /\bXXX\b/,
+  /\bfor now\b/i,
+  /\b(?:a|the) (?:proper|real|full) implementation (?:would|should|will)\b/i,
+  /\bnot (?:yet )?(?:implemented|wired)\b/i,
+  // The model's own reasoning left in the source — it was talking to itself, not
+  // documenting the code.
+  /\blet me\b/i,
+  /\bI'll\b/
+];
+var STUB_THROW = /throw new Error\(\s*["'`]\s*(?:not (?:yet )?implemented|todo)/i;
+function commentOf(line2) {
+  const t = line2.trim();
+  if (t.startsWith("//") || t.startsWith("#") || t.startsWith("*") || t.startsWith("/*")) return t;
+  const slash = line2.indexOf("//");
+  if (slash > 0 && line2[slash - 1] !== ":") return line2.slice(slash);
+  return null;
+}
+function markedLines(text) {
+  const out = [];
+  for (const line2 of text.split(/\r?\n/)) {
+    const comment = commentOf(line2);
+    if (comment && COMMENT_MARKERS.some((re) => re.test(comment)) || STUB_THROW.test(line2)) {
+      out.push(line2.trim().slice(0, 160));
+    }
+  }
+  return out;
+}
+function placeholdersWritten(tool, args) {
+  const a = args ?? {};
+  const path2 = typeof a.path === "string" ? a.path : "";
+  if (!path2 || !SOURCE_FILE.test(path2)) return [];
+  const added = tool === "write_file" ? a.content : tool === "edit_file" ? a.new_string : void 0;
+  if (typeof added !== "string" || !added) return [];
+  const before = new Set(typeof a.old_string === "string" ? markedLines(a.old_string) : []);
+  return markedLines(added).filter((text) => !before.has(text)).map((text) => ({ path: path2, text }));
+}
+function placeholderAdvisory(hits) {
+  if (!hits.length) return null;
+  const shown = hits.slice(0, 3).map((h) => `\`${h.text}\``).join(", ");
+  return `PLACEHOLDER WRITTEN in ${hits[0].path}: ${shown}${hits.length > 3 ? ` (+${hits.length - 3} more)` : ""}. This is unfinished work, and comments that narrate your own reasoning do not belong in the source. Finish it in this run \u2014 or, if it is genuinely blocked, say so plainly in your reply and name the blocker. Never report work that contains a placeholder as done or fixed.`;
+}
+function placeholderTraceEvent(tool, hits, ts) {
+  return {
+    ts,
+    category: "message",
+    label: PLACEHOLDER_GUARD_LABEL,
+    args: { tool, hits },
+    result: placeholderAdvisory(hits) ?? ""
+  };
+}
+function delegationPlaceholders(result) {
+  return asHits(resultField(result, "placeholders"));
+}
+function asHits(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((x) => {
+    const hit = x;
+    return typeof hit.path === "string" && typeof hit.text === "string" ? [{ path: hit.path, text: hit.text }] : [];
+  });
+}
+function resultField(result, key) {
+  let obj = result;
+  if (typeof obj === "string") {
+    try {
+      obj = JSON.parse(obj);
+    } catch {
+      return void 0;
+    }
+  }
+  return obj && typeof obj === "object" ? obj[key] : void 0;
+}
+
+// src/runStore/beforeDispatch.ts
+var import_working9 = require("@seanhogg/builderforce-memory/working");
+
+// src/runStore/runLoopContext.ts
+var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files", "find_symbol", "file_outline", "semantic_search", "repo_map", "read_compressed", "local_research"]);
+var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isRepoStateReadTool(name) || isReadOnlyPlatformTool(name);
+var metaOf2 = (turn) => turn.meta;
+function reportToPolicy(run, event) {
+  return run.policy = reduceRunPolicy(run.policy, event);
+}
+function failureAdvisoryFor(run, name, args, out, step) {
+  const attempts = run.failures.record(name, args);
+  const advisory = repeatedFailureAdvisory(name, attempts, failureReason(out));
+  if (advisory) {
+    pushTrace(run.c, {
+      ts: nowIso(),
+      category: "message",
+      label: "tools.repeat_failure_guard",
+      args: { step, tool: name, attempts },
+      result: advisory
+    });
+  }
+  return advisory;
+}
+async function settleReply(run, rawText, result, requested) {
+  const { c, chatId, convo } = run;
+  const text = canonicalTurnText(rawText);
+  convo.push({ role: "assistant", content: replayTextOf(text) });
+  const meta = provenanceMetadata(result, requested);
+  const [assistantMsg] = await run.req.persistence.sendMessages(chatId, [{ role: "assistant", content: text, ...meta ? { metadata: meta } : {} }]);
+  c.streamingText = "";
+  recordAppended(c, assistantMsg);
+  return assistantMsg;
+}
+
+// src/runStore/beforeDispatch.ts
+function beforeDispatchHook(run) {
+  const { c, chatId, runKey, req, allTools, catalogToolNames, usedTools, readCoverage, writeLedger, placeholderLedger } = run;
+  const { runTool, needsConfirm, persistence } = req;
+  return async (rawCall, ctx) => {
+    const iter = ctx.step;
+    run.pendingReplay = null;
+    run.pendingRun = null;
+    let call2 = rawCall;
+    {
+      const aliased = resolveToolAlias(call2.name);
+      if (aliased !== call2.name) call2 = { ...call2, name: aliased };
+    }
+    if (isRouterTool(call2.name)) {
+      const routed = handleRouterCall(allTools ?? [], call2.name, call2.args);
+      if ("result" in routed) {
+        pushTrace(c, {
+          ts: nowIso(),
+          category: "tool",
+          label: call2.name,
+          args: call2.args,
+          result: routed.result
+        });
+        return { result: { data: routed.result } };
+      }
+      const routedArgs = routed.dispatch.args ?? {};
+      call2 = { ...call2, name: routed.dispatch.name, args: routedArgs, raw: { ...call2.raw, name: routed.dispatch.name, arguments: JSON.stringify(routedArgs) } };
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "tools.routed",
+        args: { step: iter, via: rawCall.name },
+        result: `Called ${call2.name} through the tool router (it was not advertised directly this turn).`
+      });
+    }
+    if (call2.name === ASK_USER_TOOL) {
+      if (run.redirectAskToDelegation) {
+        run.redirectAskToDelegation = false;
+        return { result: { data: { ok: false, error: undelegatedRequestNudge(catalogToolNames) } } };
+      }
+      return { result: { data: { error: "ask_user needs { question, options:[{label}] } with 2+ options. Retry or answer in prose." } } };
+    }
+    if (call2.name === HAND_OFF_TOOL) {
+      if (!offersHandOff(run.policy)) {
+        const error = usedTools.has(HAND_OFF_TOOL) ? "The plan was already handed off \u2014 you are the coding model now. Implement the tasks; do not re-plan." : "This run has already started editing, so it is coding now and hand_off is closed. Implement the work directly; use spawn_agents for separate slices that own disjoint files.";
+        return { result: { data: { ok: false, error } } };
+      }
+      const plan = parseHandOff(call2.args);
+      if (typeof plan === "string") return { result: { data: { ok: false, error: plan } } };
+      reportToPolicy(run, { type: "hand_off" });
+      pushTrace(c, handOffTrace(nowIso(), ctx.step, plan.tasks.length, HAND_OFF_TOOL));
+      const outcome = await executeHandOff(plan, {
+        runTool: (name, args2) => runTool(name, args2),
+        toolNames: new Set(catalogToolNames),
+        // The research the coders inherit: what this planning run read and searched.
+        knowledge: run.knowledge.brief(),
+        // …and the goal, in the user's words: a child sees none of this conversation.
+        request: run.goal,
+        ...req.projectId != null ? { projectId: req.projectId } : {},
+        afterCreate: (toolName, out) => autoLinkCreatedItem(run.serverChatId, c, runTool, toolName, out),
+        step: (label, args2, out, durationMs) => pushTrace(c, {
+          ts: nowIso(),
+          category: "tool",
+          label,
+          durationMs,
+          args: args2,
+          result: out ?? null,
+          isError: isFailedToolResult(out)
+        }),
+        postPlan: async (text) => {
+          const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, metadata: JSON.stringify({ [MID_TURN_META_KEY]: true }) }]);
+          if (!msg) return;
+          recordAppended(c, msg);
+          emit2(c);
+        },
+        now: nowMs2
+      });
+      const changed2 = codeChangesOf(HAND_OFF_TOOL, call2.args, outcome);
+      if (changed2) {
+        c.codeChanged = true;
+        for (const f of changed2) if (!c.touchedFiles.includes(f)) c.touchedFiles.push(f);
+      }
+      usedTools.add(HAND_OFF_TOOL);
+      placeholderLedger.add(delegationPlaceholders(outcome));
+      return { result: { data: outcome } };
+    }
+    const args = call2.args;
+    attachDeltaToRunTicket(call2.name, args, c.deltaTicketId);
+    if (needsConfirm && needsConfirm({ name: call2.name, args })) {
+      const ok = await requestRunConfirm(runKey, { name: call2.name, args }, { step: iter });
+      if (!ok) {
+        const declined = { cancelled: true, reason: "User declined this action." };
+        pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: declined });
+        return { result: { data: declined } };
+      }
+    }
+    if (isDedupableRead(call2.name)) {
+      if (readCoverage.isRepeat(call2.name, args)) {
+        const cached2 = readCoverage.cachedResult(call2.name, args);
+        if (cached2 && !(0, import_working9.stillInWorkingContext)(c, cached2.anchor)) {
+          const replayNote = `Replayed from this run's read cache: this exact ${call2.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
+          const visit = readCoverage.record(call2.name, args);
+          const target = visit ? visitTarget(args) : void 0;
+          const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
+          const replayed = trimToolResult(call2.name, cached2.result ?? null, {
+            advisory: revisit ? `${replayNote}
+
+${revisit}` : replayNote,
+            contextWindowTokens: await run.windowFit.contextWindow?.()
+          });
+          run.pendingReplay = { name: call2.name, args, result: cached2.result, served: replayed.served };
+          pushTrace(c, {
+            ts: nowIso(),
+            category: "tool",
+            label: call2.name,
+            args,
+            result: { replayed: true, note: replayNote },
+            resultBytes: replayed.bytes,
+            truncated: replayed.truncated
+          });
+          run.cacheStreak.served(iter);
+          return { result: { data: replayed.content } };
+        }
+        const stub = {
+          note: `Duplicate ${call2.name} call \u2014 identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`
+        };
+        pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: stub });
+        run.cacheStreak.served(iter);
+        return { result: { data: stub } };
+      }
+      const covered = readCoverage.coveredRead(call2.name, args);
+      if (covered) {
+        const visit = readCoverage.record(call2.name, args);
+        const target = visit ? visitTarget(args) : void 0;
+        const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
+        const note = revisit ? `${covered.note}
+
+${revisit}` : covered.note;
+        if (covered.cached && !(0, import_working9.stillInWorkingContext)(c, covered.cached.anchor)) {
+          const requested = requestedReadWindow2(covered.cached.result ?? null, covered.start, covered.end);
+          const replayed = trimToolResult(call2.name, requested, { advisory: note, contextWindowTokens: await run.windowFit.contextWindow?.() });
+          run.pendingReplay = { name: call2.name, args, result: requested, served: replayed.served };
+          pushTrace(c, {
+            ts: nowIso(),
+            category: "tool",
+            label: call2.name,
+            args,
+            result: { covered: true, replayed: true, note },
+            resultBytes: replayed.bytes,
+            truncated: replayed.truncated
+          });
+          run.cacheStreak.served(iter);
+          return { result: { data: replayed.content } };
+        }
+        const stub = { note };
+        pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: { covered: true, note } });
+        run.cacheStreak.served(iter);
+        return { result: { data: stub } };
+      }
+      const derived = readCoverage.derivedSearch(call2.name, args);
+      if (derived) {
+        const visit = readCoverage.record(call2.name, args);
+        const target = visit ? visitTarget(args) : void 0;
+        const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
+        const served = trimToolResult(call2.name, derived, { advisory: revisit, contextWindowTokens: await run.windowFit.contextWindow?.() });
+        run.pendingReplay = { name: call2.name, args, result: derived };
+        pushTrace(c, {
+          ts: nowIso(),
+          category: "tool",
+          label: call2.name,
+          args,
+          result: { derived: true, note: derived.note },
+          resultBytes: served.bytes,
+          truncated: served.truncated
+        });
+        return { result: { data: served.content } };
+      }
+    } else {
+      if (writeLedger.isRepeat(call2.name, args)) {
+        const note = repeatedWriteNote(call2.name, String(args.path ?? "").trim());
+        pushTrace(c, { ts: nowIso(), category: "message", label: "tools.repeat_write_guard", args: { step: iter, tool: call2.name }, result: note });
+        pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: { skipped: true, note } });
+        run.cacheStreak.served(iter);
+        return { result: { data: { ok: true, applied: false, unchanged: true, note } } };
+      }
+      readCoverage.invalidate(call2.name, args);
+    }
+    return call2 === rawCall ? void 0 : { rewrite: call2 };
+  };
+}
+
+// src/completionGuard.ts
+var TICKET_UPDATE = /tasks[._]update/i;
+var DONE_STATUSES = /* @__PURE__ */ new Set(["done", "completed", "complete"]);
+function isTicketCompletion(tool, args) {
+  if (!TICKET_UPDATE.test(tool)) return false;
+  const status2 = args?.status;
+  return typeof status2 === "string" && DONE_STATUSES.has(status2.toLowerCase());
+}
+function canCompleteTicket(isOnBaseBranch, userDeclinedShipping) {
+  if (isOnBaseBranch) return true;
+  if (userDeclinedShipping) return true;
+  return false;
+}
+function notOnBaseBranchAdvisory() {
+  return "CANNOT MARK DONE \u2014 code is not on the base branch (main/master). Either ship to main/master first, or if you intentionally left the code uncommitted, say so explicitly in your reply so this guard knows to allow it.";
+}
+var PlaceholderLedger = class {
+  open = /* @__PURE__ */ new Map();
+  /** Account for ONE successful write, given the hits the guard found in it. */
+  record(tool, args, hits) {
+    const a = args ?? {};
+    const path2 = typeof a.path === "string" ? a.path : "";
+    if (!path2) return;
+    if (tool === "write_file") {
+      this.set(path2, hits.map((h) => h.text));
+      return;
+    }
+    if (tool === "edit_file") {
+      const current = new Set(this.open.get(path2) ?? []);
+      const removed = typeof a.old_string === "string" ? markedLines(a.old_string) : [];
+      const kept = new Set(typeof a.new_string === "string" ? markedLines(a.new_string) : []);
+      for (const text of removed) if (!kept.has(text)) current.delete(text);
+      for (const h of hits) current.add(h.text);
+      this.set(path2, [...current]);
+      return;
+    }
+    if (tool === "delete_file") this.open.delete(path2);
+  }
+  /** Placeholders a delegated child reported writing. The parent never saw those edits,
+   *  so they stay outstanding until the parent rewrites or edits the lines itself. */
+  add(hits) {
+    for (const h of hits) {
+      const texts = this.open.get(h.path) ?? /* @__PURE__ */ new Set();
+      texts.add(h.text);
+      this.open.set(h.path, texts);
+    }
+  }
+  outstanding() {
+    return [...this.open.entries()].flatMap(([path2, texts]) => [...texts].map((text) => ({ path: path2, text })));
+  }
+  set(path2, texts) {
+    if (texts.length) this.open.set(path2, new Set(texts));
+    else this.open.delete(path2);
+  }
+};
+function completionAdvisory(open) {
+  if (!open.length) return null;
+  const shown = open.slice(0, 3).map((h) => `${h.path}: \`${h.text}\``).join("; ");
+  return `MARKED DONE OVER A PLACEHOLDER. This run wrote ${open.length} placeholder(s) it has not removed \u2014 ${shown}${open.length > 3 ? ` (+${open.length - 3} more)` : ""}. A ticket is done when its code works in the product, not when a stub compiles. Finish the placeholder and keep the ticket done, or set it back to in_progress and name what blocks it.`;
+}
+
+// src/readCoverage.ts
+function isUnscopedMutation(tool, args) {
+  return isUnscopedMutationTool(tool) && !isReadOnlyShellCall(tool, args);
+}
+var BRAIN_READ_TRAITS = {
+  visitTarget,
+  activityTarget,
+  questionSeparator: VISIT_QUESTION_SEPARATOR,
+  isUnscopedMutation,
+  isCodeChangeTool,
+  isLocalWorkspaceTool,
+  isRepoPublishTool,
+  isRepoStateReadTool
+};
+var ReadCoverage2 = class extends ReadCoverage {
+  constructor() {
+    super(BRAIN_READ_TRAITS);
+  }
+};
+
+// src/runStore/earlyDelegation.ts
+var counters = /* @__PURE__ */ new WeakMap();
+function counterOf(run) {
+  let counter = counters.get(run);
+  if (!counter) {
+    counter = new ReadsWithoutSpawn();
+    counters.set(run, counter);
+  }
+  return counter;
+}
+function runLeftDelegationUndone(run) {
+  return leftDelegationUndone({ toolNames: run.catalogToolNames, requestText: run.userRequest, events: runTrace(run.c) });
+}
+function delegationCallKind2(name, args, isReadTool) {
+  if (isSpawnTool(name)) return "spawn";
+  if (isReadTool || isReadOnlyShellCall(name, args)) return "read";
+  return "other";
+}
+function earlyDelegationAdvisory(run, name, args, isReadTool, step) {
+  const counter = counterOf(run);
+  const kind = delegationCallKind2(name, args, isReadTool);
+  const reads = counter.record(kind);
+  if (kind !== "read" || !counter.due(READS_BEFORE_DELEGATION_NUDGE)) return null;
+  if (!runLeftDelegationUndone(run)) return null;
+  counter.markNudged();
+  const nudge = earlyDelegationNudge(run.catalogToolNames, reads);
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "loop.nudge_undelegated_request",
+    args: { step, tool: name, reads },
+    result: `The user asked for sub-agents and the run had made ${reads} reads without starting one \u2014 told to delegate on that read result.`
+  });
+  return nudge;
+}
+
+// src/runStore/steerInterrupt.ts
+function takeRunSteering(c, runKey, step) {
+  const messages = drainRunSteering2(runKey);
+  if (messages.length > 0) {
+    markPendingWordsRead(runKey, messages.map((m) => m.eventKey));
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "steer.applied",
+      args: { step, messages: messages.length },
+      result: messages.map((m) => m.text.slice(0, 200)).join("\n")
+    });
+  }
+  return messages;
+}
+
+// src/runStore/dispatchTool.ts
+function dispatchToolPort(run) {
+  const { c, chatId, req, readCoverage, failures, writeLedger, placeholderLedger } = run;
+  const { runTool } = req;
+  return async (call2, ctx) => {
+    const iter = ctx.step;
+    const args = call2.args;
+    const declined = malformedCallOutcome(call2, run.lastTurnInterruption === "truncated");
+    if (declined) {
+      const truncated = run.lastTurnInterruption === "truncated";
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "error",
+        isError: true,
+        durationMs: 0,
+        label: malformedCallLabel(call2.name, truncated),
+        args: { arguments: String(call2.raw?.arguments ?? "").slice(0, 200) },
+        result: declined
+      });
+      return { data: declined, isError: true };
+    }
+    const isReadTool = isDedupableRead(call2.name);
+    const toolStart = nowMs2();
+    setActivity(c, toolActivity(call2.name, args, iter, Date.now()));
+    if (!runTool) throw new Error("tool call without a tool runner");
+    let out;
+    try {
+      out = await runToolInterruptibly(runTool, run.runKey, c.abort?.signal, call2.name, withObservedModel(chatId, call2.name, args));
+    } catch (e) {
+      const message2 = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+      out = { ok: false, error: message2 };
+      const repeat = failureAdvisoryFor(run, call2.name, args, out, iter);
+      if (!isReadTool) writeLedger.record(call2.name, args, { ok: false, unscoped: isUnscopedMutation(call2.name, args) });
+      run.pendingRun = { out, toolStart, isReadTool, threw: true };
+      return { data: repeat ? withAdvisory(out, repeat) : out, isError: true };
+    }
+    const changed2 = codeChangesOf(call2.name, args, out);
+    if (changed2) {
+      const first = !c.codeChanged;
+      c.codeChanged = true;
+      for (const f of changed2) if (!c.touchedFiles.includes(f)) c.touchedFiles.push(f);
+      if (first && !c.ticketRecorded && req.projectId != null && req.runTool) {
+        await recordCodeChangeTicket(run.serverChatId, c, req, "open").catch(() => {
+        });
+      }
+    }
+    if (isTicketRecordingTool(call2.name)) c.ticketRecorded = true;
+    await autoLinkCreatedItem(run.serverChatId, c, runTool, call2.name, out);
+    let advisory = null;
+    if (!isReadTool) writeLedger.record(call2.name, args, { ok: !isFailedToolResult(out), unscoped: isUnscopedMutation(call2.name, args) });
+    if (isFailedToolResult(out)) {
+      advisory = failureAdvisoryFor(run, call2.name, args, out, iter);
+    } else {
+      failures.clear(call2.name, args);
+      const placeholders = placeholdersWritten(call2.name, args);
+      if (placeholders.length) {
+        pushTrace(c, placeholderTraceEvent(call2.name, placeholders, nowIso()));
+        advisory = placeholderAdvisory(placeholders);
+      }
+      if (isCodeChangeTool(call2.name)) placeholderLedger.record(call2.name, args, placeholders);
+      if (isDelegationTool(call2.name)) placeholderLedger.add(delegationPlaceholders(out));
+      if (isTicketCompletion(call2.name, args)) {
+        const placeholderWarning = completionAdvisory(placeholderLedger.outstanding());
+        const events = c.trace;
+        const isOnBaseBranch = shippedToBaseBranch(events);
+        const canComplete = canCompleteTicket(isOnBaseBranch, false);
+        if (!canComplete) {
+          const said = notOnBaseBranchAdvisory();
+          pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, isOnBaseBranch }, result: said });
+          advisory = said;
+        } else if (placeholderWarning) {
+          pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, open: placeholderLedger.outstanding() }, result: placeholderWarning });
+          advisory = placeholderWarning;
+        }
+      }
+      if (isReadTool) {
+        const visit = readCoverage.record(call2.name, args);
+        const target = visit ? visitTarget(args) : void 0;
+        advisory = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
+        if (advisory) {
+          pushTrace(c, {
+            ts: nowIso(),
+            category: "message",
+            label: "tools.revisit_guard",
+            args: { step: iter, tool: call2.name, target, visits: visit.count },
+            result: advisory
+          });
+        }
+      }
+    }
+    const delegate = earlyDelegationAdvisory(run, call2.name, args, isReadTool, iter);
+    if (delegate) advisory = advisory ? `${advisory}
+
+${delegate}` : delegate;
+    const contextWindowTokens = await run.windowFit.contextWindow?.();
+    const trimmedOut = trimToolResult(call2.name, out ?? null, { advisory, contextWindowTokens });
+    run.pendingRun = { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated, served: trimmedOut.served };
+    return { data: trimmedOut.content, isError: isFailedToolResult(out) };
+  };
+}
+
+// src/runStore/runMemory.ts
+var import_evermind2 = require("@seanhogg/builderforce-memory/evermind");
+var import_working10 = require("@seanhogg/builderforce-memory/working");
+
+// src/runStore/answerAnchors.ts
+var FILE_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "view_file", "open_file", "read_files"]);
+var PATH_KEYS = ["path", "file", "filePath"];
+var MAX_ANSWER_ANCHORS = 16;
+function normalizePath2(p) {
+  return p.trim().split("\\").join("/").replace(/^\.\/+/, "");
+}
+function readFileAnchors(trace4) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const ev of trace4) {
+    if (ev.category !== "tool" || ev.isError || !FILE_READ_TOOLS.has(ev.label)) continue;
+    const args = ev.args ?? {};
+    const paths = Array.isArray(args.paths) ? args.paths : PATH_KEYS.map((k) => args[k]);
+    for (const raw of paths) {
+      if (typeof raw !== "string") continue;
+      const path2 = normalizePath2(raw);
+      if (!path2 || seen.has(path2)) continue;
+      seen.add(path2);
+      out.push({ path: path2 });
+      if (out.length >= MAX_ANSWER_ANCHORS) return out;
+    }
+  }
+  return out;
+}
+
+// src/runStore/convoText.ts
+function latestUserText(convo) {
+  for (let i = convo.length - 1; i >= 0; i--) {
+    const m = convo[i];
+    if (m.role === "user") return userTextOf(m);
+  }
+  return "";
+}
+function userTextOf(m) {
+  if (typeof m.content === "string") return m.content.trim();
+  if (Array.isArray(m.content)) {
+    return m.content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ").trim();
+  }
+  return "";
+}
+function isFollowUpTurn(convo) {
+  let users = 0;
+  for (const m of convo) {
+    if (m.role === "assistant") return true;
+    if (m.role === "user") users += 1;
+  }
+  return users > 1;
+}
+function lastAssistantText(convo) {
+  for (let i = convo.length - 1; i >= 0; i -= 1) {
+    const m = convo[i];
+    if (m.role === "assistant") return typeof m.content === "string" ? m.content.trim() : "";
+  }
+  return "";
+}
+
+// src/runStore/adoptAnswer.ts
+async function adoptAnswerWithoutModel(chatId, c, req, text, step) {
+  const finalText = canonicalTurnText(text);
+  if (!finalText) return false;
+  c.transcript.push({ role: "assistant", content: replayTextOf(finalText) });
+  const [assistantMsg] = await req.persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
+  c.streamingText = "";
+  recordAppended(c, assistantMsg);
+  pushTrace(c, { ts: nowIso(), category: "recall", label: step.label, args: step.args, result: { ...step.result, skippedLlm: true } });
+  emit2(c);
+  req.onActivity?.(chatId);
+  return true;
+}
+
+// src/runStore/runMemory.ts
+var MAX_RECALL_HINT_CHARS2 = 600;
+function recallQuery2(userText, hint) {
+  const extra = (hint ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_RECALL_HINT_CHARS2);
+  if (!extra || !userText.trim()) return userText;
+  return `${userText.trim()}
+
+${extra}`;
+}
+async function recallForRun(c, convo, evermind, hint) {
+  let recalled = null;
+  if (!evermind?.recall) return { recalled, block: null, blockTokens: 0 };
+  const query = recallQuery2(latestUserText(convo), hint);
+  if (!query) return { recalled, block: null, blockTokens: 0 };
+  try {
+    recalled = await evermind.recall(query);
+  } catch {
+    recalled = null;
+  }
+  if (recalled?.seeded && recalled.items.length > 0) {
+    const block = (0, import_evermind2.formatEvermindMemoryBlock)(recalled.items);
+    if (block) {
+      const blockTokens = (0, import_working10.transcriptTokens)([{ role: "system", content: block }]);
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "recall",
+        label: "evermind.recall",
+        args: { query, version: recalled.version },
+        result: {
+          count: recalled.items.length,
+          version: recalled.version,
+          mode: recalled.mode,
+          blockTokens,
+          items: recalled.items
+        }
+      });
+      return { recalled, block, blockTokens };
+    }
+  }
+  return { recalled, block: null, blockTokens: 0 };
+}
+async function answerFromMemory(chatId, c, req, allTools, memoryReplay) {
+  const { evermind, model } = req;
+  const convo = c.transcript;
+  if (!(evermind?.answer && memoryReplay && !c.abort?.signal.aborted)) return false;
+  const query = latestUserText(convo);
+  if (!query) return false;
+  let memAnswer = null;
+  try {
+    memAnswer = await evermind.answer(query, {
+      toolsAvailable: !!allTools && allTools.length > 0,
+      // What this turn would have run on — the saving a hit records is priced at it.
+      model: model || c.lastServedModel || void 0
+    });
+  } catch {
+    memAnswer = null;
+  }
+  if (!memAnswer) return false;
+  return adoptAnswerWithoutModel(chatId, c, req, memAnswer.text ?? "", {
+    label: memAnswer.source === "evermind" ? "evermind.answer" : "memory.answer",
+    args: { query },
+    result: {
+      source: memAnswer.source,
+      ...memAnswer.evermindVersion != null ? { version: memAnswer.evermindVersion } : {},
+      // WHICH head served it — a project can target several, so without this a
+      // memory hit from a sibling IDE build's Evermind is indistinguishable from
+      // the chat project's own.
+      ...memAnswer.evermindProjectId != null ? { evermindProjectId: memAnswer.evermindProjectId } : {}
+    }
+  });
+}
+function emitEvermindLearnReconcile(run, assistantMsg, finalText) {
+  const { c, recalled } = run;
+  const evermind = run.req.evermind;
+  const learn = assistantMsg?.evermindLearn;
+  if (learn?.learned) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "learn",
+      label: "evermind.learn",
+      // `targets` carries the per-Evermind breakdown (a project can fan out to many)
+      // so the timeline can name each by id; the renderer falls back to `version` alone.
+      result: { version: learn.version, queued: true, ...learn.targets ? { targets: learn.targets } : {} }
+    });
+    const reconciled = recalled?.items ? (0, import_evermind2.countReconciledMemories)(recalled.items, finalText) : 0;
+    if (reconciled > 0) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "reconcile",
+        label: "evermind.reconcile",
+        result: { count: reconciled, version: learn.version }
+      });
+    }
+  } else if (learn && learn.reason && learn.reason !== "too-short") {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "learn",
+      label: "evermind.learn",
+      result: { version: learn.version, skipped: true, reason: learn.reason, ...learn.targets ? { targets: learn.targets } : {} }
+    });
+  }
+  if (evermind?.cacheAnswer && run.memoryReplay) {
+    const q = run.userRequest;
+    const spent = c.runUsage;
+    const origin = spent.model && spent.promptTokens + spent.completionTokens > 0 ? { model: spent.model, promptTokens: spent.promptTokens, completionTokens: spent.completionTokens } : void 0;
+    if (q) {
+      const anchors = readFileAnchors(runTrace(c));
+      const cached2 = anchors.length ? evermind.cacheAnswer(q, finalText, origin, anchors) : origin ? evermind.cacheAnswer(q, finalText, origin) : evermind.cacheAnswer(q, finalText);
+      void Promise.resolve(cached2).catch(() => {
+      });
+    }
+  }
+}
+
+// src/runStore/toolCallHooks.ts
+function beforeToolCallsHook(run) {
+  const { c, chatId } = run;
+  const { runTool, persistence, onActivity } = run.req;
+  return async (ctx, turn, calls) => {
+    const { result, requested } = metaOf2(turn);
+    run.progress.noteTurnText(result.text);
+    const askCall = calls.find((tc) => tc.name === ASK_USER_TOOL);
+    if (askCall && runTool && !run.delegationRecoveryUsed && runLeftDelegationUndone(run)) {
+      run.delegationRecoveryUsed = true;
+      run.redirectAskToDelegation = true;
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "loop.recover_undelegated_request",
+        args: { step: ctx.step, via: "ask_user" },
+        result: "The user asked for sub-agents and the run asked how to proceed without starting one \u2014 answered with the local delegation contract instead of settling the question."
+      });
+    } else if (askCall) {
+      let block = null;
+      try {
+        block = askCall.malformed ? null : askUserBlock(askCall.args);
+      } catch {
+        block = null;
+      }
+      const lead = result.text.trim();
+      const reply = block ? lead ? `${lead}
+
+${block}` : block : lead;
+      if (reply) {
+        const assistantMsg = await settleReply(run, reply, result, requested);
+        emit2(c);
+        emitEvermindLearnReconcile(run, assistantMsg, reply);
+        onActivity?.(chatId);
+        return { action: "stop", ok: true, output: reply };
+      }
+    }
+    await persistMidTurnText(chatId, c, persistence, result, requested);
+    c.streamingText = "";
+    emit2(c);
+    return void 0;
+  };
+}
+function afterDispatchHook(run) {
+  const { c, readCoverage, usedTools } = run;
+  return (call2, result, row) => {
+    run.progress.observe(call2.name, call2.args, result);
+    if (run.pendingReplay) {
+      const replay = run.pendingReplay;
+      readCoverage.cacheResult(replay.name, replay.args, { result: replay.result, ...replay.served !== void 0 ? { served: replay.served } : {}, anchor: row });
+      run.pendingReplay = null;
+      return void 0;
+    }
+    const ran = run.pendingRun;
+    run.pendingRun = null;
+    if (!ran) return void 0;
+    run.cacheStreak.ran();
+    const args = call2.args;
+    if (ran.threw) {
+      pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, durationMs: nowMs2() - ran.toolStart, args, result: ran.out, isError: true });
+      return void 0;
+    }
+    if (ran.isReadTool && !isFailedToolResult(ran.out)) {
+      readCoverage.cacheResult(call2.name, args, { result: ran.out ?? null, ...ran.served !== void 0 ? { served: ran.served } : {}, anchor: row });
+    } else if (!isFailedToolResult(ran.out)) {
+      recordShellFileRead(readCoverage, call2.name, args, ran.out, ran.truncated !== true, row);
+    }
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "tool",
+      label: call2.name,
+      durationMs: nowMs2() - ran.toolStart,
+      args,
+      result: ran.out ?? null,
+      isError: isFailedToolResult(ran.out),
+      resultBytes: ran.bytes,
+      truncated: ran.truncated
+    });
+    usedTools.add(call2.name);
+    if (!isFailedToolResult(ran.out)) run.knowledge.record(call2.name, args);
+    return void 0;
+  };
+}
+
+// src/run/brainPlatformTools.ts
+function brainPlatformTools(run) {
+  const before = beforeDispatchHook(run);
+  const dispatch = dispatchToolPort(run);
+  const after = afterDispatchHook(run);
+  const ran = [];
+  let step = 0;
+  return {
+    toolRowAppended(row) {
+      const done = ran.shift();
+      if (done) void after(done.call, { data: done.result.data, ...done.result.isError ? { isError: true } : {} }, row, done.ctx);
+    },
+    tools: {
+      closed: true,
+      verbatimText: true,
+      schemas: () => {
+        const catalog = run.allTools ?? [];
+        const conversational = run.canAskUser ? [ASK_USER_TOOL_SPEC] : [];
+        const names = new Set(catalog.map((t) => t.function.name));
+        return [...catalog, ...conversational.filter((t) => !names.has(t.function.name))].filter(
+          (t) => t.function.name !== HAND_OFF_TOOL || offersHandOff(run.policy)
+        );
+      },
+      get selection() {
+        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT2, required: new Set(offersHandOff(run.policy) && run.canAskUser ? [...run.alwaysAdvertised, HAND_OFF_TOOL] : run.alwaysAdvertised) };
+      },
+      handsOff: (name) => name === HAND_OFF_TOOL,
+      async execute(name, args) {
+        step += 1;
+        const ctx = { step, messages: run.convo };
+        const call2 = { id: `brain-${step}`, name, args, raw: { id: `brain-${step}`, name, arguments: JSON.stringify(args) }, malformed: false };
+        const pre = await before(call2, ctx);
+        let result;
+        if (pre && "result" in pre) result = pre.result;
+        else result = await dispatch(pre && "rewrite" in pre ? pre.rewrite : call2, ctx);
+        ran.push({ call: pre && "rewrite" in pre ? pre.rewrite : call2, result, ctx });
+        return result;
+      }
+    }
+  };
+}
+
+// src/run/modelTransport.ts
+function toStreamMessage(message2) {
+  if (message2.role === "tool") {
+    return { role: "tool", content: message2.content, ...message2.toolCallId ? { tool_call_id: message2.toolCallId } : {} };
+  }
+  if (message2.role === "assistant" && message2.toolCalls && message2.toolCalls.length > 0) {
+    return {
+      role: "assistant",
+      content: message2.content,
+      tool_calls: message2.toolCalls.map((call2) => ({ id: call2.id, type: "function", function: { name: call2.name, arguments: call2.arguments } }))
+    };
+  }
+  return { role: message2.role, content: message2.content };
+}
+function toCompletion(result) {
+  const interruption = turnInterruption(result.finishReason);
+  return {
+    content: result.text,
+    // The call's arguments stay the RAW JSON string — the kernel parses them, and a
+    // malformed one is the kernel's to report.
+    toolCalls: result.toolCalls.map((call2) => ({ id: call2.id, name: call2.name, arguments: call2.args })),
+    ...result.usage ? {
+      usage: {
+        ...result.usage.prompt !== void 0 ? { inputTokens: result.usage.prompt } : {},
+        ...result.usage.completion !== void 0 ? { outputTokens: result.usage.completion } : {},
+        ...result.usage.cacheRead !== void 0 ? { cacheReadTokens: result.usage.cacheRead } : {}
+      }
+    } : {},
+    ...result.resolvedModel ? { model: result.resolvedModel } : {},
+    // A cut-off turn is told apart from a finished one by the vendor's own finish reason (`finishReason.ts`).
+    ...interruption ? { interrupted: interruption } : {}
+  };
+}
+function brainModelTransport(deps) {
+  const { stream, handlers, call: call2, windows, preflight } = deps;
+  return {
+    async complete(request, signal) {
+      const tools = request.tools && request.tools.length > 0 ? request.tools : void 0;
+      const session = deps.turn?.open(request);
+      const wire = request.messages.map(toStreamMessage);
+      const messages = session?.fit ? await session.fit(wire) : wire;
+      let result;
+      try {
+        const ask = () => stream(
+          {
+            ...call2,
+            ...session?.call,
+            messages,
+            ...session?.metadata ? { metadata: session.metadata } : {},
+            ...tools ? { tools, tool_choice: request.toolChoice ?? "auto" } : {},
+            ...request.model ? { model: request.model } : {},
+            ...request.strict !== void 0 ? { modelStrict: request.strict } : {},
+            ...request.role ? { role: request.role } : {},
+            ...request.excludeModels && request.excludeModels.length > 0 ? { excludeModels: [...request.excludeModels] } : {},
+            ...request.maxTokens !== void 0 ? { maxTokens: request.maxTokens } : {},
+            ...signal ? { signal } : {}
+          },
+          session?.handlers ?? handlers?.()
+        );
+        result = await (session?.around ? session.around(ask) : ask());
+      } catch (e) {
+        throw session ? session.failed(e) : e;
+      }
+      await session?.completed(result);
+      return toCompletion(result);
+    },
+    window: (model) => contextWindowOf(model, windows?.cloud ? { cloud: windows.cloud } : {}),
+    ...preflight ? { preflight: () => preflight() } : {}
+  };
+}
+
+// src/run/loopStore.ts
+function loopRunStore(c, opts) {
+  return {
+    load: () => void 0,
+    save: () => void 0,
+    appended(row) {
+      if (row.role === "system") return;
+      const wire = toStreamMessage(row);
+      c.transcript.push(wire);
+      if (row.role === "tool") opts.toolRowAppended(wire);
+    },
+    ...opts.commitMemory ? { commitMemory: opts.commitMemory } : {}
+  };
+}
+
+// src/runStore/steerPersistence.ts
+async function persistSteer(c, chatId, persistence, steer, runKey = chatId) {
+  if (!steer.persist) return;
+  try {
+    const [msg] = await persistence.sendMessages(chatId, [{ role: "user", content: steer.text, metadata: steerMetadata(steer), ...steer.eventKey ? { eventKey: steer.eventKey } : {} }]);
+    if (!msg) return;
+    recordAppended(c, msg);
+    emit2(c);
+    forgetPendingWords(runKey, [steer.eventKey]);
+  } catch (e) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "steer.persist_failed",
+      args: { error: e instanceof Error ? e.message : String(e) },
+      result: "The steered message reached the run but could not be saved to the chat."
+    });
+  }
+}
+
+// src/run/loopSteering.ts
+function loopSteeringSource(run, turn) {
+  const { c, chatId, runKey, req } = run;
+  return {
+    ...runSteeringSource(runKey),
+    async drain() {
+      const out = [];
+      const interrupt = hasRunInterrupt(runKey);
+      for (const steer of takeRunSteering(c, runKey, turn())) {
+        await persistSteer(c, chatId, req.persistence, steer, runKey);
+        const content = steerModelContent(steer);
+        out.push({ text: typeof content === "string" ? content : content.map((p) => "text" in p && typeof p.text === "string" ? p.text : "").join(""), ...interrupt ? { interrupt: true } : {} });
+      }
+      return out;
+    }
+  };
+}
+
+// src/run/loopSettle.ts
+async function settleBrainRun(run, outcome, last) {
+  const { c, chatId, req } = run;
+  if (outcome.kind === "yielded") return;
+  if (outcome.kind === "failed") {
+    if (outcome.reason === RUN_CANCELLED_REASON || c.abort?.signal.aborted) return;
+    if (outcome.cause !== void 0) throw outcome.cause;
+    if (outcome.exhausted) {
+      c.streamingText = "";
+      recordRunFailure(c, "agent.loop", outcome.reason);
+      c.error = `The assistant's last tool calls all failed and it gave no answer. Read the failing steps above, then try again with what they ask for.`;
+      emit2(c);
+      return;
+    }
+    throw new Error(outcome.reason);
+  }
+  const text = outcome.kind === "paused" ? outcome.question : outcome.output;
+  if (!text.trim()) return;
+  const result = last.result ?? { text, toolCalls: [] };
+  const assistantMsg = await settleReply(run, text, result, last.requested);
+  emit2(c);
+  emitEvermindLearnReconcile(run, assistantMsg, text);
+  req.onActivity?.(chatId);
+}
+
+// src/composingActivity.ts
+function utf8ByteLength2(text) {
+  if (!text) return 0;
+  if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(text).length;
+  let bytes = 0;
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    bytes += cp < 128 ? 1 : cp < 2048 ? 2 : cp < 65536 ? 3 : 4;
+  }
+  return bytes;
+}
+function toolCallArgBytes(calls) {
+  let total = 0;
+  for (const c of calls) total += utf8ByteLength2(c.args ?? "");
+  return total;
+}
+function createComposingActivity(sink, opts) {
+  const now = opts.now ?? Date.now;
+  let names = /* @__PURE__ */ new Map();
+  let bytes = 0;
+  let startedAt = null;
+  let published;
+  const publish = (label, immediate) => {
+    sink.set({
+      phase: "composing",
+      startedAt,
+      step: opts.step,
+      bytes,
+      ...label ? { label } : {}
+    });
+    published = label;
+    if (immediate) sink.repaint();
+    else sink.coalescedRepaint();
+  };
+  return {
+    onDelta(index, partial) {
+      if (partial.name) names.set(index, partial.name);
+      bytes += utf8ByteLength2(partial.argsFragment ?? "");
+      const label = names.get(index) ?? published;
+      if (startedAt === null) {
+        startedAt = now();
+        publish(label, true);
+        return;
+      }
+      publish(label, !published && !!label);
+    },
+    bytes() {
+      return bytes;
+    },
+    reset() {
+      names = /* @__PURE__ */ new Map();
+      bytes = 0;
+      startedAt = null;
+      published = void 0;
+    }
+  };
+}
+
+// src/runStore/modelPreflight.ts
+var MODEL_PREFLIGHT_LABEL = "model.preflight";
+function planModelWarning2(model, book2 = snapshotPriceBook()) {
+  if (!model || model === "default") return null;
+  const price = listPriceOf(book2, model);
+  const tier2 = price ? resolveModelTier({ price }) : void 0;
+  return tier2 && isAgenticTier(tier2) === false ? { model, tier: tier2 } : null;
+}
+function modelPreflightEvent2(result, ts, plan) {
+  const entries = parseByoUnresolved((result?.byoUnresolved ?? []).filter((e) => e.trim()));
+  if (entries.length === 0 && !plan) return null;
+  const said = [];
+  if (entries.length > 0) {
+    const onto = result?.fallback ? ` This run will use ${result.fallback} instead.` : " This run will fall back to another model.";
+    said.push(`${entries.map(byoUnresolvedSummary).join("; ")}.${onto}`);
+  }
+  if (plan) {
+    said.push(`the plan phase will run on ${plan.model}, a ${plan.tier}-tier (Flash-class) model \u2014 weak at planning a multi-step change; pick a stronger model for planning if the result matters.`);
+  }
+  return {
+    ts,
+    category: "message",
+    label: MODEL_PREFLIGHT_LABEL,
+    args: {
+      ...entries.length ? { byoUnresolved: entries.map((e) => e.reason ? `${e.provider}:${e.reason}` : e.provider).join(",") } : {},
+      ...result?.fallback && entries.length ? { fallback: result.fallback } : {},
+      ...plan ? { planModel: plan.model, planTier: plan.tier } : {}
+    },
+    result: `Before the first turn: ${said.join(" Also: ")}`
+  };
+}
+async function applyModelPreflight(c, preflight, pinnedModel) {
+  if (!preflight) return;
+  let result;
+  try {
+    result = await preflight();
+  } catch {
+    return;
+  }
+  const plan = c.codeChanged ? null : planModelWarning2(pinnedModel);
+  const event = modelPreflightEvent2(result, nowIso(), plan);
+  if (!event) return;
+  if (result?.byoUnresolved.length) accrueByoUnresolved(c, result.byoUnresolved.join(","));
+  pushTrace(c, event);
+  emit2(c);
+}
+
+// src/runStore/modelDowngrade.ts
+var MODEL_DOWNGRADE_LABEL = "llm.model_downgrade";
+function modelDowngradeEvent(input) {
+  const { requested, resolved, step, ts } = input;
+  if (resolved === "default") return null;
+  if (requested !== "default") {
+    if (resolved === requested) return null;
+    return {
+      ts,
+      category: "message",
+      label: MODEL_DOWNGRADE_LABEL,
+      args: { requestedModel: requested, model: resolved, step },
+      result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) \u2014 a smaller context window can truncate long transcripts.`
+    };
+  }
+  const unresolved = (input.byoUnresolved ?? "").trim();
+  const flash = !unresolved && input.planPhase ? planModelWarning2(resolved, input.book) : null;
+  if (!unresolved && !flash) return null;
+  const said = input.events.some((e) => {
+    if (e.label !== MODEL_DOWNGRADE_LABEL) return false;
+    const args = e.args;
+    return args?.requestedModel === "default" && args.model === resolved;
+  });
+  if (said) return null;
+  if (flash) {
+    return {
+      ts,
+      category: "message",
+      label: MODEL_DOWNGRADE_LABEL,
+      args: { requestedModel: "default", model: resolved, step, planTier: flash.tier },
+      result: `Auto-routing planned this run on ${resolved}, a ${flash.tier}-tier (Flash-class) model \u2014 weak at planning a multi-step change; pick a stronger model for planning if the result matters.`
+    };
+  }
+  return {
+    ts,
+    category: "message",
+    label: MODEL_DOWNGRADE_LABEL,
+    args: { requestedModel: "default", model: resolved, step, byoUnresolved: unresolved },
+    result: `Auto-routing answered with ${resolved} because a connected account could not be used (${unresolved}) \u2014 the run is not on the tenant's own model. Reconnect it under Settings \u25B8 API Keys.`
+  };
+}
+
+// src/runStore/turnRecorder.ts
+async function recordTurn(run, t) {
+  const { c, chatId, allTools } = run;
+  const { result, iter, llmStart, role, resolved, requested, advertised } = t;
+  const advertisedNames = t.advertisedNames;
+  const firstTokenAt = t.live.firstTokenAt();
+  if (result.resolvedModel && result.toolCalls.some((tc) => isCodeChangeTool(tc.name))) c.codeModel = result.resolvedModel;
+  accrueByoUnresolved(c, result.byoUnresolved);
+  accrueProviderCap(c, result.providerCap);
+  c.runUsage.promptTokens += result.usage?.prompt ?? 0;
+  c.runUsage.completionTokens += result.usage?.completion ?? 0;
+  if (result.resolvedModel) {
+    c.runUsage.model = result.resolvedModel;
+    c.lastServedModel = result.resolvedModel;
+  }
+  setLastResolvedModel(chatId, result.resolvedModel);
+  const downgrade = modelDowngradeEvent({
+    requested,
+    resolved,
+    step: iter,
+    ts: nowIso(),
+    events: runTrace(c),
+    planPhase: !c.codeChanged,
+    ...result.byoUnresolved ? { byoUnresolved: result.byoUnresolved } : {}
+  });
+  if (downgrade) pushTrace(c, downgrade);
+  const localFallback = localFallbackTrace(nowIso(), iter, result.localFirst);
+  if (localFallback) pushTrace(c, localFallback);
+  const narratedUnadvertised = result.toolCalls.length === 0 ? toolNamesMentionedIn(result.text).filter((n2) => !advertisedNames.has(n2)) : [];
+  const argBytes = toolCallArgBytes(result.toolCalls);
+  const contextWindow = await run.windowFit.contextWindow?.();
+  pushTrace(c, {
+    ts: nowIso(),
+    category: "llm",
+    label: "llm.complete",
+    durationMs: nowMs2() - llmStart,
+    ttftMs: firstTokenAt !== void 0 ? firstTokenAt - llmStart : void 0,
+    // `model` is the model the gateway ACTUALLY used (resolved), falling back to
+    // what we requested when the gateway didn't report one. `requestedModel`
+    // keeps the caller's ask (empty/'default' ⇒ gateway auto-selects) so triage
+    // can tell "what I asked for" from "what answered".
+    args: {
+      model: resolved,
+      requestedModel: requested,
+      step: iter,
+      // What the turn asked the gateway for (analysis vs code vs chat), so a copied
+      // report shows which model planned and which one wrote the code.
+      role,
+      toolCalls: result.toolCalls.length,
+      // How much the turn actually EMITTED. "1 tool call(s) · 202509ms" said
+      // nothing about a turn that spent three minutes streaming 21 KB of
+      // `write_file` arguments — which is what a long turn usually is.
+      ...argBytes > 0 ? { argBytes } : {},
+      ...contextWindow ? { contextWindow } : {},
+      // Which account served the turn + any connected-BYO provider the gateway
+      // could NOT resolve — so triage tells "ran on the shared pool despite a
+      // connected Claude account (expired?)" apart from "nothing connected".
+      account: result.account,
+      // A turn answered on this machine cost nothing: reported as 0 explicitly. Any other turn carries NO cost
+      // (unknown, never free) - the run's total is decided over all of them (`codeRunOutcome`).
+      ...servedOnDevice(result) ? { costMc: 0 } : {},
+      byoUnresolved: result.byoUnresolved,
+      // How the gateway ROUTED the turn: the candidates it walked and every model it
+      // tried and left (`model:status kind`). The only record of why a coding turn
+      // landed where it did — a connected coder never seeded reads differently from
+      // one seeded and refused.
+      ...gatewayRoutingArgs(result.gateway),
+      // How many tools the turn was actually OFFERED, out of the whole catalog.
+      // A zero here is the difference between "the model refused to act" and "it had
+      // nothing to act with" — previously unanswerable from a copied report, which
+      // only ever carried the registry-wide total.
+      advertisedTools: advertised.length,
+      catalogTools: allTools?.length ?? 0,
+      ...narratedUnadvertised.length ? { narratedUnadvertised } : {},
+      // The stream filter strips every call it lifts, so call markup still IN the text
+      // is a dialect it does not know: the model tried to act and the call never ran.
+      // Recorded so a copied report says "parser gap" instead of "won't call tools".
+      ...result.toolCalls.length === 0 && hasCallMarkup(result.text) ? { unliftedCallMarkup: true } : {},
+      // What the vendor's RAW response carried, counted before the gateway translated
+      // it — so a text-only turn reads as "the model returned no call" or "a returned
+      // call was lost on the way", never as a guess. Absent when the vendor does not report it.
+      ...result.upstream ? { upstreamFunctionCalls: result.upstream.functionCalls, upstreamRecovered: result.upstream.recovered } : {}
+    },
+    // Structured diagnostics fields — the A-vs-B triage reads these directly.
+    usage: result.usage,
+    finishReason: result.finishReason,
+    textChars: result.text.length,
+    result: `${result.toolCalls.length} tool call(s) \xB7 ${result.text.length} chars \xB7 finish: ${result.finishReason ?? "\u2014"}${result.usage?.prompt != null ? ` \xB7 prompt ${result.usage.prompt} tok` : ""}`
+  });
+  if (result.text.trim()) {
+    pushTrace(c, { ts: nowIso(), category: "message", label: "agent.message", args: { step: iter }, result: result.text });
+  }
+  run.lastTurnInterruption = turnInterruption(result.finishReason);
+  const meta = { result, resolved, requested, advertised: advertised.length, advertisedNames };
+  return meta;
+}
+
+// src/runStore/turnStream.ts
+function openLiveTurn(c, step) {
+  setActivity(c, { phase: "thinking", startedAt: Date.now(), step });
+  let firstTokenAt;
+  const composing = createComposingActivity(
+    { set: (a) => {
+      c.activity = a;
+    }, repaint: () => emit2(c), coalescedRepaint: () => emitStreaming(c) },
+    { step }
+  );
+  const handlers = {
+    onModel: liveTurnModel(c),
+    onConnectRetry: connectRetryStep(c, step),
+    onTextDelta: (d) => {
+      c.streamingText += d;
+      if (firstTokenAt === void 0) {
+        firstTokenAt = nowMs2();
+        c.activity = { phase: "writing", startedAt: Date.now(), step };
+        emit2(c);
+        return;
+      }
+      emitStreaming(c);
+    },
+    // The first argument fragment is this turn's first token too: a tool-only turn recorded no ttft at all.
+    onToolCallDelta: (index, partial) => {
+      if (firstTokenAt === void 0) firstTokenAt = nowMs2();
+      composing.onDelta(index, partial);
+    }
+  };
+  return {
+    handlers,
+    firstTokenAt: () => firstTokenAt,
+    argBytes: () => composing.bytes(),
+    restart: () => {
+      c.streamingText = "";
+      firstTokenAt = void 0;
+      composing.reset();
+      emit2(c);
+    }
+  };
+}
+
+// src/run/loopTurn.ts
+function loopTurnObserver(run) {
+  const { c, req } = run;
+  const last = { step: 0 };
+  let iter = 0;
+  const observer = {
+    open(request) {
+      iter += 1;
+      const step = iter;
+      last.step = step;
+      c.streamingText = "";
+      emit2(c);
+      const live2 = openLiveTurn(c, step);
+      const llmStart = nowMs2();
+      const tools = request.tools ?? [];
+      return {
+        handlers: live2.handlers,
+        metadata: run.metadata,
+        call: { prompt_cache_key: `brain:${run.serverChatId ?? req.clientChatId ?? "local"}`, conversationKey: run.chatId },
+        fit: (messages) => run.windowFit.prepare({ messages, ...request.model ? { model: request.model } : {}, tools, maxTokens: turnMaxTokens(req.maxTokens, tools.length > 0), step }),
+        around: (stream) => asLiveTurn(c, stream),
+        async completed(result) {
+          const resolved = result.resolvedModel ?? request.model ?? "default";
+          const requested = request.model ?? "default";
+          run.windowFit.served(result.resolvedModel ?? request.model);
+          if (result.toolCalls.length > 0) run.announcementRecoveries = 0;
+          await recordTurn(run, {
+            result,
+            iter: step,
+            llmStart,
+            live: live2,
+            role: request.role ?? (tools.length > 0 ? "code" : "chat"),
+            resolved,
+            requested,
+            advertised: tools,
+            advertisedNames: new Set(tools.map((t) => t.function.name))
+          });
+          last.result = result;
+          last.requested = requested;
+        },
+        failed(error) {
+          if (!c.abort?.signal.aborted) {
+            const broke = error instanceof StreamInterruptedError && error.model || request.model;
+            pushTrace(c, providerFailureTrace(nowIso(), step, broke, error, nowMs2() - llmStart));
+          }
+          return error;
+        }
+      };
+    }
+  };
+  return { observer, last };
+}
+
+// src/run/runMessages.ts
+function toRunMessage(row) {
+  const r = row;
+  const content = contentText(r.content);
+  if (r.role === "tool") return { role: "tool", content, ...r.tool_call_id ? { toolCallId: r.tool_call_id } : {} };
+  if (r.role === "assistant" && r.tool_calls?.length) {
+    return { role: "assistant", content, toolCalls: r.tool_calls.map((tc) => ({ id: tc.id, name: tc.function.name, arguments: tc.function.arguments })) };
+  }
+  return { role: r.role, content };
+}
+
+// src/runStore/deviceLevers.ts
+function deviceLeverOn(id) {
+  const env = globalThis.process?.env;
+  return isCostLeverOn(env, id, null);
+}
+
+// src/run/contextSource.ts
+var NO_CONTEXT = { focus: [], facts: [], recall: [] };
+function brainContextSource(req, gather) {
+  return {
+    async pack(task) {
+      const gathered = await gather?.(task);
+      if (gathered) return gathered;
+      const served = await req.servedReads?.() ?? [];
+      return { ...NO_CONTEXT, focus: served.map((read2) => ({ path: read2.path, content: read2.content })) };
+    }
+  };
+}
+
+// src/run/eventSink.ts
+function traceStepFor(event, ts) {
+  switch (event.kind) {
+    case "model.preflight":
+      if (event.notices.length === 0) return null;
+      return {
+        ts,
+        category: "message",
+        label: "model.preflight",
+        args: { status: event.status },
+        result: `Before the first turn: ${event.notices.join(" ")}`
+      };
+    case "llm.model_downgrade":
+      return {
+        ts,
+        category: "message",
+        label: "llm.model_downgrade",
+        args: { requestedModel: event.requestedModel, model: event.model, step: event.step },
+        result: event.reason
+      };
+    case "steer.applied":
+      return {
+        ts,
+        category: "message",
+        label: "steer.applied",
+        args: { step: event.step, messages: 1 },
+        result: "The person sent direction while the run was working; it reached the next model call."
+      };
+    default:
+      return null;
+  }
+}
+function brainEventSink(c, outcome) {
+  return {
+    emit(event) {
+      const step = traceStepFor(event, nowIso());
+      if (step) {
+        pushTrace(c, step);
+        return;
+      }
+      emit2(c);
+    },
+    // The host's report may resolve to anything (a stored id, a response); the sink's contract is
+    // `void`, so what it resolves to is dropped here.
+    ...outcome ? { outcome: async (row) => {
+      await outcome(row);
+    } } : {}
+  };
+}
+
+// src/run/humanChannel.ts
+function confirmRequestFor(gate) {
+  const reason = gate.reason ?? gate.directive;
+  return {
+    name: gate.tool && gate.tool !== "*" ? gate.tool : "a tool call",
+    args: { gate: gate.id, ...reason ? { reason } : {}, ...gate.paths?.length ? { paths: gate.paths } : {} }
+  };
+}
+function brainHumanChannel(runKey) {
+  return {
+    async ask() {
+      return { kind: "paused" };
+    },
+    async approve(gate) {
+      const ok = await requestRunConfirm(runKey, confirmRequestFor(gate));
+      return ok ? { kind: "answered", answer: "approved" } : { kind: "answered", answer: "declined" };
+    }
+  };
+}
+
+// src/run/runStorePort.ts
+function transcriptOf(state) {
+  const rows = [];
+  for (const raw of state.messages) {
+    const row = raw;
+    if (row.role === "system" || typeof row.role !== "string") continue;
+    rows.push(toStreamMessage(raw));
+  }
+  return rows;
+}
+function cellRunStore(c, opts = {}) {
+  let written = opts.seeded ?? 0;
+  return {
+    load: () => void 0,
+    save(state) {
+      const rows = transcriptOf(state);
+      if (rows.length > written) c.transcript.push(...rows.slice(written));
+      written = Math.max(written, rows.length);
+    },
+    ...opts.commitMemory ? { commitMemory: opts.commitMemory } : {}
+  };
+}
+
+// src/run/webAdapter.ts
+var READS_BEFORE_NUDGE = 6;
+var GUARD_LEVERS = ["a3_progress_detector"];
+function buildBrainRunPorts(b) {
+  const { req, cell, runKey } = b;
+  return {
+    model: brainModelTransport({
+      stream: req.stream,
+      ...b.turn ? { turn: b.turn } : {},
+      ...b.handlers ? { handlers: b.handlers } : {},
+      call: {
+        ...req.routingMode ? { routingMode: req.routingMode } : {},
+        ...req.modelStrict != null ? { modelStrict: req.modelStrict } : {},
+        ...req.reasoning ? { reasoning: req.reasoning } : {},
+        ...b.call
+      },
+      ...req.windowSources ? { windows: req.windowSources } : {},
+      ...req.modelPreflight ? { preflight: req.modelPreflight } : {}
+    }),
+    capabilities: b.capabilities,
+    store: b.store ?? cellRunStore(cell, { ...b.seeded !== void 0 ? { seeded: b.seeded } : {}, ...b.commitMemory ? { commitMemory: b.commitMemory } : {} }),
+    ...b.platform ? { platform: b.platform } : {},
+    events: brainEventSink(cell, b.reportOutcome),
+    human: brainHumanChannel(runKey),
+    steering: b.steering ?? runSteeringSource(runKey),
+    context: brainContextSource(req, b.gatherContext)
+  };
+}
+function brainRunTask(b, defaultRepo) {
+  const { req } = b;
+  return {
+    prompt: b.request,
+    ...req.serverChatId != null ? { chatId: req.serverChatId } : {},
+    ...req.projectId != null ? { projectId: req.projectId } : {},
+    dispatch: req.lineage ? { source: "subagent", parentRunId: String(req.lineage.ownerKey) } : { source: "chat" },
+    ...defaultRepo ? { workspace: { defaultRepo } } : {}
+  };
+}
+function brainRunPolicy(b) {
+  const { req } = b;
+  return {
+    entryPoint: b.entryPoint,
+    toolScope: req.lineage ? "subagent" : req.chatMode === "chat" ? "chat-reply" : "chat-work",
+    role: "general",
+    levers: GUARD_LEVERS.filter((id) => deviceLeverOn(id)),
+    // A Brain run has NO tool-iteration ceiling: the kernel's consecutive-failure breaker
+    // is its only limit (`runStore/runLoop.ts`).
+    budgets: req.maxRunBudgetUsd && req.maxRunBudgetUsd > 0 ? { usd: req.maxRunBudgetUsd } : {},
+    codeChangeTools: [...CODE_CHANGE_TOOLS],
+    ...req.model && req.modelStrict ? { pinnedModel: req.model } : {},
+    inference: "hybrid",
+    verify: "none",
+    approvalGates: [...b.approvalGates ?? []],
+    delegation: { requested: asksForSubagents(b.request), readsBeforeNudge: READS_BEFORE_NUDGE }
+  };
+}
+
+// src/run/runPrepared.ts
+async function runPrepared(run) {
+  const { c, req, runKey } = run;
+  const { observer, last } = loopTurnObserver(run);
+  const platform = brainPlatformTools(run);
+  const binding = {
+    entryPoint: req.entryPoint ?? "web",
+    cell: c,
+    runKey,
+    req,
+    capabilities: { capabilities: /* @__PURE__ */ new Set() },
+    request: run.userRequest,
+    turn: observer,
+    platform: platform.tools,
+    steering: loopSteeringSource(run, () => last.step),
+    store: loopRunStore(c, { toolRowAppended: platform.toolRowAppended }),
+    ...req.reportRunRow ? { reportOutcome: req.reportRunRow } : {}
+  };
+  const transcript = [{ role: "system", content: run.systemPrompt }, ...run.convo.map(toRunMessage)];
+  const request = transcript.map((row) => row.role).lastIndexOf("user");
+  if (request >= 0) transcript[request] = { ...transcript[request], task: true };
+  const signal = c.abort?.signal;
+  const outcome = await runAgent({
+    task: { ...brainRunTask(binding), transcript },
+    policy: brainRunPolicy(binding),
+    ports: buildBrainRunPorts(binding),
+    ...signal ? { signal } : {}
+  });
+  await settleBrainRun(run, outcome, last);
+}
+
 // ../packages/agent-skills/src/spec.ts
 var SPEC_FIELDS = ["name", "description", "license", "compatibility", "metadata", "allowed-tools"];
 var SKILL_BINARY_FILE_MAX_BYTES = 5 * 1024 * 1024;
@@ -22473,58 +26719,6 @@ function restatedReplyNudge() {
   ].join("\n");
 }
 
-// src/readCoverage.ts
-function isUnscopedMutation(tool, args) {
-  return isUnscopedMutationTool(tool) && !isReadOnlyShellCall(tool, args);
-}
-var BRAIN_READ_TRAITS = {
-  visitTarget,
-  activityTarget,
-  questionSeparator: VISIT_QUESTION_SEPARATOR,
-  isUnscopedMutation,
-  isCodeChangeTool,
-  isLocalWorkspaceTool,
-  isRepoPublishTool,
-  isRepoStateReadTool
-};
-var ReadCoverage2 = class extends ReadCoverage {
-  constructor() {
-    super(BRAIN_READ_TRAITS);
-  }
-};
-
-// src/runStore/runLoopContext.ts
-var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files", "find_symbol", "file_outline", "semantic_search", "repo_map", "read_compressed", "local_research"]);
-var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isRepoStateReadTool(name) || isReadOnlyPlatformTool(name);
-var metaOf2 = (turn) => turn.meta;
-function reportToPolicy(run, event) {
-  return run.policy = reduceRunPolicy(run.policy, event);
-}
-function failureAdvisoryFor(run, name, args, out, step) {
-  const attempts = run.failures.record(name, args);
-  const advisory = repeatedFailureAdvisory(name, attempts, failureReason(out));
-  if (advisory) {
-    pushTrace(run.c, {
-      ts: nowIso(),
-      category: "message",
-      label: "tools.repeat_failure_guard",
-      args: { step, tool: name, attempts },
-      result: advisory
-    });
-  }
-  return advisory;
-}
-async function settleReply(run, rawText, result, requested) {
-  const { c, chatId, convo } = run;
-  const text = canonicalTurnText(rawText);
-  convo.push({ role: "assistant", content: replayTextOf(text) });
-  const meta = provenanceMetadata(result, requested);
-  const [assistantMsg] = await run.req.persistence.sendMessages(chatId, [{ role: "assistant", content: text, ...meta ? { metadata: meta } : {} }]);
-  c.streamingText = "";
-  recordAppended(c, assistantMsg);
-  return assistantMsg;
-}
-
 // src/runStore/pipelineRoute.ts
 function decideRunPipeline(req, request, context) {
   if (!req.pipeline || req.lineage) return null;
@@ -22625,10 +26819,10 @@ function changeBudgetTurn(run, step, selected) {
 }
 
 // src/runStore/cacheServedStreak.ts
-var CACHE_SERVED_STREAK = 6;
-var MIN_STREAK_TURNS = 2;
-var MAX_NO_PROGRESS_TURNS = 2;
-var CacheServedStreak = class {
+var CACHE_SERVED_STREAK2 = 6;
+var MIN_STREAK_TURNS2 = 2;
+var MAX_NO_PROGRESS_TURNS2 = 2;
+var CacheServedStreak2 = class {
   streak = 0;
   turns = /* @__PURE__ */ new Set();
   fired = 0;
@@ -22647,7 +26841,7 @@ var CacheServedStreak = class {
   }
   /** Whether the streak is due a forced turn. */
   due() {
-    return this.streak >= CACHE_SERVED_STREAK && this.turns.size >= MIN_STREAK_TURNS && this.fired < MAX_NO_PROGRESS_TURNS;
+    return this.streak >= CACHE_SERVED_STREAK2 && this.turns.size >= MIN_STREAK_TURNS2 && this.fired < MAX_NO_PROGRESS_TURNS2;
   }
   /** A forced turn was spent on the streak: the count starts over. */
   consume() {
@@ -22673,114 +26867,6 @@ function trace2(run, step, streak, forced) {
     args: { step, streak, forced },
     result: `${streak} consecutive call(s) answered from the read cache \u2014 this turn offers ${forced === "hand_off" ? "hand_off alone" : "the change tools alone"} and requires a call.`
   });
-}
-
-// src/toolRouter.ts
-var TOOL_ROUTER_FIND = "builtin_tools_find";
-var TOOL_ROUTER_DESCRIBE = "builtin_tools_describe";
-var TOOL_ROUTER_INVOKE = "builtin_tools_invoke";
-function isRouterTool(name) {
-  return name === TOOL_ROUTER_FIND || name === TOOL_ROUTER_DESCRIBE || name === TOOL_ROUTER_INVOKE;
-}
-var FIND_LIMIT = 25;
-function routerToolSpecs(catalogSize) {
-  const preamble = `This conversation has ${catalogSize} platform tools available in total, but only the most relevant ones are listed directly on each turn.`;
-  return [
-    {
-      type: "function",
-      function: {
-        name: TOOL_ROUTER_FIND,
-        description: `${preamble} Search ALL of them by keyword and get back their names and descriptions. Use this FIRST whenever the tool you want is not in your visible list \u2014 do NOT assume a capability is missing, and never write a tool call as plain text.`,
-        parameters: {
-          type: "object",
-          properties: {
-            query: { type: "string", description: 'Keywords, e.g. "tickets backlog status" or "pull request".' }
-          },
-          required: ["query"]
-        }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: TOOL_ROUTER_DESCRIBE,
-        description: `${preamble} Get the exact parameter schema for one tool by name, so you can build its arguments before calling it with ${TOOL_ROUTER_INVOKE}.`,
-        parameters: {
-          type: "object",
-          properties: {
-            name: { type: "string", description: `Exact tool name, e.g. "builtin_chats_list_tickets".` }
-          },
-          required: ["name"]
-        }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: TOOL_ROUTER_INVOKE,
-        description: `${preamble} Call ANY of them by name, including ones not listed on this turn. This is a real call and it really executes \u2014 use it instead of describing what you would call.`,
-        parameters: {
-          type: "object",
-          properties: {
-            name: { type: "string", description: "Exact tool name to call." },
-            args: { type: "object", description: "Arguments object for that tool." }
-          },
-          required: ["name"]
-        }
-      }
-    }
-  ];
-}
-function words2(text) {
-  return text.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
-}
-function findTools(catalog, query, limit = FIND_LIMIT) {
-  const terms = words2(query);
-  if (terms.length === 0) return [];
-  const scored = [];
-  catalog.forEach((tool, index) => {
-    const name = tool.function?.name ?? "";
-    if (!name) return;
-    const description = tool.function?.description ?? "";
-    const haystackName = name.toLowerCase();
-    const haystackDesc = description.toLowerCase();
-    let score2 = 0;
-    for (const t of terms) {
-      if (haystackName.includes(t)) score2 += 10;
-      else if (haystackDesc.includes(t)) score2 += 1;
-    }
-    if (score2 > 0) scored.push({ m: { name, description }, score: score2, index });
-  });
-  return scored.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, limit).map((e) => e.m);
-}
-function describeTool(catalog, name) {
-  return catalog.find((t) => t.function?.name === name) ?? null;
-}
-function handleRouterCall(catalog, name, args) {
-  const a = args ?? {};
-  if (name === TOOL_ROUTER_FIND) {
-    const query = typeof a.query === "string" ? a.query : "";
-    const matches = findTools(catalog, query);
-    return {
-      result: matches.length ? { matches, note: `Call one with ${TOOL_ROUTER_INVOKE}, or ${TOOL_ROUTER_DESCRIBE} first for its arguments.` } : { matches: [], note: `No tool matches "${query}". Try broader keywords; ${catalog.length} tools exist.` }
-    };
-  }
-  if (name === TOOL_ROUTER_DESCRIBE) {
-    const target2 = typeof a.name === "string" ? a.name : "";
-    const spec = describeTool(catalog, target2);
-    return {
-      result: spec ? { name: target2, description: spec.function?.description ?? "", parameters: spec.function?.parameters ?? {} } : { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
-    };
-  }
-  const target = typeof a.name === "string" ? a.name : "";
-  if (!target) return { result: { error: `${TOOL_ROUTER_INVOKE} requires a "name".` } };
-  if (isRouterTool(target)) {
-    return { result: { error: `${target} cannot be invoked through the router.` } };
-  }
-  if (!describeTool(catalog, target)) {
-    return { result: { error: `Unknown tool "${target}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
-  }
-  return { dispatch: { name: target, args: asToolArgs(a.args) ?? {} } };
 }
 
 // src/runStore/progressGuard.ts
@@ -22938,170 +27024,11 @@ function readRequest(c, convo, mode) {
   return { userRequest, directives, goal: changeRequest ? chatGoalText(convo) : userRequest };
 }
 
-// src/codeChanges.ts
-var DELEGATION_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents", "wait_agents", HAND_OFF_TOOL]);
-function isDelegationTool(name) {
-  return DELEGATION_TOOLS.has(name);
-}
-function codeChangesOf(name, args, out) {
-  if (isCodeChangeTool(name)) {
-    if (isFailedToolResult(out)) return null;
-    const file = codeChangeFile(args);
-    return file ? [file] : [];
-  }
-  if (isDelegationTool(name)) {
-    const files = out?.changedFiles;
-    if (!Array.isArray(files)) return null;
-    const named = files.filter((f) => typeof f === "string" && f.trim().length > 0);
-    return named.length ? named : null;
-  }
-  return null;
-}
-
-// src/placeholderGuard.ts
-var PLACEHOLDER_GUARD_LABEL = "tools.placeholder_guard";
-var SOURCE_FILE = /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|swift|cs|rb|php|sql|sh|ps1|vue|svelte)$/i;
-var COMMENT_MARKERS = [
-  /\bTODO\b/,
-  /\bFIXME\b/,
-  /\bXXX\b/,
-  /\bfor now\b/i,
-  /\b(?:a|the) (?:proper|real|full) implementation (?:would|should|will)\b/i,
-  /\bnot (?:yet )?(?:implemented|wired)\b/i,
-  // The model's own reasoning left in the source — it was talking to itself, not
-  // documenting the code.
-  /\blet me\b/i,
-  /\bI'll\b/
-];
-var STUB_THROW = /throw new Error\(\s*["'`]\s*(?:not (?:yet )?implemented|todo)/i;
-function commentOf(line2) {
-  const t = line2.trim();
-  if (t.startsWith("//") || t.startsWith("#") || t.startsWith("*") || t.startsWith("/*")) return t;
-  const slash = line2.indexOf("//");
-  if (slash > 0 && line2[slash - 1] !== ":") return line2.slice(slash);
-  return null;
-}
-function markedLines(text) {
-  const out = [];
-  for (const line2 of text.split(/\r?\n/)) {
-    const comment = commentOf(line2);
-    if (comment && COMMENT_MARKERS.some((re) => re.test(comment)) || STUB_THROW.test(line2)) {
-      out.push(line2.trim().slice(0, 160));
-    }
-  }
-  return out;
-}
-function placeholdersWritten(tool, args) {
-  const a = args ?? {};
-  const path2 = typeof a.path === "string" ? a.path : "";
-  if (!path2 || !SOURCE_FILE.test(path2)) return [];
-  const added = tool === "write_file" ? a.content : tool === "edit_file" ? a.new_string : void 0;
-  if (typeof added !== "string" || !added) return [];
-  const before = new Set(typeof a.old_string === "string" ? markedLines(a.old_string) : []);
-  return markedLines(added).filter((text) => !before.has(text)).map((text) => ({ path: path2, text }));
-}
-function placeholderAdvisory(hits) {
-  if (!hits.length) return null;
-  const shown = hits.slice(0, 3).map((h) => `\`${h.text}\``).join(", ");
-  return `PLACEHOLDER WRITTEN in ${hits[0].path}: ${shown}${hits.length > 3 ? ` (+${hits.length - 3} more)` : ""}. This is unfinished work, and comments that narrate your own reasoning do not belong in the source. Finish it in this run \u2014 or, if it is genuinely blocked, say so plainly in your reply and name the blocker. Never report work that contains a placeholder as done or fixed.`;
-}
-function placeholderTraceEvent(tool, hits, ts) {
-  return {
-    ts,
-    category: "message",
-    label: PLACEHOLDER_GUARD_LABEL,
-    args: { tool, hits },
-    result: placeholderAdvisory(hits) ?? ""
-  };
-}
-function delegationPlaceholders(result) {
-  return asHits(resultField(result, "placeholders"));
-}
-function asHits(raw) {
-  if (!Array.isArray(raw)) return [];
-  return raw.flatMap((x) => {
-    const hit = x;
-    return typeof hit.path === "string" && typeof hit.text === "string" ? [{ path: hit.path, text: hit.text }] : [];
-  });
-}
-function resultField(result, key) {
-  let obj = result;
-  if (typeof obj === "string") {
-    try {
-      obj = JSON.parse(obj);
-    } catch {
-      return void 0;
-    }
-  }
-  return obj && typeof obj === "object" ? obj[key] : void 0;
-}
-
-// src/completionGuard.ts
-var TICKET_UPDATE = /tasks[._]update/i;
-var DONE_STATUSES = /* @__PURE__ */ new Set(["done", "completed", "complete"]);
-function isTicketCompletion(tool, args) {
-  if (!TICKET_UPDATE.test(tool)) return false;
-  const status2 = args?.status;
-  return typeof status2 === "string" && DONE_STATUSES.has(status2.toLowerCase());
-}
-function canCompleteTicket(isOnBaseBranch, userDeclinedShipping) {
-  if (isOnBaseBranch) return true;
-  if (userDeclinedShipping) return true;
-  return false;
-}
-function notOnBaseBranchAdvisory() {
-  return "CANNOT MARK DONE \u2014 code is not on the base branch (main/master). Either ship to main/master first, or if you intentionally left the code uncommitted, say so explicitly in your reply so this guard knows to allow it.";
-}
-var PlaceholderLedger = class {
-  open = /* @__PURE__ */ new Map();
-  /** Account for ONE successful write, given the hits the guard found in it. */
-  record(tool, args, hits) {
-    const a = args ?? {};
-    const path2 = typeof a.path === "string" ? a.path : "";
-    if (!path2) return;
-    if (tool === "write_file") {
-      this.set(path2, hits.map((h) => h.text));
-      return;
-    }
-    if (tool === "edit_file") {
-      const current = new Set(this.open.get(path2) ?? []);
-      const removed = typeof a.old_string === "string" ? markedLines(a.old_string) : [];
-      const kept = new Set(typeof a.new_string === "string" ? markedLines(a.new_string) : []);
-      for (const text of removed) if (!kept.has(text)) current.delete(text);
-      for (const h of hits) current.add(h.text);
-      this.set(path2, [...current]);
-      return;
-    }
-    if (tool === "delete_file") this.open.delete(path2);
-  }
-  /** Placeholders a delegated child reported writing. The parent never saw those edits,
-   *  so they stay outstanding until the parent rewrites or edits the lines itself. */
-  add(hits) {
-    for (const h of hits) {
-      const texts = this.open.get(h.path) ?? /* @__PURE__ */ new Set();
-      texts.add(h.text);
-      this.open.set(h.path, texts);
-    }
-  }
-  outstanding() {
-    return [...this.open.entries()].flatMap(([path2, texts]) => [...texts].map((text) => ({ path: path2, text })));
-  }
-  set(path2, texts) {
-    if (texts.length) this.open.set(path2, new Set(texts));
-    else this.open.delete(path2);
-  }
-};
-function completionAdvisory(open) {
-  if (!open.length) return null;
-  const shown = open.slice(0, 3).map((h) => `${h.path}: \`${h.text}\``).join("; ");
-  return `MARKED DONE OVER A PLACEHOLDER. This run wrote ${open.length} placeholder(s) it has not removed \u2014 ${shown}${open.length > 3 ? ` (+${open.length - 3} more)` : ""}. A ticket is done when its code works in the product, not when a stub compiles. Finish the placeholder and keep the ticket done, or set it back to in_progress and name what blocks it.`;
-}
-
 // src/runStore/runPreamble.ts
-var import_working11 = require("@seanhogg/builderforce-memory/working");
+var import_working12 = require("@seanhogg/builderforce-memory/working");
 
 // src/runStore/runFoldMarker.ts
-var import_working10 = require("@seanhogg/builderforce-memory/working");
+var import_working11 = require("@seanhogg/builderforce-memory/working");
 function entryKey(m) {
   return `${m.role}\0${m.role === "assistant" ? replayTextOf(contentText(m.content ?? "")) : contentText(m.content ?? "")}`;
 }
@@ -23145,14 +27072,14 @@ function recordTranscriptAnchors(c, req) {
   }
 }
 async function persistFoldMarker(c, chatId, persistence, fold) {
-  const covered = (0, import_working10.foldKeepFromId)(c.transcriptAnchors, fold.coveredEnd);
+  const covered = (0, import_working11.foldKeepFromId)(c.transcriptAnchors, fold.coveredEnd);
   if (covered === void 0) return;
   const keepFromId = c.unseenFromId === void 0 ? covered : Math.min(covered, c.unseenFromId);
   try {
     const [msg] = await persistence.sendMessages(chatId, [{
       role: "assistant",
-      content: (0, import_working10.consolidationMarkerContent)(fold.note),
-      metadata: (0, import_working10.consolidationMetadata)({ keepFromId, folded: fold.droppedMessages })
+      content: (0, import_working11.consolidationMarkerContent)(fold.note),
+      metadata: (0, import_working11.consolidationMetadata)({ keepFromId, folded: fold.droppedMessages })
     }]);
     if (msg) {
       recordAppended(c, msg);
@@ -23386,53 +27313,6 @@ function recordAvoided(c, req, actionId, runId) {
   }));
 }
 
-// src/runStore/modelPreflight.ts
-var MODEL_PREFLIGHT_LABEL = "model.preflight";
-function planModelWarning2(model, book2 = snapshotPriceBook()) {
-  if (!model || model === "default") return null;
-  const price = listPriceOf(book2, model);
-  const tier2 = price ? resolveModelTier({ price }) : void 0;
-  return tier2 && isAgenticTier(tier2) === false ? { model, tier: tier2 } : null;
-}
-function modelPreflightEvent2(result, ts, plan) {
-  const entries = parseByoUnresolved((result?.byoUnresolved ?? []).filter((e) => e.trim()));
-  if (entries.length === 0 && !plan) return null;
-  const said = [];
-  if (entries.length > 0) {
-    const onto = result?.fallback ? ` This run will use ${result.fallback} instead.` : " This run will fall back to another model.";
-    said.push(`${entries.map(byoUnresolvedSummary).join("; ")}.${onto}`);
-  }
-  if (plan) {
-    said.push(`the plan phase will run on ${plan.model}, a ${plan.tier}-tier (Flash-class) model \u2014 weak at planning a multi-step change; pick a stronger model for planning if the result matters.`);
-  }
-  return {
-    ts,
-    category: "message",
-    label: MODEL_PREFLIGHT_LABEL,
-    args: {
-      ...entries.length ? { byoUnresolved: entries.map((e) => e.reason ? `${e.provider}:${e.reason}` : e.provider).join(",") } : {},
-      ...result?.fallback && entries.length ? { fallback: result.fallback } : {},
-      ...plan ? { planModel: plan.model, planTier: plan.tier } : {}
-    },
-    result: `Before the first turn: ${said.join(" Also: ")}`
-  };
-}
-async function applyModelPreflight(c, preflight, pinnedModel) {
-  if (!preflight) return;
-  let result;
-  try {
-    result = await preflight();
-  } catch {
-    return;
-  }
-  const plan = c.codeChanged ? null : planModelWarning2(pinnedModel);
-  const event = modelPreflightEvent2(result, nowIso(), plan);
-  if (!event) return;
-  if (result?.byoUnresolved.length) accrueByoUnresolved(c, result.byoUnresolved.join(","));
-  pushTrace(c, event);
-  emit2(c);
-}
-
 // src/runStore/hostRunContext.ts
 async function hostPart(c, part, read2) {
   if (!read2) return void 0;
@@ -23628,7 +27508,7 @@ ${turnContext}` : systemPrompt),
     ...canAskUser ? [ASK_USER_TOOL] : []
   ];
   const windowFit = createRunWindowFit({
-    workingBudgetTokens: import_working11.HISTORY_TOKEN_BUDGET,
+    workingBudgetTokens: import_working12.HISTORY_TOKEN_BUDGET,
     summarizer: () => ({ stream, model: run.policy.model, signal: c.abort?.signal }),
     ...evermind?.recall ? { recall: (q) => evermind.recall(q), priorRecall } : {},
     ...req.windowSources ? { windowSources: req.windowSources } : {},
@@ -23674,7 +27554,7 @@ ${turnContext}` : systemPrompt),
     readCoverage: new ReadCoverage2(),
     // How many calls in a row that cache has answered — a run circling its own reads
     // is forced to hand off or change (`cacheServedStreak.ts`).
-    cacheStreak: new CacheServedStreak(),
+    cacheStreak: new CacheServedStreak2(),
     // The A3 progress detector — a run that says it is ready and keeps reading, circles,
     // undoes its own edit or repeats a failure is steered, then forced, then asked
     // about (`progressGuard.ts`, PRD 35 WS8p).
@@ -23754,111 +27634,18 @@ ${turnContext}`;
   return run;
 }
 
+// src/runStore/runLoop.ts
+var import_working15 = require("@seanhogg/builderforce-memory/working");
+
 // src/runStore/completeTurn.ts
 var import_handoff11 = require("@seanhogg/builderforce-memory/handoff");
-
-// src/composingActivity.ts
-function utf8ByteLength2(text) {
-  if (!text) return 0;
-  if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(text).length;
-  let bytes = 0;
-  for (const ch of text) {
-    const cp = ch.codePointAt(0) ?? 0;
-    bytes += cp < 128 ? 1 : cp < 2048 ? 2 : cp < 65536 ? 3 : 4;
-  }
-  return bytes;
-}
-function toolCallArgBytes(calls) {
-  let total = 0;
-  for (const c of calls) total += utf8ByteLength2(c.args ?? "");
-  return total;
-}
-function createComposingActivity(sink, opts) {
-  const now = opts.now ?? Date.now;
-  let names = /* @__PURE__ */ new Map();
-  let bytes = 0;
-  let startedAt = null;
-  let published;
-  const publish = (label, immediate) => {
-    sink.set({
-      phase: "composing",
-      startedAt,
-      step: opts.step,
-      bytes,
-      ...label ? { label } : {}
-    });
-    published = label;
-    if (immediate) sink.repaint();
-    else sink.coalescedRepaint();
-  };
-  return {
-    onDelta(index, partial) {
-      if (partial.name) names.set(index, partial.name);
-      bytes += utf8ByteLength2(partial.argsFragment ?? "");
-      const label = names.get(index) ?? published;
-      if (startedAt === null) {
-        startedAt = now();
-        publish(label, true);
-        return;
-      }
-      publish(label, !published && !!label);
-    },
-    bytes() {
-      return bytes;
-    },
-    reset() {
-      names = /* @__PURE__ */ new Map();
-      bytes = 0;
-      startedAt = null;
-      published = void 0;
-    }
-  };
-}
-
-// src/runStore/steerInterrupt.ts
-function takeRunSteering(c, runKey, step) {
-  const messages = drainRunSteering2(runKey);
-  if (messages.length > 0) {
-    markPendingWordsRead(runKey, messages.map((m) => m.eventKey));
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "steer.applied",
-      args: { step, messages: messages.length },
-      result: messages.map((m) => m.text.slice(0, 200)).join("\n")
-    });
-  }
-  return messages;
-}
-
-// src/runStore/steerPersistence.ts
-async function persistSteer(c, chatId, persistence, steer, runKey = chatId) {
-  if (!steer.persist) return;
-  try {
-    const [msg] = await persistence.sendMessages(chatId, [{ role: "user", content: steer.text, metadata: steerMetadata(steer), ...steer.eventKey ? { eventKey: steer.eventKey } : {} }]);
-    if (!msg) return;
-    recordAppended(c, msg);
-    emit2(c);
-    forgetPendingWords(runKey, [steer.eventKey]);
-  } catch (e) {
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "steer.persist_failed",
-      args: { error: e instanceof Error ? e.message : String(e) },
-      result: "The steered message reached the run but could not be saved to the chat."
-    });
-  }
-}
-
-// src/runStore/completeTurn.ts
-var import_working13 = require("@seanhogg/builderforce-memory/working");
+var import_working14 = require("@seanhogg/builderforce-memory/working");
 
 // src/runStore/compactionSaved.ts
-var import_working12 = require("@seanhogg/builderforce-memory/working");
-function compactionSavedTokens(full, working, historyBudgetTokens = import_working12.HISTORY_TOKEN_BUDGET) {
-  const withoutCompaction = Math.min((0, import_working12.transcriptTokens)(full), historyBudgetTokens);
-  return Math.max(0, withoutCompaction - (0, import_working12.transcriptTokens)(working));
+var import_working13 = require("@seanhogg/builderforce-memory/working");
+function compactionSavedTokens(full, working, historyBudgetTokens = import_working13.HISTORY_TOKEN_BUDGET) {
+  const withoutCompaction = Math.min((0, import_working13.transcriptTokens)(full), historyBudgetTokens);
+  return Math.max(0, withoutCompaction - (0, import_working13.transcriptTokens)(working));
 }
 function stampOncePerCall(stamped, plain2) {
   let used = false;
@@ -23867,108 +27654,6 @@ function stampOncePerCall(stamped, plain2) {
     used = true;
     return stamped;
   };
-}
-
-// src/runStore/modelDowngrade.ts
-var MODEL_DOWNGRADE_LABEL = "llm.model_downgrade";
-function modelDowngradeEvent(input) {
-  const { requested, resolved, step, ts } = input;
-  if (resolved === "default") return null;
-  if (requested !== "default") {
-    if (resolved === requested) return null;
-    return {
-      ts,
-      category: "message",
-      label: MODEL_DOWNGRADE_LABEL,
-      args: { requestedModel: requested, model: resolved, step },
-      result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) \u2014 a smaller context window can truncate long transcripts.`
-    };
-  }
-  const unresolved = (input.byoUnresolved ?? "").trim();
-  const flash = !unresolved && input.planPhase ? planModelWarning2(resolved, input.book) : null;
-  if (!unresolved && !flash) return null;
-  const said = input.events.some((e) => {
-    if (e.label !== MODEL_DOWNGRADE_LABEL) return false;
-    const args = e.args;
-    return args?.requestedModel === "default" && args.model === resolved;
-  });
-  if (said) return null;
-  if (flash) {
-    return {
-      ts,
-      category: "message",
-      label: MODEL_DOWNGRADE_LABEL,
-      args: { requestedModel: "default", model: resolved, step, planTier: flash.tier },
-      result: `Auto-routing planned this run on ${resolved}, a ${flash.tier}-tier (Flash-class) model \u2014 weak at planning a multi-step change; pick a stronger model for planning if the result matters.`
-    };
-  }
-  return {
-    ts,
-    category: "message",
-    label: MODEL_DOWNGRADE_LABEL,
-    args: { requestedModel: "default", model: resolved, step, byoUnresolved: unresolved },
-    result: `Auto-routing answered with ${resolved} because a connected account could not be used (${unresolved}) \u2014 the run is not on the tenant's own model. Reconnect it under Settings \u25B8 API Keys.`
-  };
-}
-
-// src/selectTools.ts
-var DEFAULT_TOOL_LIMIT2 = 64;
-var PINNED_OVERFLOW2 = 16;
-var NAME_HIT2 = LEXICAL_WEIGHTS.name;
-var NAME_SYNONYM_HIT = 7;
-var DESCRIPTION_HIT2 = LEXICAL_WEIGHTS.description;
-function synonymText(text) {
-  return [...expandWithSynonyms(lexicalStems(text))].join(" ");
-}
-function toolFields(tool) {
-  const name = tool.function?.name ?? "";
-  if (!name) return [];
-  const description = tool.function?.description ?? "";
-  return [
-    { text: name, weight: NAME_HIT2 },
-    { text: synonymText(name), weight: NAME_SYNONYM_HIT },
-    { text: description, weight: DESCRIPTION_HIT2 },
-    { text: synonymText(description), weight: DESCRIPTION_HIT2 }
-  ];
-}
-function selectToolsForTurn2(tools, options) {
-  const available = tools?.length ?? 0;
-  const limit = options.limit ?? DEFAULT_TOOL_LIMIT2;
-  if (!tools || available <= limit) {
-    return { tools: tools ?? [], trimmed: false, available };
-  }
-  const required = new Set(options.required ?? []);
-  const pinned = new Set(options.pinned ?? []);
-  const chosen = [];
-  const taken = /* @__PURE__ */ new Set();
-  const take = (tool) => {
-    const name = tool.function?.name;
-    if (!name || taken.has(name)) return;
-    taken.add(name);
-    chosen.push(tool);
-  };
-  for (const tool of tools) {
-    if (chosen.length >= limit) break;
-    if (required.has(tool.function?.name ?? "")) take(tool);
-  }
-  for (const tool of rankLexically(tools, options.query, toolFields, tools.length)) {
-    if (chosen.length >= limit) break;
-    take(tool);
-  }
-  for (const tool of tools) {
-    if (chosen.length >= limit) break;
-    take(tool);
-  }
-  const position = new Map(tools.map((t, i) => [t, i]));
-  chosen.sort((a, b) => (position.get(a) ?? 0) - (position.get(b) ?? 0));
-  const ceiling = limit + PINNED_OVERFLOW2;
-  const byName = new Map(tools.map((t) => [t.function?.name ?? "", t]));
-  for (const name of pinned) {
-    if (chosen.length >= ceiling) break;
-    const tool = byName.get(name);
-    if (tool) take(tool);
-  }
-  return { tools: chosen, trimmed: true, available };
 }
 
 // src/runStore/turnMenu.ts
@@ -24022,7 +27707,7 @@ function turnMenu(run, step) {
 
 // src/runStore/completeTurn.ts
 function completeTurnPort(run) {
-  const { c, chatId, runKey, req, convo, systemPrompt, metadata, recallBlockTokens, allTools } = run;
+  const { c, chatId, runKey, req, convo, systemPrompt, metadata, recallBlockTokens } = run;
   const { stream, routingMode, maxTokens, reasoning, runTool } = req;
   return async (ctx) => {
     const iter = ctx.step;
@@ -24033,7 +27718,7 @@ function completeTurnPort(run) {
       convo.push(steer.fromPerson ? markPersonTurn(msg) : msg);
       await persistSteer(c, chatId, req.persistence, steer, runKey);
     }
-    const working = await (0, import_working13.buildWorkingTranscript)(
+    const working = await (0, import_working14.buildWorkingTranscript)(
       c,
       systemPrompt,
       (msgs) => summarizeMiddle(stream, run.policy.model, msgs, c.abort?.signal),
@@ -24055,36 +27740,10 @@ function completeTurnPort(run) {
     const nextCallMetadata = stampOncePerCall(memoryMetadata, metadata);
     if (c.abort?.signal.aborted) throw new Error("run stopped");
     const llmStart = nowMs2();
-    let firstTokenAt;
     let result;
     const { forced, advertised, tools, advertisedNames, opening } = turnMenu(run, iter);
-    setActivity(c, { phase: "thinking", startedAt: Date.now(), step: iter });
-    const composing = createComposingActivity(
-      { set: (a) => {
-        c.activity = a;
-      }, repaint: () => emit2(c), coalescedRepaint: () => emitStreaming(c) },
-      { step: iter }
-    );
-    const handlers = {
-      onModel: liveTurnModel(c),
-      onConnectRetry: connectRetryStep(c, iter),
-      onTextDelta: (d) => {
-        c.streamingText += d;
-        if (firstTokenAt === void 0) {
-          firstTokenAt = nowMs2();
-          c.activity = { phase: "writing", startedAt: Date.now(), step: iter };
-          emit2(c);
-          return;
-        }
-        emitStreaming(c);
-      },
-      // The first argument fragment is this turn's first token too: a tool-only turn
-      // recorded no ttft at all, so "Thought for Xs" covered the whole turn.
-      onToolCallDelta: (index, partial) => {
-        if (firstTokenAt === void 0) firstTokenAt = nowMs2();
-        composing.onDelta(index, partial);
-      }
-    };
+    const live2 = openLiveTurn(c, iter);
+    const handlers = live2.handlers;
     let turnRole2 = nextTurn(run.policy, { hasTools: !!tools }).role;
     const turnToolChoice = forced ? forced.toolChoice : run.forceToolChoice;
     run.forceToolChoice = void 0;
@@ -24123,12 +27782,7 @@ function completeTurnPort(run) {
       pushTrace(c, providerFailureTrace(nowIso(), iter, e instanceof StreamInterruptedError && e.model || run.policy.model, e, nowMs2() - llmStart));
       return e;
     };
-    const restartTurn = () => {
-      c.streamingText = "";
-      firstTokenAt = void 0;
-      composing.reset();
-      emit2(c);
-    };
+    const restartTurn = () => live2.restart();
     try {
       result = await request([], opening);
     } catch (e) {
@@ -24161,511 +27815,11 @@ function completeTurnPort(run) {
     reportToPolicy(run, { type: "turn_succeeded", ...result.resolvedModel ? { model: result.resolvedModel } : {} });
     run.windowFit.served(result.resolvedModel ?? run.policy.model);
     if (result.toolCalls.length > 0) run.announcementRecoveries = 0;
-    if (result.resolvedModel && result.toolCalls.some((tc) => isCodeChangeTool(tc.name))) c.codeModel = result.resolvedModel;
-    accrueByoUnresolved(c, result.byoUnresolved);
-    accrueProviderCap(c, result.providerCap);
     const resolved = result.resolvedModel ?? run.policy.model ?? "default";
     const requested = run.policy.model ?? "default";
-    c.runUsage.promptTokens += result.usage?.prompt ?? 0;
-    c.runUsage.completionTokens += result.usage?.completion ?? 0;
-    if (result.resolvedModel) {
-      c.runUsage.model = result.resolvedModel;
-      c.lastServedModel = result.resolvedModel;
-    }
-    setLastResolvedModel(chatId, result.resolvedModel);
-    const downgrade = modelDowngradeEvent({
-      requested,
-      resolved,
-      step: iter,
-      ts: nowIso(),
-      events: runTrace(c),
-      planPhase: !c.codeChanged,
-      ...result.byoUnresolved ? { byoUnresolved: result.byoUnresolved } : {}
-    });
-    if (downgrade) pushTrace(c, downgrade);
-    const localFallback = localFallbackTrace(nowIso(), iter, result.localFirst);
-    if (localFallback) pushTrace(c, localFallback);
-    const narratedUnadvertised = result.toolCalls.length === 0 ? toolNamesMentionedIn(result.text).filter((n2) => !advertisedNames.has(n2)) : [];
-    const argBytes = toolCallArgBytes(result.toolCalls);
-    const contextWindow = await run.windowFit.contextWindow?.();
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "llm",
-      label: "llm.complete",
-      durationMs: nowMs2() - llmStart,
-      ttftMs: firstTokenAt !== void 0 ? firstTokenAt - llmStart : void 0,
-      // `model` is the model the gateway ACTUALLY used (resolved), falling back to
-      // what we requested when the gateway didn't report one. `requestedModel`
-      // keeps the caller's ask (empty/'default' ⇒ gateway auto-selects) so triage
-      // can tell "what I asked for" from "what answered".
-      args: {
-        model: resolved,
-        requestedModel: requested,
-        step: iter,
-        // What the turn asked the gateway for (analysis vs code vs chat), so a copied
-        // report shows which model planned and which one wrote the code.
-        role: turnRole2,
-        toolCalls: result.toolCalls.length,
-        // How much the turn actually EMITTED. "1 tool call(s) · 202509ms" said
-        // nothing about a turn that spent three minutes streaming 21 KB of
-        // `write_file` arguments — which is what a long turn usually is.
-        ...argBytes > 0 ? { argBytes } : {},
-        ...contextWindow ? { contextWindow } : {},
-        // Which account served the turn + any connected-BYO provider the gateway
-        // could NOT resolve — so triage tells "ran on the shared pool despite a
-        // connected Claude account (expired?)" apart from "nothing connected".
-        account: result.account,
-        // A turn answered on this machine cost nothing: reported as 0 explicitly. Any other turn carries NO cost
-        // (unknown, never free) - the run's total is decided over all of them (`codeRunOutcome`).
-        ...servedOnDevice(result) ? { costMc: 0 } : {},
-        byoUnresolved: result.byoUnresolved,
-        // How the gateway ROUTED the turn: the candidates it walked and every model it
-        // tried and left (`model:status kind`). The only record of why a coding turn
-        // landed where it did — a connected coder never seeded reads differently from
-        // one seeded and refused.
-        ...gatewayRoutingArgs(result.gateway),
-        // How many tools the turn was actually OFFERED, out of the whole catalog.
-        // A zero here is the difference between "the model refused to act" and "it had
-        // nothing to act with" — previously unanswerable from a copied report, which
-        // only ever carried the registry-wide total.
-        advertisedTools: advertised.length,
-        catalogTools: allTools?.length ?? 0,
-        ...narratedUnadvertised.length ? { narratedUnadvertised } : {},
-        // The stream filter strips every call it lifts, so call markup still IN the text
-        // is a dialect it does not know: the model tried to act and the call never ran.
-        // Recorded so a copied report says "parser gap" instead of "won't call tools".
-        ...result.toolCalls.length === 0 && hasCallMarkup(result.text) ? { unliftedCallMarkup: true } : {},
-        // What the vendor's RAW response carried, counted before the gateway translated
-        // it — so a text-only turn reads as "the model returned no call" or "a returned
-        // call was lost on the way", never as a guess. Absent when the vendor does not report it.
-        ...result.upstream ? { upstreamFunctionCalls: result.upstream.functionCalls, upstreamRecovered: result.upstream.recovered } : {}
-      },
-      // Structured diagnostics fields — the A-vs-B triage reads these directly.
-      usage: result.usage,
-      finishReason: result.finishReason,
-      textChars: result.text.length,
-      result: `${result.toolCalls.length} tool call(s) \xB7 ${result.text.length} chars \xB7 finish: ${result.finishReason ?? "\u2014"}${result.usage?.prompt != null ? ` \xB7 prompt ${result.usage.prompt} tok` : ""}`
-    });
-    if (result.text.trim()) {
-      pushTrace(c, { ts: nowIso(), category: "message", label: "agent.message", args: { step: iter }, result: result.text });
-    }
-    run.lastTurnInterruption = turnInterruption(result.finishReason);
-    const meta = { result, resolved, requested, advertised: advertised.length, advertisedNames };
+    const meta = await recordTurn(run, { result, iter, llmStart, live: live2, role: turnRole2, resolved, requested, advertised, advertisedNames });
     const toolCalls = runTool ? result.toolCalls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.args })) : [];
     return { content: replayTextOf(result.text), toolCalls, meta };
-  };
-}
-
-// src/runStore/earlyDelegation.ts
-var counters = /* @__PURE__ */ new WeakMap();
-function counterOf(run) {
-  let counter = counters.get(run);
-  if (!counter) {
-    counter = new ReadsWithoutSpawn();
-    counters.set(run, counter);
-  }
-  return counter;
-}
-function runLeftDelegationUndone(run) {
-  return leftDelegationUndone({ toolNames: run.catalogToolNames, requestText: run.userRequest, events: runTrace(run.c) });
-}
-function delegationCallKind(name, args, isReadTool) {
-  if (isSpawnTool(name)) return "spawn";
-  if (isReadTool || isReadOnlyShellCall(name, args)) return "read";
-  return "other";
-}
-function earlyDelegationAdvisory(run, name, args, isReadTool, step) {
-  const counter = counterOf(run);
-  const kind = delegationCallKind(name, args, isReadTool);
-  const reads = counter.record(kind);
-  if (kind !== "read" || !counter.due(READS_BEFORE_DELEGATION_NUDGE)) return null;
-  if (!runLeftDelegationUndone(run)) return null;
-  counter.markNudged();
-  const nudge = earlyDelegationNudge(run.catalogToolNames, reads);
-  pushTrace(run.c, {
-    ts: nowIso(),
-    category: "message",
-    label: "loop.nudge_undelegated_request",
-    args: { step, tool: name, reads },
-    result: `The user asked for sub-agents and the run had made ${reads} reads without starting one \u2014 told to delegate on that read result.`
-  });
-  return nudge;
-}
-
-// src/runStore/dispatchTool.ts
-function dispatchToolPort(run) {
-  const { c, chatId, req, readCoverage, failures, writeLedger, placeholderLedger } = run;
-  const { runTool } = req;
-  return async (call2, ctx) => {
-    const iter = ctx.step;
-    const args = call2.args;
-    const declined = malformedCallOutcome(call2, run.lastTurnInterruption === "truncated");
-    if (declined) {
-      const truncated = run.lastTurnInterruption === "truncated";
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "error",
-        isError: true,
-        durationMs: 0,
-        label: malformedCallLabel(call2.name, truncated),
-        args: { arguments: String(call2.raw?.arguments ?? "").slice(0, 200) },
-        result: declined
-      });
-      return { data: declined, isError: true };
-    }
-    const isReadTool = isDedupableRead(call2.name);
-    const toolStart = nowMs2();
-    setActivity(c, toolActivity(call2.name, args, iter, Date.now()));
-    if (!runTool) throw new Error("tool call without a tool runner");
-    let out;
-    try {
-      out = await runToolInterruptibly(runTool, run.runKey, c.abort?.signal, call2.name, withObservedModel(chatId, call2.name, args));
-    } catch (e) {
-      const message2 = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-      out = { ok: false, error: message2 };
-      const repeat = failureAdvisoryFor(run, call2.name, args, out, iter);
-      if (!isReadTool) writeLedger.record(call2.name, args, { ok: false, unscoped: isUnscopedMutation(call2.name, args) });
-      run.pendingRun = { out, toolStart, isReadTool, threw: true };
-      return { data: repeat ? withAdvisory(out, repeat) : out, isError: true };
-    }
-    const changed2 = codeChangesOf(call2.name, args, out);
-    if (changed2) {
-      const first = !c.codeChanged;
-      c.codeChanged = true;
-      for (const f of changed2) if (!c.touchedFiles.includes(f)) c.touchedFiles.push(f);
-      if (first && !c.ticketRecorded && req.projectId != null && req.runTool) {
-        await recordCodeChangeTicket(run.serverChatId, c, req, "open").catch(() => {
-        });
-      }
-    }
-    if (isTicketRecordingTool(call2.name)) c.ticketRecorded = true;
-    await autoLinkCreatedItem(run.serverChatId, c, runTool, call2.name, out);
-    let advisory = null;
-    if (!isReadTool) writeLedger.record(call2.name, args, { ok: !isFailedToolResult(out), unscoped: isUnscopedMutation(call2.name, args) });
-    if (isFailedToolResult(out)) {
-      advisory = failureAdvisoryFor(run, call2.name, args, out, iter);
-    } else {
-      failures.clear(call2.name, args);
-      const placeholders = placeholdersWritten(call2.name, args);
-      if (placeholders.length) {
-        pushTrace(c, placeholderTraceEvent(call2.name, placeholders, nowIso()));
-        advisory = placeholderAdvisory(placeholders);
-      }
-      if (isCodeChangeTool(call2.name)) placeholderLedger.record(call2.name, args, placeholders);
-      if (isDelegationTool(call2.name)) placeholderLedger.add(delegationPlaceholders(out));
-      if (isTicketCompletion(call2.name, args)) {
-        const placeholderWarning = completionAdvisory(placeholderLedger.outstanding());
-        const events = c.trace;
-        const isOnBaseBranch = shippedToBaseBranch(events);
-        const canComplete = canCompleteTicket(isOnBaseBranch, false);
-        if (!canComplete) {
-          const said = notOnBaseBranchAdvisory();
-          pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, isOnBaseBranch }, result: said });
-          advisory = said;
-        } else if (placeholderWarning) {
-          pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, open: placeholderLedger.outstanding() }, result: placeholderWarning });
-          advisory = placeholderWarning;
-        }
-      }
-      if (isReadTool) {
-        const visit = readCoverage.record(call2.name, args);
-        const target = visit ? visitTarget(args) : void 0;
-        advisory = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
-        if (advisory) {
-          pushTrace(c, {
-            ts: nowIso(),
-            category: "message",
-            label: "tools.revisit_guard",
-            args: { step: iter, tool: call2.name, target, visits: visit.count },
-            result: advisory
-          });
-        }
-      }
-    }
-    const delegate = earlyDelegationAdvisory(run, call2.name, args, isReadTool, iter);
-    if (delegate) advisory = advisory ? `${advisory}
-
-${delegate}` : delegate;
-    const contextWindowTokens = await run.windowFit.contextWindow?.();
-    const trimmedOut = trimToolResult(call2.name, out ?? null, { advisory, contextWindowTokens });
-    run.pendingRun = { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated, served: trimmedOut.served };
-    return { data: trimmedOut.content, isError: isFailedToolResult(out) };
-  };
-}
-
-// src/runStore/beforeDispatch.ts
-var import_working14 = require("@seanhogg/builderforce-memory/working");
-function beforeDispatchHook(run) {
-  const { c, chatId, runKey, req, allTools, catalogToolNames, usedTools, readCoverage, writeLedger, placeholderLedger } = run;
-  const { runTool, needsConfirm, persistence } = req;
-  return async (rawCall, ctx) => {
-    const iter = ctx.step;
-    run.pendingReplay = null;
-    run.pendingRun = null;
-    let call2 = rawCall;
-    {
-      const aliased = resolveToolAlias(call2.name);
-      if (aliased !== call2.name) call2 = { ...call2, name: aliased };
-    }
-    if (isRouterTool(call2.name)) {
-      const routed = handleRouterCall(allTools ?? [], call2.name, call2.args);
-      if ("result" in routed) {
-        pushTrace(c, {
-          ts: nowIso(),
-          category: "tool",
-          label: call2.name,
-          args: call2.args,
-          result: routed.result
-        });
-        return { result: { data: routed.result } };
-      }
-      const routedArgs = routed.dispatch.args ?? {};
-      call2 = { ...call2, name: routed.dispatch.name, args: routedArgs, raw: { ...call2.raw, name: routed.dispatch.name, arguments: JSON.stringify(routedArgs) } };
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "message",
-        label: "tools.routed",
-        args: { step: iter, via: rawCall.name },
-        result: `Called ${call2.name} through the tool router (it was not advertised directly this turn).`
-      });
-    }
-    if (call2.name === ASK_USER_TOOL) {
-      if (run.redirectAskToDelegation) {
-        run.redirectAskToDelegation = false;
-        return { result: { data: { ok: false, error: undelegatedRequestNudge(catalogToolNames) } } };
-      }
-      return { result: { data: { error: "ask_user needs { question, options:[{label}] } with 2+ options. Retry or answer in prose." } } };
-    }
-    if (call2.name === HAND_OFF_TOOL) {
-      if (!offersHandOff(run.policy)) {
-        const error = usedTools.has(HAND_OFF_TOOL) ? "The plan was already handed off \u2014 you are the coding model now. Implement the tasks; do not re-plan." : "This run has already started editing, so it is coding now and hand_off is closed. Implement the work directly; use spawn_agents for separate slices that own disjoint files.";
-        return { result: { data: { ok: false, error } } };
-      }
-      const plan = parseHandOff(call2.args);
-      if (typeof plan === "string") return { result: { data: { ok: false, error: plan } } };
-      reportToPolicy(run, { type: "hand_off" });
-      pushTrace(c, handOffTrace(nowIso(), ctx.step, plan.tasks.length, HAND_OFF_TOOL));
-      const outcome = await executeHandOff(plan, {
-        runTool: (name, args2) => runTool(name, args2),
-        toolNames: new Set(catalogToolNames),
-        // The research the coders inherit: what this planning run read and searched.
-        knowledge: run.knowledge.brief(),
-        // …and the goal, in the user's words: a child sees none of this conversation.
-        request: run.goal,
-        ...req.projectId != null ? { projectId: req.projectId } : {},
-        afterCreate: (toolName, out) => autoLinkCreatedItem(run.serverChatId, c, runTool, toolName, out),
-        step: (label, args2, out, durationMs) => pushTrace(c, {
-          ts: nowIso(),
-          category: "tool",
-          label,
-          durationMs,
-          args: args2,
-          result: out ?? null,
-          isError: isFailedToolResult(out)
-        }),
-        postPlan: async (text) => {
-          const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, metadata: JSON.stringify({ [MID_TURN_META_KEY]: true }) }]);
-          if (!msg) return;
-          recordAppended(c, msg);
-          emit2(c);
-        },
-        now: nowMs2
-      });
-      const changed2 = codeChangesOf(HAND_OFF_TOOL, call2.args, outcome);
-      if (changed2) {
-        c.codeChanged = true;
-        for (const f of changed2) if (!c.touchedFiles.includes(f)) c.touchedFiles.push(f);
-      }
-      usedTools.add(HAND_OFF_TOOL);
-      placeholderLedger.add(delegationPlaceholders(outcome));
-      return { result: { data: outcome } };
-    }
-    const args = call2.args;
-    attachDeltaToRunTicket(call2.name, args, c.deltaTicketId);
-    if (needsConfirm && needsConfirm({ name: call2.name, args })) {
-      const ok = await requestRunConfirm(runKey, { name: call2.name, args }, { step: iter });
-      if (!ok) {
-        const declined = { cancelled: true, reason: "User declined this action." };
-        pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: declined });
-        return { result: { data: declined } };
-      }
-    }
-    if (isDedupableRead(call2.name)) {
-      if (readCoverage.isRepeat(call2.name, args)) {
-        const cached2 = readCoverage.cachedResult(call2.name, args);
-        if (cached2 && !(0, import_working14.stillInWorkingContext)(c, cached2.anchor)) {
-          const replayNote = `Replayed from this run's read cache: this exact ${call2.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
-          const visit = readCoverage.record(call2.name, args);
-          const target = visit ? visitTarget(args) : void 0;
-          const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
-          const replayed = trimToolResult(call2.name, cached2.result ?? null, {
-            advisory: revisit ? `${replayNote}
-
-${revisit}` : replayNote,
-            contextWindowTokens: await run.windowFit.contextWindow?.()
-          });
-          run.pendingReplay = { name: call2.name, args, result: cached2.result, served: replayed.served };
-          pushTrace(c, {
-            ts: nowIso(),
-            category: "tool",
-            label: call2.name,
-            args,
-            result: { replayed: true, note: replayNote },
-            resultBytes: replayed.bytes,
-            truncated: replayed.truncated
-          });
-          run.cacheStreak.served(iter);
-          return { result: { data: replayed.content } };
-        }
-        const stub = {
-          note: `Duplicate ${call2.name} call \u2014 identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`
-        };
-        pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: stub });
-        run.cacheStreak.served(iter);
-        return { result: { data: stub } };
-      }
-      const covered = readCoverage.coveredRead(call2.name, args);
-      if (covered) {
-        const visit = readCoverage.record(call2.name, args);
-        const target = visit ? visitTarget(args) : void 0;
-        const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
-        const note = revisit ? `${covered.note}
-
-${revisit}` : covered.note;
-        if (covered.cached && !(0, import_working14.stillInWorkingContext)(c, covered.cached.anchor)) {
-          const requested = requestedReadWindow2(covered.cached.result ?? null, covered.start, covered.end);
-          const replayed = trimToolResult(call2.name, requested, { advisory: note, contextWindowTokens: await run.windowFit.contextWindow?.() });
-          run.pendingReplay = { name: call2.name, args, result: requested, served: replayed.served };
-          pushTrace(c, {
-            ts: nowIso(),
-            category: "tool",
-            label: call2.name,
-            args,
-            result: { covered: true, replayed: true, note },
-            resultBytes: replayed.bytes,
-            truncated: replayed.truncated
-          });
-          run.cacheStreak.served(iter);
-          return { result: { data: replayed.content } };
-        }
-        const stub = { note };
-        pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: { covered: true, note } });
-        run.cacheStreak.served(iter);
-        return { result: { data: stub } };
-      }
-      const derived = readCoverage.derivedSearch(call2.name, args);
-      if (derived) {
-        const visit = readCoverage.record(call2.name, args);
-        const target = visit ? visitTarget(args) : void 0;
-        const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
-        const served = trimToolResult(call2.name, derived, { advisory: revisit, contextWindowTokens: await run.windowFit.contextWindow?.() });
-        run.pendingReplay = { name: call2.name, args, result: derived };
-        pushTrace(c, {
-          ts: nowIso(),
-          category: "tool",
-          label: call2.name,
-          args,
-          result: { derived: true, note: derived.note },
-          resultBytes: served.bytes,
-          truncated: served.truncated
-        });
-        return { result: { data: served.content } };
-      }
-    } else {
-      if (writeLedger.isRepeat(call2.name, args)) {
-        const note = repeatedWriteNote(call2.name, String(args.path ?? "").trim());
-        pushTrace(c, { ts: nowIso(), category: "message", label: "tools.repeat_write_guard", args: { step: iter, tool: call2.name }, result: note });
-        pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: { skipped: true, note } });
-        run.cacheStreak.served(iter);
-        return { result: { data: { ok: true, applied: false, unchanged: true, note } } };
-      }
-      readCoverage.invalidate(call2.name, args);
-    }
-    return call2 === rawCall ? void 0 : { rewrite: call2 };
-  };
-}
-
-// src/runStore/toolCallHooks.ts
-function beforeToolCallsHook(run) {
-  const { c, chatId } = run;
-  const { runTool, persistence, onActivity } = run.req;
-  return async (ctx, turn, calls) => {
-    const { result, requested } = metaOf2(turn);
-    run.progress.noteTurnText(result.text);
-    const askCall = calls.find((tc) => tc.name === ASK_USER_TOOL);
-    if (askCall && runTool && !run.delegationRecoveryUsed && runLeftDelegationUndone(run)) {
-      run.delegationRecoveryUsed = true;
-      run.redirectAskToDelegation = true;
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "message",
-        label: "loop.recover_undelegated_request",
-        args: { step: ctx.step, via: "ask_user" },
-        result: "The user asked for sub-agents and the run asked how to proceed without starting one \u2014 answered with the local delegation contract instead of settling the question."
-      });
-    } else if (askCall) {
-      let block = null;
-      try {
-        block = askCall.malformed ? null : askUserBlock(askCall.args);
-      } catch {
-        block = null;
-      }
-      const lead = result.text.trim();
-      const reply = block ? lead ? `${lead}
-
-${block}` : block : lead;
-      if (reply) {
-        const assistantMsg = await settleReply(run, reply, result, requested);
-        emit2(c);
-        emitEvermindLearnReconcile(run, assistantMsg, reply);
-        onActivity?.(chatId);
-        return { action: "stop", ok: true, output: reply };
-      }
-    }
-    await persistMidTurnText(chatId, c, persistence, result, requested);
-    c.streamingText = "";
-    emit2(c);
-    return void 0;
-  };
-}
-function afterDispatchHook(run) {
-  const { c, readCoverage, usedTools } = run;
-  return (call2, result, row) => {
-    run.progress.observe(call2.name, call2.args, result);
-    if (run.pendingReplay) {
-      const replay = run.pendingReplay;
-      readCoverage.cacheResult(replay.name, replay.args, { result: replay.result, ...replay.served !== void 0 ? { served: replay.served } : {}, anchor: row });
-      run.pendingReplay = null;
-      return void 0;
-    }
-    const ran = run.pendingRun;
-    run.pendingRun = null;
-    if (!ran) return void 0;
-    run.cacheStreak.ran();
-    const args = call2.args;
-    if (ran.threw) {
-      pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, durationMs: nowMs2() - ran.toolStart, args, result: ran.out, isError: true });
-      return void 0;
-    }
-    if (ran.isReadTool && !isFailedToolResult(ran.out)) {
-      readCoverage.cacheResult(call2.name, args, { result: ran.out ?? null, ...ran.served !== void 0 ? { served: ran.served } : {}, anchor: row });
-    } else if (!isFailedToolResult(ran.out)) {
-      recordShellFileRead(readCoverage, call2.name, args, ran.out, ran.truncated !== true, row);
-    }
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "tool",
-      label: call2.name,
-      durationMs: nowMs2() - ran.toolStart,
-      args,
-      result: ran.out ?? null,
-      isError: isFailedToolResult(ran.out),
-      resultBytes: ran.bytes,
-      truncated: ran.truncated
-    });
-    usedTools.add(call2.name);
-    if (!isFailedToolResult(ran.out)) run.knowledge.record(call2.name, args);
-    return void 0;
   };
 }
 
@@ -24884,23 +28038,23 @@ function unrecorded2(c, e) {
 }
 
 // src/runStore/runSpendBudget.ts
-var usd = (millicents) => `$${(millicents / MILLICENTS_PER_USD).toFixed(2)}`;
-function runBudgetCapMillicents(maxRunBudgetUsd) {
+var usd2 = (millicents) => `$${(millicents / MILLICENTS_PER_USD).toFixed(2)}`;
+function runBudgetCapMillicents2(maxRunBudgetUsd) {
   return typeof maxRunBudgetUsd === "number" && Number.isFinite(maxRunBudgetUsd) && maxRunBudgetUsd > 0 ? Math.round(maxRunBudgetUsd * MILLICENTS_PER_USD) : null;
 }
-function noPriceNote(tree) {
+function noPriceNote2(tree) {
   const n2 = tree?.unpricedCalls ?? 0;
   return n2 > 0 ? `${n2} ${n2 === 1 ? "call" : "calls"} had no known price` : null;
 }
-function budgetWarning(spentMc, capMc, tree) {
-  const note = noPriceNote(tree);
-  const spent = note ? `at least ${usd(spentMc)} (${note})` : usd(spentMc);
-  return `[Run budget] This run has spent ${spent} of its ${usd(capMc)} budget \u2014 over 80%. Stop exploring and converge: finish the essential change now, then answer with what you did and exactly what is left.`;
+function budgetWarning2(spentMc, capMc, tree) {
+  const note = noPriceNote2(tree);
+  const spent = note ? `at least ${usd2(spentMc)} (${note})` : usd2(spentMc);
+  return `[Run budget] This run has spent ${spent} of its ${usd2(capMc)} budget \u2014 over 80%. Stop exploring and converge: finish the essential change now, then answer with what you did and exactly what is left.`;
 }
-function budgetContainedReply(spentMc, capMc, tree) {
-  const note = noPriceNote(tree);
-  const spent = note ? `at least ${usd(spentMc)} spent \u2014 ${note}` : `${usd(spentMc)} spent`;
-  return `Run stopped: it reached its ${usd(capMc)} spend budget (${spent}). Nothing was rolled back \u2014 the changes made so far are in place. Ask to continue to resume from here, or raise the "builderforce.maxRunBudgetUsd" setting (0 turns the cap off).`;
+function budgetContainedReply2(spentMc, capMc, tree) {
+  const note = noPriceNote2(tree);
+  const spent = note ? `at least ${usd2(spentMc)} spent \u2014 ${note}` : `${usd2(spentMc)} spent`;
+  return `Run stopped: it reached its ${usd2(capMc)} spend budget (${spent}). Nothing was rolled back \u2014 the changes made so far are in place. Ask to continue to resume from here, or raise the "builderforce.maxRunBudgetUsd" setting (0 turns the cap off).`;
 }
 var spendTrees = /* @__PURE__ */ new WeakMap();
 function runSpendTree(run, capMc) {
@@ -24912,7 +28066,7 @@ function runSpendTree(run, capMc) {
   return tree;
 }
 function runSpendBudget(run, book2) {
-  const ownCapMc = runBudgetCapMillicents(run.req.maxRunBudgetUsd);
+  const ownCapMc = runBudgetCapMillicents2(run.req.maxRunBudgetUsd);
   if (ownCapMc == null) {
     spendTrees.delete(run.c);
     return {};
@@ -24937,7 +28091,7 @@ function runSpendBudget(run, book2) {
   const contain = async () => {
     const { c, chatId, convo, req } = run;
     const spentMc = tree.spentMc;
-    const text = budgetContainedReply(spentMc, capMc, tree);
+    const text = budgetContainedReply2(spentMc, capMc, tree);
     noteBudgetContained(c);
     pushTrace(c, {
       ts: nowIso(),
@@ -24961,7 +28115,7 @@ function runSpendBudget(run, book2) {
       if (runBudgetBreach(caps, usage)) return contain();
       if (!warned && runBudgetWarnDue(caps, usage)) {
         warned = true;
-        const warning = budgetWarning(spentMc, capMc, tree);
+        const warning = budgetWarning2(spentMc, capMc, tree);
         run.convo.push((0, import_handoff12.volatileTail)([warning]));
         pushTrace(run.c, { ts: nowIso(), category: "message", label: "run.budget_warning", args: { spentMillicents: spentMc, capMillicents: capMc }, result: warning });
       }
@@ -24991,11 +28145,8 @@ function runSpendBudget(run, book2) {
 
 // src/runStore/runLoop.ts
 var runCodec = openAiChatCodec((r) => typeof r.data === "string" ? r.data : JSON.stringify(r.data));
-async function runLoop(chatId, c, req, runKey) {
-  const run = await prepareRunLoop(chatId, c, req, runKey);
-  if (!run) return;
-  noteRunId(c, run.metadata.guestTurnId);
-  const { convo, systemPrompt, metadata } = run;
+async function runLoop(run) {
+  const { c, chatId, req, convo, systemPrompt, metadata } = run;
   const { routingMode, stream, persistence, onActivity, maxTokens, reasoning } = req;
   const loop = await runAgentLoop({
     messages: convo,
@@ -25094,6 +28245,23 @@ async function runLoop(chatId, c, req, runKey) {
   emit2(c);
 }
 
+// src/runStore/runEngine.ts
+function deviceEngine() {
+  const env = globalThis.process?.env;
+  const raw = env?.BRAIN_RUN_ENGINE;
+  return raw === "agent" || raw === "loop" ? raw : void 0;
+}
+function runEngineOf(req) {
+  return req.engine ?? deviceEngine() ?? "loop";
+}
+async function driveRun(chatId, c, req, runKey) {
+  const prepared = await prepareRunLoop(chatId, c, req, runKey);
+  if (!prepared) return;
+  noteRunId(c, prepared.metadata.guestTurnId);
+  if (runEngineOf(req) === "agent") return runPrepared(prepared);
+  return runLoop(prepared);
+}
+
 // src/runStore/beginRun.ts
 function beginRun(c, outcomeKey) {
   c.running = true;
@@ -25163,7 +28331,7 @@ async function startRun(runKey, request, claim) {
   emit2(c);
   c.runUsage = emptyRunUsage();
   try {
-    await runLoop(chatId, c, req, runKey);
+    await driveRun(chatId, c, req, runKey);
   } catch (e) {
     if (!c.abort?.signal.aborted) {
       c.error = e instanceof Error ? e.message : "Reply failed";
@@ -26041,6 +29209,33 @@ function useLaunchCancel(sendingRef) {
   return { cancelledLaunchRef, launchingRef, beginDraftSend, endDraftSend, stopConversation };
 }
 
+// src/runStore/runEnginePreference.ts
+var RUN_ENGINE_STORAGE_KEY = "builderforce.runEngine";
+var RUN_ENGINE_QUERY_PARAM = "runEngine";
+var isEngine = (value) => value === "agent" || value === "loop";
+function storedRunEngine() {
+  try {
+    const search = globalThis.location?.search;
+    const fromUrl = search ? new URLSearchParams(search).get(RUN_ENGINE_QUERY_PARAM) : null;
+    const storage = globalThis.localStorage;
+    if (isEngine(fromUrl)) {
+      try {
+        storage?.setItem(RUN_ENGINE_STORAGE_KEY, fromUrl);
+      } catch {
+      }
+      return fromUrl;
+    }
+    const stored = storage?.getItem(RUN_ENGINE_STORAGE_KEY);
+    return isEngine(stored) ? stored : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function storedRunEngineField() {
+  const engine = storedRunEngine();
+  return engine ? { engine } : {};
+}
+
 // src/useBrainConversation.ts
 function useBrainConversation(options) {
   const { persistence, resolveSystemPrompt, stream, imagePrep } = useBrainConfig();
@@ -26163,7 +29358,7 @@ ${extraSystem}` : resolvedSystemPrompt;
       }
       if (draftSend) endDraftSend(draftSend);
       bindContinuation(id);
-      await startRun(id, extra ? { ...request, ...extra } : request);
+      await startRun(id, { ...storedRunEngineField(), ...request, ...extra });
     } finally {
       launchingRef.current.delete(id);
       cancelledLaunchRef.current.delete(id);
@@ -26503,6 +29698,17 @@ function noteRunStep(key, step) {
   if (!c) return;
   pushTrace(c, { ts: nowIso(), category: "message", label: step.label, ...step.args ? { args: step.args } : {}, result: step.result });
   emit2(c);
+}
+
+// src/run/runViaAgent.ts
+function runViaAgent(binding, opts = {}) {
+  const signal = binding.cell.abort?.signal;
+  return runAgent({
+    task: brainRunTask(binding, opts.defaultRepo),
+    policy: brainRunPolicy(binding),
+    ports: buildBrainRunPorts(binding),
+    ...signal ? { signal } : {}
+  });
 }
 
 // src/indexedDbStepDurability.ts
@@ -27256,10 +30462,10 @@ function runHistoryLines(runs) {
     const who = run.agentName?.trim() || run.agentRef || "no agent recorded";
     const ticket = `#${run.taskId}${run.taskTitle ? ` "${run.taskTitle}"` : ""}`;
     const produced = run.produced === true ? " \xB7 produced output" : run.produced === false ? " \xB7 produced NOTHING" : "";
-    const failed = run.errorMessage ? ` \xB7 ${run.errorMessage}` : "";
+    const failed3 = run.errorMessage ? ` \xB7 ${run.errorMessage}` : "";
     const where = run.hostName ? ` \xB7 on on-prem "${run.hostName}"` : run.executor ? ` \xB7 on ${run.executor}${run.sandbox ? ` (sandbox: ${run.sandbox})` : ""}` : " \xB7 on ? (executor not recorded)";
     out.push(
-      `  - run #${run.executionId} \xB7 ${who} \xB7 ${ticket} \xB7 ${run.status}${produced}${where} \xB7 by ${run.submittedBy}${run.source ? ` via ${run.source}` : ""} \xB7 ${shortTime(run.createdAt)}${run.completedAt ? ` \u2192 ${shortTime(run.completedAt)}` : ""}${failed}`
+      `  - run #${run.executionId} \xB7 ${who} \xB7 ${ticket} \xB7 ${run.status}${produced}${where} \xB7 by ${run.submittedBy}${run.source ? ` via ${run.source}` : ""} \xB7 ${shortTime(run.createdAt)}${run.completedAt ? ` \u2192 ${shortTime(run.completedAt)}` : ""}${failed3}`
     );
   }
   if (runs.runs.length > MAX_RUNS_LISTED) {
@@ -27279,16 +30485,16 @@ function fmtAdvertised(tools) {
   }
   return "";
 }
-function usd2(n2) {
+function usd3(n2) {
   return String.fromCharCode(36) + n2.toFixed(n2 >= 1 ? 2 : 4);
 }
 function formatChatSpend(spend) {
   if (!spend?.spend) return null;
   const s = spend.spend;
   const saved = spend.saved;
-  const savedBit = saved && (saved.measuredUsd > 0 || saved.estimatedUsd > 0) ? ` \xB7 saved ${usd2(saved.measuredUsd)} measured / ${usd2(saved.estimatedUsd)} estimated (${saved.tokensSaved.toLocaleString("en-US")} tok)` : "";
+  const savedBit = saved && (saved.measuredUsd > 0 || saved.estimatedUsd > 0) ? ` \xB7 saved ${usd3(saved.measuredUsd)} measured / ${usd3(saved.estimatedUsd)} estimated (${saved.tokensSaved.toLocaleString("en-US")} tok)` : "";
   const unpriced = s.unpricedTokens > 0 ? ` \xB7 ${s.unpricedTokens.toLocaleString("en-US")} tok unpriced` : "";
-  return `- This chat's cost: platform ${usd2(s.platformUsd)} \xB7 your key ${usd2(s.yourKeyUsd)} \xB7 total ${usd2(s.totalUsd)} \xB7 ${s.promptTokens.toLocaleString("en-US")} prompt + ${s.completionTokens.toLocaleString("en-US")} completion tok \xB7 ${s.requests} request(s)${unpriced}${savedBit}`;
+  return `- This chat's cost: platform ${usd3(s.platformUsd)} \xB7 your key ${usd3(s.yourKeyUsd)} \xB7 total ${usd3(s.totalUsd)} \xB7 ${s.promptTokens.toLocaleString("en-US")} prompt + ${s.completionTokens.toLocaleString("en-US")} completion tok \xB7 ${s.requests} request(s)${unpriced}${savedBit}`;
 }
 function formatChatDiagnostics(d) {
   const lines = ["## Chat diagnostics"];
@@ -28508,7 +31714,10 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   bindChatHistoryForSync,
   brainPersonaAgents,
   brainRequestError,
+  brainRunPolicy,
+  brainRunTask,
   brainUploadUrl,
+  buildBrainRunPorts,
   buildBrainTriageReport,
   buildChatDiagnosticsReport,
   buildComposerDirectives,
@@ -28772,6 +31981,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   runBrainLoop,
   runOutcomesSince,
   runProgressVerdict,
+  runViaAgent,
   savePendingPrompt,
   savedChatOf,
   scopeToConsolidation,
@@ -28804,6 +32014,8 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   stopRun,
   stoppedBeforeStartRow,
   stoppedTurnMetadata,
+  storedRunEngine,
+  storedRunEngineField,
   streamChatCompletion,
   streamSummaryCompletion,
   stripAskUser,

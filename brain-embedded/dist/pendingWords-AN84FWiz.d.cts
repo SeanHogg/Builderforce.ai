@@ -1,7 +1,7 @@
 import { L as LocalRuntimeId, b as LocalEndpoint, a as LocalRuntimeProbe, c as LocalModel } from './probe-BF7uUc_H.cjs';
 import { ChatErrorAction } from './chatError.cjs';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
-import { ConsolidateOptions, ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
+import { ConsolidateOptions, ConsolidatedMemory, WorkingMemorySnapshot } from '@seanhogg/builderforce-memory/working';
 
 /**
  * The SPENT vs SAVED contract — the shape the api's `spendSavingsSummary` produces, on
@@ -2438,6 +2438,11 @@ interface RunKnowledgeLog {
     /** The long-term code map this run consolidates into (`consolidate`), or null. */
     consolidate(opts?: ConsolidateOptions): ConsolidatedMemory | null;
 }
+/** What a run's memory carries across a host's step boundary (a durable tick). Plain data. */
+interface RunKnowledgeState {
+    memory: WorkingMemorySnapshot;
+    tools: string[];
+}
 
 /**
  * The deterministic-first PreFetch contract (docs/design/deterministic-prefetch.md).
@@ -2611,6 +2616,61 @@ interface ServedRead {
 }
 
 /**
+ * telemetry/rowType — the shape of the uniform outcome row (PRD 35 §8.2).
+ *
+ * Split out of `contract.ts` (which re-exports it) so the contract stays under the module
+ * size limit; WS6 owns the row and the fields it adds.
+ */
+/** The uniform outcome row (§8.2): ONE per run, every entry point, built by `telemetry/outcomeRow`
+ *  when the run ends. `entryPoint` is a telemetry label — never a behaviour branch (§5 rule 3). */
+interface RunOutcomeRow {
+    entryPoint: string;
+    runId?: string;
+    /** Set on a SUB-AGENT's row: the run that spawned it (`RunTask.dispatch.parentRunId`), so a child is never counted as a second run of its owner. */
+    parentRunId?: string;
+    steps: number;
+    toolCalls: number;
+    toolErrors: number;
+    /** How many times the transcript was compacted this run. */
+    compactions: number;
+    /** How many stall recoveries the run's model policy performed. */
+    stallRecoveries: number;
+    /** How many times the run escalated (a forced-progress / stronger-model step). */
+    escalations: number;
+    /** The declared verify phase's result. */
+    verify: 'passed' | 'failed' | 'not-run';
+    terminalStatus: string;
+    model?: string;
+    tokens?: number;
+    cacheReadTokens?: number;
+    cost?: number;
+    /** The turn the first spawn happened on; null when nothing was spawned. */
+    firstSpawnTurn?: number | null;
+    /** How many covered reads were stubbed (a window already served, re-served). */
+    coveredReadStubs?: number;
+    /** `cat`/`sed`/`head`/`tail` of a workspace file through the shell. */
+    shellFileReads?: number;
+    /** Calls that errored with "not a repo". */
+    repoErrors?: number;
+    /** Tokens the context pack contributed. */
+    contextPackTokens?: number;
+    /** The model preflight result: ok | refreshed | degraded:<reason>. */
+    modelPreflight?: string;
+    /** Turns that claimed readiness then only read (WS8p `unkept_ready`). */
+    unkeptReadyClaims?: number;
+    /** The A3 progress trips, by signal ({ signal: count }). */
+    progressTrips?: Record<string, number>;
+    /** Present (true) only when the run was STOPPED (a user Stop, a steered stop, a cancelled owner) - not a failure of the work. */
+    cancelled?: boolean;
+    /** Present (true) only when the run died on a provider rate limit - an availability signal, not a quality one. */
+    rateLimited?: boolean;
+    /** Present (true) only when the run failed because the TENANT ran out of quota/budget - not evidence about the model, so routing never learns from it. NOT a run stopping at its own per-run cap. */
+    quotaExhausted?: boolean;
+    /** Present (true) only when the run was served by a WEAKER model than it asked for (a recorded downgrade). A failover onto a model of the same standing (or one the price book cannot rank), and a preflight note, are not recorded as a downgrade. */
+    degraded?: boolean;
+}
+
+/**
  * The run store's public contracts — what a host hands a run ({@link BrainRunRequest})
  * and what it observes ({@link BrainRunSnapshot}, {@link GlobalRunState}). Types only.
  */
@@ -2624,6 +2684,10 @@ interface ServedRead {
  * for a chat.
  */
 type RunKey = number | string;
+/** The engines a run can be driven by (`runEngine.ts`). */
+type RunEngineId = 'loop' | 'agent';
+/** The surfaces a run comes in through - a telemetry label. */
+type RunEntryPoint = 'vscode' | 'web' | 'rovr';
 /** Streaming fn shape (matches BrainRuntime.stream). */
 type BrainStreamFn = (opts: Omit<StreamChatOptions, 'transport'>, handlers?: StreamHandlers) => Promise<StreamChatResult>;
 /** Persistence subset the loop needs (matches BrainPersistenceAdapter). */
@@ -2857,6 +2921,22 @@ interface BrainRunRequest {
      */
     maxRunBudgetUsd?: number;
     /**
+     * Which engine drives this run (PRD 35 WS4): the Brain's own loop, or THE one agent
+     * (`@builderforce/agent-run`). Absent ⇒ the device's `BRAIN_RUN_ENGINE`, else `loop`. It selects the
+     * engine and nothing else; the switch goes away when the default flips.
+     */
+    engine?: RunEngineId;
+    /**
+     * The surface the run came in through - the label its uniform outcome row carries. Telemetry only:
+     * nothing branches on it.
+     */
+    entryPoint?: RunEntryPoint;
+    /**
+     * Told the run's uniform outcome row (PRD 35 §8.2) once, when an agent-engine run ends. The host
+     * posts it to the one write-back door; the run does no network I/O of its own. Best-effort.
+     */
+    reportRunRow?: (row: RunOutcomeRow) => Promise<unknown> | void;
+    /**
      * Told once, at run end, how the run ended and under which run id its calls were
      * recorded (`runEndOutcome.ts`) — the host stores it beside its usage ledger for the
      * pipeline route report. Also told, on the chat's NEXT request, whether a PreFetch
@@ -3040,4 +3120,4 @@ declare function replayPendingWords(chatId: number, persistence: Pick<BrainRunPe
 /** The app started: replay every chat this person left words in, not only the one that happens to be opened. */
 declare function replayAllPendingWords(persistence: Pick<BrainRunPersistence, 'sendMessages'>): Promise<number>;
 
-export { type ImageUrlContentPart as $, type BrainDiagnostics as A, type BrainMessage as B, type ChatInputAttachment as C, type StaffingSummary as D, type Effort as E, type AnswerOriginCost as F, type GlobalRunState as G, type AssembledToolCall as H, type AvoidedRunCall as I, type BrainDiagnosticsContext as J, type BrainRunOutcome as K, type LocalFirstAccount as L, type BrainRunPhase as M, type BuildBrainTriageOptions as N, type ByoUnresolvedEntry as O, type ProjectMemoryRequest as P, CHAT_MODES as Q, type RunKey as R, type SpendSavingsSummary as S, CHAT_MODE_ICON as T, type UsageSurface as U, type ChatWorkDirectiveOptions as V, type CompletionMetadata as W, type DispatchRefusal as X, type EffortProfile as Y, type EvermindLearnOutcome as Z, type EvermindLearnTarget as _, type BrainRunSnapshot as a, formatBrainProvenance as a$, type LocalFirstAttemptSummary as a0, MAX_STOP_HOOK_ROUNDS as a1, type MemoryAnswerOptions as a2, type MemoryFirstAnswer as a3, type MemorySurface as a4, type ModelPreflightResult as a5, type ModelScore as a6, type ModelTurn as a7, type ModelWindowSources as a8, NEW_CHAT_MODE as a9, UNBACKED_TICKET_CLAIM_NOTICE as aA, UNBACKED_WRITE_CLAIM_NOTICE as aB, USAGE_SURFACES as aC, USAGE_SURFACE_HEADER as aD, type UpstreamTurnEvidence as aE, accountUsedInTrace as aF, activityTarget as aG, askStopHook as aH, attachEvermindLearn as aI, buildBrainTriageReport as aJ, byoReasonHint as aK, byoUnresolvedInTrace as aL, byoUnresolvedSummary as aM, chatConversationDirective as aN, chatModeDirective as aO, chatRosterFromParticipants as aP, chatWorkDirective as aQ, clearPendingWords as aR, computeBrainDiagnostics as aS, computeRunProgress as aT, contextWindowOf as aU, describeLiveStep as aV, detectAnnouncedButUnmadeToolCall as aW, detectUnbackedTicketClaim as aX, detectUnbackedWriteClaim as aY, effortProfile as aZ, formatBrainDiagnostics as a_, type PersonaSubagent as aa, type PrefetchResult as ab, RESTING_CHAT_MODE as ac, type ReasoningLevel as ad, type RepeatStreak as ae, type RepeatedTarget as af, RepetitionLoopError as ag, type RunLineage as ah, type RunOutcomeReport as ai, type RunPipelineSettings as aj, type RunStageModels as ak, type RunStopHook as al, type RunStopInput as am, type RunTurn as an, STEP_MESSAGE_ROLE as ao, SUBAGENT_OF_META_KEY as ap, type SavingsBreakdown as aq, type SavingsBySource as ar, type SavingsSourceKey as as, type ServedRead as at, type SpendBreakdown as au, StreamInterruptedError as av, type SubagentOrigin as aw, type TextContentPart as ax, type ToolExposure as ay, TransportError as az, type BrainTraceEvent as b, formatBytes as b0, formatDispatchRefusals as b1, formatEvermindLearnStep as b2, formatModelScorecard as b3, formatModelTurnLog as b4, formatStaffingSummary as b5, hasEditIntent as b6, isChatMode as b7, isDispatchTool as b8, isEffort as b9, streamChatCompletion as bA, summarizeLocalFirstAttempt as bB, toolActivity as bC, toolExposureInTrace as bD, workFiledNotStaffedVerdict as bE, forgetPendingWords as bF, markPendingWordsRead as bG, registerPendingWordsReplay as bH, rememberPendingWords as bI, replayAllPendingWords as bJ, replayPendingWords as bK, isEvermindModel as ba, isFailedToolResult as bb, isMutationTool as bc, isStepMessage as bd, isTicketWriteTool as be, isUsageSurface as bf, localFallbackTrace as bg, midRunNotice as bh, modelFailoversInTrace as bi, modelScorecard as bj, modelTurnLog as bk, modelsUsedInTrace as bl, narratedUnadvertisedInTrace as bm, normalizeChatMode as bn, parseByoUnresolved as bo, parseSubagentOrigin as bp, projectMemoryHooks as bq, reasoningForRun as br, resolveContextWindow as bs, savedChatOf as bt, serverChatIdOf as bu, setPendingWordsOwner as bv, shortenTarget as bw, staffingSummaryInTrace as bx, stallRecoveriesInTrace as by, stallUnrecoveredInTrace as bz, type BrainRunPersistence as c, type BrainRunRequest as d, type BrainTransport as e, type BrainChat as f, type BrainStreamFn as g, type RunEndOutcome as h, type CompletionUsage as i, type ChatCompletionMessage as j, type StreamChatOptions as k, type StreamHandlers as l, type StreamChatResult as m, type LocalFirstAttemptRecord as n, type LocalFirstAttempt as o, type LocalFirstWorkload as p, type EvermindRunHooks as q, type BrainToolSpec as r, type BrainModality as s, type ChatMode as t, type BrainRunActivity as u, type RunWindowSources as v, type ReasoningIntent as w, type ChatRosterAgent as x, type ContentPart as y, type RunProgress as z };
+export { type ChatWorkDirectiveOptions as $, type ReasoningIntent as A, type BrainTraceEvent as B, type ChatCompletionMessage as C, type ChatRosterAgent as D, type Effort as E, type RunEngineId as F, type GateOutcome as G, type ContentPart as H, type CompletionMetadata as I, type RunProgress as J, type BrainDiagnostics as K, type LocalFirstAccount as L, type StaffingSummary as M, type AnswerOriginCost as N, type AssembledToolCall as O, type ProjectMemoryRequest as P, type AvoidedRunCall as Q, type RunTurn as R, type SpendSavingsSummary as S, type BrainDiagnosticsContext as T, type UsageSurface as U, type BrainRunOutcome as V, type BrainRunPhase as W, type BuildBrainTriageOptions as X, type ByoUnresolvedEntry as Y, CHAT_MODES as Z, CHAT_MODE_ICON as _, type BrainMessage as a, detectUnbackedTicketClaim as a$, type DispatchRefusal as a0, type EffortProfile as a1, type EvermindLearnOutcome as a2, type EvermindLearnTarget as a3, type ImageUrlContentPart as a4, type LocalFirstAttemptSummary as a5, MAX_STOP_HOOK_ROUNDS as a6, type MemoryAnswerOptions as a7, type MemoryFirstAnswer as a8, type MemorySurface as a9, type SubagentOrigin as aA, type TextContentPart as aB, type ToolExposure as aC, TransportError as aD, UNBACKED_TICKET_CLAIM_NOTICE as aE, UNBACKED_WRITE_CLAIM_NOTICE as aF, USAGE_SURFACES as aG, USAGE_SURFACE_HEADER as aH, type UpstreamTurnEvidence as aI, accountUsedInTrace as aJ, activityTarget as aK, askStopHook as aL, attachEvermindLearn as aM, buildBrainTriageReport as aN, byoReasonHint as aO, byoUnresolvedInTrace as aP, byoUnresolvedSummary as aQ, chatConversationDirective as aR, chatModeDirective as aS, chatRosterFromParticipants as aT, chatWorkDirective as aU, clearPendingWords as aV, computeBrainDiagnostics as aW, computeRunProgress as aX, contextWindowOf as aY, describeLiveStep as aZ, detectAnnouncedButUnmadeToolCall as a_, type ModelPreflightResult as aa, type ModelScore as ab, type ModelTurn as ac, type ModelWindowSources as ad, NEW_CHAT_MODE as ae, type PersonaSubagent as af, type PrefetchResult as ag, RESTING_CHAT_MODE as ah, type ReasoningLevel as ai, type RepeatStreak as aj, type RepeatedTarget as ak, RepetitionLoopError as al, type RunLineage as am, type RunOutcomeReport as an, type RunPipelineSettings as ao, type RunStageModels as ap, type RunStopHook as aq, type RunStopInput as ar, STEP_MESSAGE_ROLE as as, SUBAGENT_OF_META_KEY as at, type SavingsBreakdown as au, type SavingsBySource as av, type SavingsSourceKey as aw, type ServedRead as ax, type SpendBreakdown as ay, StreamInterruptedError as az, type BrainRunActivity as b, detectUnbackedWriteClaim as b0, effortProfile as b1, formatBrainDiagnostics as b2, formatBrainProvenance as b3, formatBytes as b4, formatDispatchRefusals as b5, formatEvermindLearnStep as b6, formatModelScorecard as b7, formatModelTurnLog as b8, formatStaffingSummary as b9, shortenTarget as bA, staffingSummaryInTrace as bB, stallRecoveriesInTrace as bC, stallUnrecoveredInTrace as bD, streamChatCompletion as bE, summarizeLocalFirstAttempt as bF, toolActivity as bG, toolExposureInTrace as bH, workFiledNotStaffedVerdict as bI, forgetPendingWords as bJ, markPendingWordsRead as bK, registerPendingWordsReplay as bL, rememberPendingWords as bM, replayAllPendingWords as bN, replayPendingWords as bO, hasEditIntent as ba, isChatMode as bb, isDispatchTool as bc, isEffort as bd, isEvermindModel as be, isFailedToolResult as bf, isMutationTool as bg, isStepMessage as bh, isTicketWriteTool as bi, isUsageSurface as bj, localFallbackTrace as bk, midRunNotice as bl, modelFailoversInTrace as bm, modelScorecard as bn, modelTurnLog as bo, modelsUsedInTrace as bp, narratedUnadvertisedInTrace as bq, normalizeChatMode as br, parseByoUnresolved as bs, parseSubagentOrigin as bt, projectMemoryHooks as bu, reasoningForRun as bv, resolveContextWindow as bw, savedChatOf as bx, serverChatIdOf as by, setPendingWordsOwner as bz, type BrainRunRequest as c, type BrainRunSnapshot as d, type RunKnowledgeState as e, type RunOutcomeRow as f, type RunKey as g, type GlobalRunState as h, type BrainRunPersistence as i, type BrainTransport as j, type BrainChat as k, type ChatInputAttachment as l, type BrainStreamFn as m, type RunEndOutcome as n, type CompletionUsage as o, type StreamChatOptions as p, type StreamHandlers as q, type StreamChatResult as r, type LocalFirstAttemptRecord as s, type LocalFirstAttempt as t, type LocalFirstWorkload as u, type EvermindRunHooks as v, type BrainToolSpec as w, type BrainModality as x, type ChatMode as y, type RunWindowSources as z };

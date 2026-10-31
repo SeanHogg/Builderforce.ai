@@ -920,6 +920,12 @@
           "minimum": 0,
           "markdownDescription": "%config.maxRunBudgetUsd.desc%"
         },
+        "builderforce.agent.engine": {
+          "type": "string",
+          "enum": ["loop", "agent"],
+          "default": "loop",
+          "markdownDescription": "%config.agent.engine.desc%"
+        },
         "builderforce.images.maxEdge": {
           "type": "number",
           "default": 1568,

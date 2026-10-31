@@ -8,17 +8,11 @@
 import { volatileTail } from '@seanhogg/builderforce-memory/handoff';
 import { replayTextOf, type LoopPorts } from '@builderforce/agent-loop';
 import { coderHandoffBrief, nextTurn } from '@builderforce/run-policy';
-import { toolNamesMentionedIn } from '@builderforce/agent-stall';
 import { StreamInterruptedError, type ChatCompletionMessage, type CompletionMetadata, type StreamChatResult, type StreamHandlers } from '../streamChatCompletion';
 import { turnMaxTokens } from '../effort';
 import { providerFailureEvent } from '../providerFailure';
 import { coderReaskTrace, providerFailureTrace, transportRetryTrace } from '../runPolicyTraces';
-import { localFallbackTrace } from '../localFirstTraces';
-import { setLastResolvedModel } from '../lastResolvedModel';
 import { isCodeChangeTool } from '../localWorkspaceTools';
-import { createComposingActivity, toolCallArgBytes } from '../composingActivity';
-import { hasCallMarkup } from '../xmlToolCalls';
-import { turnInterruption } from '../finishReason.js';
 import { takeRunSteering } from './steerInterrupt';
 import { persistSteer } from './steerPersistence';
 import { steerModelContent } from '../runSteering';
@@ -27,17 +21,16 @@ import { summarizeMiddle } from '../transcriptSummarizer';
 import { persistFoldMarker } from './runFoldMarker';
 import { compactionSavedTokens, stampOncePerCall } from './compactionSaved';
 import { callMemoryEffect } from '../memorySavings';
-import { accrueByoUnresolved, accrueProviderCap, emit, emitStreaming, nowIso, nowMs, pushTrace, runTrace, setActivity } from './runCells';
-import { modelDowngradeEvent } from './modelDowngrade';
-import { gatewayRoutingArgs } from './gatewayRoutingTrace';
+import { emit, nowIso, nowMs, pushTrace } from './runCells';
 import { turnMenu } from './turnMenu';
-import { servedOnDevice } from '@builderforce/local-inference';
 import { markPersonTurn } from './chatAsks';
-import { asLiveTurn, connectRetryStep, liveTurnModel } from './turnPersistence';
-import { reportToPolicy, type RunLoopContext, type TurnMeta } from './runLoopContext';
+import { asLiveTurn } from './turnPersistence';
+import { openLiveTurn } from './turnStream';
+import { recordTurn } from './turnRecorder';
+import { reportToPolicy, type RunLoopContext } from './runLoopContext';
 
 export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionMessage>['complete'] {
-  const { c, chatId, runKey, req, convo, systemPrompt, metadata, recallBlockTokens, allTools } = run;
+  const { c, chatId, runKey, req, convo, systemPrompt, metadata, recallBlockTokens } = run;
   const { stream, routingMode, maxTokens, reasoning, runTool } = req;
   return async (ctx) => {
     const iter = ctx.step;
@@ -94,47 +87,13 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // run's signal is the one it watches) and the run unwinds quietly.
     if (c.abort?.signal.aborted) throw new Error('run stopped');
     const llmStart = nowMs();
-    // Time-to-first-token: stamped on the FIRST streamed delta of this turn so
-    // the timeline's "Thought for Xs" reflects latency-to-first-token, not the
-    // whole turn. Stays undefined for a pure tool-call / empty turn.
-    let firstTokenAt: number | undefined;
     let result: StreamChatResult;
     // What this turn offers: the relevance-selected menu, or a forced turn's (`turnMenu.ts`).
     const { forced, advertised, tools, advertisedNames, opening } = turnMenu(run, iter);
-    // The completion is open and no token has arrived yet — the phase that used to
-    // be indistinguishable from a hang. It flips to `writing` on the first delta.
-    setActivity(c, { phase: 'thinking', startedAt: Date.now(), step: iter });
-    // A turn that emits a tool call streams its ARGUMENTS, not text — 21 KB of them
-    // took 3m 23s on chat #113 while the indicator sat on "writing the reply". See
-    // `composingActivity.ts`; the run store only supplies the cell's three writes.
-    const composing = createComposingActivity(
-      { set: (a) => { c.activity = a; }, repaint: () => emit(c), coalescedRepaint: () => emitStreaming(c) },
-      { step: iter },
-    );
-    const handlers: StreamHandlers = {
-      onModel: liveTurnModel(c),
-      onConnectRetry: connectRetryStep(c, iter),
-      onTextDelta: (d) => {
-        c.streamingText += d;
-        if (firstTokenAt === undefined) {
-          firstTokenAt = nowMs();
-          // First token: the reply is visibly forming, so the indicator stops
-          // claiming the model is still thinking. A PHASE change, so it repaints
-          // now (one repaint carrying the first token too); every later delta
-          // is text only and coalesces into a frame.
-          c.activity = { phase: 'writing', startedAt: Date.now(), step: iter };
-          emit(c);
-          return;
-        }
-        emitStreaming(c);
-      },
-      // The first argument fragment is this turn's first token too: a tool-only turn
-      // recorded no ttft at all, so "Thought for Xs" covered the whole turn.
-      onToolCallDelta: (index, partial) => {
-        if (firstTokenAt === undefined) firstTokenAt = nowMs();
-        composing.onDelta(index, partial);
-      },
-    };
+    // The completion is open and no token has arrived yet - the phase that used to be indistinguishable from a hang.
+    // It flips to `writing` on the first delta; a tool call's ARGUMENTS stream as `composing` (`turnStream.ts`).
+    const live = openLiveTurn(c, iter);
+    const handlers: StreamHandlers = live.handlers;
     // The role, model and exclusions this turn asks for — a tool-less turn is
     // conversation, not analysis or code. Re-read per request: a retry or the coder
     // re-ask below asks for what the policy says AFTER the event that caused it.
@@ -181,13 +140,7 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
       pushTrace(c, providerFailureTrace(nowIso(), iter, (e instanceof StreamInterruptedError && e.model) || run.policy.model, e, nowMs() - llmStart));
       return e;
     };
-    /** Start the turn over on a clean slate — the discarded attempt's text already streamed. */
-    const restartTurn = (): void => {
-      c.streamingText = '';
-      firstTokenAt = undefined;
-      composing.reset();
-      emit(c);
-    };
+    const restartTurn = (): void => live.restart();
     try {
       result = await request([], opening);
     } catch (e) {
@@ -247,129 +200,9 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // silently accepted as the final answer — the run just stopped mid-task. A turn
     // that actually called a tool proves the model is acting, so the streak resets.
     if (result.toolCalls.length > 0) run.announcementRecoveries = 0;
-    // The model making the code changes is the one this run's outcome grades as a
-    // coder — after a hand-off the coding model, under a pin the pinned one.
-    if (result.resolvedModel && result.toolCalls.some((tc) => isCodeChangeTool(tc.name))) c.codeModel = result.resolvedModel;
-    // Surface a connected-but-unresolved BYO account for a live banner (and reset
-    // clears it when the account is reconnected). Emit happens with the trace below.
-    accrueByoUnresolved(c, result.byoUnresolved);
-    // Surface any BYO provider usage cap so the user knows to manage their keys.
-    accrueProviderCap(c, result.providerCap);
-    // Silent-downgrade detection: the gateway can fail over mid-run to a
-    // different (often smaller-window) model than we requested. That's a prime
-    // context-exhaustion symptom, so surface it as its own warning step instead
-    // of leaving it buried in the model field — the diagnostics block counts it.
     const resolved = result.resolvedModel ?? run.policy.model ?? 'default';
     const requested = run.policy.model ?? 'default';
-    // The run's production cost so far — what its answer is cached with, and the model
-    // a later memory answer in this chat is priced against.
-    c.runUsage.promptTokens += result.usage?.prompt ?? 0;
-    c.runUsage.completionTokens += result.usage?.completion ?? 0;
-    if (result.resolvedModel) {
-      c.runUsage.model = result.resolvedModel;
-      c.lastServedModel = result.resolvedModel;
-    }
-    // Record what ACTUALLY served this turn so `builtin_session_current_model` can
-    // report the exact model (an MCP call is a separate request and can't see it).
-    // Keyed by CHAT: runs are concurrent on a host that owns them, so one slot would
-    // let this chat's tool call answer with the model that served a different one.
-    setLastResolvedModel(chatId, result.resolvedModel);
-    // A pinned model answered by another, or an auto-routed turn the tenant's own
-    // account could not serve, or an auto-routed PLAN turn on a Flash-class model
-    // (PRD 35 E7) — see `modelDowngrade.ts`.
-    const downgrade = modelDowngradeEvent({
-      requested, resolved, step: iter, ts: nowIso(), events: runTrace(c), planPhase: !c.codeChanged,
-      ...(result.byoUnresolved ? { byoUnresolved: result.byoUnresolved } : {}),
-    });
-    if (downgrade) pushTrace(c, downgrade);
-    // A local-first turn that fell over (on-device model down/refused → the cloud).
-    const localFallback = localFallbackTrace(nowIso(), iter, result.localFirst);
-    if (localFallback) pushTrace(c, localFallback);
-    // Tool names this turn WROTE OUT as prose while emitting no structured call, that
-    // were never advertised to it. Computed here because this is the only place that
-    // holds BOTH the turn's text and the exact set the turn was offered — after the
-    // fact a reader can only see the catalog total, which is why "the model is broken,
-    // pick another one" was the standing (and sometimes wrong) verdict for a run whose
-    // real fault was that the tool it was told to call had been selected away. Cheap:
-    // a handful of strings, and empty on every healthy turn.
-    const narratedUnadvertised =
-      result.toolCalls.length === 0
-        ? toolNamesMentionedIn(result.text).filter((n) => !advertisedNames.has(n))
-        : [];
-    // Bytes of tool-call arguments this turn emitted — taken from the ASSEMBLED calls,
-    // so a turn retried after a stream break reports what the surviving attempt sent.
-    const argBytes = toolCallArgBytes(result.toolCalls);
-    // The serving model's window (resolved once per model per run), so the composer's
-    // context meter reads this turn's prompt against it — `contextUsageOf`.
-    const contextWindow = await run.windowFit.contextWindow?.();
-    // DURABLE, not just live: an `llm` turn carries the token usage, finish reason
-    // and resolved model the A-vs-B triage runs on. Kept in memory only, a chat
-    // copied after a reload reported `Turns: 0` / "Tokens: not reported" and could
-    // never separate context exhaustion from model degradation. The payload is a
-    // handful of scalars — no transcript text — so the row stays small.
-    pushTrace(c, {
-      ts: nowIso(),
-      category: 'llm',
-      label: 'llm.complete',
-      durationMs: nowMs() - llmStart,
-      ttftMs: firstTokenAt !== undefined ? firstTokenAt - llmStart : undefined,
-      // `model` is the model the gateway ACTUALLY used (resolved), falling back to
-      // what we requested when the gateway didn't report one. `requestedModel`
-      // keeps the caller's ask (empty/'default' ⇒ gateway auto-selects) so triage
-      // can tell "what I asked for" from "what answered".
-      args: {
-        model: resolved,
-        requestedModel: requested,
-        step: iter,
-        // What the turn asked the gateway for (analysis vs code vs chat), so a copied
-        // report shows which model planned and which one wrote the code.
-        role: turnRole,
-        toolCalls: result.toolCalls.length,
-        // How much the turn actually EMITTED. "1 tool call(s) · 202509ms" said
-        // nothing about a turn that spent three minutes streaming 21 KB of
-        // `write_file` arguments — which is what a long turn usually is.
-        ...(argBytes > 0 ? { argBytes } : {}),
-        ...(contextWindow ? { contextWindow } : {}),
-        // Which account served the turn + any connected-BYO provider the gateway
-        // could NOT resolve — so triage tells "ran on the shared pool despite a
-        // connected Claude account (expired?)" apart from "nothing connected".
-        account: result.account,
-        // A turn answered on this machine cost nothing: reported as 0 explicitly. Any other turn carries NO cost
-        // (unknown, never free) - the run's total is decided over all of them (`codeRunOutcome`).
-        ...(servedOnDevice(result) ? { costMc: 0 } : {}),
-        byoUnresolved: result.byoUnresolved,
-        // How the gateway ROUTED the turn: the candidates it walked and every model it
-        // tried and left (`model:status kind`). The only record of why a coding turn
-        // landed where it did — a connected coder never seeded reads differently from
-        // one seeded and refused.
-        ...gatewayRoutingArgs(result.gateway),
-        // How many tools the turn was actually OFFERED, out of the whole catalog.
-        // A zero here is the difference between "the model refused to act" and "it had
-        // nothing to act with" — previously unanswerable from a copied report, which
-        // only ever carried the registry-wide total.
-        advertisedTools: advertised.length,
-        catalogTools: allTools?.length ?? 0,
-        ...(narratedUnadvertised.length ? { narratedUnadvertised } : {}),
-        // The stream filter strips every call it lifts, so call markup still IN the text
-        // is a dialect it does not know: the model tried to act and the call never ran.
-        // Recorded so a copied report says "parser gap" instead of "won't call tools".
-        ...(result.toolCalls.length === 0 && hasCallMarkup(result.text) ? { unliftedCallMarkup: true } : {}),
-        // What the vendor's RAW response carried, counted before the gateway translated
-        // it — so a text-only turn reads as "the model returned no call" or "a returned
-        // call was lost on the way", never as a guess. Absent when the vendor does not report it.
-        ...(result.upstream ? { upstreamFunctionCalls: result.upstream.functionCalls, upstreamRecovered: result.upstream.recovered } : {}),
-      },
-      // Structured diagnostics fields — the A-vs-B triage reads these directly.
-      usage: result.usage,
-      finishReason: result.finishReason,
-      textChars: result.text.length,
-      result: `${result.toolCalls.length} tool call(s) · ${result.text.length} chars · finish: ${result.finishReason ?? '—'}${result.usage?.prompt != null ? ` · prompt ${result.usage.prompt} tok` : ''}`,
-    });
-    if (result.text.trim()) {
-      pushTrace(c, { ts: nowIso(), category: 'message', label: 'agent.message', args: { step: iter }, result: result.text });
-    }
-    run.lastTurnInterruption = turnInterruption(result.finishReason);
-    const meta: TurnMeta = { result, resolved, requested, advertised: advertised.length, advertisedNames };
+    const meta = await recordTurn(run, { result, iter, llmStart, live, role: turnRole, resolved, requested, advertised, advertisedNames });
     // A host that advertised tools but cannot run them gets the turn as a final
     // answer — a tool call nobody can execute is not a tool call.
     const toolCalls = runTool

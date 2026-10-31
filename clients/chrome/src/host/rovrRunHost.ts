@@ -19,6 +19,7 @@
 import {
   getRunSnapshot,
   resolveRunConfirm,
+  storedRunEngineField,
   type BrainRunRequest,
   type BrainToolSpec,
 } from '@seanhogg/builderforce-brain-embedded';
@@ -84,6 +85,8 @@ export function createRovrRunHost(ports: RovrRunHostPorts): RovrRunHost {
         ...(serverChatId !== undefined ? { serverChatId } : {}),
         ...(prefetch ? { prefetch } : {}),
         projectId: null,
+        // The device's opt-in to the one agent (`builderforce.runEngine`): selects the engine and nothing else.
+        ...storedRunEngineField(),
       };
     },
     confirm(chatId, ok) {

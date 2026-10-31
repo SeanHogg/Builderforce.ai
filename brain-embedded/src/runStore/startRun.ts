@@ -22,7 +22,7 @@ import { appendRunMessage } from './runControl';
 import { keepStoppedTurn, persistStep } from './turnPersistence';
 import { recordCodeChangeTicket, settleView, updateLinkedTickets } from './runBackstops';
 import { resolveServerChatId } from './serverChat';
-import { runLoop } from './runLoop';
+import { driveRun } from './runEngine';
 import { reportRunEnd } from './runEndOutcome';
 import { beginRun } from './beginRun';
 import { continueLeftovers, takeContinueOnSettle } from './continueChat';
@@ -105,7 +105,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
 
   c.runUsage = emptyRunUsage();
   try {
-    await runLoop(chatId, c, req, runKey);
+    await driveRun(chatId, c, req, runKey);
   } catch (e) {
     // A user-initiated Stop aborts the stream mid-flight; that's a clean exit,
     // not an error to surface. (runLoop already returns on an aborted signal, so

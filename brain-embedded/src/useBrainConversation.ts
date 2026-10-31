@@ -50,6 +50,7 @@ import type { ChatErrorAction } from './chatError';
 import type { DraftBinding, DraftToken } from './draftBinding';
 import { useLaunchCancel, type DraftSend } from './launchCancel';
 import type { ChatMode, ChatRosterAgent } from './chatMode';
+import { storedRunEngineField } from './runStore/runEnginePreference';
 import {
   startRun,
   stopBeforeStart,
@@ -448,7 +449,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       }
       if (draftSend) endDraftSend(draftSend); // the run starts: a Stop on the draft no longer cancels this send's launch - the door's token-scoped stop ends the run
       bindContinuation(id); // direction the run never reads becomes this chat's next turn
-      await startRun(id, extra ? { ...request, ...extra } : request);
+      await startRun(id, { ...storedRunEngineField(), ...request, ...extra });
     } finally {
       launchingRef.current.delete(id);
       cancelledLaunchRef.current.delete(id);

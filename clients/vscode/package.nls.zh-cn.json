@@ -122,6 +122,7 @@
   "config.pipeline.routeThreshold.desc": "路由分数（0–1，请求需要完整流水线的可能性）达到或超过该值时，运行使用完整流水线。如果快速处理经常需要重跑，请调低该值；路由报告会给出建议值。",
   "config.pipeline.quickModel.desc": "**快速处理**编码所用的模型。它会取代软性默认模型（编码阶段的模型、`#builderforce.defaultModel#` 或项目学习到的模型），但绝不会取代你为该聊天明确选择的模型。留空：使用编码阶段的模型（`#builderforce.models.code#`），否则按网关的顺序。",
   "config.maxRunBudgetUsd.desc": "每次运行的花费上限，单位为美元（0 = 关闭）。达到 80% 时会提醒运行，达到上限时运行停止并总结已完成的工作；不会回滚任何内容。按内置价格表计价；本机上的模型不产生费用。",
+  "config.agent.engine.desc": "由哪个引擎驱动聊天运行。\"loop\" 是 Brain 自身的循环（默认）；\"agent\" 是与云端和画布共用的同一个智能体。按设备选择，只决定引擎。",
   "config.images.maxEdge.desc": "附加图片发送给模型前缩放到的最长边（像素）（视觉模型本身也会缩小更大的图片）。较小的 PNG、WebP 和 JPEG 图片以及所有 GIF 按原样发送。",
   "config.images.jpegQuality.desc": "附加图片需要重新编码时（JPEG，若有透明度则为 WebP）首先尝试的质量（0.3–1）；只有在仍然太大而无法内联发送时才会使用更低的级别。"
 }

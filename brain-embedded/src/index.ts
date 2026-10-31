@@ -303,6 +303,8 @@ export type { GlobalRunState } from './brainRunStore';
 // VS Code chat participant) drives a run with `runBrainLoop`/`startRun` and observes
 // it via `subscribeRun` + `getRunSnapshot`/`getRunTrace`, the same store the React
 // `useBrainConversation` hook reads, without pulling in React.
+export { storedRunEngine, storedRunEngineField } from './runStore/runEnginePreference';
+export type { RunEngineId } from './runStore/runTypes';
 export {
   startRun,
   runBrainLoop,

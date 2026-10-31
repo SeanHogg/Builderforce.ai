@@ -122,6 +122,7 @@
   "config.pipeline.routeThreshold.desc": "Router score (0–1, the likelihood a request needs the full pipeline) at or above which a run takes the full pipeline. Lower it if quick runs keep needing a re-run; the route report suggests a value.",
   "config.pipeline.quickModel.desc": "Model a **quick pass** codes on. It replaces a soft default — the coding-stage model, `#builderforce.defaultModel#` or the project's learned model — but never a model you picked explicitly for the chat. Empty: the coding-stage model (`#builderforce.models.code#`), else the gateway's order.",
   "config.maxRunBudgetUsd.desc": "Spend cap per run, in US dollars (0 = off). The run is warned at 80% and stops at the cap with a summary of what it did; nothing is rolled back. Priced from the bundled price list; models on this machine cost nothing.",
+  "config.agent.engine.desc": "Which engine drives a chat run. \"loop\" is the Brain's own loop (default); \"agent\" is the one agent shared with the cloud and the canvas. Opt in per device; it selects the engine and nothing else.",
   "config.images.maxEdge.desc": "Longest edge, in pixels, an attached picture is scaled to before it is sent to the model (vision models downsample larger pictures anyway). Smaller PNG, WebP and JPEG pictures and every GIF are sent as they are.",
   "config.images.jpegQuality.desc": "First quality (0.3–1) tried when an attached picture has to be re-encoded (JPEG, or WebP when it has transparency); lower steps follow only if it is still too large to send inline."
 }

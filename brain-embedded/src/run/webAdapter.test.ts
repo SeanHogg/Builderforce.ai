@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PolicyGate } from '@builderforce/agent-run';
 import { resolveRunConfirm, resetBrainRunStore, stopRun } from '../runStore/runControl';
+import { getCell } from '../runStore/runCells';
+import { beginRun } from '../runStore/beginRun';
 import { binding, result, scripted } from '../test/brainRunHarness';
 import { queueRunSteering, resetRunSteering } from '../runSteering';
 import { brainEventSink, traceStepFor } from './eventSink';
