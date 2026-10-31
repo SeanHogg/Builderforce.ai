@@ -47,10 +47,11 @@ const readPid = async (file: string): Promise<number> => {
   return Number((await readFile(file, 'utf8')).trim());
 };
 
+// The timeouts below must outlast a login shell's start-up on a cold runner, or the shell dies before it writes its pid.
 describe.skipIf(!posix)('a foreground command that hangs', () => {
   it('a timeout kills the whole tree, grandchildren included, and the request answers', async () => {
     const pidFile = join(workdir, 'gc.pid');
-    const r = await serve('/sandbox/run', { command: `(sleep 300 & echo $! > "${pidFile}"; wait)`, timeoutMs: 400 });
+    const r = await serve('/sandbox/run', { command: `(sleep 300 & echo $! > "${pidFile}"; wait)`, timeoutMs: 5_000 });
     expect(r).toMatchObject({ ok: false, timedOut: true });
     const pid = await readPid(pidFile);
     await until(() => !alive(pid));
@@ -71,7 +72,7 @@ describe.skipIf(!posix)('a foreground command that hangs', () => {
     const pidFile = join(workdir, 'escaped.pid');
     const t0 = Date.now();
     // `setsid` puts the sleeper in its own group: the group kill cannot reach it, and it keeps the output pipe open.
-    const r = await serve('/sandbox/run', { command: `setsid sleep 300 & echo $! > "${pidFile}"; wait`, timeoutMs: 300 });
+    const r = await serve('/sandbox/run', { command: `setsid sleep 300 & echo $! > "${pidFile}"; wait`, timeoutMs: 5_000 });
     expect(r).toMatchObject({ ok: false, timedOut: true });
     expect(Date.now() - t0).toBeLessThan(10_000);
     process.kill(await readPid(pidFile), 'SIGKILL');

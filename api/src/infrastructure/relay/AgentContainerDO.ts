@@ -115,7 +115,10 @@ export class AgentContainerDO extends Container<Env> {
   override async onActivityExpired(): Promise<void> {
     if (!this.ctx.container?.running) return;
     const now = Date.now();
-    const since = await this.ctx.storage.get<number>(KEEPALIVE_SINCE_KEY).catch(() => undefined);
+    const since = await this.ctx.storage.get<number>(KEEPALIVE_SINCE_KEY).catch((error: unknown) => {
+      this.reportError(error, { operation: 'onActivityExpired', level: 'warning' });
+      return undefined; // an unreadable clock reads as no clock
+    });
     const decision = decideJobKeepAlive(await this.jobRunning(), since, now);
     if (decision.since === null) await this.ctx.storage.delete(KEEPALIVE_SINCE_KEY);
     else if (decision.since !== since) await this.ctx.storage.put(KEEPALIVE_SINCE_KEY, decision.since);
@@ -136,10 +139,14 @@ export class AgentContainerDO extends Container<Env> {
           body: JSON.stringify({ executionId }),
           signal: AbortSignal.timeout(JOB_PROBE_TIMEOUT_MS),
         });
-        const body = (await res.json().catch(() => null)) as { active?: unknown } | null;
+        const body = (await res.json().catch((error: unknown) => {
+          this.reportError(error, { operation: 'jobRunning', level: 'warning' });
+          return null; // an unparseable reply reads as not active
+        })) as { active?: unknown } | null;
         return body?.active === true;
       })();
-      probe.catch(() => { /* its verdict was already taken, or it timed out */ });
+      // A rejection after the race has settled has no awaiter: record it here so it is never unhandled.
+      probe.catch((error: unknown) => { this.reportError(error, { operation: 'jobRunning', level: 'warning' }); });
       // The signal alone cannot be trusted to unblock a proxied fetch, so the wait is raced too.
       let timer: ReturnType<typeof setTimeout> | undefined;
       return await Promise.race([
