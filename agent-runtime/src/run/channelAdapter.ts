@@ -55,6 +55,11 @@ function steered(messages: readonly AgentMessage[]): SteerInput[] {
   });
 }
 
+/** The reply reserve: on-prem's (its floor, or the turn's max_tokens), never more than a quarter of the window, so a small window keeps room for its history. */
+function reserveFor(config: AgentLoopConfig): number {
+  return Math.min(compactionReserve(config.maxTokens), Math.floor(resolveContextWindowTokens(config.model) / 4));
+}
+
 /** The policy DATA of a channel run. How the run behaves is the agent's. */
 function policyOf(config: AgentLoopConfig, request: string): RunPolicy {
   return {
@@ -64,7 +69,9 @@ function policyOf(config: AgentLoopConfig, request: string): RunPolicy {
     // Cost lever C9 (compaction under a long-context price tier) is read the on-device way: a partial rollout buckets by install.
     levers: onDeviceCostLeverOn("c9_price_tier_budget") ? ["c9_price_tier_budget"] : [],
     // The history is cut at the model's WINDOW, not the cloud's cost cap, and the reply reserve is on-prem's (its floor, or the turn's max_tokens).
-    budgets: { tokens: resolveContextWindowTokens(config.model), reserveTokens: compactionReserve(config.maxTokens) },
+    budgets: { tokens: resolveContextWindowTokens(config.model), reserveTokens: reserveFor(config) },
+    // A stall that fails the run over onto a model with a smaller window re-packs the context for it, and the model is told it took over.
+    modelHandoff: { ...(config.maxTokens !== undefined ? { maxTokens: config.maxTokens } : {}) },
     pinnedModel: modelRef(config.model),
     inference: "hybrid",
     verify: "none",

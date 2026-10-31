@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fakeDb } from '../../../test/fakeDb';
 import type { Db } from '../../infrastructure/database/connection';
-import { suppressedEmails } from './suppression';
+import { isSuppressed, suppressedEmails } from './suppression';
 
 describe('suppressedEmails', () => {
   it('merges marketing_suppressions and data_suppression_list hits in ONE statement', async () => {
@@ -24,6 +24,11 @@ describe('suppressedEmails', () => {
     const db = fakeDb();
     expect((await suppressedEmails(db as unknown as Db, 7, [])).size).toBe(0);
     expect(db.calls).toHaveLength(0);
+  });
+
+  it('isSuppressed reflects the shared check', async () => {
+    await expect(isSuppressed(fakeDb([[{ k: 'e', v: 'a@x.com' }]]) as unknown as Db, 7, 'A@x.com')).resolves.toBe(true);
+    await expect(isSuppressed(fakeDb([[]]) as unknown as Db, 7, 'a@x.com')).resolves.toBe(false);
   });
 
   it('compares identifier_type case-insensitively', async () => {

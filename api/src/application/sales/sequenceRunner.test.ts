@@ -4,16 +4,20 @@ import { sequenceDueSteps, sequenceNextDueAt } from '@builderforce/creation-canv
 vi.mock('../mailbox/mailboxService', () => ({ sendFromMailbox: vi.fn() }));
 vi.mock('../social/socialService', () => ({ publishSocialPost: vi.fn(), resolvePublishableAccounts: vi.fn() }));
 vi.mock('../activity/activityLog', () => ({ recordActivity: vi.fn(), SYSTEM_ACTOR: { type: 'system' } }));
+vi.mock('../marketing/suppression', () => ({ suppressedEmails: vi.fn(async () => new Set<string>()) }));
 
 import { runSequenceSweep } from './sequenceRunner';
+import { sendFromMailbox } from '../mailbox/mailboxService';
+import { suppressedEmails } from '../marketing/suppression';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 const NOW = new Date('2026-10-17T12:00:00.000Z');
 const DAY = 86_400_000;
 
-function fakeDb(rows: Array<Record<string, unknown>>) {
+function fakeDb(rows: Array<Record<string, unknown>>, otherRows: Array<Record<string, unknown>> = []) {
   const selects: string[] = [];
+  const updates: Array<Record<string, unknown>> = [];
   const batches: Array<Array<{ set: Record<string, unknown> }>> = [];
   const chain = (result: unknown) => {
     const p = Promise.resolve(result);
@@ -23,12 +27,12 @@ function fakeDb(rows: Array<Record<string, unknown>>) {
     select: (fields: Record<string, unknown>) => {
       const isSweep = 'content' in fields;
       selects.push(isSweep ? 'sweep' : 'other');
-      return { from: () => chain(isSweep ? rows : []) };
+      return { from: () => chain(isSweep ? rows : otherRows) };
     },
-    update: () => ({ set: (set: Record<string, unknown>) => ({ where: () => ({ set }) }) }),
+    update: () => ({ set: (set: Record<string, unknown>) => { updates.push(set); return { where: () => ({ set }) }; } }),
     batch: async (items: Array<{ set: Record<string, unknown> }>) => { batches.push(items); return []; },
   } as unknown as Db;
-  return { db, selects, batches };
+  return { db, selects, batches, updates };
 }
 
 const sequenceRow = (content: Record<string, unknown>) => ({
@@ -60,6 +64,61 @@ describe('runSequenceSweep — due-time gate', () => {
     const { db, batches } = fakeDb([sequenceRow({ sequenceState: 'paused', steps: [], enrolments: [] })]);
     await runSequenceSweep({} as Env, NOW, db);
     expect((batches[0]![0]!.set.nextDueAt as Date).getUTCFullYear()).toBe(9999);
+  });
+});
+
+describe('runSequenceSweep — do-not-contact', () => {
+  const enrolledAt = new Date(NOW.getTime() - DAY).toISOString();
+  const cadence = () => sequenceRow({
+    sequenceState: 'running',
+    steps: [{ dayOffset: 0, channel: 'email', subject: 'Hi {{name}}', body: 'Hello' }],
+    enrolments: [
+      { contactRef: 'Gone@x.test', name: 'Gone', enrolledAtISO: enrolledAt, stepsSent: 0 },
+      { contactRef: 'ok@x.test', name: 'Ok', enrolledAtISO: enrolledAt, stepsSent: 0 },
+    ],
+  });
+
+  it('sends nothing to a suppressed recipient, stops them for good, and still sends to everyone else', async () => {
+    vi.mocked(sendFromMailbox).mockReset().mockResolvedValue({ ok: true, id: 'm1' } as never);
+    vi.mocked(suppressedEmails).mockReset().mockResolvedValue(new Set(['gone@x.test']));
+    const { db, updates } = fakeDb([cadence()], [{ id: 5 }]);
+
+    const r = await runSequenceSweep({} as Env, NOW, db);
+
+    expect(r).toMatchObject({ sent: 1, stopped: 1, failed: 0 });
+    expect(sendFromMailbox).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sendFromMailbox).mock.calls[0]![4]).toMatchObject({ to: 'ok@x.test' });
+    // ONE batched check for the whole cadence, never one per recipient.
+    expect(suppressedEmails).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(suppressedEmails).mock.calls[0]![2]).toEqual(['Gone@x.test', 'ok@x.test']);
+
+    const saved = updates.find((u) => 'content' in u)!.content as { enrolments: Array<Record<string, unknown>>; sequenceState?: string };
+    const [gone, ok] = saved.enrolments;
+    expect(gone).toMatchObject({ contactRef: 'Gone@x.test', stepsSent: 0 });
+    expect(gone!.stoppedAtISO).toBe(NOW.toISOString());
+    expect(ok).toMatchObject({ contactRef: 'ok@x.test', stepsSent: 1 });
+    expect(ok!.stoppedAtISO).toBeUndefined();
+    // Stopped, not retryable: nothing is left due, and the cadence has run its course.
+    expect(sequenceDueSteps({ state: 'running', steps: [{ dayOffset: 0, channel: 'email' }], enrolments: saved.enrolments }, NOW)).toHaveLength(0);
+    expect(saved.sequenceState).toBe('completed');
+  });
+
+  it('still sends when nobody is suppressed', async () => {
+    vi.mocked(sendFromMailbox).mockReset().mockResolvedValue({ ok: true, id: 'm1' } as never);
+    vi.mocked(suppressedEmails).mockReset().mockResolvedValue(new Set());
+    const { db } = fakeDb([cadence()], [{ id: 5 }]);
+    const r = await runSequenceSweep({} as Env, NOW, db);
+    expect(r).toMatchObject({ sent: 2, stopped: 0, failed: 0 });
+    expect(sendFromMailbox).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails closed: if the suppression check errors nothing is sent and the cadence stays due', async () => {
+    vi.mocked(sendFromMailbox).mockReset();
+    vi.mocked(suppressedEmails).mockReset().mockRejectedValue(new Error('db down'));
+    const { db, updates } = fakeDb([cadence()], [{ id: 5 }]);
+    await runSequenceSweep({} as Env, NOW, db);
+    expect(sendFromMailbox).not.toHaveBeenCalled();
+    expect(updates).toEqual([]);
   });
 });
 

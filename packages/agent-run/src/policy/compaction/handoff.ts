@@ -36,6 +36,8 @@ export interface ModelHandoffInput<M> {
   priceTierBoundary?: number;
   /** The hard cap for the incoming turn's answer; sizes the reply reserve. */
   maxTokens?: number;
+  /** Rows that survive the cut whole even when they fall in the dropped middle (the task the run was given). */
+  pinned?: (row: M) => boolean;
 }
 
 export interface ModelHandoffResult<M> {
@@ -73,6 +75,7 @@ export async function packForModelHandoff<M>(input: ModelHandoffInput<M>, access
     toolsTokens: toolSchemaTokens(input.tools, defaultEstimateTokens),
     from: input.from,
     to: input.to,
+    ...(input.pinned ? { pinned: (view: HandoffMessage) => { const row = back.get(view); return row !== undefined && input.pinned!(row); } } : {}),
   });
   if (pack.dropped === 0) return { messages: [...input.messages], dropped: 0, fits: pack.fits };
   const messages: M[] = [];

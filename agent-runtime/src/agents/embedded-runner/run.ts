@@ -545,6 +545,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
             prompt,
             images: params.images,
             disableTools: params.disableTools,
+            ...(params.policyGates?.length ? { policyGates: params.policyGates } : {}),
             provider,
             modelId,
             model,

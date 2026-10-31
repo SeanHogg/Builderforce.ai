@@ -56,11 +56,6 @@ NOTIFICATION_EMAIL_FROM = "Builderforce <notifications@builderforce.ai>"
 # (`cron:work-pending`, `cron:last-floor-sweep`, …) and cron controls live there.
 # Revert when Workers Paid returns.
 CACHE_L2_KV = "false"
-# CRON_FLOOR_INTERVAL_MS = 2 h. A cost dial (see `floorIntervalMs` in
-# src/application/runtime/cronWorkSignal.ts): the 30-minute default wakes the database
-# 48 times a day (about 30 CU-hours a month). At 2 h an idle platform waits up to 2 h
-# for the unconditional fan-out. Clamped to 5 min – 6 h there; read as a string.
-CRON_FLOOR_INTERVAL_MS = "7200000"
 # CLOUDFLARE_ACCOUNT_ID must be set via: wrangler secret put CLOUDFLARE_ACCOUNT_ID
 #   The Cloudflare Workers AI `/accounts/<id>/ai/run/<model>` path needs it ALONGSIDE
 #   the CLOUDFLARE_AI_API_TOKEN secret — the vendor's apiKeyFrom returns null and

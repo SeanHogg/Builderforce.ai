@@ -1,5 +1,6 @@
 /**
- * THE do-not-contact check for every marketing send path.
+ * THE do-not-contact check. Used by the paths below; a send path not listed here
+ * does NOT honour it.
  *
  * Two ledgers say "do not contact" and both must be honoured:
  *   - `marketing_suppressions`  — unsubscribes, bounces, complaints (campaign engine writes it)
@@ -8,9 +9,19 @@
  *     even though the campaign engine never wrote it.
  *
  * Both are read in ONE statement per chunk (never per recipient), because every
- * statement is a Neon round trip. Campaign materialisation is the single place a
- * recipient list is built (sequences and the newsletter send as campaigns), so
- * that is where {@link suppressedEmails} runs.
+ * statement is a Neon round trip.
+ *
+ * WHO HONOURS IT
+ *   - Campaign materialisation (email/SMS campaigns, which the newsletter send uses) —
+ *     the single place a campaign recipient list is built, so {@link suppressedEmails}
+ *     runs there.
+ *   - The sales sequence runner (`sales/sequenceRunner.ts`) — sequence emails go straight
+ *     through `sendFromMailbox`, NOT through campaign materialisation, so the runner asks
+ *     {@link suppressedEmails} itself, once per cadence.
+ *
+ * WHO DOES NOT: direct mailbox sends (`mailboxAutomationService`, the `builtinMcpService`
+ * mailbox tools) call `sendFromMailbox` without this check. That is a product decision
+ * (a person writing one email to one person), not an oversight in this module.
  */
 import { sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
@@ -46,4 +57,8 @@ export async function suppressedEmails(db: Db, tenantId: number, emails: string[
     }
   }
   return blocked;
+}
+
+export async function isSuppressed(db: Db, tenantId: number, email: string): Promise<boolean> {
+  return (await suppressedEmails(db, tenantId, [email])).size > 0;
 }

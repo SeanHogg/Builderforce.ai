@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  canTransition, dueStatuses, editableStatuses, isArmed, isDone, isInFlight, mayEdit, mayStart,
+  dueStatuses, editableStatuses, isArmed, isDone, isInFlight, mayEdit, mayStart,
   phaseOf, restingStatus, statusesIn, type CampaignKind, type CampaignPhase,
 } from './campaignLifecycle';
 
@@ -48,37 +48,26 @@ describe('campaign lifecycle — stored strings behind the SQL predicates', () =
   });
 });
 
-describe('campaign lifecycle — transitions', () => {
-  it('lets an email move draft → sending → sent | failed and nowhere after', () => {
-    expect(canTransition('email', 'draft', 'sending')).toBe(true);
-    expect(canTransition('email', 'sending', 'sent')).toBe(true);
-    expect(canTransition('email', 'sending', 'failed')).toBe(true);
-    expect(canTransition('email', 'sent', 'sending')).toBe(false);
-    expect(canTransition('email', 'failed', 'sending')).toBe(false);
-    expect(canTransition('email', 'draft', 'sent')).toBe(false);
+describe('campaign lifecycle — startable statuses', () => {
+  it('lets an email start only from draft, and a social campaign from draft, scheduled or failed', () => {
+    const startable = (kind: CampaignKind) => CASES.filter(([k, , w]) => k === kind && w.start).map(([, status]) => status);
+    expect(startable('email')).toEqual(['draft']);
+    expect(startable('social')).toEqual(['draft', 'scheduled', 'failed']);
   });
 
-  it('lets a social campaign be armed, disarmed, run, settled and re-run after failing', () => {
-    expect(canTransition('social', 'draft', 'scheduled')).toBe(true);
-    expect(canTransition('social', 'scheduled', 'draft')).toBe(true);
-    expect(canTransition('social', 'scheduled', 'publishing')).toBe(true);
-    expect(canTransition('social', 'publishing', 'published')).toBe(true);
-    expect(canTransition('social', 'publishing', 'failed')).toBe(true);
-    expect(canTransition('social', 'failed', 'publishing')).toBe(true);
-    expect(canTransition('social', 'published', 'publishing')).toBe(false);
-    expect(canTransition('social', 'publishing', 'draft')).toBe(false);
+  it('only names statuses the channel writes', () => {
+    for (const [kind, status, want] of CASES) {
+      if (want.start) expect(phaseOf(kind, status)).toBeDefined();
+    }
   });
+});
 
-  it('never treats staying put or an unknown status as a transition', () => {
-    expect(canTransition('email', 'draft', 'draft')).toBe(false);
-    expect(canTransition('social', 'bogus', 'draft')).toBe(false);
-  });
-
-  it('only moves to statuses the channel knows', () => {
-    for (const [kind, status] of CASES.map(([k, s]) => [k, s] as const)) {
-      for (const to of ['draft', 'scheduled', 'sending', 'sent', 'publishing', 'published', 'failed']) {
-        if (canTransition(kind, status, to)) expect(phaseOf(kind, to)).toBeDefined();
-      }
+describe('campaign lifecycle — keys that are not statuses', () => {
+  it.each(['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf'])('treats %s as unknown rather than throwing', (key) => {
+    for (const kind of ['email', 'social'] as const) {
+      expect(phaseOf(kind, key)).toBeUndefined();
+      expect([mayEdit(kind, key), mayStart(kind, key), isInFlight(kind, key), isArmed(kind, key), isDone(kind, key)])
+        .toEqual([false, false, false, false, false]);
     }
   });
 });

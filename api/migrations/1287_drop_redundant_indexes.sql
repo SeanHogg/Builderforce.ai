@@ -1,12 +1,18 @@
--- 1287 · Retire a dead table, drop prefix-redundant indexes, make the NULL-able segment index partial.
+-- 1287 · Retire a dead table and drop prefix-redundant indexes on the non-hot tables.
 --
--- Operator-approved (2026-10-31) from the 2026-10-17 architecture review's held items. Three parts, every
--- statement idempotent (DROP … IF EXISTS / CREATE INDEX IF NOT EXISTS), the whole file one transaction
--- (scripts/migrate.mjs wraps each file + its ledger row in sql.transaction), so there is no CONCURRENTLY.
+-- Operator-approved (2026-10-31) from the 2026-10-17 architecture review's held items. Split across three files so no single
+-- transaction holds locks on many tables while the OLD Worker is live:
+--   1287 (this file)  A. the table drop + B. 56 prefix-redundant index drops on non-hot tables    1 table + 56 indexes
+--   1288              B. 5 prefix-redundant index drops on the hot tables (tasks, objects, llm_usage_log,
+--                     agent_memory, brain_chats; `executions` has no drop)                          5 indexes
+--   1289              C. idx_knowledge_documents_segment rebuilt WHERE segment_id IS NOT NULL         1 index
+-- The B drops total 61 across 1287 + 1288 (56 + 5). Every statement is idempotent (DROP … IF EXISTS / CREATE INDEX IF NOT EXISTS).
 --
---   A. DROP TABLE marketplace_skill_likes                                      1 table
---   B. DROP INDEX × 61, prefix-redundant btree indexes                      61 indexes
---   C. idx_knowledge_documents_segment rebuilt WHERE segment_id IS NOT NULL    1 index
+-- LOCKS. A plain DROP INDEX takes ACCESS EXCLUSIVE on its table until COMMIT, and scripts/migrate.mjs runs each file as ONE
+-- transaction (sql.transaction over the Neon HTTP transport: BEGIN, every statement, the ledger INSERT, COMMIT). `SET LOCAL
+-- lock_timeout` is the first statement of that transaction, so it bounds every lock wait in this file to 3s and reverts at COMMIT.
+-- If a lock cannot be had in time the statement errors, the whole file rolls back (nothing half-applied, no ledger row), the
+-- deploy fails cleanly BEFORE the Worker deploys, and the fix is to re-run the deploy.
 --
 -- WHY IT IS SAFE
 --   A. Migration 1236 folded every row into artifact_likes (THE like store, application/marketplace/artifactLikes.ts) and
@@ -22,17 +28,13 @@
 --      api/migrations in order (CREATE/DROP INDEX, index and table renames incl. 0078's claw → agent_host, DROP COLUMN,
 --      inline and ALTER constraints), not from the Drizzle schema. Tables served by the apps database, and any index
 --      whose replay was ambiguous (created inside a to_regclass-guarded block before its table existed), are excluded.
---   C. A query filtering segment_id = $1 still uses a partial index WHERE segment_id IS NOT NULL (the equality implies the
---      predicate). knowledge_documents.segment_id is a nullable column with no NOT NULL and no default-fill trigger
---      (NULL = workspace-wide), so the partial index leaves the NULL rows out. Every other single-column segment_id index
---      sits on a column that is NOT NULL (0056) or is filled by the set_default_segment_id() trigger (0057: soc_controls,
---      soc_evidence, security_vendors, security_incidents — no NULL can be inserted), where a partial index gains nothing,
---      or was ambiguous in replay (0056 ran its guarded block before the table existed), and is left alone.
 --
 -- REVERSIBLE: every dropped index is re-created by its original CREATE INDEX (the migration that created it is named in the comment beside the drop);
--- C is reverted by re-creating the index without the WHERE; A holds no data (folded into artifact_likes by 1236).
--- Tables that also exist in the operational track (llm_usage_log, tool_audit_daily) are dropped here on the CORE copy
--- only — transactional-migrations is a different database and is out of scope.
+-- A holds no data (folded into artifact_likes by 1236). Tables that also exist in the operational track (tool_audit_daily) are
+-- dropped here on the CORE copy only — transactional-migrations is a different database (see its own file for that track).
+
+
+SET LOCAL lock_timeout = '3s';
 
 -- ── A. Retired table: marketplace_skill_likes ────────────────────────────────────────────────────────────────
 
@@ -40,18 +42,11 @@ DROP TABLE IF EXISTS marketplace_skill_likes;
 
 -- ── B. Prefix-redundant indexes (dropped index → surviving covering index) ────────────────────────────────────
 
-
--- agent_memory
-DROP INDEX IF EXISTS agent_memory_tenant_idx;   -- (tenant_id) ⊂ agent_memory_scope_key_uq (tenant_id, scope_kind, scope_id, key)  [created 0200_agent_memory]
-
 -- artifact_assignments
 DROP INDEX IF EXISTS idx_artifact_assignments_tenant;   -- (tenant_id, artifact_type) ⊂ artifact_assignments_pkey (tenant_id, artifact_type, artifact_slug, scope, scope_id)  [created 0020_artifact_assignments]
 
 -- board_type_mappings
 DROP INDEX IF EXISTS idx_board_type_mappings_conn;   -- (connection_id) ⊂ uq_board_type_mapping (connection_id, external_type)  [created 0256_platform_migration_staging]
-
--- brain_chats
-DROP INDEX IF EXISTS idx_ide_project_chats_tenant_id;   -- (tenant_id) ⊂ idx_brain_chats_tenant_mode (tenant_id, mode, created_at DESC)  [created 0025_ide_project_chats]
 
 -- candidate_demographics
 DROP INDEX IF EXISTS idx_candidate_demographics_candidate;   -- (tenant_id, candidate_ref) ⊂ uq_candidate_demographics (tenant_id, candidate_ref, category)  [created 0460_hiring_consent_and_self_scheduling]
@@ -125,9 +120,6 @@ DROP INDEX IF EXISTS idx_knowledge_training_doc;   -- (document_id) ⊂ uq_knowl
 -- lens_snapshots
 DROP INDEX IF EXISTS idx_lens_snapshots_tenant;   -- (tenant_id) ⊂ uq_lens_snapshot (tenant_id, lens, period)  [created 0309_lens_snapshots]
 
--- llm_usage_log
-DROP INDEX IF EXISTS idx_llm_usage_tenant_id;   -- (tenant_id) ⊂ idx_llm_usage_agent_host (tenant_id, agent_host_id, created_at DESC)  [created 0008_tenant_subscriptions_and_usage_scope]
-
 -- member_metrics_period
 DROP INDEX IF EXISTS idx_mmp_tenant;   -- (tenant_id) ⊂ uq_member_metrics_period (tenant_id, member_kind, member_ref, period_start, period_end)  [created 0118_member_metrics_dora]
 
@@ -137,9 +129,6 @@ DROP INDEX IF EXISTS idx_member_personas_user;   -- (tenant_id, user_id) ⊂ uq_
 
 -- member_profiles
 DROP INDEX IF EXISTS idx_member_profiles_tenant;   -- (tenant_id) ⊂ uq_member_profile (tenant_id, member_kind, member_ref)  [created 0116_member_profiles]
-
--- objects
-DROP INDEX IF EXISTS idx_objects_tenant_kind;   -- (tenant_id, kind) ⊂ uq_objects_ref (tenant_id, kind, ref_id)  [created 0418_kernel_primitives]
 
 -- privacy_requests
 DROP INDEX IF EXISTS idx_privacy_requests_status;   -- (status) ⊂ privacy_requests_due_idx (status, due_at)  [created 0016_privacy_requests]
@@ -190,9 +179,6 @@ DROP INDEX IF EXISTS idx_task_deps_predecessor;   -- (predecessor_task_id) ⊂ t
 -- task_specs
 DROP INDEX IF EXISTS idx_task_specs_task;   -- (task_id) ⊂ uq_task_specs (task_id, spec_id)  [created 0098_task_specs_and_spec_status]
 
--- tasks
-DROP INDEX IF EXISTS idx_tasks_tenant;   -- (tenant_id) ⊂ idx_tasks_tenant_project (tenant_id, project_id)  [created 0944_tasks_tenant_id]
-
 -- team_members
 DROP INDEX IF EXISTS idx_team_members_team;   -- (team_id) ⊂ uq_team_member (team_id, member_kind, member_ref)  [created 0191_workforce_teams]
 
@@ -218,9 +204,5 @@ DROP INDEX IF EXISTS idx_tool_audit_daily_tenant_day;   -- (tenant_id, day) ⊂ 
 DROP INDEX IF EXISTS idx_upo_tenant_user;   -- (tenant_id, user_id) ⊂ user_permission_overrides_tenant_id_user_id_permission_key (tenant_id, user_id, permission)  [created 0038_permissions_modules]
 
 -- vscode_connections
-DROP INDEX IF EXISTS idx_vscode_conn_tenant;   -- (tenant_id) ⊂ uq_vscode_conn_user_machine (tenant_id, user_id, machine_name)  [created 0202_vscode_connections]
-
--- ── C. Partial segment index ─────────────────────────────────────────────────────────────────────────────────
--- Drop THEN create under the same name: CREATE INDEX IF NOT EXISTS alone would be a no-op against the existing full index.
-DROP INDEX IF EXISTS idx_knowledge_documents_segment;
-CREATE INDEX IF NOT EXISTS idx_knowledge_documents_segment ON knowledge_documents (segment_id) WHERE segment_id IS NOT NULL;
+-- (tenant_id) ⊂ uq_vscode_conn_user_machine (tenant_id, user_id, machine_name)  [created 0202_vscode_connections]
+DROP INDEX IF EXISTS idx_vscode_conn_tenant;

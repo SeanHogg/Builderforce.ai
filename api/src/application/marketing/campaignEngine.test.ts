@@ -446,6 +446,34 @@ describe('runCampaignBatch', () => {
     const write = db.calls.find((c) => c.kind === 'update' && (c.payload as { error?: string })?.error);
     expect((write!.payload as { status: string }).status).toBe('queued');
   });
+
+  describe('keeping the gated cron awake', () => {
+    /** The frequent tick skips Postgres unless work was signalled, so a send with
+     *  recipients left after the inline batch must raise the signal itself. */
+    const kvEnv = () => {
+      const puts: string[] = [];
+      const kv = { get: async () => null, put: async (k: string) => { puts.push(k); }, delete: async () => undefined } as unknown as KVNamespace;
+      return { env: { AUTH_CACHE_KV: kv } as Env, puts };
+    };
+    const oneRecipient = { id: 1, email: 'a@x.com', trackToken: 't1', attempts: 0, name: '', attributes: {} };
+
+    it('signals pending work when recipients remain after the batch', async () => {
+      sendMock.mockClear();
+      const { env: gated, puts } = kvEnv();
+      const db = fakeDb([[sending], noLogo, [oneRecipient], [{ id: 1 }], [], [{ remaining: 4 }], []]);
+      const result = await runCampaignBatch(gated, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
+      expect(result).toMatchObject({ remaining: 4, status: 'sending' });
+      expect(puts).toEqual(['cron:work-pending']);
+    });
+
+    it('does not signal once the queue has drained', async () => {
+      sendMock.mockClear();
+      const { env: gated, puts } = kvEnv();
+      const db = fakeDb([[sending], noLogo, [oneRecipient], [{ id: 1 }], [], [{ remaining: 0 }], []]);
+      await runCampaignBatch(gated, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
+      expect(puts).toEqual([]);
+    });
+  });
 });
 
 describe('recordClick', () => {

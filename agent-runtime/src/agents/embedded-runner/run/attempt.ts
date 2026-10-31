@@ -759,6 +759,7 @@ export async function runEmbeddedAttempt(
           });
           return pickFallbackModel ? { pickFallbackModel } : {};
         })(),
+        ...(params.policyGates?.length ? { policyGates: params.policyGates } : {}),
         onModelFallback: (from, to, notice) => {
           log.warn(`[model-failover] ${notice}`);
           emitAgentEvent({

@@ -6,19 +6,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  *
  * The five `MIN(next_run_at)` probes are the only DB contact, so the connection is
  * stubbed and each probe is fed a per-table answer in SCHEDULE_SOURCES order:
- * workflow_triggers, ceremony_schedules, report_schedules, qa_schedules. (`cron_jobs` is
- * deliberately absent: its poller, not a server sweep, executes those rows.)
+ * workflow_triggers, ceremony_schedules, report_schedules, qa_schedules, marketing_campaigns,
+ * social_campaigns. (`cron_jobs` is deliberately absent: its poller, not a server sweep,
+ * executes those rows.)
  */
 const probeResults: Array<Date | null> = [];
-const SCHEDULE_PROBE_COLUMNS = ['m0', 'm1', 'm2', 'm3'];
+const SCHEDULE_PROBE_COLUMNS = ['m0', 'm1', 'm2', 'm3', 'm4', 'm5'];
 let statements = 0;
+let lastStatement: unknown;
 
 vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../infrastructure/database/connection')>()),
   buildDatabase: () => ({
     // ONE statement carries every probe: one column per table, in SCHEDULE_SOURCES order.
-    execute: async () => {
+    execute: async (statement: unknown) => {
       statements += 1;
+      lastStatement = statement;
       const row: Record<string, Date | null> = {};
       SCHEDULE_PROBE_COLUMNS.forEach((c) => { row[c] = probeResults.shift() ?? null; });
       return { rows: [row] };
@@ -34,6 +37,7 @@ vi.mock('../observability/caughtErrorReporter', () => ({
 }));
 
 const { publishNextDue, readScheduleStall, FLOOR_INTERVAL_MS } = await import('./cronWorkSignal');
+import { PgDialect } from 'drizzle-orm/pg-core';
 import type { Env } from '../../env';
 
 function fakeKv(seed: Record<string, string> = {}) {
@@ -50,7 +54,7 @@ function fakeKv(seed: Record<string, string> = {}) {
 
 const envWith = (kv?: KVNamespace): Env => ({ AUTH_CACHE_KV: kv, NEON_DATABASE_URL: 'postgres://x' } as Env);
 
-/** Feed the four probes, in SCHEDULE_SOURCES order. */
+/** Feed the probes, in SCHEDULE_SOURCES order; any left out read as "nothing armed". */
 function armProbes(...values: Array<Date | null>) {
   probeResults.length = 0;
   probeResults.push(...values);
@@ -80,6 +84,42 @@ describe('publishNextDue', () => {
     armProbes(at(NOW + 60_000), null, at(NOW + 5_000), null);
     await publishNextDue(envWith(kv), NOW);
     expect(statements).toBe(1);
+  });
+
+  describe('campaign sources', () => {
+    it('publishes a scheduled email campaign so the gate wakes for it without the floor', async () => {
+      const { kv, store } = fakeKv();
+      armProbes(null, null, null, null, at(NOW + 90_000), null);
+      const result = await publishNextDue(envWith(kv), NOW);
+      expect(result.perTable).toEqual([{ table: 'marketing_campaigns', nextDueMs: NOW + 90_000 }]);
+      expect(store.get('cron:next-due')).toBe(String(NOW + 90_000));
+    });
+
+    it('publishes a scheduled social campaign, and the earliest across all sources wins', async () => {
+      const { kv, store } = fakeKv();
+      armProbes(at(NOW + 600_000), null, null, null, at(NOW + 300_000), at(NOW + 120_000));
+      const result = await publishNextDue(envWith(kv), NOW);
+      expect(result.perTable.map((m) => m.table)).toEqual(['workflow_triggers', 'marketing_campaigns', 'social_campaigns']);
+      expect(store.get('cron:next-due')).toBe(String(NOW + 120_000));
+    });
+
+    it('names a campaign table in the stall report when its send time has been missed for a whole floor', async () => {
+      const { kv } = fakeKv();
+      armProbes(null, null, null, null, null, at(NOW - 2 * FLOOR_INTERVAL_MS));
+      const result = await publishNextDue(envWith(kv), NOW);
+      expect(result.stall?.tables.map((t) => t.table)).toEqual(['social_campaigns']);
+    });
+
+    /** The predicate must be the sweeps' own: a draft with a send time, a `scheduled` social campaign. */
+    it('arms an email campaign only as a draft with a send time, and a social one only as scheduled', async () => {
+      const { kv } = fakeKv();
+      armProbes();
+      await publishNextDue(envWith(kv), NOW);
+      const { sql: text, params } = new PgDialect().sqlToQuery(lastStatement as Parameters<PgDialect['sqlToQuery']>[0]);
+      expect(text).toMatch(/FROM "marketing_campaigns"\s+WHERE "marketing_campaigns"\."status" in \(\$\d+\) AND "marketing_campaigns"\."scheduled_at" IS NOT NULL/i);
+      expect(text).toMatch(/FROM "social_campaigns"\s+WHERE "social_campaigns"\."status" in \(\$\d+\) AND "social_campaigns"\."scheduled_at" IS NOT NULL/i);
+      expect(params).toEqual(expect.arrayContaining(['draft', 'scheduled']));
+    });
   });
 
   it('publishes the "none" sentinel when nothing is armed', async () => {

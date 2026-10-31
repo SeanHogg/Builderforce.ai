@@ -8,7 +8,8 @@
 import { SKILL_TOOLS, SUBAGENT_TOOLS, buildCoreToolRegistry, type ToolRegistry, type ToolSchema } from "@builderforce/agent-tools";
 import { malformedCallOutcome, type LoopDispatchResult, type LoopTurnResult, type ParsedToolCall, type TurnContext } from "@builderforce/agent-loop";
 import { reduceRunPolicy } from "@builderforce/run-policy";
-import { ModelTransportError, type ContextPack, type ModelCompletion, type ModelRequest, type RunMessage, type RunPart, type RunPorts, type RunState } from "./contract.js";
+import { ModelTransportError, type ContextPack, type ModelCompletion, type ModelRequest, type RunMessage, type RunPorts, type RunState } from "./contract.js";
+import { interruptedData, nativeResults, type NativeResult } from "./runRows.js";
 import { isTransportFailure } from "./surface.js";
 import type { PolicyHooks } from "./policy/index.js";
 import { routeAround, turnSucceeded, type TurnAsk } from "./policy/model/handoff.js";
@@ -53,37 +54,6 @@ export interface TurnSelection {
   toolChoice?: "required";
   tail?: readonly string[];
 }
-
-/** The native blocks and fields a surface's own tool answered with: the codec puts them on the tool row. */
-export interface NativeResult {
-  parts?: RunPart[];
-  meta?: Readonly<Record<string, unknown>>;
-}
-export const nativeResults = new WeakMap<object, NativeResult>();
-
-/** The native blocks and fields a turn's meta carries onto the assistant row it becomes. */
-export function nativeOfTurn(meta: unknown): Pick<RunMessage, "parts" | "meta"> {
-  const m = meta && typeof meta === "object" ? (meta as { parts?: RunPart[]; native?: Readonly<Record<string, unknown>> }) : undefined;
-  return { ...(m?.parts ? { parts: m.parts } : {}), ...(m?.native ? { meta: m.native } : {}) };
-}
-
-/**
- * The transcript row of a tool result. A surface's own tool may hand back native blocks beside its data: the row then keeps
- * them, and its text is the data itself when that is a string (the model reads the tool's words, not a JSON-quoted copy).
- */
-export function toolRow(callId: string, result: LoopDispatchResult, verbatim = false): RunMessage {
-  const native = nativeResults.get(result);
-  return {
-    role: "tool",
-    toolCallId: callId,
-    content: (native || verbatim) && typeof result.data === "string" ? result.data : JSON.stringify(result.data ?? null),
-    ...(native?.parts ? { parts: native.parts } : {}),
-    ...(native?.meta ? { meta: native.meta } : {}),
-    // A call that did not run because the person steered is answered as a failed one: the row says it did not do its work.
-    ...(result.isError || (result.data as { skipped?: unknown } | null)?.skipped === true ? { isError: true as const } : {}),
-  };
-}
-
 
 /** What a surface's own tool answered, for the no-progress count: from its read cache, or only conversational. */
 export const callKinds = new WeakMap<object, "cached" | "neutral">();
@@ -371,7 +341,7 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
           if (result.parts || result.meta) box.native = { ...(result.parts ? { parts: result.parts } : {}), ...(result.meta ? { meta: result.meta } : {}) };
           if (result.cached) box.kind = "cached";
           else if (result.neutral) box.kind = "neutral";
-          return result.data;
+          return result.aborted ? interruptedData(result.data) : result.data;
         }
         const result = await registryOf(ports).dispatch(name, args as Record<string, unknown>, { caps: ports.capabilities, ...(run ? { signal: run } : {}) });
         box.control = result.control;

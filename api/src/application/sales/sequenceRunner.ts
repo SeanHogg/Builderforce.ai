@@ -25,6 +25,15 @@
  * tick tries again; a permanent one (a revoked mailbox, a bad address) STOPS that person
  * rather than retrying forever against a wall. That is the same contract the campaign
  * engine already documents for `sendFromMailbox`, applied here rather than re-invented.
+ *
+ * ── WHY A DO-NOT-CONTACT RECIPIENT STOPS, AND IS NOT RETRIED ────────────────────
+ * A sequence email goes straight through `sendFromMailbox`, not through campaign
+ * materialisation, so it does not inherit the campaign path's suppression. The runner
+ * therefore asks `suppressedEmails` itself — ONCE per cadence for every email recipient
+ * due this tick, never per person — and a hit is a terminal stop: no send, no retry, the
+ * enrolment gets `stoppedAtISO` exactly like any other permanent failure, and the reason
+ * lands in the `sequence.send_failed` activity row. Retrying would only re-ask a question
+ * whose answer a person already gave.
  */
 
 import { asJsonRecord } from '../../domain/shared/json';
@@ -39,6 +48,7 @@ import {
   creationSessionObjects, creationSessions, mailboxConnections,
 } from '../../infrastructure/database/schema';
 import { sendFromMailbox } from '../mailbox/mailboxService';
+import { suppressedEmails } from '../marketing/suppression';
 import { publishSocialPost, resolvePublishableAccounts } from '../social/socialService';
 import { recordActivity, SYSTEM_ACTOR } from '../activity/activityLog';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
@@ -115,6 +125,8 @@ async function dispatch(
     tenantId: number; sessionId: string; sequenceTitle: string;
     mailboxId: number | null; socialConnectionIds: string[];
     taskX: number; taskY: number;
+    /** Lower-cased do-not-contact addresses among this tick's email recipients. */
+    suppressed: ReadonlySet<string>;
   },
   step: { channel: SequenceChannel; subject: string; body: string },
   enrolment: SequenceEnrolment,
@@ -123,6 +135,11 @@ async function dispatch(
   const body = render(step.body, enrolment);
 
   if (step.channel === 'email') {
+    // Checked before the mailbox: a suppressed person is not contacted whatever the
+    // mailbox state, and the stop must not wait for one to be connected.
+    if (context.suppressed.has(enrolment.contactRef.trim().toLowerCase())) {
+      return { ok: false, retryable: false, detail: 'Recipient is on a do-not-contact list; the sequence stopped for this contact.' };
+    }
     if (!context.mailboxId) {
       return { ok: false, retryable: false, detail: 'No mailbox is connected to send from.' };
     }
@@ -251,6 +268,20 @@ export async function runSequenceSweep(env: Env, now = new Date(), db: Db = buil
     const baseX = Number(geometry.x ?? 0);
     const baseY = Number(geometry.y ?? 0) + Number(geometry.h ?? 220) + 40;
 
+    // One statement for every email recipient due this tick (see the header). If the
+    // check itself fails nothing is sent: fail closed, and the cadence stays due so the
+    // next tick asks again.
+    let suppressed: ReadonlySet<string> = new Set();
+    const emailRecipients = due.filter((item) => item.step.channel === 'email').map((item) => item.enrolment.contactRef);
+    if (emailRecipients.length > 0) {
+      try {
+        suppressed = await suppressedEmails(db, row.tenantId, emailRecipients);
+      } catch (error) {
+        reportCaughtError(error, { source: SOURCE, operation: 'runSequenceSweep:suppression', context: { sequenceId: row.id } });
+        continue;
+      }
+    }
+
     const context = {
       tenantId: row.tenantId,
       sessionId: row.sessionId,
@@ -259,6 +290,7 @@ export async function runSequenceSweep(env: Env, now = new Date(), db: Db = buil
       socialConnectionIds,
       taskX: baseX,
       taskY: baseY,
+      suppressed,
     };
     let spawned = 0;
 

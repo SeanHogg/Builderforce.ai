@@ -272,7 +272,7 @@ BF	open_positions	Hiring	keep	open_positions
 BF	ai_program_initiatives	Agents & runtime	keep	ai_program_initiatives
 BF	rd_fte_allocation_quarterly	Finance	merged	(folded into a sibling)
 BF	marketplace_skills	Commerce	keep	marketplace_skills
-BF	marketplace_skill_likes	Commerce	primitive	annotation
+BF	marketplace_skill_likes	Commerce	merged	artifact_likes
 BF	artifact_likes	Canvas & ideas	primitive	annotation
 BF	managed_agent_host_requests	Platform & observability	merged	(folded into a sibling)
 BF	manager_directives	Agents & runtime	keep	manager_directives

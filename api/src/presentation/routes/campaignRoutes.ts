@@ -60,6 +60,7 @@ import {
   maxAssetBytes,
 } from '../../application/marketing/templateLibrary';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { signalPendingWork } from '../../application/runtime/cronWorkSignal';
 import { parseOptionalBody, z, zJsonObject, zNumberLike } from './requestBody';
 
 // ── Bodies ───────────────────────────────────────────────────────────────────
@@ -276,6 +277,9 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
       sessionId: body.sessionId ?? null,
     });
     if (!result.ok) return c.json({ error: result.error }, result.status);
+    // A send time is work the KV-gated cron must be told about, or it is only noticed
+    // on the next floor sweep (the social path signals the same way).
+    if (scheduledAt) await signalPendingWork(c.env as Env);
     return c.json(result.campaign, 201);
   });
 
@@ -304,6 +308,7 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
       ...(scheduledAt !== undefined ? { scheduledAt } : {}),
     });
     if (!result.ok) return c.json({ error: result.error }, result.status);
+    if (scheduledAt) await signalPendingWork(c.env as Env);
     return c.json(result.campaign);
   });
 

@@ -77,6 +77,46 @@ describe("history and results are bounded by the model's window, not the cloud's
   });
 });
 
+describe("a small window", () => {
+  it("keeps its history: a 16K window is not emptied by a 20K reserve", async () => {
+    const seen: Context[] = [];
+    const agent = new Agent({ model: { ...model, contextWindow: 16_384 }, systemPrompt: "sys" });
+    agent.replaceMessages(Array.from({ length: 8 }, (_, i) => user(`turn ${i} ${"x".repeat(2_000)}`)));
+    agent.streamFn = scripted([assistant([{ type: "text", text: "ok" }])], seen);
+
+    await agent.prompt([user("and now?")]);
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.messages).toHaveLength(9);
+  });
+});
+
+describe("a hand-off onto a smaller model", () => {
+  it("packs the context for it, and the note reaches the session as the compactionSummary row", async () => {
+    const small = { ...model, id: "m2", name: "m2", contextWindow: 16_384 };
+    const narrate = assistant([{ type: "text", text: "Let me search for that now." }]);
+    let n = 0;
+    const agent = new Agent({ model, systemPrompt: "sys", tools: [tool("read", ok)], pickFallbackModel: (tried) => (tried.includes("p/m2") ? undefined : small) });
+    agent.replaceMessages([user("TASK-MARK the task"), ...Array.from({ length: 30 }, (_, i) => user(`history ${i} ${"x".repeat(3_000)}`))]);
+    const seen: Context[] = [];
+    agent.streamFn = (m, context) => {
+      seen.push({ ...context, messages: [...context.messages] });
+      const stream = new AssistantMessageEventStream();
+      const msg = m.id === "m2" ? assistant([{ type: "text", text: "The handler is in agent-loop.ts." }]) : narrate;
+      n += 1;
+      queueMicrotask(() => { stream.push({ type: "done", reason: "stop", message: msg }); stream.end(); });
+      return stream;
+    };
+
+    const produced = await agent.prompt([user("find the handler")]);
+
+    const summary = produced.find((m) => m.role === "compactionSummary") as { summary: string } | undefined;
+    expect(summary?.summary).toContain("Handed off from p/m to p/m2.");
+    expect(seen.at(-1)!.messages.length).toBeLessThan(33);
+    expect(n).toBeGreaterThan(1);
+  });
+});
+
 describe("a tripped breaker", () => {
   it("ends the run on its last result: no forced extra turn, and nothing told twice", async () => {
     const seen: Context[] = [];
@@ -184,7 +224,7 @@ describe("a governance gate with no approver to reach", () => {
 });
 
 describe("a steer while a foreground command runs", () => {
-  it("aborts the command through its signal, and the model reads the steer next", async () => {
+  it("aborts the command through its signal, reports it as interrupted not failed, and the model reads the steer next", async () => {
     const seen: Context[] = [];
     let abortedAt: number | undefined;
     const agent = new Agent({
@@ -204,9 +244,11 @@ describe("a steer while a foreground command runs", () => {
     });
     agent.streamFn = scripted([callOf("exec"), assistant([{ type: "text", text: "fin" }])], seen);
 
-    await agent.prompt([user("go")]);
+    const produced = await agent.prompt([user("go")]);
 
     expect(abortedAt).toBeDefined();
+    expect(seen[1]!.messages.some((m) => m.role === "toolResult" && textOf(m).includes("Interrupted by the user"))).toBe(true);
+    expect((produced.find((m) => m.role === "toolResult") as { isError: boolean }).isError).toBe(false);
     expect(seen[1]!.messages.some((m) => textOf(m).includes("stop that, do this"))).toBe(true);
   });
 });

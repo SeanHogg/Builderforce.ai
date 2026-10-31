@@ -4,16 +4,13 @@
  * reads, writes and batch — the sweep is a scheduler concern over it.
  */
 
-import { asc, sql } from 'drizzle-orm';
+import { asc, inArray, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { socialCampaignPosts, socialCampaigns, youtubeUploads } from '../../infrastructure/database/schema';
 import { dueStatuses, statusesIn } from '../shared/campaignLifecycle';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { runSocialCampaignBatch } from './socialCampaignService';
-
-/** Stored statuses from the lifecycle table as SQL string literals (constants, never user input). */
-const inList = (statuses: readonly string[]) => sql.raw(statuses.map((s) => `'${s}'`).join(', '));
 
 /**
  * Campaigns the sweep should advance: mid-publish, or scheduled and now due.
@@ -28,7 +25,7 @@ export async function socialCampaignsDue(db: Db, limit = 5): Promise<Array<{ id:
   return db
     .select({ id: socialCampaigns.id, tenantId: socialCampaigns.tenantId })
     .from(socialCampaigns)
-    .where(sql`(${socialCampaigns.status} IN (${inList(statusesIn('social', 'in_flight'))}) AND (
+    .where(sql`(${inArray(socialCampaigns.status, statusesIn('social', 'in_flight'))} AND (
         EXISTS (SELECT 1 FROM ${socialCampaignPosts} p WHERE p.campaign_id = ${socialCampaigns.id} AND p.status = 'queued')
         OR NOT EXISTS (SELECT 1 FROM ${socialCampaignPosts} p WHERE p.campaign_id = ${socialCampaigns.id} AND p.status = 'uploading')
         OR EXISTS (
@@ -37,7 +34,7 @@ export async function socialCampaignsDue(db: Db, limit = 5): Promise<Array<{ id:
             AND NOT EXISTS (SELECT 1 FROM ${youtubeUploads} live WHERE live.campaign_post_id = p.id AND live.state IN ('queued', 'uploading'))
         )
       ))
-      OR (${socialCampaigns.status} IN (${inList(dueStatuses('social'))}) AND ${socialCampaigns.scheduledAt} IS NOT NULL AND ${socialCampaigns.scheduledAt} <= NOW())`)
+      OR (${inArray(socialCampaigns.status, dueStatuses('social'))} AND ${socialCampaigns.scheduledAt} IS NOT NULL AND ${socialCampaigns.scheduledAt} <= NOW())`)
     .orderBy(asc(socialCampaigns.scheduledAt), asc(socialCampaigns.id))
     .limit(limit);
 }

@@ -129,6 +129,10 @@ export class AgentEventBridge {
       case "run.finished":
         this.closeTurn();
         break;
+      case "context.compacted":
+        // The note that stands for the dropped middle reaches the session as the summary row every converter folds into the prompt.
+        if (event.note) this.record.push({ role: "compactionSummary", summary: event.note, tokensBefore: event.beforeTokens ?? 0, timestamp: Date.now() });
+        break;
       case "stall.recovered":
         if (event.action === "escalate") this.swapped(event.detail);
         if (event.action === "pause" || event.action === "fail") this.settledByPolicy = true;

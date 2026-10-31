@@ -23,6 +23,7 @@ import {
 import { loadTransportBinding } from './start';
 import { CAMPAIGN_DELIVERY_MAX_ATTEMPTS, failedDeliveryStatus } from '../../shared/campaignDelivery';
 import { isInFlight } from '../../shared/campaignLifecycle';
+import { signalPendingWork } from '../../runtime/cronWorkSignal';
 
 /** How many recipients one batch attempts. Bounded by the Worker's subrequest
  *  budget, not by taste — each send is one outbound HTTP call. */
@@ -232,6 +233,11 @@ export async function runCampaignBatch(
       updatedAt: sql`NOW()`,
     })
     .where(and(eq(marketingCampaigns.id, campaignId), eq(marketingCampaigns.tenantId, tenantId)));
+
+  // Only the first batch runs inline; the rest is finished by the gated cron sweep. The
+  // frequent tick skips Postgres entirely unless work was signalled, so without this a
+  // send larger than one batch would advance one batch per FLOOR tick.
+  if (!done) await signalPendingWork(env);
 
   return { sent, failed, remaining: Number(remaining), status: done ? 'sent' : 'sending' };
 }

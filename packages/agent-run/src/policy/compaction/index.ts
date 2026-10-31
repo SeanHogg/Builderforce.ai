@@ -223,6 +223,8 @@ function foldOf(before: readonly PackMessage[], after: readonly PackMessage[]): 
  * or the context already fits.
  */
 async function handOff(ctx: PolicyContext): Promise<CompactionResult | void> {
+  const handoff = ctx.policy.modelHandoff;
+  if (!handoff) return undefined;
   const to = ctx.state.model?.model ?? ctx.policy.pinnedModel;
   const from = ctx.state.preparedFor;
   ctx.state.preparedFor = to;
@@ -233,6 +235,9 @@ async function handOff(ctx: PolicyContext): Promise<CompactionResult | void> {
   const split = lead < 0 ? ctx.messages.length : lead;
   const system = ctx.messages.slice(0, split);
   const reserve = ctx.policy.budgets.reserveTokens;
+  // The task the run was given survives the cut: a stall's note is the latest directive now, so the packer's own rule would let it go.
+  const task = ctx.messages.find((m) => m.task === true) ?? ctx.messages.find((m) => m.role === "user");
+  let note = "";
   const packed = await packForModelHandoff<RunMessage>(
     {
       messages: ctx.messages.slice(split),
@@ -241,15 +246,26 @@ async function handOff(ctx: PolicyContext): Promise<CompactionResult | void> {
       from,
       to,
       contextWindow,
+      ...(handoff.maxTokens !== undefined ? { maxTokens: handoff.maxTokens } : {}),
+      ...(task ? { pinned: (row: RunMessage) => row === task } : {}),
       ...(leverOn(ctx, C9_TIER_LEVER) ? { priceTierBoundary: priceTierBoundary(to) } : {}),
     },
     {
       toHandoff: (row) => toPackRow(row) as never,
-      summary: (text) => ({ role: "user", content: text }),
+      summary: (text) => {
+        note = text;
+        return { role: "user", content: text };
+      },
     },
   );
   if (packed.dropped === 0) return undefined;
-  return { messages: [...system, ...packed.messages], dropped: packed.dropped, ...(reserve !== undefined ? { reserveTokens: reserve } : {}), summarized: false };
+  return {
+    messages: [...system, ...packed.messages],
+    dropped: packed.dropped,
+    ...(reserve !== undefined ? { reserveTokens: reserve } : {}),
+    summarized: false,
+    ...(note ? { note, covered: packed.dropped } : {}),
+  };
 }
 
 export function createCompactionHook(hookOptions: CompactionHookOptions = {}): CompactionHook {

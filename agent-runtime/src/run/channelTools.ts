@@ -30,8 +30,8 @@ export interface ChannelToolsOptions {
   knowledge?: RunKnowledgeLog;
   /** The request the run was given: the text the catalog is ranked against. */
   query: string;
-  /** The context window, in tokens, of the model a name refers to. */
-  window: (model: string | undefined) => number;
+  /** The context window, in tokens, of the model a name refers to; with it, a result may hold the runner's share of that window. */
+  window?: (model: string | undefined) => number;
 }
 
 export function channelTools(options: ChannelToolsOptions): PlatformTools {
@@ -48,7 +48,7 @@ export function channelTools(options: ChannelToolsOptions): PlatformTools {
     verbatimText: true,
     schemas: () => schemas,
     // The runner guards its own context: one result may hold its share of the serving model's window, as the runner's guard cuts it.
-    resultCap: (model) => singleToolResultCapChars(options.window(model)),
+    ...(options.window ? { resultCap: (model: string | undefined) => singleToolResultCapChars(options.window!(model)) } : {}),
     interruptible: (name, args) => FOREGROUND_COMMAND_TOOLS.has(name) && args.background !== true,
     // Every tool the runner gave the run is advertised: the runner decided what this channel may use.
     selection: { query: options.query, limit: Math.max(1, schemas.length), required: new Set<string>() },
@@ -56,12 +56,15 @@ export function channelTools(options: ChannelToolsOptions): PlatformTools {
       const callId = env.callId ?? name;
       const tool = byName.get(name);
       bridge.toolStart(callId, name, args);
+      // The step signal aborts on a steered message (or a Stop): a tool that comes back stopped is reported as interrupted, not failed.
+      const stopped = (): true | undefined => (env.signal?.aborted ? true : undefined);
       try {
         if (!tool) throw new Error(`Tool ${name} not found`);
         const result = await tool.execute(callId, args, env.signal, (partialResult) => bridge.toolUpdate(callId, name, args, partialResult));
         if (knowledge) knowledge.record(name, args);
         bridge.toolEnd(callId, name, result, false);
         return {
+          ...(stopped() ? { aborted: true as const } : {}),
           data: textOf(result.content),
           parts: resultParts(result.content),
           meta: { toolName: name, details: result.details, timestamp: Date.now() },
@@ -69,7 +72,8 @@ export function channelTools(options: ChannelToolsOptions): PlatformTools {
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         const result = { content: [{ type: "text" as const, text: message }], details: {} };
-        bridge.toolEnd(callId, name, result, true);
+        bridge.toolEnd(callId, name, result, stopped() === undefined);
+        if (stopped()) return { data: message, aborted: true, parts: resultParts(result.content), meta: { toolName: name, details: {}, timestamp: Date.now() } };
         return { data: message, isError: true, parts: resultParts(result.content), meta: { toolName: name, details: {}, timestamp: Date.now() } };
       }
     },

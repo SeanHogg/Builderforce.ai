@@ -15,11 +15,15 @@ import { ServiceUnavailableError } from '../../domain/shared/errors';
  *
  * Both paths are covered. The HTTP client is wrapped by {@link withDatabaseAvailability};
  * `inTransaction` opens a WebSocket pool that bypasses that wrapper and maps its own
- * errors here. Over WebSocket Neon's proxy has no HTTP status to carry: it sends the
- * quota refusal as a Postgres error whose message is the bare body, so those texts are
- * matched too. Every pattern is anchored at the start of the message, because
- * `inTransaction` passes every error out of the transaction BODY through this check —
- * another vendor saying "exceeded your quota" must never read as a database outage.
+ * errors here. Over WebSocket there is no HTTP status to carry, so the WebSocket
+ * patterns match the quota texts ("Your account or project has exceeded the compute
+ * time / data transfer quota") taken from Neon's published error messages. That text
+ * has NOT been observed on this path: it has never been captured from a live
+ * WebSocket quota refusal, and the exact wording and shape (a Postgres error whose
+ * message is the bare body) are an assumption until one is. Every pattern is anchored
+ * at the start of the message, because `inTransaction` passes every error out of the
+ * transaction BODY through this check — another vendor saying "exceeded your quota"
+ * must never read as a database outage.
  */
 export const DATABASE_UNAVAILABLE_CODE = 'database_unavailable';
 

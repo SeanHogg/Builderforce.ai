@@ -31,8 +31,11 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 import type { Env } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { ceremonySchedules, qaSchedules, reportSchedules, workflowTriggers } from '../../infrastructure/database/schema';
-import { and, eq, isNotNull, sql } from 'drizzle-orm';
+import {
+  ceremonySchedules, marketingCampaigns, qaSchedules, reportSchedules, socialCampaigns, workflowTriggers,
+} from '../../infrastructure/database/schema';
+import { and, eq, inArray, isNotNull, sql, type AnyColumn, type SQL } from 'drizzle-orm';
+import { dueStatuses, type CampaignKind } from '../shared/campaignLifecycle';
 
 /** KV key: presence => a write signalled possibly-pending backstop work. */
 const WORK_SIGNAL_KEY = 'cron:work-pending';
@@ -340,13 +343,26 @@ export async function openCronTick(env: Env, nowMs: number, floorDue: boolean): 
   }
 }
 
+/** A schedule row is armed when its boolean flag is set. */
+const flagged = (flag: AnyColumn): SQL => sql`${flag} = true`;
+
+/**
+ * A campaign is armed when it sits in its channel's waiting status (email: a `draft`;
+ * social: `scheduled`, both from `campaignLifecycle`). The probe adds `<send time> IS NOT
+ * NULL` for every source, so together they are the exact "due" predicate the campaign's
+ * sweep applies (`startDueCampaigns`, `socialCampaignsDue`) minus its `<= NOW()` clause —
+ * and, for email, the predicate of the partial index `idx_marketing_campaigns_due`.
+ */
+const campaignArmed = (kind: CampaignKind, status: AnyColumn): SQL => inArray(status, dueStatuses(kind));
+
 /**
  * The schedule tables the time-driven sweeps read. Each pairs its `next_run_at`
- * column with the flag that decides whether the row is armed, because a DISABLED
- * schedule must not hold the gate open — it would wake Neon on a due time nothing
- * will ever act on.
+ * column with the predicate that decides whether the row is ARMED, because a
+ * DISABLED schedule must not hold the gate open — it would wake Neon on a due time
+ * nothing will ever act on. The predicate is a flag for the schedule tables and a
+ * status + send-time test for the campaign tables, which have no flag.
  *
- * This is a registry rather than four branches so adding a scheduled surface is a
+ * This is a registry rather than a handful of branches so adding a scheduled surface is a
  * DATA change here (and a test that fails until it is made), not a new `UNION`
  * arm someone has to remember to write. Keep it in step with the sweeps in
  * `CRON_SWEEPS` that read a `next_run_at` — and ONLY those. `cron_jobs` is not
@@ -355,12 +371,18 @@ export async function openCronTick(env: Env, nowMs: number, floorDue: boolean): 
  * server sweep ever reads the table. Listing it held the gate open (waking Neon on
  * a due time this tick would never act on) and raised a "schedule stall" for work
  * the server was never going to clear.
+ *
+ * The two campaign tables are appended LAST so the probe columns of the earlier
+ * sources keep their positions. Without them a scheduled campaign published nothing
+ * to the gate and waited for the floor sweep.
  */
 const SCHEDULE_SOURCES = [
-  { name: 'workflow_triggers', table: workflowTriggers, nextRunAt: workflowTriggers.nextRunAt, enabled: workflowTriggers.enabled },
-  { name: 'ceremony_schedules',table: ceremonySchedules,nextRunAt: ceremonySchedules.nextRunAt,enabled: ceremonySchedules.enabled },
-  { name: 'report_schedules',  table: reportSchedules,  nextRunAt: reportSchedules.nextRunAt,  enabled: reportSchedules.isEnabled },
-  { name: 'qa_schedules',      table: qaSchedules,      nextRunAt: qaSchedules.nextRunAt,      enabled: qaSchedules.enabled },
+  { name: 'workflow_triggers', table: workflowTriggers, nextRunAt: workflowTriggers.nextRunAt, armed: flagged(workflowTriggers.enabled) },
+  { name: 'ceremony_schedules',table: ceremonySchedules,nextRunAt: ceremonySchedules.nextRunAt,armed: flagged(ceremonySchedules.enabled) },
+  { name: 'report_schedules',  table: reportSchedules,  nextRunAt: reportSchedules.nextRunAt,  armed: flagged(reportSchedules.isEnabled) },
+  { name: 'qa_schedules',      table: qaSchedules,      nextRunAt: qaSchedules.nextRunAt,      armed: flagged(qaSchedules.enabled) },
+  { name: 'marketing_campaigns', table: marketingCampaigns, nextRunAt: marketingCampaigns.scheduledAt, armed: campaignArmed('email', marketingCampaigns.status) },
+  { name: 'social_campaigns',    table: socialCampaigns,    nextRunAt: socialCampaigns.scheduledAt,    armed: campaignArmed('social', socialCampaigns.status) },
 ] as const;
 
 /**
@@ -405,7 +427,7 @@ export async function publishNextDue(env: Env, nowMs: number): Promise<NextDuePu
     // taken below (LEAST in JS — the same NULL-ignoring semantics).
     const probes = SCHEDULE_SOURCES.map((source, i) => sql`(
       SELECT MIN(${source.nextRunAt}) FROM ${source.table}
-      WHERE ${source.enabled} = true AND ${source.nextRunAt} IS NOT NULL
+      WHERE ${source.armed} AND ${source.nextRunAt} IS NOT NULL
     ) AS ${sql.raw(`m${i}`)}`);
     const result = await db.execute(sql`SELECT ${sql.join(probes, sql`, `)}`);
     const row = (result.rows[0] ?? {}) as Record<string, Date | string | null>;

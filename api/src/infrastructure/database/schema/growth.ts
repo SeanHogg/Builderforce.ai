@@ -579,7 +579,7 @@ export const marketingCampaigns = pgTable('marketing_campaigns', {
   index('idx_marketing_campaigns_tenant_status').on(t.tenantId, t.status, t.updatedAt),
   // The scheduled sweep asks exactly one question — "which drafts are due?" —
   // and asked it of an index that did not exist, because nothing asked it at all.
-  index('idx_marketing_campaigns_due').on(t.scheduledAt),
+  index('idx_marketing_campaigns_due').on(t.scheduledAt).where(sql`status = 'draft' AND scheduled_at IS NOT NULL`),
 ]);
 
 /** One row per (campaign, recipient). The unique index is what makes a resumed
@@ -663,6 +663,9 @@ export const socialCampaigns = pgTable('social_campaigns', {
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   index('idx_social_campaigns_tenant_status').on(t.tenantId, t.status, t.updatedAt),
+  // The cron gate's "earliest armed send time" probe (cronWorkSignal SCHEDULE_SOURCES) and
+  // the social sweep's due read both ask for scheduled rows by send time, across tenants.
+  index('idx_social_campaigns_due').on(t.scheduledAt).where(sql`status = 'scheduled' AND scheduled_at IS NOT NULL`),
 ]);
 
 /** One row per (campaign, account). The unique index is what makes a resumed or

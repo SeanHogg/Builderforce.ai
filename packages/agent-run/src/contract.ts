@@ -114,6 +114,12 @@ export interface RunPolicy {
    * committed still ships; a surface that lands runs wants this), `fail` stops it unfinished. Default `fail`.
    */
   stallExhausted?: "finish" | "fail" | "note";
+  /**
+   * Re-pack the run's context for the incoming model's window when a stall fails it over onto another model, and tell the model
+   * it took over (additive; absent ⇒ no hand-off packing, and the compaction is what it always was). `maxTokens` is the reply
+   * ceiling the incoming turn is asked with: it sizes the reply reserve the packer holds back.
+   */
+  modelHandoff?: { maxTokens?: number };
   modelStart?: {
     strict?: boolean; delegatedRole?: string; phaseModels?: RunPolicyOptions["phaseModels"];
     /** The run-start model when it is a soft seed rather than `pinnedModel`. */

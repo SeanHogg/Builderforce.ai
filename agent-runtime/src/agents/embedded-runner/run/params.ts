@@ -1,3 +1,4 @@
+import type { PolicyGate } from "@builderforce/agent-tools";
 import type { ImageContent } from "../../../builderforce/model/types.js";
 import type { ReasoningLevel, ThinkLevel, VerboseLevel } from "../../../auto-reply/thinking.js";
 import type { AgentStreamParams } from "../../../commands/agent/types.js";
@@ -67,6 +68,8 @@ export type RunEmbeddedAgentParams = {
   clientTools?: ClientToolDefinition[];
   /** Disable built-in tools for this run (LLM-only mode). */
   disableTools?: boolean;
+  /** Compiled governance gates the run is held to (blocked tools leave the catalog, matching calls are refused or ask an approver). */
+  policyGates?: readonly PolicyGate[];
   provider?: string;
   model?: string;
   authProfileId?: string;
