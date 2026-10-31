@@ -89,13 +89,22 @@ export async function runShellCommand(args: Record<string, unknown>, ctx: ToolCo
         return { data: { ok: true, background: true, id, status: "running", output: st.output ?? "", note: `${why}, so it moved to the background. ${jobNote(id)}`, ...where } };
       }
       const r = await compressShellResult(finishedJob(st), ctx);
-      return { data: { ...(r as unknown as Record<string, unknown>), ...where } };
+      // A job the sandbox no longer knows has no result to show: name it, so the model can poll or stop it.
+      return { data: { ...(r as unknown as Record<string, unknown>), ...(st.status === "unknown" ? { id } : {}), ...where } };
     }
     note = "This surface has no background shell, so the command ran in the foreground.";
   }
 
   const r = await compressShellResult(await shellRunWithStop(ctx, command, dir), ctx);
   return { data: { ...(r as unknown as Record<string, unknown>), ...where, ...(note ? { note } : {}) } };
+}
+
+/** A finished job's status, its `output` compressed like a foreground command's (C8: a
+ *  successful run's prose only; a failing one stays verbatim). A running job is unchanged. */
+async function compressedJobStatus(st: ShellJobStatus, ctx: ToolContext): Promise<ShellJobStatus> {
+  if (st.status === "running" || typeof st.output !== "string") return st;
+  const r = await compressShellResult(finishedJob(st), ctx);
+  return r.compressed && typeof r.stdout === "string" ? { ...st, output: r.stdout } : st;
 }
 
 function jobId(args: Record<string, unknown>): string {
@@ -123,7 +132,7 @@ export const commandStatusTool: ToolDefinition = defineTool({
     const waitMs = waitArg(args.waitMs);
     // The call's signal ends the WAIT (a steer, Stop), never the job.
     const st = await poll.call(ctx.caps.shell, id, { ...(waitMs !== undefined ? { waitMs } : {}), ...(ctx.signal ? { signal: ctx.signal } : {}) });
-    return { data: st as unknown as Record<string, unknown> };
+    return { data: (await compressedJobStatus(st, ctx)) as unknown as Record<string, unknown> };
   },
 });
 
@@ -142,7 +151,7 @@ export const commandStopTool: ToolDefinition = defineTool({
     const kill = ctx.caps.shell?.kill;
     if (!kill) return { data: { ok: false, error: "background commands are not available on this surface" } };
     const st = await kill.call(ctx.caps.shell, id);
-    return { data: st as unknown as Record<string, unknown> };
+    return { data: (await compressedJobStatus(st, ctx)) as unknown as Record<string, unknown> };
   },
 });
 
