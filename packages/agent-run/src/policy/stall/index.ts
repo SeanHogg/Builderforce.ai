@@ -58,7 +58,7 @@ import {
 } from "@builderforce/agent-stall";
 import { liftProseAskUser, trimRepetitionLoop } from "@builderforce/agent-loop";
 import type { StallState } from "../../contract.js";
-import { walkLadder } from "./ladder.js";
+import { walkLadder, walkLadderAsync } from "./ladder.js";
 import type { PolicyContext, StallDecision, StallHook } from "../hooks.js";
 
 // ── The re-prompt budget (WS2b's slice of the run) ───────────────────────────
@@ -134,70 +134,17 @@ export const stallHook = {
       const owed = walkLadder(ctx, delivery);
       if (owed || delivery.owns?.narration) return owed;
     }
-    const text = typeof ctx.content === "string" ? ctx.content : "";
-    const toolNames = (ctx.tools ?? []).map((t) => t.function?.name ?? "").filter(Boolean);
+    return narrationRecover(ctx);
+  },
 
-    // The whole stall step, in one place (`resolveStallStep`): a turn that called a
-    // tool is never a stall; a stalled turn is re-prompted until the budget is spent;
-    // then the model hand-off policy swaps models until the failover budget is spent;
-    // then the run stops and says so.
-    const budget = budgetOf(ctx);
-    // A failover moved the run to a new model: the old budget says nothing about it,
-    // so it starts full (`resolveStallStep` returns `recoveriesUsed: 0` on a failover
-    // and we adopt it below).
-    const { policy, step } = resolveStallStep(
-      ctx.state.model,
-      {
-        text,
-        toolCallCount: 0,
-        availableToolNames: toolNames,
-        // Whether the user asked for a change decides what handing the work back means.
-        requestText: ctx.task.request ?? ctx.task.prompt,
-        ...(ctx.state.model.model && ctx.state.model.model !== "default" ? { resolvedModel: ctx.state.model.model } : {}),
-      },
-      budget.recoveriesUsed,
-      // The failover source rides the run policy's proven/tried set; the transport names
-      // the models a failover may land on (the tenant's connected flagships, the coding
-      // pool). Without one the default never returns the model that just failed, never
-      // more than MAX_MODEL_FAILOVERS deep.
-      { surface: ctx.ports.model?.fallbackSurface?.() ?? undefined },
-    );
-
-    switch (step.kind) {
-      case "none":
-        // Not a stall: the turn is the answer. A repetition loop in it is trimmed when it
-        // settles (`settle`), as every source does — never re-prompted, which would spend
-        // turns with no budget bounding them.
-        return undefined;
-      case "nudge": {
-        budget.recoveriesUsed = step.recoveriesUsed;
-        saveBudget(ctx, budget, 1);
-        if (step.toolChoice) ctx.state.forceToolChoice = step.toolChoice;
-        // `step.nudge` already forces ONE structured call (it embeds the tool-choice
-        // directive), so the re-prompt cannot be answered with another prose promise.
-        return { action: "steer", note: step.nudge, detail: { model: ctx.state.model.model ?? null, attempt: step.recoveriesUsed, shape: step.shape ?? null } };
-      }
-      case "failover": {
-        budget.recoveriesUsed = step.recoveriesUsed;
-        saveBudget(ctx, budget, 1);
-        // The policy moved the run onto `step.to` — apply it so the kernel asks for
-        // that model next turn, and carry the swap's user-facing notice with the
-        // first-chance nudge the incoming model gets.
-        ctx.state.model = policy;
-        if (step.toolChoice) ctx.state.forceToolChoice = step.toolChoice;
-        return {
-          action: "escalate",
-          note: `${step.notice}\n\n${step.nudge}`,
-          detail: { from: step.from ?? null, to: step.to, attempt: step.attempt, of: step.of, shape: step.shape ?? null, notice: step.notice },
-        };
-      }
-      case "exhausted": {
-        saveBudget(ctx, budget);
-        // Nothing left to try: stop, and carry the exhausted notice so the run's
-        // emptiness is explained (`agent-runtime/.../agent-loop/stall-recovery.ts`).
-        return { action: "pause", note: step.notice, detail: { model: ctx.state.model.model ?? null, tried: step.tried, shape: step.shape ?? null } };
-      }
+  /** {@link recover} for a ledger whose rungs need a promise to say which hold; the kernel calls this one. */
+  async recoverAsync(ctx: PolicyContext): Promise<StallDecision | void> {
+    const delivery = ctx.ports?.delivery;
+    if (delivery) {
+      const owed = await walkLadderAsync(ctx, delivery);
+      if (owed || delivery.owns?.narration) return owed;
     }
+    return narrationRecover(ctx);
   },
 
   /**
@@ -234,6 +181,75 @@ export const stallHook = {
       : FORCED_SYNTHESIS_PROMPT;
   },
 } satisfies StallHook;
+
+/** The generic stall judgement: the narration heuristics, the re-prompt budget, the failover, the explained stop. */
+function narrationRecover(ctx: PolicyContext): StallDecision | undefined {
+const text = typeof ctx.content === "string" ? ctx.content : "";
+  const toolNames = (ctx.tools ?? []).map((t) => t.function?.name ?? "").filter(Boolean);
+
+  // The whole stall step, in one place (`resolveStallStep`): a turn that called a
+  // tool is never a stall; a stalled turn is re-prompted until the budget is spent;
+  // then the model hand-off policy swaps models until the failover budget is spent;
+  // then the run stops and says so.
+  const budget = budgetOf(ctx);
+  // A failover moved the run to a new model: the old budget says nothing about it,
+  // so it starts full (`resolveStallStep` returns `recoveriesUsed: 0` on a failover
+  // and we adopt it below).
+  const { policy, step } = resolveStallStep(
+    ctx.state.model,
+    {
+      text,
+      toolCallCount: 0,
+      availableToolNames: toolNames,
+      // Whether the user asked for a change decides what handing the work back means.
+      requestText: ctx.task.request ?? ctx.task.prompt,
+      ...(ctx.state.model.model && ctx.state.model.model !== "default" ? { resolvedModel: ctx.state.model.model } : {}),
+    },
+    budget.recoveriesUsed,
+    // The failover source rides the run policy's proven/tried set; the transport names
+    // the models a failover may land on (the tenant's connected flagships, the coding
+    // pool). Without one the default never returns the model that just failed, never
+    // more than MAX_MODEL_FAILOVERS deep.
+    { surface: ctx.ports.model?.fallbackSurface?.() ?? undefined },
+  );
+
+  switch (step.kind) {
+    case "none":
+      // Not a stall: the turn is the answer. A repetition loop in it is trimmed when it
+      // settles (`settle`), as every source does — never re-prompted, which would spend
+      // turns with no budget bounding them.
+      return undefined;
+    case "nudge": {
+      budget.recoveriesUsed = step.recoveriesUsed;
+      saveBudget(ctx, budget, 1);
+      if (step.toolChoice) ctx.state.forceToolChoice = step.toolChoice;
+      // `step.nudge` already forces ONE structured call (it embeds the tool-choice
+      // directive), so the re-prompt cannot be answered with another prose promise.
+      return { action: "steer", note: step.nudge, detail: { model: ctx.state.model.model ?? null, attempt: step.recoveriesUsed, shape: step.shape ?? null } };
+    }
+    case "failover": {
+      budget.recoveriesUsed = step.recoveriesUsed;
+      saveBudget(ctx, budget, 1);
+      // The policy moved the run onto `step.to` — apply it so the kernel asks for
+      // that model next turn, and carry the swap's user-facing notice with the
+      // first-chance nudge the incoming model gets.
+      ctx.state.model = policy;
+      if (step.toolChoice) ctx.state.forceToolChoice = step.toolChoice;
+      return {
+        action: "escalate",
+        note: `${step.notice}\n\n${step.nudge}`,
+        detail: { from: step.from ?? null, to: step.to, attempt: step.attempt, of: step.of, shape: step.shape ?? null, notice: step.notice },
+      };
+    }
+    case "exhausted": {
+      saveBudget(ctx, budget);
+      // Nothing left to try: stop, and carry the exhausted notice so the run's
+      // emptiness is explained (`agent-runtime/.../agent-loop/stall-recovery.ts`).
+      return { action: "pause", note: step.notice, detail: { model: ctx.state.model.model ?? null, tried: step.tried, shape: step.shape ?? null } };
+    }
+  }
+}
+
 
 // ── Re-exported so a host can drive the same step without re-deriving it ─────
 

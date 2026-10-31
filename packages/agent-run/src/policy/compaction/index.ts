@@ -155,8 +155,9 @@ export function compactionOptions(ctx: PolicyContext, opts: CompactionHookOption
 
 /** Map a RunMessage row to the packer's OpenAI shape. */
 function toPackRow(m: RunMessage): PackMessage {
-  const row: PackMessage & { task?: true } = { role: m.role, content: m.content };
+  const row: PackMessage & { task?: true; parts?: RunMessage["parts"] } = { role: m.role, content: m.content };
   if (m.task) row.task = true;
+  if (m.parts && m.parts.length > 0) row.parts = m.parts;
   if (m.toolCalls && m.toolCalls.length > 0) {
     row.tool_calls = m.toolCalls.map((tc) => ({
       id: tc.id,
@@ -170,7 +171,7 @@ function toPackRow(m: RunMessage): PackMessage {
 
 /** Map a packed OpenAI row back to the RunMessage row shape. */
 function toRunRow(m: PackMessage | Record<string, unknown>): RunMessage {
-  const src = m as PackMessage & { task?: unknown };
+  const src = m as PackMessage & { task?: unknown; parts?: RunMessage["parts"] };
   const toolCalls = Array.isArray(src.tool_calls)
     ? (src.tool_calls as Array<{ id?: string; function?: { name?: string; arguments?: string } }>).map((tc) => ({
         id: tc.id ?? "",
@@ -185,7 +186,26 @@ function toRunRow(m: PackMessage | Record<string, unknown>): RunMessage {
   if (toolCalls && toolCalls.length > 0) out.toolCalls = toolCalls;
   if (src.tool_call_id != null) out.toolCallId = src.tool_call_id;
   if (src.task === true) out.task = true;
+  if (Array.isArray(src.parts) && src.parts.length > 0) out.parts = src.parts;
   return out;
+}
+
+/**
+ * What the fold stands for, for a surface that makes it durable: the memory note the packer wrote for the dropped
+ * middle, and how many rows (counted from the first non-system row before the fold) it covers - everything before the
+ * verbatim tail. Undefined unless the output reads as the packer's shape, so a surface never keeps from a wrong place.
+ */
+function foldOf(before: readonly PackMessage[], after: readonly PackMessage[]): { note: string; covered: number } | undefined {
+  const members = new Set<PackMessage>(before);
+  const noteAt = after.findIndex((m) => !members.has(m) && m.role !== "tool" && !m.tool_calls && typeof m.content === "string");
+  if (noteAt < 0) return undefined;
+  let tail = 0;
+  while (tail < after.length - 1 - noteAt && tail < before.length && after[after.length - 1 - tail] === before[before.length - 1 - tail]) tail += 1;
+  // Whatever sits between the note and the tail must be rows the source held (a re-injected directive), never a copy.
+  for (let i = noteAt + 1; i < after.length - tail; i += 1) if (!members.has(after[i]!)) return undefined;
+  const lead = before.findIndex((m) => m.role !== "system");
+  const covered = before.length - tail - (lead < 0 ? 0 : lead);
+  return covered > 0 ? { note: after[noteAt]!.content as string, covered } : undefined;
 }
 
 /**
@@ -198,12 +218,10 @@ export function createCompactionHook(hookOptions: CompactionHookOptions = {}): C
   return {
     async compact(ctx: PolicyContext): Promise<CompactionResult | void> {
       const options = compactionOptions(ctx, hookOptions);
-      const result = await compactMessages(
-        (ctx.messages as readonly Row[]).map(toPackRow) as unknown as Array<Record<string, unknown>>,
-        options,
-        options.summarize,
-      );
+      const rows = (ctx.messages as readonly Row[]).map(toPackRow);
+      const result = await compactMessages(rows as unknown as Array<Record<string, unknown>>, options, options.summarize);
       if (!result.compacted) return undefined;
+      const fold = result.droppedMessages > 0 ? foldOf(rows, result.messages as unknown as PackMessage[]) : undefined;
       return {
         messages: result.messages.map(toRunRow),
         dropped: result.droppedMessages,
@@ -212,6 +230,7 @@ export function createCompactionHook(hookOptions: CompactionHookOptions = {}): C
         afterTokens: result.afterTokens,
         summarized: result.summarized,
         ...(result.maskedObservations ? { masked: result.maskedObservations } : {}),
+        ...(fold ? { note: fold.note, covered: fold.covered } : {}),
       };
     },
   };

@@ -21,6 +21,7 @@
 
 import type { ToolSchema } from "@builderforce/agent-tools";
 import type { RunPolicyEvent, RunPolicyOutcome } from "@builderforce/run-policy";
+import type { CacheServedStreak } from "./policy/tools/cacheServedStreak.js";
 
 /** Why a turn ended without having finished: the output ceiling, or a call the provider could not parse. */
 export type TurnInterruption = "truncated" | "malformed-tool-call";
@@ -37,6 +38,13 @@ export interface LadderProgress {
 export interface PlatformToolResult {
   data: unknown;
   isError?: boolean;
+  /**
+   * The answer is a conversational one (a tool lookup, a declined confirm, a hand-off): it touched nothing, so it neither
+   * counts as the run circling its read cache nor as work that ended the circle.
+   */
+  neutral?: true;
+  /** The answer came from the surface's own read cache (a stub, a replay): it counts toward the run circling its reads. */
+  cached?: true;
 }
 
 /** How a tool call with unusable arguments is declined, in this surface's words. */
@@ -70,6 +78,12 @@ export interface PlatformTools {
   closed?: boolean;
   /** The tools the surface can run right now. Read every turn: a rung may withdraw some. */
   schemas(progress: LadderProgress): readonly ToolSchema[];
+  /**
+   * The surface's say over THIS turn's menu, asked once per step before the request is built: it may force a turn (a narrower
+   * set of tools, a call required, a brief that rides the request's volatile tail) or add to what the tools policy selected.
+   * Nothing back ⇒ the policy's selection stands.
+   */
+  turn?(env: TurnEnv): Promise<TurnMenu | void> | TurnMenu | void;
   /** The relevance selection the tools policy applies to {@link schemas}. */
   selection: PlatformSelection;
   /** Run one call. A refusal is a result the model reads, never a throw. */
@@ -78,6 +92,28 @@ export interface PlatformTools {
   handsOff?(name: string): boolean;
   /** How a call whose arguments never parsed is declined. Absent ⇒ the shared wording, no hint. */
   malformed?: MalformedCallPolicy;
+}
+
+/** What a surface sees when it shapes a turn's menu. */
+export interface TurnEnv {
+  /** The absolute step. */
+  step: number;
+  /** The tools policy's selection for this turn (it reads the surface's `schemas` and `selection`). Asking is free; the answer is the policy's. */
+  select(): Promise<readonly ToolSchema[]>;
+  /** The delivery ladder's counters. */
+  progress: LadderProgress;
+  /** The calls in a row the run's read cache answered (`policy/tools/cacheServedStreak`). */
+  cache: CacheServedStreak;
+}
+
+/** How a surface shapes one turn. */
+export interface TurnMenu {
+  /** The whole menu of the turn, replacing the policy's selection (a forced turn's narrower set, the policy's set plus router tools). */
+  tools?: readonly ToolSchema[];
+  /** A call is required this turn. */
+  toolChoice?: "required";
+  /** Sections for the request's volatile tail (the forced turn's brief, a steer). Never persisted. */
+  tail?: readonly string[];
 }
 
 /** What the stall ladder judges a turn that ended without calling a tool. */
@@ -115,6 +151,11 @@ export interface LadderRung {
   reached?(): void;
   /** Called with the attempt number each time this rung re-states. */
   onRestate?(attempt: number): void;
+  /**
+   * Re-stating this rung hands the run from authoring to review (the verify phase): the model that continues is the review
+   * model. The surface says so only when the run changed something it can verify.
+   */
+  entersVerify?: boolean;
 }
 
 /** How a provider failure is spoken to the model, in this surface's words. */
@@ -131,8 +172,8 @@ export interface ProviderFailureWording {
 
 /** What the task still owes, and how a prose-ended turn is judged. */
 export interface DeliveryLedger {
-  /** The rungs this turn must clear, in order. Read live: the surface's own facts decide which hold. */
-  rungs(turn: DeliveryTurn): readonly LadderRung[];
+  /** The rungs this turn must clear, in order. Read live: the surface's own facts decide which hold. A surface that must ask something (a workspace's stop hook) answers with a promise. */
+  rungs(turn: DeliveryTurn): readonly LadderRung[] | Promise<readonly LadderRung[]>;
   /** Rungs whose counters survive a hand-off to another model (every other rung starts fresh). */
   sticky?: readonly string[];
   /**

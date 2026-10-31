@@ -179,3 +179,23 @@ export {
   resetRunSteering,
   type RunSteerMessage,
 } from "./policy/steering/runSteering.js";
+
+// The run's USD cap (`RunPolicy.budgets.usd`): the wording and the arithmetic, one copy. The Brain's own loop reads them here too.
+export {
+  budgetContainedReply,
+  budgetWarning,
+  localSpendMeter,
+  runBudgetCapMillicents,
+  usdBudget,
+  type BudgetVerdict,
+  type UsdBudget,
+} from "./policy/budget/usd.js";
+
+// The no-progress breaker's counter: consecutive calls the read cache answered.
+export {
+  CACHE_SERVED_STREAK,
+  CacheServedStreak,
+  MAX_NO_PROGRESS_TURNS,
+  MIN_STREAK_TURNS,
+  type ServedStreakState,
+} from "./policy/tools/cacheServedStreak.js";
