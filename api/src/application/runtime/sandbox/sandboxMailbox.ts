@@ -46,6 +46,9 @@ export class SandboxMailbox {
         clearTimeout(timer);
         signal?.removeEventListener('abort', onAbort);
         this.pending.delete(id);
+        // An aborted or timed-out request must not still be served to the runner.
+        const queued = this.queue.findIndex((r) => r.id === id);
+        if (queued >= 0) this.queue.splice(queued, 1);
         resolve(result as T | { ok: false; error: string });
       };
       const timer = setTimeout(() => done({ ok: false, error: 'the GitHub Actions runner did not answer in time' }), RESULT_TIMEOUT_MS);

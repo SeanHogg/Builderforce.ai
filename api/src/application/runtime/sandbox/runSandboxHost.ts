@@ -90,8 +90,15 @@ export class RunSandboxHost {
     return kind === 'actions' && !(await this.storage.get<boolean>(RUNNER_SEEN_KEY));
   }
 
-  /** The Actions runner's poll for the engine's next request. */
-  async handleRunnerPoll(): Promise<SandboxMailPoll> {
+  /**
+   * The Actions runner's poll for the engine's next request. `runLive` is whether the run
+   * still has its persisted cursor: the cursor outlives a park (the run resumes from it)
+   * and is deleted when the run ends. The mailbox's own `closed` flag is memory only, so
+   * after a Durable Object eviction a runner of an ENDED run would read a fresh open mailbox
+   * and idle to the job timeout with its background jobs alive. No cursor ⇒ it is told to stop.
+   */
+  async handleRunnerPoll(runLive: boolean): Promise<SandboxMailPoll> {
+    if (!runLive) return { close: true };
     await this.storage.put(RUNNER_SEEN_KEY, true);
     return this.mailbox.next();
   }

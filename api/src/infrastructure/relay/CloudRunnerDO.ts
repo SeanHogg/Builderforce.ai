@@ -156,7 +156,7 @@ export class CloudRunnerDO implements DurableObject {
     // The run's GitHub Actions runner: it cannot be called, so it polls here for the
     // engine's next sandbox request and posts each result back (`sandbox/sandboxMailbox.ts`).
     if (request.method === 'POST' && url.pathname.endsWith('/sandbox/next')) {
-      return Response.json(await this.sandboxHost.handleRunnerPoll());
+      return Response.json(await this.sandboxHost.handleRunnerPoll((await this.state.storage.get<Cursor>(CURSOR_KEY)) != null));
     }
     if (request.method === 'POST' && url.pathname.endsWith('/sandbox/result')) {
       const body = (await request.json().catch(() => null)) as { id?: unknown; result?: unknown } | null;
