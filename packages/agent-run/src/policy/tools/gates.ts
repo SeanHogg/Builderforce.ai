@@ -39,6 +39,8 @@ const TOOL_NAME_SYNONYMS: Readonly<Record<string, readonly string[]>> = {
   write_file: ["write", "Write"],
   Write: ["write", "write_file"],
   delete_file: ["write_file", "write", "Write"],
+  // A patch is a write and an edit at once: a gate authored on either covers it.
+  apply_patch: ["write_file", "write", "Write", "edit_file", "edit", "Edit"],
   edit: ["edit_file", "Edit"],
   edit_file: ["edit", "Edit"],
   Edit: ["edit", "edit_file"],
