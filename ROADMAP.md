@@ -1,454 +1,368 @@
 # Builderforce.ai — Roadmap & Gap Register
 
-> **Outstanding work only.** Finished work moves to **[DONE.md](./DONE.md)**. Re-validated against production data 2026-10-10.
+> **Outstanding work only.** Finished work moves to [DONE.md](./DONE.md). Validated against the code 2026-10-31. Entries sit under the arc stage they move a user through; work that moves nobody through the arc is under OTHER. Tags are the domains in [DomainService.ts](./api/src/application/kernel/DomainService.ts).
 >
-> **Grouped by the method.** Every entry sits under the arc stage it moves a user through — **Idea · Make · Run · Measure · Reach** — and carries its owning domain as a tag (`[canvas]`, `[delivery]`, …, the seats in [DomainService.ts](./api/src/application/kernel/DomainService.ts)). Work that moves nobody through the arc (runtime, gateway, data model, CI, code health, cost) is under **OTHER**.
->
-> **Traffic context.** Production is nearly idle (20–130 gateway calls/day; no cloud executions or role dispatches since 2026-10-05).
+> **Traffic, 30 days to 2026-10-25:** VS Code 452 runs, Web ≈230 calls, cloud tickets 4 runs.
 
 ## How an entry is written
 
-One owner, one verifiable state, one acceptance criterion. Name the blocker, or it is not blocked — scheduling around other work is not a blocker. **Human or production validation is never an entry or a blocker** — shipped work is validated by telemetry and logs (`llm_usage_log`, run/execution records, Worker observability), not by a person running a smoke test. A Build item names its proof form and the kill condition Measure grades. Authenticated UI registers a destination or Canvas object in the shell and meets PRD 21 (canonical primitives, five locales, both themes, 360px, keyboard/coarse-pointer parity, bottom-centre composer).
+One line: the gap, the next step or done-when, and `*Blocker: …*` if there is one. **No blocker named means not blocked**; scheduling around other work is not a blocker. Detail lives in the PRD or the code, not here. Human or production validation is never an entry or a blocker: telemetry and logs validate shipped work. A Build item names its proof form and kill condition. Authenticated UI meets PRD 21.
 
-## North Star — **Idea to Real**
+## North Star — Idea to Real
 
-Declared as spec data and ratcheted by `frontend/scripts/check-methodology.mjs`. This roadmap uses that vocabulary and no other.
+Vocabulary is spec data, ratcheted by `frontend/scripts/check-methodology.mjs`.
 
-- **THE ARC — `Idea → Make → Run → Measure → Reach`.** Five stages: where you are. One source: `ARC_STAGES` in [navGroups.ts](./frontend/src/lib/navGroups.ts); `STAGES` adds `admin` (settings, not a stage). The rail, Product ▾ menu, panel header switcher, canvas phases and the method section all read it.
-- **THE LOOP — `Read → Prove → Build`.** How you cross from Idea into Make. Read and Prove (Idea) spend nothing; Build (Make) spends run budget. Owned by [application/realization/](./api/src/application/realization/).
-- **Eight proof forms** — `demo-video`, `clickable-prototype`, `smoke-test`, `wizard-of-oz`, `poc`, `pilot`, `phone-line`, `live-system`. A ninth is a registry entry, never a branch.
-- **Every proof carries a kill condition**, graded in Measure, which closes the loop back to Idea.
+- **Arc:** `Idea → Make → Run → Measure → Reach` (`ARC_STAGES`, [navGroups.ts](./frontend/src/lib/navGroups.ts)).
+- **Loop:** `Read → Prove → Build`, crossing Idea into Make. Read and Prove spend nothing; Build spends run budget ([application/realization/](./api/src/application/realization/)).
+- **Proof forms:** `PROOF_FORMS` in [methodology.ts](./frontend/src/lib/methodology.ts). A new one is a registry entry, never a branch. Each proof carries a kill condition graded in Measure.
 
-Enabling work is legitimate but never outranks a broken Idea→Real journey.
+Enabling work never outranks a broken Idea→Real journey.
 
-## Consolidated Feature Register
+**North-star metric:** share of ideas reaching a graded proof. Contract: [OUTCOME-METRICS.md](./docs/design/creation-canvas/OUTCOME-METRICS.md).
 
-| Feature | Area | P | Target | Status |
-|---|---|---|---|---|
-| Managed Agent hosting add-on ($49/mo/Agent) | Revenue | P0 | Q3 2026 | ✅ Shipped |
-| Onboarding — first Agent in < 5 min | Revenue | P1 | Q3 2026 | ✅ Shipped |
-| Marketplace monetization (listing + tx fee, Stripe) | Revenue | P1 | Q3 2026 | 🔄 Partial — awaits Stripe secrets |
-| Enterprise license GA (on-prem Docker) | Revenue | P1 | Q4 2026 | ✅ Shipped |
-| SOC 2 Type I audit | Revenue | P1 | Q4 2026 | 📋 Planned |
-| Live orchestration workspace (real-time DAG) | Agents | P0 | Q3 2026 | ✅ Shipped |
-| Inline diff / pair-programming (TUI accept/reject) | Agents | P1 | Q3 2026 | ✅ Shipped |
-| Session auto-checkpoint (`/sessions`, `/undo`, `/fork`) | Agents | P1 | Q3 2026 | ✅ Shipped |
-| Remote task result streaming | Agents | P2 | Q3 2026 | ✅ Shipped — live `remote.task.chunk` + terminal assistant text |
-| Multi-model role routing | Agents | P2 | Q3 2026 | ✅ Shipped — resolver in `@builderforce/learned-routing` (`9f514a949`); wired into cloud engine (`c34d5084b`) and VS Code native Brain (`9689f3699`) |
-| Spec import from GitHub Issues / Linear / Jira | Agents | P2 | Q3 2026 | ✅ Shipped |
-| Remaining Canvas actions onto the outcome contract | Analytics | P0 | Q3 2026 | ✅ Shipped — cheap proofs on the ledger (epic #3077) |
-| Rendered presentation export of the value brief | Revenue | P1 | Q3 2026 | ✅ Shipped — `renderRfpDocPptx` from the same `rfpDocSections` as HTML/PDF; canvas PPTX + investor pack PPTX |
-| Phase 6 — activity/integration engines, scheduled reporting, PRD orchestration, analytics UI | 6 | P0–P1 | Q3–Q4 2026 | 📋 Planned |
-| Phase 7 — policy packs, governance-auditor, BLOCKER-gates-merge, SOC2 evidence ([PRD 08](./docs/specs/08-prd-agentic-governance.md)) | 7 | P1–P2 | Q3 2026 | 📋 Planned |
-| Local LLM execution — native pure-Rust engine that replaces Ollama, in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference) (`bfi`; Synapse supervises `bfi serve`; Ollama is not required), hybrid routing — [PRD](https://github.com/SeanHogg/builderforce-inference/blob/main/docs/PRD-native-engine.md); M1–M4 crates landed (tokenizer, sampler, prefix cache, grammar, embeddings, `mix_decode` concurrent batching); M5 Synapse cut-over shipped (`bf-local` no longer drives Ollama); M6 VSIX discovers Synapse via `~/.builderforce/desktop.json`. Remaining: unsigned GitHub Release binaries (3782) | 3 | P2–P3 | Q4 2026 | 🔄 Partial |
-| Multi-agent orchestration at scale (DAG UI, memory mesh) | 4 | P1–P2 | Q3–Q4 2026 | 📋 Planned |
-| Production hardening (self-hosted, fleet failover, SIEM export) | 5 | P1–P3 | Q4 2026 | 📋 Planned |
+## Claim-to-Proof
 
-## Key Metrics
+Public copy states today's evidence. **Available** = shipped and repeatably verified · **Beta** = named limitation · **Planned** = never presented as current. These are the statuses in `MARKETING_CLAIMS` ([product.ts](./frontend/src/lib/content/product.ts)), which holds the reviewed wording; this table holds what each promise still needs.
 
-**North star:** share of ideas reaching a **graded proof** (kill condition measured, not just a deliverable).
-
-Read→Prove: time to a chosen proof form · share of ideas Read before Build. Build: proofs reaching a reachable artifact · pass rate · retry rate. Measure: share of proofs graded. Collaboration · Compounding (resumed in 7/30 days, outputs reused) · Efficiency (interventions and cost per outcome) · Integrity (actions with a correlated terminal outcome). Stars, downloads and agent counts are diagnostics only. All computed from the correlated outcome ledger — contract: [OUTCOME-METRICS.md](./docs/design/creation-canvas/OUTCOME-METRICS.md).
-
-## Claim-to-Proof Product Program
-
-Public copy describes today's evidence. **Available** = shipped + repeatably verified · **Beta** = named limitation · **Planned** = never presented as current. No `every`/`always`/`never`/`100%`/`zero`/`instant` unless a test proves the boundary.
-
-| P | Promise | Honest position today | Proof required | Status |
-|---|---|---|---|---|
-| P0 | One canvas from idea to real | Connects supported artifacts into supported delivery | Release-gated journey test per marketed artifact | 🔄 Partial |
-| P0 | People control agent work | Policy gates on configured paths | Classify every mutating tool; CI fails on an unclassified one | ✅ Available |
-| P0 | Complete agent auditability | Supported workflows emit records | One audit envelope at every mutation entry point | 🔄 Partial |
-| P0 | Private, local AI work | WebGPU is local; collab/eval/publish transmit | Boundary manifest per action, shown before execution | 🔄 In Progress |
-| P1 | Evermind stays current | Keyed updates replace superseded facts | Provenance, contradiction detection, freshness budgets, stale-recall evals | 📋 Planned |
-| P1 | Same work in VS Code | Engineering surface for canvas + delivery | Web↔extension parity matrix + contract tests | 🔄 Partial |
-| P1 | Connected delivery, no sprawl | Services stay independent | Per-connector health, sync direction, conflict + recovery | 🔄 Partial |
-| P1 | Costs connect to outcomes | Rolls up where instrumented | Unattributed-spend coverage, reconciliation, task→initiative rollups | 🔄 Partial |
-| P2 | Create "anything" | A named set of artifact types | Limits, exports, owner, working example per registry entry | 🔄 In Progress |
-| P2 | Model/provider freedom | Many options; availability varies | Provider copy generated from the live catalog | 📋 Planned |
-| P2 | Fair comparisons | Criteria-first, five indexed pages | Sourced, dated, reviewed, auto-expiring vendor facts | 🔄 In Progress |
-| P2 | Value for CEOs/revenue leaders | Broad capability, little outcome proof | Measure Idea → proof → Build → graded kill condition | 🔄 In Progress |
-
-**Marketing release gate:** status, owning capability, automated evidence, prerequisites, data boundary, tested wording, sourced comparisons, runtime-derived pricing.
+| P | Promise | Status | Proof still missing |
+|---|---|---|---|
+| P0 | One canvas from idea to real | Beta | A release gate per marketed artifact. `qa-e2e` runs in no workflow and its `ci` script swallows failure |
+| P0 | People control agent work | Beta | `TOOL_SIDE_EFFECT` wired into policy, failing closed, with a CI check. It has no runtime caller today |
+| P0 | Complete agent auditability | Beta | One audit envelope at every mutation entry point. None exists |
+| P0 | Private, local AI work | Planned | A boundary manifest per action, shown before execution |
+| P1 | Evermind stays current | Beta | Freshness budgets, stale-recall evals, contradiction detection beyond docs |
+| P1 | Same work in VS Code | Beta | A web↔extension parity matrix; contract tests are partial |
+| P1 | Connected delivery, no sprawl | Beta | Health and recovery in `connectorManifest.ts`; board sync has them |
+| P1 | Costs connect to outcomes | Beta | Unattributed-spend coverage and reconciliation |
+| P2 | Create "anything" | Beta | Limits, exports and owner in `creationObjectRegistry` |
+| P2 | Model/provider freedom | Planned | Provider copy from the live catalog; "30+ providers" is hardcoded |
+| P2 | Fair comparisons | Planned | Sourced, dated, expiring vendor facts |
+| P2 | Value for CEOs/revenue leaders | Beta | Measured production values and one customer proof |
 
 ## Programs
 
-- **hired.video absorption** ([PRD 18](./docs/specs/18-prd-hired-video-port.md)) — 100% deprecation to a redirect shell. Every remaining table maps to an existing primitive (`data-model/source-to-target.tsv`, 363/363); the rest is application code over existing tables. Affiliates = the Associate program.
-- **burnrateos.com shutdown** ([PRD 19](./docs/specs/19-prd-burnrateos-consolidation.md)) — a parity obligation: an unbuilt, unretired capability is LOST at shutdown. Held by `check:burnrate-parity`, `check:no-burnrate-runtime`, `check:burnrate-policy`. No row migration (2026-09-05). B1/B2 founder loop shipped 2026-09-15. PRD 19 §2 governs twelve capabilities both programs claim. *Operator work:* provider customer actions, identity-cutover comms, redirect verification.
+- **hired.video absorption** ([PRD 18](./docs/specs/18-prd-hired-video-port.md)): deprecate to a redirect shell. Every table maps to a primitive (`docs/specs/data-model/source-to-target.tsv`); the rest is application code.
+- **burnrateos.com shutdown** ([PRD 19](./docs/specs/19-prd-burnrateos-consolidation.md)): an unbuilt, unretired capability is lost at shutdown. Held by `check:burnrate-parity`, `check:no-burnrate-runtime`, `check:burnrate-policy`. *Blocker: operator provider actions, identity-cutover comms, redirect verification.*
 
 ---
 
 ## Consolidated Gap Register — by stage of the arc
 
-| Stage | What belongs here | Next milestone |
+| Stage | Holds | Next milestone |
 |---|---|---|
-| [💡 Idea](#-idea--read--prove) | Starting a session, reading a brief, choosing and running a cheap proof | Release-gate the group-chat journey; idea validation by asking the market |
-| [🔨 Make](#-make--build) | Agents and people building: cloud/IDE runs, PR loop, boards, canvas runtimes, previews, hosting | Every marketed delivery adapter release-gated; container runtime live |
-| [⚙️ Run](#️-run--operate-the-company) | Operating the company: finance, hiring, people, governance, phone, investor | The fundraising pack end to end on connected books |
-| [📊 Measure](#-measure--grade-the-proof) | Grading proofs and seats: metrics, dashboards, experiments, OKRs, sessions | The 45 domain metric keys written by real rollups |
-| [📣 Reach](#-reach--sell-be-found-grow) | Marketplace, marketing, paid/social, SEO, public surfaces, distribution | First customer proof; live ad/social consent flows |
-| [🧰 OTHER](#-other--enabling-work-outside-the-arc) | Runtime, gateway, Evermind, desktop, data model, VS Code, CI/CD, code health, cost, ops | $0 platform plan; core inside Neon Free |
+| [💡 Idea](#-idea--read--prove) | Sessions, briefs, choosing and running a cheap proof | Experiment verdicts; validate by asking the market |
+| [🔨 Make](#-make--build) | Agents and people building: runs, boards, canvas runtimes, previews, hosting | One execution core; live preview on |
+| [⚙️ Run](#️-run--operate-the-company) | Finance, hiring, people, governance, phone, investor | Tool classification wired; SOC 2 Type I |
+| [📊 Measure](#-measure--grade-the-proof) | Grading proofs and seats: metrics, experiments, OKRs, sessions | `experiment` cards measured |
+| [📣 Reach](#-reach--sell-be-found-grow) | Billing, marketplace, marketing, SEO, distribution | First paying tenant; first customer proof |
+| [🧰 OTHER](#-other--enabling-work-outside-the-arc) | CI, gateway, Evermind, runtime, data model, code health, infrastructure | $0 platform plan |
 
 ---
 
 ## 💡 Idea — Read · Prove
 
-- **[canvas] Ideas surface and Brain's "no data" reply read as unfinished.** Lede and empty body repeat; both point at "the prompt below" while the composer is in the right rail; the stepper stays on Make; Capture misses request-shaped text; the reply asks for an object ID instead of offering Paste / Upload / Plan an interview; header says "Brain" not the chat title. Mockup: frames 1–3 of https://claude.ai/artifact/KcEJGhrZaQMQWEMSHNJjyE. *Blocker: operator go-ahead (the 2026-10-04 pass was scoped to the chat panel).*
-- **[canvas] Idea validation surveys: adjacent gaps around the shipped B0–B5 loop** (PRD 27 shipped and was removed 2026-10-25; see DONE.md). (1) `experiment` cards are never measured: `builtin_canvas_bind_ab_test` exists only in a hint in `frontend/src/lib/founderObjects.ts`, and `experiment` is absent from `CONNECTED_CANVAS_ACTIONS` — implement the bind so `evidence` can reach `evidence.bound`, connect `experiment: ['evaluate']`, and drop `run` from its actions if no adapter exists. (2) SMS and scheduled campaign sends exist on the server (migration 0940, `scheduled_at` + `startDueCampaigns`), but `growthApi.ts` `CampaignTransport` has no `twilio` and no `scheduledAt`, and `CampaignComposer` offers neither — expose both, respecting `TRANSPORTS_BY_CHANNEL`. (3) Clicks record only a first `clicked_at`, never which link — mint a per-link registry at render time (this also closes the `?u=` open-redirect surface). (4) Four contact stores (`sales_contacts` user-scoped, not tenant-scoped; `ri_prospects`; `lists`; `marketing_audience_members`) need one canonical identity — *blocker: operator decision on the canonical store*. (5) `pulse_surveys` and DevEx surveys compete with the `question_sets`/`responses` kernel — migrate pulse onto `kind='pulse'` keeping anonymity; port DevEx eNPS logic, not its tables. (6) The CSAT/NPS widget (`customer_engagement_feedback_widgets.question_set_id`, `shouldPrompt`) has no frontend renderer. (7) `newsletter_subscribers` (migration 0015, global) is a silo nothing sends to and cannot see `marketing_suppressions` — route it through the campaign rail or retire it. Unblocks measured validation evidence and channel attribution.
-- **[canvas] Idea-born survey defaults await operator decisions** (from PRD 27 §9; recommendation in brackets): anonymous by default for forms created from an idea only [yes]; a default close date on idea-born forms [14 days, editable]; who may send [Ask people + Publish for any editor; Send keeps the `manager` gate]; state tenant-wide suppression in the UI before a send [yes]; create epic/spec/roadmap board rows for this work. *Blocker: operator decision.*
-- **[canvas] Validation experiment templates and a pursue / pivot / kill verdict** (from doc 06 A9, removed 2026-10-25). The Ideas loop has proof forms and `idea.reveal`, but no named experiment templates (A/B, fake-door, concierge MVP, smoke test) that pre-fill method and metric scaffolding, no explicit decision-rule field on an idea's proof, and grading returns no pursue / pivot / kill recommendation with a rationale. Build them as proof-form registry data, not a new store. Unblocks the kill-condition verdict reading as a decision. Not blocked.
-- **[canvas] Creation sessions: the release gates PRD 17 left to deployed evidence** (PRD 17 repository implementation complete; removed 2026-10-25). Proven by telemetry and automated runs, not sign-off: (R-02) retire the hard legacy routes and close CS-025 once `creation_sessions_nav` telemetry shows wrapper success ≥ 99.9%, return-to-session ≥ 80% and near-zero legacy-route use over two releases; (R-03) run the existing deployable Playwright matrix (guest/onboarding/template/Brain review, Dashboard restore, Workflow/Voice surfaces, legacy adaptation, accessibility modes) in the release environment, plus multiplayer reconnect and packaged-VSIX scenarios, keeping traces; (R-04) run the capacity probe (25 concurrent editors on a 100-visible / 1,000-referenced session) and the invitation-replay / cross-scope / large-restore tests; (R-05) run the automated keyboard, 200% zoom, 360px, forced-colours and reduced-motion suite against the deployment; (R-06) open the same deployed session in the packaged VSIX (persistence, permissions, reconnect, theming); (R-07) the backup/restore, feature/navigation rollback and delivery kill-switch drills through `canvas:audit`. R-01's adoption baselines (Activation, Creation, Delivery, Collaboration) come from the existing event instrumentation. Unblocks Gates A–D (navigation default, GA). Not blocked.
-- **[canvas] Wizard-of-oz `/queue` and `/pilot-report` are public and expose participant contacts.** They ship `verify: 'none'`; a seeded blocking ticket is a request, not a control. Fix = per-realization read secret, signed link, or the console behind app auth. *Blocker: product decision on where an operator console lives.*
+- **[canvas] Ideas surface reads unfinished.** Lede and empty body repeat "the prompt below", Capture misses request-shaped text, Brain's "no data" reply asks for an object ID. Mockup: https://claude.ai/artifact/KcEJGhrZaQMQWEMSHNJjyE. *Blocker: operator go-ahead.*
+- **[canvas] Experiment templates and verdict.** Smoke test and wizard-of-oz exist. Add A/B and concierge templates, a decision-rule field, and a pursue / pivot / kill verdict (`revealIdea` grades met/missed only). Build as proof-form registry data.
+- **[canvas] Survey delivery gaps.** `CampaignTransport` has no `twilio` or `scheduledAt` though the server supports both; clicks record no link (a per-link registry also closes the `?u=` open redirect); the CSAT/NPS widget has no renderer.
+- **[canvas] Survey stores.** Move `pulse_surveys` onto `question_sets` `kind='pulse'` keeping anonymity, port DevEx eNPS logic, route `newsletter_subscribers` through the campaign rail or retire it.
+- **[canvas] Four contact stores** (`sales_contacts`, `ri_prospects`, `lists`, `marketing_audience_members`) need one identity. *Blocker: operator picks the canonical store.*
+- **[canvas] Idea-born survey defaults** (recommended): anonymous yes; 14-day close; Ask + Publish for any editor, Send keeps the `manager` gate; state suppression before send. *Blocker: operator decision.*
+- **[canvas] Creation-session release gates (PRD 17 R-02–R-07).** Emit `creation_sessions_nav` first (nothing does), then retire legacy routes at wrapper success ≥ 99.9% and return-to-session ≥ 80%. Run the Playwright matrix in the release environment and add reconnect and packaged-VSIX specs; capacity probe; a11y suite; backup, rollback and kill-switch drills via `canvas:audit`. Unblocks Gates A–D.
+- **[canvas] Wizard-of-oz `/queue` and pilot `/pilot-report` are public and expose contacts** (`verify: 'none'`). Fix with a read secret, signed link or authenticated console. *Blocker: product decision on where the console lives.*
+
 ---
 
 ## 🔨 Make — Build
 
-### Studio packages `[studio]`
-
-- **Published `@seanhogg/builderforce-studio` cannot be installed from npm (found 2026-10-29).** Its runtime `dependencies` are `@webdit/shared`, `@webdit/runtime` and `@webdit/torch` as `file:../webdit/...` (npm shows them on the published version), and `studio-embedded` declares the same. An npm consumer cannot resolve a `file:` path to a sibling folder. The `@webdit/*` packages are `private`. Acceptance: `npm install @seanhogg/builderforce-studio` in an empty folder succeeds and `import` works. **Blocker: a decision.** Either bundle `@webdit/*` into studio's `dist` (`noExternal` in `studio/tsup.config.ts`, move them to `devDependencies`), or publish them. The local `file:` copies also go stale the same way the studio copy in studio-embedded did; `webdit/shared` and `webdit/torch` have no `dist`.
-
 ### Cloud and IDE agent runs `[agents]`
 
-- **A knowledge review of the `agentic` workspace fails (found 2026-10-30; two scale defects found 2026-10-31, one fixed).** Diagnostics shipped in VS Code 2026.10.115: the card shows the reason, Copy details carries message, stack, root, phase and host, and the BuilderForce output channel logs plan and run failures. Headless run of the shared review over `c:\code\agentic`: 16,722 files planned (the walk stops at `MAX_LISTED_FILES`), 17,949 estimated model calls, 329 s to plan. **Defect 1, unlinked, fixed in builderforce-memory 2026.10.36 (DONE.md 2026-10-31):** `LocalSnapshotStore` persisted the whole snapshot on every mutation. It reaches users once Builderforce moves to that version and a VSIX ships. **Defect 2, linked, open:** the knowledge client makes 3 requests per file (`getExtracted`, `putExtracted`, `markStale`) on the tenant's plan-rpm bucket, about 50,000 requests for this tree, and a 429 or a 413 from any one of them ends the review. The workspace holds no snapshot file, which fits the linked path, but the exact exception has not been observed. **Next:** `batched` and `preloadExtracted` in the knowledge client, bulk routes, 429 retry, then rerun ([PRD 38](./docs/specs/38-prd-knowledge-graph.md)). Original finding: The VS Code Knowledge tab shows only "The review failed. Nothing more was written." The host (`clients/vscode/src/knowledge/knowledgeReviewSessions.ts:83`) posts `error.message` and drops the stack. Nothing is logged to the BuilderForce output channel. The view (`packages/knowledge-graph-view/src/ReviewProgress.tsx:104`) has the message in state (`useReviewRun` `{ status: 'error', message }`) but never shows it. None of the VSIX "Copy diagnostics" surfaces (chat, Evermind, `builderforce.diagnose`) carries knowledge errors. A failure in the plan step goes the same way. Fix: the failure card shows the reason and offers Copy details; the host logs message, stack, root and phase to the BuilderForce output channel and sends the detail with the `failed` event. *Acceptance:* a forced review failure shows its reason on the card, Copy details puts message + stack + root + host version on the clipboard, and the output channel has the same entry.
+- **ONE execution core ([PRD 35](./docs/specs/35-prd-one-agent-one-kernel.md)).** Two loops still call the kernel directly (`node scripts/check-one-execution.mjs` names them): brain-embedded `runStore/runLoop.ts` (nearly all traffic) and agent-runtime `builderforce/agent-loop/agent-loop.ts` (on-prem channels). Next: bring `ws4-ports` up to main, move the Brain's hooks into `runAgent`, delete `runLoop.ts`, move the channel loop, then WS7. Done when a conformance suite gives one event trace through all four adapters and `check:one-execution` bans kernel imports outside the core.
+- **PRD 35 WS2f leftovers.** Opus review, unused `cwd` on `RunSandbox.run`, `shell.jobs` missing from prep's capability set, `sleepAfter` reaping an idle job.
+- **Tests that cannot run unchanged yet.** Three pairs remain (`runEndMemory`, `finish`, `learnedFacts`), plus twin `brain-embedded/src/runSteering.ts`, which waits for the chat adapter. `compaction/pack` expects a 1,024 floor against the source's 20,000. See `packages/agent-run/docs/retention-ledger.md`, itself stale. Unblocks `check:tests-unchanged` in enforce mode at WS7.
+- **Knowledge review of `agentic` fails.** The linked client makes 3 requests per file on the plan-rpm bucket (~50,000 for this tree) and one 429 or 413 ends the review. Next: move to builderforce-memory 2026.10.36, use `batched` + `preloadExtracted`, add bulk routes and 429 retry, ship a VSIX ([PRD 38](./docs/specs/38-prd-knowledge-graph.md)).
+- **Cloud run isolation (G1, [PRD 09](./docs/specs/09-prd-cloud-agent-validation.md)).** `enableInternet = true` (`AgentContainerDO.ts:45`) with no egress allowlist or red-team. S5, S6, W2 and B2 are closed; re-audit the rest of the 50.
+- **Sandbox capacity.** `max_instances = 25` is shared with previews; when full, a run gets no sandbox rather than waiting.
+- **A run with no sandbox cannot build.** It polls branch CI, but `on: pull_request` workflows report `none` until the PR exists.
+- **A Stop on one draft can lose another's flushed turn.** Every draft shares the null key in `brain-embedded/src/doorStop.ts`. Key by draft token and test the restore.
+- **A failed run's branch residue is never swept,** and cancelled-run teardown can delete a live parent's or earlier run's work, because `runCommitMarker` is per task. Needs per-execution attribution. *Blocker: operator decision on deleting run branches.*
+- **VS Code chat history doesn't follow the person.** `isOwnRecord` filters other devices' records and `openableLocalChat` doesn't pull the transcript. Fix: re-key on arrival, hydrate from `GET /api/brain/chats/:id/messages`. *Blocker: operator decision; changes what "local first" promises.*
+- **Autonomous trigger errors.** 282 `auto_run_error` in 30 days to 2026-10-25 (`autoRunSkipLedger.ts`). Group by reason, fix the top causes.
+- **Auto runs may carry no `cloudAgentRef`** (`laneEntryTrigger.ts:323` sets it only with `decision.agentRef`).
+- **IDE agent calls tools one at a time** (chat #115: 63 turns, 82 calls). *Blocker: an A/B over real runs.*
+- **Multi-repo sandbox.** Per-task repo sets route and open PRs, but `sandboxOpenSpec.ts:26` clones one repo.
+- **Architect runs:** `AnalysisRunnerDO` has no per-tool timeline or steering; no commit-webhook re-analysis.
 
-- **Cloud agents only happy-path validated — 50-gap PRD ([09](./docs/specs/09-prd-cloud-agent-validation.md)).** P0: V2 runs `bypassPermissions` + Bash on shared infra with no documented sandbox (G1); Worker fallback ignores steering/cancel (S5/S6); errored runs leak the workspace (W2); a missing BYO key may fall to a platform key (B2).
-- **The run sandbox needs its image deployed.** Every cloud run on every plan now asks the Cloudflare Container for its shell and clone (`api/container/server.mjs` + `sandboxCore.mjs`, opened by `sandbox/runSandboxHost.ts`). Until `wrangler deploy` builds the new image, the sandbox cannot open, and each run says so on its timeline (`runtime.sandbox`) and edits over the git API without a shell. The Actions transport needs the same deploy, because the runner script is served by the Worker. Concurrency is bounded by `max_instances = 25` in wrangler.toml, shared with live previews. When it is full, a run gets no sandbox rather than waiting. Bounds: `sleepAfter` 20m, GitHub-only clones through the Worker's git proxy. *Blocker: image build + deploy.*
-- **A run without a sandbox still cannot build.** A run with a sandbox runs the project's declared `typecheck`/`type-check`/`test` at run end (`sandbox/sandboxVerify.ts`) and its post-edit checks each turn. A run without one (no container bound, repo not on GitHub, the sandbox failed to open) polls branch CI (`run_checks` + pre-finish) and records an honest skip. Remaining: PR-only workflows (`on: pull_request`) report `none` until the PR exists, so for those runs the webhook auto-fix and `CLOUD_AUTOMERGE_REQUIRE_GREEN` stay the backstop.
-- **ONE execution core: VS Code, web and Rovr chat and on-prem channels are not on `runAgent` yet.** VS Code, Rovr/Web, the on-prem agent and Cloud/container are entry points only (operator, 2026-10-24). Cloud tickets, @-replies, canvas and on-prem tickets run on `runAgent`, and the Claude Agent SDK runner is deleted (DONE.md 2026-10-30). Two executions still call the kernel themselves (`node scripts/check-one-execution.mjs` names both): brain-embedded `runStore/runLoop.ts` (VS Code/Rovr/Web, nearly all traffic) and agent-runtime `builderforce/agent-loop/agent-loop.ts` (on-prem channels). The chat adapters are not on main: `brain-embedded/src/run/webAdapter.ts` and `clients/vscode/src/run/vscodeAdapter.ts` do not exist there. The `ws4-ports` branch holds 924 lines of unwired ports, adapters and conformance, 79 commits behind main on 2026-10-31, and the contract it waited on has landed. **Next:** bring `ws4-ports` up to main, move what the Brain's hooks do into `runAgent`, delete `runLoop.ts`, add what the channels need to the contract, move the channel loop, then WS7. WS4's ship gate applies: a week of VS Code telemetry at or better than PRD 35 §8.1. **End state:** one Worker/Node/browser-safe package `@builderforce/agent-run` with `runAgent({ task, policy, ports, resume })`, step-resumable. Policy is data (tool scope, levers, budgets). Each entry point supplies only five ports: ModelTransport, CapabilityProvider, RunStore, EventSink and HumanChannel. The SDK runner, `SDK_TOOLS`, `sdk-memory-server`, the per-surface hooks and `CHAT_SCOPED_AGENT_TOOLS`-as-code are deleted. **Done when:** a conformance suite gives an identical event trace through all four adapters, `check:one-execution` bans kernel/policy imports outside the core, every adapter stays under ~300 lines, and existing behaviour tests pass unchanged. **Phases:** (0) parity oracle; (1) extract the core from `cloudAgentEngine`; (2) `agentReplyLoop`; (3) `runLoop` + canvas as a provider; (4) on-prem channels + tickets, SDK runner deleted. What is left: [PRD 35](./docs/specs/35-prd-one-agent-one-kernel.md). The contract and finished workstreams are in DONE.md (2026-10-31); design: [`docs/design/one-agent-one-kernel.html`](./docs/design/one-agent-one-kernel.html). Board autonomous execution and approvals by approver type stay with their single owners above the agent (PRD 35 §6.9).
-- **PRD 35 WS2f leftovers.** The container shell is on main (DONE.md 2026-10-31). Left: an Opus review (stopped before it reported, at the operator's call), a first live background job, an unused `cwd` on `RunSandbox.run`, `shell.jobs` missing from prep's capability set, and `sleepAfter` reaping an idle job. Each is in [PRD 35](./docs/specs/35-prd-one-agent-one-kernel.md). Unblocks calling WS2f finished.
-- **PRD 35 agent-run: tests that cannot run unchanged until an adapter exists, and twin copies awaiting deletion** (found by the 2026-10-28 review of WS1/WS2; `node scripts/check-tests-unchanged.mjs` lists them as REVIEW).
-  - Six brought-along tests in `packages/agent-run/test` differ from their source:
-    - `verify/runEndMemory`, `guards/loopGuards` and `finish/finish` are built on api wiring (env-string levers, `db`, `vi.hoisted` mocks of api modules) that no agent-run port carries.
-    - `learnedFacts` drops `readChangedExcerpt`, which needs node fs and git; it becomes the `MemoryCommitDeps.excerpt` port.
-    - `compaction/pack` drops `resolveCompactReserveTokensFloor`; its expected values (1,024 floor, `undefined → 0`) contradict the source, which uses a 20,000 floor from agent-settings.
-    - `compaction/compactMessages` gains cases.
-    - Each one is named in `packages/agent-run/docs/retention-ledger.md` (§5.1 exceptions).
-  - Twin copy still on disk: `brain-embedded/src/runSteering.ts` (vs `policy/steering/runSteering.ts`). The api `compactMessages.ts` twin is deleted.
-  - **Blocker:** each test can only run unchanged through the adapter that owns its wiring. The WS3 cloud adapter has landed, so runEndMemory, loopGuards, finish and compactMessages can now move; learnedFacts and runSteering wait for the chat adapter (see ONE execution core).
-  - **Next:** that adapter runs the source test unchanged and deletes its twin copy. WS7 flips the guard to enforce. Unblocks `check:tests-unchanged` in enforce mode.
-- **CI never runs the frontend unit tests, and 19 fail in 12 files.** `frontend`'s `test` script (`check` + vitest) has no job in `.github/workflows/release.yml`, so these fail unnoticed. All 19 fail on c7698b5c0 as well (verified 2026-10-30), so PRD 35 did not cause them: `BuilderWorkspace.modality` (7, the `@/lib/auth` mock lacks `getStoredWebToken`), `ChatInput.modelMenu`, `ChatInput.offers`, `ChatInput.running`, `CanvasPhoneAppBar` (2), `FixKind`, `prescriptionCatalog`, `scheduleCalendar`, `stepCatalogI18n`, `capabilityProof` (a dated claim passed its review date), `useWebInferenceMode` and `specVerdictKeys`. Next: fix each one, then add a frontend vitest job so they cannot rot again. Unblocks trusting the frontend suite.
-- **A Stop on one draft can lose another draft's flushed turn.** The door's Stop counter is per view, but every draft shares the null key (`brain-embedded/src/doorStop.ts` `stopEpochs`, read by `flush` in `useChatTurns.ts`). If a turn held on a draft flushes, its chat is created, and its save then fails while a Stop lands on a different draft, `flush` returns before the requeue/restore branch and the turn is in no box, queue or chat. It needs all five steps in one save window, and it predates the per-view counter. Fix: key the entry by draft token (`stopView(key, token)`), read the token after the send starts, and test that the turn is restored. Unblocks "a turn is never lost silently" holding on drafts.
-- **`ExecutionRepository.persistence.test.ts` reads past the method it guards.** Its slice ends at `.where(eq(executionsTable.id, plain.id))`, but `update()` now uses `and(...)`, so the slice runs to the end of the file and its `completedAt:` check is satisfied by `land()`. The `produced` checks still bite. The test must stay unchanged until WS7 (PRD 35 test rule); then re-anchor it on `update()` alone. Unblocks a guard that names only the write it claims to guard.
-- **Verify never bundles the Worker, so a bundling failure is first seen at deploy.** Release run 41062892954 passed every Verify job, shipped the frontend and VS Code, then failed `wrangler deploy` on an unresolved import, leaving a new frontend on the old API. Next: add a Verify API leg running `npx wrangler deploy --dry-run --containers-rollout=none --outdir <tmp>` (it needs no credentials or Docker, and passes today), and make `deploy-frontend` and the VS Code publish wait for `deploy-api`. Unblocks a release that either ships whole or not at all.
-- **The VS Code release job reports success without publishing (found 2026-10-31).** `VSCE_PAT` is not set in GitHub Actions, so "Publish to the Visual Studio Marketplace" in `.github/workflows/release.yml` warns, exits 0 and the job goes green (run 41066088200). The Marketplace's newest version is 2026.10.108 while `main` is at 2026.10.116. `OVSX_PAT` is unset as well, and Open VSX's step is skipped the same way. Both steps also swallow every real publish failure with `|| echo`, so a rejected token would look the same as "already published". Fix: set both secrets, fail the job when a secret is missing, and treat only "version already exists" as a no-op. Unblocks Marketplace users getting current builds. *Blocker: the two publisher tokens, which only the operator can issue.*
-- **A red commit still publishes to the CDN.** `publish-cdn` in `.github/workflows/release.yml` needs only `package-npm` and runs on `!cancelled()`, so it uploaded replay-sdk assets to `r2://builderforce-cdn` from 7f5141999 while every Verify job failed (run 41048662265; no replay-sdk source had changed, so nothing differed). Decide whether the job waits for verify. *Blocker: operator decision. The job's order is deliberate (a recorder must be public before the API that names it), so gating it changes release order.*
-- **A FAILED cloud run's branch residue is never swept.** A safe sweep needs per-EXECUTION commit attribution: today's `runCommitMarker` is per task, so a sweep can delete a live parent's or an earlier run's work (revertable, finished, sign-off pending, or the partial commits a retry builds on). **Blocker:** an operator decision on automatic deletion of run branches, plus a per-execution attribution design. The CANCELLED-run teardown that already exists (`cloudFinalize` -> `branchTeardownDecision` teardown mode, rule 7 only: the per-task `runCommitMarker`; the path-containment and sha checks run only in revert mode) has the SAME hazard - a cancelled retry or child run can delete an earlier run's or a live parent's work with no open PR - and a safe sweep for either needs the same per-execution commit attribution. Unblocks cleaning up the branches failed runs leave behind and making the cancelled-run teardown safe.
-- **A VS Code chat's history does not follow the person to another machine or in from the web.** PRD 36 binds each editor chat to ONE server chat and syncs its history up, but the editor reads only chats this device created: records another device synced are filtered out of the chat reads (`brain-embedded/src/localChat/records.ts` `isOwnRecord`), because their local view keys were minted on that device and collide with this one's. Opening a web-only chat from the Sessions tree makes a new local chat bound to it (`clients/vscode/src/sessionChats.ts` `openableLocalChat`), so the conversation continues on the right server chat, but its earlier transcript is not pulled into the editor. Fixing it means re-keying pulled chats on arrival (a fresh local view key per device, the client id as the join key) and hydrating a bound chat's transcript from `GET /api/brain/chats/:id/messages` into the local store. That unblocks one conversation across the web, Rovr and every editor the person uses. *Blocker: operator decision. Cross-device chat history was not in PRD 36's scope, and it changes what "local first" promises (a transcript the device did not write, held on the device).*
-- **Autonomous trigger errors.** Telemetry for the 30 days to 2026-10-25 (ops DB): 282 `auto_run_error` events (`runtime/autoRunSkipLedger.ts` writer, `swimlane/evaluateAutoRun.ts` / `runtime/autonomousExecutionSweep.ts` callers). Next: group the 282 by reason and fix the top causes. Unblocks autonomous board runs that currently error. (The auth-failover half of this entry — a dead OpenRouter connection retried on most turns — is resolved: DONE.md 2026-10-25, PRD 35 WS8m.)
-- **PRD commit is GitHub-only.** `ensureTaskPrd` now runs at `startDispatchedExecution` so host/on-prem runs draft too (ticket #3096, `54467a71d`). Remaining: PRD commit is GitHub-only; no agent task-mutation tool; Auto runs carry no `cloudAgentRef`.
-- **IDE agent calls tools one at a time.** Chat #115: 63 turns for 82 calls (8m41s model vs 5m45s tools); it can batch (turns 47–52) but nothing asks. *Blocker: an A/B over real runs.* Unblocks ~halving survey-run wall-clock.
-- **G27: no packaged acceptance suite runs with the network disabled** (offline-first review, [`docs/design/vsix-offline-first-architecture-review.md`](./docs/design/vsix-offline-first-architecture-review.md)). Unit tests exist per package (`packages/local-first`, `clients/chrome/src/platform/policy.test.ts`, `brain-embedded/src/localFirstPersistence.test.ts`), but nothing launches the packaged VSIX, Rovr or Web build with BuilderForce API access denied and asserts zero platform requests, local-only completion and correct setup states. Add network-denial and request-budget tests plus runtime request accounting (`platformRequestAccount` already counts blocked host fetches). Unblocks claiming offline/local-first behaviour. Not blocked.
-- **G21: a bound VS Code chat's rail is platform-only, with no local copy** (offline-first review G21). The chat transcript is local-first (PRD 36), but its linked tickets, invited agents, members, open questions and changed files are live reads of `/api/brain/chats/{serverId}/{tickets,agents,members,files}` and `/api/approvals` (`packages/brain-ui/src/chatTickets/restAdapter.ts`, `clients/vscode/webview/src/useChatChangedFiles.ts`), re-read on every rail refresh. Unbound chats make none of these calls, and Local-only mode refuses them at the platform gate. A bound chat in Hybrid mode that goes offline shows an empty rail, and a ticket tagged while offline is dropped rather than queued. Fixing it means a local projection of the last-read rail in the local store, shown with its freshness, plus chat-ticket links journaled as local records that sync later. That lets the rail work offline and stops the re-reads while nothing changed. *Depends on: G05 (the VSIX local ticket repository, `clients/vscode/src/localWorkRepository.ts`, is not wired to any surface) and a server importer for chat-ticket links (G15–G18).*
-- **Cloud observability is poll-only.** Needs a per-execution SSE/WS tail; auto-run creation isn't pushed; container hard-death can't push a live event (needs a cross-isolate notifier).
-- **Multi-repo spanning:** one run = one repo/branch/PR. Needs a per-task repo set routed by matchHints/pathGlobs.
-- **Architect/auto-merge finalize:** `AnalysisRunnerDO` has no per-tool timeline/steering; project list omits `hasArchitecturePrd`; no `POST /runs/:id/retry`; no commit-webhook re-analysis; `json_object` not strict `json_schema`.
+### Local-first `[agents]` `[platform]`
+
+Source: [offline-first review](./docs/design/vsix-offline-first-architecture-review.md).
+
+- **G27: no packaged acceptance suite runs with the network denied.** `deniedNetworkAcceptance.test.ts` mocks `vscode`. Assert zero platform requests and local-only completion in the packaged VSIX, Rovr and Web. Unblocks claiming offline behaviour.
+- **G21 + G23: bound-chat rail and sync status.** The rail is live reads with no local copy, and `syncStatusPresenter.ts` has no caller. Both need a local record list UI (G05; `localWorkRepository.ts` serves agent tools only) and a chat-ticket link importer (G15–G18).
+- **G03 SQLite store built, unwired.** `node:sqlite` needs VS Code ≥ 1.101; `engines.vscode` is `^1.95.0`. *Blocker: operator decision on the engine floor.*
+- **Local store holds every message twice and rewrites it on every commit** (14 MB measured; `journal.ts`, `durableLocalFirstStore.ts`). *Blocker: operator decision; the unbound journal is a contract with a second consumer.*
+- **Sync residuals:** `sync_changes.seq` can skip a late commit (needs a commit-ordered watermark); one transaction per event; a purged dependency leaves `dependency_pending` forever.
+- **Two journal stores.** `offlineLocalFirstStore.ts` has no production caller; fold its guarantees into the durable store's tests and retire it. *Blocker: operator sign-off.*
+- **Recovered interrupted runs are only logged** (`brainRunHostPorts.ts`). Surface them in the run list.
 
 ### Autonomous delivery `[delivery]`
 
-> Measured 2026-07-26 across 767 tickets: 6 fully autonomous, 755 stalled, 409 never dispatched; 69% of 6,195 runs failed. Stall causes: 313 `no_agent`, 149 `lane_requirement_gate`, 116 `run_cap_exhausted`, 100 `will_run`, 70 `no_board`/`no_lane`. The manager's census measures this continuously.
+Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs failed. The manager's census tracks this.
 
-- **Backlog lanes seed `gate:'auto'`, so parked work can spend tokens** (299 of 313 `no_agent` tickets sit there). *Blocker: operator decision* — it changes every built-in template on live boards.
-- **`never_started` cohort fell 370 → 200 after 0384/0385; the rest may be refused for an unmodelled reason.** *Blocker: query `auto_run_skip.reason` for five cohort task ids.*
-- **Lane chaining is single-hop** (`RUNNING→in_progress`, `COMPLETED→in_review`); unify with `SwimlaneCoordinator` for BA→Dev→QA. Bypassed status writers (`staleExecutionReaper`, DO `db.update`) surface only via the backstop poll — funnel through one notifier or an outbox.
-- **Board columns are hardcoded `TASK_STATUSES`, not the board's swimlanes** — custom lanes show no column; needs lane merge/reassign and per-lane automation flags.
-- **Teams/assignee scoping:** lane picker not team-scoped; all-projects board can't scope per-task; agent chips are a load-time snapshot; no epic parent/child tree; `assignedAgentHostId` (the host pin) is still separate from `agent_assignments` (project_agents was folded in by 1265); template sales are free grants.
-- **Capability guardrail** only enforces an explicit `required_capabilities` (no capability-aware routing or lane default).
-- **`autonomyWiringAudit.ts` has no test** — it now counts spec-shaped tickets as non-code deliverables, and nothing pins that. Not blocked.
-- **A reviewer's `changes_requested` doesn't reopen the producer slot itself** — the manager return path does (`reopenProducerSlots.ts`). Design call: should a verdict alone spend a run (needs a loop-safe "asked since" marker)?
-- **Role participation:** PRD per-role sections aren't audit-verified; outbound stakeholder notifications aren't all routed through the Coordinator identity ([PRD 37](./docs/specs/37-prd-coordinated-role-participation.md)).
-- **Manager pass still carries the mechanical PR loop** — move it to its own registry sweep; if `notReached` stays near `projects`, use a per-project DO alarm, not a bigger pool. Sequenced behind one `notReached` capture.
-- **Delta→ticket capture:** chat deltas off the PR branch won't auto-complete.
-- **Manager PR→ticket recovery remainder ([PRD 23](./docs/specs/23-prd-manager-pr-ticket-recovery.md)).** (1) Validator `task_reviews` are not linked to the ticket's lifecycle slot, so a review does not satisfy the slot it was for. (2) Tickets carry no disposition fields (`roadmap_capability`, `prd_alignment`, `delivery_state`, `evidence`, `duplicate_of`), so reconciliation cannot record why a ticket was closed or kept. (3) A repair run opens a new PR instead of updating the existing PR branch. (4) The open-PR count can exceed GitHub's (stale-open surplus) — reconcile against GitHub and close the surplus. (5) The backlog close / consolidate / quarantine pass has not run. (6) No Manager canary (one full PR → ticket close, proven in run records) before auto-merge/auto-close is enabled. Unblocks a trustworthy board and Manager-driven closure. Not blocked.
-- **Boards have no earned-budget ledger or investor-milestone tag** (from doc 06 A5, removed 2026-10-25). Nothing records the "funding-aware" kanban mechanic the marketing promised: a board's earned budget rises by a configured reward when a high-value item (`revenueValue`/`businessValue`) reaches done, shown against burn and runway. Needs an append-only budget ledger (event, amount, work item, balance after), boost rules, and `GET …/boards/:id/budget-ledger` — on the `ledger_entries` primitive per PRD 20 if it fits, not a new family; plus a board/sprint `investorMilestoneRef` whose progress rolls up to the investor seam (Run · `[finance]`). Not blocked.
-- **Personality** isn't on a person profile page or brain @-mentions (needs `AssigneeProfilesProvider` there).
+- **Backlog lanes in `templateCatalog.ts` seed `gate:'auto'`,** so parked work can spend tokens. `defaultSwimlanes.ts` seeds `human`; existing boards keep their gate. *Blocker: operator decision on re-gating live boards.*
+- **`never_started` cohort may be refused for an unmodelled reason.** Query `auto_run_skipped` for five cohort task ids.
+- **Status writers bypass the notifier:** `staleExecutionReaper` and self-heal write raw `update(executions)`, and a legacy lane path runs beside the coordinator.
+- **Board scoping:** agent chips are a load-time snapshot; `assignedAgentHostId` is separate from `agent_assignments`; priced kanban templates aren't charged at apply.
+- **A reviewer's `changes_requested` doesn't reopen the producer slot.** Design call: should a verdict alone spend a run?
+- **Stakeholder notifications ([PRD 37](./docs/specs/37-prd-coordinated-role-participation.md)):** `coordinatorVoice` has two callers; the rest are unrouted.
+- **Manager pass still conducts PRs** (`ManagerService.ts:1374`). Move it to a registry sweep.
+- **Delta→ticket:** a delta on a non-platform branch with no PR link never completes.
+- **Manager PR→ticket recovery ([PRD 23](./docs/specs/23-prd-manager-pr-ticket-recovery.md)).** Link `task_reviews` to lifecycle slots; add disposition fields; run the backlog pass; a Manager canary before auto-merge.
+- **Boards have no earned-budget ledger or investor milestone.** Build on `ledger_entries`; the milestone rolls up to Run's investor seam.
+- **Personality:** no person profile page; `MentionAutocomplete` doesn't use the provider.
 
 ### Ceremonies and meetings `[delivery]`
 
-- **Ceremonies:** presence not re-verified per frame; client-driven `changed` and auto-dispatch; no session history or retro/poker integration; drag has no ghost; no turn pause/resume.
-- **Mesh WebRTC caps at ~4–5 cameras.** *Blocker: a Cloudflare Calls app + server-side track push/pull.*
-- **TURN relay not provisioned** (~10–15% of symmetric-NAT pairs fail). *Blocker: create the TURN key and `wrangler secret put CLOUDFLARE_TURN_KEY_ID` / `CLOUDFLARE_TURN_API_TOKEN`.*
-- **Retros have no cross-sprint insight** (from doc 06 A6, removed 2026-10-25): no theme clustering or sentiment trend across a team's retro history, and incomplete action items do not carry forward into the next retro until completed. Extend the existing retro insights read with theme clusters, a sentiment trend line and open carry-forward items. Not blocked.
-- **Meeting agent voice is browser `speechSynthesis`.** *Blocker: product decision on each agent's voice.*
+- **Ceremony presence** is set at connect, not re-verified per frame.
+- **Retros:** no theme clusters, sentiment trend or action carry-forward.
+- **Mesh WebRTC caps at ~4–5 cameras.** *Blocker: a Cloudflare Calls app.*
+- **TURN not provisioned** (~10–15% of symmetric-NAT pairs fail). *Blocker: `CLOUDFLARE_TURN_KEY_ID` / `CLOUDFLARE_TURN_API_TOKEN`.*
+- **Meeting agent voice is browser `speechSynthesis`.** *Blocker: product decision.*
 
 ### Canvas runtimes and studio `[canvas]`
 
-- **Eight kinds have no editing runtime** (`video, voice, podcast, image, animation, comic, cad, model3d`, plus `drawing`) — they return a manifest ([PRD 18](./docs/specs/18-prd-hired-video-port.md)). Port from `C:\code\hired\hired.video\frontend\lib\studio` one kind per slice, dynamically importing heavy deps, through `creationObjectRegistry` data — never grow `CreationCanvas.tsx` (1,165 lines). Not blocked.
-- **One build-file write took 35.7s vs 38ms median** (session `local-148925cf`, `Layout.css`). *Blocker: a profile of a Studio build turn with preview running.*
-- **Knowledge editor has no `drawing` block.** Add a `BlockType` opened through the canvas drawing runtime once ported.
-- **`spawn.builderforce.ai` zone route** is not set up. Spawn's code lives in [builderforce-spawn](https://github.com/SeanHogg/builderforce-spawn).
-- **Room:** no video/audio in the Room (needs a `video` prop surface, texture budget, distance gain).
-- **Voice:** consent/provenance gate blocks GA; no in-IDE marketplace browse/checkout; embeddings localStorage-only; Studio video IndexedDB-only (mirror to R2).
-- **Video engine:** `advanceState()` is a CPU placeholder; no learned interpolation or motion module; img2img drifts; no ControlNet/inpainting; Safari needs a WebM fallback. Brain-created dataset files bypass registration.
-- **4 WebDiT models registered `available: false`.** *Blocker: diffusers→ONNX export per architecture uploaded to R2.*
-- **In-editor voice cloning needs the ONNX runtime on the CDN.** `https://builderforce.ai/ort/ort-wasm-simd-threaded.jsep.wasm` still returns 404 (checked 2026-10-23), so the asset is not reaching the deployed bundle. Keep `onnxruntime-web` pinned to `1.22.0-dev.20250409-89f8206ba4` (newer `jsep` exceeds the 25 MiB asset cap).
-- **Workflow builder (canvas IS the workflow):** branch nodes don't prune; transforms are template-only; `mcp` nodes have no transport; no per-integration credential capture; definitions not project-scoped; claim→execute→report not integration-tested; wire `WorkflowConfig`/`StepTypeRegistry` + a "Run Stack Check" timeline.
+- **Six kinds have no editing runtime:** `image, animation, podcast, comic, cad, model3d`. Port one per slice from hired.video through `creationObjectRegistry` data.
+- **Knowledge editor has no `drawing` block.** Add a `BlockType` using the canvas drawing runtime.
+- **Published `@seanhogg/builderforce-studio` can't be installed:** runtime deps are `file:` paths to private `@webdit/*`. *Blocker: decide to bundle or publish.*
+- **Workflow builder:** claim→report has no test; no credential capture on the step form.
+- **Voice:** provenance missing for GA; no in-IDE marketplace; embeddings localStorage-only.
+- **Video engine:** `advanceState()` is a CPU placeholder; no learned interpolation, ControlNet, inpainting or WebM fallback.
+- **3 WebDiT models `available: false`** (wan2.5, mochi-1, ltx2-distilled). *Blocker: ONNX exports on R2.*
+- **In-editor voice cloning:** `/ort/ort-wasm-simd-threaded.jsep.wasm` 404s. Keep `onnxruntime-web` at `1.22.0-dev.20250409-89f8206ba4` (asset cap).
+- **One build-file write took 35.7s vs 38ms median.** *Blocker: a profile of a build turn with preview running.*
+- **Room** has no video or audio.
 
-### Mobile modality `[canvas]`
+### Mobile `[canvas]`
 
-- **Device simulator is react-native-web**, not native (camera/push/navigation differ). Needs Metro or an Expo build service.
-- **Scan-to-phone QR points at a built deploy**, not a live dev server.
+- **Device simulator is in-browser.** The native path (Metro/Expo) waits on live preview; no Expo build service.
+- **Native apps:** no Evermind recall or agent invite in phone chat; no Approvals screen.
 
 ### Previews, repos and hosting `[canvas]` `[integrations]`
 
-- **Live container preview (phase 2).** Code complete behind `PREVIEW_INGRESS_ENABLED`. *Blocker: `wrangler deploy`, migration `0948_preview_sessions.sql`, a proxied `preview` DNS record, the flag secret.*
-- **Repo-backed Designer:** `createRemoteRepo` GitHub-only; commit-back has no merge guard (`last_synced_sha` never populated); import capped at 200 files/5MB and one-way; worker vs api R2 prefixes diverge; no server-side file-content guard.
-- **Drive as a project's primary storage isn't wired** — IDE storage is inline R2 in `ideRoutes.ts`. Needs a `StorageProvider` port, per-project `storage_backend`, Drive path↔id mapping. *Blocker: a live Google OAuth app.*
-- **GitHub App doesn't exist** — calls use the tenant PAT (Checks degrade to statuses; 28 GraphQL 403s this week; rate limit on 2026-09-16). *Blocker: register the App and `wrangler secret put GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY`.* Same for the refused PR-reconciliation PAT: a fresh token or the App.
-- **Multi-provider PR loop needs live GitLab/Bitbucket creds;** Bitbucket detail is state-only, GitLab lacks per-file stats, both return null `commitUrl`. Bitbucket Server can't use PR detail, repo bridge or CI context (`allowBitbucketServer` only on branch/PR callers); neither edition can revert.
-- **Post-merge validation + auto-fix is Actions-only**, reuses the merged branch, needs a `merge_sha`, gets step names not log tails.
-- **Actions never-scheduled reconcile is precise only for repos re-enabled after 2026-07-19.** Others fall to the 20-min reaper. Fix = "Enable agent runs" again or re-commit the workflow everywhere.
-- **Surface picker warns rather than disabling Actions** on a repo that can't run it.
-- **QA and security findings have no `{path, line}`** — no inline PR comments or annotations from those producers.
-- **A published site can't run customer-authored server code** (no `eval` on Workers). Needs Workers-for-Platforms or container-mode web serving.
-- **Build, run and ship a real app ([PRD 31](./docs/specs/31-prd-customer-app-platform.md)) — proposed, not started.** W1: the container run loop has no dependency-install step, single-port preview only, no `preview_*` agent tools, and dev-server candidate selection always picks Vite (`buildPreviewDevServerStep`). W3: no customer cloud connections with verified capabilities. W4: no `InfraProvider` port or provisioning ledger. W5: no Builderforce-hosted compute (Workers for Platforms + a Neon project per app). W6: no build + deploy pipeline or PR previews. W7: no repo-connected project listings with external / mobile (EAS) launch. Unblocks hired.video-calibre apps built and run on the platform. *Blockers: W1 the container image deploy + instance type (PRD 31 D6); W5 decisions D1/D3/D4.*
-- **Custom-domain certificates code-complete, not live.** *Blocker: Cloudflare for SaaS entitlement + `CLOUDFLARE_ZONE_ID` / `CLOUDFLARE_SAAS_API_TOKEN`.*
+- **Live container preview off.** Host and deploy are in place; `preview.builderforce.ai` answers "not enabled". *Blocker: the `PREVIEW_INGRESS_ENABLED` secret.* Unblocks the QR live path and the native simulator.
+- **Customer app platform ([PRD 31](./docs/specs/31-prd-customer-app-platform.md)).** W1 `preview_*` tools and multi-port; W3 customer cloud connections; W4 `InfraProvider`; W5 hosted compute; W6 PR previews; W7 repo-connected listings. *Blocker: W5 decisions D1/D3/D4.*
+- **Repo-backed Designer:** `last_synced_sha` is never written, so no merge guard; no auto two-way sync; worker and api R2 prefixes diverge; `createRemoteRepo` refuses GitLab.
+- **GitHub App not registered;** the code is wired and calls use the tenant PAT. *Blocker: `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY`.*
+- **Multi-provider PR loop:** Bitbucket Server can't revert; `getPullRequestDiffSummary.ts:163` is GitHub-only. *Blocker: live GitLab/Bitbucket creds.*
+- **Drive as primary storage isn't wired.** `workspaceStore.ts` needs a `StorageProvider` port. *Blocker: a live Google OAuth app.*
+- **Post-merge validation** needs a `merge_sha`; Bitbucket has no log tails.
+- **QA and security findings have no `{path, line}`,** so no inline PR comments.
+- **Published sites can't run customer server code.** Needs Workers-for-Platforms or container serving.
+- **Custom-domain certificates not live.** *Blocker: Cloudflare for SaaS entitlement + `CLOUDFLARE_ZONE_ID` / `CLOUDFLARE_SAAS_API_TOKEN`.*
+
 ### QA `[canvas]`
 
-- **Agentic Tester:** container deploy pending a green build (<2000MB); not an `ide_agents` entry or workflow trigger. Pipeline gaps: no network sandbox, screenshots not in R2, routes beyond `/`, single-actor only, heat not project-scoped. A cross-browser verdict needs this container.
+- **Agentic Tester:** no network sandbox; single persona login; Chromium only; no workflow step starts a run.
 
 ---
 
 ## ⚙️ Run — operate the company
 
-- **[hiring] Greenhouse, Indeed and LinkedIn confirm a posting with no public URL** — their `response` mappings carry an id only, so the card shows it live with nothing to open. Indeed returns none for a sourced posting; the others can be built from the id. Not blocked.
-- **[hiring] Source attribution is exact-match on connector key, and no applicants are imported** from the boards a posting went to. Not blocked.
-- **[hiring] No Workable connector** — `defaults/hiring.ts` has Greenhouse, Lever, Ashby, Indeed, LinkedIn and `job-feed`. Not blocked.
-- **[integrations] Business Phone is a Twilio CPaaS number, not a carrier** (no port-in, SIM, call-forward). *Blocker: business decision.*
-- **[integrations] Phone numbers have no A2P 10DLC registration** (`phoneNumbers.ts` `purchaseNumber`), so outbound SMS can degrade. *Blocker: operator decision on Trust Hub/Messaging Service resources and fees.*
-- **[integrations] Google Drive / OneDrive can't complete consent.** *Blocker: enable Drive API + `drive.readonly` on the consent screen, delegated `Files.Read` in Azure, register both `/api/drive/callback/*` URIs.*
-- **[governance] Security automation incomplete:** scanners and repo-access population, one mutation-audit envelope, governance-auditor findings, automated evidence, merge gating, per-segment DSR. The DevSecOps scope (SECURITY_SCAN SAST/SCA/secret scan on every agent PR, SECURITY_REVIEW `category=SECURITY` findings gating auto-merge, per-Segment DSR/suppression) now lives in [PRD 08 §10](./docs/specs/08-prd-agentic-governance.md); the auditor does not yet read the `/api/facts` store. Reconcile PRD 08's checklist first.
-- **[finance] Delivery does not reach the investor seam** (from doc 06 A5/A8, removed 2026-10-25). A board or sprint cannot be tagged to an investor milestone ("Series B readiness"), and `workitem.released` / milestone progress is not pushed into the investor surfaces, so investor readiness does not reflect real delivery. The `sprint.completed` → runway push exists (PRD 05 §4.3). Not blocked.
+- **[governance] Tool classification is unwired.** `TOOL_SIDE_EFFECT` is reached only by its test; `evaluatePolicyGate` matches by name and defaults to allow; `clients/vscode/src/policy.ts` is a second copy; `BrainActionsContext` and agent-runtime's heuristic fail open. One classifier, fail closed, CI check.
+- **[governance] Security automation ([PRD 08 §10](./docs/specs/08-prd-agentic-governance.md)).** Not built: `SECURITY_SCAN`, `SECURITY_REVIEW`, governance-auditor, one mutation-audit envelope, automated evidence, merge gating. `/vuln-scans`, `/dsr` and `/suppression` are CRUD only.
+- **[governance] SOC 2 Type I,** the enterprise gate, not started (epic #3062).
+- **[finance] Delivery doesn't reach the investor seam.** No milestone tag; `workitem.released` is an outbound webhook only.
+- **[hiring] Greenhouse, Indeed and LinkedIn postings have no public URL.** Indeed has none; build the others from the id.
+- **[hiring] Source attribution is exact-match;** no applicants imported.
+- **[hiring] No Workable connector.**
+- **[integrations] Business Phone is Twilio CPaaS,** no port-in or SIM. `burnrateCutoverPolicy.json` says `retire_port_out`. *Blocker: operator confirms.*
+- **[integrations] No A2P 10DLC registration.** *Blocker: operator decision on fees.*
+- **[integrations] Drive / OneDrive can't complete consent.** *Blocker: enable the Drive API and `drive.readonly`, `Files.Read`, register both `/api/drive/callback/*`.*
 
 ---
 
 ## 📊 Measure — grade the proof
 
-- **[platform] 14 of 17 seats write no domain metric.** `DOMAIN_MANIFEST` declares 45 keys; only `kernel/rollups/{finance,operations,legal}.ts` write `metric_facts`. Also missing: `channel_performance`, `site_traffic_daily`, `arr_projections`, `quota_attainment`, `rd_financials_quarterly`. Follows the PRD 20 data move. This is the open half of Measure.
-- **[finance] Vertical KPI Dashboards — Slice B next ([PRD 25](./docs/specs/25-prd-vertical-kpi-dashboards.md), build hand-off [25a](./docs/specs/25a-vertical-kpi-dashboards-implementation.md)).** Slice A shipped 2026-09-16. B: `growth.*` keys, LTV tranches, benchmark seeds for `saas`/`ai_ml` (kill: tiles read "Not measured"). C: `exitWaterfall.ts`, `exitScenario`/`marketSize` kinds (kill: disagrees with a hand spreadsheet). D: remaining eight verticals (kill per vertical: no design partner). No new tables.
-- **[growth] `@seanhogg/builderforce-replay` has never been published to npm, so the Release run's replay package leg fails on every push.** `npm publish` answers `404 Not Found - PUT …/@seanhogg%2fbuilderforce-replay` (2026-10-16, run 38888217456). `publishConfig.access` is already `public`, and the sibling `@seanhogg/*` packages publish fine with the same `NPM_TOKEN`. So the token most likely may only write packages that already exist (a granular token), and a first publish needs a token allowed to create packages under `@seanhogg`. The CDN publish and the frontend and API deploys do not depend on this leg; only the npm-installable SDK is missing. *Blocker: the operator. Either publish 2026.10.3 once by hand (`cd replay-sdk && npm publish`), or widen `NPM_TOKEN` to allow new packages under the scope.*
-- **[growth] Insights (PRD 33) is built but not provisioned in production.** All slices S0–S7, plus S8 content, landed on 2026-10-13 ([PRD 33 §0.1](./docs/specs/33-prd-session-replay.md)). *Blocker: the operator. Needs Stripe secrets plus the webhook, `CLOUDFLARE_API_TOKEN` with R2/DNS/Routes, a published legal disclosure, `NEXT_PUBLIC_REPLAY_SITE_KEY` for the Builderforce workspace's site, and a provisioned QA runner (with ffmpeg; the image size has not been checked against the 2000 MB limit).*
-- **[growth] Insights scale-up: event lake (D18).** Funnels, flow, segments and AI digests run over kept recordings weighted by `sample_weight` (≈), not over every session. For sites far above the free allowance, add an event lake (Cloudflare Pipelines → R2 SQL) behind the same `replayFilterCompiler`, so funnels become exact. *Blocker: operator provisioning of the pipeline and a token for its SQL reads. A Pipelines binding with no pipeline fails the deploy.*
-- **[growth] `experiment` records results nothing produced.** It stores authored variants with no binding to `ab_tests`, no landing-page variant and no traffic split. Insights (PRD 33 S4e) built the traffic split for hosted sites. The sites Worker serves any running `ab_tests` row whose variants name an Insights site: it assigns a sticky `bf_ab_<testId>` cookie by `trafficPercent`, serves each arm's release, counts one exposure per first assignment, and writes `data-variant` on the loader. Ingest records conversions through `recordConversion`, and `variantResults` gives the verdict. Still missing: binding the canvas `experiment` object (and a variant field on `website`/`prototype`) to `ab_tests`, external sites, and `ab_test_segments` targeting. Not blocked.
-- **[finance] Practice ops writes `companies.sector` free-form** (`api/src/presentation/routes/practiceOpsRoutes.ts` ~536) instead of going through `validateListingPatch`, so a sector outside the vertical catalog can land and the PRD 25 vertical tiles cannot key off it. Route the write through the validator. Not blocked.
-- **[delivery] hired.video `people_strategic_objectives` would fork the OKR store** — map onto `objectives`/`key_results` and invalidate `projectsList` on write.
-- **[canvas] Phone surface switcher isn't phase-gated** — a phone user reaches Insights from Idea; desktop withholds it until Measure. *Blocker: a phone design for the phase control.*
+- **[growth] `experiment` cards are never measured.** `builtin_canvas_bind_ab_test` doesn't exist and `experiment` isn't in `CONNECTED_CANVAS_ACTIONS`. Bind to `ab_tests` (the Insights traffic split exists), enforce `ab_test_segments` at serve time, cover external sites.
+- **[platform] Three metric families have no writer:** `channel_performance`, `arr_projections`, `quota_attainment`. All 17 seats have rollups.
+- **[finance] Vertical KPIs ([PRD 25](./docs/specs/25-prd-vertical-kpi-dashboards.md)).** Slice B `growth.*`, LTV tranches, benchmark seeds; C exit waterfall; D remaining eight verticals' KPIs.
+- **[finance] `companies.sector` is written free-form** (`investorRoutes.ts:167` → `companyWorkspace.ts:368`). Route through `validateListingPatch`.
+- **[growth] Insights (PRD 33) not provisioned.** *Blocker: Stripe, published disclosure, `NEXT_PUBLIC_REPLAY_SITE_KEY`, QA image-size check.*
+- **[growth] Insights event lake (D18)** for exact funnels. *Blocker: operator provisions the pipeline.*
 
 ---
 
 ## 📣 Reach — sell, be found, grow
 
-### Marketplace and commerce `[commerce]`
+### Billing and commerce `[finance]` `[commerce]`
 
-- **Buyer can't drive a listing before buying (Stage sandbox parked).** *Blocker: infrastructure decision on the throwaway tenant and who pays.*
-- **Monetization partial:** `'agent'` isn't an `artifactTypeEnum` value (no purchase/payout); "Hire" only bumps `hire_count`; template/skill/persona installs are free; hosted-card one-off settlement for knowledge listings isn't wired (`{ requiresConfig: true }`) — settle once, landing on the `ledger_entries` unique reference. *Blocker for the live leg: Stripe secrets (see OTHER · billing).*
-- **Affiliates = the Associate program** — reconcile six tables onto `sales_*` with commissions as `ledger_entries`; retire `growth.affiliate_referrals`.
-- **Company directory family is inert** — `companies` is tenant-scoped with no owner/verification column. Level 2 nav waits on PRD 19 tracks; `earnedRung()` vs `RosterNav.earned()` want reconciling. *Blocker: PRD 19 B0 company graph + an answer to PRD 21 §7 decision 4 (list non-opted-in businesses?).*
-- **Marketplace categories:** `projects` needs a decision on visibility.
-- **PRD 21's fourth rung and its open naming/ownership calls ([PRD 21](./docs/specs/21-prd-unified-experience.md)).** The "claimed a company" rung cannot be enforced until a company can be claimed, so RUN rows sit at `WORKSPACE` (follows the company directory above). Operator decisions still open: §7.2 `/security` vs `?sub=sessions` (account security is reachable twice); §11.9.3 "Run" vs "Real" as the group name (blocks M1 copy and the `Stage` union); §11.9.5 whose custom domain a claimed company's storefront uses (site backend 0412 vs the PRD 18 T6 whitelabel table); §11.9.6 "Things" vs "Assets" for the fourth marketplace family. *Blocker: operator decision.*
-- **Gigs:** fixed bids have no escrow/milestones; two publish paths could converge; eval scores aren't on an insights lens.
-- **Upwork parity:** escrow books are correct but money out rides the env-gated `PAYOUT_WEBHOOK_URL` stub; no 1099/W-8BEN/W-9; no payment-verified badge, bid economy, packages or agency accounts.
-- **Freelance/talent:** avatars full-size; payout and notify-email webhooks unset; `available_for_hire` schema drift needs a migration or allowlist.
-- **Advisor platform remainder ([PRD 26](./docs/specs/26-prd-advisor-platform.md) §12).** Built: the A0 bind and Book on talent profiles (`BookAdvisorPanel`), and A1 reservation → `advisory` meeting + calendar event + restricted thread (`api/src/application/commerce/advisoryProvisioning.ts`). Still open: (1) the Meeting Notes silent notetaker is not default-on for advisory meetings; (2) action items are not placed on the visitor's board (idempotent by title) and no fixture proves one lands; (3) no proposed follow-up slot (propose, never book) emailed to both parties, and no guest project + claim link for a visitor with no tenant; (4) no test that a visitor token cannot list other advisors' meetings; (5) P2 filters on `category=advisors` (expertise, language, method, stage), visitor chat on the profile, a Resources tab of the advisor's own listings; (6) P3 pro-bono badge, location, Start/Grow/Exit filters. Epic #2545's A3–A5 stay with their filed gaps (#5234–#5236). Not blocked.
-- **[integrations] Publishers can't list a canvas pack or prompt** — need `canvas`/`prompt` output kinds. *Blocker: product decision on what a purchased pack becomes.*
-- **[integrations] Developer Portal:** hyperscaler listings need seller accounts; design-partner work is human.
+- **No tenant can upgrade.** Stripe webhook unregistered, `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` unset. *Blocker: operator Stripe + `wrangler secret put`.*
+- **Monetization:** personas install free; confirm a paid template install charges. Agent, skill and knowledge checkout exist and need the Stripe secrets above.
+- **Enterprise license:** Docker files and `enterpriseSso.ts` exist, but nothing licenses on-prem (no key or verification code). *Blocker: operator defines what GA means.*
+- **Buyer can't drive a listing first.** The Stage sandbox exists; no buyer route. *Blocker: decision on the throwaway tenant and who pays.*
+- **Affiliates:** PRD 18 says port, PRD 19 §2 and `burnrateCutoverPolicy.json` say retire. *Blocker: operator decision.*
+- **Company directory inert.** `companies` has no owner or verification column, so the "claimed a company" rung can't be enforced. *Blocker: PRD 19 B0 + PRD 21 §7 decision 4.*
+- **PRD 21 storefront domain (§11.9.5).** *Blocker: operator decision.*
+- **`projects` marketplace category** needs a visibility decision.
+- **Gigs:** proposal eval scores aren't on an insights lens.
+- **Upwork parity:** no payment-verified badge, bid economy or packages.
+- **Freelance:** avatars are served full-size.
+- **Advisors ([PRD 26 §12](./docs/specs/26-prd-advisor-platform.md)).** Notetaker default-on, action items on the visitor's board, follow-up slot, guest claim link, token isolation test, P2 filters, location and stage filters.
+- **[integrations] Canvas packs and prompts can't be listed.** *Blocker: decide what a purchased pack becomes.*
+- **[integrations] Developer Portal:** hyperscaler listings need seller accounts.
 
 ### Marketing and campaigns `[growth]`
 
-- **Prompt-driven campaign ([PRD 30](./docs/specs/30-prd-guided-marketing-campaign.md))** — "run a marketing campaign" still maps to a portfolio table. Next: C1 `canvas_connect_mailbox`, C2 catalog use-case, C3 ICP on canvas, C4 campaign ROI. Don't clone HubSpot.
-- **Sales deck has zero customer proof.** *Blocker: one design partner and one measured result.*- **Ad and social accounts connect by pasted token, not OAuth.** Code side is a registry entry + callback per network. *Blocker: a developer app and publishing/spend review per network.*
-- **LinkedIn rows retired by 1102 (`retired:li-*`)** — needs a reconciler to re-point them, or an operator call to drop.
+- **Prompt-driven campaign ([PRD 30](./docs/specs/30-prd-guided-marketing-campaign.md)).** C1 `canvas_connect_mailbox`, C2 catalog use-case, C3 ICP on canvas, C4 ROI writer.
+- **Sales deck has zero customer proof.** *Blocker: one design partner, one measured result.*
+- **Ad and social accounts connect by pasted token,** except YouTube. *Blocker: a developer app and review per network.*
+- **LinkedIn rows retired by 1102** need a reconciler or a drop.
+
 ### Public surfaces, copy and SEO `[growth]`
 
-- **Wordmark spelled two ways** (`Builderforce.ai` ×84, `BuilderForce.ai` ×7; logo says BuilderForce.ai). *Blocker: operator picks one.*
-- **First-visit locale detection runs only on `/`** (assets bypass middleware). *Blocker: cost decision* — `run_worker_first` per path vs a Transform Rule vs client detection.
-- **Claim `credential-encryption` passed `reviewBy` (2026-10-03); `capabilityProof.test.ts` fails.** *Blocker: owner re-reviews and resets the date.*
-- **Free-site badge:** add "Remove the badge" to Pro/Teams pricing and announce it. *Blocker: admin-UI actions.*
+- **Expired claims.** `credential-encryption` and `private-runtime-deployment` passed `reviewBy` 2026-10-03, and the other four expire 2026-11-02, failing `capabilityProof.test.ts`. *Blocker: each claim's owner re-reviews.*
+- **Marketing release gate isn't enforced.** `capabilityProof.test.ts` runs in no CI job, and `docs/marketing/CLAIMS-PROCESS.md` claims CI fails on expiry and cites a missing `lib/content.ts`. Run it in the frontend vitest job and fix the doc. Vendor-fact and tested-wording rules have no check.
+- **Absolute wording in public copy.** 101 `every/always/never/zero` hits in en.json with no guard. `compare.ctaDesc` ("audit trail on every action") and `definedTerms.writeThroughCognition` ("never a stale-then-reconcile step") contradict Claim-to-Proof. Add a guard, rewrite the false ones.
+- **Wordmark spelled two ways.** `BRAND.name` is `Builderforce.ai`; `BuilderForce.ai` remains in places. *Blocker: operator confirms.*
+- **First-visit locale detection runs only on `/`.** *Blocker: cost decision.*
+- **Free-site badge removal** isn't on pricing. *Blocker: admin-UI action.*
 - **Chat/canvas merge (VSIX `2026.9.36`) has no `release_notes` row.** *Blocker: a superadmin session.*
-- **Blog translation partial** — 162 posts; title/description for 8; bodies de 61 · es 69 · fr 54 · zh 67; `blogLocale.test.ts` fails. Diff each stopped-mid-write body for truncation. *Blocker: translation content + batch-vs-slice call.*
-- **English marketing copy in TS:** `lib/content/*`, `routeMarketing.ts`, `blogData.ts`, auth panels, `buildLlmCourse()` — translate all (2026-09-12). Re-measure literals first.
-- **`/compare`: six arenas, leaf pages for one.** *Blocker: operator picks which of 23 markets get a "vs" page.*
-- **Related-article cards gone from 34 app routes** after guest preview. *Blocker: placement decision.*
-- **Tenant web surface has no renderer** for `GET /api/public/web/:owner/p/*` or the impression POST. Hoist `structured-data.ts` server-side in the same pass. Not blocked.
-- **Docs/marketing residuals:** `.page-inner` vs `PageContainer`; client-set teaser heads; per-article OG images; three unconnected feature lists; hero pacing in light mode.
-- **Distribution:** Hugging Face (account + write token), a reviewer test tenant (gate for Anthropic/Slack/Atlassian/AWS/Microsoft review), cloud marketplaces (legal entity + partner programs); `VSCE_PAT`, `OVSX_PAT`, `ACTION_MIRROR_*` unset.
-- **[integrations] Miro connector uses a personal token.** *Blocker: a registered Miro app + `MIRO_CLIENT_ID`/`MIRO_CLIENT_SECRET`.*
+- **Blog translation partial:** 184 English posts, de 78 · es 86 · fr 71 · zh 84, titles for 22; `blogLocale.test.ts` fails. Check bodies for truncation. *Blocker: batch-vs-slice call.*
+- **English left in TS:** the fallback at `courseLms.ts:94`, `creationTemplates.ts:40`.
+- **`/compare`: six arenas, leaf pages for one.** *Blocker: operator picks which 23 vendors get a page.*
+- **Related-article cards may be missing after guest preview.** Check what it renders. *Blocker: placement decision.*
+- **Tenant web surface has no renderer** for `/api/public/web/:owner/p/*` or `/:tenantId/seo/impression`.
+- **`.page-inner` remains** in `FactsPageClient.tsx`, `RfpDetailClient.tsx`, `globals.css`.
+
+### Distribution `[growth]`
+
+- **VS Code release job goes green without publishing.** `VSCE_PAT` / `OVSX_PAT` unset, and `|| echo` swallows failures. Fail on a missing secret; only "already exists" is a no-op. *Blocker: the two tokens.*
+- **Rovr isn't in the Chrome Web Store.** *Blocker: developer account + listing.*
+- **Hugging Face push, reviewer test tenant, cloud marketplaces.** *Blocker: accounts, legal entity, partner programs, `ACTION_MIRROR_*`.*
+- **[integrations] Miro uses a personal token.** *Blocker: a registered app.*
 
 ---
 
 ## 🧰 OTHER — enabling work outside the arc
 
-- **[gateway] Who may reconnect or replace the workspace's provider subscriptions.** `GET /llm/provider-keys`, `POST /llm/provider-keys/:provider/test` and `/oauth/start|complete` check only tenant membership (`requireTenantAccess`), not role. Any member can therefore replace the workspace's Claude, ChatGPT, Grok or Kimi subscription with their own account, and now from every chat's `/` menu (Status ▸ Connected accounts) as well as Settings ▸ API Keys. If this should be owner/manager only: gate the routes server-side, then render the composer section and the settings card disabled-with-reason through the RBAC primitive (never hidden). *Blocker: operator decision on the role policy.*
+### CI and release `[platform]`
 
-- **[ci] `main` is red at `7b79a244f`, before and independent of the TypeScript 7 migration.** A clean worktree of HEAD (TS 6 and TS 7 give identical errors) fails on:
-  - Unterminated strings, from unescaped apostrophes or raw newlines inside quotes: `packages/agent-tools/src/knowledge/reviewRunner.test.ts:154`, `packages/agent-tools/src/prefetch/prefetch.test.ts`, `frontend/src/components/creation-canvas/CanvasKnowledgeSurface.test.tsx:52`, `frontend/src/components/creation-canvas/inspector/TaskDescriptionField.test.tsx:64`, `clients/vscode/src/prefetch/knowledgeAskRow.test.ts:71`, `api/src/application/replay/prescriptionReads.test.ts:26`. The next build also fails: `frontend/src/app/studio/project/[id]/page.tsx:11` redeclares `params`.
-  - Source importing builderforce-memory exports that are not published yet. `nameResolver`, `clampQuote`, `oneLineLabel`, `MAX_QUOTE_CHARS`/`MAX_QUOTE_LINES` and `PlanOptions.force` are absent from 2026.10.31. This fails api, agent-run, agent-runtime and brain-embedded's dts build, and then brain-ui and clients/chrome.
-  - `packages/repo-map/src/extract.ts:12` cannot resolve `@builderforce/agent-tools/symbols` from agent-runtime's NodeNext program. repo-map does not declare the dependency.
-  - Stale ratchets:
-    - `check:silent-catches`: api 526 against 524, frontend 264 against 262.
-    - `frontend/src/lib/api.ts` is 1025 lines against a ceiling of 990.
-    - The design-scale baseline is stale.
-    - `check:react-hooks` reports `useProjectProof.ts` at 0 → 1.
-  - Fixing these turns CI and the frontend deploy green again. *Blocker: every listed file carries uncommitted edits from a concurrent session in the shared tree. Editing them here would clobber that work. Each owner finishes, or publishes builderforce-memory, and commits.*
-- **[ci] The builderforce-inference console only builds when the repo is nested inside `Builderforce.ai/`.** `app/console` links `../../../brain-embedded` and `../../../packages/brain-ui`, maps `../../../frontend/src/lib/evermindRegions.ts`, and runs `../../../scripts/ensure-linked-deps.mjs`. From the sibling checkout at `C:/code/agentic/builderforce-inference`, every link dangles, so `tsc` and `vite build` cannot resolve the brain packages. *Blocker: operator decision on the canonical checkout layout (nest it, or point the paths at `../../../Builderforce.ai/`).*
+- **CI never runs frontend unit tests; 19 fail in 12 files.** Fix them and add a vitest job.
+- **Verify never bundles the Worker.** Add `wrangler deploy --dry-run`; make `deploy-frontend` and VS Code wait for `deploy-api`.
+- **A red commit still publishes to the CDN.** *Blocker: operator decision; release order is deliberate.*
+- **`ExecutionRepository.persistence.test.ts` reads past `update()`.** Re-anchor at WS7.
+- **Flaky or heap-bound tests:** `CreationCanvas.test.tsx`, `agents/sandbox/registry.test.ts:207`, `useBrainConversation.test.tsx`, `harness/scenarios.test.ts`.
+- **CI safety:** no ephemeral-DB migrate dry-run; `production` reviewer rule unset; `qa-e2e` in no workflow; no CodeQL workflow.
+- **`packages/repo-map` doesn't declare `agent-tools`.**
+- **builderforce-inference console builds only when nested.** *Blocker: operator decision on checkout layout.*
+- **esbuild < 0.28.1 in `clients/chrome` (0.24.2) and `feedback-sdk` (0.27.7).** Add overrides; dev-time only.
 
-### Production ops (2026-10-10 log review)
+### LLM gateway and routing `[agents]`
 
-- **Disconnect Moonshot on tenant 1** (empty pay-as-you-go balance; use the Kimi Code subscription). *Blocker: operator clicks Disconnect in Settings.*
-- **Together, FluxAPI and Hugging Face are out of credit** (fail over cleanly). *Blocker: top up, or remove `TOGETHER_API_KEY` / `FLUX_API_KEY` / `HF_API_TOKEN`.*
-- **Plain `http://` still served for prerendered paths;** the www rule targets `http://`. *Blocker: a zone-edit Cloudflare credential* → "Always Use HTTPS" + an `https://` www rule.
-- **Project memory has no embedding fallback** (`vector(1536)` vs 1024-wide BGE). *Blocker: design decision* — second vector column or the same model from a second host.- **`/incidents?tab=escalation` 404 in production** — likely an RSC prefetch miss. *Blocker: response headers from the deployed Worker.*
-- **Strategy content is still in the public repo's git history.** The files now in `docs/private/`, `ROADMAP.md`'s old ARR/Risk/Buyer lines, and the 40 `SECURITY-FINDINGS.local.md` headings in old `.builderforce/symbols.json` snapshots. The purge is built and dry-run verified (0 traces left across 9,296 commits): `docs/private/purge/purge.sh` (gitignored, with a pre-purge backup bundle). It rewrites all 848 branches on a fresh mirror and force-pushes each ref with a lease. `refs/pull/*` are read-only, so GitHub Support must purge those afterward. *Blocker: a quiet window.* No other session may commit or push during the ~30-minute run. Afterwards, every clone and worktree (`.claude/worktrees/cifix`, `C:/tmp/bf-wt`, the main checkout) must re-clone or hard-reset to the new `origin`. A plain `git pull` would merge the old history back in.
-
-### LLM gateway, routing and cost `[agents]`
-
-- **`SUPERSEDED_MODEL_IDS` is hand-maintained** — extend live-`/models` reconciliation to assert keys/values.
-- **Drift guard reads only OpenRouter, NIM, Cerebras;** listing ≠ serving (NIM `kimi-k2.6` 404s). *Blocker: credentialed sources must refresh from inside the Worker.* Derive FREE/PRO/CODING pools from the live payload.
-- **A known-broken BYO provider still leads the seed.** Feed `providerAuthAlerts` into `byoAutoSeedModels` as `demotedVendors`. *Blocker: import cycle with `resolveTenantLlmCredentials`.*
-- **Only Qwen offers a model choice;** OpenAI, DeepSeek, xAI, Moonshot, MiniMax, Mistral need chat filters from real `/models` payloads. *Blocker: one live key each.*
-- **Cost caps:** no cap on premium fallback for FREE (`useCase` is caller-supplied); Pro fixed at 2 attempts; no per-user sub-ledger; gateway and on-prem runs unattributed.
-- **Image generation has no BYO path** (`imageProxyForPlan` gets no tenant keys).
-- **Orphaned usage rows:** `llm_usage_log.tenant_id ON DELETE SET NULL` drops a deleted tenant from tenant views but not the admin rollup (0 rows today).
-- **Caching:** `CachingBridge` unused (the exact `ResponseCache` now serves `completeChat`, `completeForTenant` and `/v1/chat/completions`); the semantic index stays on KV LSH by cost decision (DONE.md 2026-10-23, wave 3).
-- **Reliability:** `applyCooldowns` 2N KV writes; no cooldown re-check per attempt; streams don't surface `failovers[]` or detect empty-200; strict schema capability not advertised; hired.video tailor has its own cascade.
-- **Gateway hardening:** no message-shape sanitizer for strict vendors (Gemini `INVALID_ARGUMENT`); `llm` workflow nodes use the host key.
-- **Sampling `params` apply at the gateway only,** not in the V2 loop; no persona picker in My-LLMs. *Decision:* retire `tenant_model` presets or rename.
-- **Codex:** 403 stands the vendor down, not the run — decide if one dead BYO account should fail a request. OAuth races a local Codex CLI on `localhost:1455` (*blocker: an OpenAI client registration*).
-- **Kimi from hosted cloud agents:** Kimi's edge refuses Cloudflare egress before reading credentials. *Blocker: Kimi's approval of `docs/partnerships/kimi-code-hosted-integration-request.md`, then a paid non-Cloudflare egress host.*
-- **LLM trace capture:** `/v1/images` has no `logTrace`; streams lack `response_body`; `ideAiRoutes` not back-filled; runs don't deep-link to `llm_trace`.
-- **Gateway SDK long tail (from the LLM-gateway PRD, removed 2026-10-25).** (1) The SDK has one total `timeoutMs`; there is no `connectTimeoutMs` / `streamTimeoutMs` split, so a long healthy stream and a dead connection share one bound. (2) The legacy `coderclawllm/workforce-<id>` model prefix is still accepted beside `builderforce/workforce-<id>` with no deprecation date — set one, then remove the legacy branch. (3) Vision use cases (`vision.describe`, `ocr.extract`) are registered but the SDK `messages` shape is text-only — add multimodal payloads before customers consume them. (4) hired.video still carries its own LLM client, and it and burnrateos hold per-tenant `OPENROUTER_API_KEY` secrets — move hired.video onto the SDK and decommission the secrets. Not blocked.
-- **Per-tenant rate limiting has never run** — `TENANT_RATE_LIMITER` isn't bound. *Blocker: operator decision* — bind as-is, raise caps, or gateway-only.
-
-### LLM cost optimization — open items (PRD: LLM Cost Optimization Layer) `[agents]`
-
-Waves 1–3 shipped (see DONE.md 2026-10-22 and 2026-10-23). Still open:
-
-- **Cloud runs have no C8 token compression.** The Worker has no compressor, and the sandbox image no longer carries bf-context, so `c8_token_compression` acts only on Desktop, VSIX and on-prem. The fix is a compressor the engine can call: an ONNX/LLMLingua build in the sandbox image, measured for image size and cold start. *Blocker: that image build, whose logs give the cost.* Unblocks C8 on cloud runs.
-
-### Workload-aware routing and model hand-off `[agents]`
-
-- **Code turns resolve to MiniMax Flash although Grok-4.7 (ULTRA) and Kimi-K3 (PREMIUM) are connected (VS Code chat #6, 2026-10-25/26).** The run journal shows 265 `code` turns served by `direct/minimax/MiniMax-M3.1-Flash-Preview` after 198 analysis→code re-asks. No turn was ever served by xAI, Moonshot, OpenAI or OpenRouter. By catalog tier `orderForRole` should lead with Grok, so the vendor is either demoted (`byoAlertedVendors`: an xAI "out of credits" 403 is classed as capacity), never seeded, or tried and refused. The client could not tell which, because it discarded the gateway's `_builderforce` failover frame. That frame is now recorded per turn: `llm.complete` carries `failovers` + `candidates`, and the diagnostics print "Routing by role". The gateway also now logs `gateway.byo_seed` (connected, demoted, ranked). Fix = act on what one run shows: reconnect or top up the refusing account, or correct the seed or demotion rule. *Blocker: one turn on api ≥ 2026.10.86 + VSIX ≥ 2026.10.97 to read the recorded routing.* Unblocks code turns reaching the strongest connected coder.
-
-- **Rovr is not in the Chrome Web Store.** `clients/chrome` builds and packages `dist/builderforce-rovr-*.zip` (load-unpacked works); its icons are the web app's own logos by decision (2026-10-16). *Blocker: a Chrome Web Store developer account + listing.*
-- **Rovr cannot pin the BYO pool.** Its pin (`settings.pinnedModel`) is one model id, so choosing the "your keys" pool row in the `/` Model tab falls back to Auto (`clients/chrome/src/sidepanel/useRovrChatOptions.ts`). Fix = a typed pin (`{ kind: 'model' | 'pool' }`) read by `inference/route.ts`. Not blocked. Unblocks full Model-tab parity with the web and the editor.
-- **No on-device model has answered a turn in a real browser** (PRD 34, shipped 2026-10-17; see DONE.md). The Bonsai/bfi-web and WebLLM page engines are proven by GPU-kernel-vs-CPU and unit tests, not by an end-to-end turn in Chrome, the VSIX webview or Rovr with downloaded weights. Add an automated real-browser run (Playwright with WebGPU) that loads a model, answers one turn and records it in run telemetry. Unblocks claiming local models on all three surfaces. Not blocked.
-- **VSIX sync status is not shown (`clients/vscode/src/syncStatusPresenter.ts` has no caller, G23).** No VSIX surface lists records from the local store: `sessionsTree.ts` lists server chats (`GET /api/brain/chats`), `localChatPersistence.ts` keeps list/update on the server adapter, and server chat ids (numbers) have no mapping to local record UUIDs. Wiring the presenter needs the local-record-backed session/ticket lists of G05 (offline-first review) first; then the presenter decorates those rows. *Depends on: G05 local project/ticket/chat views.*
+- **Who may replace workspace subscriptions.** `/llm/provider-keys` and subscription OAuth routes check membership, not role, including PUT and DELETE. *Blocker: operator role policy.*
+- **Code turns resolved to MiniMax Flash with Grok and Kimi connected (chat #6).** Read the recorded `failovers` + `gateway.byo_seed`, then fix the account or the seed rule.
+- **Cloud runs have no C8 compression.** *Blocker: an ONNX image build.*
+- **Drift guard reads only OpenRouter, NIM, Cerebras;** pools are hardcoded. *Blocker: credentialed refresh inside the Worker.*
+- **Only Qwen and Kimi offer a model choice.** *Blocker: one live key per other vendor.*
+- **No per-user spend limit;** `usageAttribution.ts` only reports.
+- **Image generation has no BYO path.**
+- **`llm` workflow nodes use the host key** (`orchestrator.ts:832`).
+- **Decide `tenant_model` presets:** retire or rename.
+- **Codex OAuth races a local CLI on port 1455.** *Blocker: an OpenAI client registration.*
+- **Kimi from cloud agents** is refused at Kimi's edge. *Blocker: Kimi's approval + a non-Cloudflare egress host.*
+- **SDK long tail:** split `connectTimeoutMs`/`streamTimeoutMs`; date the `coderclawllm/` prefix removal; register `vision.describe` and `ocr.extract`; move hired.video's own client and cascade onto the SDK.
+- **Rovr has no BYO pool pin.** The row is hidden; add a typed pin read by `inference/route.ts`.
+- **No on-device model has answered a turn in a real browser.** Add a Playwright + WebGPU run recording telemetry.
 
 ### Brain chat `[agents]`
 
-
-- **No cross-turn guard against re-deriving a finished analysis.** `seedFrom` drops tool rows, so a guard must re-serve prior results with a staleness rule. *Blocker: a captured repro.*
-- **Ask-the-Manager zero tool calls — suspect the vendor path.** Instrument `buildResponsesBody` so the 102-tool payload shape lands in the logs. Not blocked.
-- **Inherited Evermind endpoints still accept writes** (UI is read-only); a 409 would change the front-door contract.
-- **AI Surface — duplicate label tables.** Every host (Web Brain panel/canvas/guest, VS Code, Rovr) is on `AiSurface` with `--bf-*` tokens (DONE 2026-10-17); audit each host for a second catalog→labels table inside the same host. Not blocked.
-- **`DEFAULT_CHAT_TITLE = 'New chat'` has two homes.** `brain-embedded/src/chatTitle.ts` (the client placeholder that auto-titling replaces) and `api/src/application/brain/chatTitle.ts` (the column default `normalizeChatTitle` falls back to) must stay equal. No source-only package both already depend on fits a chat-title constant (the shared ones are agent-loop, run-policy, model-catalog and the like), and a new dependency edge for one string was not added. **Next:** give the Brain chat contract (title placeholder and `CHAT_TITLE_MAX_LENGTH`) a shared home both import, then delete both copies. Not blocked.
+- **Prior-research reuse is prompt guidance only** (`priorResearch.ts`). Add an enforced guard with a staleness rule.
+- **Ask-the-Manager zero tool calls.** Log the payload shape in `buildResponsesBody`.
+- **Duplicate label tables:** audit each host.
+- **`DEFAULT_CHAT_TITLE` has two homes.** Give the Brain chat contract one shared home.
 
 ### Evermind / SSM `[agents]`
 
-- **Coding gate (≥90% of frontier) is built and closed;** no checkpoint passes it. *Blocker: a trained checkpoint and a recorded `POST /:projectId/evermind/coding-eval`.*
-- **GPU backward pass:** WGSL backward kernels and the GPU tape are unwired; CPU backward is exact. Grad-norm clip races across workgroups; WGSL path lacks LoRA/QLoRA/mixed precision. *Blocker: a WebGPU device for numerical validation.*
-- **P1 one run-context assembly:** context built 3× (cloud, on-prem, VS Code); on-prem/VS Code lack strategic/PRD/governance context; no delta via `EvermindCognition`. Fix = one `ContextSource` + `ContextReconciler`. Not blocked.
-- **Two canonical-JSON serialisers** because `api/src/domain/shared/stableStringify.ts` feeds stored hashes. *Blocker: a `v2:` versioned hash + production backfill.*
-- **Foreign-checkpoint weight port** (Codestral-/Falcon-Mamba). *Blocker: the real checkpoints.*
-- **Learned-routing on-prem consumer** and **auto-routing eval gate** (Evermind is pin-only). *Blockers: a running host; a product decision on gate criteria.*
-- **Teach reports success before the teacher runs;** legacy ring entries lack provenance. *Blockers: a per-contribution status channel; a per-DO storage migration.*
-- **Import from builderforce-memory:** a running stdio server re-snapshots over stubs; Markdown auto-memory isn't importable. *Blocker: a live MCP stdio + VS Code host.*
-- **Tool-calling turn costs one forward pass per candidate** — needs a prefix cache or batched scoring.
-- **Video/image codebooks untrained.** *Blocker: GPU training on a media corpus.*
-- **API uses retrieval primitives, not the enterprise ports** (`VectorStore`, `IngestionPipeline`, `Tracer`, `EvalHarness`) — its own adoption program. Two lexical scorers want a `Bm25Options.tokenize` hook. `Tracer` lacks W3C `traceparent`.
-- **Externally blocked:** transformers.js `model_type:"evermind"`, llama.cpp GGUF, a live HF push; stdio recall is lexical; Prompt API ignores per-turn system prompts.
-- **Per-run faithfulness is relevance-only** (agent-stack parity, shipped 2026-06-27). `scoreRunOutcome` writes `faithfulness` / `hallucination_rate` to `run_model_outcomes` (migration 0222), but the run's retrieved context is not passed to `evaluateResponse`, so the scorer has nothing to check grounding against and the faithfulness column measures answer relevance. Pass the recalled context into the scorer. Not blocked.
-- **Offline memory gaps M01–M11 — in the `builderforce-memory` repo** (`packages/memory`, `packages/memory-mcp`; detail in the offline-first review's "Shared offline memory scope", [`docs/design/vsix-offline-first-architecture-review.md`](./docs/design/vsix-offline-first-architecture-review.md)). M01 no durable Node storage adapter (IndexedDB owned directly); M02 writes resolve before transaction commit and share no transaction with a sync journal; M03 no account/tenant/project scope on `MemoryEntry`, origin-global database names; M04 no sync receipts, base versions, conflicts or tombstones; M05 per-instance cognition serialisation only; M06 TTL/caps hard-delete durable facts and snapshot import loses provenance; M07 caches/index not persisted, remote L2 reachable offline; M08 checkpoint/tokenizer fetches and remote bridges with no offline asset resolver; M09 no versioned checkpoint/contribution merge semantics; M10 the package's own router competes with Brain's loop; M11 a cached answer must never satisfy a requested mutation. Product side: VSIX `src/cognition.ts` and `brain-embedded/src/evermindMemory.ts` still bind recall to the server. **Done when** the review's memory acceptance 5–7 pass (restart survival, lexical recall without a GPU, crash/abort/concurrent-writer injection with no lost, cross-scope or resurrected facts). Not blocked.
-- **Knowledge & Learning Pipeline (baseline → extract → review → retrain).** KRs: extraction rate 80%, review in 24h, transfer uplift 15%, contradictions ≤5%. Re-implement abandoned #161 (review queue, PR #101), #674 (delta format, PR #332), #675 (extraction, PR #333) over `utils/delta.ts`, `export/index.ts`, `import/evermind.ts`, `bench/`.
+- **Offline memory, in builderforce-memory.** Open: M07 cache persistence, M08 asset resolver, M10 router, M11 mutation guard. Partial: M03–M05, M09. `clients/vscode/src/cognition.ts` is still server-bound. Done when the review's acceptance 5–7 pass.
+- **Per-run faithfulness is relevance-only:** `scoreRunOutcome` passes no context to `lexicalEval`.
+- **Coding gate (≥90% of frontier) closed.** *Blocker: a trained checkpoint.*
+- **GPU backward pass unvalidated;** no LoRA in kernels. *Blocker: a WebGPU device.*
+- **Knowledge pipeline:** review queue, extraction, KRs.
+- **Two canonical-JSON serialisers.** *Blocker: a `v2:` hash + backfill.*
+- **Foreign-checkpoint weight port.** *Blocker: real checkpoints.*
+- **Auto-routing eval gate;** Evermind is pin-only. *Blocker: gate criteria.*
+- **Teach:** confirm the console polls the status channel and the provenance backfill ran.
+- **builderforce-memory import:** Markdown auto-memory isn't importable. *Blocker: a live MCP stdio host.*
+- **Tool turn costs one forward pass per candidate.** Needs a prefix cache.
+- **Video/image codebooks untrained.** *Blocker: GPU training.*
+- **API doesn't use the enterprise ports;** it imports `bm25Search` directly.
+- **External:** transformers.js `model_type`, llama.cpp GGUF, HF push.
 
-### Agent runtime, desktop (Synapse) and VS Code `[agents]` `[platform]`
+### Agent runtime, desktop and VS Code `[agents]` `[platform]`
 
-> Synapse goal (2026-09-27): Evermind is each person's private capability, stored and learned on their machine. Capability gaps G1–G12 are closed; what remains is verification and platform coverage. Since 2026-10-11 Synapse's code lives in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference) and Spawn's in [builderforce-spawn](https://github.com/SeanHogg/builderforce-spawn); the entries below are tracked here but fixed there.
+Synapse lives in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference), Spawn in [builderforce-spawn](https://github.com/SeanHogg/builderforce-spawn).
 
-- **The VS Code local store holds every message twice and writes all of it on every commit.** Each local chat write while unbound appends a journal event that carries the row's full payload (`brain-embedded/src/localChat/journal.ts` `journalWrite`, unbound branch), and nothing ever acknowledges those events, so the store grows by two copies of every message. An operator store measured 14 MB on 2026-10-24: 3,127 messages at 6.9 MB, and 3,127 unbound message events at 7.2 MB. Every commit then re-serializes the whole snapshot into a journal frame and republishes `local-first-v1.json` (`clients/vscode/src/durableLocalFirstStore.ts`). The chat slice never sends those payloads: `bindChatHistoryForSync` drops them and queues one import per row from the record. Fixing it, by journaling unbound chat rows as payload-free markers or not at all, halves the store and every commit's write, and unblocks long-lived editor chats. *Blocker: operator decision. The unbound journal is a local-first contract ("every write appends its own event, as it always has"), it has a second consumer (`packages/local-first/src/sync.ts:372`), and existing tests pin it.*
-- **Local tool turns that come back as prose are accepted as answers** (chat #9, 2026-10-24: a 67-tool turn, 0 tool calls, fenced `bash` blocks, diagnostic said "healthy"). The routing, window and Qwen3-Coder tool-call halves are fixed (DONE.md 2026-10-24). Still open: (1) `answered` in `brain-embedded/src/localFirstTransport.ts` accepts a prose-only reply to a tool turn, and committing on the first delta means it cannot fall over once it has streamed. The same happens natively: Bonsai-1.7B answered a `run_command` request in prose in the bfi-node smoke. (2) The chat diagnostic classifies "asked for a CHANGE · 0 mutating calls" as `healthy`. *Blocker: a product decision on whether a tool turn holds its first delta until a tool call or a non-prose answer is seen (this adds latency to every local tool turn).*
-- **An Ollama model loaded by ANOTHER client at a larger `num_ctx` overstates our window** (`packages/local-inference/src/probe.ts` `servedWindow`). With no Modelfile `num_ctx`, we read `/api/ps`. If another app loaded the model at 32K, Ollama reloads it at the server default for our option-less `/v1` request, so the turn is packed for 32K and truncated at the default. *Blocker: no Ollama route reports the server default (`OLLAMA_CONTEXT_LENGTH` lives in the server's environment). Fixing it needs either that route upstream or moving Ollama turns to the native `/api/chat`, which carries `options.num_ctx`.*
-- **A Windows command routed to bash loses its backslash paths.** When `run_command` sends a cmd-style command to Git Bash (`clients/vscode/src/posixShell.ts`: a unix utility in the pipeline, or the `cmdCannotRun` retry), bash treats `\` as an escape, so `findstr … C:\x\activeMentionToken` became `C:activeMentionToken` and failed (seen 2026-10-25 next to the stray `nul` files, which are fixed). Fixing it would stop these Kimi steps failing on Windows paths. *Blocker: the exact commands Kimi ran are not in the stray files, so it is unclear which route sent them to bash. A blanket backslash rewrite would break real bash escapes (`sed 's/\./x/'`, `grep '\bfoo'`). It needs a run trace showing the routing decision.*
-- **Self-Directed Agents are Windows-only.** macOS needs AX (*blocker: a Mac with Xcode*); Linux needs X11 XRecord (*blocker: an interactive X11 session*).
-- **Installers unsigned; no in-place updater.** Workflows are ready to sign (each new repo's `release.yml`; Spawn uses builderforce-inference's signing actions). *Blocker: the owner adding the Azure Trusted Signing (or .pfx), Apple Developer ID + notarization and Tauri updater-key secrets to both builderforce-inference and builderforce-spawn.* Delete Spawn's `firstRunWindows`/`firstRunMac` hints when done.
-- **~3.3 GB memory after indexing one small package.** *Blocker: an idle-vs-embedding memory profile.*
-- **Phase 3 local browser/VM agent host.** *Blocker: content guardrails + prompt-injection defence first.*
-- **Native apps:** no Evermind recall or agent invite in phone chat; no Approvals screen in `apps/android` / `apps/shared/BuilderforceKit`.
-- **G03 SQLite system of record is built but not wired** (`clients/vscode/src/localRecordTransaction.ts`: one `BEGIN IMMEDIATE` transaction, `busy_timeout`, corrupt file refused; offline-first review step 2). It loads `node:sqlite` at runtime, which exists only on Node ≥ 22.13 (VS Code ≥ 1.101), while `engines.vscode` is `^1.95.0` (Node 20). Wiring it from activation in place of the journaled store needs that floor raised, or a journaled-store fallback kept for older hosts. *Blocker: operator decision on the VS Code engine floor.*
-- **Sync residuals after the 2026-10-20 wiring** (`api/src/application/sync/*`, `SyncRepository.ts`): (a) `sync_changes.seq` is a global bigserial, so a row whose seq was allocated before a pull's tip read but committed after it can be skipped by that cursor — needs a commit-ordered watermark (e.g. `pg_current_xact_id` snapshot or a per-destination sequence); (b) each applied event opens its own interactive transaction (one WebSocket pool checkout per event) — batch per push; (c) once a dependency's receipt is purged (90 d) a dependent event stays `dependency_pending` forever — treat a purged dependency as satisfied or reject explicitly. None blocks a first live sync; (a) matters under concurrent writers.
-- **Two journal-backed VSIX stores; the host uses one** — `clients/vscode/src/offlineLocalFirstStore.ts` (`createOfflineLocalFirstStore`, `commitOfflineEntityWrite`) has no production caller since the host moved to `durableLocalFirstStore.ts`; only its own test imports it. Fold any guarantee it pins that `localFirstStore.transaction.test.ts` does not (compaction equivalence, minted-id lookup by logical write) into the durable store's tests, then retire it. *Blocker: operator sign-off — removal in the offline path was refused on 2026-10-20 until confirmed.*
-- **Recovered interrupted runs are only logged** (`clients/vscode/src/brainRunHostPorts.ts`, BuilderForce output channel) — surface them in the run list so the person can resume or dismiss.
-- **Two plain-Node runners duplicate the loop skeleton** (`server.mjs`, `githubActionsRunner.ts`). Fix = bundle the kernel into both. Not blocked.
-- **pi-tui is the last `@mariozechner/pi-*` dependency** — migrate `src/tui/*` to Ink, then remove.
-- **Engine/tool convergence (PRDs 11/12/12a, removed 2026-10-25).** Converged file tools are default ON for non-sandboxed sessions (`agent-runtime/src/agents/coding-tools.ts`, `useConvergedFileTools`), confined by the same `tools.fs.workspaceOnly` as the native pair. Still open: sandboxed sessions stay on the native tools because the disk provider writes via `node:fs`, not the sandbox fs-bridge (needs a sandbox-aware provider); `read` (needs a shared media affordance) and `exec`/`process` (need streaming `ctx.onUpdate`) stay native; `RelayTaskEngine` collapse. Not blocked.
-- **plugin-sdk DTS build broken** (9× TS6059; `agent-tools` is source-only).
-- **Brain embeddable is headless only** — extract the UI to `brain-embedded/ui` plus shared `useToolConfirmationGate` and `buildComposerDirectives`.
-- **Portal channel config flows up only** — needs a `channel.configure` push + runtime consumer. *Blocker: a running on-prem host.*
-- **Cloud affect can't run GPU-trained limbic models in the Worker** (inherent).
-- **VS Code:** `@builderforce` participant forgets tool work after restart (*decision:* durable step trail?); native sessions tab needs the proposed `chatSessionsProvider` (keep the webview?); sign-in isn't covered by the extension-host suite (*blocker: a test tenant + `BF_EDITOR_KEY` secret*); `/embed` views need a frontend deploy.
+- **Local tool turns answered in prose are accepted.** `answered` in `localFirstTransport.ts`; the 0-tool case scores healthy. *Blocker: product decision on holding the first delta.*
+- **Ollama loaded at a larger `num_ctx` overstates our window.** *Blocker: move to `/api/chat` or an upstream route.*
+- **Windows command routed to bash loses backslashes** (`packages/agent-tools/src/node-posix-shell.ts`). *Blocker: a trace of the routing decision.*
+- **Self-Directed Agents are Windows-only.** *Blocker: a Mac; an X11 session.*
+- **Installers unsigned, no updater.** Windows and macOS signing are wired; Tauri updater signing isn't. *Blocker: signing secrets in both repos.* Then delete `SpawnDownloadButton`'s first-run hints.
+- **~3.3 GB after indexing one small package.** *Blocker: a memory profile.*
+- **Phase 3 browser/VM host.** *Blocker: prompt-injection defence first.*
+- **pi-tui is the last `@mariozechner/pi-*` dep.** 23 importers left; migrate to Ink.
+- **Engine convergence:** sandbox-aware provider; `read`, `exec`, `process` stay native; `RelayTaskEngine`.
+- **Brain panel controller** still lives in `frontend/src/components/brain`. Extract it.
+- **Portal channel config flows up only;** `channel.configure` doesn't exist. *Blocker: a running on-prem host.*
+- **`@builderforce` participant forgets tool work after restart;** native sessions tab needs the proposed API; sign-in untested (*blocker: a test tenant + `BF_EDITOR_KEY`*).
 
 ### Data model — PRD 20 `[platform]`
 
-- **The 25 kernel primitives await acceptance (PRD 20 §6)** — and the winner of nine contested areas. Coverage map: 1,130 source tables, 0 unaccounted. Primitive adoption today: `activity_log` 18, `connections` 6, `runs`/`work_items`/`annotations`/`revisions` 0. *Blocker: operator decision.*
-- **214 open ratchet violations:** 187 tables reachable only via the entity layer, 22 cross-module imports, 3 polymorphic refs without FK, 2 duplicate clusters (`calendar`=`drive`=`mailbox_connections` — the three connected-account stores share one encrypted-token shape since calendar dropped its plaintext columns (2026-10-14) and should fold into one table with a `kind` column; `initiatives`=`portfolios`). `domain-boundary` at 34.
-- **Step 5: 95 legacy shape tables hold live rows** — backfill → read cutover → drop, per family.
-- **`sessions` and `ai_usage_records` are targets with no writer (rebaselined 2026-10-18).** The `identity.active_users` and `agents.tokens`/`cost_cents` rollups were their only feature readers. They were reading empty tables, so those metrics were always zero, and they moved to the live twins (`auth_user_sessions` ⋈ `tenant_members`, and `llm_usage_log` on the operational DB). That dropped both tables back to entity-layer-only. Closing it means cutting the auth path over to `sessions` (folding in `auth_user_sessions` + `extension_sessions` via `kind`) and choosing which usage ledger survives the core/operational database split. *Blocker: operator decision on the surviving usage ledger; the session cutover is a live auth data migration.*
-- **Steps 6–7 moving the wrong way:** 129 application folders (target 16), 237 route files, 166 `page.tsx`; layering at 126. Needs a lane that owns the migration.
-- **Behaviour of the two merged products isn't here yet** (ATS funnel, finance/investor/growth workflows) — the entity layer is the floor.
-- **Legacy routes register into `objects` only on the sweep,** not at write.
-- **`marketing_sessions` sits in `schema/identity.ts`;** moving it adds a counted `growth → identity` edge.
-- **54 table families straddle schema modules** — needs an ownership manifest, not a prefix heuristic.
-- **Migration numbering:** grandfathered prefix collisions; five ledger rows with no file; ~75 push-only tables in the drift allowlist. Renumber + backfill creates.
+- **Primitive adoption:** `runs` and `work_items` have no feature writer.
+- **135 ratchet violations:** 109 table adoption, 22 domain boundary, 3 polymorphic, 1 duplicate cluster (`initiatives`/`portfolios`).
+- **Legacy shape tables hold live rows.** Backfill, cut over, drop per family.
+- **`sessions` and `ai_usage_records` have no writer.** `table-adoption.mjs` rules them superseded. Drop them.
+- **Steps 6–7 moving the wrong way:** 155 application folders (target 16), 286 route files, 204 `page.tsx`. Needs an owning lane.
+- **Merged-product behaviour missing:** the ATS funnel and growth workflows.
+- **Legacy routes register into `objects` only on the sweep.**
+- **Table families straddle modules;** needs an ownership manifest.
+- **Migration numbering:** 8 collisions, five ledger rows with no file, 78 drift-allowlist entries.
 
-### Frontend, i18n and code health `[platform]`
+### Code health `[platform]`
 
-- **Layering ratchet at 126;** 110 presentation modules import the schema (286 selects inline). Worst: `adminRoutes`, `agentHostRoutes`, `qaRoutes`, `knowledgeRoutes`.
-- **271 unscoped tenant queries** — each needs a per-chain decision (thread `tenantId` or record the parent check).
-- **15 of 38 permissions advisory for structural reasons:** no surface (`project:archive`), a non-member caller (`marketplace:*`), a machine caller (`agentHost:*`, `workflow:execute`).
-- **God modules, still growing:** `adminRoutes.ts` 4,047, `llmRoutes.ts` 3,574, `brainRunStore.ts` 2,940, `TaskMgmtContent.tsx` 2,761, `cloudAgentEngine.ts` 2,768, `agentHostRoutes.ts` 2,365, `ManagerService.ts` 2,109, `managerDiagnostics.ts` 1,878, `bfApi.ts` 1,684, `index.ts` 1,470, `extension.ts` 1,420, `MarketplacePageClient.tsx` 1,338, `jobRoutes.ts` 1,301. Splits named in the 2026-09-05 review (manager `MANAGER_STAGES` registry, `routeTable.ts`, `commandRegistry.ts`, per-category lazy marketplace). Pattern proven by `cloudAgentEngine`.
-- **Root closure is 596 modules;** `builderforceApi.ts` (10,633 lines, 96 namespaces, 96 uncached) → `lib/api/<domain>.ts`, `withQuery`, `apiPost/Patch/Delete`, client caching. Component-level `next/dynamic` in only 9 files.
-- **Unused primitives:** cards re-declared in 110 files, loading/error/empty in ~101, `ui/Field` 4 consumers vs 76 copies, 13 `fetchProjects()` callers, 143 raw storage sites; 818 raw `<button>`/`<input>` on marketing.
-- **Duplication left by the `CreationCanvas` split:** 68 hand-written `canEdit` guards, 44 `smoothstep` literals (`stage.connect()` has no call sites).
-- **Canvas phone + desktop have no real-browser pass** (PRD 28 §6; PRD 28 shipped and was removed 2026-10-25). The phone arrangements are unit-tested through the viewport seam, but no Playwright run covers the canvas at 390px and at desktop width in both themes (the `+` as the command bar, the persistent bottom nav, Brain never covering the surface uninvited). Add it to the e2e suite. Not blocked.
-- **PRD 21 nav remainder ([PRD 21](./docs/specs/21-prd-unified-experience.md)).** M3's second half: the seat workbench Level 2 is still each destination's own tab set rather than `filter(parent === seat)` (waits on PRD 19 tracks bringing leaves to their parent). M5: clicking a dimmed (unearned) row does not open its workbench in a preview state. Not blocked.
-- **PRD 22 open items ([PRD 22](./docs/specs/22-prd-browser-performance-domain-execution-analysis.md)).** Off the interaction thread: browser LoRA training CPU work (§3.2, P0), file/dataset processing (§3.6), the bounded diff (§3.12). Full-graph re-serialisation on every ordinary Canvas edit (§3.7). No explicit service-worker/model-cache quota, version and eviction policy (§3.9). No frontend bounded-context map or Canvas aggregate root (§4.4), and no enforced creational / reuse boundary (§3.18). No cyclomatic-complexity ratchet beyond the §9.4 baseline. The §5 Phase-0 browser/React profiling baseline has not been captured. Not blocked.
-- **i18n:** ~330 components hardcoded English; no CJK font fallback; catalogs partitioned by locale rather than bounded context (243 namespaces) — re-partition as `messages/<domain>/`, one commit.
-- **Retire-or-build decisions (yours):** `BUILDERFORCE_MODELS` fallback; the unlinked `app/import/*` scaffold.
-- **Smaller:** object timeline — 5 of 109 `recordActivity` sites pass `objectId`; `mailbox/mime.ts` extraction; `feedback-sdk` has no in-repo consumer; worker doesn't check `jti` revocation (*decision:* introspection call vs DB access); three points-fraud heuristics need unsent signals; no sweep for pre-OTP fake accounts.
+- **Layering ratchet at 96;** 81 presentation modules import the schema. Worst: `creationSessionRoutes`, `adminRoutes`, `qaRoutes`.
+- **202 unscoped tenant queries in 89 files.**
+- **14 of 37 permissions advisory.**
+- **God modules:** `builtinMcpService` 4,607, `adminRoutes` 2,994, `creationSessionRoutes` 2,994, `TaskMgmtContent` 2,761, `agentHostRoutes` 2,173, `ManagerService` 2,126, `managerDiagnostics` 1,878, `boardsync/providers` 1,859, `extension.ts` 1,707, `api/src/index.ts` 1,536, `jobRoutes` 1,261, `MarketplacePageClient` 1,161.
+- **`builderforceApi.ts` 9,988 lines.** Split to `lib/api/<domain>.ts`.
+- **Unused primitives:** ~21 `fetchProjects()` callers, 128 raw storage sites, 76 `canEdit` guards, 55 `smoothstep` literals; `stage.connect` has no production caller.
+- **Canvas real-browser pass** misses the `+` command bar, bottom nav and Brain-not-covering.
+- **PRD 21 nav:** M3 seat workbench, M5 dimmed-row preview.
+- **[PRD 22](./docs/specs/22-prd-browser-performance-domain-execution-analysis.md):** LoRA off the main thread, off-thread file and diff work, cache eviction, cyclomatic ratchet, Phase-0 baseline.
+- **i18n:** no CJK fallback; re-partition 349 namespaces by domain; measure the hardcoded remainder.
+- **Decide:** `BUILDERFORCE_MODELS` fallback.
+- **Smaller:** 24 of 113 `recordActivity` calls pass `objectId`; `buildMimeMessage` extraction; `feedback-sdk` is a CDN snippet only; no sweep for pre-OTP accounts.
 
-### Identity and governance `[identity]` `[governance]`
+### Identity `[identity]`
 
-- **OAuth consent screen says "Builder Force".** *Blocker: Google Cloud Console field → `Builderforce.ai`.* Gmail/Calendar/Drive/YouTube work for test users only until verification. *Blocker: publish + demo video + resubmit.*
-- **OAuth over `/gateway/*` builds the wrong callback** (`stripGatewayPrefix` loses the prefix). *Blocker: register `https://builderforce.ai/gateway/api/auth/oauth/<provider>/callback` in all four consoles, then ship together.*
-- **A signed-in canvas turn once sent no tenant token** (session `bf886fc1`). *Blocker: a storage timeline or two-tab repro.*
-- **Segmented mode not usable:** ~35 insert sites lack `segmentId`; isolation is app-level (add RLS); no segment roles or claim; no no-bleed DB test.
-- **Spec/impl identity contradiction ([PRD 05](./docs/specs/05-integration-embed-and-identity.md)):** add inbound OIDC, `resolveSegment(jwt)`, S2S tokens; unify PM onto `projects`/`tasks`/`specs` (decided 2026-09-12). `tenant_webhooks` is likely already satisfied by `webhook_subscriptions` (`schema/finance.ts`: tenant-scoped, optional segment; PRD 05 §4.3 uses it) — confirm, then drop it from this entry.
-- **Superadmin module permissions: `tenant_modules` was never created.** The superadmin impersonation & permissions PRD (§7, removed 2026-10-25) specified `platform_modules`, `tenant_modules` and `tenant_member_modules`; only `tenant_member_modules` exists. Confirm whether tenant-level module enablement was dropped on purpose (plan entitlements cover it) or is missing, and record the answer. *Blocker: operator decision.*
-- **SOC 2 Type I** is the enterprise gate (Q4 2026). Embed rail: `sprints`/`velocity` views render blank; `SessionRoomDO` needs a deploy.
+- **OAuth consent name; Google apps test-only.** *Blocker: console field, verification.*
+- **OAuth over `/gateway/*` builds the wrong callback.** *Blocker: register in all four consoles.*
+- **A canvas turn once sent no tenant token.** *Blocker: a repro.*
+- **Segmented mode unusable:** inserts on `segment_id` tables lack `segmentId` (trigger 0056 raises); no RLS, segment roles or no-bleed test.
+- **[PRD 05](./docs/specs/05-integration-embed-and-identity.md):** inbound host OIDC. Nothing mints the `acct`/`co` claims `resolveSegment` reads.
+- **`tenant_modules` never created** (`platform_modules` and `tenant_member_modules` exist). *Blocker: operator confirms intent.*
 
-### Billing (Builderforce's own) `[finance]`
+### Infrastructure and cost `[platform]`
 
-- **Stripe webhook unregistered and `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` unset — no tenant can upgrade.** Subscribe `https://api.builderforce.ai/api/webhooks/payment` to five events. *Blocker: operator Stripe + `wrangler secret put`.*
-
-### Infrastructure, CI/CD and cost `[platform]`
-
-- **🟠 Immutable audit tables grow without bound** (`execution_claims`, `execution_claim_evidence`, `agent_context_contributions`, `agent_outbound_inspections`, `agent_capability_grants` via `agent_run_principals`). Their BEFORE DELETE triggers make any purge fail, and `execution_claim_evidence`'s RESTRICT FK blocks the `tool_audit_events` purge. Fix = triggers allow DELETE only under `SET LOCAL app.retention = 'on'`, and the purge sets it. *Blocker: operator decision on how long claim/audit history is kept.*
-- **🟡 Index and table drops from the 2026-10-17 architecture review held** (unused indexes and the dead table listed on the review's Neon storage sheet, https://claude.ai/artifact/Kzm2Pp136DUx3E5oCUWgEe). *Blocker: operator approval for destructive migrations.*
-- **🟡 Cache-version primitives duplicated:** `infrastructure/cache/versionToken.ts` (`versionToken`/`bumpVersion`, 2 s L1) repeats `getCacheVersion` + `bumpExecutionState` / `bumpTicketSearchVersion` / `bumpOutcomesVersion` / `bumpPublicCanvasVersion` in `readThroughCache.ts` (30 s L1). Fold into one `getCacheVersion(…, {l1TtlMs})` + never-throwing `bumpCacheVersionSafe`; the shared `retryDelete` still backs off on KV 429s. Also: the tenant-wide unread bump on every chat append (`brainMessageStore.appendRaw`) keeps the unread cache cold in busy tenants — key unread per chat audience.
-- **🟡 Legacy `agents` reads remain** in MCP `agents.list` / `registered_agents.list` (`builtinMcpService.ts`) and `creationSessionRoutes.ts:~599`; `resolveAssignedAgent` can overflow int4; suppression `identifier_type` case and the dead `isSuppressed` / `suppressedSubset` alias in `marketing/suppression.ts`.
-- **🟡 Agents usage rollup no longer backfills:** the kernel rollup recomputes a trailing 3 days, so a fresh install has no `agents.tokens` / `agents.cost_cents` history before its first sweep.
-
-- **🟠 esbuild < 0.28.1 (GHSA) still locked in 6 packages — Dependabot reports `security_update_not_possible`.** Fixed 2026-10-11 in replay-sdk + the 8 tsup packages via `pnpm.overrides.esbuild ^0.28.2` (tsup 8.5.1 pins `^0.27.0`, so no in-range fix exists). Remaining, each with a different source that needs its own check before forcing 0.28: `api` (0.18.20/0.19.12 via drizzle-kit's `@esbuild-kit` — forcing may break `drizzle-kit push` in CI), `frontend` (0.14.47/0.15.18/0.27.3 — find the old-pin consumers first), `clients/vscode` (0.24.2/0.25.12 — the VSIX bundler), `agent-runtime` (0.27.3), `webdit/runtime` (0.21.5), `docs-site` (0.27.3, npm lockfile → `overrides`). All dev/build-time only. Fix = per package: override → regenerate lockfile → typecheck/build/test (+ `drizzle-kit` run for api, VSIX package for vscode). Not blocked — scoped out of the 2026-10-11 pass pending operator go-ahead on the riskier api/vscode overrides.
-
-- **🔴 $0 platform: Cloudflare Free + Neon Free (plan 2026-10-03).** Sizes 10-10: core 444 MB, transactional 184 MB, apps 8.2 MB. Run-telemetry copy hasn't run — `npm run db:copy-run-telemetry`, then `--purge-source` (*blocker: operator with production credentials*). `VACUUM FULL` reclaims ~50 MB. Keep `builderforce-apps` (live sites); delete only `builderforce-primary`. Target: thin router Worker; agents on the user's host → GitHub Actions → shell-less DO; in-browser previews (BuilderForce WebContainers); Playwright on Actions; CPU-heavy routes client-side; Containers for paid via `planFeatures.containerRuntime`. Sequence: enable observability and measure → cut telemetry + gate cron → re-default cloud surface → move QA → move CPU routes + per-sweep DO alarms → cache L2 off KV → hosted Checkout → downgrade Cloudflare → downgrade Neon. *Blockers: consoles, CPU measurements, acceptance of 2–4 concurrent agents.* (2026-10-18: "WebContainer licence" removed from this list — in-browser previews run on `@seanhogg/builderforce-webcontainers` (MIT); `@webcontainer/api` is gone from every package, so there is no StackBlitz licence to buy. See cancelled #5225.) Next/Nuxt/SvelteKit dev servers unsupported; Studio Database has no file storage (*decision: quota/abuse policy*).
-- **🟠 `builderforce-core` is on Neon Launch (paid) since the 2026-10-18 quota outage.** Storage is cut (2026-10-25: 621 → 319 MB — run telemetry copied to ops and truncated on core, superadmin step rows deleted, `VACUUM FULL`). All step rows are gone from core (the last 253 deleted 2026-10-25). Remaining: enable autosuspend (entry below), then downgrade to Free in the console. *Blocker: Neon console access (operator).*
-- **🟠 Enable autosuspend + 0.25 CU on core** (Neon console toggle).
-- **🟡 Route consolidation, remaining pieces:** campaigns are only partly consolidated (email and social share the delivery-retry rule; their state machines differ). The VS Code webview bundle keeps the old skill-assignment paths and the pre-1265 `projectAgentId` / pre-1266 `releaseDate` fields until the next VSIX build (the API aliases still return both). Canvas comments vs kernel annotations are still two stores.
-- **VS Code extension tests red on `main` (`34bc9d5`):** `webviewAssets.test.ts` (the loaded sheet lacks `.bf-header`) and `webview/src/pageEngines.test.ts` (bfi engine wasm asset). They come from the One AI surface / local-models work, and they block `Publish VS Code extension` in Release. Owner: that work's session.
-- **Cutover rows on the old primary** (12 telemetry rows would be lost). *Blocker: operator runs `npm run db:copy-run-telemetry`, then `--purge-source`.* (2026-10-18: this line previously named a `reconcile.sh` + `merge.sql` prerequisite. Neither file exists in the repo — `reconcile.sh` appeared only as prose here — so that pointer was stale; the script's own documented sequence copy → purge → VACUUM FULL → delete primary is the real procedure.) Then delete `builderforce-primary` (console) and drop core's stale site tables (not blocked).
-- **No retention on canvas history** (`creation_session_events` 50 MB, `_snapshots` 41 MB, `brain_chat_messages` 37 MB). *Blocker: decision on history kept.*
-- **`inTransaction` (WebSocket Pool) doesn't map 402** on the pool path.
-- **Sites Worker hasn't taken traffic;** needs `SITE_VISITOR_SALT` on both Workers. *Blocker: the secret + one release.*
-- **API Worker ~21 MB** — next split is `/llm` + `/v1`, after cutting the `replayApp.ts` → `index.ts` cycle.
-- **Flaky/heap-bound tests:** api full run fails a different 1–2 files each time; `CreationCanvas.test.tsx` fails a moving four (shared `localStorage`, bare `fireEvent`); `startupListing.test.ts` 1 ms `zeroCashDate` (pass one `now`); `registry.test.ts:207`; `useBrainConversation.test.tsx` and `harness/scenarios.test.ts` exhaust the heap; three `subagent-registry` announce-retry tests red (owner of `634dc1200`/`52a480513`).
-- **CI safety:** no ephemeral-DB migrate dry-run; the `production` environment's reviewer rule is unset (operator); CodeQL `query-filters` untuned; `agent-runtime` tests advisory (`continue-on-error`), 3,449 unformatted files, 588 lint errors, 12 files over 500 LOC; `qa-e2e` can't gate PRs; `pnpm dev` Turbopack fails on Windows symlinks.
-- **Brand residuals:** `clk_`→`bfa_` dual-accept — rotate legacy keys, then drop. Schema/`/api/claws`/`CODERCLAW_*` kept by decision.
+- **🔴 $0 platform (plan 2026-10-03).** Worker observability is off (`wrangler.toml:375`). Enable it, gate cron, re-default cloud surface, move QA and CPU routes, take L2 off KV, then downgrade. *Blocker: consoles, CPU measurements, acceptance of 2–4 concurrent agents.*
+- **🟠 `builderforce-core` on Neon Launch.** Enable autosuspend + 0.25 CU, then downgrade; delete `builderforce-primary`. *Blocker: Neon console.* Drop core's stale site tables.
+- **Production hardening:** no SIEM export or fleet failover.
+- **No row retention on canvas history** (`creation_session_events`, `_snapshots`, `brain_chat_messages`). *Blocker: decision on history kept.*
+- **🟡 Unused indexes from the 2026-10-17 review held** (https://claude.ai/artifact/Kzm2Pp136DUx3E5oCUWgEe). *Blocker: operator approval.*
+- **🟡 Legacy leftovers:** `isSuppressed` is test-only; `agents` table still declared at `schema/agents.ts:327`.
+- **🟡 Two stores:** campaign state machines; canvas comments vs kernel annotations.
+- **Cloudflare serves a managed challenge to every datacenter caller.** `POST api.builderforce.ai/mcp` is challenged, so `release.yml` skips the MCP registry publish. Apply `scripts/cloudflare-bot-exception.mjs`. *Blocker: a zone token with Zone Settings:Edit + WAF:Edit.*
+- **Strategy content in public git history.** Purge built. *Blocker: a quiet 30-minute window, then GitHub Support for `refs/pull/*`.*
+- **Provider credit:** disconnect Moonshot on tenant 1; Together, FluxAPI, HF out. *Blocker: operator.*
+- **`http://www` redirect** targets `http://`. *Blocker: a zone-edit credential.*
+- **`inTransaction` doesn't map 402** on the pool path.
+- **API Worker ~21 MB.** Split `/llm` + `/v1`.
+- **Brand residuals:** rotate `clk_` keys.

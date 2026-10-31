@@ -663,7 +663,7 @@ Theme persists to `localStorage('bf-theme')` with an anti-FOUC inline script app
 
 ## Roadmap & Gap Register
 
-Planned milestones (including **PHASE 4 — Multi-Agent Orchestration at Scale**) and the full **Consolidated Gap Register** — 341 items (53 resolved · 288 open, grouped by revenue impact) plus archived thematic context — now live in **[ROADMAP.md](./ROADMAP.md)**, the single source of truth for planned work and deferred issues. New deferred issues are appended there.
+Open work lives in the **Consolidated Gap Register** in **[ROADMAP.md](./ROADMAP.md)**, grouped by stage of the arc. Finished work moves to **[DONE.md](./DONE.md)**.
 
 ---
 

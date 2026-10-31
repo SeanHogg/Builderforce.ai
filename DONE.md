@@ -1,3 +1,79 @@
+## ✅ RESOLVED 2026-10-31 — Roadmap validated against the code: closed entries moved here, Feature Register retired
+
+Every ROADMAP entry was checked against the code, CI and config. These entries were already finished or no longer true. No code changed in this pass. Evidence is a read of the code and CI results at `85417312e`, with no tests run and no production behaviour observed.
+
+**CI and release**
+- `main` red at `7b79a244f` and everything listed under it (unterminated strings, `params` redeclaration, unpublished memory exports, ratchets). Release is green at `85417312e` (run 41229700854). The one piece left, repo-map's undeclared dependency, stays on the roadmap.
+- VS Code extension tests red: `webviewAssets.test.ts` now asserts `.bf-shead`; Verify passes.
+- `@seanhogg/builderforce-replay` is on npm at 2026.10.3 (2026-10-17).
+- `startupListing.test.ts` pins its clock; the `subagent-registry` tests pass in `test:fast`; `agent-runtime` tests are no longer advisory.
+- The six esbuild packages the entry named lock 0.28.2; two it missed stay on the roadmap.
+
+**Agents and runs**
+- The sandbox image deploys on every release (run 41229700854 built it). Its capacity note stays on the roadmap.
+- Cloud observability: `/executions/:id/stream`, `executionBoardBroadcast.ts` and reaper pushes through `wireExecutionEventSinks.ts`.
+- PRD 09 S5, S6, W2, B2 are closed, and `bypassPermissions` is gone from code.
+- PRD commit covers GitLab and Bitbucket; `tasks.update/move` are granted to cloud agents.
+- Per-task repo sets route and open per-repo PRs (0956, `taskRepoSet.ts`); `POST` retry, `hasArchitecturePrd` and strict `json_schema` exist for architect runs.
+- Two plain-Node runners: neither carries a loop now; `cloudAgentEngine` owns it.
+- plugin-sdk DTS build fixed (2dd01fc70).
+- Bound lanes: `TaskMgmtContent` builds columns from lanes (orphans included), lane deletes reassign, and `laneCapabilityExpectation` gives capability-ranked lane defaults. Lane picker, all-projects scoping and `EpicTreeView` exist.
+- `autonomyWiringAudit.test.ts` pins spec-shaped tickets.
+- Ceremony history, drag ghost, retro/poker tabs, pause/resume, server-side auto-dispatch.
+
+**Gateway and Evermind**
+- `SUPERSEDED_MODEL_IDS` derives from `catalogSupersessions()` and `modelDrift.test.ts` asserts it.
+- `byoAlertedVendors` feeds `demotedVendors` in `proxySeed.ts`.
+- `TENANT_RATE_LIMITER` is bound (`wrangler.toml`). Production enforcement not observed.
+- Free overflow cap, Pro attempt budget of 5, `agentHostId` attribution.
+- Cooldown grouping and re-check, stream failover frames, empty-200 detection, `strictSchema`, `messageShapeSanitizer.ts`.
+- Trace capture: `/v1/images` logs, streams carry `response_body`, `ideAiRoutes` logs, runs deep-link.
+- `llm_usage_log.tenant_id` no longer has the FK; `CachingBridge` survives only in comments.
+- Inherited Evermind writes get a 409 (`refuseInheritedWrite`).
+- P1 one run-context assembly: `runContextSource` + `ContextReconciler`, served to VS Code and on-prem.
+- Project memory embedding fallback: `memoryEmbeddingPolicy.ts` + `embedding_1024` (1256).
+- Learned-routing on-prem consumer; `bm25.ts` tokenize hook; `traceparent`.
+- Offline memory M01, M02, M06.
+
+**Platform and ops**
+- Audit retention: 1238 gates DELETE on `app.retention`, and `sweptTablesBounded.ts` purges at 90 days.
+- Cache versions: `versionToken.ts` delegates to `getCacheVersion`; unread bumps per chat audience.
+- Agents rollup backfills from the earliest `llm_usage_log` row on first sweep.
+- Sites Worker holds `*.builderforce.ai/*`, and `SITE_VISITOR_SALT` syncs to both Workers.
+- `answer_cache` dropped (1239); telemetry copy, truncate and `VACUUM FULL` ran (2026-10-25).
+- Legacy `agents` MCP reads, int4 overflow and suppression case are fixed.
+- `/incidents?tab=escalation` returns 200; plain `http://` redirects on probed paths.
+- `spawn.builderforce.ai` redirects to `/spawn`.
+- `SessionRoomDO` is deployed; embed `sprints`/`velocity` render `TrackerSurface`; S2S runs on `bfk_*`; `webhook_subscriptions` covers `tenant_webhooks`.
+- `marketing_sessions` moved to `schema/growth.ts`; `calendar`/`drive`/`mailbox` adjudicated not to merge.
+- `jti` revocation: `worker/src/lib/auth.ts` introspects.
+- PRD 22 context map, Canvas aggregate root and creational ratchet exist.
+- `/embed` deploy dependency is gone; VS Code retired iframes.
+
+**Canvas and previews**
+- Video, voice and drawing have runtimes.
+- Scan-to-phone mints a live preview first, falls back to the published build and says which.
+- Surface picker hard-disables `github_actions` when readiness is false.
+- The Actions reconcile no longer needs a manual fix: `gh-agent-workflow-refresh` re-commits.
+- `installCommand`, Metro/Expo/Next candidates, stable `ticketBranchName`, `reconcilePullRequestState.ts`.
+- Bitbucket and GitLab detail, real `commitUrl`, GitLab and Bitbucket Cloud revert, CI log tails beyond Actions.
+- Agentic Tester: `ide_agents` entry, R2 screenshots, routes beyond `/`, project-scoped heat.
+- Workflow builder: branch pruning, expression transforms, `mcp` nodes, project scoping.
+- Phone surface switcher is phase-gated (`CanvasSurfaceStrip.tsx:49`).
+
+**Reach**
+- All 17 seats have rollups (82b91e6c0), which retires "14 of 17 seats write no domain metric". `site_traffic_daily` and `rd_financials_quarterly` are live.
+- Fixed-bid escrow and milestones, Stripe/PayPal/Wise payouts, W-9/W-8/1099, agency tables, `ProBonoBadge`, advisor A3 and A5.
+- `'agent'` is in the enum, with agent, skill and knowledge checkout.
+- `available_for_hire` drift gone; per-article OG images; teaser heads are server metadata.
+- PRD 21 §7.2 (`/security` kept), §11.9.3 (`run` shipped) and §11.9.6 (Assets) are settled.
+
+**Retired without code**
+- `people_strategic_objectives` was a guardrail, not a gap; PRD 18 holds it.
+- "Cloud affect can't run GPU-trained limbic models" was inherent, not actionable.
+- Consolidated Feature Register. Shipped rows: Managed Agent hosting, onboarding, live orchestration workspace, inline diff, session checkpoints, remote task streaming, multi-model role routing, spec import, outcome contract, presentation export. Phase 4, 6 and 7 rows pointed at milestone tables removed in `14e196981`. Open rows now live in the register: SOC 2, marketplace monetization, enterprise license, production hardening, unsigned installers.
+- Key Metrics prose: the contract is OUTCOME-METRICS.md.
+
 ## ✅ RESOLVED 2026-10-31 — The container shell (PRD 35 WS2f), the `bfApi.ts` split, native chat project adoption, and snapshot batching (builderforce-memory 2026.10.36)
 
 - **WS2f, the container shell.** A cloud run's `run_command` now honours `cwd`, `background` and `yieldMs`, on both the Cloudflare Container and the GitHub Actions runner.
