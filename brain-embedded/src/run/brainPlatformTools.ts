@@ -51,6 +51,9 @@ export function brainPlatformTools(run: RunLoopContext): BrainPlatform {
     },
     tools: {
       closed: true,
+      // The Brain's read coverage (`beforeDispatchHook`'s exact-repeat, covered-window and replay answers, `afterDispatchHook`'s cache) is
+      // the run's one: the agent's own would answer a repeat first, in its own wording and shape.
+      readsCovered: true,
       verbatimText: true,
       schemas: () => {
         const catalog = (run.allTools ?? []) as unknown as ToolSchema[];

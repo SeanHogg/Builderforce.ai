@@ -96,6 +96,12 @@ export interface PlatformTools {
    * called tools, after the guards policy has folded it, before the next step's {@link turn}.
    */
   turnEnded?(env: { step: number }): Promise<void> | void;
+  /**
+   * The surface keeps its own read coverage (additive): its exact-repeat and covered-window answers, and its record of what a read
+   * SERVED, run inside {@link execute}. The agent's own read coverage then neither answers nor records the surface's reads, or a
+   * repeated read would be judged twice and answered by whichever guard saw it first.
+   */
+  readsCovered?: boolean;
   /** The relevance selection the tools policy applies to {@link schemas}. */
   selection: PlatformSelection;
   /** Run one call. A refusal is a result the model reads, never a throw. */

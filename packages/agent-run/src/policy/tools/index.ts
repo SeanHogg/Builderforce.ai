@@ -128,10 +128,10 @@ export const toolsHook: ToolsHook = {
   select: selectedTools,
   beforeDispatch: (ctx, call) => {
     loadCalledDeferredTool(ctx, call);
-    return coveredReadAnswer(ctx, call);
+    return ctx.ports.platform?.readsCovered ? undefined : coveredReadAnswer(ctx, call);
   },
   meta: toolSearchAnswer,
-  observe: recordServedRead,
+  observe: (ctx, call, result, isError) => (ctx.ports.platform?.readsCovered ? undefined : recordServedRead(ctx, call, result, isError)),
   gate: gateCall,
 };
 
