@@ -9,6 +9,7 @@ import { getProcessSupervisor } from "../process/supervisor/index.js";
 import { resolveSessionAgentIds } from "./agent-scope.js";
 import { makeBootstrapWarn, resolveBootstrapContextForRun } from "./bootstrap-files.js";
 import { resolveCliBackendConfig } from "./cli-backends.js";
+import { governCliRun } from "./cli-runner/governance.js";
 import {
   appendImagePathsToPrompt,
   buildCliSupervisorScopeKey,
@@ -78,8 +79,12 @@ export async function runCliAgent(params: {
   const normalizedModel = normalizeCliModel(modelId, backend);
   const modelDisplay = `${params.provider}/${modelId}`;
 
+  // The tenant's governance: refuses this backend (failover-eligible) when a gate it cannot be held to is in force.
+  const governance = await governCliRun({ provider: params.provider, model: params.model });
+
   const extraSystemPrompt = [
     params.extraSystemPrompt?.trim(),
+    governance,
     "Tools are disabled in this session. Do not call tools.",
   ]
     .filter(Boolean)
