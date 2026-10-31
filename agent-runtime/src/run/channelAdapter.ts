@@ -19,8 +19,8 @@
  */
 
 import { RUN_CANCELLED_REASON, asksForSubagents, runAgent } from "@builderforce/agent-run";
-import type { ContextSource, RunPolicy, RunPorts, RunTask, SteeringSource, SteerInput } from "@builderforce/agent-run";
-import { RunKnowledgeRecorder, type CapabilityProvider } from "@builderforce/agent-tools";
+import type { ContextSource, RunEvent, RunMessage, RunPolicy, RunPorts, RunTask, SteeringSource, SteerInput } from "@builderforce/agent-run";
+import { RunKnowledgeRecorder, renderPolicyDirectives, type CapabilityProvider } from "@builderforce/agent-tools";
 import { randomUUID } from "node:crypto";
 import type { AgentLoopConfig } from "../builderforce/agent-loop/agent-loop-config.js";
 import type { EventStream } from "../builderforce/agent-loop/event-stream.js";
@@ -39,6 +39,13 @@ import { channelTools } from "./channelTools.js";
 import { onPremHuman } from "./onPremHuman.js";
 import { reportRunRow } from "./outcomeReporter.js";
 
+/**
+ * The longest a channel or cron run waits on a governance approval. A person is reading a chat (or nobody is, in a cron job),
+ * and the session's lane queues behind the call, so a wait that runs to the approval gate's 10 minutes stalls every later message.
+ * Past it the call is refused and the model says so in its reply.
+ */
+export const CHANNEL_APPROVAL_WAIT_MS = 60_000;
+
 export interface ChannelRunInput {
   prompts: AgentMessage[];
   context: AgentContext;
@@ -53,6 +60,11 @@ function steered(messages: readonly AgentMessage[]): SteerInput[] {
     const row = toRunRow(m);
     return { text: row.content || textOf((m as { content?: unknown }).content), ...(row.parts?.length ? { parts: row.parts } : {}) };
   });
+}
+
+/** What a run says when governance gates refused its calls until it ran out of budget or tripped its breaker, with nothing written to the person. */
+function noReplyMessage(reason: string, gateIds: ReadonlySet<string>): string {
+  return `The run ended without a reply (${reason}): its tool calls were refused or failed. Refused by governance gate ${[...gateIds].join(", ")}.`;
 }
 
 /** The policy DATA of a channel run. How the run behaves is the agent's. */
@@ -123,17 +135,37 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
       bridge.start(prompts);
       const request = promptText(prompts);
       const knowledge = new RunKnowledgeRecorder();
+      // What the run wrote to the person, and which governance gates refused its calls: an exhausted run with no reply says why.
+      let replied = false;
+      const refusedBy = new Set<string>();
       const tools = context.tools ?? [];
       const capabilities: CapabilityProvider = { capabilities: new Set() };
       const ports: RunPorts = {
         model: channelModelTransport({ models, streamFn, config, tools, bridge }),
         capabilities,
-        store: { load: () => undefined, save: () => undefined, appended: bridge.appended },
+        store: {
+          load: () => undefined,
+          save: () => undefined,
+          appended: (row: RunMessage) => {
+            if (row.role === "assistant" && row.content.trim().length > 0) replied = true;
+            bridge.appended(row);
+          },
+        },
         // The run's uniform outcome row (§8.2), written once at its end. A channel run has no execution id: the row is keyed by the
         // run's own id (`task.runId`) and carries the model that served it; nothing else is claimed.
-        events: { emit: bridge.emit, outcome: (row) => reportRunRow(row) },
+        events: {
+          emit: (event: RunEvent) => {
+            if (event.kind === "policy.blocked") refusedBy.add(event.gateId);
+            bridge.emit(event);
+          },
+          outcome: (row) => reportRunRow(row),
+        },
         // A governance gate guards an act: with no approver to reach, the call is refused (the ticket path keeps its standalone default).
-        human: onPremHuman(() => capabilities, (request) => requestHumanInput({ ...request, failClosed: true })),
+        // The wait is bounded and ends with the run (see CHANNEL_APPROVAL_WAIT_MS).
+        human: onPremHuman(() => capabilities, (request) => requestHumanInput({ ...request, failClosed: true }), {
+          approvalTimeoutMs: CHANNEL_APPROVAL_WAIT_MS,
+          ...(signal ? { signal } : {}),
+        }),
         // The channel's runs close with what the model said: no forced no-tools turn after a tripped breaker (the runner never had one).
         delivery: { rungs: () => [], owns: { synthesis: true } },
         steering: steeringOf(config),
@@ -141,8 +173,11 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
         platform: channelTools({ tools, bridge, knowledge: config.knowledge ?? knowledge, query: request, window: (ref) => resolveContextWindowTokens(models.resolve(ref)) }),
       };
       // The opening rows are the conversation so far: the system prompt, the session's history, then the prompts (the last is the task).
+      // The transcript is handed over whole, so the kernel's own opening rows never render the governance directives: the system row carries
+      // them here, through the ONE renderer, or an `inject-directive` gate would never reach the model on a channel.
+      const system = [renderPolicyDirectives(config.policyGates), context.systemPrompt ?? ""].filter((part) => part.length > 0).join("\n\n");
       const rows = [
-        ...(context.systemPrompt ? [{ role: "system" as const, content: context.systemPrompt }] : []),
+        ...(system ? [{ role: "system" as const, content: system }] : []),
         ...context.messages.map(toRunRow),
         ...prompts.map(toRunRow),
       ];
@@ -153,6 +188,10 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
       // A failure with no model turn behind it must still reach the runner as the errored message it reads (it fails over on it).
       // A run stopped by a breaker or a budget ended as the runner always saw it: on its last tool result.
       if (outcome.kind === "failed" && !outcome.exhausted) bridge.fail(outcome.reason, outcome.reason === RUN_CANCELLED_REASON ? "aborted" : "error");
+      // A run that spent its budget or tripped its breaker AFTER saying something is delivered as it always was. One whose calls a
+      // governance gate refused and that never wrote a word would otherwise end silently (the channel owns its synthesis and the run
+      // settled on its last tool result): say what stopped it.
+      else if (outcome.kind === "failed" && !replied && refusedBy.size > 0) bridge.fail(noReplyMessage(outcome.reason, refusedBy), "error");
     } catch (err) {
       logWarn(`[on-prem] channel run failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {

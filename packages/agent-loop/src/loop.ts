@@ -224,10 +224,13 @@ export async function runAgentLoop<M>(args: LoopRunArgs<M>): Promise<LoopResult>
       const batch = tail ? prepared.slice(0, -1) : prepared;
       // A dispatch in flight is RACED against the cancel signal: Stop settles the run
       // `cancelled` now, not when a 10-minute command ends; its late result is dropped.
+      // A run stopped while `beforeDispatch` was still deciding (a governance gate waiting on an approver) dispatches nothing: the tool
+      // never starts, rather than starting only to have its result dropped.
+      const start = (call: ParsedToolCall) => (signal?.aborted ? Promise.resolve(CANCELLED) : raceCancel(ports.dispatch(call, ctx), signal));
       const dispatchOne = (p: { call: ParsedToolCall; result?: LoopDispatchResult }) =>
-        p.result ? Promise.resolve(p.result) : raceCancel(ports.dispatch(p.call, ctx), signal);
+        p.result ? Promise.resolve(p.result) : start(p.call);
       const results = await Promise.all(batch.map(dispatchOne));
-      if (tail && !results.includes(CANCELLED)) results.push(await raceCancel(ports.dispatch(tail.call, ctx), signal));
+      if (tail && !results.includes(CANCELLED)) results.push(await start(tail.call));
       if (results.includes(CANCELLED)) {
         // The assistant turn is already in the transcript: every call from here on gets a
         // stopped row, so the history never carries a tool_call without its answer.

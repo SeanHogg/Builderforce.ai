@@ -17,10 +17,19 @@ import { requestHumanInput, type HumanInputRequest, type HumanInputResult } from
 /** The longest an approval's arguments are shown to the approver. */
 const ARGS_PREVIEW_CHARS = 500;
 
+/** How an approval is waited for. A ticket keeps the gate's own (long) wait; a channel or cron run bounds it. */
+export interface OnPremHumanOptions {
+  /** The longest an approval waits for an approver before it is refused. */
+  approvalTimeoutMs?: number;
+  /** The run's cancel signal: Stop ends the wait at once, refused. */
+  signal?: AbortSignal;
+}
+
 /** The channel over a provider (read late: the provider is built after the ports that need it). */
 export function onPremHuman(
   provider: () => CapabilityProvider,
   requestHuman: (request: HumanInputRequest) => Promise<HumanInputResult> = requestHumanInput,
+  options: OnPremHumanOptions = {},
 ): HumanChannel {
   return {
     async ask(question, options): Promise<HumanAnswer> {
@@ -39,6 +48,8 @@ export function onPremHuman(
         actionType: `tool.${tool}`,
         description: `Approve the agent's use of "${tool}"? ${call?.reason ?? gate.reason ?? ""}${args ? `\n\nArguments: ${args}` : ""}`.trim(),
         metadata: { gateId: gate.id, tool, ...(call ? { args: call.args } : {}) },
+        ...(options.approvalTimeoutMs !== undefined ? { timeoutMs: options.approvalTimeoutMs } : {}),
+        ...(options.signal ? { signal: options.signal } : {}),
       });
       if (result.decision === "approved") return { kind: "answered", answer: result.responseText ?? "", approved: true };
       if (result.decision === "timeout") return { kind: "answered", answer: "No approver responded in time.", approved: false };
