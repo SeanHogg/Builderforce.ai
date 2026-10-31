@@ -7,7 +7,7 @@
  */
 
 import { priceTierBoundary } from "@builderforce/model-catalog";
-import type { CostLeverId } from "../../contract.js";
+import type { CostLeverId, RunMessage } from "../../contract.js";
 import { emit } from "../../runContext.js";
 import type { CompactionResult, PolicyContext } from "../hooks.js";
 import { packForModelHandoff } from "./handoff.js";
@@ -37,7 +37,7 @@ export async function handOff(ctx: PolicyContext): Promise<CompactionResult | vo
   // The task the run was given survives the cut: a stall's note is the latest directive now, so the packer's own rule would let it go.
   const task = ctx.messages.find((m) => m.task === true) ?? ctx.messages.find((m) => m.role === "user");
   let note = "";
-  const packed = await packForModelHandoff(
+  const packed = await packForModelHandoff<RunMessage>(
     {
       messages: ctx.messages.slice(split),
       systemPrompt: system.map((m) => m.content).join("\n\n"),
