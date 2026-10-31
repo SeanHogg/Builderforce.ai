@@ -41,9 +41,9 @@ import { reduceRunPolicy } from "@builderforce/run-policy";
 import { RUN_CANCELLED_REASON, type ContextPack, type RunMessage, type RunOutcome } from "./contract.js";
 import { composePolicyHooks } from "./policy/index.js";
 import { portInterruptWatch } from "./policy/steering/index.js";
-import { announceRow, currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
+import { announceRow, appendRows, currentView, emit, policyContext, type RunAgentInput } from "./runContext.js";
 import { asMessages, freshState, newApprovalId, resumeState } from "./runState.js";
-import { causeOf, completeTurn, dispatchCall, isResumable, offeredSchemas, synthesizeFinal } from "./runTurn.js";
+import { causeOf, completeTurn, dispatchCall, isResumable, nativeOfTurn, offeredSchemas, synthesizeFinal, toolRow } from "./runTurn.js";
 import { settle } from "./runSettle.js";
 import { kernelHooks, readOnlyPort, type KernelRun } from "./kernelHooks.js";
 import { EMPTY_PACK, buildContextPack, openingRows } from "./turnContext.js";
@@ -97,6 +97,12 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   // read as one run, not as one run per tick. The model preflight answers before turn 1.
   if (!resumed) {
     await emit(ports.events, { kind: "run.started", step: state.step });
+    // A deterministic answer found before any model call (a PreFetch tool reply) settles the run: no model is asked.
+    if (pack.answer) {
+      appendRows(input, transcript, { role: "assistant", content: pack.answer });
+      state.messages = transcript;
+      return settle(input, hooks, state, transcript, "finished", { output: pack.answer });
+    }
     const preflight = await hooks.model.preflight?.(policyContext(input, state, currentView(transcript, offered), state.step, 0));
     if (preflight) await emit(ports.events, preflight);
     // D1 + D2: a fresh run may start on a weaker model first (the guards decide; a surface with the lever off is unchanged).
@@ -133,12 +139,9 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
           role: "assistant",
           content: turn.content ?? "",
           toolCalls: turn.toolCalls.map((call) => ({ id: call.id, name: call.name, arguments: call.arguments })),
+          ...nativeOfTurn(turn.meta),
         }),
-        tool: (call, result) => announceRow(input, {
-          role: "tool",
-          toolCallId: call.id,
-          content: JSON.stringify(result.data ?? null),
-        }),
+        tool: (call, result) => announceRow(input, toolRow(call.id, result, ports.platform?.verbatimText === true)),
       },
       ports: {
         complete: (ctx) => completeTurn(input, state, hooks, ctx, offered, transcript, pack, run.selection),

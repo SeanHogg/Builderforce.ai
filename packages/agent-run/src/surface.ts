@@ -20,6 +20,7 @@
  */
 
 import type { ToolSchema } from "@builderforce/agent-tools";
+import type { RunPart } from "./contract.js";
 import type { RunPolicyEvent, RunPolicyOutcome } from "@builderforce/run-policy";
 import type { CacheServedStreak } from "./policy/tools/cacheServedStreak.js";
 
@@ -38,6 +39,10 @@ export interface LadderProgress {
 export interface PlatformToolResult {
   data: unknown;
   isError?: boolean;
+  /** The result's native blocks (text, pictures), kept on the tool row beside `data`, which the model reads as text when it is a string. */
+  parts?: RunPart[];
+  /** The result's own fields (a tool's details, its tool name), kept on the tool row (`RunMessage.meta`). */
+  meta?: Readonly<Record<string, unknown>>;
   /**
    * The answer is a conversational one (a tool lookup, a declined confirm, a hand-off): it touched nothing, so it neither
    * counts as the run circling its read cache nor as work that ended the circle.
@@ -87,9 +92,14 @@ export interface PlatformTools {
   /** The relevance selection the tools policy applies to {@link schemas}. */
   selection: PlatformSelection;
   /** Run one call. A refusal is a result the model reads, never a throw. */
-  execute(name: string, args: Record<string, unknown>, env: { signal?: AbortSignal; progress: LadderProgress }): Promise<PlatformToolResult>;
+  execute(name: string, args: Record<string, unknown>, env: { signal?: AbortSignal; progress: LadderProgress; callId?: string }): Promise<PlatformToolResult>;
   /** Does this call end analysis and begin the work? The first one hands the run to the coder. */
   handsOff?(name: string): boolean;
+  /**
+   * The surface's results are already the TEXT the model reads (a budgeted string): a string result becomes the tool row as it is,
+   * not JSON-quoted. Absent ⇒ every result is serialised as JSON, as the canvas's are.
+   */
+  verbatimText?: boolean;
   /** How a call whose arguments never parsed is declined. Absent ⇒ the shared wording, no hint. */
   malformed?: MalformedCallPolicy;
 }

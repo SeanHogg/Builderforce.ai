@@ -89,6 +89,9 @@ export function asMessages(raw: readonly unknown[]): RunMessage[] {
       content: typeof r.content === "string" ? r.content : "",
       ...(Array.isArray(r.toolCalls) ? { toolCalls: r.toolCalls } : {}),
       ...(typeof r.toolCallId === "string" ? { toolCallId: r.toolCallId } : {}),
+      ...(Array.isArray(r.parts) ? { parts: r.parts } : {}),
+      ...(r.meta && typeof r.meta === "object" ? { meta: r.meta } : {}),
+      ...(r.isError ? { isError: true as const } : {}),
     });
   }
   return out;

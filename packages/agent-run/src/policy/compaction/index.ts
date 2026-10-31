@@ -155,9 +155,10 @@ export function compactionOptions(ctx: PolicyContext, opts: CompactionHookOption
 
 /** Map a RunMessage row to the packer's OpenAI shape. */
 function toPackRow(m: RunMessage): PackMessage {
-  const row: PackMessage & { task?: true; parts?: RunMessage["parts"] } = { role: m.role, content: m.content };
+  const row: PackMessage & { task?: true; parts?: RunMessage["parts"]; meta?: RunMessage["meta"] } = { role: m.role, content: m.content };
   if (m.task) row.task = true;
   if (m.parts && m.parts.length > 0) row.parts = m.parts;
+  if (m.meta) row.meta = m.meta;
   if (m.toolCalls && m.toolCalls.length > 0) {
     row.tool_calls = m.toolCalls.map((tc) => ({
       id: tc.id,
@@ -171,7 +172,7 @@ function toPackRow(m: RunMessage): PackMessage {
 
 /** Map a packed OpenAI row back to the RunMessage row shape. */
 function toRunRow(m: PackMessage | Record<string, unknown>): RunMessage {
-  const src = m as PackMessage & { task?: unknown; parts?: RunMessage["parts"] };
+  const src = m as PackMessage & { task?: unknown; parts?: RunMessage["parts"]; meta?: RunMessage["meta"] };
   const toolCalls = Array.isArray(src.tool_calls)
     ? (src.tool_calls as Array<{ id?: string; function?: { name?: string; arguments?: string } }>).map((tc) => ({
         id: tc.id ?? "",
@@ -187,6 +188,7 @@ function toRunRow(m: PackMessage | Record<string, unknown>): RunMessage {
   if (src.tool_call_id != null) out.toolCallId = src.tool_call_id;
   if (src.task === true) out.task = true;
   if (Array.isArray(src.parts) && src.parts.length > 0) out.parts = src.parts;
+  if (src.meta) out.meta = src.meta;
   return out;
 }
 

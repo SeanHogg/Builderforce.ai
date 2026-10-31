@@ -155,7 +155,7 @@ export async function gateCall(
   if (decision.action === "block") {
     await emit(ctx.ports.events, { kind: "policy.blocked", step: ctx.step, tool: call.name, gateId: decision.gateId, reason: decision.reason });
     return {
-      data: { ok: false, error: `Blocked by governance policy: ${decision.reason}. Do not retry this tool — accomplish the task another way, or finish and explain why it cannot proceed.` },
+      data: { ok: false, gate: decision.gateId, error: `Blocked by governance policy: ${decision.reason}. Do not retry this tool — accomplish the task another way, or finish and explain why it cannot proceed.` },
       isError: true,
     };
   }

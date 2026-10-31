@@ -113,7 +113,7 @@ export interface RunPolicy {
    * What a stall that has nothing left to try does: `finish` ends the run with what it said and the notice (whatever it
    * committed still ships; a surface that lands runs wants this), `fail` stops it unfinished. Default `fail`.
    */
-  stallExhausted?: "finish" | "fail";
+  stallExhausted?: "finish" | "fail" | "note";
   modelStart?: {
     strict?: boolean; delegatedRole?: string; phaseModels?: { verify?: string };
     /** The run-start model when it is a soft seed rather than `pinnedModel`. */
@@ -141,10 +141,28 @@ export interface RunMessage {
    * existing estimates say it does.
    */
   parts?: RunPart[];
+  /**
+   * Message-level fields the surface's own transcript needs back (a provider, the usage the model reported, a stop reason, a
+   * timestamp). Opaque to the agent: it carries them from the completion or tool result to the row and never reads them.
+   */
+  meta?: Readonly<Record<string, unknown>>;
+  /** This tool row is a FAILED call's answer (a refusal, a thrown tool, a skipped call). */
+  isError?: true;
 }
 
-/** One non-text part of a row. Plain data, so a saved transcript round-trips as JSON. */
-export type RunPart = { type: 'image'; url: string };
+/**
+ * One part of a row, beside its `content` text. Plain data, so a saved transcript round-trips as JSON.
+ *
+ * `image` is a picture the person attached (a URL or a data URL). The other kinds are a transport's NATIVE blocks, kept so a
+ * row the model wrote or a tool returned reads back exactly as it was written: a signed thinking block and a tool call with
+ * its signature are not text, and a provider that continues a conversation needs them back unchanged. The agent never reads
+ * the native kinds; it carries them.
+ */
+export type RunPart =
+  | { type: 'image'; url: string }
+  | { type: 'text'; text: string; signature?: string }
+  | { type: 'thinking'; thinking: string; signature?: string }
+  | { type: 'toolCall'; id: string; name: string; arguments: Record<string, unknown>; signature?: string };
 
 /** What the agent asks the model for. The transport translates it to its own wire shape. */
 export interface ModelRequest {
@@ -199,6 +217,10 @@ export interface ModelCompletion {
   model?: string;
   /** Set when the turn was cut off (the output ceiling, an unparseable call) rather than finished. The transport reads its own vendor's finish reason. */
   interrupted?: TurnInterruption;
+  /** The answer's native blocks (thinking, signed text, tool calls with signatures), kept on the row it becomes. */
+  parts?: RunPart[];
+  /** The answer's message-level fields, kept on the row it becomes (`RunMessage.meta`). */
+  meta?: Readonly<Record<string, unknown>>;
 }
 
 /** Where the model runs. The ONE thing an entry point supplies about the model. */
@@ -227,6 +249,12 @@ export interface ModelTransport {
    * default (never the model that just failed).
    */
   fallbackSurface?(): ModelFallbackSurface | null;
+  /**
+   * The model a stalled run fails over ONTO, chosen by the host from what it already tried (additive). For a host whose successor is
+   * decided by a function of the models burned so far (an operator's declared chain) rather than by a surface to rank. `tried` holds
+   * every model asked this run, the pin included, in the names the transport answers to. Wins over {@link fallbackSurface}.
+   */
+  pickFallback?(tried: readonly string[]): string | undefined;
 }
 
 /**
@@ -319,6 +347,11 @@ export interface SteeringSource {
   drain(): Array<string | SteerInput> | Promise<Array<string | SteerInput>>;
   /** True while an interrupting message waits. Absent ⇒ steers only land between steps. */
   hasInterrupt?(): boolean;
+  /**
+   * Messages the person queued to be taken only once the run would otherwise stop (additive). The run continues on them instead of
+   * finishing, each as a user turn. Absent or empty ⇒ the run finishes.
+   */
+  followUp?(): Array<string | SteerInput> | Promise<Array<string | SteerInput>>;
   /** Be told the moment an interrupting message arrives; returns the unsubscribe. */
   onInterrupt?(listener: () => void): () => void;
 }
@@ -401,6 +434,8 @@ export interface ContextPack {
   repos?: Array<{ repo: string; branch: string; dirty: string[] }>;
   facts: Array<{ key: string; content: string }>;   // codemap:<area> facts for the areas the focus files name
   recall: string[];                                  // Evermind recall, queried with prompt + focus-file terms
+  /** A deterministic answer found before any model call (a PreFetch tool reply): the run settles on it, and no model is asked. */
+  answer?: string;
 }
 
 // ── The outcome ───────────────────────────────────────────────────────────────

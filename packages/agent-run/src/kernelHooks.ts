@@ -13,7 +13,7 @@ import type { GuardControl, PolicyContext, PolicyHooks } from "./policy/index.js
 import { isStopSteer, steerInput, steerSkip, type InterruptWatch } from "./policy/steering/index.js";
 import { appendRows, applyCompaction, currentView, emit, policyContext, toPolicyCall, type RunAgentInput, type TurnFacts } from "./runContext.js";
 import { rememberWrite } from "./runState.js";
-import { callKinds, ownsCall, type TurnSelection } from "./runTurn.js";
+import { callKinds, nativeOfTurn, ownsCall, type TurnSelection } from "./runTurn.js";
 import { volatileTail } from "./policy/compaction/pack.js";
 import type { UsdBudget } from "./policy/budget/usd.js";
 import type { CacheServedStreak } from "./policy/tools/cacheServedStreak.js";
@@ -37,6 +37,8 @@ export interface KernelRun {
   watch: InterruptWatch;
   /** The current turn's text, for the guards' turn fold (A3's readiness claims). */
   turnContent: string;
+  /** The current turn's native blocks and fields, put back on any row that restates what the model said. */
+  turnNative?: Pick<RunMessage, "parts" | "meta">;
   /** A steered stop command arrived: the run settles cancelled, no further model turn. */
   stopped: boolean;
   /** How the turn that just ended was served, for the hooks and dispatch that follow it. */
@@ -61,8 +63,8 @@ function optionsOf(control: unknown): readonly string[] | undefined {
 }
 
 /** Rewrite a pushed tool row so the model reads the replacement result. */
-function rewriteRow(row: RunMessage, data: unknown): void {
-  row.content = JSON.stringify(data ?? null);
+function rewriteRow(row: RunMessage, data: unknown, verbatim: boolean): void {
+  row.content = verbatim && typeof data === "string" ? data : JSON.stringify(data ?? null);
 }
 
 /** The kernel hooks for one invocation of the run. */
@@ -79,7 +81,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
    * two user rows in a row with the model's words lost.
    */
   const requeue = (said: string, note: string): void => {
-    if (said.trim()) append({ role: "assistant", content: said });
+    if (said.trim()) append({ role: "assistant", content: said, ...run.turnNative });
     append({ role: "user", content: note });
   };
 
@@ -205,6 +207,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
 
     afterTurn: async (ctx, turn) => {
       run.turnContent = turn.content ?? "";
+      run.turnNative = nativeOfTurn(turn.meta);
       const meta = turn.meta && typeof turn.meta === "object" ? (turn.meta as { model?: string; usage?: ModelUsage; interrupted?: TurnInterruption }) : undefined;
       const model = meta ? meta.model : tally.model;
       const usage = meta?.usage;
@@ -234,6 +237,8 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         // A surface that lands runs ends it with what it said and why it stopped (a finish, not a failure — whatever it
         // committed still ships); any other stops it unfinished.
         if (policy.stallExhausted === "finish") return { action: "finish", output: turn.content.trim() ? `${turn.content}\n\n${notice}` : notice };
+        // A surface whose conversation outlives the run records why it produced nothing: the notice joins the transcript.
+        if (policy.stallExhausted === "note") append({ role: "user", content: notice });
         return { action: "stop", ok: false, output: notice, finished: true };
       }
       if (stalled && stalled.action === "fail") {
@@ -260,12 +265,19 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         return { action: "continue" };
       }
       const output = hooks.stall.settle ? hooks.stall.settle(pctx, turn.content) : turn.content;
-      if (output.trim()) append({ role: "assistant", content: output });
+      if (output.trim()) append({ role: "assistant", content: output, ...run.turnNative });
       // A message steered in while this last turn was in flight is never lost (§6.3): the
       // run takes one more turn for it instead of finishing past it.
       const late = await takeSteers(ctx);
       if (late === "stop") return { action: "stop", ok: false, output: "cancelled", finished: true };
       if (late === "applied") return { action: "continue" };
+      // What the person queued to be taken once the run would stop: the run continues on it instead of finishing.
+      const followUps = ((await ports.steering?.followUp?.()) ?? []).map(steerInput);
+      if (followUps.length > 0) {
+        append(...followUps.map((f): RunMessage => ({ role: "user", content: f.text, ...(f.parts?.length ? { parts: f.parts } : {}) })));
+        for (let i = 0; i < followUps.length; i += 1) await emit(ports.events, { kind: "steer.applied", step: ctx.step });
+        return { action: "continue" };
+      }
       return { action: "finish", output };
     },
 
@@ -379,7 +391,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
       if (noted) data = noted.data;
       const nudged = hooks.subagents.nudge(pctx, pcall, data);
       if (nudged) data = nudged.data;
-      if (data !== result.data) rewriteRow(message, data);
+      if (data !== result.data) rewriteRow(message, data, message.parts !== undefined || ports.platform?.verbatimText === true);
       if (!stub) {
         hooks.tools.observe?.(pctx, pcall, data, result.isError === true);
         // The run's memory is the WORKSPACE's (files read and written, searches made); a

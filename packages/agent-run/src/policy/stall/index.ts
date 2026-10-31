@@ -210,7 +210,11 @@ const text = typeof ctx.content === "string" ? ctx.content : "";
     // the models a failover may land on (the tenant's connected flagships, the coding
     // pool). Without one the default never returns the model that just failed, never
     // more than MAX_MODEL_FAILOVERS deep.
-    { surface: ctx.ports.model?.fallbackSurface?.() ?? undefined },
+    {
+        surface: ctx.ports.model?.fallbackSurface?.() ?? undefined,
+        // A host whose successor is a function of what was already tried (an operator's declared chain) names it here; it wins over the surface.
+        ...(ctx.ports.model?.pickFallback ? { pick: (tried: readonly string[]) => ctx.ports.model.pickFallback!(tried) } : {}),
+      },
   );
 
   switch (step.kind) {
