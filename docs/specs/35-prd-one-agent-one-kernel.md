@@ -12,20 +12,32 @@
 ## 4. What is left
 
 ```
-WS2f container shell ─┐
-WS4 chat adapters ────┼─► WS7 enforce + delete + done
-WS5 channels ─────────┘
+WS4 chat adapters ─┬─► WS7 enforce + delete + done
+WS5 channels ──────┘
 ```
 
-### WS2f — The container shell
+### WS2f leftovers — The container shell
 
-- **Owns.** `packages/agent-run/src/policy/tools/**` and `api/container/sandboxCore.mjs`.
-- **Problem.** Long shell commands block a cloud run. The container's `run_command` (`sandboxRun`) ignores `cwd`, `background` and `yieldMs`.
-- **Do.** Make it honour all three, with a `process`-style poll that returns a job handle. A foreground command keeps the 10-minute ceiling.
-- **Accept.** A cloud run starts a background command, polls it, and runs a command in a named working directory. The `tool-output-policy` and exec tests pass unchanged.
+The container shell is built and merged (DONE.md 2026-10-31). Its 43 new tests pass on Linux in CI. These are left:
+
+- **No Opus review.** It was stopped before it reported, at the operator's call. Review `api/container/sandboxJobs.mjs` and both transports, with the first attention on process-group kill and on the Actions runner serving one request at a time.
+- **No live run.** The tests drive the real core and the real tool layer, but no cloud run has used a background job yet. The new image also needs its deploy.
+- **Dead seam.** `RunSandbox.run` takes a `cwd` that nothing calls, because foreground `sandboxShell.run` still writes `cd "./dir" || exit 1` and `sandboxShellDir.test.ts` pins that string. Switching needs an intended test change. Otherwise remove the argument.
+- **Two capability sets.** `SANDBOX_CAPABILITIES` and `prepSurfaceCaps` stay `['shell']` because tests pin them, so `shell.jobs` is added in `durableRunCaps` and `withSandbox`. Prep's identity and prompt set therefore lack it while the run host's set has it. Check that this never gives a wrong prompt. `packages/agent-run/src/policy/tools/caps.ts` also holds an unused `SANDBOX_CAPABILITIES`.
+- **Idle containers.** `AgentContainerDO.sleepAfter` is 20 minutes, so a background job on a container that gets no calls can be reaped. The next poll then answers `unknown`.
 
 ### WS4 — VS Code + Rovr / Web chat adapters (highest-traffic, telemetry-gated)
 
+- **Start from.** The `ws4-ports` branch (bb35bad66, 79 commits behind main on 2026-10-31) holds 924 lines of unwired work:
+  - the ports over the run store;
+  - `webAdapter.ts`, `runViaAgent.ts` and `vscodeAdapter.ts`;
+  - a conformance suite on the real ports.
+
+  What it waited on, `RunTask.transcript` and `RunPorts.platform` / `extensions`, is now on main.
+- **The real cost.** `runLoop.ts` itself is small. The work is moving what its hooks do into `runAgent`, or into ports, without losing any of it:
+  - `beforeDispatch.ts`: the tool router, `ask_user`, `hand_off`, the one-ticket attach, the confirm gate, and read and write dedupe with replay;
+  - `finalAnswerHook.ts`: the stop hook, the ship and review gates, the delegation and restated-reply recoveries, and the stall failover;
+  - `completeTurn.ts`, `dispatchTool.ts`, `runSpendBudget.ts`, `progressGuard.ts`, `toolCallHooks.ts` and `runPreamble.ts`.
 - **Owns.**
   - `brain-embedded/src/run/webAdapter.ts`.
   - The `brain-embedded/src/runStore/runLoop.ts` policy (moved, then deleted).
@@ -46,11 +58,13 @@ WS5 channels ─────────┘
 
 - **Owns.** The `agent-runtime/src/builderforce/agent-loop/agent-loop.ts` policy (moved) and its call sites.
 - **Do.** Channels and cron call `runAgent` through `agent-runtime/src/run/onPremAdapter.ts`, as tickets already do.
+- **Contract first.** The channel loop drives the `Agent` class in `agent-loop/agent.ts`, which `agent-session.ts` and the embedded runner use. `onPremAdapter.ts` names what the contract must carry before that can move:
+  - native message blocks: `RunMessage.content` is text only;
+  - provider-contributed tools;
+  - a model-fallback port.
+
+  The `AgentEvent` stream those surfaces subscribe to must also survive, as a bridge from `RunEvent`.
 - **Accept.** Conformance passes. The agent-runtime tests pass unchanged (§5.1).
-
-### WS8 leftover — Split `bfApi.ts`
-
-`clients/vscode/src/bfApi.ts` is over its size limit and must be split. Do it before or with the WS4 VS Code adapter.
 
 ### WS7 — Enforce, delete, close (last)
 

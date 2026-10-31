@@ -55,20 +55,20 @@ function killTree(child) {
  * One run's job table. `maxWaitMs` bounds a poll's wait (the foreground command ceiling).
  */
 export function createJobTable({ maxWaitMs }) {
-  const jobs = new Map();
+  const table = new Map();
   let seq = 0;
 
   function evictFinished() {
-    for (const [id, job] of jobs) {
-      if (jobs.size < MAX_JOBS) return;
-      if (job.status !== 'running') jobs.delete(id);
+    for (const [id, job] of table) {
+      if (table.size < MAX_JOBS) return;
+      if (job.status !== 'running') table.delete(id);
     }
   }
 
   /** Start `command` in `cwd` (already resolved inside the clone). */
   function start(command, cwd) {
     evictFinished();
-    if (jobs.size >= MAX_JOBS) return { ok: false, error: `too many running background jobs (${MAX_JOBS}); stop one with command_stop first` };
+    if (table.size >= MAX_JOBS) return { ok: false, error: `too many running background jobs (${MAX_JOBS}); stop one with command_stop first` };
     const id = `job-${++seq}`;
     const child = spawn('bash', ['-lc', command], { cwd, env: process.env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let settle;
@@ -87,14 +87,14 @@ export function createJobTable({ maxWaitMs }) {
     };
     child.on('close', finish);
     child.on('error', (e) => { cap(`\n${e.message}`); finish(null); });
-    jobs.set(id, job);
+    table.set(id, job);
     return { ok: true, id };
   }
 
   /** A job's state, after waiting up to `waitMs` for it to end. `onAbort(wake)` lets the
    *  transport end the WAIT early when the engine gives up on the request (the job runs on). */
   async function poll(id, waitMs, onAbort = () => {}) {
-    const job = jobs.get(id);
+    const job = table.get(id);
     if (!job) return unknownJob(id);
     const wait = Number.isFinite(waitMs) && waitMs > 0 ? Math.min(waitMs, maxWaitMs) : 0;
     if (job.status === 'running' && wait > 0) {
@@ -110,7 +110,7 @@ export function createJobTable({ maxWaitMs }) {
 
   /** Kill a job's process tree and report how it ended (waits briefly for the exit). */
   async function kill(id) {
-    const job = jobs.get(id);
+    const job = table.get(id);
     if (!job) return unknownJob(id);
     if (job.status === 'running') {
       job.status = 'killed';
@@ -124,7 +124,7 @@ export function createJobTable({ maxWaitMs }) {
 
   /** Kill every running job — the run is over. */
   async function closeAll() {
-    await Promise.all([...jobs.values()].filter((j) => j.status === 'running').map((j) => kill(j.id)));
+    await Promise.all([...table.values()].filter((j) => j.status === 'running').map((j) => kill(j.id)));
   }
 
   return { start, poll, kill, closeAll };

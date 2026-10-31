@@ -1,3 +1,23 @@
+## ✅ RESOLVED 2026-10-31 — The container shell (PRD 35 WS2f), the `bfApi.ts` split, native chat project adoption, and snapshot batching (builderforce-memory 2026.10.36)
+
+- **WS2f, the container shell.** A cloud run's `run_command` now honours `cwd`, `background` and `yieldMs`, on both the Cloudflare Container and the GitHub Actions runner.
+  - `api/container/sandboxJobs.mjs` holds the per-run job table. Jobs spawn detached so a kill reaches the whole process group, keep a bounded output tail, stop at 32 at once, and die when the sandbox closes. `poll` clamps its wait to the 10-minute ceiling.
+  - `sandboxJobsOver` in `runSandbox.ts` is the one reply mapping for both transports. Polls go in 20-second slices, because the Actions runner serves one request at a time.
+  - `command_status` and `command_stop` reach cloud runs through `shell.jobs`, with no tool-layer change.
+  - **Proof:** 43 new tests pass on Linux in CI (run 41229083836): `containerSandboxJobs` 11, `sandboxJobs` 22, `sandboxJobsToolLayer` 8, `runSurfaceCapsJobs` 2. The API type-check and all four vitest shards pass, and existing test files are unchanged.
+  - **Not done:** the Opus review was stopped before it reported, at the operator's call, and no live run has used a job. Those and three smaller leftovers are in PRD 35.
+- **The `bfApi.ts` split (PRD 35 WS8 leftover).** 1,804 lines became a 115-line re-export barrel and 17 domain modules under `clients/vscode/src/bfApi/`, each under 400 lines. Callers and `vi.mock` paths did not change.
+  - `clearJwt` and `setSelectedWorkspace` now fire `onSessionChange` instead of reaching into other modules' caches, which avoids an import cycle.
+  - The one test edit is a path in `authPanelSync.test.ts` (`bfApi.ts` → `bfApi/session.ts`), because that test reads the source file.
+  - **Proof:** all four type-check configs pass, and 218 tests pass across 27 files with 5 skipped. The Opus review was stopped before it reported.
+  - The ROADMAP's god-module list still shows `bfApi.ts` at 1,684 until its next recount.
+- **Native chats adopt the selected project.** A native participant chat that opened with no project now binds to the selected one, as webview chats already did. `updateBrainChatProject` existed for this but was never wired, and `chatDiagnostics.ts` already pointed at the missing self-heal. `clients/vscode/src/nativeChatProject.ts` holds the rule and reuses the webview's `adoptChatProject`; that makes it the first non-test extension-host file to import from `webview/src`. Not in a VSIX yet.
+- **builderforce-memory 2026.10.36: a review no longer rewrites its snapshot per file.** `LocalSnapshotStore` persisted the whole snapshot on every mutation: 16.4 GB written over 2,340 files for a 5.8 MB snapshot.
+  - `KnowledgeStore.batched` holds persistence for a whole review, with a checkpoint at most every 30 seconds. `KnowledgeStore.preloadExtracted` is a bulk-read hint for remote stores.
+  - A review now stores and flushes everything before it saves any manifest. That also closes an older window where a crash lost the compare phase's relations while the manifests said the files were done.
+  - **Proof:** 163 tests in 16 suites pass. Reviewed by the planning model only, because the Opus review stalled.
+  - Published to npm, with a [GitHub release](https://github.com/SeanHogg/builderforce-memory/releases/tag/v2026.10.36). The knowledge review failure itself stays open (ROADMAP and PRD 38).
+
 ## ✅ RESOLVED 2026-10-31 — PRD 35: everything finished, moved out of the spec (WS0, WS1, WS2, WS3, WS4 canvas, WS5 tickets, WS6, WS8a–p; the contract, behaviours and telemetry as built)
 
 Moved word for word from [PRD 35](./docs/specs/35-prd-one-agent-one-kernel.md), which now holds only what is left to complete. Section numbers are kept, so a `PRD 35 §x` or `PRD 35 WSx` citation in the code resolves here unless the PRD still has that section. What shipped, and when, is in the dated entries further down (2026-10-30, 2026-10-28, 2026-10-27, 2026-10-25). The workstream state was checked against the code on 2026-10-31.
