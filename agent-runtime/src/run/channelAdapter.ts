@@ -8,7 +8,8 @@
  *   model        — the runner's provider stream (`channelModel`), its events forwarded to the surface as the answer is written;
  *   platform     — the runner's own tools as the run's closed catalog (`channelTools`);
  *   store        — in memory: a channel run is one invocation; it announces each row so the surface hears it (`agentEventBridge`);
- *   events       — the agent's trace, told as the `AgentEvent` protocol the session and the subscribers speak;
+ *   events       — the agent's trace, told as the `AgentEvent` protocol the session and the subscribers speak, and the uniform
+ *                  outcome row, reported to the fleet (`outcomeReporter`);
  *   human        — the process-wide approval gate (`onPremHuman`), as for tickets;
  *   steering     — the Agent's steering and follow-up queues;
  *   context      — the PreFetch gate (an ANSWER settles the run, PREFETCH facts ride the tail) and the run's ledger brief.
@@ -33,6 +34,7 @@ import { textOf, toRunRow } from "./channelMessages.js";
 import { ChannelModels, channelModelTransport } from "./channelModel.js";
 import { channelTools } from "./channelTools.js";
 import { onPremHuman } from "./onPremHuman.js";
+import { reportRunRow } from "./outcomeReporter.js";
 
 export interface ChannelRunInput {
   prompts: AgentMessage[];
@@ -118,7 +120,9 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
         model: channelModelTransport({ models, streamFn, config, tools, bridge }),
         capabilities,
         store: { load: () => undefined, save: () => undefined, appended: bridge.appended },
-        events: { emit: bridge.emit },
+        // The run's uniform outcome row (§8.2), written once at its end. A channel run has no execution id: the row is keyed by the
+        // run's own id (`task.runId`) and carries the model that served it; nothing else is claimed.
+        events: { emit: bridge.emit, outcome: (row) => reportRunRow(row) },
         human: onPremHuman(() => capabilities),
         steering: steeringOf(config),
         context: contextOf(config, prompts, signal, knowledge),
