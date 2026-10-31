@@ -9358,7 +9358,7 @@ function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, 
     );
   }
   if (action === "stop") {
-    return /* @__PURE__ */ jsx72("button", { type: "button", className: "bf-cmp-iconbtn bf-cmp-iconbtn--stop", onClick: onStop, title: labels.stop, "aria-label": labels.stop, children: /* @__PURE__ */ jsx72(IconStop, {}) });
+    return /* @__PURE__ */ jsx72("button", { type: "button", className: "bf-cmp-iconbtn bf-cmp-iconbtn--stop", onClick: () => onStop?.(), title: labels.stop, "aria-label": labels.stop, children: /* @__PURE__ */ jsx72(IconStop, {}) });
   }
   const label = running ? sendSteers === false ? labels.queueHold : labels.queueSend : labels.send;
   const send = /* @__PURE__ */ jsx72("button", { type: "submit", className: "bf-cmp-iconbtn bf-cmp-iconbtn--send", onClick: (e) => {

@@ -3,7 +3,7 @@ import {
   abortReason,
   errorMessage,
   reportPageEngineFailure
-} from "./chunk-A5TKRKGR.mjs";
+} from "./chunk-SLI7C3HD.mjs";
 
 // ../packages/local-inference/src/runtimes.ts
 var BROWSER_ENGINE_BASE_URL = "http://browser.local";
@@ -1370,4 +1370,4 @@ export {
   createHfModelStore,
   catalogProbe
 };
-//# sourceMappingURL=chunk-KKJPRCUF.mjs.map
+//# sourceMappingURL=chunk-QYIJWKQO.mjs.map

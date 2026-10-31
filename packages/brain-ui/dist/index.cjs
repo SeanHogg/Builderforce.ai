@@ -9525,7 +9525,7 @@ function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, 
     );
   }
   if (action === "stop") {
-    return /* @__PURE__ */ (0, import_jsx_runtime72.jsx)("button", { type: "button", className: "bf-cmp-iconbtn bf-cmp-iconbtn--stop", onClick: onStop, title: labels.stop, "aria-label": labels.stop, children: /* @__PURE__ */ (0, import_jsx_runtime72.jsx)(IconStop, {}) });
+    return /* @__PURE__ */ (0, import_jsx_runtime72.jsx)("button", { type: "button", className: "bf-cmp-iconbtn bf-cmp-iconbtn--stop", onClick: () => onStop?.(), title: labels.stop, "aria-label": labels.stop, children: /* @__PURE__ */ (0, import_jsx_runtime72.jsx)(IconStop, {}) });
   }
   const label = running ? sendSteers === false ? labels.queueHold : labels.queueSend : labels.send;
   const send = /* @__PURE__ */ (0, import_jsx_runtime72.jsx)("button", { type: "submit", className: "bf-cmp-iconbtn bf-cmp-iconbtn--send", onClick: (e) => {

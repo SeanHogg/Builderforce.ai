@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.117] — Stop means stop, and nothing you type is lost
+
+- **Stop acts at once, wherever you press it.** It drops turns still waiting to send, and you can cancel a single stage of a run.
+- **What you type before a chat exists gets there.** It stays visible and removable while it waits, and comes back to the composer if the chat can't be created.
+- **Unsent words survive a restart.** They are kept on your device and come back once.
+
 ## [2026.10.115] — See why a review failed
 
 - **A failed review says why.** The Knowledge tab shows the reason under "The review failed", and **Copy details** puts the error, its stack, the folder, the last phase reached, the extension version and the time on your clipboard.
