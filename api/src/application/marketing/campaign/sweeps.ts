@@ -2,10 +2,11 @@
  * The cron sweeps — start what is due, then advance every in-flight campaign by
  * one batch. Split out of `../campaignEngine.ts`, which re-exports it.
  */
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, inArray, sql } from 'drizzle-orm';
 import type { Env } from '../../../env';
 import type { Db } from '../../../infrastructure/database/connection';
 import { marketingCampaigns } from '../../../infrastructure/database/schema';
+import { dueStatuses, statusesIn } from '../../shared/campaignLifecycle';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { resolveTrackingOrigin } from './render';
 import { runCampaignBatch } from './send';
@@ -16,7 +17,7 @@ export async function campaignsInFlight(db: Db, limit = 10): Promise<Array<{ id:
   return db
     .select({ id: marketingCampaigns.id, tenantId: marketingCampaigns.tenantId })
     .from(marketingCampaigns)
-    .where(eq(marketingCampaigns.status, 'sending'))
+    .where(inArray(marketingCampaigns.status, statusesIn('email', 'in_flight')))
     .orderBy(asc(marketingCampaigns.startedAt))
     .limit(limit);
 }
@@ -86,7 +87,7 @@ export async function startDueCampaigns(env: Env, db: Db, limit = 5): Promise<Du
     .select({ id: marketingCampaigns.id, tenantId: marketingCampaigns.tenantId })
     .from(marketingCampaigns)
     .where(and(
-      eq(marketingCampaigns.status, 'draft'),
+      inArray(marketingCampaigns.status, dueStatuses('email')),
       sql`${marketingCampaigns.scheduledAt} IS NOT NULL`,
       sql`${marketingCampaigns.scheduledAt} <= NOW()`,
     ))

@@ -2,7 +2,7 @@ import { neon, neonConfig, Pool } from '@neondatabase/serverless';
 import { drizzle, NeonHttpDatabase } from 'drizzle-orm/neon-http';
 import { drizzle as drizzlePool, type NeonDatabase } from 'drizzle-orm/neon-serverless';
 import * as schema from './schema';
-import { withDatabaseAvailability } from './neonAvailability';
+import { asDatabaseUnavailable, withDatabaseAvailability } from './neonAvailability';
 import type { Env } from '../../env';
 
 export type Db = NeonHttpDatabase<typeof schema>;
@@ -192,6 +192,10 @@ export type Tx = Parameters<Parameters<NeonDatabase<typeof schema>['transaction'
  * Writes only, and only where atomicity is the point: a socket handshake costs more
  * than an HTTP query, so a plain read or a single statement stays on `db`.
  *
+ * The pool bypasses the HTTP client's {@link withDatabaseAvailability} wrapper, so a
+ * Neon quota refusal is mapped here to the same outage error; any other error —
+ * a domain error thrown by `work` included — passes through by identity.
+ *
  * A handle not built here (a test double) has no connection string, and is handed
  * its own `transaction()` — which is what those doubles implement.
  */
@@ -201,7 +205,11 @@ export async function inTransaction<T>(db: Db, work: (tx: Tx) => Promise<T>): Pr
   const pool = new Pool({ connectionString: url });
   try {
     return await drizzlePool(pool, { schema }).transaction(work);
+  } catch (error) {
+    throw asDatabaseUnavailable(error);
   } finally {
-    await pool.end();
+    // A failed close must not replace the outcome: the transaction already committed
+    // (or already failed with the error the caller needs).
+    await pool.end().catch(() => undefined);
   }
 }

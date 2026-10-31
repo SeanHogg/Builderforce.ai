@@ -1,7 +1,7 @@
 /**
- * What one run of the native agent loop (`agent-loop.ts`) is configured with — the
- * contract the loop, its stateful {@link Agent} wrapper (`agent.ts`) and the PreFetch
- * preamble (`prefetch-preamble.ts`) share.
+ * What one run of the native agent (`agent-loop.ts`) is configured with — the contract
+ * the entry point, its stateful {@link Agent} wrapper (`agent.ts`) and the channel adapter
+ * (`run/channelAdapter.ts`) share.
  */
 
 import type { PolicyGate, RunKnowledgeLog } from "@builderforce/agent-tools";
@@ -44,6 +44,8 @@ export interface AgentLoopConfig {
     signal?: AbortSignal,
   ) => AgentMessage[] | Promise<AgentMessage[]>;
   getSteeringMessages?: () => AgentMessage[] | Promise<AgentMessage[]>;
+  /** True while a steering message waits: the rest of the turn's calls are skipped so it reaches the next model call. */
+  hasSteeringMessages?: () => boolean;
   getFollowUpMessages?: () => AgentMessage[] | Promise<AgentMessage[]>;
   getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
   apiKey?: string;
@@ -63,6 +65,4 @@ export interface AgentLoopConfig {
   knowledge?: RunKnowledgeLog;
   /** The deterministic-first PreFetch port (`prefetch-preamble.ts`); omitted ⇒ no gate. */
   prefetch?: PrefetchPort;
-  /** PREFETCH output for this run's volatile tail — set by `agentLoop` from the gate. */
-  prefetchTail?: readonly string[];
 }

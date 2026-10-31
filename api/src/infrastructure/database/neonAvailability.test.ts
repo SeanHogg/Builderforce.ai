@@ -42,6 +42,26 @@ describe('asDatabaseUnavailable', () => {
   });
 });
 
+describe('asDatabaseUnavailable (WebSocket pool messages)', () => {
+  it.each([
+    'Your account or project has exceeded the compute time quota. Upgrade your plan to increase limits.',
+    'Your project has exceeded the data transfer quota. Upgrade your plan to increase limits.',
+  ])('maps the bare Neon quota body: %s', (message) => {
+    const original = new Error(message);
+    const mapped = asDatabaseUnavailable(original);
+    expect(mapped).toBeInstanceOf(ServiceUnavailableError);
+    expect((mapped as ServiceUnavailableError).code).toBe(DATABASE_UNAVAILABLE_CODE);
+    expect((mapped as ServiceUnavailableError).cause).toBe(original);
+  });
+
+  it('leaves another vendor\'s quota message and an unanchored mention untouched', () => {
+    const vendor = new Error('You exceeded your current quota');
+    expect(asDatabaseUnavailable(vendor)).toBe(vendor);
+    const embedded = new Error('Upstream said: Your project has exceeded the data transfer quota');
+    expect(asDatabaseUnavailable(embedded)).toBe(embedded);
+  });
+});
+
 describe('withDatabaseAvailability', () => {
   it('translates a quota refusal on an awaited query and on .catch()', async () => {
     const db = withDatabaseAvailability(fakeClient(() => Promise.reject(quotaError())));

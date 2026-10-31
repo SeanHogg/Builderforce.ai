@@ -101,6 +101,16 @@ type KeyExchange =
   | { ok: true; jwt: { token: string; exp: number; tenantId: number } }
   | { ok: false; rejected: boolean };
 
+/**
+ * Ceiling on the auth-mint round trips (the key→JWT exchange and the workspace
+ * re-scope). Without this a slow / cold / dropped gateway leaves `fetch` waiting on the
+ * OS TCP timeout — tens of seconds to minutes — and because `exchangeJwt` is
+ * single-flight, that one hung mint stalls the whole panel on "Connecting…" and holds up
+ * the first turn of every run. A bounded abort turns "hang forever" into the existing
+ * fail-fast "Couldn't reach BuilderForce / Retry" path.
+ */
+const MINT_TIMEOUT_MS = 10_000;
+
 /** One `tenant-api-key-token` round trip, classified — no caching, no side effects. */
 async function requestBaseJwt(key: string): Promise<KeyExchange> {
   try {
@@ -108,6 +118,7 @@ async function requestBaseJwt(key: string): Promise<KeyExchange> {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ apiKey: key }),
+      signal: AbortSignal.timeout(MINT_TIMEOUT_MS),
     }));
     // 401 = invalid/revoked key; 400 = a key with no user (the route says "use device
     // sign-in"). Anything else non-OK is the gateway, not the key.
@@ -192,6 +203,7 @@ async function mintJwt(secrets: vscode.SecretStorage, force: boolean): Promise<s
     const res = await fetch(`${getBaseUrl()}/api/vscode/tenants/${target}/token`, {
       method: "POST",
       headers: { authorization: `Bearer ${base.token}`, "content-type": "application/json" },
+      signal: AbortSignal.timeout(MINT_TIMEOUT_MS),
     });
     if (res.status === 404) {
       rescopeUnsupported = true;

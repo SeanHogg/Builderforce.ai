@@ -1,14 +1,13 @@
 /**
  * The deterministic-first PreFetch gate in the ON-PREM run preamble
- * (docs/design/deterministic-prefetch.md). On-prem runs do not go through brain-embedded's
- * run store — `attempt.ts` drives this package's native {@link agentLoop} — so the gate is
- * consulted here, at the loop's entry, with the SAME pass the Brain runs use
+ * (docs/design/deterministic-prefetch.md). The channel path consults it from the run's CONTEXT port
+ * (`run/channelAdapter.ts`), before turn 1, with the SAME pass the Brain runs use
  * (`@builderforce/prefetch` `runGate`):
  *
- *   - ANSWER → the run settles on the tool's reply: an assistant message, no model call;
+ *   - ANSWER → the run settles on the tool's reply (`ContextPack.answer`), no model call;
  *   - PREFETCH → the facts ride the run's volatile tail (after the history, never the
  *     system prompt), beside the run's own ledger;
- *   - LLM → the loop runs exactly as before.
+ *   - LLM → the run goes to the model as usual.
  *
  * Write actions ask through the host port's `confirm` (on-prem: the approval gate the
  * portal answers); a port without one declines them. Nothing is recorded for calibration:
@@ -16,14 +15,11 @@
  */
 
 import { runGate, type GateRunResult, type PrefetchPort } from "@builderforce/prefetch";
-import type { AgentEvent, AgentMessage } from "../model/agent-types.js";
-import type { AssistantMessage, Model } from "../model/types.js";
-import type { AgentLoopConfig } from "./agent-loop-config.js";
-import type { EventStream } from "./event-stream.js";
+import type { AgentMessage } from "../model/agent-types.js";
 
 export interface PrefetchPreamble {
-  /** The adopted ANSWER, as the run's assistant message. */
-  answer?: AssistantMessage;
+  /** The adopted ANSWER: the text the run settles on. */
+  answer?: string;
   /** PREFETCH output for the run's volatile tail. */
   tail: string[];
   /** The gate pass, for the host's trace. Null when the gate was not consulted. */
@@ -48,36 +44,21 @@ export function promptText(prompts: readonly AgentMessage[]): string {
   return "";
 }
 
-/** A settled answer, shaped like a turn the model ended — zero usage, nothing was called. */
-function answerMessage(text: string, model: Model): AssistantMessage {
-  return {
-    role: "assistant",
-    content: [{ type: "text", text }],
-    api: model.api,
-    provider: model.provider,
-    model: model.id,
-    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
-    stopReason: "stop",
-    timestamp: Date.now(),
-  };
-}
-
 export async function runPrefetchPreamble(
   port: PrefetchPort | undefined,
   prompts: readonly AgentMessage[],
-  model: Model,
   signal: AbortSignal | undefined,
 ): Promise<PrefetchPreamble> {
   const request = promptText(prompts).trim();
   if (!port || !request || signal?.aborted) return NONE;
-  const adopted: { answer?: AssistantMessage } = {};
+  const adopted: { answer?: string } = {};
   let pass: GateRunResult | null;
   try {
     pass = await runGate(request, port, {
       ...(signal ? { signal } : {}),
       ...(port.confirm ? { confirm: (action, req, detail) => port.confirm!(action, req, detail) } : {}),
       adopt: async ({ result }) => {
-        adopted.answer = answerMessage(result.text, model);
+        adopted.answer = result.text;
         return true;
       },
     });
@@ -85,29 +66,5 @@ export async function runPrefetchPreamble(
     return { ...NONE, error: e instanceof Error ? e.message : String(e) };
   }
   if (!pass) return NONE;
-  return { ...(adopted.answer ? { answer: adopted.answer } : {}), tail: pass.tail, pass };
-}
-
-/**
- * The gate at the loop's entry (`agentLoop`). A deterministic ANSWER settles the run with
- * no model call: the answer is emitted, the stream ended, and null returned. Otherwise
- * the config the run proceeds with — PREFETCH facts riding every turn's volatile tail.
- */
-export async function gateRunConfig(
-  config: AgentLoopConfig,
-  prompts: readonly AgentMessage[],
-  signal: AbortSignal | undefined,
-  stream: EventStream<AgentEvent, AgentMessage[]>,
-  newMessages: AgentMessage[],
-): Promise<AgentLoopConfig | null> {
-  const gate = await runPrefetchPreamble(config.prefetch, prompts, config.model, signal);
-  if (gate.answer) {
-    newMessages.push(gate.answer);
-    stream.push({ type: "message_start", message: gate.answer });
-    stream.push({ type: "message_end", message: gate.answer });
-    stream.push({ type: "agent_end", messages: newMessages });
-    stream.end(newMessages);
-    return null;
-  }
-  return gate.tail.length > 0 ? { ...config, prefetchTail: gate.tail } : config;
+  return { ...(adopted.answer !== undefined ? { answer: adopted.answer } : {}), tail: pass.tail, pass };
 }

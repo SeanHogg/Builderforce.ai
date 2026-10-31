@@ -238,7 +238,7 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         // committed still ships); any other stops it unfinished.
         if (policy.stallExhausted === "finish") return { action: "finish", output: turn.content.trim() ? `${turn.content}\n\n${notice}` : notice };
         // A surface whose conversation outlives the run records why it produced nothing: the notice joins the transcript.
-        if (policy.stallExhausted === "note") append({ role: "user", content: notice });
+        if (policy.stallExhausted === "note") requeue(turn.content, notice);
         return { action: "stop", ok: false, output: notice, finished: true };
       }
       if (stalled && stalled.action === "fail") {

@@ -12,6 +12,7 @@ import {
   marketingCampaigns,
   marketingSenderIdentities,
 } from '../../../infrastructure/database/schema';
+import { mayStart } from '../../shared/campaignLifecycle';
 import { newChallengeToken } from '../../shared/dnsVerification';
 import {
   isCampaignChannel,
@@ -115,7 +116,7 @@ export async function startCampaign(
 ): Promise<StartResult> {
   const campaign = await loadTransportBinding(db, tenantId, campaignId);
   if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' };
-  if (campaign.status !== 'draft') {
+  if (!mayStart('email', campaign.status)) {
     return { ok: false, status: 409, error: `This campaign is already ${campaign.status}.` };
   }
   const channel: CampaignChannel = isCampaignChannel(campaign.channel) ? campaign.channel : 'email';

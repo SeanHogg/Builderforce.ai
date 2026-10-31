@@ -12,10 +12,21 @@ import { ServiceUnavailableError } from '../../domain/shared/errors';
  * place the client is built, it becomes a {@link ServiceUnavailableError} — a 503
  * carrying {@link DATABASE_UNAVAILABLE_CODE}, which the web app renders as
  * "temporarily unavailable" and does not auto-report.
+ *
+ * Both paths are covered. The HTTP client is wrapped by {@link withDatabaseAvailability};
+ * `inTransaction` opens a WebSocket pool that bypasses that wrapper and maps its own
+ * errors here. Over WebSocket Neon's proxy has no HTTP status to carry: it sends the
+ * quota refusal as a Postgres error whose message is the bare body, so those texts are
+ * matched too. Every pattern is anchored at the start of the message, because
+ * `inTransaction` passes every error out of the transaction BODY through this check —
+ * another vendor saying "exceeded your quota" must never read as a database outage.
  */
 export const DATABASE_UNAVAILABLE_CODE = 'database_unavailable';
 
-const NEON_UNAVAILABLE = /^Server error \(HTTP status 402\)/;
+const NEON_UNAVAILABLE = new RegExp(
+  '^(?:Server error \\(HTTP status 402\\)'
+  + '|Your (?:account or )?project has exceeded the (?:compute time|data transfer) quota)',
+);
 
 /** The outage error for a Neon quota refusal; any other error is returned untouched. */
 export function asDatabaseUnavailable(error: unknown): unknown {

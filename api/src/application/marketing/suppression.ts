@@ -47,7 +47,3 @@ export async function suppressedEmails(db: Db, tenantId: number, emails: string[
   }
   return blocked;
 }
-
-export async function isSuppressed(db: Db, tenantId: number, email: string): Promise<boolean> {
-  return (await suppressedEmails(db, tenantId, [email])).size > 0;
-}

@@ -18,8 +18,9 @@ import type { Db } from '../../infrastructure/database/connection';
 import { socialCampaignPosts, socialCampaigns } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { signalPendingWork } from '../runtime/cronWorkSignal';
+import { isInFlight, type SocialCampaignStatus } from '../shared/campaignLifecycle';
 
-export type SocialCampaignStatus = 'draft' | 'scheduled' | 'publishing' | 'published' | 'failed';
+export type { SocialCampaignStatus };
 /** `uploading` — handed to a background upload job (YouTube); settles when the job does. */
 export type SocialPostStatus = 'queued' | 'uploading' | 'published' | 'pending' | 'failed' | 'skipped';
 
@@ -72,7 +73,7 @@ export async function settleSocialCampaign(db: Db, env: Env, tenantId: number, c
     published: settlement.published,
     failed: settlement.failed,
     updatedAt: new Date(),
-    ...(settlement.status !== 'publishing' ? { completedAt: new Date() } : {}),
+    ...(!isInFlight('social', settlement.status) ? { completedAt: new Date() } : {}),
   }).where(scopedToTenant(socialCampaigns, tenantId, eq(socialCampaigns.id, campaignId)));
 
   // Anything left queued only finishes if the gated cron actually runs.

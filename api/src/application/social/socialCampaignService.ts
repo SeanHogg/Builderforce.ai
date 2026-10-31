@@ -31,6 +31,7 @@ import { socialCampaignPosts, socialCampaigns } from '../../infrastructure/datab
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { signalPendingWork } from '../runtime/cronWorkSignal';
 import { CAMPAIGN_DELIVERY_MAX_ATTEMPTS, failedDeliveryStatus } from '../shared/campaignDelivery';
+import { isArmed, isDone, isInFlight, mayEdit, mayStart, restingStatus } from '../shared/campaignLifecycle';
 import { uploadPercent } from '../youtube/youtubeResumableUpload';
 import { youtubeUploadsForPosts, type YouTubeUploadRow } from '../youtube/youtubeUploadJobs';
 import {
@@ -365,7 +366,7 @@ export async function createSocialCampaign(
     linkUrl: (input.linkUrl ?? '').trim().slice(0, 1000),
     mediaUrls,
     variants,
-    status: scheduledAt ? 'scheduled' : 'draft',
+    status: restingStatus('social', scheduledAt !== null),
     ...(scheduledAt ? { scheduledAt } : {}),
     targets: targets.length,
     ...(input.projectId != null ? { projectId: input.projectId } : {}),
@@ -401,8 +402,8 @@ export async function updateSocialCampaign(
   const [existing] = await db.select().from(socialCampaigns)
     .where(scopedToTenant(socialCampaigns, tenantId, eq(socialCampaigns.id, id))).limit(1);
   if (!existing) throw new SocialCampaignError('Campaign not found', 404);
-  if (existing.status === 'publishing') throw new SocialCampaignError('This campaign is publishing right now — wait for it to finish.', 409);
-  if (existing.status === 'published') throw new SocialCampaignError('A published campaign cannot be edited; it is what the world already saw.', 409);
+  if (isInFlight('social', existing.status)) throw new SocialCampaignError('This campaign is publishing right now — wait for it to finish.', 409);
+  if (!mayEdit('social', existing.status)) throw new SocialCampaignError('A published campaign cannot be edited; it is what the world already saw.', 409);
 
   const next: Partial<typeof socialCampaigns.$inferInsert> = { updatedAt: new Date() };
   if (patch.name !== undefined) next.name = patch.name.trim().slice(0, 255);
@@ -414,13 +415,13 @@ export async function updateSocialCampaign(
     const when = patch.scheduledAtISO ? new Date(patch.scheduledAtISO) : null;
     if (when && Number.isNaN(when.getTime())) throw new SocialCampaignError('That schedule time is not a valid date.');
     next.scheduledAt = when;
-    next.status = when ? 'scheduled' : 'draft';
+    next.status = restingStatus('social', when !== null);
   }
 
   const [updated] = await db.update(socialCampaigns).set(next)
     .where(scopedToTenant(socialCampaigns, tenantId, eq(socialCampaigns.id, id))).returning();
   if (!updated) throw new SocialCampaignError('The campaign could not be updated.', 500);
-  if (updated.status === 'scheduled') await signalPendingWork(env);
+  if (isArmed('social', updated.status)) await signalPendingWork(env);
 
   // Queued posts carry the copy they will publish, so an edited body has to reach
   // them — otherwise the review screen and the post that goes out disagree.
@@ -478,11 +479,9 @@ export async function runSocialCampaignBatch(
   const [campaign] = await db.select().from(socialCampaigns)
     .where(scopedToTenant(socialCampaigns, tenantId, eq(socialCampaigns.id, campaignId))).limit(1);
   if (!campaign) throw new SocialCampaignError('Campaign not found', 404);
-  if (campaign.status === 'published') {
-    return { campaignId, published: 0, failed: 0, skipped: 0, uploading: 0, remaining: 0, status: 'published', results: [] };
-  }
+  if (isDone('social', campaign.status)) return { campaignId, published: 0, failed: 0, skipped: 0, uploading: 0, remaining: 0, status: 'published', results: [] };
 
-  if (campaign.status !== 'publishing') {
+  if (mayStart('social', campaign.status)) {
     await db.update(socialCampaigns)
       .set({ status: 'publishing', startedAt: campaign.startedAt ?? new Date(), updatedAt: new Date() })
       .where(scopedToTenant(socialCampaigns, tenantId, eq(socialCampaigns.id, campaignId)));

@@ -79,7 +79,8 @@ export function toolRow(callId: string, result: LoopDispatchResult, verbatim = f
     content: (native || verbatim) && typeof result.data === "string" ? result.data : JSON.stringify(result.data ?? null),
     ...(native?.parts ? { parts: native.parts } : {}),
     ...(native?.meta ? { meta: native.meta } : {}),
-    ...(result.isError ? { isError: true as const } : {}),
+    // A call that did not run because the person steered is answered as a failed one: the row says it did not do its work.
+    ...(result.isError || (result.data as { skipped?: unknown } | null)?.skipped === true ? { isError: true as const } : {}),
   };
 }
 

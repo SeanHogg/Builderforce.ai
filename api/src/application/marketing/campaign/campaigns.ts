@@ -3,7 +3,7 @@
  * `./start.ts` and `./send.ts`. Split out of `../campaignEngine.ts`, which
  * re-exports it.
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../../infrastructure/database/connection';
 import { marketingAudiences, marketingCampaigns } from '../../../infrastructure/database/schema';
 import {
@@ -14,6 +14,7 @@ import {
   type CampaignChannel,
   type CampaignTransport,
 } from '../campaignTransports';
+import { editableStatuses } from '../../shared/campaignLifecycle';
 import { getTemplate } from '../templateLibrary';
 import { SMS_BODY_MAX_CHARS } from './render';
 
@@ -218,7 +219,7 @@ export async function updateCampaign(
       // A campaign that is sending or sent is a historical record; editing the
       // body after the fact would make the send ledger describe a message that
       // was never delivered.
-      eq(marketingCampaigns.status, 'draft'),
+      inArray(marketingCampaigns.status, editableStatuses('email')),
     ))
     .returning(CAMPAIGN_COLUMNS);
   if (!row) return { ok: false, status: 409, error: 'Only a draft campaign can be edited.' };

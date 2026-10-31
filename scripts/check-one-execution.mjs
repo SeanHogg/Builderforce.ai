@@ -83,7 +83,6 @@ for (const root of ROOTS) {
 // importers. Nothing imports a `policy/*` module from outside today, so that baseline is
 // empty. WS7 empties this list and flips the guard to enforced.
 const BASELINE = [
-  'agent-runtime/src/builderforce/agent-loop/agent-loop.ts',
   'brain-embedded/src/runStore/runLoop.ts',
 ];
 

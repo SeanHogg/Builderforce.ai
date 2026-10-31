@@ -22,6 +22,7 @@ import {
 } from './render';
 import { loadTransportBinding } from './start';
 import { CAMPAIGN_DELIVERY_MAX_ATTEMPTS, failedDeliveryStatus } from '../../shared/campaignDelivery';
+import { isInFlight } from '../../shared/campaignLifecycle';
 
 /** How many recipients one batch attempts. Bounded by the Worker's subrequest
  *  budget, not by taste — each send is one outbound HTTP call. */
@@ -62,7 +63,7 @@ export async function runCampaignBatch(
   const batchSize = Math.min(Math.max(1, opts.batchSize ?? SEND_BATCH_SIZE), 100);
 
   const campaign = await loadTransportBinding(db, tenantId, campaignId);
-  if (!campaign || campaign.status !== 'sending') {
+  if (!campaign || !isInFlight('email', campaign.status)) {
     return { sent: 0, failed: 0, remaining: 0, status: campaign?.status ?? 'missing' };
   }
 

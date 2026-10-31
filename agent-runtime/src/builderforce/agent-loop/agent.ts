@@ -153,6 +153,7 @@ export class Agent {
         this.steeringQueue = [];
         return q;
       },
+      hasSteeringMessages: () => this.steeringQueue.length > 0,
       getFollowUpMessages: () => {
         const q = this.followUpQueue;
         this.followUpQueue = [];
