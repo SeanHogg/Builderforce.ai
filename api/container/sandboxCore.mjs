@@ -12,14 +12,16 @@
  * owns the loop, the tools, the commits, verify and finalize. This file owns only what a
  * Worker physically cannot do — a shell, a working tree, the project's own checks.
  *
- * Plain ESM. Its only imports are node builtins and the two generated siblings, so the
- * Actions runner can inline it verbatim (`api/scripts/gen-sandbox-core-source.mjs`).
+ * Plain ESM. Its only imports are node builtins and its siblings (the generated tool-output
+ * policy, the post-edit checks, the background-job table), so the Actions runner can inline
+ * it verbatim (`api/scripts/gen-sandbox-core-source.mjs`).
  */
 import { spawn } from 'node:child_process';
-import { access, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
+import { access, mkdir, writeFile, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { join, dirname, relative, resolve as resolvePath, sep } from 'node:path';
 import { SHELL_CAPTURE_CHARS, fitToolText, keepTail, toolOutputCap } from './toolOutputPolicy.mjs';
 import { cloneCheckIo, createPostEditChecks } from './postEditChecks.mjs';
+import { createJobTable } from './sandboxJobs.mjs';
 
 const MAX_LIST_ENTRIES = 500;
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000; // a build/test step may legitimately take minutes
@@ -266,17 +268,37 @@ async function sandboxFs(box, body) {
   return { ok: false, error: `unknown fs op '${body.op}'` };
 }
 
+/** The directory a command runs in: the clone's root when `cwd` is absent, else that
+ *  repo-relative directory. `{ error }` when it escapes the clone or is not a directory. */
+async function commandDir(box, cwd) {
+  if (cwd == null || cwd === '' || cwd === '.') return { dir: box.workdir };
+  const abs = insideClone(box.workdir, cwd);
+  if (!abs) return { error: 'cwd must be a directory inside the repository' };
+  const isDir = await stat(abs).then((s) => s.isDirectory(), () => false);
+  return isDir ? { dir: abs } : { error: `cwd '${cwd}' is not a directory in the repository` };
+}
+
 async function sandboxRun(box, body, onAbort) {
   const command = typeof body.command === 'string' ? body.command : '';
   if (!command) return { ok: false, error: 'command is required' };
+  const where = await commandDir(box, body.cwd);
+  if (where.error) return { ok: false, error: where.error };
   // The engine giving up on the command (a cancel) kills it.
   const proc = { current: null };
   const release = onAbort(() => { if (proc.current) proc.current.kill('SIGKILL'); });
   // The engine may bound a command below the ceiling (the run-end verify's budget).
   const timeoutMs = Number.isFinite(body.timeoutMs) && body.timeoutMs > 0 ? Math.min(body.timeoutMs, COMMAND_TIMEOUT_MS) : COMMAND_TIMEOUT_MS;
-  const r = await runShell(command, box.workdir, proc, timeoutMs);
+  const r = await runShell(command, where.dir, proc, timeoutMs);
   if (typeof release === 'function') release();
   return { ok: r.exitCode === 0, exitCode: r.exitCode, timedOut: r.timedOut, output: commandOutput(box.spec, 'run_command', r.output) };
+}
+
+/** Start a background command; `poll` / `kill` then address it by the returned id. */
+async function sandboxJobStart(box, body) {
+  const command = typeof body.command === 'string' ? body.command : '';
+  if (!command.trim()) return { ok: false, error: 'command is required' };
+  const where = await commandDir(box, body.cwd);
+  return where.error ? { ok: false, error: where.error } : box.jobs.start(command, where.dir);
 }
 
 /** The verdict over the edits since the last drain (`{ passed, verifier, reason?, steer? }`,
@@ -298,19 +320,29 @@ async function sandboxChecks(box) {
  * service's event to the run's timeline (each transport posts it its own way).
  */
 export function createSandboxBox({ spec, workdir, branch = null, emit = () => {} }) {
-  const box = { spec, workdir, branch, emit, checks: null };
+  const box = { spec, workdir, branch, emit, checks: null, jobs: createJobTable({ maxWaitMs: COMMAND_TIMEOUT_MS }) };
   if (spec.postEditChecks === true) box.checks = startPostEditChecks(box);
   return box;
 }
 
+/** The run is over: kill every background job it left running. Each transport calls this
+ *  from its close path, so no job outlives its run. */
+export async function closeSandboxBox(box) {
+  await box.jobs.closeAll();
+}
+
 /**
- * Serve one sandbox request on `box`: `fs` / `run` / `checks`. `onAbort(kill)` lets the
- * transport kill a running command when the engine gives up on it (a cancel).
+ * Serve one sandbox request on `box`: `fs` / `run` / `checks` / `job/*`. `onAbort(kill)`
+ * lets the transport kill a running command (or end a job poll's wait) when the engine
+ * gives up on the request (a cancel).
  */
 export async function serveSandbox(box, path, body, onAbort = () => {}) {
   if (path === '/sandbox/fs') return sandboxFs(box, body);
   if (path === '/sandbox/run') return sandboxRun(box, body, onAbort);
   if (path === '/sandbox/checks') return sandboxChecks(box);
+  if (path === '/sandbox/job/start') return sandboxJobStart(box, body);
+  if (path === '/sandbox/job/poll') return box.jobs.poll(String(body.id ?? ''), body.waitMs, onAbort);
+  if (path === '/sandbox/job/kill') return box.jobs.kill(String(body.id ?? ''));
   return { ok: false, error: `unknown sandbox request '${path}'` };
 }
 

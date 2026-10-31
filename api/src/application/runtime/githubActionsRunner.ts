@@ -106,19 +106,24 @@ async function serve() {
     result: 'serving the run sandbox from the GitHub Actions checkout at ' + WORKDIR,
   }).catch((error) => console.error('[bf-runner] checkout telemetry failed', error));
 
-  // Serve until the run releases us (finished, cancelled, or parked on a question).
-  for (;;) {
-    const next = await op('sandbox_next', {});
-    if (!next || next.close) return;
-    if (!next.request) continue;
-    const { id, path, body } = next.request;
-    let result;
-    try {
-      result = await serveSandbox(box, path, body || {}, cancelWatch);
-    } catch (e) {
-      result = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  // Serve until the run releases us (finished, cancelled, or parked on a question). However
+  // that ends, the run's background jobs end with it.
+  try {
+    for (;;) {
+      const next = await op('sandbox_next', {});
+      if (!next || next.close) return;
+      if (!next.request) continue;
+      const { id, path, body } = next.request;
+      let result;
+      try {
+        result = await serveSandbox(box, path, body || {}, cancelWatch);
+      } catch (e) {
+        result = { ok: false, error: e instanceof Error ? e.message : String(e) };
+      }
+      await op('sandbox_result', { id, result }).catch((error) => console.error('[bf-runner] result not delivered', error));
     }
-    await op('sandbox_result', { id, result }).catch((error) => console.error('[bf-runner] result not delivered', error));
+  } finally {
+    await closeSandboxBox(box);
   }
 }
 

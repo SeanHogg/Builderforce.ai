@@ -6,6 +6,8 @@
  * There is one set for every cloud run. A run with a SANDBOX (`sandbox/runSandbox.ts`)
  * also holds what the sandbox backs (`shell`: `run_command`, the git tools,
  * `analyze_codebase`) — on every plan; the plan decides only what the run is charged.
+ * Every sandbox also keeps the run's background jobs (`shell.jobs`: `command_status`,
+ * `command_stop`), so the run's own set holds that too.
  *
  * C5 (`c5_cloud_repo_map`) is the lever that adds a capability today: `repo.semantic`.
  * On the durable surface it is backed by `createCloudRepoSemantic` over the run's BASE
@@ -17,11 +19,11 @@ import type { Env } from '../../../env';
 import type { TicketRepoContext } from '../../repos/commitFileAsPendingChange';
 import { createCloudRepoSemantic } from '../../repos/cloudRepoMap';
 import { cloudSurfaceCapsFor } from '../cloudAgentTools';
-import { SANDBOX_CAPABILITIES } from '../sandbox/sandboxProvider';
+import { SANDBOX_CAPABILITIES, SANDBOX_JOB_CAPABILITIES } from '../sandbox/sandboxProvider';
 import { delegationCaps, type CloudRunDelegation } from '../cloudRunDelegation';
 
-/** The run's capability set: levers applied, the sandbox's capabilities when it has one,
- *  `repo.semantic` only with a repo, then narrowed by its place in a delegation tree. */
+/** The run's capability set: levers applied, the sandbox's capabilities (and its jobs) when
+ *  it has one, `repo.semantic` only with a repo, then narrowed by its place in a delegation tree. */
 export function durableRunCaps(
   env: unknown,
   tenantId: number,
@@ -29,7 +31,8 @@ export function durableRunCaps(
   repoCtx: TicketRepoContext | null,
   sandboxed = false,
 ): ReadonlySet<Capability> {
-  const levered = prepSurfaceCaps(env, tenantId, sandboxed);
+  const prepared = prepSurfaceCaps(env, tenantId, sandboxed);
+  const levered = sandboxed ? new Set<Capability>([...prepared, ...SANDBOX_JOB_CAPABILITIES]) : prepared;
   const backed = repoCtx || !levered.has('repo.semantic')
     ? levered
     : new Set([...levered].filter((c) => c !== 'repo.semantic'));

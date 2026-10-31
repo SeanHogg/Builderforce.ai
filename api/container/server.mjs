@@ -17,8 +17,11 @@
  *   • `POST /sandbox/fs`    — list / read / write / delete in the clone. A write the
  *     engine already COMMITTED is absorbed by fast-forwarding the clone to the ticket
  *     branch, so the shell builds against it and the git tools see it as history.
- *   • `POST /sandbox/run`   — a shell command in the clone. Closing the request (the
- *     engine's cancel aborts its fetch) kills the command.
+ *   • `POST /sandbox/run`   — a shell command in the clone (`cwd`: a directory inside it).
+ *     Closing the request (the engine's cancel aborts its fetch) kills the command.
+ *   • `POST /sandbox/job/{start,poll,kill}` — BACKGROUND commands (`sandboxJobs.mjs`): the
+ *     job table lives here, so a job outlives the request that started it and is
+ *     pollable on a later tick. `/sandbox/close` kills every job the run left.
  *   • `POST /sandbox/checks` — drain the post-edit checks for the edits since the last
  *     drain: the verdict the engine's loop guards fold (D1) and show the model (D7).
  *   • `POST /sandbox/close` — dispose the clone at run end.
@@ -46,7 +49,7 @@ import { gzip } from 'node:zlib';
 import { promisify } from 'node:util';
 // THE sandbox primitives (shell, working tree, post-edit checks) — the same module the
 // GitHub Actions runner inlines, so both transports serve one implementation.
-import { createSandboxBox, runShell, serveSandbox } from './sandboxCore.mjs';
+import { closeSandboxBox, createSandboxBox, runShell, serveSandbox } from './sandboxCore.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
 // Live-preview passthrough: when a run starts a dev server on PREVIEW_PORT, the
@@ -320,6 +323,8 @@ async function closeSandbox(executionId) {
   const box = sandboxes.get(executionId);
   if (!box) return { ok: true };
   sandboxes.delete(executionId);
+  // Background jobs die with the run (a live preview is a separate process, not a job).
+  await closeSandboxBox(box).catch(() => {});
   // A live preview serves out of this clone, so it outlives the run; the preview sweep
   // stops the whole instance when it goes idle.
   if (!box.previewStarted) await rm(box.workdir, { recursive: true, force: true }).catch(() => {});
@@ -342,7 +347,7 @@ async function handleSandbox(path, body, res) {
   if (path === '/sandbox/close') return [200, await closeSandbox(body.executionId)];
   const box = sandboxes.get(body.executionId);
   if (!box) return [409, { ok: false, error: 'not_open' }];
-  if (!['/sandbox/fs', '/sandbox/run', '/sandbox/checks'].includes(path)) return [404, { ok: false, error: 'not found' }];
+  if (!['/sandbox/fs', '/sandbox/run', '/sandbox/checks', '/sandbox/job/start', '/sandbox/job/poll', '/sandbox/job/kill'].includes(path)) return [404, { ok: false, error: 'not found' }];
   // The engine aborting its fetch (a cancel) closes the connection: kill the command. The
   // RESPONSE's 'close' — the request's has already fired once its body was read, so a
   // listener on it would never hear the cancel.

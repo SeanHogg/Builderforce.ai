@@ -20,8 +20,9 @@ COPY server.mjs ./
 # transports serve one implementation.
 COPY sandboxCore.mjs ./
 # THE tool-output policy (@builderforce/tool-output-policy), compiled by
-# api/scripts/gen-container-shared.mjs, and the post-edit fast checks (D7 / D1).
-COPY toolOutputPolicy.mjs postEditChecks.mjs ./
+# api/scripts/gen-container-shared.mjs, the post-edit fast checks (D7 / D1) and the
+# background-job table (`run_command` background / `command_status`).
+COPY toolOutputPolicy.mjs postEditChecks.mjs sandboxJobs.mjs ./
 
 ENV NODE_ENV=production
 ENV PORT=8080
