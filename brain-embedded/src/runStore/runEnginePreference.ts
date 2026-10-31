@@ -14,6 +14,16 @@ export const RUN_ENGINE_QUERY_PARAM = 'runEngine';
 
 const isEngine = (value: unknown): value is RunEngineId => value === 'agent' || value === 'loop';
 
+/** Keep the URL's choice for later loads. False when storage is blocked: the URL still decides this load. */
+function keepChoice(storage: Storage | undefined, engine: RunEngineId): boolean {
+  try {
+    storage?.setItem(RUN_ENGINE_STORAGE_KEY, engine);
+    return storage !== undefined;
+  } catch {
+    return false;
+  }
+}
+
 /** The device's stored engine choice, or undefined when it never made one (⇒ the Brain's default). */
 export function storedRunEngine(): RunEngineId | undefined {
   try {
@@ -21,7 +31,7 @@ export function storedRunEngine(): RunEngineId | undefined {
     const fromUrl = search ? new URLSearchParams(search).get(RUN_ENGINE_QUERY_PARAM) : null;
     const storage = (globalThis as { localStorage?: Storage }).localStorage;
     if (isEngine(fromUrl)) {
-      try { storage?.setItem(RUN_ENGINE_STORAGE_KEY, fromUrl); } catch { /* storage blocked: the URL still decides this load */ }
+      keepChoice(storage, fromUrl);
       return fromUrl;
     }
     const stored = storage?.getItem(RUN_ENGINE_STORAGE_KEY);
