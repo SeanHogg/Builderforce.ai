@@ -85,9 +85,15 @@ export function isInterruptibleCall(name: string, args: unknown): boolean {
   return name === "run_command" && a.background !== true;
 }
 
-function interruptedResult(out: unknown): Record<string, unknown> {
+/** What a command a steer stopped answers with: what it returned so far, marked aborted and interrupted, in the steering policy's words. */
+export function interruptedResult(out: unknown): Record<string, unknown> {
   const base = out && typeof out === "object" && !Array.isArray(out) ? (out as Record<string, unknown>) : out === undefined ? {} : { output: out };
   return { ...base, ok: false, aborted: true, interrupted: true, error: INTERRUPTED_BY_STEER };
+}
+
+/** Is this result a command a steer STOPPED (not a wait it cut short, whose job runs on)? Its row says it failed; the run's failure streak does not count it. */
+export function isInterruptedResult(data: unknown): boolean {
+  return !!data && typeof data === "object" && (data as Record<string, unknown>).aborted === true && (data as Record<string, unknown>).interrupted === true;
 }
 
 /** A wait the steer cut short: its status so far, said to be a wait that ended — not the job. */

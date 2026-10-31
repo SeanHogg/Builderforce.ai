@@ -110,8 +110,12 @@ describe("a hand-off onto a smaller model", () => {
 
     const produced = await agent.prompt([user("find the handler")]);
 
-    const summary = produced.find((m) => m.role === "compactionSummary") as { summary: string } | undefined;
+    const summary = produced.find((m) => m.role === "compactionSummary") as { summary: string; tokensBefore: number } | undefined;
     expect(summary?.summary).toContain("Handed off from p/m to p/m2.");
+    // what the context cost before the cut is real, not a placeholder
+    expect(summary!.tokensBefore).toBeGreaterThan(20_000);
+    // the task the run was given (the last prompt) is pinned: it survives the cut whole
+    expect(seen.at(-1)!.messages.some((m) => textOf(m).includes("find the handler"))).toBe(true);
     expect(seen.at(-1)!.messages.length).toBeLessThan(33);
     expect(n).toBeGreaterThan(1);
   });
@@ -224,7 +228,7 @@ describe("a governance gate with no approver to reach", () => {
 });
 
 describe("a steer while a foreground command runs", () => {
-  it("aborts the command through its signal, reports it as interrupted not failed, and the model reads the steer next", async () => {
+  it("aborts the command through its signal, reports it as interrupted, and the model reads the steer next", async () => {
     const seen: Context[] = [];
     let abortedAt: number | undefined;
     const agent = new Agent({
@@ -232,11 +236,11 @@ describe("a steer while a foreground command runs", () => {
       systemPrompt: "sys",
       tools: [
         tool("exec", (_id, _params, signal) =>
-          new Promise((resolve) => {
+          new Promise((_resolve, reject) => {
             setTimeout(() => agent.steer(user("stop that, do this")), 5);
             signal?.addEventListener("abort", () => {
               abortedAt = Date.now();
-              resolve({ content: [{ type: "text", text: "killed" }], details: {} });
+              reject(new Error("killed"));
             });
           }),
         ),
@@ -248,7 +252,55 @@ describe("a steer while a foreground command runs", () => {
 
     expect(abortedAt).toBeDefined();
     expect(seen[1]!.messages.some((m) => m.role === "toolResult" && textOf(m).includes("Interrupted by the user"))).toBe(true);
-    expect((produced.find((m) => m.role === "toolResult") as { isError: boolean }).isError).toBe(false);
+    // the stored row agrees with what the model read: the interrupted wording, and a failed call
+    const stored = produced.find((m) => m.role === "toolResult") as { isError: boolean };
+    expect(stored.isError).toBe(true);
+    expect(textOf(stored)).toContain("Interrupted by the user");
     expect(seen[1]!.messages.some((m) => textOf(m).includes("stop that, do this"))).toBe(true);
+  });
+
+  it("a command that finishes anyway keeps its own result: never tagged interrupted, never wrapped", async () => {
+    const seen: Context[] = [];
+    const agent = new Agent({
+      model,
+      systemPrompt: "sys",
+      tools: [
+        tool("exec", (_id, _params, signal) =>
+          new Promise((resolve) => {
+            setTimeout(() => agent.steer(user("stop that, do this")), 5);
+            signal?.addEventListener("abort", () => resolve({ content: [{ type: "text", text: "killed" }], details: {} }));
+          }),
+        ),
+      ],
+    });
+    agent.streamFn = scripted([callOf("exec"), assistant([{ type: "text", text: "fin" }])], seen);
+
+    const produced = await agent.prompt([user("go")]);
+
+    const stored = produced.find((m) => m.role === "toolResult") as { isError: boolean };
+    expect(textOf(stored)).toBe("killed");
+    expect(stored.isError).toBe(false);
+  });
+
+  it("a tool that is not a foreground command and fails stays an error row, whatever the signal did", async () => {
+    const seen: Context[] = [];
+    const agent = new Agent({
+      model,
+      systemPrompt: "sys",
+      tools: [
+        tool("browser", async (_id, _params, signal) => {
+          agent.steer(user("stop that, do this"));
+          await new Promise((r) => setTimeout(r, 10));
+          throw new Error(signal?.aborted ? "aborted anyway" : "page crashed");
+        }),
+      ],
+    });
+    agent.streamFn = scripted([callOf("browser"), assistant([{ type: "text", text: "fin" }])], seen);
+
+    const produced = await agent.prompt([user("go")]);
+
+    const stored = produced.find((m) => m.role === "toolResult") as { isError: boolean };
+    expect(stored.isError).toBe(true);
+    expect(textOf(stored)).not.toContain("Interrupted by the user");
   });
 });

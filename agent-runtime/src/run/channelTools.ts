@@ -20,6 +20,9 @@ import { resultParts, textOf } from "./channelMessages.js";
 /** The runner's foreground command tools: a steered message aborts one that is running, and the model reads the message that follows. */
 const FOREGROUND_COMMAND_TOOLS: ReadonlySet<string> = new Set(["exec"]);
 
+/** A call the steer may abort: a foreground command (not one started in the background). */
+const isInterruptible = (name: string, args: Record<string, unknown>): boolean => FOREGROUND_COMMAND_TOOLS.has(name) && args.background !== true;
+
 // biome-ignore lint/suspicious/noExplicitAny: the runner's tools carry their own parameter schemas
 type AnyTool = AgentTool<any>;
 
@@ -49,22 +52,20 @@ export function channelTools(options: ChannelToolsOptions): PlatformTools {
     schemas: () => schemas,
     // The runner guards its own context: one result may hold its share of the serving model's window, as the runner's guard cuts it.
     ...(options.window ? { resultCap: (model: string | undefined) => singleToolResultCapChars(options.window!(model)) } : {}),
-    interruptible: (name, args) => FOREGROUND_COMMAND_TOOLS.has(name) && args.background !== true,
+    interruptible: isInterruptible,
     // Every tool the runner gave the run is advertised: the runner decided what this channel may use.
     selection: { query: options.query, limit: Math.max(1, schemas.length), required: new Set<string>() },
     async execute(name, args, env) {
       const callId = env.callId ?? name;
       const tool = byName.get(name);
       bridge.toolStart(callId, name, args);
-      // The step signal aborts on a steered message (or a Stop): a tool that comes back stopped is reported as interrupted, not failed.
-      const stopped = (): true | undefined => (env.signal?.aborted ? true : undefined);
       try {
         if (!tool) throw new Error(`Tool ${name} not found`);
         const result = await tool.execute(callId, args, env.signal, (partialResult) => bridge.toolUpdate(callId, name, args, partialResult));
         if (knowledge) knowledge.record(name, args);
         bridge.toolEnd(callId, name, result, false);
+        // A tool that came back keeps its own result, whatever the signal did meanwhile: only a REJECTION is a kill.
         return {
-          ...(stopped() ? { aborted: true as const } : {}),
           data: textOf(result.content),
           parts: resultParts(result.content),
           meta: { toolName: name, details: result.details, timestamp: Date.now() },
@@ -72,9 +73,11 @@ export function channelTools(options: ChannelToolsOptions): PlatformTools {
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         const result = { content: [{ type: "text" as const, text: message }], details: {} };
-        bridge.toolEnd(callId, name, result, stopped() === undefined);
-        if (stopped()) return { data: message, aborted: true, parts: resultParts(result.content), meta: { toolName: name, details: {}, timestamp: Date.now() } };
-        return { data: message, isError: true, parts: resultParts(result.content), meta: { toolName: name, details: {}, timestamp: Date.now() } };
+        bridge.toolEnd(callId, name, result, true);
+        const failed = { data: message, parts: resultParts(result.content), meta: { toolName: name, details: {}, timestamp: Date.now() } };
+        // The step signal aborts on a steered message (or a Stop): a command the abort killed is reported as interrupted (the agent's words),
+        // not as an ordinary failure. A tool that rejects for any other reason - or that was never interruptible - is an error row.
+        return env.signal?.aborted && isInterruptible(name, args) ? { ...failed, aborted: true } : { ...failed, isError: true };
       }
     },
   };

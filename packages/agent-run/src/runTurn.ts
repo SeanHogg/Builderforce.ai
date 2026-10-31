@@ -9,12 +9,12 @@ import { SKILL_TOOLS, SUBAGENT_TOOLS, buildCoreToolRegistry, type ToolRegistry, 
 import { malformedCallOutcome, type LoopDispatchResult, type LoopTurnResult, type ParsedToolCall, type TurnContext } from "@builderforce/agent-loop";
 import { reduceRunPolicy } from "@builderforce/run-policy";
 import { ModelTransportError, type ContextPack, type ModelCompletion, type ModelRequest, type RunMessage, type RunPorts, type RunState } from "./contract.js";
-import { interruptedData, nativeResults, type NativeResult } from "./runRows.js";
+import { nativeResults, type NativeResult } from "./runRows.js";
 import { isTransportFailure } from "./surface.js";
 import type { PolicyHooks } from "./policy/index.js";
 import { routeAround, turnSucceeded, type TurnAsk } from "./policy/model/handoff.js";
 import { reaskAsCoder } from "./policy/model/reask.js";
-import { runToolWithWatch, type InterruptWatch } from "./policy/steering/index.js";
+import { interruptedResult, runToolWithWatch, type InterruptWatch } from "./policy/steering/index.js";
 import { toolsTokensOf } from "./policy/compaction/compact.js";
 import { capToolResult, resultCapFor } from "./policy/tools/index.js";
 import { appendRows, currentView, emit, policyContext, type RunAgentInput, type TurnFacts } from "./runContext.js";
@@ -341,7 +341,7 @@ export async function dispatchCall(input: RunAgentInput, state: RunState, call: 
           if (result.parts || result.meta) box.native = { ...(result.parts ? { parts: result.parts } : {}), ...(result.meta ? { meta: result.meta } : {}) };
           if (result.cached) box.kind = "cached";
           else if (result.neutral) box.kind = "neutral";
-          return result.aborted ? interruptedData(result.data) : result.data;
+          return result.aborted ? interruptedResult(result.data) : result.data;
         }
         const result = await registryOf(ports).dispatch(name, args as Record<string, unknown>, { caps: ports.capabilities, ...(run ? { signal: run } : {}) });
         box.control = result.control;

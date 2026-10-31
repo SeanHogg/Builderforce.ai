@@ -73,6 +73,8 @@ export {
   INTERRUPTED_BY_STEER,
   SKIPPED_BY_STEER,
   WAIT_INTERRUPTED_BY_STEER,
+  interruptedResult,
+  isInterruptedResult,
   isInterruptibleCall,
   runInterruptWatch,
   runToolInterruptibly,

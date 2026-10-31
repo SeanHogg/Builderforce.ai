@@ -130,8 +130,11 @@ export class AgentEventBridge {
         this.closeTurn();
         break;
       case "context.compacted":
-        // The note that stands for the dropped middle reaches the session as the summary row every converter folds into the prompt.
-        if (event.note) this.record.push({ role: "compactionSummary", summary: event.note, tokensBefore: event.beforeTokens ?? 0, timestamp: Date.now() });
+        // Only a model HAND-OFF leaves a summary row, as the old loop did. Its note carries no `covered` (that is the durable fold's:
+        // the rows an ordinary fold stands for), and an ordinary fold's note is not kept: no history is lost, so nothing is persisted.
+        if (event.note && event.covered === undefined) {
+          this.record.push({ role: "compactionSummary", summary: event.note, tokensBefore: event.beforeTokens ?? 0, timestamp: Date.now() });
+        }
         break;
       case "stall.recovered":
         if (event.action === "escalate") this.swapped(event.detail);

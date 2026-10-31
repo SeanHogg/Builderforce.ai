@@ -5,6 +5,7 @@
 
 import type { LoopDispatchResult } from "@builderforce/agent-loop";
 import type { RunMessage, RunPart } from "./contract.js";
+import { isInterruptedResult } from "./policy/steering/steerInterrupt.js";
 
 /** The native blocks and fields a surface's own tool answered with: the codec puts them on the tool row. */
 export interface NativeResult {
@@ -22,22 +23,21 @@ export function nativeOfTurn(meta: unknown): Pick<RunMessage, "parts" | "meta"> 
 /**
  * The transcript row of a tool result. A surface's own tool may hand back native blocks beside its data: the row then keeps
  * them, and its text is the data itself when that is a string (the model reads the tool's words, not a JSON-quoted copy).
+ *
+ * A command a steer STOPPED is answered in the steering policy's words and fails the row (the trace and the tally say the same);
+ * its row keeps no native blocks, which would show what the killed command printed instead of that answer.
  */
 export function toolRow(callId: string, result: LoopDispatchResult, verbatim = false): RunMessage {
   const native = nativeResults.get(result);
+  const stopped = isInterruptedResult(result.data);
   return {
     role: "tool",
     toolCallId: callId,
     content: (native || verbatim) && typeof result.data === "string" ? result.data : JSON.stringify(result.data ?? null),
-    ...(native?.parts ? { parts: native.parts } : {}),
+    ...(native?.parts && !stopped ? { parts: native.parts } : {}),
     ...(native?.meta ? { meta: native.meta } : {}),
-    // A call that did not run because the person steered is answered as a failed one: the row says it did not do its work.
-    ...(result.isError || (result.data as { skipped?: unknown } | null)?.skipped === true ? { isError: true as const } : {}),
+    // A call that did not run because the person steered, or that the steer stopped, is answered as a failed one: the row says it
+    // did not do its work. (Neither counts toward the run's failure streak: the dispatch result itself is not an error.)
+    ...(result.isError || stopped || (result.data as { skipped?: unknown } | null)?.skipped === true ? { isError: true as const } : {}),
   };
-}
-
-/** The data of a tool stopped through its signal: what it returned, marked aborted, so the steering policy answers it as interrupted (not as a failure). */
-export function interruptedData(data: unknown): Record<string, unknown> {
-  const base = data && typeof data === "object" && !Array.isArray(data) ? (data as Record<string, unknown>) : { output: data };
-  return { ...base, aborted: true };
 }
