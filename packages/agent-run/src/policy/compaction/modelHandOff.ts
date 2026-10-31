@@ -3,7 +3,7 @@
  * THE INCOMING model's window, and the incoming model is told it took over (`./handoff`).
  *
  * The reply reserve is the run's ONE reserve (`replyReserve`): the same number the ordinary compaction holds back and the model
- * policy clamps the request's `maxTokens` to, so the packed context and the reply it asks for always fit the window.
+ * policy bounds the request's `maxTokens` by, so the packed context and the reply it asks for always fit the window.
  */
 
 import { priceTierBoundary } from "@builderforce/model-catalog";

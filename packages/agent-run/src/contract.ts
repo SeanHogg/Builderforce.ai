@@ -118,8 +118,8 @@ export interface RunPolicy {
   /**
    * Re-pack the run's context for the incoming model's window when a stall fails it over onto another model, and tell the model
    * it took over (additive; absent => no hand-off packing, and the compaction is what it always was). Present, the run can land on
-   * ANY window, so its reply reserve follows the model now serving: the turn's own reply ceiling within a quarter of that window,
-   * and the request's `maxTokens` is held to it (`replyReserve`, policy/compaction/reserve). Nothing to configure.
+   * ANY window, so its reply reserve follows the model now serving: on-prem's floor within a quarter of that window, and the
+   * request's `maxTokens` is the role cap, clamped to it only when the window forces it (`replyReserve`, policy/compaction/reserve).
    */
   modelHandoff?: Record<string, never>;
   modelStart?: {

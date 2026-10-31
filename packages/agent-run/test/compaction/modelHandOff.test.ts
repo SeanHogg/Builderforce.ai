@@ -3,6 +3,7 @@
  * pictures, not just text), packed for the incoming window under the run's ONE reply reserve, and a context that cannot fit is said.
  */
 
+import { reduceRunPolicy } from "@builderforce/run-policy";
 import { describe, expect, it } from "vitest";
 import type { RunEvent, RunMessage, RunPorts } from "../../src/index.js";
 import { handOff } from "../../src/policy/compaction/modelHandOff.js";
@@ -111,22 +112,28 @@ describe("a context that cannot fit is said", () => {
 });
 
 describe("one reply reserve per run", () => {
-  it("a run that hands off holds back the reply ceiling the turn asks, within a quarter of the serving window", async () => {
-    const small = ctxFor(16_384, [], { tools: ["read"] }).ctx;
-    const large = ctxFor(1_000_000, [], { tools: ["read"] }).ctx;
-    expect(replyReserve(small)).toBeLessThanOrEqual(4_096);
-    expect(replyReserve(large)).toBeGreaterThanOrEqual(replyReserve(small));
-    // the request asks for exactly what compaction holds back, on either window
-    expect((await modelHook.resolve({ ...small, tools: small.tools }))?.maxTokens).toBe(replyReserve(small));
-    expect((await modelHook.resolve({ ...large, tools: large.tools }))?.maxTokens).toBe(replyReserve(large));
-    // and so does the compaction that sizes the transcript
-    expect(compactionOptions(small).reserveOutputTokens).toBe(replyReserve(small));
+  // a run that has begun the work (handed from plan to code) asks as the code role: its reply cap is 8,192
+  const askOf = async (window: number, over: Parameters<typeof ctxFor>[2] = {}) => {
+    const { ctx } = ctxFor(window, [], { tools: ["read"], ...over });
+    ctx.state.model = reduceRunPolicy(ctx.state.model, { type: "hand_off" });
+    return { ctx, reserve: replyReserve(ctx), asks: (await modelHook.resolve(ctx))?.maxTokens };
+  };
+
+  it("holds back on-prem's floor within a quarter of the serving window, and asks the role cap unless the window forces less", async () => {
+    expect(await askOf(200_000).then((r) => [r.reserve, r.asks])).toEqual([20_000, 8_192]);
+    expect(await askOf(64_000).then((r) => [r.reserve, r.asks])).toEqual([16_000, 8_192]);
+    expect(await askOf(16_384).then((r) => [r.reserve, r.asks])).toEqual([4_096, 4_096]);
   });
 
-  it("a big window asks for the role cap it always asked for: only a small window clamps", async () => {
-    const withHandoff = ctxFor(1_000_000, [], { tools: ["read"] }).ctx;
-    const without = ctxFor(1_000_000, [], { tools: ["read"], handoff: false }).ctx;
-    expect((await modelHook.resolve(withHandoff))?.maxTokens).toBe((await modelHook.resolve(without))?.maxTokens);
+  it("compaction and the hand-off hold back the very number replyReserve names", async () => {
+    for (const window of [200_000, 64_000, 16_384]) {
+      const { ctx, reserve } = await askOf(window);
+      expect(compactionOptions(ctx).reserveOutputTokens).toBe(reserve);
+    }
+  });
+
+  it("a big window asks for the role cap it always asked for: the same as a run that does not hand off", async () => {
+    expect((await askOf(1_000_000)).asks).toBe((await askOf(1_000_000, { handoff: false })).asks);
   });
 
   it("a run that does not hand off keeps the reserve its policy states, or the host-neutral floor", () => {

@@ -88,17 +88,31 @@ export function servingModel(ctx: PolicyContext): string {
   return ctx.state.model?.model ?? ctx.policy.pinnedModel ?? "";
 }
 
+/** The reply ceiling the turn about to be asked is given: its role's cap (`cappedMaxTokens`), else the shared hand-off default. */
+function turnCeiling(ctx: PolicyContext): number {
+  return compactReserveTokens(cappedMaxTokens(nextTurn(ctx.state.model, { hasTools: ctx.tools.length > 0 }).role, undefined));
+}
+
 /**
- * THE reply reserve of the turn about to be asked - the one number compaction, the model hand-off and the request's own `maxTokens` all read.
+ * THE reply reserve of the turn about to be asked - the one number compaction and the model hand-off hold back, and the bound on the
+ * request's own `maxTokens` ({@link replyAsk}).
  *
  * A run that never hands off between models holds back what its policy states, else the host-neutral floor (`compactionReserve`).
- * A run that does (`RunPolicy.modelHandoff`) can land on ANY window, so the reserve follows the model now serving: the reply ceiling the
- * turn really asks (its role's cap, `cappedMaxTokens`) but never more than a quarter of that window. The model policy clamps the
- * request's `maxTokens` to this same number, so the input that fits plus the reply asked for always fit the window.
+ * A run that does (`RunPolicy.modelHandoff`) can land on ANY window, so the reserve follows the model now serving: on-prem's floor
+ * (or the turn's role cap, when that is larger) but never more than a quarter of that window. A 200K window holds back 20K, a 64K
+ * window 16K, a 16K window 4K.
  */
 export function replyReserve(ctx: PolicyContext): number {
   if (!ctx.policy.modelHandoff) return ctx.policy.budgets.reserveTokens ?? compactionReserve(undefined);
-  const ceiling = compactReserveTokens(cappedMaxTokens(nextTurn(ctx.state.model, { hasTools: ctx.tools.length > 0 }).role, undefined));
+  const wanted = Math.max(turnCeiling(ctx), DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR);
   const window = ctx.ports.model.window?.(servingModel(ctx));
-  return window && window > 0 ? Math.max(1, Math.min(ceiling, Math.floor(window / 4))) : ceiling;
+  return window && window > 0 ? Math.max(1, Math.min(wanted, Math.floor(window / 4))) : wanted;
+}
+
+/**
+ * What a hand-off run's request asks as its `maxTokens`: the turn's role cap, clamped to the reserve only when the window forces it,
+ * so the input that fits plus the reply asked for always fit the window.
+ */
+export function replyAsk(ctx: PolicyContext): number {
+  return Math.min(turnCeiling(ctx), replyReserve(ctx));
 }
