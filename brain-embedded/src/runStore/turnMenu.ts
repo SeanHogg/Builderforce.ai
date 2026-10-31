@@ -30,6 +30,15 @@ export interface TurnMenu {
   opening: string[];
 }
 
+/**
+ * The turn a progress rule decides, or null: the plan budget's hand-off turn (decided BEFORE selection, so a forced turn that did
+ * not hand off already selects as code), else the change budget, else a run circling its read cache, else A3's escalation. Shared by
+ * both engines (`run/loopTurnMenu.ts` is the agent's side).
+ */
+export function forcedTurnFor(run: RunLoopContext, step: number, selected: BrainToolSpec[], handOffTurn: ForcedTurn | null): ForcedTurn | null {
+  return handOffTurn ?? changeBudgetTurn(run, step, selected) ?? noProgressTurn(run, step, selected) ?? progressGuardTurn(run, step, selected);
+}
+
 /** Decide turn `step`'s menu. Advances the policy when a progress rule fires. */
 export function turnMenu(run: RunLoopContext, step: number): TurnMenu {
   const { c, allTools, requestQuery, usedTools, canAskUser, alwaysAdvertised } = run;
@@ -70,7 +79,7 @@ export function turnMenu(run: RunLoopContext, step: number): TurnMenu {
   // cache is made to hand off or change now, whatever its budget says.
   // A3's escalation or pause (`progressGuard.ts`) comes last: a budget that fires first
   // already forces the same turn, and the trip stays due for the next one.
-  const forced = handOffTurn ?? changeBudgetTurn(run, step, selected) ?? noProgressTurn(run, step, selected) ?? progressGuardTurn(run, step, selected);
+  const forced = forcedTurnFor(run, step, selected, handOffTurn);
   // A3's steer (or an escalation it could not force here) opens the turn.
   const steer = run.progress.steerNote();
   // A forced turn keeps its OWN, narrower list (and so misses the cached tools prefix for

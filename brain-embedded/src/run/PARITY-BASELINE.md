@@ -13,36 +13,48 @@ Not green on the old home, reported to the planning model: `src/run/webAdapter.t
 imports (`getCell`, `beginRun`), so 3 of its 10 tests threw ReferenceError before any of this work. The only edit is two
 `import` lines. It is not one of the 20 oracle files.
 
-## Agent engine (`BRAIN_RUN_ENGINE=agent`): 142 passed, 30 failed, 1 pending of 173
+## Agent engine (`BRAIN_RUN_ENGINE=agent`): burn-down
 
-Run on commit ebbb5ae19. Six files carry every failure; 14 files are fully green (runDriver, runOutcomeCost, continueChat,
-continueClaim, continueStop, hostRunContext, modelPreflightPlan, modelSignals, serverChat, startRun.lateBackstop,
-startRun.settle, useChatTurns.draftStop, useContinuation, and earlyDelegation.child bar its pending case).
+Run per file (`NODE_OPTIONS=--max-old-space-size=8192`, one file at a time; a single batch ran out of heap).
+After terminal `ask_user`, narration, the delivery gates, the agent-owned model policy and the per-turn menu:
+**67 of 90 green in the six files that carried failures, 23 failing.** The other 14 files are fully green
+(runDriver, runOutcomeCost, continueChat, continueClaim, continueStop, hostRunContext, modelPreflightPlan, modelSignals,
+serverChat, startRun.lateBackstop, startRun.settle, useChatTurns.draftStop, useContinuation; earlyDelegation.child has
+not finished on the agent engine, see the last row).
 
 | File | pass / fail |
 |---|---|
-| brainRunStore.test.ts | 48 / 17 |
-| handOffExecution.e2e.test.ts | 1 / 5 |
+| brainRunStore.test.ts | 54 / 11 |
+| handOffExecution.e2e.test.ts | 2 / 4 |
 | readCoverageServed.test.ts | 1 / 2 |
 | runStore/earlyDelegation.test.ts | 3 / 1 |
 | runStore/forcedBriefTail.test.ts | 1 / 1 |
 | runStore/progressGuard.test.ts | 6 / 4 |
-| runStore/earlyDelegation.child.test.ts | 2 / 0, 1 pending (passes without a skip marker on `loop`; find why it is pending here) |
 
-### The gaps, by the row that closes them
+### What is still failing, by the row that closes it
 
 | Row | Failing tests |
 |---|---|
-| Final-answer gates as `DeliveryLedger` rungs (ship, review, delegation recovery, restate, stop hook, commands-handed-back) | brainRunStore: "local run is its own reviewer", "hands the user the commands it holds the tools for", "explicit sub-agent request ... answers with the delegation contract", "... re-prompts a prose ending once" |
-| Terminal `ask_user` (`ToolExtension.terminalTurn`) | brainRunStore: "settles the run on the question", "still settles on the question when the user did not ask for sub-agents" |
-| Narration kept as its own block | brainRunStore: "tags the block a turn says before its tool calls" |
-| Forced turns and progress budgets (`turnMenu`: plan budget, change budget, no-progress, A3) | handOffExecution.e2e x5 (budget, ignored forced turn, chat that coded before, read-only coding run, sub-agent starts in `code`), forcedBriefTail ("expected -1 to be 20": the forced tail brief), progressGuard x4 (WS8p unkept readiness claim: steer, escalate, pause) |
-| Stop on tool-failure breaker, forced tools-free answer | brainRunStore: "no tool-call limit" x3 (the run ends after 8 turns instead of 60, and the forced answer does not name the failures) |
-| Coder re-ask on the first edit of an analysis turn | brainRunStore: "plans on the tenant order, and re-asks the first code change of the coding model" (needs the policy's `codeChangeTools` data and the model-policy role from the platform's hand-off) |
-| Provider failure, retry and failover (`policy/model`, `fallbackSurface`) | brainRunStore: "Grok starts and then stops" x2, "retries a turn the gateway answered 429" |
-| Window fit for a small cloud model | brainRunStore: "packs the transcript for a cloud model the gateway catalog says is small" |
-| Read paging, replay from the read cache, served-window coverage | brainRunStore: "pages a big read_file by LINE", "re-serves an exact re-read ... once compaction has removed its result"; readCoverageServed x2 (the post-step needs the result row the transcript carries; the agent's row is a different identity from the cell's) |
-| Early delegation nudge rides the sixth read | earlyDelegation: "rides the sixth read" (the advisory is lost between `dispatchToolPort` and the agent's tool row) |
+| Closed in this pass | terminal `ask_user` x2, narration block, delegation gates x3 ("commands it holds", sub-agent request x2), ship/review gates, hand-off fan-out (the Brain's `hand_off` reports itself to the policy, so the agent no longer pre-empts it) |
+| Forced turns and progress budgets still do not fire: `PlatformTools.turn` is wired (`run/loopTurnMenu.ts`, shared `forcedTurnFor`) but the plan budget never reaches its limit, so there is no `hand_off`-only turn at turn 20 | handOffExecution x3 ("expected -1 to be 20"), forcedBriefTail, handOffExecution "only reads" (`toolChoice` of an absent forced turn) |
+| A3 / WS8p readiness guard: `run.progress.observe` runs in `afterDispatchHook` from the result row; the agent never feeds `RunProgressGuard.noteTurnText`/`observe` in the order the guard reads | progressGuard x4 |
+| Tool-failure breaker and the forced tools-free answer that names the failures | brainRunStore: "no tool-call limit" x3 (run ends at 8 turns instead of 60; the closing answer is not the Brain's) |
+| Coder re-ask wiring | brainRunStore: "re-asks the first code change of the coding model" |
+| Provider failure retry and failover (`ModelTransport.pickFallback`, classify the stream error as a transport failure) | brainRunStore: "Grok starts and then stops" x2, "429" |
+| Window fit for a small cloud model (`ModelTransport.window` over the gateway catalog; the transport's `fit` runs `windowFit.prepare` but the policy's own packing sees no window) | brainRunStore: "packs the transcript for a cloud model" |
+| Read paging, replay and the served-window coverage: the post-step needs the result row with the identity the cell holds; `loopStore` appends a copy | brainRunStore x2 ("pages a big read_file by LINE", "re-serves an exact re-read"), readCoverageServed x2 |
+| Early delegation advisory lost between `dispatchToolPort` and the agent's tool row | earlyDelegation "rides the sixth read" |
+| Stall nudge: "hands the user the commands" | brainRunStore: "re-prompts it instead of accepting it" (the agent's own stall heuristics read `availableToolNames`; the Brain passes `toolSpecs` count) |
+| `earlyDelegation.child` hangs on the agent engine past 8 minutes (no result); on `loop` it passes 3/3. A real gap until explained | earlyDelegation.child |
+
+### The run row (ship gate, section 8.1)
+
+`steps` on the row `run_model_outcomes` reads is `codeRunOutcome`'s count of `llm.complete` trace rows. The agent engine
+records each completed turn through the SAME `recordTurn` (the finishing turn included), so `startRun`'s one
+`codeRunOutcome` report reads the same figure on both engines. `BrainRunRequest.reportRunRow` (the agent's own uniform row)
+is NOT wired by any host, so exactly one row reaches the ledger. `runStore/engineRunRow.test.ts` pins both: one scripted
+two-turn run on each engine, one report each, equal `steps`. Wiring a host to `reportRunRow` while `codeRunOutcome` still
+reports would double-write the ledger; do one or the other.
 
 ## Done in this pass (commit ebbb5ae19)
 

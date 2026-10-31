@@ -22,6 +22,7 @@ import { beforeDispatchHook } from '../runStore/beforeDispatch';
 import { dispatchToolPort } from '../runStore/dispatchTool';
 import { afterDispatchHook } from '../runStore/toolCallHooks';
 import type { RunLoopContext } from '../runStore/runLoopContext';
+import { loopTurnMenu } from './loopTurnMenu';
 
 /** A call that ran, waiting for its result row to join the transcript. */
 interface Ran {
@@ -61,7 +62,9 @@ export function brainPlatformTools(run: RunLoopContext): BrainPlatform {
       get selection() {
         return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, required: new Set(offersHandOff(run.policy) && run.canAskUser ? [...run.alwaysAdvertised, HAND_OFF_TOOL] : run.alwaysAdvertised) };
       },
-      handsOff: (name) => name === HAND_OFF_TOOL,
+      // No `handsOff`: `hand_off` reports itself to the model policy inside `beforeDispatchHook` (through the run's view), and a
+      // call the agent hands off first would find the plan already closed.
+      turn: (env) => loopTurnMenu(run, env, run.allTools?.length ?? 0),
       async execute(name, args): Promise<PlatformToolResult> {
         step += 1;
         const ctx = { step, messages: run.convo } as unknown as TurnContext<ChatCompletionMessage>;

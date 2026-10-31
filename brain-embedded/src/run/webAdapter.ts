@@ -18,16 +18,19 @@ import {
   runSteeringSource,
   type CapabilityProvider,
   type DeliveryLedger,
+  type EventSink,
   type PlatformTools,
   type ToolExtension,
   type PolicyGate,
   type RunStore,
+  type RunView,
   type SteeringSource,
   type RunPolicy,
   type RunPorts,
   type RunTask,
 } from '@builderforce/agent-run';
 import type { CostLeverId } from '@builderforce/cost-levers';
+import type { RunPolicyOptions } from '@builderforce/run-policy';
 import { CODE_CHANGE_TOOLS } from '../localWorkspaceTools';
 import { deviceLeverOn } from '../runStore/deviceLevers';
 import type { RunCell } from '../runStore/runCell';
@@ -80,6 +83,12 @@ export interface BrainRunBinding {
   turn?: TurnObserver;
   /** Tools the surface runs beside the registry's, and the turns that end the run before a call dispatches. */
   extensions?: ToolExtension;
+  /** How the run's model hand-off starts (`pipelinePolicyOptions`): the phase it begins in and the stage models. */
+  start?: Pick<RunPolicyOptions, 'startPhase' | 'phaseModels'>;
+  /** Where the run's events go, when the surface reacts to some beyond rendering them (`loopTurn.ts`). */
+  events?: EventSink;
+  /** Told the live run once, before turn 1: the surface reads the model policy from it. */
+  attach?: (view: RunView) => void;
   /** What the task still owes when a turn ends in prose (`brainDelivery.ts`). */
   delivery?: DeliveryLedger;
   /** The surface's own tools, when it runs them itself (`brainPlatformTools.ts`). */
@@ -111,8 +120,9 @@ export function buildBrainRunPorts(b: BrainRunBinding): RunPorts {
     store: b.store ?? cellRunStore(cell, { ...(b.seeded !== undefined ? { seeded: b.seeded } : {}), ...(b.commitMemory ? { commitMemory: b.commitMemory } : {}) }),
     ...(b.platform ? { platform: b.platform } : {}),
     ...(b.delivery ? { delivery: b.delivery } : {}),
+    ...(b.attach ? { attach: b.attach } : {}),
     ...(b.extensions ? { extensions: b.extensions } : {}),
-    events: brainEventSink(cell, b.reportOutcome),
+    events: b.events ?? brainEventSink(cell, b.reportOutcome),
     human: brainHumanChannel(runKey),
     steering: b.steering ?? runSteeringSource(runKey),
     context: brainContextSource(req, b.gatherContext),
@@ -135,7 +145,7 @@ export function brainRunTask(b: Pick<BrainRunBinding, 'req' | 'request'>, defaul
  * The policy DATA of one Brain run. Every field is read off the request or the device —
  * the same facts the Brain's own loop reads — and none selects behaviour by surface.
  */
-export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | 'request' | 'approvalGates'>): RunPolicy {
+export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | 'request' | 'approvalGates' | 'start'>): RunPolicy {
   const { req } = b;
   return {
     entryPoint: b.entryPoint,
@@ -147,6 +157,8 @@ export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | '
     budgets: req.maxRunBudgetUsd && req.maxRunBudgetUsd > 0 ? { usd: req.maxRunBudgetUsd } : {},
     codeChangeTools: [...CODE_CHANGE_TOOLS],
     ...(req.model && req.modelStrict ? { pinnedModel: req.model } : {}),
+    // The Brain's hand-off: a plain policy that starts in the phase the run's role and route say, on the stage models the host chose.
+    ...(b.start ? { modelStart: { plain: true, ...(req.model ? { model: req.model } : {}), strict: !!req.modelStrict, ...(b.start.startPhase ? { startPhase: b.start.startPhase } : {}), ...(b.start.phaseModels ? { phaseModels: b.start.phaseModels } : {}) } } : {}),
     inference: 'hybrid',
     verify: 'none',
     approvalGates: [...(b.approvalGates ?? [])],

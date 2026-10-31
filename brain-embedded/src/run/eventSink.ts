@@ -48,6 +48,11 @@ export function traceStepFor(event: RunEvent, ts: string): BrainTraceEvent | nul
   }
 }
 
+/** What a surface does on an event beyond rendering it: the coder re-ask discards the turn it replaces (`loopTurn.ts`). */
+export interface SinkReactions {
+  coderReask?: (event: Extract<RunEvent, { kind: 'model.coder_reask' }>) => void;
+}
+
 /** Where the run's outcome row goes — the host's usage ledger / learned-routing report. */
 export type OutcomeReport = (row: RunOutcomeRow) => Promise<unknown> | void;
 
@@ -55,9 +60,10 @@ export type OutcomeReport = (row: RunOutcomeRow) => Promise<unknown> | void;
  * Build the sink over a run cell. `outcome` is told the uniform §8.2 row once, at the end —
  * it is the host's to store; a rejection is the host's to handle, never the run's.
  */
-export function brainEventSink(c: RunCell, outcome?: OutcomeReport): EventSink {
+export function brainEventSink(c: RunCell, outcome?: OutcomeReport, on: SinkReactions = {}): EventSink {
   return {
     emit(event: RunEvent): void {
+      if (event.kind === 'model.coder_reask' && on.coderReask) return on.coderReask(event);
       const step = traceStepFor(event, nowIso());
       if (step) {
         pushTrace(c, step);

@@ -11,7 +11,7 @@ import type { ModelRequest } from '@builderforce/agent-run';
 import type { BrainToolSpec, StreamChatResult } from '../streamChatCompletion';
 import { StreamInterruptedError } from '../streamChatCompletion';
 import { turnMaxTokens } from '../effort';
-import { providerFailureTrace } from '../runPolicyTraces';
+import { coderReaskTrace, providerFailureTrace } from '../runPolicyTraces';
 import { emit, nowIso, nowMs, pushTrace } from '../runStore/runCells';
 import type { RunLoopContext } from '../runStore/runLoopContext';
 import { asLiveTurn } from '../runStore/turnPersistence';
@@ -26,6 +26,8 @@ export interface LastTurn {
   requested?: string;
   /** The reply a turn that ended the run on a question settles with, taken once by the extension's `terminalTurn`. */
   terminal?: string;
+  /** Where the last recorded turn's trace rows begin (the coder re-ask discards them). */
+  traceFrom?: number;
   /** The number of the turn in flight (the steering port stamps `steer.applied` with it). */
   step: number;
 }
@@ -66,6 +68,7 @@ export function loopTurnObserver(run: RunLoopContext): { observer: TurnObserver;
           const requested = request.model ?? 'default';
           run.windowFit.served(result.resolvedModel ?? request.model);
           if (result.toolCalls.length > 0) run.announcementRecoveries = 0;
+          last.traceFrom = c.trace.length;
           await recordTurn(run, {
             result, iter: step, llmStart, live, role: request.role ?? (tools.length > 0 ? 'code' : 'chat'),
             resolved, requested, advertised: tools, advertisedNames: new Set(tools.map((t) => t.function.name)),
@@ -93,4 +96,15 @@ export function loopTurnObserver(run: RunLoopContext): { observer: TurnObserver;
     },
   };
   return { observer, last };
+}
+
+/**
+ * The coder re-ask replaced the analysis model's answer: the Brain's loop never recorded it, so neither does the run's trace.
+ * Removes the `llm.complete` (and narration) rows the discarded turn left, then says the re-ask the way the loop does.
+ */
+export function retractLastTurn(run: RunLoopContext, last: LastTurn, step: number, model: string | undefined): void {
+  const { c } = run;
+  if (last.traceFrom !== undefined) c.trace.splice(last.traceFrom);
+  last.traceFrom = undefined;
+  pushTrace(c, coderReaskTrace(nowIso(), step, model));
 }

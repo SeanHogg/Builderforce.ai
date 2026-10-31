@@ -24,6 +24,7 @@ import { nowIso, pushTrace, recordAppended } from './runCells';
 import { canonicalTurnText, provenanceMetadata } from './turnPersistence';
 import type { BrainRunRequest } from './runTypes';
 import type { RunPipeline } from './pipelineRoute';
+import type { RunView } from '@builderforce/agent-run';
 import type { CacheServedStreak } from './cacheServedStreak';
 import type { RunProgressGuard } from './progressGuard';
 
@@ -107,6 +108,8 @@ export interface RunLoopContext {
 
   /** THE model hand-off policy's state — advanced only through {@link reportToPolicy}. */
   policy: RunPolicyState;
+  /** The agent's live run, when it drives this one (`run/runPrepared.ts`): the policy is ITS state, and events go to it. */
+  view?: RunView;
   /** A one-shot forced tool choice from stall recovery, consumed by the next turn. */
   forceToolChoice: 'required' | undefined;
   /** The current streak of narration-only turns the stall recovery has re-prompted. */
@@ -135,6 +138,7 @@ export interface RunLoopContext {
 
 /** Report an event to the run policy; the new state is the run's. */
 export function reportToPolicy(run: RunLoopContext, event: RunPolicyEvent): RunPolicyState {
+  if (run.view) return run.view.report(event);
   return (run.policy = reduceRunPolicy(run.policy, event));
 }
 
@@ -173,7 +177,9 @@ export function failureAdvisoryFor(run: RunLoopContext, name: string, args: unkn
 export async function settleReply(run: RunLoopContext, rawText: string, result: StreamChatResult, requested?: string): Promise<BrainMessage> {
   const { c, chatId, convo } = run;
   const text = canonicalTurnText(rawText);
-  convo.push({ role: 'assistant', content: replayTextOf(text) });
+  // The agent's store log already carries the final answer row; one copy only.
+  const tail = convo[convo.length - 1];
+  if (!(tail?.role === 'assistant' && tail.content === replayTextOf(text))) convo.push({ role: 'assistant', content: replayTextOf(text) });
   const meta = provenanceMetadata(result, requested);
   const [assistantMsg] = await run.req.persistence.sendMessages(chatId, [{ role: 'assistant', content: text, ...(meta ? { metadata: meta } : {}) }]);
   c.streamingText = '';

@@ -7,12 +7,14 @@
 
 import { runAgent } from '@builderforce/agent-run';
 import type { RunLoopContext } from '../runStore/runLoopContext';
+import { pipelinePolicyOptions } from '../runStore/pipelineRoute';
 import { brainDeliveryLedger } from './brainDelivery';
 import { brainPlatformTools } from './brainPlatformTools';
 import { loopRunStore } from './loopStore';
 import { loopSteeringSource } from './loopSteering';
 import { settleBrainRun } from './loopSettle';
-import { loopTurnObserver } from './loopTurn';
+import { brainEventSink } from './eventSink';
+import { loopTurnObserver, retractLastTurn } from './loopTurn';
 import { toRunMessage } from './runMessages';
 import { brainRunPolicy, brainRunTask, buildBrainRunPorts, type BrainRunBinding } from './webAdapter';
 
@@ -31,6 +33,13 @@ export async function runPrepared(run: RunLoopContext): Promise<void> {
     turn: observer,
     platform: platform.tools,
     delivery: brainDeliveryLedger(run, last),
+    events: brainEventSink(c, req.reportRunRow, { coderReask: (e) => retractLastTurn(run, last, e.step, e.model) }),
+    start: pipelinePolicyOptions(req, run.pipeline),
+    // From here the model policy is the AGENT's: the Brain's guards read `run.policy` and report to it through the view.
+    attach: (view) => {
+      run.view = view;
+      Object.defineProperty(run, 'policy', { get: () => view.policy(), configurable: true });
+    },
     // A question ends the run before any call dispatches (decided once per turn in `loopTurn.ts`).
     extensions: {
       schemas: () => [],
