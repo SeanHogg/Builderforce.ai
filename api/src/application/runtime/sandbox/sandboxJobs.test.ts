@@ -61,14 +61,6 @@ function mailboxHarness(server: Server): Harness {
 const harnesses: Array<[string, (server: Server) => Harness]> = [['container', containerHarness], ['mailbox', mailboxHarness]];
 
 describe.each(harnesses)('the %s transport', (_name, make) => {
-  it('carries the working directory on a foreground command, only when one is given', async () => {
-    const h = make(() => ({ ok: true, exitCode: 0, output: 'ok' }));
-    await h.sandbox.run('npm test', undefined, undefined, 'app');
-    await h.sandbox.run('ls');
-    h.stop();
-    expect(h.calls.map((c) => c.body)).toEqual([{ command: 'npm test', cwd: 'app' }, { command: 'ls' }]);
-  });
-
   it('starts a job with its directory and returns the sandbox\'s id', async () => {
     const h = make(() => ({ ok: true, id: 'job-1' }));
     await expect(h.sandbox.jobs!.start('npm run dev', 'app')).resolves.toEqual({ ok: true, id: 'job-1' });

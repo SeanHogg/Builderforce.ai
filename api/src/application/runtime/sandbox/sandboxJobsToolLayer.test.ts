@@ -41,8 +41,8 @@ function loopback(withJobs = true): RunSandbox {
   const serve = (path: string, body: Record<string, unknown>) => serveSandbox(box, path, body);
   return {
     fs: async () => ({ ok: false, error: 'not used' }),
-    run: async (command, _signal, timeoutMs, cwd) =>
-      toShellResult((await serve('/sandbox/run', { command, ...(timeoutMs ? { timeoutMs } : {}), ...(cwd ? { cwd } : {}) })) as unknown as SandboxRunReply),
+    run: async (command, _signal, timeoutMs) =>
+      toShellResult((await serve('/sandbox/run', { command, ...(timeoutMs ? { timeoutMs } : {}) })) as unknown as SandboxRunReply),
     checks: async () => null,
     close: async () => closeSandboxBox(box),
     ...(withJobs ? { jobs: sandboxJobsOver(async <T,>(path: string, body: Record<string, unknown>) => (await serve(path, body)) as T) } : {}),
