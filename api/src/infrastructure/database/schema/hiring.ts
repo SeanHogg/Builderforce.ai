@@ -475,7 +475,6 @@ export const candidateDemographics = pgTable('candidate_demographics', {
   createdAt:    timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_candidate_demographics').on(t.tenantId, t.candidateRef, t.category),
-  index('idx_candidate_demographics_candidate').on(t.tenantId, t.candidateRef),
 ]);
 
 /** A reusable bank of interview questions, grouped for a role. The asked

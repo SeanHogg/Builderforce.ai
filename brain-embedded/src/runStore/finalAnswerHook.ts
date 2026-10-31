@@ -22,16 +22,12 @@ import { modelFailoverTrace } from '../runPolicyTraces';
 import { takeRunSteering } from './steerInterrupt';
 import { persistSteer } from './steerPersistence';
 import { askStopHook } from '../stopHooks';
-import { leftChangeUnshipped, unshippedChangeNudge } from '../selfReviewShip';
-import { leftChangeUnreviewed, unreviewedChangeNudge } from '../previewReview';
-import { undelegatedRequestNudge } from '../delegationRequest';
-import { runLeftDelegationUndone } from './earlyDelegation';
-import { isRestatedReply, restatedReplyNudge } from '../restatedReply';
-import { emit, nowIso, pushTrace, runTrace } from './runCells';
+import { emit, nowIso, pushTrace } from './runCells';
 import { persistMidTurnText } from './turnPersistence';
 import { emitEvermindLearnReconcile } from './runMemory';
 import { metaOf, reportToPolicy, settleReply, type RunLoopContext } from './runLoopContext';
 import { skipsVerifyStage } from './pipelineRoute';
+import { deliveryGates } from './deliveryGates';
 
 /** A blocked finish that already wrote files continues on the review model, not the author.
  *  A QUICK run has no verify stage (`pipelineRoute.ts`): it finishes on its coding pass. */
@@ -41,7 +37,7 @@ function enterVerifyIfChanged(run: RunLoopContext): void {
 }
 
 export function finalAnswerHook(run: RunLoopContext): NonNullable<LoopHooks<ChatCompletionMessage>['onNoToolCalls']> {
-  const { c, chatId, runKey, req, convo, canAskUser, catalogToolNames, userRequest, priorReply } = run;
+  const { c, chatId, runKey, req, convo, canAskUser, userRequest } = run;
   const { tools: toolSpecs, pickFallbackModel, runTool, persistence, onActivity } = req;
   return async (ctx, turn) => {
     const iter = ctx.step;
@@ -149,94 +145,19 @@ export function finalAnswerHook(run: RunLoopContext): NonNullable<LoopHooks<Chat
       return { action: 'continue' };
     }
 
-    // The turn CHANGED code and is ending without having even tried to ship it. In a
-    // local session that change has no other reviewer: accepted as-is, its delta ticket
-    // parks in `in_review` (75%) with nothing that will ever move it. Sent back once
-    // with the self-review ship contract. Quiet when the user said not to commit, when
-    // a commit/push/PR was attempted (a declined or failed publish is a result to
-    // report, not to retry), and on any host that cannot commit and push.
-    if (runTool && !run.shipRecoveryUsed && leftChangeUnshipped({
-      codeChanged: c.codeChanged,
-      toolNames: catalogToolNames,
-      requestText: userRequest,
-      events: runTrace(c),
-    })) {
-      run.shipRecoveryUsed = true;
-      await requeueWithNudge(unshippedChangeNudge());
-      pushTrace(c, {
-        ts: nowIso(),
-        category: 'message',
-        label: 'loop.recover_unshipped_change',
-        args: { step: iter, files: c.touchedFiles.slice(0, 20) },
-        result: 'Run changed code and ended without committing or pushing it — re-prompted to verify, self-review and ship (this local session is the change\'s only reviewer).',
-      });
-      c.streamingText = '';
-      emit(c);
-      enterVerifyIfChanged(run);
-      return { action: 'continue' };
-    }
-
-    // The Studio's twin of the gate above: the turn CHANGED the app and is ending without
-    // having inspected the preview and recorded a review. Nobody else can see that
-    // preview, so accepted as-is the change's ticket parks in `in_review` forever. Sent
-    // back once; quiet when the user said not to review, and once a review (complete or
-    // gaps) follows an inspection — a failed check or a gap is a result to report.
-    if (runTool && !run.reviewRecoveryUsed && leftChangeUnreviewed({
-      codeChanged: c.codeChanged,
-      toolNames: catalogToolNames,
-      requestText: userRequest,
-      events: runTrace(c),
-    })) {
-      run.reviewRecoveryUsed = true;
-      await requeueWithNudge(unreviewedChangeNudge());
-      pushTrace(c, {
-        ts: nowIso(),
-        category: 'message',
-        label: 'loop.recover_unreviewed_change',
-        args: { step: iter, files: c.touchedFiles.slice(0, 20) },
-        result: 'Run changed the app and ended without inspecting the preview and recording a review — re-prompted to verify and review (this Studio session is the change\'s only reviewer).',
-      });
-      c.streamingText = '';
-      emit(c);
-      enterVerifyIfChanged(run);
-      return { action: 'continue' };
-    }
-
-    // The user asked for SUB-AGENTS and the run is ending in prose without having
-    // started one. Sent back once with the delegation contract; quiet once a spawn was
-    // attempted (a refused or failed child is a result to report) and on any host that
-    // cannot spawn. The `ask_user` twin of this gate is in `beforeToolCalls`.
-    if (runTool && !run.delegationRecoveryUsed && runLeftDelegationUndone(run)) {
-      run.delegationRecoveryUsed = true;
-      await requeueWithNudge(undelegatedRequestNudge(catalogToolNames));
-      pushTrace(c, {
-        ts: nowIso(),
-        category: 'message',
-        label: 'loop.recover_undelegated_request',
-        args: { step: iter, via: 'reply' },
-        result: 'The user asked for sub-agents and the run ended without starting one — re-prompted to spawn them locally.',
-      });
-      c.streamingText = '';
-      emit(c);
-      return { action: 'continue' };
-    }
-
-    // The reply is the previous turn's status again. The user already has it, so it is
-    // sent back once to act on the next unfinished item instead (chat #126: the same
-    // "not complete" summary, turn after turn, each rebuilt from a full re-read).
-    if (runTool && !run.restateRecoveryUsed && isRestatedReply(result.text, priorReply)) {
-      run.restateRecoveryUsed = true;
-      await requeueWithNudge(restatedReplyNudge());
-      pushTrace(c, {
-        ts: nowIso(),
-        category: 'message',
-        label: 'loop.recover_restated_reply',
-        args: { step: iter },
-        result: 'Final reply repeated the previous turn\'s answer — re-prompted to act on the next unfinished item instead of restating it.',
-      });
-      c.streamingText = '';
-      emit(c);
-      return { action: 'continue' };
+    // The ship, review, delegation and restated-reply gates (`deliveryGates.ts`): each sends the turn back once.
+    if (runTool) {
+      for (const gate of deliveryGates(run)) {
+        if (!gate.applies(result.text)) continue;
+        gate.spend();
+        await requeueWithNudge(gate.nudge());
+        pushTrace(c, { ts: nowIso(), category: 'message', label: gate.trace.label, args: { step: iter, ...gate.trace.args() }, result: gate.trace.result });
+        c.streamingText = '';
+        emit(c);
+        // A blocked finish that already wrote files continues on the review model, not the author.
+        if (gate.entersVerify) enterVerifyIfChanged(run);
+        return { action: 'continue' };
+      }
     }
 
     // Final text — record in the transcript, persist, broadcast to mounted views. A

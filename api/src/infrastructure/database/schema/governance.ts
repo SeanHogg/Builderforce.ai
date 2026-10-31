@@ -652,7 +652,6 @@ export const forecastAnomalyAcks = pgTable('forecast_anomaly_acks', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => ({
   uqAck:    uniqueIndex('uq_forecast_anomaly_ack').on(t.tenantId, t.metric, t.pointDay),
-  byMetric: index('idx_forecast_anomaly_ack_metric').on(t.tenantId, t.metric),
 }));
 
 
@@ -840,7 +839,6 @@ export const devexResponses = pgTable('devex_responses', {
   submittedAt:    timestamp('submitted_at').notNull().defaultNow(),
 }, (t) => [
   index('idx_devex_responses_tenant').on(t.tenantId),
-  index('idx_devex_responses_campaign').on(t.campaignId),
   index('idx_devex_responses_dedup').on(t.campaignId, t.respondentHash),
 ]);
 

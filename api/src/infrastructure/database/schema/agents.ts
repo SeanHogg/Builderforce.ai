@@ -101,16 +101,6 @@ export const marketplaceSkills = pgTable('marketplace_skills', {
 });
 
 
-/** RETIRED — no code reads or writes it. Migration 1236 folded its rows into
- *  `artifact_likes`, THE like store (application/marketplace/artifactLikes.ts). */
-export const marketplaceSkillLikes = pgTable('marketplace_skill_likes', {
-  userId:    varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
-  skillSlug: varchar('skill_slug', { length: 255 }).notNull(),
-}, (t) => [
-  primaryKey({ columns: [t.userId, t.skillSlug] }),
-]);
-
-
 /**
  * Unified artifact likes — tracks likes for any artifact type (skill, persona, content).
  */
@@ -1229,7 +1219,6 @@ export const toolAuditDaily = pgTable('tool_audit_daily', {
   lastTs:      timestamp('last_ts').notNull(),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 }, (t) => ({
-  byTenantDay: index('idx_tool_audit_daily_tenant_day').on(t.tenantId, t.day),
   grain: uniqueIndex('uq_tool_audit_daily_grain')
     .on(t.tenantId, t.day, t.toolName, t.category, t.agentHostId, t.cloudAgentRef),
 }));
@@ -3061,7 +3050,6 @@ export const tenantModels = pgTable('tenant_models', {
   createdAt:       timestamp('created_at').notNull().defaultNow(),
   updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
-  byTenant: index('idx_tenant_models_tenant').on(t.tenantId),
   uqSlug:   uniqueIndex('uq_tenant_models_slug').on(t.tenantId, t.slug),
 }));
 

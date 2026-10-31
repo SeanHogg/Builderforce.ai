@@ -150,11 +150,8 @@ export default {
   newsletter_events:
     'PERSON-OWNED: open/click/bounce events for a `newsletter_subscribers` row, which is itself a pre-tenant marketing record. It inherits its (absent) scope from the subscriber; adding a tenant here would invent one the parent never had.',
 
-  marketplace_skill_likes:
-    'PERSON-OWNED: a like the person pressed on a public marketplace listing, and the listing (`marketplace_skills`) is global. The like counts once platform-wide; a per-workspace like would let one user inflate a public count by switching workspace.',
-
   artifact_likes:
-    'PERSON-OWNED: the same rule as `marketplace_skill_likes`, one noun out — a person\'s like on a public artifact slug. The signal is global because the thing liked is.',
+    'PERSON-OWNED: a like the person pressed on a public marketplace listing, and the listing is global. The like counts once platform-wide; a per-workspace like would let one user inflate a public count by switching workspace.',
 
   professional_references:
     'PERSON-OWNED: a person\'s professional referees, carried on their profile across every workspace they work in. Scoping them would mean re-collecting the same referee once per employer, which is what having a profile exists to avoid.',

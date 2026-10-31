@@ -17,7 +17,9 @@ import {
   asksForSubagents,
   runSteeringSource,
   type CapabilityProvider,
+  type DeliveryLedger,
   type PlatformTools,
+  type ToolExtension,
   type PolicyGate,
   type RunStore,
   type SteeringSource,
@@ -76,6 +78,10 @@ export interface BrainRunBinding {
   approvalGates?: readonly PolicyGate[];
   /** The surface's live view and record of each turn (`loopTurn.ts`). */
   turn?: TurnObserver;
+  /** Tools the surface runs beside the registry's, and the turns that end the run before a call dispatches. */
+  extensions?: ToolExtension;
+  /** What the task still owes when a turn ends in prose (`brainDelivery.ts`). */
+  delivery?: DeliveryLedger;
   /** The surface's own tools, when it runs them itself (`brainPlatformTools.ts`). */
   platform?: PlatformTools;
   /** Where the run's steered direction comes from, when the surface records it as it is read (`loopSteering.ts`). */
@@ -104,6 +110,8 @@ export function buildBrainRunPorts(b: BrainRunBinding): RunPorts {
     capabilities: b.capabilities,
     store: b.store ?? cellRunStore(cell, { ...(b.seeded !== undefined ? { seeded: b.seeded } : {}), ...(b.commitMemory ? { commitMemory: b.commitMemory } : {}) }),
     ...(b.platform ? { platform: b.platform } : {}),
+    ...(b.delivery ? { delivery: b.delivery } : {}),
+    ...(b.extensions ? { extensions: b.extensions } : {}),
     events: brainEventSink(cell, b.reportOutcome),
     human: brainHumanChannel(runKey),
     steering: b.steering ?? runSteeringSource(runKey),

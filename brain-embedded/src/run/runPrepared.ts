@@ -7,6 +7,7 @@
 
 import { runAgent } from '@builderforce/agent-run';
 import type { RunLoopContext } from '../runStore/runLoopContext';
+import { brainDeliveryLedger } from './brainDelivery';
 import { brainPlatformTools } from './brainPlatformTools';
 import { loopRunStore } from './loopStore';
 import { loopSteeringSource } from './loopSteering';
@@ -29,6 +30,14 @@ export async function runPrepared(run: RunLoopContext): Promise<void> {
     request: run.userRequest,
     turn: observer,
     platform: platform.tools,
+    delivery: brainDeliveryLedger(run, last),
+    // A question ends the run before any call dispatches (decided once per turn in `loopTurn.ts`).
+    extensions: {
+      schemas: () => [],
+      handles: () => false,
+      dispatch: async () => ({ data: null }),
+      terminalTurn: () => { const reply = last.terminal; last.terminal = undefined; return reply; },
+    },
     steering: loopSteeringSource(run, () => last.step),
     store: loopRunStore(c, { toolRowAppended: platform.toolRowAppended }),
     ...(req.reportRunRow ? { reportOutcome: req.reportRunRow } : {}),

@@ -842,7 +842,6 @@ export const projectFactRelations = pgTable('project_fact_relations', {
   createdAt:  timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   unique('uq_fact_relation').on(t.tenantId, t.projectId, t.fromRef, t.toRef, t.kind),
-  index('idx_fact_relations_from').on(t.tenantId, t.projectId, t.fromRef),
   index('idx_fact_relations_to').on(t.tenantId, t.projectId, t.toRef),
 ]);
 
@@ -1538,7 +1537,6 @@ export const prodIncidentImplicatedTasks = pgTable('prod_incident_implicated_tas
   createdAt:  timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uidx_incident_implicated_task').on(t.incidentId, t.taskId),
-  index('idx_incident_implicated_incident').on(t.incidentId),
   index('idx_incident_implicated_tenant').on(t.tenantId),
 ]);
 
@@ -1609,9 +1607,7 @@ export const dashboardPins = pgTable('dashboard_pins', {
   widgetKey: varchar('widget_key', { length: 96 }).notNull(),
   position:  integer('position').notNull().default(0),
   pinnedAt:  timestamp('pinned_at').notNull().defaultNow(),
-}, (t) => ({
-  byTenantUser: index('idx_dashboard_pins_tenant_user').on(t.tenantId, t.userId),
-}));
+});
 
 
 // ---------------------------------------------------------------------------
@@ -1685,7 +1681,6 @@ export const projectSecrets = pgTable('project_secrets', {
   updatedAt:      timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   unique('uq_project_secrets_project_name').on(t.projectId, t.name),
-  index('idx_project_secrets_project').on(t.projectId),
 ]);
 
 /**
@@ -1704,7 +1699,6 @@ export const projectAppBlueprints = pgTable('project_app_blueprints', {
   createdAt:      timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   unique('uq_project_app_blueprints_project_commit').on(t.projectId, t.commitSha),
-  index('idx_project_app_blueprints_project').on(t.projectId),
   index('idx_project_app_blueprints_commit').on(t.commitSha),
 ]);
 
@@ -1774,7 +1768,6 @@ export const projectGameTargets = pgTable('project_game_targets', {
   updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   unique('uq_project_game_targets').on(t.projectId, t.slug, t.target),
-  index('idx_project_game_targets_project').on(t.projectId),
   index('idx_project_game_targets_tenant').on(t.tenantId),
 ]);
 

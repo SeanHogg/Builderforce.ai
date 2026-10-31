@@ -331,7 +331,6 @@ export const freelancerReviews = pgTable('freelancer_reviews', {
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
-  byFreelancer: index('idx_reviews_freelancer').on(t.freelancerUserId),
   byFreelancerDir: index('idx_reviews_freelancer_dir').on(t.freelancerUserId, t.direction),
   byTenantDir: index('idx_reviews_tenant_dir').on(t.tenantId, t.direction),
   /** Replaces the single-column unique so BOTH sides may review one engagement. */

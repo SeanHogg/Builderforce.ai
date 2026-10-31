@@ -981,7 +981,6 @@ export const vscodeConnections = pgTable('vscode_connections', {
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 }, (t) => ({
   uqUserMachine: uniqueIndex('uq_vscode_conn_user_machine').on(t.tenantId, t.userId, t.machineName),
-  byTenant:      index('idx_vscode_conn_tenant').on(t.tenantId),
 }));
 
 

@@ -1637,7 +1637,6 @@ export const creationOutcomeEvents = pgTable('creation_outcome_events', {
   bySession: index('idx_creation_outcomes_session_time').on(t.sessionId, t.occurredAt),
   byProject: index('idx_creation_outcomes_project_time').on(t.projectId, t.occurredAt),
   byTenant: index('idx_creation_outcomes_tenant_time').on(t.tenantId, t.occurredAt),
-  byCorrelation: index('idx_creation_outcomes_correlation').on(t.sessionId, t.correlationId),
   correlationPhase: uniqueIndex('uq_creation_outcomes_correlation_phase').on(t.sessionId, t.correlationId, t.action, t.phase),
 }));
 

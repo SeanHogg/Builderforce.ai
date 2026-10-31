@@ -199,7 +199,6 @@ export const rdFinancialsQuarterly = pgTable('rd_financials_quarterly', {
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
-  byFy: index('idx_rd_financials_fy').on(t.tenantId, t.fiscalYear, t.quarter),
   uqCat: uniqueIndex('uq_rd_financials_cat').on(t.tenantId, t.fiscalYear, t.quarter, t.category),
 }));
 

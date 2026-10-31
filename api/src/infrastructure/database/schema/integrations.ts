@@ -492,7 +492,6 @@ export const extensionPackages = pgTable('extension_packages', {
   updatedAt:        timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index('idx_extension_packages_tenant').on(t.tenantId),
-  index('idx_extension_packages_listed').on(t.listingState, t.kind),
   index('idx_extension_packages_directory').on(t.listingState, t.kind, t.installCount),
 ]);
 

@@ -16,6 +16,7 @@ import { emit, nowIso, nowMs, pushTrace } from '../runStore/runCells';
 import type { RunLoopContext } from '../runStore/runLoopContext';
 import { asLiveTurn } from '../runStore/turnPersistence';
 import { recordTurn } from '../runStore/turnRecorder';
+import { commitTurnNarration, terminalAskReply, type TurnCall } from '../runStore/turnToolCalls';
 import { openLiveTurn } from '../runStore/turnStream';
 import type { TurnObserver, TurnSession } from './modelTransport';
 
@@ -23,8 +24,20 @@ import type { TurnObserver, TurnSession } from './modelTransport';
 export interface LastTurn {
   result?: StreamChatResult;
   requested?: string;
+  /** The reply a turn that ended the run on a question settles with, taken once by the extension's `terminalTurn`. */
+  terminal?: string;
   /** The number of the turn in flight (the steering port stamps `steer.applied` with it). */
   step: number;
+}
+
+/** A call's arguments as the agent parses them: a string that is not a JSON object is a malformed call. */
+function parsedCall(name: string, raw: string): TurnCall {
+  try {
+    const args = JSON.parse(raw || '{}') as unknown;
+    return typeof args === 'object' && args !== null && !Array.isArray(args) ? { name, args: args as Record<string, unknown>, malformed: false } : { name, args: {}, malformed: true };
+  } catch {
+    return { name, args: {}, malformed: true };
+  }
 }
 
 /** The observer over one Brain run, and a view of its last turn. */
@@ -59,6 +72,14 @@ export function loopTurnObserver(run: RunLoopContext): { observer: TurnObserver;
           });
           last.result = result;
           last.requested = requested;
+          if (result.toolCalls.length > 0) {
+            // What the turn SAID it would do, judged against what its calls do (`progressGuard.ts`).
+            run.progress.noteTurnText(result.text);
+            const calls = result.toolCalls.map((tc) => parsedCall(tc.name, tc.args));
+            // A question ends the run as its reply; any other turn's narration is kept as its own block (`turnToolCalls.ts`).
+            last.terminal = terminalAskReply(run, result, calls, step);
+            if (last.terminal === undefined) await commitTurnNarration(run, result, requested);
+          }
         },
         failed(error) {
           // A user Stop rejects the stream: that is not a failed turn, and it leaves no error step.

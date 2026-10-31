@@ -151,7 +151,6 @@ export const objects = pgTable('objects', {
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_objects_ref').on(t.tenantId, t.kind, t.refId),
-  index('idx_objects_tenant_kind').on(t.tenantId, t.kind),
   index('idx_objects_tenant_touched').on(t.tenantId, t.updatedAt),
   index('idx_objects_parent').on(t.parentId),
   index('idx_objects_domain').on(t.tenantId, t.domain, t.updatedAt),

@@ -441,11 +441,8 @@ export default {
       'delivery cannot open a second ticket. It has no recipient, no payload, no attempt ' +
       'count and no terminal state; a unique index is its entire behaviour.',
 
-  marketplace_skill_likes:
-    '`annotations` is NOT NULL on both `tenant_id` and `object_id`. This like is pressed on a PUBLIC marketplace slug, which has no tenant and no objects row — the listing is global precisely so a stranger can find it. There is nothing for either required column to hold.',
-
   artifact_likes:
-    'the same wall as `marketplace_skill_likes`: identity is (artifact_type, artifact_slug), a SLUG rather than an object id, and the row is global. `annotations` requires a tenant and a registered object; this has neither.',
+    '`annotations` is NOT NULL on both `tenant_id` and `object_id`, and this like is pressed on a PUBLIC marketplace slug: identity is (artifact_type, artifact_slug), a SLUG rather than an object id, and the row is global. There is nothing for either required column to hold.',
 
   sales_coaching_notes:
     '`annotations.tenant_id` is NOT NULL. Both ends of this note are Builderforce sales staff and the row has no tenant at all — see the tenant-column adjudication. A primitive that cannot represent the row is not a home for it.',
