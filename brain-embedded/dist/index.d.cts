@@ -220,14 +220,18 @@ type AppendJournalEvent<T = unknown> = Omit<JournalEvent<T>, 'localSequence' | '
     payloadHash?: string;
 };
 /**
- * The early-exit sentinel a scan visitor returns to STOP the scan at that row.
- * Returning anything else (including undefined) continues to the next row.
+ * The sentinel's TYPE is structural, not `unique symbol`: a package that bundles this
+ * contract's declarations (brain-embedded's rolled-up `.d.ts`) gets its OWN `unique symbol`,
+ * which TypeScript treats as a different type from this one, so a store typed here would not
+ * be assignable to the bundled `LocalFirstStore`. The runtime value is `Symbol.for`, shared.
  */
-declare const SCAN_STOP: unique symbol;
+type ScanStop = symbol & {
+    readonly __builderforceScanStop: true;
+};
 /** What a `scan` / `scanPending` callback may return: nothing (continue) or `SCAN_STOP`. */
-type ScanVisit<T = unknown> = (row: Readonly<LocalRecord<T>>) => void | typeof SCAN_STOP;
+type ScanVisit<T = unknown> = (row: Readonly<LocalRecord<T>>) => void | ScanStop;
 /** What a `scanPending` callback may return: nothing (continue) or `SCAN_STOP`. */
-type ScanPendingVisit = (event: Readonly<JournalEvent>) => void | typeof SCAN_STOP;
+type ScanPendingVisit = (event: Readonly<JournalEvent>) => void | ScanStop;
 interface LocalFirstSnapshot {
     records: LocalRecord[];
     events: JournalEvent[];
