@@ -4,7 +4,7 @@
  * engine through the real `startRun`, and the row the host is told.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { resetBrainRunStore, startRun, type BrainStreamFn, type RunOutcomeRow, type StreamChatResult } from '@seanhogg/builderforce-brain-embedded';
+import { resetBrainRunStore, startRun, type BrainRunRequest, type BrainStreamFn, type StreamChatResult } from '@seanhogg/builderforce-brain-embedded';
 import { createLocalFirstPersistence } from '../persistence/localFirstPersistence';
 import { createRovrBrainPersistence } from '../persistence/rovrBrainPersistence';
 import { createMemoryRecords } from '../store/records';
@@ -25,7 +25,7 @@ describe("Rovr's host labels its runs", () => {
     expect(prepared.entryPoint).toBe('rovr');
 
     const stream: BrainStreamFn = async () => ({ text: 'Hi.', toolCalls: [], finishReason: 'stop', resolvedModel: 'fake-model' }) as StreamChatResult;
-    const rows: RunOutcomeRow[] = [];
+    const rows: Array<Parameters<NonNullable<BrainRunRequest['reportRunRow']>>[0]> = [];
     await persistence.sendMessages(id, [{ role: 'user', content: 'hello' }]);
     await startRun(id, {
       resolvedSystemPrompt: '',
