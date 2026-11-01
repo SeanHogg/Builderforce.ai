@@ -31,6 +31,14 @@ function ctxFor(window: number, messages: RunMessage[], over: { levers?: "c9_pri
 
 const shot = (n: number): string => `data:image/png;base64,${"A".repeat(n)}`;
 
+/** A hand-off that dropped nothing: every row is kept, and the incoming model is told it took over by one extra row. */
+function expectKeptWhole(result: Awaited<ReturnType<typeof handOff>>, rows: readonly RunMessage[]): void {
+  expect(result?.dropped).toBe(0);
+  const kept = result!.messages;
+  expect(rows.every((row) => kept.includes(row))).toBe(true);
+  expect(kept.filter((m) => !rows.includes(m)).map((m) => m.content)).toEqual(["Handed off from p/big to p/small."]);
+}
+
 describe("a hand-off measures the whole row", () => {
   it("a screenshot-heavy transcript does not look like it fits because its text does", async () => {
     // 80 screenshots at one fixed estimate each (2,000 tokens) is 160K tokens against a 128K window, with a few words of text apiece
@@ -59,7 +67,7 @@ describe("a hand-off measures the whole row", () => {
     rows.push({ role: "user", content: "what is in it?" });
     const { ctx } = ctxFor(128_000, rows);
 
-    expect(await handOff(ctx)).toBeUndefined();
+    expectKeptWhole(await handOff(ctx), rows);
   });
 
   it("a row's text is counted once, though a channel row carries it in its parts too", async () => {
@@ -70,7 +78,7 @@ describe("a hand-off measures the whole row", () => {
       rows.push({ role: i % 2 === 0 ? "assistant" : "user", content: text, parts: [{ type: "text", text }] });
     }
     const { ctx } = ctxFor(200_000, rows);
-    expect(await handOff(ctx)).toBeUndefined();
+    expectKeptWhole(await handOff(ctx), rows);
   });
 
   it("a thinking-heavy transcript is measured too", async () => {
@@ -89,7 +97,7 @@ describe("a hand-off measures the whole row", () => {
   it("a transcript that fits its text AND its pictures is left alone", async () => {
     const rows: RunMessage[] = [{ role: "system", content: "sys" }, { role: "user", content: "TASK", task: true }, { role: "assistant", content: "one", parts: [{ type: "image", url: shot(4_000) }] }];
     const { ctx } = ctxFor(128_000, rows);
-    expect(await handOff(ctx)).toBeUndefined();
+    expectKeptWhole(await handOff(ctx), rows);
   });
 });
 
@@ -110,8 +118,9 @@ describe("a hand-off under the long-context price tier (cost lever C9)", () => {
   });
 
   it("fills the window when it does not", async () => {
-    const { ctx } = ctxFor(1_000_000, big(), { pinnedModel: "claude-haiku-5-5" });
-    expect(await handOff(ctx)).toBeUndefined();
+    const rows = big();
+    const { ctx } = ctxFor(1_000_000, rows, { pinnedModel: "claude-haiku-5-5" });
+    expect((await handOff(ctx))?.dropped).toBe(0);
   });
 });
 
@@ -201,13 +210,21 @@ describe("a run that hands off between models runs no ordinary compaction", () =
   });
 });
 
+/** A bash execution as a channel run holds it (`toRunRow` over the runner's `bashExecution` message): the row's text IS what the model is sent, `$ command` then the output. */
+const bashRow = (command: string, output: string): RunMessage => ({
+  role: "user",
+  content: `$ ${command}\n${output}`,
+  custom: true,
+  meta: { agentMessage: { role: "bashExecution", command, output, exitCode: 0, cancelled: false, truncated: false, timestamp: 1 } },
+});
+
 describe("a surface's custom row is never the latest directive", () => {
   it("the real user request survives the cut whole; a bash-output row read as `user` does not displace it", async () => {
     const rows: RunMessage[] = [{ role: "system", content: "sys" }, { role: "user", content: "TASK", task: true }];
     for (let i = 0; i < 40; i += 1) rows.push({ role: i % 2 === 0 ? "assistant" : "user", content: `row ${i} ${"x".repeat(4_000)}` });
     rows.push({ role: "user", content: "THE LATEST REAL REQUEST" });
     rows.push({ role: "assistant", content: "on it" });
-    rows.push({ role: "user", content: `bash output ${"b".repeat(60_000)}`, custom: true });
+    rows.push(bashRow("npm run build", "b".repeat(60_000)));
     const { ctx } = ctxFor(32_000, rows);
 
     const result = await handOff(ctx);
@@ -218,7 +235,7 @@ describe("a surface's custom row is never the latest directive", () => {
   it("a custom row is not the task when the transcript marks none", async () => {
     const rows: RunMessage[] = [
       { role: "system", content: "sys" },
-      { role: "user", content: "bash output", custom: true },
+      bashRow("ls", "bash output"),
       { role: "user", content: "THE REQUEST" },
     ];
     for (let i = 0; i < 40; i += 1) rows.push({ role: i % 2 === 0 ? "assistant" : "user", content: `row ${i} ${"x".repeat(4_000)}` });

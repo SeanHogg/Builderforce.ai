@@ -13,9 +13,8 @@ import type { PackMessage } from "./pack.js";
 
 /** Map a RunMessage row to the packer's OpenAI shape. Its `content` is the row's TEXT: a row's parts ride along but are not counted. */
 export function toPackRow(m: RunMessage): PackMessage {
-  const row: PackMessage & { task?: true; custom?: true; parts?: RunMessage["parts"]; meta?: RunMessage["meta"] } = { role: m.role, content: m.content };
+  const row: PackMessage & { task?: true; parts?: RunMessage["parts"]; meta?: RunMessage["meta"] } = { role: m.role, content: m.content };
   if (m.task) row.task = true;
-  if (m.custom) row.custom = true;
   if (m.parts && m.parts.length > 0) row.parts = m.parts;
   if (m.meta) row.meta = m.meta;
   if (m.toolCalls && m.toolCalls.length > 0) {
@@ -31,7 +30,7 @@ export function toPackRow(m: RunMessage): PackMessage {
 
 /** Map a packed OpenAI row back to the RunMessage row shape. */
 export function toRunRow(m: PackMessage | Record<string, unknown>): RunMessage {
-  const src = m as PackMessage & { task?: unknown; custom?: unknown; parts?: RunMessage["parts"]; meta?: RunMessage["meta"] };
+  const src = m as PackMessage & { task?: unknown; parts?: RunMessage["parts"]; meta?: RunMessage["meta"] };
   const toolCalls = Array.isArray(src.tool_calls)
     ? (src.tool_calls as Array<{ id?: string; function?: { name?: string; arguments?: string } }>).map((tc) => ({
         id: tc.id ?? "",
@@ -46,7 +45,6 @@ export function toRunRow(m: PackMessage | Record<string, unknown>): RunMessage {
   if (toolCalls && toolCalls.length > 0) out.toolCalls = toolCalls;
   if (src.tool_call_id != null) out.toolCallId = src.tool_call_id;
   if (src.task === true) out.task = true;
-  if (src.custom === true) out.custom = true;
   if (Array.isArray(src.parts) && src.parts.length > 0) out.parts = src.parts;
   if (src.meta) out.meta = src.meta;
   return out;
@@ -77,9 +75,10 @@ export function toHandoffView(m: RunMessage): PackMessage {
 }
 
 /**
- * The run's rows as the hand-off packer reads them. The note the packer writes for the dropped middle comes back as a plain
- * user row (the role keeps turns alternating): it stays in the run's own transcript, where the incoming model reads it.
+ * The run's rows as the hand-off packer reads them. A note comes back as a plain row in the role the packer chose for it (that role
+ * keeps turns alternating, and keeps the note from standing in for the latest directive): it stays in the run's own transcript, where
+ * the incoming model reads it.
  */
 export function runRowHandoff(): HandoffAccessor<RunMessage> {
-  return { toHandoff: toHandoffView, summary: (text) => ({ role: "user", content: text }) };
+  return { toHandoff: toHandoffView, summary: (text, role) => ({ role: role as RunMessage["role"], content: text }) };
 }

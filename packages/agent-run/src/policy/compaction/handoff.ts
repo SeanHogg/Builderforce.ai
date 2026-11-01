@@ -86,8 +86,9 @@ export async function packForModelHandoff<M>(input: ModelHandoffInput<M>, access
     to: input.to,
     ...(input.pinned ? { pinned: (view: HandoffMessage) => { const row = back.get(view); return row !== undefined && input.pinned!(row); } } : {}),
   });
-  if (pack.dropped === 0) return { messages: [...input.messages], dropped: 0, fits: pack.fits, beforeTokens, afterTokens: beforeTokens };
+  if (pack.dropped === 0) return { messages: [...input.messages], dropped: 0, noted: false, fits: pack.fits, beforeTokens, afterTokens: beforeTokens };
   const messages: M[] = [];
+  let noted = false;
   for (const view of pack.messages) {
     if (view === system) continue;
     const original = back.get(view);
@@ -95,7 +96,34 @@ export async function packForModelHandoff<M>(input: ModelHandoffInput<M>, access
       messages.push(original);
       continue;
     }
-    messages.push(access.summary(typeof view.content === "string" ? view.content : JSON.stringify(view.content), beforeTokens));
+    messages.push(access.summary(typeof view.content === "string" ? view.content : JSON.stringify(view.content), view.role));
+    noted = true;
   }
-  return { messages, dropped: pack.dropped, fits: pack.fits, beforeTokens, afterTokens: pack.estimatedTokens };
+  return { messages, dropped: pack.dropped, noted, fits: pack.fits, beforeTokens, afterTokens: pack.estimatedTokens };
+}
+
+/** What the one-line hand-off note costs the incoming request (0 when the model did not change). */
+export function handoffNoteTokens(from: string, to: string): number {
+  const line = handoffLine(from, to);
+  return line ? messageTokens({ role: "user", content: line }, defaultEstimateTokens) : 0;
+}
+
+/**
+ * Tell the incoming model it took over, for a hand-off in which the packer wrote no note of its own: the context fit as it was, or the
+ * rows that must stay whole filled the window. ONE short row, before the latest directive and in the role that keeps turns alternating,
+ * so the directive stays the last thing the person said and a later hand-off never mistakes the note for it. Rows come back by identity.
+ */
+export function withHandoffNote<M>(rows: readonly M[], from: string, to: string, access: HandoffAccessor<M>): M[] {
+  const line = handoffLine(from, to);
+  if (!line) return [...rows];
+  const views = rows.map((row) => access.toHandoff(row));
+  let at = -1;
+  for (let i = views.length - 1; i >= 0; i -= 1) {
+    if (views[i]!.role === "user" && !isVolatileTail(views[i]!)) {
+      at = i;
+      break;
+    }
+  }
+  if (at < 0) return [...rows, access.summary(line, "user")];
+  return [...rows.slice(0, at), access.summary(line, "assistant"), ...rows.slice(at)];
 }

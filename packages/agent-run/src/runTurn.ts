@@ -19,6 +19,7 @@ import { toolsTokensOf } from "./policy/compaction/compact.js";
 import { capToolResult, resultCapFor } from "./policy/tools/index.js";
 import { appendRows, currentView, emit, policyContext, type RunAgentInput, type TurnFacts } from "./runContext.js";
 import { tallyTurn, type RunTally } from "./telemetry/runTally.js";
+import { measureTurnTail } from "./turnTail.js";
 import { withVolatileTail } from "./turnContext.js";
 
 /**
@@ -171,7 +172,7 @@ export async function completeTurn(
   };
   // `extra` rides the request as untagged rows before the volatile tail (the coder's hand-off brief): never in the transcript.
   const requestFor = (askedModel: string | undefined, ask: Partial<TurnAsk> | undefined, extra: RunMessage[] = []): ModelRequest => ({
-    messages: withVolatileTail(extra.length > 0 ? [...transcript, ...extra] : transcript, pack, brief ?? null, sections),
+    messages: measureTurnTail(state, withVolatileTail(extra.length > 0 ? [...transcript, ...extra] : transcript, pack, brief ?? null, sections)),
     ...(askedModel ? { model: askedModel, strict: ask?.strict ?? false } : {}),
     ...(tools.length > 0 ? { tools } : {}),
     ...(decision?.maxTokens !== undefined ? { maxTokens: decision.maxTokens } : {}),
