@@ -1630,7 +1630,7 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-audio": [25e-7, 1e-5],
   "openai/gpt-audio-mini": [6e-7, 24e-7],
   "openai/gpt-chat-latest": [5e-6, 3e-5],
-  "openai/gpt-oss-120b": [22e-9, 81e-9],
+  "openai/gpt-oss-120b": [15e-9, 54e-9],
   "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
   "openai/gpt-oss-20b": [3e-8, 13e-8],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
@@ -4568,6 +4568,20 @@ function createLocalBrainPersistence(options) {
     async listChats(params) {
       const inputs = await options.store.read(async (tx) => {
         const all = (await chats(tx)).filter((row) => !row.payload.chat.isArchived).filter((row) => params?.projectId == null || String(row.payload.chat.projectId) === params.projectId).sort((a, b) => b.payload.chat.updatedAt.localeCompare(a.payload.chat.updatedAt) || b.payload.chat.id - a.payload.chat.id);
+        const offset = params?.offset ?? 0;
+        const page = params?.limit != null ? all.slice(offset, offset + params.limit) : all.slice(offset);
+        return projectionInputs(tx, page);
+      });
+      return project(inputs);
+    },
+    /**
+     * The archived chats `listChats` hides — same projection, the rows where
+     * `isArchived` is set, most recently updated first. The archive surface reads
+     * through this; the live list never widens to include them.
+     */
+    async listArchivedChats(params) {
+      const inputs = await options.store.read(async (tx) => {
+        const all = (await chats(tx)).filter((row) => row.payload.chat.isArchived === true).filter((row) => params?.projectId == null || String(row.payload.chat.projectId) === params.projectId).sort((a, b) => b.payload.chat.updatedAt.localeCompare(a.payload.chat.updatedAt) || b.payload.chat.id - a.payload.chat.id);
         const offset = params?.offset ?? 0;
         const page = params?.limit != null ? all.slice(offset, offset + params.limit) : all.slice(offset);
         return projectionInputs(tx, page);
@@ -12835,6 +12849,7 @@ var EditRevertTracker = class {
 // ../packages/run-guards/src/noProgress.ts
 var NO_PROGRESS_TURNS = 4;
 var CHURN_TURNS = 12;
+var REGROUND_TURNS = 8;
 var MAX_SEEN = 500;
 var TEST_PATH = /(^|\/)(__tests__|tests?|spec)\/|\.(test|spec)\.[a-z0-9]+$|_test\.(go|py)$/i;
 var TEST_COMMAND = /\b(test|tests|vitest|jest|pytest|mocha|tsc|tsgo|typecheck|lint|eslint|cargo\s+test|go\s+test)\b/i;
@@ -12865,16 +12880,22 @@ var NoProgressTracker = class {
   churnThisTurn = false;
   churnTurns;
   lastGround = false;
+  turn = 0;
+  lastSeenAt;
   targetOf;
   isCheckCall;
+  isPlatformProgress;
   constructor(state, ports = {}) {
     this.seen = new Set(state?.seen ?? []);
     this.changes = new Set(state?.changes ?? []);
     this.idleTurns = state?.idleTurns ?? 0;
     this.churnTurns = state?.churnTurns ?? 0;
     this.lastCheck = state?.lastCheck;
+    this.turn = 0;
+    this.lastSeenAt = new Map(Object.entries(state?.lastSeenAt ?? {}));
     this.targetOf = ports.targetOf ?? ((_tool, args) => pathArgOf(args));
     this.isCheckCall = ports.isCheckCall ?? isCheckCallDefault;
+    this.isPlatformProgress = ports.isPlatformProgress;
   }
   /**
    * One call of the current turn ran. `wrote` = it changed content (a file edit, or a
@@ -12884,11 +12905,18 @@ var NoProgressTracker = class {
    */
   observe(tool, args, outcome) {
     const path2 = this.targetOf(tool, args);
-    if (path2 && !this.seen.has(path2)) {
-      this.seen.add(path2);
-      if (this.seen.size > MAX_SEEN) this.seen.delete(this.seen.values().next().value);
-      this.groundThisTurn = true;
+    if (path2) {
+      if (!this.seen.has(path2)) {
+        this.seen.add(path2);
+        if (this.seen.size > MAX_SEEN) this.seen.delete(this.seen.values().next().value);
+        this.groundThisTurn = true;
+      } else {
+        const last = this.lastSeenAt.get(path2);
+        if (last === void 0 || this.turn - last >= REGROUND_TURNS) this.groundThisTurn = true;
+      }
+      this.lastSeenAt.set(path2, this.turn);
     }
+    if (outcome.ok && !path2 && this.isPlatformProgress?.(tool, args)) this.groundThisTurn = true;
     if (outcome.ok && outcome.wrote) {
       if (path2 && isTestPath(path2)) this.groundThisTurn = true;
       const fingerprint = contentHash(callFingerprint(tool, args));
@@ -12917,6 +12945,7 @@ var NoProgressTracker = class {
     this.idleTurns = progressed2 ? 0 : this.idleTurns + 1;
     this.groundThisTurn = false;
     this.churnThisTurn = false;
+    this.turn += 1;
     return this.idleTurns;
   }
   /** Whether the turn {@link endTurn} last closed made GROUND progress (not churn alone). */
@@ -12933,6 +12962,7 @@ var NoProgressTracker = class {
     return {
       seen: [...this.seen],
       idleTurns: this.idleTurns,
+      ...this.lastSeenAt.size ? { lastSeenAt: Object.fromEntries(this.lastSeenAt) } : {},
       ...this.changes.size ? { changes: [...this.changes] } : {},
       ...this.churnTurns ? { churnTurns: this.churnTurns } : {},
       ...this.lastCheck ? { lastCheck: this.lastCheck } : {}
@@ -13937,6 +13967,9 @@ var READ_ONLY_PLATFORM_SUFFIXES = [
 function isReadOnlyPlatformTool(name) {
   if (!name.startsWith("builtin_")) return false;
   return READ_ONLY_PLATFORM_SUFFIXES.some((s) => name.endsWith(s));
+}
+function isMutatingPlatformTool(name) {
+  return name.startsWith("builtin_") && !isReadOnlyPlatformTool(name);
 }
 var NOT_STARTED_TASK_STATUSES = /* @__PURE__ */ new Set(["backlog", "todo", "ready"]);
 var TASK_TIER_KINDS = /* @__PURE__ */ new Set(["task", "epic", "gap"]);
@@ -23162,7 +23195,7 @@ var RunProgressGuard = class {
   /** The note the next turn opens with, when the host shows it in place of an escalation. */
   steer;
   constructor(on = deviceLeverOn("a3_progress_detector")) {
-    this.detector = on ? new ProgressDetector({}, { isReadOnly: isReadOnlyCall, isUnscopedMutation }) : null;
+    this.detector = on ? new ProgressDetector({}, { isReadOnly: isReadOnlyCall, isUnscopedMutation, isPlatformProgress: isMutatingPlatformTool }) : null;
   }
   /** What the turn said before its calls. */
   noteTurnText(text2) {
@@ -23441,9 +23474,12 @@ function isTicketCompletion(tool, args) {
   const status2 = args?.status;
   return typeof status2 === "string" && DONE_STATUSES.has(status2.toLowerCase());
 }
-function canCompleteTicket(isOnBaseBranch, userDeclinedShipping) {
+function canCompleteTicket(isOnBaseBranch, userDeclinedShipping, opts) {
   if (isOnBaseBranch) return true;
   if (userDeclinedShipping) return true;
+  const branch = (opts?.ticketGitBranch ?? "").trim();
+  if (branch && branch !== "main" && branch !== "master") return false;
+  if (opts?.wroteCodeThisRun === false) return true;
   return false;
 }
 function notOnBaseBranchAdvisory() {
@@ -24781,7 +24817,7 @@ function callRunner(run) {
         const placeholderWarning = completionAdvisory(placeholderLedger.outstanding());
         const events = c.trace;
         const isOnBaseBranch = shippedToBaseBranch(events);
-        const canComplete = canCompleteTicket(isOnBaseBranch, false);
+        const canComplete = canCompleteTicket(isOnBaseBranch, false, { wroteCodeThisRun: c.codeChanged });
         if (!canComplete) {
           const said = notOnBaseBranchAdvisory();
           pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, isOnBaseBranch }, result: said });
@@ -26513,6 +26549,7 @@ function useBrainChats(options = {}) {
   const placeholdersRef = useRef4(placeholderTitles);
   placeholdersRef.current = placeholderTitles;
   const [chats, setChats] = useState5([]);
+  const [archivedChats, setArchivedChats] = useState5([]);
   const [loading, setLoading] = useState5(true);
   const [error, setError] = useState5("");
   const [internalActiveId, setInternalActiveId] = useState5(null);
@@ -26545,6 +26582,13 @@ function useBrainChats(options = {}) {
       const list3 = await persistence.listChats(params);
       const shown = pendingRequestRef.current;
       setChats(shown.size === 0 ? list3 : list3.map((c) => shown.has(c.id) && !c.originalRequest?.trim() ? { ...c, originalRequest: shown.get(c.id) } : c));
+      if (persistence.listArchivedChats) {
+        try {
+          setArchivedChats(await persistence.listArchivedChats(params));
+        } catch {
+          setArchivedChats([]);
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load chats");
     } finally {
@@ -26720,6 +26764,7 @@ function useBrainChats(options = {}) {
   );
   return {
     chats,
+    archivedChats,
     loading,
     error,
     activeChatId,
@@ -27617,6 +27662,19 @@ function createBrainRestPersistence(opts) {
   const { baseUrl, request, getToken } = opts;
   return {
     listChats: (params) => request(`/api/brain/chats${listQuery(params)}`).then((r) => r.chats),
+    /**
+     * The archived chats `listChats` hides. The server's `listChats` accepts an
+     * `archived` option (`'only' | 'exclude' | 'all'`, default `'exclude'`) — the
+     * archive surface reads through `?archived=only`, which returns the same
+     * `isArchived = true` rows a `DELETE` set, most recently updated first.
+     *
+     * CLIENT-SIDE FALLBACK: if a backend predates the `archived` option it ignores
+     * the param and returns the live list. There is no dedicated archived route to
+     * fall back TO — the option IS the contract — so a backend without it simply
+     * yields an empty archive surface (the live rows it returns all read as
+     * un-archived and are filtered out client-side).
+     */
+    listArchivedChats: (params) => request(`/api/brain/chats${listQuery(params)}&archived=only`.replace("?&", "?")).then((r) => (r.chats ?? []).filter((c) => c.isArchived === true)),
     getChat: (id) => request(`/api/brain/chats/${id}`),
     createChat: (body) => request("/api/brain/chats", { method: "POST", body: JSON.stringify(body) }),
     updateChat: (id, body) => request(`/api/brain/chats/${id}`, { method: "PATCH", body: JSON.stringify(body) }),

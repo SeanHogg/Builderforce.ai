@@ -2887,7 +2887,7 @@ function chatSwitcherLabel(input) {
   const count = input.ticketCount ?? 0;
   const pct = displayChatProgressPct(input.ticketProgressPct);
   if (count <= 0 || pct == null) return `${glyph}${title}`;
-  return `${glyph}${pct}% \xB7 ${title}`;
+  return `${glyph}${count} tickets \xB7 ${pct}% \xB7 ${title}`;
 }
 
 // src/surface/ChatHistory.tsx
@@ -2901,16 +2901,18 @@ var DEFAULT_CHAT_HISTORY_LABELS = {
   rename: "Rename",
   summarize: "Summarize",
   delete: "Delete",
-  archive: "Archive"
+  archive: "Archive",
+  unarchive: "Unarchive"
 };
 function chatHistoryLabelsFrom(lookup) {
   return stringsFrom(DEFAULT_CHAT_HISTORY_LABELS, lookup);
 }
-function ChatHistoryList({ loading, total, children, labels: overrides, id, className }) {
+function ChatHistoryList({ loading, total, children, filter, labels: overrides, id, className }) {
   const labels = { ...DEFAULT_CHAT_HISTORY_LABELS, ...overrides };
   const hasRows = Array.isArray(children) ? children.length > 0 : children != null && children !== false;
   const status = loading ? labels.loading : !hasRows ? total === 0 ? labels.empty : labels.noMatch : null;
   return /* @__PURE__ */ jsxs26("div", { id, className: ["bf-history", className].filter(Boolean).join(" "), children: [
+    filter != null && /* @__PURE__ */ jsx27("div", { className: "bf-history__filter", children: filter }),
     status != null && /* @__PURE__ */ jsx27("div", { className: "bf-history__status", role: "status", children: status }),
     hasRows && /* @__PURE__ */ jsx27("div", { role: "list", className: "bf-history__rows", children })
   ] });
@@ -2934,6 +2936,8 @@ var ChatHistoryRow = memo7(function ChatHistoryRow2({
   onArchive,
   archiving = false,
   archived = false,
+  onUnarchive,
+  unarchiving = false,
   onDelete,
   deleting = false,
   extraActions,
@@ -3010,6 +3014,10 @@ var ChatHistoryRow = memo7(function ChatHistoryRow2({
             labels.archive,
             archiving && /* @__PURE__ */ jsx27("span", { "aria-hidden": true, children: "\u2026" })
           ] }),
+          onUnarchive && archived && /* @__PURE__ */ jsxs26("button", { type: "button", className: "bf-chatrow__action", onClick: () => onUnarchive(chat), disabled: unarchiving, "aria-busy": unarchiving || void 0, children: [
+            labels.unarchive,
+            unarchiving && /* @__PURE__ */ jsx27("span", { "aria-hidden": true, children: "\u2026" })
+          ] }),
           onDelete && /* @__PURE__ */ jsxs26("button", { type: "button", className: "bf-chatrow__action bf-chatrow__action--danger", onClick: () => onDelete(chat), disabled: deleting, "aria-busy": deleting || void 0, children: [
             labels.delete,
             deleting && /* @__PURE__ */ jsx27("span", { "aria-hidden": true, children: "\u2026" })
@@ -3031,6 +3039,7 @@ function useChatRowActions(options) {
   const [renameValue, setRenameValue] = useState8("");
   const [summarizingId, setSummarizingId] = useState8(null);
   const [archivingId, setArchivingId] = useState8(null);
+  const [unarchivingId, setUnarchivingId] = useState8(null);
   const [deletingId, setDeletingId] = useState8(null);
   const [busyId, setBusyId] = useState8(null);
   const renameFrom = useRef7("");
@@ -3083,6 +3092,17 @@ function useChatRowActions(options) {
       setArchivingId((cur) => cur === chat.id ? null : cur);
     }
   }, []);
+  const onUnarchive = useCallback4(async (chat) => {
+    const { unarchive, isArchived } = opts.current;
+    if (!unarchive || !isArchived?.(chat.id)) return;
+    setUnarchivingId(chat.id);
+    try {
+      await unarchive({ id: chat.id, title: chat.title });
+      setActionsChatId((cur) => cur === chat.id ? null : cur);
+    } finally {
+      setUnarchivingId((cur) => cur === chat.id ? null : cur);
+    }
+  }, []);
   const onDelete = useCallback4(async (chat) => {
     const { confirmDelete, remove } = opts.current;
     if (!remove) return;
@@ -3105,6 +3125,7 @@ function useChatRowActions(options) {
   }, []);
   const hasSummarize = Boolean(options.summarize);
   const hasArchive = Boolean(options.archive);
+  const hasUnarchive = Boolean(options.unarchive);
   const hasRemove = Boolean(options.remove);
   const rowProps = (id) => {
     const renaming = renamingId === id;
@@ -3124,6 +3145,9 @@ function useChatRowActions(options) {
       onArchive: hasArchive && !archived ? onArchive : void 0,
       archiving: archivingId === id,
       archived,
+      // Unarchive is the mirror: offered on an ALREADY-archived row only.
+      onUnarchive: hasUnarchive && archived ? onUnarchive : void 0,
+      unarchiving: unarchivingId === id,
       onDelete: hasRemove ? onDelete : void 0,
       deleting: deletingId === id
     };
@@ -3135,6 +3159,7 @@ function useChatRowActions(options) {
     setRenameValue,
     summarizingId,
     archivingId,
+    unarchivingId,
     deletingId,
     busyId,
     openChat,
@@ -3144,6 +3169,7 @@ function useChatRowActions(options) {
     submitRename,
     onSummarize,
     onArchive,
+    onUnarchive,
     onDelete,
     onAssign,
     rowProps
@@ -4547,8 +4573,14 @@ function useRecipientChoice({ participants, input, draftStore, resetKey }) {
     setChoice((c) => c && c !== "brain" && !participants.some((p) => p.kind === c.kind && p.ref === c.ref) ? null : c);
   }, [participants]);
   const fromInput = useMemo8(() => mentionRecipient(input ?? "", participants), [input, participants]);
-  const fromStore = useDraftSelector(draftStore ?? UNUSED_STORE, (text) => mentionRecipient(text, participants));
-  const mentioned = draftStore ? fromStore : fromInput;
+  const mentionedKey = useDraftSelector(
+    draftStore ?? UNUSED_STORE,
+    (text) => {
+      const m = mentionRecipient(text, participants);
+      return m ? `${m.kind}:${m.ref}` : null;
+    }
+  );
+  const mentioned = draftStore ? participants.find((p) => mentionedKey !== null && `${p.kind}:${p.ref}` === mentionedKey) ?? null : fromInput;
   return { recipient: resolveRecipient(choice, mentioned), choice, choose: setChoice };
 }
 

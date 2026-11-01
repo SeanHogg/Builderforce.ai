@@ -1630,6 +1630,19 @@ interface BrainPersistenceAdapter {
         limit?: number;
         offset?: number;
     }): Promise<BrainChat[]>;
+    /**
+     * Archived chats — the ones `listChats` hides (`isArchived = true`), most recently
+     * updated first. The archive surface (an "Archived" toggle on a history list) reads
+     * through this; the live list never widens to include them.
+     *
+     * Optional: an adapter that has no archived concept (a guest/offline backend that
+     * tombstones on delete) omits it, and the archive surface renders empty.
+     */
+    listArchivedChats?(params?: {
+        projectId?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<BrainChat[]>;
     getChat(id: number): Promise<BrainChat>;
     createChat(body: {
         title?: string;
@@ -4360,6 +4373,12 @@ interface UseBrainChatsOptions {
 }
 interface UseBrainChats {
     chats: BrainChat[];
+    /**
+     * The archived chats `chats` hides — the archive surface (an "Archived" toggle on a
+     * history list) reads through this. Loaded once on mount; refreshed by {@link reload}.
+     * Empty (never loading) on a persistence with no {@link BrainPersistenceAdapter.listArchivedChats}.
+     */
+    archivedChats: BrainChat[];
     loading: boolean;
     error: string;
     activeChatId: number | null;
@@ -5041,6 +5060,23 @@ interface BrainRestOptions {
 }
 declare function createBrainRestPersistence(opts: BrainRestOptions): {
     listChats: (params?: {
+        projectId?: string;
+        limit?: number;
+        offset?: number;
+    }) => Promise<BrainChat[]>;
+    /**
+     * The archived chats `listChats` hides. The server's `listChats` accepts an
+     * `archived` option (`'only' | 'exclude' | 'all'`, default `'exclude'`) — the
+     * archive surface reads through `?archived=only`, which returns the same
+     * `isArchived = true` rows a `DELETE` set, most recently updated first.
+     *
+     * CLIENT-SIDE FALLBACK: if a backend predates the `archived` option it ignores
+     * the param and returns the live list. There is no dedicated archived route to
+     * fall back TO — the option IS the contract — so a backend without it simply
+     * yields an empty archive surface (the live rows it returns all read as
+     * un-archived and are filtered out client-side).
+     */
+    listArchivedChats: (params?: {
         projectId?: string;
         limit?: number;
         offset?: number;

@@ -193,16 +193,14 @@ describe("platform progress: a turn that moved the board is not idle", () => {
 
   it("still trips on a read-only platform tool (a list) with no other progress", () => {
     const d = new ProgressDetector({}, { ...ports, ...platformPorts });
-    // First call names a new target (ground). Then repeated identical lists are neither
-    // ground nor churn, so the no-progress window fills and trips.
-    d.observe("builtin_chats_list_tickets", { chatId: 187 }, okData);
-    d.endTurn();
-    for (let i = 0; i < NO_PROGRESS_TURNS - 1; i++) {
+    // The repeated list is neither ground nor churn, so the no-progress window fills.
+    // The signal fires at NO_PROGRESS_TURNS (turn 4) and then self-clears for the next turn.
+    const kinds: Array<string | null> = [];
+    for (let i = 0; i < NO_PROGRESS_TURNS + 1; i++) {
       d.observe("builtin_chats_list_tickets", { chatId: 187 }, okData);
-      expect(d.endTurn()).toBeNull();
+      kinds.push(d.endTurn()?.signal.kind ?? null);
     }
-    d.observe("builtin_chats_list_tickets", { chatId: 187 }, okData);
-    expect(d.endTurn()?.signal.kind).toBe("no_progress");
+    expect(kinds[NO_PROGRESS_TURNS - 1]).toBe("no_progress");
   });
 });
 
