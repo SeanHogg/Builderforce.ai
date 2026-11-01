@@ -51,6 +51,8 @@ export function brainPlatformTools(run: RunLoopContext): BrainPlatform {
   const after = callPostStep(run);
   // Keyed by the call's id: a call the agent answered itself (a declined, a skipped one) never reaches `execute`, so the rows cannot be matched in order.
   const ran = new Map<string, Ran>();
+  // The calls the preflight let through (possibly rewritten by the router), waiting for the dispatch that follows them.
+  const prepared = new Map<string, { call: ParsedToolCall; ctx: TurnContext<ChatCompletionMessage> }>();
   return {
     toolRowAppended(row) {
       const id = (row as { tool_call_id?: string }).tool_call_id;
@@ -89,26 +91,47 @@ export function brainPlatformTools(run: RunLoopContext): BrainPlatform {
       turnEnded: progressAfterToolCalls(run),
       // The turn's step, as the kernel numbers it: the router, the hand-off, the confirm gate, the guards, the activity line and the
       // no-progress streak (`CacheServedStreak` counts distinct TURNS) all stamp it, so it is not a per-call counter.
+      // The runner is the Brain's own and watches the person's steers itself (`callRunner`'s `runToolInterruptibly`): a foreground command
+      // a steer stops, and a wait it cuts short, come back already encoded and counted as the failed step they are.
+      watchesItself: true,
+      // The preflight (router, `ask_user`, `hand_off`, confirm gate, dedupe) runs where the loop runs it: ahead of the dispatch, not raced
+      // against the person's Stop. A Stop pressed during a hand-off waits for it to end, so its tickets and children are on the trace.
+      async preflight(raw, { step }) {
+        const { call, ctx } = loopCall(run, raw.id, raw.name, raw.malformed ? {} : raw.args, step, raw.malformed ? raw.arguments : undefined);
+        const pre = await before(call, ctx);
+        if (pre && 'result' in pre) {
+          ran.set(raw.id, { call, result: pre.result, ctx });
+          return { result: pre.result };
+        }
+        const target = pre && 'rewrite' in pre ? pre.rewrite : call;
+        prepared.set(raw.id, { call: target, ctx });
+        return pre && 'rewrite' in pre ? { rewrite: { name: target.name, args: target.args } } : undefined;
+      },
       async execute(name, args, env): Promise<PlatformToolResult> {
         const id = env.callId ?? `brain-${env.step}-${ran.size + 1}`;
-        const { call, ctx } = loopCall(run, id, name, args, env.step);
-        const pre = await before(call, ctx);
-        let result: PlatformToolResult;
-        if (pre && 'result' in pre) result = pre.result;
-        else result = await dispatch(pre && 'rewrite' in pre ? pre.rewrite : call, ctx);
-        ran.set(id, { call: pre && 'rewrite' in pre ? pre.rewrite : call, result, ctx });
+        let held = prepared.get(id);
+        prepared.delete(id);
+        // Reached without the kernel's preflight (a caller that dispatches directly): the same steps, here.
+        let early: PlatformToolResult | undefined;
+        if (!held) {
+          const fresh = loopCall(run, id, name, args, env.step);
+          const pre = await before(fresh.call, fresh.ctx);
+          if (pre && 'result' in pre) early = pre.result;
+          held = { call: pre && 'rewrite' in pre ? pre.rewrite : fresh.call, ctx: fresh.ctx };
+        }
+        const result: PlatformToolResult = early ?? (await dispatch(held.call, held.ctx));
+        ran.set(id, { call: held.call, result, ctx: held.ctx });
         return result;
       },
-      // A call whose arguments never parsed is answered as the loop answers it: the preflight first (an `ask_user` has a corrective of
-      // its own, a `hand_off` names what it needs), else the shared decline and its trace step. The progress detector sees it either way.
+      // A call whose arguments never parsed was already answered by the preflight where it has a corrective of its own (an `ask_user`, a
+      // `hand_off`); any other is declined by the shared decline and its trace step. The progress detector sees it either way.
       malformed: {
         roundDirective: () => '',
-        async answer(raw, { step }) {
-          const { call, ctx } = loopCall(run, raw.id, raw.name, {}, step, raw.arguments);
-          const pre = await before(call, ctx);
-          const target = pre && 'rewrite' in pre ? pre.rewrite : call;
-          const result: PlatformToolResult = pre && 'result' in pre ? pre.result : (declineMalformedCall(run, target) as PlatformToolResult);
-          ran.set(raw.id, { call: target, result, ctx });
+        answer(raw, { step }) {
+          const held = prepared.get(raw.id) ?? loopCall(run, raw.id, raw.name, {}, step, raw.arguments);
+          prepared.delete(raw.id);
+          const result = declineMalformedCall(run, held.call) as PlatformToolResult;
+          ran.set(raw.id, { call: held.call, result, ctx: held.ctx });
           return result;
         },
       },

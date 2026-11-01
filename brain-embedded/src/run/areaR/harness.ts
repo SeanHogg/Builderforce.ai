@@ -64,8 +64,8 @@ export interface Scenario {
   key: number;
   script(): Turn[];
   request?(engine: RunEngineId): Partial<BrainRunRequest>;
-  /** The host's tools by name (`runTool`); a name not here answers `{ ok: true }`. */
-  tools?: Record<string, (args: unknown) => unknown>;
+  /** The host's tools by name (`runTool`; a function of the run key when a tool acts on the run); a name not here answers `{ ok: true }`. */
+  tools?: Record<string, (args: unknown) => unknown> | ((key: number) => Record<string, (args: unknown) => unknown>);
   /** A second run in the same chat, started when the first has settled (the model script goes on where it stopped). */
   follow?: { userTurn: string };
 }
@@ -111,7 +111,8 @@ export async function runOn(engine: RunEngineId, s: Scenario): Promise<Capture> 
       let n = 0;
       h.script(s.script().map((turn) => (input) => { n += 1; return turn({ opts: input.opts, call: input.call, key: h.key }); }));
       // Any tool name answers; the catalog the model is shown is the request's own.
-      h.tools(new Proxy({} as Record<string, (args: unknown) => unknown>, { get: (_t, name) => s.tools?.[String(name)] ?? (() => ({ ok: true })) }));
+      const impl = typeof s.tools === 'function' ? s.tools(h.key) : s.tools;
+      h.tools(new Proxy({} as Record<string, (args: unknown) => unknown>, { get: (_t, name) => impl?.[String(name)] ?? (() => ({ ok: true })) }));
       await h.start({ userTurn: 'find the request handler', ...s.request?.(engine) });
       if (s.follow) {
         calledByFirstRun = n;

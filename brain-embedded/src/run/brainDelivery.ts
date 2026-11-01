@@ -40,7 +40,9 @@ export function brainDeliveryLedger(run: RunLoopContext, last: LastTurn): Delive
     // The Brain's stall order and wording (`runStore/finalAnswerHook.ts`): a narrating turn is re-prompted before any rung, a model that
     // spent its budget is failed over (reading the nudge alone) or stopped only once every rung is clear, the rungs' directives are the
     // person's rows, and the stall is judged against the menu the turn advertised.
-    stall: { narrationFirst: true, nudgeAs: 'user', failoverNudgeOnly: true, menu: true, quoteEmpty: true },
+    stall: { narrationFirst: true, steersFirst: true, nudgeAs: 'user', failoverNudgeOnly: true, menu: true, quoteEmpty: true, runWideBudget: true },
+    // The stall judgement and the gates read the model's own words, reasoning included (`finalAnswerHook.ts` reads `result.text`).
+    judged: (content) => last.result?.text ?? content,
     // A turn sent back keeps what the person watched stream in: as its own block, or - a model that stalled out and was handed
     // over - as the reply it was (`finalAnswerHook.ts`'s `requeueWithNudge` and its failover).
     async sentBack({ kept }) {
