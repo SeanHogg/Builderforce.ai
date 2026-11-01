@@ -19,6 +19,7 @@
  */
 
 import { replayTextOf } from '@builderforce/agent-loop';
+import { isVolatileContent, volatileTail } from '@seanhogg/builderforce-memory/handoff';
 import type { ModelCompletion, ModelPreflightResult, ModelRequest, ModelTransport, RunMessage } from '@builderforce/agent-run';
 import type { ChatCompletionMessage, CompletionMetadata, StreamChatOptions, StreamChatResult, StreamHandlers } from '../streamChatCompletion';
 import { turnInterruption } from '../finishReason';
@@ -50,6 +51,13 @@ export interface TurnSession {
   handlers: StreamHandlers;
   /** The metadata THIS attempt carries: the call's memory effect rides the first one only (`stampOncePerCall`). */
   metadata?(): CompletionMetadata;
+  /**
+   * The sections of the request's trailing volatile row, when the surface says what that row holds (the coder re-ask carries the
+   * run's record and none of the turn's forced brief). Empty ⇒ no tail row at all. Absent ⇒ the request's own tail stands.
+   */
+  tail?: readonly string[];
+  /** The `tool_choice` this request asks for, when the surface fixes it for every request of the turn (a re-ask keeps the turn's). Absent ⇒ the request's. */
+  toolChoice?: 'auto' | 'required';
   /** The turn's `max_tokens`: the Effort ceiling, raised for a turn that can call tools. The surface owns it outright (the policy's role cap never reaches the wire). */
   maxTokens: number | undefined;
   /** Pack the wire messages for the serving model's window. */
@@ -97,10 +105,35 @@ export function toStreamMessage(message: RunMessage): ChatCompletionMessage {
     return {
       role: 'assistant',
       content: message.content,
-      tool_calls: message.toolCalls.map((call) => ({ id: call.id, type: 'function' as const, function: { name: call.name, arguments: call.arguments } })),
+      // A call with no arguments is `{}`, as the loop's codec writes it: an empty string is not JSON, and strict vendors refuse it.
+      tool_calls: message.toolCalls.map((call) => ({ id: call.id, type: 'function' as const, function: { name: call.name, arguments: call.arguments?.trim() ? call.arguments : '{}' } })),
     };
   }
   return { role: message.role, content: message.role === 'user' ? withImages(message.content, message.parts) : message.content };
+}
+
+/** `messages` with its trailing volatile row replaced by the one `sections` make (or dropped, when they make none). */
+function withTail(messages: ChatCompletionMessage[], sections: readonly string[] | undefined): ChatCompletionMessage[] {
+  if (!sections) return messages;
+  const last = messages[messages.length - 1];
+  const history = last && last.role === 'user' && isVolatileContent(last.content) ? messages.slice(0, -1) : messages;
+  const tail = volatileTail(sections);
+  return tail ? [...history, tail] : history;
+}
+
+const wired = new WeakMap<RunMessage, { content: string; parts: RunMessage['parts']; toolCalls: RunMessage['toolCalls']; wire: ChatCompletionMessage }>();
+
+/**
+ * A row's wire shape, the SAME object every request while the row is unchanged. The window fit's memo of its last pack
+ * (`windowFit/packMemo.ts`) recognises the history a pack was made from by object identity, as it does on the Brain's loop (whose
+ * transcript IS its wire rows); rows rebuilt per request would re-pack and re-summarise a small-window model every turn.
+ */
+export function wireRowOf(message: RunMessage): ChatCompletionMessage {
+  const hit = wired.get(message);
+  if (hit && hit.content === message.content && hit.parts === message.parts && hit.toolCalls === message.toolCalls) return hit.wire;
+  const wire = toStreamMessage(message);
+  wired.set(message, { content: message.content, parts: message.parts, toolCalls: message.toolCalls, wire });
+  return wire;
 }
 
 /** The stream's result in the agent's completion shape. */
@@ -152,7 +185,7 @@ export function brainModelTransport(deps: BrainModelTransportDeps): ModelTranspo
       const session = deps.turn?.open(request);
       /** One request to the stream: the window fit, then the stream, inside the live-turn window. */
       const attempt = async (req: ModelRequest): Promise<StreamChatResult> => {
-        const wire = req.messages.map(toStreamMessage);
+        const wire = withTail(req.messages.map(wireRowOf), session?.tail);
         const messages = session?.fit ? await session.fit(wire, req.model) : wire;
         const maxTokens = session ? session.maxTokens : req.maxTokens;
         const ask = () => stream(
@@ -161,7 +194,7 @@ export function brainModelTransport(deps: BrainModelTransportDeps): ModelTranspo
             ...session?.call,
             messages,
             ...(session?.metadata ? { metadata: session.metadata() } : {}),
-            ...(tools ? { tools, tool_choice: req.toolChoice ?? ('auto' as const) } : {}),
+            ...(tools ? { tools, tool_choice: session?.toolChoice ?? req.toolChoice ?? ('auto' as const) } : {}),
             ...(req.model ? { model: req.model } : {}),
             ...(req.strict !== undefined ? { modelStrict: req.strict } : {}),
             ...(req.role ? { role: req.role } : {}),

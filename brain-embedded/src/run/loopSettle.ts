@@ -26,10 +26,12 @@ export async function settleBrainRun(run: RunLoopContext, outcome: RunOutcome, l
     // A Stop settles quietly; a port's exception is re-thrown as it was thrown.
     if (outcome.reason === RUN_CANCELLED_REASON || c.abort?.signal.aborted) return;
     if (outcome.cause !== undefined) throw outcome.cause;
+    // A turn that could not be recorded (its narration could not be saved) fails the run as it does in the loop.
+    if (last.keepFailed !== undefined) throw last.keepFailed;
     // The completion that failed the run: the error as the stream threw it, never a new one made from its message.
     if (last.error !== undefined) throw last.error;
     // The breaker stopped the run: the forced tools-free closing answer is the Brain's own, shared with its loop (`failureClose.ts`).
-    if (outcome.exhausted) return closeAfterFailureStreak(run, DEFAULT_TOOL_FAILURE_STREAK, outcome.state.step);
+    if (outcome.exhausted) return closeAfterFailureStreak(run, outcome.failureStreak ?? DEFAULT_TOOL_FAILURE_STREAK, outcome.state.step);
     throw new Error(outcome.reason);
   }
   const text = outcome.kind === 'paused' ? outcome.question : outcome.output;
@@ -37,7 +39,7 @@ export async function settleBrainRun(run: RunLoopContext, outcome: RunOutcome, l
   // The run's USD cap stopped it: its reply says why and is saved as it is - no provenance chip, no Evermind learn (`runSpendBudget.ts`).
   if (last.contained !== undefined && text === last.contained) return persistBudgetStop(run, text);
   const result = last.result ?? ({ text, toolCalls: [] } as unknown as StreamChatResult);
-  const assistantMsg = await settleReply(run, text, result, last.requested);
+  const assistantMsg = last.settled ?? (await settleReply(run, text, result, last.requested));
   emit(c);
   emitEvermindLearnReconcile(run, assistantMsg, text);
   req.onActivity?.(chatId);

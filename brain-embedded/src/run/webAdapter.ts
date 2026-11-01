@@ -78,8 +78,6 @@ export interface BrainRunBinding {
   extensions?: ToolExtension;
   /** How the run's model hand-off starts (`pipelinePolicyOptions`): the phase it begins in, the stage models, and the quick model a routed QUICK run seeds. */
   start?: Pick<RunPolicyOptions, 'startPhase' | 'phaseModels' | 'pinnedModel'>;
-  /** The run's preamble already ran the host's model preflight (`runStore/hostRunContext.ts`): the transport does not ask the host a second time. */
-  preflighted?: true;
   /** Where the run's events go, when the surface reacts to some beyond rendering them (`loopTurn.ts`). */
   events?: EventSink;
   /** Told the live run once, before turn 1: the surface reads the model policy from it. */
@@ -113,7 +111,7 @@ export function buildBrainRunPorts(b: BrainRunBinding): RunPorts {
       // What the host knows about model windows. A surface with its own compaction (`modules.compaction`, `loopFold.ts`) and its own turn
       // fit (`windowFit.prepare`, its `llm.handoff` step) loses nothing by saying it: the agent sizes a tool result from it.
       ...(req.windowSources ? { windows: req.windowSources } : {}),
-      ...(req.modelPreflight && !b.preflighted ? { preflight: req.modelPreflight } : {}),
+      ...(req.modelPreflight ? { preflight: req.modelPreflight } : {}),
     }), req),
     capabilities: b.capabilities,
     store: b.store ?? cellRunStore(cell, { ...(b.seeded !== undefined ? { seeded: b.seeded } : {}), ...(b.commitMemory ? { commitMemory: b.commitMemory } : {}) }),

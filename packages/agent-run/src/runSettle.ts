@@ -20,6 +20,8 @@ interface SettleExtra {
   cause?: unknown;
   /** A budget or the failure breaker ended the run. */
   exhausted?: boolean;
+  /** How many calls in a row failed when the breaker tripped. */
+  failureStreak?: number;
 }
 
 /**
@@ -91,6 +93,6 @@ export async function settle(
 
   if (kind === "finished") return { kind, output: extra.output ?? "", state };
   if (kind === "paused") return { kind, question: extra.question ?? "", approvalId: extra.approvalId ?? newApprovalId(state), state };
-  return { kind, reason: extra.reason ?? "failed", state, ...(extra.cause !== undefined ? { cause: extra.cause } : {}), ...(extra.exhausted ? { exhausted: true } : {}) };
+  return { kind, reason: extra.reason ?? "failed", state, ...(extra.cause !== undefined ? { cause: extra.cause } : {}), ...(extra.exhausted ? { exhausted: true } : {}), ...(extra.failureStreak !== undefined ? { failureStreak: extra.failureStreak } : {}) };
 }
 

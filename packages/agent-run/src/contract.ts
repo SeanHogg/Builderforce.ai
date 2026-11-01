@@ -323,4 +323,4 @@ export type RunOutcome =
   | { kind: 'finished'; output: string; state: RunState }
   | { kind: 'paused'; question: string; approvalId: string; state: RunState }
   | { kind: 'yielded'; state: RunState }          // maxSteps reached; resume later
-  | { kind: 'failed'; reason: string; state: RunState; cause?: unknown; exhausted?: boolean };  // cause: a non-transport exception the surface may need to re-throw; exhausted: a budget or breaker ended it
+  | { kind: 'failed'; reason: string; state: RunState; cause?: unknown; exhausted?: boolean; failureStreak?: number };  // cause: a non-transport exception the surface may need to re-throw; exhausted: a budget or breaker ended it; failureStreak: the failed calls in a row that tripped the breaker

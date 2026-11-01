@@ -51,7 +51,7 @@ export interface RunMessage {
  * the native kinds; it carries them.
  */
 export type RunPart =
-  | { type: 'image'; url: string }
+  | { type: 'image'; url: string; detail?: 'low' | 'high' | 'auto' }
   | { type: 'text'; text: string; signature?: string }
   | { type: 'thinking'; thinking: string; signature?: string }
   | { type: 'toolCall'; id: string; name: string; arguments: Record<string, unknown>; signature?: string };

@@ -185,7 +185,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
     if (output) return settle(input, hooks, state, transcript, "finished", { output });
   }
   if (loopResult.exhausted) {
-    return settle(input, hooks, state, transcript, "failed", { reason: loopResult.exhaustedBy === "failures" ? "tool calls kept failing" : "step budget spent", exhausted: true });
+    return settle(input, hooks, state, transcript, "failed", { reason: loopResult.exhaustedBy === "failures" ? "tool calls kept failing" : "step budget spent", exhausted: true, ...(loopResult.exhaustedBy === "failures" ? { failureStreak: loopResult.failureStreak } : {}) });
   }
   if (!loopResult.finished) {
     // The invocation's step budget yielded. The state is saved; the next tick resumes.

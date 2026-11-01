@@ -5,12 +5,13 @@
  * adapter only builds ports (`webAdapter.ts`, `loopTurn.ts`, `brainPlatformTools.ts`, `loopSteering.ts`, `loopStore.ts`).
  */
 
-import { runAgent } from '@builderforce/agent-run';
+import { defaultPolicyModules, runAgent } from '@builderforce/agent-run';
 import type { RunLoopContext } from '../runStore/runLoopContext';
 import { pipelinePolicyOptions } from '../runStore/pipelineRoute';
 import { brainDeliveryLedger } from './brainDelivery';
 import { brainPlatformTools } from './brainPlatformTools';
 import { brainCompaction } from './loopFold';
+import { recordedPreflight } from './preflightRecorded';
 import { loopRunStore } from './loopStore';
 import { loopSpendMeter } from './loopSpend';
 import { loopSteeringSource, personSteers } from './loopSteering';
@@ -46,8 +47,6 @@ export async function runPrepared(run: RunLoopContext): Promise<void> {
       // The turn recorder writes the model downgrade, and the steering port records each direction it drains.
       recorded: new Set(['llm.model_downgrade', 'steer.applied'] as const),
     }),
-    // The preamble ran the host's model preflight already (`hostRunContext.ts`): once per run.
-    preflighted: true,
     start: pipelinePolicyOptions(req, run.pipeline),
     // From here the model policy is the AGENT's: the Brain's guards read `run.policy` and report to it through the view.
     attach: (view) => {
@@ -59,7 +58,12 @@ export async function runPrepared(run: RunLoopContext): Promise<void> {
       schemas: () => [],
       handles: () => false,
       dispatch: async () => ({ data: null }),
-      terminalTurn: () => { const reply = last.terminal; last.terminal = undefined; return reply; },
+      terminalTurn: () => {
+        if (last.keepFailed !== undefined) throw last.keepFailed;
+        const reply = last.terminal;
+        last.terminal = undefined;
+        return reply;
+      },
     },
     steering: loopSteeringSource(run, people),
     ...(spend ? { spend } : {}),
@@ -77,7 +81,9 @@ export async function runPrepared(run: RunLoopContext): Promise<void> {
     policy: brainRunPolicy(binding),
     ports: { ...ports, model: withoutUncallableTurns(ports.model, req) },
     // The Brain's own fold (`loopFold.ts`), not the agent's compaction adapted to imitate it.
-    modules: { compaction: compaction.hook },
+    // ... and the preamble ran the host's model preflight already (`hostRunContext.ts`): the agent's own would ask the host again and warn
+    // about a model the loop never warned about (a QUICK run's quick model), so the Brain's says the verdict and nothing more.
+    modules: { compaction: compaction.hook, model: { ...defaultPolicyModules().model, preflight: recordedPreflight(c, req.model) } },
     ...(signal ? { signal } : {}),
   });
   await settleBrainRun(run, outcome, last);

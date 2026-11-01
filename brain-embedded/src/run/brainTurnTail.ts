@@ -12,10 +12,14 @@
 import type { TurnMenu } from '@builderforce/agent-run';
 import type { RunLoopContext } from '../runStore/runLoopContext';
 
+/** The run's record for a turn that offers `tools` of them: nothing for a turn that offers none. */
+export function runBrief(run: RunLoopContext, tools: number): string {
+  return tools > 0 ? run.knowledge.brief() ?? '' : '';
+}
+
 /** The turn's menu with the run's record at the head of its tail (nothing added to a turn that offers no tools). */
 export function withRunBrief(run: RunLoopContext, menu: TurnMenu | void): TurnMenu | void {
-  const offered = menu?.tools ?? run.allTools ?? [];
-  const ledger = offered.length > 0 ? run.knowledge.brief() : '';
+  const ledger = runBrief(run, (menu?.tools ?? run.allTools ?? []).length);
   const sections = [ledger, ...(menu?.tail ?? [])].map((section) => (section ?? '').trim()).filter(Boolean);
   if (sections.length === 0) return menu;
   return { ...(menu ?? {}), tail: [sections.join('\n\n')] };

@@ -13,6 +13,7 @@
  * no coder model, no note of its text and no terminal question behind.
  */
 
+import type { BrainMessage } from '../types';
 import type { ModelRequest } from '@builderforce/agent-run';
 import { nextTurn } from '@builderforce/run-policy';
 import type { BrainToolSpec, CompletionMetadata, StreamChatResult } from '../streamChatCompletion';
@@ -28,6 +29,7 @@ import { recordTurn } from '../runStore/turnRecorder';
 import { commitTurnNarration, terminalAskReply, type TurnCall } from '../runStore/turnToolCalls';
 import { openLiveTurn, type LiveTurn } from '../runStore/turnStream';
 import { providerFailureEvent } from '../providerFailure';
+import { runBrief } from './brainTurnTail';
 import type { TurnObserver, TurnRetry, TurnSession } from './modelTransport';
 
 /** A turn the model answered that the agent has not yet gone on with: what recording it needs. */
@@ -56,8 +58,15 @@ export interface LastTurn {
    * intact). The settled outcome re-throws it, so `chatErrorAction` reads the original and never a message made from it.
    */
   error?: unknown;
+  /**
+   * Recording a kept turn failed (its narration could not be saved). The agent's event stream swallows a sink's failure, so the
+   * run is failed from the next place the agent asks the surface something (`terminalTurn`), as the Brain's loop fails there.
+   */
+  keepFailed?: unknown;
   /** The reply the run's USD cap stopped it with, when it did: it is not an answer (`loopSettle.ts`). */
   contained?: string;
+  /** The reply a stall with nothing left to try already saved, before it said why (`brainDelivery.ts`): the run settles on it. */
+  settled?: BrainMessage;
 }
 
 /** A call's arguments as the agent parses them: a string that is not a JSON object is a malformed call. */
@@ -80,6 +89,8 @@ interface OpenTurn {
   metadata: () => CompletionMetadata;
   /** The agent went on with the turn (it is recorded); the next request is a new turn. */
   kept: boolean;
+  /** The `tool_choice` the turn's first request asked for (a stall recovery's forced call): every request of the turn keeps it. */
+  toolChoice?: 'auto' | 'required';
 }
 
 /** The observer over one Brain run, a view of its last turn, and the call that keeps an answered turn. */
@@ -93,7 +104,8 @@ export function loopTurnObserver(run: RunLoopContext, savedTokens: () => number 
     open(request: ModelRequest): TurnSession {
       const tools = (request.tools ?? []) as unknown as BrainToolSpec[];
       // A request while the last answer is still unkept is that turn asked again (the coder re-ask): same number, same view.
-      if (turn && !turn.kept) {
+      const reask = turn !== undefined && !turn.kept;
+      if (turn && reask) {
         turn.live.restart();
       } else {
         const step = turns;
@@ -111,6 +123,7 @@ export function loopTurnObserver(run: RunLoopContext, savedTokens: () => number 
           // call already sends, so the gateway stamps it on this call's own usage row.
           metadata: stampOncePerCall<CompletionMetadata>(effect ? { ...run.metadata, memory: effect } : run.metadata, run.metadata),
           kept: false,
+          ...(request.toolChoice ? { toolChoice: request.toolChoice } : {}),
         };
       }
       const t = turn;
@@ -121,10 +134,15 @@ export function loopTurnObserver(run: RunLoopContext, savedTokens: () => number 
         handlers: t.live.handlers,
         metadata: t.metadata,
         maxTokens,
+        // The coder re-ask is asked of the SAME turn's menu with the run's record and the planner's brief, not the turn's forced brief or
+        // steer, and keeps the turn's `tool_choice` (`completeTurn.ts`): it is one more request, never a turn of its own.
+        ...(reask ? { tail: [runBrief(run, tools.length)], ...(t.toolChoice ? { toolChoice: t.toolChoice } : {}) } : {}),
         call: { prompt_cache_key: `brain:${run.serverChatId ?? req.clientChatId ?? 'local'}`, conversationKey: run.chatId },
         fit: (messages, model) => run.windowFit.prepare({ messages, ...(model ? { model } : {}), ...(tools.length > 0 ? { tools } : {}), maxTokens, step: t.step }),
         around: (stream) => asLiveTurn(c, stream),
         recover(error): TurnRetry | undefined {
+          // The re-ask is not retried: a failure there is the turn's (the loop's re-ask goes straight to its error step).
+          if (reask) return undefined;
           // The model broke AFTER the gateway committed to it, or the gateway was reached and the request reset, timed out or was answered
           // with a status the run policy routes around: the policy decides whether the turn is retried ONCE on another connected model
           // (and leaves the one that broke out of every later turn). Any other failure is not a transport failure at all.
@@ -161,7 +179,7 @@ export function loopTurnObserver(run: RunLoopContext, savedTokens: () => number 
     if (!answered) return undefined;
     last.pending = undefined;
     if (turn) turn.kept = true;
-    return keep(run, last, answered);
+    return keep(run, last, answered).catch((error: unknown) => { last.keepFailed = error; });
   };
   return { observer, last, keepAnswered };
 }
