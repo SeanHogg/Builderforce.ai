@@ -53,11 +53,19 @@ function runStatsOf(chat: BrainChat, agents: number, t: (key: string, fallback: 
 export interface VsCodeChatHistoryProps {
   id: string;
   chats: BrainChat[];
+  /** How many chats exist in the current view BEFORE the search filter (empty vs no-match). */
+  total: number;
   loading: boolean;
   activeId: number | null;
   titleOf: (chat: BrainChat) => string;
   runStatus: (id: number) => ChatRunStatus;
   rows: ChatRowActions;
+  /** The search box's value + setter (state lives in the surface, the list is stateless). */
+  query: string;
+  onQueryChange: (value: string) => void;
+  /** Archived view toggle: false = live chats, true = archived chats. */
+  showArchived: boolean;
+  onToggleArchived: () => void;
   /** The host's label bundle. */
   bundle: LabelBundle;
 }
@@ -79,11 +87,33 @@ function RunMarker({ status, label }: { status: Exclude<ChatRunStatus, null>; la
   );
 }
 
-export function VsCodeChatHistory({ id, chats, loading, activeId, titleOf, runStatus, rows, bundle }: VsCodeChatHistoryProps) {
+export function VsCodeChatHistory({ id, chats, total, loading, activeId, titleOf, runStatus, rows, query, onQueryChange, showArchived, onToggleArchived, bundle }: VsCodeChatHistoryProps) {
   const labels = useMemo(() => chatHistoryLabels(bundle), [bundle]);
+  const t = makeT(bundle);
+
+  const filter = (
+    <div className="bf-history__controls">
+      <input
+        type="search"
+        className="bf-history__search"
+        value={query}
+        aria-label={t('app.historySearch', 'Search chats')}
+        placeholder={t('app.historySearch', 'Search chats')}
+        onChange={(e) => onQueryChange(e.target.value)}
+      />
+      <button
+        type="button"
+        className="bf-history__toggle"
+        aria-pressed={showArchived}
+        onClick={onToggleArchived}
+      >
+        {showArchived ? t('app.historyShowLive', 'Live') : t('app.historyShowArchived', 'Archived')}
+      </button>
+    </div>
+  );
 
   return (
-    <ChatHistoryList id={id} loading={loading} total={chats.length} labels={labels}>
+    <ChatHistoryList id={id} loading={loading} total={total} filter={filter} labels={labels}>
       {chats.map((chat) => (
         <VsCodeChatHistoryRow
           key={chat.id}

@@ -24,6 +24,8 @@ export interface VsCodeChats {
   setChatId: (id: number | null) => void;
   /** The project-scoped list. */
   chats: BrainChat[];
+  /** The archived chats `chats` hides — the archive surface reads through this. */
+  archivedChats: BrainChat[];
   /** The history list's rows — the list, with the open chat first when it lives elsewhere. */
   chatOptions: BrainChat[];
   activeChat: BrainChat | null;
@@ -53,6 +55,8 @@ export interface VsCodeChats {
    *  webview signed out — so the archived row leaves the list and an open archived
    *  chat is closed. */
   archive: (chat: { id: number; title: string }) => Promise<void>;
+  /** Restore an archived chat to the live list — the mirror of `archive`. */
+  unarchive: (chat: { id: number; title: string }) => Promise<void>;
   /** Delete a chat through the panel's own store — the gateway signed in, this webview
    *  signed out — so the open chat is left only when it IS the deleted one. */
   remove: (chat: { id: number; title: string }) => Promise<void>;
@@ -102,9 +106,10 @@ export function useVsCodeChats(init: InitData, newChatLabel: string): VsCodeChat
       request<boolean>('chat.confirmDelete', { chatId: chat.id, title: chat.title }).then((ok) => ok === true, () => false),
     [],
   );
-  const { remove: removeChat, archive: archiveChat } = brainChats;
+  const { remove: removeChat, archive: archiveChat, unarchive: unarchiveChat } = brainChats;
   const remove = useCallback((chat: { id: number; title: string }) => removeChat(chat.id), [removeChat]);
   const archive = useCallback((chat: { id: number; title: string }) => archiveChat(chat.id), [archiveChat]);
+  const unarchive = useCallback((chat: { id: number; title: string }) => unarchiveChat(chat.id), [unarchiveChat]);
   const clearError = useCallback(() => setError(''), [setError]);
 
   const setChatId = useCallback((id: number | null) => { void select(id); }, [select]);
@@ -153,8 +158,8 @@ export function useVsCodeChats(init: InitData, newChatLabel: string): VsCodeChat
   const selectMode = useCallback((mode: ChatMode) => { void selectArmedMode(mode); }, [selectArmedMode]);
 
   return {
-    chatId, setChatId, chats, chatOptions, activeChat, reloadChats, onFirstUserTurn, ensureChatId, drafts,
-    runStatus, titleOf, chatMode, selectMode, setMemoryEnabled, armMemory, rename, summarize, confirmDelete, archive, remove,
+    chatId, setChatId, chats, archivedChats: brainChats.archivedChats, chatOptions, activeChat, reloadChats, onFirstUserTurn, ensureChatId, drafts,
+    runStatus, titleOf, chatMode, selectMode, setMemoryEnabled, armMemory, rename, summarize, confirmDelete, archive, unarchive, remove,
     loading: brainChats.loading, error: brainChats.error, clearError,
   };
 }

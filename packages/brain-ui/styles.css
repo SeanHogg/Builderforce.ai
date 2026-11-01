@@ -2586,6 +2586,20 @@
 
 /* <ChatHistoryList> / <ChatHistoryRow>. */
 .bf-history { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
+.bf-history__filter { padding: 8px 10px 0; }
+.bf-history__controls { display: flex; gap: 8px; align-items: center; }
+.bf-history__search {
+  flex: 1; min-width: 0; padding: 6px 9px; font-size: 13px;
+  color: var(--bf-text); background: var(--bf-surface-2);
+  border: 1px solid var(--bf-border); border-radius: 6px;
+}
+.bf-history__search:focus-visible { outline: 2px solid var(--bf-accent); outline-offset: -1px; }
+.bf-history__toggle {
+  flex-shrink: 0; padding: 6px 10px; font-size: 12.5px; cursor: pointer;
+  color: var(--bf-text); background: var(--bf-surface-2);
+  border: 1px solid var(--bf-border); border-radius: 6px;
+}
+.bf-history__toggle[aria-pressed='true'] { background: var(--bf-accent); border-color: var(--bf-accent); color: #fff; }
 .bf-history__status { padding: 12px; font-size: 12.5px; color: var(--bf-text-muted); text-align: center; }
 .bf-chatrow { padding: 8px 10px 8px 9px; border-bottom: 1px solid var(--bf-border); border-left: 3px solid transparent; }
 .bf-chatrow[data-active='true'] { background: var(--bf-surface-2); border-left-color: var(--bf-accent); }

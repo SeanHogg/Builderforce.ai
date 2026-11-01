@@ -96,11 +96,11 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // The conversation list — the shared `useBrainChats` plus the editor's own bindings.
   const vsChats = useVsCodeChats(init, t('app.newChat', 'New chat'));
   const {
-    chatId, setChatId, chats, chatOptions, activeChat, reloadChats, onFirstUserTurn, ensureChatId, drafts,
+    chatId, setChatId, chats, activeChat, reloadChats, onFirstUserTurn, ensureChatId, drafts,
     runStatus, titleOf, chatMode, selectMode, setMemoryEnabled: persistMemory, armMemory,
   } = vsChats;
   // The header's History lever swaps the body to the chat list; opening a chat closes it.
-  const { historyOpen, toggleHistory, openChat, rows } = useChatHistoryView(vsChats);
+  const { historyOpen, toggleHistory, openChat, rows, query, setQuery, showArchived, toggleArchived, filteredChats, total } = useChatHistoryView(vsChats);
 
   // Auto-approve skips the per-action confirm prompt. The gate is the SHARED hook (the
   // flag is read through a REF, because a run's tool loop captures `needsConfirm` at run
@@ -296,12 +296,17 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
       empty={historyOpen ? (
         <VsCodeChatHistory
           id={HISTORY_ID}
-          chats={chatOptions}
+          chats={filteredChats}
+          total={total}
           loading={vsChats.loading}
           activeId={chatId}
           titleOf={titleOf}
           runStatus={runStatus}
           rows={rows}
+          query={query}
+          onQueryChange={setQuery}
+          showArchived={showArchived}
+          onToggleArchived={toggleArchived}
           bundle={init.labels}
         />
       ) : chatId == null && !conv.pendingTurn ? <EditorEmptyState t={t} onPick={pickStarter} /> : undefined}

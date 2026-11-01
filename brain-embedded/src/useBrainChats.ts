@@ -90,6 +90,13 @@ export interface UseBrainChats {
    * tombstones the row.
    */
   archive(id: number): Promise<void>;
+  /**
+   * Restore an archived chat to the live list — the mirror of {@link archive}.
+   * Flips `isArchived` back off and re-reads both lists so the row leaves the
+   * archived view and re-enters the live one. A persistence without a generic
+   * `updateChat` fails closed (no destructive fallback).
+   */
+  unarchive(id: number): Promise<void>;
   remove(id: number): Promise<void>;
   assignToProject(id: number, projectId: number | null): Promise<void>;
   reload(): Promise<void>;
@@ -361,6 +368,15 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     }
   }, [persistence, setActiveChatId]);
 
+  const unarchive = useCallback(async (id: number) => {
+    try {
+      await persistence.updateChat(id, { isArchived: false });
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unarchive failed');
+    }
+  }, [persistence, reload]);
+
   const remove = useCallback(async (id: number) => {
     try {
       await persistence.deleteChat(id);
@@ -415,6 +431,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     captureOriginalRequest,
     summarize,
     archive,
+    unarchive,
     remove,
     assignToProject,
     reload,
