@@ -366,6 +366,19 @@ describe('tool exposure + stall handling signals', () => {
     expect(text).toContain('Narrated but never advertised: builtin_chats_list_tickets');
   });
 
+  it('flags a turn handed tools that answered in prose instead of calling them', () => {
+    const d = computeBrainDiagnostics(
+      [turn(0, { advertisedTools: 12, catalogTools: 317, answeredInProse: true })],
+      undefined,
+      [{ id: 1, role: 'assistant', content: 'Here is how I would approach that task, step by step…', metadata: null, seq: 1, createdAt: '' }],
+    );
+    expect(d.answeredInProse).toBe(true);
+    expect(d.likelyCause).toBe('answered-in-prose');
+    const text = formatBrainDiagnostics(d).join('\n');
+    expect(text).toContain('ANSWERED IN PROSE');
+    expect(text).toContain('described the work instead of doing it');
+  });
+
   it('counts the loop re-prompts and model swaps, so a stalled run shows what was tried', () => {
     const d = computeBrainDiagnostics([
       turn(0, { advertisedTools: 20 }),
