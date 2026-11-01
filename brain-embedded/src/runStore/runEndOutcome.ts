@@ -57,6 +57,6 @@ export function reportRunEnd(c: RunCell, req: Pick<BrainRunRequest, 'recordRunOu
 }
 
 /** The run's own trace (persisted with the run) records an outcome the host could not keep. */
-function unrecorded(c: RunCell, e: unknown): void {
+export function unrecorded(c: RunCell, e: unknown): void {
   pushTrace(c, { ts: nowIso(), category: 'message', label: 'run.outcome_unrecorded', result: e instanceof Error ? e.message : String(e) });
 }

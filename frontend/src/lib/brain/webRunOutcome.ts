@@ -10,10 +10,12 @@ import { webInferenceModeNow } from '@/lib/localFirst/webInferenceMode';
  * through the typed API client. The run does no network I/O of its own; this is the host's.
  *
  * AMBIENT telemetry, like the canvas's: nothing is sent when there is no signed-in tenant session, or when the person keeps inference
- * Local only (a device that chose to keep a turn on itself sends nothing about it). A report that cannot be sent is not an error.
+ * Local only (a device that chose to keep a turn on itself sends nothing about it). A report that cannot be sent is not an error to the person:
+ * it is not swallowed here either, it rejects to the run store, which owns the call and records it in the run's own trace
+ * (`run.outcome_unrecorded`) without ever holding the run open or failing it - the same as the Rovr and VS Code ports.
  */
 export async function reportWebRunOutcome(outcome: BrainRunOutcome | RunOutcomeRequest): Promise<void> {
   if (!getStoredTenantToken()) return;
   if (webInferenceModeNow() === 'local-only') return;
-  await learnedRoutingApi.reportRunOutcome(outcome as RunOutcomeRequest).catch(() => undefined);
+  await learnedRoutingApi.reportRunOutcome(outcome as RunOutcomeRequest);
 }

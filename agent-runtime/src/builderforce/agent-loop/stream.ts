@@ -91,7 +91,8 @@ function parseArguments(text: string, cutOff: boolean): { args: Record<string, u
     // `null` is a call with no arguments, as it has always been read; an array or a scalar is not an argument bag.
     if (parsed === null) return { args: {} };
   } catch {
-    // not JSON: the text is the model's, kept whole
+    // not JSON: the text is the model's, kept whole and handed back as `raw` for the kernel to decline
+    return { args: {}, raw: text };
   }
   return { args: {}, raw: text };
 }

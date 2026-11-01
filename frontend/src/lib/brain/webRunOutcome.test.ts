@@ -18,6 +18,11 @@ describe('the web Brain report port', () => {
     expect(mocks.report).toHaveBeenCalledWith(record);
   });
 
+  it('lets a failed send reject to the run store, which records it, rather than swallowing it', async () => {
+    mocks.report.mockRejectedValueOnce(new Error('door unreachable'));
+    await expect(reportWebRunOutcome(record)).rejects.toThrow('door unreachable');
+  });
+
   it('sends nothing without a signed-in tenant session, or when inference is Local only', async () => {
     mocks.token = null;
     await reportWebRunOutcome(record);

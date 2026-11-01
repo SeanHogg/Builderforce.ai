@@ -25,7 +25,7 @@ import { keepStoppedTurn, persistStep } from './turnPersistence';
 import { recordCodeChangeTicket, settleView, updateLinkedTickets } from './runBackstops';
 import { resolveServerChatId } from './serverChat';
 import { driveRun, runEngineOf } from './runEngine';
-import { reportRunEnd } from './runEndOutcome';
+import { reportRunEnd, unrecorded } from './runEndOutcome';
 import { beginRun } from './beginRun';
 import { continueLeftovers, takeContinueOnSettle } from './continueChat';
 import { holdClaim, releaseClaim, type RunClaim } from './runClaim';
@@ -232,7 +232,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
       } else if (agentRow && req.reportRunRecord) {
         const record = runOutcomeRequestOf(agentRow, { clientRunId: c.runId, stopped: aborted, projectId: req.projectId });
         // `steps` is the number the Brain has always reported (its completed model turns, the finishing one included), not the row's own tally.
-        if (record) void req.reportRunRecord({ ...record, steps: completedTurns(trace).length, routingSignal: false }).catch(() => undefined);
+        if (record) void req.reportRunRecord({ ...record, steps: completedTurns(trace).length, routingSignal: false }).catch((e: unknown) => unrecorded(c, e));
       }
       // How the run ended, under the id its calls carry — the route report's other half.
       reportRunEnd(c, req, { aborted, failed: c.error !== '' });
