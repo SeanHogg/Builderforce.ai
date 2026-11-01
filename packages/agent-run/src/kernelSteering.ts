@@ -16,6 +16,8 @@ type StepAt = { step: number; stepInCall: number };
 export function steeringTakers(run: KernelRun, contextAt: (step: number, turn: number) => PolicyContext) {
   const { input, hooks } = run;
   const { ports } = input;
+  // A surface whose Stop is its own control (`RunPolicy.stopWords: false`) never reads a steered word as a command.
+  const stopsOn = (texts: readonly string[]): boolean => input.policy.stopWords !== false && isStopSteer(texts);
   const append = (...rows: RunMessage[]): void => appendRows(input, run.transcript, ...rows);
 
   /**
@@ -24,10 +26,10 @@ export function steeringTakers(run: KernelRun, contextAt: (step: number, turn: n
    * acknowledged with `steer.applied` before the turn it reaches.
    */
   const takeSteers = async (ctx: StepAt): Promise<"none" | "stop" | "applied"> => {
-    const steered = ((await ports.steering?.drain()) ?? []).map(steerInput);
+    const steered = ((await ports.steering?.drain({ step: ctx.step })) ?? []).map(steerInput);
     if (steered.length === 0) return "none";
     const texts = steered.map((s) => s.text);
-    if (isStopSteer(texts)) {
+    if (stopsOn(texts)) {
       run.stopped = true;
       return "stop";
     }
@@ -45,10 +47,10 @@ export function steeringTakers(run: KernelRun, contextAt: (step: number, turn: n
    * the finish stand and settles the run cancelled, as it does anywhere else.
    */
   const lateSteerNote = async (ctx: { step: number }): Promise<{ note: string } | null> => {
-    const steered = ((await ports.steering?.drain()) ?? []).map(steerInput);
+    const steered = ((await ports.steering?.drain({ step: ctx.step })) ?? []).map(steerInput);
     if (steered.length === 0) return null;
     const texts = steered.map((s) => s.text);
-    if (isStopSteer(texts)) {
+    if (stopsOn(texts)) {
       run.stopped = true;
       return null;
     }

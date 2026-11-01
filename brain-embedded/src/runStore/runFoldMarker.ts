@@ -18,6 +18,7 @@ import { replayTextOf } from '@builderforce/agent-loop';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { contentText } from '../localSuccess/turnFeatures';
 import type { RunCell } from './runCell';
+import type { RunLoopContext } from './runLoopContext';
 import type { BrainRunPersistence, BrainRunRequest } from './runTypes';
 import { emit, nowIso, pushTrace, recordAppended } from './runCells';
 
@@ -108,4 +109,22 @@ export async function persistFoldMarker(c: RunCell, chatId: number, persistence:
       result: `The compaction note could not be saved (${error instanceof Error ? error.message : String(error)}) — the next run will summarize this history again.`,
     });
   }
+}
+
+/**
+ * A NEW fold, recorded: the visible `context.compacted` step, then the durable marker. The ONE place a fold is announced -
+ * the loop's model port and the agent's compaction module (`run/loopFold.ts`) both call it.
+ */
+export function recordFold(run: Pick<RunLoopContext, 'c' | 'chatId' | 'req'>, fold: TranscriptFold): void {
+  const { c } = run;
+  pushTrace(c, {
+    ts: nowIso(),
+    category: 'message',
+    label: 'context.compacted',
+    args: { droppedMessages: fold.droppedMessages },
+    result: `Compressed ${fold.droppedMessages} earlier step(s) into a memory to stay within the context window.`,
+  });
+  emit(c);
+  // Durable: the next run seeds from this note instead of re-summarizing the history.
+  void persistFoldMarker(c, run.chatId, run.req.persistence, fold);
 }

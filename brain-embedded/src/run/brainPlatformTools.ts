@@ -19,7 +19,7 @@ import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { HAND_OFF_TOOL } from '../planHandoff';
 import { DEFAULT_TOOL_LIMIT } from '../selectTools';
 import { callPreflight } from '../runStore/callPreflight';
-import { callRunner } from '../runStore/callRunner';
+import { callRunner, declineMalformedCall } from '../runStore/callRunner';
 import { callPostStep } from '../runStore/callPostStep';
 import { progressAfterToolCalls } from '../runStore/progressGuard';
 import type { RunLoopContext } from '../runStore/runLoopContext';
@@ -38,16 +38,25 @@ export interface BrainPlatform {
   toolRowAppended(row: ChatCompletionMessage): void;
 }
 
+/** The kernel-shaped call the Brain's shared steps (`callPreflight`, `callRunner`, `callPostStep`) take, and the turn context they read. */
+function loopCall(run: RunLoopContext, id: string, name: string, args: Record<string, unknown>, step: number, rawArguments?: string): { call: ParsedToolCall; ctx: TurnContext<ChatCompletionMessage> } {
+  const raw = { id, name, arguments: rawArguments ?? JSON.stringify(args) };
+  return { call: { id, name, args, raw, malformed: rawArguments !== undefined }, ctx: { step, messages: run.convo } as unknown as TurnContext<ChatCompletionMessage> };
+}
+
 export function brainPlatformTools(run: RunLoopContext): BrainPlatform {
   const before = callPreflight(run);
   const dispatch = callRunner(run);
   const after = callPostStep(run);
-  const ran: Ran[] = [];
-  let step = 0;
+  // Keyed by the call's id: a call the agent answered itself (a declined, a skipped one) never reaches `execute`, so the rows cannot be matched in order.
+  const ran = new Map<string, Ran>();
   return {
     toolRowAppended(row) {
-      const done = ran.shift();
-      if (done) void after(done.call, { data: done.result.data, ...(done.result.isError ? { isError: true } : {}) }, row, done.ctx);
+      const id = (row as { tool_call_id?: string }).tool_call_id;
+      const done = id ? ran.get(id) : undefined;
+      if (!done || !id) return;
+      ran.delete(id);
+      void after(done.call, { data: done.result.data, ...(done.result.isError ? { isError: true } : {}) }, row, done.ctx);
     },
     tools: {
       closed: true,
@@ -64,7 +73,9 @@ export function brainPlatformTools(run: RunLoopContext): BrainPlatform {
         );
       },
       get selection() {
-        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, required: new Set(offersHandOff(run.policy) && run.canAskUser ? [...run.alwaysAdvertised, HAND_OFF_TOOL] : run.alwaysAdvertised) };
+        // The pins are the tools THIS run called (`callPostStep`): a tool reached through the router is the tool it reached, a fold does not
+        // forget one, and an earlier run's calls pin nothing - the transcript the agent would read them off holds all three wrongly.
+        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, pinned: [...run.usedTools], required: new Set(offersHandOff(run.policy) && run.canAskUser ? [...run.alwaysAdvertised, HAND_OFF_TOOL] : run.alwaysAdvertised) };
       },
       // ONE cap on a result: the Brain's own, applied inside `callRunner` (`trimToolResult`, by LINE, sized to the serving
       // model's window). The agent's per-tool cap would cut the already budgeted text a second time and drop its paging fields.
@@ -74,16 +85,30 @@ export function brainPlatformTools(run: RunLoopContext): BrainPlatform {
       turn: (env) => loopTurnMenu(run, env, run.allTools?.length ?? 0),
       // A3's detector is the Brain's own (`progressGuard.ts`): the turn is judged when its calls have all run, as the loop does.
       turnEnded: progressAfterToolCalls(run),
-      async execute(name, args): Promise<PlatformToolResult> {
-        step += 1;
-        const ctx = { step, messages: run.convo } as unknown as TurnContext<ChatCompletionMessage>;
-        const call: ParsedToolCall = { id: `brain-${step}`, name, args, raw: { id: `brain-${step}`, name, arguments: JSON.stringify(args) }, malformed: false };
+      // The turn's step, as the kernel numbers it: the router, the hand-off, the confirm gate, the guards, the activity line and the
+      // no-progress streak (`CacheServedStreak` counts distinct TURNS) all stamp it, so it is not a per-call counter.
+      async execute(name, args, env): Promise<PlatformToolResult> {
+        const id = env.callId ?? `brain-${env.step}-${ran.size + 1}`;
+        const { call, ctx } = loopCall(run, id, name, args, env.step);
         const pre = await before(call, ctx);
         let result: PlatformToolResult;
         if (pre && 'result' in pre) result = pre.result;
         else result = await dispatch(pre && 'rewrite' in pre ? pre.rewrite : call, ctx);
-        ran.push({ call: pre && 'rewrite' in pre ? pre.rewrite : call, result, ctx });
+        ran.set(id, { call: pre && 'rewrite' in pre ? pre.rewrite : call, result, ctx });
         return result;
+      },
+      // A call whose arguments never parsed is answered as the loop answers it: the preflight first (an `ask_user` has a corrective of
+      // its own, a `hand_off` names what it needs), else the shared decline and its trace step. The progress detector sees it either way.
+      malformed: {
+        roundDirective: () => '',
+        async answer(raw, { step }) {
+          const { call, ctx } = loopCall(run, raw.id, raw.name, {}, step, raw.arguments);
+          const pre = await before(call, ctx);
+          const target = pre && 'rewrite' in pre ? pre.rewrite : call;
+          const result: PlatformToolResult = pre && 'result' in pre ? pre.result : (declineMalformedCall(run, target) as PlatformToolResult);
+          ran.set(raw.id, { call: target, result, ctx });
+          return result;
+        },
       },
     },
   };

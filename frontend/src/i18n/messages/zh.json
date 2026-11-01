@@ -29812,6 +29812,11 @@
       "extension": "由第三方开发者发布，可在开发者门户中安装。"
     }
   },
+  "mailboxSend": {
+    "doNotContactTitle": "该收件人在禁止联系名单中",
+    "doNotContactMessage": "对方已退订、邮件退回，或要求不再被联系。仅当你确定应当发送时，才继续发送此邮件。",
+    "sendAnyway": "仍然发送"
+  },
   "inboxApp": {
     "title": "收件箱",
     "account": "电子邮件账户",

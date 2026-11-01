@@ -89,7 +89,14 @@ export const FREQUENT_TICK_MS = 5 * 60 * 1000;
 
 /** Bounds on the `CRON_FLOOR_INTERVAL_MS` override — see {@link floorIntervalMs}. */
 export const MIN_FLOOR_INTERVAL_MS = 5 * 60 * 1000;
-export const MAX_FLOOR_INTERVAL_MS = 6 * 60 * 60 * 1000;
+/**
+ * 90 minutes, not hours. Past about 2h the floor outruns the lookbacks the frequent sweeps size
+ * themselves to: `llm-batch`'s 26h work marker can expire unseen (`llm/batch/batchWorkMarker.ts`)
+ * and `cost-alerts`' 2h outlier lookback leaves gaps nobody scores (`alerts/costAlertSweep.ts`).
+ * At 6h it would also equal the mailbox renewal lead. The `due` window scales with the floor
+ * ({@link classifyDueTime}, {@link notStuckWindowMs}), so a longer floor also widens it.
+ */
+export const MAX_FLOOR_INTERVAL_MS = 90 * 60 * 1000;
 
 /**
  * Effective floor interval: the optional `CRON_FLOOR_INTERVAL_MS` var, clamped,
@@ -100,8 +107,9 @@ export const MAX_FLOOR_INTERVAL_MS = 6 * 60 * 60 * 1000;
  * redeploy of new code.
  *
  * Clamped both ways: below the 5-minute tick the floor would fire every tick and
- * defeat the gate entirely, and past 6h a missed signal could strand work for
- * most of a day. A garbage value falls back to the default rather than throwing —
+ * defeat the gate entirely, and past {@link MAX_FLOOR_INTERVAL_MS} (90 minutes) the
+ * sweeps' own lookbacks (the `llm-batch` work marker, the `cost-alerts` window) start
+ * to lose work. A garbage value falls back to the default rather than throwing —
  * a mistyped var must never be able to break the cron path.
  */
 export function floorIntervalMs(env: Env): number {

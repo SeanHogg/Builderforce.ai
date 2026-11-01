@@ -6,7 +6,7 @@
  * the model reads (repeated failure, placeholders, an unshipped completion, circling).
  */
 
-import { malformedCallOutcome, malformedCallLabel, type LoopPorts } from '@builderforce/agent-loop';
+import { malformedCallOutcome, malformedCallLabel, type LoopPorts, type ParsedToolCall } from '@builderforce/agent-loop';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { isFailedToolResult } from '../brainTriage';
 import { withObservedModel } from '../lastResolvedModel';
@@ -26,30 +26,36 @@ import { earlyDelegationAdvisory } from './earlyDelegation';
 import { failureAdvisoryFor, isDedupableRead, type RunLoopContext } from './runLoopContext';
 import { runToolInterruptibly } from './steerInterrupt';
 
+/**
+ * A call whose arguments never parsed is NOT run. The kernel's policy is that bad JSON never aborts a run, so it hands the call over
+ * with `args: {}` and `malformed: true` - and dispatching that anyway is how four 12 KB `canvas_write_build_file` calls reached the
+ * tool with an empty bag and came back "A path is required.", telling the model nothing about the real cause (its response had hit
+ * the output ceiling) so it re-sent the same call until the run was spent. Not counted as a tool failure: the tool never ran.
+ * Returns the corrective result the model reads (and records the step that says why), or undefined when the call is well formed.
+ * Shared by both engines: the loop's runner below, the agent's platform tools (`run/brainPlatformTools.ts`).
+ */
+export function declineMalformedCall(run: RunLoopContext, call: ParsedToolCall): { data: unknown; isError: true } | undefined {
+  const truncated = run.lastTurnInterruption === 'truncated';
+  const declined = malformedCallOutcome(call, truncated);
+  if (!declined) return undefined;
+  pushTrace(run.c, {
+    ts: nowIso(), category: 'error', isError: true, durationMs: 0,
+    label: malformedCallLabel(call.name, truncated),
+    args: { arguments: String(call.raw?.arguments ?? '').slice(0, 200) },
+    result: declined,
+  });
+  return { data: declined, isError: true };
+}
+
 export function callRunner(run: RunLoopContext): LoopPorts<ChatCompletionMessage>['dispatch'] {
   const { c, chatId, req, readCoverage, failures, writeLedger, placeholderLedger } = run;
   const { runTool } = req;
   return async (call, ctx) => {
     const iter = ctx.step;
     const args = call.args;
-    // A call whose arguments never parsed is NOT run. The kernel's policy is that
-    // bad JSON never aborts a run, so it hands the call over with `args: {}` and
-    // `malformed: true` — and dispatching that anyway is how four 12 KB
-    // `canvas_write_build_file` calls reached the tool with an empty bag and came
-    // back "A path is required.", telling the model nothing about the real cause
-    // (its response had hit the output ceiling) so it re-sent the same call until
-    // the run was spent. Not counted as a tool failure: the tool never ran.
-    const declined = malformedCallOutcome(call, run.lastTurnInterruption === 'truncated');
-    if (declined) {
-      const truncated = run.lastTurnInterruption === 'truncated';
-      pushTrace(c, {
-        ts: nowIso(), category: 'error', isError: true, durationMs: 0,
-        label: malformedCallLabel(call.name, truncated),
-        args: { arguments: String(call.raw?.arguments ?? '').slice(0, 200) },
-        result: declined,
-      });
-      return { data: declined, isError: true };
-    }
+    // A call whose arguments never parsed is NOT run (see `declineMalformedCall`).
+    const declined = declineMalformedCall(run, call);
+    if (declined) return declined;
     const isReadTool = isDedupableRead(call.name);
     const toolStart = nowMs();
     // Name the tool AND what it is working on, before it runs. This is the

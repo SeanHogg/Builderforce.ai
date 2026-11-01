@@ -29812,6 +29812,11 @@
       "extension": "Publié par un développeur tiers et installable depuis le portail développeur."
     }
   },
+  "mailboxSend": {
+    "doNotContactTitle": "Ce destinataire figure sur une liste de non-contact",
+    "doNotContactMessage": "Cette personne s’est désabonnée, son adresse a rebondi ou elle a demandé à ne pas être contactée. N’envoyez ce message malgré tout que si vous êtes certain de devoir le faire.",
+    "sendAnyway": "Envoyer quand même"
+  },
   "inboxApp": {
     "title": "Boîte de réception",
     "account": "Compte e-mail",

@@ -29812,6 +29812,11 @@
       "extension": "Von einem Drittanbieter veröffentlicht und über das Entwicklerportal installierbar."
     }
   },
+  "mailboxSend": {
+    "doNotContactTitle": "Dieser Empfänger steht auf einer Kontaktsperrliste",
+    "doNotContactMessage": "Die Person hat sich abgemeldet, die Zustellung ist fehlgeschlagen oder sie wollte nicht kontaktiert werden. Senden Sie diese Nachricht nur, wenn Sie sicher sind, dass Sie es tun sollten.",
+    "sendAnyway": "Trotzdem senden"
+  },
   "inboxApp": {
     "title": "Posteingang",
     "account": "E-Mail-Konto",

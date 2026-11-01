@@ -98,6 +98,11 @@ export interface RunPolicy {
    */
   codeChangeTools?: readonly string[];
   pinnedModel?: string;
+  /**
+   * Whether a steered message that IS a stop command ("stop", "cancel") ends the run (default: it does). A surface whose Stop is its own
+   * control and whose composer never reads words as commands (the Brain's) sets `false`: the words reach the model like any steer.
+   */
+  stopWords?: false;
   inference: 'local-only' | 'hybrid' | 'specific';
   verify: 'declared-checks' | 'branch-ci' | 'none';
   signoff?: { roleKey: string; laneKey?: string };   // finish blocked until signed off
@@ -201,8 +206,8 @@ export interface SteerInput {
 
 /** What the user steered in since the last step. */
 export interface SteeringSource {
-  /** The messages since the last drain. Empty when nothing was steered. */
-  drain(): Array<string | SteerInput> | Promise<Array<string | SteerInput>>;
+  /** The messages since the last drain. Empty when nothing was steered. `env.step` is the kernel's step the drain serves (a surface that numbers what it records by step reads it). */
+  drain(env?: { step: number }): Array<string | SteerInput> | Promise<Array<string | SteerInput>>;
   /** True while an interrupting message waits. Absent ⇒ steers only land between steps. */
   hasInterrupt?(): boolean;
   /**

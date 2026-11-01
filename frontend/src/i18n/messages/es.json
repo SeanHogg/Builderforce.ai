@@ -29812,6 +29812,11 @@
       "extension": "Publicado por un desarrollador externo e instalable desde el Portal de desarrolladores."
     }
   },
+  "mailboxSend": {
+    "doNotContactTitle": "Este destinatario está en una lista de no contactar",
+    "doNotContactMessage": "Se dio de baja, el correo rebotó o pidió que no lo contactaran. Envía este mensaje de todos modos solo si estás seguro de que debes hacerlo.",
+    "sendAnyway": "Enviar de todos modos"
+  },
   "inboxApp": {
     "title": "Bandeja de entrada",
     "account": "Cuenta de correo",

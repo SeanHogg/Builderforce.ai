@@ -400,7 +400,8 @@ describe('a provider that does not answer', () => {
     send.mockResolvedValue({});
     const db = fakeDb([[sendingCampaign], [], [], [{ remaining: 0, queuedLeft: 0 }], []]);
     await run(kvEnv().env, db);
-    const read = db.calls.filter((c) => c.kind === 'select' && c.orderBy)[0]!;
+    // The batch also reads the tenant's logo (ordered, one key); the queued read is the two-key one.
+    const read = db.calls.find((c) => c.kind === 'select' && c.orderBy?.length === 2)!;
     const order = read.orderBy!.map((o) => rendered(o).sql);
     expect(order).toHaveLength(2);
     expect(order[0]).toMatch(/"attempts" asc$/);

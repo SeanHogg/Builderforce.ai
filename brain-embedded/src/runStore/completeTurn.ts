@@ -18,7 +18,7 @@ import { persistSteer } from './steerPersistence';
 import { steerModelContent } from '../runSteering';
 import { buildWorkingTranscript } from '@seanhogg/builderforce-memory/working';
 import { summarizeMiddle } from '../transcriptSummarizer';
-import { persistFoldMarker } from './runFoldMarker';
+import { recordFold } from './runFoldMarker';
 import { compactionSavedTokens, stampOncePerCall } from './compactionSaved';
 import { callMemoryEffect } from '../memorySavings';
 import { emit, nowIso, nowMs, pushTrace } from './runCells';
@@ -56,18 +56,7 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
       c,
       systemPrompt,
       (msgs) => summarizeMiddle(stream, run.policy.model, msgs, c.abort?.signal),
-      (fold) => {
-        pushTrace(c, {
-          ts: nowIso(),
-          category: 'message',
-          label: 'context.compacted',
-          args: { droppedMessages: fold.droppedMessages },
-          result: `Compressed ${fold.droppedMessages} earlier step(s) into a memory to stay within the context window.`,
-        });
-        emit(c);
-        // Durable: the next run seeds from this note instead of re-summarizing the history.
-        void persistFoldMarker(c, chatId, run.req.persistence, fold);
-      },
+      (fold) => recordFold(run, fold),
     );
     // What memory did to THIS call's prompt — compaction kept the folded part of the
     // transcript out of it, recall added its block — carried in the metadata the call

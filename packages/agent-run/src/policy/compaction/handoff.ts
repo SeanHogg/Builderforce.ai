@@ -11,15 +11,15 @@
  * identity; the note comes back as the host's own summary row.
  */
 
-import { defaultEstimateTokens, packHandoff, tokensOf, type HandoffMessage } from "@seanhogg/builderforce-memory/handoff";
+import { defaultEstimateTokens, handoffLine, isVolatileTail, messageTokens, packHandoff, tokensOf, type HandoffMessage } from "@seanhogg/builderforce-memory/handoff";
 import { handoffReserveTokens, handoffTokenBudget, toolSchemaTokens } from "@builderforce/run-policy";
 
 /** How a host's row maps to the packer's, and how the packer's note maps back. */
 export interface HandoffAccessor<M> {
   /** The packer's view of one row (for measuring and for never splitting a call from its results). */
   toHandoff(row: M): HandoffMessage;
-  /** The host's row for the note the packer wrote for the dropped middle. */
-  summary(text: string, tokensBefore: number): M;
+  /** The host's row for a hand-off note, in the role the packer chose for it (the role keeps turns alternating). */
+  summary(text: string, role: HandoffMessage["role"]): M;
 }
 
 export interface ModelHandoffInput<M> {
@@ -36,14 +36,18 @@ export interface ModelHandoffInput<M> {
   priceTierBoundary?: number;
   /** The hard cap for the incoming turn's answer; sizes the reply reserve. A run passes the reserve it holds back (`replyReserve`), so the packer and the compaction never disagree. */
   maxTokens?: number;
-  /** Rows that survive the cut whole even when they fall in the dropped middle (the task the run was given). */
+  /** Rows that survive the cut whole even when they fall in the dropped middle (the task the run was given, what the person steered in). */
   pinned?: (row: M) => boolean;
+  /** What else the incoming request costs beyond the rows and the tool schemas (the volatile tail it carries last, the hand-off note), in tokens. */
+  extraTokens?: number;
 }
 
 export interface ModelHandoffResult<M> {
   messages: M[];
   /** Rows dropped from the context (0 = it already fit; `messages` is the input). */
   dropped: number;
+  /** The packer wrote the note for the dropped middle (it is in `messages`). False when nothing was dropped, and when the rows that must stay whole fill the window on their own. */
+  noted: boolean;
   /** False when the system prompt and the rows that must stay whole (the latest directive, a pinned row) alone exceed the window. */
   fits: boolean;
   /** What the whole context (system prompt included) cost before the cut, and after it - the packer's own estimate. */
@@ -77,7 +81,7 @@ export async function packForModelHandoff<M>(input: ModelHandoffInput<M>, access
     messages: all,
     targetContextTokens: packTargetTokens(input.contextWindow, input.priceTierBoundary, reserve),
     reserveOutputTokens: reserve,
-    toolsTokens: toolSchemaTokens(input.tools, defaultEstimateTokens),
+    toolsTokens: toolSchemaTokens(input.tools, defaultEstimateTokens) + (input.extraTokens ?? 0),
     from: input.from,
     to: input.to,
     ...(input.pinned ? { pinned: (view: HandoffMessage) => { const row = back.get(view); return row !== undefined && input.pinned!(row); } } : {}),

@@ -18,9 +18,8 @@
  *                                              — verifies every core row is present on the
  *                                                operational endpoint, then empties the core copies
  *   3. VACUUM FULL on builderforce-core (operator, production credentials) to
- *      reclaim the space the purge leaves as free pages. Then delete only
- *      builderforce-primary in the Neon console; keep builderforce-apps (live
- *      sites). This script does not run VACUUM.
+ *      reclaim the space the purge leaves as free pages. Keep builderforce-apps
+ *      (live sites). This script does not run VACUUM.
  *
  * Idempotent: every insert is ON CONFLICT DO NOTHING, so a re-run copies only what is
  * missing. `--dry-run` reports counts and writes nothing.

@@ -484,7 +484,7 @@ export interface Env {
    * Optional override (milliseconds) for the KV cron work-gate's floor interval —
    * how long an idle platform may go without an unconditional Postgres fan-out.
    * Unset → 30 min (see `application/runtime/cronWorkSignal.ts`). Clamped to
-   * [5 min, 6 h]; a non-numeric value falls back to the default.
+   * [5 min, 90 min]; a non-numeric value falls back to the default.
    *
    * This is a COST dial, not a correctness one: shorter = more idle Neon wake-ups
    * (~48/day at 30 min) and tighter worst-case staleness; longer = cheaper compute.

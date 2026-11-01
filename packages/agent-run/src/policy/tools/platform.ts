@@ -24,6 +24,9 @@ export function selectPlatformCatalog(ctx: PolicyContext, pinned: readonly strin
   const platform = ctx.ports.platform;
   if (!platform?.closed) return undefined;
   const catalog = platform.schemas({ rungs: ctx.state.stall?.rungs ?? {} });
-  const { query, limit, required } = platform.selection;
-  return selectToolsForTurn(catalog, { query, limit, pinned, required: [...required] }).tools;
+  const selection = platform.selection;
+  const { query, limit, required } = selection;
+  // The surface knows what it ran: its own pins (a call through its router counts as the tool it reached; a compaction that dropped the
+  // call keeps the pin; an earlier run pins nothing) replace the ones read off the transcript.
+  return selectToolsForTurn(catalog, { query, limit, pinned: selection.pinned ? [...selection.pinned] : pinned, required: [...required] }).tools;
 }
