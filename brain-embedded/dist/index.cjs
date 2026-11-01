@@ -436,6 +436,7 @@ __export(src_exports, {
   setMcpToolStatus: () => setMcpToolStatus,
   setPendingRunTurn: () => setPendingRunTurn,
   setPendingWordsOwner: () => setPendingWordsOwner,
+  setRunServedBy: () => setRunServedBy,
   shippedToBaseBranch: () => shippedToBaseBranch,
   shortenTarget: () => shortenTarget,
   signedBrainFileUrl: () => signedBrainFileUrl,
@@ -22443,6 +22444,13 @@ function setPendingRunTurn(chatId, turn) {
   c.pendingTurn = turn;
   emit2(c);
 }
+function setRunServedBy(chatId, served) {
+  if (chatId == null) return;
+  const c = cells.get(chatId);
+  if (!c) return;
+  c.servedBy = served ? { model: served.model, ...served.account ? { account: served.account } : {} } : null;
+  emit2(c);
+}
 function requestRunConfirm(chatId, req, opts) {
   if (driverFor(chatId)) return Promise.resolve(false);
   const c = getCell(chatId);
@@ -32929,6 +32937,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   setMcpToolStatus,
   setPendingRunTurn,
   setPendingWordsOwner,
+  setRunServedBy,
   shippedToBaseBranch,
   shortenTarget,
   signedBrainFileUrl,

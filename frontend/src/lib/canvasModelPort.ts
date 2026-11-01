@@ -161,6 +161,10 @@ export function canvasModelTransport(run: CanvasRun): ModelTransport {
         throw classifyStreamError(run, error, request.model, step);
       }
       run.throwIfStopped();
+      // The route is known: publish the served model NOW (the canvas engine run's runner
+      // never writes `servedBy`, so the surface names the live model through this seam —
+      // `onModel`, the same fact `turnPersistence.liveTurnModel` writes for a chat turn).
+      if (result.resolvedModel) options.onModel?.({ model: result.resolvedModel, ...(result.account ? { account: result.account } : {}) });
       options.onCompletion?.({
         at: new Date().toISOString(), iteration: step + 1,
         requestedModel: request.model ?? null,

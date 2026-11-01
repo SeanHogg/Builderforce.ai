@@ -6,8 +6,10 @@ import { canvasProjectId, canvasProjectNodes } from '@/lib/canvasProjectRef';
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
 import { runCreationCanvasAi } from '@/lib/creationCanvasAi';
 import { readChosenCanvasPhase } from '@/lib/canvasPhases';
-import { projectMemoryHooks, routingModeForSelection } from '@seanhogg/builderforce-brain-embedded';
+import { routingModeForSelection } from '@seanhogg/builderforce-brain-embedded';
+import { projectMemoryHooks, setRunServedBy } from '@seanhogg/builderforce-brain-embedded';
 import { apiRequest } from '@/lib/apiClient';
+import { canvasRunKey } from './canvasRunKey';
 import { teachProjectEvermindFromText } from '@/lib/projectEvermindApi';
 import { safeTraceJson } from '../canvasArtifactExport';
 import type { CreationFlowNode } from '../CreationNode';
@@ -121,6 +123,7 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
           autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
           disabledModels: brainRuntimeRef.current.disabledModels,
           onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel, onOutcome: outcomeReporter(`agent:${agent.id}`),
+          onModel: (served) => setRunServedBy(canvasRunKey(sessionId), served),
           onModelFallback: (model) => setModelSelection({ mode: 'model', model }),
           participant: { ref, name, instructions: typeof agent.data.instructions === 'string' ? agent.data.instructions : agent.data.subtitle },
           conversation: groupConversation,
@@ -169,6 +172,7 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
     autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
     disabledModels: brainRuntimeRef.current.disabledModels,
     onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel, onOutcome: outcomeReporter('brain'),
+    onModel: (served) => setRunServedBy(canvasRunKey(sessionId), served),
     onModelFallback: (model) => setModelSelection({ mode: 'model', model }),
     onUnanswered: (outcome) => { turnUnansweredRef.current = outcome; },
     // The canvas runner takes recall + learn only, and deliberately NOT the

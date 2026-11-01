@@ -53,6 +53,7 @@ export {
   clearRunError,
   resolveRunConfirm,
   setPendingRunTurn,
+  setRunServedBy,
   applyRemoteRun,
 } from './runStore/runControl';
 export { startRun } from './runStore/startRun';

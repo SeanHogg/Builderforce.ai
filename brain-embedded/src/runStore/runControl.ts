@@ -265,6 +265,22 @@ export function setPendingRunTurn(chatId: RunKey | null, turn: PendingTurn | nul
 }
 
 /**
+ * Name the model an engine-hosted run (a canvas turn, `startEngineRun`) is serving —
+ * the store-side companion of a chat turn's `servedBy`. The engine's own runner never
+ * writes this field (only the chat loop's stream handler does, via `liveTurnModel`), so
+ * a canvas surface publishes the served model here the moment its route names it; the
+ * snapshot then carries `servedBy` exactly as a chat run's does. No-op when there's no
+ * cell.
+ */
+export function setRunServedBy(chatId: RunKey | null, served: { model: string; account?: string } | null): void {
+  if (chatId == null) return;
+  const c = cells.get(chatId);
+  if (!c) return;
+  c.servedBy = served ? { model: served.model, ...(served.account ? { account: served.account } : {}) } : null;
+  emit(c);
+}
+
+/**
  * Ask the human about one tool call and wait for the answer — the ONE way a pending
  * confirmation is raised on a chat's run cell.
  *
