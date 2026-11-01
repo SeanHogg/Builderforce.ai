@@ -11,8 +11,18 @@
  *     not decisions. Kept as `<ms>` so a step that has one on one engine and none on the other is seen.
  *  4. ISO-8601 instants inside text (a system prompt's clock line, a step's wording): same as rule 2.
  *
+ *  5. Epoch-ms run clocks. `clientRunId` is `ide:<run key>:<Date.now() at start>` (`runOutcomeReport.ts`); the
+ *     13-digit suffix is `<epoch>`. The key before it is kept.
+ *  6. The wire's own defaults (`wireEquivalent`). The request options are compared as the gateway body
+ *     `streamChatCompletion.ts` builds from them, so an option that body omits or defaults is equal to its absence:
+ *     `modelStrict: false`, or true with no `model` (`strict` is set only when true AND a model is named), `maxTokens` absent (`max_tokens` defaults to 4096),
+ *     `reasoning: off` (the key is omitted), an empty `tools` list (omitted), `tool_choice` absent beside tools
+ *     (`auto`), an empty `metadata`. A DIFFERENT value (16384 against 4096) is not touched.
+ *
  * Nothing else is normalised: not message order, not step numbers, not counts, not wording.
  */
+
+import { DEFAULT_MAX_TOKENS } from '../../effort';
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 // `runPreamble.ts` falls back to `<epoch ms>-<base36>` where `crypto.randomUUID` is absent.
@@ -22,6 +32,20 @@ const ISO_INSTANT = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}
 const INSTANT_KEYS = new Set(['ts', 'createdAt', 'startedAt', 'at']);
 const DURATION_KEYS = new Set(['durationMs', 'ttftMs', 'elapsedMs']);
 
+const EPOCH_RUN_CLOCK = /\b(ide:\d+:)\d{13}\b/g;
+
+/** Rule 6: one request's options reduced to what the gateway body would carry. */
+export function wireEquivalent<T extends Record<string, unknown>>(call: T): T {
+  const out: Record<string, unknown> = { ...call };
+  if (out.modelStrict === false || (out.modelStrict === true && !out.model)) delete out.modelStrict;
+  if (out.maxTokens === undefined) out.maxTokens = DEFAULT_MAX_TOKENS;
+  if ((out.reasoning as { level?: string } | undefined)?.level === 'off') delete out.reasoning;
+  if (Array.isArray(out.tools) && out.tools.length === 0) delete out.tools;
+  if (out.tools !== undefined && out.tool_choice === undefined) out.tool_choice = 'auto';
+  if (out.metadata && Object.keys(out.metadata as object).length === 0) delete out.metadata;
+  return out as T;
+}
+
 /** A normaliser with its own id numbering: one per record, so a record is numbered from 1. */
 export function normaliser(): <T>(value: T) => T {
   const ids = new Map<string, number>();
@@ -30,7 +54,7 @@ export function normaliser(): <T>(value: T) => T {
     if (n === undefined) { n = ids.size + 1; ids.set(raw, n); }
     return `<id:${n}>`;
   };
-  const text = (s: string): string => s.replace(UUID, idOf).replace(FALLBACK_ID, idOf).replace(ISO_INSTANT, '<iso>');
+  const text = (s: string): string => s.replace(UUID, idOf).replace(EPOCH_RUN_CLOCK, '$1<epoch>').replace(FALLBACK_ID, idOf).replace(ISO_INSTANT, '<iso>');
   const walk = (v: unknown, key?: string): unknown => {
     if (typeof v === 'string') return key && INSTANT_KEYS.has(key) ? '<iso>' : text(v);
     if (typeof v === 'number') return key && DURATION_KEYS.has(key) ? '<ms>' : v;

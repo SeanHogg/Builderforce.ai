@@ -33,7 +33,7 @@ describe('the oracle list', () => {
       .flatMap((d) => testFiles(join(root, d)))
       .filter((f) => !OWN_ENGINE_DIRS.some((d) => f.includes(d)))
       .filter((f) => { const text = readFileSync(f, 'utf8'); return DRIVES_A_RUN.test(text) && !CHOOSES_ITS_OWN_ENGINE.test(text); })
-      .map((f) => relative(root, f).split('\').join('/'))
+      .map((f) => relative(root, f).split(String.fromCharCode(92)).join('/'))
       .sort();
     expect(listed.slice().sort()).toEqual(found);
   });

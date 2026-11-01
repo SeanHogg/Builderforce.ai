@@ -20,6 +20,11 @@ const dump = (id: string, engine: string, record: unknown): void => {
 };
 
 describe('the agent runs the Brain exactly as the loop does', () => {
+  it('has one scenario per id (the id names its snapshot file)', () => {
+    const ids = scenarios.map((s) => s.id);
+    expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
+  });
+
   for (const s of scenarios) {
     it(`${s.id} [${s.rows.join(',') || '-'}]: ${s.title}`, async () => {
       const loop = await runScenario(s, 'loop');

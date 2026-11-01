@@ -137,7 +137,6 @@
     }
    ],
    "tool_choice": "auto",
-   "modelStrict": false,
    "maxTokens": 16384,
    "reasoning": {
     "level": "medium"
@@ -308,7 +307,6 @@
     }
    ],
    "tool_choice": "auto",
-   "modelStrict": false,
    "maxTokens": 16384,
    "reasoning": {
     "level": "medium"

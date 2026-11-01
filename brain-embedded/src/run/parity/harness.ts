@@ -15,7 +15,7 @@ import type { BrainRunRequest, BrainStreamFn, RunEngineId } from '../../runStore
 import type { BrainToolSpec, StreamChatResult } from '../../streamChatCompletion';
 import { isSummaryCall, completion } from './script';
 import { Recorder, copyWire } from './recorder';
-import { normalise } from './normalise';
+import { normalise, wireEquivalent } from './normalise';
 import type { HostTool, RunRecord, Scenario, ScenarioHost, ScriptedTurn, TurnInput } from './types';
 
 const DEFAULT_KEY = 7001;
@@ -174,5 +174,7 @@ export async function runScenario(scenario: Scenario, engine: RunEngineId): Prom
   } catch (e) {
     rec.scenarioError = e instanceof Error ? e.message : String(e);
   }
-  return normalise(JSON.parse(JSON.stringify(rec.toRecord())) as RunRecord);
+  const record = JSON.parse(JSON.stringify(rec.toRecord())) as RunRecord;
+  record.wire = record.wire.map((w) => wireEquivalent(w as Record<string, unknown>) as typeof w);
+  return normalise(record);
 }

@@ -11,7 +11,6 @@
      "content": "Say hello, then finish."
     }
    ],
-   "modelStrict": false,
    "metadata": {
     "chatId": 7001,
     "guestTurnId": "<id:1>",
@@ -20,7 +19,8 @@
    },
    "role": "chat",
    "prompt_cache_key": "brain:7001",
-   "conversationKey": 7001
+   "conversationKey": 7001,
+   "maxTokens": 4096
   }
  ],
  "persisted": [

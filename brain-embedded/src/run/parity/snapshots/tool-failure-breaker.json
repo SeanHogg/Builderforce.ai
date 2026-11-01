@@ -126,7 +126,6 @@
     }
    ],
    "tool_choice": "auto",
-   "modelStrict": false,
    "maxTokens": 16384,
    "metadata": {
     "chatId": 7001,
@@ -283,7 +282,6 @@
     }
    ],
    "tool_choice": "auto",
-   "modelStrict": false,
    "maxTokens": 16384,
    "metadata": {
     "chatId": 7001,
@@ -459,7 +457,6 @@
     }
    ],
    "tool_choice": "auto",
-   "modelStrict": false,
    "maxTokens": 16384,
    "metadata": {
     "chatId": 7001,
@@ -654,7 +651,6 @@
     }
    ],
    "tool_choice": "auto",
-   "modelStrict": false,
    "maxTokens": 16384,
    "metadata": {
     "chatId": 7001,
@@ -868,7 +864,6 @@
     }
    ],
    "tool_choice": "auto",
-   "modelStrict": false,
    "maxTokens": 16384,
    "metadata": {
     "chatId": 7001,
@@ -990,13 +985,13 @@
      "content": "This turn was stopped because your last 5 tool calls all failed. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered — say what you completed, quote what the failing calls answered, and state plainly what is blocking you and what you need (a different argument, a permission, a decision) so the next turn can succeed."
     }
    ],
-   "modelStrict": false,
    "metadata": {
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "read everything",
     "mode": "work"
-   }
+   },
+   "maxTokens": 4096
   }
  ],
  "persisted": [

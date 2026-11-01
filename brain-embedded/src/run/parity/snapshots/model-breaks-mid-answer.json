@@ -126,7 +126,6 @@
     }
    ],
    "tool_choice": "auto",
-   "modelStrict": false,
    "maxTokens": 16384,
    "metadata": {
     "chatId": 7001,
@@ -264,7 +263,6 @@
     }
    ],
    "tool_choice": "auto",
-   "modelStrict": false,
    "maxTokens": 16384,
    "metadata": {
     "chatId": 7001,
@@ -424,7 +422,6 @@
     }
    ],
    "tool_choice": "auto",
-   "modelStrict": false,
    "maxTokens": 16384,
    "metadata": {
     "chatId": 7001,

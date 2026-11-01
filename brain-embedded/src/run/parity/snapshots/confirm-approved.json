@@ -672,7 +672,7 @@
  "outcome": {
   "reported": [
    {
-    "clientRunId": "ide:7001:1793497333083",
+    "clientRunId": "ide:7001:<epoch>",
     "role": "code",
     "source": "ide",
     "steps": 2,

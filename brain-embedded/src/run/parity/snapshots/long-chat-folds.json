@@ -12,9 +12,6 @@
     }
    ],
    "maxTokens": 2500,
-   "reasoning": {
-    "level": "off"
-   },
    "summary": true
   },
   {
@@ -29,9 +26,6 @@
     }
    ],
    "maxTokens": 2500,
-   "reasoning": {
-    "level": "off"
-   },
    "summary": true
   },
   {
@@ -109,7 +103,6 @@
      "content": "And what about the manifest?"
     }
    ],
-   "modelStrict": false,
    "metadata": {
     "chatId": 7001,
     "guestTurnId": "<id:1>",
@@ -122,7 +115,8 @@
    },
    "role": "chat",
    "prompt_cache_key": "brain:7001",
-   "conversationKey": 7001
+   "conversationKey": 7001,
+   "maxTokens": 4096
   }
  ],
  "persisted": [

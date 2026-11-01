@@ -67,8 +67,8 @@ export const thoroughRoute: Scenario = {
   },
 };
 
-const refusal = (status: number, body: Record<string, unknown>): Scenario => ({
-  id: `refusal-${status}`, rows: ['T3'], title: `the gateway answers ${status}: the original error reaches errorAction with no prefix`,
+const refusal = (status: number, body: Record<string, unknown>, suffix = ''): Scenario => ({
+  id: `refusal-${status}${suffix}`, rows: ['T3'], title: `the gateway answers ${status}: the original error reaches errorAction with no prefix`,
   async run(h) {
     h.script([fails(brainRequestError(status, body)), reply('Recovered.')]);
     await h.start();
@@ -76,7 +76,7 @@ const refusal = (status: number, body: Record<string, unknown>): Scenario => ({
 });
 export const refusal401 = refusal(401, { error: 'session expired', code: 'unauthorized' });
 export const refusal402 = refusal(402, { error: 'needs a validated card', code: 'card_required' });
-export const refusal402Plan = refusal(402, { error: 'upgrade your plan', code: 'plan_required', requiredPlan: 'pro', feature: 'long_runs' });
+export const refusal402Plan = refusal(402, { error: 'upgrade your plan', code: 'plan_required', requiredPlan: 'pro', feature: 'long_runs' }, '-plan');
 export const refusal429 = refusal(429, { error: 'rate limited' });
 
 export const coreScenarios: Scenario[] = [

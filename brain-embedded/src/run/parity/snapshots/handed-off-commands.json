@@ -1173,7 +1173,6 @@
     }
    ],
    "tool_choice": "auto",
-   "modelStrict": false,
    "maxTokens": 16384,
    "metadata": {
     "chatId": 7001,
@@ -2439,7 +2438,7 @@
  "outcome": {
   "reported": [
    {
-    "clientRunId": "ide:7001:1793497329458",
+    "clientRunId": "ide:7001:<epoch>",
     "role": "code",
     "source": "ide",
     "steps": 6,

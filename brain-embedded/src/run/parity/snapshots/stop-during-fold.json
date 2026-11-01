@@ -12,9 +12,6 @@
     }
    ],
    "maxTokens": 2500,
-   "reasoning": {
-    "level": "off"
-   },
    "summary": true
   },
   {
@@ -29,9 +26,6 @@
     }
    ],
    "maxTokens": 2500,
-   "reasoning": {
-    "level": "off"
-   },
    "summary": true
   }
  ],
