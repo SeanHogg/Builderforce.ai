@@ -1,5 +1,6 @@
 /**
- * The loop's TOOL port — runs one call on the host: refuses a call whose arguments
+ * The tool runner - shared by BOTH engines (the loop's dispatch port, the agent's platform tools in `run/brainPlatformTools.ts`):
+ * runs one call on the host: refuses a call whose arguments
  * never parsed, records what it changed (opening the run's ticket on its first edit),
  * links what it created, and attaches the guards' advisories to the copy of the result
  * the model reads (repeated failure, placeholders, an unshipped completion, circling).
@@ -25,7 +26,7 @@ import { earlyDelegationAdvisory } from './earlyDelegation';
 import { failureAdvisoryFor, isDedupableRead, type RunLoopContext } from './runLoopContext';
 import { runToolInterruptibly } from './steerInterrupt';
 
-export function dispatchToolPort(run: RunLoopContext): LoopPorts<ChatCompletionMessage>['dispatch'] {
+export function callRunner(run: RunLoopContext): LoopPorts<ChatCompletionMessage>['dispatch'] {
   const { c, chatId, req, readCoverage, failures, writeLedger, placeholderLedger } = run;
   const { runTool } = req;
   return async (call, ctx) => {

@@ -122,7 +122,7 @@ function subjectOf(ev: BrainTraceEvent): string | undefined {
 /**
  * A call the run's READ CACHE answered instead of the host: an exact-repeat stub, a
  * covered window, a replay, a derived search, a repeated write not re-applied (see
- * `runStore/beforeDispatch.ts`). The model asked again; nothing ran. Counted on its own so
+ * `runStore/callPreflight.ts`). The model asked again; nothing ran. Counted on its own so
  * "EXACT duplicate" never reads as work the tools repeated, and never as a mutation.
  */
 export function isCacheAnswered(ev: BrainTraceEvent): boolean {

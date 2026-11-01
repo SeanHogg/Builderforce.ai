@@ -31,7 +31,7 @@ import type {
 import type { CostLeverId } from "@builderforce/cost-levers";
 import type { RunPolicyEvent, RunPolicyOptions, RunPolicyState } from "@builderforce/run-policy";
 import type { EntryPoint } from "@builderforce/learned-routing";
-import type { DeliveryLedger, PlatformTools, TurnInterruption } from "./surface.js";
+import type { DeliveryLedger, PlatformTools } from "./surface.js";
 import type { RunEvent } from "./runEvents.js";
 import type { RunState } from "./runStateTypes.js";
 import type { ModelTransport, RunMessage, RunPart } from "./contractModel.js";

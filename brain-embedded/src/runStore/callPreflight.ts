@@ -1,5 +1,6 @@
 /**
- * The loop's `beforeDispatch` hook — everything that decides, per tool call, whether the
+ * What decides, per tool call, whether the host's runner is reached - shared by BOTH engines (the loop's `beforeDispatch`, the
+ * agent's platform tools in `run/brainPlatformTools.ts`), so it is named for the step, not the loop. Everything that decides, per tool call, whether the
  * host's runner is reached at all and with what: the tool router, the conversational
  * `ask_user` / `hand_off` tools, the one-ticket-per-run attach, the human confirm gate,
  * and the read de-duplication / covered-read / derived-search / repeated-write guards.
@@ -25,7 +26,7 @@ import { requestRunConfirm } from './runControl';
 import { attachDeltaToRunTicket, autoLinkCreatedItem } from './runBackstops';
 import { isDedupableRead, reportToPolicy, type RunLoopContext } from './runLoopContext';
 
-export function beforeDispatchHook(run: RunLoopContext): NonNullable<LoopHooks<ChatCompletionMessage>['beforeDispatch']> {
+export function callPreflight(run: RunLoopContext): NonNullable<LoopHooks<ChatCompletionMessage>['beforeDispatch']> {
   const { c, chatId, runKey, req, allTools, catalogToolNames, usedTools, readCoverage, writeLedger, placeholderLedger } = run;
   const { runTool, needsConfirm, persistence } = req;
   return async (rawCall, ctx) => {

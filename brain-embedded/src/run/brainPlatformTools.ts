@@ -2,9 +2,9 @@
  * The Brain's own tools as the agent's CLOSED `PlatformTools` (PRD 35 §4 WS4): the catalog the host advertised plus the
  * conversational `ask_user` / `hand_off`, and how one call is run.
  *
- * A call is run by the SAME steps the Brain's loop runs, never a copy: `beforeDispatchHook` (router, alias, confirm gate,
- * one-ticket attach, `hand_off`, read and write dedupe), `dispatchToolPort` (the host's runner, the ticket on the first
- * edit, the auto-link, the guards' advisories) and, once the call's result row is in the transcript, `afterDispatchHook`
+ * A call is run by the SAME steps the Brain's loop runs, never a copy: `callPreflight` (router, alias, confirm gate,
+ * one-ticket attach, `hand_off`, read and write dedupe), `callRunner` (the host's runner, the ticket on the first
+ * edit, the auto-link, the guards' advisories) and, once the call's result row is in the transcript, `callPostStep`
  * (its durable step and read cache). While both engines exist those three modules serve both.
  *
  * Which tools the model is shown each turn is the agent's tools policy over {@link PlatformTools.selection}; `hand_off`
@@ -18,9 +18,9 @@ import { offersHandOff } from '@builderforce/run-policy';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { HAND_OFF_TOOL } from '../planHandoff';
 import { DEFAULT_TOOL_LIMIT } from '../selectTools';
-import { beforeDispatchHook } from '../runStore/beforeDispatch';
-import { dispatchToolPort } from '../runStore/dispatchTool';
-import { afterDispatchHook } from '../runStore/toolCallHooks';
+import { callPreflight } from '../runStore/callPreflight';
+import { callRunner } from '../runStore/callRunner';
+import { callPostStep } from '../runStore/callPostStep';
 import { progressAfterToolCalls } from '../runStore/progressGuard';
 import type { RunLoopContext } from '../runStore/runLoopContext';
 import { loopTurnMenu } from './loopTurnMenu';
@@ -39,9 +39,9 @@ export interface BrainPlatform {
 }
 
 export function brainPlatformTools(run: RunLoopContext): BrainPlatform {
-  const before = beforeDispatchHook(run);
-  const dispatch = dispatchToolPort(run);
-  const after = afterDispatchHook(run);
+  const before = callPreflight(run);
+  const dispatch = callRunner(run);
+  const after = callPostStep(run);
   const ran: Ran[] = [];
   let step = 0;
   return {
@@ -51,7 +51,7 @@ export function brainPlatformTools(run: RunLoopContext): BrainPlatform {
     },
     tools: {
       closed: true,
-      // The Brain's read coverage (`beforeDispatchHook`'s exact-repeat, covered-window and replay answers, `afterDispatchHook`'s cache) is
+      // The Brain's read coverage (`callPreflight`'s exact-repeat, covered-window and replay answers, `callPostStep`'s cache) is
       // the run's one: the agent's own would answer a repeat first, in its own wording and shape.
       readsCovered: true,
       verbatimText: true,
@@ -66,10 +66,10 @@ export function brainPlatformTools(run: RunLoopContext): BrainPlatform {
       get selection() {
         return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, required: new Set(offersHandOff(run.policy) && run.canAskUser ? [...run.alwaysAdvertised, HAND_OFF_TOOL] : run.alwaysAdvertised) };
       },
-      // ONE cap on a result: the Brain's own, applied inside `dispatchToolPort` (`trimToolResult`, by LINE, sized to the serving
+      // ONE cap on a result: the Brain's own, applied inside `callRunner` (`trimToolResult`, by LINE, sized to the serving
       // model's window). The agent's per-tool cap would cut the already budgeted text a second time and drop its paging fields.
       resultCap: () => Number.MAX_SAFE_INTEGER,
-      // No `handsOff`: `hand_off` reports itself to the model policy inside `beforeDispatchHook` (through the run's view), and a
+      // No `handsOff`: `hand_off` reports itself to the model policy inside `callPreflight` (through the run's view), and a
       // call the agent hands off first would find the plan already closed.
       turn: (env) => loopTurnMenu(run, env, run.allTools?.length ?? 0),
       // A3's detector is the Brain's own (`progressGuard.ts`): the turn is judged when its calls have all run, as the loop does.

@@ -6,9 +6,10 @@
  *
  *   - `runPreamble.ts`     — the catalog, recall / memory answer, directives, the policy;
  *   - `completeTurn.ts`    — the model port (selection, the window fit, retries, re-ask);
- *   - `dispatchTool.ts`    — the tool port (ticket on first edit, guards' advisories);
- *   - `beforeDispatch.ts`  — router, `ask_user` / `hand_off`, confirm gate, read dedupe;
- *   - `toolCallHooks.ts`   — a terminal question, narration, the post-call step;
+ *   - `callRunner.ts`      — the tool port (ticket on first edit, guards' advisories);
+ *   - `callPreflight.ts`   — router, `ask_user` / `hand_off`, confirm gate, read dedupe;
+ *   - `callPostStep.ts`    — the post-call step (durable step, read cache); shared with the agent;
+ *   - `toolCallHooks.ts`   — a terminal question, narration;
  *   - `finalAnswerHook.ts` — the end-of-run gates, the reply, the stall failover;
  *   - `runSpendBudget.ts`  — the run's USD cap (warn at 80%, contained stop at the cap).
  *
@@ -29,9 +30,10 @@ import { runAgentLoop, openAiChatCodec } from '@builderforce/agent-loop';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { closeAfterFailureStreak } from './failureClose';
 import { completeTurnPort } from './completeTurn';
-import { dispatchToolPort } from './dispatchTool';
-import { beforeDispatchHook } from './beforeDispatch';
-import { afterDispatchHook, beforeToolCallsHook } from './toolCallHooks';
+import { callRunner } from './callRunner';
+import { callPreflight } from './callPreflight';
+import { callPostStep } from './callPostStep';
+import { beforeToolCallsHook } from './toolCallHooks';
 import { skipOnSteer } from './steerInterrupt';
 import { finalAnswerHook } from './finalAnswerHook';
 import { progressAfterToolCalls } from './progressGuard';
@@ -48,15 +50,15 @@ export async function runLoop(run: RunLoopContext): Promise<void> {
   const loop = await runAgentLoop<ChatCompletionMessage>({
     messages: convo,
     codec: runCodec,
-    ports: { complete: completeTurnPort(run), dispatch: dispatchToolPort(run) },
+    ports: { complete: completeTurnPort(run), dispatch: callRunner(run) },
     hooks: {
       // The run's USD cap, when it has one: the cost accrues after each turn and is held
       // to the cap before the next (`runSpendBudget.ts`). No cap ⇒ no hooks.
       ...runSpendBudget(run),
       beforeToolCalls: beforeToolCallsHook(run),
-      beforeDispatch: beforeDispatchHook(run),
+      beforeDispatch: callPreflight(run),
       // The person's message skips the rest of the turn it interrupted (PRD 35 E10).
-      afterDispatch: skipOnSteer(run.runKey, afterDispatchHook(run)),
+      afterDispatch: skipOnSteer(run.runKey, callPostStep(run)),
       onNoToolCalls: finalAnswerHook(run),
       afterToolCalls: progressAfterToolCalls(run),
     },
