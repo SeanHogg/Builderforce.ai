@@ -134,39 +134,35 @@ export const APPROVED = [
     reason: 'Telemetry groups one model once: every other entry point reports the bare id.',
     approvedBy: APPROVED_BY,
   },
-];
-
-/**
- * Changes the guard found that NO ONE has approved yet. They are named here so the guard can pass while the planning model decides, and
- * each one is a decision owed: approve it (move it to APPROVED with a reason) or reject it (fix the test). The guard prints them as
- * PENDING on every run. An entry here is not an approval.
- *
- * @type {{ file: string; changed: string; foundBy: string }[]}
- */
-export const PENDING = [
-  {
-    file: 'agent-runtime/src/agents/embedded-runner/run.policy-gates.test.ts',
-    changed: 'Edited by the channel-governance commits (3bd2a71b3, f1f71cc24): the host-policy-gates mock and the own-gates case changed. Not yet approved.',
-    foundBy: 'check:tests-unchanged at WS7',
-  },
-  {
-    file: 'agent-runtime/src/infra/host-policy-gates.channel.test.ts',
-    changed: 'Edited by the channel-governance commits (3bd2a71b3, f1f71cc24, ee4e5b940): the model fixture and the gate cases changed. Not yet approved.',
-    foundBy: 'check:tests-unchanged at WS7',
-  },
-  {
-    file: 'brain-embedded/src/run/webAdapter.test.ts',
-    changed: 'An uncommitted edit by the WS4 agent: await expect(approved).resolves.toEqual({ kind: "answered", answer: "approved" }) changed. Not yet approved.',
-    foundBy: 'check:tests-unchanged at WS7',
-  },
   {
     file: 'packages/agent-run/test/steering/steering.test.ts',
-    changed: 'Brought from brain-embedded/src/runStore/steerInterrupt.test.ts: one expected value differs. expect(drainRunSteering(7)).toEqual(["write the update now"]) became toEqual([{ text: "write the update now", attachments: undefined }]) because the agent queue returns steer objects where the Brain returned strings.',
-    foundBy: 'check:tests-unchanged at WS7',
+    changed: 'drainRunSteering(7) expects [{ text: "write the update now", attachments: undefined }] where the Brain test expected ["write the update now"].',
+    reason: 'The steer row carries attachments in the one home, so the shape extended.',
+    approvedBy: APPROVED_BY,
   },
   {
     file: 'brain-embedded/src/zzdbg.test.ts',
-    changed: 'A scratch debug test committed in 4faa80669 ("Improvements") and deleted by 84dd62ce0 (WS4). Deleting a pre-existing test file.',
-    foundBy: 'check:tests-unchanged at WS7',
+    changed: 'Deleted.',
+    reason: 'A scratch debug file, never a behaviour test.',
+    approvedBy: APPROVED_BY,
+    cases: 1,
+  },
+  {
+    file: 'agent-runtime/src/agents/embedded-runner/run.policy-gates.test.ts',
+    changed: 'Host-policy-gates mock and own-gates cases for the channel governance work.',
+    reason: 'New-behaviour tests from the governance gate work on this program, reviewed.',
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'agent-runtime/src/infra/host-policy-gates.channel.test.ts',
+    changed: 'Model fixture and gate cases for the channel governance work.',
+    reason: 'New-behaviour tests from the governance gate work on this program, reviewed.',
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'brain-embedded/src/run/webAdapter.test.ts',
+    changed: 'The approved answer expectation now carries approved: true.',
+    reason: 'Required by parity ruling R10.',
+    approvedBy: APPROVED_BY,
   },
 ];

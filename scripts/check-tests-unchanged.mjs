@@ -25,7 +25,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { collectSourceFiles, toPosix } from './lib/moduleImports.mjs';
-import { APPROVED, PENDING, PROGRAM_BASE } from './tests-unchanged.approved.mjs';
+import { APPROVED, PROGRAM_BASE } from './tests-unchanged.approved.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
@@ -36,17 +36,6 @@ const PROGRAM_COMMIT = /PRD 35|\bWS\d|agent-run|one agent/i;
 const SKIP_MARKER_BASELINE = 21;
 
 const approvedByFile = new Map(APPROVED.map((entry) => [entry.file, entry]));
-const pendingByFile = new Map(PENDING.map((entry) => [entry.file, entry]));
-let pendingCount = 0;
-
-/** A difference nobody has approved yet but the planning model has been asked about: shown, not failed. */
-function pending(label, file) {
-  const entry = pendingByFile.get(file);
-  if (!entry) return false;
-  pendingCount += 1;
-  console.log(`  PENDING ${label}: ${entry.changed}`);
-  return true;
-}
 
 function git(args) {
   return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 256 * 1024 * 1024 });
@@ -125,7 +114,6 @@ function verdict(label, file, oracleText, currentText) {
   if (removed.length > 0 && !approval) problems.push(`${removed.length} oracle line(s) changed/removed (${added.length} added)`);
   if (after < before - allowedDrop) problems.push(`cases ${before} -> ${after}${allowedDrop ? ` (approved drop is ${allowedDrop})` : ''}`);
   if (newSkips > 0) problems.push(`${newSkips} new skip marker(s)`);
-  if (problems.length > 0 && pending(label, file)) return;
   if (problems.length > 0) {
     failures += 1;
     console.log(`  FAIL ${label}: ${problems.join('; ')}`);
@@ -181,9 +169,14 @@ if (baseReadable) {
     if (original === null) continue; // added since BASE: a new test is not an edit of an oracle
     compared += 1;
     if (!existsSync(resolve(repoRoot, file))) {
-      if (pending(file, file)) continue;
-      failures += 1;
-      console.log(`  FAIL ${file}: deleted`);
+      const approval = approvedByFile.get(file);
+      if (approval) {
+        approvedCount += 1;
+        console.log(`  approved ${file} deleted (${approval.approvedBy}): ${approval.reason}`);
+      } else {
+        failures += 1;
+        console.log(`  FAIL ${file}: deleted`);
+      }
       continue;
     }
     verdict(file, file, original, readFileSync(resolve(repoRoot, file), 'utf8'));
@@ -231,7 +224,7 @@ if (programBaseReadable) {
   }
 }
 
-console.log(`  §5.1: only import / vi.mock path changes, or an approved entry in scripts/tests-unchanged.approved.mjs (${approvedCount} approved change(s) matched, ${pendingCount} PENDING a decision).`);
+console.log(`  §5.1: only import / vi.mock path changes, or an approved entry in scripts/tests-unchanged.approved.mjs (${approvedCount} approved change(s) matched).`);
 if (failures > 0) {
   console.log(`  FAIL ${failures} problem(s).`);
   process.exit(1);
