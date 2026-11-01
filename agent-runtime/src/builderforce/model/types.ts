@@ -83,6 +83,8 @@ export interface ToolCall {
   name: string;
   // biome-ignore lint/suspicious/noExplicitAny: matches pi-ai's arguments shape
   arguments: Record<string, any>;
+  /** The arguments exactly as the model wrote them, kept ONLY when they never parsed to an object (a call cut off by the output limit): `arguments` is then `{}`. */
+  rawArguments?: string;
   thoughtSignature?: string;
 }
 

@@ -93,7 +93,7 @@ export function toRunRow(message: AgentMessage): RunMessage {
         role: "assistant",
         content: content.filter((b): b is TextContent => b.type === "text").map((b) => b.text).join("\n"),
         parts,
-        ...(calls.length > 0 ? { toolCalls: calls.map((c) => ({ id: c.id, name: c.name, arguments: JSON.stringify(c.arguments ?? {}) })) } : {}),
+        ...(calls.length > 0 ? { toolCalls: calls.map((c) => ({ id: c.id, name: c.name, arguments: c.rawArguments ?? JSON.stringify(c.arguments ?? {}) })) } : {}),
         meta: fields,
       };
     }

@@ -78,6 +78,22 @@ function toLlmMessages(context: Context): LlmMessage[] {
   return messages;
 }
 
+/**
+ * A call's arguments as the bag the tool reads and, when they never parsed to one, the raw text: kept so the agent can tell a call that
+ * was cut off or garbled from one that takes no arguments. A cut-off reply that never began the arguments leaves them open (`{`):
+ * nothing parsed, and it must not read as a call with none.
+ */
+function parseArguments(text: string, cutOff: boolean): { args: Record<string, unknown>; raw?: string } {
+  if (!text) return cutOff ? { args: {}, raw: "{" } : { args: {} };
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return { args: parsed as Record<string, unknown> };
+  } catch {
+    // not JSON: the text is the model's, kept whole
+  }
+  return { args: {}, raw: text };
+}
+
 function toLlmTools(context: Context): LlmToolSchema[] | undefined {
   if (!context.tools?.length) return undefined;
   return context.tools.map((t) => ({
@@ -186,18 +202,16 @@ export function createGatewayStreamFn(client: NativeLlmClientOptions): StreamFn 
         if (textIndex >= 0) {
           stream.push({ type: "text_end", contentIndex: textIndex, content: textBuf, partial });
         }
+        // The reply hit the output limit: its text is cut short, and so is any call still being written.
+        const cutOff = result.finishReason === "length";
         for (const entry of toolBuf.values()) {
-          let args: Record<string, unknown> = {};
-          try {
-            args = entry.args ? (JSON.parse(entry.args) as Record<string, unknown>) : {};
-          } catch {
-            args = {};
-          }
+          const { args, raw } = parseArguments(entry.args, cutOff);
           const toolCall: ToolCall = {
             type: "toolCall",
             id: entry.id ?? "",
             name: entry.name ?? "",
             arguments: args,
+            ...(raw !== undefined ? { rawArguments: raw } : {}),
           };
           partial.content[entry.contentIndex] = toolCall;
           stream.push({
@@ -208,7 +222,7 @@ export function createGatewayStreamFn(client: NativeLlmClientOptions): StreamFn 
           });
         }
 
-        partial.stopReason = result.toolCalls.length ? "toolUse" : "stop";
+        partial.stopReason = cutOff ? "length" : result.toolCalls.length ? "toolUse" : "stop";
         stream.push({
           type: "done",
           reason: partial.stopReason as "stop" | "toolUse" | "length",
