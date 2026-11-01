@@ -25,7 +25,7 @@ function run(gates: PolicyGate[], over: Partial<PlatformTools> = {}) {
       verbatimText: true,
       schemas: () => schemas(["exec", "read"]),
       selection: { query: "", limit: 50, required: new Set<string>() },
-      execute: async (call) => { executed.push(call.name); return { data: "ok" }; },
+      execute: async (name) => { executed.push(name); return { data: "ok" }; },
       ...over,
     },
   };
