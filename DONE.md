@@ -1,3 +1,10 @@
+## ✅ RESOLVED 2026-11-01 — Knowledge review survives agent edits, view changes and slow plans (VS Code 2026.10.122)
+
+- **Auto-swap.** A mutating `run.tool` moved an unpinned panel to Changes mid-review. `visualizationViewState` now has `reviewing`: the mutation counts, the view holds. `useKnowledgeHost` counts live reviews (`reviewCount`), because a superseded review's cleanup runs after its replacement starts.
+- **A view change stopped the review.** The Knowledge view unmounted, and `useReviewRun`'s cleanup aborted the run. `VisualizationPanel` now keeps it mounted under `hidden` in `.bf-viz__knowledge-slot`.
+- **`knowledge.call` timeout.** `plan` ran inside the 300s request. The host now answers at once (`planOver`) and posts `planned` or `failed` on a caller-named stream. After Stop, the source waits `ABORT_GRACE_MS` for the host's terminal event, so a silent host cannot hold the panel.
+- **Idle redraw.** `GraphScene` used `frameloop="always"`, so it drew every frame at up to 2x density. It is now `demand`, with `invalidate()` in `FlyTo` and `Nodes` and `RepaintOnShow` for a hidden-then-shown canvas.
+
 ## ✅ RESOLVED 2026-11-01 — False "Continue with guidance / Stop the run" pauses (VS Code 2026.10.121 · brain-embedded 2026.10.75 · run-guards 2026.10.5)
 
 All 78 pauses recorded in one operator's chat history were `no_progress`; none came from an undone edit or a repeated failure.

@@ -2,6 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.122] — A folder review keeps its place
+
+- **A review stays on screen.** The Visualization panel no longer jumps to Changes while a folder review is planning or running. Agent edits are still counted, and you can switch views yourself.
+- **Switching views no longer stops a review.** Leaving the Knowledge view keeps the review going.
+- **Large folders no longer fail with "knowledge.call timed out".** Preparing a review can take as long as it needs, and so can the folder picker.
+- **The knowledge graph rests when nothing moves.** It only draws when something changes, and not at all while hidden.
+
 ## [2026.10.121] — Fewer false "has this run stalled?" questions
 
 - **A run that is working keeps working.** Real edits to files it has already opened now count as progress, so it no longer stops to ask you how to proceed.
