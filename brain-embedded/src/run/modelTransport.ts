@@ -7,7 +7,10 @@
  * call markup back into structured calls. This wraps that function as the agent's port:
  * it translates the agent's request into the stream's options, passes the streamed deltas to
  * the surface's live view, and translates the result back. It decides nothing about WHICH
- * model, WHEN to retry or WHAT to offer — those are the agent's (`policy/model`, `policy/tools`).
+ * model or WHAT to offer — those are the agent's (`policy/model`, `policy/tools`). WHEN a failed
+ * request is retried is the run's model policy too; the transport only asks it, through the turn
+ * session, and retries INSIDE the turn (the Brain's loop never spent a step on a retry).
+ * The turn's `max_tokens` is the surface's Effort (`TurnSession.maxTokens`), not the policy's role cap.
  *
  * Also answers the two questions the agent asks of a transport:
  *   - `window(model)` — the model's context window from what the host already knows (its
@@ -15,6 +18,7 @@
  *   - `preflight(model)` — the host's BYO health check (PRD 35 E7), run once before turn 1.
  */
 
+import { replayTextOf } from '@builderforce/agent-loop';
 import type { ModelCompletion, ModelPreflightResult, ModelRequest, ModelTransport, RunMessage } from '@builderforce/agent-run';
 import type { ChatCompletionMessage, CompletionMetadata, StreamChatOptions, StreamChatResult, StreamHandlers } from '../streamChatCompletion';
 import { turnInterruption } from '../finishReason';
@@ -29,6 +33,14 @@ export type BrainCallDefaults = Partial<
   Pick<StreamChatOptions, 'routingMode' | 'modelStrict' | 'reasoning' | 'metadata' | 'role' | 'excludeModels' | 'prompt_cache_key' | 'conversationKey'>
 >;
 
+/** What a policy-routed retry of a failed attempt asks differently: the model the policy now names, and who it must not route to. */
+export interface TurnRetry {
+  model?: string;
+  strict?: boolean;
+  role?: string;
+  excludeModels?: readonly string[];
+}
+
 /**
  * One turn's session with the surface's live view and record: the stream's handlers, the call's extra metadata, the window
  * fit the request passes through, and what the turn leaves when it completes or fails. The surface builds it per request
@@ -36,13 +48,22 @@ export type BrainCallDefaults = Partial<
  */
 export interface TurnSession {
   handlers: StreamHandlers;
-  metadata?: CompletionMetadata;
-  /** Pack the wire messages for the model's window. */
-  fit?(messages: ChatCompletionMessage[]): Promise<ChatCompletionMessage[]>;
+  /** The metadata THIS attempt carries: the call's memory effect rides the first one only (`stampOncePerCall`). */
+  metadata?(): CompletionMetadata;
+  /** The turn's `max_tokens`: the Effort ceiling, raised for a turn that can call tools. The surface owns it outright (the policy's role cap never reaches the wire). */
+  maxTokens: number | undefined;
+  /** Pack the wire messages for the serving model's window. */
+  fit?(messages: ChatCompletionMessage[], model: string | undefined): Promise<ChatCompletionMessage[]>;
   /** The call's per-conversation routing keys. */
   call?: BrainCallDefaults;
   /** Run the stream inside the surface's live-turn window (the serving model is recorded while it is open). */
   around?<T>(stream: () => Promise<T>): Promise<T>;
+  /**
+   * An attempt failed: when the run's model policy routes around that failure, the retry to make INSIDE this turn - the same menu,
+   * the same brief, nothing forced spent; undefined when the failure ends the turn.
+   */
+  recover?(error: unknown): Promise<TurnRetry | undefined> | TurnRetry | undefined;
+  /** The turn answered (it is kept - recorded - only once the agent goes on with it). */
   completed(result: StreamChatResult): Promise<void> | void;
   /** The turn failed: record it and hand back the error to throw. */
   failed(error: unknown): unknown;
@@ -88,7 +109,8 @@ export function toCompletion(result: StreamChatResult, requested?: string): Mode
   const usage = result.usage;
   const pricedMc = turnPriceMc(result, requested);
   return {
-    content: result.text,
+    // The turn as the model is shown it again: the reply, else its reasoning as plain text - never the tags (`replayTextOf`).
+    content: replayTextOf(result.text),
     // The call's arguments stay the RAW JSON string — the kernel parses them, and a
     // malformed one is the kernel's to report.
     toolCalls: result.toolCalls.map((call) => ({ id: call.id, name: call.name, arguments: call.args })),
@@ -124,34 +146,56 @@ export function brainModelTransport(deps: BrainModelTransportDeps): ModelTranspo
   const { stream, handlers, call, windows, preflight } = deps;
   return {
     async complete(request: ModelRequest, signal?: AbortSignal): Promise<ModelCompletion> {
+      // A Stop that landed while the turn was being prepared (a fold) ends it before anything is opened.
+      if (signal?.aborted) throw new Error('run stopped');
       const tools = request.tools && request.tools.length > 0 ? request.tools : undefined;
       const session = deps.turn?.open(request);
-      const wire = request.messages.map(toStreamMessage);
-      const messages = session?.fit ? await session.fit(wire) : wire;
-      let result: StreamChatResult;
-      try {
+      /** One request to the stream: the window fit, then the stream, inside the live-turn window. */
+      const attempt = async (req: ModelRequest): Promise<StreamChatResult> => {
+        const wire = req.messages.map(toStreamMessage);
+        const messages = session?.fit ? await session.fit(wire, req.model) : wire;
+        const maxTokens = session ? session.maxTokens : req.maxTokens;
         const ask = () => stream(
           {
             ...call,
             ...session?.call,
             messages,
-            ...(session?.metadata ? { metadata: session.metadata } : {}),
-            ...(tools ? { tools, tool_choice: request.toolChoice ?? ('auto' as const) } : {}),
-            ...(request.model ? { model: request.model } : {}),
-            ...(request.strict !== undefined ? { modelStrict: request.strict } : {}),
-            ...(request.role ? { role: request.role } : {}),
-            ...(request.excludeModels && request.excludeModels.length > 0 ? { excludeModels: [...request.excludeModels] } : {}),
-            ...(request.maxTokens !== undefined ? { maxTokens: request.maxTokens } : {}),
+            ...(session?.metadata ? { metadata: session.metadata() } : {}),
+            ...(tools ? { tools, tool_choice: req.toolChoice ?? ('auto' as const) } : {}),
+            ...(req.model ? { model: req.model } : {}),
+            ...(req.strict !== undefined ? { modelStrict: req.strict } : {}),
+            ...(req.role ? { role: req.role } : {}),
+            ...(req.excludeModels && req.excludeModels.length > 0 ? { excludeModels: [...req.excludeModels] } : {}),
+            ...(maxTokens !== undefined ? { maxTokens } : {}),
             ...(signal ? { signal } : {}),
           },
           session?.handlers ?? handlers?.(),
         );
-        result = await (session?.around ? session.around(ask) : ask());
+        return session?.around ? session.around(ask) : ask();
+      };
+      let asked = request;
+      let result: StreamChatResult;
+      try {
+        result = await attempt(request);
       } catch (e) {
-        throw classified(session ? session.failed(e) : e);
+        // A Stop rejects the stream: that is the run's, not a failed turn.
+        if (signal?.aborted) throw e;
+        // Without a session the failure is the agent's to route (`providerFailureEvent` classifies it for the model policy).
+        if (!session) throw classified(e);
+        // With one, the run's model policy decides HERE whether the failure is routed around: ONE retry inside this turn, the way the
+        // Brain's loop makes it, so the agent never sees the failure and spends no step (and no forced turn) on it.
+        const retry = await session.recover?.(e);
+        if (!retry) throw session.failed(e);
+        asked = { ...request, model: retry.model, strict: retry.strict, role: retry.role, excludeModels: retry.excludeModels };
+        try {
+          result = await attempt(asked);
+        } catch (retryError) {
+          if (signal?.aborted) throw retryError;
+          throw session.failed(retryError);
+        }
       }
       await session?.completed(result);
-      return toCompletion(result, request.model);
+      return toCompletion(result, asked.model);
     },
     window: (model) => contextWindowOf(model, windows?.cloud ? { cloud: windows.cloud } : {}),
     ...(preflight ? { preflight: () => preflight() } : {}),

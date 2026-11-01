@@ -135,6 +135,7 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
       taskId: body.taskId,
       dispatchCloudRun,
       deployOptions: body.engineId ? { engineId: body.engineId } : {},
+      env: c.env,
     });
     if (!dispatched.ok) return c.json({ spec, error: dispatched.error }, 400);
     const { ok: _ok, plan, ...rest } = dispatched;
@@ -163,7 +164,7 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
     // RUNNABLE workflow — instantiate it for real on the workflow surface, rather than
     // chatting a single turn. The existing claim/relay + cloud-workflow cron advance it.
     if ((spec.steps?.length ?? 0) > 0) {
-      const dispatched = await deployAndDispatch(spec, 'workflow-node', { db, tenantId });
+      const dispatched = await deployAndDispatch(spec, 'workflow-node', { db, tenantId, env: c.env });
       if (!dispatched.ok) return c.json({ spec, error: dispatched.error }, 400);
       const plan = deploy(spec, 'workflow-node', body.engineId ? { engineId: body.engineId } : {});
       return c.json({

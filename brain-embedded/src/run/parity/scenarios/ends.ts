@@ -6,7 +6,7 @@
 
 import { stopRun } from '../../../runStore/runControl';
 import { StreamInterruptedError } from '../../../streamChatCompletion';
-import { calls, call, completion, decide, fails, reply, streamsUntilStopped } from '../script';
+import { calls, call, completion, decide, fails, reply, streamsUntilStopped, PINNED } from '../script';
 import type { Scenario } from '../types';
 
 const IDE = {
@@ -22,7 +22,7 @@ const IDE = {
 const READ = { read_file: () => ({ ok: true, content: 'export const a = 1;\n' }) };
 
 export const stopDuringStream: Scenario = {
-  id: 'stop-during-stream', rows: [], title: 'Stop while a reply streams keeps the partial reply with its model and records agent.stopped',
+  id: 'stop-during-stream', rows: [], loopShows: ['agent.stopped'], title: 'Stop while a reply streams keeps the partial reply with its model and records agent.stopped',
   async run(h) {
     let streaming = false;
     h.script([streamsUntilStopped(() => { streaming = true; }, ['Checking linked tickets. ', 'Checking linked tickets again.'], 'direct/minimax/MiniMax-M2.7')]);
@@ -46,7 +46,7 @@ export const stopBeforeAnyText: Scenario = {
 };
 
 export const stallToFailover: Scenario = {
-  id: 'stall-failover', rows: ['R3'], title: 'a model that only announces its call is re-prompted, then the run fails over to the model the host picks',
+  id: 'stall-failover', rows: ['R3'], loopShows: ['loop.recover_announced_tool_call', 'loop.model_failover'], title: 'a model that only announces its call is re-prompted, then the run fails over to the model the host picks',
   async run(h) {
     h.tools(READ);
     h.react(decide(({ opts }) => {
@@ -62,7 +62,7 @@ export const stallToFailover: Scenario = {
 };
 
 export const stallToExhaustion: Scenario = {
-  id: 'stall-exhaustion', rows: ['R3', 'R4', 'R5'], title: 'a model that never acts spends its budget; the run settles on its text with the exhaustion notice, learns nothing',
+  id: 'stall-exhaustion', rows: ['R3', 'R4', 'R5'], loopShows: ['loop.recover_announced_tool_call', 'loop.stall_unrecovered'], title: 'a model that never acts spends its budget; the run settles on its text with the exhaustion notice, learns nothing',
   async run(h) {
     h.tools(READ);
     h.react(() => completion({ text: 'I will read the file now.' }));
@@ -71,17 +71,17 @@ export const stallToExhaustion: Scenario = {
 };
 
 export const handedOffCommands: Scenario = {
-  id: 'handed-off-commands', rows: ['R2', 'R4'], title: 'a turn that edits then hands the user the commands it holds the tools for is sent back, and keeps its text',
+  id: 'handed-off-commands', rows: ['R2', 'R4'], loopShows: ['loop.recover_handed_off_work'], title: 'a turn that edits then hands the user the commands it holds the tools for is sent back, and keeps its text',
   async run(h) {
     h.tools(IDE);
     h.script([calls([call('edit_file', { path: 'boardRoutes.ts', find: 'a', replace: 'b' }, 'e1')])]);
     h.react(() => completion({ text: 'I applied the fix to boardRoutes.ts.\n\nNext steps:\n1. Run `pnpm --filter builderforce-api type-check`\n2. Commit and push the change\n' }));
-    await h.start({ userTurn: 'Fix the type errors' });
+    await h.start({ ...PINNED, userTurn: 'Fix the type errors' });
   },
 };
 
 export const shipGate: Scenario = {
-  id: 'ship-gate', rows: ['R2', 'R4'], title: 'a run that edited and stopped is sent back to ship; the verified push closes the ticket',
+  id: 'ship-gate', rows: ['R2', 'R4'], loopShows: ['loop.recover_unshipped_change'], title: 'a run that edited and stopped is sent back to ship; the verified push closes the ticket',
   async run(h) {
     h.tools(IDE);
     h.script([
@@ -91,12 +91,12 @@ export const shipGate: Scenario = {
       calls([call('git_push', { allowBaseBranch: true }, 'g2')]),
       reply('Shipped as abc123 - pushed to main.'),
     ]);
-    await h.start({ projectId: 11, userTurn: 'fix the deep link' });
+    await h.start({ ...PINNED, projectId: 11, userTurn: 'fix the deep link' });
   },
 };
 
 export const stopHook: Scenario = {
-  id: 'stop-hook', rows: ['R2', 'R4'], title: 'the host\'s stop hook holds a run that is about to end and hands it one more instruction',
+  id: 'stop-hook', rows: ['R2', 'R4'], loopShows: ['loop.stop_hook'], title: 'the host\'s stop hook holds a run that is about to end and hands it one more instruction',
   async run(h) {
     h.tools(READ);
     h.script([reply('Done reading a.ts.'), reply('README updated as well.')]);
@@ -107,7 +107,7 @@ export const stopHook: Scenario = {
 const STATUS = 'Status: the migration is not complete. The tickets are still in review, the branch has not been merged, the roadmap has two open gaps in the delivery lane, and the ledger shows the same three blockers as before. Nothing else changed since the last report.';
 
 export const restatedReply: Scenario = {
-  id: 'restated-reply', rows: ['R2', 'R4'], title: 'a final reply that restates the previous turn\'s answer is sent back once',
+  id: 'restated-reply', rows: ['R2', 'R4'], loopShows: ['loop.recover_restated_reply'], title: 'a final reply that restates the previous turn\'s answer is sent back once',
   async run(h) {
     h.tools(READ);
     h.script([reply(STATUS), reply(STATUS), reply('New progress: I merged the branch and closed the two open gaps.')]);
@@ -117,7 +117,7 @@ export const restatedReply: Scenario = {
 };
 
 export const undelegatedRequest: Scenario = {
-  id: 'undelegated-request', rows: ['R2', 'R4'], title: 'an explicit sub-agent request that is answered in prose is sent back once, and the next turn spawns',
+  id: 'undelegated-request', rows: ['R2', 'R4'], loopShows: ['loop.recover_undelegated_request'], title: 'an explicit sub-agent request that is answered in prose is sent back once, and the next turn spawns',
   async run(h) {
     h.tools({ read_file: () => ({ ok: true }), spawn_agent: () => ({ ok: true }), spawn_agents: () => ({ ok: true }) });
     h.script([
@@ -130,7 +130,7 @@ export const undelegatedRequest: Scenario = {
 };
 
 export const midAnswerBreak: Scenario = {
-  id: 'model-breaks-mid-answer', rows: ['T9'], title: 'a model that breaks mid-answer is retried once on another connected model, and left out of every later turn',
+  id: 'model-breaks-mid-answer', rows: ['T9'], loopShows: ['llm.stream_interrupted'], title: 'a model that breaks mid-answer is retried once on another connected model, and left out of every later turn',
   async run(h) {
     h.tools(READ);
     h.script([

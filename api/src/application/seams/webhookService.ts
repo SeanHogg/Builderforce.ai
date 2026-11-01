@@ -23,13 +23,14 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *   4. reject if the id (nonce) was already processed.
  */
 
-import { and, eq, inArray, isNotNull, lte } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, lte } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { webhookSubscriptions, webhookDeliveries } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { hmacHex } from '../../infrastructure/crypto/hmac';
+import { cronGateIsBound, signalPendingWorkIfDueWithin } from '../runtime/cronWorkSignal';
 
 /**
  * Events an integrator may subscribe to.
@@ -326,6 +327,11 @@ export interface SweepDeps {
  *
  * Wired into the frequent-tick `scheduled()` cron in index.ts — mirrors
  * runRetentionPurge / reapStaleExecutions.
+ *
+ * Re-signals the cron gate while a failed delivery is still waiting to be retried and its retry is
+ * close (see {@link nextWebhookRetryAtMs}): the backoff is 5m → 10m → 20m → …, and without this a
+ * retry due in five minutes waited for the 30-minute floor. Bounded by the attempt budget: every
+ * row reaches `next_retry_at = NULL` within {@link WEBHOOK_MAX_ATTEMPTS} attempts.
  */
 export async function runWebhookRetrySweep(env: Env, nowMs: number = Date.now(), deps: SweepDeps = {}): Promise<number> {
   const db = deps.db ?? buildDatabase(env);
@@ -392,7 +398,34 @@ export async function runWebhookRetrySweep(env: Env, nowMs: number = Date.now(),
     }
   }
 
+  await signalWhileRetriesPending(env, db, nowMs);
   return attempted;
+}
+
+/**
+ * Earliest `next_retry_at` among deliveries that can still be retried, or null when none can.
+ * Joined to the subscription exactly as the sweep's own select is, so a delivery the sweep can
+ * never pick up (its subscription is gone) is not counted and cannot hold the gate open.
+ */
+export async function nextWebhookRetryAtMs(db: Db): Promise<number | null> {
+  const [row] = await db
+    .select({ at: webhookDeliveries.nextRetryAt })
+    .from(webhookDeliveries)
+    .innerJoin(webhookSubscriptions, eq(webhookDeliveries.subscriptionId, webhookSubscriptions.id))
+    .where(acrossTenants(webhookDeliveries, 'scheduled_sweep', isNotNull(webhookDeliveries.nextRetryAt)))
+    .orderBy(asc(webhookDeliveries.nextRetryAt))
+    .limit(1);
+  return row?.at ? new Date(row.at).getTime() : null;
+}
+
+/** Best-effort: a failing probe must never fail the sweep it follows — the floor still retries. */
+async function signalWhileRetriesPending(env: Env, db: Db, nowMs: number): Promise<void> {
+  if (!cronGateIsBound(env)) return;
+  try {
+    await signalPendingWorkIfDueWithin(env, await nextWebhookRetryAtMs(db), nowMs);
+  } catch (error) {
+    reportCaughtError(error, { source: "application/seams/webhookService.ts", operation: "signalWhileRetriesPending" });
+  }
 }
 
 /** Parse a subscription's stored events JSON array, tolerating malformed data. */

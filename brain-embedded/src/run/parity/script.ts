@@ -43,6 +43,9 @@ export function streamsUntilStopped(started: () => void, deltas: string[] = [], 
   });
 }
 
+/** A model the person pinned: it writes its own code, so an edit is not re-asked of a coder and the script is one turn per call. */
+export const PINNED = { model: 'pinned/model', modelStrict: true } as const;
+
 /** The first line of the memory package's summarizer prompt: what makes a model call a fold's summary. */
 export const SUMMARY_PROMPT_HEAD = 'You compress an in-progress AI agent transcript';
 

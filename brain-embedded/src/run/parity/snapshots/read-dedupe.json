@@ -1,0 +1,1333 @@
+{
+ "wire": [
+  {
+   "messages": [
+    {
+     "role": "system",
+     "content": "You are the Brain.\n\nMODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a finished change or a running agent.\nYou are working inside Brain chat #7001. Tie the work of this conversation back to it:\n• When your investigation concludes that something needs to be DONE — a bug to fix, a missing capability, a follow-up, or a gap you identified — do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (builtin_tasks_create with exactly one assignee and taskType \"task\", \"epic\", or \"gap\"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it with builtin_chats_link_ticket (chatId=7001, linkType=\"created\"). The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.\n• Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.\n• When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=7001, the current projectId, the files you touched, kind improvement|fix|bug, modality \"ide\"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.\n• Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap — investigating its fix, editing code for it, or driving it — move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status=\"in_progress\"). When the work is finished: if this session can commit and push (it has git_commit and git_push), YOU are the reviewer — self-review, ship it, and move it to \"done\" (see the SHIP YOUR OWN CHANGE contract); otherwise advance it to \"in_review\" for someone who can (or \"done\" if it needs no review). Never leave a ticket you are actively working sitting in backlog.\n• Call builtin_chats_list_tickets (chatId=7001) to see what is already linked — both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.\n• FINISH BY DISPATCHING what you did not do yourself. A ticket that no agent is running has not started. Every create/update tool returns an `autoRun` verdict — read it. When `autoRun.dispatched` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) — a Developer for code work, a QA agent for test work — and start the run yourself with builtin_chats_dispatch_agent (chatId=7001, agentRef=<the agent>, taskId=<the ticket>). A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.\n• STAFF WITH THE TEAM. The workspace's agents (builtin_chats_list_agents for those already in this chat, builtin_cloud_agents_list_mine for all of them) are the people this work belongs to. Match each ticket to the agent whose role fits it — Developer work to a developer, QA work to a QA agent — and never leave a ticket with no agent on it.\n• builtin_chats_runs (chatId=7001) says what has ALREADY run on this chat's tickets and who started each run. Read it before claiming work is under way, and before starting a duplicate: an empty result means nothing was ever dispatched, whatever the transcript says about it.\n• If dispatch is genuinely refused — no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role — the refusal names the reason and what would clear it. Report THAT reason and do not retry the same dispatch hoping for a different answer. If the work is something you could do here, do it instead. Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.\n\nTURN OPERATING CONTRACT:\n• Infer a workable brief from the conversation, project memory, attachments and current request. Ask one grouped set of questions only when different answers would materially change the result; otherwise state a reasonable assumption briefly and proceed.\n• Treat corrections and “actually…” follow-ups as patches to the active brief. Preserve approved work and change the smallest requested scope; never regenerate unrelated content.\n• Complete all requested deliverables in this run. Batch independent reads/actions when the tool supports it, while preserving dependencies and confirmation boundaries.\n• In Work mode, plan enough to act safely and then execute in the same run. Do not make the user move to another surface just to turn a plan into work.\n• For attachments, inspect only the relevant pages/sections with builtin_attachments_read and its offset/limit controls. Accept the original file; never ask the user to convert, split, trim, or re-upload it merely to save context.\n• Reuse established project conventions, examples and explicit user preferences. A topic change is a new internal context segment, not a reason to make the user restart the chat.\n• Route work to the available model and tools transparently. Use a scheduling tool when the user expresses recurrence; do not ask them to repeat a routine manually.\n• Keep the response no longer than the task requires. Do not expose token windows, usage-reset timing, context cleanup, model-size folklore, or other platform limitations as work the user must manage."
+    },
+    {
+     "role": "user",
+     "content": "reduce the height"
+    }
+   ],
+   "tools": [
+    {
+     "type": "function",
+     "function": {
+      "name": "read_file",
+      "description": "Parity tool read_file.",
+      "parameters": {
+       "type": "object",
+       "properties": {}
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "builtin_tickets_from_delta",
+      "description": "Parity tool builtin_tickets_from_delta.",
+      "parameters": {
+       "type": "object",
+       "properties": {}
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "ask_user",
+      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "question": {
+         "type": "string",
+         "description": "The single, specific question to ask."
+        },
+        "options": {
+         "type": "array",
+         "description": "2–6 distinct, mutually-exclusive choices (unless multiSelect).",
+         "items": {
+          "type": "object",
+          "properties": {
+           "label": {
+            "type": "string",
+            "description": "Short choice text (1–5 words)."
+           },
+           "description": {
+            "type": "string",
+            "description": "Optional one-line explanation of this choice."
+           }
+          },
+          "required": [
+           "label"
+          ]
+         }
+        },
+        "multiSelect": {
+         "type": "boolean",
+         "description": "Allow choosing more than one option. Default false."
+        }
+       },
+       "required": [
+        "question",
+        "options"
+       ]
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "hand_off",
+      "description": "OPTIONAL — for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone — the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "The research, summarised for the coders — they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did."
+        },
+        "tasks": {
+         "type": "array",
+         "minItems": 1,
+         "maxItems": 12,
+         "items": {
+          "type": "object",
+          "properties": {
+           "title": {
+            "type": "string",
+            "description": "Ticket title, e.g. \"Rebuild UserDetailDrawer on SlideOutPanel\"."
+           },
+           "brief": {
+            "type": "string",
+            "description": "The complete, standalone instruction: files, the change, the primitives to use."
+           },
+           "paths": {
+            "type": "array",
+            "items": {
+             "type": "string"
+            },
+            "description": "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
+           },
+           "acceptance": {
+            "type": "string",
+            "description": "How to know it is done (tests, behaviour)."
+           },
+           "constraints": {
+            "type": "string",
+            "description": "What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change."
+           }
+          },
+          "required": [
+           "title",
+           "brief"
+          ]
+         }
+        }
+       },
+       "required": [
+        "summary",
+        "tasks"
+       ]
+      }
+     }
+    }
+   ],
+   "tool_choice": "auto",
+   "modelStrict": false,
+   "maxTokens": 16384,
+   "metadata": {
+    "chatId": 7001,
+    "guestTurnId": "<id:1>",
+    "guestTurnInput": "reduce the height",
+    "mode": "work"
+   },
+   "role": "plan",
+   "prompt_cache_key": "brain:7001",
+   "conversationKey": 7001
+  },
+  {
+   "messages": [
+    {
+     "role": "system",
+     "content": "You are the Brain.\n\nMODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a finished change or a running agent.\nYou are working inside Brain chat #7001. Tie the work of this conversation back to it:\n• When your investigation concludes that something needs to be DONE — a bug to fix, a missing capability, a follow-up, or a gap you identified — do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (builtin_tasks_create with exactly one assignee and taskType \"task\", \"epic\", or \"gap\"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it with builtin_chats_link_ticket (chatId=7001, linkType=\"created\"). The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.\n• Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.\n• When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=7001, the current projectId, the files you touched, kind improvement|fix|bug, modality \"ide\"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.\n• Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap — investigating its fix, editing code for it, or driving it — move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status=\"in_progress\"). When the work is finished: if this session can commit and push (it has git_commit and git_push), YOU are the reviewer — self-review, ship it, and move it to \"done\" (see the SHIP YOUR OWN CHANGE contract); otherwise advance it to \"in_review\" for someone who can (or \"done\" if it needs no review). Never leave a ticket you are actively working sitting in backlog.\n• Call builtin_chats_list_tickets (chatId=7001) to see what is already linked — both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.\n• FINISH BY DISPATCHING what you did not do yourself. A ticket that no agent is running has not started. Every create/update tool returns an `autoRun` verdict — read it. When `autoRun.dispatched` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) — a Developer for code work, a QA agent for test work — and start the run yourself with builtin_chats_dispatch_agent (chatId=7001, agentRef=<the agent>, taskId=<the ticket>). A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.\n• STAFF WITH THE TEAM. The workspace's agents (builtin_chats_list_agents for those already in this chat, builtin_cloud_agents_list_mine for all of them) are the people this work belongs to. Match each ticket to the agent whose role fits it — Developer work to a developer, QA work to a QA agent — and never leave a ticket with no agent on it.\n• builtin_chats_runs (chatId=7001) says what has ALREADY run on this chat's tickets and who started each run. Read it before claiming work is under way, and before starting a duplicate: an empty result means nothing was ever dispatched, whatever the transcript says about it.\n• If dispatch is genuinely refused — no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role — the refusal names the reason and what would clear it. Report THAT reason and do not retry the same dispatch hoping for a different answer. If the work is something you could do here, do it instead. Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.\n\nTURN OPERATING CONTRACT:\n• Infer a workable brief from the conversation, project memory, attachments and current request. Ask one grouped set of questions only when different answers would materially change the result; otherwise state a reasonable assumption briefly and proceed.\n• Treat corrections and “actually…” follow-ups as patches to the active brief. Preserve approved work and change the smallest requested scope; never regenerate unrelated content.\n• Complete all requested deliverables in this run. Batch independent reads/actions when the tool supports it, while preserving dependencies and confirmation boundaries.\n• In Work mode, plan enough to act safely and then execute in the same run. Do not make the user move to another surface just to turn a plan into work.\n• For attachments, inspect only the relevant pages/sections with builtin_attachments_read and its offset/limit controls. Accept the original file; never ask the user to convert, split, trim, or re-upload it merely to save context.\n• Reuse established project conventions, examples and explicit user preferences. A topic change is a new internal context segment, not a reason to make the user restart the chat.\n• Route work to the available model and tools transparently. Use a scheduling tool when the user expresses recurrence; do not ask them to repeat a routine manually.\n• Keep the response no longer than the task requires. Do not expose token windows, usage-reset timing, context cleanup, model-size folklore, or other platform limitations as work the user must manage."
+    },
+    {
+     "role": "user",
+     "content": "reduce the height"
+    },
+    {
+     "role": "assistant",
+     "content": "",
+     "tool_calls": [
+      {
+       "id": "c1",
+       "type": "function",
+       "function": {
+        "name": "read_file",
+        "arguments": "{\"path\":\"a.css\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "c1",
+     "content": "{\"ok\":true,\"path\":\"a.css\",\"content\":\"export const a = 1;\\n\",\"totalLines\":1}"
+    }
+   ],
+   "tools": [
+    {
+     "type": "function",
+     "function": {
+      "name": "read_file",
+      "description": "Parity tool read_file.",
+      "parameters": {
+       "type": "object",
+       "properties": {}
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "builtin_tickets_from_delta",
+      "description": "Parity tool builtin_tickets_from_delta.",
+      "parameters": {
+       "type": "object",
+       "properties": {}
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "ask_user",
+      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "question": {
+         "type": "string",
+         "description": "The single, specific question to ask."
+        },
+        "options": {
+         "type": "array",
+         "description": "2–6 distinct, mutually-exclusive choices (unless multiSelect).",
+         "items": {
+          "type": "object",
+          "properties": {
+           "label": {
+            "type": "string",
+            "description": "Short choice text (1–5 words)."
+           },
+           "description": {
+            "type": "string",
+            "description": "Optional one-line explanation of this choice."
+           }
+          },
+          "required": [
+           "label"
+          ]
+         }
+        },
+        "multiSelect": {
+         "type": "boolean",
+         "description": "Allow choosing more than one option. Default false."
+        }
+       },
+       "required": [
+        "question",
+        "options"
+       ]
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "hand_off",
+      "description": "OPTIONAL — for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone — the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "The research, summarised for the coders — they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did."
+        },
+        "tasks": {
+         "type": "array",
+         "minItems": 1,
+         "maxItems": 12,
+         "items": {
+          "type": "object",
+          "properties": {
+           "title": {
+            "type": "string",
+            "description": "Ticket title, e.g. \"Rebuild UserDetailDrawer on SlideOutPanel\"."
+           },
+           "brief": {
+            "type": "string",
+            "description": "The complete, standalone instruction: files, the change, the primitives to use."
+           },
+           "paths": {
+            "type": "array",
+            "items": {
+             "type": "string"
+            },
+            "description": "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
+           },
+           "acceptance": {
+            "type": "string",
+            "description": "How to know it is done (tests, behaviour)."
+           },
+           "constraints": {
+            "type": "string",
+            "description": "What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change."
+           }
+          },
+          "required": [
+           "title",
+           "brief"
+          ]
+         }
+        }
+       },
+       "required": [
+        "summary",
+        "tasks"
+       ]
+      }
+     }
+    }
+   ],
+   "tool_choice": "auto",
+   "modelStrict": false,
+   "maxTokens": 16384,
+   "metadata": {
+    "chatId": 7001,
+    "guestTurnId": "<id:1>",
+    "guestTurnInput": "reduce the height",
+    "mode": "work"
+   },
+   "role": "plan",
+   "prompt_cache_key": "brain:7001",
+   "conversationKey": 7001
+  },
+  {
+   "messages": [
+    {
+     "role": "system",
+     "content": "You are the Brain.\n\nMODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a finished change or a running agent.\nYou are working inside Brain chat #7001. Tie the work of this conversation back to it:\n• When your investigation concludes that something needs to be DONE — a bug to fix, a missing capability, a follow-up, or a gap you identified — do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (builtin_tasks_create with exactly one assignee and taskType \"task\", \"epic\", or \"gap\"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it with builtin_chats_link_ticket (chatId=7001, linkType=\"created\"). The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.\n• Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.\n• When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=7001, the current projectId, the files you touched, kind improvement|fix|bug, modality \"ide\"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.\n• Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap — investigating its fix, editing code for it, or driving it — move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status=\"in_progress\"). When the work is finished: if this session can commit and push (it has git_commit and git_push), YOU are the reviewer — self-review, ship it, and move it to \"done\" (see the SHIP YOUR OWN CHANGE contract); otherwise advance it to \"in_review\" for someone who can (or \"done\" if it needs no review). Never leave a ticket you are actively working sitting in backlog.\n• Call builtin_chats_list_tickets (chatId=7001) to see what is already linked — both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.\n• FINISH BY DISPATCHING what you did not do yourself. A ticket that no agent is running has not started. Every create/update tool returns an `autoRun` verdict — read it. When `autoRun.dispatched` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) — a Developer for code work, a QA agent for test work — and start the run yourself with builtin_chats_dispatch_agent (chatId=7001, agentRef=<the agent>, taskId=<the ticket>). A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.\n• STAFF WITH THE TEAM. The workspace's agents (builtin_chats_list_agents for those already in this chat, builtin_cloud_agents_list_mine for all of them) are the people this work belongs to. Match each ticket to the agent whose role fits it — Developer work to a developer, QA work to a QA agent — and never leave a ticket with no agent on it.\n• builtin_chats_runs (chatId=7001) says what has ALREADY run on this chat's tickets and who started each run. Read it before claiming work is under way, and before starting a duplicate: an empty result means nothing was ever dispatched, whatever the transcript says about it.\n• If dispatch is genuinely refused — no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role — the refusal names the reason and what would clear it. Report THAT reason and do not retry the same dispatch hoping for a different answer. If the work is something you could do here, do it instead. Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.\n\nTURN OPERATING CONTRACT:\n• Infer a workable brief from the conversation, project memory, attachments and current request. Ask one grouped set of questions only when different answers would materially change the result; otherwise state a reasonable assumption briefly and proceed.\n• Treat corrections and “actually…” follow-ups as patches to the active brief. Preserve approved work and change the smallest requested scope; never regenerate unrelated content.\n• Complete all requested deliverables in this run. Batch independent reads/actions when the tool supports it, while preserving dependencies and confirmation boundaries.\n• In Work mode, plan enough to act safely and then execute in the same run. Do not make the user move to another surface just to turn a plan into work.\n• For attachments, inspect only the relevant pages/sections with builtin_attachments_read and its offset/limit controls. Accept the original file; never ask the user to convert, split, trim, or re-upload it merely to save context.\n• Reuse established project conventions, examples and explicit user preferences. A topic change is a new internal context segment, not a reason to make the user restart the chat.\n• Route work to the available model and tools transparently. Use a scheduling tool when the user expresses recurrence; do not ask them to repeat a routine manually.\n• Keep the response no longer than the task requires. Do not expose token windows, usage-reset timing, context cleanup, model-size folklore, or other platform limitations as work the user must manage."
+    },
+    {
+     "role": "user",
+     "content": "reduce the height"
+    },
+    {
+     "role": "assistant",
+     "content": "",
+     "tool_calls": [
+      {
+       "id": "c1",
+       "type": "function",
+       "function": {
+        "name": "read_file",
+        "arguments": "{\"path\":\"a.css\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "c1",
+     "content": "{\"ok\":true,\"path\":\"a.css\",\"content\":\"export const a = 1;\\n\",\"totalLines\":1}"
+    },
+    {
+     "role": "assistant",
+     "content": "",
+     "tool_calls": [
+      {
+       "id": "c2",
+       "type": "function",
+       "function": {
+        "name": "builtin_tickets_from_delta",
+        "arguments": "{\"chatId\":99}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "c2",
+     "content": "{\"ok\":true}"
+    }
+   ],
+   "tools": [
+    {
+     "type": "function",
+     "function": {
+      "name": "read_file",
+      "description": "Parity tool read_file.",
+      "parameters": {
+       "type": "object",
+       "properties": {}
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "builtin_tickets_from_delta",
+      "description": "Parity tool builtin_tickets_from_delta.",
+      "parameters": {
+       "type": "object",
+       "properties": {}
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "ask_user",
+      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "question": {
+         "type": "string",
+         "description": "The single, specific question to ask."
+        },
+        "options": {
+         "type": "array",
+         "description": "2–6 distinct, mutually-exclusive choices (unless multiSelect).",
+         "items": {
+          "type": "object",
+          "properties": {
+           "label": {
+            "type": "string",
+            "description": "Short choice text (1–5 words)."
+           },
+           "description": {
+            "type": "string",
+            "description": "Optional one-line explanation of this choice."
+           }
+          },
+          "required": [
+           "label"
+          ]
+         }
+        },
+        "multiSelect": {
+         "type": "boolean",
+         "description": "Allow choosing more than one option. Default false."
+        }
+       },
+       "required": [
+        "question",
+        "options"
+       ]
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "hand_off",
+      "description": "OPTIONAL — for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone — the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "The research, summarised for the coders — they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did."
+        },
+        "tasks": {
+         "type": "array",
+         "minItems": 1,
+         "maxItems": 12,
+         "items": {
+          "type": "object",
+          "properties": {
+           "title": {
+            "type": "string",
+            "description": "Ticket title, e.g. \"Rebuild UserDetailDrawer on SlideOutPanel\"."
+           },
+           "brief": {
+            "type": "string",
+            "description": "The complete, standalone instruction: files, the change, the primitives to use."
+           },
+           "paths": {
+            "type": "array",
+            "items": {
+             "type": "string"
+            },
+            "description": "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
+           },
+           "acceptance": {
+            "type": "string",
+            "description": "How to know it is done (tests, behaviour)."
+           },
+           "constraints": {
+            "type": "string",
+            "description": "What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change."
+           }
+          },
+          "required": [
+           "title",
+           "brief"
+          ]
+         }
+        }
+       },
+       "required": [
+        "summary",
+        "tasks"
+       ]
+      }
+     }
+    }
+   ],
+   "tool_choice": "auto",
+   "modelStrict": false,
+   "maxTokens": 16384,
+   "metadata": {
+    "chatId": 7001,
+    "guestTurnId": "<id:1>",
+    "guestTurnInput": "reduce the height",
+    "mode": "work"
+   },
+   "role": "plan",
+   "prompt_cache_key": "brain:7001",
+   "conversationKey": 7001
+  },
+  {
+   "messages": [
+    {
+     "role": "system",
+     "content": "You are the Brain.\n\nMODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a finished change or a running agent.\nYou are working inside Brain chat #7001. Tie the work of this conversation back to it:\n• When your investigation concludes that something needs to be DONE — a bug to fix, a missing capability, a follow-up, or a gap you identified — do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (builtin_tasks_create with exactly one assignee and taskType \"task\", \"epic\", or \"gap\"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it with builtin_chats_link_ticket (chatId=7001, linkType=\"created\"). The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.\n• Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.\n• When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=7001, the current projectId, the files you touched, kind improvement|fix|bug, modality \"ide\"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.\n• Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap — investigating its fix, editing code for it, or driving it — move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status=\"in_progress\"). When the work is finished: if this session can commit and push (it has git_commit and git_push), YOU are the reviewer — self-review, ship it, and move it to \"done\" (see the SHIP YOUR OWN CHANGE contract); otherwise advance it to \"in_review\" for someone who can (or \"done\" if it needs no review). Never leave a ticket you are actively working sitting in backlog.\n• Call builtin_chats_list_tickets (chatId=7001) to see what is already linked — both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.\n• FINISH BY DISPATCHING what you did not do yourself. A ticket that no agent is running has not started. Every create/update tool returns an `autoRun` verdict — read it. When `autoRun.dispatched` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) — a Developer for code work, a QA agent for test work — and start the run yourself with builtin_chats_dispatch_agent (chatId=7001, agentRef=<the agent>, taskId=<the ticket>). A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.\n• STAFF WITH THE TEAM. The workspace's agents (builtin_chats_list_agents for those already in this chat, builtin_cloud_agents_list_mine for all of them) are the people this work belongs to. Match each ticket to the agent whose role fits it — Developer work to a developer, QA work to a QA agent — and never leave a ticket with no agent on it.\n• builtin_chats_runs (chatId=7001) says what has ALREADY run on this chat's tickets and who started each run. Read it before claiming work is under way, and before starting a duplicate: an empty result means nothing was ever dispatched, whatever the transcript says about it.\n• If dispatch is genuinely refused — no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role — the refusal names the reason and what would clear it. Report THAT reason and do not retry the same dispatch hoping for a different answer. If the work is something you could do here, do it instead. Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.\n\nTURN OPERATING CONTRACT:\n• Infer a workable brief from the conversation, project memory, attachments and current request. Ask one grouped set of questions only when different answers would materially change the result; otherwise state a reasonable assumption briefly and proceed.\n• Treat corrections and “actually…” follow-ups as patches to the active brief. Preserve approved work and change the smallest requested scope; never regenerate unrelated content.\n• Complete all requested deliverables in this run. Batch independent reads/actions when the tool supports it, while preserving dependencies and confirmation boundaries.\n• In Work mode, plan enough to act safely and then execute in the same run. Do not make the user move to another surface just to turn a plan into work.\n• For attachments, inspect only the relevant pages/sections with builtin_attachments_read and its offset/limit controls. Accept the original file; never ask the user to convert, split, trim, or re-upload it merely to save context.\n• Reuse established project conventions, examples and explicit user preferences. A topic change is a new internal context segment, not a reason to make the user restart the chat.\n• Route work to the available model and tools transparently. Use a scheduling tool when the user expresses recurrence; do not ask them to repeat a routine manually.\n• Keep the response no longer than the task requires. Do not expose token windows, usage-reset timing, context cleanup, model-size folklore, or other platform limitations as work the user must manage."
+    },
+    {
+     "role": "user",
+     "content": "reduce the height"
+    },
+    {
+     "role": "assistant",
+     "content": "",
+     "tool_calls": [
+      {
+       "id": "c1",
+       "type": "function",
+       "function": {
+        "name": "read_file",
+        "arguments": "{\"path\":\"a.css\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "c1",
+     "content": "{\"ok\":true,\"path\":\"a.css\",\"content\":\"export const a = 1;\\n\",\"totalLines\":1}"
+    },
+    {
+     "role": "assistant",
+     "content": "",
+     "tool_calls": [
+      {
+       "id": "c2",
+       "type": "function",
+       "function": {
+        "name": "builtin_tickets_from_delta",
+        "arguments": "{\"chatId\":99}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "c2",
+     "content": "{\"ok\":true}"
+    },
+    {
+     "role": "assistant",
+     "content": "",
+     "tool_calls": [
+      {
+       "id": "c3",
+       "type": "function",
+       "function": {
+        "name": "read_file",
+        "arguments": "{\"path\":\"a.css\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "c3",
+     "content": "{\"note\":\"Duplicate read_file call — identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).\"}"
+    }
+   ],
+   "tools": [
+    {
+     "type": "function",
+     "function": {
+      "name": "read_file",
+      "description": "Parity tool read_file.",
+      "parameters": {
+       "type": "object",
+       "properties": {}
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "builtin_tickets_from_delta",
+      "description": "Parity tool builtin_tickets_from_delta.",
+      "parameters": {
+       "type": "object",
+       "properties": {}
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "ask_user",
+      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "question": {
+         "type": "string",
+         "description": "The single, specific question to ask."
+        },
+        "options": {
+         "type": "array",
+         "description": "2–6 distinct, mutually-exclusive choices (unless multiSelect).",
+         "items": {
+          "type": "object",
+          "properties": {
+           "label": {
+            "type": "string",
+            "description": "Short choice text (1–5 words)."
+           },
+           "description": {
+            "type": "string",
+            "description": "Optional one-line explanation of this choice."
+           }
+          },
+          "required": [
+           "label"
+          ]
+         }
+        },
+        "multiSelect": {
+         "type": "boolean",
+         "description": "Allow choosing more than one option. Default false."
+        }
+       },
+       "required": [
+        "question",
+        "options"
+       ]
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "hand_off",
+      "description": "OPTIONAL — for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone — the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "The research, summarised for the coders — they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did."
+        },
+        "tasks": {
+         "type": "array",
+         "minItems": 1,
+         "maxItems": 12,
+         "items": {
+          "type": "object",
+          "properties": {
+           "title": {
+            "type": "string",
+            "description": "Ticket title, e.g. \"Rebuild UserDetailDrawer on SlideOutPanel\"."
+           },
+           "brief": {
+            "type": "string",
+            "description": "The complete, standalone instruction: files, the change, the primitives to use."
+           },
+           "paths": {
+            "type": "array",
+            "items": {
+             "type": "string"
+            },
+            "description": "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
+           },
+           "acceptance": {
+            "type": "string",
+            "description": "How to know it is done (tests, behaviour)."
+           },
+           "constraints": {
+            "type": "string",
+            "description": "What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change."
+           }
+          },
+          "required": [
+           "title",
+           "brief"
+          ]
+         }
+        }
+       },
+       "required": [
+        "summary",
+        "tasks"
+       ]
+      }
+     }
+    }
+   ],
+   "tool_choice": "auto",
+   "modelStrict": false,
+   "maxTokens": 16384,
+   "metadata": {
+    "chatId": 7001,
+    "guestTurnId": "<id:1>",
+    "guestTurnInput": "reduce the height",
+    "mode": "work"
+   },
+   "role": "plan",
+   "prompt_cache_key": "brain:7001",
+   "conversationKey": 7001
+  }
+ ],
+ "persisted": [
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "llm",
+    "label": "llm.complete",
+    "args": {
+     "model": "fake-model",
+     "requestedModel": "default",
+     "step": 0,
+     "role": "plan",
+     "toolCalls": 1,
+     "argBytes": 16,
+     "advertisedTools": 4,
+     "catalogTools": 4
+    },
+    "result": "1 tool call(s) · 0 chars · finish: tool_calls · prompt 10 tok",
+    "isError": false,
+    "durationMs": "<ms>",
+    "usage": {
+     "prompt": 10,
+     "completion": 4
+    },
+    "finishReason": "tool_calls",
+    "textChars": 0,
+    "ttftMs": "<ms>",
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:2>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "tool",
+    "label": "read_file",
+    "args": {
+     "path": "a.css"
+    },
+    "result": {
+     "ok": true,
+     "path": "a.css",
+     "content": "export const a = 1;\n",
+     "totalLines": 1
+    },
+    "isError": false,
+    "durationMs": "<ms>",
+    "resultBytes": 75,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:3>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "llm",
+    "label": "llm.complete",
+    "args": {
+     "model": "fake-model",
+     "requestedModel": "default",
+     "step": 1,
+     "role": "plan",
+     "toolCalls": 1,
+     "argBytes": 13,
+     "advertisedTools": 4,
+     "catalogTools": 4
+    },
+    "result": "1 tool call(s) · 0 chars · finish: tool_calls · prompt 10 tok",
+    "isError": false,
+    "durationMs": "<ms>",
+    "usage": {
+     "prompt": 10,
+     "completion": 4
+    },
+    "finishReason": "tool_calls",
+    "textChars": 0,
+    "ttftMs": "<ms>",
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:4>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "tool",
+    "label": "builtin_tickets_from_delta",
+    "args": {
+     "chatId": 99
+    },
+    "result": {
+     "ok": true
+    },
+    "isError": false,
+    "durationMs": "<ms>",
+    "resultBytes": 11,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:5>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "llm",
+    "label": "llm.complete",
+    "args": {
+     "model": "fake-model",
+     "requestedModel": "default",
+     "step": 2,
+     "role": "plan",
+     "toolCalls": 1,
+     "argBytes": 16,
+     "advertisedTools": 4,
+     "catalogTools": 4
+    },
+    "result": "1 tool call(s) · 0 chars · finish: tool_calls · prompt 10 tok",
+    "isError": false,
+    "durationMs": "<ms>",
+    "usage": {
+     "prompt": 10,
+     "completion": 4
+    },
+    "finishReason": "tool_calls",
+    "textChars": 0,
+    "ttftMs": "<ms>",
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:6>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "tool",
+    "label": "read_file",
+    "args": {
+     "path": "a.css"
+    },
+    "result": {
+     "note": "Duplicate read_file call — identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping)."
+    },
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:7>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "llm",
+    "label": "llm.complete",
+    "args": {
+     "model": "fake-model",
+     "requestedModel": "default",
+     "step": 3,
+     "role": "plan",
+     "toolCalls": 0,
+     "advertisedTools": 4,
+     "catalogTools": 4
+    },
+    "result": "0 tool call(s) · 19 chars · finish: stop · prompt 10 tok",
+    "isError": false,
+    "durationMs": "<ms>",
+    "usage": {
+     "prompt": 10,
+     "completion": 4
+    },
+    "finishReason": "stop",
+    "textChars": 19,
+    "ttftMs": "<ms>",
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:8>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "agent.message",
+    "args": {
+     "step": 3
+    },
+    "result": "Reduced the height.",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:9>"
+  },
+  {
+   "chatId": 7001,
+   "role": "assistant",
+   "content": "Reduced the height.",
+   "metadata": {
+    "provenance": {
+     "model": "fake-model"
+    }
+   },
+   "learned": false
+  }
+ ],
+ "trace": {
+  "7001": [
+   {
+    "ts": "<iso>",
+    "category": "llm",
+    "label": "llm.complete",
+    "durationMs": "<ms>",
+    "ttftMs": "<ms>",
+    "args": {
+     "model": "fake-model",
+     "requestedModel": "default",
+     "step": 0,
+     "role": "plan",
+     "toolCalls": 1,
+     "argBytes": 16,
+     "advertisedTools": 4,
+     "catalogTools": 4
+    },
+    "usage": {
+     "prompt": 10,
+     "completion": 4
+    },
+    "finishReason": "tool_calls",
+    "textChars": 0,
+    "result": "1 tool call(s) · 0 chars · finish: tool_calls · prompt 10 tok"
+   },
+   {
+    "ts": "<iso>",
+    "category": "tool",
+    "label": "read_file",
+    "durationMs": "<ms>",
+    "args": {
+     "path": "a.css"
+    },
+    "result": {
+     "ok": true,
+     "path": "a.css",
+     "content": "export const a = 1;\n",
+     "totalLines": 1
+    },
+    "isError": false,
+    "resultBytes": 75,
+    "truncated": false
+   },
+   {
+    "ts": "<iso>",
+    "category": "llm",
+    "label": "llm.complete",
+    "durationMs": "<ms>",
+    "ttftMs": "<ms>",
+    "args": {
+     "model": "fake-model",
+     "requestedModel": "default",
+     "step": 1,
+     "role": "plan",
+     "toolCalls": 1,
+     "argBytes": 13,
+     "advertisedTools": 4,
+     "catalogTools": 4
+    },
+    "usage": {
+     "prompt": 10,
+     "completion": 4
+    },
+    "finishReason": "tool_calls",
+    "textChars": 0,
+    "result": "1 tool call(s) · 0 chars · finish: tool_calls · prompt 10 tok"
+   },
+   {
+    "ts": "<iso>",
+    "category": "tool",
+    "label": "builtin_tickets_from_delta",
+    "durationMs": "<ms>",
+    "args": {
+     "chatId": 99
+    },
+    "result": {
+     "ok": true
+    },
+    "isError": false,
+    "resultBytes": 11,
+    "truncated": false
+   },
+   {
+    "ts": "<iso>",
+    "category": "llm",
+    "label": "llm.complete",
+    "durationMs": "<ms>",
+    "ttftMs": "<ms>",
+    "args": {
+     "model": "fake-model",
+     "requestedModel": "default",
+     "step": 2,
+     "role": "plan",
+     "toolCalls": 1,
+     "argBytes": 16,
+     "advertisedTools": 4,
+     "catalogTools": 4
+    },
+    "usage": {
+     "prompt": 10,
+     "completion": 4
+    },
+    "finishReason": "tool_calls",
+    "textChars": 0,
+    "result": "1 tool call(s) · 0 chars · finish: tool_calls · prompt 10 tok"
+   },
+   {
+    "ts": "<iso>",
+    "category": "tool",
+    "label": "read_file",
+    "args": {
+     "path": "a.css"
+    },
+    "result": {
+     "note": "Duplicate read_file call — identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping)."
+    }
+   },
+   {
+    "ts": "<iso>",
+    "category": "llm",
+    "label": "llm.complete",
+    "durationMs": "<ms>",
+    "ttftMs": "<ms>",
+    "args": {
+     "model": "fake-model",
+     "requestedModel": "default",
+     "step": 3,
+     "role": "plan",
+     "toolCalls": 0,
+     "advertisedTools": 4,
+     "catalogTools": 4
+    },
+    "usage": {
+     "prompt": 10,
+     "completion": 4
+    },
+    "finishReason": "stop",
+    "textChars": 19,
+    "result": "0 tool call(s) · 19 chars · finish: stop · prompt 10 tok"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "agent.message",
+    "args": {
+     "step": 3
+    },
+    "result": "Reduced the height."
+   }
+  ]
+ },
+ "host": {
+  "frames": {
+   "7001": [
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "starting#0"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "thinking#0"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "composing:read_file#0"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "tool:read_file#0"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "thinking#1"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "composing:builtin_tickets_from_delta#1"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "tool:builtin_tickets_from_delta#1"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "thinking#2"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "composing:read_file#2"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "thinking#3"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "writing#3"
+    },
+    {
+     "running": false,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": null
+    }
+   ]
+  },
+  "final": {
+   "7001": {
+    "running": false,
+    "streamingText": "",
+    "error": "",
+    "errorAction": null,
+    "pendingConfirm": null,
+    "messagesEpoch": 1,
+    "hasTrace": true,
+    "appended": [
+     {
+      "role": "assistant",
+      "content": "Reduced the height.",
+      "metadata": {
+       "provenance": {
+        "model": "fake-model"
+       }
+      },
+      "evermindLearn": {
+       "learned": false,
+       "version": 3
+      }
+     }
+    ],
+    "activity": null,
+    "byoUnresolved": [],
+    "providerCap": [],
+    "turn": null
+   }
+  },
+  "activityCalls": {
+   "7001": 1
+  },
+  "toolCalls": [
+   {
+    "name": "read_file",
+    "args": {
+     "path": "a.css"
+    }
+   },
+   {
+    "name": "builtin_tickets_from_delta",
+    "args": {
+     "chatId": 99
+    }
+   }
+  ],
+  "confirmAsks": [],
+  "cell": {
+   "7001": {
+    "transcript": [
+     {
+      "role": "user",
+      "content": "reduce the height"
+     },
+     {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+       {
+        "id": "c1",
+        "type": "function",
+        "function": {
+         "name": "read_file",
+         "arguments": "{\"path\":\"a.css\"}"
+        }
+       }
+      ]
+     },
+     {
+      "role": "tool",
+      "tool_call_id": "c1",
+      "content": "{\"ok\":true,\"path\":\"a.css\",\"content\":\"export const a = 1;\\n\",\"totalLines\":1}"
+     },
+     {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+       {
+        "id": "c2",
+        "type": "function",
+        "function": {
+         "name": "builtin_tickets_from_delta",
+         "arguments": "{\"chatId\":99}"
+        }
+       }
+      ]
+     },
+     {
+      "role": "tool",
+      "tool_call_id": "c2",
+      "content": "{\"ok\":true}"
+     },
+     {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+       {
+        "id": "c3",
+        "type": "function",
+        "function": {
+         "name": "read_file",
+         "arguments": "{\"path\":\"a.css\"}"
+        }
+       }
+      ]
+     },
+     {
+      "role": "tool",
+      "tool_call_id": "c3",
+      "content": "{\"note\":\"Duplicate read_file call — identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).\"}"
+     },
+     {
+      "role": "assistant",
+      "content": "Reduced the height."
+     }
+    ],
+    "compactMemo": null,
+    "transcriptAnchors": [],
+    "codeChanged": false,
+    "touchedFiles": [],
+    "ticketRecorded": true,
+    "deltaTicketId": null,
+    "priorResearch": null
+   }
+  }
+ },
+ "usage": {
+  "7001": {
+   "tally": {
+    "promptTokens": 40,
+    "completionTokens": 16,
+    "model": "fake-model"
+   },
+   "codeModel": null,
+   "lastServedModel": "fake-model"
+  }
+ },
+ "outcome": {
+  "reported": [],
+  "ended": [
+   {
+    "runId": "<id:1>",
+    "outcome": "succeeded"
+   }
+  ],
+  "avoided": []
+ },
+ "error": {}
+}

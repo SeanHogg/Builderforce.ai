@@ -13,27 +13,46 @@
  * Plain data and one pure function: no `node:*`, no DOM, no test runner.
  */
 
+import type { Capability, CapabilityProvider } from "@builderforce/agent-tools";
 import type { EventSink, ModelCompletion } from "./contract.js";
 import type { RunEvent } from "./runEvents.js";
 
 /** What the person asks. */
-export const CONFORMANCE_PROMPT = "Say hello, then finish.";
+export const CONFORMANCE_PROMPT = "List the files, then say hello.";
 
-/** What the run must end with. */
+/** What the run must end with: the model's closing prose (a run with no tool calls in its last turn is finished). */
 export const CONFORMANCE_ANSWER = "Hello! Done.";
 
 /** The model id the fake model reports. */
 export const CONFORMANCE_MODEL = "fake-model";
 
-/** The fake model's answers, in order: a `finish` call, then the closing prose. */
+/**
+ * The one tool every entry point has. A registry surface (cloud, on-prem tickets, the Brain) backs it with a `repo.read`
+ * capability; a surface whose catalog is its own (channels, the canvas) offers a tool of this name. It answers an empty listing.
+ */
+export const CONFORMANCE_TOOL = "list_files";
+
+/** A registry surface's backing for {@link CONFORMANCE_TOOL}: a read-only workspace that lists nothing. */
+export function conformanceCapabilities(): CapabilityProvider {
+  return {
+    capabilities: new Set<Capability>(["repo.read"]),
+    repoRead: {
+      listFiles: async () => ({ ok: true, paths: [] }),
+      readFile: async (path: string) => ({ ok: false, path, error: "not found" }),
+      searchCode: async (query: string) => ({ ok: true, query, total: 0, matches: [] }),
+    },
+  };
+}
+
+/** The fake model's answers, in order: one call of {@link CONFORMANCE_TOOL}, then the closing prose. No `finish`: most surfaces have none. */
 export const CONFORMANCE_SCRIPT: readonly ModelCompletion[] = [
-  { content: "", toolCalls: [{ id: "call-1", name: "finish", arguments: '{"summary":"Hello! Done."}' }], model: CONFORMANCE_MODEL },
+  { content: "", toolCalls: [{ id: "call-1", name: CONFORMANCE_TOOL, arguments: "{}" }], model: CONFORMANCE_MODEL },
   { content: CONFORMANCE_ANSWER, model: CONFORMANCE_MODEL },
 ];
 
 /**
- * The trace every entry point emits for the scripted task, in order. A `finish` call ends the run at once, so the second
- * scripted answer is never asked for; it is there so a run that wrongly asks again fails on content, not on a thrown script.
+ * The trace every entry point emits for the scripted task, in order: the ONE golden. A surface that differs from it for a real reason
+ * pins the difference in its own case with a comment saying why; there is no second golden.
  * Pinned and proved by `test/conformance/crossAdapter.test.ts`.
  */
 export const CONFORMANCE_TRACE: readonly string[] = [
@@ -42,23 +61,7 @@ export const CONFORMANCE_TRACE: readonly string[] = [
   "turn.started",
   "context.tools",
   "model.completed:fake-model",
-  "tool.dispatched:finish:ok",
-  "turn.finished",
-  "run.finished:finished",
-];
-
-/**
- * The trace of a surface whose tool catalog is CLOSED to its own tools (the Creation Canvas, channels and cron): the shared
- * `finish` is not among them, so the scripted call is refused and the run ends on the model's next prose turn. It is the
- * same run with that one difference, pinned here so the difference is named once and not re-derived per adapter.
- */
-export const CONFORMANCE_TRACE_CLOSED_CATALOG: readonly string[] = [
-  "run.started",
-  "model.preflight",
-  "turn.started",
-  "context.tools",
-  "model.completed:fake-model",
-  "tool.dispatched:finish:error",
+  "tool.dispatched:list_files:ok",
   "turn.finished",
   "turn.started",
   "model.completed:fake-model",

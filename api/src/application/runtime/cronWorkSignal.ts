@@ -18,7 +18,11 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *     lane on a request path — see maybeAutoRunOnLaneEntry) calls
  *     {@link signalPendingWork}. The next tick then runs the fan-out and
  *     dispatches within 5 minutes. Work the fan-out itself re-discovers is NOT
- *     new work and does not re-signal, or the gate would never close.
+ *     new work and does not re-signal, or the gate would never close. The exception is a
+ *     sweep that leaves TIMED work behind (an escalation level, a webhook retry, a sleeping
+ *     workflow node): it re-signals at the end of its pass while that work remains and its
+ *     timer is close ({@link signalPendingWorkIfDueWithin}), and stops the moment the work
+ *     or its window ends — never for a state that can last indefinitely.
  *   • {@link evaluateCronGate} lets the tick RUN when the signal is set OR the
  *     floor interval has elapsed; otherwise it SKIPS and Neon stays asleep.
  *   • The FLOOR sweep is the safety net: even with zero signals, the fan-out runs
@@ -159,8 +163,21 @@ export function notStuckWindowMs(intervalMs: number): number {
   return Math.max(0, intervalMs - FREQUENT_TICK_MS);
 }
 
-function kv(env: Env): KVNamespace | undefined {
+/** The one binding the signal needs — lets callers that hold a narrower env than the Worker's
+ *  full {@link Env} (the inbound-email handler, the scheduler) signal without a cast. */
+export type CronSignalEnv = Pick<Env, 'AUTH_CACHE_KV'>;
+
+function kv(env: CronSignalEnv): KVNamespace | undefined {
   return env.AUTH_CACHE_KV;
+}
+
+/**
+ * Whether a signal could take effect at all. With no KV bound the gate fails OPEN (every tick runs
+ * the fan-out), so a sweep that must run a database probe only to decide whether to re-signal can
+ * skip that probe: there is nothing to keep open.
+ */
+export function cronGateIsBound(env: CronSignalEnv): boolean {
+  return kv(env) !== undefined;
 }
 
 /**
@@ -216,7 +233,7 @@ export interface ScheduleStallReport {
  * callers MUST NOT block their request on it (fire-and-forget or `void`). A lost
  * write just means the floor sweep catches the work up to FLOOR_INTERVAL_MS later.
  */
-export async function signalPendingWork(env: Env): Promise<void> {
+export async function signalPendingWork(env: CronSignalEnv): Promise<void> {
   const store = kv(env);
   if (!store) return;
   try {
@@ -224,6 +241,35 @@ export async function signalPendingWork(env: Env): Promise<void> {
   } catch (error) {
     reportCaughtError(error, { source: "application/runtime/cronWorkSignal.ts", operation: "signalPendingWork", context: { logMessage: '[cron-work-signal] pending-work signal write failed; floor sweep remains active', details: { error } } });
   }
+}
+
+/**
+ * How near a timer must be before a sweep that is waiting on it keeps the gate open: the next
+ * tick or two. A signal is one-shot (it buys exactly one tick), so a sweep re-signals at the end
+ * of its pass for as long as it still has timed work. A timer further out than this is left to
+ * the floor sweep, which re-evaluates it and starts signalling once it is close — otherwise a
+ * retry 80 minutes away would hold Neon awake for 80 minutes of ticks that have nothing to do.
+ */
+export const SIGNAL_HORIZON_MS = 2 * FREQUENT_TICK_MS;
+
+/**
+ * Re-signal while timed work remains, but only while its next moment is close. `dueAtMs` is the
+ * earliest epoch-ms at which the sweep will have something to do (a past value means "due now");
+ * `null` means nothing is waiting, which is silent. Returns whether it signalled.
+ *
+ * The bound every caller must be able to state is WHY `dueAtMs` stops being non-null: a timer
+ * that elapses and is acted on, a row that is retired, a window that closes. Never pass a time
+ * derived from state that can last indefinitely.
+ */
+export async function signalPendingWorkIfDueWithin(
+  env: CronSignalEnv,
+  dueAtMs: number | null,
+  nowMs: number = Date.now(),
+  horizonMs: number = SIGNAL_HORIZON_MS,
+): Promise<boolean> {
+  if (dueAtMs == null || !Number.isFinite(dueAtMs) || dueAtMs - nowMs > horizonMs) return false;
+  await signalPendingWork(env);
+  return true;
 }
 
 export interface CronGateDecision {

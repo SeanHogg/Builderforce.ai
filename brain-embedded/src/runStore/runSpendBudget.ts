@@ -109,6 +109,19 @@ export function joinRunSpend(run: Pick<RunLoopContext, 'c' | 'req'>): { tree: Ru
   return { tree, capMc: Math.min(ownCapMc, tree.capMc) };
 }
 
+/**
+ * The reply a run ends with when its cap stopped it, saved as the chat's last message and shown: a plain assistant message. It is NOT a
+ * settled answer - it carries no provenance chip and the Evermind does not learn from it. Shared by both engines.
+ */
+export async function persistBudgetStop(run: Pick<RunLoopContext, 'c' | 'chatId' | 'req'>, text: string): Promise<void> {
+  const { c, chatId, req } = run;
+  const [msg] = await req.persistence.sendMessages(chatId, [{ role: 'assistant', content: text }]);
+  c.streamingText = '';
+  if (msg) recordAppended(c, msg);
+  emit(c);
+  req.onActivity?.(chatId);
+}
+
 /** `book` prices the calls — the bundled snapshot unless a test lends one. */
 export function runSpendBudget(run: RunLoopContext, book?: PriceBook): SpendHooks {
   const joined = joinRunSpend(run);
@@ -134,7 +147,7 @@ export function runSpendBudget(run: RunLoopContext, book?: PriceBook): SpendHook
   };
 
   const contain = async (): Promise<StopDecision> => {
-    const { c, chatId, convo, req } = run;
+    const { c, convo } = run;
     const spentMc = tree.spentMc;
     const text = budgetContainedReply(spentMc, capMc, tree);
     noteBudgetContained(c);
@@ -146,11 +159,7 @@ export function runSpendBudget(run: RunLoopContext, book?: PriceBook): SpendHook
       result: text,
     });
     convo.push({ role: 'assistant', content: text });
-    const [msg] = await req.persistence.sendMessages(chatId, [{ role: 'assistant', content: text }]);
-    c.streamingText = '';
-    if (msg) recordAppended(c, msg);
-    emit(c);
-    req.onActivity?.(chatId);
+    await persistBudgetStop(run, text);
     return { action: 'stop', ok: true, finished: true, output: text };
   };
 

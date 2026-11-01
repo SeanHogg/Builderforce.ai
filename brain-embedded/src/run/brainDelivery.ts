@@ -6,14 +6,14 @@
  * run's facts; nothing here iterates.
  */
 
-import { liftProseAskUser } from '@builderforce/agent-loop';
+import { liftProseAskUser, replayTextOf } from '@builderforce/agent-loop';
 import type { DeliveryLedger, DeliveryTurn, LadderRung } from '@builderforce/agent-run';
 import { askStopHook, MAX_STOP_HOOK_ROUNDS } from '../stopHooks';
 import { deliveryGates } from '../runStore/deliveryGates';
 import { skipsVerifyStage } from '../runStore/pipelineRoute';
-import { transportRetryTrace } from '../runPolicyTraces';
-import { nowIso, pushTrace } from '../runStore/runCells';
-import type { RunLoopContext } from '../runStore/runLoopContext';
+import { emit, nowIso, pushTrace } from '../runStore/runCells';
+import { persistReply, type RunLoopContext } from '../runStore/runLoopContext';
+import { persistMidTurnText } from '../runStore/turnPersistence';
 import type { LastTurn } from './loopTurn';
 
 /** The stop hook's counter key; the other rungs are `deliveryGates.ts`'s. */
@@ -25,26 +25,33 @@ export function brainDeliveryLedger(run: RunLoopContext, last: LastTurn): Delive
   const note = (label: string, result: string, args: Record<string, unknown> = {}): void => {
     pushTrace(c, { ts: nowIso(), category: 'message', label, args: { step: last.step, ...args }, result });
   };
+  // A model that asked its question in prose instead of calling `ask_user` still gets the clickable card.
+  // The agent holds a turn as it is replayed (the reply, else its reasoning as plain text); the settled message is the turn as the model
+  // wrote it, reasoning block and all, which the person can open (`canonicalTurnText`).
+  const asWritten = (content: string): string => (last.result && replayTextOf(last.result.text).trim() === content.trim() ? last.result.text : content);
+  const accept = (content: string): string => {
+    const full = asWritten(content).trim();
+    return (canAskUser ? liftProseAskUser(full) : full) || 'No response.';
+  };
   return {
-    // The closing answer after a failure streak is the Brain's own (`runStore/failureClose.ts`, run by the adapter tail).
-    owns: { settle: true, synthesis: true },
-    // A provider that broke is routed around by the agent's model policy; the Brain says nothing to the model about it (its loop never
-    // did) and records the re-ask, or - when no model is left - the failed completion, the way its loop does.
-    handedOff: () => { last.failure = undefined; },
-    providerFailure: {
-      handoff: () => '',
-      reroute: '',
-      rerouted: (failure) => {
-        last.failure = undefined;
-        pushTrace(c, transportRetryTrace(nowIso(), failure.step, failure.outcome, failure.message));
-      },
-      abandoned: () => {
-        if (last.failure) pushTrace(c, last.failure);
-        last.failure = undefined;
-      },
+    // The closing answer after a failure streak is the Brain's own (`runStore/failureClose.ts`, run by the adapter tail). A host that
+    // cannot run a tool judges no stall at all (the rungs are none): the turn IS the answer.
+    owns: { settle: true, synthesis: true, ...(runTool ? {} : { narration: true as const }) },
+    // The Brain's stall order and wording (`runStore/finalAnswerHook.ts`): a narrating turn is re-prompted before any rung, a model that
+    // spent its budget is failed over (reading the nudge alone) or stopped only once every rung is clear, the rungs' directives are the
+    // person's rows, and the stall is judged against the menu the turn advertised.
+    stall: { narrationFirst: true, nudgeAs: 'user', failoverNudgeOnly: true, menu: true, quoteEmpty: true },
+    // A turn sent back keeps what the person watched stream in: as its own block, or - a model that stalled out and was handed
+    // over - as the reply it was (`finalAnswerHook.ts`'s `requeueWithNudge` and its failover).
+    async sentBack({ kept }) {
+      const result = last.result;
+      if (!result) return;
+      if (kept === 'reply') await persistReply(run, accept(result.text), result, last.requested);
+      else await persistMidTurnText(run.chatId, c, run.req.persistence, result, last.requested);
+      c.streamingText = '';
+      emit(c);
     },
-    // A model that asked its question in prose instead of calling `ask_user` still gets the clickable card.
-    accept: (content) => ((canAskUser ? liftProseAskUser(content.trim()) : content.trim()) || 'No response.'),
+    accept,
     async rungs(turn: DeliveryTurn): Promise<readonly LadderRung[]> {
       // A host that cannot run a tool owes nothing: the turn IS the answer.
       if (!runTool) return [];

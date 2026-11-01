@@ -64,9 +64,10 @@ import { acrossTenants, scopedToTenant } from '../../infrastructure/database/ten
 
 const SOURCE = 'application/sales/sequenceRunner.ts';
 
-/** How many cadences one tick will drive. A bound, not a guess: the sweep runs every
- *  fifteen minutes and a cadence step is a day apart, so nothing is starved by a cap that
- *  keeps one tick inside a Worker's budget. Only DUE (or never-evaluated) cadences count
+/** How many cadences one tick will drive. A bound, not a guess: the sweep runs on the
+ *  frequent five-minute tick (KV-gated, so on an idle platform only when the cron gate opens —
+ *  at the latest on the 30-minute floor) and a cadence step is a day apart, so nothing is
+ *  starved by a cap that keeps one tick inside a Worker's budget. Only DUE (or never-evaluated) cadences count
  *  toward it — see `next_due_at` (1234). */
 const MAX_SEQUENCES_PER_TICK = 40;
 /** `next_due_at` for a cadence nobody will ever be due on (not running, everyone done). A

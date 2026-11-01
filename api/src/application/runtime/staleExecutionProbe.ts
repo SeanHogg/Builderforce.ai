@@ -63,6 +63,24 @@ export function stalePredicates(c: StaleCutoffs): StalePredicates {
 
 export type StaleProbe = Record<keyof StalePredicates, boolean>;
 
+/**
+ * The probe's whole answer: the stale categories, plus whether any run is still in flight.
+ *
+ * `liveRuns` is NOT a stale category and never makes {@link anyStale} true. It is the reaper's
+ * reason to keep the KV-gated cron tick open: a pending / submitted / running execution has a
+ * deadline the reaper must be around to enforce (15 min queued, 30 min host, 90s–5 min cloud
+ * silence), so the next tick has to happen. It answers in the SAME statement as the stale arms,
+ * so an idle platform still pays one probe. A `paused` run (parked on an `ask_human` question
+ * for up to 72 hours) is excluded on purpose: nothing about it changes on a timer, and counting
+ * it would hold the gate open for days on a question nobody has answered.
+ */
+export interface StaleWorkProbe extends StaleProbe {
+  liveRuns: boolean;
+}
+
+/** Statuses of an execution still in flight and so still subject to a reaper deadline. */
+const LIVE_RUN_STATUSES = ['pending', 'submitted', 'running'] as const;
+
 const ALL_STALE: StaleProbe = { hostRunning: true, cloudRunning: true, queued: true, paused: true, parkAge: true };
 
 /** Postgres booleans arrive as `true`, or as `'t'` through a text-typed mapper. */
@@ -75,7 +93,7 @@ function truthy(v: unknown): boolean {
  * category true) — a probe error must never hide stale work, it can only cost the
  * old always-run statements for one tick.
  */
-export async function probeStaleWork(db: Db, p: StalePredicates): Promise<StaleProbe> {
+export async function probeStaleWork(db: Db, p: StalePredicates): Promise<StaleWorkProbe> {
   // Declared cross-tenant: the reaper sweeps every tenant, the deadline is the predicate.
   const ex = (table: typeof executions | typeof ticketRuns, cond: SQL) =>
     sql`exists (select 1 from ${table} where ${acrossTenants(table, 'scheduled_sweep', cond)})`;
@@ -85,7 +103,8 @@ export async function probeStaleWork(db: Db, p: StalePredicates): Promise<StaleP
       ${ex(executions, p.cloudRunning)} as cloud_running,
       ${ex(executions, p.queued)} as queued,
       ${ex(executions, p.paused)} as paused,
-      ${ex(ticketRuns, p.parkAge)} as park_age`);
+      ${ex(ticketRuns, p.parkAge)} as park_age,
+      ${ex(executions, inArray(executions.status, [...LIVE_RUN_STATUSES]) as SQL)} as live_runs`);
     const row = (result.rows[0] ?? {}) as Record<string, unknown>;
     return {
       hostRunning: truthy(row.host_running),
@@ -93,13 +112,15 @@ export async function probeStaleWork(db: Db, p: StalePredicates): Promise<StaleP
       queued: truthy(row.queued),
       paused: truthy(row.paused),
       parkAge: truthy(row.park_age),
+      liveRuns: truthy(row.live_runs),
     };
   } catch (error) {
     reportCaughtError(error, { source: 'application/runtime/staleExecutionProbe.ts', operation: 'probeStaleWork', context: { logMessage: '[execution-reaper] stale probe failed; running every sweep fail-open', details: { error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) } } });
-    return { ...ALL_STALE };
+    // Fail open on the sweeps; say nothing about live runs, so a broken probe cannot pin the gate open.
+    return { ...ALL_STALE, liveRuns: false };
   }
 }
 
 export function anyStale(probe: StaleProbe): boolean {
-  return Object.values(probe).some(Boolean);
+  return (Object.keys(ALL_STALE) as Array<keyof StaleProbe>).some((key) => probe[key]);
 }

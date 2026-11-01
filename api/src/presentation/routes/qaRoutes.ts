@@ -64,6 +64,7 @@ import { isValidCron, nextCronTime } from '../../domain/workflowSchedule';
 import { projectInTenant, loadProjectInTenant } from '../../application/project/projectOwnership';
 import { deriveTargetZones } from '../../application/qa/deriveTargetRoutes';
 import { fireEventTriggers } from '../../application/workflow/eventTriggers';
+import { signalPendingWork } from '../../application/runtime/cronWorkSignal';
 import { getFindingScreenshot, putFindingScreenshot } from '../../application/qa/findingScreenshots';
 import { wildcardPath } from '@builderforce/hono-wildcard-path';
 import { QaFlowService } from '../../application/qa/QaFlowService';
@@ -1346,6 +1347,9 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
         createdBy: userId ?? null, updatedAt: new Date(),
       })
       .returning();
+    // An armed schedule is work for the `qa-sweep`, whose tick is KV-gated: the cron's next-due stamp
+    // was published by the last active tick and cannot know about this row, so signal.
+    if (schedule?.enabled) await signalPendingWork(c.env);
     return c.json({ schedule }, 201);
   });
 
@@ -1367,6 +1371,8 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       .where(and(eq(qaSchedules.id, c.req.param('id')), eq(qaSchedules.tenantId, tenantId)))
       .returning();
     if (!schedule) return c.json({ error: 'Schedule not found' }, 404);
+    // Re-armed (enabled, or its cadence changed): same reason as on create.
+    if (schedule.enabled && patch.nextRunAt != null) await signalPendingWork(c.env);
     return c.json({ schedule });
   });
 

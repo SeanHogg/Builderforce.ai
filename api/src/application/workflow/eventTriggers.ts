@@ -144,6 +144,7 @@ export async function fireEventTriggers(db: Db, params: FireEventTriggersParams)
           triggerSource: `${params.eventType}:${row.nodeId}`,
           sourceIncidentId: params.sourceIncidentId ?? null,
           sourceMonitorId: params.sourceMonitorId ?? null,
+          env: params.env,
         });
         if (run.ok) { status = `ok: ${run.workflowId}`; result.fired++; }
         else { status = `error: ${run.error}`; result.errors++; }

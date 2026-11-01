@@ -5,9 +5,9 @@
  * continuous run and for the stepped one (one step per Durable Object tick).
  */
 import { describe, expect, it } from "vitest";
-import type { Capability } from "@builderforce/agent-tools";
 import {
   CONFORMANCE_ANSWER,
+  conformanceCapabilities,
   CONFORMANCE_PROMPT,
   CONFORMANCE_TRACE,
   CONFORMANCE_SCRIPT,
@@ -39,7 +39,7 @@ function ports(store: { saved?: RunState }, events: RunEvent[]): RunPorts {
   const script = CONFORMANCE_SCRIPT;
   return {
     model: { complete: async (): Promise<ModelCompletion> => script[Math.min(turn++, script.length - 1)]! },
-    capabilities: { capabilities: new Set<Capability>() },
+    capabilities: conformanceCapabilities(),
     store: { load: () => store.saved, save: (state) => { store.saved = JSON.parse(JSON.stringify(state)) as RunState; } },
     events: teeEvents(undefined, events),
     human: { ask: async () => ({ kind: "paused" }) },

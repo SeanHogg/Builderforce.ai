@@ -31,6 +31,7 @@ import type { Env } from '../../env';
 import { pointRedemptions } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { signalPendingWork } from '../runtime/cronWorkSignal';
 import { grantAiCredits } from './aiCredits';
 import { pointsBalance, writePointsEntry } from './pointsLedger';
 import { readPointsProfile } from './pointsProfile';
@@ -170,6 +171,13 @@ async function fulfil(db: Db, env: Env, ctx: FulfilContext): Promise<boolean> {
  */
 const PENDING_RETRY_AFTER_MS = 10 * 60_000;
 const PENDING_SWEEP_LIMIT = 200;
+/**
+ * How long after the intent was written a still-pending redemption keeps the cron gate open for
+ * the next retry. A transient fault (a database blip, a grant timeout) clears within a few ticks;
+ * a redemption that can NEVER fulfil (its SKU left the catalog) stays `pending` indefinitely, and
+ * signalling for it would hold the platform awake forever. Past this age the floor sweep retries it.
+ */
+const PENDING_SIGNAL_WINDOW_MS = 60 * 60_000;
 
 /**
  * The cron half of {@link retryPendingRedemption}. Until this existed the retry
@@ -180,15 +188,23 @@ const PENDING_SWEEP_LIMIT = 200;
  */
 export async function runPendingRedemptionSweep(db: Db, env: Env, now = new Date()): Promise<{ scanned: number; fulfilled: number }> {
   const cutoff = new Date(now.getTime() - PENDING_RETRY_AFTER_MS);
-  const rows = await db.select({ id: pointRedemptions.id, tenantId: pointRedemptions.tenantId })
+  const rows = await db.select({ id: pointRedemptions.id, tenantId: pointRedemptions.tenantId, createdAt: pointRedemptions.createdAt })
     .from(pointRedemptions)
     .where(acrossTenants(pointRedemptions, 'scheduled_sweep', and(eq(pointRedemptions.status, 'pending'), lt(pointRedemptions.createdAt, cutoff))))
     .orderBy(asc(pointRedemptions.createdAt))
     .limit(PENDING_SWEEP_LIMIT);
   let fulfilled = 0;
+  let retryingSoon = false;
   for (const row of rows) {
-    if (await retryPendingRedemption(db, env, row.tenantId, row.id)) fulfilled += 1;
+    if (await retryPendingRedemption(db, env, row.tenantId, row.id)) {
+      fulfilled += 1;
+    } else if (now.getTime() - new Date(row.createdAt).getTime() < PENDING_SIGNAL_WINDOW_MS) {
+      retryingSoon = true;
+    }
   }
+  // A redemption that did not fulfil this pass is retried next tick — but only if the gate is open.
+  // Bounded by PENDING_SIGNAL_WINDOW_MS; older stragglers fall back to the floor sweep.
+  if (retryingSoon) await signalPendingWork(env);
   return { scanned: rows.length, fulfilled };
 }
 

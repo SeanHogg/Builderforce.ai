@@ -101,7 +101,7 @@ const startApprovedWorkflow: ApprovalDecisionHandler = async (ctx) => {
   if (ctx.status !== 'approved') return;
   const definitionId = approvalSubjectRef(ctx.approval.metadata, WORKFLOW_RUN_SUBJECT_KEY);
   if (definitionId) {
-    await startApprovedWorkflowRun(ctx.db, ctx.tenantId, ctx.segmentId, definitionId).catch(() => null);
+    await startApprovedWorkflowRun(ctx.db, ctx.tenantId, ctx.segmentId, definitionId, ctx.env).catch(() => null);
   }
 };
 

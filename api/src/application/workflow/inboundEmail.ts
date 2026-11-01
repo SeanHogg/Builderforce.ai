@@ -15,8 +15,9 @@ import { eq } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { workflowTriggers } from '../../infrastructure/database/schema';
 import { fireAddressedTrigger } from './fireAddressedTrigger';
+import type { CronSignalEnv } from '../runtime/cronWorkSignal';
 
-export interface InboundEmailEnv {
+export interface InboundEmailEnv extends CronSignalEnv {
   NEON_DATABASE_URL: string;
 }
 
@@ -65,5 +66,5 @@ export async function handleInboundEmail(
     subject: message.subject ?? '',
     text: message.text ?? '',
   };
-  return fireAddressedTrigger(db, row, payload, `inbound-email:${row.nodeId}`);
+  return fireAddressedTrigger(db, row, payload, `inbound-email:${row.nodeId}`, env);
 }

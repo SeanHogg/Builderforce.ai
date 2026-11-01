@@ -290,6 +290,14 @@ jobs:
           pnpm install --frozen-lockfile || pnpm install
           npm run ${{ matrix.script }}
 
+      # PRD 35 WS4 D3: the VS Code host's run test on the OTHER engine. `npm test` above ran it on the loop (the
+      # default); the oracle list (brain-embedded/src/run/parity/oracle.files.txt) names it, and this proves it on the agent.
+      - name: parity oracle on the agent engine (clients/vscode)
+        if: ${{ matrix.script == 'test' }}
+        run: node brain-embedded/src/run/parity/runOracle.mjs clients/vscode agent
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+
   package-extension:
     name: Package VS Code extension
     runs-on: ubuntu-latest
@@ -848,6 +856,23 @@ jobs:
               bash "$GITHUB_WORKSPACE/.github/scripts/run-parallel.sh"
               "pnpm --dir ../brain-embedded exec vitest run src/crossAdapterConformance.test.ts src/run/conformance.test.ts src/run/webAdapter.test.ts"
               "pnpm exec vitest run src/lib/canvasCrossAdapter.test.ts"
+          # PRD 35 WS4 D3, the parity oracle on BOTH engines. The test files that drive `startRun`
+          # (brain-embedded/src/run/parity/oracle.files.txt, guarded by oracle.test.ts) run UNCHANGED
+          # with BRAIN_RUN_ENGINE=loop and again with =agent, so one green run proves both until the
+          # loop is deleted. One matrix leg per engine; the Rovr (clients/chrome) files install their
+          # own package. The differential and snapshot suites (src/run/parity/*.test.ts) ride the
+          # agent leg: they pick their engines themselves.
+          - name: oracle (brain-embedded, loop)
+            run: node ../brain-embedded/src/run/parity/runOracle.mjs brain-embedded loop
+          - name: oracle (brain-embedded, agent)
+            run: >-
+              node ../brain-embedded/src/run/parity/runOracle.mjs brain-embedded agent &&
+              pnpm --dir ../brain-embedded exec vitest run src/run/parity
+          - name: oracle (clients/chrome, loop and agent)
+            run: >-
+              pnpm --dir ../clients/chrome install --frozen-lockfile &&
+              node ../brain-embedded/src/run/parity/runOracle.mjs clients/chrome loop &&
+              node ../brain-embedded/src/run/parity/runOracle.mjs clients/chrome agent
           # Two light gates, run concurrently by run-parallel.sh:
           #
           # brain-ui's own suite. The package is BUILT (exports → dist, its own

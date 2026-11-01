@@ -26,6 +26,7 @@ import {
 } from '../../domain/workflowTriggers';
 import { nextCronTime, isValidCron } from '../../domain/workflowSchedule';
 import { bumpEventTriggerListeners } from './eventTriggerListeners';
+import { signalPendingWork } from '../runtime/cronWorkSignal';
 import type { WorkflowDefinition } from '../../domain/workflowGraph';
 import type { RunTarget } from './instantiateRun';
 import type { Env } from '../../env';
@@ -100,29 +101,34 @@ export async function syncDefinitionTriggers(db: Db, params: SyncTriggersParams)
   }
 
   const now = new Date();
-  await db.insert(workflowTriggers).values(
-    specs.map((spec) => {
-      const act = activationFor(spec, now, tokenByNode.get(spec.nodeId));
-      return {
-        tenantId: params.tenantId,
-        segmentId: params.segmentId ?? null,
-        definitionId: params.definitionId,
-        nodeId: spec.nodeId,
-        triggerType: spec.triggerType,
-        enabled: true,
-        config: JSON.stringify(spec.config),
-        runtime: params.target.runtime,
-        agentHostId: params.target.runtime === 'host' ? params.target.agentHostId ?? null : null,
-        cloudAgentRef: params.target.runtime === 'cloud' ? params.target.cloudAgentRef ?? null : null,
-        token: act.token,
-        secret: act.secret,
-        nextRunAt: act.nextRunAt,
-        cursor: act.cursor,
-        createdAt: now,
-        updatedAt: now,
-      };
-    }),
-  );
+  const rows = specs.map((spec) => {
+    const act = activationFor(spec, now, tokenByNode.get(spec.nodeId));
+    return {
+      tenantId: params.tenantId,
+      segmentId: params.segmentId ?? null,
+      definitionId: params.definitionId,
+      nodeId: spec.nodeId,
+      triggerType: spec.triggerType,
+      enabled: true,
+      config: JSON.stringify(spec.config),
+      runtime: params.target.runtime,
+      agentHostId: params.target.runtime === 'host' ? params.target.agentHostId ?? null : null,
+      cloudAgentRef: params.target.runtime === 'cloud' ? params.target.cloudAgentRef ?? null : null,
+      token: act.token,
+      secret: act.secret,
+      nextRunAt: act.nextRunAt,
+      cursor: act.cursor,
+      createdAt: now,
+      updatedAt: now,
+    };
+  });
+  await db.insert(workflowTriggers).values(rows);
+
+  // An RSS trigger is armed `nextRunAt = now` and a schedule at its next cron instant, but the cron
+  // gate's next-due stamp is only as fresh as the last ACTIVE tick — it cannot know about a row
+  // armed since. One signal buys a tick, and that tick re-publishes the stamp with this row in it,
+  // so a schedule armed on an idle platform fires on time instead of at the next floor sweep.
+  if (params.env && rows.some((row) => row.nextRunAt != null)) await signalPendingWork(params.env);
 
   await bumpEventTriggerListeners(params.env, params.tenantId);
   return specs.length;

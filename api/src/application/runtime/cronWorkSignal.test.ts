@@ -9,6 +9,9 @@ import {
   openCronTick,
   readScheduleStall,
   signalPendingWork,
+  signalPendingWorkIfDueWithin,
+  cronGateIsBound,
+  SIGNAL_HORIZON_MS,
 } from './cronWorkSignal';
 import type { Env } from '../../env';
 
@@ -115,6 +118,47 @@ describe('openCronTick', () => {
     const { kv, store } = fakeKv({ 'cron:work-pending': '1', 'cron:last-floor-sweep': '1000' });
     await openCronTick(envWith(kv), 4_242, false);
     expect(store.get('cron:last-floor-sweep')).toBe('1000');
+  });
+});
+
+/** The override ceiling is 90 minutes: past ~2h the llm-batch work marker and the cost-alerts lookback lose work. */
+describe('floor override ceiling', () => {
+  it('caps an override at 90 minutes', () => {
+    expect(MAX_FLOOR_INTERVAL_MS).toBe(90 * 60 * 1000);
+    expect(floorIntervalMs(envWith(undefined, { CRON_FLOOR_INTERVAL_MS: String(6 * 60 * 60 * 1000) }))).toBe(90 * 60 * 1000);
+  });
+});
+
+describe('signalPendingWorkIfDueWithin', () => {
+  const NOW = 1_000_000;
+
+  it('signals when the next timed moment is inside the horizon, or already past', async () => {
+    const { kv, store } = fakeKv();
+    await expect(signalPendingWorkIfDueWithin(envWith(kv), NOW + SIGNAL_HORIZON_MS, NOW)).resolves.toBe(true);
+    expect(store.has('cron:work-pending')).toBe(true);
+    store.clear();
+    await expect(signalPendingWorkIfDueWithin(envWith(kv), NOW - 60_000, NOW)).resolves.toBe(true);
+    expect(store.has('cron:work-pending')).toBe(true);
+  });
+
+  it('stays silent when nothing is waiting, or the timer is beyond the horizon', async () => {
+    const { kv, store } = fakeKv();
+    await expect(signalPendingWorkIfDueWithin(envWith(kv), null, NOW)).resolves.toBe(false);
+    await expect(signalPendingWorkIfDueWithin(envWith(kv), NOW + SIGNAL_HORIZON_MS + 1, NOW)).resolves.toBe(false);
+    await expect(signalPendingWorkIfDueWithin(envWith(kv), Number.NaN, NOW)).resolves.toBe(false);
+    expect(store.has('cron:work-pending')).toBe(false);
+  });
+
+  it('honours a wider horizon', async () => {
+    const { kv } = fakeKv();
+    await expect(signalPendingWorkIfDueWithin(envWith(kv), NOW + 20 * 60_000, NOW, 30 * 60_000)).resolves.toBe(true);
+  });
+});
+
+describe('cronGateIsBound', () => {
+  it('is false without KV (the gate fails open) and true with it', () => {
+    expect(cronGateIsBound(envWith())).toBe(false);
+    expect(cronGateIsBound(envWith(fakeKv().kv))).toBe(true);
   });
 });
 

@@ -44,8 +44,8 @@ export interface ScenarioHost {
   seedOf(key?: number): { seed: import('../../streamChatCompletion').ChatCompletionMessage[]; seedIds: number[] };
   /** Replace the model's script. The next model call takes the first turn. */
   script(turns: ScriptedTurn[], summary?: string | ((input: TurnInput) => string | Promise<string>)): void;
-  /** The host's tools by name; any name not here fails the call. */
-  tools(impl: Record<string, HostTool>): void;
+  /** The host's tools by name; any name not here fails the call. `confirm` names the tools `needsConfirm` holds for approval. */
+  tools(impl: Record<string, HostTool>, confirm?: string[]): void;
   /** Start a run on `key`. `over` is merged over the scenario's default request. */
   start(over?: Partial<BrainRunRequest>, key?: number): Promise<StartOutcome>;
   /** Start a run and hand back its promise without awaiting it, for a scenario that acts mid-run. */
@@ -67,6 +67,8 @@ export interface Scenario {
   /** The ruling rows (T1..T14, R1..R11, or a named area) this scenario proves. */
   rows: readonly string[];
   title: string;
+  /** Trace labels the LOOP's record must contain: proof the scenario reached the behaviour it is named for. */
+  loopShows?: readonly string[];
   run(host: ScenarioHost): Promise<void>;
 }
 

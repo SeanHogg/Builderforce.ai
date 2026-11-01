@@ -524,6 +524,7 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
       triggerSource: 'incident:runbook',
       triggerPayload: { incidentId, title: inc.title, severity: inc.severity, status: inc.status, affectedSystem: inc.affectedSystem, source: inc.source },
       sourceIncidentId: incidentId,
+      env: c.env as Env,
     });
     if (!result.ok) return c.json({ error: result.error }, 400);
 

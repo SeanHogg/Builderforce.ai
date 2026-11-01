@@ -563,6 +563,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       definitionId: defRow.id,
       target,
       triggerSource: 'manual',
+      env: c.env as Env,
     });
     if (!result.ok) return c.json({ error: result.error }, 400);
 

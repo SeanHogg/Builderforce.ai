@@ -52,31 +52,6 @@ beforeEach(() => {
 });
 
 describe('conformance - the Brain\'s entry points run the same task the same way', () => {
-  it('gives one RunEvent trace and one outcome on vscode, web and rovr', async () => {
-    const runs = await Promise.all(ENTRY_POINTS.map((entryPoint, i) => drive(entryPoint, 8200 + i, [() => result({ text: 'Hello! Done.' })])));
-    const [first, ...rest] = runs;
-    for (const other of rest) {
-      expect(other.events).toEqual(first!.events);
-      expect(other.outcome.kind).toEqual(first!.outcome.kind);
-    }
-    expect(first!.outcome).toMatchObject({ kind: 'finished' });
-    expect(first!.events[0]?.kind).toBe('run.started');
-    expect(first!.events.at(-1)?.kind).toBe('run.finished');
-  });
-
-  it('stamps the surface\'s label on the uniform outcome row - and nothing else about the run changes', async () => {
-    const runs = await Promise.all(ENTRY_POINTS.map((entryPoint, i) => drive(entryPoint, 8210 + i, [() => result({ text: 'Hello! Done.' })])));
-    runs.forEach((run, i) => {
-      expect(run.rows).toHaveLength(1);
-      expect(run.rows[0]?.entryPoint).toBe(ENTRY_POINTS[i]);
-    });
-    const { entryPoint: _first, ...baseline } = runs[0]!.rows[0]!;
-    for (const run of runs.slice(1)) {
-      const { entryPoint: _other, ...row } = run.rows[0]!;
-      expect(row).toEqual(baseline);
-    }
-  });
-
   it('opens with the model preflight, which names an unresolved account on every surface', async () => {
     for (const [i, entryPoint] of ENTRY_POINTS.entries()) {
       const { events } = await drive(entryPoint, 8220 + i, [() => result({ text: 'Done.' })], {

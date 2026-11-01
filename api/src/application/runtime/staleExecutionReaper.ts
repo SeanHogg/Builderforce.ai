@@ -116,6 +116,11 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
   // Idle gate: one EXISTS probe decides which sweeps below have any work, so a quiet
   // platform costs a single statement instead of every UPDATE/SELECT each tick.
   const probe = await probeStaleWork(db, stale);
+  // A run still in flight has a deadline this sweep must be around to enforce. A signal buys ONE
+  // tick, so re-arm the next one for as long as such a run exists — before the idle return below,
+  // which a platform with only healthy in-flight runs takes. Bounded by the deadlines themselves:
+  // the reaper fails anything that outlives them, so the run (and with it the signal) ends.
+  if (probe.liveRuns) await signalPendingWork(env);
   const empty: ReapResult = { failedRunning: 0, failedQueued: 0, failedPaused: 0, requeuedCloud: 0, parkAge: { stale: 0, unparked: 0 } };
   if (!anyStale(probe)) return empty;
 

@@ -49,7 +49,7 @@ const RUN_LEVERS: readonly CostLeverId[] = [
 const NO_PACK: ContextPack = { focus: [], facts: [], recall: [] };
 
 /** The task: the ticket's prompt, who is asking, and the board's dispatch provenance (§6.9). */
-function taskOf(host: CloudRunHost, rc: CloudEngineContext): RunTask {
+export function taskOf(host: CloudRunHost, rc: CloudEngineContext): RunTask {
   const { opts } = host;
   const stamped = parseRunDispatch(rc.dispatchPayload);
   const child = isChildDelegation(opts.delegation);
@@ -70,7 +70,7 @@ function taskOf(host: CloudRunHost, rc: CloudEngineContext): RunTask {
 }
 
 /** The policy data the board compiled, and the run's lever set. Data only — the agent decides what it means. */
-function policyOf(host: CloudRunHost): RunPolicy {
+export function policyOf(host: CloudRunHost): RunPolicy {
   const { opts, env, refs } = host;
   return {
     entryPoint: 'cloud',

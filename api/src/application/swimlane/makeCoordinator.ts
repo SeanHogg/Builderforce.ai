@@ -30,7 +30,7 @@ export function makeSwimlaneCoordinator(db: Db, env: unknown): SwimlaneCoordinat
   return new SwimlaneCoordinator(
     new DrizzleCoordinatorStore(db),
     new AgentHostStageDispatcher((env as CoordinatorEnv | undefined)?.AGENT_HOST_RELAY as never),
-    new DrizzleStageWorkflowRunner(db),
+    new DrizzleStageWorkflowRunner(db, env as Env | undefined),
     new DrizzlePrdEnsurer(db, env as Env),
   );
 }

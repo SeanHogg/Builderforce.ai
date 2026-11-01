@@ -10,6 +10,7 @@ import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { reportSchedules } from '../../infrastructure/database/schema';
 import { boardPackSubjectRef, listSchedulableFrames } from '../finance/boardPackReport';
+import { signalPendingWork, type CronSignalEnv } from '../runtime/cronWorkSignal';
 import {
   FRAME_NOT_READABLE_ERROR,
   boardPackSubjectToVerify,
@@ -54,12 +55,19 @@ export async function listBoardPackFrameSubjects(db: Db, tenantId: number, sessi
   }));
 }
 
-export async function createReportSchedule(db: Db, tenantId: number, body: ScheduleCreateBody): Promise<ScheduleWriteResult> {
+/**
+ * `env` arms the cron gate for the new schedule. A create never sets `next_run_at`: the sweep reads
+ * NULL as "due now" and computes the real time on its first pass, but the gate's next-due probe
+ * filters NULL rows out, so on an idle platform the row would wait for the floor sweep. One signal
+ * buys the tick that picks it up.
+ */
+export async function createReportSchedule(db: Db, tenantId: number, body: ScheduleCreateBody, env?: CronSignalEnv): Promise<ScheduleWriteResult> {
   const decided = reportScheduleCreateValues(body);
   if ('error' in decided) return refused(decided.error);
   if (!(await frameIsReadable(db, tenantId, decided.values))) return refused(FRAME_NOT_READABLE_ERROR);
 
   const [row] = await db.insert(reportSchedules).values({ tenantId, ...decided.values }).returning();
+  if (env && row?.isEnabled) await signalPendingWork(env);
   return { ok: true, row: row! };
 }
 

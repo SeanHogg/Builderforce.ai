@@ -9,10 +9,12 @@ import { workflowDefinitions } from '../../infrastructure/database/schema';
 import { parseDefinition } from '../../domain/workflowGraph';
 import { instantiateWorkflowRun, runTargetFromDefinition } from '../workflow/instantiateRun';
 import type { Db } from '../../infrastructure/database/connection';
+import type { CronSignalEnv } from '../runtime/cronWorkSignal';
 import type { StageWorkflowRunner, StageWorkflowRunResult } from './SwimlaneCoordinator';
 
 export class DrizzleStageWorkflowRunner implements StageWorkflowRunner {
-  constructor(private readonly db: Db) {}
+  /** `env` arms the next cron tick for the cloud run a lane action starts (see `InstantiateRunParams.env`). */
+  constructor(private readonly db: Db, private readonly env?: CronSignalEnv) {}
 
   async run(
     workflowDefId: string,
@@ -38,6 +40,7 @@ export class DrizzleStageWorkflowRunner implements StageWorkflowRunner {
       definitionId: defRow.id,
       target: runTargetFromDefinition(defRow),
       triggerSource: `swimlane:ticket:${ctx.ticketRunId}`,
+      env: this.env,
     });
     if (!result.ok) return { ok: false, error: result.error };
     return { ok: true, workflowId: result.workflowId };

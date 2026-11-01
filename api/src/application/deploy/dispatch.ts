@@ -21,6 +21,7 @@ import type { AgentSpec, AgentSurface } from '@builderforce/agent-tools';
 import type { CompiledStep } from '../../domain/workflowGraph';
 import type { Db } from '../../infrastructure/database/connection';
 import { persistCompiledRun } from '../workflow/instantiateRun';
+import type { CronSignalEnv } from '../runtime/cronWorkSignal';
 import { deploy, type DeployOptions, type DeployPlan } from './index';
 
 /**
@@ -48,6 +49,8 @@ export interface DispatchContext {
   /** Required for cloud surfaces: the runtime execution dispatcher (injected). */
   dispatchCloudRun?: CloudRunDispatcher;
   deployOptions?: DeployOptions;
+  /** Arms the next cron tick for the cloud workflow run a `workflow-node` deploy creates. */
+  env?: CronSignalEnv;
 }
 
 export type DispatchResult =
@@ -80,6 +83,7 @@ export async function deployAndDispatch(
       projectId: ctx.projectId ?? null,
       name: spec.identity?.name || 'Compiled workflow',
       target: { runtime: 'cloud', cloudAgentRef: ctx.cloudAgentRef ?? null },
+      env: ctx.env,
     });
     return res.ok
       ? { ok: true, kind: 'workflow', plan, workflowId: res.workflowId, taskCount: res.taskCount }

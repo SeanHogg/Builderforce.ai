@@ -6,7 +6,7 @@
 
 import { resolveRunConfirm } from '../../../runStore/runControl';
 import { getCell } from '../../../runStore/runCells';
-import { calls, call, completion, decide, reply } from '../script';
+import { calls, call, completion, decide, reply, PINNED } from '../script';
 import type { Scenario } from '../types';
 
 const READ = { read_file: (a: unknown) => ({ ok: true, path: (a as { path?: string }).path, content: 'export const a = 1;\n', totalLines: 1 }) };
@@ -33,7 +33,7 @@ export const askUserMalformed: Scenario = {
 };
 
 export const malformedCallArgs: Scenario = {
-  id: 'malformed-call-args', rows: ['R8'], title: 'a call whose arguments are not JSON is traced with the malformed label and the model is told how to fix it',
+  id: 'malformed-call-args', rows: ['R8'], loopShows: ['read_file (unparseable arguments)'], title: 'a call whose arguments are not JSON is traced with the malformed label and the model is told how to fix it',
   async run(h) {
     h.tools(READ);
     h.script([
@@ -59,7 +59,7 @@ export const confirmApproved: Scenario = {
   async run(h) {
     h.tools({ delete_file: () => ({ ok: true }) }, ['delete_file']);
     h.script([calls([call('delete_file', { path: 'old.ts' }, 'c1')]), reply('Deleted old.ts.')]);
-    const run = h.begin({ userTurn: 'delete old.ts' });
+    const run = h.begin({ ...PINNED, userTurn: 'delete old.ts' });
     await h.until(() => getCell(h.key).pendingConfirm !== null, 'the confirm gate is raised');
     resolveRunConfirm(h.key, true);
     await run;
@@ -71,7 +71,7 @@ export const confirmDeclined: Scenario = {
   async run(h) {
     h.tools({ delete_file: () => ({ ok: true }) }, ['delete_file']);
     h.script([calls([call('delete_file', { path: 'old.ts' }, 'c1')]), reply('Left old.ts alone.')]);
-    const run = h.begin({ userTurn: 'delete old.ts' });
+    const run = h.begin({ ...PINNED, userTurn: 'delete old.ts' });
     await h.until(() => getCell(h.key).pendingConfirm !== null, 'the confirm gate is raised');
     resolveRunConfirm(h.key, false);
     await run;
@@ -105,7 +105,7 @@ export const bigReadPaged: Scenario = {
 const BIG = Array.from({ length: 70 }, (_, i) => `tool_${String(i).padStart(2, '0')}`);
 
 export const routedToolPin: Scenario = {
-  id: 'routed-tool-pin', rows: ['R6', 'R7', 'R9'], title: 'a tool reached through builtin_tools_invoke on a 70-tool catalog is pinned for later turns; the router shows while the catalog is large',
+  id: 'routed-tool-pin', rows: ['R6', 'R7', 'R9'], loopShows: ['tools.routed', 'tool_42'], title: 'a tool reached through builtin_tools_invoke on a 70-tool catalog is pinned for later turns; the router shows while the catalog is large',
   async run(h) {
     h.tools({ ...READ, ...Object.fromEntries(BIG.map((n) => [n, () => ({ ok: true, from: n })])) });
     h.script([
@@ -119,7 +119,7 @@ export const routedToolPin: Scenario = {
 };
 
 export const mcpTool: Scenario = {
-  id: 'mcp-tool', rows: ['R9'], title: 'an MCP tool on the catalog is offered with its namespaced name and runs through the host',
+  id: 'mcp-tool', rows: ['R9'], loopShows: ['mcp__github__list_issues'], title: 'an MCP tool on the catalog is offered with its namespaced name and runs through the host',
   async run(h) {
     h.tools({ ...READ, mcp__github__list_issues: () => ({ ok: true, issues: [{ number: 7, title: 'Bug' }] }) });
     h.script([calls([call('mcp__github__list_issues', { repo: 'acme/web' }, 'm1')]), reply('There is one open issue: #7 Bug.')]);
@@ -144,7 +144,7 @@ const PLAN = {
 };
 
 export const handOffExecution: Scenario = {
-  id: 'hand-off-execution', rows: ['R11', 'T9'], title: 'analysis ends at the budget, the forced hand_off files a ticket per task and fans out coders, and coding follows on the code role',
+  id: 'hand-off-execution', rows: ['R11', 'T9'], loopShows: ['loop.hand_off_due', 'spawn_agents', 'edit_file'], title: 'analysis ends at the budget, the forced hand_off files a ticket per task and fans out coders, and coding follows on the code role',
   async run(h) {
     let ticket = 900;
     h.tools({
@@ -167,7 +167,7 @@ export const handOffExecution: Scenario = {
 };
 
 export const plannerIgnoresForcedTurn: Scenario = {
-  id: 'planner-ignores-forced-turn', rows: ['R11', 'T9'], title: 'a planner that keeps reading through the forced hand_off turn ends planning; the coder takes the next turn',
+  id: 'planner-ignores-forced-turn', rows: ['R11', 'T9'], loopShows: ['loop.plan_budget_spent', 'edit_file'], title: 'a planner that keeps reading through the forced hand_off turn ends planning; the coder takes the next turn',
   async run(h) {
     h.tools({ ...READ, edit_file: () => ({ ok: true }) });
     let reads = 0;

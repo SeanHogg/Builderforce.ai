@@ -25,6 +25,7 @@ import { acrossTenants, scopedToTenant } from '../../infrastructure/database/ten
 import { isTerminalExecutionStatus } from './cloudDispatch';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { cronGateIsBound, signalPendingWork } from './cronWorkSignal';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -82,9 +83,11 @@ export const PREVIEW_TENANT_CONCURRENCY_CAP = 2;
  * re-mints and the run re-starts the dev server.
  *
  * The sweep that enforces it runs on the `frequent` (5-minute) cron, so the real
- * worst case is idle+tick ≈ 8 minutes — still less than half the DO's own 20m, and the
- * `start` op signals pending work so the KV-gated tick actually fires while a preview
- * is open rather than waiting out the 30-minute floor.
+ * worst case is idle+tick ≈ 8 minutes — still less than half the DO's own 20m. The
+ * KV-gated tick only fires while the cron gate is open, so the `start` op signals pending work
+ * and {@link sweepIdlePreviews} re-signals at the end of every pass while a lease still needs
+ * the sweep (see {@link leaseNeedsSweep}) — that is what keeps the sweep on the 5-minute tick
+ * for as long as a preview is being watched, instead of falling back to the 30-minute floor.
  */
 export const PREVIEW_IDLE_EVICTION_MS = 3 * 60_000;
 
@@ -336,7 +339,49 @@ export async function sweepIdlePreviews(env: Env, db: Db = buildDatabase(env)): 
     );
     evicted++;
   }
+  await signalWhileLeasesNeedSweep(env, db);
   return { evicted };
+}
+
+/**
+ * Does a lease still holding an instance need ANOTHER pass of the sweep soon?
+ *
+ *   • its run has finished — only the preview holds the instance, and it is evicted once idle
+ *     (the sweep evicts it at the first pass after the idle window, so this is a short wait); or
+ *   • it was touched within the idle window — someone is watching, and it will go idle (and
+ *     become evictable) within {@link PREVIEW_IDLE_EVICTION_MS}.
+ *
+ * Deliberately NOT a lease that is unwatched while its RUN is still going: the sweep may not touch
+ * it (the run owns the instance), nothing about it changes on a timer, and a run can legitimately
+ * last for hours, so signalling for it would keep the platform awake with nothing to do. The run's
+ * own end is a floor-cadence event at worst.
+ */
+export function leaseNeedsSweep(lease: { lastSeenAt: Date | string; runStatus: string }, nowMs: number): boolean {
+  return isTerminalExecutionStatus(lease.runStatus)
+    || nowMs - new Date(lease.lastSeenAt).getTime() < PREVIEW_IDLE_EVICTION_MS;
+}
+
+/** Best-effort: a failing probe must never fail the sweep — the floor still evicts. */
+async function signalWhileLeasesNeedSweep(env: Env, db: Db): Promise<void> {
+  if (!cronGateIsBound(env)) return;
+  try {
+    // Joined to the run exactly as the sweep's own select is, so a lease the sweep can never see
+    // (its execution is gone) is not counted and cannot hold the gate open. A deployment holds at
+    // most PREVIEW_GLOBAL_INSTANCE_BUDGET leases, so the read is tiny.
+    const leases = await db
+      .select({ lastSeenAt: previewSessions.lastSeenAt, runStatus: executions.status })
+      .from(previewSessions)
+      .innerJoin(executions, eq(executions.id, previewSessions.executionId))
+      .where(acrossTenants(previewSessions, 'scheduled_sweep', inArray(previewSessions.status, [...HOLDING_STATUSES])))
+      .limit(PREVIEW_GLOBAL_INSTANCE_BUDGET + 1);
+    const now = Date.now();
+    if (leases.some((lease) => leaseNeedsSweep(lease, now))) await signalPendingWork(env);
+  } catch (error) {
+    reportCaughtError(error, {
+      source: 'application/runtime/previewSessions.ts', operation: 'signalWhileLeasesNeedSweep',
+      context: { logMessage: '[preview] eviction re-signal probe failed' },
+    }, { env });
+  }
 }
 
 /** The project a run belongs to — needed to denormalise `project_id` onto the lease. */

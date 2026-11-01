@@ -16,10 +16,37 @@ import { escalationPolicies, escalationLevels, prodIncidents, incidentEvents } f
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { OnCallService } from './OnCallService';
 import { notifyIncident, type IncidentSummary } from './incidentNotifier';
+import { floorIntervalMs, signalPendingWorkIfDueWithin } from '../runtime/cronWorkSignal';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
 type LevelRow = typeof escalationLevels.$inferSelect;
+
+/** What one sweep step did to an incident, and whether the ladder still has a rung to climb. */
+export interface EscalationEvaluation {
+  /** True when this step paged a level. */
+  escalated: boolean;
+  /** Epoch-ms at which the next unfired level is due, or null when the incident is not
+   *  escalating (acknowledged / mitigated / resolved, no policy) or its ladder is exhausted.
+   *  The sweep re-signals the cron gate from this only, so an unacknowledged incident that
+   *  has reached the top of its ladder stops holding the platform awake. */
+  nextLevelDueAtMs: number | null;
+}
+
+/**
+ * When the first level ABOVE `reachedLevel` is due, or null when the ladder is exhausted.
+ * The earliest `afterMinutes` among the remaining levels, because the sweep fires any level
+ * above the one reached whose timer has elapsed. Pure, so the exhausted case is tested directly.
+ */
+export function nextEscalationDueAtMs(
+  levels: ReadonlyArray<{ level: number; afterMinutes: number }>,
+  reachedLevel: number,
+  startedAt: Date | string,
+): number | null {
+  const remaining = levels.filter((l) => l.level > reachedLevel);
+  if (remaining.length === 0) return null;
+  return new Date(startedAt).getTime() + Math.min(...remaining.map((l) => l.afterMinutes)) * 60_000;
+}
 
 export class EscalationService {
   private readonly onCall: OnCallService;
@@ -175,7 +202,12 @@ export class EscalationService {
     const resolved = await this.resolvePolicy(tenantId, summary);
     if (resolved?.levels.length) {
       summary.escalationPolicyId = resolved.policyId;
-      await this.pageLevel(env, tenantId, summary, resolved.levels[0]!, 'Initial page');
+      const first = resolved.levels[0]!;
+      await this.pageLevel(env, tenantId, summary, first, 'Initial page');
+      // The sweep that fires the later levels runs on the KV-gated tick: arm it so a 15-minute
+      // level is not left waiting for the 30-minute floor. Nothing is signalled for a ladder
+      // of one level, or for a next level further out than the floor (the floor re-evaluates it).
+      await signalPendingWorkIfDueWithin(env, nextEscalationDueAtMs(resolved.levels, first.level, inc.startedAt), Date.now(), floorIntervalMs(env));
     } else {
       // No policy — hit the global channels + managers so the page is never dropped.
       await notifyIncident(env, this.db, { tenantId, incident: summary, memberRefs: [], level: 0, note: 'Initial page (no escalation policy configured)' });
@@ -184,22 +216,24 @@ export class EscalationService {
   }
 
   /** Sweep step: if an incident is still unacknowledged and a not-yet-fired level's
-   *  timer has elapsed, fire the next due level. Returns true when it escalated. */
-  async evaluateIncident(env: Env, tenantId: number, inc: typeof prodIncidents.$inferSelect): Promise<boolean> {
-    if (inc.status === 'resolved' || inc.status === 'acknowledged' || inc.status === 'mitigated') return false;
+   *  timer has elapsed, fire the next due level. Also reports when the level after that
+   *  is due, so the sweep can keep the cron gate open exactly while the ladder has a rung left. */
+  async evaluateIncident(env: Env, tenantId: number, inc: typeof prodIncidents.$inferSelect): Promise<EscalationEvaluation> {
+    const idle: EscalationEvaluation = { escalated: false, nextLevelDueAtMs: null };
+    if (inc.status === 'resolved' || inc.status === 'acknowledged' || inc.status === 'mitigated') return idle;
     const summary: IncidentSummary & { escalationPolicyId: string | null } = {
       id: inc.id, title: inc.title, severity: inc.severity, status: inc.status,
       affectedSystem: inc.affectedSystem ?? null, escalationPolicyId: inc.escalationPolicyId ?? null,
     };
     const resolved = await this.resolvePolicy(tenantId, summary);
-    if (!resolved?.levels.length) return false;
+    if (!resolved?.levels.length) return idle;
     summary.escalationPolicyId = resolved.policyId;
 
     const elapsedMin = (Date.now() - new Date(inc.startedAt).getTime()) / 60_000;
     // The next level above the one already reached whose timer has elapsed.
     const due = resolved.levels.find((l) => l.level > inc.escalationLevel && l.afterMinutes <= elapsedMin);
-    if (!due) return false;
+    if (!due) return { escalated: false, nextLevelDueAtMs: nextEscalationDueAtMs(resolved.levels, inc.escalationLevel, inc.startedAt) };
     await this.pageLevel(env, tenantId, summary, due, `Escalation L${due.level} — unacknowledged for ${Math.round(elapsedMin)}m`);
-    return true;
+    return { escalated: true, nextLevelDueAtMs: nextEscalationDueAtMs(resolved.levels, due.level, inc.startedAt) };
   }
 }

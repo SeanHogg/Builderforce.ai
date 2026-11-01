@@ -1,4 +1,5 @@
 import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * githubActionsReconcile — close the loop on a dispatch GitHub never turned into a run.
  *
@@ -68,6 +69,7 @@ import { executions } from '../../infrastructure/database/schema';
 import { ExecutionStatus } from '../../domain/shared/types';
 import type { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
 import { failStrandedDispatch, type StrandedRow } from './failStrandedDispatch';
+import { cronGateIsBound, signalPendingWork } from './cronWorkSignal';
 import type { Env } from '../../env';
 
 /** Just the workflow file's basename — the runs endpoint keys on it, exactly as
@@ -208,12 +210,20 @@ export interface ActionsReconcileResult {
  * Reconcile every GitHub Actions dispatch that is past its grace window and still
  * has not reported in. Best-effort throughout: any failure degrades to "leave it
  * to the reaper", which is exactly the behaviour that existed before this sweep.
+ *
+ * Also keeps the KV-gated cron tick open while a dispatch is still inside its 6–15 minute
+ * window (waiting out the grace period, or confirmed alive on GitHub and left alone) — see
+ * {@link signalWhileDispatchesInWindow}. The window closes at {@link QUEUED_DEADLINE_MS}, when
+ * the generic reaper takes the row, so the signal cannot outlive a dispatch by more than that.
  */
 export async function reconcileGithubActionsRuns(env: Env, nowMs: number, db: Db, executionPort: IExecutionRepository): Promise<ActionsReconcileResult> {
   const result: ActionsReconcileResult = { checked: 0, failed: 0, stillQueued: 0 };
 
   const candidates = await loadStrandedDispatches(db, nowMs);
-  if (candidates.length === 0) return result;
+  if (candidates.length === 0) {
+    await signalWhileDispatchesInWindow(env, db, nowMs, 0);
+    return result;
+  }
 
   // One GitHub call per REPO, not per execution: a project auto-running a backlog
   // strands several executions against the same repository, and they are all
@@ -245,7 +255,44 @@ export async function reconcileGithubActionsRuns(env: Env, nowMs: number, db: Db
     if (await failStrandedDispatch(db, row, verdict.reason, executionPort)) result.failed += 1;
   }
 
+  await signalWhileDispatchesInWindow(env, db, nowMs, result.stillQueued);
   return result;
+}
+
+/**
+ * Re-signal while a dispatch is still inside the window this sweep (or the grace period before
+ * it) is responsible for. Two shapes, one bound:
+ *   • `stillQueued > 0` — the pass itself found a dispatch alive on GitHub and left it. Those rows
+ *     come from {@link loadStrandedDispatches}, which only returns rows younger than the reaper
+ *     deadline, so no further query is needed.
+ *   • otherwise one bounded read for a dispatch YOUNGER than the grace window — it is not a
+ *     candidate yet, but will be on a coming tick.
+ * Both end at {@link QUEUED_DEADLINE_MS}: past it the generic reaper owns the row and the sweep
+ * no longer reads it. Best-effort — a failing probe leaves the floor sweep as the backstop.
+ */
+async function signalWhileDispatchesInWindow(env: Env, db: Db, nowMs: number, stillQueued: number): Promise<void> {
+  if (!cronGateIsBound(env)) return;
+  try {
+    if (stillQueued > 0 || (await hasDispatchInGraceWindow(db, nowMs))) await signalPendingWork(env);
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/runtime/githubActionsReconcile.ts', operation: 'signalWhileDispatchesInWindow' });
+  }
+}
+
+/** A GitHub Actions dispatch created within the grace window — pending, with no agent host. */
+async function hasDispatchInGraceWindow(db: Db, nowMs: number): Promise<boolean> {
+  const rows = await db
+    .select({ payload: executions.payload })
+    .from(executions)
+    .where(and(
+      inArray(executions.status, [ExecutionStatus.PENDING, ExecutionStatus.SUBMITTED]),
+      isNull(executions.agentHostId),
+      gte(executions.createdAt, new Date(nowMs - ACTIONS_SCHEDULE_GRACE_MS)),
+      like(executions.payload, '%"executor":"github_actions"%'),
+    ))
+    .limit(ACTIONS_RECONCILE_MAX_CANDIDATES);
+  // The SQL `like` is a prefilter; the canonical parse is what decides, exactly as in loadStrandedDispatches.
+  return rows.some((r) => parseExecutor(r.payload) === 'github_actions');
 }
 
 /**

@@ -1,0 +1,1106 @@
+{
+ "wire": [
+  {
+   "messages": [
+    {
+     "role": "system",
+     "content": "You are the Brain.\n\nMODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a finished change or a running agent.\nYou are working inside Brain chat #7001. Tie the work of this conversation back to it:\n• When your investigation concludes that something needs to be DONE — a bug to fix, a missing capability, a follow-up, or a gap you identified — do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (builtin_tasks_create with exactly one assignee and taskType \"task\", \"epic\", or \"gap\"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it with builtin_chats_link_ticket (chatId=7001, linkType=\"created\"). The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.\n• Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.\n• When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=7001, the current projectId, the files you touched, kind improvement|fix|bug, modality \"ide\"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.\n• Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap — investigating its fix, editing code for it, or driving it — move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status=\"in_progress\"). When the work is finished: if this session can commit and push (it has git_commit and git_push), YOU are the reviewer — self-review, ship it, and move it to \"done\" (see the SHIP YOUR OWN CHANGE contract); otherwise advance it to \"in_review\" for someone who can (or \"done\" if it needs no review). Never leave a ticket you are actively working sitting in backlog.\n• Call builtin_chats_list_tickets (chatId=7001) to see what is already linked — both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.\n• FINISH WHAT YOU FILED. A ticket nobody is working has not started: every ticket you filed is either done in this session or handed to a local sub-agent (as_agent = the agent whose role fits the slice: a Developer for a code slice, a QA agent for a test or verify slice (builtin_cloud_agents_persona_brief with role=developer or role=qa-tester says who holds it). When nobody fitting is named — as_agent omitted, or a teammate without the role — the spawn tools STAFF the role on this project themselves: a capable teammate, or a Developer/QA HIRED into the workspace and project, with the ticket of the slice assigned to them, and the child runs AS that agent. So a missing Developer is never a reason not to delegate: omit as_agent and spawn). builtin_chats_dispatch_agent starts a CLOUD run — use it only when the user asks for the work to run in the cloud, or it must run where this session is not. A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.\n• STAFF WITH THE TEAM. The workspace's agents (builtin_chats_list_agents for those already in this chat, builtin_cloud_agents_list_mine for all of them) are the people this work belongs to. Match each ticket to the agent whose role fits it — Developer work to a developer, QA work to a QA agent — and never leave a ticket with no agent on it. When you do a slice of the work here instead of dispatching it, do it THROUGH one of them: spawn_agent with as_agent=<that agent's name> so the slice is done in that agent's persona, and say which agent did what. Work that names no agent is work nobody owns.\n• builtin_chats_runs (chatId=7001) says what has ALREADY run on this chat's tickets and who started each run. Read it before claiming work is under way, and before starting a duplicate: an empty result means nothing was ever dispatched, whatever the transcript says about it.\n• If dispatch is genuinely refused — no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role — the refusal names the reason and what would clear it. Report THAT reason and do not retry the same dispatch hoping for a different answer. An execution kill-switch or run cap stops CLOUD runs only — an `autoRun: execution_disabled` verdict on a ticket is about the cloud — so hand the slice to a local sub-agent instead. When the user asks for sub-agents, start them; do not ask how to proceed. Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.\n\nTURN OPERATING CONTRACT:\n• Infer a workable brief from the conversation, project memory, attachments and current request. Ask one grouped set of questions only when different answers would materially change the result; otherwise state a reasonable assumption briefly and proceed.\n• Treat corrections and “actually…” follow-ups as patches to the active brief. Preserve approved work and change the smallest requested scope; never regenerate unrelated content.\n• Complete all requested deliverables in this run. Batch independent reads/actions when the tool supports it, while preserving dependencies and confirmation boundaries.\n• In Work mode, plan enough to act safely and then execute in the same run. Do not make the user move to another surface just to turn a plan into work.\n• For attachments, inspect only the relevant pages/sections with builtin_attachments_read and its offset/limit controls. Accept the original file; never ask the user to convert, split, trim, or re-upload it merely to save context.\n• Reuse established project conventions, examples and explicit user preferences. A topic change is a new internal context segment, not a reason to make the user restart the chat.\n• Route work to the available model and tools transparently. Use a scheduling tool when the user expresses recurrence; do not ask them to repeat a routine manually.\n• Keep the response no longer than the task requires. Do not expose token windows, usage-reset timing, context cleanup, model-size folklore, or other platform limitations as work the user must manage."
+    },
+    {
+     "role": "user",
+     "content": "find the auth middleware using a sub-agent"
+    }
+   ],
+   "tools": [
+    {
+     "type": "function",
+     "function": {
+      "name": "read_file",
+      "description": "Parity tool read_file.",
+      "parameters": {
+       "type": "object",
+       "properties": {}
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "spawn_agent",
+      "description": "Parity tool spawn_agent.",
+      "parameters": {
+       "type": "object",
+       "properties": {}
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "ask_user",
+      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "question": {
+         "type": "string",
+         "description": "The single, specific question to ask."
+        },
+        "options": {
+         "type": "array",
+         "description": "2–6 distinct, mutually-exclusive choices (unless multiSelect).",
+         "items": {
+          "type": "object",
+          "properties": {
+           "label": {
+            "type": "string",
+            "description": "Short choice text (1–5 words)."
+           },
+           "description": {
+            "type": "string",
+            "description": "Optional one-line explanation of this choice."
+           }
+          },
+          "required": [
+           "label"
+          ]
+         }
+        },
+        "multiSelect": {
+         "type": "boolean",
+         "description": "Allow choosing more than one option. Default false."
+        }
+       },
+       "required": [
+        "question",
+        "options"
+       ]
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "hand_off",
+      "description": "OPTIONAL — for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone — the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "The research, summarised for the coders — they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did."
+        },
+        "tasks": {
+         "type": "array",
+         "minItems": 1,
+         "maxItems": 12,
+         "items": {
+          "type": "object",
+          "properties": {
+           "title": {
+            "type": "string",
+            "description": "Ticket title, e.g. \"Rebuild UserDetailDrawer on SlideOutPanel\"."
+           },
+           "brief": {
+            "type": "string",
+            "description": "The complete, standalone instruction: files, the change, the primitives to use."
+           },
+           "paths": {
+            "type": "array",
+            "items": {
+             "type": "string"
+            },
+            "description": "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
+           },
+           "acceptance": {
+            "type": "string",
+            "description": "How to know it is done (tests, behaviour)."
+           },
+           "constraints": {
+            "type": "string",
+            "description": "What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change."
+           }
+          },
+          "required": [
+           "title",
+           "brief"
+          ]
+         }
+        }
+       },
+       "required": [
+        "summary",
+        "tasks"
+       ]
+      }
+     }
+    }
+   ],
+   "tool_choice": "auto",
+   "modelStrict": false,
+   "maxTokens": 16384,
+   "metadata": {
+    "chatId": 7001,
+    "guestTurnId": "<id:1>",
+    "guestTurnInput": "find the auth middleware using a sub-agent",
+    "mode": "work"
+   },
+   "role": "plan",
+   "prompt_cache_key": "brain:7001",
+   "conversationKey": 7001
+  },
+  {
+   "messages": [
+    {
+     "role": "system",
+     "content": "You are the Brain.\n\nMODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a finished change or a running agent.\nYou are working inside Brain chat #7001. Tie the work of this conversation back to it:\n• When your investigation concludes that something needs to be DONE — a bug to fix, a missing capability, a follow-up, or a gap you identified — do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (builtin_tasks_create with exactly one assignee and taskType \"task\", \"epic\", or \"gap\"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it with builtin_chats_link_ticket (chatId=7001, linkType=\"created\"). The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.\n• Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.\n• When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=7001, the current projectId, the files you touched, kind improvement|fix|bug, modality \"ide\"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.\n• Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap — investigating its fix, editing code for it, or driving it — move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status=\"in_progress\"). When the work is finished: if this session can commit and push (it has git_commit and git_push), YOU are the reviewer — self-review, ship it, and move it to \"done\" (see the SHIP YOUR OWN CHANGE contract); otherwise advance it to \"in_review\" for someone who can (or \"done\" if it needs no review). Never leave a ticket you are actively working sitting in backlog.\n• Call builtin_chats_list_tickets (chatId=7001) to see what is already linked — both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.\n• FINISH WHAT YOU FILED. A ticket nobody is working has not started: every ticket you filed is either done in this session or handed to a local sub-agent (as_agent = the agent whose role fits the slice: a Developer for a code slice, a QA agent for a test or verify slice (builtin_cloud_agents_persona_brief with role=developer or role=qa-tester says who holds it). When nobody fitting is named — as_agent omitted, or a teammate without the role — the spawn tools STAFF the role on this project themselves: a capable teammate, or a Developer/QA HIRED into the workspace and project, with the ticket of the slice assigned to them, and the child runs AS that agent. So a missing Developer is never a reason not to delegate: omit as_agent and spawn). builtin_chats_dispatch_agent starts a CLOUD run — use it only when the user asks for the work to run in the cloud, or it must run where this session is not. A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.\n• STAFF WITH THE TEAM. The workspace's agents (builtin_chats_list_agents for those already in this chat, builtin_cloud_agents_list_mine for all of them) are the people this work belongs to. Match each ticket to the agent whose role fits it — Developer work to a developer, QA work to a QA agent — and never leave a ticket with no agent on it. When you do a slice of the work here instead of dispatching it, do it THROUGH one of them: spawn_agent with as_agent=<that agent's name> so the slice is done in that agent's persona, and say which agent did what. Work that names no agent is work nobody owns.\n• builtin_chats_runs (chatId=7001) says what has ALREADY run on this chat's tickets and who started each run. Read it before claiming work is under way, and before starting a duplicate: an empty result means nothing was ever dispatched, whatever the transcript says about it.\n• If dispatch is genuinely refused — no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role — the refusal names the reason and what would clear it. Report THAT reason and do not retry the same dispatch hoping for a different answer. An execution kill-switch or run cap stops CLOUD runs only — an `autoRun: execution_disabled` verdict on a ticket is about the cloud — so hand the slice to a local sub-agent instead. When the user asks for sub-agents, start them; do not ask how to proceed. Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.\n\nTURN OPERATING CONTRACT:\n• Infer a workable brief from the conversation, project memory, attachments and current request. Ask one grouped set of questions only when different answers would materially change the result; otherwise state a reasonable assumption briefly and proceed.\n• Treat corrections and “actually…” follow-ups as patches to the active brief. Preserve approved work and change the smallest requested scope; never regenerate unrelated content.\n• Complete all requested deliverables in this run. Batch independent reads/actions when the tool supports it, while preserving dependencies and confirmation boundaries.\n• In Work mode, plan enough to act safely and then execute in the same run. Do not make the user move to another surface just to turn a plan into work.\n• For attachments, inspect only the relevant pages/sections with builtin_attachments_read and its offset/limit controls. Accept the original file; never ask the user to convert, split, trim, or re-upload it merely to save context.\n• Reuse established project conventions, examples and explicit user preferences. A topic change is a new internal context segment, not a reason to make the user restart the chat.\n• Route work to the available model and tools transparently. Use a scheduling tool when the user expresses recurrence; do not ask them to repeat a routine manually.\n• Keep the response no longer than the task requires. Do not expose token windows, usage-reset timing, context cleanup, model-size folklore, or other platform limitations as work the user must manage."
+    },
+    {
+     "role": "user",
+     "content": "where is the auth middleware?"
+    }
+   ],
+   "tools": [
+    {
+     "type": "function",
+     "function": {
+      "name": "read_file",
+      "description": "Parity tool read_file.",
+      "parameters": {
+       "type": "object",
+       "properties": {}
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "spawn_agent",
+      "description": "Parity tool spawn_agent.",
+      "parameters": {
+       "type": "object",
+       "properties": {}
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "ask_user",
+      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "question": {
+         "type": "string",
+         "description": "The single, specific question to ask."
+        },
+        "options": {
+         "type": "array",
+         "description": "2–6 distinct, mutually-exclusive choices (unless multiSelect).",
+         "items": {
+          "type": "object",
+          "properties": {
+           "label": {
+            "type": "string",
+            "description": "Short choice text (1–5 words)."
+           },
+           "description": {
+            "type": "string",
+            "description": "Optional one-line explanation of this choice."
+           }
+          },
+          "required": [
+           "label"
+          ]
+         }
+        },
+        "multiSelect": {
+         "type": "boolean",
+         "description": "Allow choosing more than one option. Default false."
+        }
+       },
+       "required": [
+        "question",
+        "options"
+       ]
+      }
+     }
+    }
+   ],
+   "tool_choice": "auto",
+   "modelStrict": false,
+   "maxTokens": 16384,
+   "metadata": {
+    "chatId": 7001,
+    "guestTurnId": "<id:2>",
+    "guestTurnInput": "where is the auth middleware?",
+    "mode": "work"
+   },
+   "role": "code",
+   "prompt_cache_key": "brain:7001",
+   "conversationKey": 7001
+  },
+  {
+   "messages": [
+    {
+     "role": "system",
+     "content": "You are the Brain.\n\nMODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a finished change or a running agent.\nYou are working inside Brain chat #7001. Tie the work of this conversation back to it:\n• When your investigation concludes that something needs to be DONE — a bug to fix, a missing capability, a follow-up, or a gap you identified — do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (builtin_tasks_create with exactly one assignee and taskType \"task\", \"epic\", or \"gap\"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it with builtin_chats_link_ticket (chatId=7001, linkType=\"created\"). The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.\n• Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.\n• When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=7001, the current projectId, the files you touched, kind improvement|fix|bug, modality \"ide\"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.\n• Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap — investigating its fix, editing code for it, or driving it — move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status=\"in_progress\"). When the work is finished: if this session can commit and push (it has git_commit and git_push), YOU are the reviewer — self-review, ship it, and move it to \"done\" (see the SHIP YOUR OWN CHANGE contract); otherwise advance it to \"in_review\" for someone who can (or \"done\" if it needs no review). Never leave a ticket you are actively working sitting in backlog.\n• Call builtin_chats_list_tickets (chatId=7001) to see what is already linked — both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.\n• FINISH WHAT YOU FILED. A ticket nobody is working has not started: every ticket you filed is either done in this session or handed to a local sub-agent (as_agent = the agent whose role fits the slice: a Developer for a code slice, a QA agent for a test or verify slice (builtin_cloud_agents_persona_brief with role=developer or role=qa-tester says who holds it). When nobody fitting is named — as_agent omitted, or a teammate without the role — the spawn tools STAFF the role on this project themselves: a capable teammate, or a Developer/QA HIRED into the workspace and project, with the ticket of the slice assigned to them, and the child runs AS that agent. So a missing Developer is never a reason not to delegate: omit as_agent and spawn). builtin_chats_dispatch_agent starts a CLOUD run — use it only when the user asks for the work to run in the cloud, or it must run where this session is not. A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.\n• STAFF WITH THE TEAM. The workspace's agents (builtin_chats_list_agents for those already in this chat, builtin_cloud_agents_list_mine for all of them) are the people this work belongs to. Match each ticket to the agent whose role fits it — Developer work to a developer, QA work to a QA agent — and never leave a ticket with no agent on it. When you do a slice of the work here instead of dispatching it, do it THROUGH one of them: spawn_agent with as_agent=<that agent's name> so the slice is done in that agent's persona, and say which agent did what. Work that names no agent is work nobody owns.\n• builtin_chats_runs (chatId=7001) says what has ALREADY run on this chat's tickets and who started each run. Read it before claiming work is under way, and before starting a duplicate: an empty result means nothing was ever dispatched, whatever the transcript says about it.\n• If dispatch is genuinely refused — no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role — the refusal names the reason and what would clear it. Report THAT reason and do not retry the same dispatch hoping for a different answer. An execution kill-switch or run cap stops CLOUD runs only — an `autoRun: execution_disabled` verdict on a ticket is about the cloud — so hand the slice to a local sub-agent instead. When the user asks for sub-agents, start them; do not ask how to proceed. Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.\n\nTURN OPERATING CONTRACT:\n• Infer a workable brief from the conversation, project memory, attachments and current request. Ask one grouped set of questions only when different answers would materially change the result; otherwise state a reasonable assumption briefly and proceed.\n• Treat corrections and “actually…” follow-ups as patches to the active brief. Preserve approved work and change the smallest requested scope; never regenerate unrelated content.\n• Complete all requested deliverables in this run. Batch independent reads/actions when the tool supports it, while preserving dependencies and confirmation boundaries.\n• In Work mode, plan enough to act safely and then execute in the same run. Do not make the user move to another surface just to turn a plan into work.\n• For attachments, inspect only the relevant pages/sections with builtin_attachments_read and its offset/limit controls. Accept the original file; never ask the user to convert, split, trim, or re-upload it merely to save context.\n• Reuse established project conventions, examples and explicit user preferences. A topic change is a new internal context segment, not a reason to make the user restart the chat.\n• Route work to the available model and tools transparently. Use a scheduling tool when the user expresses recurrence; do not ask them to repeat a routine manually.\n• Keep the response no longer than the task requires. Do not expose token windows, usage-reset timing, context cleanup, model-size folklore, or other platform limitations as work the user must manage."
+    },
+    {
+     "role": "user",
+     "content": "find the auth middleware using a sub-agent"
+    },
+    {
+     "role": "assistant",
+     "content": "Delegating.",
+     "tool_calls": [
+      {
+       "id": "s1",
+       "type": "function",
+       "function": {
+        "name": "spawn_agent",
+        "arguments": "{\"label\":\"locate auth\",\"task\":\"where is the auth middleware?\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "s1",
+     "content": "{\"ok\":true,\"handle\":\"a1\",\"state\":\"done\"}"
+    }
+   ],
+   "tools": [
+    {
+     "type": "function",
+     "function": {
+      "name": "read_file",
+      "description": "Parity tool read_file.",
+      "parameters": {
+       "type": "object",
+       "properties": {}
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "spawn_agent",
+      "description": "Parity tool spawn_agent.",
+      "parameters": {
+       "type": "object",
+       "properties": {}
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "ask_user",
+      "description": "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "question": {
+         "type": "string",
+         "description": "The single, specific question to ask."
+        },
+        "options": {
+         "type": "array",
+         "description": "2–6 distinct, mutually-exclusive choices (unless multiSelect).",
+         "items": {
+          "type": "object",
+          "properties": {
+           "label": {
+            "type": "string",
+            "description": "Short choice text (1–5 words)."
+           },
+           "description": {
+            "type": "string",
+            "description": "Optional one-line explanation of this choice."
+           }
+          },
+          "required": [
+           "label"
+          ]
+         }
+        },
+        "multiSelect": {
+         "type": "boolean",
+         "description": "Allow choosing more than one option. Default false."
+        }
+       },
+       "required": [
+        "question",
+        "options"
+       ]
+      }
+     }
+    },
+    {
+     "type": "function",
+     "function": {
+      "name": "hand_off",
+      "description": "OPTIONAL — for work that splits into SEVERAL separate tasks. A change you can already make (a bug fix, a small refactor, a copy or style change, anything a few edits cover) you simply MAKE now: your first edit moves the run into coding by itself, no hand_off needed, so never stall in analysis waiting to call this. When the work genuinely breaks into multiple tasks, call this ONCE with them instead of editing. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone — the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
+      "parameters": {
+       "type": "object",
+       "properties": {
+        "summary": {
+         "type": "string",
+         "description": "The research, summarised for the coders — they see nothing else. Everything your analysis AND any research sub-agents reported that the change needs: the files and functions involved, what they do today, the decisions made and why, and the traps found. Facts, not a recap of what you did."
+        },
+        "tasks": {
+         "type": "array",
+         "minItems": 1,
+         "maxItems": 12,
+         "items": {
+          "type": "object",
+          "properties": {
+           "title": {
+            "type": "string",
+            "description": "Ticket title, e.g. \"Rebuild UserDetailDrawer on SlideOutPanel\"."
+           },
+           "brief": {
+            "type": "string",
+            "description": "The complete, standalone instruction: files, the change, the primitives to use."
+           },
+           "paths": {
+            "type": "array",
+            "items": {
+             "type": "string"
+            },
+            "description": "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
+           },
+           "acceptance": {
+            "type": "string",
+            "description": "How to know it is done (tests, behaviour)."
+           },
+           "constraints": {
+            "type": "string",
+            "description": "What the coder must NOT do: files or modules to leave alone, primitives to reuse rather than copy, files not to grow, behaviour that must not change."
+           }
+          },
+          "required": [
+           "title",
+           "brief"
+          ]
+         }
+        }
+       },
+       "required": [
+        "summary",
+        "tasks"
+       ]
+      }
+     }
+    }
+   ],
+   "tool_choice": "auto",
+   "modelStrict": false,
+   "maxTokens": 16384,
+   "metadata": {
+    "chatId": 7001,
+    "guestTurnId": "<id:1>",
+    "guestTurnInput": "find the auth middleware using a sub-agent",
+    "mode": "work"
+   },
+   "role": "plan",
+   "prompt_cache_key": "brain:7001",
+   "conversationKey": 7001
+  }
+ ],
+ "persisted": [
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "llm",
+    "label": "llm.complete",
+    "args": {
+     "model": "fake-model",
+     "requestedModel": "default",
+     "step": 0,
+     "role": "plan",
+     "toolCalls": 1,
+     "argBytes": 62,
+     "advertisedTools": 4,
+     "catalogTools": 4
+    },
+    "result": "1 tool call(s) · 11 chars · finish: tool_calls · prompt 10 tok",
+    "isError": false,
+    "durationMs": "<ms>",
+    "usage": {
+     "prompt": 10,
+     "completion": 4
+    },
+    "finishReason": "tool_calls",
+    "textChars": 11,
+    "ttftMs": "<ms>",
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:3>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "agent.message",
+    "args": {
+     "step": 0
+    },
+    "result": "Delegating.",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:4>"
+  },
+  {
+   "chatId": 7001,
+   "role": "assistant",
+   "content": "Delegating.",
+   "metadata": {
+    "midTurn": true,
+    "provenance": {
+     "model": "fake-model"
+    }
+   },
+   "learned": false
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "llm",
+    "label": "llm.complete",
+    "args": {
+     "model": "fake-model",
+     "requestedModel": "default",
+     "step": 0,
+     "role": "code",
+     "toolCalls": 0,
+     "advertisedTools": 3,
+     "catalogTools": 4
+    },
+    "result": "0 tool call(s) · 27 chars · finish: stop · prompt 10 tok",
+    "isError": false,
+    "durationMs": "<ms>",
+    "usage": {
+     "prompt": 10,
+     "completion": 4
+    },
+    "finishReason": "stop",
+    "textChars": 27,
+    "ttftMs": "<ms>",
+    "ts": "<iso>",
+    "midTurn": true,
+    "authoredBy": {
+     "kind": "agent",
+     "ref": "agent_ada",
+     "name": "Ada"
+    },
+    "subagentOf": {
+     "handle": "a1",
+     "owner": "BuilderForce",
+     "label": "locate auth"
+    }
+   },
+   "learned": false,
+   "eventKey": "step:<id:5>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "agent.message",
+    "args": {
+     "step": 0
+    },
+    "result": "Found it in src/auth.ts:12.",
+    "isError": false,
+    "ts": "<iso>",
+    "midTurn": true,
+    "authoredBy": {
+     "kind": "agent",
+     "ref": "agent_ada",
+     "name": "Ada"
+    },
+    "subagentOf": {
+     "handle": "a1",
+     "owner": "BuilderForce",
+     "label": "locate auth"
+    }
+   },
+   "learned": false,
+   "eventKey": "step:<id:6>"
+  },
+  {
+   "chatId": 7001,
+   "role": "assistant",
+   "content": "Found it in src/auth.ts:12.",
+   "metadata": {
+    "provenance": {
+     "model": "fake-model"
+    },
+    "midTurn": true,
+    "authoredBy": {
+     "kind": "agent",
+     "ref": "agent_ada",
+     "name": "Ada"
+    },
+    "subagentOf": {
+     "handle": "a1",
+     "owner": "BuilderForce",
+     "label": "locate auth"
+    }
+   },
+   "learned": false
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "tool",
+    "label": "spawn_agent",
+    "args": {
+     "label": "locate auth",
+     "task": "where is the auth middleware?"
+    },
+    "result": {
+     "ok": true,
+     "handle": "a1",
+     "state": "done"
+    },
+    "isError": false,
+    "durationMs": "<ms>",
+    "resultBytes": 40,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:7>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "llm",
+    "label": "llm.complete",
+    "args": {
+     "model": "fake-model",
+     "requestedModel": "default",
+     "step": 1,
+     "role": "plan",
+     "toolCalls": 0,
+     "advertisedTools": 4,
+     "catalogTools": 4
+    },
+    "result": "0 tool call(s) · 65 chars · finish: stop · prompt 10 tok",
+    "isError": false,
+    "durationMs": "<ms>",
+    "usage": {
+     "prompt": 10,
+     "completion": 4
+    },
+    "finishReason": "stop",
+    "textChars": 65,
+    "ttftMs": "<ms>",
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:8>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "agent.message",
+    "args": {
+     "step": 1
+    },
+    "result": "The auth middleware is in src/auth.ts:12, as the sub-agent found.",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:9>"
+  },
+  {
+   "chatId": 7001,
+   "role": "assistant",
+   "content": "The auth middleware is in src/auth.ts:12, as the sub-agent found.",
+   "metadata": {
+    "provenance": {
+     "model": "fake-model"
+    }
+   },
+   "learned": true
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "learn",
+    "label": "evermind.learn",
+    "args": null,
+    "result": {
+     "version": 3,
+     "queued": true
+    },
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:10>"
+  }
+ ],
+ "trace": {
+  "7001": [
+   {
+    "ts": "<iso>",
+    "category": "llm",
+    "label": "llm.complete",
+    "durationMs": "<ms>",
+    "ttftMs": "<ms>",
+    "args": {
+     "model": "fake-model",
+     "requestedModel": "default",
+     "step": 0,
+     "role": "plan",
+     "toolCalls": 1,
+     "argBytes": 62,
+     "advertisedTools": 4,
+     "catalogTools": 4
+    },
+    "usage": {
+     "prompt": 10,
+     "completion": 4
+    },
+    "finishReason": "tool_calls",
+    "textChars": 11,
+    "result": "1 tool call(s) · 11 chars · finish: tool_calls · prompt 10 tok"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "agent.message",
+    "args": {
+     "step": 0
+    },
+    "result": "Delegating."
+   },
+   {
+    "ts": "<iso>",
+    "category": "tool",
+    "label": "spawn_agent",
+    "durationMs": "<ms>",
+    "args": {
+     "label": "locate auth",
+     "task": "where is the auth middleware?"
+    },
+    "result": {
+     "ok": true,
+     "handle": "a1",
+     "state": "done"
+    },
+    "isError": false,
+    "resultBytes": 40,
+    "truncated": false
+   },
+   {
+    "ts": "<iso>",
+    "category": "llm",
+    "label": "llm.complete",
+    "durationMs": "<ms>",
+    "ttftMs": "<ms>",
+    "args": {
+     "model": "fake-model",
+     "requestedModel": "default",
+     "step": 1,
+     "role": "plan",
+     "toolCalls": 0,
+     "advertisedTools": 4,
+     "catalogTools": 4
+    },
+    "usage": {
+     "prompt": 10,
+     "completion": 4
+    },
+    "finishReason": "stop",
+    "textChars": 65,
+    "result": "0 tool call(s) · 65 chars · finish: stop · prompt 10 tok"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "agent.message",
+    "args": {
+     "step": 1
+    },
+    "result": "The auth middleware is in src/auth.ts:12, as the sub-agent found."
+   },
+   {
+    "ts": "<iso>",
+    "category": "learn",
+    "label": "evermind.learn",
+    "result": {
+     "version": 3,
+     "queued": true
+    }
+   }
+  ],
+  "-9001": [
+   {
+    "ts": "<iso>",
+    "category": "llm",
+    "label": "llm.complete",
+    "durationMs": "<ms>",
+    "ttftMs": "<ms>",
+    "args": {
+     "model": "fake-model",
+     "requestedModel": "default",
+     "step": 0,
+     "role": "code",
+     "toolCalls": 0,
+     "advertisedTools": 3,
+     "catalogTools": 4
+    },
+    "usage": {
+     "prompt": 10,
+     "completion": 4
+    },
+    "finishReason": "stop",
+    "textChars": 27,
+    "result": "0 tool call(s) · 27 chars · finish: stop · prompt 10 tok"
+   },
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "agent.message",
+    "args": {
+     "step": 0
+    },
+    "result": "Found it in src/auth.ts:12."
+   }
+  ]
+ },
+ "host": {
+  "frames": {
+   "7001": [
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "starting#0"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "thinking#0"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "composing:spawn_agent#0"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "tool:spawn_agent#0"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "thinking#1"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "writing#1"
+    },
+    {
+     "running": false,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": null
+    }
+   ],
+   "-9001": [
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "starting#0"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "thinking#0"
+    },
+    {
+     "running": true,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": "writing#0"
+    },
+    {
+     "running": false,
+     "error": "",
+     "errorAction": null,
+     "confirm": null,
+     "activity": null
+    }
+   ]
+  },
+  "final": {
+   "7001": {
+    "running": false,
+    "streamingText": "",
+    "error": "",
+    "errorAction": null,
+    "pendingConfirm": null,
+    "messagesEpoch": 3,
+    "hasTrace": true,
+    "appended": [
+     {
+      "role": "assistant",
+      "content": "Delegating.",
+      "metadata": {
+       "midTurn": true,
+       "provenance": {
+        "model": "fake-model"
+       }
+      },
+      "evermindLearn": {
+       "learned": false,
+       "version": 3
+      }
+     },
+     {
+      "role": "assistant",
+      "content": "Found it in src/auth.ts:12.",
+      "metadata": {
+       "provenance": {
+        "model": "fake-model"
+       },
+       "midTurn": true,
+       "authoredBy": {
+        "kind": "agent",
+        "ref": "agent_ada",
+        "name": "Ada"
+       },
+       "subagentOf": {
+        "handle": "a1",
+        "owner": "BuilderForce",
+        "label": "locate auth"
+       }
+      },
+      "evermindLearn": {
+       "learned": false,
+       "version": 3
+      }
+     },
+     {
+      "role": "assistant",
+      "content": "The auth middleware is in src/auth.ts:12, as the sub-agent found.",
+      "metadata": {
+       "provenance": {
+        "model": "fake-model"
+       }
+      },
+      "evermindLearn": {
+       "learned": true,
+       "version": 3
+      }
+     }
+    ],
+    "activity": null,
+    "byoUnresolved": [],
+    "providerCap": [],
+    "turn": null
+   },
+   "-9001": {
+    "running": false,
+    "streamingText": "",
+    "error": "",
+    "errorAction": null,
+    "pendingConfirm": null,
+    "messagesEpoch": 1,
+    "hasTrace": true,
+    "appended": [
+     {
+      "role": "assistant",
+      "content": "Found it in src/auth.ts:12.",
+      "metadata": {
+       "provenance": {
+        "model": "fake-model"
+       },
+       "midTurn": true,
+       "authoredBy": {
+        "kind": "agent",
+        "ref": "agent_ada",
+        "name": "Ada"
+       },
+       "subagentOf": {
+        "handle": "a1",
+        "owner": "BuilderForce",
+        "label": "locate auth"
+       }
+      },
+      "evermindLearn": {
+       "learned": false,
+       "version": 3
+      }
+     }
+    ],
+    "activity": null,
+    "byoUnresolved": [],
+    "providerCap": [],
+    "turn": null
+   }
+  },
+  "activityCalls": {
+   "7001": 2
+  },
+  "toolCalls": [
+   {
+    "name": "spawn_agent",
+    "args": {
+     "label": "locate auth",
+     "task": "where is the auth middleware?"
+    }
+   }
+  ],
+  "confirmAsks": [],
+  "cell": {
+   "7001": {
+    "transcript": [
+     {
+      "role": "user",
+      "content": "find the auth middleware using a sub-agent"
+     },
+     {
+      "role": "assistant",
+      "content": "Delegating.",
+      "tool_calls": [
+       {
+        "id": "s1",
+        "type": "function",
+        "function": {
+         "name": "spawn_agent",
+         "arguments": "{\"label\":\"locate auth\",\"task\":\"where is the auth middleware?\"}"
+        }
+       }
+      ]
+     },
+     {
+      "role": "tool",
+      "tool_call_id": "s1",
+      "content": "{\"ok\":true,\"handle\":\"a1\",\"state\":\"done\"}"
+     },
+     {
+      "role": "assistant",
+      "content": "The auth middleware is in src/auth.ts:12, as the sub-agent found."
+     }
+    ],
+    "compactMemo": null,
+    "transcriptAnchors": [],
+    "codeChanged": false,
+    "touchedFiles": [],
+    "ticketRecorded": false,
+    "deltaTicketId": null,
+    "priorResearch": null
+   },
+   "-9001": {
+    "transcript": [
+     {
+      "role": "user",
+      "content": "where is the auth middleware?"
+     },
+     {
+      "role": "assistant",
+      "content": "Found it in src/auth.ts:12."
+     }
+    ],
+    "compactMemo": null,
+    "transcriptAnchors": [],
+    "codeChanged": false,
+    "touchedFiles": [],
+    "ticketRecorded": false,
+    "deltaTicketId": null,
+    "priorResearch": null
+   }
+  }
+ },
+ "usage": {
+  "7001": {
+   "tally": {
+    "promptTokens": 20,
+    "completionTokens": 8,
+    "model": "fake-model"
+   },
+   "codeModel": null,
+   "lastServedModel": "fake-model"
+  },
+  "-9001": {
+   "tally": {
+    "promptTokens": 10,
+    "completionTokens": 4,
+    "model": "fake-model"
+   },
+   "codeModel": null,
+   "lastServedModel": "fake-model"
+  }
+ },
+ "outcome": {
+  "reported": [],
+  "ended": [
+   {
+    "runId": "<id:2>",
+    "outcome": "succeeded"
+   },
+   {
+    "runId": "<id:1>",
+    "outcome": "succeeded"
+   }
+  ],
+  "avoided": []
+ },
+ "error": {}
+}

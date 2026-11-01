@@ -374,8 +374,10 @@ export async function handlePreviewOp(
     await openPreviewSession(db, { tenantId, executionId, projectId, port: step.port });
     // An open lease IS pending work: the frequent cron tick is KV-gated so Neon can
     // autosuspend, and without a signal the eviction sweep would only fire on the
-    // 30-minute floor — which would make the 3-minute idle policy a fiction. Signalling
-    // here puts the sweep back on the 5-minute tick for as long as a preview is open.
+    // 30-minute floor — which would make the 3-minute idle policy a fiction. This signal
+    // buys the FIRST tick; `sweepIdlePreviews` then re-signals at the end of each pass while
+    // a lease is being watched (or its run has finished), which is what keeps the sweep on
+    // the 5-minute tick for as long as a preview is open.
     await signalPendingWork(env);
     return { status: 200, body: { ok: true, step } };
   }

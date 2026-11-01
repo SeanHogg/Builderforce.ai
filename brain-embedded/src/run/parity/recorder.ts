@@ -49,7 +49,7 @@ export class Recorder {
         const id = this.nextId++;
         // The server teaches Evermind from an assistant turn unless it is mid-turn text, a stopped reply or too short
         // (`api` learn gate); the same rule here makes "this turn was learned" a recorded fact on each persisted row.
-        const learned = m.role === 'assistant' && !isMidTurnMetadata(m.metadata) && !isStoppedTurn({ role: m.role, content: m.content, metadata: m.metadata ?? null }) && m.content.length >= EVERMIND_MIN_TEACH_CHARS;
+        const learned = m.role === 'assistant' && !isMidTurnMetadata(m.metadata) && !isStoppedTurn({ metadata: m.metadata ?? null }) && m.content.length >= EVERMIND_MIN_TEACH_CHARS;
         this.persisted.push({ chatId, role: m.role, content: m.content, metadata: parse(m.metadata), learned, ...(m.eventKey ? { eventKey: m.eventKey } : {}) });
         const row: BrainMessage = { id, role: m.role, content: m.content, metadata: m.metadata ?? null, seq: id, createdAt: new Date().toISOString(), ...(m.role === 'assistant' ? { evermindLearn: { learned, version: 3 } } : {}) };
         this.stored.push({ ...row, chatId } as BrainMessage);

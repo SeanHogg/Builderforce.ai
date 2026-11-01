@@ -23,7 +23,7 @@ function longHistory(h: ScenarioHost, pairs: number): { seed: ReturnType<Scenari
 const SUMMARY = 'Memory: the earlier questions were about the manifest service; nothing is outstanding but the newest request.';
 
 export const longChatFolds: Scenario = {
-  id: 'long-chat-folds', rows: ['T2'], title: 'a long chat folds its older middle through the Brain\'s summarizer, silently, and the run answers on the folded window',
+  id: 'long-chat-folds', rows: ['T2'], loopShows: ['context.compacted'], title: 'a long chat folds its older middle through the Brain\'s summarizer, silently, and the run answers on the folded window',
   async run(h) {
     h.script([reply('Here is the answer on the folded window.')], SUMMARY);
     const { seed, seedIds } = longHistory(h, 20);
@@ -33,7 +33,7 @@ export const longChatFolds: Scenario = {
 };
 
 export const twoRunsOneFold: Scenario = {
-  id: 'two-runs-one-fold', rows: ['T2'], title: 'two runs in one chat: the second reuses the first\'s fold memo instead of summarising again',
+  id: 'two-runs-one-fold', rows: ['T2'], loopShows: ['context.compacted'], title: 'two runs in one chat: the second reuses the first\'s fold memo instead of summarising again',
   async run(h) {
     h.script([reply('First answer, on the folded window.'), reply('Second answer, reusing the memo.')], SUMMARY);
     const { seed, seedIds } = longHistory(h, 20);
@@ -69,7 +69,7 @@ export const foldSummaryFails: Scenario = {
 };
 
 export const stopDuringFold: Scenario = {
-  id: 'stop-during-fold', rows: ['T2'], title: 'a Stop pressed while the fold\'s summary is being written ends the run cleanly',
+  id: 'stop-during-fold', rows: ['T2'], loopShows: ['agent.stopped'], title: 'a Stop pressed while the fold\'s summary is being written ends the run cleanly',
   async run(h) {
     let summarising = false;
     h.script([reply('Never reached.')], async () => {
@@ -87,7 +87,7 @@ export const stopDuringFold: Scenario = {
 };
 
 export const foldsInToolLoop: Scenario = {
-  id: 'fold-in-tool-loop', rows: ['T2'], title: 'a tool loop that outgrows the window mid-run folds, then re-serves an exact re-read from the cache',
+  id: 'fold-in-tool-loop', rows: ['T2'], loopShows: ['context.compacted'], title: 'a tool loop that outgrows the window mid-run folds, then re-serves an exact re-read from the cache',
   async run(h) {
     h.tools({ read_file: (a) => ({ ok: true, path: (a as { path: string }).path, content: bulk((a as { path: string }).path, 4_000), totalLines: 800, offset: 1, truncated: false }) });
     const READS = 16;

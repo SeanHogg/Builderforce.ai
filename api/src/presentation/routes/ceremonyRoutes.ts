@@ -43,6 +43,7 @@ import {
   concludeCeremonySession, recordCeremonyPresence, CEREMONY_TARGET_TYPE,
 } from '../../application/ceremony/concludeCeremony';
 import { ensureCeremonyMeeting } from '../../application/ceremony/ceremonyMeeting';
+import { signalPendingWork } from '../../application/runtime/cronWorkSignal';
 import { syncCeremonyMinutesToCanvas } from '../../application/ceremony/ceremonyMinutesToCanvas';
 import { getActivityLog, recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { isValidCron, nextCronTime } from '../../domain/workflowSchedule';
@@ -659,6 +660,9 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
       updatedAt: new Date(),
     }).returning();
     if (!schedule) throw new InternalError('Failed to create schedule');
+    // An armed schedule is work for the `ceremonies` sweep, whose tick is KV-gated: the cron's next-due
+    // stamp was published by the last active tick and cannot know about this row, so signal.
+    if (enabled) await signalPendingWork(c.env as Env);
     await invalidateCached(c.env as Env, schedulesCacheKey(tenantId, segmentId, body.projectId)).catch((error) => {
       reportCaughtError(error, { source: "presentation/routes/ceremonyRoutes.ts", operation: "createCeremonyRoutes" });
     });
@@ -698,6 +702,8 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(ceremonySchedules.id, id), eq(ceremonySchedules.tenantId, tenantId)))
       .returning();
     if (!schedule) return c.json({ error: 'Not found' }, 404);
+    // Re-armed (enabled, or its cadence changed): same reason as on create.
+    if (patch.nextRunAt != null) await signalPendingWork(c.env as Env);
     await invalidateCached(c.env as Env, schedulesCacheKey(tenantId, segmentId, existing.projectId)).catch((error) => {
       reportCaughtError(error, { source: "presentation/routes/ceremonyRoutes.ts", operation: "createCeremonyRoutes" });
     });

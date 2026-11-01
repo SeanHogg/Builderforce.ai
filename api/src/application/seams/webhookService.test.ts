@@ -11,6 +11,7 @@ import {
   WEBHOOK_SIGNATURE_HEADER,
   WEBHOOK_TIMESTAMP_HEADER,
 } from './webhookService';
+import { fakeCronKv } from '../runtime/__fixtures__/fakeCronKv';
 
 describe('webhook signing', () => {
   it('signWebhook is deterministic and covers id.timestamp.body', async () => {
@@ -232,5 +233,53 @@ describe('runWebhookRetrySweep', () => {
 
     // attempts reaches WEBHOOK_MAX_ATTEMPTS → terminal, no further retry scheduled.
     expect(updates.at(-1)!.set).toMatchObject({ status: 'failed', attempts: WEBHOOK_MAX_ATTEMPTS, nextRetryAt: null });
+  });
+});
+
+/**
+ * Cron-gate re-signal: a failed delivery waiting on a CLOSE retry keeps the next tick open; an empty
+ * queue, or a retry far enough out that the floor sweep can pick it up, stays silent.
+ */
+describe('runWebhookRetrySweep — cron gate', () => {
+  /** The sweep's due-rows select (`where().limit()`), plus the probe's (`where().orderBy().limit()`). */
+  function makeProbeDb(dueRows: any[], nextRetryAt: Date | null) {
+    return {
+      select: () => ({
+        from: () => ({
+          innerJoin: () => ({
+            where: () => ({
+              limit: async () => dueRows,
+              orderBy: () => ({ limit: async () => (nextRetryAt ? [{ at: nextRetryAt }] : []) }),
+            }),
+          }),
+        }),
+      }),
+      update: () => ({ set: () => ({ where: () => Promise.resolve(undefined) }) }),
+    } as any;
+  }
+  const NOW = 10_000_000;
+
+  it('signals while a failed delivery is due for retry within the next tick or two', async () => {
+    const { env, signalled } = fakeCronKv();
+    await runWebhookRetrySweep(env, NOW, { db: makeProbeDb([], new Date(NOW + 5 * 60_000)) });
+    expect(signalled()).toBe(true);
+  });
+
+  it('signals for a backlog already overdue (the batch limit left rows behind)', async () => {
+    const { env, signalled } = fakeCronKv();
+    await runWebhookRetrySweep(env, NOW, { db: makeProbeDb([], new Date(NOW - 60_000)) });
+    expect(signalled()).toBe(true);
+  });
+
+  it('does NOT signal when no delivery is waiting to be retried', async () => {
+    const { env, signalled } = fakeCronKv();
+    await runWebhookRetrySweep(env, NOW, { db: makeProbeDb([], null) });
+    expect(signalled()).toBe(false);
+  });
+
+  it('does NOT signal for a retry far enough out that the floor sweep covers it', async () => {
+    const { env, signalled } = fakeCronKv();
+    await runWebhookRetrySweep(env, NOW, { db: makeProbeDb([], new Date(NOW + 80 * 60_000)) });
+    expect(signalled()).toBe(false);
   });
 });

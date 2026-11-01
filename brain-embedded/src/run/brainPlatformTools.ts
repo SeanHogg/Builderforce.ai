@@ -15,14 +15,15 @@ import { ASK_USER_TOOL_SPEC, type ParsedToolCall, type TurnContext } from '@buil
 import type { ToolSchema } from '@builderforce/agent-tools';
 import type { PlatformTools, PlatformToolResult } from '@builderforce/agent-run';
 import { offersHandOff } from '@builderforce/run-policy';
-import type { ChatCompletionMessage } from '../streamChatCompletion';
+import type { BrainToolSpec, ChatCompletionMessage } from '../streamChatCompletion';
 import { HAND_OFF_TOOL } from '../planHandoff';
-import { DEFAULT_TOOL_LIMIT } from '../selectTools';
+import { DEFAULT_TOOL_LIMIT, relevantTools } from '../selectTools';
 import { callPreflight } from '../runStore/callPreflight';
 import { callRunner, declineMalformedCall } from '../runStore/callRunner';
 import { callPostStep } from '../runStore/callPostStep';
 import { progressAfterToolCalls } from '../runStore/progressGuard';
 import type { RunLoopContext } from '../runStore/runLoopContext';
+import { withRunBrief } from './brainTurnTail';
 import { loopTurnMenu } from './loopTurnMenu';
 
 /** A call that ran, waiting for its result row to join the transcript. */
@@ -68,21 +69,22 @@ export function brainPlatformTools(run: RunLoopContext): BrainPlatform {
         const catalog = (run.allTools ?? []) as unknown as ToolSchema[];
         const conversational = run.canAskUser ? [ASK_USER_TOOL_SPEC as unknown as ToolSchema] : [];
         const names = new Set(catalog.map((t) => t.function.name));
-        return [...catalog, ...conversational.filter((t) => !names.has(t.function.name))].filter(
-          (t) => t.function.name !== HAND_OFF_TOOL || offersHandOff(run.policy),
-        );
+        // `hand_off` stays in the catalog the selection ranks (a catalog is trimmed by its size, `hand_off` included, as the loop trims it);
+        // it leaves the MENU when planning closes (`loopTurnMenu.ts`).
+        return [...catalog, ...conversational.filter((t) => !names.has(t.function.name))];
       },
       get selection() {
         // The pins are the tools THIS run called (`callPostStep`): a tool reached through the router is the tool it reached, a fold does not
         // forget one, and an earlier run's calls pin nothing - the transcript the agent would read them off holds all three wrongly.
-        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, pinned: [...run.usedTools], required: new Set(offersHandOff(run.policy) && run.canAskUser ? [...run.alwaysAdvertised, HAND_OFF_TOOL] : run.alwaysAdvertised) };
+        // The ranking stays the Brain's own (`selectTools.ts`), not the shared scorer the cloud and the canvas keep.
+        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, rank: (tools: readonly ToolSchema[], query: string) => relevantTools(tools as unknown as BrainToolSpec[], query) as unknown as ToolSchema[], pinned: [...run.usedTools], required: new Set(offersHandOff(run.policy) && run.canAskUser ? [...run.alwaysAdvertised, HAND_OFF_TOOL] : run.alwaysAdvertised) };
       },
       // ONE cap on a result: the Brain's own, applied inside `callRunner` (`trimToolResult`, by LINE, sized to the serving
       // model's window). The agent's per-tool cap would cut the already budgeted text a second time and drop its paging fields.
       resultCap: () => Number.MAX_SAFE_INTEGER,
       // No `handsOff`: `hand_off` reports itself to the model policy inside `callPreflight` (through the run's view), and a
       // call the agent hands off first would find the plan already closed.
-      turn: (env) => loopTurnMenu(run, env, run.allTools?.length ?? 0),
+      turn: async (env) => withRunBrief(run, await loopTurnMenu(run, env, run.allTools?.length ?? 0)),
       // A3's detector is the Brain's own (`progressGuard.ts`): the turn is judged when its calls have all run, as the loop does.
       turnEnded: progressAfterToolCalls(run),
       // The turn's step, as the kernel numbers it: the router, the hand-off, the confirm gate, the guards, the activity line and the

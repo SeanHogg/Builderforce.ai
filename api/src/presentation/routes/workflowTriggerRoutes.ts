@@ -80,7 +80,7 @@ export function createWorkflowTriggerRoutes(db: Db): Hono<HonoEnv> {
       }
     }
 
-    const result = await fireAddressedTrigger(db, row, payload, `webhook:${row.nodeId}`);
+    const result = await fireAddressedTrigger(db, row, payload, `webhook:${row.nodeId}`, c.env);
 
     if (isTwilio) {
       // Twilio reads the RESPONSE BODY as TwiML. Answering with the JSON below

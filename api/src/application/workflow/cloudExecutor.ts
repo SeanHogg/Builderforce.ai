@@ -92,6 +92,7 @@ import { CONTROL_NODE_HANDLERS } from './nodes/control';
 import { AI_NODE_HANDLERS } from './nodes/ai';
 import { IO_NODE_HANDLERS } from './nodes/io';
 import { bulkUpdateById, type BulkUpdateRow } from '../../infrastructure/database/bulkUpdate';
+import { signalPendingWork, signalPendingWorkIfDueWithin } from '../runtime/cronWorkSignal';
 
 /** Default per-cron-tick budget of tasks to execute across all cloud workflows. */
 const DEFAULT_TASK_BUDGET = 50;
@@ -424,8 +425,31 @@ export function rollupCloudWorkflowStatus(statuses: readonly string[]): 'running
   return statuses.some((s) => s === 'failed') ? 'failed' : 'completed';
 }
 
-/** Drain ready tasks for one cloud workflow; returns how many tasks it executed. */
-async function advanceCloudWorkflow(env: Env, db: Db, workflowId: string, budget: number): Promise<number> {
+/**
+ * The earliest moment a PENDING task parked on a `sleep` node's `not_before` can proceed, or null
+ * when none is parked. Only a pending task counts: a sleep that has run, failed or been cancelled
+ * has nothing left to wait for. Pure, so the sleep bound is unit-tested without a database.
+ */
+export function earliestSleepWakeMs(tasks: ReadonlyArray<{ status: string; notBefore: Date | null }>): number | null {
+  let earliest: number | null = null;
+  for (const t of tasks) {
+    if (t.status !== 'pending' || !t.notBefore) continue;
+    const at = t.notBefore.getTime();
+    if (earliest == null || at < earliest) earliest = at;
+  }
+  return earliest;
+}
+
+/** What advancing one workflow did, and when it next has something to do on its own. */
+interface AdvanceOutcome {
+  /** Tasks executed this pass. */
+  processed: number;
+  /** Earliest `not_before` of a sleeping task, epoch-ms (see {@link earliestSleepWakeMs}). */
+  wakeAtMs: number | null;
+}
+
+/** Drain ready tasks for one cloud workflow; returns how many tasks it executed and its next timed wake. */
+async function advanceCloudWorkflow(env: Env, db: Db, workflowId: string, budget: number): Promise<AdvanceOutcome> {
   // The workflow's tenant — lets each `llm` node record its spend in the ledger
   // [1310], and (new) lets set-variable/get-variable/increment scope their state.
   const [wf] = await db
@@ -635,7 +659,7 @@ async function advanceCloudWorkflow(env: Env, db: Db, workflowId: string, budget
       .where(eq(workflows.id, workflowId));
   }
 
-  return processed;
+  return { processed, wakeAtMs: earliestSleepWakeMs(tasks) };
 }
 
 export interface CloudExecResult {
@@ -655,12 +679,25 @@ export async function processPendingCloudWorkflows(env: Env, budget = DEFAULT_TA
 
   let remaining = budget;
   let touched = 0;
+  let earliestWakeMs: number | null = null;
   for (const wf of cloud) {
     if (remaining <= 0) break;
     const did = await advanceCloudWorkflow(env, db, wf.id, remaining);
-    if (did > 0) touched++;
-    remaining -= did;
+    if (did.processed > 0) touched++;
+    remaining -= did.processed;
+    if (did.wakeAtMs != null) earliestWakeMs = earliestWakeMs == null ? did.wakeAtMs : Math.min(earliestWakeMs, did.wakeAtMs);
   }
+
+  // Re-signal the KV-gated tick, but only for work this sweep can actually do next time:
+  //   • the per-tick budget ran out — ready tasks may be left over, in this workflow or in ones
+  //     not reached. Each unit of budget is a task EXECUTED, and tasks only move forward
+  //     (pending -> running -> terminal), so this is finite;
+  //   • a `sleep` node's timer falls inside the next tick or two. A farther one is left to the
+  //     floor sweep, which re-checks it, rather than holding the platform awake for the whole wait.
+  // A run that can never progress (a dependency that never settles, a task left `running` by a
+  // killed Worker) executes nothing and parks no timer, so it signals nothing.
+  if (remaining <= 0) await signalPendingWork(env);
+  else await signalPendingWorkIfDueWithin(env, earliestWakeMs);
 
   console.log(`[cron:cloud-exec] workflows=${cloud.length} advanced=${touched} tasks=${budget - remaining}`);
   return { workflows: cloud.length, tasks: budget - remaining };

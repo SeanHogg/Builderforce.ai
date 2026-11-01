@@ -50,7 +50,7 @@ export const effortBalancedThinking = effortScenario('balanced', true);
 export const effortThorough = effortScenario('thorough', true);
 
 export const quickRoute: Scenario = {
-  id: 'quick-route', rows: ['T12'], title: 'QUICK route with a non-strict model: the quick model serves the run',
+  id: 'quick-route', rows: ['T12'], loopShows: ['run.pipeline_route'], title: 'QUICK route with a non-strict model: the quick model serves the run',
   async run(h) {
     h.tools(READ);
     h.script([calls([call('read_file', { path: 'a.ts' }, 'c1')]), reply('Renamed.')]);
@@ -59,7 +59,7 @@ export const quickRoute: Scenario = {
 };
 
 export const thoroughRoute: Scenario = {
-  id: 'thorough-route', rows: ['T12'], title: 'the full pipeline route (plan, code, verify) on a routed host',
+  id: 'thorough-route', rows: ['T12'], loopShows: ['run.pipeline_route'], title: 'the full pipeline route (plan, code, verify) on a routed host',
   async run(h) {
     h.tools(READ);
     h.script([calls([call('read_file', { path: 'a.ts' }, 'c1')]), reply('Planned and done.')]);

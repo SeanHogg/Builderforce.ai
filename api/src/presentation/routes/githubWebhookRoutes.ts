@@ -137,7 +137,9 @@ export function mergedPullRequestRef(p: Record<string, unknown>): MergedPullRequ
  * their own interval and skip a repo that is not due, and `gh-actions-reconcile` follows
  * dispatched workflow runs, not PRs. Everything else — synchronize, edited, labeled,
  * assigned, review_requested, converted_to_draft — either creates no sweep work or is
- * followed by the CI event that does (a push's checks report through CI_EVENTS).
+ * followed by the CI event that does (a push's checks report through CI_EVENTS, whose verdict
+ * signals through `handleCiEventOutcome` -> `signalMergeQueueOnCiResult`, scoped to a ticket PR
+ * that is still open).
  */
 const SWEEP_SIGNAL_PR_ACTIONS = new Set(['opened', 'reopened', 'ready_for_review', 'closed']);
 

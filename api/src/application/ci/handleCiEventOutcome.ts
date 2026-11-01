@@ -20,6 +20,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 import { toolAuditEvents } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
+import { signalMergeQueueOnCiResult } from './ciMergeQueueSignal';
 import { ingestRepoCiEvent, AUTOFIX_DISPATCH_EVENT, AUTOFIX_REFUSED_EVENT, AUTOFIX_DEDUPED_REASON, type RepoCiEvent, type IngestResult } from './ingestRepoCiEvent';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -65,6 +66,10 @@ export async function handleCiEventOutcome(
   const credSecret = integrationCredentialSecret(env);
 
   const res = await ingestRepoCiEvent(db, env, credSecret, evt);
+
+  // The verdict decides what `pr-merge` does with the head of the queue: arm its KV-gated tick for a
+  // PR that is actually waiting, so it does not sit until the 30-minute floor. Off the response path.
+  deps.waitUntil(signalMergeQueueOnCiResult(env, db, res));
 
   if (res.autoFix) {
     const intent = res.autoFix;

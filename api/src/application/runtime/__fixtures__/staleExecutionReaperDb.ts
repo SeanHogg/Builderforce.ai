@@ -30,6 +30,8 @@ export interface ProbeRow {
   queued: unknown;
   paused: unknown;
   park_age: unknown;
+  /** Whether any pending / submitted / running execution exists (the reaper's re-signal arm). */
+  live_runs?: unknown;
 }
 
 export interface ReaperFakeDbScript {

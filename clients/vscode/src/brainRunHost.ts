@@ -254,6 +254,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       // Gates render as binding directives ahead of the host prompt, then the workspace's
       // rules — the one preamble the native participant shares.
       await startRun(key, {
+        // The surface this run came in through: the label its uniform outcome row carries (telemetry only; nothing branches on it).
+        entryPoint: "vscode",
         resolvedSystemPrompt: withRunPreamble(systemPrompt, { gates, rules: directives?.rules }),
         // Only this workspace's tools feed the run's record: a remote platform call acted
         // elsewhere, and must not land in the workspace's note or code map.

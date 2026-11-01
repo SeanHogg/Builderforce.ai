@@ -22,7 +22,7 @@ const spawn = (h: ScenarioHost, task: string) => async (): Promise<unknown> => {
 };
 
 export const subAgentSpawn: Scenario = {
-  id: 'sub-agent-spawn', rows: ['R11'], title: 'the owner spawns a child; the child\'s rows land in the owner chat attributed to it, and the owner reads the report',
+  id: 'sub-agent-spawn', rows: ['R11'], loopShows: ['spawn_agent'], title: 'the owner spawns a child; the child\'s rows land in the owner chat attributed to it, and the owner reads the report',
   async run(h) {
     h.tools({ read_file: () => ({ ok: true, content: 'x' }), spawn_agent: spawn(h, 'where is the auth middleware?') });
     h.script([
@@ -35,7 +35,7 @@ export const subAgentSpawn: Scenario = {
 };
 
 export const childReportAtTurnEnd: Scenario = {
-  id: 'child-report-turn-end', rows: ['R11', 'R2'], title: 'a background child\'s report arrives while the owner writes its last prose turn: the turn keeps its text and the owner wakes on the report',
+  id: 'child-report-turn-end', rows: ['R11', 'R2'], loopShows: ['steer.applied'], title: 'a background child\'s report arrives while the owner writes its last prose turn: the turn keeps its text and the owner wakes on the report',
   async run(h) {
     h.tools({ read_file: () => ({ ok: true, content: 'x' }) });
     h.script([
@@ -50,7 +50,7 @@ export const childReportAtTurnEnd: Scenario = {
 };
 
 export const steerAChild: Scenario = {
-  id: 'steer-a-child', rows: ['R11', 'T11'], title: 'a person steers a running child through its own key; the child applies it once on its next turn',
+  id: 'steer-a-child', rows: ['R11', 'T11'], loopShows: ['steer.applied'], title: 'a person steers a running child through its own key; the child applies it once on its next turn',
   async run(h) {
     h.tools({
       read_file: () => ({ ok: true, content: 'x' }),

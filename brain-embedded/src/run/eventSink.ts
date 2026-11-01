@@ -73,8 +73,13 @@ export function traceStepFor(event: RunEvent, ts: string): BrainTraceEvent | nul
 /** What a surface does on an event beyond rendering it: the coder re-ask discards the turn it replaces (`loopTurn.ts`). */
 export interface SinkReactions {
   coderReask?: (event: Extract<RunEvent, { kind: 'model.coder_reask' }>) => void;
-  /** The agent folded its transcript: the cell learns it too and the fold is made durable (`loopFold.ts`). */
-  compacted?: (event: Extract<RunEvent, { kind: 'context.compacted' }>) => void;
+  /**
+   * The agent reports anything about the turn that just answered but its re-ask: it goes on with the turn, so the surface records it
+   * NOW (`loopTurn.ts`). Returns a promise only while there is a turn to record; the event is rendered after it.
+   */
+  turnKept?: () => Promise<void> | void;
+  /** The run's USD cap stopped it: the reply it settles with is not an answer (`loopSettle.ts`). */
+  budgetStop?: (event: Extract<RunEvent, { kind: 'budget.contained' }>) => void;
   /** Events the surface already records itself (the Brain's turn recorder writes the model downgrade): not rendered a second time. */
   recorded?: ReadonlySet<RunEvent['kind']>;
 }
@@ -87,20 +92,28 @@ export type OutcomeReport = (row: RunOutcomeRow) => Promise<unknown> | void;
  * it is the host's to store; a rejection is the host's to handle, never the run's.
  */
 export function brainEventSink(c: RunCell, outcome?: OutcomeReport, on: SinkReactions = {}): EventSink {
+  const render = (event: RunEvent): void => {
+    if (on.recorded?.has(event.kind)) return;
+    // The run's end is reported as contained (`runEndOutcome.ts`), as the Brain's loop notes it.
+    if (event.kind === 'budget.contained') {
+      noteBudgetContained(c);
+      on.budgetStop?.(event);
+    }
+    // A stall with nothing left to try ends the run on what the model said; why it stopped is the chat's error line (`finalAnswerHook.ts`).
+    if (event.kind === 'stall.recovered' && event.action === 'pause' && event.note) c.error = event.note;
+    if (event.kind === 'model.coder_reask' && on.coderReask) return on.coderReask(event);
+    const step = traceStepFor(event, nowIso());
+    if (step) {
+      pushTrace(c, step);
+      return;
+    }
+    // Lifecycle events have no step; the live view still repaints on each of them.
+    emit(c);
+  };
   return {
-    emit(event: RunEvent): void {
-      if (on.recorded?.has(event.kind)) return;
-      // The run's end is reported as contained (`runEndOutcome.ts`), as the Brain's loop notes it.
-      if (event.kind === 'budget.contained') noteBudgetContained(c);
-      if (event.kind === 'model.coder_reask' && on.coderReask) return on.coderReask(event);
-      if (event.kind === 'context.compacted' && on.compacted) return on.compacted(event);
-      const step = traceStepFor(event, nowIso());
-      if (step) {
-        pushTrace(c, step);
-        return;
-      }
-      // Lifecycle events have no step; the live view still repaints on each of them.
-      emit(c);
+    emit(event: RunEvent): Promise<void> | void {
+      const kept = event.kind === 'model.coder_reask' ? undefined : on.turnKept?.();
+      return kept instanceof Promise ? kept.then(() => render(event)) : render(event);
     },
     // The host's report may resolve to anything (a stored id, a response); the sink's contract is
     // `void`, so what it resolves to is dropped here.

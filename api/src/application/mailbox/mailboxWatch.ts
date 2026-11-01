@@ -426,9 +426,8 @@ async function fireMailboxReceived(
     });
     fired += result.fired;
   }
-  // A fired run is queued work the cloud executor has to pick up; without this the
-  // next idle tick would skip the fan-out and the run would sit until the floor.
-  if (fired > 0) await signalPendingWork(env).catch(() => undefined);
+  // The runs this fired are signalled where they are created — `instantiateWorkflowRun`
+  // arms the cron gate for every cloud run it persists (`fireEventTriggers` passes `env`).
   return fired;
 }
 

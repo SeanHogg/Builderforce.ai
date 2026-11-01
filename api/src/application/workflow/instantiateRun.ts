@@ -19,6 +19,7 @@ import {
 } from '../../domain/workflowGraph';
 import { expandSubflows } from './expandSubflows';
 import { subflowDefinitionLoader } from './subflowDefinitionGateway';
+import { signalPendingWork, type CronSignalEnv } from '../runtime/cronWorkSignal';
 import type { Db } from '../../infrastructure/database/connection';
 
 export type WorkflowRuntime = 'host' | 'cloud';
@@ -53,6 +54,15 @@ export interface InstantiateRunParams {
    *  so the incident detail can list its runs. */
   sourceIncidentId?: string | null;
   sourceMonitorId?: string | null;
+  /**
+   * The Worker env, from any caller that is NOT already inside a cron tick (the manual route, a
+   * webhook, an inbound email, an event trigger, an approval). A new CLOUD run is work for the
+   * frequent `wf-triggers` sweep, whose tick is KV-gated so Neon can autosuspend: without a signal
+   * the run would sit `pending` until the 30-minute floor. Passed, this arms the next tick once the
+   * run is persisted. Omit it from the scheduler's own call — it creates the run mid-tick, and the
+   * cloud executor runs in that same tick.
+   */
+  env?: CronSignalEnv;
 }
 
 export type InstantiateRunResult =
@@ -182,6 +192,9 @@ export async function persistCompiledRun(
       }),
     );
   }
+
+  // A host-targeted run is picked up by its own agent host, not by the cron: only a CLOUD run waits for a tick.
+  if (params.env && params.target.runtime === 'cloud') await signalPendingWork(params.env);
 
   return { ok: true, workflowId, taskCount: steps.length };
 }

@@ -162,7 +162,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
 
   // ── POST /api/reports/schedules ───────────────────────────────────────────
   router.post('/schedules', requirePermission(PERMISSIONS.REPORT_EXPORT), requireRole(TenantRole.MANAGER), async (c) => {
-    const result = await createReportSchedule(db, c.get('tenantId') as number, await parseBody(c, CreateScheduleBody));
+    const result = await createReportSchedule(db, c.get('tenantId') as number, await parseBody(c, CreateScheduleBody), c.env as Env);
     return result.ok ? c.json(result.row, 201) : c.json({ error: result.error }, result.status);
   });
 

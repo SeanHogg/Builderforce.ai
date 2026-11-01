@@ -1,58 +1,72 @@
 /**
- * The Brain's entry points under the ONE scripted task (PRD 35 §3.3): the task, script, trace and answer are the shared
- * ones from `@builderforce/agent-run` (`conformanceTask.ts`), so web, Rovr and VS Code are held to the same
- * `RunEvent` trace and `RunOutcome` as the cloud, canvas, on-prem and channel adapters, not merely to each other. The
- * ports are the real ones (`buildBrainRunPorts` over a real run cell); the run is driven by `runAgent`.
+ * The Brain's entry points under the ONE scripted task (PRD 35 §3.3): web, Rovr and VS Code are held to the SAME `RunEvent` trace and
+ * the same answer as the cloud, canvas, on-prem and channel adapters (the task, script and golden are `@builderforce/agent-run`'s
+ * `conformanceTask.ts`).
+ *
+ * The run goes through the PRODUCTION binding, not a harness of its own: `startRun` -> `driveRun` -> `prepareRunLoop` -> `runPrepared`,
+ * on `engine: 'agent'`, started the way a host starts it (the parity harness, `run/parity/harness.ts`; the fake is the model stream,
+ * the persistence and the host's tool port, the three things a host supplies). The trace is read by wrapping the one `runAgent` call.
  */
 
-import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  CONFORMANCE_ANSWER,
-  CONFORMANCE_SCRIPT,
-  CONFORMANCE_TRACE,
-  conformanceTrace,
-  runAgent,
-  teeEvents,
-  type RunEvent,
-  type RunOutcome,
-} from '@builderforce/agent-run';
-import { resetBrainRunStore } from './runStore/runControl';
-import { resetRunSteering } from './runSteering';
-import { binding, result, scripted } from './test/brainRunHarness';
-import { brainRunPolicy, brainRunTask, buildBrainRunPorts, type BrainEntryPoint } from './run/webAdapter';
+import { describe, expect, it, vi } from 'vitest';
+import type { RunEvent, RunOutcomeRow } from '@builderforce/agent-run';
+import { runScenario } from './run/parity/harness';
+import { call, calls, reply } from './run/parity/script';
+import type { Scenario } from './run/parity/types';
+import type { RunEntryPoint } from './runStore/runTypes';
 
-const ENTRY_POINTS: readonly BrainEntryPoint[] = ['vscode', 'web', 'rovr'];
+const seen = vi.hoisted(() => ({ events: [] as RunEvent[], rows: [] as RunOutcomeRow[] }));
 
-/** The shared script in the stream's own result shape. */
-const turns = CONFORMANCE_SCRIPT.map((c) => () =>
-  result({
-    text: c.content,
-    toolCalls: (c.toolCalls ?? []).map((call) => ({ id: call.id, name: call.name, args: call.arguments })),
-    ...(c.model ? { resolvedModel: c.model } : {}),
-  }),
-);
-
-async function drive(entryPoint: BrainEntryPoint, runKey: number): Promise<{ events: RunEvent[]; outcome: RunOutcome }> {
-  const { stream } = scripted(turns);
-  const b = binding(runKey, stream, entryPoint);
-  const ports = buildBrainRunPorts(b.binding);
-  const events: RunEvent[] = [];
-  ports.events = teeEvents(ports.events, events);
-  const outcome = await runAgent({ task: brainRunTask(b.binding), policy: brainRunPolicy(b.binding), ports, signal: b.cell.abort?.signal });
-  return { events, outcome };
-}
-
-beforeEach(() => {
-  resetBrainRunStore();
-  resetRunSteering();
+vi.mock('@builderforce/agent-run', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@builderforce/agent-run')>();
+  return {
+    ...actual,
+    runAgent: (input: Parameters<typeof actual.runAgent>[0]) =>
+      actual.runAgent({
+        ...input,
+        ports: {
+          ...input.ports,
+          events: {
+            ...actual.teeEvents(input.ports.events, seen.events),
+            outcome: async (row: RunOutcomeRow) => {
+              seen.rows.push(row);
+              await input.ports.events.outcome?.(row);
+            },
+          },
+        },
+      }),
+  };
 });
 
-describe('the Brain under the shared scripted task', () => {
-  for (const [i, entryPoint] of ENTRY_POINTS.entries()) {
-    it(`${entryPoint}: the shared RunEvent trace and the shared answer`, async () => {
-      const { events, outcome } = await drive(entryPoint, 8300 + i);
-      expect(conformanceTrace(events)).toEqual(CONFORMANCE_TRACE);
-      expect(outcome).toMatchObject({ kind: 'finished', output: CONFORMANCE_ANSWER });
+const { CONFORMANCE_ANSWER, CONFORMANCE_PROMPT, CONFORMANCE_TOOL, CONFORMANCE_TRACE, conformanceTrace } = await import('@builderforce/agent-run');
+
+const ENTRY_POINTS: readonly RunEntryPoint[] = ['vscode', 'web', 'rovr'];
+
+const scenario = (entryPoint: RunEntryPoint): Scenario => ({
+  id: `conformance-${entryPoint}`,
+  rows: [],
+  title: `the shared scripted task on ${entryPoint}`,
+  async run(host) {
+    host.tools({ [CONFORMANCE_TOOL]: () => ({ ok: true, paths: [] }) });
+    host.script([calls([call(CONFORMANCE_TOOL, {})]), reply(CONFORMANCE_ANSWER)]);
+    await host.start({ userTurn: CONFORMANCE_PROMPT, entryPoint });
+  },
+});
+
+describe('the Brain under the shared scripted task, through startRun on the agent engine', () => {
+  for (const entryPoint of ENTRY_POINTS) {
+    it(`${entryPoint}: the shared RunEvent trace, the shared answer and a finished outcome row labelled for the surface`, async () => {
+      seen.events.length = 0;
+      seen.rows.length = 0;
+      const record = await runScenario(scenario(entryPoint), 'agent');
+
+      expect(record.scenarioError).toBeUndefined();
+      expect(conformanceTrace(seen.events)).toEqual(CONFORMANCE_TRACE);
+      expect(record.host.toolCalls.map((t) => t.name)).toEqual([CONFORMANCE_TOOL]);
+      expect(record.persisted.filter((m) => m.role === 'assistant').at(-1)?.content).toBe(CONFORMANCE_ANSWER);
+      // The outcome the run ended with is the uniform row: finished, and labelled with the surface the host declared.
+      expect(seen.rows).toHaveLength(1);
+      expect(seen.rows[0]).toMatchObject({ entryPoint, terminalStatus: 'finished' });
     });
   }
 });

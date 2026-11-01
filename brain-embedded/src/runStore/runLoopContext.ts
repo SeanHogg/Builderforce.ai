@@ -175,11 +175,24 @@ export function failureAdvisoryFor(run: RunLoopContext, name: string, args: unkn
  * that renders it loses the provenance chip and the memory steps for that turn.
  */
 export async function settleReply(run: RunLoopContext, rawText: string, result: StreamChatResult, requested?: string): Promise<BrainMessage> {
-  const { c, chatId, convo } = run;
+  const { convo } = run;
   const text = canonicalTurnText(rawText);
-  // The agent's store log already carries the final answer row; one copy only.
+  // The agent's store log already carries the final answer row, shaped as the agent settled it: one copy only - never two assistant rows
+  // in a row - and it reads as the model is shown a past turn (`replayTextOf`). The loop never has an assistant row at its tail here.
   const tail = convo[convo.length - 1];
-  if (!(tail?.role === 'assistant' && tail.content === replayTextOf(text))) convo.push({ role: 'assistant', content: replayTextOf(text) });
+  if (tail?.role === 'assistant' && !tail.tool_calls) tail.content = replayTextOf(text);
+  else convo.push({ role: 'assistant', content: replayTextOf(text) });
+  return persistReply(run, rawText, result, requested);
+}
+
+/**
+ * Persist a turn's text as a reply of the chat - the durable message with the turn's provenance, the mounted views told - without
+ * touching the model transcript. The loop settles a reply with it ({@link settleReply}); the agent persists the reply of a model that
+ * stalled out and was handed over (`run/brainDelivery.ts`), whose row its own transcript already holds.
+ */
+export async function persistReply(run: RunLoopContext, rawText: string, result: StreamChatResult, requested?: string): Promise<BrainMessage> {
+  const { c, chatId } = run;
+  const text = canonicalTurnText(rawText);
   const meta = provenanceMetadata(result, requested);
   const [assistantMsg] = await run.req.persistence.sendMessages(chatId, [{ role: 'assistant', content: text, ...(meta ? { metadata: meta } : {}) }]);
   c.streamingText = '';

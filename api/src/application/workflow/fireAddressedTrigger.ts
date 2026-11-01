@@ -16,6 +16,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { parseDefinition } from '../../domain/workflowGraph';
 import { instantiateWorkflowRun, type RunTarget } from './instantiateRun';
 import type { Db } from '../../infrastructure/database/connection';
+import type { CronSignalEnv } from '../runtime/cronWorkSignal';
 
 /** Build the run target a trigger row fires onto. */
 function targetFromTrigger(row: typeof workflowTriggers.$inferSelect): RunTarget {
@@ -33,6 +34,8 @@ export async function fireAddressedTrigger(
   row: typeof workflowTriggers.$inferSelect,
   payload: unknown,
   source: string,
+  /** The Worker env: arms the next cron tick for the cloud run this creates (see `InstantiateRunParams.env`). */
+  env?: CronSignalEnv,
 ): Promise<{ ok: true; workflowId: string } | { ok: false; error: string }> {
   const [defRow] = await db
     .select({ name: workflowDefinitions.name, projectId: workflowDefinitions.projectId, definition: workflowDefinitions.definition })
@@ -50,6 +53,7 @@ export async function fireAddressedTrigger(
     target: targetFromTrigger(row),
     triggerPayload: payload,
     triggerSource: source,
+    env,
   });
 
   await db

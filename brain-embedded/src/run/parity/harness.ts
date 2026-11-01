@@ -19,6 +19,8 @@ import { normalise } from './normalise';
 import type { HostTool, RunRecord, Scenario, ScenarioHost, ScriptedTurn, TurnInput } from './types';
 
 const DEFAULT_KEY = 7001;
+/** No scenario needs more than this many model calls; a run past it is not ending. */
+const MAX_MODEL_CALLS = 120;
 
 /** A tool spec the model is shown, for a host tool the scenario named. */
 const specOf = (name: string): BrainToolSpec => ({ type: 'function', function: { name, description: `Parity tool ${name}.`, parameters: { type: 'object', properties: {} } } });
@@ -80,6 +82,8 @@ class Host implements ScenarioHost {
 
   private readonly stream: BrainStreamFn = async (opts, handlers) => {
     this.calls += 1;
+    // A scenario whose engine never ends (a model that keeps calling tools, a loop that never closes) must fail, not hang the suite.
+    if (this.calls > MAX_MODEL_CALLS) throw new Error(`parity: more than ${MAX_MODEL_CALLS} model calls - the run does not end`);
     const input: TurnInput = { opts, handlers, call: this.calls };
     const summarising = isSummaryCall(opts);
     this.rec.wire.push({ ...copyWire(opts as unknown as Record<string, unknown>), ...(summarising ? { summary: true } : {}) });

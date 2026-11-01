@@ -20,6 +20,7 @@ import { instantiateWorkflowRun, runTargetFromDefinition } from './instantiateRu
 import { workflowDefinitions } from '../../infrastructure/database/schema';
 import { parseDefinition } from '../../domain/workflowGraph';
 import type { Db } from '../../infrastructure/database/connection';
+import type { CronSignalEnv } from '../runtime/cronWorkSignal';
 import { DAY_MS } from '../../domain/shared/time';
 
 /** `approvals.action_type` for a gated workflow run. */
@@ -99,6 +100,8 @@ export async function startApprovedWorkflowRun(
   tenantId: number,
   segmentId: string | null,
   definitionId: string,
+  /** Arms the next cron tick for the cloud run the approval starts (see `InstantiateRunParams.env`). */
+  env?: CronSignalEnv,
 ): Promise<string | null> {
   const [row] = await db
     .select()
@@ -115,6 +118,7 @@ export async function startApprovedWorkflowRun(
     definitionId: row.id,
     target: runTargetFromDefinition(row),
     triggerSource: 'approval',
+    env,
   });
   return result.ok ? result.workflowId : null;
 }

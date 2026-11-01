@@ -36,6 +36,7 @@ import type { BrainRunRequest } from '../runStore/runTypes';
 import { brainContextSource, type GatherContextPack } from './contextSource';
 import { brainEventSink, type OutcomeReport } from './eventSink';
 import { brainHumanChannel } from './humanChannel';
+import { brainModelRules } from './brainModelRules';
 import { brainModelTransport, type BrainCallDefaults } from './modelTransport';
 import { cellRunStore } from './runStorePort';
 import type { TurnObserver } from './modelTransport';
@@ -75,8 +76,10 @@ export interface BrainRunBinding {
   turn?: TurnObserver;
   /** Tools the surface runs beside the registry's, and the turns that end the run before a call dispatches. */
   extensions?: ToolExtension;
-  /** How the run's model hand-off starts (`pipelinePolicyOptions`): the phase it begins in and the stage models. */
-  start?: Pick<RunPolicyOptions, 'startPhase' | 'phaseModels'>;
+  /** How the run's model hand-off starts (`pipelinePolicyOptions`): the phase it begins in, the stage models, and the quick model a routed QUICK run seeds. */
+  start?: Pick<RunPolicyOptions, 'startPhase' | 'phaseModels' | 'pinnedModel'>;
+  /** The run's preamble already ran the host's model preflight (`runStore/hostRunContext.ts`): the transport does not ask the host a second time. */
+  preflighted?: true;
   /** Where the run's events go, when the surface reacts to some beyond rendering them (`loopTurn.ts`). */
   events?: EventSink;
   /** Told the live run once, before turn 1: the surface reads the model policy from it. */
@@ -97,7 +100,7 @@ export interface BrainRunBinding {
 export function buildBrainRunPorts(b: BrainRunBinding): RunPorts {
   const { req, cell, runKey } = b;
   return {
-    model: brainModelTransport({
+    model: brainModelRules(brainModelTransport({
       stream: req.stream,
       ...(b.turn ? { turn: b.turn } : {}),
       ...(b.handlers ? { handlers: b.handlers } : {}),
@@ -107,11 +110,11 @@ export function buildBrainRunPorts(b: BrainRunBinding): RunPorts {
         ...(req.reasoning ? { reasoning: req.reasoning } : {}),
         ...b.call,
       },
-      // A surface with its own turn fit (`b.turn`) packs the request for the serving model's window itself (`windowFit.prepare`, its
-      // `llm.handoff` step); the agent's compaction would otherwise fold the same history first, on the same window.
-      ...(req.windowSources && !b.turn ? { windows: req.windowSources } : {}),
-      ...(req.modelPreflight ? { preflight: req.modelPreflight } : {}),
-    }),
+      // What the host knows about model windows. A surface with its own compaction (`modules.compaction`, `loopFold.ts`) and its own turn
+      // fit (`windowFit.prepare`, its `llm.handoff` step) loses nothing by saying it: the agent sizes a tool result from it.
+      ...(req.windowSources ? { windows: req.windowSources } : {}),
+      ...(req.modelPreflight && !b.preflighted ? { preflight: req.modelPreflight } : {}),
+    }), req),
     capabilities: b.capabilities,
     store: b.store ?? cellRunStore(cell, { ...(b.seeded !== undefined ? { seeded: b.seeded } : {}), ...(b.commitMemory ? { commitMemory: b.commitMemory } : {}) }),
     ...(b.platform ? { platform: b.platform } : {}),
@@ -122,7 +125,7 @@ export function buildBrainRunPorts(b: BrainRunBinding): RunPorts {
     events: b.events ?? brainEventSink(cell, b.reportOutcome),
     human: brainHumanChannel(runKey),
     steering: b.steering ?? runSteeringSource(runKey),
-    context: brainContextSource(req, b.gatherContext),
+    context: brainContextSource(b.gatherContext),
   };
 }
 
@@ -144,9 +147,11 @@ export function brainRunTask(b: Pick<BrainRunBinding, 'req' | 'request'>, defaul
  */
 export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | 'request' | 'approvalGates' | 'start'>): RunPolicy {
   const { req } = b;
+  const seed = b.start?.pinnedModel ?? req.model;
   return {
     entryPoint: b.entryPoint,
-    toolScope: req.lineage ? 'subagent' : req.chatMode === 'chat' ? 'chat-reply' : 'chat-work',
+    // Both modes offer the full catalog (`runPreamble.ts`, `turnMenu.ts`): the mode changes the directive the model reads, never the menu.
+    toolScope: req.lineage ? 'subagent' : 'chat-work',
     role: 'general',
     // No guard lever is switched on in the agent's own policy: A3's detector (and its device lever) is the Brain's
     // `RunProgressGuard`, which the platform tools run, so the run has ONE detector (`brainPlatformTools.ts`).
@@ -156,11 +161,16 @@ export function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | '
     budgets: req.maxRunBudgetUsd && req.maxRunBudgetUsd > 0 ? { usd: req.maxRunBudgetUsd } : {},
     codeChangeTools: [...CODE_CHANGE_TOOLS],
     ...(req.model && req.modelStrict ? { pinnedModel: req.model } : {}),
+    // The person's Stop is the composer's button: a steered "stop" is words to the model, never a command the run obeys.
+    stopWords: false,
     // The Brain's hand-off: a plain policy that starts in the phase the run's role and route say, on the stage models the host chose.
-    ...(b.start ? { modelStart: { plain: true, ...(req.model ? { model: req.model } : {}), strict: !!req.modelStrict, ...(b.start.startPhase ? { startPhase: b.start.startPhase } : {}), ...(b.start.phaseModels ? { phaseModels: b.start.phaseModels } : {}) } } : {}),
+    // The model a routed QUICK run seeds (its quick model, over a soft model) outranks the request's own, as the preamble's policy has it.
+    ...(b.start ? { modelStart: { plain: true, ...(seed ? { model: seed } : {}), strict: !!req.modelStrict, ...(b.start.startPhase ? { startPhase: b.start.startPhase } : {}), ...(b.start.phaseModels ? { phaseModels: b.start.phaseModels } : {}) } } : {}),
     inference: 'hybrid',
     verify: 'none',
     approvalGates: [...(b.approvalGates ?? [])],
+    // A model that spent its whole stall budget still describing calls ends the run on what it said, the reason beside it (`finalAnswerHook.ts`).
+    stallExhausted: 'settle',
     // The Brain's delegation gate (`earlyDelegation.ts` on the read result, the delivery ledger's rung at the end) is the run's ONE
     // gate: the agent's own early nudge and backstop stay off, or each read and each prose answer would be judged twice.
     delegation: { requested: false, readsBeforeNudge: 0 },

@@ -6,7 +6,7 @@
 
 import { StreamInterruptedError } from '../../../streamChatCompletion';
 import { queueRunSteering } from '../../../runSteering';
-import { calls, call, decide, fails, reply, completion } from '../script';
+import { calls, call, decide, fails, reply, completion, PINNED } from '../script';
 import type { Scenario } from '../types';
 
 const FILES = {
@@ -16,7 +16,7 @@ const FILES = {
 const THINK = (thought: string, say: string) => `<think>${thought}</think>${say}`;
 
 export const reasoningReplay: Scenario = {
-  id: 'reasoning-replay', rows: ['T4'], title: 'a turn that reasons before a tool call is replayed without its <think> block, and no two assistant rows meet',
+  id: 'reasoning-replay', rows: ['T4'], loopShows: ['read_file'], title: 'a turn that reasons before a tool call is replayed without its <think> block, and no two assistant rows meet',
   async run(h) {
     h.tools(FILES);
     h.script([
@@ -39,6 +39,7 @@ export const focusFilesOnce: Scenario = {
     await h.start({
       turnContext: async () => '### Focus file `docs/a.md` (2 lines, whole file)\none\ntwo',
       servedReads: async () => [{ path: 'docs/a.md', content: 'one\ntwo', totalLines: 2 }],
+      ...PINNED,
       userTurn: 'Change one to ONE in docs/a.md.',
     });
   },
@@ -54,12 +55,12 @@ export const ledgerInTail: Scenario = {
       calls([call('edit_file', { path: 'a.ts', old: 'a', new: 'b' }, 'c3')]),
       reply('Changed a.ts after reading both files.'),
     ]);
-    await h.start({ userTurn: 'Rename a to b in a.ts.' });
+    await h.start({ ...PINNED, userTurn: 'Rename a to b in a.ts.' });
   },
 };
 
 export const memorySavings: Scenario = {
-  id: 'memory-savings', rows: ['T7'], title: 'a recalled memory block is stamped once on the first request of a call, not on a retry',
+  id: 'memory-savings', rows: ['T7'], loopShows: ['evermind.recall', 'llm.stream_interrupted'], title: 'a recalled memory block is stamped once on the first request of a call, not on a retry',
   async run(h) {
     h.tools(FILES);
     h.script([
@@ -80,7 +81,7 @@ export const memorySavings: Scenario = {
 };
 
 export const retractedReask: Scenario = {
-  id: 'reask-discarded', rows: ['T8'], title: 'the coder re-ask discards the planner\'s first edit turn: nothing durable or counted survives it',
+  id: 'reask-discarded', rows: ['T8'], loopShows: ['llm.role_handoff'], title: 'the coder re-ask discards the planner\'s first edit turn: nothing durable or counted survives it',
   async run(h) {
     h.tools(FILES);
     h.script([
@@ -93,7 +94,7 @@ export const retractedReask: Scenario = {
 };
 
 export const failedReask: Scenario = {
-  id: 'reask-fails', rows: ['T8'], title: 'a coder re-ask that fails records its error step like any failed turn',
+  id: 'reask-fails', rows: ['T8'], loopShows: ['llm.role_handoff'], title: 'a coder re-ask that fails records its error step like any failed turn',
   async run(h) {
     h.tools(FILES);
     h.script([
@@ -105,7 +106,7 @@ export const failedReask: Scenario = {
 };
 
 export const retryOnForcedTurn: Scenario = {
-  id: 'retry-forced-turn', rows: ['T9'], title: 'a transport failure on the forced hand_off turn retries with the same menu and brief, spending nothing forced twice',
+  id: 'retry-forced-turn', rows: ['T9'], loopShows: ['loop.hand_off_due', 'llm.stream_interrupted', 'builtin_tasks_create'], title: 'a transport failure on the forced hand_off turn retries with the same menu and brief, spending nothing forced twice',
   async run(h) {
     h.tools({ read_file: (a) => ({ ok: true, content: `body ${JSON.stringify(a)}` }), builtin_tasks_create: () => ({ id: 901 }), spawn_agents: () => ({ ok: true }) });
     let reads = 0;
@@ -123,7 +124,7 @@ export const retryOnForcedTurn: Scenario = {
 };
 
 export const preflightOnce: Scenario = {
-  id: 'preflight-once', rows: ['T10'], title: 'the model preflight runs once and is recorded once before the first turn',
+  id: 'preflight-once', rows: ['T10'], loopShows: ['model.preflight'], title: 'the model preflight runs once and is recorded once before the first turn',
   async run(h) {
     h.tools(FILES);
     h.script([calls([call('read_file', { path: 'a.ts' }, 'c1')]), reply('Done reading.')]);
@@ -132,7 +133,7 @@ export const preflightOnce: Scenario = {
 };
 
 export const steerDuringTool: Scenario = {
-  id: 'steer-during-tool', rows: ['T11'], title: 'a person\'s steer sent while a tool runs interrupts, is applied once, and is marked as their ask',
+  id: 'steer-during-tool', rows: ['T11'], loopShows: ['steer.applied'], title: 'a person\'s steer sent while a tool runs interrupts, is applied once, and is marked as their ask',
   async run(h) {
     h.tools({ read_file: async () => { queueRunSteering(h.key, 'only the API half', { interrupt: true, fromPerson: true, persist: true }); return { ok: true, content: 'body' }; } });
     h.script([calls([call('read_file', { path: 'a.ts' }, 'c1')]), reply('Done with the API half.')]);
@@ -141,7 +142,7 @@ export const steerDuringTool: Scenario = {
 };
 
 export const steerOnFinalAnswer: Scenario = {
-  id: 'steer-final-answer', rows: ['T11', 'R2'], title: 'a steer that arrives with the final answer re-opens the run and the answer survives it',
+  id: 'steer-final-answer', rows: ['T11', 'R2'], loopShows: ['steer.applied'], title: 'a steer that arrives with the final answer re-opens the run and the answer survives it',
   async run(h) {
     h.tools(FILES);
     h.script([
@@ -153,7 +154,7 @@ export const steerOnFinalAnswer: Scenario = {
 };
 
 export const noStopWordMidRun: Scenario = {
-  id: 'steer-stop-word', rows: ['T11'], title: 'a steer reading "stop" mid-run is direction like any other: the run has no stop-word check',
+  id: 'steer-stop-word', rows: ['T11'], loopShows: ['steer.applied'], title: 'a steer reading "stop" mid-run is direction like any other: the run has no stop-word check',
   async run(h) {
     h.tools({ read_file: () => { queueRunSteering(h.key, 'stop', { interrupt: true, fromPerson: true, persist: true }); return { ok: true, content: 'body' }; } });
     h.script([calls([call('read_file', { path: 'a.ts' }, 'c1')]), reply('Stopping here, as asked.')]);
@@ -162,12 +163,13 @@ export const noStopWordMidRun: Scenario = {
 };
 
 export const budgetWarnAndStop: Scenario = {
-  id: 'budget-warn-stop', rows: ['T13'], title: 'a USD cap warns at 80% and stops at the cap; the stop message is not settled as a reply (no chip, no learn)',
+  id: 'budget-warn-stop', rows: ['T13'], loopShows: ['run.budget_warning', 'run.budget_contained'], title: 'a USD cap warns at 80% and stops at the cap; the stop message is not settled as a reply (no chip, no learn)',
   async run(h) {
     h.tools(FILES);
-    const priced = { resolvedModel: 'claude-sonnet-4-5', usage: { prompt: 60_000, completion: 8_000 } };
+    // $5/M in, $25/M out (the bundled price snapshot): $0.20 a call, so a $1 cap warns after four and stops after five.
+    const priced = { resolvedModel: 'anthropic/claude-opus-4.6', usage: { prompt: 20_000, completion: 4_000 } };
     h.react(decide(({ call: n }) => completion({ toolCalls: [call('read_file', { path: `f${n}.ts` }, `c${n}`)], finishReason: 'tool_calls', ...priced })));
-    await h.start({ maxRunBudgetUsd: 0.5, userTurn: 'read everything' });
+    await h.start({ maxRunBudgetUsd: 1, userTurn: 'read everything' });
   },
 };
 
