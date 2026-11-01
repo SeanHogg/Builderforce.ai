@@ -26738,6 +26738,14 @@ function useBrainChats(options = {}) {
       setError(e instanceof Error ? e.message : "Archive failed");
     }
   }, [persistence, setActiveChatId]);
+  const unarchive = useCallback4(async (id) => {
+    try {
+      await persistence.updateChat(id, { isArchived: false });
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unarchive failed");
+    }
+  }, [persistence, reload]);
   const remove = useCallback4(async (id) => {
     try {
       await persistence.deleteChat(id);
@@ -26787,6 +26795,7 @@ function useBrainChats(options = {}) {
     captureOriginalRequest,
     summarize,
     archive,
+    unarchive,
     remove,
     assignToProject,
     reload,

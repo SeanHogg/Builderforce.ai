@@ -42,6 +42,23 @@ describe('the shared review runner', () => {
         expect(report.unjudged).toBeGreaterThan(0);
     });
 
+    it('does not stall on a judgement that never resolves: the section stays unjudged and the review finishes', async () => {
+        // A completion that hangs forever (a stalled engine) previously left the whole review
+        // stuck at the `judge` phase. The per-request timeout treats it as unjudged instead.
+        const hung: JudgementPort = { judge: () => new Promise(() => undefined) };
+        const phases: ReviewProgress['phase'][] = [];
+        const report = await runKnowledgeReview(ports(hung), {
+            judgementTimeoutMs: 25,
+            onProgress: (e) => phases.push(e.phase),
+        });
+        expect(report.aborted).toBe(false);
+        // The timed-out requests resolve empty, so the review finishes instead of hanging; the
+        // affected sections yield no claims (memory counts an answered-but-empty call as judged).
+        expect(report.judged).toBeGreaterThan(0);
+        expect(phases).toContain('judge');
+        expect(phases.at(-1)).toBe('done');
+    });
+
     it('aborts between files: an already-stopped review writes nothing judged', async () => {
         const judge = countingJudgement();
         const abort = new AbortController();

@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { KnowledgeGraphLabels } from './labels';
 import { button, primaryButton } from './styles';
 import type { KnowledgeGraphSource, ReviewRequest, ReviewTarget } from './types';
+import type { ReviewState } from './useReviewRun';
 
 export interface ReviewLauncherProps {
     source: KnowledgeGraphSource;
@@ -16,9 +17,11 @@ export interface ReviewLauncherProps {
     primary?: boolean;
     /** Arrive on it: its targets shown and the button focused (a host's "Choose a folder to review" chip). */
     defaultOpen?: boolean;
+    /** The run's status: while a review is underway the button shows it is busy instead of offering to start again. */
+    status?: ReviewState['status'];
 }
 
-export function ReviewLauncher({ source, labels, start, primary = true, defaultOpen = false }: ReviewLauncherProps) {
+export function ReviewLauncher({ source, labels, start, primary = true, defaultOpen = false, status }: ReviewLauncherProps) {
     const [targets, setTargets] = useState<ReviewTarget[]>([]);
     const [open, setOpen] = useState(defaultOpen);
     const buttonRef = useRef<HTMLButtonElement>(null);
@@ -32,13 +35,28 @@ export function ReviewLauncher({ source, labels, start, primary = true, defaultO
 
     if (!source.review) return null;
     const style = primary ? primaryButton : button;
+    // A review already underway (planning, awaiting confirm, or running): the press is spent —
+    // say so on the button rather than letting it look idle (the plan can take a while).
+    const busy = status === 'planning' || status === 'confirm' || status === 'running';
     if (targets.length <= 1) {
         const only = targets[0];
-        return <button ref={buttonRef} type="button" style={style} onClick={() => start(only ? { target: only.id } : { pick: true })}>{labels.reviewFolder}</button>;
+        return (
+            <button
+                ref={buttonRef} type="button" style={style} disabled={busy} aria-busy={busy}
+                onClick={() => start(only ? { target: only.id } : { pick: true })}
+            >
+                {busy ? labels.reviewPlanning : labels.reviewFolder}
+            </button>
+        );
     }
     return (
         <div style={{ display: 'grid', gap: 8, justifyItems: 'start' }}>
-            <button ref={buttonRef} type="button" style={style} aria-expanded={open} onClick={() => setOpen((v) => !v)}>{labels.reviewFolder}</button>
+            <button
+                ref={buttonRef} type="button" style={style} aria-expanded={open} disabled={busy} aria-busy={busy}
+                onClick={() => setOpen((v) => !v)}
+            >
+                {busy ? labels.reviewPlanning : labels.reviewFolder}
+            </button>
             {open && (
                 <ul aria-label={labels.reviewTargetsLabel} style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
                     {targets.map((t) => (

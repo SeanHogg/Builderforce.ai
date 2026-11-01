@@ -47,6 +47,8 @@ export interface ReviewRun {
     rereviewAll(): void;
     stop(): void;
     dismiss(): void;
+    /** The phase last reported by the run, for diagnostics. Ref-backed: reading it never re-renders. */
+    readonly lastPhase?: ReviewProgress['phase'];
 }
 
 export function useReviewRun(
@@ -148,5 +150,5 @@ export function useReviewRun(
         running.current = null;
     }, []);
 
-    return { state, available: !!source.review, start, answer, rereviewAll, stop, dismiss };
+    return { state, available: !!source.review, start, answer, rereviewAll, stop, dismiss, get lastPhase() { return lastPhase.current; } };
 }

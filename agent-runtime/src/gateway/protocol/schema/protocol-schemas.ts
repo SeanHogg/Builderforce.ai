@@ -36,6 +36,8 @@ import {
   SkillsUpdateParamsSchema,
 } from "./agents-models-skills.js";
 import {
+  ChannelsConfigureParamsSchema,
+  ChannelsConfigureResultSchema,
   ChannelsLogoutParamsSchema,
   TalkConfigParamsSchema,
   TalkConfigResultSchema,
@@ -205,6 +207,8 @@ export const ProtocolSchemas: Record<string, TSchema> = {
   TalkConfigResult: TalkConfigResultSchema,
   ChannelsStatusParams: ChannelsStatusParamsSchema,
   ChannelsStatusResult: ChannelsStatusResultSchema,
+  ChannelsConfigureParams: ChannelsConfigureParamsSchema,
+  ChannelsConfigureResult: ChannelsConfigureResultSchema,
   ChannelsLogoutParams: ChannelsLogoutParamsSchema,
   WebLoginStartParams: WebLoginStartParamsSchema,
   WebLoginWaitParams: WebLoginWaitParamsSchema,

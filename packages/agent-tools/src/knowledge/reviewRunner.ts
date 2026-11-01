@@ -29,6 +29,7 @@ import type { SymbolSource } from './codePack.js';
 import { currentFileHashes, pruneEditedFiles } from './fileEdits.js';
 import type { HostKnowledgeIndex } from './index/contract.js';
 import { knowledgePacks } from './knowledgePacks.js';
+import { judgementWithTimeout, DEFAULT_JUDGEMENT_TIMEOUT_MS } from './judgement.js';
 import { repoGraphUnder, snapshotUnder } from './rootRelative.js';
 import { serialisedByKey } from './serialisedByKey.js';
 import { analyseWorkspace, type RepoGraphPort } from './workspaceAnalysis.js';
@@ -83,6 +84,13 @@ export interface KnowledgeReviewOptions {
     plan?: PlanDetail;
     /** Default {@link KNOWLEDGE_REVIEW_MODEL_CALLS}. */
     modelCalls?: number;
+    /**
+     * Ceiling for ONE judgement request (per judged file / compare pair) before it is treated as
+     * unjudged, default {@link DEFAULT_JUDGEMENT_TIMEOUT_MS}. A stalled engine (a completion that
+     * never resolves) otherwise hangs the whole review at the `judge` phase; with the timeout the
+     * affected sections stay unjudged and a later run judges them again.
+     */
+    judgementTimeoutMs?: number;
     signal?: AbortSignal;
     onProgress?(p: ReviewProgress): void;
 }
@@ -175,7 +183,10 @@ async function reviewAndIndex(
         store: ports.store,
         packs: reviewPacks(ports, ports.manifest),
         manifest: ports.manifest,
-        ...(ports.judgement ? { judgement: ports.judgement } : {}),
+        // A per-request timeout so a stalled engine cannot hang the whole review at `judge`:
+        // the affected sections stay unjudged and a later run judges them again. The wrapper
+        // lives here (not in memory's `reviewDirectory`), so the ONE review pipeline is unchanged.
+        ...(ports.judgement ? { judgement: judgementWithTimeout(ports.judgement, opts.judgementTimeoutMs ?? DEFAULT_JUDGEMENT_TIMEOUT_MS) } : {}),
         ...(ports.similar ? { similar: ports.similar } : {}),
         ...(opts.plan ? { plan: opts.plan } : {}),
         ...(opts.force ? { force: true } : {}),

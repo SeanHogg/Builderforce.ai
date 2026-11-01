@@ -39,6 +39,10 @@
   --kg-plane: var(--vscode-textBlockQuote-background, rgba(128, 128, 128, 0.12));
   --kg-warn-bg: var(--bf-warning-bg);
   --kg-error: var(--vscode-errorForeground, #fca5a5);
+  /* Neutral TEXT: body on --kg-text, secondary on --kg-muted — mapped onto the editor's own
+     foreground so a selected node's panel reads at full contrast on any theme. */
+  --kg-text: var(--vscode-foreground, #cccccc);
+  --kg-muted: var(--vscode-descriptionForeground, #999999);
 }
 
 body.vscode-light,

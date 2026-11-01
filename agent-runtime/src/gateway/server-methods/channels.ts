@@ -9,7 +9,12 @@ import {
 import { buildChannelAccountSnapshot } from "../../channels/plugins/status.js";
 import type { ChannelAccountSnapshot, ChannelPlugin } from "../../channels/plugins/types.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
-import { loadConfig, readConfigFileSnapshot } from "../../config/config.js";
+import {
+  loadConfig,
+  readConfigFileSnapshot,
+  readConfigFileSnapshotForWrite,
+  writeConfigFile,
+} from "../../config/config.js";
 import { getChannelActivity } from "../../infra/channel-activity.js";
 import { DEFAULT_ACCOUNT_ID } from "../../routing/session-key.js";
 import { defaultRuntime } from "../../runtime.js";
@@ -17,6 +22,7 @@ import {
   ErrorCodes,
   errorShape,
   formatValidationErrors,
+  validateChannelsConfigureParams,
   validateChannelsLogoutParams,
   validateChannelsStatusParams,
 } from "../protocol/index.js";
@@ -67,6 +73,110 @@ export async function logoutChannelAccount(params: {
 }
 
 export const channelsHandlers: GatewayRequestHandlers = {
+  "channels.configure": async ({ params, respond }) => {
+    if (!validateChannelsConfigureParams(params)) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `invalid channels.configure params: ${formatValidationErrors(validateChannelsConfigureParams.errors)}`,
+        ),
+      );
+      return;
+    }
+    const rawChannel = (params as { channel?: unknown }).channel;
+    const channelId = typeof rawChannel === "string" ? normalizeChannelId(rawChannel) : null;
+    if (!channelId) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "invalid channels.configure channel"),
+      );
+      return;
+    }
+    const plugin = getChannelPlugin(channelId);
+    if (!plugin) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `unknown channel ${channelId}`),
+      );
+      return;
+    }
+    const patch = (params as { config?: unknown }).config;
+    if (patch !== null && (typeof patch !== "object" || !patch || Array.isArray(patch))) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          "invalid channels.configure params: config must be an object or null",
+        ),
+      );
+      return;
+    }
+    const { snapshot, writeOptions } = await readConfigFileSnapshotForWrite();
+    if (!snapshot.valid) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "invalid config; fix before configuring channels"),
+      );
+      return;
+    }
+    const cfg = snapshot.config ?? {};
+    const accountIdRaw = (params as { accountId?: unknown }).accountId;
+    const accountId =
+      (typeof accountIdRaw === "string" && accountIdRaw.trim()) ||
+      plugin.config.defaultAccountId?.(cfg) ||
+      plugin.config.listAccountIds(cfg)[0] ||
+      DEFAULT_ACCOUNT_ID;
+
+    const channelsCfg = { ...(cfg.channels ?? {}) } as Record<string, unknown>;
+    const section = { ...((channelsCfg[channelId] ?? {}) as Record<string, unknown>) };
+    let applied: Record<string, unknown>;
+    if (patch === null) {
+      // Remove the account's configuration section.
+      if (accountId === DEFAULT_ACCOUNT_ID) {
+        delete channelsCfg[channelId];
+      } else {
+        const accounts = { ...((section.accounts ?? {}) as Record<string, unknown>) };
+        delete accounts[accountId];
+        if (Object.keys(accounts).length > 0) {
+          section.accounts = accounts;
+          channelsCfg[channelId] = section;
+        } else {
+          delete section.accounts;
+          channelsCfg[channelId] = section;
+        }
+      }
+      applied = {};
+    } else if (accountId === DEFAULT_ACCOUNT_ID) {
+      // Default account fields live directly on the channel section.
+      const next = { ...section, ...(patch as Record<string, unknown>) };
+      channelsCfg[channelId] = next;
+      applied = next;
+    } else {
+      // Named accounts nest under the channel section's `accounts` map.
+      const accounts = { ...((section.accounts ?? {}) as Record<string, unknown>) };
+      const nextAccount = {
+        ...((accounts[accountId] ?? {}) as Record<string, unknown>),
+        ...(patch as Record<string, unknown>),
+      };
+      accounts[accountId] = nextAccount;
+      section.accounts = accounts;
+      channelsCfg[channelId] = section;
+      applied = nextAccount;
+    }
+    try {
+      await writeConfigFile({ ...cfg, channels: channelsCfg }, writeOptions);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+      return;
+    }
+    respond(true, { ok: true as const, channel: channelId, accountId, applied }, undefined);
+  },
   "channels.status": async ({ params, respond, context }) => {
     if (!validateChannelsStatusParams(params)) {
       respond(

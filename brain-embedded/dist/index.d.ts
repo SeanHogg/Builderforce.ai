@@ -4442,6 +4442,13 @@ interface UseBrainChats {
      * tombstones the row.
      */
     archive(id: number): Promise<void>;
+    /**
+     * Restore an archived chat to the live list — the mirror of {@link archive}.
+     * Flips `isArchived` back off and re-reads both lists so the row leaves the
+     * archived view and re-enters the live one. A persistence without a generic
+     * `updateChat` fails closed (no destructive fallback).
+     */
+    unarchive(id: number): Promise<void>;
     remove(id: number): Promise<void>;
     assignToProject(id: number, projectId: number | null): Promise<void>;
     reload(): Promise<void>;

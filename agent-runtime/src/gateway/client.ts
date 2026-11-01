@@ -22,6 +22,8 @@ import {
 } from "../utils/message-channel.js";
 import { buildDeviceAuthPayload } from "./device-auth.js";
 import {
+  type ChannelsConfigureParams,
+  type ChannelsConfigureResult,
   type ConnectParams,
   type EventFrame,
   type HelloOk,
@@ -466,5 +468,14 @@ export class GatewayClient {
     });
     this.ws.send(JSON.stringify(frame));
     return p;
+  }
+
+  /**
+   * Portal → on-prem host downlink: push channel configuration to the host.
+   * Sends `channels.configure`; the host applies the partial account patch to
+   * its config and acknowledges with the applied section.
+   */
+  async configureChannel(params: ChannelsConfigureParams): Promise<ChannelsConfigureResult> {
+    return this.request<ChannelsConfigureResult>("channels.configure", params);
   }
 }

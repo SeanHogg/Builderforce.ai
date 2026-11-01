@@ -130,7 +130,9 @@ export function NodePanel({ graph, nodeRef, labels, source, confirm, onTrace, on
     };
 
     return (
-        <div style={{ display: 'grid', gap: 14 }}>
+        // `color` is set explicitly so the panel never inherits an unreadable foreground from a
+        // host chrome wrapper — the body reads `--kg-text`, the muted rows via `styles.muted`.
+        <div style={{ display: 'grid', gap: 14, color: cssVar('text') }}>
             <strong style={{ fontSize: 14, overflowWrap: 'anywhere' }}>{node.label}</strong>
             {node.stale && <p role="status" style={{ margin: 0, fontSize: 12, color: cssVar('violation') }}>{labels.staleMark}</p>}
             <dl style={{ margin: 0, display: 'grid', gap: 4 }}>

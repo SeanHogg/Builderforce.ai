@@ -134,6 +134,30 @@ export const ChannelsLogoutParamsSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// channel.configure downlink: the portal pushes a channel configuration
+// (account fields, enabled flag) to the on-prem host, which applies it to
+// the channel's config section and acknowledges. `config` is a partial
+// per-account patch (e.g. { botToken, enabled }); fields omitted are left
+// unchanged. Set `config` to null to remove the account's config section.
+export const ChannelsConfigureParamsSchema = Type.Object(
+  {
+    channel: NonEmptyString,
+    accountId: Type.Optional(Type.String()),
+    config: Type.Optional(Type.Union([Type.Record(Type.String(), Type.Unknown()), Type.Null()])),
+  },
+  { additionalProperties: false },
+);
+
+export const ChannelsConfigureResultSchema = Type.Object(
+  {
+    ok: Type.Literal(true),
+    channel: NonEmptyString,
+    accountId: NonEmptyString,
+    applied: Type.Record(Type.String(), Type.Unknown()),
+  },
+  { additionalProperties: false },
+);
+
 export const WebLoginStartParamsSchema = Type.Object(
   {
     force: Type.Optional(Type.Boolean()),

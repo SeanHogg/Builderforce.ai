@@ -93,6 +93,36 @@ export function completionJudgement(complete: JudgeCompletion): JudgementPort {
     };
 }
 
+/** Default ceiling for one judgement request before it is treated as unjudged (a stalled engine). */
+export const DEFAULT_JUDGEMENT_TIMEOUT_MS = 60_000;
+
+/**
+ * Wrap a `JudgementPort` with a per-request timeout: a request that does not settle within
+ * `ms` resolves to an EMPTY result, so the sections it covered are left UNJUDGED and a later
+ * run judges them again — the review continues instead of stalling on a hung completion.
+ * An already-settled request, or one settled by the caller's abort, is returned as-is.
+ */
+export function judgementWithTimeout(port: JudgementPort, ms: number = DEFAULT_JUDGEMENT_TIMEOUT_MS): JudgementPort {
+    return {
+        judge(req: JudgementRequest): Promise<JudgementResult> {
+            return new Promise<JudgementResult>((resolve, reject) => {
+                let settled = false;
+                const timer = setTimeout(() => {
+                    if (settled) return;
+                    settled = true;
+                    // Unjudged, not failed: an empty result keeps the review moving and lets a
+                    // later run pick the section up (memory re-throws a thrown judgement).
+                    resolve(req.kind === 'compare' ? { compare: [], invalid: 0 } : { extract: [], invalid: 0 });
+                }, ms);
+                port.judge(req).then(
+                    (result) => { if (!settled) { settled = true; clearTimeout(timer); resolve(result); } },
+                    (error: unknown) => { if (!settled) { settled = true; clearTimeout(timer); reject(error); } },
+                );
+            });
+        },
+    };
+}
+
 /**
  * The first port that answers: a port that THROWS (no engine running, signed out, a
  * refused call) hands the request to the next; a stopped review stops here. A port that

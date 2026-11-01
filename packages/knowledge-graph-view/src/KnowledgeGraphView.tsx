@@ -10,6 +10,9 @@
 import { lazy, Suspense, useMemo, useRef, useState, type ReactNode } from 'react';
 import { resolveLabels, fillTemplate, type KnowledgeGraphLabels } from './labels';
 import { useKnowledgeGraph } from './useKnowledgeGraph';
+import { CopiedNote, useCopyText } from './copyText';
+import { reviewDiagnosticsText } from './reviewDiagnostics';
+import { fillTemplate as fillTpl } from './template';
 import { lensFindings, hasJudgement, lensApplies } from './lenses';
 import { COMPACT_WIDTH, PHONE_FOCUS_NODES, focusGraph, lensGraph, nodeIndex, labelFor } from './graphModel';
 import { useCan3D, useContainerWidth } from './environment';
@@ -71,6 +74,22 @@ export function KnowledgeGraphView({
     const [showAll, setShowAll] = useState(false);
     const [tracing, setTracing] = useState(false);
     const [revision, setRevision] = useState<Revision>('after');
+    // The always-available capture for a bug/improvement report (English on purpose — see reviewDiagnostics.ts).
+    const diagCopy = useCopyText();
+    const copyDiagnostics = () => {
+        const s = kg.review.state;
+        const lines: string[] = [
+            'Knowledge graph diagnostics',
+            `status: ${kg.status}`,
+            ...(kg.rootId ? [`root: ${kg.rootId}`] : []),
+            ...(graph ? [`stats: ${fillTpl(labels.statsLine, { nodes: graph.stats.nodes, edges: graph.stats.edges, sources: graph.stats.sources })}`] : []),
+            `webgl: ${can3D ? 'yes' : 'no'} · view: ${mode}`,
+            `review: ${s.status}${s.status === 'running' && s.progress ? ` (${s.progress.phase} ${s.progress.done}/${s.progress.total})` : ''}${kg.review.lastPhase ? ` · last phase ${kg.review.lastPhase}` : ''}`,
+            `time: ${new Date().toISOString()}`,
+        ];
+        if (s.status === 'error') lines.push('', reviewDiagnosticsText(s));
+        void diagCopy.copy(lines.join('\n'));
+    };
 
     // Before/After: offered when the host keeps a baseline; "before" draws the baseline graph.
     const keepsBaseline = !!source.baseline || !!source.snapshot;
@@ -133,7 +152,7 @@ export function KnowledgeGraphView({
                     <>
                         <h2 style={heading}>{labels.emptyTitle}</h2>
                         <p style={{ ...muted, margin: 0, fontSize: 13 }}>{labels.emptyBody}</p>
-                        <ReviewLauncher source={source} labels={labels} start={kg.review.start} defaultOpen={!!openReview} />
+                        <ReviewLauncher source={source} labels={labels} start={kg.review.start} defaultOpen={!!openReview} status={kg.review.state.status} />
                     </>
                 ) : <p role="status" style={muted}>{labels.loading}</p>}
                 {review}
@@ -171,7 +190,15 @@ export function KnowledgeGraphView({
                 lenses={kg.lenses} lens={lens.id} onLens={kg.setLens} onSearch={(q) => void kg.search(q)}
                 can3D={can3D} mode={mode} onMode={setMode} lensControl={lensControl}
                 {...(keepsBaseline ? { revision: { value: (showingBefore ? 'before' : 'after') as Revision, hasBefore: !!kg.baseline, onChange: setRevision } } : {})}
-                actions={<ReviewLauncher source={source} labels={labels} start={(req) => kg.review.start(req.target || req.pick ? req : { rootId: graph.scope.rootId })} primary={false} defaultOpen={!!openReview} />}
+                actions={(
+                    <>
+                        <ReviewLauncher source={source} labels={labels} start={(req) => kg.review.start(req.target || req.pick ? req : { rootId: graph.scope.rootId })} primary={false} defaultOpen={!!openReview} status={kg.review.state.status} />
+                        <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                            <button type="button" style={{ ...quietButton, minHeight: 32 }} onClick={copyDiagnostics}>{labels.copyDiagnostics}</button>
+                            <CopiedNote status={diagCopy.status} labels={labels} />
+                        </span>
+                    </>
+                )}
             />
             <div style={{ display: 'grid', gap: 8, padding: '8px 12px' }}>
                 {review}

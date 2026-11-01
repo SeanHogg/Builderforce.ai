@@ -144,6 +144,8 @@ export interface KnowledgeGraphLabels {
     reviewFailedReason: string;
     /** Copies the failure's diagnostics (phase, message, detail, host, time) as plain text. */
     reviewCopyDetails: string;
+    /** The always-available capture: copies the view + run state for a bug/improvement report. */
+    copyDiagnostics: string;
     reviewProgress: string;
     phases: Record<'plan' | 'extract' | 'resolve' | 'judge' | 'write' | 'index' | 'done', string>;
 }
@@ -306,6 +308,7 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
     reviewFailed: 'The review failed. Nothing more was written.',
     reviewFailedReason: 'Reason: {message}',
     reviewCopyDetails: 'Copy details',
+    copyDiagnostics: 'Copy diagnostics',
     reviewProgress: '{phase} · {done} of {total}',
     phases: {
         plan: 'Planning', extract: 'Reading', resolve: 'Resolving', judge: 'Judging', write: 'Writing', index: 'Indexing', done: 'Done',
