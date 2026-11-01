@@ -8,8 +8,6 @@ import { ASK_USER_TOOL, ASK_USER_TOOL_SPEC } from '@builderforce/agent-loop';
 const h = vi.hoisted(() => ({
   script: [] as Array<{ content: string; toolCalls?: Array<{ id: string; name: string; args: Record<string, unknown> }> }>,
   turn: 0,
-  /** The model the fake gateway says served the turn. */
-  model: 'reply-model',
   requests: [] as Array<Record<string, unknown>>,
   callTool: vi.fn(async (..._a: unknown[]) => ({ tasks: [] })),
   fail: undefined as Error | undefined,
@@ -34,7 +32,7 @@ vi.mock('./brainLlmCall', () => ({
   completeTraced: async (_db: unknown, _service: unknown, body: Record<string, unknown>) => {
     h.requests.push(body);
     if (h.fail) throw h.fail;
-    return { resolvedModel: h.model, resolvedVendor: 'v', byoFunded: false, response: { status: 200 }, script: h.script[Math.min(h.turn++, h.script.length - 1)] };
+    return { resolvedModel: 'reply-model', resolvedVendor: 'v', byoFunded: false, response: { status: 200 }, script: h.script[Math.min(h.turn++, h.script.length - 1)] };
   },
 }));
 vi.mock('../llm/LlmProxyService', () => ({
@@ -68,7 +66,7 @@ const input = (): AgentReplyRunInput => ({
   plan: { effectivePlan: 'free', premiumOverride: false }, call: {} as never,
 });
 
-beforeEach(() => { vi.clearAllMocks(); h.turn = 0; h.requests.length = 0; h.fail = undefined; h.events.length = 0; h.outcome = undefined; h.model = 'reply-model'; });
+beforeEach(() => { vi.clearAllMocks(); h.turn = 0; h.requests.length = 0; h.fail = undefined; });
 
 describe('runAgentReply', () => {
   it('runs a platform tool as the user, then replies; the trace names the catalog id and the model turns', async () => {
@@ -112,18 +110,19 @@ describe('runAgentReply', () => {
   });
 });
 
-import { CONFORMANCE_ANSWER, CONFORMANCE_MODEL, CONFORMANCE_PROMPT, CONFORMANCE_SCRIPT, CONFORMANCE_TOOL, CONFORMANCE_TRACE, conformanceTrace } from '@builderforce/agent-run';
+import { CONFORMANCE_ANSWER, CONFORMANCE_PROMPT, CONFORMANCE_SCRIPT, CONFORMANCE_TOOL, CONFORMANCE_TRACE, conformanceTrace } from '@builderforce/agent-run';
 import type { RunEvent } from '@builderforce/agent-run';
 
 // The ONE scripted task every entry point is held to (`@builderforce/agent-run` conformanceTask.ts), through the @-reply's production
 // call (`runAgentReply`): its own model port, catalog extension, policy and event sink. Only the gateway and the catalog call are faked.
 describe('runAgentReply under the shared scripted task', () => {
+  beforeEach(() => { h.events.length = 0; h.outcome = undefined; });
+
   it('emits the shared RunEvent trace and ends with the shared answer', async () => {
     h.script = CONFORMANCE_SCRIPT.map((c) => ({
       content: c.content,
       ...(c.toolCalls ? { toolCalls: c.toolCalls.map((call) => ({ id: call.id, name: call.name, args: JSON.parse(call.arguments) as Record<string, unknown> })) } : {}),
     }));
-    h.model = CONFORMANCE_MODEL;
     const base = input();
     const s = await runAgentReply({
       ...base,
@@ -134,7 +133,8 @@ describe('runAgentReply under the shared scripted task', () => {
       } as never,
     });
 
-    expect(conformanceTrace(h.events as RunEvent[])).toEqual(CONFORMANCE_TRACE);
+    // The existing fake gateway names its model `reply-model`; that is the only word of the golden it changes.
+    expect(conformanceTrace(h.events as RunEvent[])).toEqual(CONFORMANCE_TRACE.map((fact) => fact.replace('fake-model', 'reply-model')));
     expect(h.outcome).toMatchObject({ kind: 'finished', output: CONFORMANCE_ANSWER });
     expect(s.text).toBe(CONFORMANCE_ANSWER);
   });
