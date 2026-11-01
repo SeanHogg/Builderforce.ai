@@ -62,7 +62,7 @@ import { PendingChangesController } from "./pendingChangesTree";
 import { posixShellReport } from "@builderforce/agent-tools/node-posix-shell";
 import { editWorkspaceHooks } from "./hooks/editorDirectives";
 import { buildIdentityReport } from "./buildIdentityReport";
-import { initErrorReporter, reportExtensionError, surfaceError } from "./errorReporter";
+import { initErrorReporter, logLine, reportExtensionError, surfaceError } from "./errorReporter";
 import { onLocalCredentialsChange } from "./localProviderCredentials";
 import { editorAccounts } from "./providerConnect";
 import { bindOutboxStorage, durableStepHost } from "./outboxStorage";
@@ -78,6 +78,7 @@ import { renderWebviewHtml } from "./webviewShared";
 import { VisualizationPanel } from "./visualizationPanel";
 import { registerKnowledgeCommands } from "./knowledge/knowledgeCommands";
 import { bindPlatformPolicy, platformPolicy, platformPolicyResolved, withPlatformAuthentication, outboxSendPermission as platformOutboxSendPermission } from "./platformPolicy";
+import { runNetworkDenialSelfCheck } from "./networkDenialSelfCheck";
 import { localBrainApplication } from "./localFirstStore";
 import { installChatSync } from "./chatSyncHost";
 import { configurePolicyGatesPersistence } from "./policyGates";
@@ -151,6 +152,10 @@ export function activate(context: vscode.ExtensionContext): void {
   // Installs the fetch guard now; the policy RESOLVES after the signed-in read —
   // `platformPolicyResolved()`, which every platform call started below waits on.
   void bindPlatformPolicy(context, SECRET_KEY);
+  // G27: once the guard is installed and the policy has resolved, self-verify the
+  // network denial against the REAL guarded fetch path (not a separately-captured
+  // nativeFetch). Non-blocking; the result lands on the BuilderForce output channel.
+  void runNetworkDenialSelfCheck().catch((error) => logLine(`BuilderForce network-denial self-check: error — ${String(error)}`));
   registerInferenceModeCommands(context, () => refreshWorkspaceSurfaces());
   // `BuilderForce: Pipeline Route Report` — the router's last 30 days, from the local ledger.
   registerPipelineRouteReport(context);

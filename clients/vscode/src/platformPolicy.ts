@@ -23,6 +23,14 @@ let mode: InferenceMode = "local-only";
 export function platformInferenceMode(): InferenceMode {
   return mode;
 }
+
+/** Does the CURRENT policy snapshot permit this capability? Synchronous read of the live
+ *  gate state — unlike `platformRequestRefusalFor` (which reads the cached `mode` used at
+ *  request time), this reflects an in-flight or test-set snapshot immediately. The G27
+ *  self-check uses it to decide whether a denial is currently in force. */
+export function platformCapabilityAllows(capability: PlatformCapability): boolean {
+  return policy.allows(capability);
+}
 const requests: PlatformRequestRecord[] = [];
 const nativeFetch = globalThis.fetch.bind(globalThis);
 let restoreFetch: (() => void) | undefined;
