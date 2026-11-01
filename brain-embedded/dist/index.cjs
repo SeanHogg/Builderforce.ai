@@ -3199,7 +3199,7 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-audio": [25e-7, 1e-5],
   "openai/gpt-audio-mini": [6e-7, 24e-7],
   "openai/gpt-chat-latest": [5e-6, 3e-5],
-  "openai/gpt-oss-120b": [15e-9, 54e-9],
+  "openai/gpt-oss-120b": [15e-8, 6e-7],
   "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
   "openai/gpt-oss-20b": [3e-8, 13e-8],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
@@ -3330,7 +3330,7 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
   "z-ai/glm-5.1": [14e-7, 44e-7],
   "z-ai/glm-5.2": [6e-9, 68e-7],
-  "z-ai/glm-5.3": [8e-8, 36e-7],
+  "z-ai/glm-5.3": [699e-10, 14e-7],
   "z-ai/glm-5.3-flash": [285e-10, 923e-10],
   "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
@@ -12121,21 +12121,13 @@ var import_knowledge6 = require("@seanhogg/builderforce-memory/knowledge");
 var import_knowledge7 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/reviewRunner.ts
-var import_knowledge9 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge10 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/fileEdits.ts
 var import_knowledge8 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
-var import_ingest4 = require("@seanhogg/builderforce-memory/ingest");
-var MAX_GRAPH_FILE_BYTES = 256 * 1024;
-var FAILED_RETAIN_MS = 2 * 6e4;
-var cache = createShaCache({
-  keep: (held) => held.retainMs === 0 ? false : held.retainMs ?? true
-});
-
 // ../packages/agent-tools/src/knowledge/judgement.ts
-var import_knowledge10 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge9 = require("@seanhogg/builderforce-memory/knowledge");
 var KNOWLEDGE_EXTRACT_SYSTEM = [
   "You read one section of a document and list what it asserts.",
   'Reply with JSON only: {"extract":[{"ref":<the ref given>,"claims":[{"subject","predicate","object","quote"}],"entities":[{"name","type"}]}]}.',
@@ -12147,6 +12139,14 @@ var KNOWLEDGE_COMPARE_SYSTEM = [
   "You compare two claims.",
   'Reply with JSON only: {"compare":[{"a":<ref a>,"b":<ref b>,"relation":"contradicts"|"agrees"|"unrelated","confidence":<0..1>}]}.'
 ].join("\n");
+
+// ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
+var import_ingest4 = require("@seanhogg/builderforce-memory/ingest");
+var MAX_GRAPH_FILE_BYTES = 256 * 1024;
+var FAILED_RETAIN_MS = 2 * 6e4;
+var cache = createShaCache({
+  keep: (held) => held.retainMs === 0 ? false : held.retainMs ?? true
+});
 
 // ../packages/agent-tools/src/knowledge/humanFact.ts
 var import_knowledge11 = require("@seanhogg/builderforce-memory/knowledge");

@@ -87,11 +87,10 @@ beforeAll(async () => {
   port = started.port;
   gatewayToken = process.env.BUILDERFORCE_AGENTS_GATEWAY_TOKEN ?? "";
   const { connectReq } = await import("./test-helpers.server.js");
-  const res = await connectReq(ws, { device: null });
+  const res = await connectReq(ws);
   if (!res.ok) {
-    console.log("[dbg] connect failed:", JSON.stringify(res.error));
+    throw new Error(`connect failed: ${JSON.stringify(res.error)}`);
   }
-  expect(res.ok).toBe(true);
   expect((res.payload as { type?: unknown } | undefined)?.type).toBe("hello-ok");
 });
 

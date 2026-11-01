@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-11-01T21:44:11.017Z";
+export const PRICE_SNAPSHOT_AT = "2026-11-01T23:17:34.499Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
@@ -322,7 +322,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "openai/gpt-audio": [0.0000025, 0.00001],
   "openai/gpt-audio-mini": [6e-7, 0.0000024],
   "openai/gpt-chat-latest": [0.000005, 0.00003],
-  "openai/gpt-oss-120b": [1.5e-8, 5.4e-8],
+  "openai/gpt-oss-120b": [1.5e-7, 6e-7],
   "openai/gpt-oss-120b:batch": [2.96e-8, 1.36e-7],
   "openai/gpt-oss-20b": [3e-8, 1.3e-7],
   "openai/gpt-oss-20b:batch": [2.4e-8, 1.12e-7],
@@ -453,7 +453,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "z-ai/glm-5-turbo": [0.0000012, 0.000004],
   "z-ai/glm-5.1": [0.0000014, 0.0000044],
   "z-ai/glm-5.2": [6e-9, 0.0000068],
-  "z-ai/glm-5.3": [8e-8, 0.0000036],
+  "z-ai/glm-5.3": [6.99e-8, 0.0000014],
   "z-ai/glm-5.3-flash": [2.85e-8, 9.23e-8],
   "z-ai/glm-5.3-flash:batch": [5e-8, 1.8e-7],
   "z-ai/glm-5.3-flashx": [3.7e-7, 0.00000125],
