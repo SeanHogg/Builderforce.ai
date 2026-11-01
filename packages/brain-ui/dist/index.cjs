@@ -219,6 +219,7 @@ __export(src_exports, {
   useComposerMenuRequest: () => useComposerMenuRequest,
   useConsumptionSnapshot: () => useConsumptionSnapshot,
   useDismissibleNotice: () => useDismissibleNotice,
+  useHideDoneTickets: () => useHideDoneTickets,
   useInferenceModeGate: () => useInferenceModeGate,
   useLocalModels: () => useLocalModels,
   useMentionAutocomplete: () => useMentionAutocomplete,
@@ -3044,14 +3045,10 @@ var import_jsx_runtime25 = require("react/jsx-runtime");
 function SurfaceEmptyState({ layout, title, hint, controls, composer, starters }) {
   const docked = layout === "docked";
   return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: `bf-empty bf-empty--${layout}`, children: [
-    docked ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "bf-empty__greet", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { "aria-hidden": true, className: "bf-empty__mark", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(BrainMark, {}) }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "bf-empty__copy", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "bf-empty__title", children: title }),
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "bf-empty__hint", children: hint })
-      ] })
-    ] }) : /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(import_jsx_runtime25.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { "aria-hidden": true, className: "bf-empty__mark bf-empty__mark--hero", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(BrainMark, {}) }),
+    docked ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "bf-empty__greet", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "bf-empty__copy", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "bf-empty__title", children: title }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "bf-empty__hint", children: hint })
+    ] }) }) : /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(import_jsx_runtime25.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "bf-empty__title", children: title }),
       /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "bf-empty__hint", children: hint })
     ] }),
@@ -4993,7 +4990,7 @@ function PendingChangesList({
 }
 
 // src/chatTickets/ChatTicketsPanel.tsx
-var import_react41 = require("react");
+var import_react42 = require("react");
 
 // src/chatTickets/runGate.ts
 function resolveRunGate(adapter) {
@@ -5123,6 +5120,8 @@ var S2 = {
   // Compact sort control in the rail header — sits outside the collapse button so
   // changing the order never toggles the grid. The `select` look, just tighter.
   sortSelect: { ...select2, minWidth: 132, maxWidth: 180, padding: "3px 6px", fontSize: 11, flex: "0 0 auto" },
+  // "Hide done" checkbox beside the sort control — same row, same height.
+  hideDoneLabel: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: V.text2, cursor: "pointer", flex: "0 0 auto", whiteSpace: "nowrap" },
   // The option popup is drawn by the OS and does NOT inherit `select`'s background,
   // so each option needs its own opaque pair — see nativeOptionStyle.
   option: nativeOptionStyle,
@@ -5383,6 +5382,8 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   sortDone: "Complete first",
   sortTitle: "Title",
   sortLinked: "Linked order",
+  hideDone: "Hide done",
+  allDone: "All linked tickets are done.",
   kind: { task: "Task", epic: "Epic", gap: "Gap", objective: "Objective", initiative: "Initiative", portfolio: "Portfolio", roadmap: "Roadmap", spec: "Spec", retro: "Retrospective", poker: "Planning poker" },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
   inParent: (parent) => `in ${parent}`,
@@ -5627,33 +5628,60 @@ function useChatTicketSort() {
   return [sort, choose];
 }
 
+// src/chatTickets/useHideDoneTickets.ts
+var import_react41 = require("react");
+var HIDE_DONE_KEY = "bf.chatTickets.hideDone";
+function readHideDone() {
+  try {
+    const stored = typeof localStorage === "undefined" ? null : localStorage.getItem(HIDE_DONE_KEY);
+    return stored === null ? true : stored === "1";
+  } catch {
+    return true;
+  }
+}
+function writeHideDone(hide) {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(HIDE_DONE_KEY, hide ? "1" : "0");
+  } catch {
+  }
+}
+function useHideDoneTickets() {
+  const [hideDone, setHideDone] = (0, import_react41.useState)(readHideDone);
+  const choose = (0, import_react41.useCallback)((next) => {
+    setHideDone(next);
+    writeHideDone(next);
+  }, []);
+  return [hideDone, choose];
+}
+
 // src/chatTickets/ChatTicketsPanel.tsx
 var import_jsx_runtime53 = require("react/jsx-runtime");
 var RUNNABLE = new Set(RUNNABLE_KINDS);
 var COLLAPSE_THRESHOLD = 8;
 var NO_SUBAGENTS = [];
 function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS, spend, spendLabels: spendLabels2, locale, originalRequest }) {
-  const [tickets, setTickets] = (0, import_react41.useState)([]);
-  const [agents, setAgents] = (0, import_react41.useState)([]);
-  const [members, setMembers] = (0, import_react41.useState)([]);
-  const [pool, setPool] = (0, import_react41.useState)([]);
-  const [questions, setQuestions] = (0, import_react41.useState)([]);
-  const [panel, setPanel] = (0, import_react41.useState)(null);
+  const [tickets, setTickets] = (0, import_react42.useState)([]);
+  const [agents, setAgents] = (0, import_react42.useState)([]);
+  const [members, setMembers] = (0, import_react42.useState)([]);
+  const [pool, setPool] = (0, import_react42.useState)([]);
+  const [questions, setQuestions] = (0, import_react42.useState)([]);
+  const [panel, setPanel] = (0, import_react42.useState)(null);
   const togglePanel = (key) => setPanel((open) => open === key ? null : key);
   const openExtension = extensions?.find((ext) => ext.key === panel) ?? null;
-  (0, import_react41.useEffect)(() => {
+  (0, import_react42.useEffect)(() => {
     if (panel && !isBuiltinPanel(panel) && !extensions?.some((ext) => ext.key === panel)) setPanel(null);
   }, [panel, extensions]);
-  const [lineageKey, setLineageKey] = (0, import_react41.useState)(null);
-  const [lineage, setLineage] = (0, import_react41.useState)([]);
-  const [runKey, setRunKey] = (0, import_react41.useState)(null);
-  const [msg, setMsg] = (0, import_react41.useState)(null);
-  const [busy, setBusy] = (0, import_react41.useState)(false);
-  const [collapsed, setCollapsed] = (0, import_react41.useState)(null);
-  const userCollapsed = (0, import_react41.useRef)(false);
+  const [lineageKey, setLineageKey] = (0, import_react42.useState)(null);
+  const [lineage, setLineage] = (0, import_react42.useState)([]);
+  const [runKey, setRunKey] = (0, import_react42.useState)(null);
+  const [msg, setMsg] = (0, import_react42.useState)(null);
+  const [busy, setBusy] = (0, import_react42.useState)(false);
+  const [collapsed, setCollapsed] = (0, import_react42.useState)(null);
+  const userCollapsed = (0, import_react42.useRef)(false);
   const [sort, setSort] = useChatTicketSort();
+  const [hideDone, setHideDone] = useHideDoneTickets();
   const syncChatProgress = useChatProgressSync(chatId, chatList, onChanged);
-  const load = (0, import_react41.useCallback)(async () => {
+  const load = (0, import_react42.useCallback)(async () => {
     const [tk, ag, mem, qs] = await Promise.all([
       adapter.listTickets(chatId).catch(() => []),
       adapter.listAgents(chatId).catch(() => []),
@@ -5667,18 +5695,18 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     setQuestions(qs);
     if (!userCollapsed.current) setCollapsed(tk.length > COLLAPSE_THRESHOLD);
   }, [adapter, chatId, syncChatProgress]);
-  (0, import_react41.useEffect)(() => {
+  (0, import_react42.useEffect)(() => {
     void load();
   }, [load, refreshSignal]);
-  (0, import_react41.useEffect)(() => {
+  (0, import_react42.useEffect)(() => {
     adapter.loadAgentPool().then(setPool).catch(() => setPool([]));
   }, [adapter]);
   const flash = (m) => {
     setMsg(m);
     if (typeof window !== "undefined") window.setTimeout(() => setMsg(null), 3500);
   };
-  const poolName = (0, import_react41.useCallback)((ref) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
-  const parentLink = (0, import_react41.useCallback)((tk) => tk.parent ? tickets.find((t) => t.kind === tk.parent.kind && t.ref === tk.parent.ref) : void 0, [tickets]);
+  const poolName = (0, import_react42.useCallback)((ref) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
+  const parentLink = (0, import_react42.useCallback)((tk) => tk.parent ? tickets.find((t) => t.kind === tk.parent.kind && t.ref === tk.parent.ref) : void 0, [tickets]);
   const unlink = async (tk) => {
     setBusy(true);
     try {
@@ -5711,8 +5739,11 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       setBusy(false);
     }
   };
-  const agg = (0, import_react41.useMemo)(() => rollupChatTicketHealth(tickets), [tickets]);
-  const displayedTickets = (0, import_react41.useMemo)(() => sortChatTickets(tickets, sort), [tickets, sort]);
+  const agg = (0, import_react42.useMemo)(() => rollupChatTicketHealth(tickets), [tickets]);
+  const displayedTickets = (0, import_react42.useMemo)(
+    () => sortChatTickets(tickets, sort).filter((t) => !hideDone || !isChatTicketComplete(t.progressPct)),
+    [tickets, sort, hideDone]
+  );
   const isCollapsed = tickets.length > 0 && (collapsed ?? tickets.length > COLLAPSE_THRESHOLD);
   const toggleCollapsed = () => {
     userCollapsed.current = true;
@@ -5755,9 +5786,20 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
             /* @__PURE__ */ (0, import_jsx_runtime53.jsx)("option", { value: "linked", style: S2.option, children: labels.sortLinked })
           ]
         }
-      )
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime53.jsxs)("label", { style: S2.hideDoneLabel, title: labels.hideDone, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime53.jsx)(
+          "input",
+          {
+            type: "checkbox",
+            checked: hideDone,
+            onChange: (e) => setHideDone(e.target.checked)
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime53.jsx)("span", { children: labels.hideDone })
+      ] })
     ] }),
-    !isCollapsed && /* @__PURE__ */ (0, import_jsx_runtime53.jsx)("div", { style: S2.ticketGrid, children: tickets.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime53.jsx)("span", { style: S2.muted, children: labels.none }) : displayedTickets.map((tk) => {
+    !isCollapsed && /* @__PURE__ */ (0, import_jsx_runtime53.jsx)("div", { style: S2.ticketGrid, children: tickets.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime53.jsx)("span", { style: S2.muted, children: labels.none }) : displayedTickets.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime53.jsx)("span", { style: S2.muted, children: labels.allDone }) : displayedTickets.map((tk) => {
       const key = `${tk.kind}:${tk.ref}`;
       const parentTk = parentLink(tk);
       return /* @__PURE__ */ (0, import_jsx_runtime53.jsxs)("div", { style: S2.chip, children: [
@@ -5977,7 +6019,7 @@ var BUILTIN_PANELS = /* @__PURE__ */ new Set(["link", "agents", "people", "merge
 function isBuiltinPanel(key) {
   return BUILTIN_PANELS.has(key);
 }
-var ChatTicketsPanel = (0, import_react41.memo)(ChatTicketsPanelInner);
+var ChatTicketsPanel = (0, import_react42.memo)(ChatTicketsPanelInner);
 
 // src/chatTickets/restAdapter.ts
 var import_builderforce_brain_embedded21 = require("@seanhogg/builderforce-brain-embedded");
@@ -6100,12 +6142,12 @@ function createChatTicketsRestAdapter(opts) {
 }
 
 // src/chatTickets/useChatParticipants.ts
-var import_react42 = require("react");
+var import_react43 = require("react");
 function useChatParticipants(adapter, chatId, refreshSignal = 0) {
-  const [pool, setPool] = (0, import_react42.useState)([]);
-  const [invited, setInvited] = (0, import_react42.useState)([]);
-  const [members, setMembers] = (0, import_react42.useState)([]);
-  (0, import_react42.useEffect)(() => {
+  const [pool, setPool] = (0, import_react43.useState)([]);
+  const [invited, setInvited] = (0, import_react43.useState)([]);
+  const [members, setMembers] = (0, import_react43.useState)([]);
+  (0, import_react43.useEffect)(() => {
     if (chatId == null) {
       setInvited([]);
       setMembers([]);
@@ -6127,7 +6169,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
     };
   }, [adapter, chatId, refreshSignal]);
   const needsPool = invited.some((a) => !a.name);
-  (0, import_react42.useEffect)(() => {
+  (0, import_react43.useEffect)(() => {
     if (!needsPool) return;
     let ok = true;
     adapter.loadAgentPool().then((p) => {
@@ -6139,7 +6181,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
       ok = false;
     };
   }, [adapter, needsPool]);
-  return (0, import_react42.useMemo)(
+  return (0, import_react43.useMemo)(
     () => [
       // The NAME comes off the invited row, which the server resolves in one batched
       // query. The pool lookup behind it is the legacy path, kept only for a client
@@ -6160,27 +6202,27 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
 }
 
 // src/chatTickets/useChatActivitySignal.ts
-var import_react43 = require("react");
+var import_react44 = require("react");
 var import_builderforce_brain_embedded22 = require("@seanhogg/builderforce-brain-embedded");
 function useChatActivitySignal(messages) {
-  return (0, import_react43.useMemo)(() => (0, import_builderforce_brain_embedded22.activityMessageCount)(messages), [messages]);
+  return (0, import_react44.useMemo)(() => (0, import_builderforce_brain_embedded22.activityMessageCount)(messages), [messages]);
 }
 
 // src/mention/MentionAutocomplete.tsx
-var import_react44 = require("react");
+var import_react45 = require("react");
 var import_builderforce_brain_embedded23 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime54 = require("react/jsx-runtime");
 var DEFAULT_MENTION_LABELS = { title: "Direct to", agent: "Agent", human: "Person" };
 function useMentionAutocomplete(opts) {
   const { textareaRef, value, setValue, participants, onPick, labels, disabled } = opts;
-  const [token, setToken] = (0, import_react44.useState)(null);
-  const [index, setIndex] = (0, import_react44.useState)(0);
-  const matches = (0, import_react44.useMemo)(
+  const [token, setToken] = (0, import_react45.useState)(null);
+  const [index, setIndex] = (0, import_react45.useState)(0);
+  const matches = (0, import_react45.useMemo)(
     () => token && !disabled ? (0, import_builderforce_brain_embedded23.filterMentionCandidates)(participants, token.query) : [],
     [token, participants, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
-  const recompute = (0, import_react44.useCallback)(() => {
+  const recompute = (0, import_react45.useCallback)(() => {
     const el = textareaRef.current;
     if (!el || disabled || participants.length === 0) {
       setToken(null);
@@ -6190,10 +6232,10 @@ function useMentionAutocomplete(opts) {
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, participants.length]);
-  (0, import_react44.useEffect)(() => {
+  (0, import_react45.useEffect)(() => {
     recompute();
   }, [value, recompute]);
-  const choose = (0, import_react44.useCallback)((r) => {
+  const choose = (0, import_react45.useCallback)((r) => {
     const el = textareaRef.current;
     const tk = token ?? (el ? (0, import_builderforce_brain_embedded23.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
@@ -6215,7 +6257,7 @@ function useMentionAutocomplete(opts) {
     setToken(null);
     onPick(r);
   }, [token, value, setValue, onPick, textareaRef]);
-  const onKeyDown = (0, import_react44.useCallback)((e) => {
+  const onKeyDown = (0, import_react45.useCallback)((e) => {
     if (!open) return false;
     switch (e.key) {
       case "ArrowDown":
@@ -6303,20 +6345,20 @@ var POP = {
 };
 
 // src/mention/TicketAutocomplete.tsx
-var import_react45 = require("react");
+var import_react46 = require("react");
 var import_builderforce_brain_embedded24 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime55 = require("react/jsx-runtime");
 var DEFAULT_TICKET_TAG_LABELS = { title: "Tag ticket", status: "Status", noMatches: "No tickets found" };
 function useTicketAutocomplete(opts) {
   const { textareaRef, value, setValue, tickets, onPick, labels, disabled } = opts;
-  const [token, setToken] = (0, import_react45.useState)(null);
-  const [index, setIndex] = (0, import_react45.useState)(0);
-  const matches = (0, import_react45.useMemo)(
+  const [token, setToken] = (0, import_react46.useState)(null);
+  const [index, setIndex] = (0, import_react46.useState)(0);
+  const matches = (0, import_react46.useMemo)(
     () => token && !disabled ? (0, import_builderforce_brain_embedded24.filterTicketCandidates)(tickets, token.query) : [],
     [token, tickets, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
-  const recompute = (0, import_react45.useCallback)(() => {
+  const recompute = (0, import_react46.useCallback)(() => {
     const el = textareaRef.current;
     if (!el || disabled || tickets.length === 0) {
       setToken(null);
@@ -6326,10 +6368,10 @@ function useTicketAutocomplete(opts) {
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, tickets.length]);
-  (0, import_react45.useEffect)(() => {
+  (0, import_react46.useEffect)(() => {
     recompute();
   }, [value, recompute]);
-  const choose = (0, import_react45.useCallback)((t) => {
+  const choose = (0, import_react46.useCallback)((t) => {
     const el = textareaRef.current;
     const tk = token ?? (el ? (0, import_builderforce_brain_embedded24.activeTicketToken)(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
@@ -6352,7 +6394,7 @@ function useTicketAutocomplete(opts) {
     setToken(null);
     onPick(t);
   }, [token, value, setValue, onPick, textareaRef]);
-  const onKeyDown = (0, import_react45.useCallback)((e) => {
+  const onKeyDown = (0, import_react46.useCallback)((e) => {
     if (!open) return false;
     switch (e.key) {
       case "ArrowDown":
@@ -6496,7 +6538,7 @@ function chatDiagnosticsReads(adapter, chatId) {
 }
 
 // src/evermind/EvermindConsole.tsx
-var import_react50 = require("react");
+var import_react51 = require("react");
 
 // src/evermind/types.ts
 function defaultFormatWhen(atMs) {
@@ -6721,13 +6763,13 @@ function evermindNextAction(input) {
 }
 
 // src/evermind/EvermindTestBench.tsx
-var import_react46 = require("react");
+var import_react47 = require("react");
 var import_jsx_runtime56 = require("react/jsx-runtime");
 function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
-  const [prompt, setPrompt] = (0, import_react46.useState)("");
-  const [running, setRunning] = (0, import_react46.useState)(false);
-  const [error, setError] = (0, import_react46.useState)(null);
-  const run = (0, import_react46.useCallback)(async (withPrompt) => {
+  const [prompt, setPrompt] = (0, import_react47.useState)("");
+  const [running, setRunning] = (0, import_react47.useState)(false);
+  const [error, setError] = (0, import_react47.useState)(null);
+  const run = (0, import_react47.useCallback)(async (withPrompt) => {
     setRunning(true);
     setError(null);
     try {
@@ -6780,7 +6822,7 @@ function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
 }
 
 // src/evermind/EvermindMaintenance.tsx
-var import_react47 = require("react");
+var import_react48 = require("react");
 var import_jsx_runtime57 = require("react/jsx-runtime");
 function EvermindMaintenance({
   t,
@@ -6790,13 +6832,13 @@ function EvermindMaintenance({
   onReindex,
   onCleanup
 }) {
-  const [slug, setSlug] = (0, import_react47.useState)("");
-  const [pending, setPending] = (0, import_react47.useState)(null);
-  const doReseed = (0, import_react47.useCallback)(async () => {
+  const [slug, setSlug] = (0, import_react48.useState)("");
+  const [pending, setPending] = (0, import_react48.useState)(null);
+  const doReseed = (0, import_react48.useCallback)(async () => {
     setPending(null);
     await onReseed?.(slug || void 0);
   }, [onReseed, slug]);
-  const doCleanup = (0, import_react47.useCallback)(async () => {
+  const doCleanup = (0, import_react48.useCallback)(async () => {
     setPending(null);
     await onCleanup?.();
   }, [onCleanup]);
@@ -6900,7 +6942,7 @@ function Confirm({
 }
 
 // src/evermind/EvermindAnalyzer.tsx
-var import_react48 = require("react");
+var import_react49 = require("react");
 var import_jsx_runtime58 = require("react/jsx-runtime");
 var TONE = {
   ok: "ok",
@@ -6911,15 +6953,15 @@ var TONE = {
   redundant: "warn"
 };
 function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysis, onAnalysis }) {
-  const [selected, setSelected] = (0, import_react48.useState)(/* @__PURE__ */ new Set());
-  const [running, setRunning] = (0, import_react48.useState)(false);
-  const [applying, setApplying] = (0, import_react48.useState)(false);
-  const [repair, setRepair] = (0, import_react48.useState)(null);
-  const [error, setError] = (0, import_react48.useState)(null);
-  (0, import_react48.useEffect)(() => {
+  const [selected, setSelected] = (0, import_react49.useState)(/* @__PURE__ */ new Set());
+  const [running, setRunning] = (0, import_react49.useState)(false);
+  const [applying, setApplying] = (0, import_react49.useState)(false);
+  const [repair, setRepair] = (0, import_react49.useState)(null);
+  const [error, setError] = (0, import_react49.useState)(null);
+  (0, import_react49.useEffect)(() => {
     setSelected(new Set(analysis?.findings.map((f) => f.id) ?? []));
   }, [analysis]);
-  const run = (0, import_react48.useCallback)(async () => {
+  const run = (0, import_react49.useCallback)(async () => {
     setRunning(true);
     setError(null);
     setRepair(null);
@@ -6932,7 +6974,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       setRunning(false);
     }
   }, [onAnalyze, onAnalysis, t.errorGeneric]);
-  const apply = (0, import_react48.useCallback)(async () => {
+  const apply = (0, import_react49.useCallback)(async () => {
     if (!onApply || !analysis) return;
     const picked = analysis.findings.filter((f) => selected.has(f.id));
     if (picked.length === 0) return;
@@ -6951,7 +6993,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       setApplying(false);
     }
   }, [analysis, onAnalysis, onApply, onRepaired, selected, t.errorGeneric]);
-  const toggle = (0, import_react48.useCallback)((id) => {
+  const toggle = (0, import_react49.useCallback)((id) => {
     setSelected((cur) => {
       const next = new Set(cur);
       if (next.has(id)) next.delete(id);
@@ -6960,7 +7002,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
     });
   }, []);
   const findings = analysis?.findings ?? [];
-  const allSelected = (0, import_react48.useMemo)(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
+  const allSelected = (0, import_react49.useMemo)(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
   const busy = disabled || running || applying;
   return /* @__PURE__ */ (0, import_jsx_runtime58.jsxs)("div", { style: sectionBlock, children: [
     /* @__PURE__ */ (0, import_jsx_runtime58.jsx)("div", { style: fieldTitle, children: t.analyzeTitle }),
@@ -7063,13 +7105,13 @@ function FindingRow({
 }
 
 // src/evermind/EvermindDiagnostics.tsx
-var import_react49 = require("react");
+var import_react50 = require("react");
 var import_jsx_runtime59 = require("react/jsx-runtime");
 function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
-  const [report, setReport] = (0, import_react49.useState)(null);
-  const [copied, setCopied] = (0, import_react49.useState)(false);
-  const [revealed, setRevealed] = (0, import_react49.useState)(false);
-  const copy = (0, import_react49.useCallback)(async () => {
+  const [report, setReport] = (0, import_react50.useState)(null);
+  const [copied, setCopied] = (0, import_react50.useState)(false);
+  const [revealed, setRevealed] = (0, import_react50.useState)(false);
+  const copy = (0, import_react50.useCallback)(async () => {
     const text = buildReport();
     setReport(text);
     try {
@@ -7084,13 +7126,13 @@ function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
       onManualFallback?.();
     }
   }, [buildReport, onCopy, onManualFallback]);
-  const toggleReveal = (0, import_react49.useCallback)(() => setRevealed((v) => !v), []);
+  const toggleReveal = (0, import_react50.useCallback)(() => setRevealed((v) => !v), []);
   return { report, copied, revealed, copy, toggleReveal };
 }
 function EvermindDiagnostics({ t, disabled, copy }) {
   const { report, copied, revealed } = copy;
-  const areaRef = (0, import_react49.useRef)(null);
-  (0, import_react49.useEffect)(() => {
+  const areaRef = (0, import_react50.useRef)(null);
+  (0, import_react50.useEffect)(() => {
     if (!revealed) return;
     areaRef.current?.focus();
     areaRef.current?.select();
@@ -7407,26 +7449,26 @@ var import_jsx_runtime61 = require("react/jsx-runtime");
 var TEACH_POLL_INTERVAL_MS = 3e3;
 var TEACH_POLL_TIMEOUT_MS = 12e4;
 function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate, host = "web" }) {
-  const t = (0, import_react50.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
-  const [data, setData] = (0, import_react50.useState)(null);
-  const [targets, setTargets] = (0, import_react50.useState)(null);
-  const [seedModels, setSeedModels] = (0, import_react50.useState)([]);
-  const [teacherOpts, setTeacherOpts] = (0, import_react50.useState)(null);
-  const [selectedSlug, setSelectedSlug] = (0, import_react50.useState)("");
-  const [teachPrompt, setTeachPrompt] = (0, import_react50.useState)("");
-  const [teachText, setTeachText] = (0, import_react50.useState)("");
-  const [busy, setBusy] = (0, import_react50.useState)(false);
-  const [validating, setValidating] = (0, import_react50.useState)(false);
-  const [validateResult, setValidateResult] = (0, import_react50.useState)(null);
-  const [notice, setNotice] = (0, import_react50.useState)(null);
-  const [noticeTone, setNoticeTone] = (0, import_react50.useState)("good");
-  const [error, setError] = (0, import_react50.useState)(null);
-  const [loaded, setLoaded] = (0, import_react50.useState)(false);
-  const [tab, setTab] = (0, import_react50.useState)("teach");
-  const [probeResult, setProbeResult] = (0, import_react50.useState)(null);
-  const [analysis, setAnalysis] = (0, import_react50.useState)(null);
-  const [loadFailed, setLoadFailed] = (0, import_react50.useState)(false);
-  const reload = (0, import_react50.useCallback)(async () => {
+  const t = (0, import_react51.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
+  const [data, setData] = (0, import_react51.useState)(null);
+  const [targets, setTargets] = (0, import_react51.useState)(null);
+  const [seedModels, setSeedModels] = (0, import_react51.useState)([]);
+  const [teacherOpts, setTeacherOpts] = (0, import_react51.useState)(null);
+  const [selectedSlug, setSelectedSlug] = (0, import_react51.useState)("");
+  const [teachPrompt, setTeachPrompt] = (0, import_react51.useState)("");
+  const [teachText, setTeachText] = (0, import_react51.useState)("");
+  const [busy, setBusy] = (0, import_react51.useState)(false);
+  const [validating, setValidating] = (0, import_react51.useState)(false);
+  const [validateResult, setValidateResult] = (0, import_react51.useState)(null);
+  const [notice, setNotice] = (0, import_react51.useState)(null);
+  const [noticeTone, setNoticeTone] = (0, import_react51.useState)("good");
+  const [error, setError] = (0, import_react51.useState)(null);
+  const [loaded, setLoaded] = (0, import_react51.useState)(false);
+  const [tab, setTab] = (0, import_react51.useState)("teach");
+  const [probeResult, setProbeResult] = (0, import_react51.useState)(null);
+  const [analysis, setAnalysis] = (0, import_react51.useState)(null);
+  const [loadFailed, setLoadFailed] = (0, import_react51.useState)(false);
+  const reload = (0, import_react51.useCallback)(async () => {
     const targetsP = adapter.loadTargets?.().catch(() => null);
     try {
       const d = await adapter.loadData();
@@ -7443,11 +7485,11 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (tg) setTargets(tg);
     }
   }, [adapter]);
-  (0, import_react50.useEffect)(() => {
+  (0, import_react51.useEffect)(() => {
     setLoaded(false);
     void reload();
   }, [reload]);
-  (0, import_react50.useEffect)(() => {
+  (0, import_react51.useEffect)(() => {
     if (!canManage) return;
     let cancelled = false;
     void adapter.loadSeedModels().then((m) => {
@@ -7465,7 +7507,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       cancelled = true;
     };
   }, [adapter, canManage]);
-  (0, import_react50.useEffect)(() => {
+  (0, import_react51.useEffect)(() => {
     if (!refreshMs) return;
     const hidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
     const id = setInterval(() => {
@@ -7480,13 +7522,13 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [refreshMs, busy, reload]);
-  const lastRefreshSignal = (0, import_react50.useRef)(refreshSignal);
-  (0, import_react50.useEffect)(() => {
+  const lastRefreshSignal = (0, import_react51.useRef)(refreshSignal);
+  (0, import_react51.useEffect)(() => {
     if (refreshSignal == null || refreshSignal === lastRefreshSignal.current) return;
     lastRefreshSignal.current = refreshSignal;
     void reload();
   }, [refreshSignal, reload]);
-  const runValidate = (0, import_react50.useCallback)(async (prompt) => {
+  const runValidate = (0, import_react51.useCallback)(async (prompt) => {
     const task = prompt.trim();
     if (task.length < 3) return;
     setValidating(true);
@@ -7502,20 +7544,20 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setValidating(false);
     }
   }, [adapter, onValidate, t.errorGeneric]);
-  const clearValidate = (0, import_react50.useCallback)(() => {
+  const clearValidate = (0, import_react51.useCallback)(() => {
     setValidateResult(null);
     onValidate?.(null);
   }, [onValidate]);
-  const pollTimer = (0, import_react50.useRef)(null);
-  const mounted = (0, import_react50.useRef)(true);
-  (0, import_react50.useEffect)(() => {
+  const pollTimer = (0, import_react51.useRef)(null);
+  const mounted = (0, import_react51.useRef)(true);
+  (0, import_react51.useEffect)(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
       if (pollTimer.current) clearTimeout(pollTimer.current);
     };
   }, []);
-  const describeTeachOutcome = (0, import_react50.useCallback)((status) => {
+  const describeTeachOutcome = (0, import_react51.useCallback)((status) => {
     if (status.state === "dropped") return { text: t.taughtDropped, tone: "warn" };
     if (status.state !== "merged") return { text: t.taughtStillPending, tone: "warn" };
     const verdict = evermindLearnedStatus({
@@ -7531,7 +7573,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     if (verdict.state === "fault") return { text: t.taughtTeacherFault(verdict.teacherModel ?? "", verdict.reason), tone: "warn" };
     return { text: t.taughtSelf(version), tone: "good" };
   }, [t]);
-  const trackTeach = (0, import_react50.useCallback)((contributionId) => {
+  const trackTeach = (0, import_react51.useCallback)((contributionId) => {
     const readStatus = adapter.teachStatus;
     if (!readStatus || !Number.isInteger(contributionId) || contributionId <= 0) return;
     if (pollTimer.current) clearTimeout(pollTimer.current);
@@ -7565,7 +7607,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       void tick();
     }, TEACH_POLL_INTERVAL_MS);
   }, [adapter, describeTeachOutcome, reload, t.taughtStillPending]);
-  const run = (0, import_react50.useCallback)(async (op, successNotice) => {
+  const run = (0, import_react51.useCallback)(async (op, successNotice) => {
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -7580,8 +7622,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setBusy(false);
     }
   }, [reload, t.errorGeneric]);
-  const panelId = (0, import_react50.useId)();
-  const buildReport = (0, import_react50.useCallback)(() => buildEvermindDiagnostics({
+  const panelId = (0, import_react51.useId)();
+  const buildReport = (0, import_react51.useCallback)(() => buildEvermindDiagnostics({
     data,
     projectName,
     host,
@@ -8141,7 +8183,7 @@ function RecentList({ t, entries }) {
   ] });
 }
 function RecentRow({ t, entry }) {
-  const [open, setOpen] = (0, import_react50.useState)(false);
+  const [open, setOpen] = (0, import_react51.useState)(false);
   const status = evermindLearnedStatus(entry);
   const faulted = status.state === "fault";
   const body = entry.kind === "delta" ? t.deltaEntry : faulted ? "" : entry.text ?? "";
@@ -8434,7 +8476,7 @@ function evermindLabelsFromBundle(bundle, prefix = "ev.") {
 }
 
 // src/project360/Project360View.tsx
-var import_react51 = require("react");
+var import_react52 = require("react");
 
 // src/project360/sunburstGeometry.ts
 var VIEWBOX = 320;
@@ -8614,9 +8656,9 @@ var DEFAULT_PROJECT360_LABELS = {
 var import_jsx_runtime63 = require("react/jsx-runtime");
 var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
-  const L = (0, import_react51.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
-  const [selected, setSelected] = (0, import_react51.useState)(null);
-  const sortedWorkforce = (0, import_react51.useMemo)(
+  const L = (0, import_react52.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
+  const [selected, setSelected] = (0, import_react52.useState)(null);
+  const sortedWorkforce = (0, import_react52.useMemo)(
     () => [...data?.workforce ?? []].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)),
     [data?.workforce]
   );
@@ -8783,7 +8825,7 @@ function MemberRow({ member, labels, onAction }) {
 }
 
 // src/projectList/ProjectListView.tsx
-var import_react52 = require("react");
+var import_react53 = require("react");
 
 // src/projectList/types.ts
 var DEFAULT_PROJECT_LIST_LABELS = {
@@ -8798,7 +8840,7 @@ var DEFAULT_PROJECT_LIST_LABELS = {
 // src/projectList/ProjectListView.tsx
 var import_jsx_runtime64 = require("react/jsx-runtime");
 function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }) {
-  const L = (0, import_react52.useMemo)(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
+  const L = (0, import_react53.useMemo)(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
   const header = /* @__PURE__ */ (0, import_jsx_runtime64.jsxs)("header", { className: "bf-list-head", children: [
     /* @__PURE__ */ (0, import_jsx_runtime64.jsxs)("div", { className: "bf-list-head__id", children: [
       /* @__PURE__ */ (0, import_jsx_runtime64.jsx)("span", { className: "bf-list-head__title", children: title }),
@@ -8875,7 +8917,7 @@ function Row2({ item, onAction }) {
 }
 
 // src/composer/BrainComposer.tsx
-var import_react60 = require("react");
+var import_react61 = require("react");
 
 // src/workStatus/consumptionSnapshot.ts
 var TTL_MS = 6e4;
@@ -8908,10 +8950,10 @@ function subscribeConsumptionSnapshot(listener) {
 }
 
 // src/workStatus/useConsumptionSnapshot.ts
-var import_react53 = require("react");
+var import_react54 = require("react");
 function useConsumptionSnapshot(request) {
-  const [snapshot, setSnapshot] = (0, import_react53.useState)(cachedConsumptionSnapshot());
-  (0, import_react53.useEffect)(() => {
+  const [snapshot, setSnapshot] = (0, import_react54.useState)(cachedConsumptionSnapshot());
+  (0, import_react54.useEffect)(() => {
     if (!request) return void 0;
     let alive = true;
     const off = subscribeConsumptionSnapshot((s) => {
@@ -9046,11 +9088,11 @@ function AccountStatus({ snapshot, labels, locale, onUpgrade }) {
 }
 
 // src/workStatus/EvermindStatus.tsx
-var import_react54 = require("react");
+var import_react55 = require("react");
 var import_jsx_runtime66 = require("react/jsx-runtime");
 function EvermindStatus({ request, projectId, labels }) {
-  const [head, setHead] = (0, import_react54.useState)(null);
-  (0, import_react54.useEffect)(() => {
+  const [head, setHead] = (0, import_react55.useState)(null);
+  (0, import_react55.useEffect)(() => {
     if (projectId == null) {
       setHead(null);
       return void 0;
@@ -9113,7 +9155,7 @@ function WorkSpendPanel({ request, labels: overrides, loadingLabel, locale }) {
 }
 
 // src/connections/ConnectionRow.tsx
-var import_react56 = require("react");
+var import_react57 = require("react");
 
 // src/connections/types.ts
 var DEFAULT_CONNECTIONS_LABELS = {
@@ -9162,7 +9204,7 @@ function healthLabel(health, labels) {
 }
 
 // src/connections/useProviderReconnect.ts
-var import_react55 = require("react");
+var import_react56 = require("react");
 
 // src/connections/reconnectFlow.ts
 var REASONS = ["unavailable", "denied", "expired", "failed"];
@@ -9298,19 +9340,19 @@ function reconnectFlow(client, provider) {
 
 // src/connections/useProviderReconnect.ts
 function useProviderReconnect(client, provider, { openUrl, onConnected }) {
-  const flow = (0, import_react55.useMemo)(() => reconnectFlow(client, provider), [client, provider]);
-  const state = (0, import_react55.useSyncExternalStore)(flow.subscribe, flow.snapshot, flow.snapshot);
-  const seen = (0, import_react55.useRef)(state.connected);
-  const onConnectedRef = (0, import_react55.useRef)(onConnected);
+  const flow = (0, import_react56.useMemo)(() => reconnectFlow(client, provider), [client, provider]);
+  const state = (0, import_react56.useSyncExternalStore)(flow.subscribe, flow.snapshot, flow.snapshot);
+  const seen = (0, import_react56.useRef)(state.connected);
+  const onConnectedRef = (0, import_react56.useRef)(onConnected);
   onConnectedRef.current = onConnected;
-  (0, import_react55.useEffect)(() => {
+  (0, import_react56.useEffect)(() => {
     if (state.connected === seen.current) return;
     seen.current = state.connected;
     onConnectedRef.current?.();
   }, [state.connected]);
-  const openUrlRef = (0, import_react55.useRef)(openUrl);
+  const openUrlRef = (0, import_react56.useRef)(openUrl);
   openUrlRef.current = openUrl;
-  const start = (0, import_react55.useCallback)(() => flow.start((url) => openUrlRef.current(url)), [flow]);
+  const start = (0, import_react56.useCallback)(() => flow.start((url) => openUrlRef.current(url)), [flow]);
   return {
     phase: state.phase,
     userCode: state.userCode,
@@ -9338,8 +9380,8 @@ function failureText(failure, labels) {
   }
 }
 function ConnectionRow({ row, connections, labels, onChanged, onReconnected }) {
-  const [testing, setTesting] = (0, import_react56.useState)(false);
-  const [note, setNote] = (0, import_react56.useState)(null);
+  const [testing, setTesting] = (0, import_react57.useState)(false);
+  const [note, setNote] = (0, import_react57.useState)(null);
   const reconnect = useProviderReconnect(connections.client, row.provider, {
     openUrl: connections.openUrl,
     onConnected: () => {
@@ -9418,10 +9460,10 @@ function ConnectionRow({ row, connections, labels, onChanged, onReconnected }) {
 }
 
 // src/connections/useProviderConnections.ts
-var import_react57 = require("react");
+var import_react58 = require("react");
 function useProviderConnections(client) {
-  const [state, setState] = (0, import_react57.useState)({ kind: "loading" });
-  const reload = (0, import_react57.useCallback)(async () => {
+  const [state, setState] = (0, import_react58.useState)({ kind: "loading" });
+  const reload = (0, import_react58.useCallback)(async () => {
     try {
       const rows = await client.list();
       setState(rows === null ? { kind: "unavailable" } : { kind: "ready", rows });
@@ -9429,10 +9471,10 @@ function useProviderConnections(client) {
       setState({ kind: "failed" });
     }
   }, [client]);
-  (0, import_react57.useEffect)(() => {
+  (0, import_react58.useEffect)(() => {
     void reload();
   }, [reload]);
-  const patch = (0, import_react57.useCallback)((provider, change) => {
+  const patch = (0, import_react58.useCallback)((provider, change) => {
     setState((prev) => prev.kind === "ready" ? { kind: "ready", rows: prev.rows.map((row) => row.provider === provider ? { ...row, ...change } : row) } : prev);
   }, []);
   return { state, reload, patch };
@@ -9464,7 +9506,7 @@ function ConnectionsPanel({ connections, labels: overrides }) {
 }
 
 // src/composer/ComposerAddMenu.tsx
-var import_react58 = require("react");
+var import_react59 = require("react");
 
 // src/composer/ComposerIcons.tsx
 var import_jsx_runtime71 = require("react/jsx-runtime");
@@ -9484,7 +9526,7 @@ var IconStop = () => /* @__PURE__ */ (0, import_jsx_runtime71.jsx)("svg", { widt
 var import_jsx_runtime72 = require("react/jsx-runtime");
 function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = false, accept, onAddContext, webBrowsing, items }) {
   const { open, toggle, close, rootRef } = usePopover();
-  const fileRef = (0, import_react58.useRef)(null);
+  const fileRef = (0, import_react59.useRef)(null);
   if (!onAttachFiles && !onAddContext && !webBrowsing && !items?.length) return null;
   const onFiles = (e) => {
     const files = Array.from(e.target.files ?? []);
@@ -9691,7 +9733,7 @@ function ContextMeter({ usage, labels, locale }) {
 var import_builderforce_brain_embedded27 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/composer/ComposerTextBox.tsx
-var import_react59 = require("react");
+var import_react60 = require("react");
 var import_builderforce_brain_embedded26 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime76 = require("react/jsx-runtime");
 var noop = () => void 0;
@@ -9775,7 +9817,7 @@ function ComposerTextBoxInner(props) {
     )
   ] });
 }
-var ComposerTextBox = (0, import_react59.memo)(ComposerTextBoxInner);
+var ComposerTextBox = (0, import_react60.memo)(ComposerTextBoxInner);
 
 // src/composer/labels.ts
 var n = (v) => v.toLocaleString();
@@ -9871,21 +9913,21 @@ function BrainComposerInner(props) {
     className
   } = props;
   const labels = composerLabels(labelBundle?.composer);
-  const textareaRef = (0, import_react60.useRef)(null);
-  const [focused, setFocused] = (0, import_react60.useState)(false);
-  const [dragging, setDragging] = (0, import_react60.useState)(false);
+  const textareaRef = (0, import_react61.useRef)(null);
+  const [focused, setFocused] = (0, import_react61.useState)(false);
+  const [dragging, setDragging] = (0, import_react61.useState)(false);
   const storeEmpty = (0, import_builderforce_brain_embedded27.useDraftIsEmpty)(draftStore ?? UNUSED_STORE);
   const empty = draftStore ? storeEmpty : !(value ?? "").trim();
-  const valueRef = (0, import_react60.useRef)(value ?? "");
+  const valueRef = (0, import_react61.useRef)(value ?? "");
   valueRef.current = value ?? "";
-  const getValue = (0, import_react60.useCallback)(() => draftStore ? draftStore.get() : valueRef.current, [draftStore]);
-  const onChangeRef = (0, import_react60.useRef)(onChange);
+  const getValue = (0, import_react61.useCallback)(() => draftStore ? draftStore.get() : valueRef.current, [draftStore]);
+  const onChangeRef = (0, import_react61.useRef)(onChange);
   onChangeRef.current = onChange;
-  const setValue = (0, import_react60.useCallback)((next) => {
+  const setValue = (0, import_react61.useCallback)((next) => {
     if (draftStore) draftStore.set(next);
     else onChangeRef.current?.(next);
   }, [draftStore]);
-  (0, import_react60.useEffect)(() => {
+  (0, import_react61.useEffect)(() => {
     if (focusToken == null) return;
     const el = textareaRef.current;
     if (!el) return;
@@ -9895,21 +9937,21 @@ function BrainComposerInner(props) {
   const canSubmit = !empty && !disabled;
   const ownGate = useInferenceModeGate(options.inferenceMode);
   const gate = modeGate ?? ownGate;
-  const live = (0, import_react60.useRef)({ onSubmit, onQueue, gate, disabled, getValue });
+  const live = (0, import_react61.useRef)({ onSubmit, onQueue, gate, disabled, getValue });
   live.current = { onSubmit, onQueue, gate, disabled, getValue };
-  const submit = (0, import_react60.useCallback)(() => {
+  const submit = (0, import_react61.useCallback)(() => {
     const { onSubmit: send, gate: g, disabled: closed, getValue: read } = live.current;
     if (closed || !read().trim()) return;
     g.request(() => send());
   }, []);
-  const queue = (0, import_react60.useCallback)(() => {
+  const queue = (0, import_react61.useCallback)(() => {
     const { onQueue: hold, gate: g, disabled: closed, getValue: read } = live.current;
     if (closed || !hold || !read().trim()) return;
     g.request(() => hold());
   }, []);
-  const attachmentsRef = (0, import_react60.useRef)(attachments);
+  const attachmentsRef = (0, import_react61.useRef)(attachments);
   attachmentsRef.current = attachments;
-  const onPaste = (0, import_react60.useCallback)((e) => {
+  const onPaste = (0, import_react61.useCallback)((e) => {
     const target = attachmentsRef.current;
     if (!target) return;
     const files = Array.from(e.clipboardData?.items ?? []).filter((i) => i.kind === "file" && i.type.startsWith("image/")).map((i) => i.getAsFile()).filter((f) => !!f);
@@ -9918,8 +9960,8 @@ function BrainComposerInner(props) {
       target.onAdd(files);
     }
   }, []);
-  const onFocus = (0, import_react60.useCallback)(() => setFocused(true), []);
-  const onBlur = (0, import_react60.useCallback)(() => setFocused(false), []);
+  const onFocus = (0, import_react61.useCallback)(() => setFocused(true), []);
+  const onBlur = (0, import_react61.useCallback)(() => setFocused(false), []);
   const onDrop = (e) => {
     setDragging(false);
     if (!attachments) return;
@@ -10054,17 +10096,17 @@ function BrainComposerInner(props) {
     below
   ] });
 }
-var BrainComposer = (0, import_react60.memo)(BrainComposerInner);
+var BrainComposer = (0, import_react61.memo)(BrainComposerInner);
 
 // src/composer/useChatMemorySwitch.ts
-var import_react61 = require("react");
+var import_react62 = require("react");
 function useChatMemorySwitch(opts) {
   const { chatId, serverValue, persist } = opts;
-  const [enabled, setLocal] = (0, import_react61.useState)(serverValue ?? true);
-  (0, import_react61.useEffect)(() => {
+  const [enabled, setLocal] = (0, import_react62.useState)(serverValue ?? true);
+  (0, import_react62.useEffect)(() => {
     setLocal(serverValue ?? true);
   }, [chatId, serverValue]);
-  const setEnabled = (0, import_react61.useCallback)((on) => {
+  const setEnabled = (0, import_react62.useCallback)((on) => {
     setLocal(on);
     if (chatId == null) return;
     persist(chatId, on).catch(() => setLocal(!on));
@@ -10305,6 +10347,7 @@ function composerModel(input) {
   useComposerMenuRequest,
   useConsumptionSnapshot,
   useDismissibleNotice,
+  useHideDoneTickets,
   useInferenceModeGate,
   useLocalModels,
   useMentionAutocomplete,

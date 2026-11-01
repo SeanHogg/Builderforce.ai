@@ -626,7 +626,7 @@ var ASK_USER_TOOL_SPEC = {
   type: "function",
   function: {
     name: ASK_USER_TOOL,
-    description: "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose \u2014 the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
+    description: `Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose \u2014 the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context. When one option is the choice you would advise (e.g. the sensible default), mark it with "recommended": true so a default/auto pick can select it.`,
     parameters: {
       type: "object",
       properties: {
@@ -638,7 +638,8 @@ var ASK_USER_TOOL_SPEC = {
             type: "object",
             properties: {
               label: { type: "string", description: "Short choice text (1\u20135 words)." },
-              description: { type: "string", description: "Optional one-line explanation of this choice." }
+              description: { type: "string", description: "Optional one-line explanation of this choice." },
+              recommended: { type: "boolean", description: "Optional: true on the option you would advise as the default pick." }
             },
             required: ["label"]
           }
@@ -661,7 +662,8 @@ function coerceAskUserPayload(raw) {
       const rec = it;
       const label = typeof rec.label === "string" ? rec.label.trim() : "";
       const description = typeof rec.description === "string" ? rec.description.trim() : void 0;
-      return label ? { label, ...description ? { description } : {} } : null;
+      const recommended = rec.recommended === true ? true : void 0;
+      return label ? { label, ...description ? { description } : {}, ...recommended ? { recommended } : {} } : null;
     }
     return null;
   }).filter((x) => !!x);
@@ -1060,4 +1062,4 @@ export {
   replayPendingWords,
   replayAllPendingWords
 };
-//# sourceMappingURL=chunk-6F36EGOD.mjs.map
+//# sourceMappingURL=chunk-CFENY5M7.mjs.map

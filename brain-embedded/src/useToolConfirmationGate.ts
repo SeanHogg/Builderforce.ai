@@ -61,6 +61,15 @@ export interface ToolConfirmationGate {
    * and restart the conversation.
    */
   needsConfirm: (req: { name: string; args: unknown }) => boolean;
+  /**
+   * Auto-answer resolver for the conversational `ask_user` tool. When Auto-mode is ON
+   * this returns the chosen option's label (the first `recommended` option, else the
+   * first option), letting a run that would otherwise stall on a question continue
+   * without a human click. When Auto-mode is OFF it returns `null`, so the run settles
+   * on the question exactly as before. Reads the same live ref as {@link needsConfirm},
+   * so a mid-run toggle is honoured. Referentially stable across auto-approve changes.
+   */
+  answerQuestion: (question: { question: string; options: { label: string; description?: string; recommended?: boolean; multiSelect?: boolean }[] }) => string | null;
 }
 
 export function useToolConfirmationGate(options: ToolConfirmationGateOptions): ToolConfirmationGate {
@@ -94,7 +103,19 @@ export function useToolConfirmationGate(options: ToolConfirmationGateOptions): T
     [isMutating],
   );
 
-  return { autoApprove, setAutoApprove, needsConfirm };
+  // Reads the same ref as `needsConfirm`, so a mid-run Auto toggle answers (or stops
+  // answering) questions on the very next `ask_user`, exactly like a mutating tool call.
+  const answerQuestion = useCallback(
+    (question: { question: string; options: { label: string; description?: string; recommended?: boolean; multiSelect?: boolean }[] }): string | null => {
+      if (!autoApproveRef.current) return null;
+      const options = question.options ?? [];
+      const pick = options.find((o) => o.recommended) ?? options[0];
+      return pick ? pick.label : null;
+    },
+    [],
+  );
+
+  return { autoApprove, setAutoApprove, needsConfirm, answerQuestion };
 }
 
 /**

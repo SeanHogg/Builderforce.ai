@@ -117,6 +117,14 @@ export interface UseBrainConversationOptions {
    */
   needsConfirm?: (req: { name: string; args: unknown }) => boolean;
   /**
+   * Optional auto-answer for the conversational `ask_user` tool. When provided and it
+   * returns a non-null string for a question the run is about to settle on, that string
+   * is fed as the user's answer and the run continues instead of stalling. Return null
+   * to keep today's settle-and-wait behaviour. Wired from `useToolConfirmationGate`'s
+   * `answerQuestion` (Auto-mode), which reads the same live ref as `needsConfirm`.
+   */
+  answerQuestion?: (question: { question: string; options: { label: string; description?: string; recommended?: boolean; multiSelect?: boolean }[] }) => string | null;
+  /**
    * Create-on-demand when sending without an active chat; returns the new chat id. `draft` is the token the send began with
    * (`send(text, { draft })`): the creation is THAT draft's, never whichever draft is on screen when this runs.
    */
@@ -334,6 +342,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     toolSpecs,
     runTool,
     needsConfirm,
+    answerQuestion,
     ensureChatId,
     drafts,
     onActivity,
@@ -431,6 +440,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       reasoning,
       runTool,
       needsConfirm,
+      answerQuestion,
       stream,
       persistence,
       onActivity,
@@ -446,7 +456,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       chatRoster,
       };
     },
-    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster],
+    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, answerQuestion, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster],
   );
 
   const bindContinuation = useContinuation(persistence, prepareRun);

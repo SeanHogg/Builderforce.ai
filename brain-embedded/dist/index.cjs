@@ -434,6 +434,7 @@ __export(src_exports, {
   serverChatIdOf: () => serverChatIdOf,
   setLastResolvedModel: () => setLastResolvedModel,
   setMcpToolStatus: () => setMcpToolStatus,
+  setPendingRunTurn: () => setPendingRunTurn,
   setPendingWordsOwner: () => setPendingWordsOwner,
   shippedToBaseBranch: () => shippedToBaseBranch,
   shortenTarget: () => shortenTarget,
@@ -1283,7 +1284,7 @@ var ASK_USER_TOOL_SPEC = {
   type: "function",
   function: {
     name: ASK_USER_TOOL,
-    description: "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose \u2014 the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
+    description: `Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose \u2014 the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context. When one option is the choice you would advise (e.g. the sensible default), mark it with "recommended": true so a default/auto pick can select it.`,
     parameters: {
       type: "object",
       properties: {
@@ -1295,7 +1296,8 @@ var ASK_USER_TOOL_SPEC = {
             type: "object",
             properties: {
               label: { type: "string", description: "Short choice text (1\u20135 words)." },
-              description: { type: "string", description: "Optional one-line explanation of this choice." }
+              description: { type: "string", description: "Optional one-line explanation of this choice." },
+              recommended: { type: "boolean", description: "Optional: true on the option you would advise as the default pick." }
             },
             required: ["label"]
           }
@@ -1318,7 +1320,8 @@ function coerceAskUserPayload(raw) {
       const rec = it;
       const label = typeof rec.label === "string" ? rec.label.trim() : "";
       const description = typeof rec.description === "string" ? rec.description.trim() : void 0;
-      return label ? { label, ...description ? { description } : {} } : null;
+      const recommended = rec.recommended === true ? true : void 0;
+      return label ? { label, ...description ? { description } : {}, ...recommended ? { recommended } : {} } : null;
     }
     return null;
   }).filter((x) => !!x);
@@ -2623,6 +2626,9 @@ var PLATFORM_ROUTE_RULES = Object.freeze([
 // ../packages/local-first/src/records.ts
 var UNBOUND_DESTINATION = { kind: "unbound" };
 
+// ../packages/local-first/src/storeContract.ts
+var SCAN_STOP = /* @__PURE__ */ Symbol.for("builderforce.local-first.scan-stop");
+
 // ../packages/local-first/src/clone.ts
 function clone(value) {
   return structuredClone(value);
@@ -3192,7 +3198,7 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-audio": [25e-7, 1e-5],
   "openai/gpt-audio-mini": [6e-7, 24e-7],
   "openai/gpt-chat-latest": [5e-6, 3e-5],
-  "openai/gpt-oss-120b": [15e-9, 56e-9],
+  "openai/gpt-oss-120b": [15e-9, 55e-9],
   "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
   "openai/gpt-oss-20b": [3e-8, 13e-8],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
@@ -5903,7 +5909,10 @@ function createLocalChatIdentity(options) {
       await tx.putMapping({ destination, entityType: "chat", clientEntityId: clientId, serverId: String(serverId), serverVersion: BOUND_ONLY_VERSION });
       let queued = false;
       await tx.scanPending((event) => {
-        if (event.entityType === "chat" && event.clientEntityId === clientId && event.operation === "import") queued = true;
+        if (event.entityType === "chat" && event.clientEntityId === clientId && event.operation === "import") {
+          queued = true;
+          return SCAN_STOP;
+        }
       });
       const record3 = queued ? (await liveRecords(tx, "chat", deviceId, (row) => row.id === clientId))[0] : void 0;
       if (record3) await queueImport(tx, record3);
@@ -7643,8 +7652,12 @@ async function bindChatHistoryForSync(store, deviceId, destination) {
   const anything = await store.read(async (tx) => {
     let found = false;
     for (const type of ["chat", "message", "usage"]) {
+      if (found) break;
       await tx.scan(type, (row) => {
-        if (unbound(row)) found = true;
+        if (unbound(row)) {
+          found = true;
+          return SCAN_STOP;
+        }
       });
     }
     return found;
@@ -16136,7 +16149,16 @@ function useToolConfirmationGate(options) {
     (req) => isMutating(req.name, req.args) && !autoApproveRef.current,
     [isMutating]
   );
-  return { autoApprove, setAutoApprove, needsConfirm };
+  const answerQuestion = (0, import_react2.useCallback)(
+    (question) => {
+      if (!autoApproveRef.current) return null;
+      const options2 = question.options ?? [];
+      const pick2 = options2.find((o) => o.recommended) ?? options2[0];
+      return pick2 ? pick2.label : null;
+    },
+    []
+  );
+  return { autoApprove, setAutoApprove, needsConfirm, answerQuestion };
 }
 function localStorageConfirmationPersistence(key) {
   return {
@@ -21949,6 +21971,7 @@ function makeCell() {
     pendingGate: null,
     liveTurn: null,
     servedBy: null,
+    pendingTurn: null,
     lastRequest: null,
     stopEpoch: 0,
     claim: null,
@@ -22018,7 +22041,9 @@ function emit2(c) {
     providerCap: c.providerCap,
     turn: c.turn,
     // Only when a turn's route is known: a snapshot of a run that has not named a model has no such key.
-    ...c.servedBy ? { servedBy: c.servedBy } : {}
+    ...c.servedBy ? { servedBy: c.servedBy } : {},
+    // Only while a sent turn's row has not landed yet (a run's start closes it).
+    ...c.pendingTurn ? { pendingTurn: c.pendingTurn } : {}
   };
   for (const l of c.listeners) l();
   for (const l of storeListeners) l();
@@ -22376,6 +22401,13 @@ function clearRunError(chatId) {
   if (!c || !c.error) return;
   c.error = "";
   c.errorAction = null;
+  emit2(c);
+}
+function setPendingRunTurn(chatId, turn) {
+  if (chatId == null) return;
+  const c = cells.get(chatId);
+  if (!c) return;
+  c.pendingTurn = turn;
   emit2(c);
 }
 function requestRunConfirm(chatId, req, opts) {
@@ -27337,6 +27369,11 @@ function callPreflight(run) {
         run.redirectAskToDelegation = false;
         return { result: { data: { ok: false, error: undelegatedRequestNudge(catalogToolNames) } } };
       }
+      if (run.pendingAskAutoAnswer !== void 0) {
+        const answer2 = run.pendingAskAutoAnswer;
+        run.pendingAskAutoAnswer = void 0;
+        return { result: { data: { ok: true, answer: answer2 } } };
+      }
       return { result: { data: { error: "ask_user needs { question, options:[{label}] } with 2+ options. Retry or answer in prose." } } };
     }
     if (call2.name === HAND_OFF_TOOL) {
@@ -28620,6 +28657,21 @@ function terminalAskReply(run, result, calls, step) {
   } catch {
     block = null;
   }
+  if (block && !askCall.malformed) {
+    const payload = coerceAskUserPayload(askCall.args);
+    const autoAnswer = payload && run.req.answerQuestion ? run.req.answerQuestion(payload) : null;
+    if (typeof autoAnswer === "string" && autoAnswer.trim()) {
+      run.pendingAskAutoAnswer = autoAnswer;
+      pushTrace(run.c, {
+        ts: nowIso(),
+        category: "message",
+        label: "loop.auto_answer_ask_user",
+        args: { step, options: payload.options.length },
+        result: `Auto mode answered the question with "${autoAnswer}" instead of settling on the card.`
+      });
+      return void 0;
+    }
+  }
   const lead = result.text.trim();
   const reply = block ? lead ? `${lead}
 
@@ -28966,6 +29018,7 @@ function beginRun(c, outcomeKey) {
   c.codeModel = null;
   c.liveTurn = null;
   c.servedBy = null;
+  c.pendingTurn = null;
   c.stoppedTurn = null;
   c.turn = null;
   if (typeof outcomeKey === "number") c.runId = runOutcomeId(outcomeKey, Date.now());
@@ -30014,6 +30067,7 @@ function useBrainConversation(options) {
     toolSpecs,
     runTool,
     needsConfirm,
+    answerQuestion,
     ensureChatId,
     drafts,
     onActivity,
@@ -30085,6 +30139,7 @@ ${extraSystem}` : resolvedSystemPrompt;
         reasoning,
         runTool,
         needsConfirm,
+        answerQuestion,
         stream,
         persistence,
         onActivity,
@@ -30100,7 +30155,7 @@ ${extraSystem}` : resolvedSystemPrompt;
         chatRoster
       };
     },
-    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
+    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, answerQuestion, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
   );
   const bindContinuation = useContinuation(persistence, prepareRun);
   const launch = (0, import_react15.useCallback)(async (id, request, draftSend = null) => {
@@ -32814,6 +32869,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   serverChatIdOf,
   setLastResolvedModel,
   setMcpToolStatus,
+  setPendingRunTurn,
   setPendingWordsOwner,
   shippedToBaseBranch,
   shortenTarget,
