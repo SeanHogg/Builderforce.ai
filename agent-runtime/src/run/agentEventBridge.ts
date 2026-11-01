@@ -224,12 +224,18 @@ export class AgentEventBridge {
   }
 
   /**
-   * A run the agent settled by its own policy says why in its conversation, but its lifecycle would read as a SUCCESS (an ordinary last
-   * reply) while its outcome is a failure. This ends it as failed without a second account of why: an empty reply marked `runFailed`.
+   * A run the agent settled by its own policy says why in its conversation (the stall notice is its last reply), but its lifecycle would
+   * read as a SUCCESS (an ordinary last reply) while its outcome is a failure. This ends it as failed WITHOUT a second account of why: the
+   * last reply it already told is marked `runFailed` (the object the subscribers hold), so its text is unchanged. With no reply at all, an
+   * empty one marked `runFailed` is told.
    */
   private markFailed(): void {
     if (this.failedMarked) return;
     this.failedMarked = true;
+    if (this.lastAssistant) {
+      this.lastAssistant.runFailed = true;
+      return;
+    }
     const message = this.assistant({ runFailed: true });
     this.lastAssistant = message;
     this.tell(message);

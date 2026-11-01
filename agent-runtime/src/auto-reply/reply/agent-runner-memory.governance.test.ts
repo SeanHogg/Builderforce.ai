@@ -5,12 +5,14 @@
 import fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionEntry } from "../../config/sessions.js";
 import type { TemplateContext } from "../templating.js";
 import type { FollowupRun } from "./queue.js";
 
-const state = vi.hoisted(() => ({ runEmbeddedAgentMock: vi.fn(), warn: vi.fn() }));
+const state = vi.hoisted(() => ({ runEmbeddedAgentMock: vi.fn(), warn: vi.fn(), gates: [] as unknown[] }));
+// The REAL resolver runs (so approval gates become refusals for an unattended flush): only the host link and the api's answer are faked.
+vi.mock("../../infra/approval-gate.js", () => ({ hostLink: () => ({ baseUrl: "https://bf.test", agentNodeId: "7", apiKey: "k" }) }));
 
 vi.mock("../../agents/model-fallback.js", () => ({
   runWithModelFallback: async ({ provider, model, run }: { provider: string; model: string; run: (p: string, m: string) => Promise<unknown> }) => ({
@@ -28,6 +30,7 @@ vi.mock("../../logger.js", async (importOriginal) => ({
   logWarn: state.warn,
 }));
 
+import { resetHostPolicyGates } from "../../infra/host-policy-gates.js";
 import { runMemoryFlushIfNeeded } from "./agent-runner-memory.js";
 
 let root = "";
@@ -39,7 +42,11 @@ afterAll(async () => {
 });
 beforeEach(() => {
   vi.clearAllMocks();
+  state.gates = [];
+  resetHostPolicyGates();
+  vi.stubGlobal("fetch", async () => ({ ok: true, status: 200, json: async () => ({ gates: state.gates }) }));
 });
+afterEach(() => vi.unstubAllGlobals());
 
 const followupRun = {
   prompt: "hello",
@@ -101,6 +108,37 @@ describe("a memory flush refused by a governance gate", () => {
     expect(String(state.warn.mock.calls[0]![0])).toContain("no-write");
     expect((stored as { memoryFlushAt?: number }).memoryFlushAt).toBeTypeOf("number");
     expect((stored as { memoryFlushCompactionCount?: number }).memoryFlushCompactionCount).toBe(1);
+  });
+
+  it("an UNSCOPED block on the write tools: the model is never offered one, nothing is refused, and the warning still names the gate", async () => {
+    state.gates = [
+      { id: "no-write", tool: "write", effect: "block" },
+      { id: "no-edit", tool: "edit", effect: "block" },
+    ];
+    const stored = await flush({ agentMeta: {} });
+
+    expect(state.warn).toHaveBeenCalledTimes(1);
+    const line = String(state.warn.mock.calls[0]![0]);
+    expect(line).toContain("no-write");
+    expect(line).toContain("withholds");
+    expect(line).toContain("not written");
+    // still recorded as done
+    expect((stored as { memoryFlushAt?: number }).memoryFlushAt).toBeTypeOf("number");
+  });
+
+  it("an APPROVAL gate on writes: nobody can approve during a flush, so it refuses at once and the warning names it", async () => {
+    state.gates = [{ id: "ask-first", tool: "write_file", effect: "require-approval" }];
+    await flush({ agentMeta: {} });
+
+    expect(state.warn).toHaveBeenCalledTimes(1);
+    expect(String(state.warn.mock.calls[0]![0])).toContain("ask-first");
+  });
+
+  it("a gate that leaves a write tool offered, or that is on something else, warns about nothing", async () => {
+    state.gates = [{ id: "only-write", tool: "write", effect: "block", paths: ["secrets/**"] }, { id: "no-exec", tool: "exec", effect: "block" }];
+    await flush({ agentMeta: {} });
+
+    expect(state.warn).not.toHaveBeenCalled();
   });
 
   it("control: a flush no gate refused logs nothing and is recorded", async () => {

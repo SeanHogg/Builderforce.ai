@@ -47,7 +47,8 @@ import { ensureBuilderForceAgentsModelsJson } from "../models-config.js";
 import { derivePromptTokens, normalizeUsage, type UsageLike } from "../usage.js";
 import { redactRunIdentifier, resolveRunWorkspaceDir } from "../workspace-run.js";
 import { compactForOverflow, modelServing } from "./run/served-model.js";
-import { blocksAutoContinue, runFailedMeta } from "./governance-outcome.js";
+import { createRunGovernance } from "../../builderforce/agent-loop/run-governance.js";
+import { blocksAutoContinue, governanceMeta, runFailedMeta } from "./governance-outcome.js";
 import { buildAutoContinuePrompt, shouldAutoContinueRun } from "./continuation-policy.js";
 import { resolveGlobalLane, resolveSessionLane } from "./lanes.js";
 import { trackRunOutcome } from "./learned-routing/run-outcome.js";
@@ -218,6 +219,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
       // this one seam. Inside a gateway process (it owns the host link); a one-off CLI run has none. A ticket carries its own gates
       // in its dispatch and does not run here. Model probes (`modelProbe`, host-set) and unattended runs: see `gatesForRun`.
       const policyGates = await gatesForRun(params);
+      const governance = createRunGovernance();
       const prevCwd = process.cwd();
 
       let provider = (params.provider ?? DEFAULT_PROVIDER).trim() || DEFAULT_PROVIDER;
@@ -554,6 +556,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
             images: params.images,
             disableTools: params.disableTools,
             ...(params.modelProbe ? { modelProbe: true } : {}),
+            governance,
             ...(policyGates.length ? { policyGates } : {}),
             provider,
             modelId,
@@ -1027,7 +1030,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
             lastCallUsage: lastCallUsage ?? undefined,
             promptTokens,
             compactionCount: autoCompactionCount > 0 ? autoCompactionCount : undefined,
-            ...(attempt.governanceRefusals ? { governanceRefusals: attempt.governanceRefusals } : {}),
+            ...governanceMeta(governance),
           };
 
           const payloads = buildEmbeddedRunPayloads({
@@ -1059,7 +1062,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
             timedOut,
             promptErrored: Boolean(promptError),
             hasPendingClientToolCall: Boolean(attempt.clientToolCall),
-            governanceBlocked: blocksAutoContinue(attempt),
+            governanceBlocked: blocksAutoContinue(governance, attempt),
           });
 
           log.debug(

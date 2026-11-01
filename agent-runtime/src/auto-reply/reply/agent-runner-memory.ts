@@ -15,7 +15,7 @@ import {
   buildEmbeddedRunContexts,
   resolveModelFallbackOptions,
 } from "./agent-runner-utils.js";
-import { warnIfFlushRefused } from "./flush-governance.js";
+import { flushWithheldBy, warnIfFlushStopped } from "./flush-governance.js";
 import {
   resolveMemoryFlushContextWindowTokens,
   resolveMemoryFlushPromptForRun,
@@ -151,7 +151,7 @@ export async function runMemoryFlushIfNeeded(params: {
       }
     }
     // A gate that refused the flush's writes is named in a warning; the flush is still recorded as done (it is not re-run every turn).
-    warnIfFlushRefused(flushRun.result.meta?.agentMeta?.governanceRefusals);
+    warnIfFlushStopped({ refusedBy: flushRun.result.meta?.agentMeta?.governanceRefusals, withheldBy: await flushWithheldBy() });
     if (params.storePath && params.sessionKey) {
       try {
         const updatedEntry = await updateSessionStoreEntry({

@@ -74,8 +74,22 @@ describe("a run a governance gate refused is not auto-continued", () => {
     expect(mockedAttempt.mock.calls.length).toBeGreaterThan(1);
   });
 
+  it("every attempt of one run is handed the SAME governance scope, so what an attempt learned survives a re-attempt", async () => {
+    mockedAttempt.mockResolvedValue(stalled() as never);
+    await run();
+
+    const scopes = mockedAttempt.mock.calls.map((call) => (call[0] as { governance?: unknown }).governance);
+    expect(scopes.length).toBeGreaterThan(1);
+    expect(scopes[0]).toBeDefined();
+    expect(new Set(scopes).size).toBe(1);
+  });
+
   it("a gate refused one of its calls: it runs once and the refusal is named on the result", async () => {
-    mockedAttempt.mockResolvedValue(stalled({ governanceRefusals: ["no-shell"] }) as never);
+    // the session reports the refusal into the run's shared governance scope, as the real one does
+    mockedAttempt.mockImplementation(async (params) => {
+      (params as { governance?: { refusedBy(id: string): void } }).governance?.refusedBy("no-shell");
+      return stalled() as never;
+    });
     const result = await run();
 
     expect(mockedAttempt).toHaveBeenCalledTimes(1);

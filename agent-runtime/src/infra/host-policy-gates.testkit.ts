@@ -5,6 +5,7 @@
 import { Type } from "@sinclair/typebox";
 import type { PolicyGate } from "@builderforce/agent-tools";
 import { Agent } from "../builderforce/agent-loop/agent.js";
+import type { RunGovernance } from "../builderforce/agent-loop/run-governance.js";
 import { AssistantMessageEventStream } from "../builderforce/agent-loop/event-stream.js";
 import type { StreamFn } from "../builderforce/agent-loop/stream.js";
 import type { AgentMessage, AgentTool } from "../builderforce/model/agent-types.js";
@@ -69,7 +70,7 @@ export function execTool(ran: string[]): AgentTool {
 }
 
 /** The agent a channel message is served by: the model asks for `exec`, then replies. Hand it whatever gates the host resolved. */
-export function channelAgent(gates: readonly PolicyGate[], ran: string[], extra: { onGovernanceRefusal?: (gateId: string) => void } = {}) {
+export function channelAgent(gates: readonly PolicyGate[], ran: string[], extra: { governance?: RunGovernance; workspaceDir?: string } = {}) {
   const seen: Context[] = [];
   const agent = new Agent({ model, systemPrompt: "sys", tools: [execTool(ran)], policyGates: gates, ...extra });
   agent.streamFn = scripted(

@@ -662,8 +662,6 @@ export async function runEmbeddedAttempt(
     let sessionManager: ReturnType<typeof guardSessionManager> | undefined;
     let session: Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
     let removeToolResultContextGuard: (() => void) | undefined;
-    // The gates that refused one of this attempt's tool calls (relayed by the session); the run loop reads them.
-    const governanceRefusals = new Set<string>();
     // The model a stall failed this attempt over onto, when it did (the run loop folds and retries an overflow for it).
     let servedModel: Model<Api> | undefined;
     try {
@@ -764,9 +762,8 @@ export async function runEmbeddedAttempt(
           return pickFallbackModel ? { pickFallbackModel } : {};
         })(),
         ...(params.policyGates?.length ? { policyGates: params.policyGates } : {}),
-        onGovernanceRefusal: (gateId: string) => {
-          governanceRefusals.add(gateId);
-        },
+        // What the RUN learns about governance outlives this attempt (a re-attempt keeps it): the run hands every attempt the same one.
+        ...(params.governance ? { governance: params.governance } : {}),
         onModelFallback: (from, to, notice) => {
           log.warn(`[model-failover] ${notice}`);
           servedModel = to as Model<Api>;
@@ -1508,7 +1505,6 @@ export async function runEmbeddedAttempt(
         toolMetas: toolMetasNormalized,
         lastAssistant,
         lastToolError: getLastToolError?.(),
-        ...(governanceRefusals.size > 0 ? { governanceRefusals: [...governanceRefusals] } : {}),
         didSendViaMessagingTool: didSendViaMessagingTool(),
         messagingToolSentTexts: getMessagingToolSentTexts(),
         messagingToolSentMediaUrls: getMessagingToolSentMediaUrls(),

@@ -28,11 +28,26 @@ describe("AgentEventBridge.failedReply", () => {
     expect(last(b)?.stopReason).toBe("error");
   });
 
-  it("adds nothing after the agent ended the run by its own policy", () => {
+  it("a run the agent ended by its own policy already says why: its last reply is MARKED failed, with no second account and its text unchanged", () => {
     const b = bridge();
+    b.appended({ role: "assistant", content: "Stopped: nothing was actually run." });
     b.emit({ kind: "stall.recovered", action: "fail", detail: "nothing left to try" } as never);
     b.failedReply("late notice");
+    b.fail("the same failure again", "error");
 
-    expect(b.messages()).toHaveLength(0);
+    // the lifecycle ends in error, agreeing with the run's outcome; never the late text, never a second message
+    expect(b.messages()).toHaveLength(1);
+    expect(last(b)).toMatchObject({ role: "assistant", stopReason: "stop", runFailed: true, content: [{ type: "text", text: "Stopped: nothing was actually run." }] });
+    expect(last(b)?.errorMessage).toBeUndefined();
+  });
+
+  it("with no reply to mark, a policy-settled failure tells one empty reply marked failed (and only one)", () => {
+    const b = bridge();
+    b.emit({ kind: "stall.recovered", action: "pause", note: "model made no progress" } as never);
+    b.fail("model made no progress", "error");
+    b.fail("again", "error");
+
+    expect(b.messages()).toHaveLength(1);
+    expect(last(b)).toMatchObject({ content: [], runFailed: true });
   });
 });

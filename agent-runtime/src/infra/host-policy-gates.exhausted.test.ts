@@ -88,13 +88,28 @@ describe("a run whose calls a governance gate refused until its breaker tripped"
     expect(textOf(last)).toContain("no-shell");
   });
 
-  it("a run with no gate involved that said something is delivered as it always was", async () => {
+  it("a run the breaker ended ALWAYS ends on the notice, even with no gate involved and text first (it must not read as a success)", async () => {
     const ran: string[] = [];
     const agent = new Agent({ model, systemPrompt: "sys", tools: [{ ...execTool(ran), execute: async () => { throw new Error("nope"); } }] });
     agent.streamFn = scripted(Array.from({ length: 12 }, () => callExec("trying")), []);
     const produced = await agent.prompt([user("go")]);
 
-    expect(produced.at(-1)!.role).toBe("toolResult");
+    const last = produced.at(-1) as AssistantMessage;
+    expect(last.runFailed).toBe(true);
+    expect(textOf(last)).toContain("The run stopped before it finished");
+    expect(textOf(last)).toContain("its tool calls failed");
+    expect(textOf(last)).not.toContain("governance gate");
+  });
+
+  it("a clean reply stays a clean reply: no notice, not marked failed", async () => {
+    const ran: string[] = [];
+    const agent = new Agent({ model, systemPrompt: "sys", tools: [execTool(ran)] });
+    agent.streamFn = scripted([assistant([{ type: "text", text: "all done" }])], []);
+    const produced = await agent.prompt([user("go")]);
+
+    const last = produced.at(-1) as AssistantMessage;
+    expect(textOf(last)).toBe("all done");
+    expect(last.runFailed).toBeUndefined();
   });
 });
 

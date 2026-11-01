@@ -1,4 +1,5 @@
 import type { PolicyGate } from "@builderforce/agent-tools";
+import type { RunGovernance } from "../../../builderforce/agent-loop/run-governance.js";
 import type { AgentMessage } from "../../../builderforce/model/agent-types.js";
 import type { Api, AssistantMessage, Model } from "../../../builderforce/model/types.js";
 import type { ThinkLevel } from "../../../auto-reply/thinking.js";
@@ -23,6 +24,8 @@ export type EmbeddedRunAttemptParams = EmbeddedRunAttemptBase & {
   thinkLevel: ThinkLevel;
   /** The governance gates the run is held to (the seam in `run.ts` resolves them; blocked tools leave the catalog, matching calls are refused or ask an approver). */
   policyGates?: readonly PolicyGate[];
+  /** What the run has learned about governance, shared by every attempt of it (see `createRunGovernance`). */
+  governance?: RunGovernance;
 };
 
 export type EmbeddedRunAttemptResult = {
@@ -49,8 +52,6 @@ export type EmbeddedRunAttemptResult = {
   messagingToolSentMediaUrls: string[];
   messagingToolSentTargets: MessagingToolSend[];
   successfulCronAdds?: number;
-  /** The ids of the governance gates that refused a tool call during this attempt (absent when none did). */
-  governanceRefusals?: string[];
   cloudCodeAssistFormatError: boolean;
   attemptUsage?: NormalizedUsage;
   compactionCount?: number;
