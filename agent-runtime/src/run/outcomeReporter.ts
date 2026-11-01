@@ -16,11 +16,10 @@
  * ends in a logged warning and a resolved promise.
  */
 
-import type { RunOutcomeRow } from "@builderforce/agent-run";
+import { runOutcomeRequestOf, type RunOutcomeRow } from "@builderforce/agent-run";
 import {
   DEFAULT_ACTION_TYPE,
   RUN_OUTCOME_PATH,
-  parseRunOutcomeTelemetry,
   type ActionType,
   type RunOutcomeRequest,
   type TerminalStatus,
@@ -115,23 +114,17 @@ export function buildRunOutcomeReport(facts: RunOutcomeFacts): RunOutcomeRequest
  */
 export function buildRunRowReport(row: RunOutcomeRow, scope: OutcomeScope = {}): RunOutcomeRequest | null {
   const runId = row.runId?.trim();
-  const model = row.model?.trim();
-  if (!runId || !model) return null;
-  return {
-    ...parseRunOutcomeTelemetry({ ...row, parentRunId: row.parentRunId ? clientRunIdFor(row.parentRunId) : undefined }),
-    ...reportEnvelope(runId, scope),
-    model,
-    // A Stop is not a failure of the work: it scores as cancelled, never as a bad run.
-    terminalStatus: row.cancelled ? "cancelled" : row.terminalStatus === "finished" ? "completed" : "failed",
+  if (!runId) return null;
+  const envelope = reportEnvelope(runId, scope);
+  // The shared builder (`@builderforce/agent-run` `runOutcomeRequestOf`) is the ONE place a row becomes a request; this host adds its key, its
+  // population (`onprem`, from the row's entry point) and the kind of work.
+  return runOutcomeRequestOf(row, {
+    clientRunId: envelope.clientRunId,
+    projectId: envelope.projectId ?? null,
+    ...(envelope.taskId != null ? { taskId: envelope.taskId } : {}),
+    ...(row.parentRunId ? { parentClientRunId: clientRunIdFor(row.parentRunId) } : {}),
     actionType: DEFAULT_ACTION_TYPE,
-    steps: Math.max(0, Math.floor(row.steps)),
-    ...(row.cost !== undefined ? { costMc: Math.max(0, Math.floor(row.cost)) } : {}),
-    // Availability and degradation are kept beside the score (never folded into it): a throttled model
-    // is demoted without being called bad, and a run served off its model does not earn full credit.
-    ...(row.rateLimited ? { rateLimited: true } : {}),
-    ...(row.quotaExhausted ? { quotaExhausted: true } : {}),
-    ...(row.degraded ? { degraded: true } : {}),
-  };
+  });
 }
 
 /** Report the §8.2 row a run ended with, fire-and-forget (see {@link reportRunOutcome}). */

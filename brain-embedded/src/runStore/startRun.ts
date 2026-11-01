@@ -11,7 +11,8 @@ import { linkedTicketsToAdvance, linkedTicketsToComplete, linkedTicketsReviewedC
 import { asksForChange } from '@builderforce/agent-stall';
 import { isChildReportText } from '@builderforce/agent-tools';
 import { contentText } from '../localSuccess/turnFeatures';
-import { codeRunOutcome } from '../runOutcomeReport';
+import { codeRunOutcome, completedTurns, type BrainRunReport } from '../runOutcomeReport';
+import { runOutcomeRequestOf, type RunOutcomeRow } from '@builderforce/agent-run';
 import { attemptedDelegation } from '../delegationRequest';
 import { shippedToBaseBranch } from '../shipVerification';
 import { ticketsReviewedInPreview } from '../previewReview';
@@ -22,7 +23,7 @@ import { appendRunMessage } from './runControl';
 import { keepStoppedTurn, persistStep } from './turnPersistence';
 import { recordCodeChangeTicket, settleView, updateLinkedTickets } from './runBackstops';
 import { resolveServerChatId } from './serverChat';
-import { driveRun } from './runEngine';
+import { driveRun, runEngineOf } from './runEngine';
 import { reportRunEnd } from './runEndOutcome';
 import { beginRun } from './beginRun';
 import { continueLeftovers, takeContinueOnSettle } from './continueChat';
@@ -83,7 +84,15 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
   const runPersistence = lineage
     ? lineagePersistence(steps.persistence, lineage, (msg) => appendRunMessage(chatId, msg))
     : steps.persistence;
-  const req: BrainRunRequest = { ...request, persistence: runPersistence };
+  // On the agent engine the run ends in ONE uniform row (§8.2). It is held here, not sent: the report below merges the coder's grade into it
+  // so the door hears one outcome per run, carrying the entry point (`req.entryPoint`) the host declared.
+  let agentRow: RunOutcomeRow | undefined;
+  const holdsRow = runEngineOf(request) === 'agent';
+  const req: BrainRunRequest = {
+    ...request,
+    persistence: runPersistence,
+    ...(holdsRow ? { reportRunRow: (row: RunOutcomeRow) => { agentRow = row; return request.reportRunRow?.(row); } } : {}),
+  };
   c.persistStep = (ev) => persistStep(chatId, runPersistence, ev);
   beginRun(c, chatId);
   // What the chat re-runs with when direction arrives after the run ended: the run's wiring, not the
@@ -214,7 +223,8 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
         failed: c.error !== '', error: c.error, shipped, trace, projectId: req.projectId,
         askedForChange: !wakeTurn && asksForChange(requestText),
       });
-      if (outcome) void req.reportOutcome!(outcome).catch(() => undefined);
+      const report = reportedOutcome(outcome || null, agentRow, { clientRunId: c.runId, stopped: aborted, projectId: req.projectId, steps: completedTurns(trace).length });
+      if (report && req.reportOutcome) void req.reportOutcome(report).catch(() => undefined);
       // How the run ended, under the id its calls carry — the route report's other half.
       reportRunEnd(c, req, { aborted, failed: c.error !== '' });
       c.persistStep = null;
@@ -238,4 +248,27 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
     }
   }
   return 'ran';
+}
+
+/**
+ * The ONE report a settled run makes. The Brain's loop reports the coder's grade alone (its only record of a run). The agent engine also
+ * has the uniform row; the grade is merged into it - the grade's model, role, status and merge fact win over the row's, its source and
+ * telemetry stay - so a code-changing run is one record with both, and a run with no grade is reported by its row alone (recorded, never taught).
+ */
+function reportedOutcome(
+  grade: BrainRunReport | null,
+  row: RunOutcomeRow | undefined,
+  run: { clientRunId: string; stopped: boolean; projectId?: number | null; steps: number },
+): BrainRunReport | null {
+  const { steps, ...scope } = run;
+  // `steps` is the number the Brain has always reported (its completed model turns, the finishing one included): the ledger and the
+  // routing score read one figure whichever engine ran. The row's own tally counts only the turns that acted.
+  const unified = row ? runOutcomeRequestOf(row, scope) : null;
+  if (!unified) return grade;
+  unified.steps = steps;
+  // No grade: the run is recorded (its entry point, steps, cost) but is no evidence about CODING models, so routing does not learn from it
+  // - exactly what the Brain reported before the row existed (only a coder's grade ever taught the router).
+  if (!grade) return { ...unified, routingSignal: false };
+  const { source: _source, clientRunId: _id, ...rest } = grade;
+  return { ...unified, ...rest };
 }

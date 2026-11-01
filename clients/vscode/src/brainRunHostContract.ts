@@ -8,7 +8,7 @@
 import type { PrefetchPort } from "@builderforce/prefetch";
 import type {
   AvoidedRunCall,
-  BrainRunOutcome,
+  BrainRunReport,
   ContextPack,
   BrainRunPersistence,
   BrainStreamFn,
@@ -162,7 +162,7 @@ export interface BrainRunHostPorts {
    */
   grounding?(): Promise<string | undefined>;
   /** Report a settled code-changing run's outcome to learned routing. Best-effort. */
-  reportOutcome?(outcome: BrainRunOutcome): Promise<unknown>;
+  reportOutcome?(outcome: BrainRunReport): Promise<unknown>;
   /**
    * PRD 35 E3: the run's default checkout when the open folder CONTAINS checkouts —
    * resolved ONCE per run from the request, the project's repositories and the

@@ -13,7 +13,7 @@
  * `@builderforce/learned-routing`); the host owns the transport. Pure.
  */
 
-import { isRateLimitFailure, isTenantBudgetFailure } from '@builderforce/learned-routing';
+import { isRateLimitFailure, isTenantBudgetFailure, type RunOutcomeRequest } from '@builderforce/learned-routing';
 import type { BrainTraceEvent } from './brainTriage';
 import { attemptedDelegation } from './delegationRequest';
 import { modelScorecard } from './modelScorecard';
@@ -44,6 +44,16 @@ export interface BrainRunOutcome {
    *  budget): an AVAILABILITY fact that demotes the model without calling it a bad coder. Present only when true. */
   rateLimited?: true;
 }
+
+/**
+ * What a run reports to the door: the coder's grade of a run that changed code (or was asked to and delivered nothing), alone on the
+ * Brain's own loop; on the agent engine the same grade MERGED into the run's uniform §8.2 row (`runOutcomeRequestOf`), and the row alone
+ * for a run with no grade. One report per run either way - never a grade and a row.
+ */
+export type BrainRunReport = BrainRunOutcome | RunOutcomeRequest;
+
+/** The model turns a run completed, counted from ITS trace: the number the Brain has always reported as `steps` (the finishing turn included). */
+export const completedTurns = (trace: readonly BrainTraceEvent[]): BrainTraceEvent[] => trace.filter((e) => e.label === 'llm.complete' && !e.isError);
 
 /** A turn that reported its own cost as exactly 0 (served on this device - `servedOnDevice`). */
 const reportedFree = (e: BrainTraceEvent): boolean => (e.args as { costMc?: unknown } | null | undefined)?.costMc === 0;
@@ -91,7 +101,7 @@ export function codeRunOutcome(args: {
   askedForChange?: boolean;
 }): BrainRunOutcome | null {
   if (!args.runId) return null;
-  const turns = args.trace.filter((e) => e.label === 'llm.complete' && !e.isError);
+  const turns = completedTurns(args.trace);
   const steps = turns.length;
   // Free only when EVERY turn reported 0 (served on this machine); one turn with no cost leaves the run's unknown.
   const allLocal = steps > 0 && turns.every(reportedFree);

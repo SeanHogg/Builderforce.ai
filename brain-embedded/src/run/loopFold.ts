@@ -46,17 +46,20 @@ export function brainCompaction(run: RunLoopContext): BrainCompaction {
       async compact(ctx) {
         // Auto-compact BEFORE the turn: summarise the older middle into a memory note when the transcript exceeds the token budget,
         // or fall back to the drop-oldest window when no summarizer is reachable.
+        // `recordFold` is told only of a fold made NOW; a turn that merely reuses the memo of an earlier fold is told nothing.
+        let folded = false;
         const working = await buildWorkingTranscript(
           c,
           systemPrompt,
           (msgs) => summarizeMiddle(req.stream, run.policy.model, msgs, c.abort?.signal),
-          (fold) => recordFold(run, fold),
+          (fold) => { folded = true; recordFold(run, fold); },
         );
         // What compaction kept out of THIS call's prompt, measured against what it would have been without it.
         saved = c.compactMemo ? compactionSavedTokens([{ role: 'system', content: systemPrompt }, ...c.transcript], working) : 0;
         const rows = working.map(toRunMessage);
         if (sameRows(ctx.messages, rows)) return undefined;
-        return { messages: rows, dropped: Math.max(0, ctx.messages.length - rows.length) };
+        // The run counts a compaction only for a fold made this turn: the working set differs from the cell on every later turn too.
+        return { messages: rows, dropped: Math.max(0, ctx.messages.length - rows.length), ...(folded ? {} : { reused: true as const }) };
       },
     },
   };

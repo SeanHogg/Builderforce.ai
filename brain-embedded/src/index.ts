@@ -351,7 +351,7 @@ export { buildBrainRunPorts, brainRunPolicy, brainRunTask } from './run/webAdapt
 export type { BrainEntryPoint, BrainRunBinding } from './run/webAdapter';
 export { runViaAgent } from './run/runViaAgent';
 export type { ContextPack, RunPolicy, RunPorts, RunTask } from '@builderforce/agent-run';
-export type { BrainRunOutcome } from './runOutcomeReport';
+export type { BrainRunOutcome, BrainRunReport } from './runOutcomeReport';
 export { isCoderReask } from '@builderforce/run-policy';
 // Planning ends in tasks: the `hand_off` tool, its executor, and the per-child chat report.
 export {

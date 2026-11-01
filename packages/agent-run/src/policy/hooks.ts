@@ -76,6 +76,8 @@ export interface CompactionResult {
   dropped: number;
   /** The only change is the row that tells the incoming model it took over (a model hand-off that dropped nothing): the context did not shrink, so the run does not count it as a compaction. */
   noteOnly?: true;
+  /** The fold is one an earlier turn already made, handed to this turn again (a surface that rebuilds its working set from a memo each turn): the transcript is the same, so the run does not count it as a compaction. */
+  reused?: true;
   /** The tokens reserved for the answer. */
   reserveTokens?: number;
   /** What the fold cost and saved, for the run's timeline. */

@@ -58,11 +58,13 @@ export function policyContext(input: RunAgentInput, state: RunState, view: TurnV
  * PLACE: it is the array the kernel holds (`view.messages` is that same array), so
  * assigning a new one would leave the kernel sending the uncompacted rows.
  */
-export function applyCompaction(state: RunState, view: TurnView, result: { messages: RunMessage[]; dropped: number; noteOnly?: true; reserveTokens?: number }, step: number): void {
+export function applyCompaction(state: RunState, view: TurnView, result: { messages: RunMessage[]; dropped: number; noteOnly?: true; reused?: true; reserveTokens?: number }, step: number): void {
   view.messages.splice(0, view.messages.length, ...result.messages);
   state.messages = view.messages;
   // A model hand-off that only told the incoming model it took over added a row and took none away: it is not a compaction.
   if (result.noteOnly) return;
+  // A fold an earlier turn made, handed back again: the run folded once, however many turns carry the result.
+  if (result.reused) return;
   state.compaction = {
     compactions: state.compaction.compactions + 1,
     lastCompactedStep: step,

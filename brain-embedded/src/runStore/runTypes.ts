@@ -8,7 +8,7 @@ import type { BrainToolSpec, ChatCompletionMessage, ContentPart, StreamChatOptio
 import type { ReasoningIntent } from '../effort';
 import type { BrainTraceEvent } from '../brainTriage';
 import type { ChatErrorAction } from '../chatError';
-import type { BrainRunOutcome } from '../runOutcomeReport';
+import type { BrainRunReport } from '../runOutcomeReport';
 import type { RunStopHook } from '../stopHooks';
 import type { RunLineage } from '../runLineage';
 import type { BrainRunActivity } from '../runActivity';
@@ -222,7 +222,7 @@ export interface BrainRunRequest {
    * to `/llm/v1/run-outcome`). Omit and nothing is reported. Best-effort: a rejection is
    * swallowed and never affects the run.
    */
-  reportOutcome?: (outcome: BrainRunOutcome) => Promise<unknown>;
+  reportOutcome?: (outcome: BrainRunReport) => Promise<unknown>;
   /**
    * The host's STOP HOOK (`stopHooks.ts`) — asked each time the run is about to end; a
    * returned instruction holds it for another turn (bounded per run). The VS Code host
