@@ -84,11 +84,20 @@ function transcriptOf(rows: readonly RunMessage[], model: Model): { systemPrompt
   return { systemPrompt: system.join("\n\n"), messages };
 }
 
+/**
+ * The reply bound the provider is sent for the run's ask: never more than the model itself can write. The run sizes its ask from the window
+ * it holds back (a 64K window asks 16,000); a vendor whose output cap is lower (8K) refuses the larger number outright. A model that
+ * declares no cap leaves the ask as it is.
+ */
+export function replyBound(asked: number, model: Model): number {
+  return model.maxTokens > 0 ? Math.min(asked, model.maxTokens) : asked;
+}
+
 export function channelModelTransport(options: ChannelModelOptions): ModelTransport {
   const { models, streamFn, config, bridge } = options;
 
-  /** One provider turn. `live` ⇒ the surface hears the answer as it is written. */
-  async function ask(request: ModelRequest, signal: AbortSignal | undefined, live: boolean): Promise<ModelCompletion> {
+  /** One provider turn; the surface hears the answer as it is written. */
+  async function ask(request: ModelRequest, signal: AbortSignal | undefined): Promise<ModelCompletion> {
     const model = models.resolve(request.model);
     const tailRow = request.messages.at(-1);
     const hasTail = tailRow !== undefined && tailRow.role === "user" && isVolatileTail(tailRow);
@@ -102,17 +111,17 @@ export function channelModelTransport(options: ChannelModelOptions): ModelTransp
       tools: advertised(request, options.tools),
     };
     const apiKey = (config.getApiKey ? await config.getApiKey(model.provider) : undefined) || config.apiKey;
-    const response = await streamFn(model, context, { apiKey, temperature: config.temperature, maxTokens: request.maxTokens ?? config.maxTokens, signal });
+    const response = await streamFn(model, context, { apiKey, temperature: config.temperature, maxTokens: request.maxTokens !== undefined ? replyBound(request.maxTokens, model) : config.maxTokens, signal });
     let final: AssistantMessage | undefined;
     for await (const event of response) {
       if (event.type === "done" || event.type === "error") {
         final = await response.result();
         break;
       }
-      if (live) bridge.modelEvent(event);
+      bridge.modelEvent(event);
     }
     final ??= await response.result();
-    if (live) bridge.modelEnd(final);
+    bridge.modelEnd(final);
     // An errored or aborted turn is the run's end, never a turn that acted: the agent is told it failed, and the message stays
     // in the run's record (`AgentEventBridge.modelEnd`).
     if (final.stopReason === "error" || final.stopReason === "aborted") {
@@ -131,9 +140,7 @@ export function channelModelTransport(options: ChannelModelOptions): ModelTransp
   }
 
   return {
-    complete: (request, signal) => ask(request, signal, true),
-    // A summary is not a turn: the surface does not hear it.
-    summarize: (request, signal) => ask(request, signal, false),
+    complete: (request, signal) => ask(request, signal),
     window: (ref) => resolveContextWindowTokens(models.resolve(ref)),
     ...(config.pickFallbackModel
       ? {
