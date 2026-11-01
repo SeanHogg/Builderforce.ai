@@ -36,6 +36,11 @@ export interface HumanInputResult {
   decision: HumanDecision;
   /** Free-text human answer, present for `decision === "answered"`. */
   responseText?: string;
+  /**
+   * WHY a request was refused when no person answered it: no approver could be reached (not configured, the request failed), or the
+   * run was stopped while it waited. Structured, so a caller never infers it from the decision and a signal. Absent on a person's answer.
+   */
+  reason?: "unreachable" | "stopped";
 }
 
 type PendingEntry = {
@@ -134,13 +139,13 @@ export class ApprovalGate {
 
     // A run that was already stopped asks nobody: nothing is posted for a dead run.
     if (opts.signal?.aborted) {
-      return { decision: "rejected", responseText: RUN_STOPPED };
+      return { decision: "rejected", responseText: RUN_STOPPED, reason: "stopped" };
     }
 
     if (!this.isConfigured()) {
       if (opts.failClosed) {
         logWarn("[approval-gate] not configured — refusing (fail closed)");
-        return { decision: "rejected", responseText: UNREACHABLE };
+        return { decision: "rejected", responseText: UNREACHABLE, reason: "unreachable" };
       }
       logWarn("[approval-gate] not configured — standalone mode; auto-approving");
       return { decision: "approved" };
@@ -170,7 +175,7 @@ export class ApprovalGate {
       if (!res.ok) {
         if (opts.failClosed) {
           logWarn(`[approval-gate] request failed (${res.status}) — refusing (fail closed)`);
-          return { decision: "rejected", responseText: UNREACHABLE };
+          return { decision: "rejected", responseText: UNREACHABLE, reason: "unreachable" };
         }
         logWarn(`[approval-gate] request failed (${res.status}) — auto-approving`);
         return { decision: "approved" };
@@ -180,11 +185,11 @@ export class ApprovalGate {
     } catch (err) {
       // Stopped while the post was in flight: refused whatever the caller's default, never auto-approved.
       if (opts.signal?.aborted) {
-        return { decision: "rejected", responseText: RUN_STOPPED };
+        return { decision: "rejected", responseText: RUN_STOPPED, reason: "stopped" };
       }
       if (opts.failClosed) {
         logWarn(`[approval-gate] request error — refusing (fail closed): ${String(err)}`);
-        return { decision: "rejected", responseText: UNREACHABLE };
+        return { decision: "rejected", responseText: UNREACHABLE, reason: "unreachable" };
       }
       logWarn(`[approval-gate] request error — auto-approving: ${String(err)}`);
       return { decision: "approved" };
@@ -203,7 +208,7 @@ export class ApprovalGate {
         }
         this.pending.delete(approvalId);
         clearTimeout(entry.timer);
-        entry.resolve({ decision: "rejected", responseText: RUN_STOPPED });
+        entry.resolve({ decision: "rejected", responseText: RUN_STOPPED, reason: "stopped" });
       };
       const settle = (result: HumanInputResult): void => {
         signal?.removeEventListener("abort", onAbort);

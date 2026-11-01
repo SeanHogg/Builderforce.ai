@@ -48,14 +48,17 @@ export function onPremHuman(
         actionType: `tool.${tool}`,
         description: `Approve the agent's use of "${tool}"? ${call?.reason ?? gate.reason ?? ""}${args ? `\n\nArguments: ${args}` : ""}`.trim(),
         metadata: { gateId: gate.id, tool, ...(call ? { args: call.args } : {}) },
+        // A governance gate's approval FAILS CLOSED whoever built this channel: if no approver can be reached the call is refused, never
+        // waved through (a failed approval request would otherwise auto-approve, which is the standalone default for a plain ask).
+        failClosed: true,
         ...(options.approvalTimeoutMs !== undefined ? { timeoutMs: options.approvalTimeoutMs } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
       });
       if (result.decision === "approved") return { kind: "answered", answer: result.responseText ?? "", approved: true };
       if (result.decision === "timeout") return { kind: "answered", answer: "No approver responded in time.", approved: false, refusal: "timed_out" };
-      // A refusal that arrives after the run's own Stop is the Stop, not a person's no.
-      if (options.signal?.aborted) return { kind: "answered", answer: result.responseText ?? "", approved: false, refusal: "stopped" };
-      return { kind: "answered", answer: result.responseText ?? "", approved: false, refusal: "declined" };
+      // Not answered by a person: the gate says why (no approver reachable, or the run was stopped). A person's no carries no refusal (declined).
+      if (result.reason) return { kind: "answered", answer: result.responseText ?? "", approved: false, refusal: result.reason };
+      return { kind: "answered", answer: result.responseText ?? "", approved: false };
     },
   };
 }
