@@ -105,6 +105,7 @@ export function useBrainPanelController({
     autoApprove,
     setAutoApprove: setAutoApproveMode,
     needsConfirm,
+    answerQuestion,
   } = useToolConfirmationGate({
     isMutating,
     persistence: brainAutoApprovePersistence,
@@ -217,6 +218,8 @@ export function useBrainPanelController({
     toolSpecs,
     runTool,
     needsConfirm,
+    // The same gate's answerQuestion: Auto-mode answers ask_user instead of stalling.
+    answerQuestion,
     ensureChatId,
     drafts,
     onActivity: chats.touch,

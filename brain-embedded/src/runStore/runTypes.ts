@@ -89,6 +89,18 @@ export interface BrainRunRequest {
   runTool?: (name: string, args: unknown, signal?: AbortSignal) => Promise<unknown>;
   /** Pure predicate: true → pause the loop for an explicit user confirmation. */
   needsConfirm?: (req: { name: string; args: unknown }) => boolean;
+  /**
+   * Auto-answer resolver for the conversational `ask_user` tool — the counterpart to
+   * {@link needsConfirm}, which only gates DISPATCHED tool calls. `ask_user` is terminal:
+   * without this the run settles on the question and waits for a human click. When the
+   * run is about to settle on a well-formed question AND this returns a non-null string,
+   * the run treats the string as the user's answer: it persists the question as
+   * narration, appends the answer as the next USER turn, and CONTINUES. Return null (or
+   * omit) to let the question settle and render the card exactly as when Auto is off.
+   * Hosts in Auto mode pass the shared gate's `answerQuestion`, which reads the same
+   * live ref as `needsConfirm`, so a mid-run toggle is honoured.
+   */
+  answerQuestion?: (question: import('@builderforce/agent-loop').AskUserPayload) => string | null;
   stream: BrainStreamFn;
   /**
    * `max_tokens` for this run's completions — the composer's Effort level (see

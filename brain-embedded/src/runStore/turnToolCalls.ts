@@ -4,7 +4,7 @@
  * (`run/brainTurn.ts`).
  */
 
-import { ASK_USER_TOOL, askUserBlock } from '@builderforce/agent-loop';
+import { ASK_USER_TOOL, askUserBlock, coerceAskUserPayload } from '@builderforce/agent-loop';
 import type { StreamChatResult } from '../streamChatCompletion';
 import { runLeftDelegationUndone } from './earlyDelegation';
 import { emit, nowIso, pushTrace } from './runCells';
@@ -42,6 +42,24 @@ export function terminalAskReply(run: BrainRunContext, result: StreamChatResult,
   }
   let block: string | null = null;
   try { block = askCall.malformed ? null : askUserBlock(askCall.args); } catch { block = null; }
+  // Auto-mode: a WELL-FORMED question the host's resolver answers is not terminal — the run
+  // continues with the answer as the next user turn. Resolve it here (the question is known)
+  // and carry it to the `ask_user` dispatch, exactly like the delegation recovery below.
+  if (block && !askCall.malformed) {
+    const payload = coerceAskUserPayload(askCall.args);
+    const autoAnswer = payload && run.req.answerQuestion ? run.req.answerQuestion(payload) : null;
+    if (typeof autoAnswer === 'string' && autoAnswer.trim()) {
+      run.pendingAskAutoAnswer = autoAnswer;
+      pushTrace(run.c, {
+        ts: nowIso(),
+        category: 'message',
+        label: 'loop.auto_answer_ask_user',
+        args: { step, options: payload!.options.length },
+        result: `Auto mode answered the question with "${autoAnswer}" instead of settling on the card.`,
+      });
+      return undefined;
+    }
+  }
   const lead = result.text.trim();
   const reply = block ? (lead ? `${lead}\n\n${block}` : block) : lead;
   // A bare malformed call with no prose: let it dispatch, where `beforeDispatch` answers with the corrective result.

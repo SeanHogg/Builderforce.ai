@@ -78,6 +78,14 @@ export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatC
         run.redirectAskToDelegation = false;
         return { result: { data: { ok: false, error: undelegatedRequestNudge(catalogToolNames) } } };
       }
+      // Auto-mode: `beforeToolCalls` resolved the host's `answerQuestion` for this well-formed
+      // question — return the answer as the call's result so the run continues with it as the
+      // next user turn instead of stalling on the question card.
+      if (run.pendingAskAutoAnswer !== undefined) {
+        const answer = run.pendingAskAutoAnswer;
+        run.pendingAskAutoAnswer = undefined;
+        return { result: { data: { ok: true, answer } } };
+      }
       return { result: { data: { error: 'ask_user needs { question, options:[{label}] } with 2+ options. Retry or answer in prose.' } } };
     }
     // PLANNING ENDS HERE. The planner's tasks become tickets linked to this chat and

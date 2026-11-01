@@ -1271,6 +1271,76 @@ describe('ask_user — a question is a REPLY, and the run ends on it', () => {
       expect(parseAskUser(rec.sent[0] ?? '')?.question).toBe('Which slice first?');
     });
   });
+
+  // Auto mode: the host's `answerQuestion` resolver (the tool gate's auto-approve ref)
+  // answers a WELL-FORMED question so the run continues instead of stalling on the card.
+  describe('auto-mode answerQuestion — a resolvable question continues the run', () => {
+    const QUESTION = { question: 'Which first?', options: [{ label: 'S2', recommended: true }, { label: 'S3' }] };
+
+    it('answers the resolved option and continues; the question never settles as a card', async () => {
+      const rec = recorder();
+      const toolResults: string[] = [];
+      let turn = 0;
+      const resolved: string[] = [];
+      await startRun(4409, {
+        resolvedSystemPrompt: 'sys',
+        tools: READ_TOOL,
+        runTool: async () => ({ ok: true }),
+        answerQuestion: (q) => {
+          resolved.push(q.question);
+          return q.options.find((o) => o.recommended)?.label ?? q.options[0]?.label ?? null;
+        },
+        stream: async (opts) => {
+          for (const m of opts.messages) if (m.role === 'tool') toolResults.push(String(m.content));
+          turn += 1;
+          if (turn === 1) {
+            return {
+              text: 'Two ways to go.',
+              toolCalls: [{ id: 'q1', name: 'ask_user', args: JSON.stringify(QUESTION) }],
+              finishReason: 'tool_calls',
+            };
+          }
+          return { text: 'Doing S2.', toolCalls: [], finishReason: 'stop' };
+        },
+        persistence: rec.persistence,
+        userTurn: 'these tickets are stale',
+      });
+      // The resolver saw the question, the run went PAST it, and the answer was the tool result.
+      expect(resolved).toEqual(['Which first?']);
+      expect(turn).toBe(2);
+      expect(toolResults.join('\n')).toContain('S2');
+      // The question was never settled as a reply/card.
+      expect(rec.sent.some((m) => parseAskUser(m) !== null)).toBe(false);
+      expect(selectPendingAskUser([{ id: 1, role: 'assistant', content: rec.sent[0] ?? '' }])).toBeNull();
+      expect(rec.sent.at(-1)).toBe('Doing S2.');
+      expect(getRunTrace(4409).some((e) => e.label === 'loop.auto_answer_ask_user')).toBe(true);
+    });
+
+    it('still settles on the card when the resolver returns null (Auto off)', async () => {
+      const rec = recorder();
+      let turn = 0;
+      await startRun(4410, {
+        resolvedSystemPrompt: 'sys',
+        tools: READ_TOOL,
+        runTool: async () => ({ ok: true }),
+        answerQuestion: () => null,
+        stream: async () => {
+          turn += 1;
+          return {
+            text: 'Two ways to go.',
+            toolCalls: [{ id: 'q1', name: 'ask_user', args: JSON.stringify(QUESTION) }],
+            finishReason: 'tool_calls',
+          };
+        },
+        persistence: rec.persistence,
+        userTurn: 'these tickets are stale',
+      });
+      // ONE turn: the null resolver lets the question settle as today.
+      expect(turn).toBe(1);
+      expect(parseAskUser(rec.sent[0] ?? '')?.question).toBe('Which first?');
+      expect(selectPendingAskUser([{ id: 1, role: 'assistant', content: rec.sent[0] ?? '' }])).not.toBeNull();
+    });
+  });
 });
 
 describe('the reasoning channel a run persists', () => {

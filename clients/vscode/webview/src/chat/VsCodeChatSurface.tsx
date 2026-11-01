@@ -109,7 +109,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // reaches an open panel. The predicate itself is evaluated by the host
   // (`nativeNeedsConfirm`); this panel owns the switch and tells the host when it moves.
   const autoApproveSetting = init.autoApproveDefault ?? false;
-  const { autoApprove, setAutoApprove: setAutoApproveMode } = useToolConfirmationGate({
+  const { autoApprove, setAutoApprove: setAutoApproveMode, answerQuestion: autoAnswerQuestion } = useToolConfirmationGate({
     isMutating: () => true,
     persistence: useMemo(() => autoApprovePersistence(autoApproveSetting), [autoApproveSetting]),
     defaultOn: autoApproveSetting,
@@ -195,6 +195,10 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     // WHO IS IN THIS CHAT: invited agents become the default owners of work-mode work and
     // are named in the prompt — without it the IDE session made every change itself.
     chatRoster,
+    // Auto-mode (the same ref the gate's needsConfirm reads) also answers an ask_user
+    // question automatically instead of stalling the run for a human click. Named
+    // apart from the composer send's `answerQuestion` (useChatSend) it shadows.
+    answerQuestion: autoAnswerQuestion,
   });
 
   // The chat OFF this machine (PRD 36): every server-addressed call — the rail, who is

@@ -118,6 +118,14 @@ export interface BrainRunContext {
   /** Carries the undelegated-request decision from `beforeToolCalls` to the `ask_user`
    *  dispatch it answers. */
   redirectAskToDelegation: boolean;
+  /**
+   * The auto-answer the host's `answerQuestion` resolved for the `ask_user` question this
+   * turn settled on (Auto mode). Carried to the `ask_user` dispatch, which returns it as the
+   * call's result so the run continues with the answer as the next user turn instead of
+   * stalling on the question card. Undefined when the question settled normally (Auto off,
+   * or the resolver returned null).
+   */
+  pendingAskAutoAnswer?: string;
   /** A replayed read waits for its row to be pushed so the cache can anchor to it. */
   pendingReplay: { name: string; args: unknown; result: unknown; served?: unknown } | null;
   /** What dispatch learned about the call it just ran — for the durable step + the read cache.
