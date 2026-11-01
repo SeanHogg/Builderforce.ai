@@ -173,8 +173,15 @@ describe("a tripped breaker", () => {
 
     expect(seen).toHaveLength(5);
     expect(produced.some((m) => m.role === "user" && textOf(m).includes("Now write your reply"))).toBe(false);
-    expect(produced.at(-1)!.role).toBe("toolResult");
-    expect(ended.filter((r) => r === "assistant")).toHaveLength(5);
+    // the run's last result is the tool's, and then it SAYS why it produced nothing (no gate refused here: the calls failed)
+    expect(produced.at(-2)!.role).toBe("toolResult");
+    const notice = produced.at(-1) as AssistantMessage;
+    expect(notice.role).toBe("assistant");
+    expect(notice.stopReason).toBe("error");
+    expect(notice.errorMessage).toContain("its tool calls failed");
+    expect(notice.errorMessage).not.toContain("governance gate");
+    // five model turns, then the one notice
+    expect(ended.filter((r) => r === "assistant")).toHaveLength(6);
   });
 });
 

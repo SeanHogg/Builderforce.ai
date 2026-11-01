@@ -62,9 +62,13 @@ function steered(messages: readonly AgentMessage[]): SteerInput[] {
   });
 }
 
-/** What a run says when governance gates refused its calls until it ran out of budget or tripped its breaker, with nothing written to the person. */
+/**
+ * What a run says when it ran out of budget or tripped its breaker with nothing written to the person: its tool calls failed or were
+ * refused, and when a governance gate refused them, which one.
+ */
 function noReplyMessage(reason: string, gateIds: ReadonlySet<string>): string {
-  return `The run ended without a reply (${reason}): its tool calls were refused or failed. Refused by governance gate ${[...gateIds].join(", ")}.`;
+  const refused = gateIds.size > 0 ? ` Refused by governance gate ${[...gateIds].join(", ")}.` : "";
+  return `The run ended without a reply (${reason}): its tool calls ${gateIds.size > 0 ? "were refused or failed" : "failed"}.${refused}`;
 }
 
 /** The policy DATA of a channel run. How the run behaves is the agent's. */
@@ -188,10 +192,10 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
       // A failure with no model turn behind it must still reach the runner as the errored message it reads (it fails over on it).
       // A run stopped by a breaker or a budget ended as the runner always saw it: on its last tool result.
       if (outcome.kind === "failed" && !outcome.exhausted) bridge.fail(outcome.reason, outcome.reason === RUN_CANCELLED_REASON ? "aborted" : "error");
-      // A run that spent its budget or tripped its breaker AFTER saying something is delivered as it always was. One whose calls a
-      // governance gate refused and that never wrote a word would otherwise end silently (the channel owns its synthesis and the run
-      // settled on its last tool result): say what stopped it.
-      else if (outcome.kind === "failed" && !replied && refusedBy.size > 0) bridge.fail(noReplyMessage(outcome.reason, refusedBy), "error");
+      // A run that spent its budget or tripped its breaker AFTER saying something is delivered as it always was. One that never wrote a
+      // word would otherwise end silently (the channel owns its synthesis and the run settled on its last tool result): say what
+      // stopped it, and which governance gate refused its calls when one did.
+      else if (outcome.kind === "failed" && !replied) bridge.fail(noReplyMessage(outcome.reason, refusedBy), "error");
     } catch (err) {
       logWarn(`[on-prem] channel run failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
