@@ -76,9 +76,6 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 
 ### Cloud and IDE agent runs `[agents]`
 
-- **ONE execution core ([PRD 35](./docs/specs/35-prd-one-agent-one-kernel.md)).** One loop still calls the kernel directly: brain-embedded `runStore/runLoop.ts`, which carries nearly all traffic and stays the default engine. On-prem channels moved onto `runAgent` (`agent-loop.ts` has no loop). The agent engine sits behind an opt-in (`builderforce.agent.engine`, `?runEngine=agent`). In flight (operator, 2026-10-31, no telemetry week): review the agent engine against `runLoop`, prove both with unit tests, then flip the default, delete `runLoop.ts` and the engine switch, and run `check:one-execution` with an empty allowlist.
-- **A channel run that exhausts on plain tool failures ends with no reply.** Gate refusals now reach `bridge.fail` (`channelAdapter.ts`), but a run that trips the breaker on ordinary failures stays silent, as the old loop did; `channelHardening.test.ts` "a tripped breaker" pins it. In flight in WS5 round five: every exhausted run with no reply now fails visibly, and that test's edit is planning-approved.
-- **Tests that cannot run unchanged yet.** Three pairs remain (`runEndMemory`, `finish`, `learnedFacts`), plus twin `brain-embedded/src/runSteering.ts`, which waits for the chat adapter. `compaction/pack` expects a 1,024 floor against the source's 20,000. See `packages/agent-run/docs/retention-ledger.md`, itself stale. Unblocks `check:tests-unchanged` in enforce mode at WS7.
 - **Knowledge review of `agentic` fails.** The linked client makes 3 requests per file on the plan-rpm bucket (~50,000 for this tree) and one 429 or 413 ends the review. Next: move to builderforce-memory 2026.10.36, use `batched` + `preloadExtracted`, add bulk routes and 429 retry, ship a VSIX ([PRD 38](./docs/specs/38-prd-knowledge-graph.md)).
 - **Cloud run isolation (G1, [PRD 09](./docs/specs/09-prd-cloud-agent-validation.md)).** `enableInternet = true` (`AgentContainerDO.ts:45`) with no egress allowlist or red-team. S5, S6, W2 and B2 are closed; re-audit the rest of the 50.
 - **Sandbox capacity.** `max_instances = 25` is shared with previews; when full, a run gets no sandbox rather than waiting.
@@ -249,7 +246,6 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 - **CI never runs frontend unit tests; 19 fail in 12 files.** Fix them and add a vitest job.
 - **Verify never bundles the Worker.** Add `wrangler deploy --dry-run`; make `deploy-frontend` and VS Code wait for `deploy-api`.
 - **A red commit still publishes to the CDN.** *Blocker: operator decision; release order is deliberate.*
-- **`ExecutionRepository.persistence.test.ts` reads past `update()`.** Re-anchor at WS7.
 - **Flaky or heap-bound tests:** `CreationCanvas.test.tsx`, `agents/sandbox/registry.test.ts:207`, `useBrainConversation.test.tsx`, `harness/scenarios.test.ts`.
 - **CI safety:** no ephemeral-DB migrate dry-run; `production` reviewer rule unset; `qa-e2e` in no workflow; no CodeQL workflow.
 - **`packages/repo-map` doesn't declare `agent-tools`.**

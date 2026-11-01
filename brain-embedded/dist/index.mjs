@@ -1274,9 +1274,9 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-haiku-latest": [1e-7, 5e-7],
   "~anthropic/claude-opus-latest": [4e-6, 2e-5],
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
-  "~deepseek/deepseek-flash-latest": [141e-10, 144e-9],
+  "~deepseek/deepseek-flash-latest": [35e-9, 5e-7],
   "~deepseek/deepseek-pro-latest": [1035e-10, 8e-6],
-  "~deepseek/deepseek-v4-flash-latest": [5764e-11, 17292e-11],
+  "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
   "~moonshotai/kimi-latest": [1495e-10, 715e-8],
@@ -1287,7 +1287,7 @@ var PRICE_SNAPSHOT = {
   "~openai/gpt-terra-latest": [1e-6, 5e-6],
   "~unbiased/pareto-latest": [8e-7, 32e-7],
   "~x-ai/grok-latest": [2e-6, 6e-6],
-  "~z-ai/glm-flash-latest": [163e-10, 1479e-10],
+  "~z-ai/glm-flash-latest": [98e-10, 1702e-10],
   "~z-ai/glm-latest": [699e-10, 14e-7],
   "aion-labs/aion-2.0": [8e-7, 16e-7],
   "aion-labs/aion-3.0": [3e-6, 6e-6],
@@ -1356,7 +1356,7 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v4-flash-0731": [119e-9, 238e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [2156e-10, 6468e-10],
   "deepseek/deepseek-v4-pro": [16e-7, 32e-7],
-  "deepseek/deepseek-v4-pro-0813": [66e-8, 198e-8],
+  "deepseek/deepseek-v4-pro-0813": [115e-9, 4e-6],
   "deepseek/deepseek-v4.1-flash": [45e-9, 5e-7],
   "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
   "deepseek/deepseek-v4.1-flash:batch": [5e-8, 15e-8],
@@ -1584,9 +1584,9 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-audio": [25e-7, 1e-5],
   "openai/gpt-audio-mini": [6e-7, 24e-7],
   "openai/gpt-chat-latest": [5e-6, 3e-5],
-  "openai/gpt-oss-120b": [15e-8, 6e-7],
+  "openai/gpt-oss-120b": [19e-9, 7e-8],
   "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
-  "openai/gpt-oss-20b": [18e-9, 9e-8],
+  "openai/gpt-oss-20b": [3e-8, 13e-8],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
   "openai/gpt-oss-safeguard-20b": [75e-9, 3e-7],
   "openai/o3": [2e-6, 8e-6],
@@ -1647,7 +1647,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.7-plus": [32e-8, 128e-8],
   "qwen/qwen3.7-plus:batch": [23e-8, 92e-8],
   "qwen/qwen3.8-2.4t-a95b": [2e-6, 6e-6],
-  "qwen/qwen3.8-27b": [4e-8, 23e-7],
+  "qwen/qwen3.8-27b": [15e-8, 1875e-9],
   "qwen/qwen3.8-flash": [15e-8, 47e-8],
   "qwen/qwen3.8-max-0902": [2e-6, 6e-6],
   "qwen/qwen3.8-max-prime": [4e-6, 12e-6],
@@ -1709,14 +1709,14 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-4.5v": [6e-7, 18e-7],
   "z-ai/glm-4.6": [5e-7, 2e-6],
   "z-ai/glm-4.6v": [3e-7, 9e-7],
-  "z-ai/glm-4.7": [54e-8, 198e-8],
+  "z-ai/glm-4.7": [6e-7, 22e-7],
   "z-ai/glm-4.7-flash": [605e-10, 4e-7],
   "z-ai/glm-5": [1e-6, 32e-7],
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
   "z-ai/glm-5.1": [14e-7, 44e-7],
   "z-ai/glm-5.2": [6e-9, 68e-7],
   "z-ai/glm-5.3": [699e-10, 14e-7],
-  "z-ai/glm-5.3-flash": [163e-10, 1479e-10],
+  "z-ai/glm-5.3-flash": [98e-10, 1702e-10],
   "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
   "z-ai/glm-5.3-prime": [28e-7, 88e-7],
@@ -14217,6 +14217,24 @@ function replyAsk(ctx) {
   return reserve < DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR ? reserve : void 0;
 }
 
+// ../packages/agent-run/src/policy/model/downgradeRule.ts
+function planModelWarning(model, book2 = snapshotPriceBook()) {
+  if (!model || model === "default") return null;
+  const price = listPriceOf(book2, model);
+  const tier2 = price ? resolveModelTier({ price }) : void 0;
+  return tier2 && isAgenticTier(tier2) === false ? { model, tier: tier2 } : null;
+}
+function downgradeDecision(input) {
+  const { asked, served } = input;
+  if (!served || served === "default") return null;
+  if (asked !== void 0) return served === asked ? null : { kind: "failover" };
+  const byo = input.byo.trim();
+  const flash = !byo && input.planPhase ? planModelWarning(served, input.book) : null;
+  if (!byo && !flash) return null;
+  if (input.seen) return null;
+  return byo ? { kind: "byo" } : { kind: "plan_tier", tier: flash.tier };
+}
+
 // ../packages/agent-run/src/policy/model/preflight.ts
 function classifyPreflight(input) {
   const notices = [];
@@ -14239,12 +14257,6 @@ function classifyPreflight(input) {
     notices.push("plan phase would land on a Flash-class model \u2014 routing around it for the run's quality.");
   }
   return { notices, refreshExpired };
-}
-function planModelWarning(model, book2 = snapshotPriceBook()) {
-  if (!model || model === "default") return null;
-  const price = listPriceOf(book2, model);
-  const tier2 = price ? resolveModelTier({ price }) : void 0;
-  return tier2 && isAgenticTier(tier2) === false ? { model, tier: tier2 } : null;
 }
 function reasonsOf(entries) {
   const out = {};
@@ -14290,19 +14302,22 @@ function recordWeaker(ctx, served) {
   if (!recorded.includes(served)) ctx.state.degradedBy = [...recorded, served];
 }
 function modelDowngrade(ctx, requested, served, book2 = snapshotPriceBook()) {
-  if (!served || served === "default") return void 0;
-  if (requested && requested !== "default") {
-    if (served === requested) return void 0;
-    if (isWeakerModel(requested, served, book2)) recordWeaker(ctx, served);
-    return { kind: "llm.model_downgrade", step: ctx.step, requestedModel: requested, model: served, reason: "failover" };
-  }
-  if ((ctx.state.downgrades ?? []).includes(served)) return void 0;
+  const asked = requested && requested !== "default" ? requested : void 0;
   const degraded = ctx.state.preflight?.startsWith("degraded:") ? ctx.state.preflight.slice("degraded:".length) : "";
-  const byo = degraded && degraded !== "plan_flash" ? degraded : "";
-  const flash = !byo && ctx.state.writtenPaths.length === 0 ? planModelWarning(served) : null;
-  if (!byo && !flash) return void 0;
+  const decision = downgradeDecision({
+    asked,
+    served,
+    byo: degraded && degraded !== "plan_flash" ? degraded : "",
+    planPhase: ctx.state.writtenPaths.length === 0,
+    seen: !!served && (ctx.state.downgrades ?? []).includes(served)
+  });
+  if (!decision || !served) return void 0;
+  if (decision.kind === "failover") {
+    if (isWeakerModel(asked, served, book2)) recordWeaker(ctx, served);
+    return { kind: "llm.model_downgrade", step: ctx.step, requestedModel: asked, model: served, reason: "failover" };
+  }
   ctx.state.downgrades = [...ctx.state.downgrades ?? [], served];
-  return { kind: "llm.model_downgrade", step: ctx.step, requestedModel: "default", model: served, reason: byo ? `byo_unresolved:${byo}` : `plan_tier:${flash.tier}` };
+  return { kind: "llm.model_downgrade", step: ctx.step, requestedModel: "default", model: served, reason: decision.kind === "byo" ? `byo_unresolved:${degraded}` : `plan_tier:${decision.tier}` };
 }
 
 // ../packages/agent-run/src/policy/model/index.ts
@@ -18331,8 +18346,7 @@ function kernelHooks(run) {
         progress: { rungs: state.stall?.rungs ?? {} },
         cache: run.cache
       });
-      const forced = menu?.tools?.filter((t) => !isToolWithheld(input.policy.approvalGates, t.function?.name ?? ""));
-      const advertised = forced ?? await selectNow();
+      const advertised = menu?.tools ?? await selectNow();
       run.selection = {
         tools: advertised,
         ...menu?.toolChoice ? { toolChoice: menu.toolChoice } : {},
@@ -18380,16 +18394,15 @@ function kernelHooks(run) {
       return output === void 0 ? void 0 : { action: "stop", ok: true, output, finished: true };
     },
     beforeDispatch: async (call2, ctx) => {
-      const refusal2 = (gated2) => {
-        const refused = { data: gated2.data, isError: true, ...gated2.control ? { control: asLoopControl(gated2.control) } : {} };
-        if (gated2.control) held.add(refused);
-        return refused;
-      };
       starts.set(call2.id, Date.now());
       const pctx = contextAt(ctx.step, ctx.stepInCall);
       const pcall = toPolicyCall(call2);
       const gated = await hooks.tools.gate?.(pctx, pcall);
-      if (gated) return { result: refusal2(gated) };
+      if (gated) {
+        const refused = { data: gated.data, isError: true, ...gated.control ? { control: asLoopControl(gated.control) } : {} };
+        if (gated.control) held.add(refused);
+        return { result: refused };
+      }
       const decision = await hooks.guards.beforeDispatch(pctx, pcall);
       if (decision?.skip) {
         const { data, isError, control } = decision.skip;
@@ -18416,10 +18429,7 @@ function kernelHooks(run) {
         if (pre && "result" in pre) return { result: { data: pre.result.data, ...pre.result.isError ? { isError: true } : {} } };
         if (pre && "rewrite" in pre) {
           const { name, args } = pre.rewrite;
-          const rewritten = { ...call2, name, args, raw: { ...call2.raw, name, arguments: JSON.stringify(args) } };
-          const reached = await hooks.tools.gate?.(pctx, toPolicyCall(rewritten));
-          if (reached) return { result: refusal2(reached) };
-          return { rewrite: rewritten };
+          return { rewrite: { ...call2, name, args, raw: { ...call2.raw, name, arguments: JSON.stringify(args) } } };
         }
       }
       return void 0;
@@ -23835,6 +23845,7 @@ import { defaultEstimateTokens as defaultEstimateTokens5 } from "@seanhogg/build
 var OPEN = "<turn_context>\nContext for this turn only (recalled memory and run directives) \u2014 not part of the request:";
 var CLOSE = "</turn_context>";
 var attached = /* @__PURE__ */ new WeakMap();
+var measured2 = /* @__PURE__ */ new WeakMap();
 function turnContextBlock2(parts) {
   const body = parts.map((p) => (p ?? "").trim()).filter(Boolean).join("\n\n");
   return body ? `${OPEN}
@@ -23847,6 +23858,7 @@ function turnContextCarrier(c) {
   return a && a.convo[a.index] === a.carrier ? a.carrier : void 0;
 }
 function restoreTurnContext(c) {
+  measured2.delete(c);
   const prior = attached.get(c);
   if (!prior) return;
   if (prior.convo[prior.index] === prior.carrier) prior.convo[prior.index] = prior.original;
@@ -23854,6 +23866,7 @@ function restoreTurnContext(c) {
 }
 function attachTurnContext(c, convo, block) {
   restoreTurnContext(c);
+  measured2.set(c, defaultEstimateTokens5(block));
   for (let i = convo.length - 1; i >= 0; i -= 1) {
     const original = convo[i];
     if (original.role !== "user") continue;
@@ -23862,13 +23875,13 @@ function attachTurnContext(c, convo, block) {
 ${block}` : [...original.content, { type: "text", text: block }];
     const carrier = { ...original, content };
     convo[i] = carrier;
-    attached.set(c, { convo, index: i, carrier, original, tokens: defaultEstimateTokens5(block) });
+    attached.set(c, { convo, index: i, carrier, original });
     return true;
   }
   return false;
 }
 function turnContextTokens(c) {
-  return attached.get(c)?.tokens ?? 0;
+  return measured2.get(c) ?? 0;
 }
 
 // src/runStore/runPreamble.ts
@@ -24048,7 +24061,7 @@ ${turnContext}` : systemPrompt),
     // gone. The first retry stays free; from the second the model reads the count and the
     // error it already has, and the moves that remain.
     failures: new FailureTally(),
-    // What this run has already WRITTEN (see `repeatedWrite.ts`): the third loop shape —
+    // What this run has already WRITTEN (see `WriteLedger` in `@builderforce/run-guards`): the third circling shape —
     // a successful full-content write sent again byte for byte, because an error from
     // before it was still on screen. Replaying it cannot change the file, so it is answered
     // without running.
@@ -25458,9 +25471,22 @@ function createComposingActivity(sink, opts) {
 var MODEL_DOWNGRADE_LABEL = "llm.model_downgrade";
 function modelDowngradeEvent(input) {
   const { requested, resolved, step, ts } = input;
-  if (resolved === "default") return null;
-  if (requested !== "default") {
-    if (resolved === requested) return null;
+  const unresolved = (input.byoUnresolved ?? "").trim();
+  const decision = downgradeDecision({
+    // The Brain's `requested` is the gateway's `default` when it asked for nothing.
+    asked: requested !== "default" ? requested : void 0,
+    served: resolved,
+    byo: unresolved,
+    planPhase: input.planPhase === true,
+    seen: input.events.some((e) => {
+      if (e.label !== MODEL_DOWNGRADE_LABEL) return false;
+      const args = e.args;
+      return args?.requestedModel === "default" && args.model === resolved;
+    }),
+    ...input.book ? { book: input.book } : {}
+  });
+  if (!decision) return null;
+  if (decision.kind === "failover") {
     return {
       ts,
       category: "message",
@@ -25469,22 +25495,13 @@ function modelDowngradeEvent(input) {
       result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) \u2014 a smaller context window can truncate long transcripts.`
     };
   }
-  const unresolved = (input.byoUnresolved ?? "").trim();
-  const flash = !unresolved && input.planPhase ? planModelWarning(resolved, input.book) : null;
-  if (!unresolved && !flash) return null;
-  const said = input.events.some((e) => {
-    if (e.label !== MODEL_DOWNGRADE_LABEL) return false;
-    const args = e.args;
-    return args?.requestedModel === "default" && args.model === resolved;
-  });
-  if (said) return null;
-  if (flash) {
+  if (decision.kind === "plan_tier") {
     return {
       ts,
       category: "message",
       label: MODEL_DOWNGRADE_LABEL,
-      args: { requestedModel: "default", model: resolved, step, planTier: flash.tier },
-      result: `Auto-routing planned this run on ${resolved}, a ${flash.tier}-tier (Flash-class) model \u2014 weak at planning a multi-step change; pick a stronger model for planning if the result matters.`
+      args: { requestedModel: "default", model: resolved, step, planTier: decision.tier },
+      result: `Auto-routing planned this run on ${resolved}, a ${decision.tier}-tier (Flash-class) model \u2014 weak at planning a multi-step change; pick a stronger model for planning if the result matters.`
     };
   }
   return {
@@ -25863,7 +25880,10 @@ function brainRunPolicy(b) {
     ...b.start ? { modelStart: { plain: true, ...seed ? { model: seed } : {}, strict: !!req.modelStrict, ...b.start.startPhase ? { startPhase: b.start.startPhase } : {}, ...b.start.phaseModels ? { phaseModels: b.start.phaseModels } : {} } } : {},
     inference: "hybrid",
     verify: "none",
-    // Governance gates are unbound on the Brain (parity ruling R10): its request carries none and no human channel approves one.
+    // Governance gates are unbound on the Brain BY DECISION (parity ruling R10): its request carries none and no human channel approves one.
+    // Binding them later means gating INSIDE this surface's own preflight (`brainPlatformTools.ts` `preflight`, which rewrites a router call and
+    // answers `hand_off` itself), before its side effects, on the tool a call will actually run. It does not mean gating in the kernel hook:
+    // that runs after the preflight has acted, misses a router call the preflight answers, and would ask a `require-approval` twice.
     approvalGates: [],
     // A model that spent its whole stall budget still describing calls ends the run on what it said, the reason beside it (`brainDelivery.ts`).
     stallExhausted: "settle",
