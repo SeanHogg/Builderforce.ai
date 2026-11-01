@@ -72,6 +72,12 @@ function resultBlocks(parts: readonly RunPart[]): (TextContent | ImageContent)[]
   return out;
 }
 
+/** The text the model is sent for a row that is not the person's or the model's own (what `convertToLlm` makes of it). */
+function customText(message: AgentMessage): string {
+  if (message.role === "bashExecution") return message.excludeFromContext ? "" : `$ ${message.command}\n${message.output}`;
+  return textOf((message as { content?: unknown }).content) || (message as { summary?: string }).summary || "";
+}
+
 /** An `AgentMessage` as the row the agent carries. */
 export function toRunRow(message: AgentMessage): RunMessage {
   switch (message.role) {
@@ -108,8 +114,8 @@ export function toRunRow(message: AgentMessage): RunMessage {
       };
     default:
       // bash executions, branch / compaction summaries and custom messages: the model reads them through `convertToLlm`, so they
-      // ride whole and come back as they were.
-      return { role: "user", content: textOf((message as { content?: unknown }).content) || (message as { summary?: string }).summary || "", custom: true, meta: { agentMessage: message } };
+      // ride whole and come back as they were. `content` is what the model will be sent, so the agent measures what it sends.
+      return { role: "user", content: customText(message), custom: true, meta: { agentMessage: message } };
   }
 }
 

@@ -1,4 +1,5 @@
 import type { AgentMessage } from "../../builderforce/model/agent-types.js";
+import { IMAGE_CHAR_ESTIMATE } from "@builderforce/agent-run";
 import { CHARS_PER_TOKEN } from "@builderforce/workload";
 import { onDeviceCostLeverOn } from "../../infra/cost-levers.js";
 import { cutHead, fitToolText } from "@builderforce/tool-output-policy";
@@ -7,7 +8,6 @@ import { cutHead, fitToolText } from "@builderforce/tool-output-policy";
 const CONTEXT_INPUT_HEADROOM_RATIO = 0.75;
 const SINGLE_TOOL_RESULT_CONTEXT_SHARE = 0.5;
 const TOOL_RESULT_CHARS_PER_TOKEN = 2;
-const IMAGE_CHAR_ESTIMATE = 8_000;
 
 export const CONTEXT_LIMIT_TRUNCATION_NOTICE = "[truncated: output exceeded context limit]";
 const CONTEXT_LIMIT_TRUNCATION_SUFFIX = `\n${CONTEXT_LIMIT_TRUNCATION_NOTICE}`;
