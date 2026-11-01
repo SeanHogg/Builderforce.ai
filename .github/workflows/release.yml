@@ -670,14 +670,47 @@ jobs:
           pnpm --dir ../packages/agent-run install --frozen-lockfile
           ${{ matrix.run }}
 
+  # The kernel-side packages' OWN suites. `Verify API (vitest)` runs a source-only package's tests only from its `src/`
+  # (api/vitest.config.ts builds its include from `sourcePackageRoots`, which is `<pkg>/src`), so a test kept anywhere
+  # else never ran in CI: packages/agent-run keeps all of its 65 files under `test/`, which is where the conformance
+  # suite, the retention-ledger proofs and the section 8.4 scenario live. Each leg installs the package and runs its
+  # own `vitest run` (no shard): ~100 s together. The deploy jobs need this job, so a red kernel suite stops a release.
+  verify-kernel:
+    name: Verify kernel package (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [agent-run, agent-loop, agent-tools, run-guards]
+    defaults:
+      run:
+        working-directory: packages/${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.23.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - uses: ./.github/actions/pnpm-store-cache
+        with:
+          scope: verify-kernel
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run test
+
   deploy-api:
     name: Deploy API
     runs-on: ubuntu-latest
     # After publish-cdn so a release's recorder is public before its API ships. A CDN
     # failure does not hold the API back: ReplayConfigService reads the LIVE manifest,
     # which still names the previous (public) recorder.
-    needs: [verify-api, publish-cdn]
-    if: ${{ !cancelled() && needs.verify-api.result == 'success' }}
+    needs: [verify-api, verify-kernel, publish-cdn]
+    if: ${{ !cancelled() && needs.verify-api.result == 'success' && needs.verify-kernel.result == 'success' }}
     # Binds the job to the `production` GitHub Environment so a required-reviewer rule
     # (or a wait timer, or a branch restriction) can gate the migration + worker deploy
     # WITHOUT another change to this file. Until protection rules are configured on that
@@ -928,7 +961,7 @@ jobs:
   deploy-frontend:
     name: Deploy frontend
     runs-on: ubuntu-latest
-    needs: [build-frontend, verify-frontend]
+    needs: [build-frontend, verify-frontend, verify-kernel]
     # Same production gate as deploy-api — see the note there. Gating only the API would
     # let a reviewed backend ship behind an unreviewed frontend.
     environment: production
