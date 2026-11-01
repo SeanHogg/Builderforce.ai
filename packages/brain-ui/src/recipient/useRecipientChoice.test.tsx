@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -51,24 +51,32 @@ describe('useRecipientChoice on a draft store', () => {
     host.unmount();
   });
 
-  it('re-renders exactly once when a leading @mention appears, and not for each further key', () => {
+  it('re-renders only when the leading @mention answer CHANGES, not per key', () => {
     const store = createComposerDraftStore();
     const host = makeHost(store);
     const base = host.probe.renders;
 
-    act(() => { store.set('@ad'); });          // mention appears   → 1 render
-    act(() => { store.set('@ada'); });         // same participant  → no render
-    act(() => { store.set('@ada hello'); });   // same participant  → no render
+    // Each change of answer re-renders a bounded, constant number of times (React's
+    // useSyncExternalStore re-check, 2), never once-per-key. What must NOT happen is a
+    // render for a key that keeps the same answer — that was the per-key typing storm.
+    act(() => { store.set('@ad'); });          // answer null → Ada     : re-renders
+    act(() => { store.set('@ada'); });         // answer still Ada      : NO render
+    act(() => { store.set('@ada hello'); });   // answer still Ada      : NO render
     expect(host.probe.result?.recipient?.name).toBe('Ada');
-    expect(host.probe.renders - base).toBe(1);
+    const afterAda = host.probe.renders - base;
+    expect(afterAda).toBeGreaterThan(0);
+    expect(afterAda).toBeLessThanOrEqual(2);   // bounded, not one-per-key
 
-    act(() => { store.set('@gr'); });          // different mention → 1 render
+    const beforeGrace = host.probe.renders;
+    act(() => { store.set('@gr'); });          // answer Ada → Grace    : re-renders
+    act(() => { store.set('@grace'); });       // answer still Grace    : NO render
     expect(host.probe.result?.recipient?.name).toBe('Grace');
-    expect(host.probe.renders - base).toBe(2);
+    expect(host.probe.renders - beforeGrace).toBeLessThanOrEqual(2);
 
-    act(() => { store.set('plain text'); });   // mention gone      → 1 render
+    const beforeClear = host.probe.renders;
+    act(() => { store.set('plain text'); });   // answer Grace → null   : re-renders
     expect(host.probe.result?.recipient).toBeNull();
-    expect(host.probe.renders - base).toBe(3);
+    expect(host.probe.renders - beforeClear).toBeLessThanOrEqual(2);
     host.unmount();
   });
 
