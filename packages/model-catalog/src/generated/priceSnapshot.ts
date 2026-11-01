@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-11-01T06:07:58.957Z";
+export const PRICE_SNAPSHOT_AT = "2026-11-01T15:18:37.928Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
@@ -25,7 +25,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "~openai/gpt-terra-latest": [0.000001, 0.000005],
   "~unbiased/pareto-latest": [8e-7, 0.0000032],
   "~x-ai/grok-latest": [0.000002, 0.000006],
-  "~z-ai/glm-flash-latest": [9.8e-9, 1.702e-7],
+  "~z-ai/glm-flash-latest": [2.85e-8, 9.23e-8],
   "~z-ai/glm-latest": [6.99e-8, 0.0000014],
   "aion-labs/aion-2.0": [8e-7, 0.0000016],
   "aion-labs/aion-3.0": [0.000003, 0.000006],
@@ -182,7 +182,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "minimax/minimax-m2.5": [2.7e-7, 9.5e-7],
   "minimax/minimax-m2.7": [3e-7, 0.0000012],
   "minimax/minimax-m3": [3e-7, 0.0000012],
-  "minimax/minimax-m3.1-flash": [1.5e-7, 6e-7],
+  "minimax/minimax-m3.1-flash": [7.5e-8, 3e-7],
   "mistralai/codestral-2508": [3e-7, 9e-7],
   "mistralai/devstral-2512": [4e-7, 0.000002],
   "mistralai/ministral-14b-2512": [2e-7, 2e-7],
@@ -322,7 +322,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "openai/gpt-audio": [0.0000025, 0.00001],
   "openai/gpt-audio-mini": [6e-7, 0.0000024],
   "openai/gpt-chat-latest": [0.000005, 0.00003],
-  "openai/gpt-oss-120b": [1.9e-8, 7e-8],
+  "openai/gpt-oss-120b": [2.2e-8, 8e-8],
   "openai/gpt-oss-120b:batch": [2.96e-8, 1.36e-7],
   "openai/gpt-oss-20b": [3e-8, 1.3e-7],
   "openai/gpt-oss-20b:batch": [2.4e-8, 1.12e-7],
@@ -453,8 +453,8 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "z-ai/glm-5-turbo": [0.0000012, 0.000004],
   "z-ai/glm-5.1": [0.0000014, 0.0000044],
   "z-ai/glm-5.2": [6e-9, 0.0000068],
-  "z-ai/glm-5.3": [6.99e-8, 0.0000014],
-  "z-ai/glm-5.3-flash": [9.8e-9, 1.702e-7],
+  "z-ai/glm-5.3": [8e-8, 0.0000036],
+  "z-ai/glm-5.3-flash": [2.85e-8, 9.23e-8],
   "z-ai/glm-5.3-flash:batch": [5e-8, 1.8e-7],
   "z-ai/glm-5.3-flashx": [3.7e-7, 0.00000125],
   "z-ai/glm-5.3-prime": [0.0000028, 0.0000088],
