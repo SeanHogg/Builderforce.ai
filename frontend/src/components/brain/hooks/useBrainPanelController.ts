@@ -45,6 +45,7 @@ import { useBrainPanelTurns } from './useBrainPanelTurns';
 import { routingModeForSelection } from '@seanhogg/builderforce-brain-embedded';
 import { useWebTurnGate } from '@/lib/localFirst/useWebInferenceMode';
 import { useWebKnowledgePrefetch } from '@/lib/knowledge/useWebKnowledgePrefetch';
+import { reportWebRunOutcome } from '@/lib/brain/webRunOutcome';
 
 /**
  * The ONE Brain panel's state machine: composes the focused hooks (preferences,
@@ -194,9 +195,15 @@ export function useBrainPanelController({
   // `/review`, `/graph` and knowledge questions about the project in context (PRD 38 §3.1).
   const knowledgePrefetch = useWebKnowledgePrefetch(ctxProjectId ?? null);
 
+  // The run-time parts the web host adds: the PreFetch, the entry point it declares and the report port for the run's outcome record.
+  const { prepareRun: prefetchRun } = knowledgePrefetch;
+  const prepareRun = useCallback(
+    async () => ({ ...(await prefetchRun()), entryPoint: 'web' as const, reportOutcome: reportWebRunOutcome }),
+    [prefetchRun],
+  );
   const conv = useBrainConversation({
     chatId: chats.activeChatId,
-    prepareRun: knowledgePrefetch.prepareRun,
+    prepareRun,
     modality,
     extraSystem: ambientSystem,
     systemPrompt: persona.personaPrompt,
