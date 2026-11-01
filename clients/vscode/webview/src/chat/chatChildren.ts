@@ -50,6 +50,35 @@ export function getChatChildrenCount(chatId: number): number {
   return byChat.get(chatId)?.length ?? 0;
 }
 
+/**
+ * Every sub-agent announced for a chat this session — live or already settled.
+ * A settled child leaves the live list once its run ends, but the history row
+ * still wants to say the chat HAD agents working it, so the chip falls back to
+ * this when nothing is live right now.
+ */
+export function getAnnouncedChatChildrenCount(chatId: number): number {
+  const live = byChat.get(chatId)?.length ?? 0;
+  if (live > 0) return live;
+  return everByChat.get(chatId)?.size ?? 0;
+}
+
+/**
+ * The REACTIVE read of {@link getAnnouncedChatChildrenCount} for React rows: the
+ * history chip re-renders the moment the host announces (or settles) a chat's
+ * children, where the synchronous `getChatChildrenCount` read would stay at its
+ * first-render value until some unrelated re-render happened to occur.
+ */
+export function useChatChildrenCount(chatId: number): number {
+  useSyncExternalStore(
+    (onChange) => {
+      listeners.add(onChange);
+      return () => listeners.delete(onChange);
+    },
+    () => getAnnouncedChatChildrenCount(chatId),
+  );
+  return getAnnouncedChatChildrenCount(chatId);
+}
+
 /** A chat's live sub-agents as the Agents roster lists them, beside the invited agents. */
 export function useChatSubagentRoster(chatId: number | null): readonly ChatSubagentVM[] {
   const children = useChatChildren(chatId);

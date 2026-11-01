@@ -50,6 +50,14 @@ export type CanvasAiOptions = {
   /** Session diagnostics hook. Contains routing facts only; never prompt text,
    * credentials, or provider response bodies. */
   onCompletion?: (completion: CanvasAiCompletion) => void;
+  /**
+   * Fired the moment a turn's route names its model — the same fact the chat run
+   * writes to its run cell's `servedBy` (`turnPersistence.ts`). The canvas turn
+   * answers through the ENGINE run store (`startEngineRun`), whose runner never
+   * writes that field, so the surface publishes it here; the canvas thread then
+   * names the live model off the snapshot instead of a guess.
+   */
+  onModel?: (served: { model: string; account?: string }) => void;
   /** Models that already proved unable to execute a Canvas command in this
    * session. An explicitly selected rejected model must not be invoked again. */
   disabledModels?: readonly string[];

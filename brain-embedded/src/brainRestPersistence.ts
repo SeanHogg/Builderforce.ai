@@ -84,6 +84,22 @@ export function createBrainRestPersistence(opts: BrainRestOptions) {
     listChats: (params?: { projectId?: string; limit?: number; offset?: number }) =>
       request<{ chats: BrainChat[] }>(`/api/brain/chats${listQuery(params)}`).then((r) => r.chats),
 
+    /**
+     * The archived chats `listChats` hides. The server's `listChats` accepts an
+     * `archived` option (`'only' | 'exclude' | 'all'`, default `'exclude'`) — the
+     * archive surface reads through `?archived=only`, which returns the same
+     * `isArchived = true` rows a `DELETE` set, most recently updated first.
+     *
+     * CLIENT-SIDE FALLBACK: if a backend predates the `archived` option it ignores
+     * the param and returns the live list. There is no dedicated archived route to
+     * fall back TO — the option IS the contract — so a backend without it simply
+     * yields an empty archive surface (the live rows it returns all read as
+     * un-archived and are filtered out client-side).
+     */
+    listArchivedChats: (params?: { projectId?: string; limit?: number; offset?: number }) =>
+      request<{ chats: BrainChat[] }>(`/api/brain/chats${listQuery(params)}&archived=only`.replace('?&', '?'))
+        .then((r) => (r.chats ?? []).filter((c) => c.isArchived === true)),
+
     getChat: (id: number) => request<BrainChat>(`/api/brain/chats/${id}`),
 
     createChat: (body: { title?: string; originalRequest?: string | null; projectId?: number | null; capability?: string | null; mode?: string | null }) =>

@@ -20,5 +20,5 @@ export function chatSwitcherLabel(input: {
   // The ONE display rule the Sessions tree and the ticket rail share.
   const pct = displayChatProgressPct(input.ticketProgressPct);
   if (count <= 0 || pct == null) return `${glyph}${title}`;
-  return `${glyph}${pct}% · ${title}`;
+  return `${glyph}${count} tickets · ${pct}% · ${title}`;
 }

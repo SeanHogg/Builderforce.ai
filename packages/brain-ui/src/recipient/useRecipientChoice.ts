@@ -34,7 +34,16 @@ export function useRecipientChoice({ participants, input, draftStore, resetKey }
     setChoice((c) => (c && c !== 'brain' && !participants.some((p) => p.kind === c.kind && p.ref === c.ref) ? null : c));
   }, [participants]);
   const fromInput = useMemo(() => mentionRecipient(input ?? '', participants), [input, participants]);
-  const fromStore = useDraftSelector(draftStore ?? UNUSED_STORE, (text) => mentionRecipient(text, participants));
-  const mentioned = draftStore ? fromStore : fromInput;
+  // The draft-store read must be a STABLE snapshot: `useSyncExternalStore` compares it with
+  // Object.is on every write, so a fresh object per keystroke re-renders the host per key.
+  // Resolve to the participant's (kind, ref) — a stable primitive key for equal answers —
+  // then look the LIVE member back up, so the returned object is the list's own (one identity).
+  const mentionedKey = useDraftSelector(
+    draftStore ?? UNUSED_STORE,
+    (text) => { const m = mentionRecipient(text, participants); return m ? `${m.kind}:${m.ref}` : null; },
+  );
+  const mentioned = draftStore
+    ? participants.find((p) => mentionedKey !== null && `${p.kind}:${p.ref}` === mentionedKey) ?? null
+    : fromInput;
   return { recipient: resolveRecipient(choice, mentioned), choice, choose: setChoice };
 }

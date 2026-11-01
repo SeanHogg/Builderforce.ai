@@ -172,6 +172,23 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
       });
       return project(inputs);
     },
+    /**
+     * The archived chats `listChats` hides — same projection, the rows where
+     * `isArchived` is set, most recently updated first. The archive surface reads
+     * through this; the live list never widens to include them.
+     */
+    async listArchivedChats(params) {
+      const inputs = await options.store.read(async (tx) => {
+        const all = (await chats(tx))
+          .filter((row) => row.payload.chat.isArchived === true)
+          .filter((row) => params?.projectId == null || String(row.payload.chat.projectId) === params.projectId)
+          .sort((a, b) => b.payload.chat.updatedAt.localeCompare(a.payload.chat.updatedAt) || b.payload.chat.id - a.payload.chat.id);
+        const offset = params?.offset ?? 0;
+        const page = params?.limit != null ? all.slice(offset, offset + params.limit) : all.slice(offset);
+        return projectionInputs(tx, page);
+      });
+      return project(inputs);
+    },
     async getChat(id) {
       const inputs = await options.store.read(async (tx) => projectionInputs(tx, [await chatFor(tx, id)]));
       return (await project(inputs))[0]!;

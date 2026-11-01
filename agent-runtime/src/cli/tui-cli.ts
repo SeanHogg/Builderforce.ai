@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import { defaultRuntime } from "../runtime.js";
 import { formatDocsLink } from "../terminal/links.js";
 import { theme } from "../terminal/theme.js";
+import { runTui } from "../tui/tui.js";
 import { parseTimeoutMs } from "./parse-timeout.js";
 
 export function registerTuiCli(program: Command) {
@@ -61,21 +62,8 @@ export function registerTuiCli(program: Command) {
 
         // The pi-free `ink` TUI wired through the `@builderforce/tui` render seam
         // (PRD 11 §5.1 Stage 4). It is the only TUI now that `@mariozechner/pi-tui`
-        // has been removed; the legacy pi-tui `runTui` was deleted in the migration.
-        {
-          const { runInkSession } = await import("../tui/ink-session.js");
-          await runInkSession({
-            sessionKey: (opts.session as string | undefined)?.trim() || "main",
-            connection: {
-              url: opts.url as string | undefined,
-              token: opts.token as string | undefined,
-              password: opts.password as string | undefined,
-            },
-            showThinking: typeof opts.thinking === "string" && opts.thinking !== "off",
-          });
-          return;
-        }
-
+        // has been removed; the legacy pi-tui `runTui` was deleted in the migration
+        // and `runTui` is now a back-compat seam over the Ink session.
         await runTui({
           url: opts.url as string | undefined,
           token: opts.token as string | undefined,

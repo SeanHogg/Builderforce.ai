@@ -50,6 +50,23 @@ export const JOURNAL_FILE = "local-first-v3.journal";
 /** Only ever READ (the one-time import) — never written to, so a rollback still finds it whole. */
 export const LEGACY_JOURNAL_FILE = "local-first-v2.journal";
 
+/**
+ * One stage of a measured operation. Emitted only when a timing sink is
+ * provided (`NodeJournalIoOptions.onStageTiming`), so the default path is
+ * zero-overhead. Stage names are stable: `import.load`, `import.decode`,
+ * `import.persist`, `commit.write`, `commit.fsync`.
+ */
+export interface JournalStageTiming {
+  stage: string;
+  ms: number;
+  detail?: string;
+}
+
+/** Optional instrumentation. Absent (the default) = no timings computed at all. */
+export interface NodeJournalIoOptions {
+  onStageTiming?: (timing: JournalStageTiming) => void;
+}
+
 /** Give the thread back to the event loop (I/O callbacks, timers, the webview) before continuing. */
 export const yieldToEventLoop = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
@@ -145,7 +162,8 @@ export function sameFile(a: FileIdentity | undefined, b: FileIdentity | undefine
 
 const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === "ENOENT";
 
-export function createNodeJournalIo(directory: string): NodeJournalIo {
+export function createNodeJournalIo(directory: string, options: NodeJournalIoOptions = {}): NodeJournalIo {
+  const onStageTiming = options.onStageTiming;
   const journalFile = nodePath.join(directory, JOURNAL_FILE);
   let committedBytes = 0;
   let frameCount = 0;
@@ -165,6 +183,7 @@ export function createNodeJournalIo(directory: string): NodeJournalIo {
   };
 
   const load = async (pause: () => Promise<void> = yieldToEventLoop): Promise<LoadedJournal> => {
+    const started = onStageTiming ? Date.now() : 0;
     let handle: FileHandle;
     try {
       handle = await fs.open(journalFile, "r");
@@ -182,10 +201,13 @@ export function createNodeJournalIo(directory: string): NodeJournalIo {
     } finally {
       await handle.close();
     }
+    if (onStageTiming) onStageTiming({ stage: "import.load", ms: Date.now() - started, detail: `${stat.size} bytes` });
     if (raw.byteLength === 0) {
       return { latest: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0, identity: identityOf(stat) };
     }
+    const decodeStarted = onStageTiming ? Date.now() : 0;
     const scan = await scanJournalAsync(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength), pause);
+    if (onStageTiming) onStageTiming({ stage: "import.decode", ms: Date.now() - decodeStarted, detail: `${scan.frames} frames` });
     return {
       latest: scan.latest,
       frames: scan.frames,
@@ -275,10 +297,14 @@ export function createNodeJournalIo(directory: string): NodeJournalIo {
         // A torn tail from a crashed append is not a commit: cut it before the next frame.
         if ((await handle.stat()).size !== committedBytes) await handle.truncate(committedBytes);
         try {
+          const writeStarted = onStageTiming ? Date.now() : 0;
           await writeWhole(handle, frame, committedBytes);
+          if (onStageTiming) onStageTiming({ stage: "commit.write", ms: Date.now() - writeStarted, detail: `${frame.byteLength} bytes` });
           // The frame is durable only after fsync. Callers are not told the write
           // was saved until this returns.
+          const fsyncStarted = onStageTiming ? Date.now() : 0;
           await handle.sync();
+          if (onStageTiming) onStageTiming({ stage: "commit.fsync", ms: Date.now() - fsyncStarted });
         } catch (error) {
           // A frame that may be complete on disk but was never acknowledged must not be
           // taken for a commit by another window's tail read.
@@ -297,6 +323,7 @@ export function createNodeJournalIo(directory: string): NodeJournalIo {
       version += 1;
     },
     async compact(frames) {
+      const compactStart = onStageTiming ? Date.now() : 0;
       await fs.mkdir(directory, { recursive: true });
       const temporary = temporaryPathFor(journalFile);
       const written = await writeFrameFile(temporary, frames);
@@ -306,6 +333,7 @@ export function createNodeJournalIo(directory: string): NodeJournalIo {
         await fs.rm(temporary, { force: true });
         throw error;
       }
+      if (onStageTiming) onStageTiming({ stage: "import.persist", ms: Date.now() - compactStart, detail: `${written.frames} frames, ${written.bytes} bytes` });
       const stat = await statOrUndefined();
       committedBytes = written.bytes;
       frameCount = written.frames;

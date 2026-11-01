@@ -25,6 +25,15 @@ import type { LocalRatingVerdict } from './turnRating';
  */
 export interface BrainPersistenceAdapter {
   listChats(params?: { projectId?: string; limit?: number; offset?: number }): Promise<BrainChat[]>;
+  /**
+   * Archived chats — the ones `listChats` hides (`isArchived = true`), most recently
+   * updated first. The archive surface (an "Archived" toggle on a history list) reads
+   * through this; the live list never widens to include them.
+   *
+   * Optional: an adapter that has no archived concept (a guest/offline backend that
+   * tombstones on delete) omits it, and the archive surface renders empty.
+   */
+  listArchivedChats?(params?: { projectId?: string; limit?: number; offset?: number }): Promise<BrainChat[]>;
   getChat(id: number): Promise<BrainChat>;
   createChat(body: { title?: string; originalRequest?: string | null; projectId?: number | null; capability?: string | null; mode?: string | null }): Promise<BrainChat>;
   updateChat(id: number, body: { title?: string; originalRequest?: string | null; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null; mode?: string | null; memoryEnabled?: boolean; isArchived?: boolean }): Promise<BrainChat>;

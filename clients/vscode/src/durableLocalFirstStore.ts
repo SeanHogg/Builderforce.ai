@@ -46,8 +46,9 @@ import { chooseRebuildSource, describeRebuild } from "./localFirstRebuild";
 import { baselineOf, legacyMoved, readLegacyMerge, statLegacyJournal, writeLegacyBaseline, type LegacyStat } from "./localFirstLegacyMerge";
 import { temporaryPathFor } from "./localFirstAtomicFile";
 import { compactJournal } from "./localFirstCompaction";
-import { createNodeJournalIo, yieldToEventLoop, type LoadedJournal, type TailRead } from "./localFirstJournalIo";
+import { createNodeJournalIo, yieldToEventLoop, type JournalStageTiming, type LoadedJournal, type TailRead } from "./localFirstJournalIo";
 import {
+  PRE_V3_SUFFIX,
   checkSnapshotCache,
   hasLegacyState,
   readLegacyJournal,
@@ -56,6 +57,7 @@ import {
   retireSnapshotCache,
 } from "./localFirstMigration";
 import { snapshotHasState } from "./localFirstSnapshotFile";
+import { hostLog } from "./hostLog";
 
 const fs = nodeFs.promises;
 
@@ -64,6 +66,15 @@ export const LOCK_FILE = "local-first-v1.lock";
 
 /** A commit slower than this is reported through `onSlowCommit`. */
 const SLOW_COMMIT_MS = 250;
+
+/**
+ * Stage timings for the first import and every commit. Off by default (zero overhead);
+ * `BUILDERFORCE_LOCAL_FIRST_PERF` enables them, emitted through the host debug log.
+ */
+const envPerfFlag = (): boolean => {
+  const value = process.env.BUILDERFORCE_LOCAL_FIRST_PERF;
+  return value !== undefined && value !== "0" && value.toLowerCase() !== "false";
+};
 
 /** Journal-backed store. `local-first-v1.json` is a cache written by `flush()`, not the commit. */
 export interface DurableLocalFirstStore extends LocalFirstStore {
@@ -93,6 +104,11 @@ export interface DurableLocalFirstStoreOptions {
   onBackgroundError?: (error: unknown) => void;
   /** A commit took longer than 250 ms: how long, and the size of the frame it appended. */
   onSlowCommit?: (ms: number, frameBytes: number) => void;
+  /**
+   * Stage timings for the first import and every commit. Off by default (zero overhead);
+   * `localFirstStore.ts` fills it from the `BUILDERFORCE_LOCAL_FIRST_PERF` env flag.
+   */
+  onStageTiming?: (timing: JournalStageTiming) => void;
 }
 
 export function createDurableLocalFirstStore(
@@ -100,7 +116,14 @@ export function createDurableLocalFirstStore(
   options: DurableLocalFirstStoreOptions = {},
 ): DurableLocalFirstStore {
   const snapshotFile = nodePath.join(directory, SNAPSHOT_FILE);
-  const io = createNodeJournalIo(directory);
+  // Timings are opt-in: a caller's `onStageTiming`, else the BUILDERFORCE_LOCAL_FIRST_PERF
+  // env flag through the host debug log. With neither, no clock is read (zero overhead).
+  const onStageTiming = options.onStageTiming
+    ?? (envPerfFlag()
+      ? ({ stage, ms, detail }: JournalStageTiming) =>
+          hostLog(`local-first perf: ${stage} ${ms}ms${detail ? ` (${detail})` : ""}`)
+      : undefined);
+  const io = createNodeJournalIo(directory, { onStageTiming });
   const lock = createLocalFirstFileLock(nodePath.join(directory, LOCK_FILE), options.lock);
   const beforeWrite = options.beforeWrite ?? Promise.resolve();
   const onBackgroundError = options.onBackgroundError
@@ -127,7 +150,9 @@ export function createDurableLocalFirstStore(
     // The commit boundary: the memory store publishes the commit only after this resolves.
     onCommit: async (delta) => {
       // An empty journal opens with a whole-snapshot frame (a base); every later commit is a delta.
+      const serializeStart = onStageTiming ? Date.now() : 0;
       const frame = io.frames() === 0 ? encodeJournalFrame(snapshotAfter(delta)) : encodeDeltaFrame(delta);
+      if (onStageTiming) onStageTiming({ stage: "commit.serialize", ms: Date.now() - serializeStart, detail: `${frame.byteLength} bytes` });
       lastFrameBytes = frame.byteLength;
       await io.append(frame);
     },
@@ -144,12 +169,14 @@ export function createDurableLocalFirstStore(
   };
 
   const replaceMemory = (snapshot: LocalFirstSnapshot, silent: boolean): void => {
+    const rebuildStart = onStageTiming ? Date.now() : 0;
     quiet = silent;
     try {
       memory.applyDelta(resetDeltaOf(snapshot));
     } finally {
       quiet = false;
     }
+    if (onStageTiming) onStageTiming({ stage: "import.rebuild", ms: Date.now() - rebuildStart });
   };
 
   /** The baseline of v2 as just imported, so a later open merges only what an old window adds. */
@@ -231,6 +258,22 @@ export function createDurableLocalFirstStore(
     }
   };
 
+  /**
+   * The pre-v3 rollback copy of the JSON cache (`local-first-v1.json.pre-v3`). It is only
+   * written by a legacy import, so it exists exactly when an import completed; a healthy v3
+   * open means v3 is the record and the copy only costs disk. Best effort: a failure to
+   * remove it must never fail the open. The v2 journal is NOT removed here: the merge
+   * baseline tracks it by size/mtime and still needs it present to detect (and merge) a
+   * write an old window makes to v2 after v3 went live.
+   */
+  const retirePreV3Snapshot = async (): Promise<void> => {
+    try {
+      await fs.rm(`${snapshotFile}${PRE_V3_SUFFIX}`, { force: true });
+    } catch (error) {
+      onBackgroundError(error);
+    }
+  };
+
   const openStore = async (): Promise<void> => {
     const loaded = await io.load(yieldToEventLoop);
     if (loaded.corrupt) {
@@ -241,6 +284,8 @@ export function createDurableLocalFirstStore(
       // is still moved aside here. Failing to do so must not fail the open.
       await checkSnapshotCache(snapshotFile).catch(onBackgroundError);
       await mergeLegacyWrites().catch(onBackgroundError);
+      // v3 is live and healthy: the pre-v3 rollback copy only costs disk now.
+      await retirePreV3Snapshot();
     } else if (await hasLegacyState(directory, snapshotFile)) {
       await importLegacy();
     } else {
@@ -251,7 +296,10 @@ export function createDurableLocalFirstStore(
 
   /** Never call this while holding the lock: an import takes it. */
   const ensureOpen = (): Promise<void> => {
-    opened ??= openStore().catch((error: unknown) => {
+    const openedAt = onStageTiming ? Date.now() : 0;
+    opened ??= openStore().then(() => {
+      if (onStageTiming) onStageTiming({ stage: "import.open", ms: Date.now() - openedAt });
+    }).catch((error: unknown) => {
       opened = undefined;
       throw error;
     });
@@ -310,11 +358,15 @@ export function createDurableLocalFirstStore(
   const exclusive = async <T,>(work: () => Promise<T>): Promise<T> => {
     await ensureOpen();
     await fs.mkdir(directory, { recursive: true });
+    const lockStart = onStageTiming ? Date.now() : 0;
     await lock.acquire();
+    if (onStageTiming) onStageTiming({ stage: "commit.lock", ms: lockStart ? Date.now() - lockStart : 0 });
     inTransaction = true;
     commitGeneration += 1;
     try {
+      const refreshStart = onStageTiming ? Date.now() : 0;
       await refreshForCommit();
+      if (onStageTiming) onStageTiming({ stage: "commit.refresh", ms: refreshStart ? Date.now() - refreshStart : 0 });
       return await work();
     } finally {
       inTransaction = false;
@@ -362,7 +414,10 @@ export function createDurableLocalFirstStore(
         if (lastFrameBytes > 0) dirty = true;
         const elapsed = Date.now() - started;
         if (elapsed > SLOW_COMMIT_MS) options.onSlowCommit?.(elapsed, lastFrameBytes);
+        const compactStart = onStageTiming ? Date.now() : 0;
         scheduleCompaction();
+        if (onStageTiming) onStageTiming({ stage: "commit.compact-check", ms: Date.now() - compactStart });
+        if (onStageTiming) onStageTiming({ stage: "commit.total", ms: elapsed, detail: `${lastFrameBytes} byte frame` });
         return result;
       }));
     },

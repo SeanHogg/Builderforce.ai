@@ -57,6 +57,7 @@ describe("opening over a v2 journal", () => {
     expect(scanJournal(new Uint8Array(v3))).toMatchObject({ frames: 1 });
     expect(scanJournal(new Uint8Array(v3)).latest?.records.map((record) => record.id).sort()).toEqual(["also-v2", "from-v2"]);
     expect(nodeFs.existsSync(cache)).toBe(false);
+    // The import itself keeps the rollback copy; only a later healthy v3 open removes it.
     expect(nodeFs.existsSync(`${cache}.pre-v3`)).toBe(true);
 
     await first.transact(async (tx) => { await tx.put(ticket("after-import")); });
@@ -64,11 +65,29 @@ describe("opening over a v2 journal", () => {
     expect(nodeFs.readFileSync(v2).equals(before)).toBe(true);
     expect(nodeFs.existsSync(nodePath.join(root, "local-first-v1.lock"))).toBe(false);
 
-    // A later open reads v3 alone: v2 is never read again.
+    // A later open reads v3 alone: v2 is never read again, and the pre-v3 copy is retired.
     const reads = vi.spyOn(nodeFs.promises, "readFile");
     const later = createDurableLocalFirstStore(root);
     expect(await idsOf(later)).toEqual(["after-import", "also-v2", "from-v2"]);
     expect(reads.mock.calls.some(([target]) => String(target).endsWith(LEGACY_JOURNAL_FILE))).toBe(false);
+    expect(nodeFs.existsSync(`${cache}.pre-v3`)).toBe(false);
+    // The v2 journal stays: the merge baseline tracks it by size/mtime and still needs it
+    // present to detect (and merge) a write an old window makes to v2 after v3 went live.
+    expect(nodeFs.existsSync(v2)).toBe(true);
+  });
+
+  it("does not delete the pre-v3 copy on a failed open", async () => {
+    const root = await directory();
+    const cache = nodePath.join(root, "local-first-v1.json");
+    // A rollback copy left by an earlier import; a damaged v3 with no recovery source
+    // (no v2, no cache) makes this open fail before v3 is confirmed healthy.
+    nodeFs.writeFileSync(`${cache}.pre-v3`, JSON.stringify(snapshotOf("from-rollback")));
+    const damaged = Buffer.concat([encodeJournalFrame(snapshotOf("x")), Buffer.from([0x42, 0x46, 0x4a])]);
+    damaged[13 + 5] = (damaged[13 + 5]! + 1) % 256; // corrupt the frame, not just a torn tail
+    nodeFs.writeFileSync(nodePath.join(root, JOURNAL_FILE), damaged);
+    const store = createDurableLocalFirstStore(root);
+    await expect(store.export()).rejects.toThrow("local_first_store_corrupt");
+    expect(nodeFs.existsSync(`${cache}.pre-v3`)).toBe(true);
   });
 
   it("still imports a lone local-first-v1.json when there is no v2", async () => {

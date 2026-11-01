@@ -22,6 +22,12 @@ export interface UseChatRowActionsOptions {
    * the host supplies it, and never for a chat already archived.
    */
   archive?: (chat: ChatRowRef) => Promise<unknown> | void;
+  /**
+   * Unarchive a chat — bring an archived one back to the live list. Offered on an
+   * ALREADY-archived row only (the mirror of `archive`); rows offer it when the host
+   * supplies it and the chat is archived.
+   */
+  unarchive?: (chat: ChatRowRef) => Promise<unknown> | void;
   /** Is this chat already archived? A row in that state does not offer Archive. */
   isArchived?: (id: number) => boolean;
   /** Rows offer Delete only when the host supplies it. */
@@ -37,6 +43,7 @@ export type ChatRowActionProps = Pick<
   ChatHistoryRowProps,
   | 'onOpen' | 'actionsOpen' | 'onToggleActions' | 'renaming' | 'renameValue' | 'onStartRename' | 'onRenameChange'
   | 'onSubmitRename' | 'onCancelRename' | 'onSummarize' | 'summarizing' | 'onArchive' | 'archiving' | 'archived'
+  | 'onUnarchive' | 'unarchiving'
   | 'onDelete' | 'deleting'
 >;
 
@@ -70,6 +77,7 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
   const [renameValue, setRenameValue] = useState('');
   const [summarizingId, setSummarizingId] = useState<number | null>(null);
   const [archivingId, setArchivingId] = useState<number | null>(null);
+  const [unarchivingId, setUnarchivingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   /** The title the open rename started from (the unchanged check). */
@@ -128,6 +136,21 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
       setActionsChatId((cur) => (cur === chat.id ? null : cur));
     } finally {
       setArchivingId((cur) => (cur === chat.id ? null : cur));
+    }
+  }, []);
+
+  const onUnarchive = useCallback(async (chat: ChatRowRef) => {
+    const { unarchive, isArchived } = opts.current;
+    // The mirror of `onArchive`: only an ALREADY-archived row may be un-archived,
+    // and only when the host supplies the handler.
+    if (!unarchive || !isArchived?.(chat.id)) return;
+    setUnarchivingId(chat.id);
+    try {
+      await unarchive({ id: chat.id, title: chat.title });
+      // Un-archiving takes the row out of the ARCHIVED list, so the revealed menu goes with it.
+      setActionsChatId((cur) => (cur === chat.id ? null : cur));
+    } finally {
+      setUnarchivingId((cur) => (cur === chat.id ? null : cur));
     }
   }, []);
 

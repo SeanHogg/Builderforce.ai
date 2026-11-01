@@ -67,12 +67,19 @@ export interface ChatHistoryListProps {
   total: number;
   /** The rows (`ChatHistoryRow`s) — the host maps its own chat model onto them. */
   children?: ReactNode;
+  /**
+   * A host-rendered header ABOVE the rows — the search box + archive toggle. The
+   * slot takes a ReactNode (not state) so the LIST stays stateless: the filter/
+   * toggle STATE lives in the surface shell (the list unmounts whenever History
+   * closes, which would drop state held inside the list).
+   */
+  filter?: ReactNode;
   labels?: Partial<ChatHistoryLabels>;
   id?: string;
   className?: string;
 }
 
-export function ChatHistoryList({ loading, total, children, labels: overrides, id, className }: ChatHistoryListProps) {
+export function ChatHistoryList({ loading, total, children, filter, labels: overrides, id, className }: ChatHistoryListProps) {
   const labels = { ...DEFAULT_CHAT_HISTORY_LABELS, ...overrides };
   const hasRows = Array.isArray(children) ? children.length > 0 : children != null && children !== false;
   // The status line is a live SIBLING of the rows, not a child of role="list" (a list
@@ -80,6 +87,7 @@ export function ChatHistoryList({ loading, total, children, labels: overrides, i
   const status = loading ? labels.loading : !hasRows ? (total === 0 ? labels.empty : labels.noMatch) : null;
   return (
     <div id={id} className={['bf-history', className].filter(Boolean).join(' ')}>
+      {filter != null && <div className="bf-history__filter">{filter}</div>}
       {status != null && <div className="bf-history__status" role="status">{status}</div>}
       {hasRows && <div role="list" className="bf-history__rows">{children}</div>}
     </div>

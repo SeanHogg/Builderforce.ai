@@ -6,7 +6,7 @@ describe('chatSwitcherLabel', () => {
     expect(chatSwitcherLabel({ title: 'Untitled session', id: 12 })).toBe('Untitled session');
   });
 
-  it('prefixes ticket progress so a return is obvious', () => {
+  it('prefixes ticket count and progress so a return is obvious', () => {
     expect(
       chatSwitcherLabel({
         title: 'when a user loses internet connection',
@@ -14,7 +14,7 @@ describe('chatSwitcherLabel', () => {
         ticketCount: 6,
         ticketProgressPct: 67,
       }),
-    ).toBe('67% · when a user loses internet connection');
+    ).toBe('6 tickets · 67% · when a user loses internet connection');
   });
 
   it('keeps the live-run glyph in front of the percent', () => {
@@ -26,12 +26,12 @@ describe('chatSwitcherLabel', () => {
         ticketProgressPct: 50,
         runGlyph: '● ',
       }),
-    ).toBe('● 50% · review the Roadmap.md file');
+    ).toBe('● 3 tickets · 50% · review the Roadmap.md file');
   });
 
   it('falls back to Chat <id> when the title is blank', () => {
     expect(chatSwitcherLabel({ title: '  ', id: 9, ticketCount: 1, ticketProgressPct: 0 })).toBe(
-      '0% · Chat 9',
+      '1 tickets · 0% · Chat 9',
     );
   });
 });

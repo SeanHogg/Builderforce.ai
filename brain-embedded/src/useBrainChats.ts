@@ -38,6 +38,12 @@ export interface UseBrainChatsOptions {
 
 export interface UseBrainChats {
   chats: BrainChat[];
+  /**
+   * The archived chats `chats` hides — the archive surface (an "Archived" toggle on a
+   * history list) reads through this. Loaded once on mount; refreshed by {@link reload}.
+   * Empty (never loading) on a persistence with no {@link BrainPersistenceAdapter.listArchivedChats}.
+   */
+  archivedChats: BrainChat[];
   loading: boolean;
   error: string;
   activeChatId: number | null;
@@ -97,6 +103,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
   const placeholdersRef = useRef(placeholderTitles);
   placeholdersRef.current = placeholderTitles;
   const [chats, setChats] = useState<BrainChat[]>([]);
+  const [archivedChats, setArchivedChats] = useState<BrainChat[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [internalActiveId, setInternalActiveId] = useState<number | null>(null);
@@ -156,6 +163,15 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
       setChats(shown.size === 0
         ? list
         : list.map((c) => (shown.has(c.id) && !c.originalRequest?.trim() ? { ...c, originalRequest: shown.get(c.id) } : c)));
+      // The archive surface refreshes alongside the live list — a backend without
+      // `listArchivedChats` keeps it empty rather than failing the whole reload.
+      if (persistence.listArchivedChats) {
+        try {
+          setArchivedChats(await persistence.listArchivedChats(params));
+        } catch {
+          setArchivedChats([]);
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load chats');
     } finally {
@@ -383,6 +399,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
 
   return {
     chats,
+    archivedChats,
     loading,
     error,
     activeChatId,
