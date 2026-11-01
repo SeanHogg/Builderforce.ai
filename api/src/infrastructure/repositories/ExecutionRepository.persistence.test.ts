@@ -25,7 +25,11 @@ describe('ExecutionRepository.update persists the fields the domain can change',
     fileURLToPath(new URL('./ExecutionRepository.ts', import.meta.url).href),
     'utf8',
   );
-  const updateSet = source.slice(source.indexOf('async update('), source.indexOf('.where(eq(executionsTable.id, plain.id))'));
+  // `update()` ends at its own `.returning()`: the slice must not run on into `land()` and the rest of the file, or a field written
+  // only there would satisfy an assertion about `update()`.
+  const updateStart = source.indexOf('async update(');
+  const updateSet = source.slice(updateStart, source.indexOf('.returning();', updateStart));
+  const landSet = source.slice(source.indexOf('async land('), source.indexOf('.returning();', source.indexOf('async land(')));
 
   it('writes `produced` — the autonomy breaker reads nothing else', () => {
     expect(updateSet, 'produced must be in the update set, or markProduced() is a no-op')
@@ -50,9 +54,16 @@ describe('ExecutionRepository.update persists the fields the domain can change',
     expect(coalesce(true)).toBe(true);
   });
 
-  it('still writes the terminal fields it always did', () => {
-    for (const field of ['status', 'result', 'errorMessage', 'startedAt', 'completedAt']) {
+  it('still writes the non-terminal fields it always did', () => {
+    for (const field of ['status', 'result', 'errorMessage', 'startedAt']) {
       expect(updateSet, `${field} must stay in the update set`).toContain(`${field}:`);
     }
+  });
+
+  // `completedAt` left `update()` when the terminal transition became `land()` (a terminal status is refused by `update()`), so the
+  // fact that a finished run records when it finished is pinned where it is written now.
+  it('writes `completedAt` in land(), the one terminal transition', () => {
+    expect(landSet, 'completedAt must be in the land set').toMatch(/completedAt:\s*fields\.completedAt \?\? now/);
+    expect(landSet).toContain('produced:');
   });
 });
