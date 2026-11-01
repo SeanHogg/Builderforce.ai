@@ -30,7 +30,7 @@ export interface ToolSchemaLike {
 }
 
 /** What the caller hands the selector. */
-export interface SelectToolsOptions {
+export interface SelectToolsOptions<T extends ToolSchemaLike = ToolSchemaLike> {
   /** The user's request — the text that drives the selection, not loop-injected nudges. */
   query?: string;
   /** The fixed advertised-set size. Default {@link DEFAULT_TOOL_LIMIT}. */
@@ -39,6 +39,12 @@ export interface SelectToolsOptions {
   pinned?: readonly string[];
   /** Tools the system prompt names — kept no matter how the query scores. */
   required?: readonly string[];
+  /**
+   * The surface's own relevance order (additive): from the candidates (the catalog less the required tools) the ones that MATCH the
+   * query, best first; a tool that does not match is left out and reached by the catalog-order backfill. Absent ⇒ the scorer below,
+   * which every other surface keeps.
+   */
+  rank?: (candidates: readonly T[], query: string) => readonly T[];
 }
 
 /** What the selector returns. */
@@ -84,7 +90,7 @@ function scoreTool(
  */
 export function selectToolsForTurn<T extends ToolSchemaLike>(
   tools: readonly T[] | undefined,
-  options: SelectToolsOptions = {},
+  options: SelectToolsOptions<T> = {},
 ): SelectToolsResult<T> {
   const catalog = tools ?? [];
   const available = catalog.length;
@@ -122,13 +128,16 @@ export function selectToolsForTurn<T extends ToolSchemaLike>(
   // Lexical rank over the rest, then catalog backfill to a full fixed set, restored to
   // catalog order so the advertised bytes are stable across turns.
   const rest = catalog.filter((t) => t.function?.name && !seen.has(t.function.name));
-  const ranked = [...rest]
-    .map((tool) => ({
-      tool,
-      score: scoreTool(tool.function?.name ?? "", tool.function?.description ?? "", stems, synonyms),
-    }))
-    .sort((a, b) => b.score - a.score || (a.tool.function?.name ?? "").localeCompare(b.tool.function?.name ?? ""));
-  for (const { tool } of ranked.slice(0, roomAfterRequired)) push(tool);
+  const ranked: readonly T[] = options.rank
+    ? options.rank(rest, options.query ?? "")
+    : [...rest]
+        .map((tool) => ({
+          tool,
+          score: scoreTool(tool.function?.name ?? "", tool.function?.description ?? "", stems, synonyms),
+        }))
+        .sort((a, b) => b.score - a.score || (a.tool.function?.name ?? "").localeCompare(b.tool.function?.name ?? ""))
+        .map((entry) => entry.tool);
+  for (const tool of ranked.slice(0, roomAfterRequired)) push(tool);
 
   const inFixed = new Set(wanted.map((t) => t.function?.name));
   for (const tool of catalog) {

@@ -40,9 +40,11 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
    * transcript as its own row, then the correction — so the next turn reads both, never
    * two user rows in a row with the model's words lost.
    */
-  const requeue = async (step: number, said: string, note: string, kept: "block" | "reply" = "block"): Promise<void> => {
+  const requeue = async (pctx: PolicyContext, step: number, said: string, note: string, kept: "block" | "reply" = "block"): Promise<void> => {
     await sentBack(step, said, kept);
-    if (said.trim()) append({ role: "assistant", content: said, ...run.turnNative });
+    // A surface that settles a reply itself has the model's row read as that reply (an empty turn is its placeholder).
+    const quoted = kept === "reply" && ports.delivery?.owns?.settle && hooks.stall.settle ? hooks.stall.settle(pctx, said) : said;
+    if (quoted.trim() || ports.delivery?.stall?.quoteEmpty) append({ role: "assistant", content: quoted, ...run.turnNative });
     append({ role: "user", content: note });
   };
 
@@ -57,7 +59,7 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
     // An owner never ends with children still working: their reports would strand.
     const children = await hooks.finish.liveChildren?.(pctx);
     if (children) {
-      await requeue(ctx.step, turn.content, children);
+      await requeue(pctx, ctx.step, turn.content, children);
       return { action: "continue" };
     }
     // A turn the person interrupted is not judged: what they steered in is taken first (below), so a steer is never lost to a stall
@@ -77,7 +79,7 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
         return { action: "finish", output: settled };
       }
       // A surface whose conversation outlives the run records why it produced nothing: the notice joins the transcript.
-      if (policy.stallExhausted === "note") await requeue(ctx.step, turn.content, notice);
+      if (policy.stallExhausted === "note") await requeue(pctx, ctx.step, turn.content, notice);
       return { action: "stop", ok: false, output: notice, finished: true };
     }
     if (stalled && stalled.action === "fail") {
@@ -95,7 +97,7 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
       if (stalled.rows) {
         await sentBack(ctx.step, turn.content, kept);
         append(...stalled.rows);
-      } else await requeue(ctx.step, turn.content, stalled.note ?? "Continue: do the work, do not describe it.", kept);
+      } else await requeue(pctx, ctx.step, turn.content, stalled.note ?? "Continue: do the work, do not describe it.", kept);
       return { action: "continue" };
     }
     // A prose answer is a finish too: the sign-off a reviewer owes and the sub-agents
@@ -104,7 +106,7 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
     if (owed) await emit(ports.events, { kind: "finish.blocked", step: ctx.step, reason: "review_verdict_missing", block: owed, detail: { ...policy.signoff } });
     const block = owed ?? hooks.subagents.backstop(pctx);
     if (block) {
-      await requeue(ctx.step, turn.content, block);
+      await requeue(pctx, ctx.step, turn.content, block);
       return { action: "continue" };
     }
     const output = hooks.stall.settle ? hooks.stall.settle(pctx, turn.content) : turn.content;

@@ -75,10 +75,10 @@ export function handOffToProven(ctx: PolicyContext, ledger: DeliveryLedger | und
  * The transcript rows a re-statement adds: what the model said (when quoted), the directive, a one-time note. The directive is a
  * system row unless the surface's stall style (`DeliveryLedger.stall.nudgeAs`) says the model reads it as the person's.
  */
-function restatement(ctx: PolicyContext, rung: LadderRung, attempt: number, nudgeRole: "system" | "user"): RunMessage[] {
+function restatement(ctx: PolicyContext, rung: LadderRung, attempt: number, nudgeRole: "system" | "user", quoteEmpty: boolean): RunMessage[] {
   const rows: RunMessage[] = [];
   const said = ctx.content?.trim() ? ctx.content : "";
-  if (rung.quote && said) rows.push({ role: "assistant", content: said });
+  if (rung.quote && (said || quoteEmpty)) rows.push({ role: "assistant", content: said || (ctx.content ?? "") });
   rows.push({ role: nudgeRole, content: rung.restate[attempt - 1] ?? "" });
   const notes = ctx.state.stall?.said ?? [];
   if (rung.once && !notes.includes(rung.id)) {
@@ -131,7 +131,7 @@ function walkRungs(ctx: PolicyContext, ledger: DeliveryLedger, rungs: readonly L
       rung.onRestate?.(used + 1);
       // The review model takes the run from here (a no-op when it already has it).
       if (rung.entersVerify && ctx.state.model.phase !== "verify") ctx.state.model = reduceRunPolicy(ctx.state.model, { type: "verify_started" });
-      return { action: "steer", rows: restatement(ctx, rung, used + 1, ledger.stall?.nudgeAs ?? "system") };
+      return { action: "steer", rows: restatement(ctx, rung, used + 1, ledger.stall?.nudgeAs ?? "system", ledger.stall?.quoteEmpty === true) };
     };
 
     if (used < Math.min(rung.free ?? 1, max)) return restate();

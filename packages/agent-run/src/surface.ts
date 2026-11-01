@@ -88,6 +88,12 @@ export interface PlatformSelection {
    * an earlier run's calls pin nothing. Absent ⇒ the pins are read off the transcript's tool calls.
    */
   pinned?: Iterable<string>;
+  /**
+   * The surface's own relevance order over its catalog (additive): from the candidates, the ones that match the query, best first.
+   * Absent ⇒ the shared scorer (`policy/tools/selectTools`), which the cloud and the canvas keep. The structure around it - required
+   * tools first, the catalog-order backfill, the pins appended - is the shared one either way.
+   */
+  rank?(candidates: readonly ToolSchema[], query: string): readonly ToolSchema[];
 }
 
 /** The surface's own tools, as a capability provider on the same run. */
@@ -269,6 +275,8 @@ export interface StallStyle {
   failoverNudgeOnly?: true;
   /** The stall is judged against the tools the turn ADVERTISED (its menu), not every tool the surface could run. */
   menu?: true;
+  /** A turn that said nothing is still the model's row: it is quoted before the correction, empty, so the next request reads what the model did. */
+  quoteEmpty?: true;
 }
 
 /**
