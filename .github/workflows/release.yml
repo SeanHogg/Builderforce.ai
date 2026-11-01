@@ -709,6 +709,20 @@ jobs:
           scope: verify-kernel
 
       - run: pnpm install --frozen-lockfile
+
+      # These packages are separately installed and source-linked to each other (tsconfig
+      # paths / sourcePackageAliases), so a leg's own install covers only ITS dependencies.
+      # packages/run-guards imports `@builderforce/agent-tools` by source, and the npm
+      # packages that source imports (@seanhogg/builderforce-memory/knowledge, ...) resolve
+      # from packages/agent-tools/node_modules - absent on a clean checkout, which failed
+      # the run-guards leg with `Cannot find package '@seanhogg/builderforce-memory/knowledge'`.
+      # Same two sibling installs as `Verify API`; every leg does them (one rule, not a
+      # special case per package), and the leg's own package is already installed above.
+      - name: Install the source-linked siblings' dependencies
+        run: |
+          pnpm --dir ../agent-tools install --frozen-lockfile
+          pnpm --dir ../agent-run install --frozen-lockfile
+
       - run: pnpm run test
 
   deploy-api:
