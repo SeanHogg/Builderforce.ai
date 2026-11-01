@@ -276,10 +276,10 @@ export interface DeliveryLedger {
   /**
    * A prose turn did not end the run: the kernel sent it back with a correction, or took one more turn for a steer that arrived while it
    * was written (additive). The surface keeps what the person already watched stream in as its own durable block (`kept: "block"`), or -
-   * for a model that stalled out and the run moved to another one - as the reply it was (`kept: "reply"`). Asked BEFORE the correction's
+   * for a model that stalled out and the run moved to another one - as the reply it was (`kept: "reply"`), and for a stall with nothing left to try that settles the run on the turn (`kept: "settled"`: the reply the run ends on, saved before the stall's step). Asked BEFORE the correction's
    * rows join the transcript, so what the surface saves lands in the order the person saw it.
    */
-  sentBack?(turn: { step: number; content: string; kept: "block" | "reply" }): Promise<void> | void;
+  sentBack?(turn: { step: number; content: string; kept: "block" | "reply" | "settled" }): Promise<void> | void;
 }
 
 /** The stall judgement's order and wording, as DATA a surface declares (`DeliveryLedger.stall`). */

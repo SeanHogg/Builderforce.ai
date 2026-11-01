@@ -22,8 +22,11 @@ const STOP_HOOK_RUNG = 'brain.stop_hook';
 export function brainDeliveryLedger(run: RunLoopContext, last: LastTurn): DeliveryLedger {
   const { c, req, userRequest, canAskUser } = run;
   const { runTool } = req;
+  // A rung's step is written once the turn it is about has been saved (`sentBack`): the loop saves the sent-back text, then says why.
+  const held: Array<() => void> = [];
   const note = (label: string, result: string, args: Record<string, unknown> = {}): void => {
-    pushTrace(c, { ts: nowIso(), category: 'message', label, args: { step: last.step, ...args }, result });
+    const step = { ts: nowIso(), category: 'message' as const, label, args: { step: last.step, ...args }, result };
+    held.push(() => pushTrace(c, step));
   };
   // A model that asked its question in prose instead of calling `ask_user` still gets the clickable card.
   // The agent holds a turn as it is replayed (the reply, else its reasoning as plain text); the settled message is the turn as the model
@@ -48,10 +51,12 @@ export function brainDeliveryLedger(run: RunLoopContext, last: LastTurn): Delive
     async sentBack({ kept }) {
       const result = last.result;
       if (!result) return;
-      if (kept === 'reply') await persistReply(run, accept(result.text), result, last.requested);
+      if (kept === 'settled') last.settled = await persistReply(run, accept(result.text), result, last.requested);
+      else if (kept === 'reply') await persistReply(run, accept(result.text), result, last.requested);
       else await persistMidTurnText(run.chatId, c, run.req.persistence, result, last.requested);
       c.streamingText = '';
       emit(c);
+      for (const write of held.splice(0)) write();
     },
     accept,
     async rungs(turn: DeliveryTurn): Promise<readonly LadderRung[]> {

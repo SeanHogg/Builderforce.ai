@@ -32,7 +32,7 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
   const { append } = deps;
 
   /** The turn goes on: tell the surface what the model said (as its own block, or as the reply it was) before the rows join the transcript. */
-  const sentBack = async (step: number, content: string, kept: "block" | "reply" = "block"): Promise<void> => {
+  const sentBack = async (step: number, content: string, kept: "block" | "reply" | "settled" = "block"): Promise<void> => {
     await ports.delivery?.sentBack?.({ step, content, kept });
   };
 
@@ -41,8 +41,8 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
    * transcript as its own row, then the correction — so the next turn reads both, never
    * two user rows in a row with the model's words lost.
    */
-  const requeue = async (pctx: PolicyContext, step: number, said: string, note: string, kept: "block" | "reply" = "block", parts: readonly RunPart[] = []): Promise<void> => {
-    await sentBack(step, said, kept);
+  const requeue = async (pctx: PolicyContext, step: number, said: string, note: string, kept: "block" | "reply" = "block", parts: readonly RunPart[] = [], tell = true): Promise<void> => {
+    if (tell) await sentBack(step, said, kept);
     // A surface that settles a reply itself has the model's row read as that reply (an empty turn is its placeholder).
     const quoted = kept === "reply" && ports.delivery?.owns?.settle && hooks.stall.settle ? hooks.stall.settle(pctx, said) : said;
     if (quoted.trim() || ports.delivery?.stall?.quoteEmpty) append({ role: "assistant", content: quoted, ...run.turnNative });
@@ -79,6 +79,10 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
     // A turn the person interrupted is not judged: what they steered in is taken first (below), so a steer is never lost to a stall
     // that ends the run, and never spends a re-prompt.
     const stalled = run.watch.hasInterrupt() ? undefined : await (hooks.stall.recoverAsync ? hooks.stall.recoverAsync(pctx) : hooks.stall.recover(pctx));
+    // The surface keeps what the model said BEFORE the stall is recorded: the step that says the turn was sent back follows the turn it is
+    // about in the chat (a re-prompt or a failover keeps it; a stall with nothing left to try settles the run on it).
+    if (stalled?.action === "steer" || stalled?.action === "escalate") await sentBack(ctx.step, turn.content, stalled.action === "escalate" ? "reply" : "block");
+    else if (stalled?.action === "pause" && policy.stallExhausted === "settle") await sentBack(ctx.step, turn.content, "settled");
     if (stalled) await emit(ports.events, { kind: "stall.recovered", step: ctx.step, action: stalled.action, ...(stalled.note ? { note: stalled.note } : {}), ...(stalled.detail ? { detail: stalled.detail } : {}) });
     if (stalled && stalled.action === "pause") {
       const notice = stalled.note ?? "paused";
@@ -108,10 +112,8 @@ export function noToolCallsHook(run: KernelRun, deps: NoToolCallsDeps): NonNulla
     if (stalled) {
       // A model that stalled out and was handed over is a reply the person read; any other correction keeps what it said as a block.
       const kept = stalled.action === "escalate" ? "reply" : "block";
-      if (stalled.rows) {
-        await sentBack(ctx.step, turn.content, kept);
-        append(...stalled.rows);
-      } else await requeue(pctx, ctx.step, turn.content, stalled.note ?? "Continue: do the work, do not describe it.", kept);
+      if (stalled.rows) append(...stalled.rows);
+      else await requeue(pctx, ctx.step, turn.content, stalled.note ?? "Continue: do the work, do not describe it.", kept, [], false);
       return { action: "continue" };
     }
     // A prose answer is a finish too: the sign-off a reviewer owes and the sub-agents
