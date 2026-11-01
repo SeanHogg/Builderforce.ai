@@ -54,6 +54,12 @@ export interface ChannelRunInput {
   streamFn: StreamFn;
 }
 
+/** The bare model id behind a `<provider>/<id>` ref this run met; a name it never met is left as it is. */
+function bareModelId(models: ChannelModels, ref: string): string {
+  const model = models.resolve(ref);
+  return modelRef(model) === ref ? model.id : ref;
+}
+
 /** The queued messages of the Agent as the agent's steered input: their text, and the pictures they carry. */
 function steered(messages: readonly AgentMessage[]): SteerInput[] {
   return messages.map((m) => {
@@ -162,7 +168,9 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
             if (event.kind === "policy.blocked") refusedBy.add(event.gateId);
             bridge.emit(event);
           },
-          outcome: (row) => reportRunRow(row),
+          // The row groups runs by model, and every other entry point reports the bare model id the gateway served. The run itself
+          // names a model `<provider>/<id>` (the policy keys its pins and fallbacks on it), so the ref is turned back into the id here.
+          outcome: (row) => reportRunRow(row.model ? { ...row, model: bareModelId(models, row.model) } : row),
         },
         // A governance gate guards an act: with no approver to reach, the call is refused (the ticket path keeps its standalone default).
         // The wait is bounded and ends with the run (see CHANNEL_APPROVAL_WAIT_MS).
