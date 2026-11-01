@@ -28,6 +28,12 @@ export const NEAR_DUPLICATE_MIN = 0.92;
 export const NEAR_DUPLICATE_MAX_PAIRS = 2_000;
 /** Most pairs `similar` keeps for any one claim it was asked about (best first). */
 export const SIMILAR_PAIRS_PER_ID = 20;
+/**
+ * Characters of a card's text the host retains per node in `meta`. The renderer clips to
+ * `HIT_EXCERPT_CHARS` (140) anyway and the full text stays in the engine, so keeping more
+ * here is dead weight that scales per node — the dominant per-node host retention (#6350).
+ */
+export const META_TEXT_EXCERPT = 256;
 
 export interface HostIndexOptions {
     rootId: string;
@@ -221,10 +227,15 @@ class HostIndex implements HostKnowledgeIndexCore {
             await this.index!.upsert(cards);
             const textOf = new Map(cards.map((c) => [c.id, c.text] as const));
             for (const n of g.nodes) {
+                // The card's full text already lives in the engine (DocEntry.text + the
+                // lexical index); the host keeps only the short excerpt the renderer
+                // shows (HIT_EXCERPT_CHARS) — retaining the whole card here is dead
+                // weight that scales per node (#6350).
+                const full = textOf.get(n.ref);
                 this.meta.set(n.ref, {
                     kind: n.kind, label: n.label,
                     ...(n.partition ? { partition: n.partition } : {}),
-                    ...(textOf.has(n.ref) ? { text: textOf.get(n.ref)! } : {}),
+                    ...(full !== undefined ? { text: full.slice(0, META_TEXT_EXCERPT) } : {}),
                 });
                 this.adjacency.delete(n.ref);
             }
