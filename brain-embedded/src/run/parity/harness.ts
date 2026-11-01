@@ -15,7 +15,7 @@ import type { BrainRunRequest, BrainStreamFn, RunEngineId } from '../../runStore
 import type { BrainToolSpec, StreamChatResult } from '../../streamChatCompletion';
 import { isSummaryCall, completion } from './script';
 import { Recorder, copyWire } from './recorder';
-import { normalise, wireEquivalent } from './normalise';
+import { normalise, wireEquivalent, withoutUniformTelemetry } from './normalise';
 import type { HostTool, RunRecord, Scenario, ScenarioHost, ScriptedTurn, TurnInput } from './types';
 
 const DEFAULT_KEY = 7001;
@@ -111,13 +111,14 @@ class Host implements ScenarioHost {
       reportOutcome: async (o) => { this.rec.reported.push(o); },
       recordRunOutcome: (e) => { this.rec.ended.push(e); },
       recordAvoidedCall: (a) => { this.rec.avoided.push(a); },
+      reportRunRecord: async (r) => { this.rec.recorded.push(r); },
       ...(impl ? {
         tools: Object.keys(impl).map(specOf),
-        runTool: async (name: string, args: unknown) => {
+        runTool: async (name: string, args: unknown, signal?: AbortSignal) => {
           this.rec.toolCalls.push({ name, args });
           const f = impl[name];
           if (!f) return { ok: false, error: `unknown tool ${name}` };
-          return f(args);
+          return f(args, signal);
         },
         needsConfirm: ({ name, args }: { name: string; args: unknown }) => {
           if (!this.confirmNames.has(name)) return false;
@@ -176,5 +177,5 @@ export async function runScenario(scenario: Scenario, engine: RunEngineId): Prom
   }
   const record = JSON.parse(JSON.stringify(rec.toRecord())) as RunRecord;
   record.wire = record.wire.map((w) => wireEquivalent(w as Record<string, unknown>) as typeof w);
-  return normalise(record);
+  return withoutUniformTelemetry(normalise(record));
 }

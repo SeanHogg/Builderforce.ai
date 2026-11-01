@@ -6,6 +6,13 @@
 - **One campaign state machine.** `shared/campaignLifecycle.ts` owns phases for email and social; `canTransition` and the `sql.raw` in `socialCampaignSweep.ts` are gone.
 - **Campaign gate.** Campaign tables are cron schedule sources in `cronWorkSignal.ts`, with stuck rows excluded from the stamp so a stale `sending` row cannot pin the gate.
 - **Worker observability on** (`wrangler.toml`).
+- **Do-not-contact on one-off sends.** `mailbox.send` refuses, a hand send warns and needs confirmation, anything unreadable counts as blocked, and campaigns re-check once per batch, including SMS STOP.
+- **Header injection closed.** `sendFromMailbox` refuses control characters in `to` and `replyTo`.
+- **A provider outage no longer loses audiences.** The batch stops on no answer, 429 or 5xx, retries spread across every recipient, and a failure that was definitely not delivered spends no attempt.
+- **A Gmail quota 403 no longer revokes a mailbox.** One predicate separates auth failures from rate limits on both send and read paths.
+- **Campaign counters come from the ledger** at finish and on failure, and `updated_at` round-robin stops a throwing campaign from holding a slot.
+- **Cron wakes for timed work.** Escalation, webhook retries, previews, redemptions, reconcile, the reaper and cloud workflows re-signal only while work remains, and arming writes signal. The floor override is capped at 90 minutes because `llm-batch` and `cost-alerts` break at 2 h.
+- **`isOptOutFailure` reads the code from the start of the message,** and `idx_report_schedules_due` (1292) serves the gate probe.
 - **`builderforce-primary` deleted** by the operator. The API, CI and API scripts do not read the legacy `DATABASE_URL`.
 - **Campaign delivery failures classified by whose fault they are.** A provider that does not answer is retryable and stops the batch; Twilio's From codes and a run of ten identical failures with nothing delivered fail the campaign as a sender fault, while known per-recipient codes never count. A campaign that delivered nothing reads `failed`. Start and finish flips are status-guarded, and an availability outage is not stamped as a refusal.
 - **`bareAddress` resolves the real address** past trailing comments and quoted decoys, so `Jane <a@x.com> (Sales)` and `Eve <a@x.com> "<victim@y.com>"` both reach the do-not-contact check as `a@x.com`.

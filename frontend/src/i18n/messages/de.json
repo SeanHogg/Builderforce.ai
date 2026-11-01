@@ -29813,8 +29813,8 @@
     }
   },
   "mailboxSend": {
-    "doNotContactTitle": "Dieser Empfänger steht auf einer Kontaktsperrliste",
-    "doNotContactMessage": "Die Person hat sich abgemeldet, die Zustellung ist fehlgeschlagen oder sie wollte nicht kontaktiert werden. Senden Sie diese Nachricht nur, wenn Sie sicher sind, dass Sie es tun sollten.",
+    "doNotContactTitle": "Mindestens ein Empfänger steht auf einer Kontaktsperrliste, oder eine Adresse konnte nicht gelesen werden",
+    "doNotContactMessage": "Mindestens ein Empfänger hat sich abgemeldet, die Zustellung ist fehlgeschlagen oder er wollte nicht kontaktiert werden, oder eine Adresse konnte nicht gelesen werden. Senden Sie diese Nachricht nur, wenn Sie sicher sind, dass Sie es tun sollten.",
     "sendAnyway": "Trotzdem senden"
   },
   "inboxApp": {

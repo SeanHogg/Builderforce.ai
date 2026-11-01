@@ -160,12 +160,19 @@ export class TransportError extends Error {
    * batch stops at the first one, because the next 24 would meet the same throttle or outage and
    * each would cost an attempt (and, for a silent provider, a full timeout), and requeues what it
    * had claimed. A per-recipient bounce ("mailbox full") is NOT this: it says nothing about the next.
+   *
+   * `undelivered`: the message DEFINITELY did not go out (the provider answered 429, a rate-limit 403,
+   * or the mailbox token endpoint was down, so nothing was sent). The engine retries it without
+   * spending an attempt, because no duplicate is possible. NOT set for no answer (status 0) or a 5xx:
+   * the provider may have delivered the message before failing to say so, and a free retry could
+   * deliver it twice.
    */
   constructor(
     message: string,
     readonly retryable: boolean,
     readonly scope: TransportErrorScope,
     readonly providerUnavailable: boolean = false,
+    readonly undelivered: boolean = false,
   ) {
     super(message);
     this.name = 'TransportError';
@@ -324,6 +331,7 @@ async function resolveSmsSender(
               retryable,
               twilioFailureScope(result.status, result.data),
               retryable,
+              result.status === 429,
             );
           }
           return { externalId: twilioMessageSid(result.data) };
@@ -463,14 +471,24 @@ export async function resolveCampaignSender(
             // as the sender's, so the scope stays honest if this is ever made terminal.
             //
             // `providerUnavailable` only for a REAL provider status of 0, 429 or 5xx. Any other
-            // failure here (a bounce for this address, a provider-side validation error, a throw
-            // with no status) is about this message and must not stop the batch.
-            const status = error instanceof EmailDeliveryError ? error.status : null;
+            // failure here (a bounce for this address, a provider-side validation error, an
+            // `EmailDeliveryError` carrying no status) is about this message and must not stop the batch.
+            //
+            // `EmailService` does not catch `fetch`, so a network failure arrives as a plain error
+            // with no `EmailDeliveryError` around it. That is NO RESPONSE, status 0, exactly as the
+            // connector runtime and the mailbox service read it; reading it as "no status" let a
+            // provider outage burn every row.
+            //
+            // A refused platform credential (401/402/403/404, a rotated key) is retryable and the
+            // SENDER's: the batch stops on that combination (`runCampaignBatch`) instead of spending
+            // an attempt on every remaining row.
+            const status = error instanceof EmailDeliveryError ? error.status : 0;
             throw new TransportError(
               error instanceof Error ? error.message : 'Send failed',
               true,
               providerStatusScope(status),
               isRetryableProviderStatus(status),
+              status === 429,
             );
           }
         },
@@ -512,10 +530,17 @@ export async function resolveCampaignSender(
             listUnsubscribeUrl: message.unsubscribeUrl,
           });
           // `sendFromMailbox` answers 404 (mailbox gone) and 409 (grant revoked or needs
-          // reconnecting) for the CONNECTION, and 502 for the one message the provider
-          // refused or fumbled, so the status says whose failure it is.
+          // reconnecting) for the CONNECTION, and 502 for the one message the provider refused or
+          // fumbled, or 400 for one it was never given (a control character in the address), so the
+          // status says whose failure it is: only 404 and 409 are the sender's.
           if (!result.ok) {
-            throw new TransportError(result.error, result.retryable, result.status === 502 ? 'recipient' : 'sender', result.providerUnavailable === true);
+            throw new TransportError(
+              result.error,
+              result.retryable,
+              result.status === 404 || result.status === 409 ? 'sender' : 'recipient',
+              result.providerUnavailable === true,
+              result.undelivered === true,
+            );
           }
           return {};
         },
@@ -585,6 +610,7 @@ export async function resolveCampaignSender(
               isRetryableProviderStatus(result.status),
               providerStatusScope(result.status),
               isRetryableProviderStatus(result.status),
+              result.status === 429,
             );
           }
           return {};

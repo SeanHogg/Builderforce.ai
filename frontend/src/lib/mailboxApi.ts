@@ -234,11 +234,18 @@ export const mailboxApi = {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ unread }),
     }),
 
-  /** `confirmDoNotContact`: the person was told the recipient is on a do-not-contact list and chose to send
-   *  anyway. Without it the server answers 409 {@link DO_NOT_CONTACT_CODE} and sends nothing. */
+  /** `confirmDoNotContact`: the person was told a recipient (`to` may be a list) is on a do-not-contact list
+   *  and chose to send anyway. Without it the server answers 409 {@link DO_NOT_CONTACT_CODE} and sends nothing.
+   *
+   *  `expectedErrors: [400, 409]`: all of these are handled by the caller, not faults. The do-not-contact 409
+   *  is a question the composer asks the person (see `useSendMailboxMessage`), so it must not raise the global
+   *  error toast or a quality report first; the other 409 (the mailbox needs reconnecting) and the 400 (a
+   *  control character such as a pasted tab in the address, which the person fixes) still throw with the
+   *  server's message, which both composers render inline. */
   send: (connectionId: number, message: { to: string; subject: string; html: string; replyTo?: string; confirmDoNotContact?: boolean }): Promise<{ sent: true; id: string; accountEmail: string }> =>
     apiRequest(`${MAILBOX}/connections/${connectionId}/send`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(message),
+      expectedErrors: [400, 409],
     }),
 
   listRules: (connectionId: number): Promise<{ rules: MailboxAutomationRule[] }> =>

@@ -467,14 +467,28 @@ async function failedRead(
 
 export type MailboxSendResult =
   | { ok: true; id: string; accountEmail: string }
-  | { ok: false; status: 404 | 409 | 502; error: string; retryable: boolean; providerUnavailable?: boolean };
+  | {
+    ok: false;
+    /** 400: the message itself was refused before any provider call (a control character in an
+     *  address): this recipient's problem, not the connection's and not the provider's. */
+    status: 400 | 404 | 409 | 502;
+    error: string;
+    retryable: boolean;
+    providerUnavailable?: boolean;
+    /** True only when the message DEFINITELY was not delivered (a throttle answer, the token
+     *  endpoint being down), so the campaign engine may retry without spending an attempt. Never
+     *  set for no answer at all or a 5xx: those may have been delivered. */
+    undelivered?: boolean;
+  };
 
-/** The message fields an adapter writes into a header, in the order they are checked. */
-const HEADER_FIELDS = ['to', 'replyTo', 'subject'] as const;
+/** The message fields an adapter writes into a header as-is, in the order they are checked. The
+ *  subject is not one of them: the adapters encode it (`encodeHeaderValue` for Gmail, JSON for
+ *  Graph), so a line break in it cannot add a header, and refusing it would fail a whole audience
+ *  over a trailing newline. */
+const HEADER_FIELDS = ['to', 'replyTo'] as const;
 const HEADER_FIELD_LABELS: Record<typeof HEADER_FIELDS[number], string> = {
   to: 'recipient',
   replyTo: 'reply-to address',
-  subject: 'subject',
 };
 
 /**
@@ -489,11 +503,14 @@ const HEADER_FIELD_LABELS: Record<typeof HEADER_FIELDS[number], string> = {
  * at all, a 429, a 5xx, a rate-limit 403, or the token endpoint being down. The batch stops on it
  * instead of spending an attempt on every remaining row.
  *
+ * `undelivered` is set only when the message definitely did not go out (a throttle answer, the token
+ * endpoint being down), so the campaign engine does not spend an attempt on it.
+ *
  * This is the one chokepoint every mailbox send goes through (by hand, agent tool, campaign,
- * sequence), so it is also where a header-injection attempt is refused: `to`, `replyTo` and the
- * subject are written into message headers, and a control character in any of them (a CR or LF
- * adds a header, such as a hidden Bcc) is refused BEFORE the token is refreshed or the provider is
- * called.
+ * sequence), so it is also where a header-injection attempt is refused: `to` and `replyTo` are
+ * written into message headers verbatim, and a control character in either (a CR or LF adds a
+ * header, such as a hidden Bcc) is refused with a 400 BEFORE the token is refreshed or the provider
+ * is called. The subject is encoded by the adapters and is not refused.
  */
 export async function sendFromMailbox(
   db: Db,
@@ -506,7 +523,7 @@ export async function sendFromMailbox(
   if (unsafeField) {
     return {
       ok: false,
-      status: 502,
+      status: 400,
       error: `The ${HEADER_FIELD_LABELS[unsafeField]} contains a control character (such as a line break), so the message was not sent.`,
       retryable: false,
     };
@@ -519,7 +536,8 @@ export async function sendFromMailbox(
       error: token.error,
       retryable: token.status === 'expired',
       // The token endpoint being down (`expired`) is the provider's outage, not this recipient's.
-      ...(token.status === 'expired' ? { providerUnavailable: true } : {}),
+      // Nothing was sent: the token was never obtained.
+      ...(token.status === 'expired' ? { providerUnavailable: true, undelivered: true } : {}),
     };
   }
   try {
@@ -537,13 +555,16 @@ export async function sendFromMailbox(
     reportCaughtError(error, { source: 'application/mailbox/mailboxService.ts', operation: 'sendFromMailbox' });
     // A throttled or down provider (and a rate-limit 403, which Gmail uses for a quota hit) is
     // retryable AND stops the batch; any other failure is about this one message.
-    const providerUnavailable = isRetryableProviderStatus(status) || (error instanceof MailboxProviderError && isMailboxRateLimited(error));
+    const rateLimited = error instanceof MailboxProviderError && isMailboxRateLimited(error);
+    const providerUnavailable = isRetryableProviderStatus(status) || rateLimited;
     return {
       ok: false,
       status: 502,
       error: detail,
       retryable: providerUnavailable,
       ...(providerUnavailable ? { providerUnavailable: true } : {}),
+      // A throttle answer means the provider refused the message; no answer or a 5xx may have delivered it.
+      ...(rateLimited ? { undelivered: true } : {}),
     };
   }
 }

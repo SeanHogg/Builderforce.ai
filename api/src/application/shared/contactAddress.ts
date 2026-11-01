@@ -40,10 +40,16 @@ function withoutTrailingComments(value: string): string {
 }
 
 /** The trimmed text of every `<...>` group in `text`. A quoted string is display text, never the
- *  address: it is dropped (backslash escapes honoured) before looking for groups, so
- *  `Eve <a@x.com> "<victim@y.com>"` cannot resolve to the decoy. Only the search text loses them. */
+ *  address, so a bracket inside one is not a group (backslash escapes honoured): `Eve <a@x.com>
+ *  "<victim@y.com>"` cannot resolve to the decoy. Quoted strings are masked rather than removed, so
+ *  the group is sliced from the ORIGINAL text and a quoted local part inside it
+ *  (`<"erased"@x.com>`) survives. */
 function angleGroupsOf(text: string): string[] {
-  return [...text.replace(/"(?:[^"\\]|\\.)*"/g, '').matchAll(/<([^<>]+)>/g)].map((group) => group[1]!.trim());
+  const masked = text.replace(/"(?:[^"\\]|\\.)*"/g, (quoted) => 'q'.repeat(quoted.length));
+  return [...masked.matchAll(/<([^<>]+)>/g)].map((group) => {
+    const start = (group.index ?? 0) + 1;
+    return text.slice(start, start + group[1]!.length).trim();
+  });
 }
 
 /**
@@ -54,6 +60,50 @@ function angleGroupsOf(text: string): string[] {
  */
 export function angleGroupCount(value: string): number {
   return angleGroupsOf(withoutTrailingComments(value)).length;
+}
+
+/**
+ * Whether a mailbox value is structured in a way the parser and a mail server could read
+ * differently, so a check that must not be fooled (the do-not-contact one) refuses it rather than
+ * trusting {@link bareAddress}'s reading. Three shapes:
+ *
+ *   - unbalanced parentheses outside quoted strings: `ok@x.com (, erased@y.com` has an unterminated
+ *     comment that swallows the comma, which a mail server may read as a separator before a second
+ *     recipient the check never saw;
+ *   - more than one angle group (`<a@x.com> <b@y.com>`), see {@link angleGroupCount};
+ *   - anything other than comments AFTER the angle group: `<ok@x.com> erased@y.com` has an address
+ *     the parser drops. A trailing comment (`Jane <a@x.com> (Sales)`) is fine.
+ */
+export function isAmbiguousMailbox(value: string): boolean {
+  const { balanced, code } = withoutCommentsMasked(value);
+  if (!balanced || angleGroupCount(value) > 1) return true;
+  let end = -1;
+  for (const group of code.matchAll(/<[^<>]*>/g)) end = (group.index ?? 0) + group[0].length;
+  return end >= 0 && code.slice(end).trim() !== '';
+}
+
+/** `value` with every balanced comment removed and every quoted string masked (so a bracket inside
+ *  one is never a group), plus whether the parentheses were balanced: a `)` with no `(` or a `(`
+ *  never closed is not. */
+function withoutCommentsMasked(value: string): { balanced: boolean; code: string } {
+  let code = '';
+  let depth = 0;
+  let quoted = false;
+  let stray = false;
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i]!;
+    if (quoted) {
+      code += 'q';
+      if (ch === '\\' && i + 1 < value.length) { code += 'q'; i++; } else if (ch === '"') quoted = false;
+    } else if (depth > 0) {
+      if (ch === '\\') i++;
+      else if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+    } else if (ch === '(') depth++;
+    else if (ch === ')') stray = true;
+    else if (ch === '"') { quoted = true; code += 'q'; } else code += ch;
+  }
+  return { balanced: depth === 0 && !stray, code };
 }
 
 /**
@@ -150,8 +200,8 @@ export function splitAddressList(value: string): string[] {
  * Whether `value` contains a control character: any C0 control (NUL to US, which includes CR, LF
  * and tab), DEL, or a C1 control.
  *
- * A mailbox adapter writes `to`, `replyTo` and the subject into a message header, and a CR or LF
- * there ends the header and starts a new one: a `replyTo` of `x@y.com`, CR, LF, `Bcc: erased@x.com`
+ * A mailbox adapter writes `to` and `replyTo` into a message header verbatim (the subject is encoded),
+ * and a CR or LF there ends the header and starts a new one: a `replyTo` of `x@y.com`, CR, LF, `Bcc: erased@x.com`
  * adds a recipient that no do-not-contact check ever looked at. Those fields can be
  * model-controlled (the agent send tool), so the one chokepoint that sends refuses them rather than
  * trusting each caller to have cleaned them. Pure, like the rest of this module.

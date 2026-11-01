@@ -45,8 +45,9 @@ export async function recordOpen(db: Db, trackToken: string, env?: Env): Promise
   if (!hit) return;
   await db
     .update(marketingCampaigns)
-    // No `updated_at`: `campaignsInFlight` rotates in-flight campaigns by it, so an engagement
-    // counter that bumped it would hand a well-opened campaign the front of the queue on every open.
+    // No `updated_at`: `campaignsInFlight` orders in-flight campaigns by it ascending (least recently
+    // advanced first), so an engagement counter that bumped it would push a well-opened campaign to the
+    // BACK of the queue on every open, so it would wait behind every quiet campaign.
     .set({ opened: sql`${marketingCampaigns.opened} + 1` })
     .where(and(eq(marketingCampaigns.id, hit.campaignId), eq(marketingCampaigns.tenantId, hit.tenantId)));
   // FIRST open only — the guard above already made this branch unique per send, so

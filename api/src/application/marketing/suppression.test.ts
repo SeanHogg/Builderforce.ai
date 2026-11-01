@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fakeDb } from '../../../test/fakeDb';
 import type { Db } from '../../infrastructure/database/connection';
-import { isDoNotContact, suppressedEmails, suppressionKey } from './suppression';
+import { campaignMemberKeys, isDoNotContact, isMemberBlocked, suppressedEmails, suppressionKey } from './suppression';
 
 describe('isDoNotContact', () => {
   it('checks the PARSED, lower-cased address of a mailbox value', async () => {
@@ -11,10 +11,10 @@ describe('isDoNotContact', () => {
     expect(JSON.stringify(db.calls)).not.toContain('Jane');
   });
 
-  it('is false for a clean address and for a value that holds no address, without a statement for the latter', async () => {
+  it('is false for a clean address, and FAILS CLOSED (true, without a statement) for a value it cannot read as an address', async () => {
     await expect(isDoNotContact(fakeDb([[]]) as unknown as Db, 7, 'ok@x.com')).resolves.toBe(false);
     const idle = fakeDb();
-    await expect(isDoNotContact(idle as unknown as Db, 7, '@handle')).resolves.toBe(false);
+    await expect(isDoNotContact(idle as unknown as Db, 7, '@handle')).resolves.toBe(true);
     expect(idle.calls).toHaveLength(0);
   });
 
@@ -101,5 +101,123 @@ describe('suppressionKey', () => {
   it('keys an address followed by an RFC comment, so a do-not-contact entry still matches', () => {
     expect(suppressionKey('<a@x.com> (comment)')).toBe('a@x.com');
     expect(suppressionKey('Jane <Erased@x.com> (Sales)')).toBe('erased@x.com');
+  });
+});
+
+/**
+ * `isDoNotContact` decides whether something may be sent at all, so what it cannot read it refuses:
+ * waving through an unparseable entry is a way round the register.
+ */
+describe('isDoNotContact — fails closed', () => {
+  const idle = () => fakeDb();
+
+  it.each([
+    ['a display name and a bare address with no angle brackets', 'Jane erased@x.com'],
+    ['two bare addresses', 'a@x.com erased@y.com'],
+    ['an unterminated angle group holding two addresses', 'Jane <a@x.com, erased@y.com'],
+    ['a handle that is no address', '@somebody'],
+    ['an unterminated comment that swallows the comma before a second recipient', 'ok@x.com (, erased@y.com'],
+    ['text after the angle group', '<ok@x.com> erased@y.com'],
+  ])('is true, with no statement, for %s', async (_name, to) => {
+    const db = idle();
+    await expect(isDoNotContact(db as unknown as Db, 7, to)).resolves.toBe(true);
+    expect(db.calls).toHaveLength(0);
+  });
+
+  it('is true, with no statement, for more than one angle group: the parser takes the last, a mail server need not', async () => {
+    const db = idle();
+    await expect(isDoNotContact(db as unknown as Db, 7, '<erased@y.com> <a@x.com>')).resolves.toBe(true);
+    expect(db.calls).toHaveLength(0);
+  });
+
+  it('refuses the whole send when ONE entry of a list cannot be read', async () => {
+    const db = idle();
+    await expect(isDoNotContact(db as unknown as Db, 7, 'ok@y.com, Jane erased@x.com')).resolves.toBe(true);
+    expect(db.calls).toHaveLength(0);
+  });
+
+  it('still reads a leading comment as the address it precedes, and blocks it when listed', async () => {
+    const db = fakeDb([[{ k: 'e', v: 'erased@x.com' }]]);
+    await expect(isDoNotContact(db as unknown as Db, 7, '(c) erased@x.com')).resolves.toBe(true);
+    expect(JSON.stringify(db.calls)).toContain('erased@x.com');
+  });
+
+  it('is false, and silent, for an empty value, and false for readable addresses that are not listed', async () => {
+    const empty = idle();
+    await expect(isDoNotContact(empty as unknown as Db, 7, '')).resolves.toBe(false);
+    expect(empty.calls).toHaveLength(0);
+    await expect(isDoNotContact(fakeDb([[]]) as unknown as Db, 7, 'ok@y.com, Jane <fine@z.com>')).resolves.toBe(false);
+  });
+
+  it('suppressedEmails keeps its contract: an entry with no key is never blocked and never queried (the sequence runner passes handles)', async () => {
+    const db = fakeDb([[{ k: 'e', v: 'b@y.com' }]]);
+    const blocked = await suppressedEmails(db as unknown as Db, 7, ['Jane erased@x.com', '@somebody', '<a@x.com> <b@y.com>']);
+    // The multi-group value keys on its LAST group, which is what that function has always done.
+    expect([...blocked]).toEqual(['b@y.com']);
+    expect(db.calls).toHaveLength(1);
+    const dumped = JSON.stringify(db.calls);
+    expect(dumped).not.toContain('somebody');
+    expect(dumped).not.toContain('Jane');
+  });
+});
+
+/**
+ * One mailbox, many spellings. Each of these names `erased@x.com`, and each must carry that key or
+ * an erased person's address, written another way, walks past the register.
+ */
+describe('suppressionKey — sees through equivalent spellings', () => {
+  it.each([
+    ['a quoted local part', '"erased"@x.com'],
+    ['a quoted local part inside an angle group', 'Jane <"Erased"@X.com>'],
+    ['a comment in the local part', 'erased(c)@x.com'],
+    ['a comment inside the angle group', '<erased@x.com (c)>'],
+    ['a trailing comment', 'erased@x.com (c)'],
+    ['a leading comment', '(c) erased@x.com'],
+    ['an obsolete source route', '<@a.com:erased@x.com>'],
+    ['an obsolete route with several hops', '<@a.com,@b.com:erased@x.com>'],
+    ['a trailing dot on the domain', 'erased@x.com.'],
+    ['a trailing dot inside the angle group', 'Jane <erased@x.com.>'],
+    ['mixed case', 'ERASED@X.COM'],
+  ])('%s', (_name, contact) => {
+    expect(suppressionKey(contact)).toBe('erased@x.com');
+  });
+
+  it('keeps a quoted local part that genuinely needs its quotes, and never reads a comment out of a quoted string', () => {
+    // A space makes it no single address; a bracket inside quotes is part of the local part, not a comment.
+    expect(suppressionKey('"a b"@x.com')).toBeNull();
+    expect(suppressionKey('"a(b"@x.com')).toBe('"a(b"@x.com');
+  });
+
+  it('an unterminated comment cannot hide the address in front of it, and the check refuses the entry outright', async () => {
+    // The key still reads the address in front, so the register keeps matching it (suppressedEmails)...
+    expect(suppressionKey('erased@x.com (never closed')).toBe('erased@x.com');
+    // ...but a mail server may read what the comment swallowed as another recipient, so the send check refuses it unqueried.
+    const db = fakeDb();
+    await expect(isDoNotContact(db as unknown as Db, 7, 'erased@x.com (never closed')).resolves.toBe(true);
+    expect(db.calls).toHaveLength(0);
+  });
+
+  it('blocks an erased address however it is spelled, through the whole check', async () => {
+    for (const spelling of ['"erased"@x.com', 'erased(c)@x.com', '<erased@x.com (c)>', '<@a.com:erased@x.com>', 'erased@x.com.']) {
+      const db = fakeDb([[{ k: 'e', v: 'erased@x.com' }]]);
+      await expect(isDoNotContact(db as unknown as Db, 7, spelling)).resolves.toBe(true);
+    }
+  });
+});
+
+describe('campaignMemberKeys / isMemberBlocked', () => {
+  const member = { email: 'a@x.com', phone: '+14155551234' };
+
+  it('checks an email campaign on the address only, and an SMS campaign on both the address and the number', () => {
+    expect(campaignMemberKeys('email', member)).toEqual(['a@x.com']);
+    expect(campaignMemberKeys('sms', member)).toEqual(['a@x.com', '+14155551234']);
+    expect(campaignMemberKeys('sms', { email: 'a@x.com', phone: null })).toEqual(['a@x.com', '']);
+  });
+
+  it('blocks a member when ANY of its keys is blocked, comparing by suppression key', () => {
+    const blocked = new Set(['+14155551234']);
+    expect(isMemberBlocked(blocked, campaignMemberKeys('sms', member))).toBe(true);
+    expect(isMemberBlocked(blocked, campaignMemberKeys('email', member))).toBe(false);
+    expect(isMemberBlocked(new Set(['a@x.com']), ['Jane <A@X.com>'])).toBe(true);
   });
 });

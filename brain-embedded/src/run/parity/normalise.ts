@@ -19,6 +19,15 @@
  *     `reasoning: off` (the key is omitted), an empty `tools` list (omitted), `tool_choice` absent beside tools
  *     (`auto`), an empty `metadata`. A DIFFERENT value (16384 against 4096) is not touched.
  *
+ *  7. The agent's uniform telemetry (`withoutUniformTelemetry`, approved by the coordinator, PRD 35 section 8.2). On a graded run the
+ *     agent's outcome row carries 17 optional fields the loop's row has no place for: entryPoint, toolCalls, toolErrors, tokens,
+ *     cacheReadTokens, compactions, stallRecoveries, escalations, coveredReadStubs, shellFileReads, repoErrors, contextPackTokens,
+ *     unkeptReadyClaims, verify, firstSpawnTurn, modelPreflight, progressTrips. They are the agent's own telemetry and exist only on
+ *     the agent, so they are dropped from `outcome.reported[]`. Every field the loop also sends (steps, model, source, merged,
+ *     terminalStatus, clientRunId, ...) is compared as it is: a wrong `steps` stays a failure.
+ *  8. `agentOnly.recorded` (the agent's `reportRunRecord`, for a run with no grade) is not compared with the loop, which has no such
+ *     report; the suites assert instead that every run reports exactly once (`oneReportPerRun`).
+ *
  * Nothing else is normalised: not message order, not step numbers, not counts, not wording.
  */
 
@@ -44,6 +53,22 @@ export function wireEquivalent<T extends Record<string, unknown>>(call: T): T {
   if (out.tools !== undefined && out.tool_choice === undefined) out.tool_choice = 'auto';
   if (out.metadata && Object.keys(out.metadata as object).length === 0) delete out.metadata;
   return out as T;
+}
+
+const UNIFORM_TELEMETRY = [
+  'entryPoint', 'toolCalls', 'toolErrors', 'tokens', 'cacheReadTokens', 'compactions', 'stallRecoveries', 'escalations',
+  'coveredReadStubs', 'shellFileReads', 'repoErrors', 'contextPackTokens', 'unkeptReadyClaims', 'verify', 'firstSpawnTurn',
+  'modelPreflight', 'progressTrips',
+] as const;
+
+/** Rule 7: the outcome rows without the agent's uniform telemetry. */
+export function withoutUniformTelemetry<T extends { outcome: { reported: unknown[] } }>(record: T): T {
+  const reported = record.outcome.reported.map((row) => {
+    const copy = { ...(row as Record<string, unknown>) };
+    for (const k of UNIFORM_TELEMETRY) delete copy[k];
+    return copy;
+  });
+  return { ...record, outcome: { ...record.outcome, reported } };
 }
 
 /** A normaliser with its own id numbering: one per record, so a record is numbered from 1. */

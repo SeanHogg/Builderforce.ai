@@ -16,6 +16,19 @@ function stringDiff(a: string, b: string): string {
   return `differs at char ${i} of ${a.length}/${b.length}: a=${around(a)} b=${around(b)}`;
 }
 
+/** A record as the engines are compared: the agent-only reports are asserted separately (`oneReportPerRun`), not diffed. */
+export function comparable<T extends { agentOnly?: unknown }>(record: T): Omit<T, 'agentOnly'> {
+  const { agentOnly: _agentOnly, ...rest } = record;
+  return rest;
+}
+
+/** Every run that ended reported exactly once: a graded run's outcome, or the agent's record of an ungraded one. The loop reports only graded runs. */
+export function oneReportPerRun(engine: string, record: { outcome: { reported: unknown[]; ended: unknown[] }; agentOnly?: { recorded: unknown[] } }): string[] {
+  if (engine !== 'agent') return [];
+  const reports = record.outcome.reported.length + (record.agentOnly?.recorded.length ?? 0);
+  return reports === record.outcome.ended.length ? [] : [`agent made ${reports} outcome report(s) for ${record.outcome.ended.length} run(s)`];
+}
+
 export function diffRecords(a: unknown, b: unknown, labels: [string, string] = ['loop', 'agent'], path = '$', out: string[] = []): string[] {
   if (out.length >= 80) return out;
   const [la, lb] = labels;

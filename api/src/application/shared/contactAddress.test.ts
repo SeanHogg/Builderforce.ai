@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bareAddress, isE164, splitAddressList } from './contactAddress';
+import { angleGroupCount, bareAddress, canonicalAddress, hasControlCharacter, isAmbiguousMailbox, isE164, splitAddressList } from './contactAddress';
 
 describe('splitAddressList', () => {
   it('splits a comma or semicolon list into trimmed entries', () => {
@@ -74,5 +74,85 @@ describe('isE164', () => {
     expect(isE164('+14155551234')).toBe(true);
     expect(isE164('415-555-1234')).toBe(false);
     expect(isE164(null)).toBe(false);
+  });
+});
+
+describe('angleGroupCount', () => {
+  it('counts the angle groups outside quoted strings and trailing comments', () => {
+    expect(angleGroupCount('a@x.com')).toBe(0);
+    expect(angleGroupCount('Jane <a@x.com>')).toBe(1);
+    expect(angleGroupCount('Jane <a@x.com> (Sales)')).toBe(1);
+    expect(angleGroupCount('"<victim@x.com>" <a@x.com>')).toBe(1);
+    expect(angleGroupCount('<erased@y.com> <a@x.com>')).toBe(2);
+    expect(angleGroupCount('Jane <a@x.com, erased@y.com')).toBe(0);
+  });
+});
+
+describe('isAmbiguousMailbox', () => {
+  it.each([
+    ['an unterminated comment that swallows a comma', 'ok@x.com (, erased@y.com'],
+    ['a stray closing parenthesis', 'ok@x.com ), erased@y.com'],
+    ['text after the angle group', '<ok@x.com> erased@y.com'],
+    ['a quoted string after the angle group', 'Eve <a@x.com> "<victim@y.com>"'],
+    ['more than one angle group', '<a@x.com> <b@y.com>'],
+  ])('is true for %s', (_name, value) => {
+    expect(isAmbiguousMailbox(value)).toBe(true);
+  });
+
+  it.each([
+    ['a bare address', 'a@x.com'],
+    ['a display name and a group', 'Jane <a@x.com>'],
+    ['a trailing comment after the group', 'Jane <a@x.com> (Sales)'],
+    ['a nested trailing comment', 'Jane <a@x.com> (Sales (EMEA))'],
+    ['a comment inside the group', '<a@x.com (c)>'],
+    ['a quoted display name holding a bracket and a parenthesis', '"<v@x.com> (" <a@x.com>'],
+    ['a leading comment', '(c) a@x.com'],
+  ])('is false for %s', (_name, value) => {
+    expect(isAmbiguousMailbox(value)).toBe(false);
+  });
+});
+
+describe('bareAddress keeps a quoted local part inside an angle group', () => {
+  it('slices the group from the original text, not from the text with its quoted strings removed', () => {
+    expect(bareAddress('Jane <"Erased"@X.com>')).toBe('"Erased"@X.com');
+    expect(bareAddress('"<victim@x.com>" <attacker@y.com>')).toBe('attacker@y.com');
+  });
+});
+
+describe('canonicalAddress', () => {
+  it.each([
+    ['"erased"@x.com', 'erased@x.com'],
+    ['erased(c)@x.com', 'erased@x.com'],
+    ['erased@x.com (c)', 'erased@x.com'],
+    ['(c) erased@x.com', 'erased@x.com'],
+    ['@a.com:erased@x.com', 'erased@x.com'],
+    ['@a.com,@b.com:erased@x.com', 'erased@x.com'],
+    ['erased@x.com.', 'erased@x.com'],
+    ['erased@x.com...', 'erased@x.com'],
+    ['erased@x.com', 'erased@x.com'],
+  ])('folds %s to %s', (input, expected) => {
+    expect(canonicalAddress(input)).toBe(expected);
+  });
+
+  it('leaves a quoted local part that needs its quotes, and anything it does not recognise, as written', () => {
+    expect(canonicalAddress('"a b"@x.com')).toBe('"a b"@x.com');
+    expect(canonicalAddress('"a(b"@x.com')).toBe('"a(b"@x.com');
+    expect(canonicalAddress('+14155551234')).toBe('+14155551234');
+    expect(canonicalAddress('@handle')).toBe('@handle');
+  });
+});
+
+describe('hasControlCharacter', () => {
+  it.each([
+    ['CR', '\r'], ['LF', '\n'], ['CRLF', '\r\n'], ['NUL', '\u0000'], ['tab', '\t'], ['DEL', '\u007f'], ['a C1 control', '\u0085'],
+  ])('is true for %s anywhere in the value', (_name, control) => {
+    expect(hasControlCharacter(`x@y.com${control}Bcc: erased@x.com`)).toBe(true);
+    expect(hasControlCharacter(control)).toBe(true);
+  });
+
+  it('is false for ordinary text, including spaces, unicode and the characters an address uses', () => {
+    expect(hasControlCharacter('')).toBe(false);
+    expect(hasControlCharacter('Jane Doe <jane+tag@x.com>')).toBe(false);
+    expect(hasControlCharacter('Quarterly numbers: Q3 — café')).toBe(false);
   });
 });

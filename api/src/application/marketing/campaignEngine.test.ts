@@ -36,7 +36,9 @@ vi.mock('../../infrastructure/email/EmailService', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return { ...actual, sendRawEmail: vi.fn(async () => undefined) };
 });
-const { sendRawEmail } = await import('../../infrastructure/email/EmailService');
+const { sendRawEmail, EmailDeliveryError } = await import('../../infrastructure/email/EmailService');
+/** A recipient-level provider rejection (a bounce for this address): a real 4xx, not "no response". */
+const recipientRejection = (message: string) => new EmailDeliveryError(message, 'resend', 400);
 const sendMock = sendRawEmail as unknown as ReturnType<typeof vi.fn>;
 
 describe('resolveTrackingOrigin', () => {
@@ -491,7 +493,7 @@ describe('runCampaignBatch', () => {
 
   it('records a per-recipient failure without aborting the batch', async () => {
     sendMock.mockClear();
-    sendMock.mockRejectedValueOnce(new Error('mailbox full'));
+    sendMock.mockRejectedValueOnce(recipientRejection('mailbox full'));
     const db = fakeDb([
       [sending], noLogo,
       [
@@ -582,7 +584,7 @@ describe('runCampaignBatch', () => {
 
     it('DOES signal when the first row failed for good: that row is settled and the next may be fine', async () => {
       sendMock.mockClear();
-      sendMock.mockRejectedValueOnce(new Error('mailbox full'));
+      sendMock.mockRejectedValueOnce(recipientRejection('mailbox full'));
       const { env: gated, puts } = kvEnv();
       // At the attempt ceiling, so the failure is terminal rather than requeued.
       const db = fakeDb([[sending], noLogo, [{ ...oneRecipient, attempts: 2 }], [], [{ id: 1 }], [{ id: 1 }], [{ remaining: 9, queuedLeft: 9 }], []]);
@@ -624,9 +626,9 @@ describe('recordClick', () => {
 });
 
 /**
- * `campaignsInFlight` rotates in-flight campaigns by `marketing_campaigns.updated_at`, so an
- * engagement counter that bumped it would hand a well-opened campaign the front of the queue on
- * every open, click and carrier callback, and starve the quiet ones behind it.
+ * `campaignsInFlight` orders in-flight campaigns by `marketing_campaigns.updated_at` ascending (least
+ * recently advanced first), so an engagement counter that bumped it would push a well-opened campaign
+ * to the BACK of the queue on every open, click and carrier callback, and starve it behind the quiet ones.
  */
 describe('engagement counters leave the campaign\'s updated_at alone', () => {
   const campaignWrite = (db: ReturnType<typeof fakeDb>) => {

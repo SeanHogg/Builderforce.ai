@@ -15,6 +15,12 @@ export const APPROVED_BY = 'planning model';
 
 /** @type {{ file: string; changed: string; reason: string; approvedBy: string; cases?: number }[]} */
 export const APPROVED = [
+  {
+    file: 'api/src/application/marketing/campaignEngine.test.ts',
+    changed: 'Statement-queue fixtures follow the per-batch do-not-contact read, the write-back returning its row and the ledger-counted finish; a provider rejection is an EmailDeliveryError.',
+    reason: 'Campaign delivery work, not this program: the behaviour changed on purpose, the assertions on what each test proves stand, and the review read the edits.',
+    approvedBy: APPROVED_BY,
+  },
   // ── brought-along pairs (new home <- original source test) ──
   {
     file: 'packages/agent-run/test/finish/finish.test.ts',

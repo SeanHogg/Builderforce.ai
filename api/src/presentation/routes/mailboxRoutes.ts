@@ -397,7 +397,7 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
     }
     if (body.confirmDoNotContact !== true && await isDoNotContact(db, c.get('tenantId') as number, body.to)) {
       return c.json({
-        error: 'This recipient is on a do-not-contact list (they unsubscribed, bounced or asked not to be contacted). Send anyway only if you are sure you should.',
+        error: 'A recipient is on a do-not-contact list (they unsubscribed, bounced or asked not to be contacted), or an address could not be read. Send anyway only if you are sure you should.',
         code: 'do_not_contact',
       }, 409);
     }

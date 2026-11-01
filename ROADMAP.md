@@ -359,13 +359,8 @@ Synapse lives in [builderforce-inference](https://github.com/SeanHogg/builderfor
 - **No row retention on canvas history** (`creation_session_events`, `brain_chat_messages`). Snapshots are plan-capped and command bodies are redacted at 14 days; rows are kept indefinitely. *Blocker: decision on history kept.*
 - **🟡 Legacy leftover:** `agents` table still declared at `schema/agents.ts:327`. Design: PRD 39 §3. *Blocker: operator decisions in PRD 39.*
 - **🟡 Two stores:** canvas comments vs kernel annotations. Design: PRD 39 §2. *Blocker: operator decisions in PRD 39.*
-- **Do-not-contact gaps outside campaigns.** The unattended `mailbox.send` MCP tool and hand sends do not check suppression.
-- **A campaign that throws on every tick holds an in-flight slot** (`marketing/campaign/sweeps.ts`).
-- **Migration 1291's comment is inaccurate.** "Reaped on the same terms" is wrong: NULL claims are reaped at once.
-- **A long provider outage slowly writes off campaign rows.** A no-response failure stops the batch, but the row tried spends an attempt, so each campaign loses about one row per three retries (`marketing/campaign/send.ts`). The attempt ceiling should not be spent by an outage.
-- **`isOptOutFailure` matches on substring** (`campaignTransports.ts`). A failure quoting a phone number that contains `21610` would unsubscribe that member.
-- **`report_schedules` has no `next_run_at` index,** which the cron schedule sources read.
-- **Raising the cron floor above 30 min needs a sweep audit.** A 2 h floor would have throttled campaigns; audit every sweep that relies on the floor first.
+- **A revoked mailbox fails its campaigns for good.** `failCampaign` writes off every queued row and a failed email campaign cannot restart, so one unknown 403 loses the audience. *Blocker: operator decision to hold rows queued until the mailbox is reconnected instead.*
+- **Monitors and board-sync run on the 30-minute floor on an idle platform,** so a 5-minute heartbeat can page up to about 30 minutes late. Prompt checks keep Neon awake permanently. *Blocker: operator decision, paging latency against the Neon cost ceiling.*
 - **Neon's quota text over WebSocket is unobserved.** `neonAvailability.ts` matches the published wording. *Blocker: a capture from a quota-exhausted branch.*
 - **Cloudflare serves a managed challenge to every datacenter caller.** `POST api.builderforce.ai/mcp` is challenged, so `release.yml` skips the MCP registry publish. Apply `scripts/cloudflare-bot-exception.mjs`. *Blocker: a zone token with Zone Settings:Edit + WAF:Edit.*
 - **Strategy content in public git history.** Purge built. *Blocker: a quiet 30-minute window, then GitHub Support for `refs/pull/*`.*

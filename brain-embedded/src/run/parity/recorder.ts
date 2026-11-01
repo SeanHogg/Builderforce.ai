@@ -35,6 +35,7 @@ export class Recorder {
   readonly reported: unknown[] = [];
   readonly ended: unknown[] = [];
   readonly avoided: unknown[] = [];
+  readonly recorded: unknown[] = [];
   readonly frames: Record<string, HostFrame[]> = {};
   readonly keys = new Set<number>();
   scenarioError: string | undefined;
@@ -125,6 +126,7 @@ export class Recorder {
       usage,
       outcome: { reported: this.reported, ended: this.ended, avoided: this.avoided },
       error,
+      agentOnly: { recorded: this.recorded },
       ...(this.scenarioError ? { scenarioError: this.scenarioError } : {}),
     };
   }

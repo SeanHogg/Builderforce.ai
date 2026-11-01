@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import {
   signWebhook,
   emitWebhookEvent,
   runWebhookRetrySweep,
   webhookRetryDelaySec,
   WEBHOOK_MAX_ATTEMPTS,
+  WEBHOOK_SIGNALLED_ATTEMPTS,
   parseEvents,
   isWebhookEvent,
   WEBHOOK_ID_HEADER,
@@ -160,6 +163,44 @@ describe('emitWebhookEvent', () => {
   });
 });
 
+/**
+ * A failed first delivery is rescheduled five minutes out; with the Worker env the emit signals the
+ * cron gate so that retry is picked up by the tick that can send it, not the 30-minute floor.
+ */
+describe('emitWebhookEvent — arming the retry', () => {
+  const input = {
+    tenantId: 1, segmentId: 'seg-1', eventType: 'sprint.completed' as const, eventId: 'sprint-99', data: {},
+  };
+  const subs = [{ id: 's1', url: 'https://host/wh', secret: 'sec', events: JSON.stringify(['sprint.completed']) }];
+
+  it('signals the cron gate when a delivery fails (non-2xx)', async () => {
+    const { env, signalled } = fakeCronKv();
+    const { db } = makeDb(subs);
+    await emitWebhookEvent(db, input, { fetchImpl: vi.fn(async () => new Response('boom', { status: 503 })), nowSec: () => 1, env });
+    expect(signalled()).toBe(true);
+  });
+
+  it('signals the cron gate when the endpoint cannot be reached at all', async () => {
+    const { env, signalled } = fakeCronKv();
+    const { db } = makeDb(subs);
+    await emitWebhookEvent(db, input, { fetchImpl: vi.fn(async () => { throw new Error('network down'); }), nowSec: () => 1, env });
+    expect(signalled()).toBe(true);
+  });
+
+  it('stays silent when every delivery succeeded, when nothing matched, and when the caller has no env', async () => {
+    const ok = fakeCronKv();
+    await emitWebhookEvent(makeDb(subs).db, input, { fetchImpl: vi.fn(async () => new Response(null, { status: 200 })), nowSec: () => 1, env: ok.env });
+    expect(ok.signalled()).toBe(false);
+
+    const none = fakeCronKv();
+    await emitWebhookEvent(makeDb([]).db, input, { fetchImpl: vi.fn(), env: none.env });
+    expect(none.signalled()).toBe(false);
+
+    // No env to signal with: the floor sweep still retries, and the emit must not throw.
+    await expect(emitWebhookEvent(makeDb(subs).db, input, { fetchImpl: vi.fn(async () => new Response('x', { status: 500 })), nowSec: () => 1 })).resolves.toBe(1);
+  });
+});
+
 describe('webhookRetryDelaySec', () => {
   it('is capped exponential backoff from a 5-minute base', () => {
     expect(webhookRetryDelaySec(1)).toBe(300);    // 5m
@@ -281,5 +322,69 @@ describe('runWebhookRetrySweep — cron gate', () => {
     const { env, signalled } = fakeCronKv();
     await runWebhookRetrySweep(env, NOW, { db: makeProbeDb([], new Date(NOW + 80 * 60_000)) });
     expect(signalled()).toBe(false);
+  });
+
+  /**
+   * A dead URL on a sparse stream: its delivery keeps failing, and each retry is further out. Only the
+   * first two retries (5 and 10 minutes) hold the gate open; from the third attempt on the backoff is
+   * 20 minutes or more and the floor serves it. The fake applies the attempts bound the probe's WHERE
+   * clause carries, so the bound the sweep actually sends is what decides.
+   */
+  describe('only the first two retries hold the gate open', () => {
+    const probeDb = (waiting: Array<{ attempts: number; at: Date }>) => {
+      const wheres: unknown[] = [];
+      const db = {
+        select: () => ({
+          from: () => ({
+            innerJoin: () => ({
+              where: (condition: unknown) => {
+                wheres.push(condition);
+                const bound = new PgDialect().sqlToQuery(condition as SQL).params.find((p): p is number => typeof p === 'number');
+                const eligible = waiting
+                  .filter((row) => bound === undefined || row.attempts <= bound)
+                  .sort((a, b) => a.at.getTime() - b.at.getTime());
+                return {
+                  limit: async () => [],
+                  orderBy: () => ({ limit: async () => (eligible[0] ? [{ at: eligible[0].at }] : []) }),
+                };
+              },
+            }),
+          }),
+        }),
+        update: () => ({ set: () => ({ where: () => Promise.resolve(undefined) }) }),
+      } as any;
+      return { db, wheres };
+    };
+
+    it('the threshold is exactly the 5 and 10 minute backoffs', () => {
+      expect(WEBHOOK_SIGNALLED_ATTEMPTS).toBe(2);
+      expect(webhookRetryDelaySec(WEBHOOK_SIGNALLED_ATTEMPTS)).toBe(10 * 60);
+      expect(webhookRetryDelaySec(WEBHOOK_SIGNALLED_ATTEMPTS + 1)).toBe(20 * 60);
+    });
+
+    it('signals for a delivery waiting on its first or second retry', async () => {
+      for (const attempts of [1, 2]) {
+        const { env, signalled } = fakeCronKv();
+        await runWebhookRetrySweep(env, NOW, { db: probeDb([{ attempts, at: new Date(NOW + webhookRetryDelaySec(attempts) * 1000) }]).db });
+        expect(signalled()).toBe(true);
+      }
+    });
+
+    it('does NOT signal for a delivery past the second retry, even though its retry is inside the floor window', async () => {
+      for (const attempts of [3, 4]) {
+        const { env, signalled } = fakeCronKv();
+        // 20 minutes is inside a 30-minute floor horizon: only the attempts bound keeps the gate shut.
+        await runWebhookRetrySweep(env, NOW, { db: probeDb([{ attempts, at: new Date(NOW + 20 * 60_000) }]).db });
+        expect(signalled()).toBe(false);
+      }
+    });
+
+    it('still signals for an early-retry delivery when a later-backoff one is also waiting', async () => {
+      const { env, signalled } = fakeCronKv();
+      await runWebhookRetrySweep(env, NOW, {
+        db: probeDb([{ attempts: 3, at: new Date(NOW + 20 * 60_000) }, { attempts: 1, at: new Date(NOW + 5 * 60_000) }]).db,
+      });
+      expect(signalled()).toBe(true);
+    });
   });
 });

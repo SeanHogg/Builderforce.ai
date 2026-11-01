@@ -130,8 +130,10 @@ describe('a SENDER-level terminal failure', () => {
     expect(String(payload(queuedSettle!).error)).toContain('401');
     expect(payload(campaign!)).toMatchObject({ status: 'failed' });
     expect(payload(campaign!)).toHaveProperty('completedAt');
-    expect(rendered(payload(campaign!).failed).params).toEqual([4]);
-    expect(rendered(payload(campaign!).sent).params).toEqual([0]);
+    // Both totals are counted from the ledger after the settles (not added to), so the statement
+    // carries the row status it counts rather than a delta.
+    expect(rendered(payload(campaign!).failed).params).toEqual(['failed']);
+    expect(rendered(payload(campaign!).sent).params).toEqual(['sent']);
     expect(queuedSettle).toBeDefined();
     expect(sendingSettle).toBeDefined();
     // The queued settle is counted from RETURNING, so it must ask for it.
@@ -150,8 +152,8 @@ describe('a SENDER-level terminal failure', () => {
     expect(text).toContain('"campaign_id" = $');
     expect(text).toContain('"tenant_id" = $');
     expect(params).toEqual(expect.arrayContaining(['sending', 1, 7]));
-    // The two rows the settle returned are counted on the campaign (1 from this batch + 2).
-    expect(rendered(payload(updates(db).at(-1)!).failed).params).toEqual([3]);
+    // The campaign's `failed` is counted from the ledger AFTER that settle (so it includes the two rows it returned).
+    expect(rendered(payload(updates(db).at(-1)!).failed).params).toEqual(['failed']);
   });
 
   it('keeps what the batch had already sent, and settles the order: queued, then sending, then the campaign', async () => {
@@ -167,8 +169,8 @@ describe('a SENDER-level terminal failure', () => {
     const writes = updates(db).slice(4);
     expect(writes.map((c) => payload(c).status)).toEqual(['failed', 'failed', 'failed']);
     expect(writes.map((c) => Object.keys(payload(c)).includes('completedAt'))).toEqual([false, false, true]);
-    expect(rendered(payload(writes[2]!).sent).params).toEqual([1]);
-    expect(rendered(payload(writes[2]!).failed).params).toEqual([1]);
+    expect(rendered(payload(writes[2]!).sent).params).toEqual(['sent']);
+    expect(rendered(payload(writes[2]!).failed).params).toEqual(['failed']);
   });
 
   it('also fails the campaign (and settles `sending` rows) when the sender cannot be resolved at all', async () => {
@@ -664,5 +666,195 @@ describe('a database error while recording an ACCEPTED send', () => {
     expect(updates(db).some((c) => payload(c).status === 'failed' || payload(c).status === 'queued')).toBe(false);
     // …and the batch did not carry on to row 2 on a database that just failed.
     expect(send).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('an outage that delivered nothing does not hold the cron gate open', () => {
+  const timeout = () => new TransportError('Upstream did not respond within 20s', true, 'recipient', true);
+
+  it('does NOT signal when the batch stopped as provider-unavailable, sent nothing, but had settled a failed row', async () => {
+    // Row 1 is on the register (settled failed without a send), then the provider is down for row 2.
+    // `sent + failed > 0` and rows are still queued, so the old rule signalled every tick of the outage.
+    send.mockRejectedValue(timeout());
+    const { env, puts } = kvEnv();
+    const db = fakeDb([
+      [sendingCampaign], [], [recipient(1), recipient(2), recipient(3)],
+      [{ k: 'e', v: 'r1@x.com' }],
+      [{ id: 1 }],                  // row 1 settled failed
+      ...claimAndWriteBack([2]),    // row 2: claim, requeue
+      [{ remaining: 5, queuedLeft: 5 }], [],
+    ]);
+    const result = await run(env, db);
+    expect(result).toMatchObject({ sent: 0, failed: 1, stopped: 'provider_unavailable' });
+    expect(puts).toEqual([]);
+  });
+
+  it('still signals when the batch delivered something before the provider stopped answering', async () => {
+    send.mockResolvedValueOnce({}).mockRejectedValue(timeout());
+    const { env, puts } = kvEnv();
+    const db = fakeDb([
+      [sendingCampaign], [], [recipient(1), recipient(2)], [],
+      ...claimAndWriteBack([1, 2]),
+      [{ remaining: 5, queuedLeft: 5 }], [],
+    ]);
+    const result = await run(env, db);
+    expect(result).toMatchObject({ sent: 1, stopped: 'provider_unavailable' });
+    expect(puts).toEqual(['cron:work-pending']);
+  });
+});
+
+describe('a RETRYABLE failure of the sender (a rotated platform key)', () => {
+  it('stops the batch and requeues the row, so one outage does not cost every row an attempt', async () => {
+    send.mockRejectedValue(new TransportError('Resend rejected the key (401)', true, 'sender'));
+    const { env, puts } = kvEnv();
+    const db = fakeDb([
+      [sendingCampaign], [], ids(5).map((id) => recipient(id)), [],
+      [{ id: 1 }], [{ id: 1 }],   // row 1: claim, requeue. Rows 2..5 are never claimed.
+      [{ remaining: 5, queuedLeft: 5 }], [],
+    ]);
+    const result = await run(env, db);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ sent: 0, failed: 0, status: 'sending', stopped: 'provider_unavailable' });
+    expect(updates(db).filter((c) => payload(c).status === 'sending')).toHaveLength(1);
+    expect(payload(updates(db)[1]!)).toMatchObject({ status: 'queued' });
+    expect(puts).toEqual([]);
+  });
+});
+
+describe('a failure where the message was definitely NOT delivered', () => {
+  const throttled = () => new TransportError('Resend returned 429', true, 'recipient', true, true);
+  const noAnswer = () => new TransportError('Upstream did not respond within 20s', true, 'recipient', true);
+
+  it('requeues and gives back the attempt the claim took, in the same write', async () => {
+    send.mockRejectedValue(throttled());
+    const db = fakeDb([[sendingCampaign], [], [recipient(1, 0)], [], [{ id: 1 }], [{ id: 1 }], [{ remaining: 1, queuedLeft: 1 }], []]);
+    await run(kvEnv().env, db);
+    const writeBack = payload(updates(db)[1]!);
+    expect(writeBack).toMatchObject({ status: 'queued' });
+    const refund = rendered(writeBack.attempts);
+    expect(refund.sql).toContain('- 1');
+    expect(refund.sql).toContain('"attempts"');
+  });
+
+  it('requeues even at the attempt ceiling: a throttle never writes a recipient off', async () => {
+    send.mockRejectedValue(throttled());
+    // attempts is counted at claim, so a row read with 2 is on its third (the ceiling).
+    const db = fakeDb([[sendingCampaign], [], [recipient(1, 2)], [], [{ id: 1 }], [{ id: 1 }], [{ remaining: 1, queuedLeft: 1 }], []]);
+    const result = await run(kvEnv().env, db);
+    expect(payload(updates(db)[1]!)).toMatchObject({ status: 'queued' });
+    expect(result).toMatchObject({ failed: 0, stopped: 'provider_unavailable' });
+  });
+
+  it('keeps today\'s behaviour for NO ANSWER: the attempt is spent, and the ceiling still writes the row off', async () => {
+    send.mockRejectedValue(noAnswer());
+    const db = fakeDb([[sendingCampaign], [], [recipient(1, 2)], [], [{ id: 1 }], [{ id: 1 }], [{ remaining: 1, queuedLeft: 1 }], []]);
+    const result = await run(kvEnv().env, db);
+    const writeBack = payload(updates(db)[1]!);
+    expect(writeBack).toMatchObject({ status: 'failed' });
+    expect(writeBack).not.toHaveProperty('attempts');
+    expect(result).toMatchObject({ failed: 1 });
+  });
+
+  it('keeps the attempt spent for a requeued no-answer below the ceiling (no refund)', async () => {
+    send.mockRejectedValue(noAnswer());
+    const db = fakeDb([[sendingCampaign], [], [recipient(1, 0)], [], [{ id: 1 }], [{ id: 1 }], [{ remaining: 1, queuedLeft: 1 }], []]);
+    await run(kvEnv().env, db);
+    const writeBack = payload(updates(db)[1]!);
+    expect(writeBack).toMatchObject({ status: 'queued' });
+    expect(writeBack).not.toHaveProperty('attempts');
+  });
+});
+
+describe('the per-batch re-check also reads an SMS member\'s own STOP', () => {
+  const smsSender = () => vi.mocked(resolveCampaignSender).mockResolvedValue({
+    ok: true, sender: { transport: 'twilio', channel: 'sms', fromLabel: '+14155551234', send },
+  });
+  const member = (id: number, phoneStatus: string | null) => ({ ...recipient(id), phone: `+1415555100${id}`, phoneStatus });
+
+  it('settles an unsubscribed SMS member as failed without sending or claiming it, though the register is clean', async () => {
+    smsSender();
+    send.mockResolvedValue({});
+    const db = fakeDb([
+      [{ ...sendingCampaign, channel: 'sms' }], [], [member(1, 'unsubscribed'), member(2, 'subscribed')],
+      [],                              // the register read: nobody on it (a STOP is not written there)
+      [{ id: 1 }],                     // row 1 settled failed
+      ...claimAndWriteBack([2]),
+      [{ remaining: 0, queuedLeft: 0 }], [{ status: 'sent' }],
+    ]);
+    const result = await run(kvEnv().env, db);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect((send.mock.calls[0]![0] as { to: string }).to).toBe('+14155551002');
+    expect(result).toMatchObject({ sent: 1, failed: 1 });
+    const blocked = updates(db).find((c) => payload(c).error === DO_NOT_CONTACT_SEND_ERROR)!;
+    expect(payload(blocked)).toMatchObject({ status: 'failed' });
+    expect(payload(blocked)).not.toHaveProperty('attempts');
+  });
+
+  it('does not apply to an email campaign: the phone consent says nothing about an address', async () => {
+    send.mockResolvedValue({});
+    const db = fakeDb([
+      [sendingCampaign], [], [member(1, 'unsubscribed')], [],
+      ...claimAndWriteBack([1]),
+      [{ remaining: 0, queuedLeft: 0 }], [{ status: 'sent' }],
+    ]);
+    const result = await run(kvEnv().env, db);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ sent: 1, failed: 0 });
+  });
+
+  it('reads the member\'s phone_status in the queued select', async () => {
+    send.mockResolvedValue({});
+    const db = fakeDb([[sendingCampaign], [], [], [{ remaining: 0, queuedLeft: 0 }], []]);
+    await run(kvEnv().env, db);
+    const read = db.calls.find((c) => c.kind === 'select' && c.orderBy?.length === 2)!;
+    expect(Object.keys(read.args[0] as object)).toContain('phoneStatus');
+  });
+});
+
+describe('the non-final counters only add while the campaign is still `sending`', () => {
+  it('guards both deltas, so a runner that lost the race to finish the campaign cannot overcount it', async () => {
+    send.mockResolvedValueOnce({}).mockRejectedValueOnce(recipientRefused());
+    const db = fakeDb([
+      [sendingCampaign], [], [recipient(1), recipient(2)], [], ...claimAndWriteBack([1, 2]),
+      [{ remaining: 4, queuedLeft: 4 }], [{ status: 'sent' }],
+    ]);
+    await run(kvEnv().env, db);
+    const write = payload(updates(db).at(-1)!);
+    for (const [column, delta] of [['sent', 1], ['failed', 1]] as const) {
+      const total = rendered(write[column]);
+      expect(total.sql).toContain("CASE WHEN");
+      expect(total.sql).toContain("= 'sending'");
+      expect(total.params).toEqual([delta]);
+    }
+  });
+});
+
+describe('failing a campaign counts its totals from the ledger', () => {
+  it('takes `sent` and `failed` from the ledger, in the same statement that follows the settles', async () => {
+    send.mockResolvedValueOnce({}).mockRejectedValueOnce(senderDead());
+    const db = fakeDb([
+      [sendingCampaign], [], [recipient(1), recipient(2), recipient(3)], [],
+      ...claimAndWriteBack([1, 2]),
+      [{ id: 3 }], [], [],
+    ]);
+    const result = await run(kvEnv().env, db);
+    expect(result).toMatchObject({ sent: 1, failed: 2, status: 'failed' });
+    const writes = updates(db).slice(4);
+    // queued settle, `sending` settle, THEN the campaign: the count runs after both.
+    expect(writes).toHaveLength(3);
+    const campaign = payload(writes[2]!);
+    for (const [column, status] of [['sent', 'sent'], ['failed', 'failed']] as const) {
+      const total = rendered(campaign[column]);
+      expect(total.sql).toContain('count(*)');
+      expect(total.sql).toContain('"marketing_campaign_sends"."campaign_id" = "marketing_campaigns"."id"');
+      expect(total.params).toEqual([status]);
+    }
+  });
+
+  it('still returns the rows it settled itself, so the batch reports a failed count that agrees with the ledger', async () => {
+    send.mockRejectedValue(senderDead());
+    const db = fakeDb([[sendingCampaign], [], [recipient(1), recipient(2)], [], [{ id: 1 }], [{ id: 1 }], [{ id: 2 }], [{ id: 97 }, { id: 98 }], []]);
+    const result = await run(kvEnv().env, db);
+    expect(result).toMatchObject({ sent: 0, failed: 4, status: 'failed' });
   });
 });

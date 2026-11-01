@@ -6,7 +6,7 @@
  * `PARITY_SNAPSHOT=write` generates the snapshots from the loop engine (see `snapshots.ts`).
  */
 import { describe, expect, it } from 'vitest';
-import { diffRecords } from './diff';
+import { comparable, diffRecords, oneReportPerRun } from './diff';
 import { ENGINES } from './engines';
 import { runScenario } from './harness';
 import { scenarios } from './scenarios';
@@ -23,7 +23,8 @@ describe('every engine reproduces the stored record of the loop', () => {
         }
         const stored = readSnapshot(s.id);
         expect(stored, `no snapshot for ${s.id}: generate with PARITY_SNAPSHOT=write on the loop engine`).toBeDefined();
-        expect(diffRecords(stored, record, ['snapshot', engine])).toEqual([]);
+        expect(oneReportPerRun(engine, record), 'one outcome report per run').toEqual([]);
+        expect(diffRecords(comparable(stored!), comparable(record), ['snapshot', engine])).toEqual([]);
       }, 60_000);
     }
   }

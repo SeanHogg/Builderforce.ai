@@ -44,7 +44,7 @@
 import { sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { resultRows } from '../kernel/metricRollup';
-import { angleGroupCount, bareAddress, canonicalAddress, isE164, splitAddressList } from '../shared/contactAddress';
+import { bareAddress, canonicalAddress, isAmbiguousMailbox, isE164, splitAddressList } from '../shared/contactAddress';
 
 /** Well under Postgres' 65,535 bind-parameter cap, with room for the domain list. */
 const CHUNK = 5_000;
@@ -75,13 +75,15 @@ export function suppressionKey(contact: string): string | null {
  * FAILS CLOSED. This guard decides whether something may be sent at all, so an entry it cannot
  * reduce to one address is a do-not-contact one: no {@link suppressionKey} (`Jane a@x.com`,
  * `a@x.com b@y.com`, an unterminated `Jane <a@x.com, b@y.com`), or more than one angle group
- * (`<a@x.com> <b@y.com>`), where the parser would pick one address and the mail server another.
+ * (`<a@x.com> <b@y.com>`), where the parser would pick one address and the mail server another, or
+ * unbalanced parentheses (`ok@x.com (, erased@y.com`) or text after the angle group
+ * (`<ok@x.com> erased@y.com`), see {@link isAmbiguousMailbox}.
  * A parser that waves through what it cannot read is a way round the register. (The contract of
  * {@link suppressedEmails} is different on purpose: a social handle is no address and passes.)
  */
 export async function isDoNotContact(db: Db, tenantId: number, to: string): Promise<boolean> {
   const entries = splitAddressList(to);
-  if (entries.some((entry) => suppressionKey(entry) === null || angleGroupCount(entry) > 1)) return true;
+  if (entries.some((entry) => suppressionKey(entry) === null || isAmbiguousMailbox(entry))) return true;
   return (await suppressedEmails(db, tenantId, entries)).size > 0;
 }
 

@@ -1356,5 +1356,8 @@
    "message": "The model `fake-model` described tool calls instead of making them, 3 turns in a row, so nothing was actually run and the answer above is only a description of intended actions. Before switching models, check your runtime or gateway log for this turn: a request REJECTED upstream — a prompt over the context limit, an exhausted quota — produces exactly these symptoms, and no other model will fix it. If the log is clean, this is a model limitation and a different model is the answer.",
    "action": null
   }
+ },
+ "agentOnly": {
+  "recorded": []
  }
 }

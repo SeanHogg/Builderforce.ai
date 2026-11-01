@@ -2460,5 +2460,8 @@
    "message": "The model `fake-model` handed the remaining work back to you as commands to run yourself, 3 turns in a row, rather than running them with the tools it holds, so nothing was actually run and the steps above are still yours to run — treat the change as UNVERIFIED. Nothing upstream failed here — the model reached the right answer and declined to carry it out, which is an agency limitation. Run the steps it listed, or retry on a model from the coding pool, which is selected for exactly this.",
    "action": null
   }
+ },
+ "agentOnly": {
+  "recorded": []
  }
 }

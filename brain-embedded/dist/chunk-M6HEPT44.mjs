@@ -310,9 +310,10 @@ async function runAgentLoop(args) {
       const last = prepared[prepared.length - 1];
       const tail = prepared.length > 1 && !last.result && !ports.isReadOnly(last.call) ? last : void 0;
       const batch = tail ? prepared.slice(0, -1) : prepared;
-      const dispatchOne = (p) => p.result ? Promise.resolve(p.result) : raceCancel(ports.dispatch(p.call, ctx), signal);
+      const start = (call) => signal?.aborted ? Promise.resolve(CANCELLED) : raceCancel(ports.dispatch(call, ctx), signal);
+      const dispatchOne = (p) => p.result ? Promise.resolve(p.result) : start(p.call);
       const results = await Promise.all(batch.map(dispatchOne));
-      if (tail && !results.includes(CANCELLED)) results.push(await raceCancel(ports.dispatch(tail.call, ctx), signal));
+      if (tail && !results.includes(CANCELLED)) results.push(await start(tail.call));
       if (results.includes(CANCELLED)) {
         const stopped = { data: { ok: false, aborted: true, error: "stopped" }, isError: true };
         for (const rest of calls.slice(i)) ctx.messages.push(codec.tool(rest, stopped));
@@ -1089,4 +1090,4 @@ export {
   replayPendingWords,
   replayAllPendingWords
 };
-//# sourceMappingURL=chunk-TGAUFKVL.mjs.map
+//# sourceMappingURL=chunk-M6HEPT44.mjs.map

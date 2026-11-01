@@ -29813,8 +29813,8 @@
     }
   },
   "mailboxSend": {
-    "doNotContactTitle": "Este destinatario está en una lista de no contactar",
-    "doNotContactMessage": "Se dio de baja, el correo rebotó o pidió que no lo contactaran. Envía este mensaje de todos modos solo si estás seguro de que debes hacerlo.",
+    "doNotContactTitle": "Uno o más destinatarios están en una lista de no contactar, o no se pudo leer una dirección",
+    "doNotContactMessage": "Uno o más destinatarios se dieron de baja, el correo rebotó o pidieron que no los contactaran, o no se pudo leer una dirección. Envía este mensaje de todos modos solo si estás seguro de que debes hacerlo.",
     "sendAnyway": "Enviar de todos modos"
   },
   "inboxApp": {

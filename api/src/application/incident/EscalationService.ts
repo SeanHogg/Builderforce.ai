@@ -16,7 +16,7 @@ import { escalationPolicies, escalationLevels, prodIncidents, incidentEvents } f
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { OnCallService } from './OnCallService';
 import { notifyIncident, type IncidentSummary } from './incidentNotifier';
-import { floorIntervalMs, signalPendingWorkIfDueWithin } from '../runtime/cronWorkSignal';
+import { signalPendingWorkIfDueWithin } from '../runtime/cronWorkSignal';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -207,7 +207,7 @@ export class EscalationService {
       // The sweep that fires the later levels runs on the KV-gated tick: arm it so a 15-minute
       // level is not left waiting for the 30-minute floor. Nothing is signalled for a ladder
       // of one level, or for a next level further out than the floor (the floor re-evaluates it).
-      await signalPendingWorkIfDueWithin(env, nextEscalationDueAtMs(resolved.levels, first.level, inc.startedAt), Date.now(), floorIntervalMs(env));
+      await signalPendingWorkIfDueWithin(env, nextEscalationDueAtMs(resolved.levels, first.level, inc.startedAt));
     } else {
       // No policy — hit the global channels + managers so the page is never dropped.
       await notifyIncident(env, this.db, { tenantId, incident: summary, memberRefs: [], level: 0, note: 'Initial page (no escalation policy configured)' });

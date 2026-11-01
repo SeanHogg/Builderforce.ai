@@ -1,7 +1,7 @@
 import * as react from 'react';
 import { ReactNode, Dispatch, SetStateAction } from 'react';
-import { G as GateOutcome, C as ChatCompletionMessage, B as BrainTraceEvent, a as BrainMessage, b as BrainRunActivity, R as RunTurn, c as BrainRunRequest, d as BrainRunSnapshot, e as RunKnowledgeState, f as RunOutcomeRow, g as RunKey, h as GlobalRunState, i as BrainRunPersistence, j as BrainTransport, k as BrainChat, l as ChatInputAttachment, m as BrainStreamFn, S as SpendSavingsSummary, n as RunEndOutcome, o as CompletionUsage, L as LocalFirstAccount, p as StreamChatOptions, q as StreamHandlers, r as StreamChatResult, s as LocalFirstAttemptRecord, t as LocalFirstAttempt, u as LocalFirstWorkload, P as ProjectMemoryRequest, E as Effort, v as EvermindRunHooks, w as BrainToolSpec, x as BrainModality, y as ChatMode, z as RunWindowSources, A as ReasoningIntent, D as ChatRosterAgent, F as RunEngineId, H as ContentPart, I as CompletionMetadata, J as RunProgress, K as BrainDiagnostics, M as StaffingSummary, U as UsageSurface } from './pendingWords-AN84FWiz.cjs';
-export { N as AnswerOriginCost, O as AssembledToolCall, Q as AvoidedRunCall, T as BrainDiagnosticsContext, V as BrainRunOutcome, W as BrainRunPhase, X as BuildBrainTriageOptions, Y as ByoUnresolvedEntry, Z as CHAT_MODES, _ as CHAT_MODE_ICON, $ as ChatWorkDirectiveOptions, a0 as DispatchRefusal, a1 as EffortProfile, a2 as EvermindLearnOutcome, a3 as EvermindLearnTarget, a4 as ImageUrlContentPart, a5 as LocalFirstAttemptSummary, a6 as MAX_STOP_HOOK_ROUNDS, a7 as MemoryAnswerOptions, a8 as MemoryFirstAnswer, a9 as MemorySurface, aa as ModelPreflightResult, ab as ModelScore, ac as ModelTurn, ad as ModelWindowSources, ae as NEW_CHAT_MODE, af as PersonaSubagent, ag as PrefetchResult, ah as RESTING_CHAT_MODE, ai as ReasoningLevel, aj as RepeatStreak, ak as RepeatedTarget, al as RepetitionLoopError, am as RunLineage, an as RunOutcomeReport, ao as RunPipelineSettings, ap as RunStageModels, aq as RunStopHook, ar as RunStopInput, as as STEP_MESSAGE_ROLE, at as SUBAGENT_OF_META_KEY, au as SavingsBreakdown, av as SavingsBySource, aw as SavingsSourceKey, ax as ServedRead, ay as SpendBreakdown, az as StreamInterruptedError, aA as SubagentOrigin, aB as TextContentPart, aC as ToolExposure, aD as TransportError, aE as UNBACKED_TICKET_CLAIM_NOTICE, aF as UNBACKED_WRITE_CLAIM_NOTICE, aG as USAGE_SURFACES, aH as USAGE_SURFACE_HEADER, aI as UpstreamTurnEvidence, aJ as accountUsedInTrace, aK as activityTarget, aL as askStopHook, aM as attachEvermindLearn, aN as buildBrainTriageReport, aO as byoReasonHint, aP as byoUnresolvedInTrace, aQ as byoUnresolvedSummary, aR as chatConversationDirective, aS as chatModeDirective, aT as chatRosterFromParticipants, aU as chatWorkDirective, aV as clearPendingWords, aW as computeBrainDiagnostics, aX as computeRunProgress, aY as contextWindowOf, aZ as describeLiveStep, a_ as detectAnnouncedButUnmadeToolCall, a$ as detectUnbackedTicketClaim, b0 as detectUnbackedWriteClaim, b1 as effortProfile, b2 as formatBrainDiagnostics, b3 as formatBrainProvenance, b4 as formatBytes, b5 as formatDispatchRefusals, b6 as formatEvermindLearnStep, b7 as formatModelScorecard, b8 as formatModelTurnLog, b9 as formatStaffingSummary, ba as hasEditIntent, bb as isChatMode, bc as isDispatchTool, bd as isEffort, be as isEvermindModel, bf as isFailedToolResult, bg as isMutationTool, bh as isStepMessage, bi as isTicketWriteTool, bj as isUsageSurface, bk as localFallbackTrace, bl as midRunNotice, bm as modelFailoversInTrace, bn as modelScorecard, bo as modelTurnLog, bp as modelsUsedInTrace, bq as narratedUnadvertisedInTrace, br as normalizeChatMode, bs as parseByoUnresolved, bt as parseSubagentOrigin, bu as projectMemoryHooks, bv as reasoningForRun, bw as resolveContextWindow, bx as savedChatOf, by as serverChatIdOf, bz as setPendingWordsOwner, bA as shortenTarget, bB as staffingSummaryInTrace, bC as stallRecoveriesInTrace, bD as stallUnrecoveredInTrace, bE as streamChatCompletion, bF as summarizeLocalFirstAttempt, bG as toolActivity, bH as toolExposureInTrace, bI as workFiledNotStaffedVerdict } from './pendingWords-AN84FWiz.cjs';
+import { G as GateOutcome, C as ChatCompletionMessage, B as BrainTraceEvent, a as BrainMessage, b as BrainRunActivity, R as RunTurn, c as BrainRunRequest, d as BrainRunSnapshot, e as RunKnowledgeState, f as RunOutcomeRow, E as EntryPoint, g as RunKey, h as GlobalRunState, i as BrainRunPersistence, j as BrainTransport, k as BrainChat, l as ChatInputAttachment, m as BrainStreamFn, S as SpendSavingsSummary, n as RunEndOutcome, o as CompletionUsage, L as LocalFirstAccount, p as StreamChatOptions, q as StreamHandlers, r as StreamChatResult, s as LocalFirstAttemptRecord, t as LocalFirstAttempt, u as LocalFirstWorkload, P as ProjectMemoryRequest, v as Effort, w as EvermindRunHooks, x as BrainToolSpec, y as BrainModality, z as ChatMode, A as RunWindowSources, D as ReasoningIntent, F as ChatRosterAgent, H as RunEngineId, I as ContentPart, J as CompletionMetadata, K as RunProgress, M as BrainDiagnostics, N as StaffingSummary, U as UsageSurface } from './pendingWords-BSAKg0uh.cjs';
+export { O as AnswerOriginCost, Q as AssembledToolCall, T as AvoidedRunCall, V as BrainDiagnosticsContext, W as BrainRunOutcome, X as BrainRunPhase, Y as BuildBrainTriageOptions, Z as ByoUnresolvedEntry, _ as CHAT_MODES, $ as CHAT_MODE_ICON, a0 as ChatWorkDirectiveOptions, a1 as DispatchRefusal, a2 as EffortProfile, a3 as EvermindLearnOutcome, a4 as EvermindLearnTarget, a5 as ImageUrlContentPart, a6 as LocalFirstAttemptSummary, a7 as MAX_STOP_HOOK_ROUNDS, a8 as MemoryAnswerOptions, a9 as MemoryFirstAnswer, aa as MemorySurface, ab as ModelPreflightResult, ac as ModelScore, ad as ModelTurn, ae as ModelWindowSources, af as NEW_CHAT_MODE, ag as PersonaSubagent, ah as PrefetchResult, ai as RESTING_CHAT_MODE, aj as ReasoningLevel, ak as RepeatStreak, al as RepeatedTarget, am as RepetitionLoopError, an as RunLineage, ao as RunOutcomeReport, ap as RunPipelineSettings, aq as RunStageModels, ar as RunStopHook, as as RunStopInput, at as STEP_MESSAGE_ROLE, au as SUBAGENT_OF_META_KEY, av as SavingsBreakdown, aw as SavingsBySource, ax as SavingsSourceKey, ay as ServedRead, az as SpendBreakdown, aA as StreamInterruptedError, aB as SubagentOrigin, aC as TextContentPart, aD as ToolExposure, aE as TransportError, aF as UNBACKED_TICKET_CLAIM_NOTICE, aG as UNBACKED_WRITE_CLAIM_NOTICE, aH as USAGE_SURFACES, aI as USAGE_SURFACE_HEADER, aJ as UpstreamTurnEvidence, aK as accountUsedInTrace, aL as activityTarget, aM as askStopHook, aN as attachEvermindLearn, aO as buildBrainTriageReport, aP as byoReasonHint, aQ as byoUnresolvedInTrace, aR as byoUnresolvedSummary, aS as chatConversationDirective, aT as chatModeDirective, aU as chatRosterFromParticipants, aV as chatWorkDirective, aW as clearPendingWords, aX as computeBrainDiagnostics, aY as computeRunProgress, aZ as contextWindowOf, a_ as describeLiveStep, a$ as detectAnnouncedButUnmadeToolCall, b0 as detectUnbackedTicketClaim, b1 as detectUnbackedWriteClaim, b2 as effortProfile, b3 as formatBrainDiagnostics, b4 as formatBrainProvenance, b5 as formatBytes, b6 as formatDispatchRefusals, b7 as formatEvermindLearnStep, b8 as formatModelScorecard, b9 as formatModelTurnLog, ba as formatStaffingSummary, bb as hasEditIntent, bc as isChatMode, bd as isDispatchTool, be as isEffort, bf as isEvermindModel, bg as isFailedToolResult, bh as isMutationTool, bi as isStepMessage, bj as isTicketWriteTool, bk as isUsageSurface, bl as localFallbackTrace, bm as midRunNotice, bn as modelFailoversInTrace, bo as modelScorecard, bp as modelTurnLog, bq as modelsUsedInTrace, br as narratedUnadvertisedInTrace, bs as normalizeChatMode, bt as parseByoUnresolved, bu as parseSubagentOrigin, bv as projectMemoryHooks, bw as reasoningForRun, bx as resolveContextWindow, by as savedChatOf, bz as serverChatIdOf, bA as setPendingWordsOwner, bB as shortenTarget, bC as staffingSummaryInTrace, bD as stallRecoveriesInTrace, bE as stallUnrecoveredInTrace, bF as streamChatCompletion, bG as summarizeLocalFirstAttempt, bH as toolActivity, bI as toolExposureInTrace, bJ as workFiledNotStaffedVerdict } from './pendingWords-BSAKg0uh.cjs';
 import { CompactMemo, SummaryCompletion } from '@seanhogg/builderforce-memory/working';
 export { CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, ConsolidationMarkerMeta, HISTORY_TOKEN_BUDGET, consolidationMarkerContent, consolidationMarkerOf, consolidationMetadata, isConsolidationMarker, lastConsolidationIndex, scopeToConsolidation } from '@seanhogg/builderforce-memory/working';
 import { L as LocalRuntimeId, a as LocalRuntimeProbe, b as LocalEndpoint } from './probe-BF7uUc_H.cjs';
@@ -2139,6 +2139,30 @@ declare class ReadCoverage extends ReadCoverage$1 {
 }
 
 /**
+ * Cost levers — the ONE on/off decision for every LLM cost-optimization lever.
+ *
+ * Each lever in the PRD (A1…F3) ships behind its own id here instead of a
+ * bespoke env flag per feature, so rollout, kill switch and the control group in
+ * the cost metrics all read the same answer.
+ *
+ * Resolution, first match wins:
+ *   1. `COST_LEVER_<ID>` in env — `on` / `off` (also 1/0, true/false), or an
+ *      integer 0–100 = the share of tenants it is on for.
+ *   2. `COST_LEVERS_ALL=off` — global kill switch for every lever.
+ *   3. The manifest default (`rollout`, 0–100).
+ *
+ * A percentage is applied by a stable FNV-1a bucket of `<leverId>:<tenantId>`,
+ * so a tenant stays in the same arm across requests and isolates, and different
+ * levers split tenants independently. No tenant id → the lever is on only at 100.
+ *
+ * On-device hosts (the VS Code extension, the on-prem runtime) have no tenant on the
+ * local path, so they bucket by a stable INSTALL id instead ({@link isOnDeviceCostLeverOn})
+ * — one install stays in one arm, and a 10% lever reaches about 10% of installs rather
+ * than none of them.
+ */
+type CostLeverId = 'a2_run_budget' | 'a3_progress_detector' | 'b1_stable_prefix' | 'b2_semantic_cache' | 'b3_single_flight' | 'b4_agent_answer_replay' | 'c2_observation_masking' | 'c3_task_state' | 'c4_adaptive_context' | 'c5_cloud_repo_map' | 'c6_rerank' | 'c7_tool_output_policy' | 'c8_token_compression' | 'c9_price_tier_budget' | 'd1_verifier_cascade' | 'd2_difficulty_router' | 'd3_routing_exploration' | 'd4_role_reasoning' | 'd5_output_caps' | 'd6_batch_api' | 'd7_deterministic_handlers' | 'd8_parallel_tool_calls' | 'e1_skill_ranking' | 'e2_specialists' | 'e3_free_embeddings' | 'e5_verified_local_label';
+
+/**
  * Untaken tool call — detection + recovery, shared by every agent loop.
  *
  * Recovery has two halves and BOTH live in this file: the re-prompt budget with its
@@ -2267,30 +2291,6 @@ interface ModelFallbackSurface {
  * so the failover cannot hand back the model that just failed.
  */
 declare function nextFallbackModel(surface: ModelFallbackSurface | null | undefined, tried: readonly string[]): string | undefined;
-
-/**
- * Cost levers — the ONE on/off decision for every LLM cost-optimization lever.
- *
- * Each lever in the PRD (A1…F3) ships behind its own id here instead of a
- * bespoke env flag per feature, so rollout, kill switch and the control group in
- * the cost metrics all read the same answer.
- *
- * Resolution, first match wins:
- *   1. `COST_LEVER_<ID>` in env — `on` / `off` (also 1/0, true/false), or an
- *      integer 0–100 = the share of tenants it is on for.
- *   2. `COST_LEVERS_ALL=off` — global kill switch for every lever.
- *   3. The manifest default (`rollout`, 0–100).
- *
- * A percentage is applied by a stable FNV-1a bucket of `<leverId>:<tenantId>`,
- * so a tenant stays in the same arm across requests and isolates, and different
- * levers split tenants independently. No tenant id → the lever is on only at 100.
- *
- * On-device hosts (the VS Code extension, the on-prem runtime) have no tenant on the
- * local path, so they bucket by a stable INSTALL id instead ({@link isOnDeviceCostLeverOn})
- * — one install stays in one arm, and a 10% lever reaches about 10% of installs rather
- * than none of them.
- */
-type CostLeverId = 'a2_run_budget' | 'a3_progress_detector' | 'b1_stable_prefix' | 'b2_semantic_cache' | 'b3_single_flight' | 'b4_agent_answer_replay' | 'c2_observation_masking' | 'c3_task_state' | 'c4_adaptive_context' | 'c5_cloud_repo_map' | 'c6_rerank' | 'c7_tool_output_policy' | 'c8_token_compression' | 'c9_price_tier_budget' | 'd1_verifier_cascade' | 'd2_difficulty_router' | 'd3_routing_exploration' | 'd4_role_reasoning' | 'd5_output_caps' | 'd6_batch_api' | 'd7_deterministic_handlers' | 'd8_parallel_tool_calls' | 'e1_skill_ranking' | 'e2_specialists' | 'e3_free_embeddings' | 'e5_verified_local_label';
 
 /**
  * The model hand-off policy for ONE agent run, as a pure reducer.
@@ -2584,21 +2584,6 @@ interface CascadeState {
     reasoningBoost: number;
 }
 
-/**
- * The run-outcome write-back's TELEMETRY half — the PRD 35 §8.2 uniform outcome row.
- *
- * Every entry point's run ends in one row (`@builderforce/agent-run`'s `RunOutcomeRow`).
- * A client posts it to `POST /llm/v1/run-outcome` beside the routing fields, under the
- * SAME field names, so an adapter spreads the row into the request and nothing is
- * renamed on the way. {@link parseRunOutcomeTelemetry} validates each field and drops
- * the ones that do not hold — a malformed counter is a missing fact, never a rejected
- * report. Pure and dependency-free, like the rest of this package.
- */
-/** Every entry point a run can be labelled with (PRD 35 §3.2) — the ONE list. A telemetry
- *  label only: nothing branches on it for behaviour. */
-declare const ALL_ENTRY_POINTS: readonly ["vscode", "web", "rovr", "canvas", "on-prem", "cloud"];
-type EntryPoint = (typeof ALL_ENTRY_POINTS)[number];
-
 /** The counter as it crosses a step boundary. */
 interface ServedStreakState {
     streak: number;
@@ -2654,6 +2639,12 @@ interface LadderProgress {
 interface PlatformToolResult {
     data: unknown;
     isError?: boolean;
+    /**
+     * The tool was KILLED through its signal (a steered message or the person's Stop aborted it, and it rejected): the answer is the
+     * steering policy's - interrupted by a message, or stopped - and its row fails, but the call does not count toward the failure streak.
+     * A tool that came back keeps its own result and never sets this.
+     */
+    aborted?: true;
     /** The result's native blocks (text, pictures), kept on the tool row beside `data`, which the model reads as text when it is a string. */
     parts?: RunPart[];
     /** The result's own fields (a tool's details, its tool name), kept on the tool row (`RunMessage.meta`). */
@@ -2677,6 +2668,25 @@ interface MalformedCallPolicy {
         name: string;
         arguments: string;
     }, truncated: boolean, outcome: unknown): void;
+    /**
+     * The surface's own answer to a call with unusable arguments, asked BEFORE the shared wording is used (additive): a surface whose
+     * `ask_user` or `hand_off` has a corrective of its own, or that records the declined call itself. Nothing back ⇒ the shared wording
+     * and {@link refused} stand; a result back is the call's row, and {@link refused} is not called.
+     */
+    answer?(call: {
+        id: string;
+        name: string;
+        arguments: string;
+    }, env: {
+        step: number;
+        truncated: boolean;
+    }): Promise<{
+        data: unknown;
+        isError?: boolean;
+    } | void> | {
+        data: unknown;
+        isError?: boolean;
+    } | void;
 }
 /** The turn's relevance selection over the surface's catalog. */
 interface PlatformSelection {
@@ -2686,6 +2696,18 @@ interface PlatformSelection {
     limit: number;
     /** Tools the prompt names — advertised whatever the query scores. */
     required: ReadonlySet<string>;
+    /**
+     * The tools the run has called, in first-called order (additive): kept advertised for the rest of the run. The surface knows what
+     * it ran - a tool reached through its router counts as the tool it reached, a pin outlives a compaction that dropped its call, and
+     * an earlier run's calls pin nothing. Absent ⇒ the pins are read off the transcript's tool calls.
+     */
+    pinned?: Iterable<string>;
+    /**
+     * The surface's own relevance order over its catalog (additive): from the candidates, the ones that match the query, best first.
+     * Absent ⇒ the shared scorer (`policy/tools/selectTools`), which the cloud and the canvas keep. The structure around it - required
+     * tools first, the catalog-order backfill, the pins appended - is the shared one either way.
+     */
+    rank?(candidates: readonly ToolSchema[], query: string): readonly ToolSchema[];
 }
 /** The surface's own tools, as a capability provider on the same run. */
 interface PlatformTools {
@@ -2704,6 +2726,19 @@ interface PlatformTools {
      * Nothing back ⇒ the policy's selection stands.
      */
     turn?(env: TurnEnv): Promise<TurnMenu | void> | TurnMenu | void;
+    /**
+     * A turn's calls have all run (additive): the surface folds the turn into its own progress detectors. Asked once per turn that
+     * called tools, after the guards policy has folded it, before the next step's {@link turn}.
+     */
+    turnEnded?(env: {
+        step: number;
+    }): Promise<void> | void;
+    /**
+     * The surface keeps its own read coverage (additive): its exact-repeat and covered-window answers, and its record of what a read
+     * SERVED, run inside {@link execute}. The agent's own read coverage then neither answers nor records the surface's reads, or a
+     * repeated read would be judged twice and answered by whichever guard saw it first.
+     */
+    readsCovered?: boolean;
     /** The relevance selection the tools policy applies to {@link schemas}. */
     selection: PlatformSelection;
     /** Run one call. A refusal is a result the model reads, never a throw. */
@@ -2711,6 +2746,7 @@ interface PlatformTools {
         signal?: AbortSignal;
         progress: LadderProgress;
         callId?: string;
+        step: number;
     }): Promise<PlatformToolResult>;
     /** Does this call end analysis and begin the work? The first one hands the run to the coder. */
     handsOff?(name: string): boolean;
@@ -2719,6 +2755,52 @@ interface PlatformTools {
      * not JSON-quoted. Absent ⇒ every result is serialised as JSON, as the canvas's are.
      */
     verbatimText?: boolean;
+    /**
+     * The most characters one result of this surface's tools may hand the model, for the serving model (additive). A surface that
+     * guards its own context (the embedded runner's window-share guard) says its share here; absent ⇒ the agent's per-tool table,
+     * sized by the window.
+     */
+    resultCap?(model: string | undefined): number | undefined;
+    /**
+     * Whether this call is a foreground command a steered message aborts (additive): the tool is stopped through its signal, so the
+     * model reads the message that follows. The names are the surface's own; absent ⇒ the shared registry's commands only.
+     */
+    interruptible?(name: string, args: Record<string, unknown>): boolean;
+    /**
+     * The surface's `execute` watches the person's steers itself (additive): a foreground command it runs is stopped, and a wait on a
+     * background job cut short, inside its own runner, and the result it returns already says so. The agent then does not wrap the call in
+     * its own watcher - a second one would encode the same interruption twice and hide it from the surface's failure count.
+     */
+    watchesItself?: true;
+    /**
+     * The surface's say over a call BEFORE it dispatches (additive), asked from the kernel's `beforeDispatch` slot - which the loop does
+     * not race against the person's Stop, so a long step of it (a hand-off that files tickets and starts children) ends before the run
+     * settles. A `result` answers the call (it is not dispatched); a `rewrite` dispatches another call in its place (the tool router);
+     * nothing back ⇒ the call dispatches as it is. Also asked of a call whose arguments never parsed (`malformed`).
+     */
+    preflight?(call: {
+        id: string;
+        name: string;
+        args: Record<string, unknown>;
+        arguments: string;
+        malformed: boolean;
+    }, env: {
+        step: number;
+    }): Promise<{
+        result: PlatformToolResult;
+    } | {
+        rewrite: {
+            name: string;
+            args: Record<string, unknown>;
+        };
+    } | void> | {
+        result: PlatformToolResult;
+    } | {
+        rewrite: {
+            name: string;
+            args: Record<string, unknown>;
+        };
+    } | void;
     /** How a call whose arguments never parsed is declined. Absent ⇒ the shared wording, no hint. */
     malformed?: MalformedCallPolicy;
 }
@@ -2826,10 +2908,52 @@ interface DeliveryLedger {
     };
     /** The answer a turn that cleared every rung settles on. Used when {@link DeliveryLedger.owns}`.settle`. */
     accept?(content: string): string;
+    /**
+     * The turn's text as the stall judgement and the gates read it (additive): the model's own words, reasoning included, where the
+     * transcript holds the turn as it is replayed. Absent ⇒ the replayed text.
+     */
+    judged?(content: string): string;
     /** The turn moved to another model (for the surface's session bookkeeping). */
     handedOff?(from: string | undefined, to: string): void;
     /** The wording of a provider failure's recovery. Absent ⇒ the failure is routed in silence. */
     providerFailure?: ProviderFailureWording;
+    /** How the stall judgement is ordered and worded for this surface (additive; absent ⇒ the generic order and wording every other surface keeps). */
+    stall?: StallStyle;
+    /**
+     * A prose turn did not end the run: the kernel sent it back with a correction, or took one more turn for a steer that arrived while it
+     * was written (additive). The surface keeps what the person already watched stream in as its own durable block (`kept: "block"`), or -
+     * for a model that stalled out and the run moved to another one - as the reply it was (`kept: "reply"`), and for a stall with nothing left to try that settles the run on the turn (`kept: "settled"`: the reply the run ends on, saved before the stall's step). Asked BEFORE the correction's
+     * rows join the transcript, so what the surface saves lands in the order the person saw it.
+     */
+    sentBack?(turn: {
+        step: number;
+        content: string;
+        kept: "block" | "reply" | "settled";
+    }): Promise<void> | void;
+}
+/** The stall judgement's order and wording, as DATA a surface declares (`DeliveryLedger.stall`). */
+interface StallStyle {
+    /**
+     * Judge the model's own narration BEFORE the rungs: a narrating turn is re-prompted ahead of any delivery rung, and a model that
+     * spent its whole budget fails over - or stops with its notice - only once every rung is clear. Absent ⇒ the rungs come first.
+     */
+    narrationFirst?: true;
+    /** A rung's directive joins the transcript as a USER row (the model reads it as the person's), not a system one; it then survives into the next run's seed. */
+    nudgeAs?: "user";
+    /** The model that takes over a stalled run reads the first nudge ALONE; the notice of the switch is for the person (the trace). */
+    failoverNudgeOnly?: true;
+    /** The stall is judged against the tools the turn ADVERTISED (its menu), not every tool the surface could run. */
+    menu?: true;
+    /**
+     * What the person steered in while the last prose turn was written is taken FIRST, before any judgement of the turn: the turn is sent
+     * back with their words (several join into ONE row, which is not marked the person's own), and nothing the turn owed is spent.
+     * Absent ⇒ the turn is judged first and a steer arriving meanwhile is taken at the end.
+     */
+    steersFirst?: true;
+    /** The re-prompt budget counts across the whole run until a turn calls a tool or the run fails over, whichever model served (absent ⇒ keyed by the model it was spent against). */
+    runWideBudget?: true;
+    /** A turn that said nothing is still the model's row: it is quoted before the correction, empty, so the next request reads what the model did. */
+    quoteEmpty?: true;
 }
 
 /**
@@ -3169,6 +3293,7 @@ interface RunState {
     reads: ReadCoverageState;
     context?: ContextPack;
     stall?: StallState;
+    preparedFor?: string;
     preflight?: string;
     downgrades?: string[];
     degradedBy?: string[];
@@ -3176,124 +3301,17 @@ interface RunState {
     taskState?: TaskState;
     forceToolChoice?: "required";
     approvedCalls?: string[];
+    refusedCalls?: Record<string, string>;
     parkedCalls?: Record<string, string>;
     advertisedSignature?: string;
     loadedTools?: string[];
 }
 
 /**
- * contract — THE contract between the one agent and every entry point (PRD 35 §3.2).
- *
- * An adapter supplies PORTS and nothing else: where the model runs, what the surface
- * can do, where state lives, where events go, how people are reached, what the user
- * steered in, and the context pack. It never supplies a loop, a branch on behaviour or
- * a policy — that is the agent's job. `RunPolicy.entryPoint` is a telemetry label only,
- * NEVER a switch.
- *
- * Every type here is plain data. A run's state crosses a process boundary (a Durable
- * Object tick, a Worker invocation, a VS Code extension host restart) as JSON, so it
- * has to survive a round trip.
- *
- * The types that already have a home are REUSED, never redefined: `RunPolicyState`
- * (`@builderforce/run-policy`), `RunKnowledgeState` and `PolicyGate`
- * (`@builderforce/agent-tools`), `CostLeverId` (`@builderforce/cost-levers`).
- *
- * The finish-gate counters are owned by `policy/finish` (WS2d's port of
- * `cloudAgent/finishGates.ts`) and re-exported here, never restated. The guard state
- * is named here — WS2d's `policy/guards` snapshots into it — because it gathers several
- * owners' shapes (`@builderforce/run-guards`, `@builderforce/run-policy`) into the one
- * slice a step boundary carries.
+ * contractModel - the model half of the run contract: the transcript row, what the agent asks of a model, what comes back, and
+ * the transport that answers. Split out of `contract.ts` (PRD 35 §5 rule 4); `contract.ts` re-exports every name, so no import changes.
  */
 
-/** A file, image or document handed to the run. The adapter has already fetched it. */
-interface RunAttachment {
-    /** The name the model sees. */
-    name?: string;
-    /** The MIME type when the surface knows it. */
-    mimeType?: string;
-    /** Inline content — text, or a data URL for an image. */
-    content?: string;
-    /** A location the surface can read, when the content is not inlined. */
-    url?: string;
-    /** The size in bytes, when the surface knows it. */
-    bytes?: number;
-}
-interface RunTask {
-    runId?: string;
-    prompt: string;
-    ticketId?: number;
-    chatId?: number | string;
-    projectId?: number;
-    persona?: string;
-    request?: string;
-    agentName?: string;
-    attachments?: RunAttachment[];
-    dispatch: {
-        source: 'board-sweep' | 'lane-entry' | 'chat' | 'manual' | 'ceremony' | 'subagent';
-        approvalId?: string;
-        parentRunId?: string;
-    };
-    workspace?: {
-        defaultRepo?: string;
-        focusPaths?: string[];
-    };
-    /** The opening rows when the surface assembles its own prompt (system blocks, prior conversation, the user turn). Absent ⇒ one system row from the persona and prompt. */
-    transcript?: RunMessage[];
-}
-interface RunPolicy {
-    entryPoint: EntryPoint;
-    toolScope: 'ticket' | 'chat-reply' | 'chat-work' | 'canvas' | 'subagent';
-    role: string;
-    levers: readonly CostLeverId[];
-    budgets: {
-        steps?: number;
-        tokens?: number;
-        /** Tokens held back for the reply when compaction sizes the transcript. Absent ⇒ the host-neutral floor (`compactionReserve`). A surface whose replies are bounded far below it says so here (≤ about a quarter of its smallest window). */
-        reserveTokens?: number;
-        /** The run's spend cap in USD (priced turns only, `ModelUsage.pricedMc`): the model is told once at 80% to converge, and the run stops with a contained answer at the cap. Absent or 0 ⇒ no cap. */
-        usd?: number;
-    };
-    /**
-     * The tools that CHANGE code. The first call to one in an analysis (`plan`) turn is re-asked of the coding model with a brief
-     * naming the change the planner was about to make, unless the model policy declines (a pin, a lock). Absent ⇒ no re-ask.
-     */
-    codeChangeTools?: readonly string[];
-    pinnedModel?: string;
-    inference: 'local-only' | 'hybrid' | 'specific';
-    verify: 'declared-checks' | 'branch-ci' | 'none';
-    signoff?: {
-        roleKey: string;
-        laneKey?: string;
-    };
-    approvalGates: PolicyGate[];
-    delegation: {
-        requested: boolean;
-        readsBeforeNudge: number;
-    };
-    /** How the model policy hands a run between models, where the surface's session has a say (routed-around models, strict failover). Absent ⇒ the policy's defaults. */
-    modelOptions?: Pick<RunPolicyOptions, 'strictPin' | 'pinReleasable' | 'lockAfterFirstSuccess' | 'preferProvenFailover' | 'strictFailover' | 'excludeModels'>;
-    /**
-     * How the run's model hand-off starts (additive, optional): whether `pinnedModel` is an explicit
-     * pin (asked strictly) or a soft seed, the delegated role the phase rule reads, and the per-phase
-     * models. Absent ⇒ a soft pin on a coding run, exactly as before.
-     */
-    /**
-     * What a stall that has nothing left to try does: `finish` ends the run with what it said and the notice (whatever it
-     * committed still ships; a surface that lands runs wants this), `fail` stops it unfinished. Default `fail`.
-     */
-    stallExhausted?: "finish" | "fail" | "note";
-    modelStart?: {
-        strict?: boolean;
-        delegatedRole?: string;
-        phaseModels?: {
-            verify?: string;
-        };
-        /** The run-start model when it is a soft seed rather than `pinnedModel`. */
-        model?: string;
-        /** Start the hand-off as the plain policy (no lock after first success, no releasable pin) — an addressed reply's. */
-        plain?: boolean;
-    };
-}
 /** One row of the run's transcript, in the agent's own shape. */
 interface RunMessage {
     role: 'system' | 'user' | 'assistant' | 'tool';
@@ -3309,6 +3327,11 @@ interface RunMessage {
     /** This row carries the TASK the run was given: compaction pins it, whatever else the transcript holds before it (a prior conversation). Absent ⇒ the first user row. */
     task?: true;
     /**
+     * The PERSON wrote this row (a message they steered in, a follow-up they queued): a model hand-off keeps it whole, as it keeps the task.
+     * A note the agent wrote itself (a stall's nudge) does not carry it.
+     */
+    person?: true;
+    /**
      * The row's non-text content (a picture the person attached), beside `content`, which stays the row's TEXT. The transport
      * puts the parts on the wire; token counting reads `content` alone, as it always has, so a picture costs what the
      * existing estimates say it does.
@@ -3319,6 +3342,11 @@ interface RunMessage {
      * timestamp). Opaque to the agent: it carries them from the completion or tool result to the row and never reads them.
      */
     meta?: Readonly<Record<string, unknown>>;
+    /**
+     * This row is the surface's own context, not the person's words (a bash execution, a branch or compaction summary, an extension's
+     * message): the role says `user` because that is how the model reads it, but it is never the task or the latest directive.
+     */
+    custom?: true;
     /** This tool row is a FAILED call's answer (a refusal, a thrown tool, a skipped call). */
     isError?: true;
 }
@@ -3333,6 +3361,7 @@ interface RunMessage {
 type RunPart = {
     type: 'image';
     url: string;
+    detail?: 'low' | 'high' | 'auto';
 } | {
     type: 'text';
     text: string;
@@ -3447,6 +3476,136 @@ interface ModelPreflightResult {
     /** The model the run falls back to, when the transport knows it. */
     fallback?: string;
 }
+
+/**
+ * contract — THE contract between the one agent and every entry point (PRD 35 §3.2).
+ *
+ * An adapter supplies PORTS and nothing else: where the model runs, what the surface
+ * can do, where state lives, where events go, how people are reached, what the user
+ * steered in, and the context pack. It never supplies a loop, a branch on behaviour or
+ * a policy — that is the agent's job. `RunPolicy.entryPoint` is a telemetry label only,
+ * NEVER a switch.
+ *
+ * Every type here is plain data. A run's state crosses a process boundary (a Durable
+ * Object tick, a Worker invocation, a VS Code extension host restart) as JSON, so it
+ * has to survive a round trip.
+ *
+ * The types that already have a home are REUSED, never redefined: `RunPolicyState`
+ * (`@builderforce/run-policy`), `RunKnowledgeState` and `PolicyGate`
+ * (`@builderforce/agent-tools`), `CostLeverId` (`@builderforce/cost-levers`).
+ *
+ * The finish-gate counters are owned by `policy/finish` (WS2d's port of
+ * `cloudAgent/finishGates.ts`) and re-exported here, never restated. The guard state
+ * is named here — WS2d's `policy/guards` snapshots into it — because it gathers several
+ * owners' shapes (`@builderforce/run-guards`, `@builderforce/run-policy`) into the one
+ * slice a step boundary carries.
+ */
+
+/** A file, image or document handed to the run. The adapter has already fetched it. */
+interface RunAttachment {
+    /** The name the model sees. */
+    name?: string;
+    /** The MIME type when the surface knows it. */
+    mimeType?: string;
+    /** Inline content — text, or a data URL for an image. */
+    content?: string;
+    /** A location the surface can read, when the content is not inlined. */
+    url?: string;
+    /** The size in bytes, when the surface knows it. */
+    bytes?: number;
+}
+interface RunTask {
+    runId?: string;
+    prompt: string;
+    ticketId?: number;
+    chatId?: number | string;
+    projectId?: number;
+    persona?: string;
+    request?: string;
+    agentName?: string;
+    attachments?: RunAttachment[];
+    dispatch: {
+        source: 'board-sweep' | 'lane-entry' | 'chat' | 'manual' | 'ceremony' | 'subagent';
+        approvalId?: string;
+        parentRunId?: string;
+    };
+    workspace?: {
+        defaultRepo?: string;
+        focusPaths?: string[];
+    };
+    /** The opening rows when the surface assembles its own prompt (system blocks, prior conversation, the user turn). Absent ⇒ one system row from the persona and prompt. */
+    transcript?: RunMessage[];
+}
+interface RunPolicy {
+    entryPoint: EntryPoint;
+    toolScope: 'ticket' | 'chat-reply' | 'chat-work' | 'canvas' | 'subagent';
+    role: string;
+    levers: readonly CostLeverId[];
+    budgets: {
+        steps?: number;
+        tokens?: number;
+        /** Tokens held back for the reply when compaction sizes the transcript. Absent ⇒ the host-neutral floor (`compactionReserve`). A surface whose replies are bounded far below it says so here (≤ about a quarter of its smallest window). A run with `modelHandoff` ignores it: its reserve follows the serving model's window. */
+        reserveTokens?: number;
+        /** The run's spend cap in USD (priced turns only, `ModelUsage.pricedMc`): the model is told once at 80% to converge, and the run stops with a contained answer at the cap. Absent or 0 ⇒ no cap. */
+        usd?: number;
+    };
+    /**
+     * The tools that CHANGE code. The first call to one in an analysis (`plan`) turn is re-asked of the coding model with a brief
+     * naming the change the planner was about to make, unless the model policy declines (a pin, a lock). Absent ⇒ no re-ask.
+     */
+    codeChangeTools?: readonly string[];
+    pinnedModel?: string;
+    /**
+     * Whether a steered message that IS a stop command ("stop", "cancel") ends the run (default: it does). A surface whose Stop is its own
+     * control and whose composer never reads words as commands (the Brain's) sets `false`: the words reach the model like any steer.
+     */
+    stopWords?: false;
+    inference: 'local-only' | 'hybrid' | 'specific';
+    verify: 'declared-checks' | 'branch-ci' | 'none';
+    signoff?: {
+        roleKey: string;
+        laneKey?: string;
+    };
+    approvalGates: PolicyGate[];
+    delegation: {
+        requested: boolean;
+        readsBeforeNudge: number;
+    };
+    /** How the model policy hands a run between models, where the surface's session has a say (routed-around models, strict failover). Absent ⇒ the policy's defaults. */
+    modelOptions?: Pick<RunPolicyOptions, 'strictPin' | 'pinReleasable' | 'lockAfterFirstSuccess' | 'preferProvenFailover' | 'strictFailover' | 'excludeModels'>;
+    /**
+     * How the run's model hand-off starts (additive, optional): whether `pinnedModel` is an explicit
+     * pin (asked strictly) or a soft seed, the delegated role the phase rule reads, and the per-phase
+     * models. Absent ⇒ a soft pin on a coding run, exactly as before.
+     */
+    /**
+     * What a stall that has nothing left to try does: `finish` ends the run with what it said and the notice (whatever it
+     * committed still ships; a surface that lands runs wants this), `fail` stops it unfinished, `note` records the notice in the
+     * conversation and stops it, `settle` settles the run on what the model said, shaped as any accepted answer is, and leaves
+     * the notice to the `stall.recovered` event (a conversation that shows the model's own reply and the reason beside it).
+     * Default `fail`.
+     */
+    stallExhausted?: "finish" | "fail" | "note" | "settle";
+    /**
+     * The run's conversation outlives it and its session owns the folding (additive; absent => the agent compacts as it always did).
+     * Present, the agent runs NO ordinary compaction: it re-packs the context ONLY when a stall fails the run over onto another model,
+     * for the incoming model's window, and tells that model it took over. The run can land on ANY window, so its reply reserve follows
+     * the model now serving - on-prem's floor within a quarter of that window - and the request names no `maxTokens` unless the window
+     * forces one (`replyReserve` / `replyAsk`, policy/compaction/reserve). A provider's overflow is the session's to handle.
+     */
+    modelHandoff?: true;
+    modelStart?: {
+        strict?: boolean;
+        delegatedRole?: string;
+        phaseModels?: RunPolicyOptions["phaseModels"];
+        /** The run-start model when it is a soft seed rather than `pinnedModel`. */
+        model?: string;
+        /** Start the hand-off as the plain policy (no lock after first success, no releasable pin) — an addressed reply's. */
+        plain?: boolean;
+        /** The phase a PLAIN start begins in: a delegated slice or a quick run starts coding, everything else plans. Absent ⇒ the policy's own. */
+        startPhase?: RunPolicyOptions["startPhase"];
+    };
+}
 /** Where the run's state lives. */
 interface RunStore {
     /** The state to resume from, or nothing for a fresh run. */
@@ -3477,11 +3636,14 @@ interface EventSink {
     /** The run's outcome row, written once at the end. */
     outcome?(row: RunOutcomeRow): Promise<void> | void;
 }
+/** Why an approval was not granted: a person said no, nobody answered in time, the run was stopped while it waited, or no approver could be reached at all. Absent means declined. */
+type ApprovalRefusal = 'declined' | 'timed_out' | 'stopped' | 'unreachable';
 /** What a human said, or that the run is waiting for one. */
 type HumanAnswer = {
     kind: 'answered';
     answer: string;
     approved?: boolean;
+    refusal?: ApprovalRefusal;
 } | {
     kind: 'paused';
     approvalId?: string;
@@ -3510,8 +3672,10 @@ interface SteerInput {
 }
 /** What the user steered in since the last step. */
 interface SteeringSource {
-    /** The messages since the last drain. Empty when nothing was steered. */
-    drain(): Array<string | SteerInput> | Promise<Array<string | SteerInput>>;
+    /** The messages since the last drain. Empty when nothing was steered. `env.step` is the kernel's step the drain serves (a surface that numbers what it records by step reads it). */
+    drain(env?: {
+        step: number;
+    }): Array<string | SteerInput> | Promise<Array<string | SteerInput>>;
     /** True while an interrupting message waits. Absent ⇒ steers only land between steps. */
     hasInterrupt?(): boolean;
     /**
@@ -3566,7 +3730,17 @@ interface ToolExtension {
     /** Shape the result of a tool the REGISTRY ran (the surface saves a snapshot the model reads a summary of). Absent ⇒ as-is. */
     shape?(name: string, data: unknown): Promise<unknown> | unknown;
 }
+/**
+ * What a refused approval-gated call is remembered by, ACROSS the attempts of one run. `RunState.refusedCalls` lives and dies with one attempt's
+ * state; a host that re-attempts a run (a profile rotation, a compaction retry) hands every attempt the same one of these, so the approver is not
+ * asked again for a call it already refused.
+ */
+interface RunRefusals {
+    recall(key: string): string | undefined;
+    remember(key: string, message: string): void;
+}
 interface RunPorts {
+    refusals?: RunRefusals;
     model: ModelTransport;
     capabilities: CapabilityProvider;
     store: RunStore;
@@ -3645,6 +3819,7 @@ type RunOutcome = {
     state: RunState;
     cause?: unknown;
     exhausted?: boolean;
+    failureStreak?: number;
 };
 
 /**
@@ -7652,11 +7827,11 @@ declare function steerModelContent(msg: RunSteerMessage): string | ContentPart[]
  * The Brain's CONTEXT SOURCE (PRD 35 §3.2 `ContextSource`, §6.10) — the task context pack,
  * built ONCE before turn 1 with no model call.
  *
- * The host gathers the pack's parts (the editor: `clients/vscode/src/contextPack`) and the
- * request carries them as `servedReads` (the focus files it showed whole). This is the
- * port over them: nothing is read here, nothing is decided, and a part the host could not
- * gather is simply absent — the pack is best-effort by contract. A host that gathers more
- * (chat state, git state, `codemap:` facts) passes its own structured pack as `gather`.
+ * The host's served files are NOT in the pack: the block that showed them whole reaches the model ONCE, as the run's turn
+ * context (`runStore/turnContext.ts`), and its reads are the read coverage's from then on (`recordServedReads`). Re-rendering
+ * them in every request's tail, uncached, would send the same files again each turn - and stale after an edit. So the pack a
+ * run starts from is empty unless the host gathers more (chat state, git state, `codemap:` facts) and passes its own
+ * structured pack as `gather`; nothing is read here and a part the host could not gather is simply absent.
  */
 
 /** A host's own structured pack, when it builds more than the focus files. */
@@ -7686,7 +7861,10 @@ type OutcomeReport = (row: RunOutcomeRow) => Promise<unknown> | void;
  * call markup back into structured calls. This wraps that function as the agent's port:
  * it translates the agent's request into the stream's options, passes the streamed deltas to
  * the surface's live view, and translates the result back. It decides nothing about WHICH
- * model, WHEN to retry or WHAT to offer — those are the agent's (`policy/model`, `policy/tools`).
+ * model or WHAT to offer — those are the agent's (`policy/model`, `policy/tools`). WHEN a failed
+ * request is retried is the run's model policy too; the transport only asks it, through the turn
+ * session, and retries INSIDE the turn (the Brain's loop never spent a step on a retry).
+ * The turn's `max_tokens` is the surface's Effort (`TurnSession.maxTokens`), not the policy's role cap.
  *
  * Also answers the two questions the agent asks of a transport:
  *   - `window(model)` — the model's context window from what the host already knows (its
@@ -7696,6 +7874,13 @@ type OutcomeReport = (row: RunOutcomeRow) => Promise<unknown> | void;
 
 /** What the surface fixes for every call of the run (the request's own routing choices). */
 type BrainCallDefaults = Partial<Pick<StreamChatOptions, 'routingMode' | 'modelStrict' | 'reasoning' | 'metadata' | 'role' | 'excludeModels' | 'prompt_cache_key' | 'conversationKey'>>;
+/** What a policy-routed retry of a failed attempt asks differently: the model the policy now names, and who it must not route to. */
+interface TurnRetry {
+    model?: string;
+    strict?: boolean;
+    role?: string;
+    excludeModels?: readonly string[];
+}
 /**
  * One turn's session with the surface's live view and record: the stream's handlers, the call's extra metadata, the window
  * fit the request passes through, and what the turn leaves when it completes or fails. The surface builds it per request
@@ -7703,13 +7888,29 @@ type BrainCallDefaults = Partial<Pick<StreamChatOptions, 'routingMode' | 'modelS
  */
 interface TurnSession {
     handlers: StreamHandlers;
-    metadata?: CompletionMetadata;
-    /** Pack the wire messages for the model's window. */
-    fit?(messages: ChatCompletionMessage[]): Promise<ChatCompletionMessage[]>;
+    /** The metadata THIS attempt carries: the call's memory effect rides the first one only (`stampOncePerCall`). */
+    metadata?(): CompletionMetadata;
+    /**
+     * The sections of the request's trailing volatile row, when the surface says what that row holds (the coder re-ask carries the
+     * run's record and none of the turn's forced brief). Empty ⇒ no tail row at all. Absent ⇒ the request's own tail stands.
+     */
+    tail?: readonly string[];
+    /** The `tool_choice` this request asks for, when the surface fixes it for every request of the turn (a re-ask keeps the turn's). Absent ⇒ the request's. */
+    toolChoice?: 'auto' | 'required';
+    /** The turn's `max_tokens`: the Effort ceiling, raised for a turn that can call tools. The surface owns it outright (the policy's role cap never reaches the wire). */
+    maxTokens: number | undefined;
+    /** Pack the wire messages for the serving model's window. */
+    fit?(messages: ChatCompletionMessage[], model: string | undefined): Promise<ChatCompletionMessage[]>;
     /** The call's per-conversation routing keys. */
     call?: BrainCallDefaults;
     /** Run the stream inside the surface's live-turn window (the serving model is recorded while it is open). */
     around?<T>(stream: () => Promise<T>): Promise<T>;
+    /**
+     * An attempt failed: when the run's model policy routes around that failure, the retry to make INSIDE this turn - the same menu,
+     * the same brief, nothing forced spent; undefined when the failure ends the turn.
+     */
+    recover?(error: unknown): Promise<TurnRetry | undefined> | TurnRetry | undefined;
+    /** The turn answered (it is kept - recorded - only once the agent goes on with it). */
     completed(result: StreamChatResult): Promise<void> | void;
     /** The turn failed: record it and hand back the error to throw. */
     failed(error: unknown): unknown;
@@ -7781,12 +7982,24 @@ interface BrainRunBinding {
     approvalGates?: readonly PolicyGate[];
     /** The surface's live view and record of each turn (`loopTurn.ts`). */
     turn?: TurnObserver;
+    /** Tools the surface runs beside the registry's, and the turns that end the run before a call dispatches. */
+    extensions?: ToolExtension;
+    /** How the run's model hand-off starts (`pipelinePolicyOptions`): the phase it begins in, the stage models, and the quick model a routed QUICK run seeds. */
+    start?: Pick<RunPolicyOptions, 'startPhase' | 'phaseModels' | 'pinnedModel'>;
+    /** Where the run's events go, when the surface reacts to some beyond rendering them (`loopTurn.ts`). */
+    events?: EventSink;
+    /** Told the live run once, before turn 1: the surface reads the model policy from it. */
+    attach?: (view: RunView) => void;
+    /** What the task still owes when a turn ends in prose (`brainDelivery.ts`). */
+    delivery?: DeliveryLedger;
     /** The surface's own tools, when it runs them itself (`brainPlatformTools.ts`). */
     platform?: PlatformTools;
     /** Where the run's steered direction comes from, when the surface records it as it is read (`loopSteering.ts`). */
     steering?: SteeringSource;
     /** Where the run's state lives, when the surface keeps its own log (`loopStore.ts`). */
     store?: RunStore;
+    /** The run tree's spend, when the surface shares one total across a run and its sub-agents (`loopSpend.ts`). */
+    spend?: SpendMeter;
 }
 /** The ports of one Brain run — built from the request, deciding nothing. */
 declare function buildBrainRunPorts(b: BrainRunBinding): RunPorts;
@@ -7796,7 +8009,7 @@ declare function brainRunTask(b: Pick<BrainRunBinding, 'req' | 'request'>, defau
  * The policy DATA of one Brain run. Every field is read off the request or the device —
  * the same facts the Brain's own loop reads — and none selects behaviour by surface.
  */
-declare function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | 'request' | 'approvalGates'>): RunPolicy;
+declare function brainRunPolicy(b: Pick<BrainRunBinding, 'entryPoint' | 'req' | 'request' | 'approvalGates' | 'start'>): RunPolicy;
 
 /**
  * runViaAgent — one Brain run, driven by THE one agent (PRD 35 §3.1).

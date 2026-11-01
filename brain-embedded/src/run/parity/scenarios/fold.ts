@@ -90,7 +90,7 @@ export const foldsInToolLoop: Scenario = {
   id: 'fold-in-tool-loop', rows: ['T2'], loopShows: ['context.compacted'], title: 'a tool loop that outgrows the window mid-run folds, then re-serves an exact re-read from the cache',
   async run(h) {
     h.tools({ read_file: (a) => ({ ok: true, path: (a as { path: string }).path, content: bulk((a as { path: string }).path, 4_000), totalLines: 800, offset: 1, truncated: false }) });
-    const READS = 16;
+    const READS = 24;
     h.script([], SUMMARY);
     h.react(decide(({ call: n }) => {
       if (n <= READS) return completion({ toolCalls: [call('read_file', { path: `f${n}.ts` }, `c${n}`)], finishReason: 'tool_calls' });

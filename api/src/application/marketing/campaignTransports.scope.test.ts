@@ -186,6 +186,15 @@ describe('twilio (SMS)', () => {
     }
   });
 
+  it('only a 429 is UNDELIVERED: no answer or a 5xx may have delivered the message', async () => {
+    respond(429);
+    expect(await thrownBy(await senderFor(binding, connection))).toMatchObject({ undelivered: true });
+    for (const status of [0, 500, 400]) {
+      respond(status);
+      expect(await thrownBy(await senderFor(binding, connection))).toMatchObject({ undelivered: false });
+    }
+  });
+
   it('an unexpected throw is still retried', async () => {
     vi.mocked(executeConnectorAction).mockRejectedValue(new Error('boom'));
     expect(await thrownBy(await senderFor(binding, connection))).toMatchObject({ retryable: true });
@@ -244,6 +253,15 @@ describe('sendgrid', () => {
     expect(await thrownBy(await senderFor(binding, connection))).toMatchObject({ providerUnavailable: false });
   });
 
+  it('only a 429 is UNDELIVERED: no answer or a 5xx may have delivered the message', async () => {
+    respond(429);
+    expect(await thrownBy(await senderFor(binding, connection))).toMatchObject({ undelivered: true });
+    for (const status of [0, 502, 400]) {
+      respond(status);
+      expect(await thrownBy(await senderFor(binding, connection))).toMatchObject({ undelivered: false });
+    }
+  });
+
   it('a ConnectorCallError is terminal and the SENDER\'s', async () => {
     vi.mocked(executeConnectorAction).mockRejectedValue(new ConnectorCallError('blocked URL', 400));
     expect(await thrownBy(await senderFor(binding, connection))).toMatchObject({ retryable: false, scope: 'sender' });
@@ -252,7 +270,7 @@ describe('sendgrid', () => {
 
 describe('mailbox', () => {
   const binding: TransportBinding = { ...base, transport: 'mailbox', senderIdentity: null, mailboxConnectionId: 3 };
-  const respond = (status: 404 | 409 | 502, retryable: boolean) =>
+  const respond = (status: 400 | 404 | 409 | 502, retryable: boolean) =>
     vi.mocked(sendFromMailbox).mockResolvedValue({ ok: false, status, error: 'x', retryable });
 
   it('a revoked grant (409, not retryable) is terminal and the SENDER\'s', async () => {
@@ -275,6 +293,11 @@ describe('mailbox', () => {
     expect(await thrownBy(await senderFor(binding))).toMatchObject({ retryable: false, scope: 'recipient' });
   });
 
+  it('a refused control character (400, not retryable) is the RECIPIENT\'s: only 404 and 409 are the sender\'s', async () => {
+    respond(400, false);
+    expect(await thrownBy(await senderFor(binding))).toMatchObject({ retryable: false, scope: 'recipient', providerUnavailable: false, undelivered: false });
+  });
+
   it('a retryable refusal the service did not flag as the provider\'s is retried without stopping the batch', async () => {
     respond(502, true);
     expect(await thrownBy(await senderFor(binding))).toMatchObject({ retryable: true, scope: 'recipient', providerUnavailable: false });
@@ -285,9 +308,16 @@ describe('mailbox', () => {
     expect(await thrownBy(await senderFor(binding))).toMatchObject({ retryable: true, scope: 'recipient', providerUnavailable: true });
   });
 
-  it('a token endpoint outage (409, retryable, flagged) is the SENDER\'s and stops the batch', async () => {
-    vi.mocked(sendFromMailbox).mockResolvedValue({ ok: false, status: 409, error: 'token endpoint down', retryable: true, providerUnavailable: true });
-    expect(await thrownBy(await senderFor(binding))).toMatchObject({ retryable: true, scope: 'sender', providerUnavailable: true });
+  it('a token endpoint outage (409, retryable, flagged) is the SENDER\'s, stops the batch and is UNDELIVERED', async () => {
+    vi.mocked(sendFromMailbox).mockResolvedValue({ ok: false, status: 409, error: 'token endpoint down', retryable: true, providerUnavailable: true, undelivered: true });
+    expect(await thrownBy(await senderFor(binding))).toMatchObject({ retryable: true, scope: 'sender', providerUnavailable: true, undelivered: true });
+  });
+
+  it('carries the service\'s undelivered flag, and leaves it false when the service did not set it (no answer, a 5xx)', async () => {
+    vi.mocked(sendFromMailbox).mockResolvedValue({ ok: false, status: 502, error: 'throttled', retryable: true, providerUnavailable: true, undelivered: true });
+    expect(await thrownBy(await senderFor(binding))).toMatchObject({ undelivered: true });
+    vi.mocked(sendFromMailbox).mockResolvedValue({ ok: false, status: 502, error: 'fetch failed', retryable: true, providerUnavailable: true });
+    expect(await thrownBy(await senderFor(binding))).toMatchObject({ undelivered: false });
   });
 });
 
@@ -313,7 +343,27 @@ describe('platform', () => {
     // A throw with no provider status at all says nothing about the provider.
     vi.mocked(sendRawEmail).mockRejectedValue(new EmailDeliveryError('no status', 'resend', null));
     expect(await thrownBy(sender)).toMatchObject({ providerUnavailable: false });
+    // A plain error is a fetch that failed (EmailService does not catch it): NO RESPONSE, status 0, so the
+    // provider is not serving us and the batch stops rather than burning a row per recipient.
     vi.mocked(sendRawEmail).mockRejectedValue(new Error('timeout'));
-    expect(await thrownBy(sender)).toMatchObject({ providerUnavailable: false });
+    expect(await thrownBy(sender)).toMatchObject({ retryable: true, scope: 'recipient', providerUnavailable: true });
+  });
+
+  it('a refused platform credential (401/402/403/404) is retryable and the SENDER\'s, and NOT flagged unavailable', async () => {
+    const sender = await senderFor(base);
+    for (const status of [401, 402, 403, 404]) {
+      vi.mocked(sendRawEmail).mockRejectedValue(new EmailDeliveryError('rotated key', 'resend', status));
+      expect(await thrownBy(sender)).toMatchObject({ retryable: true, scope: 'sender', providerUnavailable: false });
+    }
+  });
+
+  it('only a 429 is UNDELIVERED: a plain network error and a 5xx may have delivered the message', async () => {
+    const sender = await senderFor(base);
+    vi.mocked(sendRawEmail).mockRejectedValue(new EmailDeliveryError('slow down', 'resend', 429));
+    expect(await thrownBy(sender)).toMatchObject({ undelivered: true });
+    for (const failure of [new EmailDeliveryError('down', 'resend', 503), new Error('timeout'), new EmailDeliveryError('no status', 'resend', null)]) {
+      vi.mocked(sendRawEmail).mockRejectedValue(failure);
+      expect(await thrownBy(sender)).toMatchObject({ undelivered: false });
+    }
   });
 });

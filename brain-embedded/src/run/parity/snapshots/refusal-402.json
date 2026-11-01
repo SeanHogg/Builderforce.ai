@@ -156,5 +156,8 @@
     "kind": "upgrade"
    }
   }
+ },
+ "agentOnly": {
+  "recorded": []
  }
 }

@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { describeMailboxFilter, mailboxFilterParts } from './mailboxApi';
+const apiRequest = vi.fn(async () => ({ sent: true, id: 'm1', accountEmail: 'me@x.com' }));
+vi.mock('./apiClient', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./apiClient')>()),
+  apiRequest: (...args: unknown[]) => apiRequest(...(args as [])),
+}));
+
+import { describeMailboxFilter, mailboxApi, mailboxFilterParts } from './mailboxApi';
 
 /**
  * The inbox tile's filter line is persisted with the board, so the lib hands back
@@ -41,5 +47,23 @@ describe('describeMailboxFilter (model-facing English)', () => {
   it('reads as one capitalised line', () => {
     expect(describeMailboxFilter({ unread: true, from: 'dana@acme.com' })).toBe('Unread, from dana@acme.com');
     expect(describeMailboxFilter({ from: 'dana@acme.com', hasAttachments: true })).toBe('From dana@acme.com, with attachments');
+  });
+});
+
+/**
+ * A 409 from `send` is handled by the composer, not a fault: the do-not-contact one is a question it asks
+ * the person, and the other (the mailbox needs reconnecting) is rendered inline from the error's message.
+ * Neither may raise the global error toast or a quality report first.
+ */
+describe('mailboxApi.send', () => {
+  beforeEach(() => { apiRequest.mockClear(); });
+
+  it('lists 400 and 409 as expected errors and posts the message as JSON', async () => {
+    await mailboxApi.send(3, { to: 'a@x.com, b@y.com', subject: 'Hi', html: '<p>Hi</p>' });
+    const [path, options] = apiRequest.mock.calls[0] as unknown as [string, { method: string; expectedErrors?: number[]; body: string }];
+    expect(path).toBe('/api/mailbox/connections/3/send');
+    expect(options.method).toBe('POST');
+    expect(options.expectedErrors).toEqual([400, 409]);
+    expect(JSON.parse(options.body)).toMatchObject({ to: 'a@x.com, b@y.com' });
   });
 });

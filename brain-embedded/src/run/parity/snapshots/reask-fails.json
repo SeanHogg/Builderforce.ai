@@ -464,5 +464,8 @@
    "message": "coder unavailable",
    "action": null
   }
+ },
+ "agentOnly": {
+  "recorded": []
  }
 }

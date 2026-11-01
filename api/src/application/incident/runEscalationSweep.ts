@@ -16,7 +16,7 @@ import { eq } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { prodIncidents } from '../../infrastructure/database/schema';
 import { EscalationService } from './EscalationService';
-import { floorIntervalMs, signalPendingWorkIfDueWithin } from '../runtime/cronWorkSignal';
+import { signalPendingWorkIfDueWithin } from '../runtime/cronWorkSignal';
 import type { Env } from '../../env';
 
 export interface EscalationSweepResult {
@@ -43,7 +43,8 @@ export async function runEscalationSweep(env: Env, db: Db = buildDatabase(env)):
       reportCaughtError(err, { source: "application/incident/runEscalationSweep.ts", operation: "runEscalationSweep", context: { logMessage: '[cron:escalation] incident', details: inc.id } });
     }
   }
-  // A level further out than the floor interval is left to the floor sweep, which re-evaluates it.
-  await signalPendingWorkIfDueWithin(env, nextLevelDueAtMs, Date.now(), floorIntervalMs(env));
+  // A level further out than the floor interval (the signal's default horizon) is left to the floor
+  // sweep, which re-evaluates it.
+  await signalPendingWorkIfDueWithin(env, nextLevelDueAtMs);
   return { openIncidents: open.length, escalated, nextLevelDueAtMs };
 }

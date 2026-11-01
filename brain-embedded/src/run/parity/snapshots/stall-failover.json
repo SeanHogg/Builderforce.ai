@@ -1967,5 +1967,8 @@
   ],
   "avoided": []
  },
- "error": {}
+ "error": {},
+ "agentOnly": {
+  "recorded": []
+ }
 }

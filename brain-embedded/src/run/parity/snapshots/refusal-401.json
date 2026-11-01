@@ -156,5 +156,8 @@
     "kind": "auth"
    }
   }
+ },
+ "agentOnly": {
+  "recorded": []
  }
 }

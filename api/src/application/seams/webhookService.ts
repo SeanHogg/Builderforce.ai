@@ -100,6 +100,13 @@ export const WEBHOOK_TIMESTAMP_HEADER = 'X-BF-Webhook-Timestamp';
 export const WEBHOOK_MAX_ATTEMPTS = 6;
 /** Most rows the retry sweep processes per tick (bounds cron subrequest cost). */
 export const WEBHOOK_SWEEP_BATCH = 50;
+/**
+ * The most attempts a delivery may have made and still hold the cron gate open for its retry: the
+ * first two retries, waiting on the 5 and 10 minute backoffs. Later backoffs are 20 minutes or more
+ * ({@link webhookRetryDelaySec}), so the floor sweep serves them: signalling for them would keep Neon
+ * awake for a dead URL on a sparse stream, one tick at a time, for no sooner a retry.
+ */
+export const WEBHOOK_SIGNALLED_ATTEMPTS = 2;
 
 /**
  * Capped exponential backoff (seconds) to wait before the next retry, given how
@@ -316,8 +323,10 @@ export async function emitWebhookEvent(db: Db, input: EmitInput, deps: EmitDeps 
     })));
 
   // The first retry is due in five minutes, inside the gate's horizon, so a failed delivery keeps
-  // the gate open for the tick that will retry it. Bounded the same way the sweep's own re-signal
-  // is: the row reaches `next_retry_at = NULL` within WEBHOOK_MAX_ATTEMPTS attempts.
+  // the gate open for the tick that will retry it. This row has made ONE attempt, always within
+  // WEBHOOK_SIGNALLED_ATTEMPTS, so it signals unconditionally; the sweep's re-signal applies that
+  // bound to the later retries. Bounded the same way: the row reaches `next_retry_at = NULL` within
+  // WEBHOOK_MAX_ATTEMPTS attempts.
   if (anyFailed && deps.env) await signalPendingWork(deps.env);
 
   return targets.length;
@@ -345,8 +354,9 @@ export interface SweepDeps {
  *
  * Re-signals the cron gate while a failed delivery is still waiting to be retried and its retry is
  * close (see {@link nextWebhookRetryAtMs}): the backoff is 5m → 10m → 20m → …, and without this a
- * retry due in five minutes waited for the 30-minute floor. Bounded by the attempt budget: every
- * row reaches `next_retry_at = NULL` within {@link WEBHOOK_MAX_ATTEMPTS} attempts.
+ * retry due in five minutes waited for the 30-minute floor. Only the first two retries signal
+ * ({@link WEBHOOK_SIGNALLED_ATTEMPTS}): the later backoffs are served by the floor. Bounded by the
+ * attempt budget: every row reaches `next_retry_at = NULL` within {@link WEBHOOK_MAX_ATTEMPTS} attempts.
  */
 export async function runWebhookRetrySweep(env: Env, nowMs: number = Date.now(), deps: SweepDeps = {}): Promise<number> {
   const db = deps.db ?? buildDatabase(env);
@@ -421,13 +431,21 @@ export async function runWebhookRetrySweep(env: Env, nowMs: number = Date.now(),
  * Earliest `next_retry_at` among deliveries that can still be retried, or null when none can.
  * Joined to the subscription exactly as the sweep's own select is, so a delivery the sweep can
  * never pick up (its subscription is gone) is not counted and cannot hold the gate open.
+ *
+ * `maxAttempts` restricts the probe to deliveries that have made at most that many attempts. The
+ * gate re-signal passes {@link WEBHOOK_SIGNALLED_ATTEMPTS}, so a delivery on a 20-minute-plus backoff
+ * is invisible to it and cannot hold the gate open.
  */
-export async function nextWebhookRetryAtMs(db: Db): Promise<number | null> {
+export async function nextWebhookRetryAtMs(db: Db, maxAttempts: number = WEBHOOK_MAX_ATTEMPTS): Promise<number | null> {
   const [row] = await db
     .select({ at: webhookDeliveries.nextRetryAt })
     .from(webhookDeliveries)
     .innerJoin(webhookSubscriptions, eq(webhookDeliveries.subscriptionId, webhookSubscriptions.id))
-    .where(acrossTenants(webhookDeliveries, 'scheduled_sweep', isNotNull(webhookDeliveries.nextRetryAt)))
+    .where(acrossTenants(
+      webhookDeliveries,
+      'scheduled_sweep',
+      and(isNotNull(webhookDeliveries.nextRetryAt), lte(webhookDeliveries.attempts, maxAttempts)),
+    ))
     .orderBy(asc(webhookDeliveries.nextRetryAt))
     .limit(1);
   return row?.at ? new Date(row.at).getTime() : null;
@@ -437,7 +455,7 @@ export async function nextWebhookRetryAtMs(db: Db): Promise<number | null> {
 async function signalWhileRetriesPending(env: Env, db: Db, nowMs: number): Promise<void> {
   if (!cronGateIsBound(env)) return;
   try {
-    await signalPendingWorkIfDueWithin(env, await nextWebhookRetryAtMs(db), nowMs);
+    await signalPendingWorkIfDueWithin(env, await nextWebhookRetryAtMs(db, WEBHOOK_SIGNALLED_ATTEMPTS), nowMs);
   } catch (error) {
     reportCaughtError(error, { source: "application/seams/webhookService.ts", operation: "signalWhileRetriesPending" });
   }

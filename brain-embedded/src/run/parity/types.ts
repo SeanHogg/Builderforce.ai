@@ -27,7 +27,7 @@ export interface TurnInput {
 export type ScriptedTurn = (input: TurnInput) => StreamChatResult | Promise<StreamChatResult>;
 
 /** A host tool: what `runTool` answers for one tool name. */
-export type HostTool = (args: unknown) => unknown | Promise<unknown>;
+export type HostTool = (args: unknown, signal?: AbortSignal) => unknown | Promise<unknown>;
 
 /** What a scenario drives. One instance per engine run. */
 export interface ScenarioHost {
@@ -111,6 +111,8 @@ export interface RunRecord {
   outcome: { reported: unknown[]; ended: unknown[]; avoided: unknown[] };
   /** The error a run threw (never, startRun settles it) or surfaced, per key. */
   error: Record<string, { message: string; action: unknown }>;
+  /** Reports the loop never makes: the agent's `reportRunRecord` for a run with no grade. Compared on its own (one report per run), never against the loop. */
+  agentOnly?: { recorded: unknown[] };
   /** The scenario itself failed to complete (a wait that never came true): a difference, never a skip. */
   scenarioError?: string;
 }

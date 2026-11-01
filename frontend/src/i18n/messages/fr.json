@@ -29813,8 +29813,8 @@
     }
   },
   "mailboxSend": {
-    "doNotContactTitle": "Ce destinataire figure sur une liste de non-contact",
-    "doNotContactMessage": "Cette personne s’est désabonnée, son adresse a rebondi ou elle a demandé à ne pas être contactée. N’envoyez ce message malgré tout que si vous êtes certain de devoir le faire.",
+    "doNotContactTitle": "Un ou plusieurs destinataires figurent sur une liste de non-contact, ou une adresse n’a pas pu être lue",
+    "doNotContactMessage": "Un ou plusieurs destinataires se sont désabonnés, leur adresse a rebondi ou ils ont demandé à ne pas être contactés, ou une adresse n’a pas pu être lue. N’envoyez ce message malgré tout que si vous êtes certain de devoir le faire.",
     "sendAnyway": "Envoyer quand même"
   },
   "inboxApp": {

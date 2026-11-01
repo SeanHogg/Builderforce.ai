@@ -206,7 +206,7 @@ export async function runPendingRedemptionSweep(db: Db, env: Env, now = new Date
   // PENDING_RETRY_AFTER_MS. Without a signal it would wait for the floor sweep (up to 30 minutes)
   // after its ten minutes, rather than being picked up by the first tick that can retry it.
   // Always inside PENDING_SIGNAL_WINDOW_MS by construction (it is younger than the threshold), and
-  // it stops being pending-and-young the moment the threshold passes. One indexed row is enough.
+  // it stops being pending-and-young the moment the threshold passes. One row is enough.
   if (!retryingSoon) {
     const [youngPending] = await db.select({ id: pointRedemptions.id })
       .from(pointRedemptions)

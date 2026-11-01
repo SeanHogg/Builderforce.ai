@@ -59,9 +59,9 @@ export const STALE_CLAIM_ERROR =
   + 'so it may or may not have been delivered. It was not retried, to avoid sending it twice.';
 
 /** What a row says when the per-batch do-not-contact re-check settles it: the person was added to a
- *  register after the campaign started, so the message was never sent. */
+ *  register, or (on an SMS campaign) replied STOP, after the campaign started, so the message was never sent. */
 export const DO_NOT_CONTACT_SEND_ERROR =
-  'Not sent: this contact was added to a do-not-contact list after the campaign started.';
+  'Not sent: this contact was added to a do-not-contact list or opted out after the campaign started.';
 
 /**
  * How many recipient-terminal failures in a row, with the SAME normalised message and NOTHING
@@ -108,9 +108,26 @@ export interface BatchResult {
   remaining: number;
   status: string;
   /** Set when the batch ended before its claimed set was exhausted: the provider is not serving us
-   *  (no answer, a 429 or a 5xx). The rows it had not claimed stay `queued` with no attempt spent. */
+   *  (no answer, a 429 or a 5xx), or refused the sender's credentials while keeping the failure retryable (a
+   *  rotated platform key). The rows it had not claimed stay `queued` with no attempt spent. */
   stopped?: 'provider_unavailable';
 }
+
+/**
+ * A campaign's `sent` / `failed` total counted from its send ledger, as a correlated subselect for
+ * an UPDATE of `marketing_campaigns`. ONE helper for the finishing update and for {@link failCampaign}.
+ *
+ * The ledger, not batch deltas, is the source of truth for a campaign's final totals. A delta lives in
+ * one Worker invocation's memory: an evicted runner, or a batch that threw after recording sends,
+ * leaves the counters short of the rows actually settled. `sent` and `failed` are the only terminal
+ * row states (opens, clicks and carrier delivery status live in their own columns and never move a row
+ * off them, and an SMS the carrier later reports undelivered is flipped sent -> failed in the ledger as
+ * well as on the counters), so counting rows is correct by construction.
+ */
+const ledgerCount = (rowStatus: 'sent' | 'failed') => sql`(SELECT count(*)::int FROM ${marketingCampaignSends}
+    WHERE ${marketingCampaignSends.campaignId} = ${marketingCampaigns.id}
+      AND ${marketingCampaignSends.tenantId} = ${marketingCampaigns.tenantId}
+      AND ${marketingCampaignSends.status} = ${rowStatus})`;
 
 /**
  * Fail a campaign whose SENDER is dead, and settle every row it still owns. Returns how many
@@ -123,16 +140,16 @@ export interface BatchResult {
  * at all, because a failed campaign has left the in-flight set and the stale-claim sweep
  * (`reapStaleClaims`) never visits it again. Those `sending` rows get the same "delivery state
  * unknown" verdict the sweep would have given them, not the sender's error: another runner may
- * have delivered them. Both settles are counted from `RETURNING`, and added to the campaign's
- * `failed` along with `delta` (what the calling batch already did, so its counters land in the
- * same write).
+ * have delivered them. Both settles are counted from `RETURNING` for the return value only. The
+ * campaign's own `sent` and `failed` are taken from the ledger ({@link ledgerCount}) by the final
+ * statement, which runs AFTER the settles in the same transaction and so sees them: a batch whose
+ * write-back threw, or an earlier batch's lost delta, cannot leave a failed campaign short.
  */
 async function failCampaign(
   db: Db,
   tenantId: number,
   campaignId: number,
   reason: string,
-  delta: { sent: number; failed: number },
 ): Promise<number> {
   return inTransaction(db, async (tx) => {
     const unattempted = await tx
@@ -158,8 +175,8 @@ async function failCampaign(
       .update(marketingCampaigns)
       .set({
         status: 'failed',
-        sent: sql`${marketingCampaigns.sent} + ${delta.sent}`,
-        failed: sql`${marketingCampaigns.failed} + ${delta.failed + settledHere}`,
+        sent: ledgerCount('sent'),
+        failed: ledgerCount('failed'),
         completedAt: sql`NOW()`,
         updatedAt: sql`NOW()`,
       })
@@ -199,7 +216,7 @@ export async function runCampaignBatch(
     // sender un-verified, connection deleted). Every remaining recipient would
     // fail identically, so the campaign fails as a whole and says why — rather
     // than grinding through the audience writing the same error N times.
-    const failedHere = await failCampaign(db, tenantId, campaignId, resolved.error, { sent: 0, failed: 0 });
+    const failedHere = await failCampaign(db, tenantId, campaignId, resolved.error);
     return { sent: 0, failed: failedHere, remaining: 0, status: 'failed' };
   }
   const sender = resolved.sender;
@@ -219,6 +236,9 @@ export async function runCampaignBatch(
       // this replaces would be one round-trip per person in the audience.
       name: marketingAudienceMembers.name,
       attributes: marketingAudienceMembers.attributes,
+      // A carrier STOP sets only this (see the catch below and `recordSmsDeliveryStatus`), never the
+      // register the re-check reads, so the re-check reads it too.
+      phoneStatus: marketingAudienceMembers.phoneStatus,
     })
     .from(marketingCampaignSends)
     .leftJoin(marketingAudienceMembers, and(
@@ -231,11 +251,11 @@ export async function runCampaignBatch(
       eq(marketingCampaignSends.tenantId, tenantId),
       eq(marketingCampaignSends.status, 'queued'),
     ))
-    // Least-attempted first, then id. The batch stops at the first no-response, so ordering by id
-    // alone retries the same head row every tick through a long outage and writes it off at the
+    // Least-attempted first, then id. The batch stops at the first provider-unavailable failure, so
+    // ordering by id alone retries the same head row every tick through a long outage and writes it off at the
     // attempt ceiling before the next row gets a single try. This way every recipient gets one
-    // attempt before any gets a second. No attempt is refunded: a timed-out send may have been
-    // delivered, and a refund would allow unlimited duplicates.
+    // attempt before any gets a second. An attempt is refunded only for a failure that definitely was
+    // not delivered (see the catch): a timed-out send may have gone out, and refunding it would allow unlimited duplicates.
     .orderBy(asc(marketingCampaignSends.attempts), asc(marketingCampaignSends.id))
     .limit(batchSize);
 
@@ -245,15 +265,17 @@ export async function runCampaignBatch(
   // Do-not-contact, re-checked ONCE per batch. `startCampaign` applied the register when it
   // materialised the recipient rows, but a long send runs for hours across many batches, and
   // someone erased or unsubscribed in the meantime must not receive the rest of it. One statement
-  // for the whole batch (both keys for an SMS, as at start), and a blocked row is settled straight
+  // for the whole batch (both keys for an SMS, as at start, plus the member's own `phone_status`), and a blocked row is settled straight
   // to `failed` WITHOUT being claimed: it is never sent, and spending an attempt on it would only
   // misstate how many times we tried to reach somebody we must not contact. One UPDATE settles them
   // all, and a row another runner got to first (no longer `queued`) is left alone and not counted.
-  const batchChannel = campaign.channel === 'sms' ? 'sms' : 'email';
   const blockedKeys = queued.length > 0
-    ? await suppressedEmails(db, tenantId, queued.flatMap((row) => campaignMemberKeys(batchChannel, row)))
+    ? await suppressedEmails(db, tenantId, queued.flatMap((row) => campaignMemberKeys(sender.channel, row)))
     : new Set<string>();
-  const blockedRows = queued.filter((row) => isMemberBlocked(blockedKeys, campaignMemberKeys(batchChannel, row)));
+  // An SMS member who replied STOP is blocked too: STOP sets `phone_status` and nothing on the register.
+  const blockedRows = queued.filter((row) =>
+    isMemberBlocked(blockedKeys, campaignMemberKeys(sender.channel, row))
+    || (sender.channel === 'sms' && row.phoneStatus === 'unsubscribed'));
   if (blockedRows.length > 0) {
     const settledBlocked = await db
       .update(marketingCampaignSends)
@@ -350,10 +372,21 @@ export async function runCampaignBatch(
       // transient 429 is how a campaign silently under-delivers — and the
       // attempt ceiling is what stops the opposite failure, an unsendable
       // recipient requeued forever so the campaign never completes.
-      const requeue = failedDeliveryStatus(row.attempts + 1, error instanceof TransportError && error.retryable) === 'queued';
+      //
+      // A failure where the message DEFINITELY was not delivered (`undelivered`: a 429, a rate-limit
+      // 403, the mailbox token endpoint down) always requeues, whatever the ceiling says, and gives
+      // back the attempt the claim took in the same write: no duplicate is possible, so spending the
+      // attempt would only write a recipient off for the provider's throttle. No answer (status 0) and
+      // a 5xx are NOT undelivered, the message may have gone out, so they keep the capped requeue.
+      const undelivered = error instanceof TransportError && error.undelivered;
+      const requeue = undelivered || failedDeliveryStatus(row.attempts + 1, error instanceof TransportError && error.retryable) === 'queued';
       const settled = await db
         .update(marketingCampaignSends)
-        .set({ status: requeue ? 'queued' : 'failed', error: message.slice(0, 1_000) })
+        .set({
+          status: requeue ? 'queued' : 'failed',
+          error: message.slice(0, 1_000),
+          ...(undelivered ? { attempts: sql`${marketingCampaignSends.attempts} - 1` } : {}),
+        })
         .where(and(
           eq(marketingCampaignSends.id, row.id),
           eq(marketingCampaignSends.tenantId, tenantId),
@@ -374,10 +407,14 @@ export async function runCampaignBatch(
       // A provider that is not serving us (no answer, the call's timeout, a 429, a 5xx) will not
       // serve the next 24 either: each would cost an attempt, and a silent provider its full
       // timeout, so a small audience would be written off in three ticks of an outage. Stop the
-      // batch here. The row just tried was requeued above (its attempt counts: it WAS tried); the
+      // batch here. The row just tried was requeued above (its attempt counts unless it was `undelivered`); the
       // rest were never claimed, so they stay `queued` with no attempt consumed, and the next
       // batch retries them.
-      if (error instanceof TransportError && error.providerUnavailable) {
+      //
+      // The same stop for a RETRYABLE failure of the SENDER (a platform 401/402/403/404, a rotated
+      // key, which the transport keeps retryable): every remaining recipient would fail identically,
+      // so continuing only burns an attempt per row. The row just tried is requeued above.
+      if (error instanceof TransportError && (error.providerUnavailable || (error.retryable && error.scope === 'sender'))) {
         providerUnavailable = true;
         break;
       }
@@ -431,7 +468,7 @@ export async function runCampaignBatch(
   }
 
   if (senderFailure !== null) {
-    const failedHere = await failCampaign(db, tenantId, campaignId, senderFailure, { sent, failed });
+    const failedHere = await failCampaign(db, tenantId, campaignId, senderFailure);
     return { sent, failed: failed + failedHere, remaining: 0, status: 'failed' };
   }
 
@@ -451,21 +488,17 @@ export async function runCampaignBatch(
     ));
 
   const done = Number(remaining) === 0;
-  // The totals a FINISHED campaign reports are counted from the ledger, not accumulated from
-  // batch deltas. A delta lives in one Worker invocation's memory: an evicted runner, or a batch
-  // that threw after recording sends, leaves the campaign's counters short of the rows it actually
-  // settled, and a total that is wrong is wrong for good. The send ledger is the source of truth
-  // (`sent` and `failed` are the only terminal row states; opens, clicks and carrier delivery
-  // status live in their own columns and never move a row off them, and an SMS the carrier later
-  // reports undelivered is flipped sent -> failed in the ledger as well as on the counters), so
-  // counting its rows makes the final number correct by construction. Non-final batches keep the
-  // cheap delta: nothing reads those totals as final, and the finishing update replaces them.
-  const ledgerCount = (rowStatus: 'sent' | 'failed') => sql`(SELECT count(*)::int FROM ${marketingCampaignSends}
-    WHERE ${marketingCampaignSends.campaignId} = ${marketingCampaigns.id}
-      AND ${marketingCampaignSends.tenantId} = ${marketingCampaigns.tenantId}
-      AND ${marketingCampaignSends.status} = ${rowStatus})`;
-  const sentTotal = done ? ledgerCount('sent') : sql`${marketingCampaigns.sent} + ${sent}`;
-  const failedTotal = done ? ledgerCount('failed') : sql`${marketingCampaigns.failed} + ${failed}`;
+  // The totals a FINISHED campaign reports are counted from the ledger ({@link ledgerCount}), not
+  // accumulated from batch deltas. Non-final batches keep the cheap delta: nothing reads those totals
+  // as final, and the finishing update replaces them.
+  //
+  // A non-final delta only ADDS while the campaign is still `sending`. Another runner may already
+  // have finished it from the ledger (or failed it): this runner's delta then lands on top of a total
+  // that already counts those rows, and the campaign reads more than it sent.
+  const addWhileSending = (column: typeof marketingCampaigns.sent | typeof marketingCampaigns.failed, delta: number) =>
+    sql`CASE WHEN ${marketingCampaigns.status} = 'sending' THEN ${column} + ${delta} ELSE ${column} END`;
+  const sentTotal = done ? ledgerCount('sent') : addWhileSending(marketingCampaigns.sent, sent);
+  const failedTotal = done ? ledgerCount('failed') : addWhileSending(marketingCampaigns.failed, failed);
   // The flip to a finished status is conditional on the campaign still being `sending`, so a
   // concurrent batch that failed it (a dead sender) is never overwritten with `sent`; the
   // counters land either way. A campaign that finishes having delivered nothing, with rows
@@ -507,7 +540,13 @@ export async function runCampaignBatch(
   // Bounded: every signalling batch settles at least one row for good (`sent` and `failed` never
   // go back to `queued`), so the signals one campaign raises cannot exceed its audience, and a
   // requeue is capped by the attempt ceiling (`CAMPAIGN_SEND_MAX_ATTEMPTS`, counted at claim).
-  if (!done && sent + failed > 0 && Number(queuedLeft ?? 0) > 0) await signalPendingWork(env);
+  //
+  // Never when the batch STOPPED because the provider is not serving us and delivered nothing: the
+  // `failed` rows it settled (do-not-contact, an earlier bad number) say nothing about the next
+  // attempt, which would meet the same outage. Signalling there re-opens the gate every tick for the
+  // length of an outage, which is exactly what the stop exists to prevent; the floor cadence retries.
+  const stalledOnProvider = providerUnavailable && sent === 0;
+  if (!done && !stalledOnProvider && sent + failed > 0 && Number(queuedLeft ?? 0) > 0) await signalPendingWork(env);
 
   return {
     sent,

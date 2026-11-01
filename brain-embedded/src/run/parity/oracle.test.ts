@@ -11,7 +11,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../../../..');
 const DRIVES_A_RUN = /startRun\b|brainRunStore|startEngineRun|driveRun|test\/continueHarness|brainRunHarness|draftHost|mirrorRun/;
 /** A test that names BOTH engines itself (`engineKit`, the area harnesses under `run/areaR/`) is a parity test, not an oracle: the oracle's engine is the environment's. */
-const CHOOSES_ITS_OWN_ENGINE = /engineKit|bothEngines/;
+const CHOOSES_ITS_OWN_ENGINE = /engineKit|bothEngines|run\/parity\/harness/;
 const OWN_ENGINE_DIRS = [join('src', 'run', 'areaR'), join('src', 'run', 'parity')];
 
 function testFiles(dir: string, out: string[] = []): string[] {

@@ -497,6 +497,11 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
    * Start sending. This materializes the recipient list and immediately runs the
    * FIRST batch, so a small audience completes in one request and the user sees
    * a finished send rather than a spinner; the cron sweep picks up the rest.
+   *
+   * By then the campaign is ALREADY live (`startCampaign` flipped it and materialised the rows), so a
+   * throw from that first batch must not answer 500 for a send that is happening: it is reported, the
+   * sweep is signalled so the campaign carries on, and the started campaign is returned with an empty
+   * batch.
    */
   router.post('/campaigns/:id/send', manager, async (c) => {
     const campaignId = Number(c.req.param('id'));
@@ -504,9 +509,16 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const started = await startCampaign(c.env as Env, db, tenantId, campaignId);
     if (!started.ok) return c.json({ error: started.error }, started.status);
-    const batch = await runCampaignBatch(c.env, db, tenantId, campaignId, {
-      trackingOrigin: resolveTrackingOrigin(c.env),
-    });
+    let batch: Awaited<ReturnType<typeof runCampaignBatch>>;
+    try {
+      batch = await runCampaignBatch(c.env, db, tenantId, campaignId, {
+        trackingOrigin: resolveTrackingOrigin(c.env),
+      });
+    } catch (error) {
+      reportCaughtError(error, { source: 'presentation/routes/campaignRoutes.ts', operation: 'sendFirstBatch' });
+      await signalPendingWork(c.env as Env);
+      batch = { sent: 0, failed: 0, remaining: started.queued, status: started.campaign.status };
+    }
     return c.json({ campaign: started.campaign, queued: started.queued, suppressed: started.suppressed, batch });
   });
 
