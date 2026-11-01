@@ -197,6 +197,32 @@ export class AgentEventBridge {
     this.stream.push({ type: "message_end", message });
   }
 
+  /**
+   * The run ended without a word for the person, and `text` says why. It is told as the run's REPLY (`stopReason: "stop"`, no
+   * `errorMessage`), so nothing that classifies or rewrites an errored turn's text reads it, and marked `runFailed` so the lifecycle
+   * still ends as a failed run for the consumers that watch for one (the parent of a sub-agent, `agent.wait`). A run that already ended
+   * on an errored turn, or by its own policy, adds nothing.
+   */
+  failedReply(text: string): void {
+    if (this.terminal || this.settledByPolicy) return;
+    const model = this.options.activeModel();
+    const message: AssistantMessage = {
+      role: "assistant",
+      content: [{ type: "text", text }],
+      api: model.api,
+      provider: model.provider,
+      model: model.id,
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      stopReason: "stop",
+      runFailed: true,
+      timestamp: Date.now(),
+    };
+    this.lastAssistant = message;
+    this.record.push(message);
+    this.stream.push({ type: "message_start", message });
+    this.stream.push({ type: "message_end", message });
+  }
+
   /** The messages of the run, in order. */
   messages(): AgentMessage[] {
     return [...this.record];

@@ -120,6 +120,12 @@ export interface AssistantMessage {
   usage: Usage;
   stopReason: StopReason;
   errorMessage?: string;
+  /**
+   * The run FAILED, and this reply says why (it ended on its budget or failure breaker, and a governance gate may have refused its
+   * calls). Told as an ordinary reply so nothing that classifies or rewrites an errored turn's text reads it; the lifecycle still
+   * ends as a failed run because of this field. Set by the channel runner, never by a model.
+   */
+  runFailed?: true;
   timestamp: number;
 }
 

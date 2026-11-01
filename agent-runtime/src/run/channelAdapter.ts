@@ -69,12 +69,21 @@ function steered(messages: readonly AgentMessage[]): SteerInput[] {
 }
 
 /**
- * What a run says when it ran out of budget or tripped its breaker with nothing written to the person: its tool calls failed or were
- * refused, and when a governance gate refused them, which one.
+ * What a run says when it ended on its budget or its failure breaker: what happened (a spent step budget is not failing tool calls),
+ * and which governance gate refused its calls when one did.
  */
-function noReplyMessage(reason: string, gateIds: ReadonlySet<string>): string {
-  const refused = gateIds.size > 0 ? ` Refused by governance gate ${[...gateIds].join(", ")}.` : "";
-  return `The run ended without a reply (${reason}): its tool calls ${gateIds.size > 0 ? "were refused or failed" : "failed"}.${refused}`;
+export function noReplyMessage(reason: string, gateIds: ReadonlySet<string>, wrote: boolean): string {
+  const gates = [...gateIds].join(", ");
+  const lead = wrote ? "The run stopped before it finished" : "The run ended without a reply";
+  const what =
+    reason === "tool calls kept failing"
+      ? gateIds.size > 0
+        ? "its tool calls were refused or failed"
+        : "its tool calls failed"
+      : reason === "step budget spent"
+        ? "it used up its step budget"
+        : reason;
+  return `${lead}: ${what}.${gateIds.size > 0 ? ` Governance gate ${gates} refused some of its tool calls.` : ""}`;
 }
 
 /** The policy DATA of a channel run. How the run behaves is the agent's. */
@@ -165,7 +174,10 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
         // run's own id (`task.runId`) and carries the model that served it; nothing else is claimed.
         events: {
           emit: (event: RunEvent) => {
-            if (event.kind === "policy.blocked") refusedBy.add(event.gateId);
+            if (event.kind === "policy.blocked") {
+              refusedBy.add(event.gateId);
+              config.onGovernanceRefusal?.(event.gateId);
+            }
             bridge.emit(event);
           },
           // The row groups runs by model, and every other entry point reports the bare model id the gateway served. The run itself
@@ -200,13 +212,12 @@ export function runChannelAgent(input: ChannelRunInput): EventStream<AgentEvent,
       // A failure with no model turn behind it must still reach the runner as the errored message it reads (it fails over on it).
       // A run stopped by a breaker or a budget ended as the runner always saw it: on its last tool result.
       if (outcome.kind === "failed" && !outcome.exhausted) bridge.fail(outcome.reason, outcome.reason === RUN_CANCELLED_REASON ? "aborted" : "error");
-      // A run that spent its budget or tripped its breaker AFTER saying something is delivered as it always was. One that never wrote a
-      // word would otherwise end silently (the channel owns its synthesis and the run settled on its last tool result): say what
-      // stopped it, and which governance gate refused its calls when one did. It is told as the run's REPLY, not as an errored turn: the
-      // runner regex-classifies an errored message's text (auth, billing, rate limit, context overflow), so a gate whose key reads like
-      // one of those ("forbidden-paths") would put a healthy profile in cooldown and repeat the run, and its friendly-error rewrite
-      // would replace the text. A reply is read by none of that.
-      else if (outcome.kind === "failed" && !replied) bridge.appended({ role: "assistant", content: noReplyMessage(outcome.reason, refusedBy) });
+      // A run that spent its budget or tripped its breaker never reaches a closing reply (the channel owns its synthesis). If it wrote
+      // nothing it would end silently; if a governance gate refused its calls, whatever it wrote before is not an honest account of
+      // why it stopped. Either way, say what stopped it and which gate refused its calls. It is told as the run's REPLY, not as an
+      // errored turn (the runner regex-classifies an errored message's text, so a gate keyed like `forbidden-paths` would put a healthy
+      // profile in cooldown), and marked `runFailed` so the lifecycle still ends as a failure.
+      else if (outcome.kind === "failed" && (!replied || refusedBy.size > 0)) bridge.failedReply(noReplyMessage(outcome.reason, refusedBy, replied));
     } catch (err) {
       logWarn(`[on-prem] channel run failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {

@@ -69,9 +69,9 @@ export function execTool(ran: string[]): AgentTool {
 }
 
 /** The agent a channel message is served by: the model asks for `exec`, then replies. Hand it whatever gates the host resolved. */
-export function channelAgent(gates: readonly PolicyGate[], ran: string[]) {
+export function channelAgent(gates: readonly PolicyGate[], ran: string[], extra: { onGovernanceRefusal?: (gateId: string) => void } = {}) {
   const seen: Context[] = [];
-  const agent = new Agent({ model, systemPrompt: "sys", tools: [execTool(ran)], policyGates: gates });
+  const agent = new Agent({ model, systemPrompt: "sys", tools: [execTool(ran)], policyGates: gates, ...extra });
   agent.streamFn = scripted(
     [assistant([{ type: "toolCall", id: "c1", name: "exec", arguments: {} }], "toolUse"), assistant([{ type: "text", text: "fin" }])],
     seen,

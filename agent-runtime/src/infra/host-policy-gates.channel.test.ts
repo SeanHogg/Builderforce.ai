@@ -43,6 +43,17 @@ describe("tenant gates on a channel run", () => {
     expect(textOf(result)).toContain("no-shell");
   });
 
+  it("tells the host which gate refused (the structured path a memory flush and a run's result read)", async () => {
+    linkWithGates([{ id: "no-shell", tool: "exec", effect: "block", reason: "shell is off" }, { id: "careful", effect: "inject-directive", directive: "Be careful." }]);
+    const refused: string[] = [];
+    const { agent } = channelAgent(await resolveHostPolicyGates(), [], { onGovernanceRefusal: (id) => refused.push(id) });
+
+    await agent.prompt([user("run the build")]);
+
+    // the withheld tool is called anyway by the scripted model: refused, and the host is told which gate (a directive refuses nothing)
+    expect(refused).toEqual(["no-shell"]);
+  });
+
   it("an inject-directive gate reaches the model's prompt", async () => {
     linkWithGates([{ id: "careful", effect: "inject-directive", directive: "Never touch production." }]);
     const ran: string[] = [];

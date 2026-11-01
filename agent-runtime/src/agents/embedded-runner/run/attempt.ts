@@ -662,6 +662,8 @@ export async function runEmbeddedAttempt(
     let sessionManager: ReturnType<typeof guardSessionManager> | undefined;
     let session: Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
     let removeToolResultContextGuard: (() => void) | undefined;
+    // The gates that refused one of this attempt's tool calls (relayed by the session); the run loop reads them.
+    const governanceRefusals = new Set<string>();
     try {
       await repairSessionFileIfNeeded({
         sessionFile: params.sessionFile,
@@ -760,6 +762,9 @@ export async function runEmbeddedAttempt(
           return pickFallbackModel ? { pickFallbackModel } : {};
         })(),
         ...(params.policyGates?.length ? { policyGates: params.policyGates } : {}),
+        onGovernanceRefusal: (gateId: string) => {
+          governanceRefusals.add(gateId);
+        },
         onModelFallback: (from, to, notice) => {
           log.warn(`[model-failover] ${notice}`);
           emitAgentEvent({
@@ -1059,7 +1064,7 @@ export async function runEmbeddedAttempt(
       setActiveEmbeddedRun(params.sessionId, queueHandle, params.sessionKey);
 
       let abortWarnTimer: NodeJS.Timeout | undefined;
-      const isProbeSession = params.sessionId?.startsWith("probe-") ?? false;
+      const isProbeSession = params.modelProbe === true;
       const abortTimer = setTimeout(
         () => {
           if (!isProbeSession) {
@@ -1500,6 +1505,7 @@ export async function runEmbeddedAttempt(
         toolMetas: toolMetasNormalized,
         lastAssistant,
         lastToolError: getLastToolError?.(),
+        ...(governanceRefusals.size > 0 ? { governanceRefusals: [...governanceRefusals] } : {}),
         didSendViaMessagingTool: didSendViaMessagingTool(),
         messagingToolSentTexts: getMessagingToolSentTexts(),
         messagingToolSentMediaUrls: getMessagingToolSentMediaUrls(),

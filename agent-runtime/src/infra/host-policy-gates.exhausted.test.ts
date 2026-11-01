@@ -18,6 +18,7 @@ import {
   isFailoverAssistantError,
   isRateLimitAssistantError,
 } from "../agents/embedded-helpers.js";
+import { noReplyMessage } from "../run/channelAdapter.js";
 import { approvalGate } from "./approval-gate.js";
 import { assistant, execTool, model, scripted, textOf, user } from "./host-policy-gates.testkit.js";
 
@@ -46,6 +47,8 @@ describe("a run whose calls a governance gate refused until its breaker tripped"
     const last = produced.at(-1) as AssistantMessage;
     expect(last.role).toBe("assistant");
     expect(last.stopReason).toBe("stop");
+    // marked as a failed run, so the lifecycle ends in the error phase for the consumers that watch for one
+    expect(last.runFailed).toBe(true);
     expect(textOf(last)).toContain("no-shell");
     expect(textOf(last)).toContain("refused or failed");
   });
@@ -76,9 +79,40 @@ describe("a run whose calls a governance gate refused until its breaker tripped"
     }
   });
 
-  it("having said something, is delivered as it always was: it ends on its last result", async () => {
+  it("having said something before the gate refused it, still ends on an honest account of why it stopped", async () => {
     const { produced } = await runRefusedForever([BLOCK], () => callExec("I will try the shell."));
 
+    const last = produced.at(-1) as AssistantMessage;
+    expect(last.runFailed).toBe(true);
+    expect(textOf(last)).toContain("The run stopped before it finished");
+    expect(textOf(last)).toContain("no-shell");
+  });
+
+  it("a run with no gate involved that said something is delivered as it always was", async () => {
+    const ran: string[] = [];
+    const agent = new Agent({ model, systemPrompt: "sys", tools: [{ ...execTool(ran), execute: async () => { throw new Error("nope"); } }] });
+    agent.streamFn = scripted(Array.from({ length: 12 }, () => callExec("trying")), []);
+    const produced = await agent.prompt([user("go")]);
+
     expect(produced.at(-1)!.role).toBe("toolResult");
+  });
+});
+
+describe("what the notice says happened", () => {
+  it("a spent step budget is not described as failing tool calls", () => {
+    const text = noReplyMessage("step budget spent", new Set(), false);
+    expect(text).toContain("step budget");
+    expect(text).not.toContain("tool calls failed");
+    expect(text).not.toContain("refused");
+  });
+
+  it("a spent step budget after some refusals still names the gate and the budget", () => {
+    const text = noReplyMessage("step budget spent", new Set(["no-shell"]), true);
+    expect(text).toContain("step budget");
+    expect(text).toContain("no-shell");
+  });
+
+  it("failing tool calls are described as that", () => {
+    expect(noReplyMessage("tool calls kept failing", new Set(), false)).toContain("its tool calls failed");
   });
 });

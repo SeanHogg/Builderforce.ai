@@ -46,6 +46,8 @@ export interface AgentOptions {
   onModelFallback?: (from: Model, to: Model, notice: string) => void;
   /** See {@link AgentLoopConfig.policyGates}. */
   policyGates?: readonly PolicyGate[];
+  /** See {@link AgentLoopConfig.onGovernanceRefusal}. */
+  onGovernanceRefusal?: (gateId: string) => void;
 }
 
 /**
@@ -74,6 +76,7 @@ export class Agent {
   private pickFallbackModel?: (tried: readonly string[]) => Model | undefined;
   private onModelFallback?: (from: Model, to: Model, notice: string) => void;
   private policyGates?: readonly PolicyGate[];
+  private onGovernanceRefusal?: (gateId: string) => void;
 
   constructor(opts: AgentOptions) {
     this._state = {
@@ -90,6 +93,7 @@ export class Agent {
     this.pickFallbackModel = opts.pickFallbackModel;
     this.onModelFallback = opts.onModelFallback;
     this.policyGates = opts.policyGates;
+    this.onGovernanceRefusal = opts.onGovernanceRefusal;
   }
 
   get state(): AgentState {
@@ -174,6 +178,7 @@ export class Agent {
         this.onModelFallback?.(from, to, notice);
       },
       ...(this.policyGates?.length ? { policyGates: this.policyGates } : {}),
+      ...(this.onGovernanceRefusal ? { onGovernanceRefusal: this.onGovernanceRefusal } : {}),
       ...(this.knowledge ? { knowledge: this.knowledge } : {}),
       ...(this.prefetch ? { prefetch: this.prefetch } : {}),
     };

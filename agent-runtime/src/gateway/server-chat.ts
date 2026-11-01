@@ -320,13 +320,16 @@ export function createAgentEventHandler({
       nodeSendToSession(sessionKey, "chat", payload);
       return;
     }
+    const errorMessage = details?.errorMessage ?? (error ? formatForLog(error) : undefined);
+    // A failed run that said why as its reply (`runFailed`) already streamed that text to the chat: the error final carries no second copy.
+    const alreadyShown = errorMessage !== undefined && text.length > 0 && text.includes(errorMessage);
     const payload = {
       runId: clientRunId,
       sessionKey,
       seq,
       state: "error" as const,
       stopReason: details?.stopReason,
-      errorMessage: details?.errorMessage ?? (error ? formatForLog(error) : undefined),
+      ...(alreadyShown ? {} : { errorMessage }),
     };
     broadcast("chat", payload);
     nodeSendToSession(sessionKey, "chat", payload);

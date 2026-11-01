@@ -1,7 +1,6 @@
 import fs from "node:fs/promises";
-import type { PolicyGate } from "@builderforce/agent-tools";
 import type { ThinkLevel } from "../../auto-reply/thinking.js";
-import { forUnattendedRun, resolveHostPolicyGates } from "../../infra/host-policy-gates.js";
+import { gatesForRun } from "../../infra/host-policy-gates.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { enqueueCommandInLane } from "../../process/command-queue.js";
 import { isMarkdownCapableMessageChannel } from "../../utils/message-channel.js";
@@ -48,6 +47,7 @@ import { ensureBuilderForceAgentsModelsJson } from "../models-config.js";
 import { derivePromptTokens, normalizeUsage, type UsageLike } from "../usage.js";
 import { redactRunIdentifier, resolveRunWorkspaceDir } from "../workspace-run.js";
 import { compactEmbeddedSessionDirect } from "./compact.js";
+import { blocksAutoContinue } from "./governance-outcome.js";
 import { buildAutoContinuePrompt, shouldAutoContinueRun } from "./continuation-policy.js";
 import { resolveGlobalLane, resolveSessionLane } from "./lanes.js";
 import { trackRunOutcome } from "./learned-routing/run-outcome.js";
@@ -190,7 +190,8 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
         ? "markdown"
         : "plain"
       : "markdown");
-  const isProbeSession = params.sessionId?.startsWith("probe-") ?? false;
+  // A model liveness probe is what the HOST says it is (`modelProbe`), never what a session id's prefix claims: `agent` accepts any client sessionId.
+  const isProbeSession = params.modelProbe === true;
 
   // Learned Model Routing (PRD 13): what this run will teach the fleet (see `learned-routing/run-outcome.ts`).
   const tracker = trackRunOutcome({ runId: params.runId, isProbeSession, requestedModel: params.requestedModel });
@@ -213,16 +214,10 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
           `[workspace-fallback] caller=runEmbeddedAgent reason=${workspaceResolution.fallbackReason} run=${params.runId} session=${redactedSessionId} sessionKey=${redactedSessionKey} agent=${workspaceResolution.agentId} workspace=${redactedWorkspace}`,
         );
       }
-      // Governance gates: every embedded run served here (a channel reply, a cron job, a command) is
-      // held to the TENANT's gates, resolved at this one seam so no caller has to remember to feed
-      // them. That holds inside a gateway process, which owns the host's link; a one-off CLI command
-      // run outside one has no link and so no gates. A ticket is dispatched through the relay with its own gates and does not run here, so
-      // this never overrides a payload. Model probes are not governed runs (the host sets `modelProbe`; the
-      // client-chosen `probe-` session prefix decides nothing here). A run nobody can approve in time
-      // (`unattended`) has its approval gates turned into refusals.
-      const policyGates: readonly PolicyGate[] = params.modelProbe === true
-        ? []
-        : forUnattendedRun(await resolveHostPolicyGates(), params.unattended === true);
+      // Governance gates: every embedded run served here (channel reply, cron job, command) is held to the TENANT's gates, resolved at
+      // this one seam. Inside a gateway process (it owns the host link); a one-off CLI run has none. A ticket carries its own gates
+      // in its dispatch and does not run here. Model probes (`modelProbe`, host-set) and unattended runs: see `gatesForRun`.
+      const policyGates = await gatesForRun(params);
       const prevCwd = process.cwd();
 
       let provider = (params.provider ?? DEFAULT_PROVIDER).trim() || DEFAULT_PROVIDER;
@@ -557,6 +552,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
             prompt,
             images: params.images,
             disableTools: params.disableTools,
+            ...(params.modelProbe ? { modelProbe: true } : {}),
             ...(policyGates.length ? { policyGates } : {}),
             provider,
             modelId,
@@ -1043,6 +1039,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
             lastCallUsage: lastCallUsage ?? undefined,
             promptTokens,
             compactionCount: autoCompactionCount > 0 ? autoCompactionCount : undefined,
+            ...(attempt.governanceRefusals ? { governanceRefusals: attempt.governanceRefusals } : {}),
           };
 
           const payloads = buildEmbeddedRunPayloads({
@@ -1074,6 +1071,7 @@ export async function runEmbeddedAgent(params: RunEmbeddedAgentParams): Promise<
             timedOut,
             promptErrored: Boolean(promptError),
             hasPendingClientToolCall: Boolean(attempt.clientToolCall),
+            governanceBlocked: blocksAutoContinue(attempt),
           });
 
           log.debug(

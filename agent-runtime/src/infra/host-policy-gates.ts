@@ -131,6 +131,17 @@ export async function resolveHostPolicyGates(): Promise<PolicyGate[]> {
 }
 
 /**
+ * The gates a run is held to: the tenant's, resolved at the embedded runner's one seam. A model liveness probe (set by the host, never by a
+ * client) is not a governed run, and a run nobody can approve in time (`unattended`) has its approval gates turned into refusals.
+ */
+export async function gatesForRun(run: { modelProbe?: boolean; unattended?: boolean }): Promise<readonly PolicyGate[]> {
+  if (run.modelProbe === true) {
+    return [];
+  }
+  return forUnattendedRun(await resolveHostPolicyGates(), run.unattended === true);
+}
+
+/**
  * The gates for a run nobody can approve in time (a memory flush runs between turns): an
  * approval gate becomes a refusal on the same tool, at once, instead of a wait for an
  * approver who is not there. `block` and directive gates are unchanged.

@@ -49,6 +49,8 @@ export type EmbeddedRunAttemptResult = {
   messagingToolSentMediaUrls: string[];
   messagingToolSentTargets: MessagingToolSend[];
   successfulCronAdds?: number;
+  /** The ids of the governance gates that refused a tool call during this attempt (absent when none did). */
+  governanceRefusals?: string[];
   cloudCodeAssistFormatError: boolean;
   attemptUsage?: NormalizedUsage;
   compactionCount?: number;

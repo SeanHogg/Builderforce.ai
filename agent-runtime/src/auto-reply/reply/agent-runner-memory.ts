@@ -7,7 +7,6 @@ import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import { type SessionEntry, updateSessionStoreEntry } from "../../config/sessions.js";
 import { logVerbose } from "../../globals.js";
 import { registerAgentRunContext } from "../../infra/agent-events.js";
-import { logWarn } from "../../logger.js";
 import type { TemplateContext } from "../templating.js";
 import type { VerboseLevel } from "../thinking.js";
 import type { GetReplyOptions } from "../types.js";
@@ -16,7 +15,7 @@ import {
   buildEmbeddedRunContexts,
   resolveModelFallbackOptions,
 } from "./agent-runner-utils.js";
-import { watchFlushRefusals } from "./flush-governance.js";
+import { warnIfFlushRefused } from "./flush-governance.js";
 import {
   resolveMemoryFlushContextWindowTokens,
   resolveMemoryFlushPromptForRun,
@@ -91,7 +90,6 @@ export async function runMemoryFlushIfNeeded(params: {
     });
   }
   let memoryCompactionCompleted = false;
-  const refusals = watchFlushRefusals();
   const flushSystemPrompt = [
     params.followupRun.run.extraSystemPrompt,
     memoryFlushSettings.systemPrompt,
@@ -99,7 +97,7 @@ export async function runMemoryFlushIfNeeded(params: {
     .filter(Boolean)
     .join("\n\n");
   try {
-    await runWithModelFallback({
+    const flushRun = await runWithModelFallback({
       ...resolveModelFallbackOptions(params.followupRun.run),
       run: (provider, model) => {
         const { authProfile, embeddedContext, senderContext } = buildEmbeddedRunContexts({
@@ -127,7 +125,6 @@ export async function runMemoryFlushIfNeeded(params: {
           // Runs between turns: no person can approve a gated tool in time, so approval gates refuse at once.
           unattended: true,
           onAgentEvent: (evt) => {
-            refusals.observe(evt);
             if (evt.stream === "compaction") {
               const phase = typeof evt.data.phase === "string" ? evt.data.phase : "";
               if (phase === "end") {
@@ -153,13 +150,9 @@ export async function runMemoryFlushIfNeeded(params: {
         memoryFlushCompactionCount = nextCount;
       }
     }
-    const refusedBy = refusals.gates();
-    if (refusedBy.length > 0) {
-      // The flush ran but its writes were refused: it is NOT recorded as done, so the next turn does not believe its memory was saved.
-      logWarn(
-        `[memory-flush] governance gate ${refusedBy.join(", ")} refused the flush's tool calls; the flush is not recorded as done`,
-      );
-    } else if (params.storePath && params.sessionKey) {
+    // A gate that refused the flush's writes is named in a warning; the flush is still recorded as done (it is not re-run every turn).
+    warnIfFlushRefused(flushRun.result.meta?.agentMeta?.governanceRefusals);
+    if (params.storePath && params.sessionKey) {
       try {
         const updatedEntry = await updateSessionStoreEntry({
           storePath: params.storePath,

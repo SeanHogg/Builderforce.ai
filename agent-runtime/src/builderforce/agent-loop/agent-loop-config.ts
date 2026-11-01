@@ -36,6 +36,8 @@ export interface AgentLoopConfig {
    * and persist the swap (see {@link Agent}).
    */
   onModelFallback?: (from: Model, to: Model, notice: string) => void;
+  /** Told the id of each governance gate that refuses a tool call of this run (the structured `policy.blocked` path), so the host learns which gates stopped it. */
+  onGovernanceRefusal?: (gateId: string) => void;
   /** Converts AgentMessage[] to LLM-compatible Message[] before each LLM call. */
   convertToLlm: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
   /** Optional AgentMessage[] → AgentMessage[] transform applied before conversion. */

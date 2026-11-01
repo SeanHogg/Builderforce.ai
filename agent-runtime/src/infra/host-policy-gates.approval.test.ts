@@ -83,10 +83,9 @@ describe("a require-approval gate on a channel run", () => {
     expect(ran).toEqual([]);
     // and the refusal reads as a stop, not as a person's no
     const result = produced.find((m) => m.role === "toolResult");
-    if (result) {
-      expect(textOf(result)).toContain("stopped");
-      expect(textOf(result)).not.toContain("declined");
-    }
+    expect(result).toBeDefined();
+    expect(textOf(result)).toContain("stopped");
+    expect(textOf(result)).not.toContain("declined");
   });
 
   it("a Stop that has already happened posts nothing for the dead run", async () => {

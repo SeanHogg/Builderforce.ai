@@ -8,6 +8,8 @@ export type ContinuationPolicyInput = {
   timedOut?: boolean;
   promptErrored?: boolean;
   hasPendingClientToolCall?: boolean;
+  /** A governance gate refused a call of this run, or the run ended failed: continuing it would re-run the refused calls. */
+  governanceBlocked?: boolean;
 };
 
 export type ContinuationPolicyDecision = {
@@ -84,6 +86,11 @@ export function shouldAutoContinueRun(input: ContinuationPolicyInput): Continuat
       `[auto-continue] blocked: abort/timeout/error status (aborted=${input.aborted} timedOut=${input.timedOut})`,
     );
     return { shouldContinue: false };
+  }
+
+  if (input.governanceBlocked) {
+    logDebug(`[auto-continue] blocked: a governance gate refused this run's calls, or the run ended failed`);
+    return { shouldContinue: false, reason: "governance_blocked" };
   }
 
   if (!looksLikeExecutionTask(input.userPrompt)) {

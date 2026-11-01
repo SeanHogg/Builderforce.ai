@@ -1,53 +1,21 @@
 /**
- * What a memory flush must not hide: a tenant governance gate refused a tool call it made.
+ * A memory flush runs the embedded runner like any other turn, so a tenant governance gate can refuse the tool calls that write its
+ * notes. The run reports WHICH gates refused (the structured `policy.blocked` path, relayed on the run result's
+ * `meta.agentMeta.governanceRefusals`), and this is what the flush says about it.
  *
- * A flush writes the session's memory notes. When a gate refuses those writes the run still "finishes" (the model reads the
- * refusal and stops), so recording it as a flush that happened would tell the next turn its memory was saved when it was not.
- * A gate refusal reaches the run's tool events as an error result whose content is the gate's own structured answer
- * (`{ ok: false, gate, error }`, `policy/tools/gates.ts`), so the watch reads that field and no wording.
+ * The flush is still recorded as done (`memoryFlushAt`, `memoryFlushCompactionCount`): a flush the gate keeps refusing would
+ * otherwise run again on every turn, and the refusal would repeat. The warning is what tells an operator the notes were not written.
  */
+import { logWarn } from "../../logger.js";
 
-interface ToolEvent {
-  stream?: string;
-  data?: Record<string, unknown>;
-}
-
-/** The gate id a tool-result event carries when a governance gate refused the call, else undefined. */
-function refusingGate(evt: ToolEvent): string | undefined {
-  if (evt.stream !== "tool" || evt.data?.phase !== "result" || evt.data.isError !== true) {
-    return undefined;
+/** Warn, naming the gates, when any refused the flush's tool calls. Returns whether any did. */
+export function warnIfFlushRefused(gateIds: readonly string[] | undefined): boolean {
+  if (!gateIds || gateIds.length === 0) {
+    return false;
   }
-  const content = (evt.data.result as { content?: unknown } | undefined)?.content;
-  if (!Array.isArray(content)) {
-    return undefined;
-  }
-  for (const block of content) {
-    const text = (block as { type?: unknown; text?: unknown } | null)?.type === "text" ? (block as { text?: unknown }).text : undefined;
-    if (typeof text !== "string") {
-      continue;
-    }
-    try {
-      const parsed = JSON.parse(text) as { gate?: unknown };
-      if (typeof parsed?.gate === "string" && parsed.gate.length > 0) {
-        return parsed.gate;
-      }
-    } catch {
-      // not the gate's JSON answer: an ordinary tool error
-    }
-  }
-  return undefined;
-}
-
-/** Feed it the flush run's agent events; ask it afterwards which gates refused the run's calls. */
-export function watchFlushRefusals(): { observe: (evt: ToolEvent) => void; gates: () => string[] } {
-  const gates = new Set<string>();
-  return {
-    observe: (evt) => {
-      const gate = refusingGate(evt);
-      if (gate) {
-        gates.add(gate);
-      }
-    },
-    gates: () => [...gates],
-  };
+  logWarn(
+    `[memory-flush] governance gate ${gateIds.join(", ")} refused the flush's tool calls, so its notes may not have been written; ` +
+      "the flush is recorded as done so it is not re-run every turn",
+  );
+  return true;
 }

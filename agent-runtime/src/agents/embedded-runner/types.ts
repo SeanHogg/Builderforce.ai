@@ -21,6 +21,8 @@ export type EmbeddedAgentMeta = {
    * sums input tokens from every API call in the run, which overstates the
    * actual context size.
    */
+  /** The ids of the governance gates that refused a tool call during the run (absent when none did): how a caller learns a gate stopped it. */
+  governanceRefusals?: string[];
   lastCallUsage?: {
     input?: number;
     output?: number;

@@ -46,6 +46,8 @@ export interface CreateAgentSessionOptions {
   onModelFallback?: (from: Model, to: Model, notice: string) => void;
   /** Compiled governance gates the session's runs are held to (see {@link AgentLoopConfig.policyGates}). */
   policyGates?: readonly PolicyGate[];
+  /** Told the id of each gate that refuses a call of the session's runs (see {@link AgentLoopConfig.onGovernanceRefusal}). */
+  onGovernanceRefusal?: (gateId: string) => void;
   /** Default stream fn; the embedded runner overrides `session.agent.streamFn` per route. */
   streamFn?: StreamFn;
   /** Accepted for call-site compatibility with pi's `createAgentSession`, but unused —
@@ -87,6 +89,7 @@ export class AgentSession {
       ...(opts.pickFallbackModel ? { pickFallbackModel: opts.pickFallbackModel } : {}),
       ...(opts.onModelFallback ? { onModelFallback: opts.onModelFallback } : {}),
       ...(opts.policyGates?.length ? { policyGates: opts.policyGates } : {}),
+      ...(opts.onGovernanceRefusal ? { onGovernanceRefusal: opts.onGovernanceRefusal } : {}),
     });
     this.agent.sessionId = this.sessionManager.getSessionId();
     if (opts.streamFn) this.agent.streamFn = opts.streamFn;
