@@ -35,18 +35,22 @@ async function failOver(turnSections: (() => string[]) | undefined) {
     context: { pack: () => ({ focus: [], facts: [], recall: [] }), ...(turnSections ? { turnSections } : {}) },
     platform,
   };
-  await runAgent({ task: { ...TEST_TASK, transcript: rows }, policy: { ...TEST_POLICY, pinnedModel: "p/m", modelHandoff: true }, ports });
-  return events.filter((e): e is Extract<RunEvent, { kind: "context.compacted" }> => e.kind === "context.compacted");
+  const outcome = await runAgent({ task: { ...TEST_TASK, transcript: rows }, policy: { ...TEST_POLICY, pinnedModel: "p/m", modelHandoff: true }, ports });
+  const folds = events.filter((e): e is Extract<RunEvent, { kind: "context.compacted" }> => e.kind === "context.compacted");
+  return Object.assign(folds, { compactions: outcome.state.compaction.compactions });
 }
 
 describe("a hand-off charges the tail the last request carried", () => {
   it("without a tail the transcript is handed over whole", async () => {
     const folds = await failOver(undefined);
     expect(folds.at(-1)).toMatchObject({ dropped: 0 });
+    // a hand-off that only tells the incoming model it took over is not a compaction
+    expect(folds.compactions).toBe(0);
   });
 
   it("with a 3K-token tail the same transcript is cut", async () => {
     const folds = await failOver(() => [`## run record\n${"r".repeat(12_000)}`]);
     expect(folds.at(-1)!.dropped).toBeGreaterThan(0);
+    expect(folds.compactions).toBe(1);
   });
 });
