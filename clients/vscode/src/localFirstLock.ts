@@ -5,8 +5,8 @@
  * storage, so a commit takes this lock. Two rules, and they used to fight:
  *
  *   - NEVER STEAL FROM A LIVE HOLDER. A held lock is busy however old it is
- *     (`leaseBusy`); a contender polls for `LOCAL_FIRST_BUSY_TIMEOUT_MS` and
- *     then fails `local_first_store_busy`. There is no age window.
+ *     (`leaseBusy`); a contender polls for `LOCAL_FIRST_BUSY_TIMEOUT_MS` (an open:
+ *     `LOCAL_FIRST_OPEN_BUSY_TIMEOUT_MS`) and then fails `local_first_store_busy`. There is no age window.
  *   - NEVER BRICK. A holder that crashed mid-commit used to leave its lock
  *     behind forever, and a failed write right after the exclusive create left
  *     a lock naming nobody that was ALSO busy forever. A dead holder is now
@@ -39,10 +39,13 @@ import { leaseBusy, leaseReclaimable, type HolderLiveness } from "@builderforce/
 const fs = nodeFs.promises;
 
 /**
- * How long a second owner polls before `local_first_store_busy`.
+ * How long a second owner polls before `local_first_store_busy` when it wants to COMMIT.
+ * Sized past the longest ordinary hold (a compaction measured at 2.7 s on a fast disk).
  * Not a steal window: a lock older than 30s is still the holder's.
  */
-export const LOCAL_FIRST_BUSY_TIMEOUT_MS = 1_500;
+export const LOCAL_FIRST_BUSY_TIMEOUT_MS = 15_000;
+/** The same wait for an OPEN (the one-time import measured at about 3.3 s, far more on a slow disk). */
+export const LOCAL_FIRST_OPEN_BUSY_TIMEOUT_MS = 60_000;
 /** Pause between exclusive attempts while another owner holds the lock. */
 export const LOCAL_FIRST_BUSY_POLL_MS = 25;
 
@@ -222,7 +225,8 @@ async function reclaimDeadLock(lockPath: string, dead: LockHolder): Promise<void
 
 export interface LocalFirstFileLock {
   readonly ownerId: string;
-  acquire(): Promise<void>;
+  /** Polls (asynchronously, never blocking the event loop) up to `timeoutMs`, default the commit wait. */
+  acquire(timeoutMs?: number): Promise<void>;
   release(): Promise<void>;
 }
 
@@ -246,8 +250,8 @@ export function createLocalFirstFileLock(
 
   return {
     ownerId,
-    async acquire() {
-      const deadline = Date.now() + busyTimeoutMs;
+    async acquire(timeoutMs = busyTimeoutMs) {
+      const deadline = Date.now() + timeoutMs;
       for (;;) {
         const content = JSON.stringify({
           holder: ownerId,

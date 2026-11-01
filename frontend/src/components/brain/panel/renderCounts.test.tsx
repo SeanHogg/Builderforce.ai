@@ -11,7 +11,7 @@ import type { BrainPanelController } from '../hooks/useBrainPanelController';
  * (the panel's `BrainComposer`) and not the conversation column or its transcript.
  * Everything heavy around them is stubbed; the transcript and the web surface only count their renders.
  */
-const counts = vi.hoisted(() => ({ timeline: 0, surface: 0 }));
+const counts = vi.hoisted(() => ({ timeline: 0, surface: 0, timelineProps: null as Record<string, unknown> | null }));
 
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
 vi.mock('next/dynamic', () => ({ default: () => () => null }));
@@ -19,7 +19,7 @@ vi.mock('@seanhogg/builderforce-brain-ui', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@seanhogg/builderforce-brain-ui')>();
   return {
     ...actual,
-    BrainTimeline: () => { counts.timeline += 1; return <div data-testid="timeline" />; },
+    BrainTimeline: (props: Record<string, unknown>) => { counts.timeline += 1; counts.timelineProps = props; return <div data-testid="timeline" />; },
     PersonaPicker: () => null,
     RecipientPicker: () => null,
   };
@@ -57,6 +57,7 @@ afterEach(() => {
   cleanup();
   counts.timeline = 0;
   counts.surface = 0;
+  counts.timelineProps = null;
 });
 
 const NO_MESSAGES: never[] = [];
@@ -98,5 +99,38 @@ describe('typing in the web panel composer', () => {
     expect(box.value).toBe('x'.repeat(20));
     expect(counts.timeline).toBe(before.timeline);
     expect(counts.surface).toBe(before.surface);
+  });
+});
+
+describe('the web panel transcript after a send', () => {
+  it('is handed the pending turn and the serving model from the conversation', () => {
+    const panel = {
+      isPage: false,
+      chats: { activeChatId: 1, activeChat: { id: 1 }, chats: [] },
+      conv: {
+        messages: NO_MESSAGES, sending: true, streamingText: '', uploading: false, pendingAttachments: NO_MESSAGES, contextUsage: null,
+        pendingTurn: { text: 'fix the build' }, servedBy: { model: 'local/kimi-code/k3', account: 'own' },
+      },
+      draftStore: createComposerDraftStore(),
+      error: null,
+      timeline: { timelineLabels: {} },
+      timelineTrace: NO_MESSAGES,
+      repoContext: { repoPickerOpen: false },
+      prefs: {}, memory: {}, consolidation: {}, persona: {}, queued: {}, rows: {}, newProject: {},
+      participants: NO_MESSAGES,
+      recipient: null,
+      chooseRecipient: noop,
+      handleSend: noop,
+      handleQueueAfter: noop,
+      stopTurn: noop,
+      composerId: 'c',
+      capabilitySurface: 'chat',
+      capabilityId: null,
+      chatMode: 'chat',
+    } as unknown as BrainPanelController;
+
+    render(<BrainPanelContext.Provider value={panel}><BrainConversation /></BrainPanelContext.Provider>);
+
+    expect(counts.timelineProps).toMatchObject({ pendingUserText: 'fix the build', liveModel: 'local/kimi-code/k3', liveAccount: 'own' });
   });
 });

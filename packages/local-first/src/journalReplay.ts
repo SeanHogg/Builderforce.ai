@@ -14,7 +14,7 @@
 import type { LocalFirstDelta } from './localFirstDelta.js';
 import { CommittedState } from './storeState.js';
 import type { LocalFirstSnapshot } from './storeContract.js';
-import { isBaseFrame, walkFrames, type JournalFrameBound } from './journalCodec.js';
+import { damagedAfterStop, isBaseFrame, walkFrames, type JournalFrameBound } from './journalCodec.js';
 
 export function isLocalFirstSnapshot(value: unknown): value is LocalFirstSnapshot {
   if (!value || typeof value !== 'object') return false;
@@ -88,6 +88,13 @@ export interface JournalOpenScan extends JournalScan {
   readonly tailFrames: number;
   /** Bytes of those frames. */
   readonly tailBytes: number;
+  /**
+   * Set when the journal is DAMAGED, not merely torn: a frame failed with committed bytes
+   * behind it (`damaged-frame`), or the newest base never reached its closing `endsBase`
+   * (`unclosed-base`). A torn tail is not corruption. A host must not truncate a corrupt
+   * journal: it keeps a copy and rebuilds from elsewhere.
+   */
+  readonly corrupt: 'damaged-frame' | 'unclosed-base' | undefined;
 }
 
 interface Folded {
@@ -95,6 +102,8 @@ interface Folded {
   applied: number;
   /** Index of the frame that ends the last base chain. */
   baseEnd: number;
+  /** A base chain started and its closing frame was reached (or there is no base chain at all). */
+  baseClosed: boolean;
 }
 
 function* foldFrom(bytes: Uint8Array, bounds: readonly JournalFrameBound[], from: number): Generator<void, Folded> {
@@ -118,7 +127,7 @@ function* foldFrom(bytes: Uint8Array, bounds: readonly JournalFrameBound[], from
     }
     yield;
   }
-  return { state, applied, baseEnd: closedAt ?? lastBase };
+  return { state, applied, baseEnd: closedAt ?? lastBase, baseClosed: lastBase < 0 || closedAt !== undefined };
 }
 
 function* scanSteps(bytes: Uint8Array): Generator<void, JournalOpenScan> {
@@ -127,7 +136,11 @@ function* scanSteps(bytes: Uint8Array): Generator<void, JournalOpenScan> {
     bounds.push(bound);
     yield;
   }
-  if (bounds.length === 0) return { latest: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0 };
+  const walkedTo = bounds.length === 0 ? 0 : bounds[bounds.length - 1]!.end;
+  const damaged = walkedTo < bytes.byteLength && damagedAfterStop(bytes, walkedTo);
+  if (bounds.length === 0) {
+    return { latest: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0, corrupt: damaged ? 'damaged-frame' : undefined };
+  }
   let start = 0;
   for (let index = bounds.length - 1; index >= 0; index -= 1) {
     if (isBaseFrame(bytes, bounds[index]!)) { start = index; break; }
@@ -141,11 +154,12 @@ function* scanSteps(bytes: Uint8Array): Generator<void, JournalOpenScan> {
     folded = yield* foldFrom(bytes, bounds, from);
   }
   const committed = from + folded.applied;
-  if (!folded.state || folded.applied === 0) return { latest: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0 };
+  const corrupt = damaged ? 'damaged-frame' : folded.baseClosed ? undefined : 'unclosed-base';
+  if (!folded.state || folded.applied === 0) return { latest: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0, corrupt };
   const committedBytes = bounds[committed - 1]!.end;
   const tailFrames = Math.max(0, committed - 1 - folded.baseEnd);
   const tailBytes = folded.baseEnd >= 0 ? committedBytes - bounds[folded.baseEnd]!.end : committedBytes;
-  return { latest: folded.state.view(), frames: committed, committedBytes, tailFrames, tailBytes };
+  return { latest: folded.state.view(), frames: committed, committedBytes, tailFrames, tailBytes, corrupt };
 }
 
 function drive(steps: Generator<void, JournalOpenScan>): JournalOpenScan {
@@ -182,6 +196,8 @@ export interface JournalTail {
   readonly consumedBytes: number;
   /** A base frame (a compaction landed on this file): the reader must reload, not apply. */
   readonly needsReload: boolean;
+  /** The bytes stop at a DAMAGED frame (see `JournalOpenScan.corrupt`), not a torn tail: reload, never cut. */
+  readonly damaged: boolean;
 }
 
 /**
@@ -191,12 +207,15 @@ export interface JournalTail {
 export function readJournalTail(bytes: Uint8Array): JournalTail {
   const deltas: LocalFirstDelta[] = [];
   let consumedBytes = 0;
+  let walkedTo = 0;
   for (const bound of walkFrames(bytes)) {
-    if (isBaseFrame(bytes, bound)) return { deltas, consumedBytes, needsReload: true };
+    if (isBaseFrame(bytes, bound)) return { deltas, consumedBytes, needsReload: true, damaged: false };
+    walkedTo = bound.end;
     const parsed = parseFrame(bytes, bound);
     if (!parsed || parsed.kind !== 'delta') break;
     deltas.push(parsed.delta);
     consumedBytes = bound.end;
   }
-  return { deltas, consumedBytes, needsReload: false };
+  const damaged = walkedTo < bytes.byteLength && damagedAfterStop(bytes, walkedTo);
+  return { deltas, consumedBytes, needsReload: false, damaged };
 }

@@ -34,9 +34,11 @@ import nodePath from "node:path";
 import {
   readJournalTail,
   scanJournalAsync,
+  type JournalOpenScan,
   type LocalFirstDelta,
   type LocalFirstSnapshot,
 } from "@builderforce/local-first";
+import { LocalFirstStoreCorruptError } from "./localFirstCorruption";
 
 const fs = nodeFs.promises;
 
@@ -64,6 +66,8 @@ export interface LoadedJournal extends JournalOpen {
   tailFrames: number;
   tailBytes: number;
   identity: FileIdentity | undefined;
+  /** The journal is damaged, not torn. Such a load can be read, never `adopt`ed (which would cut it). */
+  corrupt?: JournalOpenScan["corrupt"];
 }
 
 export type TailRead =
@@ -103,6 +107,14 @@ function identityOf(stat: nodeFs.Stats): FileIdentity {
 function sameFile(a: FileIdentity | undefined, b: FileIdentity | undefined): boolean {
   if (!a || !b) return a === b;
   return a.ino === b.ino && a.birthtimeMs === b.birthtimeMs;
+}
+
+/** A write the file system cut short is a failed write: publishing it would leave a damaged frame or base. */
+async function writeWhole(handle: FileHandle, frame: Uint8Array, position: number): Promise<void> {
+  const { bytesWritten } = await handle.write(frame, 0, frame.byteLength, position);
+  if (bytesWritten !== frame.byteLength) {
+    throw new Error(`local_first_short_write: wrote ${bytesWritten} of ${frame.byteLength} bytes`);
+  }
 }
 
 const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === "ENOENT";
@@ -155,10 +167,13 @@ export function createNodeJournalIo(directory: string): NodeJournalIo {
       tailFrames: scan.tailFrames,
       tailBytes: scan.tailBytes,
       identity: identityOf(stat),
+      corrupt: scan.corrupt,
     };
   };
 
   const adopt = (loaded: LoadedJournal): void => {
+    // Tracking a damaged journal would let the next append cut everything after the damage.
+    if (loaded.corrupt) throw new LocalFirstStoreCorruptError(journalFile);
     committedBytes = loaded.committedBytes;
     frameCount = loaded.frames;
     tailFrames = loaded.tailFrames;
@@ -199,7 +214,7 @@ export function createNodeJournalIo(directory: string): NodeJournalIo {
       await handle.close();
     }
     const tail = readJournalTail(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
-    if (tail.needsReload) return { kind: "reload" };
+    if (tail.needsReload || tail.damaged) return { kind: "reload" };
     if (tail.deltas.length === 0) return { kind: "unchanged" };
     return { kind: "deltas", deltas: tail.deltas, consumedBytes: tail.consumedBytes };
   };
@@ -231,7 +246,7 @@ export function createNodeJournalIo(directory: string): NodeJournalIo {
         // A torn tail from a crashed append is not a commit: cut it before the next frame.
         if ((await handle.stat()).size !== committedBytes) await handle.truncate(committedBytes);
         try {
-          await handle.write(frame, 0, frame.byteLength, committedBytes);
+          await writeWhole(handle, frame, committedBytes);
           // The frame is durable only after fsync. Callers are not told the write
           // was saved until this returns.
           await handle.sync();
@@ -261,7 +276,7 @@ export function createNodeJournalIo(directory: string): NodeJournalIo {
         const handle = await fs.open(temporary, "wx");
         try {
           for await (const frame of frames) {
-            await handle.write(frame, 0, frame.byteLength, written);
+            await writeWhole(handle, frame, written);
             written += frame.byteLength;
             count += 1;
           }

@@ -162,6 +162,9 @@ export function BrainConversation() {
               streamingText={conv.sending ? conv.streamingText : ''}
               isRunning={conv.sending}
               activity={conv.activity}
+              pendingUserText={conv.pendingTurn?.text}
+              liveModel={conv.servedBy?.model}
+              liveAccount={conv.servedBy?.account}
               loading={conv.loadingMessages}
               labels={timeline.timelineLabels}
               modelIdentity={modelIdentity}

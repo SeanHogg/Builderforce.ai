@@ -39,7 +39,9 @@ import {
   type LocalFirstStore,
   type MemoryLocalFirstStore,
 } from "@builderforce/local-first";
-import { createLocalFirstFileLock, type LocalFirstFileLockOptions } from "./localFirstLock";
+import { LOCAL_FIRST_OPEN_BUSY_TIMEOUT_MS, createLocalFirstFileLock, type LocalFirstFileLockOptions } from "./localFirstLock";
+import { LocalFirstStoreCorruptError, quarantineJournal } from "./localFirstCorruption";
+import { baselineOf, legacyMoved, readLegacyMerge, statLegacyJournal, writeLegacyBaseline, type LegacyStat } from "./localFirstLegacyMerge";
 import { createNodeJournalIo, yieldToEventLoop, type LoadedJournal, type TailRead } from "./localFirstJournalIo";
 import {
   checkSnapshotCache,
@@ -99,6 +101,8 @@ export function createDurableLocalFirstStore(
   const beforeWrite = options.beforeWrite ?? Promise.resolve();
   const onBackgroundError = options.onBackgroundError
     ?? ((error: unknown) => console.warn("local-first: background write failed", error));
+  // An open or import holds the lock far longer than a commit does (a measured 3.3 s import).
+  const openWaitMs = options.lock?.busyTimeoutMs ?? LOCAL_FIRST_OPEN_BUSY_TIMEOUT_MS;
   const listeners = new Set<LocalFirstListener>();
   let quiet = false;
   let opened: Promise<void> | undefined;
@@ -144,21 +148,31 @@ export function createDurableLocalFirstStore(
     }
   };
 
+  /** The baseline of v2 as just imported, so a later open merges only what an old window adds. */
+  const recordImportBaseline = async (source: LocalFirstSnapshot | undefined, legacy: LegacyStat | undefined): Promise<void> => {
+    if (legacy) await writeLegacyBaseline(directory, baselineOf(source ?? EMPTY_LOCAL_FIRST_SNAPSHOT, legacy)).catch(onBackgroundError);
+  };
+
   /**
    * First open with no v3 journal and an older store to bring over. UNDER THE LOCK: two
    * windows can open at once, and the loser must find the winner's v3 rather than write its
    * own. v2 is only read; v3 is written as a stream of frames; the JSON cache of v2's state is
-   * set aside so it is never parsed again.
+   * set aside so it is never parsed again. A damaged v3 takes the same road (`rebuildCorrupt`).
    */
   const importLegacy = async (): Promise<void> => {
     await fs.mkdir(directory, { recursive: true });
-    await lock.acquire();
+    await lock.acquire(openWaitMs);
     try {
       const raced = await io.load(yieldToEventLoop);
+      if (raced.corrupt) {
+        await rebuildCorrupt();
+        return;
+      }
       if (raced.latest) {
         adopt(raced, true);
         return;
       }
+      const legacy = await statLegacyJournal(directory); // before the read: a later write must show as a change
       const fromJournal = await readLegacyJournal(directory, yieldToEventLoop);
       const source = fromJournal ?? await readSnapshotCache(snapshotFile);
       if (source && snapshotHasState(source)) {
@@ -167,7 +181,48 @@ export function createDurableLocalFirstStore(
       } else {
         adopt(raced, true);
       }
-      if (fromJournal) await retireSnapshotCache(snapshotFile);
+      await recordImportBaseline(source, legacy);
+      if (fromJournal) await retireSnapshotCache(snapshotFile).catch(onBackgroundError);
+    } finally {
+      await lock.release();
+    }
+  };
+
+  /**
+   * UNDER THE LOCK: v3 is damaged (not torn). It is copied aside whole and never truncated; the
+   * store is rebuilt from v2 by the import path, or — with no v2 to rebuild from — the open is
+   * refused with `local_first_store_corrupt` rather than opening partial.
+   */
+  const rebuildCorrupt = async (): Promise<void> => {
+    const copy = await quarantineJournal(io.journalFile);
+    const legacy = await statLegacyJournal(directory);
+    const source = await readLegacyJournal(directory, yieldToEventLoop);
+    if (!source || !snapshotHasState(source)) throw new LocalFirstStoreCorruptError(copy);
+    await io.compact(snapshotFrames(source, yieldToEventLoop));
+    replaceMemory(source, false);
+    await recordImportBaseline(source, legacy);
+    onBackgroundError(new Error(`local-first: journal damaged; original kept at ${copy}; rebuilt from the v2 journal`));
+  };
+
+  /**
+   * Writes an old window made to v2 after the import (`localFirstLegacyMerge.ts`). A lock-free
+   * check first — one stat plus the sidecar — so the usual open never takes the lock; then, under
+   * it and caught up with v3, merge what the baseline says is new as ONE v3 commit and move the baseline.
+   */
+  const mergeLegacyWrites = async (): Promise<void> => {
+    if (!(await legacyMoved(directory))) return;
+    await lock.acquire(openWaitMs);
+    try {
+      await refreshForCommit();
+      const merge = await readLegacyMerge(directory, memory.view(), yieldToEventLoop);
+      if (!merge) return;
+      if (merge.delta) {
+        await io.append(encodeDeltaFrame(merge.delta));
+        memory.applyDelta(merge.delta);
+        dirty = true;
+      }
+      await writeLegacyBaseline(directory, merge.baseline);
+      if (merge.delta) onBackgroundError(new Error(`local-first: merged ${merge.rows} rows and ${merge.events} events an older window wrote to the v2 journal`));
     } finally {
       await lock.release();
     }
@@ -175,11 +230,14 @@ export function createDurableLocalFirstStore(
 
   const openStore = async (): Promise<void> => {
     const loaded = await io.load(yieldToEventLoop);
-    if (loaded.latest) {
+    if (loaded.corrupt) {
+      await importLegacy();
+    } else if (loaded.latest) {
       adopt(loaded, true);
       // The journal is the record, so the cache is not imported — but a small corrupt cache
       // is still moved aside here. Failing to do so must not fail the open.
       await checkSnapshotCache(snapshotFile).catch(onBackgroundError);
+      await mergeLegacyWrites().catch(onBackgroundError);
     } else if (await hasLegacyState(directory, snapshotFile)) {
       await importLegacy();
     } else {
@@ -209,7 +267,11 @@ export function createDurableLocalFirstStore(
   const refreshForCommit = async (): Promise<void> => {
     const read = await io.readTail();
     if (read.kind === "deltas") applyTail(read);
-    else if (read.kind === "reload") adopt(await io.load(yieldToEventLoop), false);
+    else if (read.kind === "reload") {
+      const loaded = await io.load(yieldToEventLoop);
+      if (loaded.corrupt) await rebuildCorrupt();
+      else adopt(loaded, false);
+    }
   };
 
   /**
@@ -230,7 +292,8 @@ export function createDurableLocalFirstStore(
       return;
     }
     const loaded = await io.load(yieldToEventLoop);
-    if (stale()) return;
+    // A damaged journal is left for the next commit (under the lock) to set aside and rebuild.
+    if (stale() || loaded.corrupt) return;
     adopt(loaded, false);
   };
 

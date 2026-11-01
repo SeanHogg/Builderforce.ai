@@ -106,6 +106,8 @@ const ORPHAN_PATTERNS: readonly RegExp[] = [
   /^local-first-v1\.json\.\d+\.\d+\.tmp$/,
   /^local-first-v1\.lock\..+\.tmp$/,
   /^local-first-v[23]\.journal\.\d+\.\d+\.tmp$/,
+  /^local-first-v3\.import\.json\.\d+\.\d+\.tmp$/,
+  /^local-first-v3\.import\.json\.\d+\.\d+\.tmp$/,
 ];
 
 /**

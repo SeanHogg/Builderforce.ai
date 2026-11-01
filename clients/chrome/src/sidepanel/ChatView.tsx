@@ -236,6 +236,8 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
           isRunning={conv.sending}
           activity={conv.activity}
           pendingUserText={conv.pendingTurn?.text}
+          liveModel={conv.servedBy?.model}
+          liveAccount={conv.servedBy?.account}
           labels={labels}
           assistantName="Rovr"
           onAnswerQuestion={answer}

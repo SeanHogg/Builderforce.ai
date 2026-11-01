@@ -40,6 +40,7 @@ export function createVsCodeLocalFirstStore(
   return createDurableLocalFirstStore(ctx.globalStorageUri.fsPath, {
     beforeWrite,
     onSlowCommit: (ms, frameBytes) => hostLog(`[local-first] slow commit: ${ms} ms, ${frameBytes} byte frame`),
+    onBackgroundError: (error) => hostLog(`[local-first] ${error instanceof Error ? error.message : String(error)}`),
   });
 }
 

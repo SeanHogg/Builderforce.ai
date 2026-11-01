@@ -150,6 +150,35 @@ export function* walkFrames(bytes: Uint8Array): Generator<JournalFrameBound> {
   }
 }
 
+/** A whole frame (known magic, length that fits, matching crc) starts at `offset`. */
+function completeFrameAt(bytes: Uint8Array, offset: number): boolean {
+  if (offset + JOURNAL_HEADER_BYTES > bytes.byteLength || !magicKind(bytes, offset)) return false;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const start = offset + JOURNAL_HEADER_BYTES;
+  const end = start + view.getUint32(offset + MAGIC_BYTES, false);
+  return end <= bytes.byteLength && crc32(bytes.subarray(start, end)) === view.getUint32(offset + MAGIC_BYTES + 4, false);
+}
+
+/**
+ * `walkFrames` stopped at `offset`, short of the end of the file. Is that a plain TORN TAIL
+ * (a kill cut the last append short: the failed frame is the last thing in the file), or
+ * DAMAGE (a frame failed its crc with more bytes after it, or a whole frame still follows)?
+ * A torn tail is cut and recovered; damage must never be truncated.
+ */
+export function damagedAfterStop(bytes: Uint8Array, offset: number): boolean {
+  if (offset + JOURNAL_HEADER_BYTES > bytes.byteLength) return false;
+  if (magicKind(bytes, offset)) {
+    const length = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(offset + MAGIC_BYTES, false);
+    // Failed its crc with bytes after it: the frame was complete once, so it is not a torn append.
+    if (offset + JOURNAL_HEADER_BYTES + length < bytes.byteLength && !completeFrameAt(bytes, offset)) return true;
+  }
+  // A frame that cannot be read, but a whole one after it: committed data sits behind the damage.
+  for (let index = offset + 1; index + JOURNAL_HEADER_BYTES <= bytes.byteLength; index += 1) {
+    if (bytes[index] === 0x42 && completeFrameAt(bytes, index)) return true;
+  }
+  return false;
+}
+
 /** True for a frame a reader may START from: a whole snapshot, or a delta that resets. */
 export function isBaseFrame(bytes: Uint8Array, bound: JournalFrameBound): boolean {
   if (bound.kind === 'snapshot') return true;

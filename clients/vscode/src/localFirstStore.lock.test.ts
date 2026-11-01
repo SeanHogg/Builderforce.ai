@@ -87,7 +87,7 @@ describe("local-first file lock", () => {
 
     await expect(second.transact(async () => undefined)).resolves.toBeUndefined();
     expect(existsSync(lock)).toBe(false);
-  });
+  }, LOCAL_FIRST_BUSY_TIMEOUT_MS + 15_000);
 
   async function lockDirectory(): Promise<{ root: string; lock: string }> {
     const root = await mkdtemp(nodePath.join(tmpdir(), "bf-local-first-lock-"));

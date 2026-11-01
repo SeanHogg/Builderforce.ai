@@ -7,8 +7,8 @@ One commit on a store of 20,627 records took about 10 s on the extension-host th
 - **Two journal stores retired.** `offlineLocalFirstStore.ts`, `createJournaledLocalFirstStore`, `JournalIo` and `JournaledLocalFirstStore` are deleted.
 - **Local store rewriting every message on every commit:** closed by the delta journal. The second payload copy stays open as the unbound-rows entry in ROADMAP.md.
 - **Typing.** `createComposerDraftStore` with `useDraftText`/`useDraftIsEmpty`: only the text box re-renders per key on VS Code, web and Rovr; render-count tests hold it in `packages/brain-ui`, `frontend` and `clients/chrome`.
-- **First bubble.** `usePendingTurns`/`announceTurn` show the turn before the commit; `useBrainChats` shows `originalRequest` optimistically.
-- **Model shown, wording corrected.** `servedModelLabel`, `servedBy`/`liveModel` in the timeline. Hosted models called from your machine (Kimi Code) are no longer labelled as running on this device: `runsOnDevice` is separate from `isLocalModelRef`, and `hostedTip` plus "Your account" are translated in VS Code, web and Rovr.
+- **First bubble.** `usePendingTurns`/`announceTurn` show the turn before the commit on VS Code, Rovr, and the web Brain and guest panels; `useBrainChats` shows `originalRequest` optimistically.
+- **Model shown, wording corrected.** `servedModelLabel`, `servedBy`/`liveModel` in the timeline on the same surfaces. Hosted models called from your machine (Kimi Code) are no longer labelled as running on this device: `runsOnDevice` is separate from `isLocalModelRef`, and `hostedTip` plus "Your account" are translated in VS Code, web and Rovr.
 - `packages/brain-ui/vitest.config.ts` dedupes React, which the linked `brain-embedded` otherwise loads twice.
 
 ## ✅ RESOLVED 2026-11-01 — PRD 35 closed: VS Code, web and Rovr chat and on-prem channels run on the one agent; the Brain's `runLoop` and the engine switch are deleted (VS Code 2026.10.118 · api 2026.10.96 · frontend 2026.10.100 · agent-runtime 2026.10.24 · brain-embedded 2026.10.73 · brain-ui 2026.10.31 · agent-run 2026.10.85 · agent-loop 2026.10.15 · agent-tools 2026.10.18 · run-guards 2026.10.4 · Rovr 2026.10.35)

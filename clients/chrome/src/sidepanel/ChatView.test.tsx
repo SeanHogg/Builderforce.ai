@@ -34,10 +34,15 @@ import { ChatView } from './ChatView';
 import { ServicesContext } from './hooks';
 
 /** Counts the chat view's renders: it draws the surface once per render, so a keystroke that re-rendered the view would show here. */
-const counts = vi.hoisted(() => ({ surface: 0 }));
+const counts = vi.hoisted(() => ({ surface: 0, pendingSeen: [] as Array<string | undefined> }));
 vi.mock('@seanhogg/builderforce-brain-ui', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@seanhogg/builderforce-brain-ui')>();
-  return { ...actual, AiSurface: (props: Parameters<typeof actual.AiSurface>[0]) => { counts.surface += 1; return actual.AiSurface(props); } };
+  return { ...actual, AiSurface: (props: Parameters<typeof actual.AiSurface>[0]) => {
+      counts.surface += 1;
+      // The thread is the transcript element: record the pending text each render hands it.
+      const thread = props.thread as { props?: { pendingUserText?: string } } | undefined;
+      counts.pendingSeen.push(thread?.props?.pendingUserText);
+      return actual.AiSurface(props); } };
 });
 
 /** `chrome.*` as the panel reads it: no catalog (every `t()` is its key), English UI. */
@@ -140,6 +145,7 @@ describe('Rovr ChatView on the shared conversation hook', () => {
     const box = screen.getByRole('textbox', { name: 'composerLabel' }) as HTMLTextAreaElement;
     await act(async () => { await Promise.resolve(); });
     const before = counts.surface;
+    expect(before).toBeGreaterThan(0); // positive control: the mock is applied, so an unchanged count means something
 
     for (let i = 1; i <= 20; i += 1) fireEvent.change(box, { target: { value: 'x'.repeat(i) } });
 
@@ -157,6 +163,20 @@ describe('Rovr ChatView on the shared conversation hook', () => {
     await waitFor(() => expect(screen.getByText('Hello from Rovr.')).toBeTruthy());
     expect(stream).toHaveBeenCalledTimes(1);
     expect(await userRows(records)).toEqual(['hi']);
+  });
+
+  it('hands the sent text to the transcript as the pending turn, before the answer lands', async () => {
+    counts.pendingSeen.length = 0;
+    let finish!: (r: StreamChatResult) => void;
+    const stream = vi.fn<BrainStreamFn>(() => new Promise<StreamChatResult>((resolve) => { finish = resolve; }));
+    const { services } = await panel(stream);
+    render(<Harness services={services} />);
+
+    await type('fix the build');
+
+    await waitFor(() => expect(counts.pendingSeen).toContain('fix the build'));
+    await act(async () => { finish(answer('Done.')); });
+    await waitFor(() => expect(screen.getByText('Done.')).toBeTruthy());
   });
 
   it('a refused turn shows the shared banner; Switch to Hybrid re-sends the SAME turn — one user row', async () => {

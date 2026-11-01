@@ -138,6 +138,9 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
               trace={[]}
               streamingText={conv.streamingText || room.streamingPeer?.text || ''}
               isRunning={conv.sending || !!room.streamingPeer}
+              pendingUserText={conv.pendingTurn?.text}
+              liveModel={conv.servedBy?.model}
+              liveAccount={conv.servedBy?.account}
               labels={timelineLabels}
               assistantName={t('brand')}
               renderMessage={(_msg, ctx) => <ChatMessageContent content={ctx.text} />}
