@@ -83,7 +83,7 @@ describe("opening over a v2 journal", () => {
 describe("orphaned temp files", () => {
   it("removes only the exact temp patterns, and only once they are old", async () => {
     const root = await directory();
-    const old = ["local-first-v1.json.4242.1700000000000.tmp", "local-first-v1.lock.9f1c2b.tmp", "local-first-v2.journal.4242.17.tmp", "local-first-v3.journal.4242.17.tmp"];
+    const old = ["local-first-v1.json.4242.1700000000000.tmp", "local-first-v1.lock.9f1c2b.tmp", "local-first-v2.journal.4242.17.tmp", "local-first-v3.journal.4242.17.tmp", "local-first-v3.journal.4242.1700000000000.k3x9a2.tmp", "local-first-v1.json.4242.1700000000000.q8z1b7.tmp"];
     const kept = ["local-first-v1.json.corrupt-1700000000000", "local-first-v1.json.pre-v3", "notes.tmp", "local-first-v3.journal.keep", "local-first-v3.journal.x.tmp", "local-first-v2.journal"];
     const fresh = "local-first-v1.json.4242.1700000000001.tmp";
     for (const name of [...old, ...kept, fresh]) await writeFile(nodePath.join(root, name), "x");

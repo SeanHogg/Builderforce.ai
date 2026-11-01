@@ -91,12 +91,20 @@ export function isJournalEventId(value: unknown): value is string {
  * The early-exit sentinel a scan visitor returns to STOP the scan at that row.
  * Returning anything else (including undefined) continues to the next row.
  */
-export const SCAN_STOP: unique symbol = Symbol.for('builderforce.local-first.scan-stop');
+export const SCAN_STOP: ScanStop = Symbol.for('builderforce.local-first.scan-stop') as ScanStop;
+
+/**
+ * The sentinel's TYPE is structural, not `unique symbol`: a package that bundles this
+ * contract's declarations (brain-embedded's rolled-up `.d.ts`) gets its OWN `unique symbol`,
+ * which TypeScript treats as a different type from this one, so a store typed here would not
+ * be assignable to the bundled `LocalFirstStore`. The runtime value is `Symbol.for`, shared.
+ */
+export type ScanStop = symbol & { readonly __builderforceScanStop: true };
 
 /** What a `scan` / `scanPending` callback may return: nothing (continue) or `SCAN_STOP`. */
-export type ScanVisit<T = unknown> = (row: Readonly<LocalRecord<T>>) => void | typeof SCAN_STOP;
+export type ScanVisit<T = unknown> = (row: Readonly<LocalRecord<T>>) => void | ScanStop;
 /** What a `scanPending` callback may return: nothing (continue) or `SCAN_STOP`. */
-export type ScanPendingVisit = (event: Readonly<JournalEvent>) => void | typeof SCAN_STOP;
+export type ScanPendingVisit = (event: Readonly<JournalEvent>) => void | ScanStop;
 
 export interface LocalFirstSnapshot {
   records: LocalRecord[];

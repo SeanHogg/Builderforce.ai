@@ -42,6 +42,7 @@ import {
   type LocalFirstSnapshot,
 } from "@builderforce/local-first";
 import { LocalFirstStoreCorruptError } from "./localFirstCorruption";
+import { renameDurably, temporaryPathFor, writeFrameFile, writeWhole } from "./localFirstAtomicFile";
 
 const fs = nodeFs.promises;
 
@@ -115,10 +116,10 @@ export interface NodeJournalIo {
    * lock-free phase already streamed and FSYNCED. `catchUp` copies the committed frames
    * appended to the journal after it was snapshotted onto the temp's end (see `CatchUp`).
    * The temp is re-fsynced and atomically renamed over the journal, so the rename lands the
-   * new base and the caught-up tail in one step. Resolves with the caught-up frame count. A
+   * new base and the caught-up tail in one step. A
    * failure removes the temp and leaves the journal untouched.
    */
-  publishCompacted(tempPath: string, tempFrames: number, catchUp: CatchUp): Promise<number>;
+  publishCompacted(tempPath: string, tempFrames: number, catchUp: CatchUp): Promise<void>;
   /** Remove a temp file a cancelled compaction left behind. */
   discardCompacted(tempPath: string): Promise<void>;
   /** Commit frames and bytes since the last base. */
@@ -140,14 +141,6 @@ function identityOf(stat: nodeFs.Stats): FileIdentity {
 export function sameFile(a: FileIdentity | undefined, b: FileIdentity | undefined): boolean {
   if (!a || !b) return a === b;
   return a.ino === b.ino && a.birthtimeMs === b.birthtimeMs;
-}
-
-/** A write the file system cut short is a failed write: publishing it would leave a damaged frame or base. */
-export async function writeWhole(handle: FileHandle, frame: Uint8Array, position: number): Promise<void> {
-  const { bytesWritten } = await handle.write(frame, 0, frame.byteLength, position);
-  if (bytesWritten !== frame.byteLength) {
-    throw new Error(`local_first_short_write: wrote ${bytesWritten} of ${frame.byteLength} bytes`);
-  }
 }
 
 const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === "ENOENT";
@@ -305,29 +298,17 @@ export function createNodeJournalIo(directory: string): NodeJournalIo {
     },
     async compact(frames) {
       await fs.mkdir(directory, { recursive: true });
-      const temporary = `${journalFile}.${process.pid}.${Date.now()}.tmp`;
-      let written = 0;
-      let count = 0;
+      const temporary = temporaryPathFor(journalFile);
+      const written = await writeFrameFile(temporary, frames);
       try {
-        const handle = await fs.open(temporary, "wx");
-        try {
-          for await (const frame of frames) {
-            await writeWhole(handle, frame, written);
-            written += frame.byteLength;
-            count += 1;
-          }
-          await handle.sync();
-        } finally {
-          await handle.close();
-        }
-        await fs.rename(temporary, journalFile);
+        await renameDurably(temporary, journalFile);
       } catch (error) {
         await fs.rm(temporary, { force: true });
         throw error;
       }
       const stat = await statOrUndefined();
-      committedBytes = written;
-      frameCount = count;
+      committedBytes = written.bytes;
+      frameCount = written.frames;
       tailFrames = 0;
       tailBytes = 0;
       identity = stat ? identityOf(stat) : undefined;
@@ -344,7 +325,7 @@ export function createNodeJournalIo(directory: string): NodeJournalIo {
         await handle.sync();
         await handle.close();
         handle = undefined;
-        await fs.rename(tempPath, journalFile);
+        await renameDurably(tempPath, journalFile);
         const stat = await statOrUndefined();
         committedBytes = stat?.size ?? 0;
         frameCount = tempFrames + copied.frames;
@@ -354,7 +335,6 @@ export function createNodeJournalIo(directory: string): NodeJournalIo {
         identity = stat ? identityOf(stat) : undefined;
         opened = true;
         version += 1;
-        return copied.frames;
       } catch (error) {
         if (handle) await handle.close().catch(() => undefined);
         await fs.rm(tempPath, { force: true }).catch(() => undefined);

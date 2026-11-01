@@ -103,9 +103,9 @@ export async function retireSnapshotCache(snapshotFile: string): Promise<void> {
 
 /** Exactly the temp names this store's writers use — nothing else in the directory is touched. */
 const ORPHAN_PATTERNS: readonly RegExp[] = [
-  /^local-first-v1\.json\.\d+\.\d+\.tmp$/,
+  /^local-first-v1\.json\.\d+\.\d+(\.[a-z0-9]+)?\.tmp$/,
   /^local-first-v1\.lock\..+\.tmp$/,
-  /^local-first-v[23]\.journal\.\d+\.\d+\.tmp$/,
+  /^local-first-v[23]\.journal\.\d+\.\d+(\.[a-z0-9]+)?\.tmp$/,
   /^local-first-v3\.import\.json\.\d+\.\d+\.tmp$/,
 ];
 

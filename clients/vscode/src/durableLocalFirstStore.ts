@@ -13,8 +13,9 @@
  * journal — a positional read of the new tail, applied as deltas (`localFirstJournalIo.ts`).
  * Only a different file (another window compacted) costs a full reload. The journal's tail
  * is compacted on the shared `shouldCompactJournal` policy, OFF the commit path: after a
- * commit resolves, a compaction is queued on the same serial queue and writes the store as
- * a stream of small frames, giving the thread back between them.
+ * commit resolves, a compaction job is queued on the same serial queue (this window's commits
+ * wait for it; other windows do not). It streams the store as small frames WITHOUT the
+ * cross-window lock, then holds the lock only to catch up the tail and rename.
  *
  * No `vscode` import: `bootVsixHost` opens the same store over a plain directory, and
  * `createVsCodeLocalFirstStore` over global storage.
@@ -43,8 +44,9 @@ import { LOCAL_FIRST_OPEN_BUSY_TIMEOUT_MS, createLocalFirstFileLock, type LocalF
 import { LocalFirstStoreCorruptError, quarantineJournal } from "./localFirstCorruption";
 import { chooseRebuildSource, describeRebuild } from "./localFirstRebuild";
 import { baselineOf, legacyMoved, readLegacyMerge, statLegacyJournal, writeLegacyBaseline, type LegacyStat } from "./localFirstLegacyMerge";
-import { copyCommittedTail, streamCompactionTemp } from "./localFirstCompaction";
-import { createNodeJournalIo, sameFile, yieldToEventLoop, type FileIdentity, type LoadedJournal, type TailRead } from "./localFirstJournalIo";
+import { temporaryPathFor } from "./localFirstAtomicFile";
+import { compactJournal } from "./localFirstCompaction";
+import { createNodeJournalIo, yieldToEventLoop, type LoadedJournal, type TailRead } from "./localFirstJournalIo";
 import {
   checkSnapshotCache,
   hasLegacyState,
@@ -320,65 +322,20 @@ export function createDurableLocalFirstStore(
     }
   };
 
-  /** The snapshot rows a compaction is streaming, plus the identity/token of what was folded. */
-  interface CompactionSource {
-    /** The exact snapshot passed to `snapshotFrames` — the rows folded into the new base. */
-    snapshot: LocalFirstSnapshot;
-    /** `io.committedBytes()` at snapshot time — the tail appended after it must be caught up. */
-    baseCommittedBytes: number;
-    /** The journal's file identity at snapshot time; `undefined` before the first frame exists. */
-    baseIdentity: FileIdentity | undefined;
-  }
-
-  /** Prepare compaction WITHOUT the lock: capture the in-memory snapshot and the file state at that instant. */
-  const prepareCompaction = (): CompactionSource => ({
-    snapshot: memory.view(),
-    baseCommittedBytes: io.committedBytes(),
-    baseIdentity: io.identity(),
-  });
-
   /**
-   * Fold the tail into a new base. Two phases so the cross-window lock is held for the
-   * rename only, never for the whole rewrite:
-   *
-   *   1. WITHOUT the lock: stream the new compacted temp file from the in-memory snapshot.
-   *      Commits interleave and append frames to the journal the whole time.
-   *   2. UNDER the lock: re-check the policy (another window may have compacted first),
-   *      catch up on the frames appended while streaming (apply them to the store, then
-   *      append them to the temp file so the rename lands them atomically), fsync, rename.
-   *
-   * Queued behind the commit that tripped the policy, never inside it: the commit has
-   * already resolved. If the journal changed IDENTITY while streaming (another window
-   * compacted), the temp holds a fold of the same rows under the same generation — a
-   * no-op rewrite — so the temp is discarded and the normal open/merge path runs instead.
-   * A rename failure removes the temp: the journal on disk is untouched.
+   * Fold the tail into a new base (`localFirstCompaction.ts`): stream the temp WITHOUT the
+   * cross-window lock, then catch up and rename UNDER it. Queued on the serial queue behind
+   * the commit that tripped the policy, never inside it, so this window's own commits wait for
+   * it; only other windows interleave. `flush()` waits for it.
    */
   const scheduleCompaction = (): void => {
     if (!shouldCompactJournal(io.tail(), options.compaction)) return;
-    void serialized(() => (async () => {
-      const source = prepareCompaction();
-      const temporary = await streamCompactionTemp(io.journalFile, source.snapshot);
-      try {
-        await exclusive(async () => {
-          // `exclusive` has already caught memory up with every frame other windows committed.
-          // Another window compacting changes the file's identity; the temp then folds the
-          // same rows under an older generation, so it is dropped and the open/merge path rules.
-          if (!sameFile(io.identity(), source.baseIdentity) || !shouldCompactJournal(io.tail(), options.compaction)) {
-            await io.discardCompacted(temporary.path);
-            return;
-          }
-          await io.publishCompacted(temporary.path, temporary.frames, (temp, tempEnd, journalEnd) =>
-            copyCommittedTail(io.journalFile, source.baseCommittedBytes, journalEnd, temp, tempEnd));
-        });
-      } catch (error) {
-        await fs.rm(temporary.path, { force: true }).catch(() => undefined);
-        throw error;
-      }
-    })()).catch(onBackgroundError);
+    void serialized(() => compactJournal({ io, view: () => memory.view(), exclusive, policy: options.compaction }))
+      .catch(onBackgroundError);
   };
 
   const writeCache = async (): Promise<void> => {
-    const temporary = `${snapshotFile}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;
+    const temporary = temporaryPathFor(snapshotFile);
     try {
       await fs.mkdir(directory, { recursive: true });
       await fs.writeFile(temporary, JSON.stringify(memory.view()), { encoding: "utf8", flag: "wx" });
