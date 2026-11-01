@@ -8,7 +8,9 @@
 import type { TurnEnv, TurnMenu } from '@builderforce/agent-run';
 import type { ToolSchema } from '@builderforce/agent-tools';
 import type { BrainToolSpec } from '../streamChatCompletion';
+import { DEFAULT_TOOL_LIMIT } from '../selectTools';
 import { routerToolSpecs } from '../toolRouter';
+import { nowIso, pushTrace } from '../runStore/runCells';
 import { userTextOf } from '../runStore/convoText';
 import { planBudgetTurn } from '../runStore/progressBudget';
 import type { RunLoopContext } from '../runStore/runLoopContext';
@@ -23,8 +25,17 @@ export async function loopTurnMenu(run: RunLoopContext, env: TurnEnv, catalogSiz
   const steer = run.progress.steerNote();
   const tail = [...(forced ? [userTextOf(forced.brief)] : []), ...(steer ? [steer] : [])];
   if (forced) return { tools: forced.tools as unknown as ToolSchema[], toolChoice: forced.toolChoice, tail };
-  // The ROUTER rides along whenever selection trimmed something, so the tools that missed the cut stay REACHABLE.
-  const trimmed = selected.length < (run.allTools?.length ?? 0);
-  if (trimmed) return { tools: [...(selected as unknown as ToolSchema[]), ...(routerToolSpecs(catalogSize) as unknown as ToolSchema[])], ...(tail.length > 0 ? { tail } : {}) };
+  // The ROUTER rides along whenever selection trimmed something, so the tools that missed the cut stay REACHABLE. A catalog at or under
+  // the limit is never trimmed (`selectToolsForTurn`): `hand_off` leaving the menu is not a trim.
+  if (catalogSize > DEFAULT_TOOL_LIMIT) {
+    pushTrace(run.c, {
+      ts: nowIso(),
+      category: 'message',
+      label: 'tools.selected',
+      args: { step: env.step },
+      result: `${selected.length} of ${catalogSize} tools advertised this turn (relevance-selected; ${run.usedTools.size} pinned from earlier calls)`,
+    });
+    return { tools: [...(selected as unknown as ToolSchema[]), ...(routerToolSpecs(catalogSize) as unknown as ToolSchema[])], ...(tail.length > 0 ? { tail } : {}) };
+  }
   return tail.length > 0 ? { tail } : undefined;
 }
