@@ -1,7 +1,7 @@
 /**
  * What a turn that CALLS tools settles before any call dispatches: a terminal `ask_user` ends the run as its reply, and
  * otherwise the turn's visible narration is committed as its own permanent block. Called from the agent's model port
- * (`run/loopTurn.ts`).
+ * (`run/brainTurn.ts`).
  */
 
 import { ASK_USER_TOOL, askUserBlock } from '@builderforce/agent-loop';
@@ -9,7 +9,7 @@ import type { StreamChatResult } from '../streamChatCompletion';
 import { runLeftDelegationUndone } from './earlyDelegation';
 import { emit, nowIso, pushTrace } from './runCells';
 import { persistMidTurnText } from './turnPersistence';
-import type { RunLoopContext } from './runLoopContext';
+import type { BrainRunContext } from './brainRunContext';
 
 /** A turn's call, its arguments parsed. */
 export interface TurnCall {
@@ -25,7 +25,7 @@ export interface TurnCall {
  * proceed instead is not settled: the call dispatches and `beforeDispatch` answers it with the delegation contract (once).
  * Returns the reply, or undefined when the turn does not end the run.
  */
-export function terminalAskReply(run: RunLoopContext, result: StreamChatResult, calls: readonly TurnCall[], step: number): string | undefined {
+export function terminalAskReply(run: BrainRunContext, result: StreamChatResult, calls: readonly TurnCall[], step: number): string | undefined {
   const askCall = calls.find((tc) => tc.name === ASK_USER_TOOL);
   if (!askCall) return undefined;
   if (run.req.runTool && !run.delegationRecoveryUsed && runLeftDelegationUndone(run)) {
@@ -53,7 +53,7 @@ export function terminalAskReply(run: RunLoopContext, result: StreamChatResult, 
  * turn. Without this the narration only lived in the transient `streamingText` bubble, and the next turn's stream reused that
  * bubble - erasing what the user just read.
  */
-export async function commitTurnNarration(run: RunLoopContext, result: StreamChatResult, requested: string | undefined): Promise<void> {
+export async function commitTurnNarration(run: BrainRunContext, result: StreamChatResult, requested: string | undefined): Promise<void> {
   await persistMidTurnText(run.chatId, run.c, run.req.persistence, result, requested);
   run.c.streamingText = '';
   emit(run.c);

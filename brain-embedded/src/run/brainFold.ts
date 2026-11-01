@@ -7,7 +7,7 @@
  *
  * The agent's own compaction is replaced WHOLE (`modules.compaction`), not adapted to imitate this: the module builds the working
  * set from the cell, hands the agent's transcript that set when it differs, and keeps what compaction saved this turn for the
- * call's memory effect (`loopTurn.ts`). The cell's rows are never rewritten, so every index the memo and the read cache's anchors
+ * call's memory effect (`brainTurn.ts`). The cell's rows are never rewritten, so every index the memo and the read cache's anchors
  * hold stays valid.
  */
 
@@ -16,7 +16,7 @@ import { buildWorkingTranscript } from '@seanhogg/builderforce-memory/working';
 import { summarizeMiddle } from '../transcriptSummarizer';
 import { compactionSavedTokens } from '../runStore/compactionSaved';
 import { recordFold } from '../runStore/runFoldMarker';
-import type { RunLoopContext } from '../runStore/runLoopContext';
+import type { BrainRunContext } from '../runStore/brainRunContext';
 import { toRunMessage } from './runMessages';
 
 export interface BrainCompaction {
@@ -37,7 +37,7 @@ function sameRows(a: readonly RunMessage[], b: readonly RunMessage[]): boolean {
   });
 }
 
-export function brainCompaction(run: RunLoopContext): BrainCompaction {
+export function brainCompaction(run: BrainRunContext): BrainCompaction {
   const { c, systemPrompt, req } = run;
   let saved = 0;
   return {

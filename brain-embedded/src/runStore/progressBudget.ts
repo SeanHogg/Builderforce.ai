@@ -27,7 +27,7 @@ import { isCodeChangeTool } from '../localWorkspaceTools';
 import { HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC } from '../planHandoff';
 import type { BrainToolSpec, ChatCompletionMessage } from '../streamChatCompletion';
 import { nowIso, pushTrace } from './runCells';
-import { reportToPolicy, type RunLoopContext } from './runLoopContext';
+import { reportToPolicy, type BrainRunContext } from './brainRunContext';
 import { skipsVerifyStage } from './pipelineRoute';
 
 /** A forced hand-off's brief: why it is forced, then the one hand-off instruction. */
@@ -62,12 +62,12 @@ export function isChangeRequest(mode: string | undefined, text: string): boolean
 }
 
 /** Is this run asked to CHANGE something (see {@link isChangeRequest}). */
-export function budgeted(run: RunLoopContext): boolean {
+export function budgeted(run: BrainRunContext): boolean {
   return isChangeRequest(run.metadata.mode, run.userRequest);
 }
 
 /** Has the run made its change — edited code itself or handed it to coders? */
-export function progressed(run: RunLoopContext): boolean {
+export function progressed(run: BrainRunContext): boolean {
   return run.c.codeChanged || run.usedTools.has(HAND_OFF_TOOL);
 }
 
@@ -77,7 +77,7 @@ export function progressed(run: RunLoopContext): boolean {
  * ordinary turn — and, once the forced turn has come and gone without a hand-off (or
  * `hand_off` cannot be offered here), null after ending planning.
  */
-export function planBudgetTurn(run: RunLoopContext, step: number): ForcedTurn | null {
+export function planBudgetTurn(run: BrainRunContext, step: number): ForcedTurn | null {
   if (!handOffDue(run.policy) || !budgeted(run)) return null;
   if (run.policy.handOffForced || !run.canAskUser) {
     reportToPolicy(run, { type: 'plan_budget_spent' });
@@ -105,7 +105,7 @@ export function planBudgetTurn(run: RunLoopContext, step: number): ForcedTurn | 
 
 /** The menu of a forced change turn: the change tools this turn would offer, plus
  *  `ask_user` where it is advertised. Null when the turn offers no change tool to force. */
-export function changeToolsOf(run: RunLoopContext, selected: readonly BrainToolSpec[]): BrainToolSpec[] | null {
+export function changeToolsOf(run: BrainRunContext, selected: readonly BrainToolSpec[]): BrainToolSpec[] | null {
   const tools = selected.filter((t) => isCodeChangeTool(t.function.name) || (run.canAskUser && t.function.name === ASK_USER_TOOL));
   return tools.some((t) => isCodeChangeTool(t.function.name)) ? tools : null;
 }
@@ -118,7 +118,7 @@ export function changeToolsOf(run: RunLoopContext, selected: readonly BrainToolS
  * policy event. Null when this turn offers no change tool to force.
  */
 export function forcedProgressTurn(
-  run: RunLoopContext,
+  run: BrainRunContext,
   selected: readonly BrainToolSpec[],
   reason: string,
 ): { turn: ForcedTurn; forced: 'hand_off' | 'change' } | null {
@@ -141,7 +141,7 @@ export function forcedProgressTurn(
  * has changed code or handed it off, when it is not due, or when this turn offers no
  * change tool to force.
  */
-export function changeBudgetTurn(run: RunLoopContext, step: number, selected: readonly BrainToolSpec[]): ForcedTurn | null {
+export function changeBudgetTurn(run: BrainRunContext, step: number, selected: readonly BrainToolSpec[]): ForcedTurn | null {
   // A QUICK pass is one small change with nothing to plan: its budget is a quick pass's.
   const budget = skipsVerifyStage(run.pipeline) ? QUICK_CHANGE_TURN_BUDGET : PLAN_TURN_BUDGET;
   if (!changeDue(run.policy, progressed(run), budget) || !budgeted(run)) return null;

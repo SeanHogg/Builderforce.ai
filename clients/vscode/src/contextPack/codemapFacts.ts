@@ -2,7 +2,7 @@
  * Which `codemap:<area>` facts belong in a context pack (PRD 35 E2): the maps for the
  * areas the focus files sit in AND the code paths those files name (a PRD names the
  * modules it changes). A map is the run-end consolidation of an earlier run
- * (`memoryCommit.ts`) — "open these first instead of searching" for that area.
+ * (`@builderforce/agent-run/memory`) — "open these first instead of searching" for that area.
  *
  * The area rules are the shared ones (`@seanhogg/builderforce-memory/working`), so the
  * editor and the run-context source pick maps the same way — a root-level file maps to

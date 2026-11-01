@@ -72,7 +72,7 @@ describe('the stall is judged on the model own words', () => {
 });
 
 describe('the Brain runner watches the steers, once', () => {
-  it('a wait a steer cuts short comes back encoded once, as a failed step', async () => {
+  it('a wait a steer cuts short comes back encoded once, as a step that is not an error', async () => {
     const s: Scenario = {
       key: 9506,
       script: () => [calls({ name: 'command_status', args: { waitMs: 5000 } }), say('Read the new direction.')],

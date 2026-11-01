@@ -13,18 +13,18 @@
 
 import { ASK_USER_TOOL_SPEC, type ParsedToolCall, type TurnContext } from '@builderforce/agent-loop';
 import type { ToolSchema } from '@builderforce/agent-tools';
-import type { PlatformTools, PlatformToolResult } from '@builderforce/agent-run';
+import { DEFAULT_TOOL_LIMIT, type PlatformTools, type PlatformToolResult } from '@builderforce/agent-run';
 import { offersHandOff } from '@builderforce/run-policy';
 import type { BrainToolSpec, ChatCompletionMessage } from '../streamChatCompletion';
 import { HAND_OFF_TOOL } from '../planHandoff';
-import { DEFAULT_TOOL_LIMIT, relevantTools } from '../selectTools';
+import { relevantTools } from '../selectTools';
 import { callPreflight } from '../runStore/callPreflight';
 import { callRunner, declineMalformedCall } from '../runStore/callRunner';
 import { callPostStep } from '../runStore/callPostStep';
 import { progressAfterToolCalls } from '../runStore/progressGuard';
-import type { RunLoopContext } from '../runStore/runLoopContext';
+import type { BrainRunContext } from '../runStore/brainRunContext';
 import { withRunBrief } from './brainTurnTail';
-import { loopTurnMenu } from './loopTurnMenu';
+import { brainTurnMenu } from './brainTurnMenu';
 
 /** A call that ran, waiting for its result row to join the transcript. */
 interface Ran {
@@ -40,12 +40,12 @@ export interface BrainPlatform {
 }
 
 /** The kernel-shaped call the Brain's shared steps (`callPreflight`, `callRunner`, `callPostStep`) take, and the turn context they read. */
-function loopCall(run: RunLoopContext, id: string, name: string, args: Record<string, unknown>, step: number, rawArguments?: string): { call: ParsedToolCall; ctx: TurnContext<ChatCompletionMessage> } {
+function kernelCall(run: BrainRunContext, id: string, name: string, args: Record<string, unknown>, step: number, rawArguments?: string): { call: ParsedToolCall; ctx: TurnContext<ChatCompletionMessage> } {
   const raw = { id, name, arguments: rawArguments ?? JSON.stringify(args) };
   return { call: { id, name, args, raw, malformed: rawArguments !== undefined }, ctx: { step, messages: run.convo } as unknown as TurnContext<ChatCompletionMessage> };
 }
 
-export function brainPlatformTools(run: RunLoopContext): BrainPlatform {
+export function brainPlatformTools(run: BrainRunContext): BrainPlatform {
   const before = callPreflight(run);
   const dispatch = callRunner(run);
   const after = callPostStep(run);
@@ -72,21 +72,21 @@ export function brainPlatformTools(run: RunLoopContext): BrainPlatform {
         const conversational = run.canAskUser ? [ASK_USER_TOOL_SPEC as unknown as ToolSchema] : [];
         const names = new Set(catalog.map((t) => t.function.name));
         // `hand_off` stays in the catalog the selection ranks (a catalog is trimmed by its size, `hand_off` included, as the loop trims it);
-        // it leaves the MENU when planning closes (`loopTurnMenu.ts`).
+        // it leaves the MENU when planning closes (`brainTurnMenu.ts`).
         return [...catalog, ...conversational.filter((t) => !names.has(t.function.name))];
       },
       get selection() {
         // The pins are the tools THIS run called (`callPostStep`): a tool reached through the router is the tool it reached, a fold does not
         // forget one, and an earlier run's calls pin nothing - the transcript the agent would read them off holds all three wrongly.
-        // The ranking stays the Brain's own (`selectTools.ts`), not the shared scorer the cloud and the canvas keep.
-        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, rank: (tools: readonly ToolSchema[], query: string) => relevantTools(tools as unknown as BrainToolSpec[], query) as unknown as ToolSchema[], pinned: [...run.usedTools], required: new Set(offersHandOff(run.policy) && run.canAskUser ? [...run.alwaysAdvertised, HAND_OFF_TOOL] : run.alwaysAdvertised) };
+        // The ranking stays the Brain's own (`selectTools.ts`), not the shared scorer the cloud and the canvas keep, and the required tools are held to the cap as the Brain's loop always held them.
+        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, capRequired: true, rank: (tools: readonly ToolSchema[], query: string) => relevantTools(tools as unknown as BrainToolSpec[], query) as unknown as ToolSchema[], pinned: [...run.usedTools], required: new Set(offersHandOff(run.policy) && run.canAskUser ? [...run.alwaysAdvertised, HAND_OFF_TOOL] : run.alwaysAdvertised) };
       },
       // ONE cap on a result: the Brain's own, applied inside `callRunner` (`trimToolResult`, by LINE, sized to the serving
       // model's window). The agent's per-tool cap would cut the already budgeted text a second time and drop its paging fields.
       resultCap: () => Number.MAX_SAFE_INTEGER,
       // No `handsOff`: `hand_off` reports itself to the model policy inside `callPreflight` (through the run's view), and a
       // call the agent hands off first would find the plan already closed.
-      turn: async (env) => withRunBrief(run, await loopTurnMenu(run, env, run.allTools?.length ?? 0)),
+      turn: async (env) => withRunBrief(run, await brainTurnMenu(run, env, run.allTools?.length ?? 0)),
       // A3's detector is the Brain's own (`progressGuard.ts`): the turn is judged when its calls have all run, as the loop does.
       turnEnded: progressAfterToolCalls(run),
       // The turn's step, as the kernel numbers it: the router, the hand-off, the confirm gate, the guards, the activity line and the
@@ -97,7 +97,7 @@ export function brainPlatformTools(run: RunLoopContext): BrainPlatform {
       // The preflight (router, `ask_user`, `hand_off`, confirm gate, dedupe) runs where the loop runs it: ahead of the dispatch, not raced
       // against the person's Stop. A Stop pressed during a hand-off waits for it to end, so its tickets and children are on the trace.
       async preflight(raw, { step }) {
-        const { call, ctx } = loopCall(run, raw.id, raw.name, raw.malformed ? {} : raw.args, step, raw.malformed ? raw.arguments : undefined);
+        const { call, ctx } = kernelCall(run, raw.id, raw.name, raw.malformed ? {} : raw.args, step, raw.malformed ? raw.arguments : undefined);
         const pre = await before(call, ctx);
         if (pre && 'result' in pre) {
           ran.set(raw.id, { call, result: pre.result, ctx });
@@ -114,7 +114,7 @@ export function brainPlatformTools(run: RunLoopContext): BrainPlatform {
         // Reached without the kernel's preflight (a caller that dispatches directly): the same steps, here.
         let early: PlatformToolResult | undefined;
         if (!held) {
-          const fresh = loopCall(run, id, name, args, env.step);
+          const fresh = kernelCall(run, id, name, args, env.step);
           const pre = await before(fresh.call, fresh.ctx);
           if (pre && 'result' in pre) early = pre.result;
           held = { call: pre && 'rewrite' in pre ? pre.rewrite : fresh.call, ctx: fresh.ctx };
@@ -128,7 +128,7 @@ export function brainPlatformTools(run: RunLoopContext): BrainPlatform {
       malformed: {
         roundDirective: () => '',
         answer(raw, { step }) {
-          const held = prepared.get(raw.id) ?? loopCall(run, raw.id, raw.name, {}, step, raw.arguments);
+          const held = prepared.get(raw.id) ?? kernelCall(run, raw.id, raw.name, {}, step, raw.arguments);
           prepared.delete(raw.id);
           const result = declineMalformedCall(run, held.call) as PlatformToolResult;
           ran.set(raw.id, { call: held.call, result, ctx: held.ctx });

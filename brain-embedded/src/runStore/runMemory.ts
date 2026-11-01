@@ -14,7 +14,7 @@ import { nowIso, pushTrace, runTrace } from './runCells';
 import { readFileAnchors } from './answerAnchors';
 import { latestUserText } from './convoText';
 import type { BrainRunRequest } from './runTypes';
-import type { RunLoopContext } from './runLoopContext';
+import type { BrainRunContext } from './brainRunContext';
 import { adoptAnswerWithoutModel } from './adoptAnswer';
 
 /** The pre-turn recall, the memory block it adds to the prompt, and that block's cost. */
@@ -156,7 +156,7 @@ export async function answerFromMemory(
  * `reconcile` step stays client-side: which of the RECALLED memories this answer
  * restated (write-through).
  */
-export function emitEvermindLearnReconcile(run: RunLoopContext, assistantMsg: BrainMessage | undefined, finalText: string): void {
+export function emitEvermindLearnReconcile(run: BrainRunContext, assistantMsg: BrainMessage | undefined, finalText: string): void {
   const { c, recalled } = run;
   const evermind = run.req.evermind;
   const learn = assistantMsg?.evermindLearn;

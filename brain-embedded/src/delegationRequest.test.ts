@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BrainTraceEvent } from './brainTriage';
-import { asksForSubagents, attemptedDelegation, leftDelegationUndone, undelegatedRequestNudge } from './delegationRequest';
+import { asksForSubagents, attemptedDelegation, leftDelegationUndone, undelegatedRequestNudge } from '@builderforce/agent-run';
 
 const tool = (label: string): BrainTraceEvent => ({ ts: '2026-10-11T00:00:00.000Z', category: 'tool', label });
 const EDITOR = ['read_file', 'spawn_agent', 'spawn_agents'];

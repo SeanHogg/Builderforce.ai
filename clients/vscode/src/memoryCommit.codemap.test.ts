@@ -1,8 +1,9 @@
 import * as os from "node:os";
 import { describe, expect, it, vi } from "vitest";
 import { RunKnowledgeRecorder } from "@builderforce/agent-tools";
-import { commitRunKnowledge, commitRunKnowledgeIfAllowed, MEMORY_OFF_NOTE } from "./memoryCommit";
+import { commitRunKnowledge, commitRunKnowledgeIfAllowed, MEMORY_OFF_NOTE } from "@builderforce/agent-run/memory";
 
+// `commitRunKnowledge` is the agent's (`@builderforce/agent-run/memory`): the editor's own `memoryCommit.ts` is gone (PRD 35 WS7).
 // PRD 35 E8: a read-only run's code map is written (its file anchors are derived by the
 // facts store, one rule for every writer), and Memory off leaves one trace line.
 

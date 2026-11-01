@@ -16,7 +16,7 @@ import { handOffTrace } from '../runPolicyTraces';
 import { HAND_OFF_TOOL, executeHandOff, parseHandOff } from '../planHandoff';
 import { codeChangesOf } from '../codeChanges';
 import { delegationPlaceholders } from '../placeholderGuard';
-import { undelegatedRequestNudge } from '../delegationRequest';
+import { undelegatedRequestNudge } from '@builderforce/agent-run';
 import { visitTarget } from '../runActivity';
 import { repeatedWriteNote, revisitAdvisory } from '@builderforce/run-guards';
 import { requestedReadWindow, trimToolResult } from '../toolResultBudget';
@@ -24,9 +24,9 @@ import { stillInWorkingContext } from '@seanhogg/builderforce-memory/working';
 import { emit, nowIso, nowMs, pushTrace, recordAppended } from './runCells';
 import { requestRunConfirm } from './runControl';
 import { attachDeltaToRunTicket, autoLinkCreatedItem } from './runBackstops';
-import { isDedupableRead, reportToPolicy, type RunLoopContext } from './runLoopContext';
+import { isDedupableRead, reportToPolicy, type BrainRunContext } from './brainRunContext';
 
-export function callPreflight(run: RunLoopContext): NonNullable<LoopHooks<ChatCompletionMessage>['beforeDispatch']> {
+export function callPreflight(run: BrainRunContext): NonNullable<LoopHooks<ChatCompletionMessage>['beforeDispatch']> {
   const { c, chatId, runKey, req, allTools, catalogToolNames, usedTools, readCoverage, writeLedger, placeholderLedger } = run;
   const { runTool, needsConfirm, persistence } = req;
   return async (rawCall, ctx) => {

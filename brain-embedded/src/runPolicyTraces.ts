@@ -5,9 +5,9 @@
  * The policy decides; this module only SAYS what it decided, in the labels and wording
  * the triage and diagnostics readers already key on (`llm.role_handoff`,
  * `llm.stream_interrupted`, `llm.transport_error`, and the
- * `llm.complete` error a failed completion records). Kept out of
- * `brainRunStore.ts` so the loop reads as "report the event, act on the outcome" rather
- * than carrying the prose of every outcome inline. Pure: the caller stamps `ts`.
+ * `llm.complete` error a failed completion records). The turn observer (`run/brainTurn.ts`)
+ * and the call preflight (`runStore/callPreflight.ts`) call it, so they report the event
+ * rather than carry the prose of every outcome inline. Pure: the caller stamps `ts`.
  */
 
 import type { RunPolicyOutcome } from '@builderforce/run-policy';

@@ -5,13 +5,13 @@
  * callers (`stopHooks.ts`).
  */
 
-import { undelegatedRequestNudge } from '../delegationRequest';
+import { undelegatedRequestNudge } from '@builderforce/agent-run';
 import { isRestatedReply, restatedReplyNudge } from '../restatedReply';
 import { leftChangeUnreviewed, unreviewedChangeNudge } from '../previewReview';
 import { leftChangeUnshipped, unshippedChangeNudge } from '../selfReviewShip';
 import { runLeftDelegationUndone } from './earlyDelegation';
 import { runTrace } from './runCells';
-import type { RunLoopContext } from './runLoopContext';
+import type { BrainRunContext } from './brainRunContext';
 
 export interface DeliveryGate {
   /** The ladder counter key. */
@@ -29,7 +29,7 @@ export interface DeliveryGate {
 }
 
 /** The ship, review, delegation and restated-reply gates, in the order they are asked. */
-export function deliveryGates(run: RunLoopContext): DeliveryGate[] {
+export function deliveryGates(run: BrainRunContext): DeliveryGate[] {
   const { c, catalogToolNames, userRequest, priorReply } = run;
   const facts = () => ({ codeChanged: c.codeChanged, toolNames: catalogToolNames, requestText: userRequest, events: runTrace(c) });
   const files = () => ({ files: c.touchedFiles.slice(0, 20) });

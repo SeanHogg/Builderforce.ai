@@ -13,15 +13,16 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { runAgent, type RunEvent, type RunOutcome, type RunOutcomeRow, resetRunSteering } from '@builderforce/agent-run';
 import { resetBrainRunStore, stopRun } from '../runStore/runControl';
+import type { RunEntryPoint } from '../runStore/runTypes';
 import { queueRunSteering } from '../runSteering';
-import { binding, result, scripted } from '../test/brainRunHarness';
-import { brainRunPolicy, brainRunTask, buildBrainRunPorts, type BrainEntryPoint } from './webAdapter';
+import { binding, preflightedModules, result, scripted } from '../test/brainRunHarness';
+import { brainRunPolicy, brainRunTask, buildBrainRunPorts } from './webAdapter';
 
-const ENTRY_POINTS: readonly BrainEntryPoint[] = ['vscode', 'web', 'rovr'];
+const ENTRY_POINTS: readonly RunEntryPoint[] = ['vscode', 'web', 'rovr'];
 
 /** Drive one scripted run through the real ports, recording the trace and the outcome row. */
 async function drive(
-  entryPoint: BrainEntryPoint,
+  entryPoint: RunEntryPoint,
   runKey: number,
   turns: Parameters<typeof scripted>[0],
   extra: Parameters<typeof binding>[3] = {},
@@ -41,6 +42,8 @@ async function drive(
     task: brainRunTask(b.binding),
     policy: brainRunPolicy(b.binding),
     ports,
+    // The agent's modules as production hands them: the host's preflight ran as the preamble runs it, and the module says its verdict.
+    modules: await preflightedModules(b),
     signal: signalOf ? signalOf(b.cell) : b.cell.abort?.signal,
   });
   return { events, rows, outcome, asked };

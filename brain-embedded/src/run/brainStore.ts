@@ -13,13 +13,13 @@ import { markPersonTurn } from '../runStore/chatAsks';
 import type { RunCell } from '../runStore/runCell';
 import { toStreamMessage } from './modelTransport';
 
-export interface LoopStoreOptions {
+export interface BrainRunStoreOptions {
   toolRowAppended: (row: ChatCompletionMessage) => void;
-  /** Is this user row the person's own steered words (`loopSteering.ts`)? Only theirs is one of the chat's asks (`chatAsks.ts`). */
+  /** Is this user row the person's own steered words (`brainSteering.ts`)? Only theirs is one of the chat's asks (`chatAsks.ts`). */
   personSteer?: (text: string) => boolean;
 }
 
-export function loopRunStore(c: RunCell, opts: LoopStoreOptions): RunStore {
+export function brainRunStorePort(c: RunCell, opts: BrainRunStoreOptions): RunStore {
   return {
     load: () => undefined,
     save: () => undefined,

@@ -23,7 +23,7 @@ vi.mock("@seanhogg/builderforce-brain-embedded", () => ({
 }));
 
 import { recordEditorRunEnd } from "./editorRunEnd";
-import { MEMORY_OFF_NOTE } from "./memoryCommit";
+import { MEMORY_OFF_NOTE } from "@builderforce/agent-run/memory";
 
 function readOnlyRun(): RunKnowledgeRecorder {
   const r = new RunKnowledgeRecorder();

@@ -24,9 +24,9 @@ import { nowIso, pushTrace, recordAppended } from './runCells';
 import { canonicalTurnText, provenanceMetadata } from './turnPersistence';
 import type { BrainRunRequest } from './runTypes';
 import type { RunPipeline } from './pipelineRoute';
-import type { RunView } from '@builderforce/agent-run';
-import type { CacheServedStreak } from './cacheServedStreak';
+import type { CacheServedStreak, RunView } from '@builderforce/agent-run';
 import type { RunProgressGuard } from './progressGuard';
+import type { OutcomeReport } from '../run/eventSink';
 
 /** Read-only, idempotent LOCAL file/search tools whose exact-repeat call within a run is
  *  suppressed (the result is already in context). Read-only PLATFORM (`builtin_*`) tools
@@ -47,7 +47,7 @@ const DEDUP_READ_TOOLS = new Set(['read_file', 'search_code', 'list_files', 'fin
 export const isDedupableRead = (name: string): boolean =>
   DEDUP_READ_TOOLS.has(name) || isRepoStateReadTool(name) || isReadOnlyPlatformTool(name);
 
-export interface RunLoopContext {
+export interface BrainRunContext {
   /** The chat's key in the host's persistence — where the run's turns are written. */
   chatId: number;
   /** The server chat the run's server-addressed work names (`resolveServerChatId`);
@@ -57,6 +57,8 @@ export interface RunLoopContext {
   runKey: number;
   c: RunCell;
   req: BrainRunRequest;
+  /** Told the run's uniform outcome row (PRD 35 §8.2) once, when it ends: `startRun` holds it and merges the coder's grade in. Not part of the host's request. */
+  reportRunRow?: OutcomeReport;
   /** The cell's working transcript (`c.transcript`), appended to as the run goes. */
   convo: ChatCompletionMessage[];
   /** `ask_user` / `hand_off` are advertised (a runner AND a non-empty host catalog). */
@@ -129,7 +131,7 @@ export interface RunLoopContext {
 }
 
 /** Report an event to the run policy; the new state is the run's. */
-export function reportToPolicy(run: RunLoopContext, event: RunPolicyEvent): RunPolicyState {
+export function reportToPolicy(run: BrainRunContext, event: RunPolicyEvent): RunPolicyState {
   if (run.view) return run.view.report(event);
   return (run.policy = reduceRunPolicy(run.policy, event));
 }
@@ -140,7 +142,7 @@ export function reportToPolicy(run: RunLoopContext, event: RunPolicyEvent): RunP
  * as the revisit guard's is — so triage can see the loop was fought rather than
  * inferring it from the repetition.
  */
-export function failureAdvisoryFor(run: RunLoopContext, name: string, args: unknown, out: unknown, step: number): string | null {
+export function failureAdvisoryFor(run: BrainRunContext, name: string, args: unknown, out: unknown, step: number): string | null {
   const attempts = run.failures.record(name, args);
   const advisory = repeatedFailureAdvisory(name, attempts, failureReason(out));
   if (advisory) {
@@ -166,7 +168,7 @@ export function failureAdvisoryFor(run: RunLoopContext, name: string, args: unkn
  * attributed, learned from and broadcast exactly like any other, or the surface
  * that renders it loses the provenance chip and the memory steps for that turn.
  */
-export async function settleReply(run: RunLoopContext, rawText: string, result: StreamChatResult, requested?: string): Promise<BrainMessage> {
+export async function settleReply(run: BrainRunContext, rawText: string, result: StreamChatResult, requested?: string): Promise<BrainMessage> {
   const { convo } = run;
   const text = canonicalTurnText(rawText);
   // The agent's store log already carries the final answer row, shaped as the agent settled it: one copy only - never two assistant rows
@@ -182,7 +184,7 @@ export async function settleReply(run: RunLoopContext, rawText: string, result: 
  * touching the model transcript. The loop settles a reply with it ({@link settleReply}); the agent persists the reply of a model that
  * stalled out and was handed over (`run/brainDelivery.ts`), whose row its own transcript already holds.
  */
-export async function persistReply(run: RunLoopContext, rawText: string, result: StreamChatResult, requested?: string): Promise<BrainMessage> {
+export async function persistReply(run: BrainRunContext, rawText: string, result: StreamChatResult, requested?: string): Promise<BrainMessage> {
   const { c, chatId } = run;
   const text = canonicalTurnText(rawText);
   const meta = provenanceMetadata(result, requested);

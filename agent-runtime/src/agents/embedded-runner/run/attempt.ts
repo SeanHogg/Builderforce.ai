@@ -40,7 +40,7 @@ import { resolveSessionAgentIds } from "../../agent-scope.js";
 import {
   ensureCompactionReserveTokens,
   resolveCompactionReserveTokensFloor,
-} from "../../agent-settings.js";
+} from "@builderforce/agent-run";
 import { createAnthropicPayloadLogger } from "../../anthropic-payload-log.js";
 import {
   buildActiveLimbicPrompt,

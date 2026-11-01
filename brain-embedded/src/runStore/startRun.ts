@@ -12,9 +12,8 @@ import { asksForChange } from '@builderforce/agent-stall';
 import { isChildReportText } from '@builderforce/agent-tools';
 import { contentText } from '../localSuccess/turnFeatures';
 import { askedModelOf, codeRunOutcome, completedTurns } from '../runOutcomeReport';
-import { runOutcomeRequestOf, type RunOutcomeRow } from '@builderforce/agent-run';
+import { attemptedDelegation, runOutcomeRequestOf, type RunOutcomeRow } from '@builderforce/agent-run';
 import { parseRunOutcomeTelemetry } from '@builderforce/learned-routing';
-import { attemptedDelegation } from '../delegationRequest';
 import { shippedToBaseBranch } from '../shipVerification';
 import { ticketsReviewedInPreview } from '../previewReview';
 import { lineagePersistence, savedChatOf } from '../runLineage';
@@ -24,7 +23,7 @@ import { appendRunMessage } from './runControl';
 import { keepStoppedTurn, persistStep } from './turnPersistence';
 import { recordCodeChangeTicket, settleView, updateLinkedTickets } from './runBackstops';
 import { resolveServerChatId } from './serverChat';
-import { prepareRunLoop } from './runPreamble';
+import { prepareBrainRun } from './runPreamble';
 import { runPrepared } from '../run/runPrepared';
 import { noteRunId, reportRunEnd, unrecorded } from './runEndOutcome';
 import { beginRun } from './beginRun';
@@ -89,11 +88,8 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
   // The run ends in ONE uniform row (§8.2). It is held here, not sent: the report below merges the coder's grade into it
   // so the door hears one outcome per run, carrying the entry point (`req.entryPoint`) the host declared.
   let agentRow: RunOutcomeRow | undefined;
-  const req: BrainRunRequest = {
-    ...request,
-    persistence: runPersistence,
-    reportRunRow: (row: RunOutcomeRow) => { agentRow = row; return request.reportRunRow?.(row); },
-  };
+  const holdRunRow = (row: RunOutcomeRow): void => { agentRow = row; };
+  const req: BrainRunRequest = { ...request, persistence: runPersistence };
   c.persistStep = (ev) => persistStep(chatId, runPersistence, ev);
   beginRun(c, chatId);
   // What the chat re-runs with when direction arrives after the run ended: the run's wiring, not the
@@ -115,7 +111,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
 
   c.runUsage = emptyRunUsage();
   try {
-    const prepared = await prepareRunLoop(chatId, c, req, runKey);
+    const prepared = await prepareBrainRun(chatId, c, req, runKey, holdRunRow);
     // Memory answered: the run is over before a model was asked.
     if (prepared) {
       // The id this run's calls carry - what its end is reported under (`runEndOutcome.ts`).

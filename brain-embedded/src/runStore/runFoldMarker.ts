@@ -18,7 +18,7 @@ import { replayTextOf } from '@builderforce/agent-loop';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { contentText } from '../localSuccess/turnFeatures';
 import type { RunCell } from './runCell';
-import type { RunLoopContext } from './runLoopContext';
+import type { BrainRunContext } from './brainRunContext';
 import type { BrainRunPersistence, BrainRunRequest } from './runTypes';
 import { emit, nowIso, pushTrace, recordAppended } from './runCells';
 
@@ -113,9 +113,9 @@ export async function persistFoldMarker(c: RunCell, chatId: number, persistence:
 
 /**
  * A NEW fold, recorded: the visible `context.compacted` step, then the durable marker. The ONE place a fold is announced -
- * the agent's compaction module (`run/loopFold.ts`) calls it.
+ * the agent's compaction module (`run/brainFold.ts`) calls it.
  */
-export function recordFold(run: Pick<RunLoopContext, 'c' | 'chatId' | 'req'>, fold: TranscriptFold): void {
+export function recordFold(run: Pick<BrainRunContext, 'c' | 'chatId' | 'req'>, fold: TranscriptFold): void {
   const { c } = run;
   pushTrace(c, {
     ts: nowIso(),

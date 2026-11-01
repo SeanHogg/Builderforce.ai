@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { initialRunPolicy, reduceRunPolicy, type RunPhase } from '@builderforce/run-policy';
 import type { BrainToolSpec } from '../streamChatCompletion';
 import { makeCell } from './runCell';
-import type { RunLoopContext } from './runLoopContext';
-import { CACHE_SERVED_STREAK, CacheServedStreak, MAX_NO_PROGRESS_TURNS, noProgressTurn } from './cacheServedStreak';
+import type { BrainRunContext } from './brainRunContext';
+import { CACHE_SERVED_STREAK, CacheServedStreak, MAX_NO_PROGRESS_TURNS } from '@builderforce/agent-run';
+import { noProgressTurn } from './cacheServedStreak';
 
 const spec = (name: string): BrainToolSpec => ({ type: 'function', function: { name, description: '', parameters: { type: 'object', properties: {} } } }) as BrainToolSpec;
 const SELECTED = ['read_file', 'search_code', 'edit_file', 'write_file', 'ask_user'].map(spec);
 
-function runIn(phase: RunPhase, userRequest = 'complete the implementation'): RunLoopContext {
+function runIn(phase: RunPhase, userRequest = 'complete the implementation'): BrainRunContext {
   return {
     c: makeCell(),
     canAskUser: true,
@@ -17,11 +18,11 @@ function runIn(phase: RunPhase, userRequest = 'complete the implementation'): Ru
     usedTools: new Set<string>(),
     policy: initialRunPolicy({ startPhase: phase }),
     cacheStreak: new CacheServedStreak(),
-  } as unknown as RunLoopContext;
+  } as unknown as BrainRunContext;
 }
 
 /** `n` cache answers, two to a turn — a run circling over several turns. */
-const circle = (run: RunLoopContext, n = CACHE_SERVED_STREAK) => {
+const circle = (run: BrainRunContext, n = CACHE_SERVED_STREAK) => {
   for (let i = 0; i < n; i++) run.cacheStreak.served(Math.floor(i / 2));
 };
 const names = (tools: readonly BrainToolSpec[] | undefined) => (tools ?? []).map((t) => t.function.name);

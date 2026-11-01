@@ -8,14 +8,14 @@ import type { LoopHooks } from '@builderforce/agent-loop';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { isFailedToolResult } from '../brainTriage';
 import { nowIso, nowMs, pushTrace } from './runCells';
-import type { RunLoopContext } from './runLoopContext';
+import type { BrainRunContext } from './brainRunContext';
 import { recordShellFileRead } from './shellReadCoverage';
 
 type Hooks = LoopHooks<ChatCompletionMessage>;
 
 /** `afterDispatch`: the call's durable step, its read cached against the row carrying
  *  it, and the tool pinned for later turns. */
-export function callPostStep(run: RunLoopContext): NonNullable<Hooks['afterDispatch']> {
+export function callPostStep(run: BrainRunContext): NonNullable<Hooks['afterDispatch']> {
   const { c, readCoverage, usedTools } = run;
   return (call, result, row) => {
     // Every call the model made, cache-answered or run — the progress detector judges both.

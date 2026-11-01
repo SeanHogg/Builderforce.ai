@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { priceBookFromPrices } from '@builderforce/model-catalog';
 import { getRunTrace, resetBrainRunStore, startRun } from '../brainRunStore';
-import { MODEL_PREFLIGHT_LABEL, modelPreflightEvent, planModelWarning } from './modelPreflight';
+import { planModelWarning } from '@builderforce/agent-run';
+import { MODEL_PREFLIGHT_LABEL, modelPreflightEvent } from './modelPreflight';
 
 /**
  * PRD 35 E7 (§6.10): the preflight also says when the PLAN phase would land on a

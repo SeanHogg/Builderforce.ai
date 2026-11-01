@@ -3,7 +3,7 @@
  * the same answer as the cloud, canvas, on-prem and channel adapters (the task, script and golden are `@builderforce/agent-run`'s
  * `conformanceTask.ts`).
  *
- * The run goes through the PRODUCTION binding, not a harness of its own: `startRun` -> `prepareRunLoop` -> `runPrepared`,
+ * The run goes through the PRODUCTION binding, not a harness of its own: `startRun` -> `prepareBrainRun` -> `runPrepared`,
  * started the way a host starts it (the parity harness, `run/parity/harness.ts`; the fake is the model stream,
  * the persistence and the host's tool port, the three things a host supplies). The trace is read by wrapping the one `runAgent` call.
  */

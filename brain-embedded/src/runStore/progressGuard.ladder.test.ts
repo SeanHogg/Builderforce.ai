@@ -3,7 +3,7 @@ import { initialRunPolicy } from '@builderforce/run-policy';
 import type { BrainToolSpec } from '../streamChatCompletion';
 import { makeCell } from './runCell';
 import { runTrace } from './runCells';
-import type { RunLoopContext } from './runLoopContext';
+import type { BrainRunContext } from './brainRunContext';
 import { budgeted } from './progressBudget';
 import { RunProgressGuard, progressGuardTurn } from './progressGuard';
 
@@ -17,7 +17,7 @@ const READY = 'Now I have everything I need.';
 const CHANGE = 'update the PRD with the WS8p design';
 const QUESTION = 'what does the read cache cover?';
 
-function runOf(opts: { userRequest?: string; canAskUser?: boolean } = {}): RunLoopContext {
+function runOf(opts: { userRequest?: string; canAskUser?: boolean } = {}): BrainRunContext {
   return {
     c: makeCell(),
     canAskUser: opts.canAskUser ?? true,
@@ -26,7 +26,7 @@ function runOf(opts: { userRequest?: string; canAskUser?: boolean } = {}): RunLo
     usedTools: new Set<string>(),
     policy: initialRunPolicy({ startPhase: 'code' }),
     progress: new RunProgressGuard(true),
-  } as unknown as RunLoopContext;
+  } as unknown as BrainRunContext;
 }
 
 /** A turn that claims readiness and only reads a new file. */
@@ -36,7 +36,7 @@ function unkeptTurn(g: RunProgressGuard, i: number) {
   return g.endTurn();
 }
 
-const forcedEvents = (run: RunLoopContext) => runTrace(run.c).filter((e) => e.label === 'loop.progress_forced');
+const forcedEvents = (run: BrainRunContext) => runTrace(run.c).filter((e) => e.label === 'loop.progress_forced');
 const names = (tools: readonly BrainToolSpec[] | undefined) => (tools ?? []).map((t) => t.function.name);
 
 describe('progressGuardTurn — the ladder on the editor', () => {

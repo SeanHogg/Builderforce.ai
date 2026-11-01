@@ -1,39 +1,19 @@
 /**
- * The Brain's HUMAN CHANNEL (PRD 35 §3.2 `HumanChannel`) — how the person is reached.
+ * The Brain's HUMAN CHANNEL (PRD 35 §3.2 `HumanChannel`) - how the person is reached.
  *
- *   - `approve(gate)` is the CONFIRM GATE: the run cell publishes a `pendingConfirm`, whichever
- *     surface is mounted on the cell shows it (the panel's card, the native modal), and the
- *     answer comes back through `resolveRunConfirm`. A Stop declines it, so nothing waits
- *     forever (`runControl.ts`);
- *   - `ask(question)` parks the run. On the Brain a question IS the run's reply (`ask_user` ends
- *     the run on a card the person answers by sending their next message), so the channel
- *     answers `paused` and the question reaches the person as the settled reply.
+ * `ask(question)` parks the run. On the Brain a question IS the run's reply (`ask_user` ends the run on a card the person answers
+ * by sending their next message), so the channel answers `paused` and the question reaches the person as the settled reply.
+ * There is no `approve`: governance gates are unbound on the Brain (parity ruling R10), and a tool's own confirm card is the run
+ * cell's `pendingConfirm` (`runStore/callPreflight.ts`), raised by the tool dispatch, not by this channel.
  */
 
-import type { HumanChannel, PolicyGate } from '@builderforce/agent-run';
-import { requestRunConfirm } from '../runStore/runControl';
-import type { RunKey } from '../runStore/runTypes';
+import type { HumanChannel } from '@builderforce/agent-run';
 
-/** What the confirm card is shown for a governance gate. */
-export function confirmRequestFor(gate: PolicyGate): { name: string; args: unknown } {
-  const reason = gate.reason ?? gate.directive;
-  return {
-    name: gate.tool && gate.tool !== '*' ? gate.tool : 'a tool call',
-    args: { gate: gate.id, ...(reason ? { reason } : {}), ...(gate.paths?.length ? { paths: gate.paths } : {}) },
-  };
-}
-
-/** The channel for one run, over its cell's confirm gate. */
-export function brainHumanChannel(runKey: RunKey): HumanChannel {
+/** The channel for one run. */
+export function brainHumanChannel(): HumanChannel {
   return {
     async ask() {
       return { kind: 'paused' };
-    },
-    async approve(gate: PolicyGate) {
-      const ok = await requestRunConfirm(runKey, confirmRequestFor(gate));
-      // The decision is the STRUCTURED `approved` (the gate never reads it out of the answer's words): a card the person accepted
-      // is an approval, whatever the answer says; a decline - or a Stop that declined it - carries none and is refused.
-      return ok ? { kind: 'answered', answer: 'approved', approved: true } : { kind: 'answered', answer: 'declined' };
     },
   };
 }

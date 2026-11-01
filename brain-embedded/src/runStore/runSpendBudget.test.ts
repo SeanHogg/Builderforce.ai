@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { budgetContainedReply, budgetWarning, usdBudget, runBudgetCapMillicents, type UsdBudget } from '@builderforce/agent-run';
 import type { StreamChatResult } from '../streamChatCompletion';
 import { priceBookFromPrices } from '@builderforce/model-catalog';
-import { loopSpendMeter } from '../run/loopSpend';
+import { brainSpendMeter } from '../run/brainSpend';
 import { brainEventSink } from '../run/eventSink';
 import { turnPriceMc } from '../localChat/turnCost';
 import { makeCell } from './runCell';
 import { cells } from './runCells';
-import type { RunLoopContext } from './runLoopContext';
+import type { BrainRunContext } from './brainRunContext';
 import { persistBudgetStop } from './runSpendBudget';
 
 /** A run with a USD cap, and the persistence its contained stop writes through. A
@@ -22,7 +22,7 @@ function runWith(maxRunBudgetUsd: number | undefined, tree: { runKey?: number; o
     chatId: 1,
     c,
     req: { maxRunBudgetUsd, persistence: { sendMessages }, ...(lineage ? { lineage } : {}) },
-  } as unknown as RunLoopContext;
+  } as unknown as BrainRunContext;
   return { run, sendMessages };
 }
 
@@ -30,12 +30,12 @@ function runWith(maxRunBudgetUsd: number | undefined, tree: { runKey?: number; o
 const BOOK = priceBookFromPrices([['openai/gpt-x', { input: 1e-6, output: 1e-6 }]]);
 
 /**
- * The run's cap as the agent holds it: the Brain's tree meter (`run/loopSpend.ts`) under the agent's budget (`usdBudget`), each turn
+ * The run's cap as the agent holds it: the Brain's tree meter (`run/brainSpend.ts`) under the agent's budget (`usdBudget`), each turn
  * priced by the device's one rule (`localChat/turnCost.ts`, here over `BOOK`) and the budget's events rendered on the run's trace by
  * the Brain's sink. Undefined when the run is uncapped.
  */
-function capOf(run: RunLoopContext): { budget: UsdBudget; turn(result: Partial<StreamChatResult>, requested: string): void } | undefined {
-  const meter = loopSpendMeter(run);
+function capOf(run: BrainRunContext): { budget: UsdBudget; turn(result: Partial<StreamChatResult>, requested: string): void } | undefined {
+  const meter = brainSpendMeter(run);
   const budget = meter ? usdBudget(run.req.maxRunBudgetUsd, meter) : undefined;
   if (!budget) return undefined;
   const sink = brainEventSink(run.c);
@@ -55,7 +55,7 @@ const turn = (model: string, prompt: number, completion = 0): [Partial<StreamCha
 /** A turn whose call reported NO usage at all. */
 const noUsageTurn = (model: string): [Partial<StreamChatResult>, string] => [{ resolvedModel: model }, model];
 
-const unpricedSteps = (run: RunLoopContext) => run.c.trace.filter((event) => event.label === 'run.budget_unpriced');
+const unpricedSteps = (run: BrainRunContext) => run.c.trace.filter((event) => event.label === 'run.budget_unpriced');
 
 describe('runBudgetCapMillicents', () => {
   it('is null for no cap, 0 or nonsense; millicents otherwise', () => {
@@ -82,7 +82,7 @@ describe('the run\'s USD cap', () => {
 
   it('a call to a hosted local-grammar runtime (Kimi Code) is the person’s own spend and counts against the cap', () => {
     const { run } = runWith(0.01);
-    const meter = loopSpendMeter(run)!;
+    const meter = brainSpendMeter(run)!;
     const budget = usdBudget(run.req.maxRunBudgetUsd, meter)!;
     const price = turnPriceMc({ text: '', toolCalls: [], resolvedModel: 'local/kimi-code/k2', usage: { prompt: 50_000_000, completion: 50_000_000 } } as StreamChatResult, 'local/kimi-code/k2', priceBookFromPrices([['moonshotai/kimi-k2', { input: 1e-6, output: 1e-6 }]]));
     budget.afterTurn({ pricedMc: price });

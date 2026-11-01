@@ -25,6 +25,7 @@
  * Pure apart from the per-cell memo; no I/O.
  */
 
+import { defaultEstimateTokens } from '@seanhogg/builderforce-memory/handoff';
 import type { ChatCompletionMessage, ContentPart } from '../streamChatCompletion';
 import type { RunCell } from './runCell';
 
@@ -38,6 +39,8 @@ interface Attached {
   /** The copy that carries the block — restored only while it still holds the slot. */
   carrier: ChatCompletionMessage;
   original: ChatCompletionMessage;
+  /** The block's token estimate (the §8.2 row's `contextPackTokens`), taken when it was attached. */
+  tokens: number;
 }
 
 const attached = new WeakMap<RunCell, Attached>();
@@ -77,8 +80,13 @@ export function attachTurnContext(c: RunCell, convo: ChatCompletionMessage[], bl
       : [...original.content, { type: 'text', text: block }];
     const carrier: ChatCompletionMessage = { ...original, content };
     convo[i] = carrier;
-    attached.set(c, { convo, index: i, carrier, original });
+    attached.set(c, { convo, index: i, carrier, original, tokens: defaultEstimateTokens(block) });
     return true;
   }
   return false;
+}
+
+/** The tokens of the block this run attached to its request (0 when it attached none): what the run's outcome row reports as `contextPackTokens`. */
+export function turnContextTokens(c: RunCell): number {
+  return attached.get(c)?.tokens ?? 0;
 }

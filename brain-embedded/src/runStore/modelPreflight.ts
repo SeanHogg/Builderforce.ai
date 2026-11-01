@@ -8,41 +8,19 @@
  * `byoUnresolved` — the SAME state the live banner reads — and recorded as a
  * `model.preflight` step, so the user sees "your Anthropic token expired; this run will
  * not use your own model" up front, and diagnostics can say why the run was weak.
+ *
+ * What the host's check returns ({@link ModelPreflightResult}) and the Flash-class plan rule ({@link planModelWarning}) are the agent's,
+ * once (`@builderforce/agent-run` `policy/model`). What stays here is the Brain's own: the step in the Brain's trace wording
+ * (`BrainTraceEvent`, pinned by `modelSignals.test.ts`), and the write into the run cell the live banner reads (`RunCell`) - the agent's
+ * own `model.preflight` event is deliberately silent on the Brain (`run/preflightRecorded.ts`, parity ruling T10).
  */
 
-import { isAgenticTier, listPriceOf, resolveModelTier, snapshotPriceBook, type ModelTier, type PriceBook } from '@builderforce/model-catalog';
+import { planModelWarning, type ModelPreflightResult, type PlanModelWarning } from '@builderforce/agent-run';
 import { byoUnresolvedSummary, parseByoUnresolved, type BrainTraceEvent } from '../brainTriage';
 import type { RunCell } from './runCell';
 import { accrueByoUnresolved, emit, nowIso, pushTrace } from './runCells';
 
 export const MODEL_PREFLIGHT_LABEL = 'model.preflight';
-
-/** What a host's preflight found. Empty `byoUnresolved` = every connected account resolves. */
-export interface ModelPreflightResult {
-  /** `provider:reason` entries, exactly as the gateway's header spells them. */
-  byoUnresolved: readonly string[];
-  /** The model the run will fall back to, when the host knows it. */
-  fallback?: string;
-}
-
-/** A pinned model whose catalog tier is Flash-class (not an agentic tier). */
-export interface PlanModelWarning {
-  model: string;
-  tier: ModelTier;
-}
-
-/**
- * Would the run's PLAN phase land on a Flash-class model? Only answerable for a model the
- * run names explicitly (a pin); an auto-routed run (`undefined` / `default`) is the
- * gateway's pick, which only the BYO check speaks to. The tier is the catalog's own rule
- * over the release's bundled prices; an unpriced model (a local one) is unknown, not weak. Pure.
- */
-export function planModelWarning(model: string | undefined, book: PriceBook = snapshotPriceBook()): PlanModelWarning | null {
-  if (!model || model === 'default') return null;
-  const price = listPriceOf(book, model);
-  const tier = price ? resolveModelTier({ price }) : undefined;
-  return tier && isAgenticTier(tier) === false ? { model, tier } : null;
-}
 
 /** The `model.preflight` step for a result, or null when there is nothing to say. Pure. */
 export function modelPreflightEvent(result: ModelPreflightResult | null | undefined, ts: string, plan?: PlanModelWarning | null): BrainTraceEvent | null {

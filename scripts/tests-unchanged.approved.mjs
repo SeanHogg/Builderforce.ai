@@ -35,9 +35,27 @@ export const APPROVED = [
     approvedBy: APPROVED_BY,
   },
   {
+    file: 'clients/vscode/src/memoryCommit.test.ts',
+    changed: 'Deleted. Its readChangedExcerpt case moved, unchanged, to clients/vscode/src/changedExcerpt.test.ts; its other 13 cases are packages/agent-run/test/learnedFacts.test.ts, unchanged.',
+    reason: "PRD 35 WS7: memoryCommit.ts (the editor's twin of policy/memory/{learnedFacts,runKnowledgeCommit}.ts) is deleted; the editor imports the agent's module. Every one of the 13 cases runs unchanged against the one copy in packages/agent-run (the two files differ only in imports and in the readChangedExcerpt describe), and the one host-specific case lives with the workspace reader it tests.",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'brain-embedded/src/run/parity/oracle.files.txt',
+    changed: 'The line for brain-embedded/src/run/areaR/human.test.ts is removed.',
+    reason: "PRD 35 WS7: that test is deleted (approved above): both cases drove approvalGates through the human channel's approve, which the Brain never binds (ruling R10), so the code and the test are dead. oracle.test.ts requires every listed file to exist.",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'brain-embedded/src/test/brainRunHarness.ts',
+    changed: "The harness builds the binding with a minimal real turn observer (plainTurn) instead of none, no longer sets the removed BrainRunBinding.cell/runKey, and runBound takes the whole bound run so it can run the production preflight seam.",
+    reason: "PRD 35 WS7: BrainRunBinding.turn is now required (the transport's no-session branches served only tests), and cell/runKey/approvalGates left the binding as dead. The harness is a fixture, not a case: no test input or expected value changes.",
+    approvedBy: APPROVED_BY,
+  },
+  {
     file: 'packages/agent-run/test/learnedFacts.test.ts',
     changed: 'The readChangedExcerpt case is not carried.',
-    reason: 'It reads the workspace with node fs and git; the package may not import node:*. It keeps running unchanged in clients/vscode/src/memoryCommit.test.ts.',
+    reason: 'It reads the workspace with node fs and git; the package may not import node:*. The case runs unchanged in clients/vscode/src/changedExcerpt.test.ts (the editor, readChangedExcerpt).',
     approvedBy: APPROVED_BY,
     cases: 1,
   },
@@ -167,8 +185,8 @@ export const APPROVED = [
   },
   {
     file: 'brain-embedded/src/run/webAdapter.test.ts',
-    changed: 'The approved answer expectation now carries approved: true. runViaAgent became the test harness\'s runBound (same runAgent call over the same ports), and the run-store case is gone with cellRunStore.',
-    reason: 'Required by parity ruling R10. The cellRunStore case tested a store only the deleted second path used; the live store is loopRunStore (run/loopStore.ts), held by the parity snapshots.',
+    changed: 'The approved answer expectation now carries approved: true. runViaAgent became the test harness\'s runBound (same runAgent call over the same ports), and the run-store case is gone with cellRunStore. Then: runBound takes the bound run (its cell is no longer on the binding) and drives the production preflight module; every transport is built over a turn observer (plainTurn); the window case drops its `ports.model.preflight` assertion; the human-channel case keeps its `ask` assertion and drops the `approve` ones.',
+    reason: 'Required by parity ruling R10. The cellRunStore case tested a store only the deleted second path used; the live store is brainRunStorePort (run/brainStore.ts), held by the parity snapshots. The Brain\'s production transport always has a turn observer (brainTurn.ts) and never reaches `ports.model.preflight` (run/preflightRecorded.ts replaces it), nor a governance approval (R10 keeps gates unbound), so those assertions proved only dead paths; the live preflight is pinned by the trace case (the preamble\'s check plus the recorded module) and by conformance.test.ts.',
     approvedBy: APPROVED_BY,
     cases: 1,
   },
@@ -182,18 +200,6 @@ export const APPROVED = [
     file: 'brain-embedded/src/runStore/engineRunRow.test.ts',
     changed: 'Deleted.',
     reason: "PRD 35 WS4 ship gate (operator order, 2026-10-31): the Brain's old loop (runLoop) and the engine switch are deleted. It ran a two-turn run on both engines to compare their `steps` rows; the one row per run is held by the agentRunReport and parity snapshots.",
-    approvedBy: APPROVED_BY,
-  },
-  {
-    file: 'brain-embedded/src/selectTools.test.ts',
-    changed: 'Deleted.',
-    reason: "PRD 35 WS4 ship gate (operator order, 2026-10-31): the Brain's old loop (runLoop) and the engine switch are deleted. The Brain's selectToolsForTurn is a copy of the agent's; its 15 cases run unchanged against the one selector in packages/agent-run/test/tools/selectTools.test.ts.",
-    approvedBy: APPROVED_BY,
-  },
-  {
-    file: 'brain-embedded/src/selectTools.pins.test.ts',
-    changed: 'Deleted.',
-    reason: "PRD 35 WS4 ship gate (operator order, 2026-10-31): the Brain's old loop (runLoop) and the engine switch are deleted. Same: its 4 cases run unchanged in packages/agent-run/test/tools/selectTools.pins.test.ts.",
     approvedBy: APPROVED_BY,
   },
   {
@@ -246,8 +252,20 @@ export const APPROVED = [
   },
   {
     file: 'brain-embedded/src/run/areaR/steer.test.ts',
-    changed: 'bothEngines became a single run; agent-equals-loop equalities removed, pinned values kept on the agent run; some equality-only quantities became concrete expectations.',
+    changed: 'bothEngines became a single run; agent-equals-loop equalities removed, pinned values kept on the agent run; some equality-only quantities became concrete expectations. One it() TITLE: "as a failed step" became "as a step that is not an error" (the case asserts isError: false); no input or assertion changed.',
     reason: "PRD 35 WS4 ship gate (operator order, 2026-10-31): the Brain's old loop (runLoop) and the engine switch are deleted. The test ran one scripted run on the loop and on the agent; it now runs it on the agent. Every concrete value the loop was pinned to stays on the agent run; each removed assertion was an agent-equals-loop equality and is held by a parity snapshot or a stated concrete expectation (see the hand-off note).",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'brain-embedded/src/run/areaR/human.test.ts',
+    changed: 'Deleted.',
+    reason: "Both cases drove `RunPolicy.approvalGates` through `HumanChannel.approve` and the confirm card. Parity ruling R10 keeps governance gates UNBOUND on the Brain (its request carries none, `brainRunPolicy` sends `approvalGates: []`), so `startRun` never reaches that path; the test could only prove dead code, which is deleted (`approve`, `confirmRequestFor`, `BrainRunBinding.approvalGates`). The confirm card a TOOL raises is `callPreflight.ts` and is held by prefetchGate.confirm.test.ts and the parity tools scenarios.",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'brain-embedded/src/run/conformance.test.ts',
+    changed: 'The drive helper hands runAgent the production model module (preflightedModules: the preamble\'s host check, then the recorded preflight) and names the entry-point type RunEntryPoint (an import). No input, fixture, expected value or case count changed.',
+    reason: "The model preflight case asserted the agent's own preflight, which asked `ports.model.preflight`; production replaces that with the recorded module (run/preflightRecorded.ts, parity ruling T10), so the case now drives the seam production runs and still expects the same events.",
     approvedBy: APPROVED_BY,
   },
   {
@@ -259,7 +277,7 @@ export const APPROVED = [
   },
   {
     file: 'brain-embedded/src/runStore/runSpendBudget.test.ts',
-    changed: "The cases drove the loop's spend hooks; they now drive the agent's budget (usdBudget) over the Brain's tree meter (loopSpendMeter), the device's one price rule and the Brain's event sink. The wording cases import budgetWarning/budgetContainedReply from the agent (the unpriced count is a number, not an object). The convo/persistence side effects of the hooks are the agent's (kernelHooks) and held by the budget-warn-stop snapshot; persistBudgetStop is asserted directly. The run-state tag case is dropped (the agent builds the tail in kernelHooks; the snapshot pins the tagged row).",
+    changed: "The cases drove the loop's spend hooks; they now drive the agent's budget (usdBudget) over the Brain's tree meter (brainSpendMeter), the device's one price rule and the Brain's event sink. The wording cases import budgetWarning/budgetContainedReply from the agent (the unpriced count is a number, not an object). The convo/persistence side effects of the hooks are the agent's (kernelHooks) and held by the budget-warn-stop snapshot; persistBudgetStop is asserted directly. The run-state tag case is dropped (the agent builds the tail in kernelHooks; the snapshot pins the tagged row).",
     reason: "PRD 35 WS4 ship gate (operator order, 2026-10-31): the Brain's old loop (runLoop) and the engine switch are deleted. The hooks are deleted with runLoop; every price, tree and wording case is kept on the seams that carry it.",
     approvedBy: APPROVED_BY,
     cases: 1,

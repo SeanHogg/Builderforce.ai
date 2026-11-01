@@ -13,11 +13,11 @@ import type { StreamChatResult } from '../streamChatCompletion';
 import { emit } from '../runStore/runCells';
 import { closeAfterFailureStreak } from '../runStore/failureClose';
 import { emitEvermindLearnReconcile } from '../runStore/runMemory';
-import { settleReply, type RunLoopContext } from '../runStore/runLoopContext';
+import { settleReply, type BrainRunContext } from '../runStore/brainRunContext';
 import { persistBudgetStop } from '../runStore/runSpendBudget';
-import type { LastTurn } from './loopTurn';
+import type { LastTurn } from './brainTurn';
 
-export async function settleBrainRun(run: RunLoopContext, outcome: RunOutcome, last: LastTurn): Promise<void> {
+export async function settleBrainRun(run: BrainRunContext, outcome: RunOutcome, last: LastTurn): Promise<void> {
   const { c, chatId, req } = run;
   // An answer the agent never went on with is not part of the run.
   last.pending = undefined;

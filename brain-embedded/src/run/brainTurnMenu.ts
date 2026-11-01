@@ -6,28 +6,27 @@
  */
 
 import { offersHandOff } from '@builderforce/run-policy';
-import type { TurnEnv, TurnMenu } from '@builderforce/agent-run';
+import { DEFAULT_TOOL_LIMIT, type TurnEnv, type TurnMenu } from '@builderforce/agent-run';
 import type { ToolSchema } from '@builderforce/agent-tools';
 import type { BrainToolSpec } from '../streamChatCompletion';
 import { HAND_OFF_TOOL } from '../planHandoff';
-import { DEFAULT_TOOL_LIMIT } from '../selectTools';
 import { routerToolSpecs } from '../toolRouter';
 import { nowIso, pushTrace } from '../runStore/runCells';
 import { userTextOf } from '../runStore/convoText';
 import { changeBudgetTurn, planBudgetTurn, type ForcedTurn } from '../runStore/progressBudget';
 import { noProgressTurn } from '../runStore/cacheServedStreak';
 import { progressGuardTurn } from '../runStore/progressGuard';
-import type { RunLoopContext } from '../runStore/runLoopContext';
+import type { BrainRunContext } from '../runStore/brainRunContext';
 
 /**
  * The turn a progress rule decides, or null: the plan budget's hand-off turn (decided BEFORE selection, so a forced turn that did
  * not hand off already selects as code), else the change budget, else a run circling its read cache, else A3's escalation or pause.
  */
-function forcedTurnFor(run: RunLoopContext, step: number, selected: BrainToolSpec[], handOffTurn: ForcedTurn | null): ForcedTurn | null {
+function forcedTurnFor(run: BrainRunContext, step: number, selected: BrainToolSpec[], handOffTurn: ForcedTurn | null): ForcedTurn | null {
   return handOffTurn ?? changeBudgetTurn(run, step, selected) ?? noProgressTurn(run, step, selected) ?? progressGuardTurn(run, step, selected);
 }
 
-export async function loopTurnMenu(run: RunLoopContext, env: TurnEnv, catalogSize: number): Promise<TurnMenu | void> {
+export async function brainTurnMenu(run: BrainRunContext, env: TurnEnv, catalogSize: number): Promise<TurnMenu | void> {
   // Analysis that has spent its budget ends HERE, BEFORE selection: the hand-off turn offers `hand_off` alone with a call required.
   const handOffTurn = planBudgetTurn(run, env.step);
   // Once the run is coding, the plan is handed off: `hand_off` is gone from the menu, so a coder can never re-plan the work it was just given.

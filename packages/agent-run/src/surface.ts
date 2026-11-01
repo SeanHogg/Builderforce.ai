@@ -94,6 +94,8 @@ export interface PlatformSelection {
    * tools first, the catalog-order backfill, the pins appended - is the shared one either way.
    */
   rank?(candidates: readonly ToolSchema[], query: string): readonly ToolSchema[];
+  /** Hold {@link required} to {@link limit} too, in catalog order (additive; the Brain's rule). Absent ⇒ a required tool is never dropped. */
+  capRequired?: boolean;
 }
 
 /** The surface's own tools, as a capability provider on the same run. */

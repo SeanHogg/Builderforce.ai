@@ -14,10 +14,9 @@ import type { ChatMode, ChatRosterAgent } from '../chatMode';
 import type { EvermindRunHooks } from '../evermindMemory';
 import type { RunWindowSources } from '../windowFit/modelWindow';
 import type { RunKnowledgeLog } from '@builderforce/agent-tools';
-import type { ModelPreflightResult } from './modelPreflight';
 import type { ServedRead } from './hostRunContext';
 import type { PrefetchPort } from '@builderforce/prefetch';
-import type { RunOutcomeRow } from '@builderforce/agent-run';
+import type { ModelPreflightResult } from '@builderforce/agent-run';
 
 /**
  * What a run cell is keyed by. A CHAT's run is keyed by its chat id (a number — the
@@ -276,11 +275,6 @@ export interface BrainRunRequest {
    * nothing branches on it.
    */
   entryPoint?: RunEntryPoint;
-  /**
-   * Told the run's uniform outcome row (PRD 35 §8.2) once, when a run ends. The host
-   * posts it to the one write-back door; the run does no network I/O of its own. Best-effort.
-   */
-  reportRunRow?: (row: RunOutcomeRow) => Promise<unknown> | void;
   /**
    * Told once, at run end, how the run ended and under which run id its calls were
    * recorded (`runEndOutcome.ts`) — the host stores it beside its usage ledger for the

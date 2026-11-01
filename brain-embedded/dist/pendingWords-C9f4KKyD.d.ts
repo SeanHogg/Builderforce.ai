@@ -2687,26 +2687,6 @@ interface PrefetchPort {
 }
 
 /**
- * MODEL PREFLIGHT (PRD 35 E7) — the run learns BEFORE turn 1 that a connected account
- * cannot serve it, instead of after a turn from `x-builderforce-byo-unresolved`.
- *
- * The host checks its BYO health (the VS Code client: the provider-key status reads,
- * which attempt the token refresh themselves) and hands back the unresolved entries in
- * the header's own `provider:reason` form. They are seeded into the run cell's
- * `byoUnresolved` — the SAME state the live banner reads — and recorded as a
- * `model.preflight` step, so the user sees "your Anthropic token expired; this run will
- * not use your own model" up front, and diagnostics can say why the run was weak.
- */
-
-/** What a host's preflight found. Empty `byoUnresolved` = every connected account resolves. */
-interface ModelPreflightResult {
-    /** `provider:reason` entries, exactly as the gateway's header spells them. */
-    byoUnresolved: readonly string[];
-    /** The model the run will fall back to, when the host knows it. */
-    fallback?: string;
-}
-
-/**
  * What the HOST hands a run before its first turn (PRD 35 E2 / E7), gathered in one
  * parallel wait: the recall hint (its context pack's focus files + headings), the task
  * context block, the files that block served whole, and the model preflight.
@@ -2725,58 +2705,18 @@ interface ServedRead {
 }
 
 /**
- * telemetry/rowType — the shape of the uniform outcome row (PRD 35 §8.2).
- *
- * Split out of `contract.ts` (which re-exports it) so the contract stays under the module
- * size limit; WS6 owns the row and the fields it adds.
+ * contractModel - the model half of the run contract: the transcript row, what the agent asks of a model, what comes back, and
+ * the transport that answers. Split out of `contract.ts` (PRD 35 §5 rule 4); `contract.ts` re-exports every name, so no import changes.
  */
-/** The uniform outcome row (§8.2): ONE per run, every entry point, built by `telemetry/outcomeRow`
- *  when the run ends. `entryPoint` is a telemetry label — never a behaviour branch (§5 rule 3). */
-interface RunOutcomeRow {
-    entryPoint: string;
-    runId?: string;
-    /** Set on a SUB-AGENT's row: the run that spawned it (`RunTask.dispatch.parentRunId`), so a child is never counted as a second run of its owner. */
-    parentRunId?: string;
-    steps: number;
-    toolCalls: number;
-    toolErrors: number;
-    /** How many times the transcript was compacted this run. */
-    compactions: number;
-    /** How many stall recoveries the run's model policy performed. */
-    stallRecoveries: number;
-    /** How many times the run escalated (a forced-progress / stronger-model step). */
-    escalations: number;
-    /** The declared verify phase's result. */
-    verify: 'passed' | 'failed' | 'not-run';
-    terminalStatus: string;
-    model?: string;
-    tokens?: number;
-    cacheReadTokens?: number;
-    cost?: number;
-    /** The turn the first spawn happened on; null when nothing was spawned. */
-    firstSpawnTurn?: number | null;
-    /** How many covered reads were stubbed (a window already served, re-served). */
-    coveredReadStubs?: number;
-    /** `cat`/`sed`/`head`/`tail` of a workspace file through the shell. */
-    shellFileReads?: number;
-    /** Calls that errored with "not a repo". */
-    repoErrors?: number;
-    /** Tokens the context pack contributed. */
-    contextPackTokens?: number;
-    /** The model preflight result: ok | refreshed | degraded:<reason>. */
-    modelPreflight?: string;
-    /** Turns that claimed readiness then only read (WS8p `unkept_ready`). */
-    unkeptReadyClaims?: number;
-    /** The A3 progress trips, by signal ({ signal: count }). */
-    progressTrips?: Record<string, number>;
-    /** Present (true) only when the run was STOPPED (a user Stop, a steered stop, a cancelled owner) - not a failure of the work. */
-    cancelled?: boolean;
-    /** Present (true) only when the run died on a provider rate limit - an availability signal, not a quality one. */
-    rateLimited?: boolean;
-    /** Present (true) only when the run failed because the TENANT ran out of quota/budget - not evidence about the model, so routing never learns from it. NOT a run stopping at its own per-run cap. */
-    quotaExhausted?: boolean;
-    /** Present (true) only when the run was served by a WEAKER model than it asked for (a recorded downgrade). A failover onto a model of the same standing (or one the price book cannot rank), and a preflight note, are not recorded as a downgrade. */
-    degraded?: boolean;
+
+/** What a transport's preflight found. Empty `byoUnresolved` ⇒ every connected account resolves. */
+interface ModelPreflightResult {
+    /** `provider:reason` entries, exactly as the gateway's `x-builderforce-byo-unresolved` header spells them. */
+    byoUnresolved: readonly string[];
+    /** Providers whose `expired` token the transport refreshed successfully. */
+    refreshed?: readonly string[];
+    /** The model the run falls back to, when the transport knows it. */
+    fallback?: string;
 }
 
 /**
@@ -3039,11 +2979,6 @@ interface BrainRunRequest {
      * nothing branches on it.
      */
     entryPoint?: RunEntryPoint;
-    /**
-     * Told the run's uniform outcome row (PRD 35 §8.2) once, when a run ends. The host
-     * posts it to the one write-back door; the run does no network I/O of its own. Best-effort.
-     */
-    reportRunRow?: (row: RunOutcomeRow) => Promise<unknown> | void;
     /**
      * Told once, at run end, how the run ended and under which run id its calls were
      * recorded (`runEndOutcome.ts`) — the host stores it beside its usage ledger for the

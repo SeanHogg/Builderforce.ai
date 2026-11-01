@@ -11,6 +11,7 @@ import { gatewayModelWindows } from '../gatewayModels';
 import { StreamInterruptedError, type ContentPart, type StreamChatResult } from '../streamChatCompletion';
 import { windowFitTranscript } from '../test/windowFitTranscript';
 import { answer, callTool, runOn, script, stepsLabelled, toolSpec, type Observed, type StreamOpts } from '../test/engineKit';
+import { plainTurn } from '../test/brainRunHarness';
 import { brainModelTransport } from './modelTransport';
 import { toRunMessage, withImages } from './runMessages';
 
@@ -33,12 +34,16 @@ describe('the window fit packs a small-window model once, not every turn', () =>
       userTurn: 'Now wire the chip row.',
       stream: script([read(0), read(1), read(2), answer('Wired.', { resolvedModel: small })]),
     }));
-    expect(stepsLabelled(run.trace, 'llm.handoff').length).toBeGreaterThan(0);
+    // Pinned at what the Brain's old loop recorded here (the agent equalled it when the comparison was removed, 46f1e630f): one
+    // `llm.handoff` step per request, four (three reads, then the answer), and no summarising request at all (a request that offers no tools): the history is ELIDED to the 4,096-token
+    // window, never sent to the model to be summarised.
+    expect(stepsLabelled(run.trace, 'llm.handoff')).toHaveLength(4);
+    expect(toolless(run)).toHaveLength(0);
   });
 
   it('hands the stream the SAME wire row for the same transcript row', async () => {
     const seen: unknown[][] = [];
-    const model = brainModelTransport({ stream: async (opts) => { seen.push(opts.messages); return { text: 'ok', toolCalls: [], finishReason: 'stop' }; } });
+    const model = brainModelTransport({ turn: plainTurn, stream: async (opts) => { seen.push(opts.messages); return { text: 'ok', toolCalls: [], finishReason: 'stop' }; } });
     const rows = [
       { role: 'system' as const, content: 's' },
       { role: 'assistant' as const, content: '', toolCalls: [{ id: 'c1', name: 'read_file', arguments: '{}' }] },

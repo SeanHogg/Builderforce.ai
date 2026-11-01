@@ -6,7 +6,7 @@
  * failing and what is needed, instead of an error; the loop error is surfaced only if THIS closing turn is also empty. This
  * does not depend on which model answered, so it also rescues a weak auto-selected model that thrashed.
  *
- * The agent's adapter tail (`run/loopSettle.ts`) calls it.
+ * The agent's adapter tail (`run/brainSettle.ts`) calls it.
  */
 
 import { replayTextOf } from '@builderforce/agent-loop';
@@ -17,10 +17,10 @@ import { accrueByoUnresolved, accrueProviderCap, emit, emitStreaming, nowIso, no
 import { asLiveTurn, canonicalTurnText, connectRetryStep, liveTurnModel, provenanceMetadata } from './turnPersistence';
 import { emitEvermindLearnReconcile } from './runMemory';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
-import type { RunLoopContext } from './runLoopContext';
+import type { BrainRunContext } from './brainRunContext';
 
 /** Force the tools-free closing answer for a run stopped after `streak` failed calls at `step`, and settle it on the chat. */
-export async function closeAfterFailureStreak(run: RunLoopContext, streak: number, step: number): Promise<void> {
+export async function closeAfterFailureStreak(run: BrainRunContext, streak: number, step: number): Promise<void> {
   const { c, chatId, req, convo, systemPrompt, metadata } = run;
   const { routingMode, stream, persistence, onActivity, maxTokens, reasoning } = req;
   c.streamingText = '';
@@ -44,7 +44,7 @@ export async function closeAfterFailureStreak(run: RunLoopContext, streak: numbe
         {
           onModel: liveTurnModel(c),
           onConnectRetry: connectRetryStep(c, step),
-          // The first token repaints now; every later delta coalesces into a frame (as `run/loopTurn.ts` does).
+          // The first token repaints now; every later delta coalesces into a frame (as `run/brainTurn.ts` does).
           onTextDelta: (d) => {
             c.streamingText += d;
             if (closeFirstTokenAt === undefined) {

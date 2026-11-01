@@ -157,7 +157,7 @@ export function classifyModelFunding(
   return 'premium';
 }
 
-import { DEFAULT_TOOL_LIMIT } from './selectTools';
+import { DEFAULT_TOOL_LIMIT } from '@builderforce/agent-run';
 import { PROJECT_EVERMIND_MODEL_PREFIX } from './modelChoice';
 
 /** Everything the diagnostics block needs — already gathered by the host (pure in). */

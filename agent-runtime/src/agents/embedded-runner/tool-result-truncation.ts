@@ -1,122 +1,66 @@
 import type { AgentMessage } from "../../builderforce/model/agent-types.js";
-import type { TextContent } from "../../builderforce/model/types.js";
 import { SessionManager } from "../../builderforce/agent-loop/index.js";
 import { log } from "./logger.js";
 import { onDeviceCostLeverOn } from "../../infra/cost-levers.js";
 import {
-  DEFAULT_TRUNCATION_SUFFIX,
-  HARD_MAX_TOOL_RESULT_CHARS,
-  MIN_KEEP_CHARS,
-  cutHead,
-  fitToolText,
-  windowToolResultCap,
-} from "@builderforce/tool-output-policy";
+  calculateMaxToolResultChars,
+  toolResultTextLength,
+  truncateOversizedToolResultsInMessages as capMessages,
+  truncateToolResultMessage as capMessage,
+  truncateToolResultText as capText,
+  type TruncateHooks,
+} from "@builderforce/agent-run";
+import { DEFAULT_TRUNCATION_SUFFIX } from "@builderforce/tool-output-policy";
 
 /**
- * The budgets and the cut are THE shared tool-output policy
- * (`@builderforce/tool-output-policy`, PRD C7): 30% of the context window (~4 chars per
- * token), a 400K hard cap, a 2K floor, cut at a line boundary. With the C7 lever on, a
- * shell/test/build log is summarized (failing tests, error lines, assertion diffs, the
- * tail) instead of head-cut, so the verdict at the end of a long run is never the part
- * that is dropped.
+ * The on-prem face of the window-sized tool-result cut.
+ *
+ * The budgets, the cut and the message-level proportional truncation are THE shared tool-output policy, once, in
+ * `@builderforce/agent-run` (`policy/tools/truncation.ts`, over `@builderforce/tool-output-policy`, PRD C7); callers that need only
+ * those (`calculateMaxToolResultChars`, `isOversizedToolResult`, `HARD_MAX_TOOL_RESULT_CHARS`) import them from there. What stays HERE
+ * is what the agent may not have, because it is this host's:
+ *   - the C7 lever for an on-device host (`onDeviceCostLeverOn`, bucketed by the install id): with it on, a shell/test/build log is
+ *     summarized (failing tests, error lines, assertion diffs, the tail) instead of head-cut, so the verdict at the end of a long run
+ *     is never the part that is dropped. The agent takes it as an injected hook, never an import;
+ *   - the walk of the session FILE (`SessionManager`) that re-appends a branch with the oversized results cut.
  */
-export { HARD_MAX_TOOL_RESULT_CHARS };
 
 /** The C7 lever for an on-device host (bucketed by the install id). */
-function summarizeLogs(): boolean {
-  return onDeviceCostLeverOn("c7_tool_output_policy");
+const LEVERS: TruncateHooks = { summarize: () => onDeviceCostLeverOn("c7_tool_output_policy") };
+
+/**
+ * Truncate a single text string to fit within maxChars, preserving the beginning - or, with the C7 lever on, summarizing it when it reads
+ * as a shell/test/build log. `suffix` is the notice a head cut ends with (the persistence guard says so in its own words).
+ */
+export function truncateToolResultText(text: string, maxChars: number, suffix: string = DEFAULT_TRUNCATION_SUFFIX): string {
+  return capText(text, maxChars, suffix, LEVERS);
 }
 
 /**
- * Truncate a single text string to fit within maxChars, preserving the beginning — or,
- * with the C7 lever on, summarizing it when it reads as a shell/test/build log.
- * `suffix` is the notice a head cut ends with (the persistence guard says so in its own words).
+ * Truncate a tool result message's text content blocks to fit within maxChars (the agent's proportional cut, with this host's lever).
+ * Returns a new message (does not mutate the original). THE message-level cut: the context-overflow recovery below and the persistence
+ * guard (`session-tool-result-guard.ts`) both use it.
  */
-export function truncateToolResultText(
-  text: string,
-  maxChars: number,
-  suffix: string = DEFAULT_TRUNCATION_SUFFIX,
-): string {
-  return fitToolText(text, maxChars, {
-    summarize: summarizeLogs(),
-    fallback: (t, max) => cutHead(t, max, { suffix, minKeep: MIN_KEEP_CHARS }),
-  });
+export function truncateToolResultMessage(msg: AgentMessage, maxChars: number, opts: { suffix?: string } = {}): AgentMessage {
+  return capMessage(msg, maxChars, { ...opts, hooks: LEVERS });
 }
 
 /**
- * Calculate the maximum allowed characters for a single tool result
- * based on the model's context window tokens.
+ * Truncate oversized tool results in an array of messages (in-memory), as a pre-emptive guard before sending messages to the LLM,
+ * without modifying the session file. Returns a new array with truncated messages.
  */
-export function calculateMaxToolResultChars(contextWindowTokens: number): number {
-  return windowToolResultCap(contextWindowTokens);
+export function truncateOversizedToolResultsInMessages(
+  messages: AgentMessage[],
+  contextWindowTokens: number,
+): { messages: AgentMessage[]; truncatedCount: number } {
+  return capMessages(messages, contextWindowTokens, { hooks: LEVERS });
 }
 
 /**
- * Get the total character count of text content blocks in a tool result message.
+ * The overflow-recovery check `run.ts` asks (and its test mocks, as it does {@link truncateOversizedToolResultsInSession}): the agent's
+ * own estimate, named here only because this module is the seam that runner imports both from.
  */
-function getToolResultTextLength(msg: AgentMessage): number {
-  if (!msg || (msg as { role?: string }).role !== "toolResult") {
-    return 0;
-  }
-  const content = (msg as { content?: unknown }).content;
-  if (!Array.isArray(content)) {
-    return 0;
-  }
-  let totalLength = 0;
-  for (const block of content) {
-    if (block && typeof block === "object" && (block as { type?: string }).type === "text") {
-      const text = (block as TextContent).text;
-      if (typeof text === "string") {
-        totalLength += text.length;
-      }
-    }
-  }
-  return totalLength;
-}
-
-/**
- * Truncate a tool result message's text content blocks to fit within maxChars, each
- * block given its proportional share of the budget (never below the policy floor).
- * Returns a new message (does not mutate the original). THE message-level cut: the
- * context-overflow recovery below and the persistence guard
- * (`session-tool-result-guard.ts`) both use it.
- */
-export function truncateToolResultMessage(
-  msg: AgentMessage,
-  maxChars: number,
-  opts: { suffix?: string } = {},
-): AgentMessage {
-  const content = (msg as { content?: unknown }).content;
-  if (!Array.isArray(content)) {
-    return msg;
-  }
-
-  // Calculate total text size
-  const totalTextChars = getToolResultTextLength(msg);
-  if (totalTextChars <= maxChars) {
-    return msg;
-  }
-
-  // Distribute the budget proportionally among text blocks
-  const newContent = content.map((block: unknown) => {
-    if (!block || typeof block !== "object" || (block as { type?: string }).type !== "text") {
-      return block; // Keep non-text blocks (images) as-is
-    }
-    const textBlock = block as TextContent;
-    if (typeof textBlock.text !== "string") {
-      return block;
-    }
-    // Proportional budget for this block
-    const blockShare = textBlock.text.length / totalTextChars;
-    const blockBudget = Math.max(MIN_KEEP_CHARS, Math.floor(maxChars * blockShare));
-    return {
-      ...textBlock,
-      text: truncateToolResultText(textBlock.text, blockBudget, opts.suffix),
-    };
-  });
-
-  return { ...msg, content: newContent } as AgentMessage;
-}
+export { sessionLikelyHasOversizedToolResults } from "@builderforce/agent-run";
 
 /**
  * Find oversized tool result entries in a session and truncate them.
@@ -157,7 +101,7 @@ export async function truncateOversizedToolResultsInSession(params: {
       if ((msg as { role?: string }).role !== "toolResult") {
         continue;
       }
-      const textLength = getToolResultTextLength(msg);
+      const textLength = toolResultTextLength(msg);
       if (textLength > maxChars) {
         oversizedIndices.push(i);
         log.info(
@@ -198,7 +142,7 @@ export async function truncateOversizedToolResultsInSession(params: {
         if (oversizedSet.has(i)) {
           message = truncateToolResultMessage(message, maxChars);
           truncatedCount++;
-          const newLength = getToolResultTextLength(message);
+          const newLength = toolResultTextLength(message);
           log.info(
             `[tool-result-truncation] Truncated tool result: ` +
               `originalEntry=${entry.id} newChars=${newLength} ` +
@@ -254,69 +198,4 @@ export async function truncateOversizedToolResultsInSession(params: {
     log.warn(`[tool-result-truncation] Failed to truncate: ${errMsg}`);
     return { truncated: false, truncatedCount: 0, reason: errMsg };
   }
-}
-
-/**
- * Truncate oversized tool results in an array of messages (in-memory).
- * Returns a new array with truncated messages.
- *
- * This is used as a pre-emptive guard before sending messages to the LLM,
- * without modifying the session file.
- */
-export function truncateOversizedToolResultsInMessages(
-  messages: AgentMessage[],
-  contextWindowTokens: number,
-): { messages: AgentMessage[]; truncatedCount: number } {
-  const maxChars = calculateMaxToolResultChars(contextWindowTokens);
-  let truncatedCount = 0;
-
-  const result = messages.map((msg) => {
-    if ((msg as { role?: string }).role !== "toolResult") {
-      return msg;
-    }
-    const textLength = getToolResultTextLength(msg);
-    if (textLength <= maxChars) {
-      return msg;
-    }
-    truncatedCount++;
-    return truncateToolResultMessage(msg, maxChars);
-  });
-
-  return { messages: result, truncatedCount };
-}
-
-/**
- * Check if a tool result message exceeds the size limit for a given context window.
- */
-export function isOversizedToolResult(msg: AgentMessage, contextWindowTokens: number): boolean {
-  if ((msg as { role?: string }).role !== "toolResult") {
-    return false;
-  }
-  const maxChars = calculateMaxToolResultChars(contextWindowTokens);
-  return getToolResultTextLength(msg) > maxChars;
-}
-
-/**
- * Estimate whether the session likely has oversized tool results that caused
- * a context overflow. Used as a heuristic to decide whether to attempt
- * tool result truncation before giving up.
- */
-export function sessionLikelyHasOversizedToolResults(params: {
-  messages: AgentMessage[];
-  contextWindowTokens: number;
-}): boolean {
-  const { messages, contextWindowTokens } = params;
-  const maxChars = calculateMaxToolResultChars(contextWindowTokens);
-
-  for (const msg of messages) {
-    if ((msg as { role?: string }).role !== "toolResult") {
-      continue;
-    }
-    const textLength = getToolResultTextLength(msg);
-    if (textLength > maxChars) {
-      return true;
-    }
-  }
-
-  return false;
 }

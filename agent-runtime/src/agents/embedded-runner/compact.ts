@@ -42,7 +42,7 @@ import {
 import {
   ensureCompactionReserveTokens,
   resolveCompactionReserveTokensFloor,
-} from "../agent-settings.js";
+} from "@builderforce/agent-run";
 import { createBuilderForceAgentsCodingTools } from "../coding-tools.js";
 import { resolveOnPremLocalBackings, type OnPremLocalBackings } from "../on-prem-local-backings.js";
 import { resolveSandboxContext } from "../sandbox.js";

@@ -1,7 +1,7 @@
 /**
  * What a COMPLETED turn leaves on the run, recorded ONCE: the coder the outcome grades, the BYO banners, the run's usage,
  * the serving model, the downgrade and local-first traces, and the durable `llm.complete` step (plus the turn's visible
- * text) every diagnostics reader keys on. Used by the agent's model port (`run/loopTurn.ts`).
+ * text) every diagnostics reader keys on. Used by the agent's model port (`run/brainTurn.ts`).
  *
  * It RECORDS and decides nothing: the model policy's report of the turn, the window fit and the stall counters stay with
  * the agent that owns them.
@@ -20,7 +20,7 @@ import { accrueByoUnresolved, accrueProviderCap, nowIso, nowMs, pushTrace, runTr
 import { modelDowngradeEvent } from './modelDowngrade';
 import { gatewayRoutingArgs } from './gatewayRoutingTrace';
 import type { LiveTurn } from './turnStream';
-import type { RunLoopContext } from './runLoopContext';
+import type { BrainRunContext } from './brainRunContext';
 
 /** One completed turn, as the engine that asked for it saw it. */
 export interface RecordedTurn {
@@ -42,7 +42,7 @@ export interface RecordedTurn {
 }
 
 /** Record turn `t` on the run's cell, trace and usage. */
-export async function recordTurn(run: RunLoopContext, t: RecordedTurn): Promise<void> {
+export async function recordTurn(run: BrainRunContext, t: RecordedTurn): Promise<void> {
   const { c, chatId, allTools } = run;
   const { result, iter, llmStart, role, resolved, requested, advertised } = t;
   const advertisedNames = t.advertisedNames as Set<string>;

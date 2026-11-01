@@ -20,19 +20,10 @@
  * the Brain's own part: recording the drained direction on the run's trace.
  */
 
-import {
-  INTERRUPTED_BY_STEER,
-  SKIPPED_BY_STEER,
-  WAIT_INTERRUPTED_BY_STEER,
-  isInterruptibleCall,
-  runToolInterruptibly,
-} from '@builderforce/agent-run';
 import { markPendingWordsRead } from '../pendingWords';
 import { drainRunSteering, type RunSteerMessage } from '../runSteering';
 import type { RunCell } from './runCell';
 import { nowIso, pushTrace } from './runCells';
-
-export { INTERRUPTED_BY_STEER, SKIPPED_BY_STEER, WAIT_INTERRUPTED_BY_STEER, isInterruptibleCall, runToolInterruptibly };
 
 /**
  * Drain the run's waiting direction for this turn and record it as `steer.applied`. The model reads these words

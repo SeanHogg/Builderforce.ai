@@ -7,9 +7,9 @@
 
 import type { SpendMeter } from '@builderforce/agent-run';
 import { joinRunSpend } from '../runStore/runSpendBudget';
-import type { RunLoopContext } from '../runStore/runLoopContext';
+import type { BrainRunContext } from '../runStore/brainRunContext';
 
-export function loopSpendMeter(run: RunLoopContext): SpendMeter | undefined {
+export function brainSpendMeter(run: BrainRunContext): SpendMeter | undefined {
   const joined = joinRunSpend(run);
   if (!joined) return undefined;
   const { tree } = joined;

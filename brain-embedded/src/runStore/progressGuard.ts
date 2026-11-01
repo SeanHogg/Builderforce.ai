@@ -28,7 +28,7 @@ import { isReadOnlyShellCall } from '../readOnlyShell';
 import { isRouterTool } from '../toolRouter';
 import type { BrainToolSpec } from '../streamChatCompletion';
 import { nowIso, pushTrace } from './runCells';
-import { isDedupableRead, type RunLoopContext } from './runLoopContext';
+import { isDedupableRead, type BrainRunContext } from './brainRunContext';
 import { budgeted, forcedProgressTurn, type ForcedTurn } from './progressBudget';
 import { deviceLeverOn } from './deviceLevers';
 
@@ -90,7 +90,7 @@ export class RunProgressGuard {
 }
 
 /** `afterToolCalls`: the turn is over — judge it. */
-export function progressAfterToolCalls(run: RunLoopContext): (ctx: { step: number }) => void {
+export function progressAfterToolCalls(run: BrainRunContext): (ctx: { step: number }) => void {
   return (ctx) => {
     const action = run.progress.endTurn();
     if (!action) return;
@@ -109,7 +109,7 @@ export function progressAfterToolCalls(run: RunLoopContext): (ctx: { step: numbe
  * turn's tools. Null for an ordinary turn — and when the trip cannot be forced here,
  * in which case its note opens the turn instead.
  */
-export function progressGuardTurn(run: RunLoopContext, step: number, selected: readonly BrainToolSpec[]): ForcedTurn | null {
+export function progressGuardTurn(run: BrainRunContext, step: number, selected: readonly BrainToolSpec[]): ForcedTurn | null {
   const due = run.progress.takeDue();
   if (!due) return null;
   const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
@@ -138,7 +138,7 @@ export function progressGuardTurn(run: RunLoopContext, step: number, selected: r
   return out.turn;
 }
 
-function trace(run: RunLoopContext, step: number, due: ProgressAction, forced: 'hand_off' | 'change' | 'ask_user'): void {
+function trace(run: BrainRunContext, step: number, due: ProgressAction, forced: 'hand_off' | 'change' | 'ask_user'): void {
   pushTrace(run.c, {
     ts: nowIso(),
     category: 'message',

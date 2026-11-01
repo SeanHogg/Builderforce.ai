@@ -1,6 +1,7 @@
 /**
  * truncation — the window-sized result cap applied to a tool result's text, ported
- * from `agent-runtime/src/agents/embedded-runner/tool-result-truncation.ts`.
+ * from `agent-runtime/src/agents/embedded-runner/tool-result-truncation.ts`, which now binds it (its cost-lever hook and
+ * its session-file walk) and holds none of the cut.
  *
  * The budget and the cut are THE shared tool-output policy (`@builderforce/tool-output-policy`,
  * PRD C7): 30% of the context window (~4 chars per token), a hard cap, a floor, cut at a
@@ -35,7 +36,6 @@ export interface TextBlock {
 export interface ToolResultMessage {
   role?: string;
   content?: unknown;
-  [key: string]: unknown;
 }
 
 /** How a shell/test/build log is summarized when the C7 lever is on. */
@@ -87,11 +87,11 @@ export function toolResultTextLength(msg: ToolResultMessage): number {
  * its proportional share of the budget (never below the policy floor). Returns a NEW
  * message — the original is not mutated. THE message-level cut.
  */
-export function truncateToolResultMessage(
-  msg: ToolResultMessage,
+export function truncateToolResultMessage<M extends ToolResultMessage>(
+  msg: M,
   maxChars: number,
   opts: { suffix?: string; hooks?: TruncateHooks } = {},
-): ToolResultMessage {
+): M {
   const content = msg.content;
   if (!Array.isArray(content)) return msg;
 
@@ -105,18 +105,18 @@ export function truncateToolResultMessage(
     return { ...block, text: truncateToolResultText(block.text, blockBudget, opts.suffix, opts.hooks) };
   });
 
-  return { ...msg, content: newContent };
+  return { ...msg, content: newContent } as M;
 }
 
 /**
  * Truncate oversized tool results in an array of messages (in-memory). Returns a NEW
  * array. Used as a pre-send guard before handing messages to the model.
  */
-export function truncateOversizedToolResultsInMessages(
-  messages: ToolResultMessage[],
+export function truncateOversizedToolResultsInMessages<M extends ToolResultMessage>(
+  messages: M[],
   contextWindowTokens: number,
   opts: { hooks?: TruncateHooks } = {},
-): { messages: ToolResultMessage[]; truncatedCount: number } {
+): { messages: M[]; truncatedCount: number } {
   const maxChars = calculateMaxToolResultChars(contextWindowTokens);
   let truncatedCount = 0;
   const result = messages.map((msg) => {
@@ -139,7 +139,7 @@ export function isOversizedToolResult(msg: ToolResultMessage, contextWindowToken
  * overflow — the heuristic that decides whether to attempt truncation before giving up.
  */
 export function sessionLikelyHasOversizedToolResults(params: {
-  messages: ToolResultMessage[];
+  messages: readonly ToolResultMessage[];
   contextWindowTokens: number;
 }): boolean {
   const maxChars = calculateMaxToolResultChars(params.contextWindowTokens);

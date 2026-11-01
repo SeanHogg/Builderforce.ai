@@ -15,7 +15,7 @@
 
 import { isRateLimitFailure, isTenantBudgetFailure, type RunOutcomeTelemetry } from '@builderforce/learned-routing';
 import type { BrainTraceEvent } from './brainTriage';
-import { attemptedDelegation } from './delegationRequest';
+import { attemptedDelegation } from '@builderforce/agent-run';
 import { modelScorecard } from './modelScorecard';
 
 export interface BrainRunOutcome extends RunOutcomeTelemetry {

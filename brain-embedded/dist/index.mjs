@@ -16584,7 +16584,15 @@ function selectToolsForTurn(tools, options = {}) {
     seen.add(name);
     wanted.push(tool);
   };
-  for (const name of options.required ?? []) push(byName.get(name));
+  if (options.capRequired) {
+    const required = new Set(options.required ?? []);
+    for (const tool of catalog) {
+      if (wanted.length >= limit) break;
+      if (required.has(tool.function?.name ?? "")) push(tool);
+    }
+  } else {
+    for (const name of options.required ?? []) push(byName.get(name));
+  }
   const roomAfterRequired = Math.max(0, limit - wanted.length);
   const rest = catalog.filter((t) => t.function?.name && !seen.has(t.function.name));
   const ranked2 = options.rank ? options.rank(rest, options.query ?? "") : [...rest].map((tool) => ({
@@ -16623,7 +16631,7 @@ function selectPlatformCatalog(ctx, pinned) {
   const catalog = platform.schemas({ rungs: ctx.state.stall?.rungs ?? {} });
   const selection = platform.selection;
   const { query, limit, required } = selection;
-  return selectToolsForTurn(catalog, { query, limit, pinned: selection.pinned ? [...selection.pinned] : pinned, required: [...required], ...selection.rank ? { rank: selection.rank } : {} }).tools;
+  return selectToolsForTurn(catalog, { query, limit, pinned: selection.pinned ? [...selection.pinned] : pinned, required: [...required], ...selection.rank ? { rank: selection.rank } : {}, ...selection.capRequired ? { capRequired: true } : {} }).tools;
 }
 
 // ../packages/agent-run/src/policy/tools/toolset.ts
@@ -18323,7 +18331,8 @@ function kernelHooks(run) {
         progress: { rungs: state.stall?.rungs ?? {} },
         cache: run.cache
       });
-      const advertised = menu?.tools ?? await selectNow();
+      const forced = menu?.tools?.filter((t) => !isToolWithheld(input.policy.approvalGates, t.function?.name ?? ""));
+      const advertised = forced ?? await selectNow();
       run.selection = {
         tools: advertised,
         ...menu?.toolChoice ? { toolChoice: menu.toolChoice } : {},
@@ -18371,15 +18380,16 @@ function kernelHooks(run) {
       return output === void 0 ? void 0 : { action: "stop", ok: true, output, finished: true };
     },
     beforeDispatch: async (call2, ctx) => {
+      const refusal2 = (gated2) => {
+        const refused = { data: gated2.data, isError: true, ...gated2.control ? { control: asLoopControl(gated2.control) } : {} };
+        if (gated2.control) held.add(refused);
+        return refused;
+      };
       starts.set(call2.id, Date.now());
       const pctx = contextAt(ctx.step, ctx.stepInCall);
       const pcall = toPolicyCall(call2);
       const gated = await hooks.tools.gate?.(pctx, pcall);
-      if (gated) {
-        const refused = { data: gated.data, isError: true, ...gated.control ? { control: asLoopControl(gated.control) } : {} };
-        if (gated.control) held.add(refused);
-        return { result: refused };
-      }
+      if (gated) return { result: refusal2(gated) };
       const decision = await hooks.guards.beforeDispatch(pctx, pcall);
       if (decision?.skip) {
         const { data, isError, control } = decision.skip;
@@ -18406,7 +18416,10 @@ function kernelHooks(run) {
         if (pre && "result" in pre) return { result: { data: pre.result.data, ...pre.result.isError ? { isError: true } : {} } };
         if (pre && "rewrite" in pre) {
           const { name, args } = pre.rewrite;
-          return { rewrite: { ...call2, name, args, raw: { ...call2.raw, name, arguments: JSON.stringify(args) } } };
+          const rewritten = { ...call2, name, args, raw: { ...call2.raw, name, arguments: JSON.stringify(args) } };
+          const reached = await hooks.tools.gate?.(pctx, toPolicyCall(rewritten));
+          if (reached) return { result: refusal2(reached) };
+          return { rewrite: rewritten };
         }
       }
       return void 0;
@@ -22679,7 +22692,115 @@ var ReadCoverage2 = class extends ReadCoverage {
   }
 };
 
-// src/runStore/runLoopContext.ts
+// src/toolRouter.ts
+var TOOL_ROUTER_FIND = "builtin_tools_find";
+var TOOL_ROUTER_DESCRIBE = "builtin_tools_describe";
+var TOOL_ROUTER_INVOKE = "builtin_tools_invoke";
+function isRouterTool(name) {
+  return name === TOOL_ROUTER_FIND || name === TOOL_ROUTER_DESCRIBE || name === TOOL_ROUTER_INVOKE;
+}
+var FIND_LIMIT = 25;
+function routerToolSpecs(catalogSize) {
+  const preamble = `This conversation has ${catalogSize} platform tools available in total, but only the most relevant ones are listed directly on each turn.`;
+  return [
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_FIND,
+        description: `${preamble} Search ALL of them by keyword and get back their names and descriptions. Use this FIRST whenever the tool you want is not in your visible list \u2014 do NOT assume a capability is missing, and never write a tool call as plain text.`,
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: 'Keywords, e.g. "tickets backlog status" or "pull request".' }
+          },
+          required: ["query"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_DESCRIBE,
+        description: `${preamble} Get the exact parameter schema for one tool by name, so you can build its arguments before calling it with ${TOOL_ROUTER_INVOKE}.`,
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: `Exact tool name, e.g. "builtin_chats_list_tickets".` }
+          },
+          required: ["name"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_INVOKE,
+        description: `${preamble} Call ANY of them by name, including ones not listed on this turn. This is a real call and it really executes \u2014 use it instead of describing what you would call.`,
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Exact tool name to call." },
+            args: { type: "object", description: "Arguments object for that tool." }
+          },
+          required: ["name"]
+        }
+      }
+    }
+  ];
+}
+function words2(text2) {
+  return text2.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
+}
+function findTools(catalog, query, limit = FIND_LIMIT) {
+  const terms = words2(query);
+  if (terms.length === 0) return [];
+  const scored = [];
+  catalog.forEach((tool, index) => {
+    const name = tool.function?.name ?? "";
+    if (!name) return;
+    const description = tool.function?.description ?? "";
+    const haystackName = name.toLowerCase();
+    const haystackDesc = description.toLowerCase();
+    let score2 = 0;
+    for (const t of terms) {
+      if (haystackName.includes(t)) score2 += 10;
+      else if (haystackDesc.includes(t)) score2 += 1;
+    }
+    if (score2 > 0) scored.push({ m: { name, description }, score: score2, index });
+  });
+  return scored.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, limit).map((e) => e.m);
+}
+function describeTool(catalog, name) {
+  return catalog.find((t) => t.function?.name === name) ?? null;
+}
+function handleRouterCall(catalog, name, args) {
+  const a = args ?? {};
+  if (name === TOOL_ROUTER_FIND) {
+    const query = typeof a.query === "string" ? a.query : "";
+    const matches = findTools(catalog, query);
+    return {
+      result: matches.length ? { matches, note: `Call one with ${TOOL_ROUTER_INVOKE}, or ${TOOL_ROUTER_DESCRIBE} first for its arguments.` } : { matches: [], note: `No tool matches "${query}". Try broader keywords; ${catalog.length} tools exist.` }
+    };
+  }
+  if (name === TOOL_ROUTER_DESCRIBE) {
+    const target2 = typeof a.name === "string" ? a.name : "";
+    const spec = describeTool(catalog, target2);
+    return {
+      result: spec ? { name: target2, description: spec.function?.description ?? "", parameters: spec.function?.parameters ?? {} } : { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
+    };
+  }
+  const target = typeof a.name === "string" ? a.name : "";
+  if (!target) return { result: { error: `${TOOL_ROUTER_INVOKE} requires a "name".` } };
+  if (isRouterTool(target)) {
+    return { result: { error: `${target} cannot be invoked through the router.` } };
+  }
+  if (!describeTool(catalog, target)) {
+    return { result: { error: `Unknown tool "${target}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
+  }
+  return { dispatch: { name: target, args: asToolArgs(a.args) ?? {} } };
+}
+
+// src/runStore/brainRunContext.ts
 var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files", "find_symbol", "file_outline", "semantic_search", "repo_map", "read_compressed", "local_research"]);
 var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isRepoStateReadTool(name) || isReadOnlyPlatformTool(name);
 function reportToPolicy(run, event) {
@@ -22817,165 +22938,6 @@ function changeBudgetTurn(run, step, selected) {
   return { tools, toolChoice: "required", brief: { role: "user", content: changeBrief(`STOP READING. You have spent ${run.policy.codeTurns} coding turns without changing anything.`, run.canAskUser) } };
 }
 
-// src/runStore/cacheServedStreak.ts
-var CACHE_SERVED_STREAK2 = 6;
-var MIN_STREAK_TURNS2 = 2;
-var MAX_NO_PROGRESS_TURNS2 = 2;
-var CacheServedStreak2 = class {
-  streak = 0;
-  turns = /* @__PURE__ */ new Set();
-  fired = 0;
-  /** A repeat the read cache answered (stub, covered window, replay, repeated write), on `step`. */
-  served(step) {
-    this.streak += 1;
-    this.turns.add(step);
-  }
-  /** A call the host actually ran — the run touched the world again. */
-  ran() {
-    this.streak = 0;
-    this.turns.clear();
-  }
-  get count() {
-    return this.streak;
-  }
-  /** Whether the streak is due a forced turn. */
-  due() {
-    return this.streak >= CACHE_SERVED_STREAK2 && this.turns.size >= MIN_STREAK_TURNS2 && this.fired < MAX_NO_PROGRESS_TURNS2;
-  }
-  /** A forced turn was spent on the streak: the count starts over. */
-  consume() {
-    this.ran();
-    this.fired += 1;
-  }
-};
-var circling = (n2) => `YOU ARE CIRCLING. Your last ${n2} calls were all answered from this run's read cache \u2014 you already have every one of those results, and re-reading them changes nothing.`;
-function noProgressTurn(run, step, selected) {
-  if (!budgeted(run) || progressed(run) || run.policy.phase === "verify" || !run.cacheStreak.due()) return null;
-  const n2 = run.cacheStreak.count;
-  const out = forcedProgressTurn(run, selected, circling(n2));
-  if (!out) return null;
-  run.cacheStreak.consume();
-  trace2(run, step, n2, out.forced);
-  return out.turn;
-}
-function trace2(run, step, streak, forced) {
-  pushTrace(run.c, {
-    ts: nowIso(),
-    category: "message",
-    label: "loop.no_progress",
-    args: { step, streak, forced },
-    result: `${streak} consecutive call(s) answered from the read cache \u2014 this turn offers ${forced === "hand_off" ? "hand_off alone" : "the change tools alone"} and requires a call.`
-  });
-}
-
-// src/toolRouter.ts
-var TOOL_ROUTER_FIND = "builtin_tools_find";
-var TOOL_ROUTER_DESCRIBE = "builtin_tools_describe";
-var TOOL_ROUTER_INVOKE = "builtin_tools_invoke";
-function isRouterTool(name) {
-  return name === TOOL_ROUTER_FIND || name === TOOL_ROUTER_DESCRIBE || name === TOOL_ROUTER_INVOKE;
-}
-var FIND_LIMIT = 25;
-function routerToolSpecs(catalogSize) {
-  const preamble = `This conversation has ${catalogSize} platform tools available in total, but only the most relevant ones are listed directly on each turn.`;
-  return [
-    {
-      type: "function",
-      function: {
-        name: TOOL_ROUTER_FIND,
-        description: `${preamble} Search ALL of them by keyword and get back their names and descriptions. Use this FIRST whenever the tool you want is not in your visible list \u2014 do NOT assume a capability is missing, and never write a tool call as plain text.`,
-        parameters: {
-          type: "object",
-          properties: {
-            query: { type: "string", description: 'Keywords, e.g. "tickets backlog status" or "pull request".' }
-          },
-          required: ["query"]
-        }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: TOOL_ROUTER_DESCRIBE,
-        description: `${preamble} Get the exact parameter schema for one tool by name, so you can build its arguments before calling it with ${TOOL_ROUTER_INVOKE}.`,
-        parameters: {
-          type: "object",
-          properties: {
-            name: { type: "string", description: `Exact tool name, e.g. "builtin_chats_list_tickets".` }
-          },
-          required: ["name"]
-        }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: TOOL_ROUTER_INVOKE,
-        description: `${preamble} Call ANY of them by name, including ones not listed on this turn. This is a real call and it really executes \u2014 use it instead of describing what you would call.`,
-        parameters: {
-          type: "object",
-          properties: {
-            name: { type: "string", description: "Exact tool name to call." },
-            args: { type: "object", description: "Arguments object for that tool." }
-          },
-          required: ["name"]
-        }
-      }
-    }
-  ];
-}
-function words2(text2) {
-  return text2.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
-}
-function findTools(catalog, query, limit = FIND_LIMIT) {
-  const terms = words2(query);
-  if (terms.length === 0) return [];
-  const scored = [];
-  catalog.forEach((tool, index) => {
-    const name = tool.function?.name ?? "";
-    if (!name) return;
-    const description = tool.function?.description ?? "";
-    const haystackName = name.toLowerCase();
-    const haystackDesc = description.toLowerCase();
-    let score2 = 0;
-    for (const t of terms) {
-      if (haystackName.includes(t)) score2 += 10;
-      else if (haystackDesc.includes(t)) score2 += 1;
-    }
-    if (score2 > 0) scored.push({ m: { name, description }, score: score2, index });
-  });
-  return scored.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, limit).map((e) => e.m);
-}
-function describeTool(catalog, name) {
-  return catalog.find((t) => t.function?.name === name) ?? null;
-}
-function handleRouterCall(catalog, name, args) {
-  const a = args ?? {};
-  if (name === TOOL_ROUTER_FIND) {
-    const query = typeof a.query === "string" ? a.query : "";
-    const matches = findTools(catalog, query);
-    return {
-      result: matches.length ? { matches, note: `Call one with ${TOOL_ROUTER_INVOKE}, or ${TOOL_ROUTER_DESCRIBE} first for its arguments.` } : { matches: [], note: `No tool matches "${query}". Try broader keywords; ${catalog.length} tools exist.` }
-    };
-  }
-  if (name === TOOL_ROUTER_DESCRIBE) {
-    const target2 = typeof a.name === "string" ? a.name : "";
-    const spec = describeTool(catalog, target2);
-    return {
-      result: spec ? { name: target2, description: spec.function?.description ?? "", parameters: spec.function?.parameters ?? {} } : { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
-    };
-  }
-  const target = typeof a.name === "string" ? a.name : "";
-  if (!target) return { result: { error: `${TOOL_ROUTER_INVOKE} requires a "name".` } };
-  if (isRouterTool(target)) {
-    return { result: { error: `${target} cannot be invoked through the router.` } };
-  }
-  if (!describeTool(catalog, target)) {
-    return { result: { error: `Unknown tool "${target}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
-  }
-  return { dispatch: { name: target, args: asToolArgs(a.args) ?? {} } };
-}
-
 // src/runStore/progressGuard.ts
 function isReadOnlyCall(tool, args) {
   return isDedupableRead(tool) || isReadOnlyShellCall(tool, args) || isRouterTool(tool);
@@ -23044,7 +23006,7 @@ function progressGuardTurn(run, step, selected) {
       run.progress.steerInstead(advice);
       return null;
     }
-    trace3(run, step, due, "ask_user");
+    trace2(run, step, due, "ask_user");
     return {
       tools: [ASK_USER_TOOL_SPEC],
       toolChoice: "required",
@@ -23059,10 +23021,10 @@ function progressGuardTurn(run, step, selected) {
     run.progress.steerInstead(advice);
     return null;
   }
-  trace3(run, step, due, out.forced);
+  trace2(run, step, due, out.forced);
   return out.turn;
 }
-function trace3(run, step, due, forced) {
+function trace2(run, step, due, forced) {
   pushTrace(run.c, {
     ts: nowIso(),
     category: "message",
@@ -23786,12 +23748,6 @@ function recordAvoided(c, req, actionId, runId) {
 
 // src/runStore/modelPreflight.ts
 var MODEL_PREFLIGHT_LABEL = "model.preflight";
-function planModelWarning2(model, book2 = snapshotPriceBook()) {
-  if (!model || model === "default") return null;
-  const price = listPriceOf(book2, model);
-  const tier2 = price ? resolveModelTier({ price }) : void 0;
-  return tier2 && isAgenticTier(tier2) === false ? { model, tier: tier2 } : null;
-}
 function modelPreflightEvent2(result, ts, plan) {
   const entries = parseByoUnresolved((result?.byoUnresolved ?? []).filter((e) => e.trim()));
   if (entries.length === 0 && !plan) return null;
@@ -23823,7 +23779,7 @@ async function applyModelPreflight(c, preflight, pinnedModel) {
   } catch {
     return;
   }
-  const plan = c.codeChanged ? null : planModelWarning2(pinnedModel);
+  const plan = c.codeChanged ? null : planModelWarning(pinnedModel);
   const event = modelPreflightEvent2(result, nowIso(), plan);
   if (!event) return;
   if (result?.byoUnresolved.length) accrueByoUnresolved(c, result.byoUnresolved.join(","));
@@ -23875,6 +23831,7 @@ function recordServedReads(coverage, reads, anchor) {
 }
 
 // src/runStore/turnContext.ts
+import { defaultEstimateTokens as defaultEstimateTokens5 } from "@seanhogg/builderforce-memory/handoff";
 var OPEN = "<turn_context>\nContext for this turn only (recalled memory and run directives) \u2014 not part of the request:";
 var CLOSE = "</turn_context>";
 var attached = /* @__PURE__ */ new WeakMap();
@@ -23905,10 +23862,13 @@ function attachTurnContext(c, convo, block) {
 ${block}` : [...original.content, { type: "text", text: block }];
     const carrier = { ...original, content };
     convo[i] = carrier;
-    attached.set(c, { convo, index: i, carrier, original });
+    attached.set(c, { convo, index: i, carrier, original, tokens: defaultEstimateTokens5(block) });
     return true;
   }
   return false;
+}
+function turnContextTokens(c) {
+  return attached.get(c)?.tokens ?? 0;
 }
 
 // src/runStore/runPreamble.ts
@@ -23920,7 +23880,7 @@ function recorderFor(userRequest, lent) {
   if (!r.activity.prompt) r.setPrompt(userRequest);
   return r;
 }
-async function prepareRunLoop(chatId, c, req, runKey) {
+async function prepareBrainRun(chatId, c, req, runKey, reportRunRow) {
   const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, runTool, stream, evermind } = req;
   const convo = c.transcript;
   restoreTurnContext(c);
@@ -24039,6 +23999,7 @@ ${turnContext}` : systemPrompt),
     runKey,
     c,
     req,
+    ...reportRunRow ? { reportRunRow } : {},
     convo,
     canAskUser,
     allTools,
@@ -24072,7 +24033,7 @@ ${turnContext}` : systemPrompt),
     readCoverage: new ReadCoverage2(),
     // How many calls in a row that cache has answered — a run circling its own reads
     // is forced to hand off or change (`cacheServedStreak.ts`).
-    cacheStreak: new CacheServedStreak2(),
+    cacheStreak: new CacheServedStreak(),
     // The A3 progress detector — a run that says it is ready and keeps reading, circles,
     // undoes its own edit or repeats a failure is steered, then forced, then asked
     // about (`progressGuard.ts`, PRD 35 WS8p).
@@ -24120,12 +24081,6 @@ ${turnContext}` : systemPrompt),
       ...pipelinePolicyOptions(req, pipeline)
     }),
     pipeline,
-    // Bounded counter for the announced-but-never-made tool call recovery, so a model
-    // that keeps narrating instead of acting cannot spin the loop. Not one-shot: a model
-    // that stalls once frequently stalls again on the very next turn, and spending the
-    // single retry on the first stall left the user holding the SECOND promise. The
-    // stall budget (`agent-stall`) bounds these recoveries on its own — a run has no
-    // iteration ceiling to fall back on.
     // One re-prompt per run for a code change left unshipped (see `selfReviewShip.ts`).
     // One, not a budget: the second time the model stops short it has read the contract
     // twice, and its answer — including "I cannot ship this because…" — is the answer.
@@ -24326,7 +24281,6 @@ function brainDeliveryLedger(run, last) {
 }
 
 // src/selectTools.ts
-var DEFAULT_TOOL_LIMIT2 = 64;
 var NAME_HIT2 = LEXICAL_WEIGHTS.name;
 var NAME_SYNONYM_HIT2 = 7;
 var DESCRIPTION_HIT2 = LEXICAL_WEIGHTS.description;
@@ -24540,22 +24494,6 @@ ${revisit}` : covered.note;
   };
 }
 
-// src/runStore/steerInterrupt.ts
-function takeRunSteering(c, runKey, step) {
-  const messages = drainRunSteering2(runKey);
-  if (messages.length > 0) {
-    markPendingWordsRead(runKey, messages.map((m) => m.eventKey));
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "steer.applied",
-      args: { step, messages: messages.length },
-      result: messages.map((m) => m.text.slice(0, 200)).join("\n")
-    });
-  }
-  return messages;
-}
-
 // src/runStore/callRunner.ts
 function declineMalformedCall2(run, call2) {
   const truncated = run.lastTurnInterruption === "truncated";
@@ -24713,11 +24651,32 @@ function withRunBrief(run, menu) {
   return { ...menu ?? {}, tail: [sections.join("\n\n")] };
 }
 
-// src/run/loopTurnMenu.ts
+// src/runStore/cacheServedStreak.ts
+var circling = (n2) => `YOU ARE CIRCLING. Your last ${n2} calls were all answered from this run's read cache \u2014 you already have every one of those results, and re-reading them changes nothing.`;
+function noProgressTurn(run, step, selected) {
+  if (!budgeted(run) || progressed(run) || run.policy.phase === "verify" || !run.cacheStreak.due()) return null;
+  const n2 = run.cacheStreak.count;
+  const out = forcedProgressTurn(run, selected, circling(n2));
+  if (!out) return null;
+  run.cacheStreak.consume();
+  trace3(run, step, n2, out.forced);
+  return out.turn;
+}
+function trace3(run, step, streak, forced) {
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "loop.no_progress",
+    args: { step, streak, forced },
+    result: `${streak} consecutive call(s) answered from the read cache \u2014 this turn offers ${forced === "hand_off" ? "hand_off alone" : "the change tools alone"} and requires a call.`
+  });
+}
+
+// src/run/brainTurnMenu.ts
 function forcedTurnFor(run, step, selected, handOffTurn) {
   return handOffTurn ?? changeBudgetTurn(run, step, selected) ?? noProgressTurn(run, step, selected) ?? progressGuardTurn(run, step, selected);
 }
-async function loopTurnMenu(run, env, catalogSize) {
+async function brainTurnMenu(run, env, catalogSize) {
   const handOffTurn = planBudgetTurn(run, env.step);
   const ranked2 = await env.select();
   const selected = offersHandOff(run.policy) ? ranked2 : ranked2.filter((t) => t.function.name !== HAND_OFF_TOOL);
@@ -24725,7 +24684,7 @@ async function loopTurnMenu(run, env, catalogSize) {
   const steer = run.progress.steerNote();
   const tail = [...forced ? [userTextOf(forced.brief)] : [], ...steer ? [steer] : []];
   if (forced) return { tools: forced.tools, toolChoice: forced.toolChoice, tail };
-  if (catalogSize > DEFAULT_TOOL_LIMIT2) {
+  if (catalogSize > DEFAULT_TOOL_LIMIT) {
     pushTrace(run.c, {
       ts: nowIso(),
       category: "message",
@@ -24739,7 +24698,7 @@ async function loopTurnMenu(run, env, catalogSize) {
 }
 
 // src/run/brainPlatformTools.ts
-function loopCall(run, id, name, args, step, rawArguments) {
+function kernelCall(run, id, name, args, step, rawArguments) {
   const raw = { id, name, arguments: rawArguments ?? JSON.stringify(args) };
   return { call: { id, name, args, raw, malformed: rawArguments !== void 0 }, ctx: { step, messages: run.convo } };
 }
@@ -24770,14 +24729,14 @@ function brainPlatformTools(run) {
         return [...catalog, ...conversational.filter((t) => !names.has(t.function.name))];
       },
       get selection() {
-        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT2, rank: (tools, query) => relevantTools(tools, query), pinned: [...run.usedTools], required: new Set(offersHandOff(run.policy) && run.canAskUser ? [...run.alwaysAdvertised, HAND_OFF_TOOL] : run.alwaysAdvertised) };
+        return { query: run.requestQuery, limit: DEFAULT_TOOL_LIMIT, capRequired: true, rank: (tools, query) => relevantTools(tools, query), pinned: [...run.usedTools], required: new Set(offersHandOff(run.policy) && run.canAskUser ? [...run.alwaysAdvertised, HAND_OFF_TOOL] : run.alwaysAdvertised) };
       },
       // ONE cap on a result: the Brain's own, applied inside `callRunner` (`trimToolResult`, by LINE, sized to the serving
       // model's window). The agent's per-tool cap would cut the already budgeted text a second time and drop its paging fields.
       resultCap: () => Number.MAX_SAFE_INTEGER,
       // No `handsOff`: `hand_off` reports itself to the model policy inside `callPreflight` (through the run's view), and a
       // call the agent hands off first would find the plan already closed.
-      turn: async (env) => withRunBrief(run, await loopTurnMenu(run, env, run.allTools?.length ?? 0)),
+      turn: async (env) => withRunBrief(run, await brainTurnMenu(run, env, run.allTools?.length ?? 0)),
       // A3's detector is the Brain's own (`progressGuard.ts`): the turn is judged when its calls have all run, as the loop does.
       turnEnded: progressAfterToolCalls(run),
       // The turn's step, as the kernel numbers it: the router, the hand-off, the confirm gate, the guards, the activity line and the
@@ -24788,7 +24747,7 @@ function brainPlatformTools(run) {
       // The preflight (router, `ask_user`, `hand_off`, confirm gate, dedupe) runs where the loop runs it: ahead of the dispatch, not raced
       // against the person's Stop. A Stop pressed during a hand-off waits for it to end, so its tickets and children are on the trace.
       async preflight(raw, { step }) {
-        const { call: call2, ctx } = loopCall(run, raw.id, raw.name, raw.malformed ? {} : raw.args, step, raw.malformed ? raw.arguments : void 0);
+        const { call: call2, ctx } = kernelCall(run, raw.id, raw.name, raw.malformed ? {} : raw.args, step, raw.malformed ? raw.arguments : void 0);
         const pre = await before(call2, ctx);
         if (pre && "result" in pre) {
           ran.set(raw.id, { call: call2, result: pre.result, ctx });
@@ -24804,7 +24763,7 @@ function brainPlatformTools(run) {
         prepared.delete(id);
         let early;
         if (!held) {
-          const fresh = loopCall(run, id, name, args, env.step);
+          const fresh = kernelCall(run, id, name, args, env.step);
           const pre = await before(fresh.call, fresh.ctx);
           if (pre && "result" in pre) early = pre.result;
           held = { call: pre && "rewrite" in pre ? pre.rewrite : fresh.call, ctx: fresh.ctx };
@@ -24818,7 +24777,7 @@ function brainPlatformTools(run) {
       malformed: {
         roundDirective: () => "",
         answer(raw, { step }) {
-          const held = prepared.get(raw.id) ?? loopCall(run, raw.id, raw.name, {}, step, raw.arguments);
+          const held = prepared.get(raw.id) ?? kernelCall(run, raw.id, raw.name, {}, step, raw.arguments);
           prepared.delete(raw.id);
           const result = declineMalformedCall2(run, held.call);
           ran.set(raw.id, { call: held.call, result, ctx: held.ctx });
@@ -24829,7 +24788,7 @@ function brainPlatformTools(run) {
   };
 }
 
-// src/run/loopFold.ts
+// src/run/brainFold.ts
 import { buildWorkingTranscript } from "@seanhogg/builderforce-memory/working";
 
 // src/runStore/compactionSaved.ts
@@ -24872,7 +24831,7 @@ function toRunMessage(row) {
   return { role: r.role, content, ...parts.length > 0 ? { parts } : {} };
 }
 
-// src/run/loopFold.ts
+// src/run/brainFold.ts
 function sameRows(a, b) {
   if (a.length !== b.length) return false;
   return a.every((row, i) => {
@@ -24910,11 +24869,14 @@ function brainCompaction(run) {
 function recordedPreflight(c, pinnedModel) {
   return (ctx) => {
     const byo = c.byoUnresolved.join(",");
-    const plan = c.codeChanged ? null : planModelWarning2(pinnedModel);
+    const plan = c.codeChanged ? null : planModelWarning(pinnedModel);
     const degraded = byo !== "" || plan !== null;
     ctx.state.preflight = degraded ? `degraded:${byo || "plan_flash"}` : "ok";
     return { kind: "model.preflight", step: ctx.step, status: degraded ? "degraded" : "ok", notices: [] };
   };
+}
+function recordedModelHook(c, pinnedModel) {
+  return { ...defaultPolicyModules().model, preflight: recordedPreflight(c, pinnedModel) };
 }
 
 // src/run/modelTransport.ts
@@ -24988,23 +24950,23 @@ function toCompletion(result, requested) {
   };
 }
 function brainModelTransport(deps) {
-  const { stream, call: call2, windows, preflight } = deps;
+  const { turn, stream, call: call2, windows } = deps;
   return {
     async complete(request, signal) {
       if (signal?.aborted) throw new Error("run stopped");
       const tools = request.tools && request.tools.length > 0 ? request.tools : void 0;
-      const session = deps.turn?.open(request);
+      const session = turn.open(request);
       const attempt = async (req) => {
-        const wire = withTail(req.messages.map(wireRowOf), session?.tail);
-        const messages = session?.fit ? await session.fit(wire, req.model) : wire;
-        const maxTokens = session ? session.maxTokens : req.maxTokens;
+        const wire = withTail(req.messages.map(wireRowOf), session.tail);
+        const messages = session.fit ? await session.fit(wire, req.model) : wire;
+        const maxTokens = session.maxTokens;
         const ask = () => stream(
           {
             ...call2,
-            ...session?.call,
+            ...session.call,
             messages,
-            ...session?.metadata ? { metadata: session.metadata() } : {},
-            ...tools ? { tools, tool_choice: session?.toolChoice ?? req.toolChoice ?? "auto" } : {},
+            ...session.metadata ? { metadata: session.metadata() } : {},
+            ...tools ? { tools, tool_choice: session.toolChoice ?? req.toolChoice ?? "auto" } : {},
             ...req.model ? { model: req.model } : {},
             ...req.strict !== void 0 ? { modelStrict: req.strict } : {},
             ...req.role ? { role: req.role } : {},
@@ -25012,9 +24974,9 @@ function brainModelTransport(deps) {
             ...maxTokens !== void 0 ? { maxTokens } : {},
             ...signal ? { signal } : {}
           },
-          session?.handlers
+          session.handlers
         );
-        return session?.around ? session.around(ask) : ask();
+        return session.around ? session.around(ask) : ask();
       };
       let asked = request;
       let result;
@@ -25022,7 +24984,6 @@ function brainModelTransport(deps) {
         result = await attempt(request);
       } catch (e) {
         if (signal?.aborted) throw e;
-        if (!session) throw e;
         const retry = await session.recover?.(e);
         if (!retry) throw session.failed(e);
         asked = { ...request, model: retry.model, strict: retry.strict, role: retry.role, excludeModels: retry.excludeModels };
@@ -25033,16 +24994,15 @@ function brainModelTransport(deps) {
           throw session.failed(retryError);
         }
       }
-      await session?.completed(result);
+      await session.completed(result);
       return toCompletion(result, asked.model);
     },
-    window: (model) => contextWindowOf(model, windows?.cloud ? { cloud: windows.cloud } : {}),
-    ...preflight ? { preflight: () => preflight() } : {}
+    window: (model) => contextWindowOf(model, windows?.cloud ? { cloud: windows.cloud } : {})
   };
 }
 
-// src/run/loopStore.ts
-function loopRunStore(c, opts) {
+// src/run/brainStore.ts
+function brainRunStorePort(c, opts) {
   return {
     load: () => void 0,
     save: () => void 0,
@@ -25085,8 +25045,8 @@ async function persistBudgetStop(run, text2) {
   req.onActivity?.(chatId);
 }
 
-// src/run/loopSpend.ts
-function loopSpendMeter(run) {
+// src/run/brainSpend.ts
+function brainSpendMeter(run) {
   const joined = joinRunSpend(run);
   if (!joined) return void 0;
   const { tree } = joined;
@@ -25099,6 +25059,22 @@ function loopSpendMeter(run) {
       else tree.spentMc += pricedMc;
     }
   };
+}
+
+// src/runStore/steerInterrupt.ts
+function takeRunSteering(c, runKey, step) {
+  const messages = drainRunSteering2(runKey);
+  if (messages.length > 0) {
+    markPendingWordsRead(runKey, messages.map((m) => m.eventKey));
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "steer.applied",
+      args: { step, messages: messages.length },
+      result: messages.map((m) => m.text.slice(0, 200)).join("\n")
+    });
+  }
+  return messages;
 }
 
 // src/runStore/steerPersistence.ts
@@ -25121,7 +25097,7 @@ async function persistSteer(c, chatId, persistence, steer, runKey = chatId) {
   }
 }
 
-// src/run/loopSteering.ts
+// src/run/brainSteering.ts
 function personSteers() {
   const waiting2 = [];
   return {
@@ -25134,7 +25110,7 @@ function personSteers() {
     }
   };
 }
-function loopSteeringSource(run, people) {
+function brainSteeringSource(run, people) {
   const { c, chatId, runKey, req } = run;
   return {
     ...runSteeringSource(runKey),
@@ -25183,7 +25159,7 @@ async function closeAfterFailureStreak(run, streak, step) {
         {
           onModel: liveTurnModel(c),
           onConnectRetry: connectRetryStep(c, step),
-          // The first token repaints now; every later delta coalesces into a frame (as `run/loopTurn.ts` does).
+          // The first token repaints now; every later delta coalesces into a frame (as `run/brainTurn.ts` does).
           onTextDelta: (d) => {
             c.streamingText += d;
             if (closeFirstTokenAt === void 0) {
@@ -25238,7 +25214,7 @@ async function closeAfterFailureStreak(run, streak, step) {
   emit2(c);
 }
 
-// src/run/loopSettle.ts
+// src/run/brainSettle.ts
 async function settleBrainRun(run, outcome, last) {
   const { c, chatId, req } = run;
   last.pending = void 0;
@@ -25411,9 +25387,13 @@ function brainEventSink(c, outcome, on = {}) {
     // The host's report may resolve to anything (a stored id, a response); the sink's contract is
     // `void`, so what it resolves to is dropped here.
     ...outcome ? { outcome: async (row) => {
-      await outcome(row);
+      await outcome(withHostContext(row, c));
     } } : {}
   };
+}
+function withHostContext(row, c) {
+  const tokens2 = turnContextTokens(c);
+  return tokens2 > 0 ? { ...row, contextPackTokens: (row.contextPackTokens ?? 0) + tokens2 } : row;
 }
 
 // src/composingActivity.ts
@@ -25490,7 +25470,7 @@ function modelDowngradeEvent(input) {
     };
   }
   const unresolved = (input.byoUnresolved ?? "").trim();
-  const flash = !unresolved && input.planPhase ? planModelWarning2(resolved, input.book) : null;
+  const flash = !unresolved && input.planPhase ? planModelWarning(resolved, input.book) : null;
   if (!unresolved && !flash) return null;
   const said = input.events.some((e) => {
     if (e.label !== MODEL_DOWNGRADE_LABEL) return false;
@@ -25687,8 +25667,8 @@ function openLiveTurn(c, step) {
   };
 }
 
-// src/run/loopTurn.ts
-function loopTurnObserver(run, savedTokens = () => 0) {
+// src/run/brainTurn.ts
+function brainTurnObserver(run, savedTokens = () => 0) {
   const { c, req } = run;
   const last = { step: -1 };
   let turn;
@@ -25814,41 +25794,29 @@ function brainContextSource() {
 }
 
 // src/run/humanChannel.ts
-function confirmRequestFor(gate) {
-  const reason = gate.reason ?? gate.directive;
-  return {
-    name: gate.tool && gate.tool !== "*" ? gate.tool : "a tool call",
-    args: { gate: gate.id, ...reason ? { reason } : {}, ...gate.paths?.length ? { paths: gate.paths } : {} }
-  };
-}
-function brainHumanChannel(runKey) {
+function brainHumanChannel() {
   return {
     async ask() {
       return { kind: "paused" };
-    },
-    async approve(gate) {
-      const ok = await requestRunConfirm(runKey, confirmRequestFor(gate));
-      return ok ? { kind: "answered", answer: "approved", approved: true } : { kind: "answered", answer: "declined" };
     }
   };
 }
 
 // src/run/webAdapter.ts
 function buildBrainRunPorts(b) {
-  const { req, runKey } = b;
+  const { req } = b;
   return {
     model: brainModelRules(brainModelTransport({
       stream: req.stream,
-      ...b.turn ? { turn: b.turn } : {},
+      turn: b.turn,
       call: {
         ...req.routingMode ? { routingMode: req.routingMode } : {},
         ...req.modelStrict != null ? { modelStrict: req.modelStrict } : {},
         ...req.reasoning ? { reasoning: req.reasoning } : {}
       },
-      // What the host knows about model windows. A surface with its own compaction (`modules.compaction`, `loopFold.ts`) and its own turn
+      // What the host knows about model windows. A surface with its own compaction (`modules.compaction`, `brainFold.ts`) and its own turn
       // fit (`windowFit.prepare`, its `llm.handoff` step) loses nothing by saying it: the agent sizes a tool result from it.
-      ...req.windowSources ? { windows: req.windowSources } : {},
-      ...req.modelPreflight ? { preflight: req.modelPreflight } : {}
+      ...req.windowSources ? { windows: req.windowSources } : {}
     }), req),
     capabilities: b.capabilities,
     store: b.store,
@@ -25858,7 +25826,7 @@ function buildBrainRunPorts(b) {
     ...b.spend ? { spend: b.spend } : {},
     ...b.extensions ? { extensions: b.extensions } : {},
     events: b.events,
-    human: brainHumanChannel(runKey),
+    human: brainHumanChannel(),
     steering: b.steering,
     context: brainContextSource()
   };
@@ -25895,8 +25863,9 @@ function brainRunPolicy(b) {
     ...b.start ? { modelStart: { plain: true, ...seed ? { model: seed } : {}, strict: !!req.modelStrict, ...b.start.startPhase ? { startPhase: b.start.startPhase } : {}, ...b.start.phaseModels ? { phaseModels: b.start.phaseModels } : {} } } : {},
     inference: "hybrid",
     verify: "none",
-    approvalGates: [...b.approvalGates ?? []],
-    // A model that spent its whole stall budget still describing calls ends the run on what it said,, the reason beside it (`brainDelivery.ts`).
+    // Governance gates are unbound on the Brain (parity ruling R10): its request carries none and no human channel approves one.
+    approvalGates: [],
+    // A model that spent its whole stall budget still describing calls ends the run on what it said, the reason beside it (`brainDelivery.ts`).
     stallExhausted: "settle",
     // The Brain's delegation gate (`earlyDelegation.ts` on the read result, the delivery ledger's rung at the end) is the run's ONE
     // gate: the agent's own early nudge and backstop stay off, or each read and each prose answer would be judged twice.
@@ -25906,23 +25875,21 @@ function brainRunPolicy(b) {
 
 // src/run/runPrepared.ts
 async function runPrepared(run) {
-  const { c, req, runKey } = run;
+  const { c, req } = run;
   const compaction = brainCompaction(run);
-  const { observer, last, keepAnswered } = loopTurnObserver(run, compaction.savedTokens);
+  const { observer, last, keepAnswered } = brainTurnObserver(run, compaction.savedTokens);
   const people = personSteers();
   const platform = brainPlatformTools(run);
-  const spend = loopSpendMeter(run);
+  const spend = brainSpendMeter(run);
   const binding = {
     entryPoint: req.entryPoint ?? "web",
-    cell: c,
-    runKey,
     req,
     capabilities: { capabilities: /* @__PURE__ */ new Set() },
     request: run.userRequest,
     turn: observer,
     platform: platform.tools,
     delivery: brainDeliveryLedger(run, last),
-    events: brainEventSink(c, req.reportRunRow, {
+    events: brainEventSink(c, run.reportRunRow, {
       coderReask: (e) => discardAnswered(run, last, e.step, e.model),
       turnKept: keepAnswered,
       budgetStop: (e) => {
@@ -25937,7 +25904,7 @@ async function runPrepared(run) {
       run.view = view;
       Object.defineProperty(run, "policy", { get: () => view.policy(), configurable: true });
     },
-    // A question ends the run before any call dispatches (decided once per turn in `loopTurn.ts`).
+    // A question ends the run before any call dispatches (decided once per turn in `brainTurn.ts`).
     extensions: {
       schemas: () => [],
       handles: () => false,
@@ -25949,9 +25916,9 @@ async function runPrepared(run) {
         return reply;
       }
     },
-    steering: loopSteeringSource(run, people),
+    steering: brainSteeringSource(run, people),
     ...spend ? { spend } : {},
-    store: loopRunStore(c, { toolRowAppended: platform.toolRowAppended, personSteer: people.take })
+    store: brainRunStorePort(c, { toolRowAppended: platform.toolRowAppended, personSteer: people.take })
   };
   const transcript = [{ role: "system", content: run.systemPrompt }, ...run.convo.map(toRunMessage)];
   const request = transcript.map((row) => row.role).lastIndexOf("user");
@@ -25962,10 +25929,10 @@ async function runPrepared(run) {
     task: { ...brainRunTask(binding), transcript },
     policy: brainRunPolicy(binding),
     ports: { ...ports, model: withoutUncallableTurns(ports.model, req) },
-    // The Brain's own fold (`loopFold.ts`), not the agent's compaction adapted to imitate it.
+    // The Brain's own fold (`brainFold.ts`), not the agent's compaction adapted to imitate it.
     // ... and the preamble ran the host's model preflight already (`hostRunContext.ts`): the agent's own would ask the host again and warn
     // about a model the loop never warned about (a QUICK run's quick model), so the Brain's says the verdict and nothing more.
-    modules: { compaction: compaction.hook, model: { ...defaultPolicyModules().model, preflight: recordedPreflight(c, req.model) } },
+    modules: { compaction: compaction.hook, model: recordedModelHook(c, req.model) },
     ...signal ? { signal } : {}
   });
   await settleBrainRun(run, outcome, last);
@@ -26028,14 +25995,10 @@ async function startRun(runKey, request, claim) {
   const steps = batchStepPersistence(request.persistence, stepDurabilityFor(chatId, runKey));
   const runPersistence = lineage ? lineagePersistence(steps.persistence, lineage, (msg) => appendRunMessage(chatId, msg)) : steps.persistence;
   let agentRow;
-  const req = {
-    ...request,
-    persistence: runPersistence,
-    reportRunRow: (row) => {
-      agentRow = row;
-      return request.reportRunRow?.(row);
-    }
+  const holdRunRow = (row) => {
+    agentRow = row;
   };
+  const req = { ...request, persistence: runPersistence };
   c.persistStep = (ev) => persistStep(chatId, runPersistence, ev);
   beginRun(c, chatId);
   const { userTurn: _turn, userTurnMessageId: _row, seed: _seed, seedIds: _seedIds, priorResearch: _research, ...rerun } = request;
@@ -26048,7 +26011,7 @@ async function startRun(runKey, request, claim) {
   emit2(c);
   c.runUsage = emptyRunUsage();
   try {
-    const prepared = await prepareRunLoop(chatId, c, req, runKey);
+    const prepared = await prepareBrainRun(chatId, c, req, runKey, holdRunRow);
     if (prepared) {
       noteRunId(c, prepared.metadata.guestTurnId);
       await runPrepared(prepared);
@@ -28178,8 +28141,8 @@ function fmtAdvertised(tools) {
     const range = min != null && min !== last ? `${min}\u2013${last}` : `${last}`;
     return ` \xB7 ${range} advertised per turn (measured)${min === 0 ? " \xB7 \u26A0 a turn was offered NONE" : ""}`;
   }
-  if (tools.count > DEFAULT_TOOL_LIMIT2) {
-    return ` \xB7 per-turn selection capped at ${DEFAULT_TOOL_LIMIT2}, not yet measured (no turn in this run advertised tools)`;
+  if (tools.count > DEFAULT_TOOL_LIMIT) {
+    return ` \xB7 per-turn selection capped at ${DEFAULT_TOOL_LIMIT}, not yet measured (no turn in this run advertised tools)`;
   }
   return "";
 }
@@ -29321,7 +29284,7 @@ export {
   DEFAULT_PERSONA,
   DEFAULT_ROUTE_THRESHOLD,
   DEFAULT_TOOL_FAILURE_STREAK,
-  DEFAULT_TOOL_LIMIT2 as DEFAULT_TOOL_LIMIT,
+  DEFAULT_TOOL_LIMIT,
   EMPTY_GATEWAY_MODEL_OPTIONS,
   ENGINE_WORKER_FATAL,
   ENGINE_WORKER_IDLE_MS,

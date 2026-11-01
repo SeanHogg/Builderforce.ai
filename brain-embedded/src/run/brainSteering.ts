@@ -7,13 +7,13 @@
 import { runSteeringSource, type SteerInput, type SteeringSource, hasRunInterrupt } from '@builderforce/agent-run';
 import { imagePartsOf } from './runMessages';
 import { steerModelContent } from '../runSteering';
-import type { RunLoopContext } from '../runStore/runLoopContext';
+import type { BrainRunContext } from '../runStore/brainRunContext';
 import { takeRunSteering } from '../runStore/steerInterrupt';
 import { persistSteer } from '../runStore/steerPersistence';
 
 /**
  * Which steered words are the PERSON's own. The agent turns a drained steer into a user row it writes itself, so the store
- * (`loopStore.ts`) asks here whether that row is one of the chat's asks (`chatAsks.ts`): a child's report or an owner's
+ * (`brainStore.ts`) asks here whether that row is one of the chat's asks (`chatAsks.ts`): a child's report or an owner's
  * direction, which arrive the same way, are not.
  */
 export interface PersonSteers {
@@ -34,7 +34,7 @@ export function personSteers(): PersonSteers {
   };
 }
 
-export function loopSteeringSource(run: RunLoopContext, people: PersonSteers): SteeringSource {
+export function brainSteeringSource(run: BrainRunContext, people: PersonSteers): SteeringSource {
   const { c, chatId, runKey, req } = run;
   return {
     ...runSteeringSource(runKey),

@@ -101,7 +101,9 @@ export {
   stallStep,
   turnRequestFields,
   turnRole,
+  planModelWarning,
   type ModelRunState,
+  type PlanModelWarning,
   type PolicyTurnRequest,
 } from "./policy/model/index.js";
 export { ROLE_CORE_TOOLS, selectCatalog, deferredToolRole, coreToolNames } from "./policy/tools/catalog.js";
@@ -118,7 +120,12 @@ export {
 export { openingRows } from "./turnContext.js";
 export { RUN_CANCELLED_NOTICE } from "./policy/steering/index.js";
 export { createCompactionHook, type CompactionHookOptions } from "./policy/compaction/index.js";
-export { compactionReserve } from "./policy/compaction/reserve.js";
+export {
+  DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR,
+  compactionReserve,
+  ensureCompactionReserveTokens,
+  resolveCompactionReserveTokensFloor,
+} from "./policy/compaction/reserve.js";
 export { IMAGE_CHAR_ESTIMATE, runRowHandoff } from "./policy/compaction/rows.js";
 export { packForModelHandoff, type HandoffAccessor, type ModelHandoffInput, type ModelHandoffResult } from "./policy/compaction/handoff.js";
 // The compaction primitives a surface sizes its own budgets with (the cost-loop session, the gateway summarizer).
@@ -150,6 +157,24 @@ export { offeredSchemas } from "./runTurn.js";
 // `write_file` / `Write`). A surface whose own tool dispatch is not yet the agent's
 // (the embedded runner's native loop) asks it here instead of keeping a second copy.
 export { evaluatePolicyGateSeam, isPolicyRefusal, isToolWithheld, policyRefusalMessage } from "./policy/tools/gates.js";
+
+// The per-turn tool selection's advertised-set size (a surface that ranks its own way hands `rank` to the selector and keeps this cap).
+export { DEFAULT_TOOL_LIMIT, PINNED_OVERFLOW, selectToolsForTurn, type SelectToolsOptions, type SelectToolsResult } from "./policy/tools/selectTools.js";
+
+// The window-sized cut of a tool result's text, for the surfaces that cut a message themselves (the on-prem runner's
+// persistence guard and pre-send guard). The cost-lever log summarizer is theirs: they pass it as `hooks`.
+export {
+  HARD_MAX_TOOL_RESULT_CHARS,
+  calculateMaxToolResultChars,
+  isOversizedToolResult,
+  sessionLikelyHasOversizedToolResults,
+  toolResultTextLength,
+  truncateOversizedToolResultsInMessages,
+  truncateToolResultMessage,
+  truncateToolResultText,
+  type ToolResultMessage,
+  type TruncateHooks,
+} from "./policy/tools/truncation.js";
 
 // The product-vocabulary classes the per-turn tool selector expands a query through.
 export { expandWithSynonyms, synonymsFor } from "./policy/tools/toolVocabulary.js";

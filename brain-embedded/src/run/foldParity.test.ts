@@ -1,6 +1,6 @@
 /**
  * PRD 35 WS4 parity rulings T2 (the fold) and T7 (what memory did to a call), through the real `startRun` on the agent. The fold is
- * `buildWorkingTranscript`, run as the agent's compaction module (`run/loopFold.ts`), so a long chat reads, summarises, records and
+ * `buildWorkingTranscript`, run as the agent's compaction module (`run/brainFold.ts`), so a long chat reads, summarises, records and
  * reloads as the Brain's old loop did: the values pinned here are the ones that loop produced. The whole record of these scenarios is
  * also held by the snapshot suite (`run/parity/snapshot.test.ts`).
  */

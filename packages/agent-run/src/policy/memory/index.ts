@@ -14,10 +14,10 @@
  *   volatileTail.ts`).
  * - `consolidate` is the run-end memory: the `codemap:` write-back fields from
  *   `run.consolidate({ root })` (the one rule every runtime — on-prem `knowledge-loop.ts`,
- *   cloud `runEndMemory.ts`, the editor `memoryCommit.ts` — commits the same way),
+ *   cloud `runEndMemory.ts`, the editor's run end through `commit.ts` — commits the same way),
  *   PLUS the model-extracted learned facts when the run changed files and the surface
- *   opted in with a `learnedFacts` port (`clients/vscode/src/memoryCommit.ts`, the
- *   editor's addition on top of the shared code map).
+ *   opted in with a `learnedFacts` port (`learnedFacts.ts`, the editor's addition on top
+ *   of the shared code map; the editor reaches it through `commit.ts`).
  *
  * The run's record is `@builderforce/agent-tools`' `RunKnowledgeRecorder`
  * (`run-knowledge.ts`); `RunState.memory` IS its `RunKnowledgeState` — reused, never

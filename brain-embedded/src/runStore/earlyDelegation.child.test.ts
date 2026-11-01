@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { isCoderReask } from '@builderforce/run-policy';
 import { getRunTrace, resetBrainRunStore, startRun } from '../brainRunStore';
-import { asksForSubagents } from '../delegationRequest';
+import { asksForSubagents } from '@builderforce/agent-run';
 
 // VS Code chat #6: every PRD 35 workstream brief NAMED the sub-agent policy, the gate read
 // that mention as "asked for sub-agents", and each child was told to stop reading and

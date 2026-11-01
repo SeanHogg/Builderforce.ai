@@ -19,7 +19,8 @@ import { rememberProjectFact } from "./bfApi";
 import { getApiKey } from "./gateway";
 import { resolveModelRoute, routeStream } from "./modelRouting";
 import { appendSessionNote } from "./sessionNotes";
-import { commitRunKnowledgeIfAllowed, MEMORY_COMMIT_SYSTEM, type FinishedRun } from "./memoryCommit";
+import { commitRunKnowledgeIfAllowed, MEMORY_COMMIT_SYSTEM, type FinishedRun } from "@builderforce/agent-run/memory";
+import { readChangedExcerpt } from "./changedExcerpt";
 import type { RunNoteOptions } from "./brainRunHost";
 
 /** The chat whose usage ledger the run-end model call is recorded on. */
@@ -77,6 +78,8 @@ export async function recordEditorRunEnd(
             return result.text;
           },
           remember: async (key, content) => rememberProjectFact(secrets, projectId, key, content, await chatMeta()),
+          // The evidence the learned facts are extracted from: the editor reads the workspace, the agent may not.
+          excerpt: readChangedExcerpt,
         },
     note,
   );

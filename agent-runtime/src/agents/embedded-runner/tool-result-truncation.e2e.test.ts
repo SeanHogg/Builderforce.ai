@@ -1,12 +1,14 @@
 import type { AgentMessage } from "../../builderforce/model/agent-types.js";
 import { describe, expect, it } from "vitest";
 import {
-  truncateToolResultText,
   calculateMaxToolResultChars,
-  truncateOversizedToolResultsInMessages,
   isOversizedToolResult,
   sessionLikelyHasOversizedToolResults,
   HARD_MAX_TOOL_RESULT_CHARS,
+} from "@builderforce/agent-run";
+import {
+  truncateToolResultText,
+  truncateOversizedToolResultsInMessages,
 } from "./tool-result-truncation.js";
 
 function makeToolResult(text: string, toolCallId = "call_1"): AgentMessage {

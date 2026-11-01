@@ -12,7 +12,7 @@
 import { runBudgetCapMillicents } from '@builderforce/agent-run';
 import type { RunCell } from './runCell';
 import { cells, emit, recordAppended } from './runCells';
-import type { RunLoopContext } from './runLoopContext';
+import type { BrainRunContext } from './brainRunContext';
 
 /** One run TREE's spend — the owner and every sub-agent under it share one. */
 export interface RunSpendTree {
@@ -26,13 +26,13 @@ export interface RunSpendTree {
 
 /**
  * Each run's tree, by its cell (weakly — an evicted cell takes its entry with it; a run
- * still going holds its tree in its meter, `run/loopSpend.ts`). A child finds its owner's cell by
+ * still going holds its tree in its meter, `run/brainSpend.ts`). A child finds its owner's cell by
  * `lineage.ownerKey` and joins that tree; a top-level run always starts a fresh one.
  */
 const spendTrees = new WeakMap<RunCell, RunSpendTree>();
 
 /** The tree `run` accrues into: its owner's when it is a sub-agent of a capped run. */
-function runSpendTree(run: Pick<RunLoopContext, 'c' | 'req'>, capMc: number): RunSpendTree {
+function runSpendTree(run: Pick<BrainRunContext, 'c' | 'req'>, capMc: number): RunSpendTree {
   const ownerKey = run.req.lineage?.ownerKey;
   const ownerCell = ownerKey !== undefined ? cells.get(ownerKey) : undefined;
   const owned = ownerCell && ownerCell !== run.c ? spendTrees.get(ownerCell) : undefined;
@@ -42,7 +42,7 @@ function runSpendTree(run: Pick<RunLoopContext, 'c' | 'req'>, capMc: number): Ru
 }
 
 /** The tree `run` joins and the cap it is held to, or null when it is uncapped (its cell then carries no tree, so its children never join a stale one). */
-export function joinRunSpend(run: Pick<RunLoopContext, 'c' | 'req'>): { tree: RunSpendTree; capMc: number } | null {
+export function joinRunSpend(run: Pick<BrainRunContext, 'c' | 'req'>): { tree: RunSpendTree; capMc: number } | null {
   const ownCapMc = runBudgetCapMillicents(run.req.maxRunBudgetUsd);
   if (ownCapMc == null) {
     spendTrees.delete(run.c);
@@ -56,7 +56,7 @@ export function joinRunSpend(run: Pick<RunLoopContext, 'c' | 'req'>): { tree: Ru
  * The reply a run ends with when its cap stopped it, saved as the chat's last message and shown: a plain assistant message. It is NOT a
  * settled answer - it carries no provenance chip and the Evermind does not learn from it.
  */
-export async function persistBudgetStop(run: Pick<RunLoopContext, 'c' | 'chatId' | 'req'>, text: string): Promise<void> {
+export async function persistBudgetStop(run: Pick<BrainRunContext, 'c' | 'chatId' | 'req'>, text: string): Promise<void> {
   const { c, chatId, req } = run;
   const [msg] = await req.persistence.sendMessages(chatId, [{ role: 'assistant', content: text }]);
   c.streamingText = '';

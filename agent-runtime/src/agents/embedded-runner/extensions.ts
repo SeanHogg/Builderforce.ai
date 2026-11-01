@@ -9,7 +9,7 @@ import { setCompactionSafeguardRuntime } from "../agent-extensions/compaction-sa
 import { setContextPruningRuntime } from "../agent-extensions/context-pruning/runtime.js";
 import { computeEffectiveSettings } from "../agent-extensions/context-pruning/settings.js";
 import { makeToolPrunablePredicate } from "../agent-extensions/context-pruning/tools.js";
-import { ensureCompactionReserveTokens } from "../agent-settings.js";
+import { ensureCompactionReserveTokens } from "@builderforce/agent-run";
 import { isCacheTtlEligibleProvider, readLastCacheTtlTimestamp } from "./cache-ttl.js";
 
 function resolveExtensionPath(id: string): string {

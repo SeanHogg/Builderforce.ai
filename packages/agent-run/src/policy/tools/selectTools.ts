@@ -45,6 +45,12 @@ export interface SelectToolsOptions<T extends ToolSchemaLike = ToolSchemaLike> {
    * which every other surface keeps.
    */
   rank?: (candidates: readonly T[], query: string) => readonly T[];
+  /**
+   * Hold the required tools to the limit too (additive): the first `limit` of them in CATALOG order, so the advertised set can never
+   * outgrow the cap the way the Brain's loop always held it. Absent ⇒ a required tool is never dropped, even at limit 1 - what every
+   * other surface keeps.
+   */
+  capRequired?: boolean;
 }
 
 /** What the selector returns. */
@@ -122,7 +128,15 @@ export function selectToolsForTurn<T extends ToolSchemaLike>(
 
   // Required outranks everything — a tool the prompt names is never dropped, even at
   // limit 1, so the model is never told to call a tool and then not given it.
-  for (const name of options.required ?? []) push(byName.get(name));
+  if (options.capRequired) {
+    const required = new Set(options.required ?? []);
+    for (const tool of catalog) {
+      if (wanted.length >= limit) break;
+      if (required.has(tool.function?.name ?? "")) push(tool);
+    }
+  } else {
+    for (const name of options.required ?? []) push(byName.get(name));
+  }
   const roomAfterRequired = Math.max(0, limit - wanted.length);
 
   // Lexical rank over the rest, then catalog backfill to a full fixed set, restored to

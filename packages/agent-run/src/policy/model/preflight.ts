@@ -9,9 +9,10 @@
  * Also the two run events the policy emits from them: `model.preflight` once before
  * turn 1, and `llm.model_downgrade` when a turn is answered by another model than the run
  * expected — ported from brain-embedded `runStore/modelPreflight.ts` +
- * `runStore/modelDowngrade.ts` (the replacement home; that copy goes when the Brain's
- * adapter switches over, WS4). The tier rule is the catalog's own
- * (`@builderforce/model-catalog`).
+ * `runStore/modelDowngrade.ts`. The Brain keeps only its trace-wording form of both events and
+ * the write into its run cell (the agent's events are silent there, parity ruling T10); the
+ * Flash-class rule, `planModelWarning`, is read from here by both. The tier rule is the
+ * catalog's own (`@builderforce/model-catalog`).
  *
  * No `node:*`, no DOM. The hook halves read their port and the run state; the rest is pure.
  */

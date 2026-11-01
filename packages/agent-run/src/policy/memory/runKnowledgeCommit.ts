@@ -3,11 +3,13 @@
  * the code map of what it read and changed, then the model-extracted learned facts for a
  * run that changed files, behind the chat's Memory switch.
  *
- * Ports `clients/vscode/src/memoryCommit.ts`' `commitRunKnowledge` /
- * `commitRunKnowledgeIfAllowed` with the same signatures. The one thing that read the
- * disk there — the diff / file-head evidence (`readChangedExcerpt`, node `fs` + `git`) —
- * is the surface's `excerpt` port here: this package runs in the Worker and the browser
- * too. A surface without it extracts from the paths and the task alone.
+ * Ported from the editor's former `clients/vscode/src/memoryCommit.ts` (`commitRunKnowledge` /
+ * `commitRunKnowledgeIfAllowed`, same signatures), which the editor now imports from here
+ * (`@builderforce/agent-run/memory`, `commit.ts`). The one thing that reads the disk - the diff /
+ * file-head evidence (`readChangedExcerpt`, node `fs` + `git`) - stays the editor's
+ * (`clients/vscode/src/changedExcerpt.ts`) and arrives as the surface's `excerpt` port: this
+ * package runs in the Worker and the browser too. A surface without it extracts from the paths
+ * and the task alone.
  *
  * No `node:*` imports, no DOM.
  */

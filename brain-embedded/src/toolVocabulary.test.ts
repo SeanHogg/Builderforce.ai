@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { expandWithSynonyms, synonymsFor } from './toolVocabulary';
+import { expandWithSynonyms, synonymsFor } from '@builderforce/agent-run';
 
 describe('synonymsFor', () => {
   it('relates the product word to the catalog word', () => {

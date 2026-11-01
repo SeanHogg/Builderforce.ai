@@ -9,11 +9,10 @@
  * reads), derived from what the preamble left on the cell.
  */
 
-import type { ModelHook } from '@builderforce/agent-run';
-import { planModelWarning } from '../runStore/modelPreflight';
+import { defaultPolicyModules, planModelWarning, type ModelHook } from '@builderforce/agent-run';
 import type { RunCell } from '../runStore/runCell';
 
-export function recordedPreflight(c: RunCell, pinnedModel: string | undefined): NonNullable<ModelHook['preflight']> {
+function recordedPreflight(c: RunCell, pinnedModel: string | undefined): NonNullable<ModelHook['preflight']> {
   return (ctx) => {
     const byo = c.byoUnresolved.join(',');
     const plan = c.codeChanged ? null : planModelWarning(pinnedModel);
@@ -21,4 +20,9 @@ export function recordedPreflight(c: RunCell, pinnedModel: string | undefined): 
     ctx.state.preflight = degraded ? `degraded:${byo || 'plan_flash'}` : 'ok';
     return { kind: 'model.preflight', step: ctx.step, status: degraded ? 'degraded' : 'ok', notices: [] };
   };
+}
+
+/** The agent's model module with its preflight made the Brain's: the one `runPrepared` hands the run. */
+export function recordedModelHook(c: RunCell, pinnedModel: string | undefined): ModelHook {
+  return { ...defaultPolicyModules().model, preflight: recordedPreflight(c, pinnedModel) };
 }

@@ -15,6 +15,7 @@ import type { BrainTraceEvent } from '../brainTriage';
 import type { RunCell } from '../runStore/runCell';
 import { emit, nowIso, pushTrace } from '../runStore/runCells';
 import { noteBudgetContained } from '../runStore/runEndOutcome';
+import { turnContextTokens } from '../runStore/turnContext';
 import { stallTraceStep } from './stallTrace';
 
 /** The trace step for an event, or null when the event has no step of its own. Pure. */
@@ -70,15 +71,15 @@ export function traceStepFor(event: RunEvent, ts: string): BrainTraceEvent | nul
   }
 }
 
-/** What a surface does on an event beyond rendering it: the coder re-ask discards the turn it replaces (`loopTurn.ts`). */
+/** What a surface does on an event beyond rendering it: the coder re-ask discards the turn it replaces (`brainTurn.ts`). */
 export interface SinkReactions {
   coderReask?: (event: Extract<RunEvent, { kind: 'model.coder_reask' }>) => void;
   /**
    * The agent reports anything about the turn that just answered but its re-ask: it goes on with the turn, so the surface records it
-   * NOW (`loopTurn.ts`). Returns a promise only while there is a turn to record; the event is rendered after it.
+   * NOW (`brainTurn.ts`). Returns a promise only while there is a turn to record; the event is rendered after it.
    */
   turnKept?: () => Promise<void> | void;
-  /** The run's USD cap stopped it: the reply it settles with is not an answer (`loopSettle.ts`). */
+  /** The run's USD cap stopped it: the reply it settles with is not an answer (`brainSettle.ts`). */
   budgetStop?: (event: Extract<RunEvent, { kind: 'budget.contained' }>) => void;
   /** Events the surface already records itself (the Brain's turn recorder writes the model downgrade): not rendered a second time. */
   recorded?: ReadonlySet<RunEvent['kind']>;
@@ -117,6 +118,16 @@ export function brainEventSink(c: RunCell, outcome?: OutcomeReport, on: SinkReac
     },
     // The host's report may resolve to anything (a stored id, a response); the sink's contract is
     // `void`, so what it resolves to is dropped here.
-    ...(outcome ? { outcome: async (row: RunOutcomeRow): Promise<void> => { await outcome(row); } } : {}),
+    ...(outcome ? { outcome: async (row: RunOutcomeRow): Promise<void> => { await outcome(withHostContext(row, c)); } } : {}),
   };
+}
+
+/**
+ * The Brain's context pack is empty (`contextSource.ts`): the host's task context reaches the model as the run's turn-context block
+ * (`runStore/turnContext.ts`), which the agent never sees. The row's `contextPackTokens` (§8.2) is that block, measured where it was
+ * attached, added to whatever the agent measured (nothing, for an empty pack).
+ */
+function withHostContext(row: RunOutcomeRow, c: RunCell): RunOutcomeRow {
+  const tokens = turnContextTokens(c);
+  return tokens > 0 ? { ...row, contextPackTokens: (row.contextPackTokens ?? 0) + tokens } : row;
 }

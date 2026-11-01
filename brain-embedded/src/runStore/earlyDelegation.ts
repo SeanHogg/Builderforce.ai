@@ -10,15 +10,15 @@
  */
 
 import { ReadsWithoutSpawn, READS_BEFORE_DELEGATION_NUDGE, type DelegationCallKind } from '@builderforce/run-guards';
-import { earlyDelegationNudge, isSpawnTool, leftDelegationUndone } from '../delegationRequest';
+import { earlyDelegationNudge, isSpawnTool, leftDelegationUndone } from '@builderforce/agent-run';
 import { isReadOnlyShellCall } from '../readOnlyShell';
 import { nowIso, pushTrace, runTrace } from './runCells';
-import type { RunLoopContext } from './runLoopContext';
+import type { BrainRunContext } from './brainRunContext';
 
 /** One counter per run — kept beside the run's context so it can never exist twice. */
-const counters = new WeakMap<RunLoopContext, ReadsWithoutSpawn>();
+const counters = new WeakMap<BrainRunContext, ReadsWithoutSpawn>();
 
-function counterOf(run: RunLoopContext): ReadsWithoutSpawn {
+function counterOf(run: BrainRunContext): ReadsWithoutSpawn {
   let counter = counters.get(run);
   if (!counter) {
     counter = new ReadsWithoutSpawn();
@@ -32,7 +32,7 @@ function counterOf(run: RunLoopContext): ReadsWithoutSpawn {
  * `ask_user` redirect all ask it, so every path applies the same rule. A sub-agent runs
  * it exactly as its owner does, on its own request (its brief).
  */
-export function runLeftDelegationUndone(run: RunLoopContext): boolean {
+export function runLeftDelegationUndone(run: BrainRunContext): boolean {
   return leftDelegationUndone({ toolNames: run.catalogToolNames, requestText: run.userRequest, events: runTrace(run.c) });
 }
 
@@ -48,7 +48,7 @@ export function delegationCallKind(name: string, args: unknown, isReadTool: bool
  * crosses the threshold in a run that was asked for sub-agents and has spawned none.
  * Null otherwise (and always on a non-read call).
  */
-export function earlyDelegationAdvisory(run: RunLoopContext, name: string, args: unknown, isReadTool: boolean, step: number): string | null {
+export function earlyDelegationAdvisory(run: BrainRunContext, name: string, args: unknown, isReadTool: boolean, step: number): string | null {
   const counter = counterOf(run);
   const kind = delegationCallKind(name, args, isReadTool);
   const reads = counter.record(kind);

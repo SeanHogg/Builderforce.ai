@@ -1,7 +1,7 @@
 /**
  * Run one scenario through the REAL `startRun` and return what every observer saw.
  *
- * Production binding: `startRun` -> `prepareRunLoop` -> `runPrepared`, never touching an internal. The fake is the
+ * Production binding: `startRun` -> `prepareBrainRun` -> `runPrepared`, never touching an internal. The fake is the
  * model stream, the host's persistence and its tool port - the three things a host supplies - and nothing between them.
  */
 

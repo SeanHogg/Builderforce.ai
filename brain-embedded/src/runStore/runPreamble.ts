@@ -2,7 +2,7 @@
  * Everything a run resolves ONCE, before its first turn — the catalog it advertises,
  * the recall and memory answer, the system prompt with every directive folded in, the
  * read/write/failure guards, and the run policy it starts from. Returns the run's
- * shared state ({@link RunLoopContext}), or null when memory answered and the run is over.
+ * shared state ({@link BrainRunContext}), or null when memory answered and the run is over.
  */
 
 import { ASK_USER_TOOL, ASK_USER_TOOL_SPEC } from '@builderforce/agent-loop';
@@ -19,7 +19,7 @@ import { selfReviewShipDirective } from '../selfReviewShip';
 import { previewReviewDirective } from '../previewReview';
 import { previousReplyText } from '../restatedReply';
 import { ReadCoverage } from '../readCoverage';
-import { CacheServedStreak } from './cacheServedStreak';
+import { CacheServedStreak } from '@builderforce/agent-run';
 import { RunProgressGuard } from './progressGuard';
 import { readRequest } from './requestReading';
 import { RunKnowledgeRecorder, type RunKnowledgeLog } from '@builderforce/agent-tools';
@@ -34,7 +34,8 @@ import { isFollowUpTurn, latestUserText } from './convoText';
 import { answerFromMemory, recallForRun } from './runMemory';
 import { answerDeterministically } from './prefetchGate';
 import { gatherHostRunContext, recordServedReads } from './hostRunContext';
-import type { RunLoopContext } from './runLoopContext';
+import type { BrainRunContext } from './brainRunContext';
+import type { OutcomeReport } from '../run/eventSink';
 import type { BrainRunRequest } from './runTypes';
 import { attachTurnContext, restoreTurnContext, turnContextBlock, turnContextCarrier } from './turnContext';
 import { resolveServerChatId } from './serverChat';
@@ -53,7 +54,7 @@ function recorderFor(userRequest: string, lent?: RunKnowledgeLog): RunKnowledgeL
   return r;
 }
 
-export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey: number): Promise<RunLoopContext | null> {
+export async function prepareBrainRun(chatId: number, c: RunCell, req: BrainRunRequest, runKey: number, reportRunRow?: OutcomeReport): Promise<BrainRunContext | null> {
   const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, runTool, stream, evermind } = req;
   const convo = c.transcript;
   // The previous run's per-turn block goes back off its user message BEFORE anything
@@ -274,12 +275,13 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
     now: nowIso,
   });
 
-  const run: RunLoopContext = {
+  const run: BrainRunContext = {
     chatId,
     serverChatId,
     runKey,
     c,
     req,
+    ...(reportRunRow ? { reportRunRow } : {}),
     convo,
     canAskUser,
     allTools,
@@ -361,12 +363,6 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
       ...pipelinePolicyOptions(req, pipeline),
     }),
     pipeline,
-    // Bounded counter for the announced-but-never-made tool call recovery, so a model
-    // that keeps narrating instead of acting cannot spin the loop. Not one-shot: a model
-    // that stalls once frequently stalls again on the very next turn, and spending the
-    // single retry on the first stall left the user holding the SECOND promise. The
-    // stall budget (`agent-stall`) bounds these recoveries on its own — a run has no
-    // iteration ceiling to fall back on.
     // One re-prompt per run for a code change left unshipped (see `selfReviewShip.ts`).
     // One, not a budget: the second time the model stops short it has read the contract
     // twice, and its answer — including "I cannot ship this because…" — is the answer.

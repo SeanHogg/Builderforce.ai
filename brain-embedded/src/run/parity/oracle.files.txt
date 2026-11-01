@@ -9,7 +9,6 @@ brain-embedded/src/localFirstTransport.test.ts
 brain-embedded/src/readCoverageServed.test.ts
 brain-embedded/src/referenceScenario.test.ts
 brain-embedded/src/run/areaR/calls.test.ts
-brain-embedded/src/run/areaR/human.test.ts
 brain-embedded/src/run/areaR/menu.test.ts
 brain-embedded/src/run/areaR/stall.test.ts
 brain-embedded/src/run/areaR/steer.test.ts

@@ -3,7 +3,7 @@ import {
   DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR,
   ensureCompactionReserveTokens,
   resolveCompactionReserveTokensFloor,
-} from "./agent-settings.js";
+} from "@builderforce/agent-run";
 
 describe("ensureCompactionReserveTokens", () => {
   it("bumps reserveTokens when below floor", () => {

@@ -17,14 +17,14 @@ import { delegationPlaceholders, placeholderAdvisory, placeholdersWritten, place
 import { canCompleteTicket, completionAdvisory, isTicketCompletion, notOnBaseBranchAdvisory } from '../completionGuard';
 import { shippedToBaseBranch } from '../shipVerification';
 import { toolActivity, visitTarget } from '../runActivity';
+import { runToolInterruptibly } from '@builderforce/agent-run';
 import { revisitAdvisory, withAdvisory } from '@builderforce/run-guards';
 import { isUnscopedMutation } from '../readCoverage';
 import { trimToolResult } from '../toolResultBudget';
 import { nowIso, nowMs, pushTrace, setActivity } from './runCells';
 import { autoLinkCreatedItem, recordCodeChangeTicket } from './runBackstops';
 import { earlyDelegationAdvisory } from './earlyDelegation';
-import { failureAdvisoryFor, isDedupableRead, type RunLoopContext } from './runLoopContext';
-import { runToolInterruptibly } from './steerInterrupt';
+import { failureAdvisoryFor, isDedupableRead, type BrainRunContext } from './brainRunContext';
 
 /**
  * A call whose arguments never parsed is NOT run. The kernel's policy is that bad JSON never aborts a run, so it hands the call over
@@ -34,7 +34,7 @@ import { runToolInterruptibly } from './steerInterrupt';
  * Returns the corrective result the model reads (and records the step that says why), or undefined when the call is well formed.
  * Run by the agent's platform tools (`run/brainPlatformTools.ts`).
  */
-export function declineMalformedCall(run: RunLoopContext, call: ParsedToolCall): { data: unknown; isError: true } | undefined {
+export function declineMalformedCall(run: BrainRunContext, call: ParsedToolCall): { data: unknown; isError: true } | undefined {
   const truncated = run.lastTurnInterruption === 'truncated';
   const declined = malformedCallOutcome(call, truncated);
   if (!declined) return undefined;
@@ -47,7 +47,7 @@ export function declineMalformedCall(run: RunLoopContext, call: ParsedToolCall):
   return { data: declined, isError: true };
 }
 
-export function callRunner(run: RunLoopContext): LoopPorts<ChatCompletionMessage>['dispatch'] {
+export function callRunner(run: BrainRunContext): LoopPorts<ChatCompletionMessage>['dispatch'] {
   const { c, chatId, req, readCoverage, failures, writeLedger, placeholderLedger } = run;
   const { runTool } = req;
   return async (call, ctx) => {

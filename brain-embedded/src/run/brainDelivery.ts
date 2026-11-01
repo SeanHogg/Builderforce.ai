@@ -12,14 +12,14 @@ import { askStopHook, MAX_STOP_HOOK_ROUNDS } from '../stopHooks';
 import { deliveryGates } from '../runStore/deliveryGates';
 import { skipsVerifyStage } from '../runStore/pipelineRoute';
 import { emit, nowIso, pushTrace } from '../runStore/runCells';
-import { persistReply, type RunLoopContext } from '../runStore/runLoopContext';
+import { persistReply, type BrainRunContext } from '../runStore/brainRunContext';
 import { persistMidTurnText } from '../runStore/turnPersistence';
-import type { LastTurn } from './loopTurn';
+import type { LastTurn } from './brainTurn';
 
 /** The stop hook's counter key; the other rungs are `deliveryGates.ts`'s. */
 const STOP_HOOK_RUNG = 'brain.stop_hook';
 
-export function brainDeliveryLedger(run: RunLoopContext, last: LastTurn): DeliveryLedger {
+export function brainDeliveryLedger(run: BrainRunContext, last: LastTurn): DeliveryLedger {
   const { c, req, userRequest, canAskUser } = run;
   const { runTool } = req;
   // A rung's step is written once the turn it is about has been saved (`sentBack`): the loop saves the sent-back text, then says why.

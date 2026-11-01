@@ -15,12 +15,14 @@
  *    for a reason the header does not carry. The tier is the preflight's own rule
  *    ({@link planModelWarning}); an unpriced model is unknown, not weak. Once per served model.
  *
- * Pure.
+ * Pure. The Brain's TRACE form of the agent's own rule (`policy/model/preflight.ts` `modelDowngrade`): the same three cases, in this trace's
+ * wording and deduped against THIS run's trace (the agent dedupes in `RunState`, off the preflight's verdict rather than each turn's
+ * header); the agent's event for it is not written on the Brain (`run/runPrepared.ts` `recorded`). The Flash-class rule is the agent's.
  */
 
 import type { PriceBook } from '@builderforce/model-catalog';
 import type { BrainTraceEvent } from '../brainTriage';
-import { planModelWarning } from './modelPreflight';
+import { planModelWarning } from '@builderforce/agent-run';
 
 export const MODEL_DOWNGRADE_LABEL = 'llm.model_downgrade';
 

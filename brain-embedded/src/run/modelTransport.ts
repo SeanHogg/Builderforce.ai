@@ -12,15 +12,16 @@
  * session, and retries INSIDE the turn (a retry never spends a step).
  * The turn's `max_tokens` is the surface's Effort (`TurnSession.maxTokens`), not the policy's role cap.
  *
- * Also answers the two questions the agent asks of a transport:
- *   - `window(model)` — the model's context window from what the host already knows (its
- *     gateway catalog, the shipped local catalog), sync; `undefined` keeps today's caps;
- *   - `preflight(model)` — the host's BYO health check (PRD 35 E7), run once before turn 1.
+ * Also answers the one question the agent asks of a transport: `window(model)` — the model's context
+ * window from what the host already knows (its gateway catalog, the shipped local catalog), sync;
+ * `undefined` keeps today's caps. The host's BYO health check (PRD 35 E7) is not asked here: the
+ * preamble ran it before turn 1 and the run's preflight module only reports its verdict
+ * (`preflightRecorded.ts`).
  */
 
 import { replayTextOf } from '@builderforce/agent-loop';
 import { isVolatileContent, volatileTail } from '@seanhogg/builderforce-memory/handoff';
-import type { ModelCompletion, ModelPreflightResult, ModelRequest, ModelTransport, RunMessage } from '@builderforce/agent-run';
+import type { ModelCompletion, ModelRequest, ModelTransport, RunMessage } from '@builderforce/agent-run';
 import type { ChatCompletionMessage, CompletionMetadata, StreamChatOptions, StreamChatResult, StreamHandlers } from '../streamChatCompletion';
 import { turnInterruption } from '../finishReason';
 import { withImages } from './runMessages';
@@ -44,7 +45,7 @@ export interface TurnRetry {
 /**
  * One turn's session with the surface's live view and record: the stream's handlers, the call's extra metadata, the window
  * fit the request passes through, and what the turn leaves when it completes or fails. The surface builds it per request
- * (`loopTurn.ts` over the run cell); the transport only calls it.
+ * (`brainTurn.ts` over the run cell); the transport only calls it.
  */
 export interface TurnSession {
   handlers: StreamHandlers;
@@ -81,16 +82,14 @@ export interface TurnObserver {
 }
 
 export interface BrainModelTransportDeps {
-  /** The surface's live view and record of each turn (`loopTurn.ts`). */
-  turn?: TurnObserver;
+  /** The surface's live view and record of each turn (`brainTurn.ts`). */
+  turn: TurnObserver;
   /** The surface's streaming completion — gateway, local-first and XML lifting behind it. */
   stream: BrainStreamFn;
   /** Per-call routing the request fixed for the whole run. */
   call?: BrainCallDefaults;
   /** What the host knows about model windows — its gateway catalog and live local runtimes. */
   windows?: Pick<RunWindowSources, 'cloud'>;
-  /** The host's BYO health check — awaited once before the first turn. */
-  preflight?: () => Promise<ModelPreflightResult | undefined>;
 }
 
 /** The agent's transcript row in the stream's wire shape. */
@@ -163,25 +162,25 @@ export function toCompletion(result: StreamChatResult, requested?: string): Mode
 
 /** Build the Brain's `ModelTransport` over its streaming function. */
 export function brainModelTransport(deps: BrainModelTransportDeps): ModelTransport {
-  const { stream, call, windows, preflight } = deps;
+  const { turn, stream, call, windows } = deps;
   return {
     async complete(request: ModelRequest, signal?: AbortSignal): Promise<ModelCompletion> {
       // A Stop that landed while the turn was being prepared (a fold) ends it before anything is opened.
       if (signal?.aborted) throw new Error('run stopped');
       const tools = request.tools && request.tools.length > 0 ? request.tools : undefined;
-      const session = deps.turn?.open(request);
+      const session = turn.open(request);
       /** One request to the stream: the window fit, then the stream, inside the live-turn window. */
       const attempt = async (req: ModelRequest): Promise<StreamChatResult> => {
-        const wire = withTail(req.messages.map(wireRowOf), session?.tail);
-        const messages = session?.fit ? await session.fit(wire, req.model) : wire;
-        const maxTokens = session ? session.maxTokens : req.maxTokens;
+        const wire = withTail(req.messages.map(wireRowOf), session.tail);
+        const messages = session.fit ? await session.fit(wire, req.model) : wire;
+        const maxTokens = session.maxTokens;
         const ask = () => stream(
           {
             ...call,
-            ...session?.call,
+            ...session.call,
             messages,
-            ...(session?.metadata ? { metadata: session.metadata() } : {}),
-            ...(tools ? { tools, tool_choice: session?.toolChoice ?? req.toolChoice ?? ('auto' as const) } : {}),
+            ...(session.metadata ? { metadata: session.metadata() } : {}),
+            ...(tools ? { tools, tool_choice: session.toolChoice ?? req.toolChoice ?? ('auto' as const) } : {}),
             ...(req.model ? { model: req.model } : {}),
             ...(req.strict !== undefined ? { modelStrict: req.strict } : {}),
             ...(req.role ? { role: req.role } : {}),
@@ -189,9 +188,9 @@ export function brainModelTransport(deps: BrainModelTransportDeps): ModelTranspo
             ...(maxTokens !== undefined ? { maxTokens } : {}),
             ...(signal ? { signal } : {}),
           },
-          session?.handlers,
+          session.handlers,
         );
-        return session?.around ? session.around(ask) : ask();
+        return session.around ? session.around(ask) : ask();
       };
       let asked = request;
       let result: StreamChatResult;
@@ -200,9 +199,7 @@ export function brainModelTransport(deps: BrainModelTransportDeps): ModelTranspo
       } catch (e) {
         // A Stop rejects the stream: that is the run's, not a failed turn.
         if (signal?.aborted) throw e;
-        // Without a session there is nothing to record the failure on or route it around: it leaves as it is.
-        if (!session) throw e;
-        // With one, the run's model policy decides HERE whether the failure is routed around: ONE retry inside this turn, so the
+        // The run's model policy decides HERE whether the failure is routed around: ONE retry inside this turn, so the
         // agent never sees the failure and spends no step (and no forced turn) on it.
         const retry = await session.recover?.(e);
         if (!retry) throw session.failed(e);
@@ -214,11 +211,10 @@ export function brainModelTransport(deps: BrainModelTransportDeps): ModelTranspo
           throw session.failed(retryError);
         }
       }
-      await session?.completed(result);
+      await session.completed(result);
       return toCompletion(result, asked.model);
     },
     window: (model) => contextWindowOf(model, windows?.cloud ? { cloud: windows.cloud } : {}),
-    ...(preflight ? { preflight: () => preflight() } : {}),
   };
 }
 

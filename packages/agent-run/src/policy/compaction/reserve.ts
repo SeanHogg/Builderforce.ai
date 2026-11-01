@@ -4,11 +4,9 @@
  * The tokens the packer holds back so the serving model has room to answer.
  *   - The reply reserve is the shared hand-off rule (`@builderforce/run-policy`
  *     `DEFAULT_HANDOFF_RESERVE_TOKENS` / `handoffReserveTokens`), bound here, never restated.
- *   - The FLOOR is on-prem's (`agent-runtime/src/agents/agent-settings.ts`, which
- *     `agents/embedded-runner/compact.ts` applies before every compaction): the reserve
- *     never sits below `DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR` (20,000) unless the
- *     config names another floor. Ported faithfully — same names, same signatures, same
- *     value — so its tests run here unchanged.
+ *   - The FLOOR is on-prem's, and lives HERE once (the former `agent-runtime/src/agents/agent-settings.ts` is gone; the embedded
+ *     runner's `compact.ts` applies it before every compaction): the reserve never sits below
+ *     `DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR` (20,000) unless the config names another floor.
  *
  * No `node:*` imports, no DOM: this file is compiled into the Worker, the browser
  * and Node.

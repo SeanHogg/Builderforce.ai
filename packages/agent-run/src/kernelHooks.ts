@@ -21,6 +21,7 @@ import { volatileTail } from "./policy/compaction/pack.js";
 import type { UsdBudget } from "./policy/budget/usd.js";
 import type { CacheServedStreak } from "./policy/tools/cacheServedStreak.js";
 import { lastFinishReason } from "./policy/finish/index.js";
+import { isToolWithheld } from "./policy/tools/gates.js";
 import { tallyCall, tallyTurn, tallyVerify, type RunTally } from "./telemetry/runTally.js";
 import type { ToolSchema } from "@builderforce/agent-tools";
 import type { TurnInterruption } from "./surface.js";
@@ -127,7 +128,10 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         progress: { rungs: state.stall?.rungs ?? {} },
         cache: run.cache,
       });
-      const advertised = menu?.tools ?? (await selectNow());
+      // A forced or extended menu is the surface's own list, so the governance withholding applies to it as to the policy's selection:
+      // a tool an unscoped `block` gate withholds is never advertised, whoever built the menu.
+      const forced = menu?.tools?.filter((t) => !isToolWithheld(input.policy.approvalGates, t.function?.name ?? ""));
+      const advertised = forced ?? (await selectNow());
       run.selection = {
         tools: advertised,
         ...(menu?.toolChoice ? { toolChoice: menu.toolChoice } : {}),
@@ -183,17 +187,18 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
     },
 
     beforeDispatch: async (call, ctx) => {
+      const refusal = (gated: { data: unknown; control?: GuardControl }): LoopDispatchResult => {
+        const refused: LoopDispatchResult = { data: gated.data, isError: true, ...(gated.control ? { control: asLoopControl(gated.control) } : {}) };
+        if (gated.control) held.add(refused);
+        return refused;
+      };
       starts.set(call.id, Date.now());
       const pctx = contextAt(ctx.step, ctx.stepInCall);
       const pcall = toPolicyCall(call);
       // Governance gates (`RunPolicy.approvalGates`): a block refuses the call, an approval
       // asks the human channel and parks the run on the approver.
       const gated = await hooks.tools.gate?.(pctx, pcall);
-      if (gated) {
-        const refused: LoopDispatchResult = { data: gated.data, isError: true, ...(gated.control ? { control: asLoopControl(gated.control) } : {}) };
-        if (gated.control) held.add(refused);
-        return { result: refused };
-      }
+      if (gated) return { result: refusal(gated) };
       // A3's pause parks the run on a person (the control); any other skip just answers.
       const decision = await hooks.guards.beforeDispatch(pctx, pcall);
       if (decision?.skip) {
@@ -227,7 +232,11 @@ export function kernelHooks(run: KernelRun): LoopHooks<RunMessage> {
         if (pre && "result" in pre) return { result: { data: pre.result.data, ...(pre.result.isError ? { isError: true } : {}) } };
         if (pre && "rewrite" in pre) {
           const { name, args } = pre.rewrite;
-          return { rewrite: { ...call, name, args, raw: { ...call.raw, name, arguments: JSON.stringify(args) } } };
+          const rewritten = { ...call, name, args, raw: { ...call.raw, name, arguments: JSON.stringify(args) } };
+          // The call that will RUN is gated, as the call the model made was: a tool reached through the surface's router is judged by its own name.
+          const reached = await hooks.tools.gate?.(pctx, toPolicyCall(rewritten));
+          if (reached) return { result: refusal(reached) };
+          return { rewrite: rewritten };
         }
       }
       return undefined;

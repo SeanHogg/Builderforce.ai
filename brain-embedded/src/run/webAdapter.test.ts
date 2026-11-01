@@ -1,9 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetRunSteering, type PolicyGate } from '@builderforce/agent-run';
-import { resolveRunConfirm, resetBrainRunStore, stopRun } from '../runStore/runControl';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { resetRunSteering } from '@builderforce/agent-run';
+import { resetBrainRunStore, stopRun } from '../runStore/runControl';
 import { getCell } from '../runStore/runCells';
-import { beginRun } from '../runStore/beginRun';
-import { binding, result, runBound, scripted } from '../test/brainRunHarness';
+import type { StreamChatResult } from '../streamChatCompletion';
+import { binding, plainTurn, result, runBound, scripted } from '../test/brainRunHarness';
 import { queueRunSteering } from '../runSteering';
 import { brainEventSink, traceStepFor } from './eventSink';
 import { brainHumanChannel } from './humanChannel';
@@ -19,7 +19,7 @@ describe('the Brain runs through the one agent', () => {
     for (const [i, entryPoint] of (['web', 'rovr', 'vscode'] as const).entries()) {
       const { stream } = scripted([() => result({ text: 'Hello! Done.' })]);
       const b = binding(8100 + i, stream, entryPoint);
-      const outcome = await runBound(b.binding);
+      const outcome = await runBound(b);
       expect(outcome.kind).toBe('finished');
       expect(b.cell.transcript.at(-1)).toMatchObject({ role: 'assistant' });
       expect(b.rows).toHaveLength(1);
@@ -30,7 +30,7 @@ describe('the Brain runs through the one agent', () => {
   it('says on the trace, before the first turn, which connected account cannot serve the run', async () => {
     const { stream } = scripted([() => result({ text: 'Done.' })]);
     const b = binding(8110, stream, 'web', { modelPreflight: async () => ({ byoUnresolved: ['anthropic:expired'], fallback: 'free-model' }) });
-    await runBound(b.binding);
+    await runBound(b);
     const step = b.cell.trace.find((e) => e.label === 'model.preflight');
     expect(step).toBeDefined();
     expect(String(step?.result)).toContain('anthropic');
@@ -45,7 +45,7 @@ describe('the Brain runs through the one agent', () => {
       }),
     ]);
     const b = binding(8120, stream);
-    const run = runBound(b.binding);
+    const run = runBound(b);
     await started.promise;
     stopRun(8120);
     await expect(run).resolves.toMatchObject({ kind: 'failed', reason: 'cancelled' });
@@ -60,7 +60,7 @@ describe('the Brain runs through the one agent', () => {
       () => result({ text: 'Done.' }),
     ]);
     const b = binding(8130, stream);
-    await runBound(b.binding);
+    await runBound(b);
     expect(b.cell.trace.some((e) => e.label === 'steer.applied')).toBe(true);
     expect(asked[1]?.messages.map((m) => m.content)).toContain('write the update now');
   });
@@ -69,7 +69,7 @@ describe('the Brain runs through the one agent', () => {
 describe('the Brain\'s ports', () => {
   it('the model transport hands the stream the agent\'s transcript and lifts the result back', async () => {
     const { stream, asked } = scripted([() => result({ text: 'hi', toolCalls: [{ id: 'c9', name: 'read_file', args: '{"path":"a"}' }], usage: { prompt: 7, completion: 3, cacheRead: 5 } })]);
-    const model = brainModelTransport({ stream, call: { routingMode: 'byo_pool' } });
+    const model = brainModelTransport({ stream, turn: plainTurn, call: { routingMode: 'byo_pool' } });
     const completion = await model.complete({
       messages: [
         { role: 'system', content: 's' },
@@ -86,12 +86,10 @@ describe('the Brain\'s ports', () => {
     expect(completion.toolCalls).toEqual([{ id: 'c9', name: 'read_file', arguments: '{"path":"a"}' }]);
   });
 
-  it('answers the window from what the host knows, and the preflight from its health check', async () => {
-    const preflight = vi.fn(async () => ({ byoUnresolved: ['xai:revoked'] }));
-    const model = brainModelTransport({ stream: scripted([]).stream, windows: { cloud: (ref) => (ref === 'big' ? 200_000 : undefined) }, preflight });
+  it('answers the window from what the host knows', () => {
+    const model = brainModelTransport({ stream: scripted([]).stream, turn: plainTurn, windows: { cloud: (ref) => (ref === 'big' ? 200_000 : undefined) } });
     expect(model.window?.('big')).toBe(200_000);
     expect(model.window?.('unknown')).toBeUndefined();
-    await expect(model.preflight?.('big')).resolves.toEqual({ byoUnresolved: ['xai:revoked'] });
   });
 
   it('maps rows and results without losing a tool call', () => {
@@ -99,20 +97,8 @@ describe('the Brain\'s ports', () => {
     expect(toCompletion(result({ text: 't' }))).toEqual({ content: 't', toolCalls: [], usage: { inputTokens: 10, outputTokens: 4 }, model: 'fake-model' });
   });
 
-  it('the human channel raises the confirm gate on the cell and a Stop declines it', async () => {
-    const gate: PolicyGate = { id: 'g1', tool: 'delete_file', effect: 'require-approval', reason: 'destructive' };
-    const c = getCell(8150);
-    beginRun(c, 8150);
-    const human = brainHumanChannel(8150);
-    const approved = human.approve?.(gate);
-    expect(c.pendingConfirm).toMatchObject({ name: 'delete_file' });
-    resolveRunConfirm(8150, true);
-    await expect(approved).resolves.toEqual({ kind: 'answered', answer: 'approved', approved: true });
-
-    const declined = human.approve?.(gate);
-    stopRun(8150);
-    await expect(declined).resolves.toEqual({ kind: 'answered', answer: 'declined' });
-    await expect(human.ask('which?')).resolves.toEqual({ kind: 'paused' });
+  it('the human channel answers a question as paused: the question is the reply of the run', async () => {
+    await expect(brainHumanChannel().ask('which?')).resolves.toEqual({ kind: 'paused' });
   });
 
   it('the event sink renders the labelled steps diagnostics read, and nothing for lifecycle events', () => {

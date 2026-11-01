@@ -1,7 +1,8 @@
 /**
  * policy/memory/learnedFacts — the model-extracted durable facts a finished run leaves.
  *
- * Ports `clients/vscode/src/memoryCommit.ts` — after a file-changing run, the run asks
+ * Ported from the editor's former `clients/vscode/src/memoryCommit.ts` (now gone; the editor keeps only the workspace reader,
+ * `changedExcerpt.ts`) — after a file-changing run, the run asks
  * a cheap completion for the durable facts (decisions, root causes, conventions) and
  * writes them itself, under stable `learned:` keys so a later run on the same decision
  * REPLACES the fact instead of stacking a second one. Before this, a finished run hoped

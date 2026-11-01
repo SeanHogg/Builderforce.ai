@@ -24,7 +24,7 @@ import { callMemoryEffect } from '../memorySavings';
 import { coderReaskTrace, providerFailureTrace, transportRetryTrace } from '../runPolicyTraces';
 import { emit, nowIso, nowMs, pushTrace } from '../runStore/runCells';
 import { stampOncePerCall } from '../runStore/compactionSaved';
-import { reportToPolicy, type RunLoopContext } from '../runStore/runLoopContext';
+import { reportToPolicy, type BrainRunContext } from '../runStore/brainRunContext';
 import { asLiveTurn } from '../runStore/turnPersistence';
 import { recordTurn } from '../runStore/turnRecorder';
 import { commitTurnNarration, terminalAskReply, type TurnCall } from '../runStore/turnToolCalls';
@@ -64,7 +64,7 @@ export interface LastTurn {
    * run is failed from the next place the agent asks the surface something (`terminalTurn`), so the run fails there.
    */
   keepFailed?: unknown;
-  /** The reply the run's USD cap stopped it with, when it did: it is not an answer (`loopSettle.ts`). */
+  /** The reply the run's USD cap stopped it with, when it did: it is not an answer (`brainSettle.ts`). */
   contained?: string;
   /** The reply a stall with nothing left to try already saved, before it said why (`brainDelivery.ts`): the run settles on it. */
   settled?: BrainMessage;
@@ -85,7 +85,7 @@ interface OpenTurn {
 }
 
 /** The observer over one Brain run, a view of its last turn, and the call that keeps an answered turn. */
-export function loopTurnObserver(run: RunLoopContext, savedTokens: () => number = () => 0): { observer: TurnObserver; last: LastTurn; keepAnswered: () => Promise<void> | undefined } {
+export function brainTurnObserver(run: BrainRunContext, savedTokens: () => number = () => 0): { observer: TurnObserver; last: LastTurn; keepAnswered: () => Promise<void> | undefined } {
   const { c, req } = run;
   const last: LastTurn = { step: -1 };
   let turn: OpenTurn | undefined;
@@ -176,7 +176,7 @@ export function loopTurnObserver(run: RunLoopContext, savedTokens: () => number 
 }
 
 /** Record a kept turn: what it left on the run, then what a turn that calls tools settles before any call dispatches. */
-async function keep(run: RunLoopContext, last: LastTurn, a: Answered): Promise<void> {
+async function keep(run: BrainRunContext, last: LastTurn, a: Answered): Promise<void> {
   const { result } = a;
   run.windowFit.served(result.resolvedModel ?? run.policy.model);
   const resolved = result.resolvedModel ?? run.policy.model ?? 'default';
@@ -201,7 +201,7 @@ async function keep(run: RunLoopContext, last: LastTurn, a: Answered): Promise<v
  * The coder re-ask replaced the analysis model's answer: the Brain never records it, so neither does the run - the
  * answer is dropped unrecorded, and the re-ask is said on the trace.
  */
-export function discardAnswered(run: RunLoopContext, last: LastTurn, step: number, model: string | undefined): void {
+export function discardAnswered(run: BrainRunContext, last: LastTurn, step: number, model: string | undefined): void {
   last.pending = undefined;
   pushTrace(run.c, coderReaskTrace(nowIso(), step, model));
 }

@@ -329,7 +329,7 @@ export {
 export type { BrainRunRequest, BrainRunSnapshot, BrainRunPersistence, BrainStreamFn, BrainRunEngine, RunEngineControl, RunKey, RunTurn } from './brainRunStore';
 export type { AvoidedRunCall, RunOutcomeReport, RunPipelineSettings, RunStageModels } from './runStore/runTypes';
 // PRD 35 E7: what a host's pre-turn BYO health check hands the run.
-export type { ModelPreflightResult } from './runStore/modelPreflight';
+export type { ModelPreflightResult } from '@builderforce/agent-run';
 export type { ServedRead } from './runStore/hostRunContext';
 // The chat's tickets + run history, ONE reader for every host (panel adapter, VS Code context pack).
 export { readChatRunHistory, readChatTicketLinks, type ChatStateGet } from './chatStateReads';
@@ -342,8 +342,6 @@ export { parseSubagentOrigin, savedChatOf, SUBAGENT_OF_META_KEY } from './runLin
 export type { RunLineage, SubagentOrigin } from './runLineage';
 export { queueRunSteering, requeueRunSteering, drainRunSteering, steerModelContent } from './runSteering';
 export type { RunSteerMessage } from './runSteering';
-// The agent's contract type a host's context pack is built to (`clients/vscode/src/contextPack`).
-export type { ContextPack } from '@builderforce/agent-run';
 export type { BrainRunOutcome } from './runOutcomeReport';
 export { isCoderReask } from '@builderforce/run-policy';
 // Planning ends in tasks: the `hand_off` tool, its executor, and the per-child chat report.
@@ -780,7 +778,7 @@ export {
 } from './gatewayModels';
 export type { GatewayJsonRequest, GatewayModelOptions, GatewayModelSurface } from './gatewayModels';
 export { getMcpToolStatus, setMcpToolStatus, type McpToolStatus } from './mcpToolStatus';
-export { DEFAULT_TOOL_LIMIT } from './selectTools';
+export { DEFAULT_TOOL_LIMIT } from '@builderforce/agent-run';
 // The tool ROUTER — three fixed tools that keep the whole catalog reachable even when
 // per-turn selection trims it, so a tool below the cut is a lookup away, not missing.
 export {

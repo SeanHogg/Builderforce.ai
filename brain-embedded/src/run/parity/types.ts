@@ -2,7 +2,7 @@
  * The parity harness (PRD 35 WS4, area D): the shapes it shares.
  *
  * One SCENARIO is a scripted conversation with the Brain - a fake model, fake host tools, the actions a person takes
- * mid-run (Stop, steer, confirm). It runs through the real `startRun`, on the production binding (`prepareRunLoop` ->
+ * mid-run (Stop, steer, confirm). It runs through the real `startRun`, on the production binding (`prepareBrainRun` ->
  * `runPrepared`), and the harness records what every observer saw. That record must equal the one stored for the scenario
  * (`snapshots/`, generated from the Brain's old loop before it was deleted) once ids and timestamps are normalised
  * (`normalise.ts`, the only place a difference is ever excused, each one named).

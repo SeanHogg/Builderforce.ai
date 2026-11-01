@@ -2,45 +2,43 @@
  * One PREPARED Brain run (`runStore/runPreamble.ts`), driven by THE one agent (PRD 35 §4 WS4). The preamble assembled what
  * the canvas assembles for itself - the system prompt, the transcript, the catalog, the recall - and this hands it over as
  * the task's transcript, the policy data and the ports. There is no loop here and no policy: the agent owns both, and an
- * adapter only builds ports (`webAdapter.ts`, `loopTurn.ts`, `brainPlatformTools.ts`, `loopSteering.ts`, `loopStore.ts`).
+ * adapter only builds ports (`webAdapter.ts`, `brainTurn.ts`, `brainPlatformTools.ts`, `brainSteering.ts`, `brainStore.ts`).
  */
 
-import { defaultPolicyModules, runAgent } from '@builderforce/agent-run';
-import type { RunLoopContext } from '../runStore/runLoopContext';
+import { runAgent } from '@builderforce/agent-run';
+import type { BrainRunContext } from '../runStore/brainRunContext';
 import { pipelinePolicyOptions } from '../runStore/pipelineRoute';
 import { brainDeliveryLedger } from './brainDelivery';
 import { brainPlatformTools } from './brainPlatformTools';
-import { brainCompaction } from './loopFold';
-import { recordedPreflight } from './preflightRecorded';
-import { loopRunStore } from './loopStore';
-import { loopSpendMeter } from './loopSpend';
-import { loopSteeringSource, personSteers } from './loopSteering';
-import { settleBrainRun } from './loopSettle';
+import { brainCompaction } from './brainFold';
+import { recordedModelHook } from './preflightRecorded';
+import { brainRunStorePort } from './brainStore';
+import { brainSpendMeter } from './brainSpend';
+import { brainSteeringSource, personSteers } from './brainSteering';
+import { settleBrainRun } from './brainSettle';
 import { brainEventSink } from './eventSink';
-import { discardAnswered, loopTurnObserver } from './loopTurn';
+import { discardAnswered, brainTurnObserver } from './brainTurn';
 import { toRunMessage } from './runMessages';
 import { withoutUncallableTurns } from './brainModelRules';
 import { brainRunPolicy, brainRunTask, buildBrainRunPorts, type BrainRunBinding } from './webAdapter';
 
 /** Drive the prepared run to its outcome and settle it on the chat. */
-export async function runPrepared(run: RunLoopContext): Promise<void> {
-  const { c, req, runKey } = run;
+export async function runPrepared(run: BrainRunContext): Promise<void> {
+  const { c, req } = run;
   const compaction = brainCompaction(run);
-  const { observer, last, keepAnswered } = loopTurnObserver(run, compaction.savedTokens);
+  const { observer, last, keepAnswered } = brainTurnObserver(run, compaction.savedTokens);
   const people = personSteers();
   const platform = brainPlatformTools(run);
-  const spend = loopSpendMeter(run);
+  const spend = brainSpendMeter(run);
   const binding: BrainRunBinding = {
     entryPoint: req.entryPoint ?? 'web',
-    cell: c,
-    runKey,
     req,
     capabilities: { capabilities: new Set() },
     request: run.userRequest,
     turn: observer,
     platform: platform.tools,
     delivery: brainDeliveryLedger(run, last),
-    events: brainEventSink(c, req.reportRunRow, {
+    events: brainEventSink(c, run.reportRunRow, {
       coderReask: (e) => discardAnswered(run, last, e.step, e.model),
       turnKept: keepAnswered,
       budgetStop: (e) => { last.contained = e.text; },
@@ -53,7 +51,7 @@ export async function runPrepared(run: RunLoopContext): Promise<void> {
       run.view = view;
       Object.defineProperty(run, 'policy', { get: () => view.policy(), configurable: true });
     },
-    // A question ends the run before any call dispatches (decided once per turn in `loopTurn.ts`).
+    // A question ends the run before any call dispatches (decided once per turn in `brainTurn.ts`).
     extensions: {
       schemas: () => [],
       handles: () => false,
@@ -65,9 +63,9 @@ export async function runPrepared(run: RunLoopContext): Promise<void> {
         return reply;
       },
     },
-    steering: loopSteeringSource(run, people),
+    steering: brainSteeringSource(run, people),
     ...(spend ? { spend } : {}),
-    store: loopRunStore(c, { toolRowAppended: platform.toolRowAppended, personSteer: people.take }),
+    store: brainRunStorePort(c, { toolRowAppended: platform.toolRowAppended, personSteer: people.take }),
   };
   const transcript = [{ role: 'system' as const, content: run.systemPrompt }, ...run.convo.map(toRunMessage)];
   // The TASK is the person's request: compaction pins it, whatever conversation comes before it.
@@ -79,10 +77,10 @@ export async function runPrepared(run: RunLoopContext): Promise<void> {
     task: { ...brainRunTask(binding), transcript },
     policy: brainRunPolicy(binding),
     ports: { ...ports, model: withoutUncallableTurns(ports.model, req) },
-    // The Brain's own fold (`loopFold.ts`), not the agent's compaction adapted to imitate it.
+    // The Brain's own fold (`brainFold.ts`), not the agent's compaction adapted to imitate it.
     // ... and the preamble ran the host's model preflight already (`hostRunContext.ts`): the agent's own would ask the host again and warn
     // about a model the loop never warned about (a QUICK run's quick model), so the Brain's says the verdict and nothing more.
-    modules: { compaction: compaction.hook, model: { ...defaultPolicyModules().model, preflight: recordedPreflight(c, req.model) } },
+    modules: { compaction: compaction.hook, model: recordedModelHook(c, req.model) },
     ...(signal ? { signal } : {}),
   });
   await settleBrainRun(run, outcome, last);
