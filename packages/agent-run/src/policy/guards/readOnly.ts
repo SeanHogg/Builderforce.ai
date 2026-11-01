@@ -6,11 +6,9 @@
  * another call in the same turn could observe — no repo write, no ticket write, no
  * lease, no human, no spend beyond its own read. Anything absent dispatches in order.
  *
- * Ported from `api/src/application/runtime/costLoop/readOnlyTools.ts` — ONE table for
- * every surface, deliberately dependency-free. (That file has no imports on purpose:
- * the Cloudflare Container has no build step, so a generator compiles it into
- * `container/readOnlyTools.mjs` for the image loop — the durable runner and the image
- * read the SAME names.)
+ * This is the ONE table for every surface (the guards and the sub-agents policy read it for every run, whichever entry point
+ * started it), deliberately dependency-free. It replaced the cloud's `costLoop/readOnlyTools.ts`, which was deleted once
+ * nothing imported it; the container image no longer has a loop of its own, so there is no second copy to generate.
  */
 
 export const READ_ONLY_CLOUD_TOOLS: ReadonlySet<string> = new Set([
