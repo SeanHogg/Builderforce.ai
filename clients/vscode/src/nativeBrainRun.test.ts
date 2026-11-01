@@ -29,6 +29,7 @@ import {
   toolLabel,
   transientRunPersistence,
   type NativeApprovalRequest,
+  type NativeBrainRunOptions,
   type NativeRunEvents,
 } from "./nativeBrainRun";
 
@@ -96,6 +97,7 @@ async function runTurn(opts: {
   evermind?: EvermindRunHooks;
   chatId?: number;
   prompt?: string;
+  recovery?: NativeBrainRunOptions["recovery"];
 }) {
   const gateway = fakeGateway(opts.script);
   const { events, log } = recorder();
@@ -110,6 +112,7 @@ async function runTurn(opts: {
     root: "/workspace",
     ...(opts.projectId != null ? { projectId: opts.projectId } : {}),
     ...(opts.evermind ? { evermind: opts.evermind } : {}),
+    ...(opts.recovery ? { recovery: opts.recovery } : {}),
     ...(opts.policyGates ? { policyGates: opts.policyGates } : {}),
     ...(opts.directives ? { directives: opts.directives } : {}),
     permissionMode: opts.permissionMode ?? "ask",
@@ -685,6 +688,113 @@ describe("chat ⇄ work linking", () => {
     // chat-scoped tools usable. Two copies of it would be the duplication this pass removed.
     expect(systemPrompt).toContain(`chatId=${chatId}`);
     expect(systemPrompt.match(/MODE: WORK/g)).toHaveLength(1);
+  });
+});
+
+// ── G22 — the participant's tool work is journaled for restart recovery ─────
+// COVERED offline: the journal's start/checkpoint/finish calls and the safeToResume
+// flags they carry. NOT covered: the next activation reading them back (that is
+// `runRecovery.test.ts` / `hostRunLifecycle.test.ts`); the user-facing notice (a live
+// host renders the ChatResponseStream).
+describe("restart-recovery journaling (G22)", () => {
+  /** A recording recovery-journal stub, in the InstalledRunRecovery journal shape. */
+  function journal() {
+    const started: Array<{ runId: string; chatId?: string | number }> = [];
+    const checkpoints: Array<{ runId: string; step: number; safeToResume: boolean }> = [];
+    const finished: Array<{ runId: string; status: string }> = [];
+    return {
+      started,
+      checkpoints,
+      finished,
+      recovery: {
+        recordStarted: async (a: { runId: string; chatId?: string | number }) => {
+          started.push(a);
+        },
+        recordCheckpoint: async (a: { runId: string; step: number; safeToResume: boolean }) => {
+          checkpoints.push(a);
+        },
+        recordFinished: async (a: { runId: string; status: string }) => {
+          finished.push(a);
+        },
+      },
+    };
+  }
+
+  it("journals start, one checkpoint per tool step, and a terminal finish", async () => {
+    const read = toolDef("read_file", { result: { content: "hi" } });
+    const write = toolDef("write_file", { mutating: true });
+    const j = journal();
+    await runTurn({
+      tools: [read, write],
+      recovery: j.recovery,
+      permissionMode: "acceptEdits",
+      script: (ctx) => {
+        if (ctx.turn === 0) return { toolCalls: [{ name: "read_file", args: { path: "a.ts" } }] };
+        if (ctx.turn === 1) return { toolCalls: [{ name: "write_file", args: { path: "b.ts" } }] };
+        return { text: "done" };
+      },
+    });
+
+    // One run, started before any step, finished completed after the last.
+    expect(j.started).toHaveLength(1);
+    expect(j.started[0]).toMatchObject({ chatId: expect.any(Number) });
+    expect(j.finished).toEqual([{ runId: j.started[0]!.runId, status: "completed" }]);
+    // One checkpoint per tool step, in order, steps 1..n.
+    expect(j.checkpoints.map((c) => c.step)).toEqual([1, 2]);
+    expect(j.checkpoints.every((c) => c.runId === j.started[0]!.runId)).toBe(true);
+  });
+
+  it("marks a checkpoint safeToResume only after a successful non-mutating local tool", async () => {
+    const read = toolDef("read_file");
+    const write = toolDef("write_file", { mutating: true });
+    const remote = toolDef("builtin_tasks_list", { remote: true });
+    const failing = toolDef("read_broken", { throws: "disk gone" });
+    const j = journal();
+    await runTurn({
+      tools: [read, write, remote, failing],
+      recovery: j.recovery,
+      permissionMode: "acceptEdits",
+      script: (ctx) => {
+        if (ctx.turn === 0) return { toolCalls: [{ name: "read_file", args: { path: "ok.ts" } }] };
+        if (ctx.turn === 1) return { toolCalls: [{ name: "write_file", args: { path: "w.ts" } }] };
+        if (ctx.turn === 2) return { toolCalls: [{ name: "builtin_tasks_list", args: {} }] };
+        if (ctx.turn === 3) return { toolCalls: [{ name: "read_broken", args: { path: "bad.ts" } }] };
+        return { text: "done" };
+      },
+    });
+
+    expect(j.checkpoints.map((c) => c.safeToResume)).toEqual([true, false, false, false]);
+  });
+
+  it("marks the run cancelled when the turn is stopped mid-run", async () => {
+    const read = toolDef("read_file");
+    const j = journal();
+    const abort = new AbortController();
+    const gateway = fakeGateway((ctx) =>
+      ctx.turn === 0 ? { toolCalls: [{ name: "read_file", args: { path: "a.ts" } }] } : { text: "done" },
+    );
+    const { events } = recorder();
+    const turn = runNativeBrain({
+      chatId: freshChatId(),
+      systemPrompt: "p",
+      seed: [],
+      userTurn: "go",
+      tools: [read],
+      root: "/workspace",
+      recovery: j.recovery,
+      permissionMode: "acceptEdits",
+      approve: async () => true,
+      stream: gateway.stream,
+      persistence: transientRunPersistence(),
+      signal: abort.signal,
+      labels: LABELS,
+      events,
+    });
+    // Stop the run while its single tool step is being journaled.
+    abort.abort();
+    await turn;
+
+    expect(j.finished).toEqual([{ runId: j.started[0]!.runId, status: "cancelled" }]);
   });
 });
 

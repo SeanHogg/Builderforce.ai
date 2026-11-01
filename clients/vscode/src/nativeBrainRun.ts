@@ -41,6 +41,7 @@ import { runRequestFields } from "./stageModels";
 import { createStreamRelay, exhaustedToolBudget, transientRunPersistence } from "./nativeRunStream";
 import { approvalRequestFor, createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs } from "./nativeRunTool";
 import type { NativeBrainRunOptions } from "./nativeRunTypes";
+import type { RunTerminalStatus } from "./runRecovery";
 
 // The run's contract, its tool bridge and its stream relay live in their own modules
 // (`nativeRunTypes.ts`, `nativeRunTool.ts`, `nativeRunStream.ts`); every name is re-exported
@@ -130,12 +131,38 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<boole
     runKey: chatId,
   });
   const repoReady = opts.repoReady;
+  const recovery = opts.recovery;
+  // The recovery journal (G22): one run id per turn, started before the loop, checkpointed
+  // after every tool step, finished with the terminal status. `recordStarted` is idempotent
+  // and swallows its own journal errors, so a journaling miss never fails the run — the
+  // next activation simply recovers whatever did commit.
+  const runId = `native:${chatId}:${Date.now().toString(36)}`;
+  let step = 0;
+  void recovery?.recordStarted({ runId, chatId });
+  const journalTool: typeof native = async (name, args, signal) => {
+    const out = await native(name, args, signal);
+    if (recovery) {
+      step += 1;
+      const def = tools.find((candidate) => candidate.name === name);
+      const failed = !!out && typeof out === "object" && (out as { ok?: unknown }).ok === false;
+      void recovery
+        .recordCheckpoint({
+          runId,
+          step,
+          // Only a successful, non-mutating, local tool may resume without human
+          // re-confirmation — the same rule the panel host's lifecycle sink applies.
+          safeToResume: !failed && !def?.mutating && !def?.remote,
+        })
+        .catch(() => undefined);
+    }
+    return out;
+  };
   const runTool: typeof native = repoReady
     ? async (name, args, signal) => {
         await repoReady;
-        return native(name, args, signal);
+        return journalTool(name, args, signal);
       }
-    : native;
+    : journalTool;
   // Governance rides in TWO places, both of them here: the gates are rendered as binding
   // system-prompt lines so the model is bound by the same policy on every surface, and
   // they are HARD-enforced at the tool seam above. Rendering it here (rather than in the
@@ -208,6 +235,19 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<boole
     void directives?.hooks.onRunEnd();
     // What the run held outside the loop (its background jobs) dies with it.
     opts.settleRun?.(chatId);
+    // Terminal status into the journal (G22): completed, failed, or cancelled (a Stop
+    // during the run). Once finished, the next activation never rewrites it — only a
+    // run the host died inside is recovered as interrupted.
+    if (recovery) {
+      const settledSnapshot = getRunSnapshot(chatId);
+      const stopped = signal.aborted;
+      const status: RunTerminalStatus = stopped
+        ? "cancelled"
+        : settledSnapshot.error
+          ? "failed"
+          : "completed";
+      void recovery.recordFinished({ runId, status }).catch(() => undefined);
+    }
   }
 
   if (signal.aborted) return true;

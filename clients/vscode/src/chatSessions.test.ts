@@ -41,6 +41,16 @@ describe("chatSessions stays a thin registration adapter", () => {
     expect(SOURCE).toContain("return undefined");
   });
 
+  it("rolls the list registrations back when content registration throws (half-granted proposal)", () => {
+    // On a stable build the methods EXIST and only throw when CALLED. If the list half
+    // registered but the content half threw, a dead tab (a list that opens onto nothing)
+    // would remain. The adapter must dispose what it registered and return undefined.
+    const code = SOURCE.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    // The rollback lives inside the catch that guards content registration.
+    expect(code).toMatch(/catch[\s\S]*?for \(const disposable of disposables\) disposable\.dispose\(\);/);
+    expect(code).toMatch(/catch[\s\S]*?disposables\.length = 0;/);
+  });
+
   it("records WHY the two per-tab surfaces do not converge", () => {
     // The decision is the artifact; losing it is how a resolved question re-opens.
     expect(SOURCE).toContain("Decision: the two per-tab surfaces do NOT converge");

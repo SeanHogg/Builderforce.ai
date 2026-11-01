@@ -20,6 +20,7 @@ import type { ToolDef } from "./fileTools";
 import type { PolicyGate } from "./policy";
 import type { EditorRunSettings } from "./stageModels";
 import type { RunDirectives } from "./hooks/runHooks";
+import type { InstalledRunRecovery } from "./installRunRecovery";
 
 /**
  * The native surface renders MARKDOWN, not the webview's `<BrainTimeline>`, so the
@@ -142,6 +143,13 @@ export interface NativeBrainRunOptions {
   /** The run's record of what it did and read — the per-turn ledger, and what the caller
    *  commits at run end (`recordEditorRunEnd`). Omitted ⇒ the loop keeps its own. */
   knowledge?: RunKnowledgeLog;
+  /**
+   * The restart-recovery journal (G22): start, per-step checkpoints and the terminal
+   * status of THIS run, so a restart during the turn is recovered as `interrupted`
+   * (surfaced to the user) instead of silently forgotten. Omitted ⇒ the run is not
+   * journaled (legacy callers / tests).
+   */
+  recovery?: Pick<InstalledRunRecovery, "recordStarted" | "recordCheckpoint" | "recordFinished">;
   signal: AbortSignal;
   labels: NativeRunLabels;
   events: NativeRunEvents;

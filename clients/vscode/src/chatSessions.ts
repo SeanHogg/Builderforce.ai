@@ -163,6 +163,11 @@ export function registerChatSessions(
       ) as vscode.Disposable,
     );
   } catch (e) {
+    // Content is the half that makes the tab USEFUL — a list with no bound chat is a
+    // dead tab. Roll the list registrations back too, so a half-granted proposal does
+    // not leave a tab that opens onto nothing.
+    for (const disposable of disposables) disposable.dispose();
+    disposables.length = 0;
     console.error(
       "[BuilderForce] chat-session content registration failed. On a packaged stable " +
         "VS Code this is expected unless the extension was launched with " +

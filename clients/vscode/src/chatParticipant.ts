@@ -31,6 +31,7 @@ import { whereDefinedOnce } from "./contextPack/preSearchSource";
 import { CONTEXT_PACK_DEADLINE_MS } from "./contextPack/deadline";
 import { nativeRunSetup } from "./runSetupPorts";
 import { priorBrainChatId, splitSystemPrompt } from "./participantSession";
+import { installRunRecovery } from "./installRunRecovery";
 
 const PARTICIPANT_ID = "builderforce.agent";
 
@@ -262,6 +263,31 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     // recorded or saved for it.
     let claimed = true;
     try {
+      // The restart-recovery journal (G22): the SAME WeakMap-cached handle activation and the
+      // run host installed, so this turn's tool work is journaled into the same `execution`
+      // records recovery reads on the next activation. `recordStarted` waits for activation
+      // recovery to commit first, so this start is never mis-marked interrupted.
+      const recovery = installRunRecovery(ctx);
+      // Surface a run of THIS chat the previous editor session left in flight (marked
+      // `interrupted` by activation recovery) — the turn that was working when VS Code
+      // restarted is reported, never silently forgotten. Only the chat's own run: another
+      // chat's interrupted work is not this turn's to announce.
+      const recoveredNotice = recovery.recovered
+        .then((runs) => {
+          const mine = runs.find((run) => String(run.record.payload.chatId ?? "") === String(runChatId));
+          if (!mine) return;
+          const safe = recovery.safeToResume(mine);
+          stream.markdown(
+            `\n\n_${vscode.l10n.t(
+              "A previous BuilderForce run in this chat was interrupted when VS Code restarted.{0}",
+              safe
+                ? vscode.l10n.t(" Its last step was safe to resume; ask again and the work continues.")
+                : vscode.l10n.t(" Re-ask and the work resumes from where it stopped."),
+            )}_\n`,
+          );
+        })
+        .catch(() => undefined); // Surfacing is best-effort; never fails the turn.
+      void recoveredNotice;
       claimed = await runNativeBrain({
         knowledge,
         // The local chat's view key is the run's cell key; the server chat (bound above,
@@ -307,6 +333,9 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
           local.usage,
           { chatId: runChatId, runKey: runChatId, mode: "work" },
         ),
+        // Journal this turn's tool work for restart recovery (G22): same handle as the
+        // panel's host, so a restart RESUMES a safe run or CLEANLY REPORTS it interrupted.
+        recovery,
         signal: abort.signal,
         approve: (req: NativeApprovalRequest) => confirmToolCall(req),
         labels: {
