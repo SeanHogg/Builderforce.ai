@@ -16,17 +16,17 @@ function stringDiff(a: string, b: string): string {
   return `differs at char ${i} of ${a.length}/${b.length}: a=${around(a)} b=${around(b)}`;
 }
 
-/** A record as the engines are compared: the agent-only reports are asserted separately (`oneReportPerRun`), not diffed. */
+/** A record as the engines are compared: the agent-only reports are asserted separately (`atMostOneReportPerRun`), not diffed. */
 export function comparable<T extends { agentOnly?: unknown }>(record: T): Omit<T, 'agentOnly'> {
   const { agentOnly: _agentOnly, ...rest } = record;
   return rest;
 }
 
-/** Every run that ended reported exactly once: a graded run's outcome, or the agent's record of an ungraded one. The loop reports only graded runs. */
-export function oneReportPerRun(engine: string, record: { outcome: { reported: unknown[]; ended: unknown[] }; agentOnly?: { recorded: unknown[] } }): string[] {
+/** No run is reported twice: a graded run's outcome XOR the agent's record of an ungraded one. A run that failed or was stopped before the agent finished has no uniform row, so it may report nothing. The loop reports only graded runs. */
+export function atMostOneReportPerRun(engine: string, record: { outcome: { reported: unknown[]; ended: unknown[] }; agentOnly?: { recorded: unknown[] } }): string[] {
   if (engine !== 'agent') return [];
   const reports = record.outcome.reported.length + (record.agentOnly?.recorded.length ?? 0);
-  return reports === record.outcome.ended.length ? [] : [`agent made ${reports} outcome report(s) for ${record.outcome.ended.length} run(s)`];
+  return reports <= record.outcome.ended.length ? [] : [`agent made ${reports} outcome report(s) for ${record.outcome.ended.length} run(s)`];
 }
 
 export function diffRecords(a: unknown, b: unknown, labels: [string, string] = ['loop', 'agent'], path = '$', out: string[] = []): string[] {

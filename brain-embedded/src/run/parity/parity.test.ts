@@ -8,7 +8,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { comparable, diffRecords, oneReportPerRun } from './diff';
+import { comparable, diffRecords, atMostOneReportPerRun } from './diff';
 import { runScenario } from './harness';
 import { scenarios } from './scenarios';
 
@@ -35,7 +35,7 @@ describe('the agent runs the Brain exactly as the loop does', () => {
       // The scenario must reach the behaviour it is named for on the loop; a scenario that never gets there proves nothing.
       const labels = new Set(Object.values(loop.trace).flat().map((e) => (e as { label: string }).label));
       expect([...(s.loopShows ?? [])].filter((l) => !labels.has(l)), 'trace labels the loop must show').toEqual([]);
-      expect(oneReportPerRun('agent', agent), 'the agent reports once per run').toEqual([]);
+      expect(atMostOneReportPerRun('agent', agent), 'the agent reports a run at most once').toEqual([]);
       expect(diffRecords(comparable(loop), comparable(agent))).toEqual([]);
     }, 60_000);
   }

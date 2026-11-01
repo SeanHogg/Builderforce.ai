@@ -26,7 +26,7 @@
  *     the agent, so they are dropped from `outcome.reported[]`. Every field the loop also sends (steps, model, source, merged,
  *     terminalStatus, clientRunId, ...) is compared as it is: a wrong `steps` stays a failure.
  *  8. `agentOnly.recorded` (the agent's `reportRunRecord`, for a run with no grade) is not compared with the loop, which has no such
- *     report; the suites assert instead that every run reports exactly once (`oneReportPerRun`).
+ *     report; the suites assert instead that no run reports twice (`atMostOneReportPerRun`).
  *
  * Nothing else is normalised: not message order, not step numbers, not counts, not wording.
  */
