@@ -12,6 +12,8 @@ concurrency:
 permissions:
   contents: read
   id-token: write
+  # `gh run list` in the test-oracle guard's base step reads this workflow's own run history.
+  actions: read
 
 env:
   NPM_CONFIG_FETCH_RETRIES: "5"
@@ -635,14 +637,24 @@ jobs:
       - uses: actions/checkout@v7
 
       # check:tests-unchanged reads test files as they were before the PRD 35 program (git show), which a depth-1 clone cannot.
-      - name: Full history for the test-oracle guard
+      #
+      # The guard's base is the head of the LAST SUCCESSFUL Release run on main, so a push that went red or was cancelled (this workflow
+      # cancels in progress) is judged again by the next one instead of being forgiven. It falls back to this push's own `before`, then to
+      # the guard's default (an empty range on a pushed main) when neither can be read.
+      - name: Full history and base for the test-oracle guard
+        id: oracle-base
         if: matrix.name == 'guards'
         env:
+          GH_TOKEN: ${{ github.token }}
           BEFORE: ${{ github.event.before }}
         run: |
           git fetch --unshallow --quiet || true
-          # The push's own base (AGENT_RUN_BASE on the guards step) is not an ancestor after a force-push: fetch it by id.
-          if [ -n "$BEFORE" ] && [ "${BEFORE#0000000}" = "$BEFORE" ]; then git fetch --quiet origin "$BEFORE" || true; fi
+          usable() { [ -n "$1" ] && [ "${1#0000000}" = "$1" ] && { git cat-file -e "$1^{commit}" 2>/dev/null || { git fetch --quiet origin "$1" 2>/dev/null && git cat-file -e "$1^{commit}" 2>/dev/null; }; }; }
+          LAST=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --branch main --status success --limit 1 --json headSha --jq '.[0].headSha' 2>/dev/null || true)
+          if usable "$LAST"; then BASE="$LAST"; echo "Guard base: last successful Release run $BASE"
+          elif usable "$BEFORE"; then BASE="$BEFORE"; echo "Guard base: this push's before $BASE (no readable last successful run)"
+          else BASE=""; echo "Guard base: none readable, the guard uses its default"; fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
 
       - uses: pnpm/action-setup@v6
         with:
@@ -667,9 +679,9 @@ jobs:
           # is what outgrew Node's default ~4 GiB heap.
           NODE_OPTIONS: --max-old-space-size=6144
           # check:tests-unchanged compares the oracle tests with this commit. Its default (origin/main) IS the pushed HEAD in CI, which
-          # would examine nothing; the push's own `before` makes it evaluate exactly what this push changed. Empty on a manual run, where
-          # the guard falls back to its default.
-          AGENT_RUN_BASE: ${{ github.event.before }}
+          # would examine nothing; the base chosen by the oracle-base step (last successful Release run) makes it evaluate everything
+          # shipped since the last green release. Empty on the other legs and when no base is readable: the guard falls back to its default.
+          AGENT_RUN_BASE: ${{ steps.oracle-base.outputs.base }}
         run: |
           pnpm install --frozen-lockfile
           # packages/agent-tools is compiled from source (tsconfig paths), and its imports of npm

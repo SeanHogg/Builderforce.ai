@@ -69,6 +69,8 @@ export default [
   // unshallows the clone first, because the originals are read from git history.
   ['check:one-execution', '../../scripts/check-one-execution.mjs', '--enforce'],
   ['check:tests-unchanged', '../../scripts/check-tests-unchanged.mjs'],
+  // The guard's own test: which paths it holds to section 5.1 (scripts/lib/oracleScope.mjs). Plain node:test, run with node.
+  ['check:tests-unchanged-scope', '../../scripts/lib/oracleScope.test.mjs'],
   // Per-file ratchet over raw `c.req.json` reads; parseBody (requestBody.ts) is the
   // one validated read. Seeded 2026-09-06; the counts can only fall.
   ['check:unvalidated-bodies', 'check-unvalidated-bodies.mjs'],

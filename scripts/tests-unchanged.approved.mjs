@@ -15,12 +15,6 @@ export const APPROVED_BY = 'planning model';
 
 /** @type {{ file: string; changed: string; reason: string; approvedBy: string; cases?: number }[]} */
 export const APPROVED = [
-  {
-    file: 'api/src/application/marketing/campaignEngine.test.ts',
-    changed: 'Statement-queue fixtures follow the per-batch do-not-contact read, the write-back returning its row and the ledger-counted finish; a provider rejection is an EmailDeliveryError.',
-    reason: 'Campaign delivery work, not this program: the behaviour changed on purpose, the assertions on what each test proves stand, and the review read the edits.',
-    approvedBy: APPROVED_BY,
-  },
   // ── brought-along pairs (new home <- original source test) ──
   {
     file: 'packages/agent-run/test/finish/finish.test.ts',
@@ -32,12 +26,6 @@ export const APPROVED = [
     file: 'packages/agent-run/test/verify/runEndMemory.test.ts',
     changed: 'The three run-end tail cases run over timeline and store.commitMemory port fakes instead of a stub Drizzle db; the seven pure cases are import-only.',
     reason: 'The cloud keeps the three original tail cases unchanged in api/.../runEndMemory.test.ts; these are additional port-level variants.',
-    approvedBy: APPROVED_BY,
-  },
-  {
-    file: 'clients/vscode/src/memoryCommit.test.ts',
-    changed: 'Deleted. Its readChangedExcerpt case moved, unchanged, to clients/vscode/src/changedExcerpt.test.ts; its other 13 cases are packages/agent-run/test/learnedFacts.test.ts, unchanged.',
-    reason: "PRD 35 WS7: memoryCommit.ts (the editor's twin of policy/memory/{learnedFacts,runKnowledgeCommit}.ts) is deleted; the editor imports the agent's module. Every one of the 13 cases runs unchanged against the one copy in packages/agent-run (the two files differ only in imports and in the readChangedExcerpt describe), and the one host-specific case lives with the workspace reader it tests.",
     approvedBy: APPROVED_BY,
   },
   {
@@ -92,18 +80,6 @@ export const APPROVED = [
   },
   // ── approved edits to existing tests ──
   {
-    file: 'agent-runtime/src/builderforce/agent-loop/handoff-pack.test.ts',
-    changed: 'packContextForModel calls and compactionSummary expectations (lines 57-116).',
-    reason: 'The stall hand-off moved into the agent; the test runs through its public seam.',
-    approvedBy: APPROVED_BY,
-  },
-  {
-    file: 'agent-runtime/src/builderforce/agent-loop/handoff-pack.levers.test.ts',
-    changed: 'Retargeted with handoff-pack.test.ts.',
-    reason: 'Same as handoff-pack.test.ts.',
-    approvedBy: APPROVED_BY,
-  },
-  {
     file: 'agent-runtime/src/run/channelHardening.test.ts',
     changed: 'Hand-off tests run over the real channel row shape; the tripped-breaker test reads the notice.',
     reason: 'Channel runs moved onto the agent (WS5 hardening).',
@@ -113,37 +89,6 @@ export const APPROVED = [
     file: 'packages/agent-run/test/channels/surfaceControls.test.ts',
     changed: 'Surface-control cases for the channel adapter.',
     reason: 'Channel runs moved onto the agent (WS5).',
-    approvedBy: APPROVED_BY,
-  },
-  {
-    file: 'api/src/application/runtime/containerSandboxJobs.test.ts',
-    changed: 'The foreground-cwd case renamed to "runs at the clone root" and its cwd lines dropped (587fcbdb4).',
-    reason: 'RunSandbox.run / /sandbox/run cwd retired (WS2f item 10).',
-    approvedBy: APPROVED_BY,
-  },
-  {
-    file: 'api/src/application/runtime/sandbox/sandboxJobs.test.ts',
-    changed: 'The foreground-cwd case dropped (587fcbdb4).',
-    reason: 'RunSandbox.run / /sandbox/run cwd retired (WS2f item 10).',
-    approvedBy: APPROVED_BY,
-    cases: 1,
-  },
-  {
-    file: 'api/src/application/runtime/sandbox/sandboxJobsToolLayer.test.ts',
-    changed: 'The foreground-cwd lines dropped (587fcbdb4).',
-    reason: 'RunSandbox.run / /sandbox/run cwd retired (WS2f item 10).',
-    approvedBy: APPROVED_BY,
-  },
-  {
-    file: 'api/src/infrastructure/repositories/ExecutionRepository.persistence.test.ts',
-    changed: 'update() is read to its own .returning(), not to the end of the file; completedAt leaves the update-set field list and is pinned in land().',
-    reason: 'update() no longer writes completedAt (a terminal status is refused by update()); the old end anchor no longer existed.',
-    approvedBy: APPROVED_BY,
-  },
-  {
-    file: 'packages/run-guards/src/readsWithoutSpawn.test.ts',
-    changed: 'Sixth read became the fourth read (the default delegation threshold is 4).',
-    reason: 'PRD 35 §8.4 budget: first spawn by turn 5 for a serial reader.',
     approvedBy: APPROVED_BY,
   },
   {
@@ -165,25 +110,6 @@ export const APPROVED = [
     approvedBy: APPROVED_BY,
   },
   {
-    file: 'brain-embedded/src/zzdbg.test.ts',
-    changed: 'Deleted.',
-    reason: 'A scratch debug file, never a behaviour test.',
-    approvedBy: APPROVED_BY,
-    cases: 1,
-  },
-  {
-    file: 'agent-runtime/src/agents/embedded-runner/run.policy-gates.test.ts',
-    changed: 'Host-policy-gates mock and own-gates cases for the channel governance work.',
-    reason: 'New-behaviour tests from the governance gate work on this program, reviewed.',
-    approvedBy: APPROVED_BY,
-  },
-  {
-    file: 'agent-runtime/src/infra/host-policy-gates.channel.test.ts',
-    changed: 'Model fixture and gate cases for the channel governance work.',
-    reason: 'New-behaviour tests from the governance gate work on this program, reviewed.',
-    approvedBy: APPROVED_BY,
-  },
-  {
     file: 'brain-embedded/src/run/webAdapter.test.ts',
     changed: 'The approved answer expectation now carries approved: true. runViaAgent became the test harness\'s runBound (same runAgent call over the same ports), and the run-store case is gone with cellRunStore. Then: runBound takes the bound run (its cell is no longer on the binding) and drives the production preflight module; every transport is built over a turn observer (plainTurn); the window case drops its `ports.model.preflight` assertion; the human-channel case keeps its `ask` assertion and drops the `approve` ones.',
     reason: 'Required by parity ruling R10. The cellRunStore case tested a store only the deleted second path used; the live store is brainRunStorePort (run/brainStore.ts), held by the parity snapshots. The Brain\'s production transport always has a turn observer (brainTurn.ts) and never reaches `ports.model.preflight` (run/preflightRecorded.ts replaces it), nor a governance approval (R10 keeps gates unbound), so those assertions proved only dead paths; the live preflight is pinned by the trace case (the preamble\'s check plus the recorded module) and by conformance.test.ts.',
@@ -200,12 +126,6 @@ export const APPROVED = [
     file: 'brain-embedded/src/runStore/engineRunRow.test.ts',
     changed: 'Deleted.',
     reason: "PRD 35 WS4 ship gate (operator order, 2026-10-31): the Brain's old loop (runLoop) and the engine switch are deleted. It ran a two-turn run on both engines to compare their `steps` rows; the one row per run is held by the agentRunReport and parity snapshots.",
-    approvedBy: APPROVED_BY,
-  },
-  {
-    file: 'clients/vscode/src/run/vscodeAdapter.test.ts',
-    changed: 'Deleted.',
-    reason: "PRD 35 WS4 ship gate (operator order, 2026-10-31): the Brain's old loop (runLoop) and the engine switch are deleted. vscodeBinding was called by nothing (the editor's run goes through startRun); the test exercised only it.",
     approvedBy: APPROVED_BY,
   },
   {
@@ -272,13 +192,6 @@ export const APPROVED = [
     file: 'brain-embedded/src/runStore/agentRunReport.test.ts',
     changed: 'The loop-engine case ("a run with no coder grade reports nothing") is deleted; the graded-run case runs once and pins the report\'s source, entry point and run id instead of comparing it with the loop\'s.',
     reason: "PRD 35 WS4 ship gate (operator order, 2026-10-31): the Brain's old loop (runLoop) and the engine switch are deleted. The deleted case asserted the loop's behaviour (no report), which is false of the one engine.",
-    approvedBy: APPROVED_BY,
-    cases: 1,
-  },
-  {
-    file: 'brain-embedded/src/runStore/runSpendBudget.test.ts',
-    changed: "The cases drove the loop's spend hooks; they now drive the agent's budget (usdBudget) over the Brain's tree meter (brainSpendMeter), the device's one price rule and the Brain's event sink. The wording cases import budgetWarning/budgetContainedReply from the agent (the unpriced count is a number, not an object). The convo/persistence side effects of the hooks are the agent's (kernelHooks) and held by the budget-warn-stop snapshot; persistBudgetStop is asserted directly. The run-state tag case is dropped (the agent builds the tail in kernelHooks; the snapshot pins the tagged row).",
-    reason: "PRD 35 WS4 ship gate (operator order, 2026-10-31): the Brain's old loop (runLoop) and the engine switch are deleted. The hooks are deleted with runLoop; every price, tree and wording case is kept on the seams that carry it.",
     approvedBy: APPROVED_BY,
     cases: 1,
   },

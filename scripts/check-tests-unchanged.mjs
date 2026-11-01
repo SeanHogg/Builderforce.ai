@@ -12,7 +12,7 @@
  *      uncommitted edits alike). The oracle is scoped by PATH, never by commit subject, so a change committed as "Fixes" is seen:
  *      every file in `brain-embedded/src/run/parity/oracle.files.txt` (as at BASE or now, so dropping a line frees nothing), the
  *      packages/agent-run tests, the kernel's own tests, the agent-runtime run tests, the conformance tests, the Brain parity directory
- *      and the list itself (see `GUARDED`). The base is the merge base of BASE and HEAD. Parity snapshots must match exactly.
+ *      and the list itself (see `lib/oracleScope.mjs`). The base is the merge base of BASE and HEAD. Parity snapshots must match exactly.
  *      A test outside that set is ordinary feature work and is not examined. BASE defaults to `origin/main` (what has not been pushed), or `HEAD` where that is not readable; CI sets `AGENT_RUN_BASE` to the push's own `before` commit, because
  *      on a pushed main `origin/main` IS `HEAD`. The body is compared with BASE's after imports and `vi.mock` paths are normalised
  *      away. A deleted file (or one moved away) is always a failure unless approved.
@@ -30,30 +30,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { collectSourceFiles, toPosix } from './lib/moduleImports.mjs';
+import { EXACT, isGuarded, ORACLE_LIST, parseOracleList } from './lib/oracleScope.mjs';
 import { APPROVED, PROGRAM_BASE } from './tests-unchanged.approved.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 const BROUGHT_ALONG_DIR = 'packages/agent-run/test';
-/** The Brain's run-store oracle: one list for every package (`runOracle.mjs <pkg>` filters it by prefix). */
-const ORACLE_LIST = 'brain-embedded/src/run/parity/oracle.files.txt';
-/**
- * The rest of the program's oracle, by path. Anything matching is held to §5.1 whoever committed it and whatever the subject says.
- * Every file under the agent-run test tree counts (fixtures and helpers too, not only `*.test.ts`), as does the whole Brain parity
- * directory (its snapshots, scenarios and normaliser decide what the snapshots prove) and the Brain's run harnesses. The oracle list
- * itself is guarded by `oracleEdited` (a dropped line would free its test).
- */
-const GUARDED = [
-  /^packages\/agent-run\/test\//,
-  /^packages\/agent-loop\/.*\.test\.[cm]?[jt]sx?$/,
-  /^agent-runtime\/src\/run\/[^/]+\.test\.[cm]?[jt]sx?$/,
-  /^agent-runtime\/src\/conformance\//,
-  /^api\/src\/application\/runtime\/cloudAdapter\.(?:conformance|sharedTask)\.test\.ts$/,
-  /^brain-embedded\/src\/run\/parity\//,
-  /^brain-embedded\/src\/test\/(?:brainRunHarness|continueHarness|draftHost|engineKit)\.tsx?$/,
-];
-/** Stored records, not code: any difference at all (an inserted key, a changed value) fails unless approved. */
-const EXACT = /^brain-embedded\/src\/run\/parity\/snapshots\//;
 /** Skip markers the repository holds today (all outside this program's tests). It may only fall. */
 const SKIP_MARKER_BASELINE = 21;
 
@@ -172,16 +154,15 @@ function diffBase() {
 /** Oracle-list entries (repo-relative paths) as the list reads at `ref`, or in the working tree when `ref` is null. */
 function oracleListed(ref) {
   const text = ref === null ? (existsSync(resolve(repoRoot, ORACLE_LIST)) ? readFileSync(resolve(repoRoot, ORACLE_LIST), 'utf8') : null) : at(ref, ORACLE_LIST);
-  return (text ?? '').split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith('#'));
+  return parseOracleList(text);
 }
 
 /** Files of the program's oracle that differ from BASE: modified or deleted, since BASE or uncommitted. Not by commit subject. */
 function oracleEdited(base) {
   const listed = new Set([...oracleListed(base), ...oracleListed(null)]);
-  const guarded = (name) => name === ORACLE_LIST || listed.has(name) || GUARDED.some((pattern) => pattern.test(name));
   // --no-renames: a moved oracle file is a deletion of the original (and an added file), never a quiet rename. T: a file turned symlink.
   const names = git(['diff', '--name-only', '--no-renames', '--diff-filter=MDT', base]).split('\n');
-  return new Set(names.map((name) => name.trim()).filter((name) => name && guarded(name)));
+  return new Set(names.map((name) => name.trim()).filter((name) => name && isGuarded(name, listed)));
 }
 
 if (baseReadable) {
