@@ -35790,6 +35790,8 @@
     "retry": "Try again",
     "emptyTitle": "No folder reviewed yet",
     "emptyBody": "Point it at a folder of code or documents. It reads every file once, builds a graph of what the folder says and how it connects, and remembers it, so questions are answered without reading the files again.",
+    "loadFailedTitle": "The review didn’t finish saving",
+    "loadFailedBody": "This folder has a review, but its graph could not be loaded — the review may have been cut short. Retry the load, or review the folder again to rebuild it.",
     "reviewFolder": "Review a folder",
     "reviewTargetsLabel": "What to review",
     "targets": {

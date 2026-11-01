@@ -25,6 +25,9 @@ export interface KnowledgeGraphLabels {
     retry: string;
     emptyTitle: string;
     emptyBody: string;
+    /** A review EXISTS (a scope) but its graph could not be loaded — not the same as never reviewed. */
+    loadFailedTitle: string;
+    loadFailedBody: string;
     reviewFolder: string;
     reviewTargetsLabel: string;
     targets: Record<ReviewTarget['kind'], string>;
@@ -154,6 +157,8 @@ export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {
     retry: 'Try again',
     emptyTitle: 'No folder reviewed yet',
     emptyBody: 'Point it at a folder of code or documents. It reads every file once, builds a graph of what the folder says and how it connects, and remembers it, so questions are answered without reading the files again.',
+    loadFailedTitle: 'The review didn’t finish saving',
+    loadFailedBody: 'This folder has a review, but its graph could not be loaded — the review may have been cut short. Retry the load, or review the folder again to rebuild it.',
     reviewFolder: 'Review a folder',
     reviewTargetsLabel: 'What to review',
     targets: { workspace: 'This workspace’s files', upload: 'A folder on this device', drive: 'A connected drive', folder: 'A folder' },

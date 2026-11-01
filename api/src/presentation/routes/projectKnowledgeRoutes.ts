@@ -11,6 +11,8 @@
  *                                                           a past review digest (Compare's baseline)
  *   POST /:projectId/knowledge/write                        the single writer (≤ 500 rows)
  *   GET  /:projectId/knowledge/extracted/:hash              extracted output by content hash
+ *   POST /:projectId/knowledge/extracted/bulk               extracted outputs for a batch of hashes
+ *                                                           (one miss yields entries: null, not 404)
  *   PUT  /:projectId/knowledge/extracted/:hash              … upload (≤ 1 MB)
  *   PUT  /:projectId/code-analysis/:sha?root=               code-pack analyzer snapshot (≤ 2 MB), stored per root
  *                                                           and sha (a root's paths are its own)
@@ -126,6 +128,9 @@ const JudgeBody = z.object({
   kind: z.enum(['extract', 'compare']),
   items: z.array(z.object({ ref: zRef, text: z.string().max(20_000), sourceHash: z.string().max(160) })).min(1).max(MAX_JUDGE_ITEMS),
 });
+const BulkExtractedBody = z.object({
+  hashes: z.array(z.string().regex(KNOWLEDGE_HASH_PATTERN)).min(1).max(500),
+});
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const pid = (c: Context): number => Number(c.req.param('projectId'));
@@ -213,6 +218,15 @@ export function createProjectKnowledgeRoutes(db: Db, door: FrontDoor = tenantDoo
     if (!KNOWLEDGE_HASH_PATTERN.test(hash)) return json({ error: 'invalid hash' }, 400);
     const extracted = await p.extracted.get(hash);
     return extracted ? json({ extracted }) : json({ error: 'not found' }, 404);
+  }));
+
+  router.post('/:projectId/knowledge/extracted/bulk', (c) => withPorts(c, async (p) => {
+    if (declaredTooLarge(c, MAX_EXTRACTED_BYTES * 4)) return tooLarge(MAX_EXTRACTED_BYTES * 4);
+    const body = await parseBody(c, BulkExtractedBody);
+    if (byteLength(body) > MAX_EXTRACTED_BYTES * 4) return tooLarge(MAX_EXTRACTED_BYTES * 4);
+    const get = p.extracted.get?.bind(p.extracted);
+    const extracted = await Promise.all(body.hashes.map(async (hash) => ({ hash, entries: (get ? await get(hash) : null) ?? null })));
+    return json({ extracted });
   }));
 
   router.put('/:projectId/knowledge/extracted/:hash', (c) => withPorts(c, async (p) => {

@@ -2,8 +2,10 @@
  * The knowledge routes (PRD 38 §4.8): tenancy is refused before any port exists, the
  * write and upload bounds answer 413/400, and `maxNodes` reaches the use case capped.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { Hono } from 'hono';
 import { TenantRole } from '../../domain/shared/types';
+import type { HonoEnv } from '../../env';
 
 const TENANT = 8;
 const mocks = vi.hoisted(() => ({
@@ -42,9 +44,19 @@ vi.mock('../../application/knowledge/getKnowledgeGraph', async (importOriginal) 
 
 import { createProjectKnowledgeRoutes } from './projectKnowledgeRoutes';
 import type { FrontDoor } from '../middleware/frontDoor';
+import { errorHandler } from '../middleware/errorHandler';
 
 const db = {} as never;
 const routes = () => createProjectKnowledgeRoutes(db);
+/** The bulk route's schema refusal throws `RequestValidationError`, which the app answers
+ *  through `app.onError(errorHandler)` (see index.ts); the sub-router alone has no error
+ *  handler, so mount one for the tests that assert a 400. */
+const appWithErrors = () => {
+  const app = new Hono<HonoEnv>();
+  app.onError(errorHandler);
+  app.route('/', routes());
+  return app;
+};
 /** The agent-host key door, as `hostKeyAuth` publishes a host's identity. */
 const hostDoor: FrontDoor = {
   agentHost: true,
@@ -295,6 +307,82 @@ describe('project knowledge routes', () => {
       expect(res.status).toBe(200);
       expect((mocks.upsertFact.mock.calls[0] as unknown[])[5]).toBe('l1\nl2\nl3');
     });
+  });
+});
+
+describe('POST /:projectId/knowledge/extracted/bulk', () => {
+  it('returns the entries for known hashes and null for unknown ones, one miss not failing the batch', async () => {
+    const entries = [{ sourceRef: 'src:r::a.md', sourceHash: 'h1', nodes: [], edges: [], keys: [] }];
+    const get = vi.fn(async (hash: string) => (hash === 'h1' ? entries : undefined));
+    mocks.ports.mockImplementation((_e: unknown, _d: unknown, tenantId: number, projectId: number) => ({
+      env: {}, db, tenantId, projectId,
+      store: {},
+      extracted: { get, setSource: vi.fn(), snapshotReview: vi.fn() },
+      graph: { repo: { linked: async () => null } },
+      index: {},
+    }));
+    const res = await routes().request('/42/knowledge/extracted/bulk', post({ hashes: ['h1', 'h2'] }), {});
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ extracted: [{ hash: 'h1', entries }, { hash: 'h2', entries: null }] });
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it('tolerates a ports mock without extracted.get, answering null entries', async () => {
+    // The default beforeEach mock only gives extracted: { setSource, snapshotReview } —
+    // one unknown hash must not fail the batch.
+    const res = await routes().request('/42/knowledge/extracted/bulk', post({ hashes: ['h1'] }), {});
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ extracted: [{ hash: 'h1', entries: null }] });
+  });
+
+  it('answers 400 for an invalid hash', async () => {
+    const res = await appWithErrors().request('/42/knowledge/extracted/bulk', post({ hashes: ['bad hash!'] }), {});
+    expect(res.status).toBe(400);
+  });
+
+  it('answers 400 for an empty or over-500 batch', async () => {
+    expect((await appWithErrors().request('/42/knowledge/extracted/bulk', post({ hashes: [] }), {})).status).toBe(400);
+    expect((await appWithErrors().request('/42/knowledge/extracted/bulk', post({ hashes: Array.from({ length: 501 }, (_, i) => `h${i}`) }), {})).status).toBe(400);
+  });
+
+  it('answers a body declaring more than 4× the extracted bound with 413, before parsing', async () => {
+    // The 4× bound is a generous DoS guard: 500 hashes of ≤160 chars can never reach it from a
+    // schema-valid body, so the refusal path is the DECLARED content-length — a real oversized
+    // upload is refused before it is ever read.
+    const res = await routes().request('/42/knowledge/extracted/bulk', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-length': String(4 * 1024 * 1024 + 1) },
+      body: JSON.stringify({ hashes: ['h1'] }),
+    }, {});
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({ code: 'payload_too_large' });
+  });
+
+  it('works behind the host door', async () => {
+    mocks.ports.mockImplementation((_e: unknown, _d: unknown, tenantId: number, projectId: number) => ({
+      env: {}, db, tenantId, projectId,
+      store: {},
+      extracted: { get: vi.fn(async () => [{ sourceRef: 'src:r::a.md', sourceHash: 'h1', nodes: [], edges: [], keys: [] }]), setSource: vi.fn(), snapshotReview: vi.fn() },
+      graph: { repo: { linked: async () => null } },
+      index: {},
+    }));
+    const res = await hostRoutes().request('/42/knowledge/extracted/bulk', post({ hashes: ['h1'] }), {});
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { extracted: unknown[] }).extracted).toHaveLength(1);
+  });
+
+  it('does not bump the knowledge version on a read', async () => {
+    mocks.version.n = 0;
+    mocks.ports.mockImplementation((_e: unknown, _d: unknown, tenantId: number, projectId: number) => ({
+      env: {}, db, tenantId, projectId,
+      store: {},
+      extracted: { get: vi.fn(async () => []), setSource: vi.fn(), snapshotReview: vi.fn() },
+      graph: { repo: { linked: async () => null } },
+      index: {},
+    }));
+    const res = await routes().request('/42/knowledge/extracted/bulk', post({ hashes: ['h1'] }), {});
+    expect(res.status).toBe(200);
+    expect(mocks.bump).not.toHaveBeenCalled();
   });
 });
 

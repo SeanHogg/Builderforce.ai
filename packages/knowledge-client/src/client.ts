@@ -19,7 +19,15 @@
  *                     at graph build from the anchor hash vs the source's current hash.
  *   judgeEstimate()   GET  …/knowledge/judge/estimate → ≈ USD of one judged section (+ local)
  *   getExtracted      GET  …/knowledge/extracted/:hash (404 → undefined)
- *   putExtracted      PUT  …/knowledge/extracted/:hash
+ *   putExtracted      PUT  …/knowledge/extracted/:hash — a 413 (payload_too_large) is SKIPPED
+ *                     and counted on `store.skippedTooLarge`, never thrown; a 400
+ *                     source_hash_mismatch still throws
+ *   preloadExtracted  POST …/knowledge/extracted/bulk in chunks of PRELOAD_CHUNK hashes —
+ *                     a best-effort hint: returned entries are cached per hash and
+ *                     `getExtracted` then answers without a round trip; it NEVER throws,
+ *                     per-file getExtracted stays the fallback
+ *   batched(work)     identity — the server is the single writer and `write()` already puts
+ *                     the scope on the last chunk, so there is nothing to flush locally
  *
  * `relations` are read back from the server-built graph (edges whose origin is stored),
  * since the server is the only reader of the tables — what a re-review needs to re-anchor
@@ -35,6 +43,7 @@ import type {
   JudgementRequest,
   JudgementResult,
   KnowledgeGraph,
+  KnowledgeStore,
   NodeRef,
   Scope,
   ScopeRecord,
@@ -58,6 +67,23 @@ export const MAX_WRITE_ROWS = 500;
 export const DEFAULT_KNOWLEDGE_BASE_PATH = '/api/projects';
 /** The widest graph the server builds; `relations` read it. */
 const STORE_READ_MAX_NODES = 2000;
+/** Hashes per `preloadExtracted` bulk call. */
+const PRELOAD_CHUNK = 200;
+/** Bounded retry on HTTP 429 (rate limited): at most this many retries, delay capped below. */
+const MAX_429_RETRIES = 3;
+/** Upper bound (ms) for the Retry-After-derived 429 backoff. */
+const MAX_RETRY_DELAY_MS = 5000;
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** `Retry-After` in seconds, from the header or `null` when absent/unusable. */
+function retryAfterMs(res: Response): number | null {
+  const raw = res.headers.get('retry-after');
+  if (raw == null) return null;
+  const seconds = Number(raw);
+  if (!Number.isFinite(seconds) || seconds < 0) return null;
+  return Math.min(seconds * 1000, MAX_RETRY_DELAY_MS);
+}
 
 type Row =
   | { t: 'fact'; v: StoredFact }
@@ -90,7 +116,32 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
     return res;
   };
 
+  /**
+   * `call` with bounded retry on HTTP 429: honors the `Retry-After` header (seconds, capped
+   * at 5s), at most 3 retries. Only for idempotent knowledge/extracted GET/PUT and bulk POSTs —
+   * never for the judge POST (a retried judgement could double-bill).
+   */
+  const callRetried = async (path: string, init?: RequestInit): Promise<Response> => {
+    for (let attempt = 0; ; attempt++) {
+      let res: Response;
+      try {
+        res = await opts.fetch(`${base}${path}`, init);
+      } catch (error) {
+        throw new KnowledgeApiError(0, 'network', error instanceof Error ? error.message : String(error));
+      }
+      if (res.ok) return res;
+      if (res.status === 429 && attempt < MAX_429_RETRIES) {
+        await sleep(retryAfterMs(res) ?? 0);
+        continue;
+      }
+      throw await errorOf(res);
+    }
+  };
+
   const jsonCall = async <T>(path: string, init?: RequestInit): Promise<T> => (await call(path, init)).json() as Promise<T>;
+
+  /** `jsonCall` over `callRetried` (429-resilient). */
+  const jsonCallRetried = async <T>(path: string, init?: RequestInit): Promise<T> => (await callRetried(path, init)).json() as Promise<T>;
 
   const send = (method: 'POST' | 'PUT', body: unknown): RequestInit => ({
     method,
@@ -171,12 +222,31 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
   };
 
   const putExtracted = async (hash: string, extracted: Extracted[]): Promise<void> => {
-    await call(`/knowledge/extracted/${encodeURIComponent(hash)}`, send('PUT', extracted));
+    try {
+      await callRetried(`/knowledge/extracted/${encodeURIComponent(hash)}`, send('PUT', extracted));
+    } catch (error) {
+      // payload_too_large: the file's extracted output exceeds the server's 1MB bound. Skip and
+      // count — the review keeps going and the file's facts are still written. Anything else
+      // (e.g. 400 source_hash_mismatch) still throws.
+      if (error instanceof KnowledgeApiError && error.status === 413) {
+        skippedTooLarge += 1;
+        return;
+      }
+      throw error;
+    }
   };
 
-  return {
-    store: {
-      scopes,
+  // ---------------------------------------------------------------------------
+  // Extracted cache: `preloadExtracted` fills it from the bulk route; `getExtracted`
+  // answers a cached hash (including cached misses) without a round trip.
+  // ---------------------------------------------------------------------------
+  const extractedCache = new Map<string, Extracted[] | undefined>();
+  let skippedTooLarge = 0;
+
+  // The client store exposes KnowledgeStore plus the 413-skip counter (not part of the
+  // interface — a host reads it for progress/reporting).
+  const store: KnowledgeStore & { readonly skippedTooLarge: number } = {
+    scopes,
       facts: async (scope) => (await facts(scope.rootId))?.facts ?? [],
       relations: relationsOf,
       write: (batch) => write(batch),
@@ -184,11 +254,47 @@ export function createKnowledgeClient(opts: KnowledgeClientOptions): KnowledgeCl
         await call('/knowledge/write', send('POST', { facts: [], relations: [], stale: [{ sourceRef, currentHash }] }));
       },
       getExtracted: async (hash) => {
-        const out = await orNull(jsonCall<{ extracted: Extracted[] }>(`/knowledge/extracted/${encodeURIComponent(hash)}`));
+        if (extractedCache.has(hash)) return extractedCache.get(hash);
+        const out = await orNull(jsonCallRetried<{ extracted: Extracted[] }>(`/knowledge/extracted/${encodeURIComponent(hash)}`));
         return out?.extracted;
       },
       putExtracted,
-    },
+      /**
+       * Best-effort bulk hint: POSTs the hashes to `/knowledge/extracted/bulk` in chunks of
+       * ~200 and caches every returned entry (including nulls = cache misses) by hash. NEVER
+       * throws — on any failure the cache simply stays empty for those hashes and per-file
+       * `getExtracted` remains the fallback.
+       */
+      preloadExtracted: async (hashes: readonly string[]) => {
+        try {
+          const distinct = [...new Set(hashes)];
+          for (let i = 0; i < distinct.length; i += PRELOAD_CHUNK) {
+            const chunk = distinct.slice(i, i + PRELOAD_CHUNK);
+            const out = await orNull(jsonCallRetried<{ extracted: Array<{ hash: string; entries: Extracted[] | null }> }>(
+              '/knowledge/extracted/bulk',
+              send('POST', { hashes: chunk }),
+            ));
+            for (const row of out?.extracted ?? []) {
+              extractedCache.set(row.hash, row.entries ?? undefined);
+            }
+          }
+        } catch {
+          // Best-effort by contract: a failed preload must not abort the review.
+        }
+      },
+      /**
+       * Identity: the server is the single writer and `write()` already rides the scope on the
+       * last chunk, so there is nothing to flush or bound locally — `work` runs as-is.
+       */
+      batched: async <T>(work: (flush: () => Promise<void>) => Promise<T>): Promise<T> => work(async () => {}),
+      /** Count of `putExtracted` calls skipped because the payload was too large (HTTP 413). */
+      get skippedTooLarge(): number {
+        return skippedTooLarge;
+      },
+  };
+
+  return {
+    store,
     judgement: {
       judge: (req: JudgementRequest): Promise<JudgementResult> =>
         jsonCall<JudgementResult>('/knowledge/judge', {

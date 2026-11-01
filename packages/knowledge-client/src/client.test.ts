@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { StoredFact, StoredRelation } from '@seanhogg/builderforce-memory/knowledge';
 import { createKnowledgeClient, MAX_WRITE_ROWS } from './client.js';
 import { KnowledgeApiError } from './types.js';
@@ -144,6 +144,119 @@ describe('createKnowledgeClient', () => {
     const client = createKnowledgeClient({ fetch, projectId: 4 });
     expect(await client.facts('nope')).toBeNull();
     expect(await client.store.facts({ rootId: 'nope' })).toEqual([]);
+  });
+
+  it('preloads extracted in one bulk POST and answers preloaded hashes without further calls', async () => {
+    const { fetch, seen } = fakeFetch((path) => (path.includes('/extracted/bulk')
+      ? json({ extracted: [{ hash: 'h1', entries: [{ kind: 'symbol', name: 'a', file: 'a.ts' }] }, { hash: 'h2', entries: null }] })
+      : json({ extracted: [{ kind: 'symbol', name: 'live', file: 'b.ts' }] })));
+    const client = createKnowledgeClient({ fetch, projectId: 6 });
+    await client.store.preloadExtracted!(['h1', 'h2', 'h1']);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ path: '/api/projects/6/knowledge/extracted/bulk', method: 'POST', body: { hashes: ['h1', 'h2'] } });
+    // Preloaded hit: answered from the cache, no network call.
+    expect(await client.store.getExtracted!('h1')).toEqual([{ kind: 'symbol', name: 'a', file: 'a.ts' }]);
+    // Preloaded miss (entries: null): also answered from the cache, no network call.
+    expect(await client.store.getExtracted!('h2')).toBeUndefined();
+    expect(seen).toHaveLength(1);
+    // Unknown hash falls through to the per-file GET.
+    expect(await client.store.getExtracted!('h3')).toEqual([{ kind: 'symbol', name: 'live', file: 'b.ts' }]);
+    expect(seen[1]).toMatchObject({ path: '/api/projects/6/knowledge/extracted/h3', method: 'GET' });
+  });
+
+  it('chunks a large preload into bulk POSTs of ~200 hashes', async () => {
+    const { fetch, seen } = fakeFetch(() => json({ extracted: [] }));
+    const client = createKnowledgeClient({ fetch, projectId: 6 });
+    const hashes = Array.from({ length: 450 }, (_, i) => `h${i}`);
+    await client.store.preloadExtracted!(hashes);
+    expect(seen).toHaveLength(3);
+    expect((seen[0]!.body as { hashes: string[] }).hashes).toHaveLength(200);
+    expect((seen[1]!.body as { hashes: string[] }).hashes).toHaveLength(200);
+    expect((seen[2]!.body as { hashes: string[] }).hashes).toHaveLength(50);
+  });
+
+  it('preloadExtracted never throws, even when the bulk call fails', async () => {
+    const { fetch } = fakeFetch(() => json({ error: 'boom' }, 500));
+    const client = createKnowledgeClient({ fetch, projectId: 6 });
+    await expect(client.store.preloadExtracted!(['h1'])).resolves.toBeUndefined();
+  });
+
+  it('retries a 429 honoring Retry-After, then succeeds', async () => {
+    vi.useFakeTimers();
+    try {
+      let calls = 0;
+      const { fetch, seen } = fakeFetch((path) => {
+        calls += 1;
+        return calls < 3 ? new Response(JSON.stringify({ error: 'slow down' }), { status: 429, headers: { 'Retry-After': '1', 'Content-Type': 'application/json' } }) : json({ extracted: [] });
+      });
+      const client = createKnowledgeClient({ fetch, projectId: 8 });
+      const p = client.store.getExtracted!('h1');
+      // Two 1s backoffs (capped at 5s) then the success.
+      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(1000);
+      await expect(p).resolves.toEqual([]);
+      expect(seen).toHaveLength(3);
+      expect(seen.every((s) => s.path === '/api/projects/8/knowledge/extracted/h1')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up after 3 retries on a persistent 429', async () => {
+    vi.useFakeTimers();
+    try {
+      const { fetch, seen } = fakeFetch(() => new Response(JSON.stringify({ error: 'slow down' }), { status: 429, headers: { 'Retry-After': '0', 'Content-Type': 'application/json' } }));
+      const client = createKnowledgeClient({ fetch, projectId: 8 });
+      const p = client.store.getExtracted!('h1').then(() => 'ok', (e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(10_000);
+      const err = await p;
+      expect(err).toBeInstanceOf(KnowledgeApiError);
+      expect((err as KnowledgeApiError).status).toBe(429);
+      expect(seen).toHaveLength(4); // 1 original + 3 retries
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does NOT retry the judge POST on a 429', async () => {
+    const { fetch, seen } = fakeFetch(() => new Response(JSON.stringify({ error: 'slow down' }), { status: 429, headers: { 'Content-Type': 'application/json' } }));
+    const client = createKnowledgeClient({ fetch, projectId: 8 });
+    await expect(client.judgement.judge({ kind: 'claims', items: [] } as never)).rejects.toMatchObject({ status: 429 });
+    expect(seen).toHaveLength(1);
+  });
+
+  it('skips and counts a 413 on putExtracted instead of throwing', async () => {
+    const { fetch, seen } = fakeFetch(() => json({ error: 'payload_too_large', code: 'payload_too_large' }, 413));
+    const client = createKnowledgeClient({ fetch, projectId: 9 });
+    await expect(client.store.putExtracted!('h1', [])).resolves.toBeUndefined();
+    await expect(client.putExtracted('h2', [])).resolves.toBeUndefined();
+    expect((client.store as { skippedTooLarge: number }).skippedTooLarge).toBe(2);
+    expect(seen).toHaveLength(2);
+  });
+
+  it('still throws a 400 source_hash_mismatch from putExtracted', async () => {
+    const { fetch } = fakeFetch(() => json({ error: 'hash mismatch', code: 'source_hash_mismatch' }, 400));
+    const client = createKnowledgeClient({ fetch, projectId: 9 });
+    await expect(client.store.putExtracted!('h1', [])).rejects.toMatchObject({ status: 400, code: 'source_hash_mismatch' });
+    expect((client.store as { skippedTooLarge: number }).skippedTooLarge).toBe(0);
+  });
+
+  it('store.batched runs the work as-is; writes inside it still chunk with scope on the last chunk', async () => {
+    const { fetch, seen } = fakeFetch();
+    const client = createKnowledgeClient({ fetch, projectId: 10 });
+    let flushable = false;
+    const out = await client.store.batched!(async (flush) => {
+      flushable = true;
+      await flush(); // identity: a no-op, must not throw
+      await client.store.write({ scope, facts: Array.from({ length: 600 }, (_, i) => fact(i)) });
+      return 'done';
+    });
+    expect(out).toBe('done');
+    expect(flushable).toBe(true);
+    expect(seen.map((s) => s.path)).toEqual(Array(2).fill('/api/projects/10/knowledge/write'));
+    const sizes = seen.map((s) => (s.body as { facts: unknown[] }).facts.length);
+    expect(sizes).toEqual([MAX_WRITE_ROWS, 100]);
+    expect(seen.map((s) => 'scope' in (s.body as object))).toEqual([false, true]);
   });
 
   it('reads the judge estimate from the project’s door, keeping a null price and a local flag', async () => {

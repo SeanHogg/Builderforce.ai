@@ -6,12 +6,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import { LENSES, lensApplies, lensesFor, type LensDef } from './lenses';
+import { LENSES, lensApplies, lensFindings, lensesFor, type LensDef } from './lenses';
 import { localSearch } from './graphModel';
 import { useReviewRun, type ReviewRun } from './useReviewRun';
 import type { KnowledgeBaseline, KnowledgeGraphSource, KnowledgeScopeSummary, KnowledgeSearchHit, LensId } from './types';
 
-export type GraphStatus = 'loading' | 'empty' | 'ready' | 'error';
+export type GraphStatus = 'loading' | 'empty' | 'load-failed' | 'ready' | 'error';
 
 export interface KnowledgeGraphState {
     status: GraphStatus;
@@ -39,6 +39,9 @@ export interface KnowledgeGraphState {
 
 const newestFirst = (a: KnowledgeScopeSummary, b: KnowledgeScopeSummary): number =>
     (b.lastReviewedAt ?? '').localeCompare(a.lastReviewedAt ?? '') || a.title.localeCompare(b.title);
+
+/** The lenses a graph with findings should open on, in preference order (first that applies AND has findings). */
+const FINDINGS_FIRST: readonly LensId[] = ['unused', 'partitions', 'duplication', 'knowledge', 'structure'];
 
 export interface KnowledgeGraphOptions {
     initialLens?: LensId;
@@ -109,9 +112,11 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
                 baselineMemo.current = { source, key, value: base };
                 setGraph(g);
                 setBaseline(base);
-                setStatus(g ? 'ready' : 'empty');
+                // A scope EXISTS (rootId was picked) but its graph is gone or unreadable: this is
+                // NOT "never reviewed" — say the load failed so the view can offer Retry.
+                setStatus(g ? 'ready' : 'load-failed');
             })
-            .catch(() => { if (live && !refocus) setStatus('error'); });
+            .catch(() => { if (live && !refocus) setStatus('load-failed'); });
         return () => { live = false; };
     }, [source, held, rootId, generation, loadFocus]);
 
@@ -143,6 +148,23 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
         if (!shown || (lensApplies(wanted, shown) && (!allowed || allowed.includes(wanted.id)))) return wanted;
         return lenses[0] ?? LENSES.structure;
     }, [shown, lensId, lenses, allowed]);
+
+    // Open a READY graph on a lens that SHOWS its findings instead of always 'structure' — once per load.
+    // The user (or host) may still pick any lens afterwards; this never fights a manual pick.
+    const autoSwitched = useRef<{ key: string; from: LensId } | null>(null);
+    useEffect(() => {
+        if (!shown) return;
+        const key = `${shown.scope.rootId}:${generation}`;
+        if (autoSwitched.current?.key === key) return;
+        autoSwitched.current = { key, from: lensId };
+        const current = LENSES[lensId];
+        const currentOk = lensApplies(current, shown) && (!allowed || allowed.includes(current.id));
+        if (currentOk && lensFindings(current, shown).length > 0) return;
+        const wanted = FINDINGS_FIRST.find(
+            (id) => lensApplies(LENSES[id], shown) && (!allowed || allowed.includes(id)) && lensFindings(LENSES[id], shown).length > 0,
+        );
+        if (wanted) setLensId(wanted);
+    }, [shown, generation, lensId, allowed]);
 
     const search = useCallback(async (q: string) => {
         const seq = ++searchSeq.current;

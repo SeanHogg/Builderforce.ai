@@ -114,6 +114,17 @@ export function KnowledgeGraphView({
             </div>,
         );
     }
+    if (kg.status === 'load-failed') {
+        // A scope exists but its graph is gone/unreadable — this is NOT the "never reviewed" empty state.
+        return frame(
+            <div role="alert" style={{ padding: 24, display: 'grid', gap: 12, justifyItems: 'start', maxWidth: 560 }}>
+                <h2 style={heading}>{labels.loadFailedTitle}</h2>
+                <p style={{ ...muted, margin: 0 }}>{labels.loadFailedBody}</p>
+                <button type="button" style={button} onClick={kg.reload}>{labels.retry}</button>
+                {review}
+            </div>,
+        );
+    }
     if (kg.status === 'empty' || (kg.status === 'loading' && !graph)) {
         const empty = kg.status === 'empty';
         return frame(
