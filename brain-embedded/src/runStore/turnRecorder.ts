@@ -148,6 +148,12 @@ export async function recordTurn(run: BrainRunContext, t: RecordedTurn): Promise
       advertisedTools: advertised.length,
       catalogTools: allTools?.length ?? 0,
       ...(narratedUnadvertised.length ? { narratedUnadvertised } : {}),
+      // A turn that WAS handed tools but answered IN PROSE with zero structured calls:
+      // the model described the work instead of doing it. Recorded so brainTriage flags
+      // the run (`answered-in-prose`) instead of scoring it healthy on a clean trace.
+      ...(result.toolCalls.length === 0 && result.text.trim() !== '' && advertised.length > 0
+        ? { answeredInProse: true }
+        : {}),
       // The stream filter strips every call it lifts, so call markup still IN the text
       // is a dialect it does not know: the model tried to act and the call never ran.
       // Recorded so a copied report says "parser gap" instead of "won't call tools".

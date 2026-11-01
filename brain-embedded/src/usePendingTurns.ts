@@ -15,6 +15,7 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { BrainMessage, ChatInputAttachment } from './types';
+import type { RunServedBy } from './runStore/runSnapshotTypes';
 
 /** A sent turn that has not landed in the transcript yet. */
 export interface PendingTurn {
@@ -45,6 +46,19 @@ export function pendingTurnShown(slot: PendingSlot | undefined, messages: readon
 export interface PendingTurns {
   /** The open chat's pending turn, or null. */
   pendingTurn: PendingTurn | null;
+  /**
+   * Show a turn at SUBMIT, before `send` is called - for a host whose send waits on its own pre-send stage
+   * (the editor's per-turn limbic fetch). `null` withdraws it (the stage said the send is not going: stopped,
+   * or another chat is showing). `opts.chat` names the chat it was announced in when that is no longer the one
+   * showing; absent, the chat showing WHEN THE CALL RUNS takes it (a send outlives a switch). `send` takes it over.
+   */
+  announceTurn?(text: string | null, opts?: { chat?: number | null }): void;
+  /**
+   * The model doing this run's work, as the stream named it - from the moment the turn's route is known, kept
+   * through the tool steps. Undefined before that: the transcript never shows a guess. Surfaced HERE (not beside
+   * the run snapshot) so the "what is answering me" state is colocated with the just-sent turn it answers.
+   */
+  servedBy?: RunServedBy;
   /** Open `chat`'s slot for `text` (a no-op when it already holds exactly that). */
   open(chat: number | null, text: string, attachments?: readonly ChatInputAttachment[]): void;
   /** Close `chat`'s slot. */
@@ -53,11 +67,29 @@ export interface PendingTurns {
   rekey(from: number | null, to: number): void;
 }
 
-export function usePendingTurns(chatId: number | null, messages: readonly BrainMessage[]): PendingTurns {
+export interface UsePendingTurnsOptions {
+  /**
+   * The chat showing NOW, read at CALL time by `announceTurn` (not render time): an announced turn belongs to
+   * the conversation the user was in when they submitted, even when a switch lands mid-stage.
+   */
+  currentChat?: () => number | null;
+  /** The run snapshot's `servedBy` (`useRunSnapshot`), surfaced on the return next to `pendingTurn`. */
+  servedBy?: RunServedBy;
+}
+
+export function usePendingTurns(
+  chatId: number | null,
+  messages: readonly BrainMessage[],
+  options?: UsePendingTurnsOptions,
+): PendingTurns {
   const [slots, setSlots] = useState(NO_SLOTS);
   // The ids the open chat holds NOW, read when a slot opens (the opening chat IS the one showing: a send starts there).
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
+  // `announceTurn` resolves the chat at CALL time through this, so it never writes a turn into the conversation
+  // the user moved to while the host's pre-send stage ran.
+  const currentChatRef = useRef(options?.currentChat);
+  currentChatRef.current = options?.currentChat;
 
   const open = useCallback((chat: number | null, text: string, attachments?: readonly ChatInputAttachment[]) => {
     setSlots((cur) => {
@@ -91,7 +123,15 @@ export function usePendingTurns(chatId: number | null, messages: readonly BrainM
     });
   }, []);
 
+  // The pre-send seam, colocated with the slots it opens: `useBrainConversation` used to own this callback; the
+  // knowledge of WHICH chat a turn was announced into belongs with the slot map, not the conversation hook.
+  const announceTurn = useCallback((text: string | null, opts?: { chat?: number | null }) => {
+    const chat = opts && 'chat' in opts ? (opts.chat ?? null) : (currentChatRef.current?.() ?? null);
+    if (text == null) close(chat);
+    else open(chat, text.trim());
+  }, [open, close]);
+
   const slot = slots.get(chatId);
   const pendingTurn = useMemo(() => pendingTurnShown(slot, messages), [slot, messages]);
-  return { pendingTurn, open, close, rekey };
+  return { pendingTurn, announceTurn, servedBy: options?.servedBy, open, close, rekey };
 }

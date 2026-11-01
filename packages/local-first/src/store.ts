@@ -28,11 +28,10 @@ import type {
   LocalFirstStore,
   LocalFirstTransaction,
 } from './storeContract.js';
+import { clone } from './clone.js';
 
 export * from './storeContract.js';
 export { changeTouches, isEmptyDelta, resetDeltaOf, type LocalFirstChange, type LocalFirstDelta } from './localFirstDelta.js';
-
-const clone = <T>(value: T): T => structuredClone(value);
 
 /**
  * Rows of `type` for which `where` holds, cloned — and ONLY those. `list` clones every

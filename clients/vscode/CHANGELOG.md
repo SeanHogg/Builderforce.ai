@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.120] — Stop pressed right after Send now actually stops the run
+
+- **Stop no longer gets dropped in the setup window.** Pressing Stop in the moments after you send — before the run's loop has marked itself busy — now still reaches the run and cancels it, instead of being silently ignored. What you type while it stops is still held and sent after.
+
 ## [2026.10.119] — Faster on big histories, and clearer about where a model runs
 
 - **Your message shows as soon as you send it.** It no longer waits for local storage, and neither does the original request on a ticket.

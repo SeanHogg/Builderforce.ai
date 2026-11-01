@@ -398,6 +398,7 @@ export {
   stallUnrecoveredInTrace,
   toolExposureInTrace,
   narratedUnadvertisedInTrace,
+  answeredInProseInTrace,
   isTicketWriteTool,
 } from './brainTriage';
 export type { BrainTraceEvent, BuildBrainTriageOptions, BrainDiagnostics, BrainDiagnosticsContext, ByoUnresolvedEntry, ToolExposure } from './brainTriage';

@@ -4532,12 +4532,16 @@ function RecipientPicker({ participants, recipient, onChoose, labels, disabled, 
 // src/recipient/useRecipientChoice.ts
 import { useEffect as useEffect12, useMemo as useMemo8, useState as useState18 } from "react";
 import {
-  createComposerDraftStore,
   mentionRecipient,
   resolveRecipient,
   useDraftSelector
 } from "@seanhogg/builderforce-brain-embedded";
+
+// src/composer/unusedDraftStore.ts
+import { createComposerDraftStore } from "@seanhogg/builderforce-brain-embedded";
 var UNUSED_STORE = createComposerDraftStore();
+
+// src/recipient/useRecipientChoice.ts
 function useRecipientChoice({ participants, input, draftStore, resetKey }) {
   const [choice, setChoice] = useState18(null);
   useEffect12(() => {
@@ -9519,13 +9523,12 @@ function ContextMeter({ usage, labels, locale }) {
 }
 
 // src/composer/BrainComposer.tsx
-import { createComposerDraftStore as createComposerDraftStore3, useDraftIsEmpty } from "@seanhogg/builderforce-brain-embedded";
+import { useDraftIsEmpty } from "@seanhogg/builderforce-brain-embedded";
 
 // src/composer/ComposerTextBox.tsx
 import { memo as memo11 } from "react";
-import { createComposerDraftStore as createComposerDraftStore2, useDraftText } from "@seanhogg/builderforce-brain-embedded";
+import { useDraftText } from "@seanhogg/builderforce-brain-embedded";
 import { Fragment as Fragment23, jsx as jsx76, jsxs as jsxs73 } from "react/jsx-runtime";
-var UNUSED_STORE2 = createComposerDraftStore2();
 var noop = () => void 0;
 var NO_PARTICIPANTS = [];
 var NO_TICKETS = [];
@@ -9552,7 +9555,7 @@ function ComposerTextBoxInner(props) {
     draftStore,
     onChange
   } = props;
-  const storeText = useDraftText(draftStore ?? UNUSED_STORE2);
+  const storeText = useDraftText(draftStore ?? UNUSED_STORE);
   const value = draftStore ? storeText : props.value ?? "";
   const setValue = draftStore ? draftStore.set : onChange ?? noop;
   const mention = useMentionAutocomplete({
@@ -9665,7 +9668,6 @@ function composerLabelsFrom(lookup, overrides) {
 
 // src/composer/BrainComposer.tsx
 import { Fragment as Fragment24, jsx as jsx77, jsxs as jsxs74 } from "react/jsx-runtime";
-var UNUSED_STORE3 = createComposerDraftStore3();
 function BrainComposerInner(props) {
   const {
     draftStore,
@@ -9707,7 +9709,7 @@ function BrainComposerInner(props) {
   const textareaRef = useRef21(null);
   const [focused, setFocused] = useState38(false);
   const [dragging, setDragging] = useState38(false);
-  const storeEmpty = useDraftIsEmpty(draftStore ?? UNUSED_STORE3);
+  const storeEmpty = useDraftIsEmpty(draftStore ?? UNUSED_STORE);
   const empty = draftStore ? storeEmpty : !(value ?? "").trim();
   const valueRef = useRef21(value ?? "");
   valueRef.current = value ?? "";

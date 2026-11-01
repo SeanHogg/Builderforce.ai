@@ -1,7 +1,8 @@
 import { memo, type ClipboardEvent, type KeyboardEvent, type RefObject } from 'react';
-import { createComposerDraftStore, useDraftText, type ComposerDraftStore } from '@seanhogg/builderforce-brain-embedded';
+import { useDraftText, type ComposerDraftStore } from '@seanhogg/builderforce-brain-embedded';
 import { useMentionAutocomplete, type UseMentionAutocompleteOptions } from '../mention/MentionAutocomplete';
 import { useTicketAutocomplete, type UseTicketAutocompleteOptions } from '../mention/TicketAutocomplete';
+import { UNUSED_STORE } from './unusedDraftStore';
 
 /**
  * Where the composer's text comes from: a {@link ComposerDraftStore} (the box subscribes to it, the host never
@@ -11,8 +12,6 @@ export type ComposerTextSource =
   | { draftStore: ComposerDraftStore; value?: undefined; onChange?: undefined }
   | { draftStore?: undefined; value: string; onChange: (value: string) => void };
 
-/** Never written: the stand-in `useDraftText` reads while a host controls the text itself (hooks cannot be skipped). */
-const UNUSED_STORE = createComposerDraftStore();
 const noop = () => undefined;
 
 export type ComposerTextBoxProps = ComposerTextSource & {

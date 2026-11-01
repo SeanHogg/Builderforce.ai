@@ -385,14 +385,14 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   // The latest transcript, for callbacks that must keep their identity across appends.
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
-  // The just-sent turn, drawn before its row is saved (`usePendingTurns`).
-  const pending = usePendingTurns(chatId, messages);
-  const { open: openPending, close: closePending, rekey: rekeyPending } = pending;
-  const announceTurn = useCallback((text: string | null, opts?: { chat?: number | null }) => {
-    const chat = opts && 'chat' in opts ? (opts.chat ?? null) : chatIdRef.current;
-    if (text == null) closePending(chat);
-    else openPending(chat, text.trim());
-  }, [openPending, closePending]);
+  // The just-sent turn, drawn before its row is saved (`usePendingTurns`). That hook also owns the
+  // pre-send `announceTurn` seam and surfaces `servedBy` - the "what is answering me" state lives
+  // next to the turn it answers, not scattered through this hook.
+  const pending = usePendingTurns(chatId, messages, {
+    currentChat: () => chatIdRef.current,
+    servedBy: snapshot.servedBy,
+  });
+  const { open: openPending, close: closePending, rekey: rekeyPending, announceTurn } = pending;
 
   // Re-hydrate this viewer's thumbs from the persisted message metadata, so a
   // reopened chat shows what they already pressed. (The durable RATING fact lives in
@@ -689,7 +689,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     messages,
     pendingTurn: pending.pendingTurn,
     announceTurn,
-    servedBy: snapshot.servedBy,
+    servedBy: pending.servedBy,
     loadingMessages,
     reloadMessages,
     // A turn that is only announced (its host's pre-send stage is running) already counts as in flight: the transcript shows

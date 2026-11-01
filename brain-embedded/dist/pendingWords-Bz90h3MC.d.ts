@@ -1259,6 +1259,13 @@ interface BrainDiagnostics {
      */
     narratedUnadvertisedTools: string[];
     /**
+     * True when at least one TOOL turn was handed tools but answered IN PROSE with zero
+     * tool calls — the model described the work instead of doing it, and nothing ran.
+     * A run made only of these used to score "healthy" (no errors, no truncation, no
+     * pressure) while accomplishing nothing. See {@link answeredInProseInTrace}.
+     */
+    answeredInProse: boolean;
+    /**
      * Turns the memory-first short-circuit answered WITHOUT calling a model (see
      * {@link memoryAnswersInTrace}). A run made only of these has no turns, no tokens
      * and no tool calls — the exact shape of a "the model won't call tools" run, which
@@ -1330,7 +1337,7 @@ interface BrainDiagnostics {
      * it is a verdict about the run's OUTCOME, not its mechanics, so any genuine exhaustion,
      * model fault or narrated-call failure explains the missing dispatch better and outranks it.
      */
-    likelyCause: 'memory-answered' | 'no-tools-advertised' | 'tool-not-advertised' | 'tool-calls-not-emitted' | 'no-progress' | 'context-exhaustion' | 'model-degradation' | 'app-errors-unresolved' | 'work-filed-not-staffed' | 'inconclusive' | 'healthy';
+    likelyCause: 'memory-answered' | 'no-tools-advertised' | 'tool-not-advertised' | 'tool-calls-not-emitted' | 'answered-in-prose' | 'no-progress' | 'context-exhaustion' | 'model-degradation' | 'app-errors-unresolved' | 'work-filed-not-staffed' | 'inconclusive' | 'healthy';
 }
 /**
  * Derive {@link BrainDiagnostics} from a recorded trace. Pure — no clock, no I/O

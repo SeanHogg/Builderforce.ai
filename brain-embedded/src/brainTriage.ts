@@ -339,6 +339,24 @@ export function narratedUnadvertisedInTrace(events: BrainTraceEvent[]): string[]
   return seen;
 }
 
+/**
+ * A TOOL turn the model answered IN PROSE with zero tool calls: the turn was handed
+ * tools, wanted one, but replied with text instead of a structured call — and nothing
+ * downstream ran. Recorded per-turn by the run loop as `answeredInProse` (only it holds
+ * both the turn's text and the exact tool set it was offered).
+ *
+ * This is the turn-level twin of {@link narratedUnadvertisedInTrace}: that one names a
+ * tool the selection dropped (our fault), while this one flags a turn that HAD tools and
+ * still answered in prose (a model/provider fault — the model is describing work instead
+ * of doing it). A run made of these used to score "healthy": no errors, no truncation,
+ * no context pressure — while accomplishing nothing.
+ */
+export function answeredInProseInTrace(events: BrainTraceEvent[]): boolean {
+  return events.some(
+    (ev) => (ev.args as { answeredInProse?: unknown } | undefined)?.answeredInProse === true,
+  );
+}
+
 /** One turn the memory-first short-circuit answered — the LLM was never called. */
 export interface MemoryAnsweredTurn {
   /** `evermind` = the project's SSM GENERATED the reply; `qa-cache` = a stored answer was replayed;
@@ -625,6 +643,13 @@ export interface BrainDiagnostics {
    */
   narratedUnadvertisedTools: string[];
   /**
+   * True when at least one TOOL turn was handed tools but answered IN PROSE with zero
+   * tool calls — the model described the work instead of doing it, and nothing ran.
+   * A run made only of these used to score "healthy" (no errors, no truncation, no
+   * pressure) while accomplishing nothing. See {@link answeredInProseInTrace}.
+   */
+  answeredInProse: boolean;
+  /**
    * Turns the memory-first short-circuit answered WITHOUT calling a model (see
    * {@link memoryAnswersInTrace}). A run made only of these has no turns, no tokens
    * and no tool calls — the exact shape of a "the model won't call tools" run, which
@@ -701,6 +726,7 @@ export interface BrainDiagnostics {
     | 'no-tools-advertised'
     | 'tool-not-advertised'
     | 'tool-calls-not-emitted'
+    | 'answered-in-prose'
     | 'no-progress'
     | 'context-exhaustion'
     | 'model-degradation'
@@ -1013,6 +1039,10 @@ export function computeBrainDiagnostics(
   const streamRetries = streamRetriesInTrace(events);
   const exposure = toolExposureInTrace(events);
   const narratedUnadvertisedTools = narratedUnadvertisedInTrace(events);
+  // A turn that WAS offered tools but answered in prose (zero structured calls) did
+  // nothing, yet reads clean on every other signal — no error, no truncation, no
+  // pressure. Without this it scored "healthy" while accomplishing nothing.
+  const answeredInProse = answeredInProseInTrace(events);
   // A turn offered ZERO tools cannot emit one. That is a configuration/catalog failure
   // (the MCP catalog fetch failed, or nothing was registered), never a model fault.
   const noToolsAdvertised = exposure.min === 0 && toolEvents.length === 0;
@@ -1041,12 +1071,13 @@ export function computeBrainDiagnostics(
   const unresolvedAppFailures = unresolvedAppFailuresInTrace(events);
   const healthy =
     errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal
-    && !announcedUnmadeToolCall && !noProgress && unresolvedAppFailures === 0 && didWork;
+    && !announcedUnmadeToolCall && !answeredInProse && !noProgress && unresolvedAppFailures === 0 && didWork;
   const likelyCause: BrainDiagnostics['likelyCause'] =
     memoryOnlyRun ? 'memory-answered'
       : noToolsAdvertised ? 'no-tools-advertised'
         : narratedUnadvertisedTools.length > 0 ? 'tool-not-advertised'
           : announcedUnmadeToolCall ? 'tool-calls-not-emitted'
+            : answeredInProse ? 'answered-in-prose'
             : noProgress ? 'no-progress'
             : contextSignal && !degradationSignal ? 'context-exhaustion'
               : degradationSignal && !contextSignal ? 'model-degradation'
@@ -1086,6 +1117,7 @@ export function computeBrainDiagnostics(
     advertisedToolsMin: exposure.min,
     catalogTools: exposure.catalog,
     narratedUnadvertisedTools,
+    answeredInProse,
     memoryAnswers,
     turnCoveragePartial,
     progress,
@@ -1154,6 +1186,8 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
         ? `TOOL NOT ADVERTISED — a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(', ')} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for — not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.`
         : d.likelyCause === 'tool-calls-not-emitted'
           ? 'TOOL CALLS NOT EMITTED — a turn NARRATED a tool call in prose ("I\'ll call the tool…", a bare `builtin_…` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.'
+          : d.likelyCause === 'answered-in-prose'
+            ? 'ANSWERED IN PROSE — at least one turn was handed tool definitions but replied with text and ZERO tool calls, so nothing ran. The tools were advertised; the model described the work instead of doing it. This is a model/provider fault: try a different model, or pin one that emits structured calls.'
           : d.likelyCause === 'no-progress'
             ? ((d.progress && runProgressVerdict(d.progress)) ?? 'NO PROGRESS — the run repeated work without advancing.')
           : d.likelyCause === 'context-exhaustion'

@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { InferenceMode } from '@builderforce/local-first';
+import type { PlatformPolicySnapshot } from '@builderforce/local-first';
+
 /**
  * The webview's fetch and WebSocket are not the host's. These tests call the installed
  * globals, so deleting the gate (the fetch patch or the WebSocket subclass) makes them fail.
@@ -132,5 +135,33 @@ describe('webview platform gate', () => {
     expect(nativeFetch).toHaveBeenCalledTimes(1);
     expect(() => new WebSocket('ws://127.0.0.1:9')).not.toThrow();
     expect(NativeSocket.instances).toHaveLength(1);
+  });
+});
+
+describe('webviewOffline', () => {
+  // The composer swaps `@`/`#` from server-backed (invited participants / linked
+  // tickets) to LOCAL candidates (live sub-agents, persona agents / local tickets)
+  // when the platform cannot serve the typeahead. `webviewOffline` is that decision.
+  const setHost = async (platformPolicy: Partial<PlatformPolicySnapshot>, inferenceMode: InferenceMode) => {
+    await install();
+    fromHost({ type: 'platform.policy', platformPolicy, inferenceMode, baseUrl: 'https://builderforce.ai' });
+  };
+
+  it('is true before the host names a mode (Local only) and when connected-features is off', async () => {
+    await install();
+    expect((await import('./platformPolicy')).webviewOffline()).toBe(true);
+
+    await setHost({ connectedFeatures: false, gatewayInference: true, synchronize: false }, 'hybrid');
+    expect((await import('./platformPolicy')).webviewOffline()).toBe(true);
+  });
+
+  it('is false on a signed-in Hybrid with connected-features on', async () => {
+    await setHost({ connectedFeatures: true, gatewayInference: true, synchronize: false }, 'hybrid');
+    expect((await import('./platformPolicy')).webviewOffline()).toBe(false);
+  });
+
+  it('stays true on local-only even with connected-features granted', async () => {
+    await setHost({ connectedFeatures: true, gatewayInference: false, synchronize: false }, 'local-only');
+    expect((await import('./platformPolicy')).webviewOffline()).toBe(true);
   });
 });

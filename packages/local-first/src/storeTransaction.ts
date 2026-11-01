@@ -13,8 +13,7 @@ import type { LocalFirstDelta } from './localFirstDelta.js';
 import { DraftMap } from './draftMap.js';
 import { CommittedState, PendingKeyIndex, mappingKey, recordKey } from './storeState.js';
 import { isJournalEventId, type AppendJournalEvent, type LocalFirstTransaction } from './storeContract.js';
-
-const clone = <T>(value: T): T => structuredClone(value);
+import { clone } from './clone.js';
 
 function hashPayload(payload: unknown): string {
   const text = JSON.stringify(payload) ?? 'null';

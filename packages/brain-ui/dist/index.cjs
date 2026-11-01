@@ -32,7 +32,7 @@ var src_exports = {};
 __export(src_exports, {
   AiSurface: () => AiSurface,
   Avatar: () => Avatar,
-  BUILDERFORCE_PRODUCT_NAME: () => import_builderforce_brain_embedded28.BUILDERFORCE_PRODUCT_NAME,
+  BUILDERFORCE_PRODUCT_NAME: () => import_builderforce_brain_embedded29.BUILDERFORCE_PRODUCT_NAME,
   BrainComposer: () => BrainComposer,
   BrainMark: () => BrainMark,
   BrainTimeline: () => BrainTimeline,
@@ -56,7 +56,7 @@ __export(src_exports, {
   DEFAULT_LOCAL_MODEL_LABELS: () => DEFAULT_LOCAL_MODEL_LABELS,
   DEFAULT_MENTION_LABELS: () => DEFAULT_MENTION_LABELS,
   DEFAULT_MODEL_FALLBACK_LABELS: () => DEFAULT_MODEL_FALLBACK_LABELS,
-  DEFAULT_MODEL_IDENTITY: () => import_builderforce_brain_embedded28.DEFAULT_MODEL_IDENTITY,
+  DEFAULT_MODEL_IDENTITY: () => import_builderforce_brain_embedded29.DEFAULT_MODEL_IDENTITY,
   DEFAULT_MODEL_MOVE_LABELS: () => DEFAULT_MODEL_MOVE_LABELS,
   DEFAULT_PENDING_CHANGES_LABELS: () => DEFAULT_PENDING_CHANGES_LABELS,
   DEFAULT_PERSONA_PICKER_LABELS: () => DEFAULT_PERSONA_PICKER_LABELS,
@@ -86,11 +86,11 @@ __export(src_exports, {
   LiveActivity: () => LiveActivity,
   LocalModelList: () => LocalModelList,
   LocalModelRow: () => LocalModelRow,
-  MODEL_CATEGORIES: () => import_builderforce_brain_embedded28.MODEL_CATEGORIES,
+  MODEL_CATEGORIES: () => import_builderforce_brain_embedded29.MODEL_CATEGORIES,
   Markdown: () => Markdown,
   ModelFallbackNotice: () => ModelFallbackNotice,
   OriginalRequest: () => OriginalRequest,
-  PROJECT_EVERMIND_MODEL_PREFIX: () => import_builderforce_brain_embedded28.PROJECT_EVERMIND_MODEL_PREFIX,
+  PROJECT_EVERMIND_MODEL_PREFIX: () => import_builderforce_brain_embedded29.PROJECT_EVERMIND_MODEL_PREFIX,
   PendingChangesList: () => PendingChangesList,
   PendingQuestionBanner: () => PendingQuestionBanner,
   PersonaPicker: () => PersonaPicker,
@@ -122,16 +122,16 @@ __export(src_exports, {
   ToolStep: () => ToolStep,
   WorkSpendPanel: () => WorkSpendPanel,
   WorkStatusPanel: () => WorkStatusPanel,
-  activeModelKey: () => import_builderforce_brain_embedded28.activeModelKey,
+  activeModelKey: () => import_builderforce_brain_embedded29.activeModelKey,
   askUserAnchorId: () => import_builderforce_brain_embedded4.askUserAnchorId,
   attachmentsOf: () => attachmentsOf,
   avatarColor: () => avatarColor,
   brainComposerLabelsFrom: () => brainComposerLabelsFrom,
-  buildModelItems: () => import_builderforce_brain_embedded28.buildModelItems,
+  buildModelItems: () => import_builderforce_brain_embedded29.buildModelItems,
   buildSettledTimeline: () => buildSettledTimeline,
   buildTimeline: () => buildTimeline,
   bundleLookup: () => bundleLookup,
-  byoVendorLabel: () => import_builderforce_brain_embedded28.byoVendorLabel,
+  byoVendorLabel: () => import_builderforce_brain_embedded29.byoVendorLabel,
   cachedConsumptionSnapshot: () => cachedConsumptionSnapshot,
   chatActivityLabelsFrom: () => chatActivityLabelsFrom,
   chatDiagnosticsReads: () => chatDiagnosticsReads,
@@ -148,12 +148,12 @@ __export(src_exports, {
   connectionsLabelsFrom: () => connectionsLabelsFrom,
   createChatTicketsRestAdapter: () => createChatTicketsRestAdapter,
   createEvermindRestAdapter: () => createEvermindRestAdapter,
-  displayModelName: () => import_builderforce_brain_embedded28.displayModelName,
+  displayModelName: () => import_builderforce_brain_embedded29.displayModelName,
   evermindLabelsFromBundle: () => evermindLabelsFromBundle,
   evermindLearnedStatus: () => evermindLearnedStatus,
   evermindNextAction: () => evermindNextAction,
   fetchConsumptionSnapshot: () => fetchConsumptionSnapshot,
-  filterModelItems: () => import_builderforce_brain_embedded28.filterModelItems,
+  filterModelItems: () => import_builderforce_brain_embedded29.filterModelItems,
   formatContextTokens: () => formatContextTokens,
   formatDownloadSize: () => formatDownloadSize,
   formatDuration: () => formatDuration,
@@ -167,26 +167,26 @@ __export(src_exports, {
   inferenceModeOption: () => inferenceModeOption,
   initialsOf: () => initialsOf,
   invalidateConsumptionSnapshot: () => invalidateConsumptionSnapshot,
-  isManagerRole: () => import_builderforce_brain_embedded29.isManagerRole,
+  isManagerRole: () => import_builderforce_brain_embedded30.isManagerRole,
   liveActivityLabelsFrom: () => liveActivityLabelsFrom,
   loadEvermindBuilds: () => loadEvermindBuilds,
   localModelLabelsFrom: () => localModelLabelsFrom,
-  modelCategoryLabel: () => import_builderforce_brain_embedded28.modelCategoryLabel,
-  modelInUse: () => import_builderforce_brain_embedded28.modelInUse,
+  modelCategoryLabel: () => import_builderforce_brain_embedded29.modelCategoryLabel,
+  modelInUse: () => import_builderforce_brain_embedded29.modelInUse,
   modelMoveLine: () => modelMoveLine,
   modelMoveOf: () => modelMoveOf,
   modelRemedies: () => modelRemedies,
   modelSelectionFrom: () => modelSelectionFrom,
   parseAskUser: () => import_builderforce_brain_embedded4.parseAskUser,
   pendingChangesSummary: () => pendingChangesSummary,
-  perMillionUsd: () => import_builderforce_brain_embedded28.perMillionUsd,
+  perMillionUsd: () => import_builderforce_brain_embedded29.perMillionUsd,
   planIsPaid: () => planIsPaid,
   preferredEvermindBuild: () => preferredEvermindBuild,
   prefetchChipLabelsFrom: () => prefetchChipLabelsFrom,
   prefetchLabelText: () => prefetchLabelText,
-  premiumCostLabel: () => import_builderforce_brain_embedded28.premiumCostLabel,
-  productForPlan: () => import_builderforce_brain_embedded28.productForPlan,
-  productModelName: () => import_builderforce_brain_embedded28.productModelName,
+  premiumCostLabel: () => import_builderforce_brain_embedded29.premiumCostLabel,
+  productForPlan: () => import_builderforce_brain_embedded29.productForPlan,
+  productModelName: () => import_builderforce_brain_embedded29.productModelName,
   promptOptionsLabels: () => promptOptionsLabels,
   promptOptionsLabelsFrom: () => promptOptionsLabelsFrom,
   promptTrailingAction: () => promptTrailingAction,
@@ -194,7 +194,7 @@ __export(src_exports, {
   requestComposerMenu: () => requestComposerMenu,
   resolvePendingChangesLabels: () => resolvePendingChangesLabels,
   resolveTeacherOptions: () => resolveTeacherOptions,
-  revealsModelId: () => import_builderforce_brain_embedded28.revealsModelId,
+  revealsModelId: () => import_builderforce_brain_embedded29.revealsModelId,
   rovingRadioNextIndex: () => rovingRadioNextIndex,
   selectPendingAskUser: () => import_builderforce_brain_embedded4.selectPendingAskUser,
   serializeAskUser: () => import_builderforce_brain_embedded4.serializeAskUser,
@@ -4595,7 +4595,7 @@ function inferenceModeOption(state) {
 }
 
 // src/index.ts
-var import_builderforce_brain_embedded28 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded29 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/picker/PickerShell.tsx
 var import_jsx_runtime39 = require("react/jsx-runtime");
@@ -4711,8 +4711,13 @@ function RecipientPicker({ participants, recipient, onChoose, labels, disabled, 
 
 // src/recipient/useRecipientChoice.ts
 var import_react34 = require("react");
+var import_builderforce_brain_embedded19 = require("@seanhogg/builderforce-brain-embedded");
+
+// src/composer/unusedDraftStore.ts
 var import_builderforce_brain_embedded18 = require("@seanhogg/builderforce-brain-embedded");
 var UNUSED_STORE = (0, import_builderforce_brain_embedded18.createComposerDraftStore)();
+
+// src/recipient/useRecipientChoice.ts
 function useRecipientChoice({ participants, input, draftStore, resetKey }) {
   const [choice, setChoice] = (0, import_react34.useState)(null);
   (0, import_react34.useEffect)(() => {
@@ -4721,14 +4726,14 @@ function useRecipientChoice({ participants, input, draftStore, resetKey }) {
   (0, import_react34.useEffect)(() => {
     setChoice((c) => c && c !== "brain" && !participants.some((p) => p.kind === c.kind && p.ref === c.ref) ? null : c);
   }, [participants]);
-  const fromInput = (0, import_react34.useMemo)(() => (0, import_builderforce_brain_embedded18.mentionRecipient)(input ?? "", participants), [input, participants]);
-  const fromStore = (0, import_builderforce_brain_embedded18.useDraftSelector)(draftStore ?? UNUSED_STORE, (text) => (0, import_builderforce_brain_embedded18.mentionRecipient)(text, participants));
+  const fromInput = (0, import_react34.useMemo)(() => (0, import_builderforce_brain_embedded19.mentionRecipient)(input ?? "", participants), [input, participants]);
+  const fromStore = (0, import_builderforce_brain_embedded19.useDraftSelector)(draftStore ?? UNUSED_STORE, (text) => (0, import_builderforce_brain_embedded19.mentionRecipient)(text, participants));
   const mentioned = draftStore ? fromStore : fromInput;
-  return { recipient: (0, import_builderforce_brain_embedded18.resolveRecipient)(choice, mentioned), choice, choose: setChoice };
+  return { recipient: (0, import_builderforce_brain_embedded19.resolveRecipient)(choice, mentioned), choice, choose: setChoice };
 }
 
 // src/persona/PersonaPicker.tsx
-var import_builderforce_brain_embedded19 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded20 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime41 = require("react/jsx-runtime");
 var DEFAULT_PERSONA_PICKER_LABELS = {
   actingAs: "Acting as",
@@ -4740,8 +4745,8 @@ var DEFAULT_PERSONA_PICKER_LABELS = {
 function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, quietAt }) {
   if (quietAt !== void 0 && agents.length === 0 && value === quietAt) return null;
   const l = { ...DEFAULT_PERSONA_PICKER_LABELS, ...labels };
-  const modality = modalities.find((m) => (0, import_builderforce_brain_embedded19.modalityPersonaChoice)(m.id) === value);
-  const agent = (0, import_builderforce_brain_embedded19.personaAgentOf)(value, agents);
+  const modality = modalities.find((m) => (0, import_builderforce_brain_embedded20.modalityPersonaChoice)(m.id) === value);
+  const agent = (0, import_builderforce_brain_embedded20.personaAgentOf)(value, agents);
   const leading = agent ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Avatar, { name: agent.name, kind: "agent", size: 16 }) : modality?.icon ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { "aria-hidden": "true", children: modality.icon }) : /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(IconBolt, {});
   return /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
     PickerShell,
@@ -4750,7 +4755,7 @@ function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, 
       leading,
       name: modality?.label ?? agent?.name ?? l.defaultBrain,
       title: l.title,
-      active: value !== import_builderforce_brain_embedded19.DEFAULT_PERSONA && (modality != null || agent != null),
+      active: value !== import_builderforce_brain_embedded20.DEFAULT_PERSONA && (modality != null || agent != null),
       disabled,
       children: (close) => {
         const pick = (next) => {
@@ -4758,7 +4763,7 @@ function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, 
           close();
         };
         return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)(import_jsx_runtime41.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(PickerItem, { icon: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(IconBolt, {}), label: l.defaultBrain, active: !modality && !agent, onClick: () => pick(import_builderforce_brain_embedded19.DEFAULT_PERSONA) }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(PickerItem, { icon: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(IconBolt, {}), label: l.defaultBrain, active: !modality && !agent, onClick: () => pick(import_builderforce_brain_embedded20.DEFAULT_PERSONA) }),
           modalities.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)(import_jsx_runtime41.Fragment, { children: [
             /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { className: "bf-pmenu__sep" }),
             /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { className: "bf-pmenu__group", children: l.personas }),
@@ -4768,7 +4773,7 @@ function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, 
                 icon: m.icon ?? "",
                 label: m.label,
                 active: modality?.id === m.id,
-                onClick: () => pick((0, import_builderforce_brain_embedded19.modalityPersonaChoice)(m.id))
+                onClick: () => pick((0, import_builderforce_brain_embedded20.modalityPersonaChoice)(m.id))
               },
               m.id
             ))
@@ -4781,10 +4786,10 @@ function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, 
               {
                 icon: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Avatar, { name: a.name, kind: "agent", size: 16 }),
                 label: a.name,
-                active: agent != null && (0, import_builderforce_brain_embedded19.agentPersonaChoice)(agent) === (0, import_builderforce_brain_embedded19.agentPersonaChoice)(a),
-                onClick: () => pick((0, import_builderforce_brain_embedded19.agentPersonaChoice)(a))
+                active: agent != null && (0, import_builderforce_brain_embedded20.agentPersonaChoice)(agent) === (0, import_builderforce_brain_embedded20.agentPersonaChoice)(a),
+                onClick: () => pick((0, import_builderforce_brain_embedded20.agentPersonaChoice)(a))
               },
-              (0, import_builderforce_brain_embedded19.agentPersonaChoice)(a)
+              (0, import_builderforce_brain_embedded20.agentPersonaChoice)(a)
             ))
           ] })
         ] });
@@ -5975,7 +5980,7 @@ function isBuiltinPanel(key) {
 var ChatTicketsPanel = (0, import_react41.memo)(ChatTicketsPanelInner);
 
 // src/chatTickets/restAdapter.ts
-var import_builderforce_brain_embedded20 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded21 = require("@seanhogg/builderforce-brain-embedded");
 var emptyRunHistory = () => ({ linkedRunnableTickets: 0, runs: [], dispatchers: [], executors: [] });
 var RUNNABLE2 = new Set(RUNNABLE_KINDS);
 function createChatTicketsRestAdapter(opts) {
@@ -5999,13 +6004,13 @@ function createChatTicketsRestAdapter(opts) {
     return [...workforce, ...agents];
   };
   return {
-    listTickets: (chatId) => (0, import_builderforce_brain_embedded20.readChatTicketLinks)(req, chatId),
+    listTickets: (chatId) => (0, import_builderforce_brain_embedded21.readChatTicketLinks)(req, chatId),
     linkTicket: (chatId, input) => req(`/api/brain/chats/${chatId}/tickets`, { method: "POST", body: JSON.stringify(input) }).then(() => void 0),
     unlinkTicket: (chatId, kind, ref) => req(
       `/api/brain/chats/${chatId}/tickets?kind=${encodeURIComponent(kind)}&ref=${encodeURIComponent(ref)}`,
       { method: "DELETE" }
     ).then(() => void 0),
-    listRuns: (chatId) => (0, import_builderforce_brain_embedded20.readChatRunHistory)(req, chatId).then((history) => history ?? emptyRunHistory()).catch(emptyRunHistory),
+    listRuns: (chatId) => (0, import_builderforce_brain_embedded21.readChatRunHistory)(req, chatId).then((history) => history ?? emptyRunHistory()).catch(emptyRunHistory),
     listTicketChats: (kind, ref) => req(
       `/api/brain/tickets/${encodeURIComponent(kind)}/${encodeURIComponent(ref)}/chats`
     ).then((r) => r.chats.map((c) => ({
@@ -6076,7 +6081,7 @@ function createChatTicketsRestAdapter(opts) {
     },
     listQuestions: async (chatId) => {
       const [links, pending] = await Promise.all([
-        (0, import_builderforce_brain_embedded20.readChatTicketLinks)(req, chatId),
+        (0, import_builderforce_brain_embedded21.readChatTicketLinks)(req, chatId),
         // `kind` is on the wire but not on the VM — the panel renders a question
         // without caring which flavour it is, while the FILTER cares about nothing
         // else. Typing the wire row here keeps both true.
@@ -6156,14 +6161,14 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
 
 // src/chatTickets/useChatActivitySignal.ts
 var import_react43 = require("react");
-var import_builderforce_brain_embedded21 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded22 = require("@seanhogg/builderforce-brain-embedded");
 function useChatActivitySignal(messages) {
-  return (0, import_react43.useMemo)(() => (0, import_builderforce_brain_embedded21.activityMessageCount)(messages), [messages]);
+  return (0, import_react43.useMemo)(() => (0, import_builderforce_brain_embedded22.activityMessageCount)(messages), [messages]);
 }
 
 // src/mention/MentionAutocomplete.tsx
 var import_react44 = require("react");
-var import_builderforce_brain_embedded22 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded23 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime54 = require("react/jsx-runtime");
 var DEFAULT_MENTION_LABELS = { title: "Direct to", agent: "Agent", human: "Person" };
 function useMentionAutocomplete(opts) {
@@ -6171,7 +6176,7 @@ function useMentionAutocomplete(opts) {
   const [token, setToken] = (0, import_react44.useState)(null);
   const [index, setIndex] = (0, import_react44.useState)(0);
   const matches = (0, import_react44.useMemo)(
-    () => token && !disabled ? (0, import_builderforce_brain_embedded22.filterMentionCandidates)(participants, token.query) : [],
+    () => token && !disabled ? (0, import_builderforce_brain_embedded23.filterMentionCandidates)(participants, token.query) : [],
     [token, participants, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
@@ -6181,7 +6186,7 @@ function useMentionAutocomplete(opts) {
       setToken(null);
       return;
     }
-    const next = (0, import_builderforce_brain_embedded22.activeMentionToken)(el.value, el.selectionStart ?? el.value.length);
+    const next = (0, import_builderforce_brain_embedded23.activeMentionToken)(el.value, el.selectionStart ?? el.value.length);
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, participants.length]);
@@ -6190,7 +6195,7 @@ function useMentionAutocomplete(opts) {
   }, [value, recompute]);
   const choose = (0, import_react44.useCallback)((r) => {
     const el = textareaRef.current;
-    const tk = token ?? (el ? (0, import_builderforce_brain_embedded22.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
+    const tk = token ?? (el ? (0, import_builderforce_brain_embedded23.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
       let after = value.slice(tk.end);
       if (after.startsWith(" ")) after = after.slice(1);
@@ -6299,7 +6304,7 @@ var POP = {
 
 // src/mention/TicketAutocomplete.tsx
 var import_react45 = require("react");
-var import_builderforce_brain_embedded23 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded24 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime55 = require("react/jsx-runtime");
 var DEFAULT_TICKET_TAG_LABELS = { title: "Tag ticket", status: "Status", noMatches: "No tickets found" };
 function useTicketAutocomplete(opts) {
@@ -6307,7 +6312,7 @@ function useTicketAutocomplete(opts) {
   const [token, setToken] = (0, import_react45.useState)(null);
   const [index, setIndex] = (0, import_react45.useState)(0);
   const matches = (0, import_react45.useMemo)(
-    () => token && !disabled ? (0, import_builderforce_brain_embedded23.filterTicketCandidates)(tickets, token.query) : [],
+    () => token && !disabled ? (0, import_builderforce_brain_embedded24.filterTicketCandidates)(tickets, token.query) : [],
     [token, tickets, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
@@ -6317,7 +6322,7 @@ function useTicketAutocomplete(opts) {
       setToken(null);
       return;
     }
-    const next = (0, import_builderforce_brain_embedded23.activeTicketToken)(el.value, el.selectionStart ?? el.value.length);
+    const next = (0, import_builderforce_brain_embedded24.activeTicketToken)(el.value, el.selectionStart ?? el.value.length);
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, tickets.length]);
@@ -6326,7 +6331,7 @@ function useTicketAutocomplete(opts) {
   }, [value, recompute]);
   const choose = (0, import_react45.useCallback)((t) => {
     const el = textareaRef.current;
-    const tk = token ?? (el ? (0, import_builderforce_brain_embedded23.activeTicketToken)(el.value, el.selectionStart ?? 0) : null);
+    const tk = token ?? (el ? (0, import_builderforce_brain_embedded24.activeTicketToken)(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
       const ref = t.key ?? String(t.id);
       let after = value.slice(tk.end);
@@ -8288,7 +8293,7 @@ function preferredEvermindBuild(builds, pick = {}) {
 }
 
 // src/index.ts
-var import_builderforce_brain_embedded29 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded30 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/evermind/labelBundle.ts
 var STATIC_KEYS = [
@@ -9589,14 +9594,14 @@ function AttachmentChips({ items, onRemove, labels }) {
 }
 
 // src/composer/composerOptions.ts
-var import_builderforce_brain_embedded24 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded25 = require("@seanhogg/builderforce-brain-embedded");
 function composerOptionGroups(options, labels) {
   const { mode, memory, effort, thinking, model, inferenceMode, openMenu, autoMode, session } = options;
   const thinkingOn = thinking?.value ?? false;
   const modeGroup = mode ? {
     value: mode.value,
     onChange: (next) => mode.onChange(next),
-    choices: import_builderforce_brain_embedded24.CHAT_MODES.map((m) => ({ value: m, label: labels.modeLabel(m), hint: labels.modeHint(m), icon: import_builderforce_brain_embedded24.CHAT_MODE_ICON[m] }))
+    choices: import_builderforce_brain_embedded25.CHAT_MODES.map((m) => ({ value: m, label: labels.modeLabel(m), hint: labels.modeHint(m), icon: import_builderforce_brain_embedded25.CHAT_MODE_ICON[m] }))
   } : void 0;
   const memoryGroup = memory ? {
     enabled: memory.enabled,
@@ -9616,7 +9621,7 @@ function composerOptionGroups(options, labels) {
       // What a level REALLY costs, read from the shared effort table, so the copy can
       // never promise a budget the request does not send.
       describeEffort: (level) => {
-        const { maxTokens, thinkingBudgetTokens } = (0, import_builderforce_brain_embedded24.effortProfile)(level);
+        const { maxTokens, thinkingBudgetTokens } = (0, import_builderforce_brain_embedded25.effortProfile)(level);
         const base = labels.effortDesc(level, Math.max(maxTokens, effort.minAnswerTokens ?? 0));
         return thinkingOn ? `${base} ${labels.effortThinkingSuffix(thinkingBudgetTokens)}` : base;
       }
@@ -9624,7 +9629,7 @@ function composerOptionGroups(options, labels) {
     ...thinking ? {
       thinking: thinking.value,
       onThinkingChange: thinking.onChange,
-      describeThinking: (on) => on ? labels.thinkingOnDesc((0, import_builderforce_brain_embedded24.effortProfile)(effort?.value ?? "balanced").thinkingBudgetTokens) : labels.thinkingOffDesc
+      describeThinking: (on) => on ? labels.thinkingOnDesc((0, import_builderforce_brain_embedded25.effortProfile)(effort?.value ?? "balanced").thinkingBudgetTokens) : labels.thinkingOffDesc
     } : {},
     model,
     inferenceMode,
@@ -9683,13 +9688,12 @@ function ContextMeter({ usage, labels, locale }) {
 }
 
 // src/composer/BrainComposer.tsx
-var import_builderforce_brain_embedded26 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded27 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/composer/ComposerTextBox.tsx
 var import_react59 = require("react");
-var import_builderforce_brain_embedded25 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded26 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime76 = require("react/jsx-runtime");
-var UNUSED_STORE2 = (0, import_builderforce_brain_embedded25.createComposerDraftStore)();
 var noop = () => void 0;
 var NO_PARTICIPANTS = [];
 var NO_TICKETS = [];
@@ -9716,7 +9720,7 @@ function ComposerTextBoxInner(props) {
     draftStore,
     onChange
   } = props;
-  const storeText = (0, import_builderforce_brain_embedded25.useDraftText)(draftStore ?? UNUSED_STORE2);
+  const storeText = (0, import_builderforce_brain_embedded26.useDraftText)(draftStore ?? UNUSED_STORE);
   const value = draftStore ? storeText : props.value ?? "";
   const setValue = draftStore ? draftStore.set : onChange ?? noop;
   const mention = useMentionAutocomplete({
@@ -9829,7 +9833,6 @@ function composerLabelsFrom(lookup, overrides) {
 
 // src/composer/BrainComposer.tsx
 var import_jsx_runtime77 = require("react/jsx-runtime");
-var UNUSED_STORE3 = (0, import_builderforce_brain_embedded26.createComposerDraftStore)();
 function BrainComposerInner(props) {
   const {
     draftStore,
@@ -9871,7 +9874,7 @@ function BrainComposerInner(props) {
   const textareaRef = (0, import_react60.useRef)(null);
   const [focused, setFocused] = (0, import_react60.useState)(false);
   const [dragging, setDragging] = (0, import_react60.useState)(false);
-  const storeEmpty = (0, import_builderforce_brain_embedded26.useDraftIsEmpty)(draftStore ?? UNUSED_STORE3);
+  const storeEmpty = (0, import_builderforce_brain_embedded27.useDraftIsEmpty)(draftStore ?? UNUSED_STORE);
   const empty = draftStore ? storeEmpty : !(value ?? "").trim();
   const valueRef = (0, import_react60.useRef)(value ?? "");
   valueRef.current = value ?? "";
@@ -10086,12 +10089,12 @@ function brainComposerLabelsFrom(lookup, overrides) {
 }
 
 // src/composer/composerModel.ts
-var import_builderforce_brain_embedded27 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded28 = require("@seanhogg/builderforce-brain-embedded");
 function composerCatalogLoaded(catalog) {
-  return catalog != null && catalog !== import_builderforce_brain_embedded27.EMPTY_GATEWAY_MODEL_OPTIONS;
+  return catalog != null && catalog !== import_builderforce_brain_embedded28.EMPTY_GATEWAY_MODEL_OPTIONS;
 }
 function withLocalModels(catalog, local) {
-  const base = catalog ?? import_builderforce_brain_embedded27.EMPTY_GATEWAY_MODEL_OPTIONS;
+  const base = catalog ?? import_builderforce_brain_embedded28.EMPTY_GATEWAY_MODEL_OPTIONS;
   if (!local || local.length === 0) return base;
   return { ...base, options: { ...base.options, local } };
 }

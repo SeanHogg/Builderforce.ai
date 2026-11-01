@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-11-01T15:18:37.928Z";
+export const PRICE_SNAPSHOT_AT = "2026-11-01T16:42:07.315Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
@@ -14,7 +14,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "~anthropic/claude-sonnet-latest": [0.000002, 0.00001],
   "~deepseek/deepseek-flash-latest": [3.5e-8, 5e-7],
   "~deepseek/deepseek-pro-latest": [1.035e-7, 0.000008],
-  "~deepseek/deepseek-v4-flash-latest": [4.34e-8, 3e-7],
+  "~deepseek/deepseek-v4-flash-latest": [5.9e-8, 3e-7],
   "~google/gemini-flash-latest": [7.5e-7, 0.00000375],
   "~google/gemini-pro-latest": [0.000002, 0.00001],
   "~moonshotai/kimi-latest": [1.495e-7, 0.00000715],
@@ -322,7 +322,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "openai/gpt-audio": [0.0000025, 0.00001],
   "openai/gpt-audio-mini": [6e-7, 0.0000024],
   "openai/gpt-chat-latest": [0.000005, 0.00003],
-  "openai/gpt-oss-120b": [2.2e-8, 8e-8],
+  "openai/gpt-oss-120b": [1.6e-8, 5.8e-8],
   "openai/gpt-oss-120b:batch": [2.96e-8, 1.36e-7],
   "openai/gpt-oss-20b": [3e-8, 1.3e-7],
   "openai/gpt-oss-20b:batch": [2.4e-8, 1.12e-7],
@@ -411,9 +411,9 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "tencent/hy-mt2-1.8b": [4.4e-8, 1.77e-7],
   "tencent/hy-mt2-30b-a3b": [7.4e-8, 2.95e-7],
   "tencent/hy-mt2-7b": [7.4e-8, 2.95e-7],
-  "tencent/hy3": [1.32e-7, 5.28e-7],
+  "tencent/hy3": [8.25e-8, 3.3e-7],
   "tencent/hy3-preview": [1.8e-7, 6e-7],
-  "tencent/hy4-preview": [8.34e-7, 0.000002501],
+  "tencent/hy4-preview": [7.506e-7, 0.0000022509],
   "thedrummer/cydonia-24b-v4.1": [3e-7, 5e-7],
   "thedrummer/skyfall-36b-v2": [5.5e-7, 8e-7],
   "thedrummer/unslopnemo-12b": [4e-7, 4e-7],

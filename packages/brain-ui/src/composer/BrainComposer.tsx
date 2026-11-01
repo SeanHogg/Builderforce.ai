@@ -35,9 +35,10 @@ import { AttachmentChips, type ComposerAttachment } from './AttachmentChips';
 import { composerOptionGroups, type ComposerOptions } from './composerOptions';
 import { SuggestionRow, type ComposerSuggestion } from './SuggestionRow';
 import { ContextMeter } from './ContextMeter';
-import { createComposerDraftStore, useDraftIsEmpty, type ContextUsage } from '@seanhogg/builderforce-brain-embedded';
+import { useDraftIsEmpty, type ContextUsage } from '@seanhogg/builderforce-brain-embedded';
 import { ComposerTextBox, type ComposerTextSource } from './ComposerTextBox';
 import { composerLabels, type ComposerLabels } from './labels';
+import { UNUSED_STORE } from './unusedDraftStore';
 
 export interface BrainComposerLabels {
   composer?: Partial<ComposerLabels>;
@@ -132,9 +133,6 @@ export interface BrainComposerBaseProps {
   labels?: BrainComposerLabels;
   className?: string;
 }
-
-/** Never written: stands in for the draft while a host controls the text itself (hooks cannot be skipped). */
-const UNUSED_STORE = createComposerDraftStore();
 
 function BrainComposerInner(props: BrainComposerProps) {
   const {

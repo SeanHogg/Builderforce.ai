@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  createComposerDraftStore,
   mentionRecipient,
   resolveRecipient,
   useDraftSelector,
@@ -8,9 +7,7 @@ import {
   type DirectedRecipient,
   type RecipientChoice,
 } from '@seanhogg/builderforce-brain-embedded';
-
-/** Never written: stands in for the draft while the host passes the text itself (hooks cannot be skipped). */
-const UNUSED_STORE = createComposerDraftStore();
+import { UNUSED_STORE } from '../composer/unusedDraftStore';
 
 /**
  * Who the next message goes to, as composer state — shared by every composer so

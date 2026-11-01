@@ -10,7 +10,9 @@ const jwt = vi.hoisted(() => ({ refreshTenantJwt: vi.fn(async () => "fresh"), ge
 vi.mock("./bfApi", () => jwt);
 vi.mock("./errorReporter", () => ({ logLine: vi.fn() }));
 vi.mock("./gateway", () => ({ getBaseUrl: () => "https://api.example", getWebBaseUrl: () => "https://web.example" }));
-vi.mock("./localFirstStore", () => ({ localBrainApplication: () => ({ persistence: {} }) }));
+vi.mock("./localFirstStore", () => ({ localBrainApplication: () => ({ persistence: {}, store: {}, deviceId: "device-test" }) }));
+const workRepo = vi.hoisted(() => ({ createLocalWorkRepository: vi.fn() }));
+vi.mock("./localWorkRepository", () => workRepo);
 vi.mock("./platformPolicy", () => ({
   platformInferenceMode: () => "hybrid",
   platformPolicy: () => ({
@@ -120,4 +122,41 @@ describe("local.persistence dispatch", () => {
       view.dispose();
     },
   );
+});
+
+describe("local.tickets dispatch", () => {
+  // The webview asks on the `#` typeahead's offline path. A host whose local store is
+  // missing/unreadable must still answer `[]`, never a refusal — an empty picker is a
+  // correct "no local tickets".
+  const ticketRows = [
+    { id: 101, payload: { title: "First", status: "open" } },
+    { id: 205, payload: { title: "Second", status: "done" } },
+  ];
+
+  it("answers with the live local tickets mapped to { id, title, status }", async () => {
+    workRepo.createLocalWorkRepository.mockReturnValue({ listTickets: vi.fn(async () => ticketRows) });
+    const view = surface();
+    await handleSharedHostMessage(ctx, view.webview, { type: "local.tickets", id: "lt1" } as never, view.owner);
+    expect(workRepo.createLocalWorkRepository).toHaveBeenCalledWith({ store: {}, deviceId: "device-test" });
+    expect(view.posted).toContainEqual({
+      type: "response",
+      id: "lt1",
+      ok: true,
+      result: [
+        { id: 101, title: "First", status: "open" },
+        { id: 205, title: "Second", status: "done" },
+      ],
+    });
+    view.dispose();
+  });
+
+  it("answers [] when the local store cannot serve tickets, never an error", async () => {
+    workRepo.createLocalWorkRepository.mockImplementation(() => {
+      throw new Error("no local store");
+    });
+    const view = surface();
+    await handleSharedHostMessage(ctx, view.webview, { type: "local.tickets", id: "lt2" } as never, view.owner);
+    expect(view.posted).toContainEqual({ type: "response", id: "lt2", ok: true, result: [] });
+    view.dispose();
+  });
 });

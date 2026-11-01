@@ -1058,8 +1058,12 @@ var PLATFORM_ROUTE_RULES = Object.freeze([
 // ../packages/local-first/src/records.ts
 var UNBOUND_DESTINATION = { kind: "unbound" };
 
+// ../packages/local-first/src/clone.ts
+function clone(value) {
+  return structuredClone(value);
+}
+
 // ../packages/local-first/src/store.ts
-var clone = (value) => structuredClone(value);
 async function selectRecords(tx, type, where) {
   const matches = [];
   await tx.scan(type, (row) => {
@@ -1315,7 +1319,7 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
   "~deepseek/deepseek-flash-latest": [35e-9, 5e-7],
   "~deepseek/deepseek-pro-latest": [1035e-10, 8e-6],
-  "~deepseek/deepseek-v4-flash-latest": [434e-10, 3e-7],
+  "~deepseek/deepseek-v4-flash-latest": [59e-9, 3e-7],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
   "~moonshotai/kimi-latest": [1495e-10, 715e-8],
@@ -1623,7 +1627,7 @@ var PRICE_SNAPSHOT = {
   "openai/gpt-audio": [25e-7, 1e-5],
   "openai/gpt-audio-mini": [6e-7, 24e-7],
   "openai/gpt-chat-latest": [5e-6, 3e-5],
-  "openai/gpt-oss-120b": [22e-9, 8e-8],
+  "openai/gpt-oss-120b": [16e-9, 58e-9],
   "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
   "openai/gpt-oss-20b": [3e-8, 13e-8],
   "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
@@ -1712,9 +1716,9 @@ var PRICE_SNAPSHOT = {
   "tencent/hy-mt2-1.8b": [44e-9, 177e-9],
   "tencent/hy-mt2-30b-a3b": [74e-9, 295e-9],
   "tencent/hy-mt2-7b": [74e-9, 295e-9],
-  "tencent/hy3": [132e-9, 528e-9],
+  "tencent/hy3": [825e-10, 33e-8],
   "tencent/hy3-preview": [18e-8, 6e-7],
-  "tencent/hy4-preview": [834e-9, 2501e-9],
+  "tencent/hy4-preview": [7506e-10, 22509e-10],
   "thedrummer/cydonia-24b-v4.1": [3e-7, 5e-7],
   "thedrummer/skyfall-36b-v2": [55e-8, 8e-7],
   "thedrummer/unslopnemo-12b": [4e-7, 4e-7],
@@ -21704,6 +21708,11 @@ function narratedUnadvertisedInTrace(events) {
   }
   return seen;
 }
+function answeredInProseInTrace(events) {
+  return events.some(
+    (ev) => ev.args?.answeredInProse === true
+  );
+}
 var SYMBOL_ANSWER_ACTION = "symbols.where-defined";
 function memoryAnswersInTrace(events) {
   const out = [];
@@ -21958,6 +21967,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const streamRetries = streamRetriesInTrace(events);
   const exposure = toolExposureInTrace(events);
   const narratedUnadvertisedTools = narratedUnadvertisedInTrace(events);
+  const answeredInProse = answeredInProseInTrace(events);
   const noToolsAdvertised = exposure.min === 0 && toolEvents2.length === 0;
   const memoryOnlyRun = memoryAnswers.length > 0 && llm.length === 0;
   const progress = computeRunProgress(events, messages);
@@ -21967,8 +21977,8 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const memoryUsage = memoryUsageInTrace(events);
   const workFiledNotStaffed = sessionShipped === 0 && (staffing.verdict === "filed-not-staffed" || staffing.verdict === "staffing-refused");
   const unresolvedAppFailures = unresolvedAppFailuresInTrace(events);
-  const healthy = errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal && !announcedUnmadeToolCall && !noProgress && unresolvedAppFailures === 0 && didWork;
-  const likelyCause = memoryOnlyRun ? "memory-answered" : noToolsAdvertised ? "no-tools-advertised" : narratedUnadvertisedTools.length > 0 ? "tool-not-advertised" : announcedUnmadeToolCall ? "tool-calls-not-emitted" : noProgress ? "no-progress" : contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : unresolvedAppFailures > 0 ? "app-errors-unresolved" : workFiledNotStaffed ? "work-filed-not-staffed" : healthy ? "healthy" : "inconclusive";
+  const healthy = errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal && !announcedUnmadeToolCall && !answeredInProse && !noProgress && unresolvedAppFailures === 0 && didWork;
+  const likelyCause = memoryOnlyRun ? "memory-answered" : noToolsAdvertised ? "no-tools-advertised" : narratedUnadvertisedTools.length > 0 ? "tool-not-advertised" : announcedUnmadeToolCall ? "tool-calls-not-emitted" : answeredInProse ? "answered-in-prose" : noProgress ? "no-progress" : contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : unresolvedAppFailures > 0 ? "app-errors-unresolved" : workFiledNotStaffed ? "work-filed-not-staffed" : healthy ? "healthy" : "inconclusive";
   return {
     turns: llm.length,
     toolCalls: toolEvents2.length,
@@ -22000,6 +22010,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     advertisedToolsMin: exposure.min,
     catalogTools: exposure.catalog,
     narratedUnadvertisedTools,
+    answeredInProse,
     memoryAnswers,
     turnCoveragePartial,
     progress,
@@ -26825,10 +26836,12 @@ function pendingTurnShown(slot, messages) {
   if (landed) return null;
   return { text: slot.text, ...slot.attachments?.length ? { attachments: slot.attachments } : {} };
 }
-function usePendingTurns(chatId, messages) {
+function usePendingTurns(chatId, messages, options) {
   const [slots, setSlots] = useState8(NO_SLOTS);
   const messagesRef = useRef7(messages);
   messagesRef.current = messages;
+  const currentChatRef = useRef7(options?.currentChat);
+  currentChatRef.current = options?.currentChat;
   const open = useCallback8((chat, text2, attachments) => {
     setSlots((cur) => {
       const have = cur.get(chat);
@@ -26860,9 +26873,14 @@ function usePendingTurns(chatId, messages) {
       return next;
     });
   }, []);
+  const announceTurn = useCallback8((text2, opts) => {
+    const chat = opts && "chat" in opts ? opts.chat ?? null : currentChatRef.current?.() ?? null;
+    if (text2 == null) close(chat);
+    else open(chat, text2.trim());
+  }, [open, close]);
   const slot = slots.get(chatId);
   const pendingTurn = useMemo6(() => pendingTurnShown(slot, messages), [slot, messages]);
-  return { pendingTurn, open, close, rekey };
+  return { pendingTurn, announceTurn, servedBy: options?.servedBy, open, close, rekey };
 }
 
 // src/useAutoReplyTrailingTurn.ts
@@ -27170,13 +27188,11 @@ function useBrainConversation(options) {
   });
   const messagesRef = useRef10(messages);
   messagesRef.current = messages;
-  const pending = usePendingTurns(chatId, messages);
-  const { open: openPending, close: closePending, rekey: rekeyPending } = pending;
-  const announceTurn = useCallback12((text2, opts) => {
-    const chat = opts && "chat" in opts ? opts.chat ?? null : chatIdRef.current;
-    if (text2 == null) closePending(chat);
-    else openPending(chat, text2.trim());
-  }, [openPending, closePending]);
+  const pending = usePendingTurns(chatId, messages, {
+    currentChat: () => chatIdRef.current,
+    servedBy: snapshot.servedBy
+  });
+  const { open: openPending, close: closePending, rekey: rekeyPending, announceTurn } = pending;
   useEffect10(() => {
     const map = {};
     for (const msg of messages) {
@@ -27395,7 +27411,7 @@ ${extraSystem}` : resolvedSystemPrompt;
     messages,
     pendingTurn: pending.pendingTurn,
     announceTurn,
-    servedBy: snapshot.servedBy,
+    servedBy: pending.servedBy,
     loadingMessages,
     reloadMessages,
     // A turn that is only announced (its host's pre-send stage is running) already counts as in flight: the transcript shows
