@@ -20,6 +20,7 @@ export * from "./registry.js";
 export * from "./toolAliases.js";
 export * from "./engine.js";
 export * from "./spec.js";
+export { PATCH_MARKERS, gatePathCandidates, parsePatchHeader, patchHeaderPaths, type PatchHeaderKind } from "./gatePaths.js";
 export * from "./policyGateCallKey.js";
 export * from "./core-tools.js";
 export * from "./writeOverwriteGuard.js";

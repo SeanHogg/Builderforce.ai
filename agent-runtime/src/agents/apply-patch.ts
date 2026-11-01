@@ -2,16 +2,15 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { AgentTool } from "../builderforce/model/agent-types.js";
 import { Type } from "@sinclair/typebox";
+import { PATCH_MARKERS, parsePatchHeader } from "@builderforce/agent-tools";
 import { applyUpdateHunk } from "./apply-patch-update.js";
 import { assertSandboxPath, resolveSandboxInputPath } from "./sandbox-paths.js";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 
-const BEGIN_PATCH_MARKER = "*** Begin Patch";
-const END_PATCH_MARKER = "*** End Patch";
-const ADD_FILE_MARKER = "*** Add File: ";
-const DELETE_FILE_MARKER = "*** Delete File: ";
-const UPDATE_FILE_MARKER = "*** Update File: ";
-const MOVE_TO_MARKER = "*** Move to: ";
+// The patch's begin/end markers and its file headers are the shared grammar (`@builderforce/agent-tools`): a path-scoped governance
+// gate reads the files a patch touches with the SAME header parser this applier uses.
+const BEGIN_PATCH_MARKER = PATCH_MARKERS.begin;
+const END_PATCH_MARKER = PATCH_MARKERS.end;
 const EOF_MARKER = "*** End of File";
 const CHANGE_CONTEXT_MARKER = "@@ ";
 const EMPTY_CHANGE_CONTEXT_MARKER = "@@";
@@ -362,9 +361,9 @@ function parseOneHunk(lines: string[], lineNumber: number): { hunk: Hunk; consum
   if (lines.length === 0) {
     throw new Error(`Invalid patch hunk at line ${lineNumber}: empty hunk`);
   }
-  const firstLine = lines[0].trim();
-  if (firstLine.startsWith(ADD_FILE_MARKER)) {
-    const targetPath = firstLine.slice(ADD_FILE_MARKER.length);
+  const header = parsePatchHeader(lines[0]);
+  if (header?.kind === "add") {
+    const targetPath = header.path;
     let contents = "";
     let consumed = 1;
     for (const addLine of lines.slice(1)) {
@@ -381,23 +380,23 @@ function parseOneHunk(lines: string[], lineNumber: number): { hunk: Hunk; consum
     };
   }
 
-  if (firstLine.startsWith(DELETE_FILE_MARKER)) {
-    const targetPath = firstLine.slice(DELETE_FILE_MARKER.length);
+  if (header?.kind === "delete") {
+    const targetPath = header.path;
     return {
       hunk: { kind: "delete", path: targetPath },
       consumed: 1,
     };
   }
 
-  if (firstLine.startsWith(UPDATE_FILE_MARKER)) {
-    const targetPath = firstLine.slice(UPDATE_FILE_MARKER.length);
+  if (header?.kind === "update") {
+    const targetPath = header.path;
     let remaining = lines.slice(1);
     let consumed = 1;
     let movePath: string | undefined;
 
-    const moveCandidate = remaining[0]?.trim();
-    if (moveCandidate?.startsWith(MOVE_TO_MARKER)) {
-      movePath = moveCandidate.slice(MOVE_TO_MARKER.length);
+    const moveHeader = remaining[0] === undefined ? null : parsePatchHeader(remaining[0]);
+    if (moveHeader?.kind === "move") {
+      movePath = moveHeader.path;
       remaining = remaining.slice(1);
       consumed += 1;
     }

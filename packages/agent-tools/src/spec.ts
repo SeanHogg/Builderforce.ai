@@ -20,6 +20,7 @@
  * primitive is recorded in DONE.md (2026-10-25 docs-cleanup entry).
  */
 
+import { gatePathCandidates } from "./gatePaths.js";
 import { matchGlob } from "./glob.js";
 import { inScope } from "./workstreamScope.js";
 
@@ -169,39 +170,7 @@ export function coercePolicyGates(raw: unknown): PolicyGate[] {
   return out;
 }
 
-/** The file headers of a `*** Begin Patch` document (`apply_patch`'s only argument): what a patch adds, updates, deletes or moves to. */
-const PATCH_FILE_HEADER = /^\*\*\* (?:Add File|Update File|Delete File|Move to):[ \t]*(.+?)[ \t]*$/gm;
-
-function patchPaths(input: unknown): string[] {
-  if (typeof input !== "string" || !input.includes("*** Begin Patch")) return [];
-  return [...input.matchAll(PATCH_FILE_HEADER)].map((m) => m[1] as string);
-}
-
-/**
- * Paths a tool call is acting on, extracted from the common arg shapes (`path`,
- * `filePath`, `oldPath`, `newPath`, `paths[]`, and the file headers of an
- * `apply_patch` `input`). The hook call sites pass into
- * {@link evaluatePolicyGate} so a path-scoped gate can match without each engine
- * re-implementing extraction.
- */
-export function toolCallPaths(args: Record<string, unknown> | undefined): string[] {
-  if (!args) return [];
-  const out: string[] = [];
-  const add = (v: unknown) => {
-    if (typeof v === "string" && v.trim()) out.push(v.trim());
-  };
-  add(args.path);
-  add(args.filePath);
-  // The on-prem native tools' spelling — a path-scoped gate must match it too.
-  add(args.file_path);
-  add(args.oldPath);
-  add(args.newPath);
-  if (Array.isArray(args.paths)) {
-    for (const p of args.paths) add(p);
-  }
-  for (const p of patchPaths(args.input)) add(p);
-  return out;
-}
+export { toolCallPaths } from "./gatePaths.js";
 
 function pathHitsPattern(path: string, pattern: string): boolean {
   return matchGlob(path, pattern) || inScope(path, [pattern]);
@@ -210,9 +179,8 @@ function pathHitsPattern(path: string, pattern: string): boolean {
 function gateMatchesPath(g: PolicyGate, callPath?: string | readonly string[]): boolean {
   const patterns = g.paths;
   if (!patterns || patterns.length === 0) return true;
-  const callPaths = (Array.isArray(callPath) ? callPath : callPath ? [callPath] : [])
-    .map((p) => p.trim())
-    .filter(Boolean);
+  // Every spelling of each path (`./x`, `a/../x`, backslashes, an absolute path by its tails): a scope is not stepped around by writing the path differently.
+  const callPaths = (Array.isArray(callPath) ? callPath : callPath ? [callPath] : []).flatMap(gatePathCandidates).filter(Boolean);
   // Path-scoped but the seam did not pass a path: do not match. Existing call
   // sites that only pass toolName keep today's tool-only behaviour.
   if (callPaths.length === 0) return false;

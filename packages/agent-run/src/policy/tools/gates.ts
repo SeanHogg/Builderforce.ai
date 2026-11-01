@@ -25,50 +25,12 @@ import { evaluatePolicyGate, policyGateCallKey, toolCallPaths, type PolicyDecisi
 import type { ApprovalRefusal } from "../../contract.js";
 import type { GuardControl, PolicyContext, PolicyToolCall } from "../hooks.js";
 import { emit } from "../../runContext.js";
+import { candidateToolNames } from "./gateToolNames.js";
 
 export { policyGateCallKey };
 
-/**
- * Native / SDK tool names the model emits, plus the catalog names a gate is typically
- * authored against (`write_file`, `run_command`, …). The on-prem `policy-gate-seam.ts`
- * table, extended with the SDK vocabulary its runner's allowlist covered: `Task` is
- * delegation (`spawn_agent(s)`), `Glob` / `Grep` are `list_files` / `search_code`, and a
- * write gate also covers `delete_file` (a delete is a write).
- */
-const TOOL_NAME_SYNONYMS: Readonly<Record<string, readonly string[]>> = {
-  write: ["write_file", "Write"],
-  write_file: ["write", "Write"],
-  Write: ["write", "write_file"],
-  delete_file: ["write_file", "write", "Write"],
-  // A patch is a write and an edit at once: a gate authored on either covers it.
-  apply_patch: ["write_file", "write", "Write", "edit_file", "edit", "Edit"],
-  edit: ["edit_file", "Edit"],
-  edit_file: ["edit", "Edit"],
-  Edit: ["edit", "edit_file"],
-  exec: ["run_command", "Bash", "bash"],
-  Bash: ["run_command", "exec", "bash"],
-  bash: ["run_command", "exec", "Bash"],
-  run_command: ["exec", "Bash", "bash"],
-  read: ["read_file", "Read"],
-  Read: ["read", "read_file"],
-  read_file: ["read", "Read"],
-  Task: ["spawn_agent", "spawn_agents"],
-  spawn_agent: ["Task", "spawn_agents"],
-  spawn_agents: ["Task", "spawn_agent"],
-  Glob: ["list_files"],
-  list_files: ["Glob"],
-  Grep: ["search_code"],
-  search_code: ["Grep"],
-};
-
-/**
- * Tools whose ACTION decides what they are: `nodes` with `action: "run"` runs a command on a node, so a gate on the exec family
- * covers it at dispatch. DATA, read by {@link candidateToolNames}; the whole tool is NOT withheld from the catalog (its other
- * actions are not execution), so only a call with the named action evaluates as the family.
- */
-const ACTION_TOOL_FAMILIES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
-  nodes: { run: "exec" },
-};
+/** Tools whose target files are read out of their `input` string (`apply_patch`), not out of a path argument. */
+const INPUT_PATH_TOOLS: ReadonlySet<string> = new Set(["apply_patch"]);
 
 /** How a run ends or asks. A gate that names no tool never gets between a run and these. */
 const CONTROL_TOOLS: ReadonlySet<string> = new Set(["finish", "ask_human", "ask_user"]);
@@ -90,20 +52,6 @@ export function policyRefusalMessage(d: PolicyRefusal): string {
   );
 }
 
-function candidateToolNames(toolName: string, args?: Record<string, unknown>): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  const action = typeof args?.action === "string" ? args.action.trim().toLowerCase() : "";
-  const family = ACTION_TOOL_FAMILIES[toolName]?.[action];
-  const names = [toolName, ...(TOOL_NAME_SYNONYMS[toolName] ?? []), ...(family ? [family, ...(TOOL_NAME_SYNONYMS[family] ?? [])] : [])];
-  for (const n of names) {
-    if (!n || seen.has(n)) continue;
-    seen.add(n);
-    out.push(n);
-  }
-  return out;
-}
-
 /** The gates that apply to `toolName`: for a control tool, only those that NAME a tool. */
 function gatesFor(gates: readonly PolicyGate[] | undefined, toolName: string): readonly PolicyGate[] {
   const all = gates ?? [];
@@ -120,9 +68,16 @@ export function evaluatePolicyGateSeam(
   toolName: string,
   args?: Record<string, unknown>,
 ): PolicyDecision {
-  const applicable = gatesFor(gates, toolName);
   const paths = toolCallPaths(args);
   const pathArg = paths.length ? paths : undefined;
+  // A tool whose files are INSIDE its input (a patch) that names none we can read is not known to stay outside a scope: FAIL CLOSED,
+  // so a path-scoped gate applies to it as if it were unscoped, rather than a malformed input stepping around the scope.
+  const unreadable = INPUT_PATH_TOOLS.has(toolName) && typeof args?.input === "string" && args.input.trim().length > 0 && paths.length === 0;
+  const applicable = gatesFor(gates, toolName).map((g) => {
+    if (!unreadable || !g.paths) return g;
+    const { paths: _scope, ...unscoped } = g;
+    return unscoped;
+  });
   let approval: PolicyRefusal | undefined;
   for (const name of candidateToolNames(toolName, args)) {
     const d = evaluatePolicyGate(applicable, name, pathArg);
@@ -149,11 +104,31 @@ export function isToolWithheld(gates: readonly PolicyGate[] | undefined, toolNam
 
 // The identity of ONE `require-approval` decision (`policyGateCallKey`) is shared by every surface: `@builderforce/agent-tools`.
 
-/** What the model reads when an approval was not granted: declined, timed out and stopped each say what happened. */
+/** Told with every refusal: the same call asked again is refused at once, so the model should take another path. */
+const DO_NOT_RETRY = "Do not ask for this again — accomplish the task another way, or finish and explain why it cannot proceed.";
+
+/** What the model reads when an approval was not granted: declined, timed out, stopped and no-approver-reachable each say what happened. */
 function approvalRefusalMessage(refusal: ApprovalRefusal, tool: string, gateId: string, answer: string): string {
-  if (refusal === "timed_out") return `No approver answered "${tool}" in time (governance gate ${gateId}), so it was not run.`;
+  if (refusal === "timed_out") return `No approver answered "${tool}" in time (governance gate ${gateId}), so it was not run. ${DO_NOT_RETRY}`;
   if (refusal === "stopped") return `The run was stopped before "${tool}" was approved (governance gate ${gateId}), so it was not run.`;
-  return `The approver declined "${tool}" (governance gate ${gateId}).${answer ? ` ${answer}` : ""}`;
+  if (refusal === "unreachable") return `No approver could be reached for "${tool}" (governance gate ${gateId}), so it was not run. ${DO_NOT_RETRY}`;
+  return `The approver declined "${tool}" (governance gate ${gateId}).${answer ? ` ${answer}` : ""} ${DO_NOT_RETRY}`;
+}
+
+/**
+ * Refuse an approval-gated call: told as a gate refusal (`policy.blocked`, so a surface can name the gate when a run ends on it) and
+ * REMEMBERED by the call's key, so the same call asked again within the run is refused at once instead of asking the approver again.
+ */
+async function refuseApproval(
+  ctx: PolicyContext,
+  call: PolicyToolCall,
+  decision: PolicyRefusal,
+  key: string,
+  error: string,
+): Promise<{ data: unknown; isError: true }> {
+  ctx.state.refusedCalls = { ...(ctx.state.refusedCalls ?? {}), [key]: error };
+  await emit(ctx.ports.events, { kind: "policy.blocked", step: ctx.step, tool: call.name, gateId: decision.gateId, reason: error });
+  return { data: { ok: false, gate: decision.gateId, error }, isError: true };
 }
 
 /**
@@ -184,6 +159,9 @@ export async function gateCall(
   if (decision.action !== "require-approval") return undefined;
   const key = policyGateCallKey(decision.gateId, call.name, call.args);
   if ((ctx.state.approvedCalls ?? []).includes(key)) return undefined;
+  // Refused earlier in this run (declined, timed out, stopped, no approver): the answer stands, the approver is not asked again.
+  const refusedBefore = ctx.state.refusedCalls?.[key];
+  if (refusedBefore) return { data: { ok: false, gate: decision.gateId, error: refusedBefore }, isError: true };
 
   const gate: PolicyGate = gates.find((g) => g.id === decision.gateId) ?? { id: decision.gateId, effect: "require-approval", reason: decision.reason };
   const question = `Approve the agent's use of "${call.name}"? ${decision.reason}`;
@@ -196,11 +174,7 @@ export async function gateCall(
     ? await human.approve(gate, { tool: call.name, args: call.args, reason: decision.reason, ...(parkedOn ? { approvalId: parkedOn } : {}) })
     : await human.ask(question);
   // A channel that cannot say anything at all is no approver: the policy refuses the call (the model reads why).
-  if (!answer) {
-    const error = policyRefusalMessage(decision);
-    await emit(ctx.ports.events, { kind: "policy.blocked", step: ctx.step, tool: call.name, gateId: decision.gateId, reason: error });
-    return { data: { ok: false, gate: decision.gateId, error }, isError: true };
-  }
+  if (!answer) return refuseApproval(ctx, call, decision, key, `${policyRefusalMessage(decision)} ${DO_NOT_RETRY}`);
   // The decision is the approval's STRUCTURED outcome, never matched out of the answer's words.
   if (answer.kind === "answered") {
     if (parkedOn) {
@@ -211,11 +185,7 @@ export async function gateCall(
       ctx.state.approvedCalls = [...(ctx.state.approvedCalls ?? []), key];
       return undefined;
     }
-    const refusal = answer.refusal ?? "declined";
-    const error = approvalRefusalMessage(refusal, call.name, decision.gateId, answer.answer);
-    // A refusal is a gate stopping a call whoever said no, so it is told like a block (the surface names the gate when a run ends on it).
-    await emit(ctx.ports.events, { kind: "policy.blocked", step: ctx.step, tool: call.name, gateId: decision.gateId, reason: error });
-    return { data: { ok: false, gate: decision.gateId, error }, isError: true };
+    return refuseApproval(ctx, call, decision, key, approvalRefusalMessage(answer.refusal ?? "declined", call.name, decision.gateId, answer.answer));
   }
   // Parked. With an approval record, the call is NOT approved: the retried identical call reads that record's
   // status. With none (a plain question), the person's answer arrives with the resume, and the retried call proceeds.

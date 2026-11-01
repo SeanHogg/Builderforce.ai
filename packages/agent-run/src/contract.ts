@@ -177,8 +177,8 @@ export interface EventSink {
   outcome?(row: RunOutcomeRow): Promise<void> | void;
 }
 
-/** Why an approval was not granted: a person said no, nobody answered in time, or the run was stopped while it waited. Absent means declined. */
-export type ApprovalRefusal = 'declined' | 'timed_out' | 'stopped';
+/** Why an approval was not granted: a person said no, nobody answered in time, the run was stopped while it waited, or no approver could be reached at all. Absent means declined. */
+export type ApprovalRefusal = 'declined' | 'timed_out' | 'stopped' | 'unreachable';
 
 /** What a human said, or that the run is waiting for one. */
 export type HumanAnswer =

@@ -117,6 +117,7 @@ export interface RunState {
   taskState?: TaskState;           // WS2f (C3): the agent's structured task state — kept outside the transcript so compaction cannot summarise it away
   forceToolChoice?: "required";    // WS2b: a stall recovery's one-shot tool_choice for the NEXT request
   approvedCalls?: string[];        // WS2c: the `require-approval` calls a person APPROVED (one policyGateCallKey each)
+  refusedCalls?: Record<string, string>; // an approval-gated call that was REFUSED this run (declined, timed out, stopped, no approver), by policyGateCallKey → what the model was told: the same call asked again is refused at once
   parkedCalls?: Record<string, string>; // WS2c: the `require-approval` calls the run parked on, by policyGateCallKey → the approval awaiting a decision
   advertisedSignature?: string;    // WS2f: the advertised tool set last reported on the timeline, so it is reported only when it CHANGES
   loadedTools?: string[];          // WS2f: tools a `tool_search` loaded beyond the role core set — they stay advertised for the rest of the run
