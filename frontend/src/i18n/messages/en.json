@@ -12075,6 +12075,8 @@
       "sortDone": "Complete first",
       "sortTitle": "Title",
       "sortLinked": "Linked order",
+      "hideDone": "Hide done",
+      "allDone": "All linked tickets are done.",
       "ticketCount": "{n, plural, one {# ticket} other {# tickets}}",
       "overallAria": "Overall progress: {pct}% done",
       "mergeAction": "Merge {n} here",

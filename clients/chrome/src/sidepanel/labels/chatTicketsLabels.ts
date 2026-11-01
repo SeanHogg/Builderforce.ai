@@ -65,6 +65,8 @@ const CHAT_TICKETS_KEY: Readonly<Record<string, MessageKey>> = {
   sortDone: 'ctSortDone',
   sortTitle: 'ctSortTitle',
   sortLinked: 'ctSortLinked',
+  hideDone: 'ctHideDone',
+  allDone: 'ctAllDone',
   'kind.task': 'ctKindTask',
   'kind.epic': 'ctKindEpic',
   'kind.gap': 'ctKindGap',

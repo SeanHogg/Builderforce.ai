@@ -430,6 +430,8 @@ export const MESSAGE_KEYS = [
   'ctSortDone',
   'ctSortTitle',
   'ctSortLinked',
+  'ctHideDone',
+  'ctAllDone',
   'ctKindTask',
   'ctKindEpic',
   'ctKindGap',

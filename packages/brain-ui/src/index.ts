@@ -249,6 +249,7 @@ export { createChatTicketsRestAdapter } from './chatTickets/restAdapter';
 export type { ChatTicketsRequest, ChatTicketsRestOptions } from './chatTickets/restAdapter';
 export { useChatParticipants } from './chatTickets/useChatParticipants';
 export { useChatActivitySignal } from './chatTickets/useChatActivitySignal';
+export { useHideDoneTickets } from './chatTickets/useHideDoneTickets';
 export { useMentionAutocomplete } from './mention/MentionAutocomplete';
 export type { MentionAutocomplete, MentionLabels, UseMentionAutocompleteOptions } from './mention/MentionAutocomplete';
 export { useTicketAutocomplete } from './mention/TicketAutocomplete';

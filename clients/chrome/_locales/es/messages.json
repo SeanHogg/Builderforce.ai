@@ -1425,6 +1425,14 @@
     "message": "Orden de vínculo",
     "description": "Sort option: original link order"
   },
+  "ctHideDone": {
+    "message": "Ocultar completados",
+    "description": "Ticket-grid filter: hide 100%-complete tickets"
+  },
+  "ctAllDone": {
+    "message": "Todos los tickets vinculados están completos.",
+    "description": "Ticket-grid note shown when the hide-done filter empties the grid"
+  },
   "ctKindTask": {
     "message": "Tarea",
     "description": "Ticket kind"

@@ -12075,6 +12075,8 @@
       "sortDone": "Erledigte zuerst",
       "sortTitle": "Titel",
       "sortLinked": "Verknüpfungsreihenfolge",
+      "hideDone": "Erledigte ausblenden",
+      "allDone": "Alle verknüpften Tickets sind erledigt.",
       "ticketCount": "{n, plural, one {# Ticket} other {# Tickets}}",
       "overallAria": "Gesamtfortschritt: {pct}% erledigt",
       "mergeAction": "{n} hier zusammenführen",

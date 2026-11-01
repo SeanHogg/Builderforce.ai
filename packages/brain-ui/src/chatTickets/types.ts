@@ -351,6 +351,11 @@ export interface ChatTicketsLabels {
   sortTitle: string;
   /** Original API / link order. */
   sortLinked: string;
+  /** Checkbox that filters 100%-complete tickets out of the grid (on by default —
+   *  a chat that accumulates many DONE chips keeps open work visible). */
+  hideDone: string;
+  /** Note in the grid when every linked ticket is 100% and the filter hid them all. */
+  allDone: string;
   kind: Record<TicketKind, string>;
   ringAria: (label: string, pct: number) => string;
   /** The chip's parent line: which work item this ticket belongs to ("in Advisor
@@ -424,6 +429,8 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   sortDone: 'Complete first',
   sortTitle: 'Title',
   sortLinked: 'Linked order',
+  hideDone: 'Hide done',
+  allDone: 'All linked tickets are done.',
   kind: { task: 'Task', epic: 'Epic', gap: 'Gap', objective: 'Objective', initiative: 'Initiative', portfolio: 'Portfolio', roadmap: 'Roadmap', spec: 'Spec', retro: 'Retrospective', poker: 'Planning poker' },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
   inParent: (parent) => `in ${parent}`,

@@ -56,6 +56,8 @@ export const S = {
   // Compact sort control in the rail header — sits outside the collapse button so
   // changing the order never toggles the grid. The `select` look, just tighter.
   sortSelect: { ...select, minWidth: 132, maxWidth: 180, padding: '3px 6px', fontSize: 11, flex: '0 0 auto' } as React.CSSProperties,
+  // "Hide done" checkbox beside the sort control — same row, same height.
+  hideDoneLabel: { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: V.text2, cursor: 'pointer', flex: '0 0 auto', whiteSpace: 'nowrap' } as React.CSSProperties,
   // The option popup is drawn by the OS and does NOT inherit `select`'s background,
   // so each option needs its own opaque pair — see nativeOptionStyle.
   option: nativeOptionStyle,

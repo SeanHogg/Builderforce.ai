@@ -833,6 +833,8 @@
   "Incomplete first": "Non terminés d'abord",
   "Complete first": "Terminés d'abord",
   "Linked order": "Ordre de liaison",
+  "Hide done": "Masquer les terminés",
+  "All linked tickets are done.": "Tous les tickets liés sont terminés.",
   "{n} ticket": "{n} ticket",
   "{n} tickets": "{n} tickets",
   "Overall progress: {pct}% done": "Progression globale : {pct}% terminé",

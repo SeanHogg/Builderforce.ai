@@ -1425,6 +1425,14 @@
     "message": "关联顺序",
     "description": "Sort option: original link order"
   },
+  "ctHideDone": {
+    "message": "隐藏已完成",
+    "description": "Ticket-grid filter: hide 100%-complete tickets"
+  },
+  "ctAllDone": {
+    "message": "所有关联工单均已完成。",
+    "description": "Ticket-grid note shown when the hide-done filter empties the grid"
+  },
   "ctKindTask": {
     "message": "任务",
     "description": "Ticket kind"

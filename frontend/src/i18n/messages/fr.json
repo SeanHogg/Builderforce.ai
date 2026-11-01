@@ -12075,6 +12075,8 @@
       "sortDone": "Terminés d'abord",
       "sortTitle": "Titre",
       "sortLinked": "Ordre de liaison",
+      "hideDone": "Masquer les terminés",
+      "allDone": "Tous les tickets liés sont terminés.",
       "ticketCount": "{n, plural, one {# ticket} other {# tickets}}",
       "overallAria": "Progression globale : {pct}% terminé",
       "mergeAction": "Fusionner {n} ici",

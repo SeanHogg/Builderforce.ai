@@ -833,6 +833,8 @@
   "Incomplete first": "Unerledigte zuerst",
   "Complete first": "Erledigte zuerst",
   "Linked order": "Verknüpfungsreihenfolge",
+  "Hide done": "Erledigte ausblenden",
+  "All linked tickets are done.": "Alle verknüpften Tickets sind erledigt.",
   "{n} ticket": "{n} Ticket",
   "{n} tickets": "{n} Tickets",
   "Overall progress: {pct}% done": "Gesamtfortschritt: {pct}% erledigt",

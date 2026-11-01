@@ -12075,6 +12075,8 @@
       "sortDone": "Completos primero",
       "sortTitle": "Título",
       "sortLinked": "Orden de vínculo",
+      "hideDone": "Ocultar completados",
+      "allDone": "Todos los tickets vinculados están completos.",
       "ticketCount": "{n, plural, one {# ticket} other {# tickets}}",
       "overallAria": "Progreso general: {pct}% completado",
       "mergeAction": "Fusionar {n} aquí",

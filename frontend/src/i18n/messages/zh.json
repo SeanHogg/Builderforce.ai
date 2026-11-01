@@ -12075,6 +12075,8 @@
       "sortDone": "已完成优先",
       "sortTitle": "标题",
       "sortLinked": "关联顺序",
+      "hideDone": "隐藏已完成",
+      "allDone": "所有关联工单均已完成。",
       "ticketCount": "{n, plural, other {# 个工单}}",
       "overallAria": "总体进度：完成 {pct}%",
       "mergeAction": "将 {n} 个合并到此处",

@@ -31,8 +31,9 @@ import { PeopleSection } from './PeopleSection';
 import { OriginalRequest } from './OriginalRequest';
 import { QuestionsSection } from './QuestionsSection';
 import { S } from './panelStyles';
-import { parseChatTicketSort, sortChatTickets } from './sortChatTickets';
+import { isChatTicketComplete, parseChatTicketSort, sortChatTickets } from './sortChatTickets';
 import { useChatTicketSort } from './useChatTicketSort';
+import { useHideDoneTickets } from './useHideDoneTickets';
 import {
   RUNNABLE_KINDS,
   type ChatTicketsAdapter, type ChatTicketsLabels, type TicketKind,
@@ -128,6 +129,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   // Presentational only — default incomplete-first so DONE chips don't bury open work;
   // the viewer's choice survives chat switches (see useChatTicketSort).
   const [sort, setSort] = useChatTicketSort();
+  // Hide 100%-complete tickets (on by default) — the viewer's choice, persisted like sort.
+  const [hideDone, setHideDone] = useHideDoneTickets();
 
   // The picker and Sessions tree show a chat-list snapshot; when the tickets read here
   // disagree with it, the host refetches so all three show one figure.
@@ -196,7 +199,10 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   // SAME rollup the server puts on the chat list (see rollupChatTicketHealth for why it
   // weights `progressPct` rather than counting Σdone/Σtotal).
   const agg = useMemo(() => rollupChatTicketHealth(tickets), [tickets]);
-  const displayedTickets = useMemo(() => sortChatTickets(tickets, sort), [tickets, sort]);
+  const displayedTickets = useMemo(
+    () => sortChatTickets(tickets, sort).filter((t) => !hideDone || !isChatTicketComplete(t.progressPct)),
+    [tickets, sort, hideDone],
+  );
 
   const isCollapsed = tickets.length > 0 && (collapsed ?? tickets.length > COLLAPSE_THRESHOLD);
   const toggleCollapsed = () => { userCollapsed.current = true; setCollapsed(!isCollapsed); };
@@ -237,6 +243,14 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
               <option value="linked" style={S.option}>{labels.sortLinked}</option>
             </select>
           )}
+          <label style={S.hideDoneLabel} title={labels.hideDone}>
+            <input
+              type="checkbox"
+              checked={hideDone}
+              onChange={(e) => setHideDone(e.target.checked)}
+            />
+            <span>{labels.hideDone}</span>
+          </label>
         </div>
       )}
 
@@ -245,6 +259,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       <div style={S.ticketGrid}>
         {tickets.length === 0 ? (
           <span style={S.muted}>{labels.none}</span>
+        ) : displayedTickets.length === 0 ? (
+          <span style={S.muted}>{labels.allDone}</span>
         ) : displayedTickets.map((tk) => {
           const key = `${tk.kind}:${tk.ref}`;
           const parentTk = parentLink(tk);

@@ -1543,6 +1543,14 @@
     "message": "Linked order",
     "description": "Sort option: original link order"
   },
+  "ctHideDone": {
+    "message": "Hide done",
+    "description": "Ticket-grid filter: hide 100%-complete tickets"
+  },
+  "ctAllDone": {
+    "message": "All linked tickets are done.",
+    "description": "Ticket-grid note shown when the hide-done filter empties the grid"
+  },
   "ctKindTask": {
     "message": "Task",
     "description": "Ticket kind"

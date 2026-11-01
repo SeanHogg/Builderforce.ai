@@ -76,6 +76,8 @@ export function chatTicketsLabels(): Record<string, string> {
     "ct.sortDone": t("Complete first"),
     "ct.sortTitle": t("Title"),
     "ct.sortLinked": t("Linked order"),
+    "ct.hideDone": t("Hide done"),
+    "ct.allDone": t("All linked tickets are done."),
     "ct.ticketCountOne": t("{n} ticket"),
     "ct.ticketCountMany": t("{n} tickets"),
     "ct.overallAria": t("Overall progress: {pct}% done"),

@@ -833,6 +833,8 @@
   "Incomplete first": "Incomplete first",
   "Complete first": "Complete first",
   "Linked order": "Linked order",
+  "Hide done": "Hide done",
+  "All linked tickets are done.": "All linked tickets are done.",
   "{n} ticket": "{n} ticket",
   "{n} tickets": "{n} tickets",
   "Overall progress: {pct}% done": "Overall progress: {pct}% done",

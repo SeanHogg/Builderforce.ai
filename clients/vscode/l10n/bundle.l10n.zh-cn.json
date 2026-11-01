@@ -833,6 +833,8 @@
   "Incomplete first": "未完成优先",
   "Complete first": "已完成优先",
   "Linked order": "关联顺序",
+  "Hide done": "隐藏已完成",
+  "All linked tickets are done.": "所有关联工单均已完成。",
   "{n} ticket": "{n} 个工单",
   "{n} tickets": "{n} 个工单",
   "Overall progress: {pct}% done": "总体进度：完成 {pct}%",

@@ -1425,6 +1425,14 @@
     "message": "Verknüpfungsreihenfolge",
     "description": "Sort option: original link order"
   },
+  "ctHideDone": {
+    "message": "Erledigte ausblenden",
+    "description": "Ticket-grid filter: hide 100%-complete tickets"
+  },
+  "ctAllDone": {
+    "message": "Alle verknüpften Tickets sind erledigt.",
+    "description": "Ticket-grid note shown when the hide-done filter empties the grid"
+  },
   "ctKindTask": {
     "message": "Aufgabe",
     "description": "Ticket kind"
