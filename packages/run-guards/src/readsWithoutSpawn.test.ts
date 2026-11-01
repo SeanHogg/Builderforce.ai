@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { READS_BEFORE_DELEGATION_NUDGE, ReadsWithoutSpawn } from "./readsWithoutSpawn.js";
 
 describe("ReadsWithoutSpawn", () => {
-  it("is due on the sixth read with no spawn, and only once", () => {
+  it("is due on the fourth read with no spawn, and only once", () => {
     const t = new ReadsWithoutSpawn();
     for (let i = 1; i < READS_BEFORE_DELEGATION_NUDGE; i += 1) {
       t.record("read");
       expect(t.due()).toBe(false);
     }
-    expect(t.record("read")).toBe(6);
+    expect(t.record("read")).toBe(READS_BEFORE_DELEGATION_NUDGE);
     expect(t.due()).toBe(true);
     t.markNudged();
     t.record("read");

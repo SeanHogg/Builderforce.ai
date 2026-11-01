@@ -15,7 +15,7 @@
  */
 import { ASK_USER_TOOL, askUserBlock, readOpenAiToolCalls, type StepRowInput } from '@builderforce/agent-loop';
 import {
-  ModelTransportError, createCompactionHook, runAgent,
+  DEFAULT_READS_BEFORE_NUDGE, ModelTransportError, createCompactionHook, runAgent,
   type ModelCompletion, type ModelTransport, type RunEvent, type RunPolicy, type ToolExtension,
 } from '@builderforce/agent-run';
 import { fileToolKind, type ToolSchema } from '@builderforce/agent-tools';
@@ -159,7 +159,7 @@ export async function runAgentReply(input: AgentReplyRunInput): Promise<ReplyTur
     entryPoint: 'cloud', toolScope: 'chat-reply', role: 'chat', levers: [], budgets: {},
     // A stall with nothing left to try posts what the reply said and why it stopped.
     stallExhausted: 'finish',
-    inference: 'hybrid', verify: 'none', approvalGates: [], delegation: { requested: false, readsBeforeNudge: 6 },
+    inference: 'hybrid', verify: 'none', approvalGates: [], delegation: { requested: false, readsBeforeNudge: DEFAULT_READS_BEFORE_NUDGE },
     // The reply's own routing, as its loop always asked for it: the plain policy over the pin and the verify model — no lock
     // after the first success, no releasable pin, no decline list.
     modelStart: { plain: true, ...(pinnedModel ? { model: pinnedModel } : {}), ...(verifyPin && verifyPin !== pinnedModel ? { phaseModels: { verify: verifyPin } } : {}) },

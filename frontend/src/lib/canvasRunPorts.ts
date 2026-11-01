@@ -56,7 +56,9 @@ export function canvasRunPolicy(options: CanvasAiOptions, inference: InferenceMo
     inference,
     verify: 'none',
     approvalGates: [],
-    delegation: { requested: false, readsBeforeNudge: 6 },
+    // The canvas asks for no sub-agents, so the nudge never fires; the number is the agent's default (`DEFAULT_READS_BEFORE_NUDGE`),
+    // spelled out because this module imports the agent as a TYPE only: the agent loads lazily, in its own chunk.
+    delegation: { requested: false, readsBeforeNudge: 4 },
     modelOptions: {
       strictPin: options.modelStrict,
       lockAfterFirstSuccess: true,

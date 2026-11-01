@@ -22,6 +22,9 @@ export * from "./surface.js";
 // The ONE scripted task every entry point's conformance case runs (PRD 35 §3.3), and the trace fold it is compared by.
 export * from "./conformanceTask.js";
 
+// The default `RunPolicy.delegation.readsBeforeNudge`: every adapter that lets the agent nudge says this, not its own number.
+export { READS_BEFORE_DELEGATION_NUDGE as DEFAULT_READS_BEFORE_NUDGE } from "@builderforce/run-guards";
+
 // The one agent. `RunAgentInput` is the single entry point.
 export { runAgent, type RunAgentInput } from "./runAgent.js";
 

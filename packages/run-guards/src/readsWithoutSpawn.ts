@@ -11,8 +11,11 @@
  * for. State is plain JSON so a durable host can carry it between steps.
  */
 
-/** Read calls with no spawn before the nudge fires (`RunPolicy.delegation.readsBeforeNudge`). */
-export const READS_BEFORE_DELEGATION_NUDGE = 6;
+/**
+ * Read calls with no spawn before the nudge fires (`RunPolicy.delegation.readsBeforeNudge`). Four, so a model that reads one
+ * file a turn is told on turn 4 and has spawned by turn 5 (PRD 35 §8.4); it fires only when delegation was asked for and is undone.
+ */
+export const READS_BEFORE_DELEGATION_NUDGE = 4;
 
 export interface ReadsWithoutSpawnState {
   /** Read calls since the run started, while no spawn had been attempted. */

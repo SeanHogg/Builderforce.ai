@@ -18,7 +18,7 @@
  * `agent-loop.ts`'s `agentLoop` always returned, so the Agent, the session and the runner are unchanged.
  */
 
-import { RUN_CANCELLED_REASON, asksForSubagents, runAgent } from "@builderforce/agent-run";
+import { DEFAULT_READS_BEFORE_NUDGE, RUN_CANCELLED_REASON, asksForSubagents, runAgent } from "@builderforce/agent-run";
 import type { ContextSource, RunEvent, RunMessage, RunPolicy, RunPorts, RunTask, SteeringSource, SteerInput } from "@builderforce/agent-run";
 import { RunKnowledgeRecorder, renderPolicyDirectives, type CapabilityProvider } from "@builderforce/agent-tools";
 import { randomUUID } from "node:crypto";
@@ -88,7 +88,7 @@ export function policyOf(config: AgentLoopConfig, request: string): RunPolicy {
     inference: "hybrid",
     verify: "none",
     approvalGates: [...(config.policyGates ?? [])],
-    delegation: { requested: asksForSubagents(request), readsBeforeNudge: 6 },
+    delegation: { requested: asksForSubagents(request), readsBeforeNudge: DEFAULT_READS_BEFORE_NUDGE },
     // A stall with nothing left to try ends the run, and the conversation says why it produced nothing.
     stallExhausted: "note",
   };

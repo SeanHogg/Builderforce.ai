@@ -20,7 +20,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { Capability, CapabilityProvider } from "@builderforce/agent-tools";
-import { runAgent, teeEvents, type ModelCompletion, type ModelRequest, type RunEvent, type RunOutcome, type RunPolicy, type RunPorts } from "../../src/index.js";
+import { DEFAULT_READS_BEFORE_NUDGE, runAgent, teeEvents, type ModelCompletion, type ModelRequest, type RunEvent, type RunOutcome, type RunPolicy, type RunPorts } from "../../src/index.js";
 import { TEST_POLICY } from "../support/policyContext.js";
 
 const PRD_PATH = "Builderforce.ai/docs/specs/35-prd-one-agent-one-kernel.md";
@@ -57,7 +57,7 @@ const call = (id: string, name: string, args: unknown): { id: string; name: stri
  * spawned, edit and finish; otherwise page the PRD two windows further. Turn 2 also asks for a window that OVERLAPS what it has seen
  * but reaches past it.
  */
-function reactiveModel(log: { spawnTurn?: number }): (request: ModelRequest) => ModelCompletion {
+function reactiveModel(log: { spawnTurn?: number }, readsPerTurn: 1 | 2): (request: ModelRequest) => ModelCompletion {
   let turn = 0;
   let next = 1;
   let spawned = false;
@@ -75,23 +75,21 @@ function reactiveModel(log: { spawnTurn?: number }): (request: ModelRequest) => 
       return { content: "", toolCalls: [call(`s${turn}`, "spawn_agents", { workstreams: [{ label: "WS2", task: "Review section 2 and report." }, { label: "WS4", task: "Review section 4 and report." }] })] };
     }
     // Turn 2 asks for lines the model has seen (1-120, 121-240) AND lines it has not (241-300); turn 3 re-reads lines it HAS seen.
-    const reads = turn === 2
-      ? [{ path: PRD_PATH, offset: 200, limit: 100 }, { path: PRD_PATH, offset: next, limit: WINDOW }]
-      : turn === 3
-        ? [{ path: PRD_PATH, offset: 10, limit: 30 }, { path: PRD_PATH, offset: next, limit: WINDOW }]
-        : [{ path: PRD_PATH, offset: next, limit: WINDOW }, { path: PRD_PATH, offset: next + WINDOW, limit: WINDOW }];
-    next += 2 * WINDOW;
+    const ahead = { path: PRD_PATH, offset: next, limit: WINDOW };
+    const wanted = turn === 2 ? [{ path: PRD_PATH, offset: 200, limit: 100 }, ahead] : turn === 3 ? [{ path: PRD_PATH, offset: 10, limit: 30 }, ahead] : [ahead, { ...ahead, offset: next + WINDOW }];
+    const reads = wanted.slice(0, readsPerTurn);
+    next += readsPerTurn * WINDOW;
     return { content: "", toolCalls: reads.map((args, i) => call(`r${turn}-${i}`, "read_file", args)) };
   };
 }
 
-const POLICY: RunPolicy = { ...TEST_POLICY, role: "code", delegation: { requested: true, readsBeforeNudge: 6 } };
+const POLICY: RunPolicy = { ...TEST_POLICY, role: "code", delegation: { requested: true, readsBeforeNudge: DEFAULT_READS_BEFORE_NUDGE } };
 
-async function replay(): Promise<{ outcome: RunOutcome; events: RunEvent[]; edits: string[]; spawnTurn: number | undefined; modelTurns: number; lastRequest: ModelRequest }> {
+async function replay(readsPerTurn: 1 | 2 = 2): Promise<{ outcome: RunOutcome; events: RunEvent[]; edits: string[]; spawnTurn: number | undefined; modelTurns: number; lastRequest: ModelRequest }> {
   const events: RunEvent[] = [];
   const edits: string[] = [];
   const log: { spawnTurn?: number } = {};
-  const model = reactiveModel(log);
+  const model = reactiveModel(log, readsPerTurn);
   let modelTurns = 0;
   let lastRequest!: ModelRequest;
   const ports: RunPorts = {
@@ -119,7 +117,7 @@ function servedRange(result: unknown): [number, number] | null {
 }
 
 describe("the §8.4 reference scenario, replayed on the one agent", () => {
-  it("finishes within 15 parent turns, spawns by turn 5 on the agent's own advisory, and edits the PRD", async () => {
+  it("finishes within 15 parent turns, spawns by turn 5 on the agent's own advisory (two reads a turn), and edits the PRD", async () => {
     const { outcome, edits, spawnTurn, modelTurns } = await replay();
     expect(outcome).toMatchObject({ kind: "finished", output: "PRD reviewed and updated." });
     expect(spawnTurn).toBeDefined();
@@ -128,8 +126,17 @@ describe("the §8.4 reference scenario, replayed on the one agent", () => {
     expect(edits).toEqual([PRD_PATH]);
   });
 
+  it("holds the same budgets for a model that reads ONE window a turn: told on the fourth read, spawned by turn 5", async () => {
+    const { outcome, edits, spawnTurn, modelTurns } = await replay(1);
+    expect(outcome).toMatchObject({ kind: "finished", output: "PRD reviewed and updated." });
+    expect(DEFAULT_READS_BEFORE_NUDGE).toBe(4);
+    expect(spawnTurn).toBe(5);
+    expect(modelTurns).toBeLessThanOrEqual(15);
+    expect(edits).toEqual([PRD_PATH]);
+  });
+
   it("never answers with a covered-read stub for lines the model was not served", async () => {
-    const { lastRequest } = await replay();
+    const { lastRequest } = await replay(1);
     // Pair each read_file call with the row the model got back, in transcript order.
     const asked = new Map<string, { offset?: number; limit?: number }>();
     for (const m of lastRequest.messages) {
@@ -155,7 +162,7 @@ describe("the §8.4 reference scenario, replayed on the one agent", () => {
         expect(served.some(([a, b]) => line >= a && line <= b), `line ${line} was answered from coverage but never served`).toBe(true);
       }
     }
-    expect(reads).toBeGreaterThan(4);
+    expect(reads).toBeGreaterThanOrEqual(4);
     // Turn 3 re-read lines 10-39, which WERE served: the agent answered from coverage, so the check above ran on a real stub.
     expect(stubs).toBeGreaterThan(0);
   });

@@ -27,7 +27,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { RUN_CANCELLED_REASON, asksForSubagents, runAgent } from "@builderforce/agent-run";
+import { DEFAULT_READS_BEFORE_NUDGE, RUN_CANCELLED_REASON, asksForSubagents, runAgent } from "@builderforce/agent-run";
 import type { ContextSource, ModelTransport, RunOutcome, RunPolicy, RunPorts, RunState, RunStore } from "@builderforce/agent-run";
 import { RunKnowledgeRecorder, type CapabilityProvider, type PolicyGate, type RunKnowledgeLog } from "@builderforce/agent-tools";
 import type { QueuedSteer, SteeringChannel } from "../infra/relay-steering.js";
@@ -111,7 +111,7 @@ function policyOf(params: OnPremRunParams): RunPolicy {
     inference: "hybrid",
     verify: "none",
     approvalGates: params.policyGates ?? [],
-    delegation: { requested: asksForSubagents(params.prompt), readsBeforeNudge: 6 },
+    delegation: { requested: asksForSubagents(params.prompt), readsBeforeNudge: DEFAULT_READS_BEFORE_NUDGE },
   };
 }
 

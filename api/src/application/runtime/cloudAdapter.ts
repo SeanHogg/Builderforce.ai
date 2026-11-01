@@ -21,7 +21,7 @@
  * The finish gates, guards, verify and compaction are bound with the couplings this surface has
  * (`cloudAdapterHooks`); what they DO is the agent's.
  */
-import { asksForSubagents, renderTaskState, runAgent, type ContextPack, type RunPolicy, type RunPorts, type RunState, type RunTask } from '@builderforce/agent-run';
+import { DEFAULT_READS_BEFORE_NUDGE, asksForSubagents, renderTaskState, runAgent, type ContextPack, type RunPolicy, type RunPorts, type RunState, type RunTask } from '@builderforce/agent-run';
 import { isCostLeverOn, type CostLeverId } from '@builderforce/cost-levers';
 import type { CloudEngineContext } from './cloudAgentEngine';
 import { parseRunDispatch } from './runDispatch';
@@ -85,7 +85,7 @@ function policyOf(host: CloudRunHost): RunPolicy {
     ...(opts.requiredSignoff ? { signoff: opts.requiredSignoff } : {}),
     approvalGates: opts.policyGates ?? [],
     // The ticket's OWN words — not the rendered PRD / facts envelope the prompt carries, which can name sub-agents without asking for them.
-    delegation: { requested: asksForSubagents(`${host.taskRow.title}\n${host.taskRow.description ?? ''}`), readsBeforeNudge: 6 },
+    delegation: { requested: asksForSubagents(`${host.taskRow.title}\n${host.taskRow.description ?? ''}`), readsBeforeNudge: DEFAULT_READS_BEFORE_NUDGE },
     // Nothing left to try ends the run with what it said; whatever it committed still ships.
     stallExhausted: 'finish',
     modelStart: {

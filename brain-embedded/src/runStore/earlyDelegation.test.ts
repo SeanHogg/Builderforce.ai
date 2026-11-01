@@ -67,15 +67,15 @@ async function scripted(chatId: number, userTurn: string, script: Call[]) {
 }
 
 describe('the early delegation nudge', () => {
-  it('rides the sixth read of a run that was asked for sub-agents', async () => {
-    const turns = await scripted(4601, 'review this PRD and implement it using subagents', [...[1, 2, 3, 4, 5, 6].map(read), SPAWN, null]);
-    // Turn index 6 is the model call that follows read 6; it sees six read results.
-    const afterRead5 = turns[5]!;
-    const afterRead6 = turns[6]!;
-    expect(afterRead5.some((r) => r.includes(NUDGE))).toBe(false);
-    expect(afterRead6.at(-1)).toContain(NUDGE);
+  it('rides the fourth read of a run that was asked for sub-agents', async () => {
+    const turns = await scripted(4601, 'review this PRD and implement it using subagents', [...[1, 2, 3, 4].map(read), SPAWN, null]);
+    // Turn index 4 is the model call that follows read 4; it sees four read results.
+    const afterRead3 = turns[3]!;
+    const afterRead4 = turns[4]!;
+    expect(afterRead3.some((r) => r.includes(NUDGE))).toBe(false);
+    expect(afterRead4.at(-1)).toContain(NUDGE);
     // The row is the model's JSON: read the nudge out of it, not off its escaped text.
-    expect(textInRow(afterRead6.at(-1)!).find((t) => t.includes(NUDGE))).toContain('role "explore"');
+    expect(textInRow(afterRead4.at(-1)!).find((t) => t.includes(NUDGE))).toContain('role "explore"');
     expect(getRunTrace(4601).filter((e) => e.label === LABEL)).toHaveLength(1);
     // The model spawned after the nudge, so the end-of-run backstop stays quiet.
     expect(getRunTrace(4601).some((e) => e.label === 'loop.recover_undelegated_request')).toBe(false);
