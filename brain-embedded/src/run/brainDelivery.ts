@@ -40,14 +40,14 @@ export function brainDeliveryLedger(run: RunLoopContext, last: LastTurn): Delive
     // The closing answer after a failure streak is the Brain's own (`runStore/failureClose.ts`, run by the adapter tail). A host that
     // cannot run a tool judges no stall at all (the rungs are none): the turn IS the answer.
     owns: { settle: true, synthesis: true, ...(runTool ? {} : { narration: true as const }) },
-    // The Brain's stall order and wording (`runStore/finalAnswerHook.ts`): a narrating turn is re-prompted before any rung, a model that
+    // The Brain's stall order and wording (the stall policy's options below): a narrating turn is re-prompted before any rung, a model that
     // spent its budget is failed over (reading the nudge alone) or stopped only once every rung is clear, the rungs' directives are the
     // person's rows, and the stall is judged against the menu the turn advertised.
     stall: { narrationFirst: true, steersFirst: true, nudgeAs: 'user', failoverNudgeOnly: true, menu: true, quoteEmpty: true, runWideBudget: true },
-    // The stall judgement and the gates read the model's own words, reasoning included (`finalAnswerHook.ts` reads `result.text`).
+    // The stall judgement and the gates read the model's own words, reasoning included (`last.result.text`).
     judged: (content) => last.result?.text ?? content,
     // A turn sent back keeps what the person watched stream in: as its own block, or - a model that stalled out and was handed
-    // over - as the reply it was (`finalAnswerHook.ts`'s `requeueWithNudge` and its failover).
+    // over - as the reply it was (the nudge-and-requeue and failover rungs).
     async sentBack({ kept }) {
       const result = last.result;
       if (!result) return;

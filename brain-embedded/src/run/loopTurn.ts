@@ -2,7 +2,7 @@
  * The agent's MODEL port over a Brain run: each turn's live view and record (PRD 35 §4 WS4, "the streamed turn").
  *
  * The streamed deltas, the activity indicator, the time to the first token, the `llm.complete` step, the usage, the BYO
- * banners and the failure ledger are the Brain's own, and they are the SAME code the Brain's loop runs: `openLiveTurn`
+ * banners and the failure ledger are the Brain's own, and they are the Brain's one implementation: `openLiveTurn`
  * (`runStore/turnStream.ts`) and `recordTurn` (`runStore/turnRecorder.ts`). This only joins them to the transport's per-turn
  * session. It decides nothing - which model, when to retry and what to offer are the agent's.
  *
@@ -61,7 +61,7 @@ export interface LastTurn {
   error?: unknown;
   /**
    * Recording a kept turn failed (its narration could not be saved). The agent's event stream swallows a sink's failure, so the
-   * run is failed from the next place the agent asks the surface something (`terminalTurn`), as the Brain's loop fails there.
+   * run is failed from the next place the agent asks the surface something (`terminalTurn`), so the run fails there.
    */
   keepFailed?: unknown;
   /** The reply the run's USD cap stopped it with, when it did: it is not an answer (`loopSettle.ts`). */
@@ -126,13 +126,13 @@ export function loopTurnObserver(run: RunLoopContext, savedTokens: () => number 
         metadata: t.metadata,
         maxTokens,
         // The coder re-ask is asked of the SAME turn's menu with the run's record and the planner's brief, not the turn's forced brief or
-        // steer, and keeps the turn's `tool_choice` (`completeTurn.ts`): it is one more request, never a turn of its own.
+        // steer, and keeps the turn's `tool_choice`: it is one more request, never a turn of its own.
         ...(reask ? { tail: [runBrief(run, tools.length)], ...(t.toolChoice ? { toolChoice: t.toolChoice } : {}) } : {}),
         call: { prompt_cache_key: `brain:${run.serverChatId ?? req.clientChatId ?? 'local'}`, conversationKey: run.chatId },
         fit: (messages, model) => run.windowFit.prepare({ messages, ...(model ? { model } : {}), ...(tools.length > 0 ? { tools } : {}), maxTokens, step: t.step }),
         around: (stream) => asLiveTurn(c, stream),
         recover(error): TurnRetry | undefined {
-          // The re-ask is not retried: a failure there is the turn's (the loop's re-ask goes straight to its error step).
+          // The re-ask is not retried: a failure there is the turn's (its error step is recorded like any failed turn).
           if (reask) return undefined;
           // The model broke AFTER the gateway committed to it, or the gateway was reached and the request reset, timed out or was answered
           // with a status the run policy routes around: the policy decides whether the turn is retried ONCE on another connected model
@@ -164,7 +164,7 @@ export function loopTurnObserver(run: RunLoopContext, savedTokens: () => number 
     },
   };
 
-  /** The agent went on with the answered turn: record it, once, the way the Brain's loop does. */
+  /** The agent went on with the answered turn: record it, once. */
   const keepAnswered = (): Promise<void> | undefined => {
     const answered = last.pending;
     if (!answered) return undefined;
@@ -198,8 +198,8 @@ async function keep(run: RunLoopContext, last: LastTurn, a: Answered): Promise<v
 }
 
 /**
- * The coder re-ask replaced the analysis model's answer: the Brain's loop never recorded it, so neither does the run - the
- * answer is dropped unrecorded, and the re-ask is said the way the loop says it.
+ * The coder re-ask replaced the analysis model's answer: the Brain never records it, so neither does the run - the
+ * answer is dropped unrecorded, and the re-ask is said on the trace.
  */
 export function discardAnswered(run: RunLoopContext, last: LastTurn, step: number, model: string | undefined): void {
   last.pending = undefined;

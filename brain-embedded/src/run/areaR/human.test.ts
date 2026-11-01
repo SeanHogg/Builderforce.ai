@@ -1,7 +1,7 @@
 /**
  * Area R, R10: the confirm card is an approval. A governance gate (`RunPolicy.approvalGates`) asks the human channel and reads
  * its STRUCTURED `approved`, never the words of the answer. Governance gates are unbound on the Brain (its request carries none,
- * as the loop's did), so `startRun` cannot reach this: the test drives `runAgent` over the Brain's real ports and a gate.
+ * as it always has), so `startRun` cannot reach this: the test drives `runAgent` over the Brain's real ports and a gate.
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';

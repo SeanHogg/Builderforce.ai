@@ -1,8 +1,7 @@
 /**
  * webAdapter — the Brain's surfaces adapted to the ONE agent (PRD 35 §3.1 / §4 WS4).
  *
- * Web, Rovr and — through its own thin adapter (`clients/vscode/src/run/vscodeAdapter.ts`) —
- * the editor run the same code here. An adapter ONLY builds ports and the policy DATA:
+ * Web, Rovr and the editor run the same code here. An adapter ONLY builds ports and the policy DATA:
  * it has no loop, no branch on behaviour and no policy. `RunPolicy.entryPoint` is the label
  * the outcome row carries (`'web'` / `'rovr'` / `'vscode'`); nothing reads it to decide what
  * the run does.
@@ -34,8 +33,7 @@ import type { BrainRunRequest } from '../runStore/runTypes';
 import { brainContextSource } from './contextSource';
 import { brainHumanChannel } from './humanChannel';
 import { brainModelRules } from './brainModelRules';
-import { brainModelTransport, type BrainCallDefaults } from './modelTransport';
-import type { TurnObserver } from './modelTransport';
+import { brainModelTransport, type TurnObserver } from './modelTransport';
 
 /** The telemetry label of the surface the run came in through. */
 export type BrainEntryPoint = 'web' | 'rovr' | 'vscode';

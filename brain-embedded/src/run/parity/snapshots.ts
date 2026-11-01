@@ -1,5 +1,5 @@
 /**
- * The stored expected records (PRD 35 WS4, D4). Each file is the record the Brain's old loop (`runLoop.ts`, deleted at the ship gate)
+ * The stored expected records (PRD 35 WS4, D4). Each file is the record the Brain's old loop (deleted at the PRD 35 ship gate)
  * left for one scenario; the agent is held to it by `snapshot.test.ts`. They are READ-ONLY: nothing can write one, because the only
  * thing left to write one from is the agent, and a snapshot made from the agent proves nothing about the agent. A behaviour change
  * that is genuinely intended is a planning decision, not a regeneration.

@@ -1,6 +1,6 @@
 /**
  * The §8.4 reference scenario through the Brain's PRODUCTION path (PRD 35 §8.4): "Review `docs/specs/35-prd-one-agent-one-kernel.md`
- * and update it using sub-agents" on a 45 KB markdown PRD, started the way the editor starts it (`startRun` on the agent engine, the
+ * and update it using sub-agents" on a 45 KB markdown PRD, started the way the editor starts it (`startRun`, the
  * parity harness's host: the model stream, persistence and tool port are the only fakes). This is the path where `readsCovered: true`
  * makes `callPreflight` stub a covered read, which is what ran on 2026-10-25; the core scenario
  * (`packages/agent-run/test/conformance/referenceScenario.test.ts`) proves the same budgets on the agent's own ports.
@@ -76,7 +76,7 @@ function scenario(state: { doc: string }): Scenario {
   };
 }
 
-describe('the section 8.4 reference scenario through the Brain on the agent engine', () => {
+describe('the section 8.4 reference scenario through the Brain', () => {
   it('requests delegation from the prompt, spawns by turn 5, finishes within 15 parent turns, and really edits the PRD', async () => {
     expect(asksForSubagents(PROMPT)).toBe(true);
     const state = { doc: LINES.join('\n') };

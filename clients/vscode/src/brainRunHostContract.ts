@@ -164,7 +164,7 @@ export interface BrainRunHostPorts {
   grounding?(): Promise<string | undefined>;
   /** Report a settled code-changing run's outcome to learned routing. Best-effort. */
   reportOutcome?(outcome: BrainRunOutcome): Promise<unknown>;
-  /** The agent engine's uniform §8.2 record of a run that made no coder grade (recorded, never taught to routing); the same door as {@link reportOutcome}. */
+  /** The uniform §8.2 record of a run that made no coder grade (recorded, never taught to routing); the same door as {@link reportOutcome}. */
   reportRunRecord?(record: RunOutcomeRequest): Promise<unknown>;
   /**
    * PRD 35 E3: the run's default checkout when the open folder CONTAINS checkouts —

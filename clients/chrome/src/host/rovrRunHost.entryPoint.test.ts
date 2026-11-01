@@ -1,7 +1,7 @@
 /**
  * The Rovr host declares itself and reports (PRD 35 §8.2): the run it prepares carries `entryPoint: 'rovr'` and the host's report port, so
  * the one agent's uniform outcome record is labelled by the host and reaches the gateway's door ONCE. Proved end to end: Rovr's
- * `prepareRun` laid over a request, started on the agent engine through the real `startRun`, and the record the port is told.
+ * `prepareRun` laid over a request, started through the real `startRun`, and the record the port is told.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { resetBrainRunStore, startRun, type BrainRunRequest, type BrainStreamFn, type StreamChatResult } from '@seanhogg/builderforce-brain-embedded';

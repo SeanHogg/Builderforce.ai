@@ -3,7 +3,7 @@
  * rendered as the live trace the panel shows and the durable step rows a reopened chat
  * reads. The labels are the ones every diagnostics reader already keys on
  * (`model.preflight`, `llm.model_downgrade`, `steer.applied`), so a run driven by the agent
- * reads exactly like one driven by the Brain's own loop.
+ * reads the way the Brain's runs always have.
  *
  * The sink renders; it never decides. A run's lifecycle events (`run.started`,
  * `turn.started`, `run.finished` …) have no step of their own — the run cell's `running`
@@ -94,12 +94,12 @@ export type OutcomeReport = (row: RunOutcomeRow) => Promise<unknown> | void;
 export function brainEventSink(c: RunCell, outcome?: OutcomeReport, on: SinkReactions = {}): EventSink {
   const render = (event: RunEvent): void => {
     if (on.recorded?.has(event.kind)) return;
-    // The run's end is reported as contained (`runEndOutcome.ts`), as the Brain's loop notes it.
+    // The run's end is reported as contained (`runEndOutcome.ts`), as it always has been.
     if (event.kind === 'budget.contained') {
       noteBudgetContained(c);
       on.budgetStop?.(event);
     }
-    // A stall with nothing left to try ends the run on what the model said; why it stopped is the chat's error line (`finalAnswerHook.ts`).
+    // A stall with nothing left to try ends the run on what the model said; why it stopped is the chat's error line (`brainDelivery.ts`).
     if (event.kind === 'stall.recovered' && event.action === 'pause' && event.note) c.error = event.note;
     if (event.kind === 'model.coder_reask' && on.coderReask) return on.coderReask(event);
     const step = traceStepFor(event, nowIso());

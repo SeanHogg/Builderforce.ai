@@ -1,6 +1,6 @@
 /**
  * The highest-traffic Brain runs: a plain chat turn, chat mode (R1), the composer's Effort levels (T1), the QUICK
- * route (T12), a tool run and the three gateway refusals (T3). Each is scripted once and run on both engines.
+ * route (T12), a tool run and the three gateway refusals (T3). Each is scripted once and held to the record the old loop left.
  */
 
 import { brainRequestError } from '../../../chatError';

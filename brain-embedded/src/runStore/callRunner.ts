@@ -1,5 +1,5 @@
 /**
- * The tool runner - shared by BOTH engines (the loop's dispatch port, the agent's platform tools in `run/brainPlatformTools.ts`):
+ * The tool runner - run by the agent's platform tools (`run/brainPlatformTools.ts`):
  * runs one call on the host: refuses a call whose arguments
  * never parsed, records what it changed (opening the run's ticket on its first edit),
  * links what it created, and attaches the guards' advisories to the copy of the result
@@ -32,7 +32,7 @@ import { runToolInterruptibly } from './steerInterrupt';
  * tool with an empty bag and came back "A path is required.", telling the model nothing about the real cause (its response had hit
  * the output ceiling) so it re-sent the same call until the run was spent. Not counted as a tool failure: the tool never ran.
  * Returns the corrective result the model reads (and records the step that says why), or undefined when the call is well formed.
- * Shared by both engines: the loop's runner below, the agent's platform tools (`run/brainPlatformTools.ts`).
+ * Run by the agent's platform tools (`run/brainPlatformTools.ts`).
  */
 export function declineMalformedCall(run: RunLoopContext, call: ParsedToolCall): { data: unknown; isError: true } | undefined {
   const truncated = run.lastTurnInterruption === 'truncated';

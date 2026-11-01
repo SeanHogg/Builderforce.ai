@@ -2,10 +2,10 @@
  * The Brain's own tools as the agent's CLOSED `PlatformTools` (PRD 35 §4 WS4): the catalog the host advertised plus the
  * conversational `ask_user` / `hand_off`, and how one call is run.
  *
- * A call is run by the SAME steps the Brain's loop runs, never a copy: `callPreflight` (router, alias, confirm gate,
+ * A call is run by the Brain's one set of steps, never a copy: `callPreflight` (router, alias, confirm gate,
  * one-ticket attach, `hand_off`, read and write dedupe), `callRunner` (the host's runner, the ticket on the first
  * edit, the auto-link, the guards' advisories) and, once the call's result row is in the transcript, `callPostStep`
- * (its durable step and read cache). While both engines exist those three modules serve both.
+ * (its durable step and read cache).
  *
  * Which tools the model is shown each turn is the agent's tools policy over {@link PlatformTools.selection}; `hand_off`
  * leaves the menu when planning closes (`offersHandOff`).

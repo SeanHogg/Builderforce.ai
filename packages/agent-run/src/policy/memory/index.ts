@@ -55,7 +55,7 @@ function codeMapOf(ctx: PolicyContext) {
 /**
  * The memory hook. Beyond the {@link MemoryHook} contract it carries `observe`, the
  * per-call record the brief and the map are built from (brain-embedded's
- * `toolCallHooks.ts` records each SUCCESSFUL call; the cloud engine does the same) — the
+ * the Brain's `callPostStep.ts` records each SUCCESSFUL call; the cloud engine does the same) — the
  * composition calls it after every dispatched call.
  */
 export const memoryHook: MemoryHook & {

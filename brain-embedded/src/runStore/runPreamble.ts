@@ -1,7 +1,7 @@
 /**
  * Everything a run resolves ONCE, before its first turn — the catalog it advertises,
  * the recall and memory answer, the system prompt with every directive folded in, the
- * read/write/failure guards, and the run policy it starts from. Returns the loop's
+ * read/write/failure guards, and the run policy it starts from. Returns the run's
  * shared state ({@link RunLoopContext}), or null when memory answered and the run is over.
  */
 
@@ -85,7 +85,7 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
   const canAskUser = !!runTool && (toolSpecs?.length ?? 0) > 0;
   // `hand_off` rides the same gate: it is how PLANNING ends (see `planHandoff.ts`) — the
   // planner names the tasks, the run files them and hands them to the coding model(s).
-  // Advertised only while the run is still planning; see `completeTurn.ts`.
+  // Advertised only while the run is still planning; see `run/brainPlatformTools.ts`.
   const catalog = canAskUser ? [...(toolSpecs ?? []), ASK_USER_TOOL_SPEC, HAND_OFF_TOOL_SPEC] : toolSpecs;
   const allTools = catalog && catalog.length > 0 ? catalog : undefined;
   // Caller provenance for the gateway's audit emit — this is what makes the
@@ -301,7 +301,7 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
     // (see `restatedReply.ts`). Captured before the loop: the transcript grows as it runs.
     priorReply: previousReplyText(convo),
     // The user's ACTUAL request for this run, resolved once. Every turn's tool
-    // selection scores against this and nothing else — see `completeTurn.ts`.
+    // selection scores against this and nothing else — see `run/brainPlatformTools.ts`.
     requestQuery: routingQueryForTurn(convo),
     windowFit,
     // What this run has already read. Two guards, one tally (see `readCoverage.ts`):

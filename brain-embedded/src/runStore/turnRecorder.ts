@@ -1,11 +1,10 @@
 /**
  * What a COMPLETED turn leaves on the run, recorded ONCE: the coder the outcome grades, the BYO banners, the run's usage,
  * the serving model, the downgrade and local-first traces, and the durable `llm.complete` step (plus the turn's visible
- * text) every diagnostics reader keys on. Extracted from `completeTurn.ts` so the Brain's own loop and the agent's model
- * port (`run/modelTransport.ts`) record a turn the same way - never a copy.
+ * text) every diagnostics reader keys on. Used by the agent's model port (`run/loopTurn.ts`).
  *
  * It RECORDS and decides nothing: the model policy's report of the turn, the window fit and the stall counters stay with
- * the engine that owns them.
+ * the agent that owns them.
  */
 
 import { toolNamesMentionedIn } from '@builderforce/agent-stall';

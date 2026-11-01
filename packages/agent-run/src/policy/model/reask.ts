@@ -1,7 +1,7 @@
 /**
  * policy/model/reask — the analysis → code hand-off, at the exact turn it matters.
  *
- * Ports `brain-embedded/src/runStore/completeTurn.ts`'s coder re-ask: the analysis model has just decided to change
+ * Ports the Brain's former `completeTurn` coder re-ask (deleted with its loop): the analysis model has just decided to change
  * code, and that edit is the first line of the deliverable, so the turn is re-asked of the coding model rather than
  * written by the model that planned it. The coder is handed the transcript AND a brief naming the change the planner was
  * about to make (`coderHandoffBrief`) - given the transcript alone, it started the analysis over.

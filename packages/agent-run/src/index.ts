@@ -189,7 +189,7 @@ export {
   type RunSteerMessage,
 } from "./policy/steering/runSteering.js";
 
-// The run's USD cap (`RunPolicy.budgets.usd`): the wording and the arithmetic, one copy. The Brain's own loop reads them here too.
+// The run's USD cap (`RunPolicy.budgets.usd`): the wording and the arithmetic, one copy. The Brain takes them from here.
 export {
   budgetContainedReply,
   budgetWarning,

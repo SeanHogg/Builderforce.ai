@@ -16,7 +16,7 @@ export function brainModelRules(model: ModelTransport, req: Pick<BrainRunRequest
   return pickFallbackModel ? { ...model, pickFallback: (tried: readonly string[]) => pickFallbackModel(tried) } : model;
 }
 
-/** The turns of a host that cannot run a tool carry no calls (`completeTurn.ts`: "a tool call nobody can execute is not a tool call"). */
+/** The turns of a host that cannot run a tool carry no calls ("a tool call nobody can execute is not a tool call"). */
 export function withoutUncallableTurns(model: ModelTransport, req: Pick<BrainRunRequest, 'runTool'>): ModelTransport {
   if (req.runTool) return model;
   return { ...model, complete: async (request, signal) => ({ ...(await model.complete(request, signal)), toolCalls: [] }) };

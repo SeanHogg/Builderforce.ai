@@ -620,36 +620,6 @@ function canonicalReasoningText(content, reasoning) {
 ${answer}` : `<think>${thought}</think>`;
 }
 
-// ../packages/agent-loop/src/openaiCodec.ts
-function toOpenAiToolCall(call) {
-  return { id: call.id, type: "function", function: { name: call.name, arguments: call.arguments?.trim() ? call.arguments : "{}" } };
-}
-var defaultToolRowSerializer = (result) => JSON.stringify(result.data ?? null);
-function resolveSerializer(opts) {
-  if (typeof opts === "function") return opts;
-  if (opts?.serialize) return opts.serialize;
-  const policy = opts?.toolResultPolicy;
-  if (policy) return (result, call) => policy(call.name, result.data ?? null);
-  return defaultToolRowSerializer;
-}
-function openAiChatCodec(serializeOrOptions) {
-  const serialize = resolveSerializer(serializeOrOptions);
-  return {
-    assistant(turn) {
-      const row = {
-        role: "assistant",
-        content: turn.content ?? "",
-        tool_calls: turn.toolCalls.map(toOpenAiToolCall)
-      };
-      return row;
-    },
-    tool(call, result) {
-      const row = { role: "tool", tool_call_id: call.id, content: serialize(result, call) };
-      return row;
-    }
-  };
-}
-
 // ../packages/agent-loop/src/index.ts
 var ASK_USER_TOOL = "ask_user";
 var ASK_USER_TOOL_SPEC = {
@@ -1053,6 +1023,7 @@ export {
   within,
   DEFAULT_TOOL_FAILURE_STREAK,
   asToolArgs,
+  parseToolArgs,
   detectRepetitionLoop,
   trimRepetitionLoop,
   runAgentLoop,
@@ -1069,7 +1040,6 @@ export {
   replayTextOf,
   splitVendorReasoning,
   canonicalReasoningText,
-  openAiChatCodec,
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
   coerceAskUserPayload,
@@ -1090,4 +1060,4 @@ export {
   replayPendingWords,
   replayAllPendingWords
 };
-//# sourceMappingURL=chunk-M6HEPT44.mjs.map
+//# sourceMappingURL=chunk-6F36EGOD.mjs.map

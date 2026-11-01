@@ -2,7 +2,7 @@
  * The run store's OBSERVE-AND-CONTROL surface — everything a mounted view, a run driver
  * or a tool that waits calls on a chat's run cell: subscribe and read the snapshot,
  * Stop, clear the error, answer a confirmation, mirror a run executing elsewhere.
- * Starting a run is `startRun.ts`; the loop itself is `runLoop.ts`.
+ * Starting a run is `startRun.ts`; the run itself is the agent's (`../run/runPrepared.ts`).
  */
 
 import { stepRow } from '@builderforce/agent-loop';
@@ -142,7 +142,7 @@ export function getRunTrace(chatId: RunKey | null): BrainTraceEvent[] {
  * destroy the only evidence of what it did. The unwinding run persists both
  * ({@link keepStoppedTurn}); see `stoppedTurn.ts`.
  *
- * `running` flips to false when `runLoop` unwinds and `startRun`'s `finally`
+ * `running` flips to false when the run unwinds and `startRun`'s `finally`
  * fires; we emit here too so the Stop is reflected immediately.
  */
 /**

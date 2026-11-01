@@ -1,6 +1,6 @@
 /**
- * What decides, per tool call, whether the host's runner is reached - shared by BOTH engines (the loop's `beforeDispatch`, the
- * agent's platform tools in `run/brainPlatformTools.ts`), so it is named for the step, not the loop. Everything that decides, per tool call, whether the
+ * What decides, per tool call, whether the host's runner is reached - run by the agent's platform tools
+ * (`run/brainPlatformTools.ts`). Everything that decides, per tool call, whether the
  * host's runner is reached at all and with what: the tool router, the conversational
  * `ask_user` / `hand_off` tools, the one-ticket-per-run attach, the human confirm gate,
  * and the read de-duplication / covered-read / derived-search / repeated-write guards.

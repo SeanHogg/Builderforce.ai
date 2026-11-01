@@ -1,5 +1,4 @@
-export { aW as clearPendingWords, bK as forgetPendingWords, bL as markPendingWordsRead, bM as registerPendingWordsReplay, bN as rememberPendingWords, bO as replayAllPendingWords, bP as replayPendingWords, bA as setPendingWordsOwner } from './pendingWords-CgNAR6bV.js';
+export { aO as clearPendingWords, bC as forgetPendingWords, bD as markPendingWordsRead, bE as registerPendingWordsReplay, bF as rememberPendingWords, bG as replayAllPendingWords, bH as replayPendingWords, bs as setPendingWordsOwner } from './pendingWords-DQyXAzmX.js';
 import './probe-BF7uUc_H.js';
-import './chatError.js';
 import '@seanhogg/builderforce-memory/evermind';
 import '@seanhogg/builderforce-memory/working';

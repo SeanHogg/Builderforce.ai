@@ -55,8 +55,8 @@ __export(src_exports, {
   CHAT_MODE_ICON: () => CHAT_MODE_ICON,
   CODE_CHANGE_TOOLS: () => CODE_CHANGE_TOOLS,
   CONNECT_RETRY_DELAYS_MS: () => CONNECT_RETRY_DELAYS_MS,
-  CONSOLIDATION_MARKER_PREFIX: () => import_working20.CONSOLIDATION_MARKER_PREFIX,
-  CONSOLIDATION_META: () => import_working20.CONSOLIDATION_META,
+  CONSOLIDATION_MARKER_PREFIX: () => import_working19.CONSOLIDATION_MARKER_PREFIX,
+  CONSOLIDATION_META: () => import_working19.CONSOLIDATION_META,
   DEFAULT_AGENT_MODEL_SENTINEL: () => DEFAULT_AGENT_MODEL_SENTINEL,
   DEFAULT_CHAT_ACTIVITY_LABELS: () => DEFAULT_CHAT_ACTIVITY_LABELS,
   DEFAULT_CHAT_TITLE: () => DEFAULT_CHAT_TITLE,
@@ -77,7 +77,7 @@ __export(src_exports, {
   FailureTally: () => FailureTally,
   HAND_OFF_TOOL: () => HAND_OFF_TOOL,
   HAND_OFF_TOOL_SPEC: () => HAND_OFF_TOOL_SPEC,
-  HISTORY_TOKEN_BUDGET: () => import_working19.HISTORY_TOKEN_BUDGET,
+  HISTORY_TOKEN_BUDGET: () => import_working18.HISTORY_TOKEN_BUDGET,
   INFERENCE_MODES: () => INFERENCE_MODES,
   LOCAL_ENGINE_FAILURE_CODES: () => LOCAL_ENGINE_FAILURE_CODES,
   LOCAL_PICKER_GROUPS: () => LOCAL_PICKER_GROUPS,
@@ -156,10 +156,7 @@ __export(src_exports, {
   bindChatHistoryForSync: () => bindChatHistoryForSync,
   brainPersonaAgents: () => brainPersonaAgents,
   brainRequestError: () => brainRequestError,
-  brainRunPolicy: () => brainRunPolicy,
-  brainRunTask: () => brainRunTask,
   brainUploadUrl: () => brainUploadUrl,
-  buildBrainRunPorts: () => buildBrainRunPorts,
   buildBrainTriageReport: () => buildBrainTriageReport,
   buildChatDiagnosticsReport: () => buildChatDiagnosticsReport,
   buildComposerDirectives: () => buildComposerDirectives,
@@ -195,9 +192,9 @@ __export(src_exports, {
   composeEvermindHooks: () => composeEvermindHooks,
   computeBrainDiagnostics: () => computeBrainDiagnostics,
   computeRunProgress: () => computeRunProgress,
-  consolidationMarkerContent: () => import_working20.consolidationMarkerContent,
-  consolidationMarkerOf: () => import_working20.consolidationMarkerOf,
-  consolidationMetadata: () => import_working20.consolidationMetadata,
+  consolidationMarkerContent: () => import_working19.consolidationMarkerContent,
+  consolidationMarkerOf: () => import_working19.consolidationMarkerOf,
+  consolidationMetadata: () => import_working19.consolidationMetadata,
   contextUsageOf: () => contextUsageOf,
   contextWindowOf: () => contextWindowOf,
   countReconciledMemories: () => import_evermind3.countReconciledMemories,
@@ -287,7 +284,7 @@ __export(src_exports, {
   isCoderReask: () => isCoderReask,
   isConnectFailure: () => isConnectFailure,
   isConnectedAccountUnused: () => isConnectedAccountUnused,
-  isConsolidationMarker: () => import_working20.isConsolidationMarker,
+  isConsolidationMarker: () => import_working19.isConsolidationMarker,
   isDirectedToParticipant: () => isDirectedToParticipant,
   isDispatchTool: () => isDispatchTool,
   isEffort: () => isEffort,
@@ -318,7 +315,7 @@ __export(src_exports, {
   isUserConfiguredModelRef: () => isUserConfiguredModelRef,
   isWasmTrap: () => isWasmTrap,
   joinRestorableTurns: () => joinRestorableTurns,
-  lastConsolidationIndex: () => import_working20.lastConsolidationIndex,
+  lastConsolidationIndex: () => import_working19.lastConsolidationIndex,
   lastServedModel: () => lastServedModel,
   leftChangeUnreviewed: () => leftChangeUnreviewed,
   leftChangeUnshipped: () => leftChangeUnshipped,
@@ -423,12 +420,10 @@ __export(src_exports, {
   runBrainLoop: () => startRun,
   runOutcomesSince: () => runOutcomesSince,
   runProgressVerdict: () => runProgressVerdict,
-  runViaAgent: () => runViaAgent,
   savePendingPrompt: () => savePendingPrompt,
   savedChatOf: () => savedChatOf,
-  scopeToConsolidation: () => import_working20.scopeToConsolidation,
+  scopeToConsolidation: () => import_working19.scopeToConsolidation,
   selectPendingAskUser: () => selectPendingAskUser,
-  selectToolsForTurn: () => selectToolsForTurn2,
   selfReviewShipDirective: () => selfReviewShipDirective,
   serializeAskUser: () => serializeAskUser,
   serveEngineWorker: () => serveEngineWorker,
@@ -456,8 +451,6 @@ __export(src_exports, {
   stopRun: () => stopRun,
   stoppedBeforeStartRow: () => stoppedBeforeStartRow,
   stoppedTurnMetadata: () => stoppedTurnMetadata,
-  storedRunEngine: () => storedRunEngine,
-  storedRunEngineField: () => storedRunEngineField,
   streamChatCompletion: () => streamChatCompletion,
   streamSummaryCompletion: () => streamSummaryCompletion,
   stripAskUser: () => stripAskUser,
@@ -1275,36 +1268,6 @@ function canonicalReasoningText(content, reasoning) {
   return answer2 ? `<think>${thought}</think>
 
 ${answer2}` : `<think>${thought}</think>`;
-}
-
-// ../packages/agent-loop/src/openaiCodec.ts
-function toOpenAiToolCall(call2) {
-  return { id: call2.id, type: "function", function: { name: call2.name, arguments: call2.arguments?.trim() ? call2.arguments : "{}" } };
-}
-var defaultToolRowSerializer = (result) => JSON.stringify(result.data ?? null);
-function resolveSerializer(opts) {
-  if (typeof opts === "function") return opts;
-  if (opts?.serialize) return opts.serialize;
-  const policy = opts?.toolResultPolicy;
-  if (policy) return (result, call2) => policy(call2.name, result.data ?? null);
-  return defaultToolRowSerializer;
-}
-function openAiChatCodec(serializeOrOptions) {
-  const serialize = resolveSerializer(serializeOrOptions);
-  return {
-    assistant(turn) {
-      const row = {
-        role: "assistant",
-        content: turn.content ?? "",
-        tool_calls: turn.toolCalls.map(toOpenAiToolCall)
-      };
-      return row;
-    },
-    tool(call2, result) {
-      const row = { role: "tool", tool_call_id: call2.id, content: serialize(result, call2) };
-      return row;
-    }
-  };
 }
 
 // ../packages/agent-loop/src/index.ts
@@ -2754,8 +2717,8 @@ function computeCostMillicents(pricing, usage) {
   const cacheRead = usage.cacheReadTokens ?? 0;
   const cacheCreation = usage.cacheCreationTokens ?? 0;
   const fullPrompt = Math.max(0, usage.promptTokens - cacheRead - cacheCreation);
-  const usd4 = fullPrompt * pricing.prompt + cacheRead * pricing.prompt * CACHE_READ_MULTIPLIER + cacheCreation * pricing.prompt * CACHE_CREATION_MULTIPLIER + usage.completionTokens * pricing.completion;
-  return Math.round(usd4 * 1e5);
+  const usd3 = fullPrompt * pricing.prompt + cacheRead * pricing.prompt * CACHE_READ_MULTIPLIER + cacheCreation * pricing.prompt * CACHE_CREATION_MULTIPLIER + usage.completionTokens * pricing.completion;
+  return Math.round(usd3 * 1e5);
 }
 
 // ../packages/model-catalog/src/price.ts
@@ -8413,15 +8376,6 @@ function handOffTrace(ts, step, tasks, via) {
     label: "llm.role_handoff",
     args: { step, tasks, via },
     result: `Planning handed off ${tasks} task${tasks === 1 ? "" : "s"} to the coding model.`
-  };
-}
-function modelFailoverTrace(ts, step, from, outcome, shape) {
-  return {
-    ts,
-    category: "message",
-    label: "loop.model_failover",
-    args: { step, from, to: outcome.to, attempt: outcome.attempt, of: outcome.of },
-    result: modelFailoverNotice(from, outcome.to, shape)
   };
 }
 function transportRetryTrace(ts, step, outcome, message2) {
@@ -17611,7 +17565,7 @@ var stallHook = {
    * The settled answer, shaped the way every source shapes it: a reply stuck on one
    * block posts that block once (`trimRepetitionLoop`, `brain/agentReplyLoop.ts`), and a
    * prose question with options becomes the canonical ```ask-user block the surfaces
-   * render as a choice (`liftProseAskUser`, `brain-embedded/.../finalAnswerHook.ts`).
+   * render as a choice (`liftProseAskUser`).
    */
   settle(ctx, text2) {
     const delivery = ctx.ports?.delivery;
@@ -17824,14 +17778,6 @@ function runToolInterruptibly(runTool, runKey, runSignal, name, args) {
 function steerSkip(watch) {
   if (!watch.hasInterrupt()) return void 0;
   return { skipRemaining: { data: { ok: false, skipped: true, error: SKIPPED_BY_STEER }, isError: false } };
-}
-function skipOnSteer(runKey, inner) {
-  return async (call2, result, row, ctx) => {
-    const post = await inner(call2, result, row, ctx);
-    if (post?.skipRemaining) return post;
-    const skip = steerSkip(runInterruptWatch(runKey));
-    return skip ? { ...post ?? {}, ...skip } : post;
-  };
 }
 
 // ../packages/agent-run/src/policy/steering/index.ts
@@ -22842,8 +22788,8 @@ function createOutbox(opts) {
     return durable ? "durable" : "best-effort";
   };
   const resolveRetention = (work, path2) => {
-    const classified3 = classifyQueue(work) ?? classifyQueue(opts.work);
-    if (classified3) return classified3.retention;
+    const classified2 = classifyQueue(work) ?? classifyQueue(opts.work);
+    if (classified2) return classified2.retention;
     if (path2 === "enqueueDurable" || durable) return "durable";
     return "best-effort";
   };
@@ -23515,6 +23461,17 @@ function formatModelTurnLog(turns) {
 
 // src/runOutcomeReport.ts
 var completedTurns = (trace4) => trace4.filter((e) => e.label === "llm.complete" && !e.isError);
+function askedModelOf(requested, trace4) {
+  const asked = requested?.trim();
+  if (asked) return asked;
+  for (let i = trace4.length - 1; i >= 0; i -= 1) {
+    const e = trace4[i];
+    if (e.label !== "llm.complete" && e.label !== "agent.stopped") continue;
+    const model = e.args?.model;
+    if (typeof model === "string" && model.trim()) return model.trim();
+  }
+  return "default";
+}
 var reportedFree = (e) => e.args?.costMc === 0;
 function runOutcomeId(chatId, startedAtMs) {
   return `ide:${chatId}:${startedAtMs}`;
@@ -25135,318 +25092,10 @@ function resolveServerChatId(chatId, req) {
   return req.serverChatId === void 0 ? chatId : req.serverChatId;
 }
 
-// src/runStore/pipelineRoute.ts
-function decideRunPipeline(req, request, context) {
-  if (!req.pipeline || req.lineage) return null;
-  const { actionType } = classifyRunAction(request);
-  return scorePipeline(pipelineFeaturesOf(request, { actionType, followUp: context.followUp }), {
-    mode: req.pipeline.routing,
-    ...req.pipeline.threshold !== void 0 ? { threshold: req.pipeline.threshold } : {}
-  });
-}
-function pipelinePolicyOptions(req, pipeline) {
-  const quick = pipeline?.route === "quick";
-  const startPhase = req.lineage || quick ? "code" : "plan";
-  const phaseModels = { ...req.phaseModels ?? {} };
-  const quickModel = req.pipeline?.quickModel?.trim();
-  if (quick && quickModel) phaseModels.code = quickModel;
-  return {
-    startPhase,
-    ...Object.keys(phaseModels).length ? { phaseModels } : {},
-    ...quick && quickModel && !req.modelStrict ? { pinnedModel: quickModel } : {}
-  };
-}
-function pipelineMetadata(pipeline) {
-  return pipeline ? { pipelineRoute: pipeline.route, routeScore: pipeline.score } : {};
-}
-function skipsVerifyStage(pipeline) {
-  return pipeline?.route === "quick";
-}
-
-// src/stopHooks.ts
-var MAX_STOP_HOOK_ROUNDS = 4;
-async function askStopHook(hook, input) {
-  if (!hook || input.round >= MAX_STOP_HOOK_ROUNDS) return null;
-  try {
-    const nudge = (await hook(input))?.trim();
-    return nudge ? nudge : null;
-  } catch {
-    return null;
-  }
-}
-
-// src/restatedReply.ts
-var RESTATED_MIN_WORDS = 40;
-var RESTATED_CONTAINMENT = 0.6;
-function textOf(content) {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ");
-  }
-  return "";
-}
-function previousReplyText(convo) {
-  let i = convo.length - 1;
-  while (i >= 0 && convo[i].role !== "user") i--;
-  for (i -= 1; i >= 0; i--) {
-    const m = convo[i];
-    if (m.role === "user") return "";
-    if (m.role === "assistant") {
-      const text2 = textOf(m.content).trim();
-      if (text2) return text2;
-    }
-  }
-  return "";
-}
-function shingles(text2) {
-  const words3 = text2.toLowerCase().replace(/[^a-z0-9#\s]+/g, " ").split(/\s+/).filter(Boolean);
-  const out = /* @__PURE__ */ new Set();
-  for (let i = 0; i + 2 < words3.length; i++) out.add(`${words3[i]} ${words3[i + 1]} ${words3[i + 2]}`);
-  return out;
-}
-function isRestatedReply(current, previous) {
-  const now = shingles(current);
-  if (now.size + 2 < RESTATED_MIN_WORDS || !previous.trim()) return false;
-  const before = shingles(previous);
-  let seen = 0;
-  for (const s of now) if (before.has(s)) seen += 1;
-  return seen / now.size >= RESTATED_CONTAINMENT;
-}
-function restatedReplyNudge() {
-  return [
-    "Your reply repeats the status you already gave the user last turn \u2014 they have it. Do not restate it.",
-    "Instead: take the FIRST unfinished item and do it now, with tools. If every remaining item is blocked, say which one and exactly what would unblock it, in one or two lines.",
-    "If the remaining items are not yet tickets, file one ticket per item (builtin_tasks_create, linked to this chat) so the status lives on the board instead of in a repeated summary.",
-    "End with only what CHANGED this turn."
-  ].join("\n");
-}
-
-// src/selfReviewShip.ts
-function selfReviewShipDirective(chatId) {
-  const trackingTicket = chatId != null ? "builtin_chats_list_tickets with chatId=" + chatId + " lists it" : "the one builtin_tickets_from_delta returned for it";
-  return `SHIP YOUR OWN CHANGE \u2014 in this session YOU are its reviewer. This is a local editor session: no other agent or reviewer can ever reach a change you leave in the working tree, so a ticket you leave "in_review" sits at 75% on the board forever. When your turn changes code, finish it in this order:
-1. VERIFY \u2014 ${VERIFY_STEP}
-2. SELF-REVIEW \u2014 read your own diff with \`git_diff\` against what the ticket and the user asked for: bugs, leftover debug code, edits unrelated to the task, missing tests or localisation. If you find a problem, FIX it and review again. Then record the pass with builtin_reviews_record (taskId = the ticket tracking this change \u2014 ` + trackingTicket + '; verdict "complete"; a one-paragraph summary of what you checked).\n3. SHIP \u2014 `git_commit` with allowBaseBranch:true and exactly the `paths` you changed (never a catch-all: the tree may hold the human\'s own work), then `git_push` with allowBaseBranch:true. Both are shown to the human for approval \u2014 that approval is their review of your review, so do not ask for it in prose as well.\n4. CLOSE \u2014 the push reports the branch it landed on. Once it lands on the base branch with nothing left to push, the in_review ticket this chat opened for the change moves to done automatically. Move any OTHER linked ticket this change fully delivers to done yourself with builtin_tasks_update. Report the commit hash and the push result.\nExceptions, and only these: if the user asked for a pull request or a ticket branch, commit on a `branch` and `open_pull_request` instead (the ticket then closes when that PR merges); if the user said not to commit or push, leave the change uncommitted and say so. If a commit or push is refused or fails, report the exact error \u2014 never claim a change shipped when it did not.';
-}
-var PUBLISH_TOOLS = /* @__PURE__ */ new Set(["git_commit", "git_push", "open_pull_request"]);
-var RAW_PUBLISH = gitCommandPattern("commit|push");
-function attemptedPublish(events) {
-  return events.some(
-    (e) => e.category === "tool" && (PUBLISH_TOOLS.has(e.label) || RAW_PUBLISH.test(commandOf(e)))
-  );
-}
-var DECLINES_SHIPPING = /\b(?:don'?t|do not|never|without)\s+(?:commit|push|ship|merg)\w*|\b(?:no|skip)\s+(?:commit|push)\w*|\b(?:leave|keep)\s+(?:it|them|this|the\s+(?:change|changes|edits?))\s+(?:uncommitted|unstaged|local(?:ly)?)\b/i;
-function declinesShipping(text2) {
-  return DECLINES_SHIPPING.test(text2 ?? "");
-}
-function leftChangeUnshipped(input) {
-  return input.codeChanged && canShipHere(input.toolNames) && asksForChange(input.requestText) && !declinesShipping(input.requestText) && !attemptedPublish(input.events);
-}
-function unshippedChangeNudge() {
-  return "You changed code in this run and ended the turn without shipping it. In this local session you are the reviewer \u2014 no one else can pick the change up, so leaving it uncommitted parks its ticket in review forever. Finish it now: verify it \u2014 " + VERIFY_STEP + ' Then self-review your diff with `git_diff` and record builtin_reviews_record (verdict "complete") on the ticket tracking it, then `git_commit` (allowBaseBranch:true, exactly the paths you changed) and `git_push` (allowBaseBranch:true). If the user asked for a pull request, commit on a `branch` and `open_pull_request` instead. If you genuinely cannot ship \u2014 the change is unfinished, or verification fails and you cannot fix it \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
-}
-
-// src/runStore/earlyDelegation.ts
-var counters = /* @__PURE__ */ new WeakMap();
-function counterOf(run) {
-  let counter = counters.get(run);
-  if (!counter) {
-    counter = new ReadsWithoutSpawn();
-    counters.set(run, counter);
-  }
-  return counter;
-}
-function runLeftDelegationUndone(run) {
-  return leftDelegationUndone({ toolNames: run.catalogToolNames, requestText: run.userRequest, events: runTrace(run.c) });
-}
-function delegationCallKind2(name, args, isReadTool) {
-  if (isSpawnTool(name)) return "spawn";
-  if (isReadTool || isReadOnlyShellCall(name, args)) return "read";
-  return "other";
-}
-function earlyDelegationAdvisory(run, name, args, isReadTool, step) {
-  const counter = counterOf(run);
-  const kind = delegationCallKind2(name, args, isReadTool);
-  const reads = counter.record(kind);
-  if (kind !== "read" || !counter.due(READS_BEFORE_DELEGATION_NUDGE)) return null;
-  if (!runLeftDelegationUndone(run)) return null;
-  counter.markNudged();
-  const nudge = earlyDelegationNudge(run.catalogToolNames, reads);
-  pushTrace(run.c, {
-    ts: nowIso(),
-    category: "message",
-    label: "loop.nudge_undelegated_request",
-    args: { step, tool: name, reads },
-    result: `The user asked for sub-agents and the run had made ${reads} reads without starting one \u2014 told to delegate on that read result.`
-  });
-  return nudge;
-}
-
-// src/runStore/deliveryGates.ts
-function deliveryGates(run) {
-  const { c, catalogToolNames, userRequest, priorReply } = run;
-  const facts = () => ({ codeChanged: c.codeChanged, toolNames: catalogToolNames, requestText: userRequest, events: runTrace(c) });
-  const files = () => ({ files: c.touchedFiles.slice(0, 20) });
-  return [
-    {
-      // The turn CHANGED code and is ending without having even tried to ship it. In a local session that change has no other
-      // reviewer. Quiet when the user said not to commit, when a commit/push/PR was attempted, and on a host that cannot commit.
-      id: "brain.ship",
-      entersVerify: true,
-      applies: () => !run.shipRecoveryUsed && leftChangeUnshipped(facts()),
-      nudge: unshippedChangeNudge,
-      trace: { label: "loop.recover_unshipped_change", args: files, result: "Run changed code and ended without committing or pushing it \u2014 re-prompted to verify, self-review and ship (this local session is the change's only reviewer)." },
-      spend: () => {
-        run.shipRecoveryUsed = true;
-      }
-    },
-    {
-      // The Studio's twin: the turn CHANGED the app and is ending without having inspected the preview and recorded a review.
-      id: "brain.review",
-      entersVerify: true,
-      applies: () => !run.reviewRecoveryUsed && leftChangeUnreviewed(facts()),
-      nudge: unreviewedChangeNudge,
-      trace: { label: "loop.recover_unreviewed_change", args: files, result: "Run changed the app and ended without inspecting the preview and recording a review \u2014 re-prompted to verify and review (this Studio session is the change's only reviewer)." },
-      spend: () => {
-        run.reviewRecoveryUsed = true;
-      }
-    },
-    {
-      // The user asked for SUB-AGENTS and the run is ending in prose without having started one. The `ask_user` twin is in
-      // `turnToolCalls.ts`; both spend the one recovery.
-      id: "brain.delegate",
-      entersVerify: false,
-      applies: () => !run.delegationRecoveryUsed && runLeftDelegationUndone(run),
-      nudge: () => undelegatedRequestNudge(catalogToolNames),
-      trace: { label: "loop.recover_undelegated_request", args: () => ({ via: "reply" }), result: "The user asked for sub-agents and the run ended without starting one \u2014 re-prompted to spawn them locally." },
-      spend: () => {
-        run.delegationRecoveryUsed = true;
-      }
-    },
-    {
-      // The reply is the previous turn's status again: sent back once to act on the next unfinished item instead.
-      id: "brain.restate",
-      entersVerify: false,
-      applies: (text2) => !run.restateRecoveryUsed && isRestatedReply(text2, priorReply),
-      nudge: restatedReplyNudge,
-      trace: { label: "loop.recover_restated_reply", args: () => ({}), result: "Final reply repeated the previous turn's answer \u2014 re-prompted to act on the next unfinished item instead of restating it." },
-      spend: () => {
-        run.restateRecoveryUsed = true;
-      }
-    }
-  ];
-}
-
-// src/runStore/runLoopContext.ts
-var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files", "find_symbol", "file_outline", "semantic_search", "repo_map", "read_compressed", "local_research"]);
-var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isRepoStateReadTool(name) || isReadOnlyPlatformTool(name);
-var metaOf2 = (turn) => turn.meta;
-function reportToPolicy(run, event) {
-  if (run.view) return run.view.report(event);
-  return run.policy = reduceRunPolicy(run.policy, event);
-}
-function failureAdvisoryFor(run, name, args, out, step) {
-  const attempts = run.failures.record(name, args);
-  const advisory = repeatedFailureAdvisory(name, attempts, failureReason(out));
-  if (advisory) {
-    pushTrace(run.c, {
-      ts: nowIso(),
-      category: "message",
-      label: "tools.repeat_failure_guard",
-      args: { step, tool: name, attempts },
-      result: advisory
-    });
-  }
-  return advisory;
-}
-async function settleReply(run, rawText, result, requested) {
-  const { convo } = run;
-  const text2 = canonicalTurnText(rawText);
-  const tail = convo[convo.length - 1];
-  if (tail?.role === "assistant" && !tail.tool_calls) tail.content = replayTextOf(text2);
-  else convo.push({ role: "assistant", content: replayTextOf(text2) });
-  return persistReply(run, rawText, result, requested);
-}
-async function persistReply(run, rawText, result, requested) {
-  const { c, chatId } = run;
-  const text2 = canonicalTurnText(rawText);
-  const meta = provenanceMetadata(result, requested);
-  const [assistantMsg] = await run.req.persistence.sendMessages(chatId, [{ role: "assistant", content: text2, ...meta ? { metadata: meta } : {} }]);
-  c.streamingText = "";
-  recordAppended(c, assistantMsg);
-  return assistantMsg;
-}
-
-// src/run/brainDelivery.ts
-var STOP_HOOK_RUNG = "brain.stop_hook";
-function brainDeliveryLedger(run, last) {
-  const { c, req, userRequest, canAskUser } = run;
-  const { runTool } = req;
-  const held = [];
-  const note = (label, result, args = {}) => {
-    const step = { ts: nowIso(), category: "message", label, args: { step: last.step, ...args }, result };
-    held.push(() => pushTrace(c, step));
-  };
-  const asWritten = (content) => last.result && replayTextOf(last.result.text).trim() === content.trim() ? last.result.text : content;
-  const accept = (content) => {
-    const full = asWritten(content).trim();
-    return (canAskUser ? liftProseAskUser(full) : full) || "No response.";
-  };
-  return {
-    // The closing answer after a failure streak is the Brain's own (`runStore/failureClose.ts`, run by the adapter tail). A host that
-    // cannot run a tool judges no stall at all (the rungs are none): the turn IS the answer.
-    owns: { settle: true, synthesis: true, ...runTool ? {} : { narration: true } },
-    // The Brain's stall order and wording (`runStore/finalAnswerHook.ts`): a narrating turn is re-prompted before any rung, a model that
-    // spent its budget is failed over (reading the nudge alone) or stopped only once every rung is clear, the rungs' directives are the
-    // person's rows, and the stall is judged against the menu the turn advertised.
-    stall: { narrationFirst: true, steersFirst: true, nudgeAs: "user", failoverNudgeOnly: true, menu: true, quoteEmpty: true, runWideBudget: true },
-    // The stall judgement and the gates read the model's own words, reasoning included (`finalAnswerHook.ts` reads `result.text`).
-    judged: (content) => last.result?.text ?? content,
-    // A turn sent back keeps what the person watched stream in: as its own block, or - a model that stalled out and was handed
-    // over - as the reply it was (`finalAnswerHook.ts`'s `requeueWithNudge` and its failover).
-    async sentBack({ kept }) {
-      const result = last.result;
-      if (!result) return;
-      if (kept === "settled") last.settled = await persistReply(run, accept(result.text), result, last.requested);
-      else if (kept === "reply") await persistReply(run, accept(result.text), result, last.requested);
-      else await persistMidTurnText(run.chatId, c, run.req.persistence, result, last.requested);
-      c.streamingText = "";
-      emit2(c);
-      for (const write2 of held.splice(0)) write2();
-    },
-    accept,
-    async rungs(turn) {
-      if (!runTool) return [];
-      const stopNudge = await askStopHook(req.onStop, { codeChanged: c.codeChanged, touchedFiles: c.touchedFiles, requestText: userRequest, round: run.stopHookRounds });
-      const verifiable = c.codeChanged && !skipsVerifyStage(run.pipeline);
-      const stopHook = {
-        id: STOP_HOOK_RUNG,
-        applies: !!stopNudge,
-        restate: Array(MAX_STOP_HOOK_ROUNDS).fill(stopNudge ?? ""),
-        free: MAX_STOP_HOOK_ROUNDS,
-        quote: true,
-        spent: "fall",
-        entersVerify: verifiable,
-        onRestate: () => {
-          run.stopHookRounds += 1;
-          note("loop.stop_hook", `A workspace stop hook held the run for another turn: ${(stopNudge ?? "").slice(0, 200)}`, { round: run.stopHookRounds });
-        }
-      };
-      const gates = deliveryGates(run).map((gate) => ({
-        id: gate.id,
-        applies: gate.applies(turn.content),
-        restate: [gate.nudge()],
-        quote: true,
-        spent: "fall",
-        entersVerify: gate.entersVerify && verifiable,
-        onRestate: () => {
-          gate.spend();
-          note(gate.trace.label, gate.trace.result, gate.trace.args());
-        }
-      }));
-      return [stopHook, ...gates];
-    }
-  };
+// src/runStore/deviceLevers.ts
+function deviceLeverOn(id) {
+  const env = globalThis.process?.env;
+  return isCostLeverOn(env, id, null);
 }
 
 // src/planHandoff.ts
@@ -25671,67 +25320,358 @@ ${childTaskBrief(t, briefContext, ids2[i])}`).join("\n\n")}`
   };
 }
 
-// src/selectTools.ts
-var DEFAULT_TOOL_LIMIT2 = 64;
-var PINNED_OVERFLOW2 = 16;
-var NAME_HIT2 = LEXICAL_WEIGHTS.name;
-var NAME_SYNONYM_HIT2 = 7;
-var DESCRIPTION_HIT2 = LEXICAL_WEIGHTS.description;
-function synonymText(text2) {
-  return [...expandWithSynonyms(lexicalStems(text2))].join(" ");
+// ../packages/agent-skills/src/spec.ts
+var SPEC_FIELDS = ["name", "description", "license", "compatibility", "metadata", "allowed-tools"];
+var SKILL_BINARY_FILE_MAX_BYTES = 5 * 1024 * 1024;
+var SKILL_PACKAGE_MAX_BYTES = 10 * 1024 * 1024;
+var SKILL_BINARY_EXTENSIONS = [
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "ico",
+  "pdf",
+  "woff",
+  "woff2",
+  "ttf",
+  "otf",
+  "zip",
+  "gz",
+  "mp3",
+  "mp4",
+  "wasm"
+];
+var BINARY_EXTENSION_SET = new Set(SKILL_BINARY_EXTENSIONS);
+var SKILL_READ_TOOL_NAME = "builtin_skills_read";
+
+// ../packages/agent-skills/src/validate.ts
+var SPEC_FIELD_SET = new Set(SPEC_FIELDS);
+
+// ../packages/agent-skills/src/skillPackage.ts
+var DEFAULT_SKILL_PACKAGE_LIMITS = {
+  maxFiles: 64,
+  maxFileBytes: 256 * 1024,
+  maxBinaryFileBytes: SKILL_BINARY_FILE_MAX_BYTES,
+  maxTotalBytes: SKILL_PACKAGE_MAX_BYTES
+};
+
+// ../packages/agent-skills/src/catalog.ts
+var TOOL_HOST_INSTRUCTIONS = [
+  "The following skills provide specialized instructions for specific tasks.",
+  `When a task matches a skill's description, call \`${SKILL_READ_TOOL_NAME}\` with its name and follow the instructions it returns before acting.`,
+  `A skill may list bundled files (scripts, references); load one with \`${SKILL_READ_TOOL_NAME}\` { name, path } only when its instructions call for it.`
+];
+
+// src/skillLibraryTools.ts
+function skillToolsIn(toolNames) {
+  return toolNames.filter((name) => name === SKILL_READ_TOOL_NAME);
 }
-function toolFields(tool) {
-  const name = tool.function?.name ?? "";
-  if (!name) return [];
-  const description = tool.function?.description ?? "";
+
+// src/turnOptimization.ts
+var MAX_ROUTING_QUERY_CHARS = 4e3;
+var ROUTING_USER_TURNS = 4;
+function textContent(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.filter((part) => part.type === "text").map((part) => part.text).join("\n");
+}
+function routingQueryForTurn(messages) {
+  const turns = messages.filter((message2) => message2.role === "user").map((message2) => textContent(message2.content).trim()).filter(Boolean).slice(-ROUTING_USER_TURNS);
+  return turns.join("\n").slice(-MAX_ROUTING_QUERY_CHARS);
+}
+function turnOptimizationDirective() {
   return [
-    { text: name, weight: NAME_HIT2 },
-    { text: synonymText(name), weight: NAME_SYNONYM_HIT2 },
-    { text: description, weight: DESCRIPTION_HIT2 },
-    { text: synonymText(description), weight: DESCRIPTION_HIT2 }
-  ];
+    "TURN OPERATING CONTRACT:",
+    "\u2022 Infer a workable brief from the conversation, project memory, attachments and current request. Ask one grouped set of questions only when different answers would materially change the result; otherwise state a reasonable assumption briefly and proceed.",
+    "\u2022 Treat corrections and \u201Cactually\u2026\u201D follow-ups as patches to the active brief. Preserve approved work and change the smallest requested scope; never regenerate unrelated content.",
+    "\u2022 Complete all requested deliverables in this run. Batch independent reads/actions when the tool supports it, while preserving dependencies and confirmation boundaries.",
+    "\u2022 In Work mode, plan enough to act safely and then execute in the same run. Do not make the user move to another surface just to turn a plan into work.",
+    "\u2022 For attachments, inspect only the relevant pages/sections with builtin_attachments_read and its offset/limit controls. Accept the original file; never ask the user to convert, split, trim, or re-upload it merely to save context.",
+    "\u2022 Reuse established project conventions, examples and explicit user preferences. A topic change is a new internal context segment, not a reason to make the user restart the chat.",
+    "\u2022 Route work to the available model and tools transparently. Use a scheduling tool when the user expresses recurrence; do not ask them to repeat a routine manually.",
+    "\u2022 Keep the response no longer than the task requires. Do not expose token windows, usage-reset timing, context cleanup, model-size folklore, or other platform limitations as work the user must manage."
+  ].join("\n");
 }
-function relevantTools(tools, query) {
-  return rankLexically(tools, query, toolFields, tools.length);
+
+// src/selfReviewShip.ts
+function selfReviewShipDirective(chatId) {
+  const trackingTicket = chatId != null ? "builtin_chats_list_tickets with chatId=" + chatId + " lists it" : "the one builtin_tickets_from_delta returned for it";
+  return `SHIP YOUR OWN CHANGE \u2014 in this session YOU are its reviewer. This is a local editor session: no other agent or reviewer can ever reach a change you leave in the working tree, so a ticket you leave "in_review" sits at 75% on the board forever. When your turn changes code, finish it in this order:
+1. VERIFY \u2014 ${VERIFY_STEP}
+2. SELF-REVIEW \u2014 read your own diff with \`git_diff\` against what the ticket and the user asked for: bugs, leftover debug code, edits unrelated to the task, missing tests or localisation. If you find a problem, FIX it and review again. Then record the pass with builtin_reviews_record (taskId = the ticket tracking this change \u2014 ` + trackingTicket + '; verdict "complete"; a one-paragraph summary of what you checked).\n3. SHIP \u2014 `git_commit` with allowBaseBranch:true and exactly the `paths` you changed (never a catch-all: the tree may hold the human\'s own work), then `git_push` with allowBaseBranch:true. Both are shown to the human for approval \u2014 that approval is their review of your review, so do not ask for it in prose as well.\n4. CLOSE \u2014 the push reports the branch it landed on. Once it lands on the base branch with nothing left to push, the in_review ticket this chat opened for the change moves to done automatically. Move any OTHER linked ticket this change fully delivers to done yourself with builtin_tasks_update. Report the commit hash and the push result.\nExceptions, and only these: if the user asked for a pull request or a ticket branch, commit on a `branch` and `open_pull_request` instead (the ticket then closes when that PR merges); if the user said not to commit or push, leave the change uncommitted and say so. If a commit or push is refused or fails, report the exact error \u2014 never claim a change shipped when it did not.';
 }
-function selectToolsForTurn2(tools, options) {
-  const available = tools?.length ?? 0;
-  const limit = options.limit ?? DEFAULT_TOOL_LIMIT2;
-  if (!tools || available <= limit) {
-    return { tools: tools ?? [], trimmed: false, available };
+var PUBLISH_TOOLS = /* @__PURE__ */ new Set(["git_commit", "git_push", "open_pull_request"]);
+var RAW_PUBLISH = gitCommandPattern("commit|push");
+function attemptedPublish(events) {
+  return events.some(
+    (e) => e.category === "tool" && (PUBLISH_TOOLS.has(e.label) || RAW_PUBLISH.test(commandOf(e)))
+  );
+}
+var DECLINES_SHIPPING = /\b(?:don'?t|do not|never|without)\s+(?:commit|push|ship|merg)\w*|\b(?:no|skip)\s+(?:commit|push)\w*|\b(?:leave|keep)\s+(?:it|them|this|the\s+(?:change|changes|edits?))\s+(?:uncommitted|unstaged|local(?:ly)?)\b/i;
+function declinesShipping(text2) {
+  return DECLINES_SHIPPING.test(text2 ?? "");
+}
+function leftChangeUnshipped(input) {
+  return input.codeChanged && canShipHere(input.toolNames) && asksForChange(input.requestText) && !declinesShipping(input.requestText) && !attemptedPublish(input.events);
+}
+function unshippedChangeNudge() {
+  return "You changed code in this run and ended the turn without shipping it. In this local session you are the reviewer \u2014 no one else can pick the change up, so leaving it uncommitted parks its ticket in review forever. Finish it now: verify it \u2014 " + VERIFY_STEP + ' Then self-review your diff with `git_diff` and record builtin_reviews_record (verdict "complete") on the ticket tracking it, then `git_commit` (allowBaseBranch:true, exactly the paths you changed) and `git_push` (allowBaseBranch:true). If the user asked for a pull request, commit on a `branch` and `open_pull_request` instead. If you genuinely cannot ship \u2014 the change is unfinished, or verification fails and you cannot fix it \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
+}
+
+// src/restatedReply.ts
+var RESTATED_MIN_WORDS = 40;
+var RESTATED_CONTAINMENT = 0.6;
+function textOf(content) {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ");
   }
-  const required = new Set(options.required ?? []);
-  const pinned = new Set(options.pinned ?? []);
-  const chosen = [];
-  const taken = /* @__PURE__ */ new Set();
-  const take = (tool) => {
-    const name = tool.function?.name;
-    if (!name || taken.has(name)) return;
-    taken.add(name);
-    chosen.push(tool);
+  return "";
+}
+function previousReplyText(convo) {
+  let i = convo.length - 1;
+  while (i >= 0 && convo[i].role !== "user") i--;
+  for (i -= 1; i >= 0; i--) {
+    const m = convo[i];
+    if (m.role === "user") return "";
+    if (m.role === "assistant") {
+      const text2 = textOf(m.content).trim();
+      if (text2) return text2;
+    }
+  }
+  return "";
+}
+function shingles(text2) {
+  const words3 = text2.toLowerCase().replace(/[^a-z0-9#\s]+/g, " ").split(/\s+/).filter(Boolean);
+  const out = /* @__PURE__ */ new Set();
+  for (let i = 0; i + 2 < words3.length; i++) out.add(`${words3[i]} ${words3[i + 1]} ${words3[i + 2]}`);
+  return out;
+}
+function isRestatedReply(current, previous) {
+  const now = shingles(current);
+  if (now.size + 2 < RESTATED_MIN_WORDS || !previous.trim()) return false;
+  const before = shingles(previous);
+  let seen = 0;
+  for (const s of now) if (before.has(s)) seen += 1;
+  return seen / now.size >= RESTATED_CONTAINMENT;
+}
+function restatedReplyNudge() {
+  return [
+    "Your reply repeats the status you already gave the user last turn \u2014 they have it. Do not restate it.",
+    "Instead: take the FIRST unfinished item and do it now, with tools. If every remaining item is blocked, say which one and exactly what would unblock it, in one or two lines.",
+    "If the remaining items are not yet tickets, file one ticket per item (builtin_tasks_create, linked to this chat) so the status lives on the board instead of in a repeated summary.",
+    "End with only what CHANGED this turn."
+  ].join("\n");
+}
+
+// src/readCoverage.ts
+function isUnscopedMutation(tool, args) {
+  return isUnscopedMutationTool(tool) && !isReadOnlyShellCall(tool, args);
+}
+var BRAIN_READ_TRAITS = {
+  visitTarget,
+  activityTarget,
+  questionSeparator: VISIT_QUESTION_SEPARATOR,
+  isUnscopedMutation,
+  isCodeChangeTool,
+  isLocalWorkspaceTool,
+  isRepoPublishTool,
+  isRepoStateReadTool
+};
+var ReadCoverage2 = class extends ReadCoverage {
+  constructor() {
+    super(BRAIN_READ_TRAITS);
+  }
+};
+
+// src/runStore/runLoopContext.ts
+var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files", "find_symbol", "file_outline", "semantic_search", "repo_map", "read_compressed", "local_research"]);
+var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isRepoStateReadTool(name) || isReadOnlyPlatformTool(name);
+function reportToPolicy(run, event) {
+  if (run.view) return run.view.report(event);
+  return run.policy = reduceRunPolicy(run.policy, event);
+}
+function failureAdvisoryFor(run, name, args, out, step) {
+  const attempts = run.failures.record(name, args);
+  const advisory = repeatedFailureAdvisory(name, attempts, failureReason(out));
+  if (advisory) {
+    pushTrace(run.c, {
+      ts: nowIso(),
+      category: "message",
+      label: "tools.repeat_failure_guard",
+      args: { step, tool: name, attempts },
+      result: advisory
+    });
+  }
+  return advisory;
+}
+async function settleReply(run, rawText, result, requested) {
+  const { convo } = run;
+  const text2 = canonicalTurnText(rawText);
+  const tail = convo[convo.length - 1];
+  if (tail?.role === "assistant" && !tail.tool_calls) tail.content = replayTextOf(text2);
+  else convo.push({ role: "assistant", content: replayTextOf(text2) });
+  return persistReply(run, rawText, result, requested);
+}
+async function persistReply(run, rawText, result, requested) {
+  const { c, chatId } = run;
+  const text2 = canonicalTurnText(rawText);
+  const meta = provenanceMetadata(result, requested);
+  const [assistantMsg] = await run.req.persistence.sendMessages(chatId, [{ role: "assistant", content: text2, ...meta ? { metadata: meta } : {} }]);
+  c.streamingText = "";
+  recordAppended(c, assistantMsg);
+  return assistantMsg;
+}
+
+// src/runStore/pipelineRoute.ts
+function decideRunPipeline(req, request, context) {
+  if (!req.pipeline || req.lineage) return null;
+  const { actionType } = classifyRunAction(request);
+  return scorePipeline(pipelineFeaturesOf(request, { actionType, followUp: context.followUp }), {
+    mode: req.pipeline.routing,
+    ...req.pipeline.threshold !== void 0 ? { threshold: req.pipeline.threshold } : {}
+  });
+}
+function pipelinePolicyOptions(req, pipeline) {
+  const quick = pipeline?.route === "quick";
+  const startPhase = req.lineage || quick ? "code" : "plan";
+  const phaseModels = { ...req.phaseModels ?? {} };
+  const quickModel = req.pipeline?.quickModel?.trim();
+  if (quick && quickModel) phaseModels.code = quickModel;
+  return {
+    startPhase,
+    ...Object.keys(phaseModels).length ? { phaseModels } : {},
+    ...quick && quickModel && !req.modelStrict ? { pinnedModel: quickModel } : {}
   };
-  for (const tool of tools) {
-    if (chosen.length >= limit) break;
-    if (required.has(tool.function?.name ?? "")) take(tool);
+}
+function pipelineMetadata(pipeline) {
+  return pipeline ? { pipelineRoute: pipeline.route, routeScore: pipeline.score } : {};
+}
+function skipsVerifyStage(pipeline) {
+  return pipeline?.route === "quick";
+}
+
+// src/runStore/progressBudget.ts
+function handOffBrief(reason) {
+  return `${reason} Call hand_off NOW. summary = the research for the coders: everything you and any research sub-agents established that the change needs (files, functions, what they do today, decisions, traps). tasks = each one standalone: the files, the change, and how to know it is done. The coding agents start from exactly what you write here; they do not see this conversation.`;
+}
+function changeBrief(reason, canAskUser) {
+  return `${reason} Make the change now with what you already know \u2014 the edit tools are the only ones offered this turn.` + (canAskUser ? " If something genuinely blocks the change, call ask_user and say exactly what." : "");
+}
+var HAND_OFF_DUE_BRIEF = handOffBrief(`ANALYSIS IS OVER. You have spent ${PLAN_TURN_BUDGET} turns analysing without changing anything.`);
+function isChangeRequest(mode, text2) {
+  return mode !== "chat" && (asksForChange(text2) || isContinuationDirective(text2));
+}
+function budgeted(run) {
+  return isChangeRequest(run.metadata.mode, run.userRequest);
+}
+function progressed(run) {
+  return run.c.codeChanged || run.usedTools.has(HAND_OFF_TOOL);
+}
+function planBudgetTurn(run, step) {
+  if (!handOffDue(run.policy) || !budgeted(run)) return null;
+  if (run.policy.handOffForced || !run.canAskUser) {
+    reportToPolicy(run, { type: "plan_budget_spent" });
+    pushTrace(run.c, {
+      ts: nowIso(),
+      category: "message",
+      label: "loop.plan_budget_spent",
+      args: { step, planTurns: run.policy.planTurns },
+      result: run.canAskUser ? "The forced hand-off turn did not hand off \u2014 analysis ends here and the coding role takes the next turn." : "Analysis budget spent where hand_off cannot be offered \u2014 analysis ends here and the coding role takes the next turn."
+    });
+    return null;
   }
-  for (const tool of relevantTools(tools, options.query)) {
-    if (chosen.length >= limit) break;
-    take(tool);
+  reportToPolicy(run, { type: "hand_off_forced" });
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "loop.hand_off_due",
+    args: { step, planTurns: run.policy.planTurns },
+    result: `${run.policy.planTurns} analysis turn(s) with no change and no hand-off \u2014 this turn offers hand_off alone and requires the call.`
+  });
+  return { tools: [HAND_OFF_TOOL_SPEC], toolChoice: "required", brief: { role: "user", content: HAND_OFF_DUE_BRIEF } };
+}
+function changeToolsOf(run, selected) {
+  const tools = selected.filter((t) => isCodeChangeTool(t.function.name) || run.canAskUser && t.function.name === ASK_USER_TOOL);
+  return tools.some((t) => isCodeChangeTool(t.function.name)) ? tools : null;
+}
+function forcedProgressTurn(run, selected, reason) {
+  if (offersHandOff(run.policy) && run.canAskUser && !run.policy.handOffForced) {
+    reportToPolicy(run, { type: "hand_off_forced" });
+    return { forced: "hand_off", turn: { tools: [HAND_OFF_TOOL_SPEC], toolChoice: "required", brief: { role: "user", content: handOffBrief(reason) } } };
   }
-  for (const tool of tools) {
-    if (chosen.length >= limit) break;
-    take(tool);
+  const tools = changeToolsOf(run, selected.filter((t) => t.function.name !== HAND_OFF_TOOL));
+  if (!tools) return null;
+  if (offersHandOff(run.policy)) reportToPolicy(run, { type: "plan_budget_spent" });
+  reportToPolicy(run, { type: "change_forced" });
+  return { forced: "change", turn: { tools, toolChoice: "required", brief: { role: "user", content: changeBrief(reason, run.canAskUser) } } };
+}
+function changeBudgetTurn(run, step, selected) {
+  const budget2 = skipsVerifyStage(run.pipeline) ? QUICK_CHANGE_TURN_BUDGET : PLAN_TURN_BUDGET;
+  if (!changeDue(run.policy, progressed(run), budget2) || !budgeted(run)) return null;
+  const tools = changeToolsOf(run, selected);
+  if (!tools) return null;
+  reportToPolicy(run, { type: "change_forced" });
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "loop.change_due",
+    args: { step, codeTurns: run.policy.codeTurns },
+    result: `${run.policy.codeTurns} coding turn(s) with no change and no hand-off \u2014 this turn offers the change tools alone and requires a call.`
+  });
+  return { tools, toolChoice: "required", brief: { role: "user", content: changeBrief(`STOP READING. You have spent ${run.policy.codeTurns} coding turns without changing anything.`, run.canAskUser) } };
+}
+
+// src/runStore/cacheServedStreak.ts
+var CACHE_SERVED_STREAK2 = 6;
+var MIN_STREAK_TURNS2 = 2;
+var MAX_NO_PROGRESS_TURNS2 = 2;
+var CacheServedStreak2 = class {
+  streak = 0;
+  turns = /* @__PURE__ */ new Set();
+  fired = 0;
+  /** A repeat the read cache answered (stub, covered window, replay, repeated write), on `step`. */
+  served(step) {
+    this.streak += 1;
+    this.turns.add(step);
   }
-  const position = new Map(tools.map((t, i) => [t, i]));
-  chosen.sort((a, b) => (position.get(a) ?? 0) - (position.get(b) ?? 0));
-  const ceiling = limit + PINNED_OVERFLOW2;
-  const byName = new Map(tools.map((t) => [t.function?.name ?? "", t]));
-  for (const name of pinned) {
-    if (chosen.length >= ceiling) break;
-    const tool = byName.get(name);
-    if (tool) take(tool);
+  /** A call the host actually ran — the run touched the world again. */
+  ran() {
+    this.streak = 0;
+    this.turns.clear();
   }
-  return { tools: chosen, trimmed: true, available };
+  get count() {
+    return this.streak;
+  }
+  /** Whether the streak is due a forced turn. */
+  due() {
+    return this.streak >= CACHE_SERVED_STREAK2 && this.turns.size >= MIN_STREAK_TURNS2 && this.fired < MAX_NO_PROGRESS_TURNS2;
+  }
+  /** A forced turn was spent on the streak: the count starts over. */
+  consume() {
+    this.ran();
+    this.fired += 1;
+  }
+};
+var circling = (n2) => `YOU ARE CIRCLING. Your last ${n2} calls were all answered from this run's read cache \u2014 you already have every one of those results, and re-reading them changes nothing.`;
+function noProgressTurn(run, step, selected) {
+  if (!budgeted(run) || progressed(run) || run.policy.phase === "verify" || !run.cacheStreak.due()) return null;
+  const n2 = run.cacheStreak.count;
+  const out = forcedProgressTurn(run, selected, circling(n2));
+  if (!out) return null;
+  run.cacheStreak.consume();
+  trace2(run, step, n2, out.forced);
+  return out.turn;
+}
+function trace2(run, step, streak, forced) {
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "loop.no_progress",
+    args: { step, streak, forced },
+    result: `${streak} consecutive call(s) answered from the read cache \u2014 this turn offers ${forced === "hand_off" ? "hand_off alone" : "the change tools alone"} and requires a call.`
+  });
 }
 
 // src/toolRouter.ts
@@ -25842,6 +25782,192 @@ function handleRouterCall(catalog, name, args) {
   return { dispatch: { name: target, args: asToolArgs(a.args) ?? {} } };
 }
 
+// src/runStore/progressGuard.ts
+function isReadOnlyCall(tool, args) {
+  return isDedupableRead(tool) || isReadOnlyShellCall(tool, args) || isRouterTool(tool);
+}
+var RunProgressGuard = class {
+  /** Null when the lever is off: every method is then a no-op. */
+  detector;
+  /** An escalate / pause a later turn's menu acts on — kept until one takes it, so a
+   *  budget that forces the next turn first never drops it. */
+  due = null;
+  /** The note the next turn opens with, when the host shows it in place of an escalation. */
+  steer;
+  constructor(on = deviceLeverOn("a3_progress_detector")) {
+    this.detector = on ? new ProgressDetector({}, { isReadOnly: isReadOnlyCall, isUnscopedMutation }) : null;
+  }
+  /** What the turn said before its calls. */
+  noteTurnText(text2) {
+    this.detector?.noteTurnText(text2);
+  }
+  /** One of the turn's calls ran (or was answered from the read cache). */
+  observe(tool, args, result) {
+    this.detector?.observe(tool, args, result);
+  }
+  /** The turn's calls all ran. The trip it caused, if any. */
+  endTurn() {
+    this.steer = void 0;
+    const action = this.detector?.endTurn() ?? null;
+    if (action?.kind === "escalate") this.detector?.setSteer(void 0);
+    if (action && action.kind !== "steer") this.due = action;
+    return action;
+  }
+  /** The note the next turn opens with ("" when none). */
+  steerNote() {
+    return this.steer ?? this.detector?.steerNote() ?? "";
+  }
+  /** The escalation or pause waiting for this turn, taken once. */
+  takeDue() {
+    const due = this.due;
+    this.due = null;
+    return due;
+  }
+  /** The escalation could not be forced here: show its note on this turn instead. */
+  steerInstead(note) {
+    this.steer = note;
+  }
+};
+function progressAfterToolCalls(run) {
+  return (ctx) => {
+    const action = run.progress.endTurn();
+    if (!action) return;
+    pushTrace(run.c, {
+      ts: nowIso(),
+      category: "message",
+      label: "loop.progress_check",
+      args: { step: ctx.step, trip: action.trip, signal: action.signal.kind, action: action.kind },
+      result: `progress check ${action.trip}: ${action.signal.kind} \u2192 ${action.kind}`
+    });
+  };
+}
+function progressGuardTurn(run, step, selected) {
+  const due = run.progress.takeDue();
+  if (!due) return null;
+  const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
+  if (due.kind === "pause") {
+    if (!run.canAskUser) {
+      run.progress.steerInstead(advice);
+      return null;
+    }
+    trace3(run, step, due, "ask_user");
+    return {
+      tools: [ASK_USER_TOOL_SPEC],
+      toolChoice: "required",
+      brief: {
+        role: "user",
+        content: `${advice} Call ${ASK_USER_TOOL} now. question: "${due.question}" options: [{ "label": "Continue with guidance" }, { "label": "Stop the run" }]`
+      }
+    };
+  }
+  const out = budgeted(run) ? forcedProgressTurn(run, selected, advice) : null;
+  if (!out) {
+    run.progress.steerInstead(advice);
+    return null;
+  }
+  trace3(run, step, due, out.forced);
+  return out.turn;
+}
+function trace3(run, step, due, forced) {
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "loop.progress_forced",
+    args: { step, trip: due.trip, signal: due.signal.kind, forced },
+    result: `progress check ${due.trip} (${due.signal.kind}) \u2014 this turn offers ${forced === "ask_user" ? "ask_user alone" : forced === "hand_off" ? "hand_off alone" : "the change tools alone"} and requires a call.`
+  });
+}
+
+// src/runStore/convoText.ts
+function latestUserText(convo) {
+  for (let i = convo.length - 1; i >= 0; i--) {
+    const m = convo[i];
+    if (m.role === "user") return userTextOf(m);
+  }
+  return "";
+}
+function userTextOf(m) {
+  if (typeof m.content === "string") return m.content.trim();
+  if (Array.isArray(m.content)) {
+    return m.content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ").trim();
+  }
+  return "";
+}
+function isFollowUpTurn(convo) {
+  let users = 0;
+  for (const m of convo) {
+    if (m.role === "assistant") return true;
+    if (m.role === "user") users += 1;
+  }
+  return users > 1;
+}
+function lastAssistantText(convo) {
+  for (let i = convo.length - 1; i >= 0; i -= 1) {
+    const m = convo[i];
+    if (m.role === "assistant") return typeof m.content === "string" ? m.content.trim() : "";
+  }
+  return "";
+}
+
+// src/runStore/chatAsks.ts
+var personTurns = /* @__PURE__ */ new WeakSet();
+function markPersonTurn(m) {
+  if (m.role === "user") personTurns.add(m);
+  return m;
+}
+var MAX_ASKS = 4;
+var MAX_ASK_CHARS = 300;
+function chatAsks(convo) {
+  const seen = /* @__PURE__ */ new Set();
+  const asks = [];
+  for (let i = convo.length - 1; i >= 0 && asks.length < MAX_ASKS; i--) {
+    const m = convo[i];
+    if (m?.role !== "user" || !personTurns.has(m)) continue;
+    const text2 = userTextOf(m).replace(/\s+/g, " ").trim();
+    if (!text2 || isContinuationDirective(text2) || !asksForChange(text2)) continue;
+    const key = text2.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    asks.unshift(text2.length > MAX_ASK_CHARS ? `${text2.slice(0, MAX_ASK_CHARS)}\u2026` : text2);
+  }
+  return asks;
+}
+var numbered = (asks) => asks.map((a, i) => `${i + 1}. ${a}`).join("\n");
+var EARLIER_ASKS = "Earlier change asks in this chat (oldest first) \u2014 CONTEXT ONLY: some may already be done or superseded by a later one. Act on your own task; the request above is authoritative.";
+function chatGoalText(convo) {
+  const latest = latestUserText(convo);
+  const asks = chatAsks(convo);
+  if (asks.length <= 1) return latest;
+  return `${latest}
+
+${EARLIER_ASKS}
+${numbered(asks)}`;
+}
+function chatAsksDirective(convo) {
+  const asks = chatAsks(convo);
+  if (asks.length <= 1) return null;
+  return "CHANGE ASKS IN THIS CHAT (oldest first). The latest message is authoritative; it continues these, it does not silently drop them. An earlier ask may already be done, or superseded by a later one. Before your final answer, check each against the code: do what is still open and still wanted, and say plainly which are done.\n" + numbered(asks);
+}
+
+// src/runStore/requestReading.ts
+function readRequest(c, convo, mode) {
+  const userRequest = latestUserText(convo);
+  const directives = [];
+  if (isContinuationDirective(userRequest) && promisesUnfinishedWork(lastAssistantText(convo))) {
+    directives.push(continuationDirective());
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "turn.continuation_resolved",
+      result: "The user's bare directive was resolved against the previous turn's unfinished proposal, so the run carries that proposal out instead of asking what to fix."
+    });
+  }
+  const changeRequest = isChangeRequest(mode, userRequest);
+  const asks = changeRequest ? chatAsksDirective(convo) : null;
+  if (asks) directives.push(asks);
+  return { userRequest, directives, goal: changeRequest ? chatGoalText(convo) : userRequest };
+}
+
 // src/codeChanges.ts
 var DELEGATION_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents", "wait_agents", HAND_OFF_TOOL]);
 function isDelegationTool(name) {
@@ -25940,8 +26066,1092 @@ function resultField(result, key) {
   return obj && typeof obj === "object" ? obj[key] : void 0;
 }
 
-// src/runStore/callPreflight.ts
+// src/completionGuard.ts
+var TICKET_UPDATE = /tasks[._]update/i;
+var DONE_STATUSES = /* @__PURE__ */ new Set(["done", "completed", "complete"]);
+function isTicketCompletion(tool, args) {
+  if (!TICKET_UPDATE.test(tool)) return false;
+  const status2 = args?.status;
+  return typeof status2 === "string" && DONE_STATUSES.has(status2.toLowerCase());
+}
+function canCompleteTicket(isOnBaseBranch, userDeclinedShipping) {
+  if (isOnBaseBranch) return true;
+  if (userDeclinedShipping) return true;
+  return false;
+}
+function notOnBaseBranchAdvisory() {
+  return "CANNOT MARK DONE \u2014 code is not on the base branch (main/master). Either ship to main/master first, or if you intentionally left the code uncommitted, say so explicitly in your reply so this guard knows to allow it.";
+}
+var PlaceholderLedger = class {
+  open = /* @__PURE__ */ new Map();
+  /** Account for ONE successful write, given the hits the guard found in it. */
+  record(tool, args, hits) {
+    const a = args ?? {};
+    const path2 = typeof a.path === "string" ? a.path : "";
+    if (!path2) return;
+    if (tool === "write_file") {
+      this.set(path2, hits.map((h) => h.text));
+      return;
+    }
+    if (tool === "edit_file") {
+      const current = new Set(this.open.get(path2) ?? []);
+      const removed = typeof a.old_string === "string" ? markedLines(a.old_string) : [];
+      const kept = new Set(typeof a.new_string === "string" ? markedLines(a.new_string) : []);
+      for (const text2 of removed) if (!kept.has(text2)) current.delete(text2);
+      for (const h of hits) current.add(h.text);
+      this.set(path2, [...current]);
+      return;
+    }
+    if (tool === "delete_file") this.open.delete(path2);
+  }
+  /** Placeholders a delegated child reported writing. The parent never saw those edits,
+   *  so they stay outstanding until the parent rewrites or edits the lines itself. */
+  add(hits) {
+    for (const h of hits) {
+      const texts = this.open.get(h.path) ?? /* @__PURE__ */ new Set();
+      texts.add(h.text);
+      this.open.set(h.path, texts);
+    }
+  }
+  outstanding() {
+    return [...this.open.entries()].flatMap(([path2, texts]) => [...texts].map((text2) => ({ path: path2, text: text2 })));
+  }
+  set(path2, texts) {
+    if (texts.length) this.open.set(path2, new Set(texts));
+    else this.open.delete(path2);
+  }
+};
+function completionAdvisory(open) {
+  if (!open.length) return null;
+  const shown = open.slice(0, 3).map((h) => `${h.path}: \`${h.text}\``).join("; ");
+  return `MARKED DONE OVER A PLACEHOLDER. This run wrote ${open.length} placeholder(s) it has not removed \u2014 ${shown}${open.length > 3 ? ` (+${open.length - 3} more)` : ""}. A ticket is done when its code works in the product, not when a stub compiles. Finish the placeholder and keep the ticket done, or set it back to in_progress and name what blocks it.`;
+}
+
+// src/runStore/runPreamble.ts
+var import_working11 = require("@seanhogg/builderforce-memory/working");
+
+// src/runStore/runFoldMarker.ts
 var import_working9 = require("@seanhogg/builderforce-memory/working");
+function entryKey(m) {
+  return `${m.role}\0${m.role === "assistant" ? replayTextOf(contentText(m.content ?? "")) : contentText(m.content ?? "")}`;
+}
+function anchorPersistedHistory(c, seed, seedIds) {
+  const at2 = /* @__PURE__ */ new Map();
+  c.transcript.forEach((m, i) => {
+    const key = entryKey(m);
+    const list3 = at2.get(key);
+    if (list3) list3.push(i);
+    else at2.set(key, [i]);
+  });
+  let from = 0;
+  seed.forEach((m, k) => {
+    const id = seedIds[k];
+    const index = at2.get(entryKey(m))?.find((i) => i >= from);
+    if (index === void 0) {
+      c.unseenFromId = c.unseenFromId === void 0 ? id : Math.min(c.unseenFromId, id);
+      return;
+    }
+    if (!c.transcriptAnchors.some((a) => a.index === index)) c.transcriptAnchors.push({ index, id });
+    from = index + 1;
+  });
+}
+function recordTranscriptAnchors(c, req) {
+  const t = c.transcript;
+  const { seed, seedIds } = req;
+  c.unseenFromId = void 0;
+  if (seed && seedIds && seed.length > 0 && seedIds.length === seed.length) {
+    if (t[0] === seed[0] && t[seed.length - 1] === seed[seed.length - 1]) {
+      c.transcriptAnchors = seedIds.map((id, index) => ({ index, id }));
+    } else {
+      anchorPersistedHistory(c, seed, seedIds);
+    }
+  }
+  if (req.userTurnMessageId == null || req.userTurn === void 0) return;
+  for (let i = t.length - 1; i >= 0; i--) {
+    if (t[i].role === "user" && t[i].content === req.userTurn) {
+      if (!c.transcriptAnchors.some((a) => a.index === i)) c.transcriptAnchors.push({ index: i, id: req.userTurnMessageId });
+      return;
+    }
+  }
+}
+async function persistFoldMarker(c, chatId, persistence, fold) {
+  const covered = (0, import_working9.foldKeepFromId)(c.transcriptAnchors, fold.coveredEnd);
+  if (covered === void 0) return;
+  const keepFromId = c.unseenFromId === void 0 ? covered : Math.min(covered, c.unseenFromId);
+  try {
+    const [msg] = await persistence.sendMessages(chatId, [{
+      role: "assistant",
+      content: (0, import_working9.consolidationMarkerContent)(fold.note),
+      metadata: (0, import_working9.consolidationMetadata)({ keepFromId, folded: fold.droppedMessages })
+    }]);
+    if (msg) {
+      recordAppended(c, msg);
+      emit2(c);
+    }
+  } catch (error) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "context.compact_persist_failed",
+      args: { coveredEnd: fold.coveredEnd },
+      result: `The compaction note could not be saved (${error instanceof Error ? error.message : String(error)}) \u2014 the next run will summarize this history again.`
+    });
+  }
+}
+function recordFold(run, fold) {
+  const { c } = run;
+  pushTrace(c, {
+    ts: nowIso(),
+    category: "message",
+    label: "context.compacted",
+    args: { droppedMessages: fold.droppedMessages },
+    result: `Compressed ${fold.droppedMessages} earlier step(s) into a memory to stay within the context window.`
+  });
+  emit2(c);
+  void persistFoldMarker(c, run.chatId, run.req.persistence, fold);
+}
+
+// src/windowFit/runWindowFit.ts
+function windowFitTrace(ts, step, t) {
+  const how = t.summarized ? "summarized" : t.recalled ? "recalled from memory" : "elided";
+  return {
+    ts,
+    category: "message",
+    label: "llm.handoff",
+    args: { step, ...t },
+    result: t.dropped > 0 ? `Packed the transcript for ${t.to}${t.from ? ` (from ${t.from})` : ""}: ${t.dropped} earlier message(s) ${how}, ~${t.estimatedTokens} tokens${t.fits ? "" : " \u2014 still over its window"}.` : `Handed the transcript to ${t.to}${t.from ? ` (from ${t.from})` : ""} verbatim, ~${t.estimatedTokens} tokens.`
+  };
+}
+function windowFitRecallFailedTrace(ts, step, error) {
+  return {
+    ts,
+    category: "message",
+    label: "llm.handoff_recall_failed",
+    args: { step },
+    result: `The memory recall for the hand-off note failed (${error instanceof Error ? error.message : String(error)}) \u2014 the dropped messages were elided instead.`
+  };
+}
+function windowCapUnknownTrace(ts, model, error) {
+  return {
+    ts,
+    category: "message",
+    label: "llm.window_unknown",
+    args: { model },
+    result: `The context window of ${model} could not be resolved (${error instanceof Error ? error.message : String(error)}) \u2014 tool results keep the default caps.`
+  };
+}
+function createRunWindowFit(deps) {
+  let lastServed;
+  let lastAsked;
+  const capWindows = /* @__PURE__ */ new Map();
+  const packs = /* @__PURE__ */ new Map();
+  const recalls = /* @__PURE__ */ new Map();
+  if (deps.priorRecall) recalls.set(deps.priorRecall.query, Promise.resolve(deps.priorRecall.result));
+  const recallFor = (step) => deps.recall ? (query) => {
+    let hit = recalls.get(query);
+    if (!hit) {
+      hit = deps.recall(query).catch((error) => {
+        deps.trace(windowFitRecallFailedTrace(deps.now(), step, error));
+        return null;
+      });
+      recalls.set(query, hit);
+    }
+    return hit;
+  } : void 0;
+  return {
+    async prepare(req) {
+      const to = req.model;
+      if (!to) return req.messages;
+      lastAsked = to;
+      const window2 = await resolveContextWindow(to, deps.windowSources);
+      if (window2 === void 0) return req.messages;
+      const differs = lastServed !== void 0 && lastServed !== to;
+      if (!differs && window2 >= deps.workingBudgetTokens) return req.messages;
+      const memoKey = `${to}|${window2}`;
+      const memo = packs.get(memoKey);
+      const budget2 = packBudgetTokens({ to, contextTokens: window2, ...req.tools ? { tools: req.tools } : {}, ...req.maxTokens ? { maxTokens: req.maxTokens } : {} });
+      const reused = memo ? reusePack(memo, req.messages, budget2) : null;
+      if (reused) return reused;
+      const recall = recallFor(req.step);
+      const { messages, pack } = await packForModel({
+        messages: req.messages,
+        to,
+        ...lastServed ? { from: lastServed } : {},
+        contextTokens: window2,
+        ...req.tools ? { tools: req.tools } : {},
+        ...req.maxTokens ? { maxTokens: req.maxTokens } : {},
+        ...deps.summarizer ? { summarizer: deps.summarizer() } : {},
+        ...recall ? { recall } : {},
+        onTrace: (t) => {
+          if (differs || t.dropped > 0 || !t.fits) deps.trace(windowFitTrace(deps.now(), req.step, t));
+        }
+      });
+      if (pack.fits) packs.set(memoKey, packMemoOf(req.messages, messages));
+      else packs.delete(memoKey);
+      return messages;
+    },
+    served(model) {
+      if (model) lastServed = model;
+    },
+    contextWindow() {
+      const ref = lastServed ?? lastAsked;
+      if (!ref) return Promise.resolve(void 0);
+      let window2 = capWindows.get(ref);
+      if (!window2) {
+        window2 = resolveContextWindow(ref, deps.windowSources).catch((e) => {
+          deps.trace(windowCapUnknownTrace(deps.now(), ref, e));
+          return void 0;
+        });
+        capWindows.set(ref, window2);
+      }
+      return window2;
+    }
+  };
+}
+
+// src/runStore/runMemory.ts
+var import_evermind2 = require("@seanhogg/builderforce-memory/evermind");
+var import_working10 = require("@seanhogg/builderforce-memory/working");
+
+// src/runStore/answerAnchors.ts
+var FILE_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "view_file", "open_file", "read_files"]);
+var PATH_KEYS = ["path", "file", "filePath"];
+var MAX_ANSWER_ANCHORS = 16;
+function normalizePath2(p) {
+  return p.trim().split("\\").join("/").replace(/^\.\/+/, "");
+}
+function readFileAnchors(trace4) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const ev of trace4) {
+    if (ev.category !== "tool" || ev.isError || !FILE_READ_TOOLS.has(ev.label)) continue;
+    const args = ev.args ?? {};
+    const paths = Array.isArray(args.paths) ? args.paths : PATH_KEYS.map((k) => args[k]);
+    for (const raw of paths) {
+      if (typeof raw !== "string") continue;
+      const path2 = normalizePath2(raw);
+      if (!path2 || seen.has(path2)) continue;
+      seen.add(path2);
+      out.push({ path: path2 });
+      if (out.length >= MAX_ANSWER_ANCHORS) return out;
+    }
+  }
+  return out;
+}
+
+// src/runStore/adoptAnswer.ts
+async function adoptAnswerWithoutModel(chatId, c, req, text2, step) {
+  const finalText = canonicalTurnText(text2);
+  if (!finalText) return false;
+  c.transcript.push({ role: "assistant", content: replayTextOf(finalText) });
+  const [assistantMsg] = await req.persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
+  c.streamingText = "";
+  recordAppended(c, assistantMsg);
+  pushTrace(c, { ts: nowIso(), category: "recall", label: step.label, args: step.args, result: { ...step.result, skippedLlm: true } });
+  emit2(c);
+  req.onActivity?.(chatId);
+  return true;
+}
+
+// src/runStore/runMemory.ts
+var MAX_RECALL_HINT_CHARS2 = 600;
+function recallQuery2(userText, hint) {
+  const extra = (hint ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_RECALL_HINT_CHARS2);
+  if (!extra || !userText.trim()) return userText;
+  return `${userText.trim()}
+
+${extra}`;
+}
+async function recallForRun(c, convo, evermind, hint) {
+  let recalled = null;
+  if (!evermind?.recall) return { recalled, block: null, blockTokens: 0 };
+  const query = recallQuery2(latestUserText(convo), hint);
+  if (!query) return { recalled, block: null, blockTokens: 0 };
+  try {
+    recalled = await evermind.recall(query);
+  } catch {
+    recalled = null;
+  }
+  if (recalled?.seeded && recalled.items.length > 0) {
+    const block = (0, import_evermind2.formatEvermindMemoryBlock)(recalled.items);
+    if (block) {
+      const blockTokens = (0, import_working10.transcriptTokens)([{ role: "system", content: block }]);
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "recall",
+        label: "evermind.recall",
+        args: { query, version: recalled.version },
+        result: {
+          count: recalled.items.length,
+          version: recalled.version,
+          mode: recalled.mode,
+          blockTokens,
+          items: recalled.items
+        }
+      });
+      return { recalled, block, blockTokens };
+    }
+  }
+  return { recalled, block: null, blockTokens: 0 };
+}
+async function answerFromMemory(chatId, c, req, allTools, memoryReplay) {
+  const { evermind, model } = req;
+  const convo = c.transcript;
+  if (!(evermind?.answer && memoryReplay && !c.abort?.signal.aborted)) return false;
+  const query = latestUserText(convo);
+  if (!query) return false;
+  let memAnswer = null;
+  try {
+    memAnswer = await evermind.answer(query, {
+      toolsAvailable: !!allTools && allTools.length > 0,
+      // What this turn would have run on — the saving a hit records is priced at it.
+      model: model || c.lastServedModel || void 0
+    });
+  } catch {
+    memAnswer = null;
+  }
+  if (!memAnswer) return false;
+  return adoptAnswerWithoutModel(chatId, c, req, memAnswer.text ?? "", {
+    label: memAnswer.source === "evermind" ? "evermind.answer" : "memory.answer",
+    args: { query },
+    result: {
+      source: memAnswer.source,
+      ...memAnswer.evermindVersion != null ? { version: memAnswer.evermindVersion } : {},
+      // WHICH head served it — a project can target several, so without this a
+      // memory hit from a sibling IDE build's Evermind is indistinguishable from
+      // the chat project's own.
+      ...memAnswer.evermindProjectId != null ? { evermindProjectId: memAnswer.evermindProjectId } : {}
+    }
+  });
+}
+function emitEvermindLearnReconcile(run, assistantMsg, finalText) {
+  const { c, recalled } = run;
+  const evermind = run.req.evermind;
+  const learn = assistantMsg?.evermindLearn;
+  if (learn?.learned) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "learn",
+      label: "evermind.learn",
+      // `targets` carries the per-Evermind breakdown (a project can fan out to many)
+      // so the timeline can name each by id; the renderer falls back to `version` alone.
+      result: { version: learn.version, queued: true, ...learn.targets ? { targets: learn.targets } : {} }
+    });
+    const reconciled = recalled?.items ? (0, import_evermind2.countReconciledMemories)(recalled.items, finalText) : 0;
+    if (reconciled > 0) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "reconcile",
+        label: "evermind.reconcile",
+        result: { count: reconciled, version: learn.version }
+      });
+    }
+  } else if (learn && learn.reason && learn.reason !== "too-short") {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "learn",
+      label: "evermind.learn",
+      result: { version: learn.version, skipped: true, reason: learn.reason, ...learn.targets ? { targets: learn.targets } : {} }
+    });
+  }
+  if (evermind?.cacheAnswer && run.memoryReplay) {
+    const q = run.userRequest;
+    const spent = c.runUsage;
+    const origin = spent.model && spent.promptTokens + spent.completionTokens > 0 ? { model: spent.model, promptTokens: spent.promptTokens, completionTokens: spent.completionTokens } : void 0;
+    if (q) {
+      const anchors = readFileAnchors(runTrace(c));
+      const cached2 = anchors.length ? evermind.cacheAnswer(q, finalText, origin, anchors) : origin ? evermind.cacheAnswer(q, finalText, origin) : evermind.cacheAnswer(q, finalText);
+      void Promise.resolve(cached2).catch(() => {
+      });
+    }
+  }
+}
+
+// src/runStore/prefetchGate.ts
+var NOTHING = { answered: false, tail: [] };
+function unrecorded(c, what, e) {
+  pushTrace(c, { ts: nowIso(), category: "message", label: "prefetch.unrecorded", args: { what }, result: e instanceof Error ? e.message : String(e) });
+}
+function bestEffort(c, what, write2) {
+  let pending;
+  try {
+    pending = write2();
+  } catch (e) {
+    unrecorded(c, what, e);
+    return;
+  }
+  void Promise.resolve(pending).then(void 0, (e) => unrecorded(c, what, e));
+}
+function settlePending(c, port, req, request) {
+  const pending = c.pendingGate;
+  c.pendingGate = null;
+  if (!pending) return;
+  const accepted = !isReask(pending.request, request);
+  const { runId } = pending;
+  if (port.record) bestEffort(c, "calibration", () => port.record({ ...pending.outcome, accepted }));
+  if (runId && req.recordRunOutcome) bestEffort(c, "gate-outcome", () => req.recordRunOutcome({ runId, gateAccepted: accepted }));
+}
+function confirmVia(port, runKey, stop) {
+  return async (action, request, detail) => {
+    if (port.confirm) return port.confirm(action, request, detail);
+    if (stop?.aborted) return false;
+    const onAbort = () => resolveRunConfirm(runKey, false);
+    stop?.addEventListener("abort", onAbort, { once: true });
+    try {
+      return await requestRunConfirm(runKey, prefetchConfirmRequest(action, request, detail));
+    } finally {
+      stop?.removeEventListener("abort", onAbort);
+    }
+  };
+}
+function decisionTrace(c, pass) {
+  const { decision } = pass;
+  pushTrace(c, {
+    ts: nowIso(),
+    category: "message",
+    label: "prefetch.decision",
+    durationMs: pass.elapsedMs,
+    args: {
+      route: decision.route,
+      actions: decision.actions.map(({ id, p, tier: tier2 }) => ({ id, p, tier: tier2 })),
+      pNeedsLlm: decision.pNeedsLlm,
+      tiers: decision.tiersRun
+    },
+    result: {
+      settled: pass.settled,
+      classifyMs: decision.elapsedMs,
+      elapsedMs: pass.elapsedMs,
+      ran: pass.ran.map(({ action, result, confirmed }) => ({
+        id: action.id,
+        ok: !!result,
+        ...confirmed !== void 0 ? { confirmed } : {},
+        ...result?.data ? { data: result.data } : {}
+      }))
+    }
+  });
+}
+function routedModel(c, req) {
+  return req.model || c.lastServedModel || void 0;
+}
+async function answerDeterministically(chatId, c, req, runId, runKey = chatId) {
+  const port = req.prefetch;
+  if (!port || c.abort?.signal.aborted) return NOTHING;
+  const query = latestUserText(c.transcript);
+  if (!query) return NOTHING;
+  settlePending(c, port, req, query);
+  const stop = c.abort?.signal;
+  const pass = await runGate(query, port, {
+    ...stop ? { signal: stop } : {},
+    confirm: confirmVia(port, runKey, stop),
+    adopt: ({ action, candidate, result }) => adoptAnswerWithoutModel(chatId, c, req, result.text, {
+      label: action.id,
+      args: { query },
+      result: {
+        source: action.id,
+        p: candidate.p,
+        tier: candidate.tier,
+        route: "answer",
+        ...result.chips?.length ? { chips: result.chips } : {},
+        ...result.data ? { data: result.data } : {}
+      }
+    })
+  });
+  if (!pass) return NOTHING;
+  decisionTrace(c, pass);
+  const lead = pass.lead;
+  if (lead) {
+    c.pendingGate = {
+      request: query,
+      outcome: { actionId: lead.action.id, route: pass.settled === "answer" ? "answer" : "prefetch", p: lead.candidate.p, tier: lead.candidate.tier, features: lead.candidate.features },
+      ...runId ? { runId } : {}
+    };
+  }
+  if (pass.answer) {
+    recordAvoided(c, req, pass.answer.action.id, runId);
+    return { answered: true, tail: [] };
+  }
+  return { answered: false, tail: pass.tail };
+}
+function recordAvoided(c, req, actionId, runId) {
+  if (!req.recordAvoidedCall) return;
+  const model = routedModel(c, req);
+  const record3 = req.recordAvoidedCall;
+  bestEffort(c, "avoided-call", () => record3({
+    source: "deterministic",
+    actionId,
+    ...runId ? { runId } : {},
+    ...model ? { model } : {},
+    promptTokens: MEDIAN_TURN_TOKENS.prompt,
+    completionTokens: MEDIAN_TURN_TOKENS.completion
+  }));
+}
+
+// src/runStore/modelPreflight.ts
+var MODEL_PREFLIGHT_LABEL = "model.preflight";
+function planModelWarning2(model, book2 = snapshotPriceBook()) {
+  if (!model || model === "default") return null;
+  const price = listPriceOf(book2, model);
+  const tier2 = price ? resolveModelTier({ price }) : void 0;
+  return tier2 && isAgenticTier(tier2) === false ? { model, tier: tier2 } : null;
+}
+function modelPreflightEvent2(result, ts, plan) {
+  const entries = parseByoUnresolved((result?.byoUnresolved ?? []).filter((e) => e.trim()));
+  if (entries.length === 0 && !plan) return null;
+  const said = [];
+  if (entries.length > 0) {
+    const onto = result?.fallback ? ` This run will use ${result.fallback} instead.` : " This run will fall back to another model.";
+    said.push(`${entries.map(byoUnresolvedSummary).join("; ")}.${onto}`);
+  }
+  if (plan) {
+    said.push(`the plan phase will run on ${plan.model}, a ${plan.tier}-tier (Flash-class) model \u2014 weak at planning a multi-step change; pick a stronger model for planning if the result matters.`);
+  }
+  return {
+    ts,
+    category: "message",
+    label: MODEL_PREFLIGHT_LABEL,
+    args: {
+      ...entries.length ? { byoUnresolved: entries.map((e) => e.reason ? `${e.provider}:${e.reason}` : e.provider).join(",") } : {},
+      ...result?.fallback && entries.length ? { fallback: result.fallback } : {},
+      ...plan ? { planModel: plan.model, planTier: plan.tier } : {}
+    },
+    result: `Before the first turn: ${said.join(" Also: ")}`
+  };
+}
+async function applyModelPreflight(c, preflight, pinnedModel) {
+  if (!preflight) return;
+  let result;
+  try {
+    result = await preflight();
+  } catch {
+    return;
+  }
+  const plan = c.codeChanged ? null : planModelWarning2(pinnedModel);
+  const event = modelPreflightEvent2(result, nowIso(), plan);
+  if (!event) return;
+  if (result?.byoUnresolved.length) accrueByoUnresolved(c, result.byoUnresolved.join(","));
+  pushTrace(c, event);
+  emit2(c);
+}
+
+// src/runStore/hostRunContext.ts
+async function hostPart(c, part, read2) {
+  if (!read2) return void 0;
+  try {
+    return await read2();
+  } catch (e) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "host.context_failed",
+      args: { part },
+      result: `The host's ${part} could not be read (${e instanceof Error ? e.message : String(e)}) \u2014 the run starts without it.`
+    });
+    return void 0;
+  }
+}
+async function gatherHostRunContext(c, req, recall) {
+  const [recallHint, turnContext, servedReads] = await Promise.all([
+    recall ? hostPart(c, "recall hint", req.recallHint) : Promise.resolve(void 0),
+    hostPart(c, "task context", req.turnContext),
+    hostPart(c, "served reads", req.servedReads),
+    // The model preflight (E7): an account that cannot serve this run is shown on the
+    // banner BEFORE the first turn, not after it.
+    applyModelPreflight(c, req.modelPreflight, req.model)
+  ]);
+  return {
+    ...recallHint ? { recallHint } : {},
+    ...turnContext?.trim() ? { turnContext } : {},
+    servedReads: servedReads ?? []
+  };
+}
+function recordServedReads(coverage, reads, anchor) {
+  for (const read2 of reads) {
+    if (!read2.path) continue;
+    const args = { path: read2.path };
+    coverage.record("read_file", args);
+    coverage.cacheResult("read_file", args, {
+      result: { ok: true, path: read2.path, content: read2.content, totalLines: read2.totalLines, offset: 1, truncated: false },
+      anchor
+    });
+  }
+}
+
+// src/runStore/turnContext.ts
+var OPEN = "<turn_context>\nContext for this turn only (recalled memory and run directives) \u2014 not part of the request:";
+var CLOSE = "</turn_context>";
+var attached = /* @__PURE__ */ new WeakMap();
+function turnContextBlock2(parts) {
+  const body = parts.map((p) => (p ?? "").trim()).filter(Boolean).join("\n\n");
+  return body ? `${OPEN}
+
+${body}
+${CLOSE}` : null;
+}
+function turnContextCarrier(c) {
+  const a = attached.get(c);
+  return a && a.convo[a.index] === a.carrier ? a.carrier : void 0;
+}
+function restoreTurnContext(c) {
+  const prior = attached.get(c);
+  if (!prior) return;
+  if (prior.convo[prior.index] === prior.carrier) prior.convo[prior.index] = prior.original;
+  attached.delete(c);
+}
+function attachTurnContext(c, convo, block) {
+  restoreTurnContext(c);
+  for (let i = convo.length - 1; i >= 0; i -= 1) {
+    const original = convo[i];
+    if (original.role !== "user") continue;
+    const content = typeof original.content === "string" ? `${original.content}
+
+${block}` : [...original.content, { type: "text", text: block }];
+    const carrier = { ...original, content };
+    convo[i] = carrier;
+    attached.set(c, { convo, index: i, carrier, original });
+    return true;
+  }
+  return false;
+}
+
+// src/runStore/runPreamble.ts
+function stablePrefixOn() {
+  return deviceLeverOn("b1_stable_prefix");
+}
+function recorderFor(userRequest, lent) {
+  const r = lent ?? new RunKnowledgeRecorder();
+  if (!r.activity.prompt) r.setPrompt(userRequest);
+  return r;
+}
+async function prepareRunLoop(chatId, c, req, runKey) {
+  const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, runTool, stream, evermind } = req;
+  const convo = c.transcript;
+  restoreTurnContext(c);
+  recordTranscriptAnchors(c, req);
+  const stablePrefix = stablePrefixOn();
+  const turnParts = [];
+  const canAskUser = !!runTool && (toolSpecs?.length ?? 0) > 0;
+  const catalog = canAskUser ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC, HAND_OFF_TOOL_SPEC] : toolSpecs;
+  const allTools = catalog && catalog.length > 0 ? catalog : void 0;
+  const runMode = normalizeChatMode(req.chatMode ?? "work");
+  const serverChatId = resolveServerChatId(chatId, req);
+  const pipeline = decideRunPipeline(req, latestUserText(convo), { followUp: isFollowUpTurn(convo) });
+  if (pipeline) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "run.pipeline_route",
+      args: { route: pipeline.route, score: pipeline.score },
+      result: `${pipeline.route === "quick" ? "Quick pass" : "Full pipeline"}: ${pipeline.reason}`
+    });
+  }
+  const metadata = {
+    ...serverChatId != null ? { chatId: serverChatId } : {},
+    ...req.clientChatId ? { clientChatId: req.clientChatId } : {},
+    guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    guestTurnInput: latestUserText(convo),
+    mode: runMode,
+    ...req.projectId != null ? { projectId: req.projectId } : {},
+    ...pipelineMetadata(pipeline)
+  };
+  const host = await gatherHostRunContext(c, req, !!evermind?.recall);
+  const { recalled, block: recallBlock2, blockTokens: recallBlockTokens } = await recallForRun(c, convo, evermind, host.recallHint);
+  let systemPrompt = resolvedSystemPrompt;
+  if (recallBlock2) {
+    if (stablePrefix) turnParts.push(recallBlock2);
+    else systemPrompt = `${systemPrompt}
+
+${recallBlock2}`;
+  }
+  const priorRecall = { query: latestUserText(convo), result: recalled };
+  const memoryReplay = memoryReplayable(latestUserText(convo), { followUp: isFollowUpTurn(convo) });
+  const gate = await answerDeterministically(chatId, c, req, metadata.guestTurnId, runKey);
+  if (gate.answered) return null;
+  if (req.prefetch) metadata.gateRoute = gate.tail.length > 0 ? "prefetch" : "llm";
+  if (await answerFromMemory(chatId, c, req, allTools, memoryReplay)) return null;
+  if (host.turnContext) turnParts.push(host.turnContext);
+  for (const block of gate.tail) if (!host.turnContext?.includes(block)) turnParts.push(block);
+  if (req.augmentSystemPrompt) {
+    try {
+      const extra = await req.augmentSystemPrompt(latestUserText(convo));
+      if (typeof extra === "string" && extra.trim()) {
+        if (stablePrefix) turnParts.push(extra);
+        else systemPrompt = `${systemPrompt}
+
+${extra}`;
+      }
+    } catch {
+    }
+  }
+  const catalogToolNames = (req.tools ?? []).map((t) => t.function.name);
+  const canEditHere = canChangeCodeHere(catalogToolNames);
+  systemPrompt = `${systemPrompt}
+
+${chatModeDirective(runMode, serverChatId, { canEditHere, canDelegate: catalogToolNames.includes("spawn_agent"), canFanOut: catalogToolNames.includes("spawn_agents"), roster: req.chatRoster })}
+
+${turnOptimizationDirective()}`;
+  const canShip = canShipHere(catalogToolNames);
+  if (canShip) systemPrompt = `${systemPrompt}
+
+${selfReviewShipDirective(serverChatId)}`;
+  if (canReviewInPreview(catalogToolNames)) systemPrompt = `${systemPrompt}
+
+${previewReviewDirective(serverChatId)}`;
+  if (c.priorResearch) systemPrompt = `${systemPrompt}
+
+${c.priorResearch}`;
+  const reading = readRequest(c, convo, runMode);
+  const { userRequest } = reading;
+  for (const directive of reading.directives) {
+    if (stablePrefix) turnParts.push(directive);
+    else systemPrompt = `${systemPrompt}
+
+${directive}`;
+  }
+  const turnContext = turnContextBlock2(turnParts);
+  const alwaysAdvertised = [
+    ...toolNamesMentionedIn(turnContext ? `${systemPrompt}
+
+${turnContext}` : systemPrompt),
+    ...localToolsIn(catalogToolNames),
+    // The Studio's workspace vocabulary, including the preview review its contract
+    // requires — empty everywhere but the Studio (see `studioToolsIn`).
+    ...studioToolsIn(catalogToolNames),
+    // The project-memory pair (recall before re-reading; remember what was learned) is
+    // the cheapest tool in the catalog and the first one relevance would drop.
+    ...memoryToolsIn(catalogToolNames),
+    // The workspace's Agent Skills — its description IS the skill catalog, so dropping
+    // it on relevance would hide every reviewed procedure the workspace has.
+    ...skillToolsIn(catalogToolNames),
+    // Asking the user is never off-topic: it is how the run stops when it cannot
+    // proceed, so relevance against the request must not be what decides whether the
+    // agent is allowed to ask. Its one schema is also the cheapest in the catalog.
+    ...canAskUser ? [ASK_USER_TOOL] : []
+  ];
+  const windowFit = createRunWindowFit({
+    workingBudgetTokens: import_working11.HISTORY_TOKEN_BUDGET,
+    summarizer: () => ({ stream, model: run.policy.model, signal: c.abort?.signal }),
+    ...evermind?.recall ? { recall: (q) => evermind.recall(q), priorRecall } : {},
+    ...req.windowSources ? { windowSources: req.windowSources } : {},
+    trace: (ev) => pushTrace(c, ev),
+    now: nowIso
+  });
+  const run = {
+    chatId,
+    serverChatId,
+    runKey,
+    c,
+    req,
+    convo,
+    canAskUser,
+    allTools,
+    catalogToolNames,
+    alwaysAdvertised,
+    // Tools this run has actually called — pinned into every later turn's selection
+    // so a multi-step task never loses a tool it is mid-way through using.
+    usedTools: /* @__PURE__ */ new Set(),
+    systemPrompt,
+    metadata,
+    recalled,
+    recallBlockTokens,
+    memoryReplay,
+    userRequest,
+    // The goal a hand-off states to coders who see none of this chat: the latest
+    // message, and for a change request the chat's earlier change asks (`chatAsks.ts`).
+    goal: reading.goal,
+    // One re-prompt per run for a final reply that repeats the previous turn's answer
+    // (see `restatedReply.ts`). Captured before the loop: the transcript grows as it runs.
+    priorReply: previousReplyText(convo),
+    // The user's ACTUAL request for this run, resolved once. Every turn's tool
+    // selection scores against this and nothing else — see `run/brainPlatformTools.ts`.
+    requestQuery: routingQueryForTurn(convo),
+    windowFit,
+    // What this run has already read. Two guards, one tally (see `readCoverage.ts`):
+    // an EXACT repeat of a successful read-only call — same tool, same arguments —
+    // returns an "already returned above" stub instead of re-fetching + re-injecting
+    // the payload; and a target re-read at SHIFTING offsets gets an advisory once it
+    // starts circling. Both are invalidated together, and only for what a later
+    // mutation actually touched — never wiped wholesale by an unrelated call.
+    readCoverage: new ReadCoverage2(),
+    // How many calls in a row that cache has answered — a run circling its own reads
+    // is forced to hand off or change (`cacheServedStreak.ts`).
+    cacheStreak: new CacheServedStreak2(),
+    // The A3 progress detector — a run that says it is ready and keeps reading, circles,
+    // undoes its own edit or repeats a failure is steered, then forced, then asked
+    // about (`progressGuard.ts`, PRD 35 WS8p).
+    progress: new RunProgressGuard(),
+    // What the run did and read, restated in front of every turn (its `brief()`) —
+    // the host's recorder when it keeps one, so the ledger and its code map agree.
+    knowledge: recorderFor(userRequest, req.knowledge),
+    // What this run has already FAILED at (see `FailureTally` in `@builderforce/run-guards`). The read guards
+    // above deliberately record only SUCCESSES, so an identical failing call — the same
+    // `git_status` answered with the same remedy three times, the same platform read
+    // answered 502 twice — got no pushback at all and could repeat until the budget was
+    // gone. The first retry stays free; from the second the model reads the count and the
+    // error it already has, and the moves that remain.
+    failures: new FailureTally(),
+    // What this run has already WRITTEN (see `repeatedWrite.ts`): the third loop shape —
+    // a successful full-content write sent again byte for byte, because an error from
+    // before it was still on screen. Replaying it cannot change the file, so it is answered
+    // without running.
+    writeLedger: new WriteLedger(),
+    // Placeholders this run wrote and has not removed — read when a ticket is marked done
+    // (see `completionGuard.ts`).
+    placeholderLedger: new PlaceholderLedger(),
+    // THE model hand-off policy (`@builderforce/run-policy`), shared with every other agent
+    // loop. ANALYSIS first, then the CODE: under auto-routing each turn tells the gateway
+    // what kind of call it is. Until the run reaches its first code change the turns are
+    // analysis (`plan` — the tenant's own precedence decides who plans); from then on they
+    // are `code`, which the gateway leads with the strongest connected model. A run that
+    // already changed code (a resumed turn) starts as `code`. The policy also holds the
+    // model this run is CURRENTLY talking to, every model it has already tried, and the
+    // models that broke mid-turn: a model that burns its whole stall budget fails over to
+    // another one rather than handing the user a promise (see the final-answer hook),
+    // and one that breaks mid-stream is routed around for the rest of the run. A pinned
+    // model is the user's own choice and is never routed around.
+    policy: initialRunPolicy({
+      pinnedModel: model,
+      strictPin: modelStrict,
+      // Every run starts the same way, whatever the chat's history: a chat that coded
+      // before used to start every later run in `code`, which skipped the analysis
+      // budget and let an old chat read forever while a fresh one handed off (chat
+      // #5739). The one exception is a ROLE, not history — a sub-agent is a delegated
+      // SLICE its owner already planned; started in `plan` it was offered `hand_off` and
+      // the analysis all over again, inside work it was handed to carry out. A QUICK
+      // run (`pipelineRoute.ts`) starts in `code` too, on the quick model. The host's
+      // stage models ride as `phaseModels`, never as one model pinned to the whole run.
+      ...pipelinePolicyOptions(req, pipeline)
+    }),
+    pipeline,
+    // Bounded counter for the announced-but-never-made tool call recovery, so a model
+    // that keeps narrating instead of acting cannot spin the loop. Not one-shot: a model
+    // that stalls once frequently stalls again on the very next turn, and spending the
+    // single retry on the first stall left the user holding the SECOND promise. The
+    // stall budget (`agent-stall`) bounds these recoveries on its own — a run has no
+    // iteration ceiling to fall back on.
+    // One re-prompt per run for a code change left unshipped (see `selfReviewShip.ts`).
+    // One, not a budget: the second time the model stops short it has read the contract
+    // twice, and its answer — including "I cannot ship this because…" — is the answer.
+    shipRecoveryUsed: false,
+    reviewRecoveryUsed: false,
+    // One redirect per run for an explicit sub-agent request the run neither started nor
+    // refused on a real result (see `delegationRequest.ts`).
+    delegationRecoveryUsed: false,
+    restateRecoveryUsed: false,
+    stopHookRounds: 0,
+    redirectAskToDelegation: false,
+    pendingReplay: null,
+    pendingRun: null,
+    lastTurnInterruption: null
+  };
+  if (turnContext && !attachTurnContext(c, convo, turnContext)) {
+    run.systemPrompt = `${systemPrompt}
+
+${turnContext}`;
+  }
+  recordServedReads(run.readCoverage, host.servedReads, turnContextCarrier(c));
+  return run;
+}
+
+// src/stopHooks.ts
+var MAX_STOP_HOOK_ROUNDS = 4;
+async function askStopHook(hook, input) {
+  if (!hook || input.round >= MAX_STOP_HOOK_ROUNDS) return null;
+  try {
+    const nudge = (await hook(input))?.trim();
+    return nudge ? nudge : null;
+  } catch {
+    return null;
+  }
+}
+
+// src/runStore/earlyDelegation.ts
+var counters = /* @__PURE__ */ new WeakMap();
+function counterOf(run) {
+  let counter = counters.get(run);
+  if (!counter) {
+    counter = new ReadsWithoutSpawn();
+    counters.set(run, counter);
+  }
+  return counter;
+}
+function runLeftDelegationUndone(run) {
+  return leftDelegationUndone({ toolNames: run.catalogToolNames, requestText: run.userRequest, events: runTrace(run.c) });
+}
+function delegationCallKind2(name, args, isReadTool) {
+  if (isSpawnTool(name)) return "spawn";
+  if (isReadTool || isReadOnlyShellCall(name, args)) return "read";
+  return "other";
+}
+function earlyDelegationAdvisory(run, name, args, isReadTool, step) {
+  const counter = counterOf(run);
+  const kind = delegationCallKind2(name, args, isReadTool);
+  const reads = counter.record(kind);
+  if (kind !== "read" || !counter.due(READS_BEFORE_DELEGATION_NUDGE)) return null;
+  if (!runLeftDelegationUndone(run)) return null;
+  counter.markNudged();
+  const nudge = earlyDelegationNudge(run.catalogToolNames, reads);
+  pushTrace(run.c, {
+    ts: nowIso(),
+    category: "message",
+    label: "loop.nudge_undelegated_request",
+    args: { step, tool: name, reads },
+    result: `The user asked for sub-agents and the run had made ${reads} reads without starting one \u2014 told to delegate on that read result.`
+  });
+  return nudge;
+}
+
+// src/runStore/deliveryGates.ts
+function deliveryGates(run) {
+  const { c, catalogToolNames, userRequest, priorReply } = run;
+  const facts = () => ({ codeChanged: c.codeChanged, toolNames: catalogToolNames, requestText: userRequest, events: runTrace(c) });
+  const files = () => ({ files: c.touchedFiles.slice(0, 20) });
+  return [
+    {
+      // The turn CHANGED code and is ending without having even tried to ship it. In a local session that change has no other
+      // reviewer. Quiet when the user said not to commit, when a commit/push/PR was attempted, and on a host that cannot commit.
+      id: "brain.ship",
+      entersVerify: true,
+      applies: () => !run.shipRecoveryUsed && leftChangeUnshipped(facts()),
+      nudge: unshippedChangeNudge,
+      trace: { label: "loop.recover_unshipped_change", args: files, result: "Run changed code and ended without committing or pushing it \u2014 re-prompted to verify, self-review and ship (this local session is the change's only reviewer)." },
+      spend: () => {
+        run.shipRecoveryUsed = true;
+      }
+    },
+    {
+      // The Studio's twin: the turn CHANGED the app and is ending without having inspected the preview and recorded a review.
+      id: "brain.review",
+      entersVerify: true,
+      applies: () => !run.reviewRecoveryUsed && leftChangeUnreviewed(facts()),
+      nudge: unreviewedChangeNudge,
+      trace: { label: "loop.recover_unreviewed_change", args: files, result: "Run changed the app and ended without inspecting the preview and recording a review \u2014 re-prompted to verify and review (this Studio session is the change's only reviewer)." },
+      spend: () => {
+        run.reviewRecoveryUsed = true;
+      }
+    },
+    {
+      // The user asked for SUB-AGENTS and the run is ending in prose without having started one. The `ask_user` twin is in
+      // `turnToolCalls.ts`; both spend the one recovery.
+      id: "brain.delegate",
+      entersVerify: false,
+      applies: () => !run.delegationRecoveryUsed && runLeftDelegationUndone(run),
+      nudge: () => undelegatedRequestNudge(catalogToolNames),
+      trace: { label: "loop.recover_undelegated_request", args: () => ({ via: "reply" }), result: "The user asked for sub-agents and the run ended without starting one \u2014 re-prompted to spawn them locally." },
+      spend: () => {
+        run.delegationRecoveryUsed = true;
+      }
+    },
+    {
+      // The reply is the previous turn's status again: sent back once to act on the next unfinished item instead.
+      id: "brain.restate",
+      entersVerify: false,
+      applies: (text2) => !run.restateRecoveryUsed && isRestatedReply(text2, priorReply),
+      nudge: restatedReplyNudge,
+      trace: { label: "loop.recover_restated_reply", args: () => ({}), result: "Final reply repeated the previous turn's answer \u2014 re-prompted to act on the next unfinished item instead of restating it." },
+      spend: () => {
+        run.restateRecoveryUsed = true;
+      }
+    }
+  ];
+}
+
+// src/run/brainDelivery.ts
+var STOP_HOOK_RUNG = "brain.stop_hook";
+function brainDeliveryLedger(run, last) {
+  const { c, req, userRequest, canAskUser } = run;
+  const { runTool } = req;
+  const held = [];
+  const note = (label, result, args = {}) => {
+    const step = { ts: nowIso(), category: "message", label, args: { step: last.step, ...args }, result };
+    held.push(() => pushTrace(c, step));
+  };
+  const asWritten = (content) => last.result && replayTextOf(last.result.text).trim() === content.trim() ? last.result.text : content;
+  const accept = (content) => {
+    const full = asWritten(content).trim();
+    return (canAskUser ? liftProseAskUser(full) : full) || "No response.";
+  };
+  return {
+    // The closing answer after a failure streak is the Brain's own (`runStore/failureClose.ts`, run by the adapter tail). A host that
+    // cannot run a tool judges no stall at all (the rungs are none): the turn IS the answer.
+    owns: { settle: true, synthesis: true, ...runTool ? {} : { narration: true } },
+    // The Brain's stall order and wording (the stall policy's options below): a narrating turn is re-prompted before any rung, a model that
+    // spent its budget is failed over (reading the nudge alone) or stopped only once every rung is clear, the rungs' directives are the
+    // person's rows, and the stall is judged against the menu the turn advertised.
+    stall: { narrationFirst: true, steersFirst: true, nudgeAs: "user", failoverNudgeOnly: true, menu: true, quoteEmpty: true, runWideBudget: true },
+    // The stall judgement and the gates read the model's own words, reasoning included (`last.result.text`).
+    judged: (content) => last.result?.text ?? content,
+    // A turn sent back keeps what the person watched stream in: as its own block, or - a model that stalled out and was handed
+    // over - as the reply it was (the nudge-and-requeue and failover rungs).
+    async sentBack({ kept }) {
+      const result = last.result;
+      if (!result) return;
+      if (kept === "settled") last.settled = await persistReply(run, accept(result.text), result, last.requested);
+      else if (kept === "reply") await persistReply(run, accept(result.text), result, last.requested);
+      else await persistMidTurnText(run.chatId, c, run.req.persistence, result, last.requested);
+      c.streamingText = "";
+      emit2(c);
+      for (const write2 of held.splice(0)) write2();
+    },
+    accept,
+    async rungs(turn) {
+      if (!runTool) return [];
+      const stopNudge = await askStopHook(req.onStop, { codeChanged: c.codeChanged, touchedFiles: c.touchedFiles, requestText: userRequest, round: run.stopHookRounds });
+      const verifiable = c.codeChanged && !skipsVerifyStage(run.pipeline);
+      const stopHook = {
+        id: STOP_HOOK_RUNG,
+        applies: !!stopNudge,
+        restate: Array(MAX_STOP_HOOK_ROUNDS).fill(stopNudge ?? ""),
+        free: MAX_STOP_HOOK_ROUNDS,
+        quote: true,
+        spent: "fall",
+        entersVerify: verifiable,
+        onRestate: () => {
+          run.stopHookRounds += 1;
+          note("loop.stop_hook", `A workspace stop hook held the run for another turn: ${(stopNudge ?? "").slice(0, 200)}`, { round: run.stopHookRounds });
+        }
+      };
+      const gates = deliveryGates(run).map((gate) => ({
+        id: gate.id,
+        applies: gate.applies(turn.content),
+        restate: [gate.nudge()],
+        quote: true,
+        spent: "fall",
+        entersVerify: gate.entersVerify && verifiable,
+        onRestate: () => {
+          gate.spend();
+          note(gate.trace.label, gate.trace.result, gate.trace.args());
+        }
+      }));
+      return [stopHook, ...gates];
+    }
+  };
+}
+
+// src/selectTools.ts
+var DEFAULT_TOOL_LIMIT2 = 64;
+var NAME_HIT2 = LEXICAL_WEIGHTS.name;
+var NAME_SYNONYM_HIT2 = 7;
+var DESCRIPTION_HIT2 = LEXICAL_WEIGHTS.description;
+function synonymText(text2) {
+  return [...expandWithSynonyms(lexicalStems(text2))].join(" ");
+}
+function toolFields(tool) {
+  const name = tool.function?.name ?? "";
+  if (!name) return [];
+  const description = tool.function?.description ?? "";
+  return [
+    { text: name, weight: NAME_HIT2 },
+    { text: synonymText(name), weight: NAME_SYNONYM_HIT2 },
+    { text: description, weight: DESCRIPTION_HIT2 },
+    { text: synonymText(description), weight: DESCRIPTION_HIT2 }
+  ];
+}
+function relevantTools(tools, query) {
+  return rankLexically(tools, query, toolFields, tools.length);
+}
+
+// src/runStore/callPreflight.ts
+var import_working12 = require("@seanhogg/builderforce-memory/working");
 function callPreflight(run) {
   const { c, chatId, runKey, req, allTools, catalogToolNames, usedTools, readCoverage, writeLedger, placeholderLedger } = run;
   const { runTool, needsConfirm, persistence } = req;
@@ -26040,7 +27250,7 @@ function callPreflight(run) {
     if (isDedupableRead(call2.name)) {
       if (readCoverage.isRepeat(call2.name, args)) {
         const cached2 = readCoverage.cachedResult(call2.name, args);
-        if (cached2 && !(0, import_working9.stillInWorkingContext)(c, cached2.anchor)) {
+        if (cached2 && !(0, import_working12.stillInWorkingContext)(c, cached2.anchor)) {
           const replayNote = `Replayed from this run's read cache: this exact ${call2.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
           const visit = readCoverage.record(call2.name, args);
           const target = visit ? visitTarget(args) : void 0;
@@ -26079,7 +27289,7 @@ ${revisit}` : replayNote,
         const note = revisit ? `${covered.note}
 
 ${revisit}` : covered.note;
-        if (covered.cached && !(0, import_working9.stillInWorkingContext)(c, covered.cached.anchor)) {
+        if (covered.cached && !(0, import_working12.stillInWorkingContext)(c, covered.cached.anchor)) {
           const requested = requestedReadWindow2(covered.cached.result ?? null, covered.start, covered.end);
           const replayed = trimToolResult(call2.name, requested, { advisory: note, contextWindowTokens: await run.windowFit.contextWindow?.() });
           run.pendingReplay = { name: call2.name, args, result: requested, served: replayed.served };
@@ -26131,87 +27341,6 @@ ${revisit}` : covered.note;
     return call2 === rawCall ? void 0 : { rewrite: call2 };
   };
 }
-
-// src/completionGuard.ts
-var TICKET_UPDATE = /tasks[._]update/i;
-var DONE_STATUSES = /* @__PURE__ */ new Set(["done", "completed", "complete"]);
-function isTicketCompletion(tool, args) {
-  if (!TICKET_UPDATE.test(tool)) return false;
-  const status2 = args?.status;
-  return typeof status2 === "string" && DONE_STATUSES.has(status2.toLowerCase());
-}
-function canCompleteTicket(isOnBaseBranch, userDeclinedShipping) {
-  if (isOnBaseBranch) return true;
-  if (userDeclinedShipping) return true;
-  return false;
-}
-function notOnBaseBranchAdvisory() {
-  return "CANNOT MARK DONE \u2014 code is not on the base branch (main/master). Either ship to main/master first, or if you intentionally left the code uncommitted, say so explicitly in your reply so this guard knows to allow it.";
-}
-var PlaceholderLedger = class {
-  open = /* @__PURE__ */ new Map();
-  /** Account for ONE successful write, given the hits the guard found in it. */
-  record(tool, args, hits) {
-    const a = args ?? {};
-    const path2 = typeof a.path === "string" ? a.path : "";
-    if (!path2) return;
-    if (tool === "write_file") {
-      this.set(path2, hits.map((h) => h.text));
-      return;
-    }
-    if (tool === "edit_file") {
-      const current = new Set(this.open.get(path2) ?? []);
-      const removed = typeof a.old_string === "string" ? markedLines(a.old_string) : [];
-      const kept = new Set(typeof a.new_string === "string" ? markedLines(a.new_string) : []);
-      for (const text2 of removed) if (!kept.has(text2)) current.delete(text2);
-      for (const h of hits) current.add(h.text);
-      this.set(path2, [...current]);
-      return;
-    }
-    if (tool === "delete_file") this.open.delete(path2);
-  }
-  /** Placeholders a delegated child reported writing. The parent never saw those edits,
-   *  so they stay outstanding until the parent rewrites or edits the lines itself. */
-  add(hits) {
-    for (const h of hits) {
-      const texts = this.open.get(h.path) ?? /* @__PURE__ */ new Set();
-      texts.add(h.text);
-      this.open.set(h.path, texts);
-    }
-  }
-  outstanding() {
-    return [...this.open.entries()].flatMap(([path2, texts]) => [...texts].map((text2) => ({ path: path2, text: text2 })));
-  }
-  set(path2, texts) {
-    if (texts.length) this.open.set(path2, new Set(texts));
-    else this.open.delete(path2);
-  }
-};
-function completionAdvisory(open) {
-  if (!open.length) return null;
-  const shown = open.slice(0, 3).map((h) => `${h.path}: \`${h.text}\``).join("; ");
-  return `MARKED DONE OVER A PLACEHOLDER. This run wrote ${open.length} placeholder(s) it has not removed \u2014 ${shown}${open.length > 3 ? ` (+${open.length - 3} more)` : ""}. A ticket is done when its code works in the product, not when a stub compiles. Finish the placeholder and keep the ticket done, or set it back to in_progress and name what blocks it.`;
-}
-
-// src/readCoverage.ts
-function isUnscopedMutation(tool, args) {
-  return isUnscopedMutationTool(tool) && !isReadOnlyShellCall(tool, args);
-}
-var BRAIN_READ_TRAITS = {
-  visitTarget,
-  activityTarget,
-  questionSeparator: VISIT_QUESTION_SEPARATOR,
-  isUnscopedMutation,
-  isCodeChangeTool,
-  isLocalWorkspaceTool,
-  isRepoPublishTool,
-  isRepoStateReadTool
-};
-var ReadCoverage2 = class extends ReadCoverage {
-  constructor() {
-    super(BRAIN_READ_TRAITS);
-  }
-};
 
 // src/runStore/steerInterrupt.ts
 function takeRunSteering(c, runKey, step) {
@@ -26375,179 +27504,6 @@ function callPostStep(run) {
   };
 }
 
-// src/runStore/progressBudget.ts
-function handOffBrief(reason) {
-  return `${reason} Call hand_off NOW. summary = the research for the coders: everything you and any research sub-agents established that the change needs (files, functions, what they do today, decisions, traps). tasks = each one standalone: the files, the change, and how to know it is done. The coding agents start from exactly what you write here; they do not see this conversation.`;
-}
-function changeBrief(reason, canAskUser) {
-  return `${reason} Make the change now with what you already know \u2014 the edit tools are the only ones offered this turn.` + (canAskUser ? " If something genuinely blocks the change, call ask_user and say exactly what." : "");
-}
-var HAND_OFF_DUE_BRIEF = handOffBrief(`ANALYSIS IS OVER. You have spent ${PLAN_TURN_BUDGET} turns analysing without changing anything.`);
-function isChangeRequest(mode, text2) {
-  return mode !== "chat" && (asksForChange(text2) || isContinuationDirective(text2));
-}
-function budgeted(run) {
-  return isChangeRequest(run.metadata.mode, run.userRequest);
-}
-function progressed(run) {
-  return run.c.codeChanged || run.usedTools.has(HAND_OFF_TOOL);
-}
-function planBudgetTurn(run, step) {
-  if (!handOffDue(run.policy) || !budgeted(run)) return null;
-  if (run.policy.handOffForced || !run.canAskUser) {
-    reportToPolicy(run, { type: "plan_budget_spent" });
-    pushTrace(run.c, {
-      ts: nowIso(),
-      category: "message",
-      label: "loop.plan_budget_spent",
-      args: { step, planTurns: run.policy.planTurns },
-      result: run.canAskUser ? "The forced hand-off turn did not hand off \u2014 analysis ends here and the coding role takes the next turn." : "Analysis budget spent where hand_off cannot be offered \u2014 analysis ends here and the coding role takes the next turn."
-    });
-    return null;
-  }
-  reportToPolicy(run, { type: "hand_off_forced" });
-  pushTrace(run.c, {
-    ts: nowIso(),
-    category: "message",
-    label: "loop.hand_off_due",
-    args: { step, planTurns: run.policy.planTurns },
-    result: `${run.policy.planTurns} analysis turn(s) with no change and no hand-off \u2014 this turn offers hand_off alone and requires the call.`
-  });
-  return { tools: [HAND_OFF_TOOL_SPEC], toolChoice: "required", brief: { role: "user", content: HAND_OFF_DUE_BRIEF } };
-}
-function changeToolsOf(run, selected) {
-  const tools = selected.filter((t) => isCodeChangeTool(t.function.name) || run.canAskUser && t.function.name === ASK_USER_TOOL);
-  return tools.some((t) => isCodeChangeTool(t.function.name)) ? tools : null;
-}
-function forcedProgressTurn(run, selected, reason) {
-  if (offersHandOff(run.policy) && run.canAskUser && !run.policy.handOffForced) {
-    reportToPolicy(run, { type: "hand_off_forced" });
-    return { forced: "hand_off", turn: { tools: [HAND_OFF_TOOL_SPEC], toolChoice: "required", brief: { role: "user", content: handOffBrief(reason) } } };
-  }
-  const tools = changeToolsOf(run, selected.filter((t) => t.function.name !== HAND_OFF_TOOL));
-  if (!tools) return null;
-  if (offersHandOff(run.policy)) reportToPolicy(run, { type: "plan_budget_spent" });
-  reportToPolicy(run, { type: "change_forced" });
-  return { forced: "change", turn: { tools, toolChoice: "required", brief: { role: "user", content: changeBrief(reason, run.canAskUser) } } };
-}
-function changeBudgetTurn(run, step, selected) {
-  const budget2 = skipsVerifyStage(run.pipeline) ? QUICK_CHANGE_TURN_BUDGET : PLAN_TURN_BUDGET;
-  if (!changeDue(run.policy, progressed(run), budget2) || !budgeted(run)) return null;
-  const tools = changeToolsOf(run, selected);
-  if (!tools) return null;
-  reportToPolicy(run, { type: "change_forced" });
-  pushTrace(run.c, {
-    ts: nowIso(),
-    category: "message",
-    label: "loop.change_due",
-    args: { step, codeTurns: run.policy.codeTurns },
-    result: `${run.policy.codeTurns} coding turn(s) with no change and no hand-off \u2014 this turn offers the change tools alone and requires a call.`
-  });
-  return { tools, toolChoice: "required", brief: { role: "user", content: changeBrief(`STOP READING. You have spent ${run.policy.codeTurns} coding turns without changing anything.`, run.canAskUser) } };
-}
-
-// src/runStore/deviceLevers.ts
-function deviceLeverOn(id) {
-  const env = globalThis.process?.env;
-  return isCostLeverOn(env, id, null);
-}
-
-// src/runStore/progressGuard.ts
-function isReadOnlyCall(tool, args) {
-  return isDedupableRead(tool) || isReadOnlyShellCall(tool, args) || isRouterTool(tool);
-}
-var RunProgressGuard = class {
-  /** Null when the lever is off: every method is then a no-op. */
-  detector;
-  /** An escalate / pause a later turn's menu acts on — kept until one takes it, so a
-   *  budget that forces the next turn first never drops it. */
-  due = null;
-  /** The note the next turn opens with, when the host shows it in place of an escalation. */
-  steer;
-  constructor(on = deviceLeverOn("a3_progress_detector")) {
-    this.detector = on ? new ProgressDetector({}, { isReadOnly: isReadOnlyCall, isUnscopedMutation }) : null;
-  }
-  /** What the turn said before its calls. */
-  noteTurnText(text2) {
-    this.detector?.noteTurnText(text2);
-  }
-  /** One of the turn's calls ran (or was answered from the read cache). */
-  observe(tool, args, result) {
-    this.detector?.observe(tool, args, result);
-  }
-  /** The turn's calls all ran. The trip it caused, if any. */
-  endTurn() {
-    this.steer = void 0;
-    const action = this.detector?.endTurn() ?? null;
-    if (action?.kind === "escalate") this.detector?.setSteer(void 0);
-    if (action && action.kind !== "steer") this.due = action;
-    return action;
-  }
-  /** The note the next turn opens with ("" when none). */
-  steerNote() {
-    return this.steer ?? this.detector?.steerNote() ?? "";
-  }
-  /** The escalation or pause waiting for this turn, taken once. */
-  takeDue() {
-    const due = this.due;
-    this.due = null;
-    return due;
-  }
-  /** The escalation could not be forced here: show its note on this turn instead. */
-  steerInstead(note) {
-    this.steer = note;
-  }
-};
-function progressAfterToolCalls(run) {
-  return (ctx) => {
-    const action = run.progress.endTurn();
-    if (!action) return;
-    pushTrace(run.c, {
-      ts: nowIso(),
-      category: "message",
-      label: "loop.progress_check",
-      args: { step: ctx.step, trip: action.trip, signal: action.signal.kind, action: action.kind },
-      result: `progress check ${action.trip}: ${action.signal.kind} \u2192 ${action.kind}`
-    });
-  };
-}
-function progressGuardTurn(run, step, selected) {
-  const due = run.progress.takeDue();
-  if (!due) return null;
-  const advice = `PROGRESS CHECK ${due.trip}: ${progressAdvice(due.signal)}`;
-  if (due.kind === "pause") {
-    if (!run.canAskUser) {
-      run.progress.steerInstead(advice);
-      return null;
-    }
-    trace2(run, step, due, "ask_user");
-    return {
-      tools: [ASK_USER_TOOL_SPEC],
-      toolChoice: "required",
-      brief: {
-        role: "user",
-        content: `${advice} Call ${ASK_USER_TOOL} now. question: "${due.question}" options: [{ "label": "Continue with guidance" }, { "label": "Stop the run" }]`
-      }
-    };
-  }
-  const out = budgeted(run) ? forcedProgressTurn(run, selected, advice) : null;
-  if (!out) {
-    run.progress.steerInstead(advice);
-    return null;
-  }
-  trace2(run, step, due, out.forced);
-  return out.turn;
-}
-function trace2(run, step, due, forced) {
-  pushTrace(run.c, {
-    ts: nowIso(),
-    category: "message",
-    label: "loop.progress_forced",
-    args: { step, trip: due.trip, signal: due.signal.kind, forced },
-    result: `progress check ${due.trip} (${due.signal.kind}) \u2014 this turn offers ${forced === "ask_user" ? "ask_user alone" : forced === "hand_off" ? "hand_off alone" : "the change tools alone"} and requires a call.`
-  });
-}
-
 // src/run/brainTurnTail.ts
 function runBrief(run, tools) {
   return tools > 0 ? run.knowledge.brief() ?? "" : "";
@@ -26559,141 +27515,10 @@ function withRunBrief(run, menu) {
   return { ...menu ?? {}, tail: [sections.join("\n\n")] };
 }
 
-// src/runStore/convoText.ts
-function latestUserText(convo) {
-  for (let i = convo.length - 1; i >= 0; i--) {
-    const m = convo[i];
-    if (m.role === "user") return userTextOf(m);
-  }
-  return "";
-}
-function userTextOf(m) {
-  if (typeof m.content === "string") return m.content.trim();
-  if (Array.isArray(m.content)) {
-    return m.content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ").trim();
-  }
-  return "";
-}
-function isFollowUpTurn(convo) {
-  let users = 0;
-  for (const m of convo) {
-    if (m.role === "assistant") return true;
-    if (m.role === "user") users += 1;
-  }
-  return users > 1;
-}
-function lastAssistantText(convo) {
-  for (let i = convo.length - 1; i >= 0; i -= 1) {
-    const m = convo[i];
-    if (m.role === "assistant") return typeof m.content === "string" ? m.content.trim() : "";
-  }
-  return "";
-}
-
-// src/runStore/cacheServedStreak.ts
-var CACHE_SERVED_STREAK2 = 6;
-var MIN_STREAK_TURNS2 = 2;
-var MAX_NO_PROGRESS_TURNS2 = 2;
-var CacheServedStreak2 = class {
-  streak = 0;
-  turns = /* @__PURE__ */ new Set();
-  fired = 0;
-  /** A repeat the read cache answered (stub, covered window, replay, repeated write), on `step`. */
-  served(step) {
-    this.streak += 1;
-    this.turns.add(step);
-  }
-  /** A call the host actually ran — the run touched the world again. */
-  ran() {
-    this.streak = 0;
-    this.turns.clear();
-  }
-  get count() {
-    return this.streak;
-  }
-  /** Whether the streak is due a forced turn. */
-  due() {
-    return this.streak >= CACHE_SERVED_STREAK2 && this.turns.size >= MIN_STREAK_TURNS2 && this.fired < MAX_NO_PROGRESS_TURNS2;
-  }
-  /** A forced turn was spent on the streak: the count starts over. */
-  consume() {
-    this.ran();
-    this.fired += 1;
-  }
-};
-var circling = (n2) => `YOU ARE CIRCLING. Your last ${n2} calls were all answered from this run's read cache \u2014 you already have every one of those results, and re-reading them changes nothing.`;
-function noProgressTurn(run, step, selected) {
-  if (!budgeted(run) || progressed(run) || run.policy.phase === "verify" || !run.cacheStreak.due()) return null;
-  const n2 = run.cacheStreak.count;
-  const out = forcedProgressTurn(run, selected, circling(n2));
-  if (!out) return null;
-  run.cacheStreak.consume();
-  trace3(run, step, n2, out.forced);
-  return out.turn;
-}
-function trace3(run, step, streak, forced) {
-  pushTrace(run.c, {
-    ts: nowIso(),
-    category: "message",
-    label: "loop.no_progress",
-    args: { step, streak, forced },
-    result: `${streak} consecutive call(s) answered from the read cache \u2014 this turn offers ${forced === "hand_off" ? "hand_off alone" : "the change tools alone"} and requires a call.`
-  });
-}
-
-// src/runStore/turnMenu.ts
+// src/run/loopTurnMenu.ts
 function forcedTurnFor(run, step, selected, handOffTurn) {
   return handOffTurn ?? changeBudgetTurn(run, step, selected) ?? noProgressTurn(run, step, selected) ?? progressGuardTurn(run, step, selected);
 }
-function turnMenu(run, step) {
-  const { c, allTools, requestQuery, usedTools, canAskUser, alwaysAdvertised } = run;
-  const handOffTurn = planBudgetTurn(run, step);
-  const selection = selectToolsForTurn2(allTools, {
-    // The REQUEST, captured once before the loop — never "the latest user message".
-    // The loop pushes its own `role:'user'` turns (the stall-recovery nudge, the
-    // tool-budget close-out), so reading the newest one re-rolled the advertised
-    // set from text WE wrote: after one recovery the query became "…made zero tool
-    // calls… answer using its result…", which scores `key_results`/`dashboards`/
-    // `incidents` and drops the ticket tools the user actually asked for. The tool
-    // the model was told to call then genuinely did not exist, and it narrated.
-    // Holding the request steady also keeps the advertised set STABLE across turns
-    // — a tool must not vanish between one turn and the next.
-    query: requestQuery,
-    pinned: usedTools,
-    // Tools the SYSTEM PROMPT instructs the model to call (e.g. the chat↔ticket
-    // directive names `builtin_chats_list_tickets`) are never optional: telling a
-    // model to call a tool we then decline to advertise is the exact contradiction
-    // that produces a narrated call. Derived from the prompt text, so a directive
-    // edit can never silently desync from this list — plus the local workspace
-    // tools, which the prompt names in prose the pattern cannot see.
-    // While planning, the planner's deliverable is never off-topic either.
-    required: offersHandOff(run.policy) && canAskUser ? [...alwaysAdvertised, HAND_OFF_TOOL] : alwaysAdvertised
-  });
-  const selected = offersHandOff(run.policy) ? selection.tools : selection.tools.filter((t) => t.function.name !== HAND_OFF_TOOL);
-  const forced = forcedTurnFor(run, step, selected, handOffTurn);
-  const steer = run.progress.steerNote();
-  const advertised = forced ? forced.tools : selection.trimmed ? [...selected, ...routerToolSpecs(allTools?.length ?? 0)] : selected;
-  if (selection.trimmed && !forced) {
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "tools.selected",
-      args: { step },
-      result: `${selected.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`
-    });
-  }
-  return {
-    forced,
-    advertised,
-    tools: advertised.length > 0 ? advertised : void 0,
-    advertisedNames: new Set(advertised.map((t) => t.function.name)),
-    // Every retry of the same turn sends it again, or a forced turn would retry with no
-    // instruction. It rides the turn's tagged volatile tail, never as a message of its own.
-    opening: [...forced ? [userTextOf(forced.brief)] : [], ...steer ? [steer] : []]
-  };
-}
-
-// src/run/loopTurnMenu.ts
 async function loopTurnMenu(run, env, catalogSize) {
   const handOffTurn = planBudgetTurn(run, env.step);
   const ranked2 = await env.select();
@@ -26807,13 +27632,13 @@ function brainPlatformTools(run) {
 }
 
 // src/run/loopFold.ts
-var import_working12 = require("@seanhogg/builderforce-memory/working");
+var import_working14 = require("@seanhogg/builderforce-memory/working");
 
 // src/runStore/compactionSaved.ts
-var import_working10 = require("@seanhogg/builderforce-memory/working");
-function compactionSavedTokens(full, working, historyBudgetTokens = import_working10.HISTORY_TOKEN_BUDGET) {
-  const withoutCompaction = Math.min((0, import_working10.transcriptTokens)(full), historyBudgetTokens);
-  return Math.max(0, withoutCompaction - (0, import_working10.transcriptTokens)(working));
+var import_working13 = require("@seanhogg/builderforce-memory/working");
+function compactionSavedTokens(full, working, historyBudgetTokens = import_working13.HISTORY_TOKEN_BUDGET) {
+  const withoutCompaction = Math.min((0, import_working13.transcriptTokens)(full), historyBudgetTokens);
+  return Math.max(0, withoutCompaction - (0, import_working13.transcriptTokens)(working));
 }
 function stampOncePerCall(stamped, plain2) {
   let used = false;
@@ -26822,87 +27647,6 @@ function stampOncePerCall(stamped, plain2) {
     used = true;
     return stamped;
   };
-}
-
-// src/runStore/runFoldMarker.ts
-var import_working11 = require("@seanhogg/builderforce-memory/working");
-function entryKey(m) {
-  return `${m.role}\0${m.role === "assistant" ? replayTextOf(contentText(m.content ?? "")) : contentText(m.content ?? "")}`;
-}
-function anchorPersistedHistory(c, seed, seedIds) {
-  const at2 = /* @__PURE__ */ new Map();
-  c.transcript.forEach((m, i) => {
-    const key = entryKey(m);
-    const list3 = at2.get(key);
-    if (list3) list3.push(i);
-    else at2.set(key, [i]);
-  });
-  let from = 0;
-  seed.forEach((m, k) => {
-    const id = seedIds[k];
-    const index = at2.get(entryKey(m))?.find((i) => i >= from);
-    if (index === void 0) {
-      c.unseenFromId = c.unseenFromId === void 0 ? id : Math.min(c.unseenFromId, id);
-      return;
-    }
-    if (!c.transcriptAnchors.some((a) => a.index === index)) c.transcriptAnchors.push({ index, id });
-    from = index + 1;
-  });
-}
-function recordTranscriptAnchors(c, req) {
-  const t = c.transcript;
-  const { seed, seedIds } = req;
-  c.unseenFromId = void 0;
-  if (seed && seedIds && seed.length > 0 && seedIds.length === seed.length) {
-    if (t[0] === seed[0] && t[seed.length - 1] === seed[seed.length - 1]) {
-      c.transcriptAnchors = seedIds.map((id, index) => ({ index, id }));
-    } else {
-      anchorPersistedHistory(c, seed, seedIds);
-    }
-  }
-  if (req.userTurnMessageId == null || req.userTurn === void 0) return;
-  for (let i = t.length - 1; i >= 0; i--) {
-    if (t[i].role === "user" && t[i].content === req.userTurn) {
-      if (!c.transcriptAnchors.some((a) => a.index === i)) c.transcriptAnchors.push({ index: i, id: req.userTurnMessageId });
-      return;
-    }
-  }
-}
-async function persistFoldMarker(c, chatId, persistence, fold) {
-  const covered = (0, import_working11.foldKeepFromId)(c.transcriptAnchors, fold.coveredEnd);
-  if (covered === void 0) return;
-  const keepFromId = c.unseenFromId === void 0 ? covered : Math.min(covered, c.unseenFromId);
-  try {
-    const [msg] = await persistence.sendMessages(chatId, [{
-      role: "assistant",
-      content: (0, import_working11.consolidationMarkerContent)(fold.note),
-      metadata: (0, import_working11.consolidationMetadata)({ keepFromId, folded: fold.droppedMessages })
-    }]);
-    if (msg) {
-      recordAppended(c, msg);
-      emit2(c);
-    }
-  } catch (error) {
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "context.compact_persist_failed",
-      args: { coveredEnd: fold.coveredEnd },
-      result: `The compaction note could not be saved (${error instanceof Error ? error.message : String(error)}) \u2014 the next run will summarize this history again.`
-    });
-  }
-}
-function recordFold(run, fold) {
-  const { c } = run;
-  pushTrace(c, {
-    ts: nowIso(),
-    category: "message",
-    label: "context.compacted",
-    args: { droppedMessages: fold.droppedMessages },
-    result: `Compressed ${fold.droppedMessages} earlier step(s) into a memory to stay within the context window.`
-  });
-  emit2(c);
-  void persistFoldMarker(c, run.chatId, run.req.persistence, fold);
 }
 
 // src/run/runMessages.ts
@@ -26946,7 +27690,7 @@ function brainCompaction(run) {
     hook: {
       async compact(ctx) {
         let folded = false;
-        const working = await (0, import_working12.buildWorkingTranscript)(
+        const working = await (0, import_working14.buildWorkingTranscript)(
           c,
           systemPrompt,
           (msgs) => summarizeMiddle(req.stream, run.policy.model, msgs, c.abort?.signal),
@@ -26964,53 +27708,6 @@ function brainCompaction(run) {
   };
 }
 
-// src/runStore/modelPreflight.ts
-var MODEL_PREFLIGHT_LABEL = "model.preflight";
-function planModelWarning2(model, book2 = snapshotPriceBook()) {
-  if (!model || model === "default") return null;
-  const price = listPriceOf(book2, model);
-  const tier2 = price ? resolveModelTier({ price }) : void 0;
-  return tier2 && isAgenticTier(tier2) === false ? { model, tier: tier2 } : null;
-}
-function modelPreflightEvent2(result, ts, plan) {
-  const entries = parseByoUnresolved((result?.byoUnresolved ?? []).filter((e) => e.trim()));
-  if (entries.length === 0 && !plan) return null;
-  const said = [];
-  if (entries.length > 0) {
-    const onto = result?.fallback ? ` This run will use ${result.fallback} instead.` : " This run will fall back to another model.";
-    said.push(`${entries.map(byoUnresolvedSummary).join("; ")}.${onto}`);
-  }
-  if (plan) {
-    said.push(`the plan phase will run on ${plan.model}, a ${plan.tier}-tier (Flash-class) model \u2014 weak at planning a multi-step change; pick a stronger model for planning if the result matters.`);
-  }
-  return {
-    ts,
-    category: "message",
-    label: MODEL_PREFLIGHT_LABEL,
-    args: {
-      ...entries.length ? { byoUnresolved: entries.map((e) => e.reason ? `${e.provider}:${e.reason}` : e.provider).join(",") } : {},
-      ...result?.fallback && entries.length ? { fallback: result.fallback } : {},
-      ...plan ? { planModel: plan.model, planTier: plan.tier } : {}
-    },
-    result: `Before the first turn: ${said.join(" Also: ")}`
-  };
-}
-async function applyModelPreflight(c, preflight, pinnedModel) {
-  if (!preflight) return;
-  let result;
-  try {
-    result = await preflight();
-  } catch {
-    return;
-  }
-  const plan = c.codeChanged ? null : planModelWarning2(pinnedModel);
-  const event = modelPreflightEvent2(result, nowIso(), plan);
-  if (!event) return;
-  if (result?.byoUnresolved.length) accrueByoUnresolved(c, result.byoUnresolved.join(","));
-  pushTrace(c, event);
-  emit2(c);
-}
-
 // src/run/preflightRecorded.ts
 function recordedPreflight(c, pinnedModel) {
   return (ctx) => {
@@ -27020,46 +27717,6 @@ function recordedPreflight(c, pinnedModel) {
     ctx.state.preflight = degraded ? `degraded:${byo || "plan_flash"}` : "ok";
     return { kind: "model.preflight", step: ctx.step, status: degraded ? "degraded" : "ok", notices: [] };
   };
-}
-
-// src/runStore/chatAsks.ts
-var personTurns = /* @__PURE__ */ new WeakSet();
-function markPersonTurn(m) {
-  if (m.role === "user") personTurns.add(m);
-  return m;
-}
-var MAX_ASKS = 4;
-var MAX_ASK_CHARS = 300;
-function chatAsks(convo) {
-  const seen = /* @__PURE__ */ new Set();
-  const asks = [];
-  for (let i = convo.length - 1; i >= 0 && asks.length < MAX_ASKS; i--) {
-    const m = convo[i];
-    if (m?.role !== "user" || !personTurns.has(m)) continue;
-    const text2 = userTextOf(m).replace(/\s+/g, " ").trim();
-    if (!text2 || isContinuationDirective(text2) || !asksForChange(text2)) continue;
-    const key = text2.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    asks.unshift(text2.length > MAX_ASK_CHARS ? `${text2.slice(0, MAX_ASK_CHARS)}\u2026` : text2);
-  }
-  return asks;
-}
-var numbered = (asks) => asks.map((a, i) => `${i + 1}. ${a}`).join("\n");
-var EARLIER_ASKS = "Earlier change asks in this chat (oldest first) \u2014 CONTEXT ONLY: some may already be done or superseded by a later one. Act on your own task; the request above is authoritative.";
-function chatGoalText(convo) {
-  const latest = latestUserText(convo);
-  const asks = chatAsks(convo);
-  if (asks.length <= 1) return latest;
-  return `${latest}
-
-${EARLIER_ASKS}
-${numbered(asks)}`;
-}
-function chatAsksDirective(convo) {
-  const asks = chatAsks(convo);
-  if (asks.length <= 1) return null;
-  return "CHANGE ASKS IN THIS CHAT (oldest first). The latest message is authoritative; it continues these, it does not silently drop them. An earlier ask may already be done, or superseded by a later one. Before your final answer, check each against the code: do what is still open and still wanted, and say plainly which are done.\n" + numbered(asks);
 }
 
 // src/run/modelTransport.ts
@@ -27132,12 +27789,8 @@ function toCompletion(result, requested) {
     ...interruption ? { interrupted: interruption } : {}
   };
 }
-function classified2(error) {
-  const failure = providerFailureEvent(error);
-  return failure && error instanceof Error ? Object.assign(error, { failure }) : error;
-}
 function brainModelTransport(deps) {
-  const { stream, handlers, call: call2, windows, preflight } = deps;
+  const { stream, call: call2, windows, preflight } = deps;
   return {
     async complete(request, signal) {
       if (signal?.aborted) throw new Error("run stopped");
@@ -27161,7 +27814,7 @@ function brainModelTransport(deps) {
             ...maxTokens !== void 0 ? { maxTokens } : {},
             ...signal ? { signal } : {}
           },
-          session?.handlers ?? handlers?.()
+          session?.handlers
         );
         return session?.around ? session.around(ask) : ask();
       };
@@ -27171,7 +27824,7 @@ function brainModelTransport(deps) {
         result = await attempt(request);
       } catch (e) {
         if (signal?.aborted) throw e;
-        if (!session) throw classified2(e);
+        if (!session) throw e;
         const retry = await session.recover?.(e);
         if (!retry) throw session.failed(e);
         asked = { ...request, model: retry.model, strict: retry.strict, role: retry.role, excludeModels: retry.excludeModels };
@@ -27202,61 +27855,11 @@ function loopRunStore(c, opts) {
       if (row.role === "user" && opts.personSteer?.(row.content)) markPersonTurn(wire);
       c.transcript.push(wire);
       if (row.role === "tool") opts.toolRowAppended(wire);
-    },
-    ...opts.commitMemory ? { commitMemory: opts.commitMemory } : {}
+    }
   };
 }
 
 // src/runStore/runSpendBudget.ts
-var import_handoff15 = require("@seanhogg/builderforce-memory/handoff");
-
-// src/runStore/runEndOutcome.ts
-var notes = /* @__PURE__ */ new WeakMap();
-function noteRunId(c, runId) {
-  if (runId) notes.set(c, { runId, contained: false });
-}
-function noteBudgetContained(c) {
-  const n2 = notes.get(c);
-  if (n2) n2.contained = true;
-}
-function runEndOutcome(state) {
-  if (state.contained) return "budget-contained";
-  if (state.aborted) return "stopped";
-  return state.failed ? "failed" : "succeeded";
-}
-function reportRunEnd(c, req, state) {
-  const n2 = notes.get(c);
-  notes.delete(c);
-  if (!n2 || !req.recordRunOutcome) return;
-  try {
-    void Promise.resolve(req.recordRunOutcome({ runId: n2.runId, outcome: runEndOutcome({ ...state, contained: n2.contained }) })).catch((e) => unrecorded(c, e));
-  } catch (e) {
-    unrecorded(c, e);
-  }
-}
-function unrecorded(c, e) {
-  pushTrace(c, { ts: nowIso(), category: "message", label: "run.outcome_unrecorded", result: e instanceof Error ? e.message : String(e) });
-}
-
-// src/runStore/runSpendBudget.ts
-var usd2 = (millicents) => `$${(millicents / MILLICENTS_PER_USD).toFixed(2)}`;
-function runBudgetCapMillicents2(maxRunBudgetUsd) {
-  return typeof maxRunBudgetUsd === "number" && Number.isFinite(maxRunBudgetUsd) && maxRunBudgetUsd > 0 ? Math.round(maxRunBudgetUsd * MILLICENTS_PER_USD) : null;
-}
-function noPriceNote2(tree) {
-  const n2 = tree?.unpricedCalls ?? 0;
-  return n2 > 0 ? `${n2} ${n2 === 1 ? "call" : "calls"} had no known price` : null;
-}
-function budgetWarning2(spentMc, capMc, tree) {
-  const note = noPriceNote2(tree);
-  const spent = note ? `at least ${usd2(spentMc)} (${note})` : usd2(spentMc);
-  return `[Run budget] This run has spent ${spent} of its ${usd2(capMc)} budget \u2014 over 80%. Stop exploring and converge: finish the essential change now, then answer with what you did and exactly what is left.`;
-}
-function budgetContainedReply2(spentMc, capMc, tree) {
-  const note = noPriceNote2(tree);
-  const spent = note ? `at least ${usd2(spentMc)} spent \u2014 ${note}` : `${usd2(spentMc)} spent`;
-  return `Run stopped: it reached its ${usd2(capMc)} spend budget (${spent}). Nothing was rolled back \u2014 the changes made so far are in place. Ask to continue to resume from here, or raise the "builderforce.maxRunBudgetUsd" setting (0 turns the cap off).`;
-}
 var spendTrees = /* @__PURE__ */ new WeakMap();
 function runSpendTree(run, capMc) {
   const ownerKey = run.req.lineage?.ownerKey;
@@ -27267,7 +27870,7 @@ function runSpendTree(run, capMc) {
   return tree;
 }
 function joinRunSpend(run) {
-  const ownCapMc = runBudgetCapMillicents2(run.req.maxRunBudgetUsd);
+  const ownCapMc = runBudgetCapMillicents(run.req.maxRunBudgetUsd);
   if (ownCapMc == null) {
     spendTrees.delete(run.c);
     return null;
@@ -27282,63 +27885,6 @@ async function persistBudgetStop(run, text2) {
   if (msg) recordAppended(c, msg);
   emit2(c);
   req.onActivity?.(chatId);
-}
-function runSpendBudget(run, book2) {
-  const joined = joinRunSpend(run);
-  if (!joined) return {};
-  const { tree, capMc } = joined;
-  const caps = { maxSpendMillicents: capMc };
-  let warned = false;
-  let unpricedNoted = false;
-  const noteUnpriced = (model) => {
-    tree.unpricedCalls += 1;
-    if (unpricedNoted) return;
-    unpricedNoted = true;
-    pushTrace(run.c, {
-      ts: nowIso(),
-      category: "message",
-      label: "run.budget_unpriced",
-      args: { model: model ?? null },
-      result: "A call had no known price, so the run cap counts only the spend that is priced."
-    });
-  };
-  const contain = async () => {
-    const { c, convo } = run;
-    const spentMc = tree.spentMc;
-    const text2 = budgetContainedReply2(spentMc, capMc, tree);
-    noteBudgetContained(c);
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "run.budget_contained",
-      args: { spentMillicents: spentMc, capMillicents: capMc, unpricedCalls: tree.unpricedCalls },
-      result: text2
-    });
-    convo.push({ role: "assistant", content: text2 });
-    await persistBudgetStop(run, text2);
-    return { action: "stop", ok: true, finished: true, output: text2 };
-  };
-  return {
-    async beforeTurn() {
-      const spentMc = tree.spentMc;
-      const usage = { spendMillicents: spentMc };
-      if (runBudgetBreach(caps, usage)) return contain();
-      if (!warned && runBudgetWarnDue(caps, usage)) {
-        warned = true;
-        const warning = budgetWarning2(spentMc, capMc, tree);
-        run.convo.push((0, import_handoff15.volatileTail)([warning]));
-        pushTrace(run.c, { ts: nowIso(), category: "message", label: "run.budget_warning", args: { spentMillicents: spentMc, capMillicents: capMc }, result: warning });
-      }
-      return void 0;
-    },
-    afterTurn(_ctx, turn) {
-      const meta = turn.meta;
-      if (!meta) return;
-      const cost = turnPriceMc(meta.result, meta.requested, book2);
-      if (cost === void 0) noteUnpriced(servedModel(meta.result, meta.requested));
-      else tree.spentMc += cost;
-    }
-  };
 }
 
 // src/run/loopSpend.ts
@@ -27415,167 +27961,7 @@ function loopSteeringSource(run, people) {
 }
 
 // src/runStore/failureClose.ts
-var import_working14 = require("@seanhogg/builderforce-memory/working");
-
-// src/runStore/runMemory.ts
-var import_evermind2 = require("@seanhogg/builderforce-memory/evermind");
-var import_working13 = require("@seanhogg/builderforce-memory/working");
-
-// src/runStore/answerAnchors.ts
-var FILE_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "view_file", "open_file", "read_files"]);
-var PATH_KEYS = ["path", "file", "filePath"];
-var MAX_ANSWER_ANCHORS = 16;
-function normalizePath2(p) {
-  return p.trim().split("\\").join("/").replace(/^\.\/+/, "");
-}
-function readFileAnchors(trace4) {
-  const seen = /* @__PURE__ */ new Set();
-  const out = [];
-  for (const ev of trace4) {
-    if (ev.category !== "tool" || ev.isError || !FILE_READ_TOOLS.has(ev.label)) continue;
-    const args = ev.args ?? {};
-    const paths = Array.isArray(args.paths) ? args.paths : PATH_KEYS.map((k) => args[k]);
-    for (const raw of paths) {
-      if (typeof raw !== "string") continue;
-      const path2 = normalizePath2(raw);
-      if (!path2 || seen.has(path2)) continue;
-      seen.add(path2);
-      out.push({ path: path2 });
-      if (out.length >= MAX_ANSWER_ANCHORS) return out;
-    }
-  }
-  return out;
-}
-
-// src/runStore/adoptAnswer.ts
-async function adoptAnswerWithoutModel(chatId, c, req, text2, step) {
-  const finalText = canonicalTurnText(text2);
-  if (!finalText) return false;
-  c.transcript.push({ role: "assistant", content: replayTextOf(finalText) });
-  const [assistantMsg] = await req.persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
-  c.streamingText = "";
-  recordAppended(c, assistantMsg);
-  pushTrace(c, { ts: nowIso(), category: "recall", label: step.label, args: step.args, result: { ...step.result, skippedLlm: true } });
-  emit2(c);
-  req.onActivity?.(chatId);
-  return true;
-}
-
-// src/runStore/runMemory.ts
-var MAX_RECALL_HINT_CHARS2 = 600;
-function recallQuery2(userText, hint) {
-  const extra = (hint ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_RECALL_HINT_CHARS2);
-  if (!extra || !userText.trim()) return userText;
-  return `${userText.trim()}
-
-${extra}`;
-}
-async function recallForRun(c, convo, evermind, hint) {
-  let recalled = null;
-  if (!evermind?.recall) return { recalled, block: null, blockTokens: 0 };
-  const query = recallQuery2(latestUserText(convo), hint);
-  if (!query) return { recalled, block: null, blockTokens: 0 };
-  try {
-    recalled = await evermind.recall(query);
-  } catch {
-    recalled = null;
-  }
-  if (recalled?.seeded && recalled.items.length > 0) {
-    const block = (0, import_evermind2.formatEvermindMemoryBlock)(recalled.items);
-    if (block) {
-      const blockTokens = (0, import_working13.transcriptTokens)([{ role: "system", content: block }]);
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "recall",
-        label: "evermind.recall",
-        args: { query, version: recalled.version },
-        result: {
-          count: recalled.items.length,
-          version: recalled.version,
-          mode: recalled.mode,
-          blockTokens,
-          items: recalled.items
-        }
-      });
-      return { recalled, block, blockTokens };
-    }
-  }
-  return { recalled, block: null, blockTokens: 0 };
-}
-async function answerFromMemory(chatId, c, req, allTools, memoryReplay) {
-  const { evermind, model } = req;
-  const convo = c.transcript;
-  if (!(evermind?.answer && memoryReplay && !c.abort?.signal.aborted)) return false;
-  const query = latestUserText(convo);
-  if (!query) return false;
-  let memAnswer = null;
-  try {
-    memAnswer = await evermind.answer(query, {
-      toolsAvailable: !!allTools && allTools.length > 0,
-      // What this turn would have run on — the saving a hit records is priced at it.
-      model: model || c.lastServedModel || void 0
-    });
-  } catch {
-    memAnswer = null;
-  }
-  if (!memAnswer) return false;
-  return adoptAnswerWithoutModel(chatId, c, req, memAnswer.text ?? "", {
-    label: memAnswer.source === "evermind" ? "evermind.answer" : "memory.answer",
-    args: { query },
-    result: {
-      source: memAnswer.source,
-      ...memAnswer.evermindVersion != null ? { version: memAnswer.evermindVersion } : {},
-      // WHICH head served it — a project can target several, so without this a
-      // memory hit from a sibling IDE build's Evermind is indistinguishable from
-      // the chat project's own.
-      ...memAnswer.evermindProjectId != null ? { evermindProjectId: memAnswer.evermindProjectId } : {}
-    }
-  });
-}
-function emitEvermindLearnReconcile(run, assistantMsg, finalText) {
-  const { c, recalled } = run;
-  const evermind = run.req.evermind;
-  const learn = assistantMsg?.evermindLearn;
-  if (learn?.learned) {
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "learn",
-      label: "evermind.learn",
-      // `targets` carries the per-Evermind breakdown (a project can fan out to many)
-      // so the timeline can name each by id; the renderer falls back to `version` alone.
-      result: { version: learn.version, queued: true, ...learn.targets ? { targets: learn.targets } : {} }
-    });
-    const reconciled = recalled?.items ? (0, import_evermind2.countReconciledMemories)(recalled.items, finalText) : 0;
-    if (reconciled > 0) {
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "reconcile",
-        label: "evermind.reconcile",
-        result: { count: reconciled, version: learn.version }
-      });
-    }
-  } else if (learn && learn.reason && learn.reason !== "too-short") {
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "learn",
-      label: "evermind.learn",
-      result: { version: learn.version, skipped: true, reason: learn.reason, ...learn.targets ? { targets: learn.targets } : {} }
-    });
-  }
-  if (evermind?.cacheAnswer && run.memoryReplay) {
-    const q = run.userRequest;
-    const spent = c.runUsage;
-    const origin = spent.model && spent.promptTokens + spent.completionTokens > 0 ? { model: spent.model, promptTokens: spent.promptTokens, completionTokens: spent.completionTokens } : void 0;
-    if (q) {
-      const anchors = readFileAnchors(runTrace(c));
-      const cached2 = anchors.length ? evermind.cacheAnswer(q, finalText, origin, anchors) : origin ? evermind.cacheAnswer(q, finalText, origin) : evermind.cacheAnswer(q, finalText);
-      void Promise.resolve(cached2).catch(() => {
-      });
-    }
-  }
-}
-
-// src/runStore/failureClose.ts
+var import_working15 = require("@seanhogg/builderforce-memory/working");
 async function closeAfterFailureStreak(run, streak, step) {
   const { c, chatId, req, convo, systemPrompt, metadata } = run;
   const { routingMode, stream, persistence, onActivity, maxTokens, reasoning } = req;
@@ -27585,7 +27971,7 @@ async function closeAfterFailureStreak(run, streak, step) {
     try {
       const working = [
         { role: "system", content: systemPrompt },
-        ...(0, import_working14.windowed)(convo),
+        ...(0, import_working15.windowed)(convo),
         {
           role: "user",
           content: `This turn was stopped because your last ${streak} tool calls all failed. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered \u2014 say what you completed, quote what the failing calls answered, and state plainly what is blocking you and what you need (a different argument, a permission, a decision) so the next turn can succeed.`
@@ -27599,7 +27985,7 @@ async function closeAfterFailureStreak(run, streak, step) {
         {
           onModel: liveTurnModel(c),
           onConnectRetry: connectRetryStep(c, step),
-          // The first token repaints now; every later delta coalesces into a frame (as `completeTurn` does).
+          // The first token repaints now; every later delta coalesces into a frame (as `run/loopTurn.ts` does).
           onTextDelta: (d) => {
             c.streamingText += d;
             if (closeFirstTokenAt === void 0) {
@@ -27675,6 +28061,34 @@ async function settleBrainRun(run, outcome, last) {
   emit2(c);
   emitEvermindLearnReconcile(run, assistantMsg, text2);
   req.onActivity?.(chatId);
+}
+
+// src/runStore/runEndOutcome.ts
+var notes = /* @__PURE__ */ new WeakMap();
+function noteRunId(c, runId) {
+  if (runId) notes.set(c, { runId, contained: false });
+}
+function noteBudgetContained(c) {
+  const n2 = notes.get(c);
+  if (n2) n2.contained = true;
+}
+function runEndOutcome(state) {
+  if (state.contained) return "budget-contained";
+  if (state.aborted) return "stopped";
+  return state.failed ? "failed" : "succeeded";
+}
+function reportRunEnd(c, req, state) {
+  const n2 = notes.get(c);
+  notes.delete(c);
+  if (!n2 || !req.recordRunOutcome) return;
+  try {
+    void Promise.resolve(req.recordRunOutcome({ runId: n2.runId, outcome: runEndOutcome({ ...state, contained: n2.contained }) })).catch((e) => unrecorded2(c, e));
+  } catch (e) {
+    unrecorded2(c, e);
+  }
+}
+function unrecorded2(c, e) {
+  pushTrace(c, { ts: nowIso(), category: "message", label: "run.outcome_unrecorded", result: e instanceof Error ? e.message : String(e) });
 }
 
 // src/run/stallTrace.ts
@@ -27997,8 +28411,6 @@ async function recordTurn(run, t) {
     pushTrace(c, { ts: nowIso(), category: "message", label: "agent.message", args: { step: iter }, result: result.text });
   }
   run.lastTurnInterruption = turnInterruption(result.finishReason);
-  const meta = { result, resolved, requested, advertised: advertised.length, advertisedNames };
-  return meta;
 }
 
 // src/runStore/turnToolCalls.ts
@@ -28078,14 +28490,6 @@ function openLiveTurn(c, step) {
 }
 
 // src/run/loopTurn.ts
-function parsedCall(name, raw) {
-  try {
-    const args = JSON.parse(raw || "{}");
-    return typeof args === "object" && args !== null && !Array.isArray(args) ? { name, args, malformed: false } : { name, args: {}, malformed: true };
-  } catch {
-    return { name, args: {}, malformed: true };
-  }
-}
 function loopTurnObserver(run, savedTokens = () => 0) {
   const { c, req } = run;
   const last = { step: -1 };
@@ -28124,7 +28528,7 @@ function loopTurnObserver(run, savedTokens = () => 0) {
         metadata: t.metadata,
         maxTokens,
         // The coder re-ask is asked of the SAME turn's menu with the run's record and the planner's brief, not the turn's forced brief or
-        // steer, and keeps the turn's `tool_choice` (`completeTurn.ts`): it is one more request, never a turn of its own.
+        // steer, and keeps the turn's `tool_choice`: it is one more request, never a turn of its own.
         ...reask ? { tail: [runBrief(run, tools.length)], ...t.toolChoice ? { toolChoice: t.toolChoice } : {} } : {},
         call: { prompt_cache_key: `brain:${run.serverChatId ?? req.clientChatId ?? "local"}`, conversationKey: run.chatId },
         fit: (messages, model) => run.windowFit.prepare({ messages, ...model ? { model } : {}, ...tools.length > 0 ? { tools } : {}, maxTokens, step: t.step }),
@@ -28169,7 +28573,6 @@ function loopTurnObserver(run, savedTokens = () => 0) {
 async function keep(run, last, a) {
   const { result } = a;
   run.windowFit.served(result.resolvedModel ?? run.policy.model);
-  if (result.toolCalls.length > 0) run.announcementRecoveries = 0;
   const resolved = result.resolvedModel ?? run.policy.model ?? "default";
   const requested = run.policy.model ?? "default";
   await recordTurn(run, {
@@ -28187,7 +28590,7 @@ async function keep(run, last, a) {
   last.requested = requested;
   if (result.toolCalls.length === 0 || !run.req.runTool) return;
   run.progress.noteTurnText(result.text);
-  const calls = result.toolCalls.map((tc) => parsedCall(tc.name, tc.args));
+  const calls = result.toolCalls.map((tc) => ({ name: tc.name, ...parseToolArgs(tc.args) }));
   last.terminal = terminalAskReply(run, result, calls, a.step);
   if (last.terminal === void 0) await commitTurnNarration(run, result, requested);
 }
@@ -28208,12 +28611,8 @@ function withoutUncallableTurns(model, req) {
 
 // src/run/contextSource.ts
 var NO_CONTEXT = { focus: [], facts: [], recall: [] };
-function brainContextSource(gather) {
-  return {
-    async pack(task) {
-      return await gather?.(task) ?? NO_CONTEXT;
-    }
-  };
+function brainContextSource() {
+  return { pack: async () => NO_CONTEXT };
 }
 
 // src/run/humanChannel.ts
@@ -28236,42 +28635,17 @@ function brainHumanChannel(runKey) {
   };
 }
 
-// src/run/runStorePort.ts
-function transcriptOf(state) {
-  const rows = [];
-  for (const raw of state.messages) {
-    const row = raw;
-    if (row.role === "system" || typeof row.role !== "string") continue;
-    rows.push(toStreamMessage(raw));
-  }
-  return rows;
-}
-function cellRunStore(c, opts = {}) {
-  let written = opts.seeded ?? 0;
-  return {
-    load: () => void 0,
-    save(state) {
-      const rows = transcriptOf(state);
-      if (rows.length > written) c.transcript.push(...rows.slice(written));
-      written = Math.max(written, rows.length);
-    },
-    ...opts.commitMemory ? { commitMemory: opts.commitMemory } : {}
-  };
-}
-
 // src/run/webAdapter.ts
 function buildBrainRunPorts(b) {
-  const { req, cell, runKey } = b;
+  const { req, runKey } = b;
   return {
     model: brainModelRules(brainModelTransport({
       stream: req.stream,
       ...b.turn ? { turn: b.turn } : {},
-      ...b.handlers ? { handlers: b.handlers } : {},
       call: {
         ...req.routingMode ? { routingMode: req.routingMode } : {},
         ...req.modelStrict != null ? { modelStrict: req.modelStrict } : {},
-        ...req.reasoning ? { reasoning: req.reasoning } : {},
-        ...b.call
+        ...req.reasoning ? { reasoning: req.reasoning } : {}
       },
       // What the host knows about model windows. A surface with its own compaction (`modules.compaction`, `loopFold.ts`) and its own turn
       // fit (`windowFit.prepare`, its `llm.handoff` step) loses nothing by saying it: the agent sizes a tool result from it.
@@ -28279,26 +28653,25 @@ function buildBrainRunPorts(b) {
       ...req.modelPreflight ? { preflight: req.modelPreflight } : {}
     }), req),
     capabilities: b.capabilities,
-    store: b.store ?? cellRunStore(cell, { ...b.seeded !== void 0 ? { seeded: b.seeded } : {}, ...b.commitMemory ? { commitMemory: b.commitMemory } : {} }),
+    store: b.store,
     ...b.platform ? { platform: b.platform } : {},
     ...b.delivery ? { delivery: b.delivery } : {},
     ...b.attach ? { attach: b.attach } : {},
     ...b.spend ? { spend: b.spend } : {},
     ...b.extensions ? { extensions: b.extensions } : {},
-    events: b.events ?? brainEventSink(cell, b.reportOutcome),
+    events: b.events,
     human: brainHumanChannel(runKey),
-    steering: b.steering ?? runSteeringSource(runKey),
-    context: brainContextSource(b.gatherContext)
+    steering: b.steering,
+    context: brainContextSource()
   };
 }
-function brainRunTask(b, defaultRepo) {
+function brainRunTask(b) {
   const { req } = b;
   return {
     prompt: b.request,
     ...req.serverChatId != null ? { chatId: req.serverChatId } : {},
     ...req.projectId != null ? { projectId: req.projectId } : {},
-    dispatch: req.lineage ? { source: "subagent", parentRunId: String(req.lineage.ownerKey) } : { source: "chat" },
-    ...defaultRepo ? { workspace: { defaultRepo } } : {}
+    dispatch: req.lineage ? { source: "subagent", parentRunId: String(req.lineage.ownerKey) } : { source: "chat" }
   };
 }
 function brainRunPolicy(b) {
@@ -28306,14 +28679,14 @@ function brainRunPolicy(b) {
   const seed = b.start?.pinnedModel ?? req.model;
   return {
     entryPoint: b.entryPoint,
-    // Both modes offer the full catalog (`runPreamble.ts`, `turnMenu.ts`): the mode changes the directive the model reads, never the menu.
+    // Both modes offer the full catalog (`runPreamble.ts`): the mode changes the directive the model reads, never the menu.
     toolScope: req.lineage ? "subagent" : "chat-work",
     role: "general",
     // No guard lever is switched on in the agent's own policy: A3's detector (and its device lever) is the Brain's
     // `RunProgressGuard`, which the platform tools run, so the run has ONE detector (`brainPlatformTools.ts`).
     levers: [],
     // A Brain run has NO tool-iteration ceiling: the kernel's consecutive-failure breaker
-    // is its only limit (`runStore/runLoop.ts`).
+    // is its only limit (`@builderforce/agent-loop`'s `DEFAULT_TOOL_FAILURE_STREAK`).
     budgets: req.maxRunBudgetUsd && req.maxRunBudgetUsd > 0 ? { usd: req.maxRunBudgetUsd } : {},
     codeChangeTools: [...CODE_CHANGE_TOOLS],
     ...req.model && req.modelStrict ? { pinnedModel: req.model } : {},
@@ -28325,7 +28698,7 @@ function brainRunPolicy(b) {
     inference: "hybrid",
     verify: "none",
     approvalGates: [...b.approvalGates ?? []],
-    // A model that spent its whole stall budget still describing calls ends the run on what it said, the reason beside it (`finalAnswerHook.ts`).
+    // A model that spent its whole stall budget still describing calls ends the run on what it said,, the reason beside it (`brainDelivery.ts`).
     stallExhausted: "settle",
     // The Brain's delegation gate (`earlyDelegation.ts` on the read result, the delivery ledger's rung at the end) is the run's ONE
     // gate: the agent's own early nudge and backstop stay off, or each read and each prose answer would be judged twice.
@@ -28380,8 +28753,7 @@ async function runPrepared(run) {
     },
     steering: loopSteeringSource(run, people),
     ...spend ? { spend } : {},
-    store: loopRunStore(c, { toolRowAppended: platform.toolRowAppended, personSteer: people.take }),
-    ...req.reportRunRow ? { reportOutcome: req.reportRunRow } : {}
+    store: loopRunStore(c, { toolRowAppended: platform.toolRowAppended, personSteer: people.take })
   };
   const transcript = [{ role: "system", content: run.systemPrompt }, ...run.convo.map(toRunMessage)];
   const request = transcript.map((row) => row.role).lastIndexOf("user");
@@ -28399,930 +28771,6 @@ async function runPrepared(run) {
     ...signal ? { signal } : {}
   });
   await settleBrainRun(run, outcome, last);
-}
-
-// ../packages/agent-skills/src/spec.ts
-var SPEC_FIELDS = ["name", "description", "license", "compatibility", "metadata", "allowed-tools"];
-var SKILL_BINARY_FILE_MAX_BYTES = 5 * 1024 * 1024;
-var SKILL_PACKAGE_MAX_BYTES = 10 * 1024 * 1024;
-var SKILL_BINARY_EXTENSIONS = [
-  "png",
-  "jpg",
-  "jpeg",
-  "gif",
-  "webp",
-  "ico",
-  "pdf",
-  "woff",
-  "woff2",
-  "ttf",
-  "otf",
-  "zip",
-  "gz",
-  "mp3",
-  "mp4",
-  "wasm"
-];
-var BINARY_EXTENSION_SET = new Set(SKILL_BINARY_EXTENSIONS);
-var SKILL_READ_TOOL_NAME = "builtin_skills_read";
-
-// ../packages/agent-skills/src/validate.ts
-var SPEC_FIELD_SET = new Set(SPEC_FIELDS);
-
-// ../packages/agent-skills/src/skillPackage.ts
-var DEFAULT_SKILL_PACKAGE_LIMITS = {
-  maxFiles: 64,
-  maxFileBytes: 256 * 1024,
-  maxBinaryFileBytes: SKILL_BINARY_FILE_MAX_BYTES,
-  maxTotalBytes: SKILL_PACKAGE_MAX_BYTES
-};
-
-// ../packages/agent-skills/src/catalog.ts
-var TOOL_HOST_INSTRUCTIONS = [
-  "The following skills provide specialized instructions for specific tasks.",
-  `When a task matches a skill's description, call \`${SKILL_READ_TOOL_NAME}\` with its name and follow the instructions it returns before acting.`,
-  `A skill may list bundled files (scripts, references); load one with \`${SKILL_READ_TOOL_NAME}\` { name, path } only when its instructions call for it.`
-];
-
-// src/skillLibraryTools.ts
-function skillToolsIn(toolNames) {
-  return toolNames.filter((name) => name === SKILL_READ_TOOL_NAME);
-}
-
-// src/turnOptimization.ts
-var MAX_ROUTING_QUERY_CHARS = 4e3;
-var ROUTING_USER_TURNS = 4;
-function textContent(content) {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content.filter((part) => part.type === "text").map((part) => part.text).join("\n");
-}
-function routingQueryForTurn(messages) {
-  const turns = messages.filter((message2) => message2.role === "user").map((message2) => textContent(message2.content).trim()).filter(Boolean).slice(-ROUTING_USER_TURNS);
-  return turns.join("\n").slice(-MAX_ROUTING_QUERY_CHARS);
-}
-function turnOptimizationDirective() {
-  return [
-    "TURN OPERATING CONTRACT:",
-    "\u2022 Infer a workable brief from the conversation, project memory, attachments and current request. Ask one grouped set of questions only when different answers would materially change the result; otherwise state a reasonable assumption briefly and proceed.",
-    "\u2022 Treat corrections and \u201Cactually\u2026\u201D follow-ups as patches to the active brief. Preserve approved work and change the smallest requested scope; never regenerate unrelated content.",
-    "\u2022 Complete all requested deliverables in this run. Batch independent reads/actions when the tool supports it, while preserving dependencies and confirmation boundaries.",
-    "\u2022 In Work mode, plan enough to act safely and then execute in the same run. Do not make the user move to another surface just to turn a plan into work.",
-    "\u2022 For attachments, inspect only the relevant pages/sections with builtin_attachments_read and its offset/limit controls. Accept the original file; never ask the user to convert, split, trim, or re-upload it merely to save context.",
-    "\u2022 Reuse established project conventions, examples and explicit user preferences. A topic change is a new internal context segment, not a reason to make the user restart the chat.",
-    "\u2022 Route work to the available model and tools transparently. Use a scheduling tool when the user expresses recurrence; do not ask them to repeat a routine manually.",
-    "\u2022 Keep the response no longer than the task requires. Do not expose token windows, usage-reset timing, context cleanup, model-size folklore, or other platform limitations as work the user must manage."
-  ].join("\n");
-}
-
-// src/runStore/requestReading.ts
-function readRequest(c, convo, mode) {
-  const userRequest = latestUserText(convo);
-  const directives = [];
-  if (isContinuationDirective(userRequest) && promisesUnfinishedWork(lastAssistantText(convo))) {
-    directives.push(continuationDirective());
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "turn.continuation_resolved",
-      result: "The user's bare directive was resolved against the previous turn's unfinished proposal, so the run carries that proposal out instead of asking what to fix."
-    });
-  }
-  const changeRequest = isChangeRequest(mode, userRequest);
-  const asks = changeRequest ? chatAsksDirective(convo) : null;
-  if (asks) directives.push(asks);
-  return { userRequest, directives, goal: changeRequest ? chatGoalText(convo) : userRequest };
-}
-
-// src/runStore/runPreamble.ts
-var import_working15 = require("@seanhogg/builderforce-memory/working");
-
-// src/windowFit/runWindowFit.ts
-function windowFitTrace(ts, step, t) {
-  const how = t.summarized ? "summarized" : t.recalled ? "recalled from memory" : "elided";
-  return {
-    ts,
-    category: "message",
-    label: "llm.handoff",
-    args: { step, ...t },
-    result: t.dropped > 0 ? `Packed the transcript for ${t.to}${t.from ? ` (from ${t.from})` : ""}: ${t.dropped} earlier message(s) ${how}, ~${t.estimatedTokens} tokens${t.fits ? "" : " \u2014 still over its window"}.` : `Handed the transcript to ${t.to}${t.from ? ` (from ${t.from})` : ""} verbatim, ~${t.estimatedTokens} tokens.`
-  };
-}
-function windowFitRecallFailedTrace(ts, step, error) {
-  return {
-    ts,
-    category: "message",
-    label: "llm.handoff_recall_failed",
-    args: { step },
-    result: `The memory recall for the hand-off note failed (${error instanceof Error ? error.message : String(error)}) \u2014 the dropped messages were elided instead.`
-  };
-}
-function windowCapUnknownTrace(ts, model, error) {
-  return {
-    ts,
-    category: "message",
-    label: "llm.window_unknown",
-    args: { model },
-    result: `The context window of ${model} could not be resolved (${error instanceof Error ? error.message : String(error)}) \u2014 tool results keep the default caps.`
-  };
-}
-function createRunWindowFit(deps) {
-  let lastServed;
-  let lastAsked;
-  const capWindows = /* @__PURE__ */ new Map();
-  const packs = /* @__PURE__ */ new Map();
-  const recalls = /* @__PURE__ */ new Map();
-  if (deps.priorRecall) recalls.set(deps.priorRecall.query, Promise.resolve(deps.priorRecall.result));
-  const recallFor = (step) => deps.recall ? (query) => {
-    let hit = recalls.get(query);
-    if (!hit) {
-      hit = deps.recall(query).catch((error) => {
-        deps.trace(windowFitRecallFailedTrace(deps.now(), step, error));
-        return null;
-      });
-      recalls.set(query, hit);
-    }
-    return hit;
-  } : void 0;
-  return {
-    async prepare(req) {
-      const to = req.model;
-      if (!to) return req.messages;
-      lastAsked = to;
-      const window2 = await resolveContextWindow(to, deps.windowSources);
-      if (window2 === void 0) return req.messages;
-      const differs = lastServed !== void 0 && lastServed !== to;
-      if (!differs && window2 >= deps.workingBudgetTokens) return req.messages;
-      const memoKey = `${to}|${window2}`;
-      const memo = packs.get(memoKey);
-      const budget2 = packBudgetTokens({ to, contextTokens: window2, ...req.tools ? { tools: req.tools } : {}, ...req.maxTokens ? { maxTokens: req.maxTokens } : {} });
-      const reused = memo ? reusePack(memo, req.messages, budget2) : null;
-      if (reused) return reused;
-      const recall = recallFor(req.step);
-      const { messages, pack } = await packForModel({
-        messages: req.messages,
-        to,
-        ...lastServed ? { from: lastServed } : {},
-        contextTokens: window2,
-        ...req.tools ? { tools: req.tools } : {},
-        ...req.maxTokens ? { maxTokens: req.maxTokens } : {},
-        ...deps.summarizer ? { summarizer: deps.summarizer() } : {},
-        ...recall ? { recall } : {},
-        onTrace: (t) => {
-          if (differs || t.dropped > 0 || !t.fits) deps.trace(windowFitTrace(deps.now(), req.step, t));
-        }
-      });
-      if (pack.fits) packs.set(memoKey, packMemoOf(req.messages, messages));
-      else packs.delete(memoKey);
-      return messages;
-    },
-    served(model) {
-      if (model) lastServed = model;
-    },
-    contextWindow() {
-      const ref = lastServed ?? lastAsked;
-      if (!ref) return Promise.resolve(void 0);
-      let window2 = capWindows.get(ref);
-      if (!window2) {
-        window2 = resolveContextWindow(ref, deps.windowSources).catch((e) => {
-          deps.trace(windowCapUnknownTrace(deps.now(), ref, e));
-          return void 0;
-        });
-        capWindows.set(ref, window2);
-      }
-      return window2;
-    }
-  };
-}
-
-// src/runStore/prefetchGate.ts
-var NOTHING = { answered: false, tail: [] };
-function unrecorded2(c, what, e) {
-  pushTrace(c, { ts: nowIso(), category: "message", label: "prefetch.unrecorded", args: { what }, result: e instanceof Error ? e.message : String(e) });
-}
-function bestEffort(c, what, write2) {
-  let pending;
-  try {
-    pending = write2();
-  } catch (e) {
-    unrecorded2(c, what, e);
-    return;
-  }
-  void Promise.resolve(pending).then(void 0, (e) => unrecorded2(c, what, e));
-}
-function settlePending(c, port, req, request) {
-  const pending = c.pendingGate;
-  c.pendingGate = null;
-  if (!pending) return;
-  const accepted = !isReask(pending.request, request);
-  const { runId } = pending;
-  if (port.record) bestEffort(c, "calibration", () => port.record({ ...pending.outcome, accepted }));
-  if (runId && req.recordRunOutcome) bestEffort(c, "gate-outcome", () => req.recordRunOutcome({ runId, gateAccepted: accepted }));
-}
-function confirmVia(port, runKey, stop) {
-  return async (action, request, detail) => {
-    if (port.confirm) return port.confirm(action, request, detail);
-    if (stop?.aborted) return false;
-    const onAbort = () => resolveRunConfirm(runKey, false);
-    stop?.addEventListener("abort", onAbort, { once: true });
-    try {
-      return await requestRunConfirm(runKey, prefetchConfirmRequest(action, request, detail));
-    } finally {
-      stop?.removeEventListener("abort", onAbort);
-    }
-  };
-}
-function decisionTrace(c, pass) {
-  const { decision } = pass;
-  pushTrace(c, {
-    ts: nowIso(),
-    category: "message",
-    label: "prefetch.decision",
-    durationMs: pass.elapsedMs,
-    args: {
-      route: decision.route,
-      actions: decision.actions.map(({ id, p, tier: tier2 }) => ({ id, p, tier: tier2 })),
-      pNeedsLlm: decision.pNeedsLlm,
-      tiers: decision.tiersRun
-    },
-    result: {
-      settled: pass.settled,
-      classifyMs: decision.elapsedMs,
-      elapsedMs: pass.elapsedMs,
-      ran: pass.ran.map(({ action, result, confirmed }) => ({
-        id: action.id,
-        ok: !!result,
-        ...confirmed !== void 0 ? { confirmed } : {},
-        ...result?.data ? { data: result.data } : {}
-      }))
-    }
-  });
-}
-function routedModel(c, req) {
-  return req.model || c.lastServedModel || void 0;
-}
-async function answerDeterministically(chatId, c, req, runId, runKey = chatId) {
-  const port = req.prefetch;
-  if (!port || c.abort?.signal.aborted) return NOTHING;
-  const query = latestUserText(c.transcript);
-  if (!query) return NOTHING;
-  settlePending(c, port, req, query);
-  const stop = c.abort?.signal;
-  const pass = await runGate(query, port, {
-    ...stop ? { signal: stop } : {},
-    confirm: confirmVia(port, runKey, stop),
-    adopt: ({ action, candidate, result }) => adoptAnswerWithoutModel(chatId, c, req, result.text, {
-      label: action.id,
-      args: { query },
-      result: {
-        source: action.id,
-        p: candidate.p,
-        tier: candidate.tier,
-        route: "answer",
-        ...result.chips?.length ? { chips: result.chips } : {},
-        ...result.data ? { data: result.data } : {}
-      }
-    })
-  });
-  if (!pass) return NOTHING;
-  decisionTrace(c, pass);
-  const lead = pass.lead;
-  if (lead) {
-    c.pendingGate = {
-      request: query,
-      outcome: { actionId: lead.action.id, route: pass.settled === "answer" ? "answer" : "prefetch", p: lead.candidate.p, tier: lead.candidate.tier, features: lead.candidate.features },
-      ...runId ? { runId } : {}
-    };
-  }
-  if (pass.answer) {
-    recordAvoided(c, req, pass.answer.action.id, runId);
-    return { answered: true, tail: [] };
-  }
-  return { answered: false, tail: pass.tail };
-}
-function recordAvoided(c, req, actionId, runId) {
-  if (!req.recordAvoidedCall) return;
-  const model = routedModel(c, req);
-  const record3 = req.recordAvoidedCall;
-  bestEffort(c, "avoided-call", () => record3({
-    source: "deterministic",
-    actionId,
-    ...runId ? { runId } : {},
-    ...model ? { model } : {},
-    promptTokens: MEDIAN_TURN_TOKENS.prompt,
-    completionTokens: MEDIAN_TURN_TOKENS.completion
-  }));
-}
-
-// src/runStore/hostRunContext.ts
-async function hostPart(c, part, read2) {
-  if (!read2) return void 0;
-  try {
-    return await read2();
-  } catch (e) {
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "host.context_failed",
-      args: { part },
-      result: `The host's ${part} could not be read (${e instanceof Error ? e.message : String(e)}) \u2014 the run starts without it.`
-    });
-    return void 0;
-  }
-}
-async function gatherHostRunContext(c, req, recall) {
-  const [recallHint, turnContext, servedReads] = await Promise.all([
-    recall ? hostPart(c, "recall hint", req.recallHint) : Promise.resolve(void 0),
-    hostPart(c, "task context", req.turnContext),
-    hostPart(c, "served reads", req.servedReads),
-    // The model preflight (E7): an account that cannot serve this run is shown on the
-    // banner BEFORE the first turn, not after it.
-    applyModelPreflight(c, req.modelPreflight, req.model)
-  ]);
-  return {
-    ...recallHint ? { recallHint } : {},
-    ...turnContext?.trim() ? { turnContext } : {},
-    servedReads: servedReads ?? []
-  };
-}
-function recordServedReads(coverage, reads, anchor) {
-  for (const read2 of reads) {
-    if (!read2.path) continue;
-    const args = { path: read2.path };
-    coverage.record("read_file", args);
-    coverage.cacheResult("read_file", args, {
-      result: { ok: true, path: read2.path, content: read2.content, totalLines: read2.totalLines, offset: 1, truncated: false },
-      anchor
-    });
-  }
-}
-
-// src/runStore/turnContext.ts
-var OPEN = "<turn_context>\nContext for this turn only (recalled memory and run directives) \u2014 not part of the request:";
-var CLOSE = "</turn_context>";
-var attached = /* @__PURE__ */ new WeakMap();
-function turnContextBlock2(parts) {
-  const body = parts.map((p) => (p ?? "").trim()).filter(Boolean).join("\n\n");
-  return body ? `${OPEN}
-
-${body}
-${CLOSE}` : null;
-}
-function turnContextCarrier(c) {
-  const a = attached.get(c);
-  return a && a.convo[a.index] === a.carrier ? a.carrier : void 0;
-}
-function restoreTurnContext(c) {
-  const prior = attached.get(c);
-  if (!prior) return;
-  if (prior.convo[prior.index] === prior.carrier) prior.convo[prior.index] = prior.original;
-  attached.delete(c);
-}
-function attachTurnContext(c, convo, block) {
-  restoreTurnContext(c);
-  for (let i = convo.length - 1; i >= 0; i -= 1) {
-    const original = convo[i];
-    if (original.role !== "user") continue;
-    const content = typeof original.content === "string" ? `${original.content}
-
-${block}` : [...original.content, { type: "text", text: block }];
-    const carrier = { ...original, content };
-    convo[i] = carrier;
-    attached.set(c, { convo, index: i, carrier, original });
-    return true;
-  }
-  return false;
-}
-
-// src/runStore/runPreamble.ts
-function stablePrefixOn() {
-  return deviceLeverOn("b1_stable_prefix");
-}
-function recorderFor(userRequest, lent) {
-  const r = lent ?? new RunKnowledgeRecorder();
-  if (!r.activity.prompt) r.setPrompt(userRequest);
-  return r;
-}
-async function prepareRunLoop(chatId, c, req, runKey) {
-  const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, runTool, stream, evermind } = req;
-  const convo = c.transcript;
-  restoreTurnContext(c);
-  recordTranscriptAnchors(c, req);
-  const stablePrefix = stablePrefixOn();
-  const turnParts = [];
-  const canAskUser = !!runTool && (toolSpecs?.length ?? 0) > 0;
-  const catalog = canAskUser ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC, HAND_OFF_TOOL_SPEC] : toolSpecs;
-  const allTools = catalog && catalog.length > 0 ? catalog : void 0;
-  const runMode = normalizeChatMode(req.chatMode ?? "work");
-  const serverChatId = resolveServerChatId(chatId, req);
-  const pipeline = decideRunPipeline(req, latestUserText(convo), { followUp: isFollowUpTurn(convo) });
-  if (pipeline) {
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "run.pipeline_route",
-      args: { route: pipeline.route, score: pipeline.score },
-      result: `${pipeline.route === "quick" ? "Quick pass" : "Full pipeline"}: ${pipeline.reason}`
-    });
-  }
-  const metadata = {
-    ...serverChatId != null ? { chatId: serverChatId } : {},
-    ...req.clientChatId ? { clientChatId: req.clientChatId } : {},
-    guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    guestTurnInput: latestUserText(convo),
-    mode: runMode,
-    ...req.projectId != null ? { projectId: req.projectId } : {},
-    ...pipelineMetadata(pipeline)
-  };
-  const host = await gatherHostRunContext(c, req, !!evermind?.recall);
-  const { recalled, block: recallBlock2, blockTokens: recallBlockTokens } = await recallForRun(c, convo, evermind, host.recallHint);
-  let systemPrompt = resolvedSystemPrompt;
-  if (recallBlock2) {
-    if (stablePrefix) turnParts.push(recallBlock2);
-    else systemPrompt = `${systemPrompt}
-
-${recallBlock2}`;
-  }
-  const priorRecall = { query: latestUserText(convo), result: recalled };
-  const memoryReplay = memoryReplayable(latestUserText(convo), { followUp: isFollowUpTurn(convo) });
-  const gate = await answerDeterministically(chatId, c, req, metadata.guestTurnId, runKey);
-  if (gate.answered) return null;
-  if (req.prefetch) metadata.gateRoute = gate.tail.length > 0 ? "prefetch" : "llm";
-  if (await answerFromMemory(chatId, c, req, allTools, memoryReplay)) return null;
-  if (host.turnContext) turnParts.push(host.turnContext);
-  for (const block of gate.tail) if (!host.turnContext?.includes(block)) turnParts.push(block);
-  if (req.augmentSystemPrompt) {
-    try {
-      const extra = await req.augmentSystemPrompt(latestUserText(convo));
-      if (typeof extra === "string" && extra.trim()) {
-        if (stablePrefix) turnParts.push(extra);
-        else systemPrompt = `${systemPrompt}
-
-${extra}`;
-      }
-    } catch {
-    }
-  }
-  const catalogToolNames = (req.tools ?? []).map((t) => t.function.name);
-  const canEditHere = canChangeCodeHere(catalogToolNames);
-  systemPrompt = `${systemPrompt}
-
-${chatModeDirective(runMode, serverChatId, { canEditHere, canDelegate: catalogToolNames.includes("spawn_agent"), canFanOut: catalogToolNames.includes("spawn_agents"), roster: req.chatRoster })}
-
-${turnOptimizationDirective()}`;
-  const canShip = canShipHere(catalogToolNames);
-  if (canShip) systemPrompt = `${systemPrompt}
-
-${selfReviewShipDirective(serverChatId)}`;
-  if (canReviewInPreview(catalogToolNames)) systemPrompt = `${systemPrompt}
-
-${previewReviewDirective(serverChatId)}`;
-  if (c.priorResearch) systemPrompt = `${systemPrompt}
-
-${c.priorResearch}`;
-  const reading = readRequest(c, convo, runMode);
-  const { userRequest } = reading;
-  for (const directive of reading.directives) {
-    if (stablePrefix) turnParts.push(directive);
-    else systemPrompt = `${systemPrompt}
-
-${directive}`;
-  }
-  const turnContext = turnContextBlock2(turnParts);
-  const alwaysAdvertised = [
-    ...toolNamesMentionedIn(turnContext ? `${systemPrompt}
-
-${turnContext}` : systemPrompt),
-    ...localToolsIn(catalogToolNames),
-    // The Studio's workspace vocabulary, including the preview review its contract
-    // requires — empty everywhere but the Studio (see `studioToolsIn`).
-    ...studioToolsIn(catalogToolNames),
-    // The project-memory pair (recall before re-reading; remember what was learned) is
-    // the cheapest tool in the catalog and the first one relevance would drop.
-    ...memoryToolsIn(catalogToolNames),
-    // The workspace's Agent Skills — its description IS the skill catalog, so dropping
-    // it on relevance would hide every reviewed procedure the workspace has.
-    ...skillToolsIn(catalogToolNames),
-    // Asking the user is never off-topic: it is how the run stops when it cannot
-    // proceed, so relevance against the request must not be what decides whether the
-    // agent is allowed to ask. Its one schema is also the cheapest in the catalog.
-    ...canAskUser ? [ASK_USER_TOOL] : []
-  ];
-  const windowFit = createRunWindowFit({
-    workingBudgetTokens: import_working15.HISTORY_TOKEN_BUDGET,
-    summarizer: () => ({ stream, model: run.policy.model, signal: c.abort?.signal }),
-    ...evermind?.recall ? { recall: (q) => evermind.recall(q), priorRecall } : {},
-    ...req.windowSources ? { windowSources: req.windowSources } : {},
-    trace: (ev) => pushTrace(c, ev),
-    now: nowIso
-  });
-  const run = {
-    chatId,
-    serverChatId,
-    runKey,
-    c,
-    req,
-    convo,
-    canAskUser,
-    allTools,
-    catalogToolNames,
-    alwaysAdvertised,
-    // Tools this run has actually called — pinned into every later turn's selection
-    // so a multi-step task never loses a tool it is mid-way through using.
-    usedTools: /* @__PURE__ */ new Set(),
-    systemPrompt,
-    metadata,
-    recalled,
-    recallBlockTokens,
-    memoryReplay,
-    userRequest,
-    // The goal a hand-off states to coders who see none of this chat: the latest
-    // message, and for a change request the chat's earlier change asks (`chatAsks.ts`).
-    goal: reading.goal,
-    // One re-prompt per run for a final reply that repeats the previous turn's answer
-    // (see `restatedReply.ts`). Captured before the loop: the transcript grows as it runs.
-    priorReply: previousReplyText(convo),
-    // The user's ACTUAL request for this run, resolved once. Every turn's tool
-    // selection scores against this and nothing else — see `completeTurn.ts`.
-    requestQuery: routingQueryForTurn(convo),
-    windowFit,
-    // What this run has already read. Two guards, one tally (see `readCoverage.ts`):
-    // an EXACT repeat of a successful read-only call — same tool, same arguments —
-    // returns an "already returned above" stub instead of re-fetching + re-injecting
-    // the payload; and a target re-read at SHIFTING offsets gets an advisory once it
-    // starts circling. Both are invalidated together, and only for what a later
-    // mutation actually touched — never wiped wholesale by an unrelated call.
-    readCoverage: new ReadCoverage2(),
-    // How many calls in a row that cache has answered — a run circling its own reads
-    // is forced to hand off or change (`cacheServedStreak.ts`).
-    cacheStreak: new CacheServedStreak2(),
-    // The A3 progress detector — a run that says it is ready and keeps reading, circles,
-    // undoes its own edit or repeats a failure is steered, then forced, then asked
-    // about (`progressGuard.ts`, PRD 35 WS8p).
-    progress: new RunProgressGuard(),
-    // What the run did and read, restated in front of every turn (its `brief()`) —
-    // the host's recorder when it keeps one, so the ledger and its code map agree.
-    knowledge: recorderFor(userRequest, req.knowledge),
-    // What this run has already FAILED at (see `FailureTally` in `@builderforce/run-guards`). The read guards
-    // above deliberately record only SUCCESSES, so an identical failing call — the same
-    // `git_status` answered with the same remedy three times, the same platform read
-    // answered 502 twice — got no pushback at all and could repeat until the budget was
-    // gone. The first retry stays free; from the second the model reads the count and the
-    // error it already has, and the moves that remain.
-    failures: new FailureTally(),
-    // What this run has already WRITTEN (see `repeatedWrite.ts`): the third loop shape —
-    // a successful full-content write sent again byte for byte, because an error from
-    // before it was still on screen. Replaying it cannot change the file, so it is answered
-    // without running.
-    writeLedger: new WriteLedger(),
-    // Placeholders this run wrote and has not removed — read when a ticket is marked done
-    // (see `completionGuard.ts`).
-    placeholderLedger: new PlaceholderLedger(),
-    // THE model hand-off policy (`@builderforce/run-policy`), shared with every other agent
-    // loop. ANALYSIS first, then the CODE: under auto-routing each turn tells the gateway
-    // what kind of call it is. Until the run reaches its first code change the turns are
-    // analysis (`plan` — the tenant's own precedence decides who plans); from then on they
-    // are `code`, which the gateway leads with the strongest connected model. A run that
-    // already changed code (a resumed turn) starts as `code`. The policy also holds the
-    // model this run is CURRENTLY talking to, every model it has already tried, and the
-    // models that broke mid-turn: a model that burns its whole stall budget fails over to
-    // another one rather than handing the user a promise (see the final-answer hook),
-    // and one that breaks mid-stream is routed around for the rest of the run. A pinned
-    // model is the user's own choice and is never routed around.
-    policy: initialRunPolicy({
-      pinnedModel: model,
-      strictPin: modelStrict,
-      // Every run starts the same way, whatever the chat's history: a chat that coded
-      // before used to start every later run in `code`, which skipped the analysis
-      // budget and let an old chat read forever while a fresh one handed off (chat
-      // #5739). The one exception is a ROLE, not history — a sub-agent is a delegated
-      // SLICE its owner already planned; started in `plan` it was offered `hand_off` and
-      // the analysis all over again, inside work it was handed to carry out. A QUICK
-      // run (`pipelineRoute.ts`) starts in `code` too, on the quick model. The host's
-      // stage models ride as `phaseModels`, never as one model pinned to the whole run.
-      ...pipelinePolicyOptions(req, pipeline)
-    }),
-    pipeline,
-    // Bounded counter for the announced-but-never-made tool call recovery, so a model
-    // that keeps narrating instead of acting cannot spin the loop. Not one-shot: a model
-    // that stalls once frequently stalls again on the very next turn, and spending the
-    // single retry on the first stall left the user holding the SECOND promise. The
-    // stall budget (`agent-stall`) bounds these recoveries on its own — a run has no
-    // iteration ceiling to fall back on.
-    forceToolChoice: void 0,
-    announcementRecoveries: 0,
-    // One re-prompt per run for a code change left unshipped (see `selfReviewShip.ts`).
-    // One, not a budget: the second time the model stops short it has read the contract
-    // twice, and its answer — including "I cannot ship this because…" — is the answer.
-    shipRecoveryUsed: false,
-    reviewRecoveryUsed: false,
-    // One redirect per run for an explicit sub-agent request the run neither started nor
-    // refused on a real result (see `delegationRequest.ts`).
-    delegationRecoveryUsed: false,
-    restateRecoveryUsed: false,
-    stopHookRounds: 0,
-    redirectAskToDelegation: false,
-    pendingReplay: null,
-    pendingRun: null,
-    lastTurnInterruption: null
-  };
-  if (turnContext && !attachTurnContext(c, convo, turnContext)) {
-    run.systemPrompt = `${systemPrompt}
-
-${turnContext}`;
-  }
-  recordServedReads(run.readCoverage, host.servedReads, turnContextCarrier(c));
-  return run;
-}
-
-// src/runStore/completeTurn.ts
-var import_handoff16 = require("@seanhogg/builderforce-memory/handoff");
-var import_working16 = require("@seanhogg/builderforce-memory/working");
-function completeTurnPort(run) {
-  const { c, chatId, runKey, req, convo, systemPrompt, metadata, recallBlockTokens } = run;
-  const { stream, routingMode, maxTokens, reasoning, runTool } = req;
-  return async (ctx) => {
-    const iter = ctx.step;
-    c.streamingText = "";
-    emit2(c);
-    for (const steer of takeRunSteering(c, runKey, iter)) {
-      const msg = { role: "user", content: steerModelContent(steer) };
-      convo.push(steer.fromPerson ? markPersonTurn(msg) : msg);
-      await persistSteer(c, chatId, req.persistence, steer, runKey);
-    }
-    const working = await (0, import_working16.buildWorkingTranscript)(
-      c,
-      systemPrompt,
-      (msgs) => summarizeMiddle(stream, run.policy.model, msgs, c.abort?.signal),
-      (fold) => recordFold(run, fold)
-    );
-    const trimmed = c.compactMemo ? compactionSavedTokens([{ role: "system", content: systemPrompt }, ...c.transcript], working) : 0;
-    const memoryEffect = callMemoryEffect(trimmed, recallBlockTokens);
-    const memoryMetadata = memoryEffect ? { ...metadata, memory: memoryEffect } : metadata;
-    const nextCallMetadata = stampOncePerCall(memoryMetadata, metadata);
-    if (c.abort?.signal.aborted) throw new Error("run stopped");
-    const llmStart = nowMs2();
-    let result;
-    const { forced, advertised, tools, advertisedNames, opening } = turnMenu(run, iter);
-    const live2 = openLiveTurn(c, iter);
-    const handlers = live2.handlers;
-    let turnRole2 = nextTurn(run.policy, { hasTools: !!tools }).role;
-    const turnToolChoice = forced ? forced.toolChoice : run.forceToolChoice;
-    run.forceToolChoice = void 0;
-    const ledger = tools ? run.knowledge.brief() : "";
-    const request = async (extra = [], tailSections = []) => {
-      const ask = nextTurn(run.policy, { hasTools: !!tools });
-      const callMetadata = nextCallMetadata();
-      const tail = (0, import_handoff16.volatileTail)([ledger, ...tailSections]);
-      const perTurn = tail ? [...extra, tail] : extra;
-      const messages = await run.windowFit.prepare({ messages: perTurn.length > 0 ? [...working, ...perTurn] : working, model: ask.model, tools, maxTokens: turnMaxTokens(maxTokens, !!tools), step: iter });
-      return asLiveTurn(c, () => stream(
-        {
-          messages,
-          tools,
-          tool_choice: tools ? turnToolChoice ?? "auto" : void 0,
-          model: ask.model,
-          modelStrict: ask.strict,
-          // Raised to the tool-turn floor when tools are on offer: a file write is
-          // output, and the Effort ceiling cut every one of them off mid-JSON.
-          routingMode,
-          maxTokens: turnMaxTokens(maxTokens, !!tools),
-          reasoning,
-          metadata: callMetadata,
-          role: ask.role,
-          ...ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {},
-          // Keyed on the conversation's identity OFF this machine (PRD 36): the server
-          // chat, else the local chat's client id — never its local view key.
-          prompt_cache_key: `brain:${run.serverChatId ?? run.req.clientChatId ?? "local"}`,
-          conversationKey: run.chatId,
-          signal: c.abort?.signal
-        },
-        handlers
-      ));
-    };
-    const turnError = (e) => {
-      pushTrace(c, providerFailureTrace(nowIso(), iter, e instanceof StreamInterruptedError && e.model || run.policy.model, e, nowMs2() - llmStart));
-      return e;
-    };
-    const restartTurn = () => live2.restart();
-    try {
-      result = await request([], opening);
-    } catch (e) {
-      if (c.abort?.signal.aborted) throw e;
-      const failure = providerFailureEvent(e);
-      const outcome = failure ? reportToPolicy(run, failure).outcome : null;
-      if (!outcome || outcome.kind !== "retry_turn") throw turnError(e);
-      pushTrace(c, transportRetryTrace(nowIso(), iter, outcome, e.message));
-      restartTurn();
-      try {
-        result = await request([], opening);
-      } catch (retryError) {
-        if (c.abort?.signal.aborted) throw retryError;
-        throw turnError(retryError);
-      }
-    }
-    const codeChangeOutcome = turnRole2 === "plan" && result.toolCalls.some((tc) => isCodeChangeTool(tc.name)) ? reportToPolicy(run, { type: "code_change_attempted" }).outcome : null;
-    if (codeChangeOutcome?.kind === "reask_as_coder") {
-      turnRole2 = nextTurn(run.policy, { hasTools: !!tools }).role;
-      const brief = coderHandoffBrief(replayTextOf(result.text), result.toolCalls);
-      pushTrace(c, coderReaskTrace(nowIso(), iter, result.resolvedModel));
-      restartTurn();
-      try {
-        result = await request([{ role: "user", content: brief }]);
-      } catch (e) {
-        if (c.abort?.signal.aborted) throw e;
-        throw turnError(e);
-      }
-    }
-    reportToPolicy(run, { type: "turn_succeeded", ...result.resolvedModel ? { model: result.resolvedModel } : {} });
-    run.windowFit.served(result.resolvedModel ?? run.policy.model);
-    if (result.toolCalls.length > 0) run.announcementRecoveries = 0;
-    const resolved = result.resolvedModel ?? run.policy.model ?? "default";
-    const requested = run.policy.model ?? "default";
-    const meta = await recordTurn(run, { result, iter, llmStart, live: live2, role: turnRole2, resolved, requested, advertised, advertisedNames });
-    const toolCalls = runTool ? result.toolCalls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.args })) : [];
-    return { content: replayTextOf(result.text), toolCalls, meta };
-  };
-}
-
-// src/runStore/toolCallHooks.ts
-function beforeToolCallsHook(run) {
-  const { c, chatId } = run;
-  const { onActivity } = run.req;
-  return async (ctx, turn, calls) => {
-    const { result, requested } = metaOf2(turn);
-    run.progress.noteTurnText(result.text);
-    const reply = terminalAskReply(run, result, calls, ctx.step);
-    if (reply) {
-      const assistantMsg = await settleReply(run, reply, result, requested);
-      emit2(c);
-      emitEvermindLearnReconcile(run, assistantMsg, reply);
-      onActivity?.(chatId);
-      return { action: "stop", ok: true, output: reply };
-    }
-    await commitTurnNarration(run, result, requested);
-    return void 0;
-  };
-}
-
-// src/runStore/finalAnswerHook.ts
-function enterVerifyIfChanged(run) {
-  if (!run.c.codeChanged || run.policy.phase === "verify" || skipsVerifyStage(run.pipeline)) return;
-  reportToPolicy(run, { type: "verify_started" });
-}
-function finalAnswerHook(run) {
-  const { c, chatId, runKey, req, convo, canAskUser, userRequest } = run;
-  const { tools: toolSpecs, pickFallbackModel, runTool, persistence, onActivity } = req;
-  return async (ctx, turn) => {
-    const iter = ctx.step;
-    const { result, resolved, requested, advertised, advertisedNames } = metaOf2(turn);
-    const stallInput = {
-      text: result.text,
-      toolCallCount: result.toolCalls.length,
-      availableToolCount: toolSpecs?.length ?? 0,
-      recoveriesUsed: run.announcementRecoveries,
-      availableToolNames: [...advertisedNames],
-      requestText: userRequest
-    };
-    const shape = stallShape(stallInput);
-    const requeueWithNudge = async (nudge) => {
-      await persistMidTurnText(chatId, c, persistence, result, requested);
-      convo.push({ role: "assistant", content: replayTextOf(result.text) });
-      convo.push({ role: "user", content: nudge });
-    };
-    const steering = takeRunSteering(c, runKey, iter);
-    if (steering.length > 0) {
-      for (const steer of steering) await persistSteer(c, chatId, persistence, steer, runKey);
-      const joinedText = steering.map((m) => m.text).join("\n\n");
-      const imageAtts = steering.flatMap((m) => (m.attachments ?? []).filter((a) => a.imageUrl));
-      const nudge = imageAtts.length > 0 ? [
-        { type: "text", text: joinedText },
-        ...imageAtts.map((a) => ({ type: "image_url", image_url: { url: a.imageUrl } }))
-      ] : joinedText;
-      await requeueWithNudge(nudge);
-      c.streamingText = "";
-      emit2(c);
-      return { action: "continue" };
-    }
-    if (runTool && shouldRecoverStalledTurn(stallInput)) {
-      run.announcementRecoveries += 1;
-      const lastChance = run.announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
-      run.forceToolChoice = stallRecoveryToolChoice(stallInput);
-      await requeueWithNudge(stallRecoveryNudge(lastChance, shape, stallInput));
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "message",
-        label: shape === "handed-off" ? "loop.recover_handed_off_work" : "loop.recover_announced_tool_call",
-        args: { step: iter, attempt: run.announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES, advertisedTools: advertised, shape },
-        result: shape === "handed-off" ? `Model ended by telling the user to run the commands itself holds tools for \u2014 re-prompted to run them (${run.announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).` : `Model announced a tool call without making one \u2014 re-prompted (${run.announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
-      });
-      c.streamingText = "";
-      emit2(c);
-      return { action: "continue" };
-    }
-    const stopNudge = runTool ? await askStopHook(req.onStop, { codeChanged: c.codeChanged, touchedFiles: c.touchedFiles, requestText: userRequest, round: run.stopHookRounds }) : null;
-    if (stopNudge) {
-      run.stopHookRounds += 1;
-      await requeueWithNudge(stopNudge);
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "message",
-        label: "loop.stop_hook",
-        args: { step: iter, round: run.stopHookRounds },
-        result: `A workspace stop hook held the run for another turn: ${stopNudge.slice(0, 200)}`
-      });
-      c.streamingText = "";
-      emit2(c);
-      enterVerifyIfChanged(run);
-      return { action: "continue" };
-    }
-    if (runTool) {
-      for (const gate of deliveryGates(run)) {
-        if (!gate.applies(result.text)) continue;
-        gate.spend();
-        await requeueWithNudge(gate.nudge());
-        pushTrace(c, { ts: nowIso(), category: "message", label: gate.trace.label, args: { step: iter, ...gate.trace.args() }, result: gate.trace.result });
-        c.streamingText = "";
-        emit2(c);
-        if (gate.entersVerify) enterVerifyIfChanged(run);
-        return { action: "continue" };
-      }
-    }
-    const settledText = result.text.trim();
-    const finalText = (canAskUser ? liftProseAskUser(settledText) : settledText) || "No response.";
-    const assistantMsg = await settleReply(run, finalText, result, requested);
-    if (runTool && isExhaustedStall(stallInput)) {
-      const { outcome } = reportToPolicy(run, { type: "stalled", resolvedModel: resolved, pick: pickFallbackModel });
-      if (outcome.kind === "failed_over") {
-        pushTrace(c, modelFailoverTrace(nowIso(), iter, resolved, outcome, shape));
-        run.announcementRecoveries = 0;
-        run.forceToolChoice = stallRecoveryToolChoice(stallInput);
-        convo.push({ role: "user", content: stallRecoveryNudge(false, shape, stallInput) });
-        c.streamingText = "";
-        emit2(c);
-        return { action: "continue" };
-      }
-      const notice = stallExhaustedNotice(resolved, run.policy.tried, shape);
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "error",
-        label: "loop.stall_unrecovered",
-        args: { step: iter, model: resolved, attempts: run.announcementRecoveries, tried: run.policy.tried, advertisedTools: advertised, shape },
-        result: notice,
-        isError: true
-      });
-      c.error = notice;
-    }
-    emit2(c);
-    emitEvermindLearnReconcile(run, assistantMsg, finalText);
-    onActivity?.(chatId);
-    return { action: "stop", ok: true, output: finalText };
-  };
-}
-
-// src/runStore/runLoop.ts
-var runCodec = openAiChatCodec((r) => typeof r.data === "string" ? r.data : JSON.stringify(r.data));
-async function runLoop(run) {
-  const { c, convo } = run;
-  const loop = await runAgentLoop({
-    messages: convo,
-    codec: runCodec,
-    ports: { complete: completeTurnPort(run), dispatch: callRunner(run) },
-    hooks: {
-      // The run's USD cap, when it has one: the cost accrues after each turn and is held
-      // to the cap before the next (`runSpendBudget.ts`). No cap ⇒ no hooks.
-      ...runSpendBudget(run),
-      beforeToolCalls: beforeToolCallsHook(run),
-      beforeDispatch: callPreflight(run),
-      // The person's message skips the rest of the turn it interrupted (PRD 35 E10).
-      afterDispatch: skipOnSteer(run.runKey, callPostStep(run)),
-      onNoToolCalls: finalAnswerHook(run),
-      afterToolCalls: progressAfterToolCalls(run)
-    },
-    signal: c.abort?.signal,
-    // No step cap. The kernel's consecutive-tool-failure breaker is the run's only
-    // limit — see the "no tool-iteration ceiling" note at the top of this module.
-    budget: {}
-  });
-  if (loop.finished || loop.cancelled) return;
-  return closeAfterFailureStreak(run, loop.failureStreak, loop.step);
-}
-
-// src/runStore/runEngine.ts
-function deviceEngine() {
-  const env = globalThis.process?.env;
-  const raw = env?.BRAIN_RUN_ENGINE;
-  return raw === "agent" || raw === "loop" ? raw : void 0;
-}
-function runEngineOf(req) {
-  return req.engine ?? deviceEngine() ?? "loop";
-}
-async function driveRun(chatId, c, req, runKey) {
-  const prepared = await prepareRunLoop(chatId, c, req, runKey);
-  if (!prepared) return;
-  noteRunId(c, prepared.metadata.guestTurnId);
-  if (runEngineOf(req) === "agent") return runPrepared(prepared);
-  return runLoop(prepared);
 }
 
 // src/runStore/beginRun.ts
@@ -29382,14 +28830,13 @@ async function startRun(runKey, request, claim) {
   const steps = batchStepPersistence(request.persistence, stepDurabilityFor(chatId, runKey));
   const runPersistence = lineage ? lineagePersistence(steps.persistence, lineage, (msg) => appendRunMessage(chatId, msg)) : steps.persistence;
   let agentRow;
-  const holdsRow = runEngineOf(request) === "agent";
   const req = {
     ...request,
     persistence: runPersistence,
-    ...holdsRow ? { reportRunRow: (row) => {
+    reportRunRow: (row) => {
       agentRow = row;
       return request.reportRunRow?.(row);
-    } } : {}
+    }
   };
   c.persistStep = (ev) => persistStep(chatId, runPersistence, ev);
   beginRun(c, chatId);
@@ -29403,7 +28850,11 @@ async function startRun(runKey, request, claim) {
   emit2(c);
   c.runUsage = emptyRunUsage();
   try {
-    await driveRun(chatId, c, req, runKey);
+    const prepared = await prepareRunLoop(chatId, c, req, runKey);
+    if (prepared) {
+      noteRunId(c, prepared.metadata.guestTurnId);
+      await runPrepared(prepared);
+    }
   } catch (e) {
     if (!c.abort?.signal.aborted) {
       c.error = e instanceof Error ? e.message : "Reply failed";
@@ -29484,8 +28935,9 @@ async function startRun(runKey, request, claim) {
       if (outcome) {
         void req.reportOutcome(agentRow ? { ...parseRunOutcomeTelemetry({ ...agentRow }), ...outcome } : outcome).catch(() => void 0);
       } else if (agentRow && req.reportRunRecord) {
-        const record3 = runOutcomeRequestOf(agentRow, { clientRunId: c.runId, stopped: aborted, projectId: req.projectId });
-        if (record3) void req.reportRunRecord({ ...record3, steps: completedTurns(trace4).length, routingSignal: false }).catch(() => void 0);
+        const held = agentRow.model?.trim() ? agentRow : { ...agentRow, model: askedModelOf(req.model, trace4) };
+        const record3 = runOutcomeRequestOf(held, { clientRunId: c.runId, stopped: aborted, projectId: req.projectId });
+        if (record3) void req.reportRunRecord({ ...record3, steps: completedTurns(trace4).length, routingSignal: false }).catch((e) => unrecorded2(c, e));
       }
       reportRunEnd(c, req, { aborted, failed: c.error !== "" });
       c.persistStep = null;
@@ -30039,14 +29491,14 @@ function useChatTranscript(persistence, chatId, snapshot, callbacks) {
 var import_react10 = require("react");
 
 // src/userTurnRuns.ts
-var import_working17 = require("@seanhogg/builderforce-memory/working");
+var import_working16 = require("@seanhogg/builderforce-memory/working");
 function startsRun(text2) {
   return !stopIntent(text2);
 }
 function unansweredTurnIndex(messages) {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message2 = messages[i];
-    if (isStepMessage(message2) || (0, import_working17.isConsolidationMarker)(message2)) continue;
+    if (isStepMessage(message2) || (0, import_working16.isConsolidationMarker)(message2)) continue;
     return message2.role === "user" && !isMidTurnMetadata(message2.metadata) && startsRun(message2.content) ? i : -1;
   }
   return -1;
@@ -30128,7 +29580,7 @@ function useContinuation(persistence, prepareRun) {
 }
 
 // src/useBrainConversation.ts
-var import_working18 = require("@seanhogg/builderforce-memory/working");
+var import_working17 = require("@seanhogg/builderforce-memory/working");
 
 // src/contextUsage.ts
 var LLM_COMPLETE = "llm.complete";
@@ -30286,38 +29738,6 @@ function useLaunchCancel(sendingRef) {
   return { cancelledLaunchRef, launchingRef, beginDraftSend, endDraftSend, stopConversation };
 }
 
-// src/runStore/runEnginePreference.ts
-var RUN_ENGINE_STORAGE_KEY = "builderforce.runEngine";
-var RUN_ENGINE_QUERY_PARAM = "runEngine";
-var isEngine = (value) => value === "agent" || value === "loop";
-function keepChoice(storage, engine) {
-  try {
-    storage?.setItem(RUN_ENGINE_STORAGE_KEY, engine);
-    return storage !== void 0;
-  } catch {
-    return false;
-  }
-}
-function storedRunEngine() {
-  try {
-    const search = globalThis.location?.search;
-    const fromUrl = search ? new URLSearchParams(search).get(RUN_ENGINE_QUERY_PARAM) : null;
-    const storage = globalThis.localStorage;
-    if (isEngine(fromUrl)) {
-      keepChoice(storage, fromUrl);
-      return fromUrl;
-    }
-    const stored = storage?.getItem(RUN_ENGINE_STORAGE_KEY);
-    return isEngine(stored) ? stored : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function storedRunEngineField() {
-  const engine = storedRunEngine();
-  return engine ? { engine } : {};
-}
-
 // src/useBrainConversation.ts
 function useBrainConversation(options) {
   const { persistence, resolveSystemPrompt, stream, imagePrep } = useBrainConfig();
@@ -30410,7 +29830,7 @@ ${extraSystem}` : resolvedSystemPrompt;
         augmentSystemPrompt,
         seed: seed.messages,
         seedIds: seed.ids,
-        priorResearch: priorResearchDigest((0, import_working18.scopeToConsolidation)(researchFrom)),
+        priorResearch: priorResearchDigest((0, import_working17.scopeToConsolidation)(researchFrom)),
         userTurn,
         ...userTurnMessageId != null ? { userTurnMessageId } : {},
         projectId,
@@ -30440,7 +29860,7 @@ ${extraSystem}` : resolvedSystemPrompt;
       }
       if (draftSend) endDraftSend(draftSend);
       bindContinuation(id);
-      await startRun(id, { ...storedRunEngineField(), ...request, ...extra });
+      await startRun(id, { ...request, ...extra });
     } finally {
       launchingRef.current.delete(id);
       cancelledLaunchRef.current.delete(id);
@@ -30782,17 +30202,6 @@ function noteRunStep(key, step) {
   emit2(c);
 }
 
-// src/run/runViaAgent.ts
-function runViaAgent(binding, opts = {}) {
-  const signal = binding.cell.abort?.signal;
-  return runAgent({
-    task: brainRunTask(binding, opts.defaultRepo),
-    policy: brainRunPolicy(binding),
-    ports: buildBrainRunPorts(binding),
-    ...signal ? { signal } : {}
-  });
-}
-
 // src/indexedDbStepDurability.ts
 function installIndexedDbStepDurability(opts) {
   const { indexedDB: factory, dbName } = opts;
@@ -30880,7 +30289,7 @@ function ordinalWord(n2) {
 }
 
 // src/index.ts
-var import_working19 = require("@seanhogg/builderforce-memory/working");
+var import_working18 = require("@seanhogg/builderforce-memory/working");
 
 // src/apiVersion.ts
 var API_VERSION_TTL_MS = 6e4;
@@ -30949,7 +30358,7 @@ function takePendingPrompt() {
 }
 
 // src/index.ts
-var import_working20 = require("@seanhogg/builderforce-memory/working");
+var import_working19 = require("@seanhogg/builderforce-memory/working");
 
 // src/agentPool.ts
 var DEFAULT_AGENT_MODEL_SENTINEL = "builderforce-default";
@@ -31567,16 +30976,16 @@ function fmtAdvertised(tools) {
   }
   return "";
 }
-function usd3(n2) {
+function usd2(n2) {
   return String.fromCharCode(36) + n2.toFixed(n2 >= 1 ? 2 : 4);
 }
 function formatChatSpend(spend) {
   if (!spend?.spend) return null;
   const s = spend.spend;
   const saved = spend.saved;
-  const savedBit = saved && (saved.measuredUsd > 0 || saved.estimatedUsd > 0) ? ` \xB7 saved ${usd3(saved.measuredUsd)} measured / ${usd3(saved.estimatedUsd)} estimated (${saved.tokensSaved.toLocaleString("en-US")} tok)` : "";
+  const savedBit = saved && (saved.measuredUsd > 0 || saved.estimatedUsd > 0) ? ` \xB7 saved ${usd2(saved.measuredUsd)} measured / ${usd2(saved.estimatedUsd)} estimated (${saved.tokensSaved.toLocaleString("en-US")} tok)` : "";
   const unpriced = s.unpricedTokens > 0 ? ` \xB7 ${s.unpricedTokens.toLocaleString("en-US")} tok unpriced` : "";
-  return `- This chat's cost: platform ${usd3(s.platformUsd)} \xB7 your key ${usd3(s.yourKeyUsd)} \xB7 total ${usd3(s.totalUsd)} \xB7 ${s.promptTokens.toLocaleString("en-US")} prompt + ${s.completionTokens.toLocaleString("en-US")} completion tok \xB7 ${s.requests} request(s)${unpriced}${savedBit}`;
+  return `- This chat's cost: platform ${usd2(s.platformUsd)} \xB7 your key ${usd2(s.yourKeyUsd)} \xB7 total ${usd2(s.totalUsd)} \xB7 ${s.promptTokens.toLocaleString("en-US")} prompt + ${s.completionTokens.toLocaleString("en-US")} completion tok \xB7 ${s.requests} request(s)${unpriced}${savedBit}`;
 }
 function formatChatDiagnostics(d) {
   const lines = ["## Chat diagnostics"];
@@ -32796,10 +32205,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   bindChatHistoryForSync,
   brainPersonaAgents,
   brainRequestError,
-  brainRunPolicy,
-  brainRunTask,
   brainUploadUrl,
-  buildBrainRunPorts,
   buildBrainTriageReport,
   buildChatDiagnosticsReport,
   buildComposerDirectives,
@@ -33063,12 +32469,10 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   runBrainLoop,
   runOutcomesSince,
   runProgressVerdict,
-  runViaAgent,
   savePendingPrompt,
   savedChatOf,
   scopeToConsolidation,
   selectPendingAskUser,
-  selectToolsForTurn,
   selfReviewShipDirective,
   serializeAskUser,
   serveEngineWorker,
@@ -33096,8 +32500,6 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   stopRun,
   stoppedBeforeStartRow,
   stoppedTurnMetadata,
-  storedRunEngine,
-  storedRunEngineField,
   streamChatCompletion,
   streamSummaryCompletion,
   stripAskUser,

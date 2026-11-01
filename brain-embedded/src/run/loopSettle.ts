@@ -1,8 +1,8 @@
 /**
  * What happens AFTER the one agent returns for a Brain run (PRD 35 §4 WS4 "the adapter tail"): the settled reply, the
  * Evermind learn and reconcile steps, `onActivity`, and a failure's verdict. The agent decided how the run ended; this puts
- * that on the chat and the cell, the way the Brain's own loop's tail does (the SAME `settleReply` and
- * `emitEvermindLearnReconcile`). A failed outcome re-throws the error the stream threw - the very object, its `status`, `unlock`,
+ * that on the chat and the cell, with the Brain's `settleReply` and
+ * `emitEvermindLearnReconcile`. A failed outcome re-throws the error the stream threw - the very object, its `status`, `unlock`,
  * `reason`, `requiredPlan`, `feature` and `capability` intact and its message unprefixed (`LastTurn.error`) - so
  * `chatErrorAction` reads what it always read. A run its USD cap stopped does not settle as a reply (`persistBudgetStop`).
  */

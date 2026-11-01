@@ -3,7 +3,7 @@
  * `buildWorkingTranscript` (`@seanhogg/builderforce-memory/working`) over the CELL'S transcript - the 64,000-token history
  * allowance, the 40,000-token tail, the stable cut, the memo reused across turns and runs (`c.compactMemo`), drop-oldest when
  * the summary fails - summarised by the silent `transcriptSummarizer` (reasoning off, never a visible model turn) and recorded
- * by `recordFold` (the `context.compacted` step and the durable marker, the SAME function the loop's model port calls).
+ * by `recordFold` (the `context.compacted` step and the durable marker, the ONE function that announces a fold).
  *
  * The agent's own compaction is replaced WHOLE (`modules.compaction`), not adapted to imitate this: the module builds the working
  * set from the cell, hands the agent's transcript that set when it differs, and keeps what compaction saved this turn for the

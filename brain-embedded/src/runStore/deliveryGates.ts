@@ -1,8 +1,7 @@
 /**
  * The gates a prose-ended turn must clear before it is the run's answer, as DATA: when each holds, the nudge that sends the
- * turn back, the trace it leaves, and which flag records that it was spent. ONE definition, read by the Brain's own
- * final-answer hook (`finalAnswerHook.ts`) and by the agent's delivery ledger (`run/brainDelivery.ts`), so the two engines
- * cannot drift on what "sent back" means. The workspace stop hook is asynchronous and bounded by round, so it stays with its
+ * turn back, the trace it leaves, and which flag records that it was spent. ONE definition, read by the agent's delivery
+ * ledger (`run/brainDelivery.ts`), so nothing can drift on what "sent back" means. The workspace stop hook is asynchronous and bounded by round, so it stays with its
  * callers (`stopHooks.ts`).
  */
 

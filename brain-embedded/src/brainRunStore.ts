@@ -32,7 +32,7 @@
  *   - `startRun.ts`        — the single-flight start and what a run does as it unwinds;
  *   - `engineRun.ts`       — the same cell hosting a non-chat loop (a canvas turn);
  *   - `beginRun.ts`        — the per-run reset both starts share;
- *   - `runLoop.ts`         — THE loop, composed from its hooks and ports;
+ *   - `runPreamble.ts`     — what a run is prepared with; the run itself is THE agent (`../run/runPrepared.ts`);
  *   - `runBackstops.ts`    — the ticket guarantees; `turnPersistence.ts` — durable turns.
  */
 

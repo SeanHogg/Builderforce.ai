@@ -2,8 +2,7 @@
  * One turn's LIVE view while its completion streams: the cell's streaming text, the phase the
  * activity indicator shows (`thinking` until the first token, `writing` after, `composing` for a
  * tool call's arguments), the time to the first token, and the discard of an attempt a retry or
- * the coder re-ask starts over. Extracted from `completeTurn.ts` so the Brain's own loop and the
- * agent's model port (`run/modelTransport.ts`) stream a turn the same way - never a copy.
+ * the coder re-ask starts over. Used by the agent's model port (`run/loopTurn.ts`).
  */
 
 import { createComposingActivity } from '../composingActivity';

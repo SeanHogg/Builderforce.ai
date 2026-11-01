@@ -221,7 +221,7 @@ export function stepNode(step: PersistedStep, ts: number, key: string): Timeline
   }
 }
 
-/** The run step a working-transcript fold records (`completeTurn.ts`). */
+/** The run step a working-transcript fold records (`run/loopFold.ts`). */
 export const COMPACTED_STEP = 'context.compacted';
 
 /** A step-only fold row is dropped when a durable marker covers it: one saved no earlier

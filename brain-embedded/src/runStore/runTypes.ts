@@ -221,7 +221,7 @@ export interface BrainRunRequest {
   /**
    * Told the uniform §8.2 record (PRD 35) of a run that made no coder grade, once, when a run ends: the entry point, the counts,
    * `routingSignal: false` (the door records it and routing never learns from it). The host posts it to the same door. It is its own port so
-   * that {@link reportOutcome} keeps doing exactly what it does on the Brain's loop: the same runs, the same `source`, the same fields. A run
+   * that {@link reportOutcome} keeps doing exactly what it always has: the same runs, the same `source`, the same fields. A run
    * with a grade reports through `reportOutcome` alone, the §8.2 telemetry riding on it as optional fields. One report per run.
    */
   reportRunRecord?: (record: RunOutcomeRequest) => Promise<unknown>;

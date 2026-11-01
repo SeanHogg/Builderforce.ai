@@ -1,7 +1,7 @@
 /**
  * The agent's STEERING port over a Brain run (PRD 35 §4 WS4): the direction that arrived while the run was working goes in
  * front of the next turn, recorded as one `steer.applied` step and saved as it is read - the SAME `takeRunSteering` and
- * `persistSteer` the Brain's loop runs. The interrupt side (a step in flight) is the run-keyed queue the agent owns.
+ * `persistSteer` the Brain has always run. The interrupt side (a step in flight) is the run-keyed queue the agent owns.
  */
 
 import { runSteeringSource, type SteerInput, type SteeringSource, hasRunInterrupt } from '@builderforce/agent-run';

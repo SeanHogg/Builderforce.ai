@@ -113,7 +113,7 @@ export async function persistFoldMarker(c: RunCell, chatId: number, persistence:
 
 /**
  * A NEW fold, recorded: the visible `context.compacted` step, then the durable marker. The ONE place a fold is announced -
- * the loop's model port and the agent's compaction module (`run/loopFold.ts`) both call it.
+ * the agent's compaction module (`run/loopFold.ts`) calls it.
  */
 export function recordFold(run: Pick<RunLoopContext, 'c' | 'chatId' | 'req'>, fold: TranscriptFold): void {
   const { c } = run;

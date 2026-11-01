@@ -1,6 +1,6 @@
 /**
  * The EARLY delegation nudge (PRD 35 E5 / WS8c) — the dispatch-time twin of the
- * end-of-run `loop.recover_undelegated_request` gate in `finalAnswerHook.ts`.
+ * end-of-run `loop.recover_undelegated_request` gate in the delivery ledger (`run/brainDelivery.ts`).
  *
  * Every dispatched call is counted by the run's {@link ReadsWithoutSpawn}: a read is a
  * dedupable read tool or a read-only `run_command`; a spawn is `spawn_agent(s)`. When the

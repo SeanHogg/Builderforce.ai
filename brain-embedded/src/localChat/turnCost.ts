@@ -1,7 +1,6 @@
 /**
- * What ONE completed turn is worth on the device, in millicents - THE rule both engines' USD caps read: the Brain's loop
- * (`runStore/runSpendBudget.ts`) accrues it after each turn, and the agent's budget reads it as `ModelUsage.pricedMc`
- * (`run/modelTransport.ts`). Undefined means the turn has no known price - it is counted as UNPRICED, never as free.
+ * What ONE completed turn is worth on the device, in millicents - THE rule the run's USD cap reads: the agent's budget takes
+ * it as `ModelUsage.pricedMc` (`run/modelTransport.ts`). Undefined means the turn has no known price - it is counted as UNPRICED, never as free.
  *
  *   - a turn that reported no usage cannot be priced: off the device it is unpriced; on it, it costs nothing;
  *   - otherwise the device's one call-cost rule (`callCost.ts`), by where the call ran and the model that served it.

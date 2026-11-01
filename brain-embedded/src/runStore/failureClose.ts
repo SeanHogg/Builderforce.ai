@@ -6,7 +6,7 @@
  * failing and what is needed, instead of an error; the loop error is surfaced only if THIS closing turn is also empty. This
  * does not depend on which model answered, so it also rescues a weak auto-selected model that thrashed.
  *
- * ONE copy for both engines: the Brain's loop (`runLoop.ts`) and the agent's adapter tail (`run/loopSettle.ts`) call it.
+ * The agent's adapter tail (`run/loopSettle.ts`) calls it.
  */
 
 import { replayTextOf } from '@builderforce/agent-loop';
@@ -44,7 +44,7 @@ export async function closeAfterFailureStreak(run: RunLoopContext, streak: numbe
         {
           onModel: liveTurnModel(c),
           onConnectRetry: connectRetryStep(c, step),
-          // The first token repaints now; every later delta coalesces into a frame (as `completeTurn` does).
+          // The first token repaints now; every later delta coalesces into a frame (as `run/loopTurn.ts` does).
           onTextDelta: (d) => {
             c.streamingText += d;
             if (closeFirstTokenAt === undefined) {

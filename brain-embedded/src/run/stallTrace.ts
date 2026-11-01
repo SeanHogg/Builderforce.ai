@@ -1,6 +1,6 @@
 /**
- * The trace steps of a stall the one agent judged (`stall.recovered`), in the Brain's own labels - the ones the loop's
- * final-answer hook records (`loop.recover_*`, `loop.model_failover`, `loop.stall_unrecovered`) and every diagnostics reader keys
+ * The trace steps of a stall the one agent judged (`stall.recovered`), in the Brain's own labels - the ones the Brain
+ * has always recorded (`loop.recover_*`, `loop.model_failover`, `loop.stall_unrecovered`) and every diagnostics reader keys
  * on. Pure over the event; `eventSink.ts` renders it.
  */
 
@@ -13,10 +13,10 @@ type Stalled = Extract<RunEvent, { kind: 'stall.recovered' }>;
 const text = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
 const num = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
 
-/** The size of the menu the stalled turn advertised, when the run says (the loop's `advertisedTools`). */
+/** The size of the menu the stalled turn advertised, when the run says (`advertisedTools`). */
 const menuArg = (d: Record<string, unknown>): { advertisedTools?: number } => (num(d.advertisedTools) !== undefined ? { advertisedTools: num(d.advertisedTools) as number } : {});
 
-/** The step a stall leaves, or null for an action the Brain's loop leaves no step for (a settle, a fail). */
+/** The step a stall leaves, or null for an action that leaves no step (a settle, a fail). */
 export function stallTraceStep(event: Stalled, ts: string): BrainTraceEvent | null {
   const d = event.detail ?? {};
   const shape = d.shape as StallShapeArg;

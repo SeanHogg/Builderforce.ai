@@ -9,7 +9,7 @@
  *     first, unchanged, against `@builderforce/run-policy`, the package that owns it);
  *   - `api/.../cloudAgent/cloudRunModelPolicy.test.ts` (`cloudStallStep`) — the
  *     re-prompt budget and the failover the cloud loop kept on its durable model state;
- *   - `brain-embedded/.../finalAnswerHook.ts` + `agent-loop` (`liftProseAskUser`) —
+ *   - the Brain's former final-answer hook + `agent-loop` (`liftProseAskUser`) —
  *     the prose ask-lift on a settled answer;
  *   - `brain/agentReplyLoop.ts` — the forced no-tools synthesis prompt;
  *   - `agent-runtime/.../agent-loop/stall-recovery.ts` — the exhausted notice.
@@ -181,7 +181,7 @@ describe("the repetition trim (`agent-loop/repetitionLoop.ts`)", () => {
   });
 });
 
-describe("the prose ask-lift (`brain-embedded/finalAnswerHook.ts`)", () => {
+describe("the prose ask-lift (the Brain's former final-answer hook)", () => {
   it("lifts a prose question with options into the canonical ask-user block", () => {
     const lifted = liftProseAskUser(
       "Two ways to go.\n\nWhich approach should I take?\n1. Postgres: managed\n2. SQLite",

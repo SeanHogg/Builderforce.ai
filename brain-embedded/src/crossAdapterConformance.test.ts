@@ -3,7 +3,7 @@
  * the same answer as the cloud, canvas, on-prem and channel adapters (the task, script and golden are `@builderforce/agent-run`'s
  * `conformanceTask.ts`).
  *
- * The run goes through the PRODUCTION binding, not a harness of its own: `startRun` -> `driveRun` -> `prepareRunLoop` -> `runPrepared`,
+ * The run goes through the PRODUCTION binding, not a harness of its own: `startRun` -> `prepareRunLoop` -> `runPrepared`,
  * started the way a host starts it (the parity harness, `run/parity/harness.ts`; the fake is the model stream,
  * the persistence and the host's tool port, the three things a host supplies). The trace is read by wrapping the one `runAgent` call.
  */
@@ -53,7 +53,7 @@ const scenario = (entryPoint: RunEntryPoint): Scenario => ({
   },
 });
 
-describe('the Brain under the shared scripted task, through startRun on the agent engine', () => {
+describe('the Brain under the shared scripted task, through startRun', () => {
   for (const entryPoint of ENTRY_POINTS) {
     it(`${entryPoint}: the shared RunEvent trace, the shared answer and a finished outcome row labelled for the surface`, async () => {
       seen.events.length = 0;

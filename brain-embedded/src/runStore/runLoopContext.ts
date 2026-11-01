@@ -1,6 +1,6 @@
 /**
- * ONE run's loop state — what `runPreamble.ts` resolves before the first turn and every
- * hook and port of the loop (`runLoop.ts`) reads and advances. The loop's parts live in
+ * ONE run's state — what `runPreamble.ts` resolves before the first turn and every
+ * port of the agent's run (`run/runPrepared.ts`) reads and advances. The ports live in
  * their own modules; this object is what they share, so a counter or a cache can never
  * exist twice. Fields below `policy` change while the run runs; the rest are fixed once
  * the preamble returns.

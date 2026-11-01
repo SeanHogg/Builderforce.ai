@@ -1,7 +1,7 @@
 /**
  * What a tool call leaves once its result row is in the transcript - the call's durable step, its read cached against the row
- * carrying it, the tool pinned for later turns. Not a loop hook by name: the Brain's loop (`runLoop.ts`, as `afterDispatch`) and
- * the agent's platform tools (`run/brainPlatformTools.ts`) both run it, so deleting the loop leaves it where it is.
+ * carrying it, the tool pinned for later turns. The agent's platform tools
+ * (`run/brainPlatformTools.ts`) run it once the call's result row is in the transcript.
  */
 
 import type { LoopHooks } from '@builderforce/agent-loop';

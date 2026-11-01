@@ -33,7 +33,7 @@
  *   - the forced no-tools final-synthesis prompt, so an agent whose every turn only
  *     called tools still speaks (`brain/agentReplyLoop.ts`);
  *   - the prose ask-lift on a settled final answer
- *     (`brain-embedded/.../finalAnswerHook.ts`);
+ *     (the Brain's former final-answer hook, deleted with its loop);
  *   - the canvas escalation ladder — restate, then hand to a proven model, then stop —
  *     generalised and walked in `ladder.ts` over the surface's `DeliveryLedger` (the canvas
  *     supplies the rungs: `frontend/src/lib/canvasDelivery.ts`);
@@ -158,7 +158,7 @@ export const stallHook = {
    * The settled answer, shaped the way every source shapes it: a reply stuck on one
    * block posts that block once (`trimRepetitionLoop`, `brain/agentReplyLoop.ts`), and a
    * prose question with options becomes the canonical ```ask-user block the surfaces
-   * render as a choice (`liftProseAskUser`, `brain-embedded/.../finalAnswerHook.ts`).
+   * render as a choice (`liftProseAskUser`).
    */
   settle(ctx: PolicyContext, text: string): string {
     // A surface with a ledger shapes its own accepted answer (a copied speaker label, a
