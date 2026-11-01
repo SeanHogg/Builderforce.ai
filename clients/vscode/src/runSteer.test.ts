@@ -17,10 +17,14 @@ function steer(busy: Set<number>) {
 }
 
 describe("runSteer.stop", () => {
-  it("with nothing claimed, stops nothing and leaves no mark", () => {
+  it("with nothing claimed, still forwards the stop (the run's own stop is a safe no-op) and leaves no mark", () => {
     const { s, deps } = steer(new Set());
     s.stop(7);
-    expect(deps.childHost.stop).not.toHaveBeenCalled();
+    // The Stop is ALWAYS forwarded to the run's own stop so a stop pressed in the gap
+    // between the host claiming the key and its loop starting still reaches the abort;
+    // `stopRun` is itself a no-op when nothing is running.
+    expect(deps.childHost.stop).toHaveBeenCalledWith(7);
+    // No work to end: no stopped mark that could swallow the NEXT run's words.
     expect(s.stopped(7)).toBe(false);
     // The next run's settle still sends on what waits for it.
     s.settled(7);

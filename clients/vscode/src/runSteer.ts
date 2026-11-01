@@ -73,10 +73,18 @@ export function createRunSteer(deps: RunSteerDeps): RunSteer {
   };
 
   const stop = (runKey: number): void => {
-    // Nothing claimed: nothing to stop, and no mark left to swallow the NEXT run's words.
-    if (!deps.isBusy(runKey)) return;
-    deps.dropParked?.(runKey);
-    stopped.add(runKey);
+    // The Stop is ALWAYS forwarded to the run's own stop (`childHost.stop` -> `stopRun`),
+    // which is itself a safe no-op when nothing is running: a Stop pressed in the gap
+    // between the host claiming a key and its `beginRun` must still reach the abort the
+    // moment the loop starts, never be swallowed here. Only the END-OF-WORK side effects
+    // (dropping what waits, marking the run stopped so `settled` drops its words) are
+    // gated on there being work to end - a Stop while truly idle leaves no mark that
+    // could swallow the NEXT run's words.
+    const busy = deps.isBusy(runKey);
+    if (busy) {
+      deps.dropParked?.(runKey);
+      stopped.add(runKey);
+    }
     deps.childHost.stop(runKey);
   };
 
