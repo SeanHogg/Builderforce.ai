@@ -15,6 +15,11 @@
  * exec/process are shell/streaming (PRD 12 §5 Phase B prereqs). These converged tools
  * flow through the SAME `coding-tools.ts` normalize/hook/abort/policy pipeline as every
  * other native tool, so the hardening is preserved.
+ *
+ * SANDBOXED sessions converge too: `buildConvergedFileToolsFromProvider` accepts any
+ * `CapabilityProvider`, so a sandboxed session backs the SAME shared definitions with
+ * the fs-bridge `buildSandboxCapabilityProvider` instead of the disk one — one
+ * definition per tool across BOTH session kinds (engine convergence, ticket 6349).
  */
 
 import {
@@ -26,6 +31,7 @@ import {
   SEMANTIC_TOOLS,
   ToolRegistry,
   writeFileTool,
+  type CapabilityProvider,
   type LocalResearchCapability,
   type RepoSemanticCapability,
 } from "@builderforce/agent-tools";
@@ -105,8 +111,32 @@ export function buildConvergedFileTools(params: {
     semantic: params.semantic,
     research: params.research,
   });
+  return buildConvergedFileToolsFromProvider({
+    provider,
+    workspaceRoot: params.workspaceRoot,
+    semantic: params.semantic,
+  });
+}
+
+/**
+ * The provider-taking core of {@link buildConvergedFileTools}: fold any
+ * `CapabilityProvider` into native `AgentTool`s backed by the shared registry. A
+ * sandboxed session passes the fs-bridge {@link buildSandboxCapabilityProvider} here so
+ * it runs the SAME shared definitions a non-sandboxed session runs — the only difference
+ * is the backing (container view vs. disk), never the tool contract.
+ */
+export function buildConvergedFileToolsFromProvider(params: {
+  provider: CapabilityProvider;
+  workspaceRoot: string;
+  semantic?: RepoSemanticCapability;
+}): AnyAgentTool[] {
   return withoutUnbackedSemanticTools(
-    registryToAgentTools(CONVERGED_REGISTRY, provider, params.workspaceRoot, NATIVE_NAME_ALIASES),
+    registryToAgentTools(
+      CONVERGED_REGISTRY,
+      params.provider,
+      params.workspaceRoot,
+      NATIVE_NAME_ALIASES,
+    ),
     params.semantic,
   );
 }

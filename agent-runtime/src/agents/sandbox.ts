@@ -28,6 +28,13 @@ export {
 
 export { resolveSandboxToolPolicyForAgent } from "./sandbox/tool-policy.js";
 
+export {
+  buildSandboxCapabilityProvider,
+  SANDBOX_SURFACE_CAPS,
+  type SandboxProviderOptions,
+  type SandboxWriteScope,
+} from "./sandbox-capability-provider.js";
+
 export type {
   SandboxBrowserConfig,
   SandboxBrowserContext,

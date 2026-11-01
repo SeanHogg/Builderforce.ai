@@ -26,9 +26,7 @@ import {
   assertRequiredParams,
   CLAUDE_PARAM_GROUPS,
   createBuilderForceAgentsReadTool,
-  createSandboxedEditTool,
   createSandboxedReadTool,
-  createSandboxedWriteTool,
   fixMissingRootSeparator,
   normalizeToolParams,
   patchToolSchemaForClaudeCompatibility,
@@ -37,7 +35,8 @@ import {
 } from "./coding-tools.read.js";
 import { cleanToolSchemaForGemini, normalizeToolParameters } from "./coding-tools.schema.js";
 import type { AnyAgentTool } from "./coding-tools.types.js";
-import { buildConvergedFileTools } from "./converged-coding-tools.js";
+import { buildConvergedFileTools, buildConvergedFileToolsFromProvider } from "./converged-coding-tools.js";
+import { buildSandboxCapabilityProvider } from "./sandbox-capability-provider.js";
 import { buildMemoryTools } from "./memory-tools.js";
 import { resolveImageSanitizationLimits } from "./image-sanitization.js";
 import type { ModelAuthMode } from "./model-auth.js";
@@ -316,9 +315,10 @@ export function createBuilderForceAgentsCodingTools(options?: {
   if (sandboxRoot && !sandboxFsBridge) {
     throw new Error("Sandbox filesystem bridge is unavailable.");
   }
-  // Converge the overlapping file tools onto the shared registry (PRD 12 Phase B) only
-  // for non-sandboxed sessions — a sandboxed session routes file ops through the fs-bridge,
-  // which the disk-backed Node provider does not (yet) use.
+  // Converge the overlapping file tools onto the shared registry (PRD 12 Phase B).
+  // A sandboxed session uses the fs-bridge-backed sandbox provider instead of the disk
+  // one (the documented follow-up), so it converges too — `read`/`exec`/`process` stay
+  // native regardless (the ticket's constraint).
   //
   // DEFAULT ON (`!== false`). It was opt-in while two things were unproven, and both now
   // are: `cross-provider-smoke.test.ts` drives the shared definitions over two independent
@@ -327,8 +327,7 @@ export function createBuilderForceAgentsCodingTools(options?: {
   // from the SAME `tools.fs.workspaceOnly` the native pair uses, so turning this on swaps
   // the implementation without moving the security boundary. Set
   // `tools.fs.convergedFileTools: false` to fall back to the native copies.
-  const useConvergedFileTools =
-    (options?.convergedFileTools ?? fsConfig.convergedFileTools) !== false && !sandboxRoot;
+  const useConvergedFileTools = (options?.convergedFileTools ?? fsConfig.convergedFileTools) !== false;
   const imageSanitization = resolveImageSanitizationLimits(options?.config);
 
   // The native coding tool set is read/bash/edit/write; bash is dropped here (replaced by
@@ -357,6 +356,7 @@ export function createBuilderForceAgentsCodingTools(options?: {
     }
     if (toolName === "write") {
       // Converged: the shared `write_file` (exposed as `write`) replaces this native copy.
+      // A sandboxed session gets it from the fs-bridge-backed sandbox provider instead of disk.
       if (sandboxRoot || useConvergedFileTools) {
         return [];
       }
@@ -429,23 +429,36 @@ export function createBuilderForceAgentsCodingTools(options?: {
               : undefined,
           workspaceOnly: applyPatchWorkspaceOnly,
         });
-  // Converged file tools (shared registry → disk provider): write/edit replace the native
-  // copies skipped above, delete_file/list_files are additive. They join `tools` here so
-  // the normalize/hook/abort/policy pipeline below wraps them like every other tool.
+  // Converged file tools (shared registry → capability provider): write/edit replace the
+  // native copies skipped above, delete_file/list_files are additive. A sandboxed session
+  // backs them with the fs-bridge sandbox provider; a non-sandboxed one with the disk
+  // provider. They join `tools` here so the normalize/hook/abort/policy pipeline wraps
+  // them like every other tool.
   const convergedFileTools = useConvergedFileTools
-    ? buildConvergedFileTools({
-        workspaceRoot,
-        // Native `write`/`edit` are confined ONLY when `tools.fs.workspaceOnly` is set.
-        // The converged pair inherits exactly that, so convergence swaps the
-        // implementation and never the security boundary.
-        scope: workspaceOnly ? "workspace" : "unconfined",
-        semantic: options?.semantic,
-        research: options?.research,
-      }).map((tool) =>
-        // …and the same outer guard native gets, so the path normalization and
-        // `assertSandboxPath` check are identical on both sides of the flag too.
-        workspaceOnly ? wrapToolWorkspaceRootGuard(tool, workspaceRoot) : tool,
-      )
+    ? sandboxRoot
+      ? buildConvergedFileToolsFromProvider({
+          provider: buildSandboxCapabilityProvider({
+            workspaceRoot: sandboxRoot,
+            bridge: sandboxFsBridge!,
+            scope: workspaceOnly ? "workspace" : "unconfined",
+          }),
+          workspaceRoot: sandboxRoot,
+        }).map((tool) =>
+          workspaceOnly ? wrapToolWorkspaceRootGuard(tool, sandboxRoot) : tool,
+        )
+      : buildConvergedFileTools({
+          workspaceRoot,
+          // Native `write`/`edit` are confined ONLY when `tools.fs.workspaceOnly` is set.
+          // The converged pair inherits exactly that, so convergence swaps the
+          // implementation and never the security boundary.
+          scope: workspaceOnly ? "workspace" : "unconfined",
+          semantic: options?.semantic,
+          research: options?.research,
+        }).map((tool) =>
+          // …and the same outer guard native gets, so the path normalization and
+          // `assertSandboxPath` check are identical on both sides of the flag too.
+          workspaceOnly ? wrapToolWorkspaceRootGuard(tool, workspaceRoot) : tool,
+        )
     : [];
   // Active cross-run memory tools (memory_recall / memory_remember), backed by the SSM
   // memory service. Self-gating: [] when the memory layer is unavailable.
@@ -454,24 +467,6 @@ export function createBuilderForceAgentsCodingTools(options?: {
     ...base,
     ...convergedFileTools,
     ...memoryTools,
-    ...(sandboxRoot
-      ? allowWorkspaceWrites
-        ? [
-            workspaceOnly
-              ? wrapToolWorkspaceRootGuard(
-                  createSandboxedEditTool({ root: sandboxRoot, bridge: sandboxFsBridge! }),
-                  sandboxRoot,
-                )
-              : createSandboxedEditTool({ root: sandboxRoot, bridge: sandboxFsBridge! }),
-            workspaceOnly
-              ? wrapToolWorkspaceRootGuard(
-                  createSandboxedWriteTool({ root: sandboxRoot, bridge: sandboxFsBridge! }),
-                  sandboxRoot,
-                )
-              : createSandboxedWriteTool({ root: sandboxRoot, bridge: sandboxFsBridge! }),
-          ]
-        : []
-      : []),
     ...(applyPatchTool ? [applyPatchTool as unknown as AnyAgentTool] : []),
     execTool as unknown as AnyAgentTool,
     processTool as unknown as AnyAgentTool,
