@@ -11,6 +11,19 @@
  * events based on the version the server holds, which is what its conflict policy
  * checks. A delete of a row the server never saw sends nothing.
  *
+ * DECIDED (2026-11-01): the unbound frame does NOT persist the full payload copy.
+ * An unbound event is never sent — the coordinator refuses an unbound partition — so
+ * keeping its payload only duplicates the record's copy: tens of thousands of dead
+ * events on a long-lived machine. The unbound journal is now a marker per write:
+ * ids, type, operation, a size, and a content hash of the real payload. When the row
+ * is later bound, `queueImport` replaces the marker with ONE real `import` whose
+ * payload comes from the record (`tx.get` in `bindChatHistoryForSync`), never from the
+ * frame — so no sendable payload is ever read back out of the marker. A later append
+ * for the same idempotency key dedupes against the live marker the same as before.
+ * The sendable payload stays owned by the record / import path; the G03
+ * record-and-sync-in-one-frame contract is untouched (a bound frame still carries
+ * both the record and its event in one commit).
+ *
  * A chat bound by sign-in alone (`chatIdentity.ts`) has a mapping at version
  * {@link BOUND_ONLY_VERSION}: the server chat exists, its history has not been imported.
  * Its import names that chat (`serverId`) so the server adopts it instead of minting a
@@ -37,6 +50,41 @@ export interface JournalWriteOptions {
 /** Whether the server has imported this row (a sync receipt mapped it). */
 export function isImported(mapping: ServerMapping | undefined): boolean {
   return mapping !== undefined && mapping.serverVersion > BOUND_ONLY_VERSION;
+}
+
+/**
+ * FNV-1a over the JSON of the real payload — the same alphabet the store's
+ * `hashPayload` mints into a frame's `payloadHash` — so the unbound marker can
+ * keep a content hash without computing it in two alphabets.
+ */
+function hashPayload(payload: unknown): string {
+  const text = JSON.stringify(payload) ?? 'null';
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `fnv1a:${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+/**
+ * The marker an unbound write appends instead of a payload copy: ids, type,
+ * operation, size and a content hash — enough to identify and reconcile the write
+ * after a later bind, never a sendable payload (see the module comment).
+ */
+function unboundMarker(record: LocalRecord, operation: JournalOperation): {
+  operation: JournalOperation;
+  payloadSize: number;
+  payloadHash: string;
+  payload: null;
+} {
+  const text = JSON.stringify(record.payload) ?? 'null';
+  return {
+    operation,
+    payloadSize: text.length,
+    payloadHash: hashPayload(record.payload),
+    payload: null,
+  };
 }
 
 /**
@@ -90,13 +138,14 @@ export async function journalWrite(
       idempotencyKey: options.key,
       clientEntityId: record.id,
       entityType: record.entityType,
-      operation,
       schemaVersion: record.schemaVersion,
       occurredAt: record.occurredAt,
       ...(record.baseVersion !== undefined ? { baseVersion: record.baseVersion } : {}),
       dependsOn: options.dependsOn ?? [],
       destination: record.destination,
-      payload: record.payload,
+      // The marker carries size + a content hash of the real payload, never the
+      // payload itself; the record is the only copy while unbound (module comment).
+      ...unboundMarker(record, operation),
     });
     return;
   }

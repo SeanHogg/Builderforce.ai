@@ -4,7 +4,8 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { createMemoryLocalFirstStore, type EntityDestination } from '@builderforce/local-first';
+import { createMemoryLocalFirstStore, newLocalRecord, type EntityDestination } from '@builderforce/local-first';
+import { journalWrite } from './journal';
 import { priceBookFromPrices } from '@builderforce/model-catalog';
 import { combineSpendSavings, foldSpendSavings } from '@builderforce/spend-contract';
 import { createLocalBrainPersistence } from '../localFirstPersistence';
@@ -115,7 +116,9 @@ describe('run usage ledger — spend on the device', () => {
     await ledger.record({ chatId: chat.id, runKey: 1, model: 'local/ollama/q', route: 'local', usage: { prompt: 10, completion: 10 } });
     const usageEvents = (await store.read((tx) => tx.pending())).filter((e) => e.entityType === 'usage');
     expect(usageEvents).toHaveLength(1);
-    expect((usageEvents[0]!.payload as RunUsageValue).route).toBe('local');
+    // The journaled event is the marker (no payload copy); the record is the copy.
+    expect(usageEvents[0]!.payload).toBeNull();
+    expect((await store.read((tx) => tx.get<RunUsageValue>('usage', usageEvents[0]!.clientEntityId)))?.payload.route).toBe('local');
   });
 
   it('a bound chat adds the platform figure for gateway calls to the device figure for the rest — no double count', () => {
@@ -200,5 +203,55 @@ describe('sync on enable — the chat history goes to the account once', () => {
     expect(update?.operation).toBe('update');
     expect(update?.baseVersion).toBe(1);
     expect(update?.destination).toEqual(ACCOUNT);
+  });
+});
+
+describe('unbound journalWrite — no full-payload copy while unbound', () => {
+  it('leaves a marker (ids, type, size, content hash, payload null) instead of a payload copy', async () => {
+    const { store } = setup({ destination: () => undefined });
+    const record = newLocalRecord({
+      id: 'chat:marker-1',
+      entityType: 'chat',
+      payload: { clientId: 'chat:marker-1', chat: { title: 'kept only on the record', projectId: null } },
+      deviceId: DEVICE,
+    });
+    await store.transact(async (tx) => {
+      await tx.put(record);
+      await journalWrite(tx, record, 'create', { key: 'chat:marker-1' });
+    });
+    const [event] = await store.read((tx) => tx.pending());
+    expect(event?.idempotencyKey).toBe('chat:marker-1');
+    expect(event?.clientEntityId).toBe('chat:marker-1');
+    expect(event?.entityType).toBe('chat');
+    expect(event?.operation).toBe('create');
+    // No full-payload copy: the frame's payload is null and the real payload is
+    // NOT embedded anywhere in the serialized event.
+    expect(event?.payload).toBeFalsy();
+    expect(JSON.stringify(event)).not.toContain('kept only on the record');
+    // The marker keeps a size and a content hash for reconciliation after bind.
+    // (The frame payload is null; the marker fields ride on the event itself.)
+    const body = event as unknown as { payloadSize?: number; payloadHash?: string };
+    expect(body.payloadSize).toBeGreaterThan(0);
+    expect(body.payloadHash).toMatch(/^fnv1a:/);
+  });
+
+  it('after a later bind, the row still sends with its real payload from the record', async () => {
+    const { store } = setup({ destination: () => undefined });
+    const record = newLocalRecord({
+      id: 'chat:bind-1',
+      entityType: 'chat',
+      payload: { clientId: 'chat:bind-1', chat: { title: 'the real payload, still on the record', projectId: null } },
+      deviceId: DEVICE,
+    });
+    await store.transact(async (tx) => {
+      await tx.put(record);
+      await journalWrite(tx, record, 'create', { key: 'chat:bind-1' });
+    });
+    expect(await bindChatHistoryForSync(store, DEVICE, ACCOUNT)).toBe(1);
+    const [importEvent] = await store.read((tx) => tx.pending());
+    expect(importEvent?.operation).toBe('import');
+    expect(importEvent?.destination).toEqual(ACCOUNT);
+    // The authoritative send path rebuilt the payload from the record, not the marker.
+    expect((importEvent?.payload as { chat: { title: string } }).chat.title).toBe('the real payload, still on the record');
   });
 });
