@@ -17,7 +17,6 @@ import type { useLlmModels } from '@/lib/useLlmModels';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import type { Project } from '@/lib/types';
 import { captureDiagnosticsBlock } from '../captureDiagnostics';
-
 /**
  * Capture execution: copy the Brain run's LLM/tool/error trace + transcript to
  * the clipboard — the Brain twin of the Observability/Logs "Copy triage info"

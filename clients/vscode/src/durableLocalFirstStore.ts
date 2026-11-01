@@ -319,17 +319,85 @@ export function createDurableLocalFirstStore(
     }
   };
 
+  /** The snapshot rows a compaction is streaming, plus the identity/token of what was folded. */
+  interface CompactionSource {
+    /** The exact snapshot passed to `snapshotFrames`. */
+    snapshot: LocalFirstSnapshot;
+    /** `io.frames()` at snapshot time — frames already in the file when streaming began. */
+    baseFrameCount: number;
+    /** `io.epoch()` at snapshot time — distinguishes a compaction from an append. */
+    baseEpoch: number;
+    /** The journal's file identity at snapshot time; `undefined` before the first open. */
+    baseIdentity: FileIdentity | undefined;
+  }
+
+  /** Prepare compaction WITHOUT the lock: capture the in-memory snapshot and the file state at that instant. */
+  const prepareCompaction = (): CompactionSource => ({
+    snapshot: memory.view(),
+    baseFrameCount: io.frames(),
+    baseEpoch: io.epoch(),
+    baseIdentity: currentIdentity,
+  });
+
   /**
-   * Fold the tail into a new base. Queued behind the commit that tripped the policy, never
-   * inside it: the commit has already resolved. Re-checks the policy after catching up,
-   * because another window may have compacted first.
+   * Stream the compacted temp file WITHOUT the lock (any number of windows may stream at
+   * once; unique temp names never collide). `snapshotFrames` only READS `source.snapshot`
+   * and yields between frames, so commits may interleave and append to the journal.
+   */
+  const streamCompactionTemp = async (source: CompactionSource): Promise<string> => {
+    await fs.mkdir(directory, { recursive: true });
+    const temporary = `${journalFile}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;
+    let written = 0;
+    try {
+      const handle = await fs.open(temporary, "wx");
+      try {
+        for await (const frame of snapshotFrames(source.snapshot, yieldToEventLoop)) {
+          await writeWhole(handle, frame, written);
+          written += frame.byteLength;
+        }
+        // Crash-safety: the data must be durable before the rename can ever publish it.
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+    } catch (error) {
+      await fs.rm(temporary, { force: true });
+      throw error;
+    }
+    return temporary;
+  };
+
+  /**
+   * Fold the tail into a new base. Two phases so the cross-window lock is held for the
+   * rename only, never for the whole rewrite:
+   *
+   *   1. WITHOUT the lock: stream the new compacted temp file from the in-memory snapshot.
+   *      Commits interleave and append frames to the journal the whole time.
+   *   2. UNDER the lock: re-check the policy (another window may have compacted first),
+   *      catch up on the frames appended while streaming (apply them to the store, then
+   *      append them to the temp file so the rename lands them atomically), fsync, rename.
+   *
+   * Queued behind the commit that tripped the policy, never inside it: the commit has
+   * already resolved. If the journal changed IDENTITY while streaming (another window
+   * compacted), the temp holds a fold of the same rows under the same generation — a
+   * no-op rewrite — so the temp is discarded and the normal open/merge path runs instead.
+   * A rename failure removes the temp: the journal on disk is untouched.
    */
   const scheduleCompaction = (): void => {
     if (!shouldCompactJournal(io.tail(), options.compaction)) return;
-    void serialized(() => exclusive(async () => {
-      if (!shouldCompactJournal(io.tail(), options.compaction)) return;
-      await io.compact(snapshotFrames(memory.view(), yieldToEventLoop));
-    })).catch(onBackgroundError);
+    void serialized(() => (async () => {
+      const source = prepareCompaction();
+      const temporary = await streamCompactionTemp(source);
+      try {
+        await exclusive(async () => {
+          if (!shouldCompactJournal(io.tail(), options.compaction)) return;
+          await io.compact(temporary, io.frames() - source.baseFrameCount, source.baseEpoch);
+        });
+      } catch (error) {
+        await fs.rm(temporary, { force: true }).catch(() => undefined);
+        throw error;
+      }
+    })()).catch(onBackgroundError);
   };
 
   const writeCache = async (): Promise<void> => {

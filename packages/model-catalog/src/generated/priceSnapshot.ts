@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-11-01T16:42:07.315Z";
+export const PRICE_SNAPSHOT_AT = "2026-11-01T16:55:18.158Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
@@ -322,7 +322,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "openai/gpt-audio": [0.0000025, 0.00001],
   "openai/gpt-audio-mini": [6e-7, 0.0000024],
   "openai/gpt-chat-latest": [0.000005, 0.00003],
-  "openai/gpt-oss-120b": [1.6e-8, 5.8e-8],
+  "openai/gpt-oss-120b": [1.5e-8, 5.6e-8],
   "openai/gpt-oss-120b:batch": [2.96e-8, 1.36e-7],
   "openai/gpt-oss-20b": [3e-8, 1.3e-7],
   "openai/gpt-oss-20b:batch": [2.4e-8, 1.12e-7],

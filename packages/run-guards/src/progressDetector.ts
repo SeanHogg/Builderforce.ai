@@ -7,12 +7,14 @@
  *  - `repeated_failure` — the identical call failing {@link FAILURE_HARD_AT} times ({@link FailureTally});
  *  - `circling_read` — one target read {@link REVISIT_HARD_AT} times with nothing changing it ({@link VisitTally});
  *  - `unkept_ready` — {@link UNKEPT_READY_AT} turns that said the run had what it needed, then only read ({@link UnkeptClaimTracker});
- *  - `no_progress` — {@link NO_PROGRESS_TURNS} turns with no new file and no test change ({@link NoProgressTracker}).
+ *  - `no_progress` — {@link NO_PROGRESS_TURNS} turns with no new file, no change the run had not already made, and no test change ({@link NoProgressTracker}).
  *
  * A turn that showed any of them is a TRIP, and trips escalate: the first is a steer
  * (a note the host shows the model on its next turn), the second asks the host to move
  * the run up one model tier, the third asks it to pause the run for a human. After a
  * trip the windows start over, so one stuck stretch is one trip, not one per turn.
+ * {@link LADDER_RESET_TURNS} ground-progress turns (new files, test or check movement; churn alone does not count) in a row clear the ladder, so unrelated
+ * stretches far apart each start from a steer instead of adding up to a pause.
  *
  * Pure and host-agnostic: the host says which calls only read and which mutate
  * unscoped. Its state is plain JSON, so the cloud durable loop — one model turn per
@@ -24,6 +26,10 @@ import { NO_PROGRESS_TURNS, NoProgressTracker, type NoProgressPorts, type NoProg
 import { REVISIT_HARD_AT, VisitTally, type VisitTallyState } from "./visitTally.js";
 import { pathArgOf } from "./fingerprint.js";
 import { UNKEPT_READY_AT, UnkeptClaimTracker, type UnkeptClaimState } from "./readinessClaim.js";
+
+/** Ground-progress, signal-free turns in a row that clear the trip ladder: trips far apart are
+ *  separate stuck stretches, and only back-to-back ones should end in a pause. */
+export const LADDER_RESET_TURNS = 8;
 
 export type ProgressSignalKind = "edit_revert" | "repeated_failure" | "circling_read" | "unkept_ready" | "no_progress";
 
@@ -63,6 +69,8 @@ export interface ProgressDetectorState {
   /** Turns this run that claimed readiness and then only read — every one, never reset
    *  by a trip (the claim tracker's own count is the CURRENT streak). */
   unkeptTurns?: number;
+  /** Consecutive signal-free ground-progress turns, toward {@link LADDER_RESET_TURNS}. Omitted when 0. */
+  quietTurns?: number;
   /** The steer the NEXT turn shows the model, until that turn ends. */
   steer?: string;
 }
@@ -107,6 +115,7 @@ export class ProgressDetector {
   private trips: number;
   private tripsBySignal: Partial<Record<ProgressSignalKind, number>>;
   private unkeptTurns: number;
+  private quietTurns: number;
   private steer: string | undefined;
   private turnSignal: ProgressSignal | null = null;
 
@@ -119,6 +128,7 @@ export class ProgressDetector {
     this.trips = state.trips ?? 0;
     this.tripsBySignal = { ...(state.tripsBySignal ?? {}) };
     this.unkeptTurns = state.unkeptTurns ?? 0;
+    this.quietTurns = state.quietTurns ?? 0;
     this.steer = state.steer;
   }
 
@@ -137,8 +147,8 @@ export class ProgressDetector {
     // Without an `isReadOnly` port nothing is judged read-only, so no claim goes unkept.
     this.claims.observe(this.ports.isReadOnly?.(tool, args) === true);
     const ok = succeeded(result);
-    const wrote = ok && changesContent(args);
     const unscoped = (this.ports.isUnscopedMutation ?? ((t) => t === "run_command"))(tool, args);
+    const wrote = ok && (changesContent(args) || (unscoped && this.ports.isReadOnly?.(tool, args) !== true));
     if (unscoped) {
       this.visits.markAllMayHaveChanged();
       this.edits.reset();
@@ -188,7 +198,18 @@ export class ProgressDetector {
     if (!this.turnSignal && idle >= NO_PROGRESS_TURNS) this.raise({ kind: "no_progress", count: idle });
     const signal = this.turnSignal;
     this.turnSignal = null;
-    if (!signal) return null;
+    if (!signal) {
+      // Sustained GROUND progress ends the stuck stretch the ladder was counting. A churn
+      // turn neither adds to the streak nor breaks it; an idle turn resets it.
+      if (this.progress.lastTurnGround) this.quietTurns += 1;
+      else if (idle > 0) this.quietTurns = 0;
+      if (this.quietTurns >= LADDER_RESET_TURNS) {
+        this.trips = 0;
+        this.quietTurns = 0;
+      }
+      return null;
+    }
+    this.quietTurns = 0;
     this.trips += 1;
     this.tripsBySignal[signal.kind] = (this.tripsBySignal[signal.kind] ?? 0) + 1;
     // One stuck stretch is one trip: start every window over.
@@ -230,8 +251,9 @@ export class ProgressDetector {
       progress: this.progress.snapshot(),
       ...(this.claims.snapshot().unkept ? { claims: this.claims.snapshot() } : {}),
       ...(this.trips ? { trips: this.trips } : {}),
-      ...(this.trips ? { tripsBySignal: { ...this.tripsBySignal } } : {}),
+      ...(Object.keys(this.tripsBySignal).length ? { tripsBySignal: { ...this.tripsBySignal } } : {}),
       ...(this.unkeptTurns ? { unkeptTurns: this.unkeptTurns } : {}),
+      ...(this.quietTurns ? { quietTurns: this.quietTurns } : {}),
       ...(this.steer ? { steer: this.steer } : {}),
     };
   }

@@ -40,6 +40,7 @@ export {
 export { WriteLedger, contentWriteOf, repeatedWriteNote } from "./writeLedger.js";
 export { EditRevertTracker, changesContent, type EditRevert, type EditRevertState } from "./editRevert.js";
 export {
+  CHURN_TURNS,
   NO_PROGRESS_TURNS,
   NoProgressTracker,
   isCheckCallDefault,
@@ -48,6 +49,7 @@ export {
   type NoProgressState,
 } from "./noProgress.js";
 export {
+  LADDER_RESET_TURNS,
   ProgressDetector,
   progressAdvice,
   progressPauseQuestion,
